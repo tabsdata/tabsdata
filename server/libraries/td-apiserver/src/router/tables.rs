@@ -19,7 +19,7 @@ mod routes {
     use td_objects::dxo::table::{Table, TableFlowGraphResponse};
     use td_objects::dxo::table_data_version::TableDataVersion;
     use td_objects::rest_urls::params::{
-        CollectionAtName, TableAtIdName, TableDataVersionAtIdName, TableSampleAtName, TableSchema,
+        TableAtIdName, TableDataVersionAtIdName, TableSampleAtName, TableSchema,
     };
     use td_objects::rest_urls::{
         AtTimeParam, CollectionParam, DOWNLOAD_TABLE, FileFormatParam, LIST_TABLE_DATA_VERSIONS,
@@ -40,7 +40,7 @@ mod routes {
         Path(table_path): Path<TableParam>,
     ) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
         let request = context.delete(table_path);
-        let response = state.delete.service().await.oneshot(request).await?;
+        let response = state.delete.service().oneshot(request).await?;
         Ok(DeleteStatus::OK(response))
     }
 
@@ -54,7 +54,7 @@ mod routes {
     ) -> Result<ParquetFile, ErrorStatus> {
         let name = TableAtIdName::new(table_param, at_param);
         let request = context.read(name);
-        let response = tables.download.service().await.raw_oneshot(request).await?;
+        let response = tables.download.service().raw_oneshot(request).await?;
         Ok(ParquetFile(response))
     }
 
@@ -64,10 +64,9 @@ mod routes {
         State(state): State<Arc<TableServices>>,
         Extension(context): Extension<RequestContext>,
         Query(query_params): Query<ListParams>,
-        Query(at_param): Query<AtTimeParam>,
     ) -> Result<ListStatus<Table>, ErrorStatus> {
-        let request = context.list(at_param, query_params);
-        let response = state.list.service().await.oneshot(request).await?;
+        let request = context.list((), query_params);
+        let response = state.list.service().oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
 
@@ -78,14 +77,11 @@ mod routes {
         Extension(context): Extension<RequestContext>,
         Path(collection_param): Path<CollectionParam>,
         Query(query_params): Query<ListParams>,
-        Query(at_param): Query<AtTimeParam>,
     ) -> Result<ListStatus<Table>, ErrorStatus> {
-        let name = CollectionAtName::new(collection_param, at_param);
-        let request = context.list(name, query_params);
+        let request = context.list(collection_param, query_params);
         let response = state
             .list_by_collection
             .service()
-            .await
             .oneshot(request)
             .await?;
         Ok(ListStatus::OK(response))
@@ -107,7 +103,6 @@ mod routes {
         let response = state
             .list_data_versions
             .service()
-            .await
             .oneshot(request)
             .await?;
         Ok(ListStatus::OK(response))
@@ -132,7 +127,7 @@ mod routes {
             sql_param,
         );
         let request = context.read(name);
-        let stream = tables.sample.service().await.raw_oneshot(request).await?;
+        let stream = tables.sample.service().raw_oneshot(request).await?;
         Ok(CsvFile(stream))
     }
 
@@ -146,7 +141,7 @@ mod routes {
     ) -> Result<GetStatus<TableSchema>, ErrorStatus> {
         let name = TableAtIdName::new(table_param, at_param);
         let request = context.read(name);
-        let response = state.schema.service().await.oneshot(request).await?;
+        let response = state.schema.service().oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }
 
@@ -158,7 +153,7 @@ mod routes {
         Path(table_path): Path<TableParam>,
     ) -> Result<GetStatus<TableFlowGraphResponse>, ErrorStatus> {
         let request = context.read(table_path);
-        let response = state.flow_graph.service().await.oneshot(request).await?;
+        let response = state.flow_graph.service().oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }
 }

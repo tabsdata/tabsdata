@@ -32,7 +32,7 @@ mod secure_routes {
         Extension(context): Extension<RequestContext>,
     ) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
         let request = context.update((), ());
-        let response = state.logout.service().await.oneshot(request).await?;
+        let response = state.logout.service().oneshot(request).await?;
         Ok(UpdateStatus::OK(response))
     }
 
@@ -44,7 +44,7 @@ mod secure_routes {
         Form(request): Form<RefreshRequestX>,
     ) -> Result<RawStatus<TokenResponseX>, ErrorStatus> {
         let request = context.update((), request.refresh_token.clone());
-        let response = state.refresh.service().await.raw_oneshot(request).await?;
+        let response = state.refresh.service().raw_oneshot(request).await?;
         Ok(RawStatus::OK(response))
     }
 
@@ -59,7 +59,6 @@ mod secure_routes {
         let response = state
             .role_change
             .service()
-            .await
             .raw_oneshot(request)
             .await?;
         Ok(RawStatus::OK(response))
@@ -72,7 +71,7 @@ mod secure_routes {
         Extension(context): Extension<RequestContext>,
     ) -> Result<GetStatus<UserInfo>, ErrorStatus> {
         let request = context.read(());
-        let response = state.user_info.service().await.oneshot(request).await?;
+        let response = state.user_info.service().oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }
 }
@@ -100,7 +99,7 @@ mod unsecure_routes {
         State(state): State<Arc<AuthServices>>,
         Json(request): Json<Login>,
     ) -> Result<RawStatus<TokenResponseX>, ErrorStatus> {
-        let response = state.login.service().await.raw_oneshot(request).await?;
+        let response = state.login.service().raw_oneshot(request).await?;
         // incorrect_role
         // user disabled
         // unauthorized
@@ -116,7 +115,6 @@ mod unsecure_routes {
         let response = state
             .password_change
             .service()
-            .await
             .oneshot(request)
             .await?;
         // incorrect_role
@@ -130,7 +128,7 @@ mod unsecure_routes {
     pub async fn cert_download(
         State(state): State<Arc<AuthServices>>,
     ) -> Result<PemFile, ErrorStatus> {
-        let response = state.cert_download.service().await.raw_oneshot(()).await?;
+        let response = state.cert_download.service().raw_oneshot(()).await?;
         Ok(PemFile(response))
     }
 }

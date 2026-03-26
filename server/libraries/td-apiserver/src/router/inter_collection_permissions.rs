@@ -37,7 +37,7 @@ mod routes {
         Json(request): Json<InterCollectionPermissionCreate>,
     ) -> Result<CreateStatus<InterCollectionPermission>, ErrorStatus> {
         let request = context.create(role_param, request);
-        let response = state.create.service().await.oneshot(request).await?;
+        let response = state.create.service().oneshot(request).await?;
         Ok(CreateStatus::CREATED(response))
     }
 
@@ -49,7 +49,7 @@ mod routes {
         Path(param): Path<InterCollectionPermissionParam>,
     ) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
         let request = context.delete(param);
-        let response = state.delete.service().await.oneshot(request).await?;
+        let response = state.delete.service().oneshot(request).await?;
         Ok(DeleteStatus::OK(response))
     }
 
@@ -62,7 +62,7 @@ mod routes {
         Path(path_params): Path<CollectionParam>,
     ) -> Result<ListStatus<InterCollectionPermission>, ErrorStatus> {
         let request = context.list(path_params, query_params);
-        let response = state.list.service().await.oneshot(request).await?;
+        let response = state.list.service().oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
 }

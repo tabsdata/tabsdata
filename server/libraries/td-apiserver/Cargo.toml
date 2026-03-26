@@ -29,6 +29,11 @@ test_logging = []
 test_tower_metadata = []
 test-utils = []
 
+# Backend support features
+sqlite = ["td-services/sqlite", "td-authz/sqlite", "td-database/sqlite", "td-queries/sqlite"]
+postgres = ["td-services/postgres", "td-authz/postgres", "td-database/postgres", "td-queries/postgres"]
+mysql = ["td-services/mysql", "td-authz/mysql", "td-database/mysql", "td-queries/mysql"]
+
 [package.metadata.cargo-machete]
 ignored = ["openssl"]
 
@@ -62,6 +67,7 @@ td-database = { workspace = true }
 td-execution = { workspace = true }
 td-objects = { workspace = true }
 td-process = { workspace = true }
+td-queries = { workspace = true }
 td-security = { workspace = true }
 td-services = { workspace = true }
 td-storage = { workspace = true }
@@ -91,6 +97,7 @@ tracing = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tower = { workspace = true, features = ["buffer", "limit", "make", "timeout", "util"] }
 tower-http = { workspace = true, features = ["cors", "compression-full", "timeout", "trace"] }
+url = { workspace = true }
 utoipa = { workspace = true, features = ["axum_extras", "preserve_order", "uuid"] }
 utoipa-axum = { workspace = true }
 utoipa-swagger-ui = { workspace = true, features = ["axum", "reqwest"] }
@@ -100,6 +107,7 @@ rand = { workspace = true }
 indicatif = { workspace = true, features = ["rayon"] }
 td-common = { workspace = true, features = ["td-test"] }
 td-objects = { workspace = true, features = ["td-test"] }
+td-queries = { workspace = true, features = ["td-test"] }
 td-services = { workspace = true, features = ["td-test"] }
 td-storage = { workspace = true, features = ["td-test"] }
 td-test = { workspace = true, features = ["td-test"] }

@@ -37,7 +37,7 @@ mod routes {
         Json(request): Json<UserRoleCreate>,
     ) -> Result<CreateStatus<UserRole>, ErrorStatus> {
         let request = context.create(role_param, request);
-        let response = state.create.service().await.oneshot(request).await?;
+        let response = state.create.service().oneshot(request).await?;
         Ok(CreateStatus::CREATED(response))
     }
 
@@ -49,7 +49,7 @@ mod routes {
         Path(user_role_param): Path<UserRoleParam>,
     ) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
         let request = context.delete(user_role_param);
-        let response = state.delete.service().await.oneshot(request).await?;
+        let response = state.delete.service().oneshot(request).await?;
         Ok(DeleteStatus::OK(response))
     }
 
@@ -62,7 +62,7 @@ mod routes {
         Path(role_param): Path<RoleParam>,
     ) -> Result<ListStatus<UserRole>, ErrorStatus> {
         let request = context.list(role_param, query_params);
-        let response = state.list.service().await.oneshot(request).await?;
+        let response = state.list.service().oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
 
@@ -74,7 +74,7 @@ mod routes {
         Path(user_role_param): Path<UserRoleParam>,
     ) -> Result<GetStatus<UserRole>, ErrorStatus> {
         let request = context.read(user_role_param);
-        let response = state.read.service().await.oneshot(request).await?;
+        let response = state.read.service().oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }
 }

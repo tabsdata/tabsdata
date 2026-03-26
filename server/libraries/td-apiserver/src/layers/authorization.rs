@@ -9,17 +9,18 @@ use axum::response::Response;
 use std::string::ToString;
 use std::sync::Arc;
 use ta_apiserver::status::error_status::ErrorStatus;
-use td_database::sql::DbPool;
+use td_authz::jwt::{JwtConfig, decode_token};
+use td_authz::session_provider::{Session, SessionError, Sessions};
+use td_common::provider::Provider;
+use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::types::basic::{AccessToken, AccessTokenId};
 use td_services::auth::AuthError;
-use td_services::auth::jwt::{JwtConfig, decode_token};
-use td_services::auth::session::{Session, SessionError, SessionProvider, Sessions};
 use tracing::{Instrument, Level, Span, error, span};
 
 pub async fn authorization_layer(
-    State(db): State<DbPool>,
+    State(db): State<TdPool>,
     State(jwt_config): State<Arc<JwtConfig>>,
     State(sessions): State<Arc<Sessions>>,
     request: Request,
@@ -73,7 +74,7 @@ pub async fn authorization_layer(
             error!("Could not decode token: {}", e);
             TdError::from(AuthError::AuthenticationFailed)
         })?;
-    let access_token_id: AccessTokenId = token.jti().into();
+    let access_token_id: AccessTokenId = token.jti.into();
 
     // Get user_id/role_id from session
     let mut conn = db
@@ -81,9 +82,15 @@ pub async fn authorization_layer(
         .await
         .map_err(|e| TdError::from(SessionError::CouldNotGetDbConn(e)))?;
     let session = sessions
-        .get_session(&mut conn, &access_token_id)
+        .get(&mut conn)
         .await
-        //        .log_err_warn(ToString::to_string)
+        .map_err(|e| {
+            error!("Could not get session: {}", e);
+            TdError::from(AuthError::AuthenticationFailed)
+        })?
+        .get(&access_token_id)
+        .cloned()
+        .ok_or_else(|| TdError::from(SessionError::NotFound(access_token_id)))
         .map_err(|e| {
             error!("Could not get session: {}", e);
             TdError::from(AuthError::AuthenticationFailed)
@@ -118,10 +125,10 @@ mod tests {
     use super::*;
     use std::io::{self, Write};
     use std::sync::{Arc, Mutex};
+    use td_objects::Buildable;
     use td_objects::types::basic::{
         AccessTokenId, AtTime, RefreshTokenId, RoleId, RoleName, SessionStatus, UserId, UserName,
     };
-    use td_services::auth::session::Session;
     use tracing::info;
     use tracing::subscriber::set_default;
     use tracing_subscriber::layer::SubscriberExt;

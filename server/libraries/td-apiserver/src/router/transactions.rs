@@ -34,7 +34,7 @@ mod routes {
         Path(param): Path<TransactionParam>,
     ) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
         let request = context.update(param, ());
-        let response = transaction.cancel.service().await.oneshot(request).await?;
+        let response = transaction.cancel.service().oneshot(request).await?;
         Ok(UpdateStatus::OK(response))
     }
 
@@ -46,7 +46,7 @@ mod routes {
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<Transaction>, ErrorStatus> {
         let request = context.list((), query_params);
-        let response = transaction.list.service().await.oneshot(request).await?;
+        let response = transaction.list.service().oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
 
@@ -58,7 +58,7 @@ mod routes {
         Path(param): Path<TransactionParam>,
     ) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
         let request = context.update(param, ());
-        let response = transaction.recover.service().await.oneshot(request).await?;
+        let response = transaction.recover.service().oneshot(request).await?;
         Ok(UpdateStatus::OK(response))
     }
 
@@ -73,7 +73,6 @@ mod routes {
         let response = transaction
             .synchrotron
             .service()
-            .await
             .oneshot(request)
             .await?;
         Ok(ListStatus::OK(response))

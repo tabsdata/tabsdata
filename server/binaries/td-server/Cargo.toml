@@ -55,6 +55,11 @@ test_logging = []
 test_tower_metadata = []
 test-utils = []
 
+# Backend support features
+sqlite = ["td-apiserver/sqlite"]
+postgres = ["td-apiserver/postgres"]
+mysql = ["td-apiserver/mysql"]
+
 [package.metadata.cargo-machete]
 ignored = ["openssl", "paste", "toml", "utoipa", "utoipa-axum", "td-tower", "windows"]
 

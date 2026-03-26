@@ -30,13 +30,13 @@ impl FunctionRequesterV1 {
             .concurrency_limit(1)
             .rate_limit(1, CHECK_FREQUENCY)
             .timeout(Duration::from_secs(10))
-            .service(services.request.service().await)
+            .service(services.request.service())
             .into_service_provider();
         FunctionRequesterV1 { request_service }
     }
 
     async fn request(&self) -> Result<(), BoxError> {
-        let service = self.request_service.make().await;
+        let service = self.request_service.make();
         let _ = service.oneshot(()).await?;
         Ok(())
     }
@@ -78,13 +78,13 @@ impl FunctionDispatcherV1 {
             .concurrency_limit(1)
             .rate_limit(1, CHECK_FREQUENCY)
             .timeout(Duration::from_secs(10))
-            .service(services.dispatch.service().await)
+            .service(services.dispatch.service())
             .into_service_provider();
         FunctionDispatcherV1 { commit_service }
     }
 
     async fn commit(&self) -> Result<(), BoxError> {
-        let service = self.commit_service.make().await;
+        let service = self.commit_service.make();
         let _ = service.oneshot(()).await?;
         Ok(())
     }

@@ -38,7 +38,7 @@ mod routes {
         Path(param): Path<ExecutionParam>,
     ) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
         let request = context.update(param, ());
-        let response = executions.cancel.service().await.oneshot(request).await?;
+        let response = executions.cancel.service().oneshot(request).await?;
         Ok(UpdateStatus::OK(response))
     }
 
@@ -50,7 +50,7 @@ mod routes {
         Path(param): Path<ExecutionParam>,
     ) -> Result<GetStatus<ExecutionDetails>, ErrorStatus> {
         let request = context.read(param);
-        let response = executions.details.service().await.oneshot(request).await?;
+        let response = executions.details.service().oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }
 
@@ -63,7 +63,7 @@ mod routes {
         Json(request): Json<ExecutionRequest>,
     ) -> Result<CreateStatus<ExecutionResponse>, ErrorStatus> {
         let request = context.create(function_param, request);
-        let response = executions.execute.service().await.oneshot(request).await?;
+        let response = executions.execute.service().oneshot(request).await?;
         Ok(CreateStatus::CREATED(response))
     }
 
@@ -75,7 +75,7 @@ mod routes {
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<Execution>, ErrorStatus> {
         let request = context.list((), query_params);
-        let response = executions.list.service().await.oneshot(request).await?;
+        let response = executions.list.service().oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
 
@@ -89,9 +89,9 @@ mod routes {
     ) -> Result<GetStatus<ExecutionResponse>, ErrorStatus> {
         let request = context.read(param);
         let service = if *allow_disabled.with_disabled {
-            executions.read_with_disabled.service().await
+            executions.read_with_disabled.service()
         } else {
-            executions.read.service().await
+            executions.read.service()
         };
         let response = service.oneshot(request).await?;
         Ok(GetStatus::OK(response))
@@ -105,7 +105,7 @@ mod routes {
         Path(param): Path<ExecutionParam>,
     ) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
         let request = context.update(param, ());
-        let response = executions.recover.service().await.oneshot(request).await?;
+        let response = executions.recover.service().oneshot(request).await?;
         Ok(UpdateStatus::OK(response))
     }
 }

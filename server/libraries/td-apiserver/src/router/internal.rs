@@ -45,7 +45,7 @@ mod routes {
         Json(request): Json<CallbackRequest>,
     ) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
         let request = context.update(param, request);
-        let response = state.callback.service().await.oneshot(request).await?;
+        let response = state.callback.service().oneshot(request).await?;
         Ok(UpdateStatus::OK(response))
     }
 
@@ -58,7 +58,7 @@ mod routes {
         Json(request): Json<CallbackRequest>,
     ) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
         let request = context.update(param, request);
-        let response = state.callback.service().await.oneshot(request).await?;
+        let response = state.callback.service().oneshot(request).await?;
         Ok(UpdateStatus::OK(response))
     }
 
@@ -74,7 +74,6 @@ mod routes {
         let response = state
             .execute_version
             .service()
-            .await
             .oneshot(request)
             .await?;
         Ok(CreateStatus::CREATED(response))
@@ -96,7 +95,6 @@ mod routes {
         let response = state
             .read_version_execution
             .service()
-            .await
             .oneshot(request)
             .await?;
         Ok(GetStatus::OK(response))
@@ -118,7 +116,6 @@ mod routes {
         let response = state
             .download_state
             .service()
-            .await
             .raw_oneshot(request)
             .await?;
         Ok(ParquetFile(response))

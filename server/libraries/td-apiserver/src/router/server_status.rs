@@ -28,7 +28,7 @@ mod routes {
     pub async fn status(
         State(status_state): State<Arc<SystemServices>>,
     ) -> Result<GetStatus<ApiStatus>, ErrorStatus> {
-        let response = status_state.status.service().await.oneshot(()).await?;
+        let response = status_state.status.service().oneshot(()).await?;
         Ok(GetStatus::OK(response))
     }
 
@@ -39,7 +39,7 @@ mod routes {
         Extension(context): Extension<RequestContext>,
     ) -> Result<GetStatus<RuntimeInfo>, ErrorStatus> {
         let request = context.read(());
-        let response = executions.info.service().await.oneshot(request).await?;
+        let response = executions.info.service().oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }
 }
@@ -53,7 +53,7 @@ mod tests {
     use http::{Method, StatusCode};
     use ta_apiserver::router::RouterExtension;
     use ta_services::factory::ServiceFactory;
-    use td_database::sql::DbPool;
+    use td_database::pool::TdPool;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::system::{ApiStatus, HealthStatus};
     use td_objects::rest_urls::SERVER_STATUS;
@@ -70,7 +70,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_status(db: DbPool) {
+    async fn test_status(db: TdPool) {
         let router = ServerStatusRouter::router(Services::build(&Context::with_defaults(db)));
 
         // Retrieve the status
