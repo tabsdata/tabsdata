@@ -4,18 +4,17 @@
 
 use derive_builder::Builder;
 use itertools::{Either, Itertools};
-use sqlx::SqliteConnection;
 use std::collections::HashMap;
 use std::fmt::Debug;
-use td_error::display_vec::DisplayVec;
+use td_database::dynamic::DynamicConnection;
+use td_error::DisplayVec;
 use td_error::{TdError, display_vec, td_error};
-use td_objects::dxo::crudl::handle_sql_err;
-use td_objects::dxo::execution::ExecutionDB;
+use td_objects::dxo::execution::VersionedExecutionDB;
 use td_objects::dxo::table_data_version::ActiveTableDataVersionDB;
-use td_objects::sql::DaoQueries;
-use td_objects::sql::cte::{TableQueries, VersionedQueries};
-use td_objects::table_ref::{Version, Versions};
 use td_objects::types::basic::{FunctionId, TableDataVersionId, TableId, TriggeredOn};
+use td_objects::types::table_ref::{Version, Versions};
+use td_objects::{and, lte};
+use td_queries::{BasicQueries, DataVersionsQueries};
 
 #[td_error]
 pub enum VersionResolverError {
@@ -51,20 +50,25 @@ impl<'a> VersionResolver<'a> {
     /// resolve to multiple versions (i.e. List).
     pub async fn resolve(
         &self,
-        queries: &DaoQueries,
-        conn: &mut SqliteConnection,
+        conn: &mut DynamicConnection<'_>,
     ) -> Result<Vec<Option<ActiveTableDataVersionDB>>, TdError> {
         let (table_id, versions, triggered_on) = (self.table_id, self.versions, self.triggered_on);
         let versions = match versions {
             Versions::None => {
-                let v =
-                    optional_data_version(queries, conn, triggered_on, table_id, versions).await?;
+                let v = conn
+                    .fetch_optional_data_version_at::<{ ActiveTableDataVersionDB::All }, ActiveTableDataVersionDB>(
+                        table_id, triggered_on, versions,
+                    )
+                    .await?;
                 vec![v]
             }
             Versions::Single(version) => match version {
                 Version::Fixed(version) => {
                     // We fail if fixed not found.
-                    let v = data_version(queries, conn, triggered_on, table_id, versions)
+                    let v = conn
+                        .fetch_one_data_version_at::<{ ActiveTableDataVersionDB::All }, ActiveTableDataVersionDB>(
+                            table_id, triggered_on, versions,
+                        )
                         .await
                         .map_err(|_| {
                             VersionResolverError::FixedTableDataVersionsNotFound(display_vec![
@@ -74,13 +78,16 @@ impl<'a> VersionResolver<'a> {
                     vec![Some(v)]
                 }
                 Version::Head(_) | Version::Initial(_) => {
-                    let v = optional_data_version(queries, conn, triggered_on, table_id, versions)
+                    let v = conn
+                        .fetch_optional_data_version_at::<{ ActiveTableDataVersionDB::All }, ActiveTableDataVersionDB>(
+                            table_id, triggered_on, versions,
+                        )
                         .await?;
                     vec![v]
                 }
             },
             Versions::List(versions) => {
-                // Split versions into fixed and head versions so we only do 2 queries.
+                // Split versions into fixed, head and initial versions so we only do 3 queries.
                 let (fixed_versions, head_versions, initial_versions) =
                     versions.iter().cloned().enumerate().fold(
                         (HashMap::new(), HashMap::new(), HashMap::new()),
@@ -97,14 +104,11 @@ impl<'a> VersionResolver<'a> {
                 // Each fixed versions is queried by its id to find if it exists or not.
                 let fixed_versions = if !fixed_versions.is_empty() {
                     let version_list = fixed_versions.values().cloned().collect();
-                    let found = all_data_version(
-                        queries,
-                        conn,
-                        triggered_on,
-                        table_id,
-                        &Versions::List(version_list),
-                    )
-                    .await?;
+                    let found = conn
+                        .fetch_all_data_versions_at::<{ ActiveTableDataVersionDB::All }, ActiveTableDataVersionDB>(
+                            table_id, triggered_on, &Versions::List(version_list),
+                        )
+                        .await?;
                     let found: HashMap<_, _> =
                         found.into_iter().map(|v| (v.id.clone(), v)).collect();
 
@@ -131,7 +135,7 @@ impl<'a> VersionResolver<'a> {
                     HashMap::new()
                 };
 
-                // Head and tail versions are queried as a range, so we can map them back by position.
+                // Head and initial versions are queried as a range, so we can map them back by position.
                 let mut find_min_max_range =
                     async |versions: HashMap<usize, Version>, reverse: bool| {
                         let minmax = versions
@@ -141,14 +145,11 @@ impl<'a> VersionResolver<'a> {
                             .map(|(min, max)| (min.clone(), max.clone()));
 
                         let versions = if let Some((min, max)) = minmax {
-                            let mut found = all_data_version(
-                                queries,
-                                conn,
-                                triggered_on,
-                                table_id,
-                                &Versions::Range(min, max), // range always older to newer
-                            )
-                            .await?;
+                            let mut found = conn
+                                .fetch_all_data_versions_at::<{ ActiveTableDataVersionDB::All }, ActiveTableDataVersionDB>(
+                                    table_id, triggered_on, &Versions::Range(min, max), // range always older to newer
+                                )
+                                .await?;
 
                             // We know that this vec has all the versions in the range at most, so we can
                             // get the position by the index of the versions (or None if range is too short).
@@ -189,7 +190,7 @@ impl<'a> VersionResolver<'a> {
                     .collect::<HashMap<_, _>>()
                     .into_iter()
                     .sorted_by_key(|&(index, _)| index)
-                    .map(|(_, version)| version.clone())
+                    .map(|(_, version)| version)
                     .collect();
 
                 sorted_versions
@@ -201,8 +202,11 @@ impl<'a> VersionResolver<'a> {
                     Version::Head(_) | Version::Initial(_) => Some(from),
                     Version::Fixed(id) => {
                         let relative =
-                            relative_offset(queries, conn, triggered_on, table_id, from.clone())
-                                .await?;
+                            conn.fetch_relative_offset_at::<{ ActiveTableDataVersionDB::All }, ActiveTableDataVersionDB>(
+                                table_id,
+                                triggered_on,
+                                from
+                            ).await?;
 
                         match relative {
                             Some(relative) => Some(&Version::Head((-relative + 1) as isize)),
@@ -217,8 +221,11 @@ impl<'a> VersionResolver<'a> {
                     Version::Head(_) | Version::Initial(_) => Some(to),
                     Version::Fixed(id) => {
                         let relative =
-                            relative_offset(queries, conn, triggered_on, table_id, to.clone())
-                                .await?;
+                            conn.fetch_relative_offset_at::<{ ActiveTableDataVersionDB::All }, ActiveTableDataVersionDB>(
+                                table_id,
+                                triggered_on,
+                                to,
+                            ).await?;
 
                         match relative {
                             Some(relative) => Some(&Version::Head((-relative + 1) as isize)),
@@ -242,14 +249,12 @@ impl<'a> VersionResolver<'a> {
                 };
 
                 // Check relative versions are always older to newer (if we can).
-                let relative_indexes = match (relative_from, relative_to) {
-                    (Version::Head(from), Version::Head(to)) if from > to => Some((from, to)),
-                    (Version::Initial(from), Version::Initial(to)) if from > to => Some((from, to)),
-                    _ => None,
+                let is_desc_range = match (relative_from, relative_to) {
+                    (Version::Head(from), Version::Head(to)) => from > to,
+                    (Version::Initial(from), Version::Initial(to)) => from > to,
+                    _ => false,
                 };
-                if let Some((relative_from_index, relative_to_index)) = relative_indexes
-                    && relative_from_index > relative_to_index
-                {
+                if is_desc_range {
                     if self.error_on_desc_range {
                         Err(VersionResolverError::InvalidRange(self.versions.clone()))?
                     } else {
@@ -257,14 +262,16 @@ impl<'a> VersionResolver<'a> {
                     }
                 } else {
                     // And fetch the versions.
-                    let mut found =
-                        all_data_version(queries, conn, triggered_on, table_id, versions)
-                            .await?
-                            .into_iter()
-                            .map(Some)
-                            .collect::<Vec<_>>();
+                    let mut found = conn
+                        .fetch_all_data_versions_at::<{ ActiveTableDataVersionDB::All }, ActiveTableDataVersionDB>(
+                            table_id, triggered_on, versions,
+                        )
+                        .await?
+                        .into_iter()
+                        .map(Some)
+                        .collect::<Vec<_>>();
 
-                    // In we didn't find enough versions, we fill with None the empty spots, if possible.
+                    // If we didn't find enough versions, we fill with None the empty spots, if possible.
                     let found_size = found.len();
                     match (relative_from, relative_to) {
                         (Version::Head(from), Version::Head(to)) => {
@@ -275,7 +282,6 @@ impl<'a> VersionResolver<'a> {
                         (Version::Initial(from), Version::Initial(to)) => {
                             let range_size = (to - from).unsigned_abs() + 1;
                             found.resize(range_size, None);
-                            found.rotate_right(range_size - found_size);
                         }
                         _ => {
                             // HEAD to INITIAL or INITIAL to HEAD ranges do not define a size, so we
@@ -292,78 +298,48 @@ impl<'a> VersionResolver<'a> {
                 // by the function) are not considered new.
                 // This is useful to maintain consistency, even if removing/adding the table as
                 // a dependency, or depending on one table on NEW and (for example) HEAD.
-                let executions: Vec<ExecutionDB> = queries
-                    .select_versions_at::<{ ExecutionDB::All }, ExecutionDB>(
-                        Some(triggered_on),
-                        self.function_id, // need to use function_id to allow continuity through versions
-                    )?
-                    .build_query_as()
-                    .fetch_all(&mut *conn)
-                    .await
-                    .map_err(handle_sql_err)?;
-                // We get the latest-1 because the current ExecutionDB is already in place, and we
-                // need to ignore it.
-                let last_execution = executions
-                    .len()
-                    .checked_sub(2)
-                    .and_then(|n| executions.get(n));
-
-                match last_execution {
-                    // If there is a previous execution of the function, we can find the latest
-                    // data version of the table that existed up to that time.
-                    Some(last_execution) => {
-                        let last_table_data_version = optional_data_version(
-                            queries,
-                            conn,
-                            &last_execution.triggered_on,
-                            table_id,
-                            &Versions::None,
-                        )
-                        .await?;
-
-                        match last_table_data_version {
-                            // If there is such version, it means that from that point to the present
-                            // all versions are considered NEW.
-                            Some(v) => all_data_version(
-                                queries,
-                                conn,
-                                triggered_on,
-                                table_id,
-                                &Versions::Range(Version::Fixed(v.id), Version::Head(0)),
-                            )
-                            .await?
-                            .into_iter()
-                            // We need to remove the first element, given that Range bounds are included,
-                            // and we do not want the already used lower bound version as a New version.
-                            .skip(1)
-                            .map(Some)
-                            .collect::<Vec<_>>(),
-                            // But if there is not, it means that all data versions are NEW.
-                            None => all_data_version(
-                                queries,
-                                conn,
-                                triggered_on,
-                                table_id,
-                                &Versions::Range(Version::Initial(0), Version::Head(0)),
-                            )
-                            .await?
-                            .into_iter()
-                            .map(Some)
-                            .collect(),
-                        }
-                    }
-                    // And if there is no execution, we can also consider all versions as NEW.
-                    None => all_data_version(
-                        queries,
-                        conn,
-                        triggered_on,
-                        table_id,
-                        &Versions::Range(Version::Initial(0), Version::Head(0)),
+                // We use offset=1 because the current ExecutionDB is already in place, and we
+                // need to ignore it (offset=0 is the latest, offset=1 is the previous one).
+                let last_execution = conn
+                    .fetch_latest_before::<{ VersionedExecutionDB::All }, VersionedExecutionDB>(
+                        and!(&self.function_id, lte!(triggered_on)),
+                        1,
                     )
-                    .await?
-                    .into_iter()
-                    .map(Some)
-                    .collect(),
+                    .await?;
+
+                // If there is a previous execution, find the latest data version at that time
+                // to use as the lower bound (exclusive) for NEW versions.
+                let last_table_data_version = match last_execution {
+                    Some(last_execution) => conn
+                        .fetch_optional_data_version_at::<{ ActiveTableDataVersionDB::All }, ActiveTableDataVersionDB>(
+                            table_id, &last_execution.triggered_on, &Versions::None,
+                        )
+                        .await?,
+                    None => None,
+                };
+
+                match last_table_data_version {
+                    // From that version to HEAD, skipping the lower bound itself.
+                    Some(v) => conn
+                        .fetch_all_data_versions_at::<{ ActiveTableDataVersionDB::All }, ActiveTableDataVersionDB>(
+                            table_id, triggered_on,
+                            &Versions::Range(Version::Fixed(v.id), Version::Head(0)),
+                        )
+                        .await?
+                        .into_iter()
+                        .skip(1)
+                        .map(Some)
+                        .collect::<Vec<_>>(),
+                    // No previous execution or no data version at that time: all versions are NEW.
+                    None => conn
+                        .fetch_all_data_versions_at::<{ ActiveTableDataVersionDB::All }, ActiveTableDataVersionDB>(
+                            table_id, triggered_on,
+                            &Versions::Range(Version::Initial(0), Version::Head(0)),
+                        )
+                        .await?
+                        .into_iter()
+                        .map(Some)
+                        .collect(),
                 }
             }
         };
@@ -372,115 +348,36 @@ impl<'a> VersionResolver<'a> {
     }
 }
 
-async fn data_version(
-    queries: &DaoQueries,
-    conn: &mut SqliteConnection,
-    triggered_on: &TriggeredOn,
-    table_id: &TableId,
-    versions: &Versions,
-) -> Result<ActiveTableDataVersionDB, TdError> {
-    queries
-        .select_table_data_versions_at::<{ ActiveTableDataVersionDB::All }, ActiveTableDataVersionDB>(
-            Some(triggered_on),
-            table_id,
-            versions,
-        )?
-        .build_query_as()
-        .fetch_one(&mut *conn)
-        .await
-        .map_err(handle_sql_err)
-}
-
-async fn optional_data_version(
-    queries: &DaoQueries,
-    conn: &mut SqliteConnection,
-    triggered_on: &TriggeredOn,
-    table_id: &TableId,
-    versions: &Versions,
-) -> Result<Option<ActiveTableDataVersionDB>, TdError> {
-    queries
-        .select_table_data_versions_at::<{ ActiveTableDataVersionDB::All }, ActiveTableDataVersionDB>(
-            Some(triggered_on),
-            table_id,
-            versions,
-        )?
-        .build_query_as()
-        .fetch_optional(&mut *conn)
-        .await
-        .map_err(handle_sql_err)
-}
-
-async fn all_data_version(
-    queries: &DaoQueries,
-    conn: &mut SqliteConnection,
-    triggered_on: &TriggeredOn,
-    table_id: &TableId,
-    versions: &Versions,
-) -> Result<Vec<ActiveTableDataVersionDB>, TdError> {
-    queries
-        .select_table_data_versions_at::<{ ActiveTableDataVersionDB::All }, ActiveTableDataVersionDB>(
-            Some(triggered_on),
-            table_id,
-            versions,
-        )?
-        .build_query_as()
-        .fetch_all(&mut *conn)
-        .await
-        .map_err(handle_sql_err)
-}
-
-async fn relative_offset(
-    queries: &DaoQueries,
-    conn: &mut SqliteConnection,
-    triggered_on: &TriggeredOn,
-    table_id: &TableId,
-    version: Version,
-) -> Result<Option<i32>, TdError> {
-    queries
-        .find_relative_offset::<{ ActiveTableDataVersionDB::All }, ActiveTableDataVersionDB>(
-            Some(triggered_on),
-            table_id,
-            &Versions::Single(version),
-        )?
-        .build_query_scalar()
-        .fetch_optional(&mut *conn)
-        .await
-        .map_err(handle_sql_err)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use td_database::sql::DbPool;
+    use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::table::TableDB;
     use td_objects::dxo::table_data_version::ActiveTableDataVersionDB;
-    use td_objects::sql::{DaoQueries, SelectBy};
-    use td_objects::test_utils::seed_collection::seed_collection;
-    use td_objects::test_utils::seed_execution::seed_execution;
-    use td_objects::test_utils::seed_function::seed_function;
-    use td_objects::test_utils::seed_function_run::seed_function_run;
-    use td_objects::test_utils::seed_table_data_version::seed_table_data_version;
-    use td_objects::test_utils::seed_transaction::seed_transaction;
     use td_objects::types::basic::{
-        BundleId, CollectionName, Decorator, FunctionRunStatus, TableName, TableNameDto,
+        AtTime, BundleId, CollectionName, Decorator, FunctionRunStatus, TableName, TableNameDto,
         TransactionKey, UserId,
     };
+    use td_objects::{Buildable, and};
+    use td_queries::test_utils::SeedQueries;
+    use td_queries::{BasicQueries, VersionedQueries};
     use td_security::ENCODED_ID_SYSTEM;
 
     // Tables create N times, where N is the number of versions. Returning a map of table name to
     // the table data versions created, also ordered in ASC order.
     async fn seed_table_data_versions<'a>(
-        db: &DbPool,
+        db: &TdPool,
         tables: HashMap<&'a TableNameDto, usize>,
     ) -> HashMap<&'a TableNameDto, Vec<ActiveTableDataVersionDB>> {
-        let collection = seed_collection(
-            db,
-            &CollectionName::try_from("collection").unwrap(),
-            &UserId::try_from(ENCODED_ID_SYSTEM).unwrap(),
-        )
-        .await;
+        let collection = db
+            .seed_collection(
+                &CollectionName::try_from("collection").unwrap(),
+                &UserId::try_from(ENCODED_ID_SYSTEM).unwrap(),
+            )
+            .await
+            .unwrap();
 
         let created_tables = tables.keys().map(|t| (*t).clone()).collect();
         let dependencies = None;
@@ -505,50 +402,52 @@ mod tests {
             .build()
             .unwrap();
 
-        let function_version = seed_function(db, &collection, &create).await;
+        let function_version = db.seed_function(&collection, &create).await.unwrap();
 
         let mut table_versions_map = HashMap::new();
         for (table_name_dto, number_of_versions) in tables {
             let table_name = TableName::try_from(table_name_dto).unwrap();
             let mut table_versions = vec![];
             for _ in 0..number_of_versions {
-                let execution = seed_execution(db, &function_version).await;
+                let execution = db.seed_execution(&function_version).await.unwrap();
 
                 let transaction_key = TransactionKey::try_from("ANY").unwrap();
-                let transaction = seed_transaction(db, &execution, &transaction_key).await;
-
-                let function_run = seed_function_run(
-                    db,
-                    &collection,
-                    &function_version,
-                    &execution,
-                    &transaction,
-                    &FunctionRunStatus::Scheduled,
-                )
-                .await;
-
-                let table_version = DaoQueries::default()
-                    .select_by::<TableDB>(&(collection.id, &table_name))
-                    .unwrap()
-                    .build_query_as()
-                    .fetch_one(db)
+                let transaction = db
+                    .seed_transaction(&execution, &transaction_key)
                     .await
                     .unwrap();
 
-                let table_data_version = seed_table_data_version(
-                    db,
-                    &collection,
-                    &execution,
-                    &transaction,
-                    &function_run,
-                    &table_version,
-                )
-                .await;
-                let table_data_version = DaoQueries::default()
-                    .select_by::<ActiveTableDataVersionDB>(&(table_data_version.id))
-                    .unwrap()
-                    .build_query_as()
-                    .fetch_one(db)
+                let function_run = db
+                    .seed_function_run(
+                        &collection,
+                        &function_version,
+                        &execution,
+                        &transaction,
+                        &FunctionRunStatus::Scheduled,
+                    )
+                    .await
+                    .unwrap();
+
+                let table_version = db
+                    .fetch_one_at::<{ TableDB::All }, TableDB>(
+                        and!(&collection.id, &table_name),
+                        &AtTime::now(),
+                    )
+                    .await
+                    .unwrap();
+
+                let table_data_version = db
+                    .seed_table_data_version(
+                        &collection,
+                        &execution,
+                        &transaction,
+                        &function_run,
+                        &table_version,
+                    )
+                    .await
+                    .unwrap();
+                let table_data_version = db
+                    .fetch_one::<ActiveTableDataVersionDB>(&table_data_version.id)
                     .await
                     .unwrap();
                 table_versions.push(table_data_version);
@@ -560,7 +459,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_resolve_none(db: DbPool) -> Result<(), TdError> {
+    async fn test_resolve_none(db: TdPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 1)])).await;
@@ -576,7 +475,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
@@ -589,7 +488,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_resolve_none_multiple_tables(db: DbPool) -> Result<(), TdError> {
+    async fn test_resolve_none_multiple_tables(db: TdPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let extra_table_name_1 = TableNameDto::try_from("should_not_be_found_1")?;
         let extra_table_name_2 = TableNameDto::try_from("should_not_be_found_2")?;
@@ -614,7 +513,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
@@ -627,7 +526,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_resolve_none_triggered_on(db: DbPool) -> Result<(), TdError> {
+    async fn test_resolve_none_triggered_on(db: TdPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
@@ -653,7 +552,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
@@ -668,7 +567,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
@@ -683,7 +582,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
@@ -694,7 +593,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_resolve_single_head(db: DbPool) -> Result<(), TdError> {
+    async fn test_resolve_single_head(db: TdPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 3)])).await;
@@ -724,7 +623,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
@@ -740,7 +639,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
@@ -755,7 +654,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
@@ -770,7 +669,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
@@ -785,7 +684,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 1);
         let version_found = versions_found[0].as_ref();
@@ -795,7 +694,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_resolve_single_initial(db: DbPool) -> Result<(), TdError> {
+    async fn test_resolve_single_initial(db: TdPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 3)])).await;
@@ -825,7 +724,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
@@ -843,7 +742,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
@@ -858,7 +757,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
@@ -873,7 +772,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
@@ -888,7 +787,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 1);
         let version_found = versions_found[0].as_ref();
@@ -898,7 +797,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_resolve_single_fixed(db: DbPool) -> Result<(), TdError> {
+    async fn test_resolve_single_fixed(db: TdPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
@@ -926,7 +825,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
@@ -943,7 +842,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
@@ -962,7 +861,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await;
         assert!(res.is_err());
         let version_error = res.unwrap_err();
@@ -981,7 +880,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_resolve_list_relative(db: DbPool) -> Result<(), TdError> {
+    async fn test_resolve_list_relative(db: TdPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
@@ -1016,7 +915,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 6);
         // HEAD
@@ -1044,7 +943,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_resolve_list_fixed(db: DbPool) -> Result<(), TdError> {
+    async fn test_resolve_list_fixed(db: TdPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
@@ -1075,7 +974,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 2);
         // Version 1
@@ -1091,7 +990,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_resolve_list_mixed(db: DbPool) -> Result<(), TdError> {
+    async fn test_resolve_list_mixed(db: TdPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
@@ -1124,7 +1023,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 4);
         // HEAD~1
@@ -1148,7 +1047,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_resolve_list_fixed_not_found(db: DbPool) -> Result<(), TdError> {
+    async fn test_resolve_list_fixed_not_found(db: TdPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
@@ -1181,7 +1080,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await;
         assert!(versions_found.is_err());
         let version_error = versions_found.unwrap_err();
@@ -1202,7 +1101,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_resolve_range_head(db: DbPool) -> Result<(), TdError> {
+    async fn test_resolve_range_head(db: TdPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 3)])).await;
@@ -1235,7 +1134,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 3);
         // HEAD~2
@@ -1255,7 +1154,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_resolve_range_initial(db: DbPool) -> Result<(), TdError> {
+    async fn test_resolve_range_initial(db: TdPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 3)])).await;
@@ -1288,7 +1187,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 3);
         // INITIAL
@@ -1308,7 +1207,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_resolve_range_initial_head(db: DbPool) -> Result<(), TdError> {
+    async fn test_resolve_range_initial_head(db: TdPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 3)])).await;
@@ -1341,7 +1240,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 3);
         // INITIAL
@@ -1368,7 +1267,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 0);
         Ok(())
@@ -1376,7 +1275,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_resolve_range_head_initial(db: DbPool) -> Result<(), TdError> {
+    async fn test_resolve_range_head_initial(db: TdPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 3)])).await;
@@ -1409,7 +1308,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 3);
         // INITIAL
@@ -1429,7 +1328,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_resolve_range_head_incomplete(db: DbPool) -> Result<(), TdError> {
+    async fn test_resolve_range_head_incomplete(db: TdPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
@@ -1457,7 +1356,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 3);
         // HEAD~2
@@ -1475,7 +1374,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_resolve_range_inverse_head(db: DbPool) -> Result<(), TdError> {
+    async fn test_resolve_range_inverse_head(db: TdPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
@@ -1503,7 +1402,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert!(versions_found.is_empty());
         Ok(())
@@ -1511,7 +1410,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_resolve_range_inverse_initial(db: DbPool) -> Result<(), TdError> {
+    async fn test_resolve_range_inverse_initial(db: TdPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
@@ -1539,7 +1438,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert!(versions_found.is_empty());
         Ok(())
@@ -1547,7 +1446,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_resolve_range_fixed(db: DbPool) -> Result<(), TdError> {
+    async fn test_resolve_range_fixed(db: TdPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 3)])).await;
@@ -1583,7 +1482,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 3);
         // HEAD~2
@@ -1603,7 +1502,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_resolve_range_inverse_fixed(db: DbPool) -> Result<(), TdError> {
+    async fn test_resolve_range_inverse_fixed(db: TdPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 3)])).await;
@@ -1639,7 +1538,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert!(versions_found.is_empty());
         Ok(())
@@ -1647,7 +1546,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_resolve_range_same_head(db: DbPool) -> Result<(), TdError> {
+    async fn test_resolve_range_same_head(db: TdPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
@@ -1675,7 +1574,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
@@ -1686,7 +1585,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_resolve_range_same_initial(db: DbPool) -> Result<(), TdError> {
+    async fn test_resolve_range_same_initial(db: TdPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
@@ -1714,7 +1613,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
@@ -1725,7 +1624,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_resolve_range_same_head_not_found(db: DbPool) -> Result<(), TdError> {
+    async fn test_resolve_range_same_head_not_found(db: TdPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
@@ -1753,7 +1652,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_none());
@@ -1762,7 +1661,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_resolve_range_same_initial_not_found(db: DbPool) -> Result<(), TdError> {
+    async fn test_resolve_range_same_initial_not_found(db: TdPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
@@ -1790,7 +1689,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_none());
@@ -1799,7 +1698,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_resolve_range_same_fixed(db: DbPool) -> Result<(), TdError> {
+    async fn test_resolve_range_same_fixed(db: TdPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
@@ -1830,7 +1729,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
@@ -1841,7 +1740,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_resolve_range_fixed_head(db: DbPool) -> Result<(), TdError> {
+    async fn test_resolve_range_fixed_head(db: TdPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
@@ -1869,7 +1768,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 2);
         // Fixed
@@ -1885,7 +1784,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_resolve_range_fixed_initial(db: DbPool) -> Result<(), TdError> {
+    async fn test_resolve_range_fixed_initial(db: TdPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
@@ -1913,7 +1812,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 2);
         // Fixed
@@ -1929,7 +1828,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_resolve_range_matching_head_fixed(db: DbPool) -> Result<(), TdError> {
+    async fn test_resolve_range_matching_head_fixed(db: TdPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
@@ -1957,7 +1856,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 1);
         // HEAD and fixed
@@ -1969,7 +1868,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_resolve_range_matching_head_initial(db: DbPool) -> Result<(), TdError> {
+    async fn test_resolve_range_matching_head_initial(db: TdPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
@@ -1997,7 +1896,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 1);
         assert!(versions_found[0].is_some());
@@ -2008,7 +1907,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_resolve_range_matching_initial_fixed(db: DbPool) -> Result<(), TdError> {
+    async fn test_resolve_range_matching_initial_fixed(db: TdPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
@@ -2036,7 +1935,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 1);
         // HEAD and fixed
@@ -2048,7 +1947,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_resolve_range_mixed_head_bound(db: DbPool) -> Result<(), TdError> {
+    async fn test_resolve_range_mixed_head_bound(db: TdPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
@@ -2076,7 +1975,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
         assert_eq!(versions_found.len(), 5);
         // Head bound as None (nothing else found)
@@ -2093,17 +1992,17 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_resolve_empty_list(db: DbPool) -> Result<(), TdError> {
+    async fn test_resolve_empty_list(db: TdPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
 
-        let requester_collection = seed_collection(
-            &db,
-            &CollectionName::try_from("requester_collection")?,
-            &UserId::try_from(ENCODED_ID_SYSTEM)?,
-        )
-        .await;
+        let requester_collection = db
+            .seed_collection(
+                &CollectionName::try_from("requester_collection")?,
+                &UserId::try_from(ENCODED_ID_SYSTEM)?,
+            )
+            .await?;
         let create = FunctionRegister::builder()
             .try_name("requester")?
             .try_description("function_foo description")?
@@ -2118,11 +2017,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         // This function version is the one requesting the table data versions.
-        let requester_function = seed_function(&db, &requester_collection, &create).await;
+        let requester_function = db.seed_function(&requester_collection, &create).await?;
         // Create execution for function (meaning all previously created versions were already taken by this execution).
-        let _ = seed_execution(&db, &requester_function).await;
+        let _ = db.seed_execution(&requester_function).await;
         // Create 2nd execution for function (which would be, the current execution)
-        let _ = seed_execution(&db, &requester_function).await;
+        let _ = db.seed_execution(&requester_function).await;
 
         let mut conn = db.acquire().await.unwrap();
 
@@ -2156,7 +2055,7 @@ mod tests {
                 .versions(&versions)
                 .triggered_on(&triggered_on)
                 .build()?
-                .resolve(&DaoQueries::default(), &mut conn)
+                .resolve(&mut conn)
                 .await?;
             assert_eq!(versions_found.len(), 0, "versions: {:?}", versions);
         }
@@ -2165,7 +2064,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_resolve_range_validate(db: DbPool) -> Result<(), TdError> {
+    async fn test_resolve_range_validate(db: TdPool) -> Result<(), TdError> {
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 1)])).await;
@@ -2185,7 +2084,7 @@ mod tests {
             .triggered_on(&triggered_on)
             .error_on_desc_range(true)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await;
         assert!(versions_found.is_err());
         let version_error = versions_found.unwrap_err();
@@ -2199,18 +2098,18 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_resolve_new_no_execution(db: DbPool) -> Result<(), TdError> {
+    async fn test_resolve_new_no_execution(db: TdPool) -> Result<(), TdError> {
         // checks that all versions are resolved by NEW when there is no execution
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
 
-        let requester_collection = seed_collection(
-            &db,
-            &CollectionName::try_from("requester_collection")?,
-            &UserId::try_from(ENCODED_ID_SYSTEM)?,
-        )
-        .await;
+        let requester_collection = db
+            .seed_collection(
+                &CollectionName::try_from("requester_collection")?,
+                &UserId::try_from(ENCODED_ID_SYSTEM)?,
+            )
+            .await?;
         let create = FunctionRegister::builder()
             .try_name("requester")?
             .try_description("function_foo description")?
@@ -2225,7 +2124,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         // This function version is the one requesting the table data versions
-        let requester_function = seed_function(&db, &requester_collection, &create).await;
+        let requester_function = db.seed_function(&requester_collection, &create).await?;
 
         let mut conn = db.acquire().await.unwrap();
 
@@ -2248,7 +2147,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
 
         // No execution, gets all table versions
@@ -2264,18 +2163,18 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_resolve_new_with_actual_execution(db: DbPool) -> Result<(), TdError> {
+    async fn test_resolve_new_with_actual_execution(db: TdPool) -> Result<(), TdError> {
         // checks that no versions are resolved by NEW when there is an execution
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
             seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
 
-        let requester_collection = seed_collection(
-            &db,
-            &CollectionName::try_from("requester_collection")?,
-            &UserId::try_from(ENCODED_ID_SYSTEM)?,
-        )
-        .await;
+        let requester_collection = db
+            .seed_collection(
+                &CollectionName::try_from("requester_collection")?,
+                &UserId::try_from(ENCODED_ID_SYSTEM)?,
+            )
+            .await?;
         let create = FunctionRegister::builder()
             .try_name("requester")?
             .try_description("function_foo description")?
@@ -2290,11 +2189,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         // This function version is the one requesting the table data versions.
-        let requester_function = seed_function(&db, &requester_collection, &create).await;
+        let requester_function = db.seed_function(&requester_collection, &create).await?;
         // Create execution for function (meaning all previously created versions were already taken by this execution).
-        let _ = seed_execution(&db, &requester_function).await;
+        let _ = db.seed_execution(&requester_function).await;
         // Create 2nd execution for function (which would be, the current execution)
-        let _ = seed_execution(&db, &requester_function).await;
+        let _ = db.seed_execution(&requester_function).await;
 
         let mut conn = db.acquire().await.unwrap();
 
@@ -2317,7 +2216,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
 
         // With execution, get no table versions
@@ -2327,14 +2226,14 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_resolve_new_with_previous_execution(db: DbPool) -> Result<(), TdError> {
+    async fn test_resolve_new_with_previous_execution(db: TdPool) -> Result<(), TdError> {
         // checks that versions are resolved by NEW when there is an execution prior to them
-        let requester_collection = seed_collection(
-            &db,
-            &CollectionName::try_from("requester_collection")?,
-            &UserId::try_from(ENCODED_ID_SYSTEM)?,
-        )
-        .await;
+        let requester_collection = db
+            .seed_collection(
+                &CollectionName::try_from("requester_collection")?,
+                &UserId::try_from(ENCODED_ID_SYSTEM)?,
+            )
+            .await?;
         let create = FunctionRegister::builder()
             .try_name("requester")?
             .try_description("function_foo description")?
@@ -2349,9 +2248,9 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         // This function version is the one requesting the table data versions.
-        let requester_function = seed_function(&db, &requester_collection, &create).await;
+        let requester_function = db.seed_function(&requester_collection, &create).await?;
         // Create execution for function (meaning all previously created versions were already taken by this execution).
-        let _ = seed_execution(&db, &requester_function).await;
+        let _ = db.seed_execution(&requester_function).await?;
 
         let table_name = TableNameDto::try_from("joaquin")?;
         let table_data_versions =
@@ -2378,7 +2277,7 @@ mod tests {
             .versions(&versions)
             .triggered_on(&triggered_on)
             .build()?
-            .resolve(&DaoQueries::default(), &mut conn)
+            .resolve(&mut conn)
             .await?;
 
         // With previous execution, get all table versions (all are new)
@@ -2389,6 +2288,190 @@ mod tests {
         assert!(versions_found[1].is_some());
         let version_found = versions_found[1].as_ref().unwrap();
         assert_eq!(version_found.id, version_2.id);
+        Ok(())
+    }
+
+    #[td_test::test(sqlx)]
+    #[tokio::test]
+    async fn test_resolve_list_empty_vec(db: TdPool) -> Result<(), TdError> {
+        let table_name = TableNameDto::try_from("joaquin")?;
+        let table_data_versions =
+            seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
+
+        let table_id = table_data_versions.get(&table_name).unwrap()[0].table_id;
+        let versions = Versions::List(vec![]);
+        let triggered_on = TriggeredOn::now();
+        let mut conn = db.acquire().await.unwrap();
+
+        // Empty list resolves to empty result, even when versions exist.
+        let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
+            .table_id(&table_id)
+            .versions(&versions)
+            .triggered_on(&triggered_on)
+            .build()?
+            .resolve(&mut conn)
+            .await?;
+        assert!(versions_found.is_empty());
+        Ok(())
+    }
+
+    #[td_test::test(sqlx)]
+    #[tokio::test]
+    async fn test_resolve_range_validate_initial(db: TdPool) -> Result<(), TdError> {
+        let table_name = TableNameDto::try_from("joaquin")?;
+        let table_data_versions =
+            seed_table_data_versions(&db, HashMap::from([(&table_name, 1)])).await;
+
+        let table_id = table_data_versions.get(&table_name).unwrap()[0].table_id;
+        let triggered_on = TriggeredOn::now();
+        let mut conn = db.acquire().await.unwrap();
+
+        // Inversed INITIAL range with error_on_desc_range returns error.
+        let versions = Versions::Range(Version::Initial(1), Version::Initial(0));
+        let result = VersionResolver::builder()
+            .function_id(&FunctionId::default())
+            .table_id(&table_id)
+            .versions(&versions)
+            .triggered_on(&triggered_on)
+            .error_on_desc_range(true)
+            .build()?
+            .resolve(&mut conn)
+            .await;
+        assert!(result.is_err());
+        let result_err = result.unwrap_err();
+        let version_error = result_err.domain_err::<VersionResolverError>();
+        assert!(matches!(
+            version_error,
+            VersionResolverError::InvalidRange(_)
+        ));
+        Ok(())
+    }
+
+    #[td_test::test(sqlx)]
+    #[tokio::test]
+    async fn test_resolve_range_fixed_not_found(db: TdPool) -> Result<(), TdError> {
+        let table_name = TableNameDto::try_from("joaquin")?;
+        let table_data_versions =
+            seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
+
+        let version_1 = &table_data_versions.get(&table_name).unwrap()[0];
+        let table_id = version_1.table_id;
+        let triggered_on = TriggeredOn::now();
+        let mut conn = db.acquire().await.unwrap();
+
+        // Range with a non-existent fixed "from" returns FixedTableDataVersionsNotFound.
+        let bad_id = TableDataVersionId::new();
+        let versions = Versions::Range(Version::Fixed(bad_id.clone()), Version::Head(0));
+        let result = VersionResolver::builder()
+            .function_id(&FunctionId::default())
+            .table_id(&table_id)
+            .versions(&versions)
+            .triggered_on(&triggered_on)
+            .build()?
+            .resolve(&mut conn)
+            .await;
+        assert!(result.is_err());
+        let result_err = result.unwrap_err();
+        let err = result_err.domain_err::<VersionResolverError>();
+        let VersionResolverError::FixedTableDataVersionsNotFound(not_found) = err else {
+            panic!("Expected FixedTableDataVersionsNotFound, got {:?}", err);
+        };
+        assert_eq!(not_found.len(), 1);
+        assert_eq!(not_found[0], bad_id);
+
+        // Same for non-existent fixed "to".
+        let versions = Versions::Range(Version::Head(-1), Version::Fixed(bad_id.clone()));
+        let result = VersionResolver::builder()
+            .function_id(&FunctionId::default())
+            .table_id(&table_id)
+            .versions(&versions)
+            .triggered_on(&triggered_on)
+            .build()?
+            .resolve(&mut conn)
+            .await;
+        assert!(result.is_err());
+        let result_err = result.unwrap_err();
+        let err = result_err.domain_err::<VersionResolverError>();
+        let VersionResolverError::FixedTableDataVersionsNotFound(not_found) = err else {
+            panic!("Expected FixedTableDataVersionsNotFound, got {:?}", err);
+        };
+        assert_eq!(not_found.len(), 1);
+        assert_eq!(not_found[0], bad_id);
+        Ok(())
+    }
+
+    #[td_test::test(sqlx)]
+    #[tokio::test]
+    async fn test_resolve_range_head_with_triggered_on(db: TdPool) -> Result<(), TdError> {
+        let table_name = TableNameDto::try_from("joaquin")?;
+        let table_data_versions =
+            seed_table_data_versions(&db, HashMap::from([(&table_name, 3)])).await;
+
+        let version_1 = &table_data_versions.get(&table_name).unwrap()[0];
+        let version_2 = &table_data_versions.get(&table_name).unwrap()[1];
+        let table_id = version_1.table_id;
+        let mut conn = db.acquire().await.unwrap();
+
+        // Using version_2's triggered_on as cutoff: only v1 and v2 are visible.
+        // Range HEAD~1..HEAD should return v1 and v2.
+        let versions = Versions::Range(Version::Head(-1), Version::Head(0));
+        let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
+            .table_id(&table_id)
+            .versions(&versions)
+            .triggered_on(&version_2.triggered_on)
+            .build()?
+            .resolve(&mut conn)
+            .await?;
+        assert_eq!(versions_found.len(), 2);
+        assert_eq!(versions_found[0].as_ref().unwrap().id, version_1.id);
+        assert_eq!(versions_found[1].as_ref().unwrap().id, version_2.id);
+        Ok(())
+    }
+
+    #[td_test::test(sqlx)]
+    #[tokio::test]
+    async fn test_resolve_range_initial_incomplete(db: TdPool) -> Result<(), TdError> {
+        let table_name = TableNameDto::try_from("joaquin")?;
+        let table_data_versions =
+            seed_table_data_versions(&db, HashMap::from([(&table_name, 2)])).await;
+
+        let mut conn = db.acquire().await.unwrap();
+
+        let version_1 = &table_data_versions.get(&table_name).unwrap()[0];
+        let version_2 = &table_data_versions.get(&table_name).unwrap()[1];
+        assert_ne!(version_1.id, version_2.id);
+        assert_eq!(version_1.table_id, version_2.table_id);
+        assert!(version_1.triggered_on < version_2.triggered_on);
+
+        let table_id = version_1.table_id;
+
+        // INITIAL..INITIAL~2 requests 3 versions but only 2 exist.
+        // None should be appended at the newer (to) end.
+        let (versions, triggered_on) = (
+            Versions::Range(Version::Initial(0), Version::Initial(2)),
+            TriggeredOn::now(),
+        );
+        let versions_found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
+            .table_id(&table_id)
+            .versions(&versions)
+            .triggered_on(&triggered_on)
+            .build()?
+            .resolve(&mut conn)
+            .await?;
+        assert_eq!(versions_found.len(), 3);
+        // INITIAL
+        assert!(versions_found[0].is_some());
+        let version_found = versions_found[0].as_ref().unwrap();
+        assert_eq!(version_found.id, version_1.id);
+        // INITIAL~1
+        assert!(versions_found[1].is_some());
+        let version_found = versions_found[1].as_ref().unwrap();
+        assert_eq!(version_found.id, version_2.id);
+        // INITIAL~2 (doesn't exist, padded at the end)
+        assert!(versions_found[2].is_none());
         Ok(())
     }
 }

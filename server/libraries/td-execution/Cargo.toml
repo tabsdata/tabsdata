@@ -50,6 +50,7 @@ td-database = { workspace = true }
 te-execution = { workspace = true }
 td-error = { workspace = true }
 td-objects = { workspace = true }
+td-queries = { workspace = true }
 td-test = { workspace = true }
 
 # External dependencies
@@ -66,6 +67,7 @@ tokio = { workspace = true, features = ["full"] }
 
 [dev-dependencies]
 td-objects = { workspace = true, features = ["td-test"] }
+td-queries = { workspace = true, features = ["td-test"] }
 td-security = { workspace = true, features = ["td-test"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
