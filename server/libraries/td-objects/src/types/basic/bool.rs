@@ -2,10 +2,10 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-#[td_type::typed(bool(default = false))]
+#[ta_objects::typed(bool(default = false))]
 pub struct AllowDisabled;
 
-#[td_type::typed(bool)]
+#[ta_objects::typed(bool)]
 pub struct DataChanged;
 
 impl From<Option<HasData>> for DataChanged {
@@ -18,53 +18,63 @@ impl From<Option<HasData>> for DataChanged {
     }
 }
 
-#[td_type::typed(bool(default = true))]
+#[ta_objects::typed(bool(default = true))]
+#[derive(Eq, PartialEq, Hash)]
 pub struct Enabled;
 
-#[td_type::typed(bool(default = false))]
+#[ta_objects::typed(bool(default = false))]
+#[derive(Eq, PartialEq)]
 pub struct Fixed;
 
-#[td_type::typed(bool)]
+#[ta_objects::typed(bool)]
 pub struct FixedRole;
 
-#[td_type::typed(bool(default = false))]
+#[ta_objects::typed(bool(default = false))]
 pub struct FunctionOnly;
 
-#[td_type::typed(bool(default = false))]
+#[ta_objects::typed(bool(default = false))]
+#[derive(Eq, PartialEq, Hash)]
 pub struct HasData;
 
-#[td_type::typed(bool)]
+#[ta_objects::typed(bool)]
+#[derive(Eq, PartialEq)]
 pub struct IsEmptyVersions;
 
-#[td_type::typed(bool(default = false))]
+#[ta_objects::typed(bool(default = false))]
 pub struct OverrideDisabledTrigger;
 
-#[td_type::typed(bool)]
+#[ta_objects::typed(bool)]
+#[derive(Eq, PartialEq)]
 pub struct Partitioned;
 
-#[td_type::typed(bool(default = false))]
+#[ta_objects::typed(bool(default = false))]
+#[derive(Eq, PartialEq)]
 pub struct PasswordMustChange;
 
-#[td_type::typed(bool)]
+#[ta_objects::typed(bool)]
+#[derive(Eq, PartialEq)]
 pub struct Private;
 
-#[td_type::typed(bool(default = false))]
+#[ta_objects::typed(bool(default = false))]
 pub struct ReuseFrozen;
 
-#[td_type::typed(bool)]
+#[ta_objects::typed(bool)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct SelfDependency;
 
-#[td_type::typed(bool)]
+#[ta_objects::typed(bool)]
 pub struct SkipIfRunning;
 
-#[td_type::typed(bool)]
+#[ta_objects::typed(bool)]
 pub struct SysAdmin;
 
-#[td_type::typed(bool)]
+#[ta_objects::typed(bool)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct System;
 
-#[td_type::typed(bool(default = false))]
+#[ta_objects::typed(bool(default = false))]
 pub struct UncommittedStatus;
 
-#[td_type::typed(bool(default = true))]
+#[ta_objects::typed(bool(default = true))]
+#[derive(Eq, PartialEq)]
 pub struct UserEnabled;

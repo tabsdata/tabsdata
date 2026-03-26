@@ -5,7 +5,8 @@
 use td_common::execution_status::WorkerCallbackStatus;
 use td_error::{ApiError, TdError, api_error};
 
-#[td_type::typed_enum]
+#[ta_objects::typed_enum]
+#[derive(Eq, PartialEq)]
 pub enum Decorator {
     #[typed_enum(rename = "P")]
     Publisher,
@@ -15,7 +16,8 @@ pub enum Decorator {
     Subscriber,
 }
 
-#[td_type::typed_enum]
+#[ta_objects::typed_enum]
+#[derive(Eq, PartialEq)]
 pub enum DependencyStatus {
     #[typed_enum(rename = "A")]
     Active,
@@ -25,8 +27,8 @@ pub enum DependencyStatus {
 
 /// Represents the status of an execution.
 /// It is a summary of the statuses of all function runs within the execution.
-#[td_type::typed_enum]
-#[derive(Hash)]
+#[ta_objects::typed_enum]
+#[derive(Eq, PartialEq, Hash)]
 pub enum ExecutionStatus {
     /// All function runs are scheduled.
     #[typed_enum(rename = "S")]
@@ -73,8 +75,8 @@ pub enum ExecutionStatus {
 ///     Done --> Committed
 ///     Committed --> Yanked
 /// ```
-#[td_type::typed_enum]
-#[derive(Hash)]
+#[ta_objects::typed_enum]
+#[derive(Eq, PartialEq, Hash)]
 pub enum FunctionRunStatus {
     #[typed_enum(rename = "S")]
     Scheduled,
@@ -118,7 +120,8 @@ impl TryFrom<WorkerCallbackStatus> for FunctionRunStatus {
     }
 }
 
-#[td_type::typed_enum]
+#[ta_objects::typed_enum]
+#[derive(Eq, PartialEq)]
 pub enum FunctionStatus {
     #[typed_enum(rename = "A")]
     Active,
@@ -128,13 +131,13 @@ pub enum FunctionStatus {
     Deleted,
 }
 
-#[td_type::typed_enum]
+#[ta_objects::typed_enum]
 pub enum GrantType {
     #[typed_enum(rename = "refresh_token")]
     RefreshToken,
 }
 
-#[td_type::typed_enum]
+#[ta_objects::typed_enum]
 pub enum GlobalStatus {
     #[typed_enum(rename = "S")]
     Scheduled,
@@ -148,7 +151,8 @@ pub enum GlobalStatus {
     Unknown,
 }
 
-#[td_type::typed_enum]
+#[ta_objects::typed_enum]
+#[derive(Eq, PartialEq)]
 pub enum PermissionEntityType {
     #[typed_enum(rename = "s")]
     System,
@@ -156,7 +160,8 @@ pub enum PermissionEntityType {
     Collection,
 }
 
-#[td_type::typed_enum]
+#[ta_objects::typed_enum]
+#[derive(Eq, PartialEq)]
 pub enum PermissionType {
     #[typed_enum(rename = "sa")]
     SysAdmin,
@@ -182,7 +187,8 @@ impl PermissionType {
     }
 }
 
-#[td_type::typed_enum]
+#[ta_objects::typed_enum]
+#[derive(Eq, PartialEq)]
 pub enum SessionStatus {
     #[typed_enum(rename = "a")]
     Active,
@@ -198,7 +204,8 @@ pub enum SessionStatus {
     InvalidUserDisabled,
 }
 
-#[td_type::typed_enum]
+#[ta_objects::typed_enum]
+#[derive(Eq, PartialEq)]
 pub enum TableStatus {
     #[typed_enum(rename = "A")]
     Active,
@@ -208,7 +215,7 @@ pub enum TableStatus {
     Deleted,
 }
 
-#[td_type::typed_enum]
+#[ta_objects::typed_enum]
 #[derive(Default)]
 pub enum TableType {
     #[default]
@@ -224,8 +231,8 @@ pub enum TableType {
 /// So final status (e.g., Committed, Canceled, Yanked) means all function runs within the transaction
 /// do have the same status.
 /// It is a summary of the statuses of all function runs within the transaction.
-#[td_type::typed_enum]
-#[derive(Hash)]
+#[ta_objects::typed_enum]
+#[derive(Eq, PartialEq, Hash)]
 pub enum TransactionStatus {
     /// All function runs are scheduled.
     #[typed_enum(rename = "S")]
@@ -250,7 +257,8 @@ pub enum TransactionStatus {
     Unexpected,
 }
 
-#[td_type::typed_enum]
+#[ta_objects::typed_enum]
+#[derive(Eq, PartialEq)]
 pub enum Trigger {
     #[typed_enum(rename = "M")]
     Manual,
@@ -258,8 +266,8 @@ pub enum Trigger {
     Dependency,
 }
 
-#[td_type::typed_enum]
-#[derive(Default)]
+#[ta_objects::typed_enum]
+#[derive(Default, Eq, PartialEq)]
 pub enum TriggerStatus {
     #[default]
     #[typed_enum(rename = "A")]
@@ -270,7 +278,8 @@ pub enum TriggerStatus {
     Deleted,
 }
 
-#[td_type::typed_enum]
+#[ta_objects::typed_enum]
+#[derive(Eq, PartialEq)]
 pub enum TriggerType {
     #[typed_enum(rename = "M")]
     Manual,
@@ -280,7 +289,8 @@ pub enum TriggerType {
     StageTrigger,
 }
 
-#[td_type::typed_enum]
+#[ta_objects::typed_enum]
+#[derive(Eq, PartialEq)]
 pub enum WorkerMessageStatus {
     #[typed_enum(rename = "N")]
     None,
@@ -290,7 +300,8 @@ pub enum WorkerMessageStatus {
     Unlocked,
 }
 
-#[td_type::typed_enum]
+#[ta_objects::typed_enum]
+#[derive(Eq, PartialEq)]
 pub enum WorkerStatus {
     #[typed_enum(rename = "S")]
     Scheduled,
@@ -326,8 +337,8 @@ impl From<WorkerCallbackStatus> for WorkerStatus {
     }
 }
 
-#[td_type::typed_enum]
-#[derive(Hash)]
+#[ta_objects::typed_enum]
+#[derive(Eq, PartialEq, Hash)]
 pub enum WorkerTypeDto {
     #[typed_enum(rename = "CT")]
     CronTrigger,
@@ -335,7 +346,8 @@ pub enum WorkerTypeDto {
     StageTrigger,
 }
 
-#[td_type::typed_enum]
+#[ta_objects::typed_enum]
+#[derive(Eq, PartialEq)]
 pub enum WorkerType {
     #[typed_enum(rename = "F")]
     FunctionRunner,

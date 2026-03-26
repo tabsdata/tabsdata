@@ -7,8 +7,8 @@ mod i16;
 mod i32;
 mod i64;
 mod id;
-mod id_name;
 mod string;
+mod tagged;
 mod timestamp;
 mod typed_enum;
 
@@ -18,7 +18,7 @@ pub use i16::*;
 pub use i32::*;
 pub use i64::*;
 pub use id::*;
-pub use id_name::*;
 pub use string::*;
+pub use tagged::*;
 pub use timestamp::*;
 pub use typed_enum::*;

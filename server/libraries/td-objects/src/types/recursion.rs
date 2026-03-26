@@ -53,7 +53,7 @@ impl RecursionOptions {
     }
 }
 
-#[td_type::Dlo]
+#[ta_objects::Dlo]
 #[derive(Copy, Serialize, Deserialize)]
 pub struct RecursionOptionsV1 {
     /// Maximum recursive depth when going upstream (toward ancestors)
