@@ -30,7 +30,7 @@ impl ListFilter for NoFilter {
 
 /// Extracts a [`ListFilter`] from a tower [`Handler`].
 pub trait ListFilterExtract: ListFilter + Clone + Send + 'static {
-    fn extract(handler: &Handler) -> Result<Self, FromHandlerError>;
+    fn extract(handler: &mut Handler) -> Result<Self, FromHandlerError>;
 
     /// Returns the handler types actually consumed by this extractor.
     #[cfg(feature = "test_tower_metadata")]
@@ -38,7 +38,7 @@ pub trait ListFilterExtract: ListFilter + Clone + Send + 'static {
 }
 
 impl ListFilterExtract for NoFilter {
-    fn extract(_handler: &Handler) -> Result<Self, FromHandlerError> {
+    fn extract(_handler: &mut Handler) -> Result<Self, FromHandlerError> {
         Ok(NoFilter)
     }
 
@@ -48,14 +48,37 @@ impl ListFilterExtract for NoFilter {
     }
 }
 
-/// [`FromHandler`] wrapper that extracts a [`ListFilterExtract`] from the
-/// tower [`Handler`]. Used as a parameter type in `By` service functions.
+/// Extracts a [`ListFilterExtract`] from the tower [`Handler`].
+///
+/// Follows the same pattern as [`SqlRef`](crate::sql_condition::SqlRef):
+/// implements [`Deref`](std::ops::Deref) so the inner filter is accessed
+/// without destructuring.
 #[derive(Debug, Clone)]
-pub struct ListFilterInput<F>(pub F);
+pub struct ListRef<F>(F);
 
-impl<F: ListFilterExtract> FromHandler for ListFilterInput<F> {
-    fn from_handler(handler: &Handler) -> Result<Self, FromHandlerError> {
-        Ok(ListFilterInput(F::extract(handler)?))
+impl<F> ListRef<F> {
+    pub fn new(value: F) -> Self {
+        Self(value)
+    }
+}
+
+impl<F> std::ops::Deref for ListRef<F> {
+    type Target = F;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<F: ListFilter> ListFilter for ListRef<F> {
+    fn condition<D: DaoCore>(&self) -> Result<Condition, SqlError> {
+        self.0.condition::<D>()
+    }
+}
+
+impl<F: ListFilterExtract> FromHandler for ListRef<F> {
+    fn from_handler(handler: &mut Handler) -> Result<Self, FromHandlerError> {
+        Ok(ListRef(F::extract(handler)?))
     }
 
     #[cfg(feature = "test_tower_metadata")]

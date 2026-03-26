@@ -6,24 +6,21 @@
 //! be created by composing these services with other layer.
 
 use crate::ctx_service::CtxResponse;
+use crate::ctx_service::ReqCtx;
 use crate::error::{ConnectionError, FromHandlerError};
-use crate::extractors::{Connection, ConnectionType, Input, ReqCtx, SrvCtx};
 use crate::handler::{Handler, IntoHandler};
 #[cfg(feature = "test_tower_metadata")]
-use crate::metadata::{MetadataMutex, type_of, type_of_val};
+use crate::metadata::type_of;
 use std::any::type_name;
 use std::future::Future;
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::Arc;
+use td_database::dynamic::DynamicConnection;
 use td_database::pool::TdPool;
 use td_error::TdError;
 use tower::{Layer, Service};
 use tracing::{error, trace};
-
-/// Utility trait to ensure that the type is Send + Sync + 'static
-pub trait Share: Send + Sync + 'static {}
-impl<T: Send + Sync + 'static> Share for T {}
 
 /// ServiceEntry is a layer wrapping InitService.
 pub struct ServiceEntry<Res> {
@@ -83,7 +80,7 @@ where
     S: Service<Handler, Response = Handler, Error = TdError> + Clone + Send + 'static,
     S::Future: Send + 'static,
     Req: Send + Sync + 'static,
-    Res: Send + Sync + 'static,
+    Res: Send + 'static,
 {
     type Response = CtxResponse<Res>;
     type Error = TdError;
@@ -105,20 +102,20 @@ where
             // Create handler with initial request
             let mut handler = Handler::new();
             // For convenience, we insert the () into the handler (unit type always present).
-            handler.insert(Input(Arc::new(())));
-            handler.insert(Input(Arc::new(req)));
+            handler.set(());
+            handler.set(req);
 
             // Also insert context
-            handler.insert(ReqCtx::default());
+            handler.set(ReqCtx::default());
 
             #[cfg(feature = "test_tower_metadata")]
             {
-                use crate::metadata::{MetadataMutex, type_of};
+                use crate::metadata::Metadata;
 
                 // Add metadata to handler
                 let res_type_name = type_of::<ReqCtx>();
-                let metadata = MetadataMutex::with_initial_types(&[res_type_name]);
-                handler.insert(Input::new(metadata));
+                let metadata = Metadata::with_initial_types(&[res_type_name]);
+                handler.insert(metadata);
             }
 
             // And send it to the next service, awaiting the completion
@@ -133,24 +130,13 @@ where
                 }
             }?;
 
-            // Extract the response type from the handler (we don't check for context, just other
-            // input types layer might have created)
+            // Extract the response type from the handler.
             let res = handler
-                .remove::<Input<Res>>()
+                .take::<Res>()
                 .ok_or(FromHandlerError::NotFound(String::from(type_name::<Res>())))?;
-            let res = Arc::try_unwrap(res.0)
-                .map_err(|_| FromHandlerError::InternalError(String::from(type_name::<Res>())))?;
             // Also get ctx
             let ctx = handler
-                .remove::<ReqCtx>()
-                .ok_or(FromHandlerError::NotFound(String::from(
-                    type_name::<ReqCtx>(),
-                )))?;
-            let ctx = ctx
-                .arc()
-                .lock()
-                .await
-                .take()
+                .take::<ReqCtx>()
                 .ok_or(FromHandlerError::NotFound(String::from(
                     type_name::<ReqCtx>(),
                 )))?;
@@ -210,7 +196,6 @@ impl<S, T> Service<Handler> for SrvCtxProviderService<S, T>
 where
     S: Service<Handler> + Send + Clone + 'static,
     S::Future: Send,
-    S::Response: Send,
     T: Send + Sync + 'static,
 {
     type Response = S::Response;
@@ -232,12 +217,12 @@ where
 
         Box::pin(async move {
             #[cfg(feature = "test_tower_metadata")]
-            MetadataMutex::extract(&handler)
-                .created_type("ContextProviderService", type_of::<SrvCtx<T>>())
-                .await;
+            if let Some(m) = crate::metadata::Metadata::extract(&mut handler) {
+                m.created_type("ContextProviderService", type_of::<T>());
+            }
 
             // Insert the context into the handler
-            handler.insert(SrvCtx(context));
+            handler.set_arc(context);
 
             // And send it to the next service
             inner.call(handler).await
@@ -279,7 +264,6 @@ impl<S, Err> Service<Handler> for ConnectionProviderService<S>
 where
     S: Service<Handler, Response = Handler, Error = Err> + Clone + Send + 'static,
     S::Future: Send,
-    S::Response: Send,
     Err: From<TdError>,
 {
     type Response = S::Response;
@@ -304,12 +288,13 @@ where
                 .acquire()
                 .await
                 .map_err(|e| ConnectionError::CannotGetConnection(e).into())?;
-            let connection = Connection::new(connection);
-
             #[cfg(feature = "test_tower_metadata")]
-            MetadataMutex::extract(&handler)
-                .created_type("ConnectionProviderService", type_of_val(&connection))
-                .await;
+            if let Some(m) = crate::metadata::Metadata::extract(&mut handler) {
+                m.created_type(
+                    "ConnectionProviderService",
+                    type_of::<DynamicConnection<'static>>(),
+                );
+            }
 
             // Add it to the handler
             handler.insert(connection);
@@ -355,7 +340,6 @@ impl<S> Service<Handler> for TransactionProviderService<S>
 where
     S: Service<Handler, Response = Handler, Error = TdError> + Clone + Send + 'static,
     S::Future: Send,
-    S::Error: From<TdError>,
 {
     type Response = S::Response;
     type Error = S::Error;
@@ -379,48 +363,48 @@ where
                 .begin()
                 .await
                 .map_err(ConnectionError::CannotBeginTransaction)?;
-            let connection = Connection::new(transaction);
+            let connection = transaction.into_connection();
 
             #[cfg(feature = "test_tower_metadata")]
-            MetadataMutex::extract(&handler)
-                .created_type("TransactionProviderService", type_of_val(&connection))
-                .await;
-
-            // Note this just clones the Arc, not the transaction itself
-            handler.insert(connection.clone());
-
-            // Send it to the next service
-            let result = inner.call(handler).await;
-
-            #[cfg(feature = "test_tower_metadata")]
-            if let Ok(ref handler) = result {
-                MetadataMutex::extract(handler)
-                    .remove_created("TransactionProviderService", type_of_val(&connection))
-                    .await;
+            if let Some(m) = crate::metadata::Metadata::extract(&mut handler) {
+                m.created_type(
+                    "TransactionProviderService",
+                    type_of::<DynamicConnection<'static>>(),
+                );
             }
 
-            // Regain the transaction
-            let transaction = connection
-                .arc()
-                .reclaim()
-                .await
-                .and_then(|conn| match conn {
-                    ConnectionType::Transaction(t) => Ok(t),
-                    _ => Err(ConnectionError::ConnectionLost),
-                })?;
+            // Insert the connection into the handler
+            handler.insert(connection);
 
-            // Commit or rollback based on the result
+            // Send it to the next service
+            #[allow(unused_mut)]
+            let mut result = inner.call(handler).await;
+
+            // Handle commit or rollback based on the result
             match result {
-                Ok(response) => {
-                    if let Err(e) = transaction.commit().await {
-                        return Err(ConnectionError::CannotCommitTransaction(e))?;
+                Ok(ref mut handler) => {
+                    #[cfg(feature = "test_tower_metadata")]
+                    if let Some(m) = crate::metadata::Metadata::extract(handler) {
+                        m.remove_created(
+                            "TransactionProviderService",
+                            type_of::<DynamicConnection<'static>>(),
+                        );
                     }
-                    Ok(response)
+
+                    // Remove connection from handler — MutRef auto-restored it
+                    let connection = handler
+                        .take::<DynamicConnection<'static>>()
+                        .ok_or(ConnectionError::ConnectionLost)?;
+                    let transaction = connection
+                        .into_transaction()
+                        .ok_or(ConnectionError::ConnectionLost)?;
+                    if let Err(e) = transaction.commit().await {
+                        return Err(ConnectionError::CannotCommitTransaction(e).into());
+                    }
+                    result
                 }
                 Err(e) => {
-                    if let Err(e) = transaction.rollback().await {
-                        error!("Rollback error: {:?}", e);
-                    }
+                    // Transaction auto-rolls-back when dropped
                     Err(e)
                 }
             }
@@ -609,23 +593,19 @@ where
             #[cfg(feature = "test_tower_metadata")]
             {
                 // Metadata mode: record the used type, then run both branches
-                MetadataMutex::extract(&handler)
-                    .used_type("ConditionalService", type_of::<Input<Condition>>())
-                    .await;
+                if let Some(m) = crate::metadata::Metadata::extract(&mut handler) {
+                    m.used_type("ConditionalService", type_of::<Condition>());
+                }
                 handler = do_service.0.call(handler).await?.into_handler();
                 handler = else_service.0.call(handler).await?.into_handler();
             }
 
             #[cfg(not(feature = "test_tower_metadata"))]
             {
-                use crate::extractors::FromHandler;
-
                 // Conditional service should always return a Condition
-                let condition = Input::<Condition>::from_handler(&handler)?;
-
-                let Input(condition) = condition;
-                // Remove it so there are no other false positives
-                handler.remove::<Input<Condition>>().unwrap();
+                let condition = handler
+                    .take::<Condition>()
+                    .ok_or(FromHandlerError::NotFound(type_name::<Condition>().into()))?;
 
                 // And execute the service based on the condition
                 if condition.0 {
@@ -647,10 +627,11 @@ where
 mod tests {
     use super::*;
     use crate::ctx_service::RawOneshot;
-    use crate::extractors::Input;
+    use crate::extractors::{MutRef, Owned, Ref};
     use crate::from_fn::from_fn;
     use std::ops::Deref;
     use std::sync::Arc;
+    use td_database::dynamic::DynamicConnection;
     use td_error::TdError;
     use tower::{ServiceBuilder, ServiceExt};
 
@@ -667,16 +648,16 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
     async fn test_tower_metadata_init_service() {
-        use crate::metadata::MetadataMutex;
+        use crate::metadata::Metadata;
 
         let init_service = InitService {
             inner: ServiceReturn,
-            phantom: PhantomData::<MetadataMutex>,
+            phantom: PhantomData::<Metadata>,
         };
 
         let res = init_service.raw_oneshot(()).await;
         assert!(res.is_ok());
-        let metadata = res.unwrap().get();
+        let metadata = res.unwrap();
         metadata.assert_service::<(), ()>(&[]);
     }
 
@@ -685,7 +666,7 @@ mod tests {
         let service = ServiceBuilder::new()
             .layer(ServiceEntry::default())
             .layer(SrvCtxProvider::new(Arc::new(String::from("data"))))
-            .layer(from_fn(|SrvCtx(c): SrvCtx<String>| async move {
+            .layer(from_fn(|c: Ref<String>| async move {
                 // Clones context to output
                 let s = c.deref().clone();
                 Ok::<_, TdError>(s)
@@ -702,15 +683,13 @@ mod tests {
         let service = ServiceBuilder::new()
             .layer(ServiceEntry::default())
             .layer(ConnectionProvider::new(db))
-            .layer(from_fn(|Connection(c): Connection| async move {
-                let mut conn = c.lock().await;
-
-                let mut conn = conn.get()?;
-                let is_ok = conn.ping().await.is_ok();
-
-                assert!(is_ok);
-                Ok::<_, TdError>(is_ok)
-            }))
+            .layer(from_fn(
+                |mut conn: MutRef<DynamicConnection<'static>>| async move {
+                    let is_ok = conn.ping().await.is_ok();
+                    assert!(is_ok);
+                    Ok::<_, TdError>(is_ok)
+                },
+            ))
             .service(ServiceReturn);
 
         let res: bool = service.raw_oneshot(()).await.unwrap();
@@ -723,15 +702,13 @@ mod tests {
         let service = ServiceBuilder::new()
             .layer(ServiceEntry::default())
             .layer(TransactionProvider::new(db))
-            .layer(from_fn(|Connection(c): Connection| async move {
-                let mut conn = c.lock().await;
-
-                let mut conn = conn.get()?;
-                let is_ok = conn.ping().await.is_ok();
-
-                assert!(is_ok);
-                Ok::<_, TdError>(is_ok)
-            }))
+            .layer(from_fn(
+                |mut conn: MutRef<DynamicConnection<'static>>| async move {
+                    let is_ok = conn.ping().await.is_ok();
+                    assert!(is_ok);
+                    Ok::<_, TdError>(is_ok)
+                },
+            ))
             .service(ServiceReturn);
 
         let res: bool = service.raw_oneshot(()).await.unwrap();
@@ -741,18 +718,17 @@ mod tests {
     #[tokio::test]
     async fn test_service_return() {
         let mut handler = Handler::new();
-        handler.insert(Input::new(1));
+        handler.set(1i32);
 
         let mut res: Handler = ServiceReturn.oneshot(handler).await.unwrap();
-        let res = res.remove::<Input<i32>>().unwrap();
-        let res = *res.0.deref();
+        let res = res.take::<i32>().unwrap();
         assert_eq!(res, 1);
     }
 
     #[cfg(feature = "test_tower_metadata")]
     #[tokio::test]
     async fn test_tower_metadata_service_conditional() {
-        use crate::metadata::{MetadataMutex, type_of_val};
+        use crate::metadata::{Metadata, type_of_val};
 
         async fn if_fn() -> Result<Condition, TdError> {
             Ok(Condition(true))
@@ -783,10 +759,9 @@ mod tests {
             ))
             .service(ServiceReturn);
 
-        let res: Result<MetadataMutex, TdError> = service.raw_oneshot(()).await;
+        let res: Result<Metadata, TdError> = service.raw_oneshot(()).await;
         let res = res.unwrap();
-        let metadata = res.get();
-        metadata.assert_service::<(), ()>(&[
+        res.assert_service::<(), ()>(&[
             type_of_val(&if_fn),
             type_of_val(&do_fn),
             type_of_val(&else_fn),
@@ -799,8 +774,8 @@ mod tests {
             .layer(ServiceEntry::default())
             .layer(conditional(
                 If(ServiceBuilder::new()
-                    .layer(from_fn(|condition: Input<bool>| async move {
-                        Ok::<_, TdError>(Condition(*condition.0))
+                    .layer(from_fn(|condition: Owned<bool>| async move {
+                        Ok::<_, TdError>(Condition(condition.into_inner()))
                     }))
                     .service(ServiceReturn)),
                 Do(ServiceBuilder::new()

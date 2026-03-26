@@ -10,7 +10,7 @@ use ta_objects::errors::SqlError;
 use ta_objects::{DaoCore, ListFilter, ListFilterExtract, SeaValue};
 use td_error::TdError;
 use td_tower::error::FromHandlerError;
-use td_tower::extractors::{FromHandler, Input};
+use td_tower::extractors::{FromHandler, Ref};
 use td_tower::handler::Handler;
 
 #[derive(Debug, Clone)]
@@ -59,14 +59,14 @@ impl ListFilter for VisibleCollections {
 }
 
 impl ListFilterExtract for VisibleCollections {
-    fn extract(handler: &Handler) -> Result<Self, FromHandlerError> {
-        let Input(val) = Input::<Self>::from_handler(handler)?;
+    fn extract(handler: &mut Handler) -> Result<Self, FromHandlerError> {
+        let val = Ref::<Self>::from_handler(handler)?;
         Ok((*val).clone())
     }
 
     #[cfg(feature = "test_tower_metadata")]
     fn metadata_used_types() -> Vec<String> {
-        vec![td_tower::metadata::type_of::<Input<Self>>()]
+        vec![td_tower::metadata::type_of::<Self>()]
     }
 }
 
@@ -122,14 +122,14 @@ impl ListFilter for VisibleTablesCollections {
 }
 
 impl ListFilterExtract for VisibleTablesCollections {
-    fn extract(handler: &Handler) -> Result<Self, FromHandlerError> {
-        let Input(val) = Input::<Self>::from_handler(handler)?;
+    fn extract(handler: &mut Handler) -> Result<Self, FromHandlerError> {
+        let val = Ref::<Self>::from_handler(handler)?;
         Ok((*val).clone())
     }
 
     #[cfg(feature = "test_tower_metadata")]
     fn metadata_used_types() -> Vec<String> {
-        vec![td_tower::metadata::type_of::<Input<Self>>()]
+        vec![td_tower::metadata::type_of::<Self>()]
     }
 }
 
@@ -160,13 +160,13 @@ impl ListFilter for VisibleFunctionsCollections {
 }
 
 impl ListFilterExtract for VisibleFunctionsCollections {
-    fn extract(handler: &Handler) -> Result<Self, FromHandlerError> {
-        let Input(val) = Input::<Self>::from_handler(handler)?;
+    fn extract(handler: &mut Handler) -> Result<Self, FromHandlerError> {
+        let val = Ref::<Self>::from_handler(handler)?;
         Ok((*val).clone())
     }
 
     #[cfg(feature = "test_tower_metadata")]
     fn metadata_used_types() -> Vec<String> {
-        vec![td_tower::metadata::type_of::<Input<Self>>()]
+        vec![td_tower::metadata::type_of::<Self>()]
     }
 }

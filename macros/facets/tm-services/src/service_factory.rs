@@ -148,10 +148,10 @@ pub fn service_factory(attr: TokenStream, item: TokenStream) -> TokenStream {
     let (db_input, db_arg, db_provider) = match &args.connection {
         None => (None, None, vec![]),
         Some(prov) => {
-            factory_args.push(quote! { ::td_database::sql::DbPool::get_field(ctx) });
-            factory_types.push(quote! { ::td_database::sql::DbPool });
+            factory_args.push(quote! { ::td_database::pool::TdPool::get_field(ctx) });
+            factory_types.push(quote! { ::td_database::pool::TdPool });
             (
-                Some(quote! { db: ::td_database::sql::DbPool, }),
+                Some(quote! { db: ::td_database::pool::TdPool, }),
                 Some(quote! { db.clone(), }),
                 vec![quote! { #prov::new(db), }],
             )
@@ -183,7 +183,7 @@ pub fn service_factory(attr: TokenStream, item: TokenStream) -> TokenStream {
     func.sig.inputs = {
         let mut inputs = Punctuated::<FnArg, Comma>::new();
         if db_input.is_some() {
-            inputs.push(parse_quote! { db: ::td_database::sql::DbPool });
+            inputs.push(parse_quote! { db: ::td_database::pool::TdPool });
         }
         for input in &ctx_input {
             inputs.push(parse_quote! { #input });
@@ -232,7 +232,7 @@ pub fn service_factory(attr: TokenStream, item: TokenStream) -> TokenStream {
         pub struct #name #impl_generics {
             provider: ::td_tower::service_provider::ServiceProvider<#req_ty, #res_ty, td_error::TdError>,
             #[cfg(feature = "test_tower_metadata")]
-            metadata: ::td_tower::service_provider::ServiceProvider<(), td_tower::metadata::MetadataMutex, td_error::TdError>,
+            metadata: ::td_tower::service_provider::ServiceProvider<(), td_tower::metadata::Metadata, td_error::TdError>,
             #phantom_data
         }
 
@@ -271,22 +271,20 @@ pub fn service_factory(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
 
 
-        #[async_trait::async_trait]
         impl #impl_generics ::ta_services::service::TdService for #name #ty_generics #where_clause {
             type Request = #req_ty;
             type Response = #res_ty;
             type Error = td_error::TdError;
 
-            async fn service(&self) -> ::td_tower::service_provider::TdBoxService<Self::Request, Self::Response, Self::Error> {
-                self.provider.make().await
+            fn service(&self) -> ::td_tower::service_provider::TdBoxService<Self::Request, Self::Response, Self::Error> {
+                self.provider.make()
             }
 
             #[cfg(feature = "test_tower_metadata")]
             async fn metadata(&self) -> td_tower::metadata::Metadata {
                 use td_tower::ctx_service::RawOneshot;
-                let service = self.metadata.make().await;
-                let metadata_mutex = service.raw_oneshot(()).await.unwrap();
-                metadata_mutex.get()
+                let service = self.metadata.make();
+                service.raw_oneshot(()).await.unwrap()
             }
         }
     })
