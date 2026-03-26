@@ -34,6 +34,7 @@ members = [
     "devutils/automation/tasks/cargo/td-build",
     "devutils/automation/tasks/makers/td-xtask",
     "server/libraries/ta-apiserver",
+    "server/libraries/ta-objects",
     "server/libraries/ta-services",
     "server/libraries/ta-system",
     "server/libraries/ta-tableframe",
@@ -48,6 +49,7 @@ members = [
     "server/libraries/td-process",
     "server/libraries/td-python",
     "server/libraries/td-schema",
+    "server/libraries/td-queries",
     "server/libraries/td-security",
     "server/libraries/td-services",
     "server/libraries/td-shuttle",
@@ -68,11 +70,10 @@ exclude = [
     "macros/helpers/td-shared",
     "macros/facets/td-apiforge",
     "macros/facets/td-attach",
-    "macros/facets/td-type",
     "macros/facets/tm-error",
+    "macros/facets/tm-objects",
     "macros/facets/tm-pyo3",
     "macros/facets/tm-services",
-    "macros/facets/tm-sql",
     "macros/facets/tm-test",
     "macros/facets/tm-tower",
     "macros/facets/tm-workspace",
@@ -90,6 +91,11 @@ api-docs = []
 # This feature enbles enterprise functionalities not available in the open source implementation.
 # It should be normally used only for cross-crates tests.
 enterprise = []
+
+# Backend support
+sqlite = ["td-apiserver/sqlite"]
+postgres = ["td-apiserver/postgres"]
+mysql = ["td-apiserver/mysql"]
 
 td-test = ["dummy", "mock-env", "test-utils"]
 dummy = []
@@ -154,20 +160,17 @@ path = "macros/facets/td-attach"
 [workspace.dependencies.td-build]
 path = "devutils/automation/tasks/cargo/td-build"
 
-[workspace.dependencies.td-type]
-path = "macros/facets/td-type"
-
 [workspace.dependencies.tm-error]
 path = "macros/facets/tm-error"
+
+[workspace.dependencies.tm-objects]
+path = "macros/facets/tm-objects"
 
 [workspace.dependencies.tm-pyo3]
 path = "macros/facets/tm-pyo3"
 
 [workspace.dependencies.tm-services]
 path = "macros/facets/tm-services"
-
-[workspace.dependencies.tm-sql]
-path = "macros/facets/tm-sql"
 
 [workspace.dependencies.tm-test]
 path = "macros/facets/tm-test"
@@ -182,6 +185,9 @@ path = "macros/facets/tm-workspace"
 
 [workspace.dependencies.ta-apiserver]
 path = "server/libraries/ta-apiserver"
+
+[workspace.dependencies.ta-objects]
+path = "server/libraries/ta-objects"
 
 [workspace.dependencies.ta-services]
 path = "server/libraries/ta-services"
@@ -234,6 +240,9 @@ path = "server/libraries/td-python"
 [workspace.dependencies.td-schema]
 path = "server/libraries/td-schema"
 
+[workspace.dependencies.td-queries]
+path = "server/libraries/td-queries"
+
 [workspace.dependencies.td-security]
 path = "server/libraries/td-security"
 
@@ -282,6 +291,9 @@ features = ["std"]
 [workspace.dependencies.async-compression]
 version = "0.4.41"
 features = ["tokio", "all-algorithms"]
+
+[workspace.dependencies.async-stream]
+version = "0.3.6"
 
 [workspace.dependencies.async-trait]
 version = "0.1.89"
@@ -516,6 +528,14 @@ version = "0.23.37"
 [workspace.dependencies.rust-embed]
 version = "8.11.0"
 
+[workspace.dependencies.sea-query]
+version = "1.0.0-rc.31"
+features = ["with-chrono", "with-json"]
+
+[workspace.dependencies.sea-query-sqlx]
+version = "0.8.0-rc.14"
+features = ["with-chrono", "with-json"]
+
 [workspace.dependencies.semver]
 version = "1.0.27"
 
@@ -532,12 +552,15 @@ version = "1.0.149"
 [workspace.dependencies.serde_valid]
 version = "2.0.1"
 
+[workspace.dependencies.serde_with]
+version = "3.16.1"
+
 [workspace.dependencies.serde_yaml]
 version = "0.9.34"
 
 [workspace.dependencies.sqlx]
 version = "0.8.6"
-features = ["sqlite", "runtime-tokio", "macros", "chrono"]
+features = ["chrono", "runtime-tokio"]
 
 [workspace.dependencies.strum]
 version = "0.28.0"
@@ -668,6 +691,7 @@ toml = { workspace = true }
 
 ## Libraries
 
+td-apiserver = { workspace = true, optional = true }
 te-system = { workspace = true }
 
 # External dependencies
