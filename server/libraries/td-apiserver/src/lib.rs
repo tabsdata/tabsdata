@@ -11,10 +11,9 @@ use std::time::Duration;
 use td_common::server::FileWorkerMessageQueue;
 use td_common::server_runner::ServerRunner;
 use td_common::status::ExitStatus;
-use td_database::sql::DbError;
-use td_objects::logic_id::initialialize_logical_ids;
-use td_objects::sql::DaoQueries;
+use td_database::error::DbError;
 use td_process::launcher::cli::Cli;
+use td_queries::initialize_logical_ids;
 use td_services::execution::services::runtime_info::RuntimeContext;
 use td_storage::Storage;
 use tracing::{error, info};
@@ -41,10 +40,7 @@ pub fn run() {
             // Connect to db
             let db = match td_database::db(&config.database).await {
                 Ok(db) => {
-                    info!(
-                        "Connected to Sqlite database: {}",
-                        config.database.url.as_ref().unwrap()
-                    );
+                    info!("Connected to database: {:?}", config.database.url.as_ref());
                     if let Some(db_schema) = &params.db_schema {
                         match db_schema {
                             DbSchema::Create => {
@@ -139,13 +135,13 @@ pub fn run() {
                     db
                 }
                 Err(e) => {
-                    error!("Error connecting to Sqlite database: {e}");
+                    error!("Error connecting to database: {e}");
                     Err(ExitStatus::GeneralError)?
                 }
             };
 
             // setup IdL Generators
-            initialialize_logical_ids(&db).await.map_err(|e| {
+            initialize_logical_ids(&db).await.map_err(|e| {
                 error!("Error initializing logical IDs: {e}");
                 ExitStatus::GeneralError
             })?;
@@ -175,14 +171,10 @@ pub fn run() {
             })?;
             let runtime_context = Arc::new(runtime_context);
 
-            // Create queries
-            let queries = Arc::new(DaoQueries::default());
-
             // Create context
             let server_context = ApiServerCtx::new(
                 config.clone(),
                 db.clone(),
-                queries.clone(),
                 storage.clone(),
                 runtime_context.clone(),
             );
@@ -206,7 +198,6 @@ pub fn run() {
 
             let scheduler_context = SchedulerCtx::new(
                 db.clone(),
-                queries.clone(),
                 storage.clone(),
                 worker_message_queue.clone(),
                 internal_addresses.clone(),

@@ -11,28 +11,23 @@ use std::time::Instant;
 use strum::IntoEnumIterator;
 use td_common::logging;
 use td_common::logging::CONSOLE_PROFILE;
-
-use td_database::sql::SqliteConfig;
+use td_database::config::DatabaseConfig;
 use td_execution::TransactionBy;
+use td_objects::Buildable;
 use td_objects::dxo::function::{FunctionDB, FunctionRegister};
+use td_objects::dxo::graph::FunctionNode;
 use td_objects::dxo::table::{TableDB, TableDBWithNames};
-use td_objects::sql::{DaoQueries, SelectBy};
-use td_objects::test_utils::seed_collection::seed_collection;
-use td_objects::test_utils::seed_execution::seed_execution;
-use td_objects::test_utils::seed_function::seed_function;
-use td_objects::test_utils::seed_function_run::seed_function_run;
-use td_objects::test_utils::seed_table_data_version::seed_table_data_version;
-use td_objects::test_utils::seed_transaction::seed_transaction;
-use td_objects::test_utils::seed_user::seed_user;
 use td_objects::transaction::map::TransactionMapper;
 use td_objects::types::basic::{
     BundleId, CollectionName, Decorator, FunctionName, FunctionRunStatus, TableNameDto,
     UserEnabled, UserName,
 };
 use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
-use td_objects::types::graph::FunctionNode;
+use td_queries::BasicQueries;
+use td_queries::test_utils::SeedQueries;
 use tracing::Level;
 use tracing::{debug, info};
+use url::Url;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -71,7 +66,7 @@ struct Args {
 
     /// Database URL (defaults to env var DATABASE_URL or specific file)
     #[arg(long)]
-    db_url: Option<String>,
+    db_url: Option<Url>,
 }
 
 /// Automated script to bulk load a tabsdata database. The created database is used to test
@@ -104,13 +99,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Starting load test with config: {:?}", args);
 
     let db_url = args.db_url.unwrap_or_else(|| {
-        td_common::tdtestdir!()
-            .join("tabsdata.db")
-            .to_str()
-            .unwrap()
-            .to_string()
+        Url::from_file_path(td_common::tdtestdir!().join("tabsdata.db")).unwrap()
     });
-    let database_config = SqliteConfig {
+    let database_config = DatabaseConfig {
         url: Some(db_url),
         ..Default::default()
     };
@@ -134,7 +125,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     pb.set_message("Creating users...");
     for i in 0..args.users {
         let name = UserName::try_from(format!("load_user_{i}"))?;
-        let user = seed_user(&db, &name, &UserEnabled::TRUE).await;
+        let user = db.seed_user(&name, &UserEnabled::TRUE).await?;
         users.push(user);
         pb.inc(1);
     }
@@ -150,7 +141,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for i in 0..args.collections {
         let col_name = CollectionName::try_from(format!("load_col_{i}"))?;
         let user = users.choose(&mut rand::rng()).unwrap();
-        let collection = seed_collection(&db, &col_name, &user.id).await;
+        let collection = db.seed_collection(&col_name, &user.id).await?;
         collections.insert(collection.id, collection);
         pb.inc(1);
     }
@@ -181,10 +172,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .collect::<Vec<FunctionDB>>();
         let mut dependencies = Vec::new();
         for dependency_function in dependency_functions {
-            let tables: Vec<TableDBWithNames> = DaoQueries::default()
-                .select_by::<TableDBWithNames>(&dependency_function.id)?
-                .build_query_as()
-                .fetch_all(&db)
+            let tables = db
+                .fetch_all::<TableDBWithNames>(&dependency_function.id)
                 .await?;
             if let Some(dependency_table) = tables.choose(&mut rand::rng()) {
                 dependencies.push(TableDependencyDto::try_from(format!(
@@ -201,10 +190,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .collect::<Vec<FunctionDB>>();
         let mut triggers = Vec::new();
         for trigger_function in trigger_functions {
-            let tables: Vec<TableDBWithNames> = DaoQueries::default()
-                .select_by::<TableDBWithNames>(&trigger_function.id)?
-                .build_query_as()
-                .fetch_all(&db)
+            let tables = db
+                .fetch_all::<TableDBWithNames>(&trigger_function.id)
                 .await?;
             if let Some(trigger_table) = tables.choose(&mut rand::rng()) {
                 triggers.push(TableTriggerDto::try_from(format!(
@@ -243,7 +230,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .build()?;
 
         let (_, coll) = collections.iter().choose(&mut rand::rng()).unwrap();
-        let function = seed_function(&db, coll, &create).await;
+        let function = db.seed_function(coll, &create).await?;
         functions.push(function);
         pb.inc(1);
     }
@@ -267,12 +254,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for _ in 0..rand::rng().random_range(0..=args.executions) {
         let function = functions.choose(&mut rand::rng()).unwrap();
         let collection = collections.get(&function.collection_id).unwrap();
-        let tables: Vec<TableDB> = DaoQueries::default()
-            .select_by::<TableDB>(&function.id)?
-            .build_query_as()
-            .fetch_all(&db)
-            .await?;
-        let execution = seed_execution(&db, function).await;
+        let tables = db.fetch_all::<TableDB>(&function.id).await?;
+        let execution = db.seed_execution(function).await?;
 
         for _ in 0..rand::rng().random_range(0..=args.transactions) {
             let node = FunctionNode {
@@ -284,29 +267,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 enabled: Default::default(),
             };
 
-            let transaction =
-                seed_transaction(&db, &execution, &transaction_mapper.key(&node)?).await;
+            let transaction = db
+                .seed_transaction(&execution, &transaction_mapper.key(&node)?)
+                .await?;
 
-            let function_run = seed_function_run(
-                &db,
-                collection,
-                function,
-                &execution,
-                &transaction,
-                &FunctionRunStatus::Committed,
-            )
-            .await;
-
-            for table in &tables {
-                let data_version = seed_table_data_version(
-                    &db,
+            let function_run = db
+                .seed_function_run(
                     collection,
+                    function,
                     &execution,
                     &transaction,
-                    &function_run,
-                    table,
+                    &FunctionRunStatus::Committed,
                 )
-                .await;
+                .await?;
+
+            for table in &tables {
+                let data_version = db
+                    .seed_table_data_version(
+                        collection,
+                        &execution,
+                        &transaction,
+                        &function_run,
+                        table,
+                    )
+                    .await;
                 data_versions.push(data_version);
             }
             transactions.push(transaction);

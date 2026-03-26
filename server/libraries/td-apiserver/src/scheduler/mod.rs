@@ -7,8 +7,7 @@ use async_trait::async_trait;
 use std::sync::Arc;
 use td_common::server::FileWorkerMessageQueue;
 use td_common::server_runner::ServerRunnable;
-use td_database::sql::DbPool;
-use td_objects::sql::DaoQueries;
+use td_database::pool::TdPool;
 use td_objects::types::addresses::InternalServerAddresses;
 use td_services::scheduler::services::SchedulerContext;
 use td_storage::Storage;
@@ -22,15 +21,13 @@ pub struct SchedulerCtx {
 
 impl SchedulerCtx {
     pub fn new(
-        db: DbPool,
-        queries: Arc<DaoQueries>,
+        db: TdPool,
         storage: Arc<Storage>,
         worker_queue: Arc<FileWorkerMessageQueue>,
         internal_addresses: Arc<InternalServerAddresses>,
     ) -> Self {
         let context = SchedulerContext {
             db,
-            queries,
             storage,
             worker_queue,
             internal_addresses,

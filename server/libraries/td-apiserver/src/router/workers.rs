@@ -34,7 +34,7 @@ mod routes {
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<Worker>, ErrorStatus> {
         let request = context.list((), query_params);
-        let response = messages.list.service().await.oneshot(request).await?;
+        let response = messages.list.service().oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
 
@@ -48,7 +48,7 @@ mod routes {
     ) -> Result<LogsFile, ErrorStatus> {
         let params = WorkerLogsParams::new(path_params, query_params);
         let request = context.read(params);
-        let response = messages.logs.service().await.raw_oneshot(request).await?;
+        let response = messages.logs.service().raw_oneshot(request).await?;
         Ok(LogsFile(response))
     }
 }

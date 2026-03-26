@@ -11,10 +11,9 @@ use std::sync::Arc;
 use ta_services::extension::ContextExt;
 use ta_services::factory::ServiceFactory;
 use td_authz::AuthzContext;
+use td_authz::session_provider::Sessions;
 use td_common::server_runner::ServerRunnable;
-use td_database::sql::DbPool;
-use td_objects::sql::DaoQueries;
-use td_services::auth::session::Sessions;
+use td_database::pool::TdPool;
 use td_services::execution::services::runtime_info::RuntimeContext;
 use td_services::{Context, Services};
 use td_storage::Storage;
@@ -37,14 +36,12 @@ pub struct ApiServerCtx {
 impl ApiServerCtx {
     pub fn new(
         config: Config,
-        db: DbPool,
-        queries: Arc<DaoQueries>,
+        db: TdPool,
         storage: Arc<Storage>,
         runtime_context: Arc<RuntimeContext>,
     ) -> Self {
         let context = Context {
             db: db.clone(),
-            queries: queries.clone(),
             server_addresses: Arc::new(config.addresses.clone()),
             jwt_config: Arc::new(config.jwt.clone()),
             auth_context: Arc::new(AuthzContext::default()),

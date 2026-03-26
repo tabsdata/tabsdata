@@ -39,7 +39,6 @@ mod routes {
         let response = collection_state
             .list
             .service()
-            .await
             .oneshot(request)
             .await?;
         Ok(ListStatus::OK(response))
@@ -56,7 +55,6 @@ mod routes {
         let response = collection_state
             .read
             .service()
-            .await
             .oneshot(request)
             .await?;
         Ok(GetStatus::OK(response))
@@ -73,7 +71,6 @@ mod routes {
         let response = collection_state
             .create
             .service()
-            .await
             .oneshot(request)
             .await?;
         Ok(CreateStatus::CREATED(response))
@@ -91,7 +88,6 @@ mod routes {
         let response = collection_state
             .update
             .service()
-            .await
             .oneshot(request)
             .await?;
         Ok(UpdateStatus::OK(response))
@@ -108,7 +104,6 @@ mod routes {
         let response = collection_state
             .delete
             .service()
-            .await
             .oneshot(request)
             .await?;
         Ok(DeleteStatus::OK(response))
@@ -126,7 +121,7 @@ mod tests {
     use std::sync::Arc;
     use ta_apiserver::router::RouterExtension;
     use ta_services::factory::ServiceFactory;
-    use td_database::sql::DbPool;
+    use td_database::pool::TdPool;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::rest_urls::{
         CREATE_COLLECTION, DELETE_COLLECTION, GET_COLLECTION, LIST_COLLECTIONS, UPDATE_COLLECTION,
@@ -148,7 +143,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_collections_lifecycle(db: DbPool) {
+    async fn test_collections_lifecycle(db: TdPool) {
         let router = CollectionsRouter::router(Arc::new(CollectionServices::build(
             &Context::with_defaults(db),
         )));

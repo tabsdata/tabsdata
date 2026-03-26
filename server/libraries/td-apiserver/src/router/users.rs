@@ -35,7 +35,7 @@ mod routes {
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<UserRead>, ErrorStatus> {
         let request = context.list((), query_params);
-        let response = users_state.list.service().await.oneshot(request).await?;
+        let response = users_state.list.service().oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
 
@@ -47,7 +47,7 @@ mod routes {
         Path(path_params): Path<UserParam>,
     ) -> Result<GetStatus<UserRead>, ErrorStatus> {
         let request = context.read(path_params);
-        let response = users_state.read.service().await.oneshot(request).await?;
+        let response = users_state.read.service().oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }
 
@@ -59,7 +59,7 @@ mod routes {
         Json(request): Json<UserCreate>,
     ) -> Result<CreateStatus<UserRead>, ErrorStatus> {
         let request = context.create((), request);
-        let response = users_state.create.service().await.oneshot(request).await?;
+        let response = users_state.create.service().oneshot(request).await?;
         Ok(CreateStatus::CREATED(response))
     }
 
@@ -72,7 +72,7 @@ mod routes {
         Json(request): Json<UserUpdate>,
     ) -> Result<UpdateStatus<UserRead>, ErrorStatus> {
         let request = context.update(path_params, request);
-        let response = users_state.update.service().await.oneshot(request).await?;
+        let response = users_state.update.service().oneshot(request).await?;
         Ok(UpdateStatus::OK(response))
     }
 
@@ -84,7 +84,7 @@ mod routes {
         Path(path_params): Path<UserParam>,
     ) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
         let request = context.delete(path_params);
-        let response = users_state.delete.service().await.oneshot(request).await?;
+        let response = users_state.delete.service().oneshot(request).await?;
         Ok(DeleteStatus::OK(response))
     }
 }
@@ -99,7 +99,7 @@ mod tests {
     use serde_json::json;
     use ta_apiserver::router::RouterExtension;
     use ta_services::factory::ServiceFactory;
-    use td_database::sql::DbPool;
+    use td_database::pool::TdPool;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::rest_urls::{CREATE_USER, DELETE_USER, GET_USER, LIST_USERS, UPDATE_USER};
     use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
@@ -118,7 +118,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_users_lifecycle(db: DbPool) {
+    async fn test_users_lifecycle(db: TdPool) {
         let router = UsersRouter::router(Services::build(&Context::with_defaults(db)));
 
         // List empty users (only sysadmin will be there)

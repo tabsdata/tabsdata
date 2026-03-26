@@ -30,7 +30,7 @@ mod routes {
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<FunctionRun>, ErrorStatus> {
         let request = context.list((), query_params);
-        let response = function_runs.list.service().await.oneshot(request).await?;
+        let response = function_runs.list.service().oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
 
@@ -42,7 +42,7 @@ mod routes {
         Path(param): Path<FunctionRunParam>,
     ) -> Result<GetStatus<FunctionRun>, ErrorStatus> {
         let request = context.read(param);
-        let response = state.read.service().await.oneshot(request).await?;
+        let response = state.read.service().oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }
 }

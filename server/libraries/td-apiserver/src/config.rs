@@ -11,16 +11,17 @@ use std::net::{AddrParseError, SocketAddr};
 use std::path::PathBuf;
 use strum::{Display, EnumString, ParseError};
 use ta_services::factory::FieldAccessors;
-use td_database::sql::SqliteConfig;
+use td_authz::jwt::JwtConfig;
+use td_database::config::DatabaseConfig;
 use td_error::{TdError, td_error};
 use td_execution::TransactionBy;
 use td_objects::types::addresses::{
     ApiServerAddresses, InternalServerAddresses, NonEmptyAddresses,
 };
 use td_security::config::PasswordHashingConfig;
-use td_services::auth::jwt::JwtConfig;
 use td_storage::{MountDef, StorageError};
 use te_apiserver::config::{ExtendedConfig, ExtendedParams};
+use url::Url;
 
 #[derive(Clone, Serialize, Deserialize, FieldAccessors)]
 pub struct Config {
@@ -32,7 +33,7 @@ pub struct Config {
     pub jwt: JwtConfig,
     pub request_timeout: i64, // in seconds
     pub ssl_folder: PathBuf,
-    pub database: SqliteConfig,
+    pub database: DatabaseConfig,
     #[serde(default)]
     pub storage: Option<StorageConfig>,
     #[serde(default)]
@@ -55,22 +56,19 @@ impl Config {
             return Err(ConfigError::MissingStorage);
         };
 
-        let has_url = storage.url.is_some();
-        let has_mounts = storage.mounts.is_some();
-
-        match (has_url, has_mounts) {
-            (true, true) => Err(ConfigError::DoubleStorageConfig),
-            (false, false) => Err(ConfigError::MissingStorageConfig),
-            (true, false) => {
+        match (&storage.url, &storage.mounts) {
+            (Some(_), Some(_)) => Err(ConfigError::DoubleStorageConfig),
+            (None, None) => Err(ConfigError::MissingStorageConfig),
+            (Some(url), None) => {
                 let mount_def = MountDef::builder()
                     .id("TDS_MOUNT_ROOT")
                     .path("/")
-                    .uri(storage.url.as_ref().unwrap())
+                    .uri(url)
                     .build()
                     .map_err(ConfigError::InvalidMountDefinition)?;
                 Ok(vec![mount_def])
             }
-            (false, true) => Ok(storage.mounts.as_ref().unwrap().clone()),
+            (None, Some(mounts)) => Ok(mounts.clone()),
         }
     }
 }
@@ -84,7 +82,7 @@ impl Default for Config {
             jwt: JwtConfig::default(),
             request_timeout: 60,
             ssl_folder: PathBuf::default(),
-            database: SqliteConfig::default(),
+            database: DatabaseConfig::default(),
             storage: Some(StorageConfig::default()),
             transaction_by: TransactionBy::default(),
             extended_config: ExtendedConfig::default(),
@@ -138,8 +136,8 @@ pub enum DbSchema {
 #[derive(Debug, Clone, Args)]
 pub struct Params {
     #[clap(long, alias = "db")]
-    /// Database URL (it must be a file:// URI)
-    database_url: Option<String>,
+    /// Database URL
+    database_url: Option<Url>,
     #[clap(long)]
     /// Database log level
     database_log_level: Option<String>,
@@ -247,13 +245,6 @@ impl Params {
             Err(ConfigError::MissingJWTSecret)?
         }
 
-        match &config.database.url {
-            None => Err(ConfigError::MissingDatabaseUrl)?,
-            Some(url) if !url.starts_with("file://") => {
-                Err(ConfigError::InvalidDatabaseUrl(url.to_string()))?;
-            }
-            _ => {}
-        }
         if config.storage_mounts()?.is_empty() {
             Err(ConfigError::MissingStorage)?;
         }
@@ -275,10 +266,6 @@ pub enum ConfigError {
     MissingAddress = 0,
     #[error("No JWT Secret was specified.")]
     MissingJWTSecret = 1,
-    #[error("No database URL (must be a file:// URL) was provided.")]
-    MissingDatabaseUrl = 2,
-    #[error("The database URL '{0}' must be a file:// URL.")]
-    InvalidDatabaseUrl(String) = 3,
     #[error("No storage settings.")]
     MissingStorage = 4,
     #[error("Both storage.url and storage.mounts have been configured.")]
@@ -295,6 +282,7 @@ mod tests {
     use chrono::Duration;
     use nonempty::nonempty;
     use std::net::SocketAddr;
+    use std::str::FromStr;
     use td_common::id;
     use td_objects::types::addresses::NonEmptyAddresses;
 
@@ -322,9 +310,9 @@ mod tests {
 
         let params = Params {
             #[cfg(target_os = "windows")]
-            database_url: Some(String::from("file:///c:/test.db")),
+            database_url: Some(Url::from_str("file:///c:/test.db").unwrap()),
             #[cfg(not(target_os = "windows"))]
-            database_url: Some(String::from("file:///test.db")),
+            database_url: Some(Url::from_str("file:///test.db").unwrap()),
             database_log_level: None,
             #[cfg(target_os = "windows")]
             storage_url: Some(String::from("file:///c:/storage")),
@@ -352,13 +340,13 @@ mod tests {
         );
         #[cfg(target_os = "windows")]
         assert_eq!(
-            resolved_config.database.url.as_ref().unwrap(),
-            "file:///c:/test.db"
+            resolved_config.database.url,
+            Some(Url::from_str("file:///test.db").unwrap())
         );
         #[cfg(not(target_os = "windows"))]
         assert_eq!(
-            resolved_config.database.url.as_ref().unwrap(),
-            "file:///test.db"
+            resolved_config.database.url,
+            Some(Url::from_str("file:///test.db").unwrap())
         );
         assert!(resolved_config.clone().storage.is_some());
         #[cfg(target_os = "windows")]
@@ -390,7 +378,7 @@ mod tests {
             #[cfg(target_os = "windows")]
             database_url: Some(String::from("file:///c:/test.db")),
             #[cfg(not(target_os = "windows"))]
-            database_url: Some(String::from("file:///test.db")),
+            database_url: Some(Url::from_str("file:///test.db").unwrap()),
             database_log_level: None,
             #[cfg(target_os = "windows")]
             storage_url: Some(String::from("file:///c:/storage")),
