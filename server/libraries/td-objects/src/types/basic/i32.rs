@@ -2,26 +2,30 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-#[td_type::typed(i32(default = 0))]
+#[ta_objects::typed(i32(default = 0))]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct DependencyPos;
 
-#[td_type::typed(i32(min = 0, default = 0))]
+#[ta_objects::typed(i32(min = 0, default = 0))]
 pub struct Depth;
 
 impl Depth {
     pub const ZERO: Self = Self(0);
 }
 
-#[td_type::typed(i32)]
+#[ta_objects::typed(i32)]
 pub struct StatusCount;
 
-#[td_type::typed(i32)]
+#[ta_objects::typed(i32)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct TableFunctionParamPos;
 
-#[td_type::typed(i32(min = 0, default = 0))]
+#[ta_objects::typed(i32(min = 0, default = 0))]
+#[derive(Eq, PartialEq)]
 pub struct InputIdx;
 
-#[td_type::typed(i32(default = 0))]
+#[ta_objects::typed(i32(default = 0))]
+#[derive(Eq, PartialEq)]
 pub struct VersionPos;
 
 impl VersionPos {

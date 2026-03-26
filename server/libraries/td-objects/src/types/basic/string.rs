@@ -11,22 +11,24 @@ use std::fmt::Debug;
 use td_error::{ApiError, api_error};
 use td_security::{ADMIN_USER, SEC_ADMIN_ROLE, SYS_ADMIN_ROLE, USER_ROLE};
 
-#[td_type::typed(string)]
+#[ta_objects::typed(string)]
 pub struct AccessToken;
 
-#[td_type::typed(string(default = "<unavailable>"))]
+#[ta_objects::typed(string(default = "<unavailable>"))]
 pub struct BuildManifest;
 
-#[td_type::typed(string)]
+#[ta_objects::typed(string)]
 pub struct BundleHash;
 
-#[td_type::typed(string(parser = parse_collection), try_from = ToCollectionName)]
+#[ta_objects::typed(string(parser = parse_collection), try_from = ToCollectionName)]
+#[derive(Eq, PartialEq, Hash)]
 pub struct CollectionName;
 
-#[td_type::typed(string)]
+#[ta_objects::typed(string)]
+#[derive(Eq, PartialEq)]
 pub struct Connector;
 
-#[td_type::typed(string(parser = CronMask::parse_cron))]
+#[ta_objects::typed(string(parser = CronMask::parse_cron))]
 pub struct CronMask;
 
 impl CronMask {
@@ -59,75 +61,87 @@ impl CronMask {
     }
 }
 
-#[td_type::typed(string(regex = DATA_LOCATION_REGEX, default = "/"))]
+#[ta_objects::typed(string(regex = DATA_LOCATION_REGEX, default = "/"))]
+#[derive(Eq, PartialEq, Hash)]
 pub struct DataLocation;
 
-#[td_type::typed(string(min_len = 0, max_len = 200, default = ""))]
+#[ta_objects::typed(string(min_len = 0, max_len = 200, default = ""))]
+#[derive(Eq, PartialEq)]
 pub struct Description;
 
-#[td_type::typed(string)]
+#[ta_objects::typed(string)]
+#[derive(Eq, PartialEq)]
 pub struct Dot;
 
-#[td_type::typed(string(parser = parse_email))]
+#[ta_objects::typed(string(parser = parse_email))]
+#[derive(Eq, PartialEq)]
 pub struct Email;
 
-#[td_type::typed(string(parser = parse_entity))]
+#[ta_objects::typed(string(parser = parse_entity))]
 pub struct EntityName;
 
-#[td_type::typed(string)]
+#[ta_objects::typed(string)]
+#[derive(Eq, PartialEq, Hash)]
 pub struct EnvPrefix;
 
-#[td_type::typed(string)]
+#[ta_objects::typed(string)]
 pub struct ExecutionError;
 
-#[td_type::typed(string(parser = parse_execution))]
+#[ta_objects::typed(string(parser = parse_execution))]
+#[derive(Eq, PartialEq)]
 pub struct ExecutionName;
 
-#[td_type::typed(string)]
+#[ta_objects::typed(string)]
+#[derive(Eq, PartialEq)]
 pub struct FullName;
 
-#[td_type::typed(string(parser = parse_function))]
+#[ta_objects::typed(string(parser = parse_function))]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct FunctionName;
 
 // JSON blob with `version`, `envs` & `secrets` top entries.
 // info used in decorator.
-#[td_type::typed(string(max_len = 4096, default = "{}"))]
+#[ta_objects::typed(string(max_len = 4096, default = "{}"))]
+#[derive(Eq, PartialEq)]
 pub struct FunctionRuntimeValues;
 
-#[td_type::typed(string)]
+#[ta_objects::typed(string)]
 pub struct LikeFilter;
 
 const MIN_PASSWORD_LEN: usize = 8;
 const MAX_PASSWORD_LEN: usize = 64;
 
-#[td_type::typed(string(min_len = MIN_PASSWORD_LEN, max_len = MAX_PASSWORD_LEN))]
+#[ta_objects::typed(string(min_len = MIN_PASSWORD_LEN, max_len = MAX_PASSWORD_LEN))]
 pub struct NewPassword;
 
-#[td_type::typed(string(min_len = MIN_PASSWORD_LEN, max_len = MAX_PASSWORD_LEN))]
+#[ta_objects::typed(string(min_len = MIN_PASSWORD_LEN, max_len = MAX_PASSWORD_LEN))]
 pub struct OldPassword;
 
-#[td_type::typed(string(min_len = 1, max_len = 1024))]
+#[ta_objects::typed(string(min_len = 1, max_len = 1024))]
 pub struct Partition;
 
-#[td_type::typed(string)]
+#[ta_objects::typed(string)]
+#[derive(Eq, PartialEq, Hash)]
 pub struct PartitionName;
 
-#[td_type::typed(string)]
+#[ta_objects::typed(string)]
 pub struct PartitionFileName;
 
-#[td_type::typed(string(min_len = MIN_PASSWORD_LEN, max_len = MAX_PASSWORD_LEN))]
+#[ta_objects::typed(string(min_len = MIN_PASSWORD_LEN, max_len = MAX_PASSWORD_LEN))]
 pub struct Password;
 
-#[td_type::typed(string)]
+#[ta_objects::typed(string)]
+#[derive(Eq, PartialEq)]
 pub struct PasswordHash;
 
-#[td_type::typed(string)]
+#[ta_objects::typed(string)]
 pub struct PythonVersion;
 
-#[td_type::typed(string)]
+#[ta_objects::typed(string)]
 pub struct RefreshToken;
 
-#[td_type::typed(string(parser = parse_role))]
+#[ta_objects::typed(string(parser = parse_role))]
+#[derive(Eq, PartialEq)]
 pub struct RoleName;
 
 impl RoleName {
@@ -144,25 +158,31 @@ impl RoleName {
     }
 }
 
-#[td_type::typed(string)]
+#[ta_objects::typed(string)]
+#[derive(Eq, PartialEq)]
 pub struct SchemaFieldName;
 
-#[td_type::typed(string)]
+#[ta_objects::typed(string)]
+#[derive(Eq, PartialEq)]
 pub struct SchemaFieldType;
 
-#[td_type::typed(string)]
+#[ta_objects::typed(string)]
+#[derive(Eq, PartialEq, Hash)]
 pub struct SchemaHash;
 
-#[td_type::typed(string(min_len = 0, max_len = 4096))]
+#[ta_objects::typed(string(min_len = 0, max_len = 4096))]
+#[derive(Eq, PartialEq)]
 pub struct Snippet;
 
-#[td_type::typed(string)]
+#[ta_objects::typed(string)]
 pub struct Sql;
 
-#[td_type::typed(string(min_len = 1, max_len = 10, default = "V1"))]
+#[ta_objects::typed(string(min_len = 1, max_len = 10, default = "V1"))]
+#[derive(Eq, PartialEq, Hash)]
 pub struct StorageVersion;
 
-#[td_type::typed(string, try_from = TableNameDto)]
+#[ta_objects::typed(string, try_from = TableNameDto)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct TableName;
 
 impl TableName {
@@ -180,7 +200,8 @@ impl TryFrom<&TableDBWithNames> for TableName {
     }
 }
 
-#[td_type::typed(string(parser = parse_table))]
+#[ta_objects::typed(string(parser = parse_table))]
+#[derive(Eq, PartialEq, Hash)]
 pub struct TableNameDto;
 
 impl TableNameDto {
@@ -189,22 +210,24 @@ impl TableNameDto {
     }
 }
 
-#[td_type::typed(string)]
+#[ta_objects::typed(string)]
 pub struct TabsdataVersion;
 
-#[td_type::typed(string(parser = parse_collection))]
+#[ta_objects::typed(string(parser = parse_collection))]
 pub struct ToCollectionName;
 
-#[td_type::typed(string)]
+#[ta_objects::typed(string)]
 pub struct TokenType;
 
-#[td_type::typed(string(default = "F"))]
+#[ta_objects::typed(string(default = "F"))]
 pub struct TransactionByStr;
 
-#[td_type::typed(string)]
+#[ta_objects::typed(string)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct TransactionKey;
 
-#[td_type::typed(string(parser = parse_user))]
+#[ta_objects::typed(string(parser = parse_user))]
+#[derive(Eq, PartialEq, Hash)]
 pub struct UserName;
 
 impl UserName {
@@ -214,7 +237,8 @@ impl UserName {
 }
 
 // JSON blob with config for the workers.
-#[td_type::typed(string(default = "{}", parser = WorkerConfig::parse_json))]
+#[ta_objects::typed(string(default = "{}", parser = WorkerConfig::parse_json))]
+#[derive(Eq, PartialEq)]
 pub struct WorkerConfig;
 
 impl WorkerConfig {
@@ -242,5 +266,5 @@ impl WorkerConfig {
     }
 }
 
-#[td_type::typed(string(min_len = 1, max_len = 10, default = "V1"))]
+#[ta_objects::typed(string(min_len = 1, max_len = 10, default = "V1"))]
 pub struct WorkerVersion;

@@ -3,18 +3,21 @@
 //
 
 use crate::dxo::table::TableDBWithNames;
-use crate::table_ref::{TableRef, VersionedTableRef, Versions};
-use crate::types::ComposedString;
 use crate::types::basic::{TableName, TableNameDto};
+use crate::types::table_ref::{TableRef, VersionedTableRef, Versions};
+use ta_objects::ComposedString;
 use td_error::TdError;
 
-#[td_type::typed(composed(inner = "VersionedTableRef::<TableName>"), try_from = TableDependencyDto)]
+#[ta_objects::typed(composed(inner = "VersionedTableRef::<TableName>"), try_from = TableDependencyDto)]
+#[derive(Eq, PartialEq)]
 pub struct TableDependency;
 
-#[td_type::typed(composed(inner = "VersionedTableRef::<TableNameDto>"))]
+#[ta_objects::typed(composed(inner = "VersionedTableRef::<TableNameDto>"))]
+#[derive(Eq, PartialEq, Hash)]
 pub struct TableDependencyDto;
 
-#[td_type::typed(composed(inner = "TableRef::<TableName>"), try_from = TableTriggerDto)]
+#[ta_objects::typed(composed(inner = "TableRef::<TableName>"), try_from = TableTriggerDto)]
+#[derive(Eq, PartialEq, Hash)]
 pub struct TableTrigger;
 
 impl TryFrom<&TableDependencyDto> for TableTrigger {
@@ -38,9 +41,10 @@ impl TryFrom<&TableDBWithNames> for TableTrigger {
     }
 }
 
-#[td_type::typed(composed(inner = "TableRef::<TableNameDto>"))]
+#[ta_objects::typed(composed(inner = "TableRef::<TableNameDto>"))]
+#[derive(Eq, PartialEq)]
 pub struct TableTriggerDto;
 
-#[td_type::typed(composed(inner = "Versions"))]
-#[derive(Ord, PartialOrd)]
+#[ta_objects::typed(composed(inner = "Versions"))]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct TableVersions;

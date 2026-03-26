@@ -2,11 +2,14 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-#[td_type::typed(timestamp, try_from = TriggeredOn)]
+#[ta_objects::typed(timestamp, try_from = TriggeredOn)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct AtTime;
 
-#[td_type::typed(timestamp, try_from = AtTime)]
+#[ta_objects::typed(timestamp, try_from = AtTime)]
+#[derive(Eq, PartialEq)]
 pub struct PasswordChangeTime;
 
-#[td_type::typed(timestamp, try_from = AtTime)]
+#[ta_objects::typed(timestamp, try_from = AtTime)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct TriggeredOn;

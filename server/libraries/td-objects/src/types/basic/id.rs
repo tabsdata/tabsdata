@@ -7,7 +7,7 @@ use td_security::{
     ID_ALL_ENTITIES, ID_ROLE_SEC_ADMIN, ID_ROLE_SYS_ADMIN, ID_ROLE_USER, ID_USER_ADMIN,
 };
 
-#[td_type::typed(id)]
+#[ta_objects::typed(id)]
 pub struct AccessTokenId;
 
 impl AccessTokenId {
@@ -19,10 +19,10 @@ impl AccessTokenId {
     }
 }
 
-#[td_type::typed(id)]
+#[ta_objects::typed(id)]
 pub struct BundleId;
 
-#[td_type::typed(id, try_from = EntityId, try_from = FromCollectionId, try_from = ToCollectionId)]
+#[ta_objects::typed(id, try_from = EntityId, try_from = FromCollectionId, try_from = ToCollectionId)]
 pub struct CollectionId;
 
 impl CollectionId {
@@ -35,13 +35,13 @@ impl CollectionId {
     }
 }
 
-#[td_type::typed(id)]
+#[ta_objects::typed(id)]
 pub struct DependencyId;
 
-#[td_type::typed(id)]
+#[ta_objects::typed(id)]
 pub struct DependencyVersionId;
 
-#[td_type::typed(id, try_from = CollectionId)]
+#[ta_objects::typed(id, try_from = CollectionId)]
 pub struct EntityId;
 
 impl EntityId {
@@ -54,34 +54,34 @@ impl EntityId {
     }
 }
 
-#[td_type::typed(idlogic(key = EP))]
+#[ta_objects::typed(idlogic(key = EP))]
 pub struct ExecutionId;
 
-#[td_type::typed(id, try_from = CollectionId)]
+#[ta_objects::typed(id, try_from = CollectionId)]
 pub struct FromCollectionId;
 
-#[td_type::typed(id)]
+#[ta_objects::typed(id)]
 pub struct FunctionId;
 
-#[td_type::typed(id)]
+#[ta_objects::typed(id)]
 pub struct FunctionRunId;
 
-#[td_type::typed(idlogic(key = FV))]
+#[ta_objects::typed(idlogic(key = FV))]
 pub struct FunctionVersionId;
 
-#[td_type::typed(id)]
+#[ta_objects::typed(id)]
 pub struct InterCollectionPermissionId;
 
-#[td_type::typed(id)]
+#[ta_objects::typed(id)]
 pub struct PermissionId;
 
-#[td_type::typed(id)]
+#[ta_objects::typed(id)]
 pub struct RefreshTokenId;
 
-#[td_type::typed(id)]
+#[ta_objects::typed(id)]
 pub struct RequirementId;
 
-#[td_type::typed(id)]
+#[ta_objects::typed(id)]
 pub struct RoleId;
 
 impl RoleId {
@@ -98,34 +98,31 @@ impl RoleId {
     }
 }
 
-#[td_type::typed(id)]
-pub struct SessionId;
-
-#[td_type::typed(id)]
+#[ta_objects::typed(id)]
 pub struct TableDataId;
 
-#[td_type::typed(idlogic(key = DV))]
+#[ta_objects::typed(idlogic(key = DV))]
 pub struct TableDataVersionId;
 
-#[td_type::typed(id)]
+#[ta_objects::typed(id)]
 pub struct TableId;
 
-#[td_type::typed(id)]
+#[ta_objects::typed(id)]
 pub struct TableVersionId;
 
-#[td_type::typed(id, try_from = CollectionId)]
+#[ta_objects::typed(id, try_from = CollectionId)]
 pub struct ToCollectionId;
 
-#[td_type::typed(idlogic(key = TX))]
+#[ta_objects::typed(idlogic(key = TX))]
 pub struct TransactionId;
 
-#[td_type::typed(id)]
+#[ta_objects::typed(id)]
 pub struct TriggerId;
 
-#[td_type::typed(id)]
+#[ta_objects::typed(id)]
 pub struct TriggerVersionId;
 
-#[td_type::typed(id)]
+#[ta_objects::typed(id)]
 pub struct UserId;
 
 impl UserId {
@@ -134,8 +131,8 @@ impl UserId {
     }
 }
 
-#[td_type::typed(id)]
+#[ta_objects::typed(id)]
 pub struct UserRoleId;
 
-#[td_type::typed(id)]
+#[ta_objects::typed(id)]
 pub struct WorkerId;
