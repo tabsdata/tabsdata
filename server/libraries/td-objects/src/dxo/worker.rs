@@ -13,7 +13,7 @@ mod definitions {
     };
     use chrono::{DateTime, Utc};
     use ta_objects::Buildable;
-    use ta_objects::and;
+    use ta_objects::{and, or};
     use td_common::datetime::Timestamp;
     use td_common::execution_status::WorkerCallbackStatus;
     use td_common::server::ResponseMessagePayload;
@@ -54,6 +54,7 @@ mod definitions {
     #[ta_objects::Dao]
     #[dao(sql_table = "workers__with_names",
         states(
+            EnabledTriggers = and!(Enabled::TRUE, or!(WorkerType::CronTrigger, WorkerType::StageTrigger)),
             CronTriggersToSchedule = and!(Enabled::TRUE, WorkerType::CronTrigger, WorkerStatus::Scheduled),
             CronTriggersToStop = and!(Enabled::TRUE, WorkerType::CronTrigger, WorkerStatus::StopScheduled),
             StageTriggersToSchedule = and!(Enabled::TRUE, WorkerType::StageTrigger, WorkerStatus::Scheduled),

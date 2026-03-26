@@ -7,6 +7,8 @@ use std::ops::Deref;
 use td_error::TdError;
 use td_objects::dxo::dependency::DependencyDBWithNames;
 use td_objects::dxo::table::TableDBWithNames;
+use td_objects::dxo::worker::WorkerDBWithNames;
+use td_objects::types::basic::{WorkerId, WorkerType, WorkerTypeDto};
 use td_objects::types::composed::TableDependency;
 use td_objects::types::table_ref::VersionedTableRef;
 use td_tower::extractors::Ref;
@@ -33,4 +35,18 @@ pub async fn vec_create_table_dependency(
         })
         .collect::<Vec<_>>();
     Ok(table_deps)
+}
+
+pub async fn map_create_worker(
+    workers: Ref<Vec<WorkerDBWithNames>>,
+) -> Result<HashMap<WorkerTypeDto, WorkerId>, TdError> {
+    let workers = workers
+        .iter()
+        .filter_map(|w| match w.worker_type {
+            WorkerType::CronTrigger => Some((WorkerTypeDto::CronTrigger, w.id)),
+            WorkerType::StageTrigger => Some((WorkerTypeDto::StageTrigger, w.id)),
+            _ => None,
+        })
+        .collect();
+    Ok(workers)
 }

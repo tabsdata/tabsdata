@@ -9,7 +9,7 @@ mod definitions {
         AtTime, BundleId, CollectionId, CollectionName, Connector, DataLocation, Decorator,
         Description, Enabled, FunctionId, FunctionName, FunctionRuntimeValues, FunctionStatus,
         FunctionVersionId, ReuseFrozen, Snippet, StorageVersion, TableName, TableNameDto,
-        TableType, UserId, UserName, WorkerConfig, WorkerTypeDto,
+        TableType, UserId, UserName, WorkerConfig, WorkerId, WorkerTypeDto,
     };
     use crate::types::composed::{
         TableDependency, TableDependencyDto, TableTrigger, TableTriggerDto,
@@ -201,14 +201,8 @@ mod definitions {
         #[dxo(builder(skip), setter)]
         pub triggers: Vec<TableTrigger>,
         #[dxo(builder(skip), setter)]
-        pub tables: Vec<TableName>,
-    }
-
-    #[ta_objects::Dto]
-    #[dxo(builder(try_from = FunctionWithTables))]
-    #[inherits(FunctionWithTables)]
-    pub struct FunctionWithAllVersions {
+        pub workers: HashMap<WorkerTypeDto, WorkerId>,
         #[dxo(builder(skip), setter)]
-        pub all: Vec<Function>,
+        pub tables: Vec<TableName>,
     }
 }
