@@ -26,6 +26,11 @@ mock-env = []
 test_logging = []
 test-utils = []
 
+# Backend support features
+sqlite = ["td-database/sqlite", "td-queries/sqlite"]
+postgres = ["td-database/postgres", "td-queries/postgres"]
+mysql = ["td-database/mysql", "td-queries/mysql"]
+
 [package.metadata.cargo-machete]
 ignored = ["openssl", "tokio"]
 
@@ -50,18 +55,24 @@ td-error = { workspace = true }
 td-common = { workspace = true }
 td-database = { workspace = true }
 td-objects = { workspace = true }
+td-queries = { workspace = true }
 td-schema = { workspace = true }
 td-tower = { workspace = true }
 
 # External dependencies
 
-async-trait = { workspace = true }
+chrono = { workspace = true }
+jsonwebtoken = { workspace = true, features = ["aws_lc_rs"] }
 itertools = { workspace = true }
+serde = { workspace = true }
 sqlx = { workspace = true }
+strum = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 
 [dev-dependencies]
 td-objects = { workspace = true, features = ["td-test"] }
+td-queries = { workspace = true, features = ["td-test"] }
 td-test = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]

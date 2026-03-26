@@ -2,21 +2,23 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::sql::SqlAuthzDataProvider;
-use async_trait::async_trait;
-use sqlx::SqliteConnection;
+use crate::authz_provider::SqlAuthzDataProvider;
+use crate::tower::{AuthzContextT, NoPermissions, Permission};
 use std::collections::HashMap;
 use std::sync::Arc;
 use td_common::provider::{CachedProvider, Provider};
+use td_database::dynamic::DynamicConnection;
 use td_error::TdError;
-use td_objects::tower_service::authz::{AuthzContextT, NoPermissions, Permission};
 use td_objects::types::basic::{CollectionId, RoleId, ToCollectionId};
-use td_tower::extractors::{Connection, IntoMutSqlConnection, SrvCtx};
+use td_tower::extractors::{Connection, SrvCtx};
 
-mod sql;
+pub mod authz_provider;
+pub mod jwt;
+pub mod session_provider;
+pub mod tower;
 
 /// Authorization context for permissions check
-pub type AuthzContext = AuthzContextImplWithCache<'static>;
+pub type AuthzContext = AuthzContextImplWithCache;
 
 /// Layer to refresh the authz context. It must be called every time
 /// permissions and inter_collection_permissions change.
@@ -25,8 +27,8 @@ pub async fn refresh_authz_context(
     Connection(conn): Connection,
 ) -> Result<(), TdError> {
     let mut conn_ = conn.lock().await;
-    let conn = conn_.get_mut_connection()?;
-    context.refresh(conn).await?;
+    let mut conn = conn_.get()?;
+    context.refresh(&mut conn).await?;
     Ok(())
 }
 
@@ -41,11 +43,11 @@ struct AuthzData {
         HashMap<ToCollectionId, Arc<Vec<CollectionId>>>,
 }
 
-pub struct AuthzContextImplWithCache<'a> {
-    provider: CachedProvider<'a, AuthzData, &'a mut SqliteConnection, SqlAuthzDataProvider>,
+pub struct AuthzContextImplWithCache {
+    provider: CachedProvider<AuthzData, SqlAuthzDataProvider>,
 }
 
-impl Default for AuthzContextImplWithCache<'_> {
+impl Default for AuthzContextImplWithCache {
     fn default() -> Self {
         let provider = SqlAuthzDataProvider;
         let provider = CachedProvider::cache(provider);
@@ -53,11 +55,10 @@ impl Default for AuthzContextImplWithCache<'_> {
     }
 }
 
-#[async_trait]
-impl AuthzContextT for AuthzContextImplWithCache<'_> {
+impl AuthzContextT for AuthzContextImplWithCache {
     async fn role_permissions(
         &self,
-        conn: &mut SqliteConnection,
+        conn: &mut DynamicConnection<'_>,
         role: &RoleId,
     ) -> Result<Option<Arc<Vec<Permission>>>, TdError> {
         Ok(self
@@ -71,7 +72,7 @@ impl AuthzContextT for AuthzContextImplWithCache<'_> {
 
     async fn inter_collections_permissions_value_can_read_key(
         &self,
-        conn: &mut SqliteConnection,
+        conn: &mut DynamicConnection<'_>,
         collection_id: &CollectionId,
     ) -> Result<Option<Arc<Vec<ToCollectionId>>>, TdError> {
         Ok(self
@@ -85,7 +86,7 @@ impl AuthzContextT for AuthzContextImplWithCache<'_> {
 
     async fn inter_collections_permissions_key_can_read_value(
         &self,
-        conn: &mut SqliteConnection,
+        conn: &mut DynamicConnection<'_>,
         collection_id: &ToCollectionId,
     ) -> Result<Option<Arc<Vec<CollectionId>>>, TdError> {
         Ok(self
@@ -97,12 +98,12 @@ impl AuthzContextT for AuthzContextImplWithCache<'_> {
             .cloned())
     }
 
-    async fn refresh(&self, conn: &mut SqliteConnection) -> Result<(), TdError> {
+    async fn refresh(&self, conn: &mut DynamicConnection<'_>) -> Result<(), TdError> {
         self.provider.purge(conn).await
     }
 }
 
-/// [`td_objects::tower_service::authz::Authz`]  with a fixed [`AuthzContextT`] context.
+/// [`td_objects::tower_service::tower::Authz`]  with a fixed [`AuthzContextT`] context.
 ///
 /// It expects a [`AuthzContextImplWithCache`] in the service context.
 pub type Authz<
@@ -114,4 +115,4 @@ pub type Authz<
     C5 = NoPermissions,
     C6 = NoPermissions,
     C7 = NoPermissions,
-> = td_objects::tower_service::authz::Authz<AuthzContext, C1, C2, C3, C4, C5, C6, C7>;
+> = tower::Authz<AuthzContext, C1, C2, C3, C4, C5, C6, C7>;
