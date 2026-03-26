@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-#[td_type::dxo]
+#[ta_objects::dxo]
 mod definitions {
     use crate::dxo::crudl::RequestContext;
     use crate::dxo::function::FunctionDB;
@@ -11,34 +11,35 @@ mod definitions {
         DependencyVersionId, FunctionId, System, TableId, UserId,
     };
     use crate::types::composed::TableVersions;
+    use ta_objects::and;
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(
         sql_table = "dependencies",
-        order_by = "dep_pos",
-        versioned(order_by = "defined_on", partition_by = "dependency_id"),
+        order_by(col = "dep_pos", dir = "desc"),
+        versioned(pk = "id", version_by = "defined_on", partition_by = "dependency_id", current = "dependencies_current"),
         recursive(up = "table_function_id", down = "function_id"),
         states(
             // Active dependencies are dependencies that can be used in executions.
-            Active = [&DependencyStatus::Active],
+            Active = DependencyStatus::Active,
             // Available dependencies are active user dependencies.
-            User = [&(DependencyStatus::Active, System::FALSE)],
+            User = and!(DependencyStatus::Active, System::FALSE),
         )
     )]
-    #[td_type(
+    #[dxo(
         builder(try_from = FunctionDB, skip_all),
         updater(try_from = RequestContext, skip_all)
     )]
     pub struct DependencyDB {
         #[builder(default)]
         pub id: DependencyVersionId,
-        #[td_type(builder(include))]
+        #[dxo(builder(include))]
         pub collection_id: CollectionId,
         #[builder(default)]
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub dependency_id: DependencyId,
-        #[td_type(builder(include, field = "function_id"))]
-        #[td_type(extractor)]
+        #[dxo(builder(include, field = "function_id"))]
+        #[dxo(extractor)]
         pub function_id: FunctionId,
         pub table_collection_id: CollectionId,
         pub table_function_id: FunctionId,
@@ -46,18 +47,21 @@ mod definitions {
         pub table_versions: TableVersions,
         pub dep_pos: DependencyPos,
         pub status: DependencyStatus,
-        #[td_type(updater(include, field = "time"))]
+        #[dxo(updater(include, field = "time"))]
         pub defined_on: AtTime,
-        #[td_type(updater(include, field = "user_id"))]
+        #[dxo(updater(include, field = "user_id"))]
         pub defined_by_id: UserId,
         pub system: System,
     }
 
-    #[td_type::Dao]
-    #[dao(sql_table = "dependencies__with_names")]
+    #[ta_objects::Dao]
+    #[dao(
+        sql_table = "dependencies__with_names",
+        versioned(current = "dependencies_current__with_names")
+    )]
     #[inherits(DependencyDB)]
     pub struct DependencyDBWithNames {
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub table_id: TableId,
 
         pub collection: CollectionName,

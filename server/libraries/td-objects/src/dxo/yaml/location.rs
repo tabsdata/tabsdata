@@ -5,7 +5,7 @@
 use crate::types::basic::EnvPrefix;
 use url::Url;
 
-#[td_type::Dto]
+#[ta_objects::Dto]
 #[derive(Eq, PartialEq)]
 pub struct Location {
     pub uri: Url,

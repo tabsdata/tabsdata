@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-#[td_type::dxo]
+#[ta_objects::dxo]
 mod definitions {
     use crate::types::basic::{
         AccessToken, AccessTokenExpiration, AccessTokenId, AtTime, GrantType, NewPassword,
@@ -10,25 +10,25 @@ mod definitions {
         TokenType, UserId, UserName,
     };
 
-    #[td_type::Dto]
+    #[ta_objects::Dto]
     pub struct Login {
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub name: UserName,
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub password: Password,
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         #[serde(default = "RoleName::user")]
         pub role: RoleName,
     }
 
-    #[td_type::Dto]
+    #[ta_objects::Dto]
     pub struct RefreshRequestX {
         pub grant_type: GrantType,
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub refresh_token: RefreshToken,
     }
 
-    #[td_type::Dto]
+    #[ta_objects::Dto]
     pub struct TokenResponseX {
         pub access_token: AccessToken,
         pub refresh_token: RefreshToken,
@@ -36,44 +36,44 @@ mod definitions {
         pub expires_in: AccessTokenExpiration,
     }
 
-    #[td_type::Dto]
+    #[ta_objects::Dto]
     pub struct RoleChange {
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub role: RoleName,
     }
 
-    #[td_type::Dto]
+    #[ta_objects::Dto]
     pub struct PasswordChange {
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub name: UserName,
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub old_password: OldPassword,
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub new_password: NewPassword,
     }
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(sql_table = "sessions")]
     pub struct SessionDB {
         #[builder(default)]
         pub access_token_id: AccessTokenId,
         #[builder(default)]
         pub refresh_token_id: RefreshTokenId,
-        #[td_type(setter)]
+        #[dxo(setter)]
         pub user_id: UserId,
-        #[td_type(setter)]
+        #[dxo(setter)]
         pub role_id: RoleId,
-        #[td_type(setter)]
+        #[dxo(setter)]
         pub created_on: AtTime,
         pub expires_on: AtTime,
         #[builder(default = "AtTime::default()")]
-        // TODO, ideally we should support #[td_type(setter)] on the same type multiple times.
+        // TODO, ideally we should support #[dxo(setter)] on the same type multiple times.
         pub status_change_on: AtTime,
         #[builder(default = "SessionStatus::Active")]
         pub status: SessionStatus,
     }
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(sql_table = "sessions__with_names")]
     #[inherits(SessionDB)]
     pub struct SessionDBWithNames {
@@ -81,43 +81,43 @@ mod definitions {
         pub role_name: RoleName,
     }
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(sql_table = "sessions")]
     pub struct SessionLogoutDB {
-        #[td_type(setter)]
+        #[dxo(setter)]
         pub status_change_on: AtTime,
         #[builder(default = "SessionStatus::InvalidLogout")]
         pub status: SessionStatus,
     }
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(sql_table = "sessions")]
     pub struct SessionPasswordChangeDB {
-        #[td_type(setter)]
+        #[dxo(setter)]
         pub status_change_on: AtTime,
         #[builder(default = "SessionStatus::InvalidPasswordChange")]
         pub status: SessionStatus,
     }
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(sql_table = "sessions")]
     pub struct SessionRoleChangeDB {
-        #[td_type(setter)]
+        #[dxo(setter)]
         pub status_change_on: AtTime,
         #[builder(default = "SessionStatus::InvalidRoleChange")]
         pub status: SessionStatus,
     }
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(sql_table = "sessions")]
     pub struct SessionNewTokenDB {
-        #[td_type(setter)]
+        #[dxo(setter)]
         pub status_change_on: AtTime,
         #[builder(default = "SessionStatus::InvalidNewToken")]
         pub status: SessionStatus,
     }
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(sql_table = "users_roles__with_names")]
     pub struct UserInfoUserRoleDB {
         pub user_id: UserId,

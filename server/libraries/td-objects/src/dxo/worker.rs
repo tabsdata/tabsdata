@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-#[td_type::dxo]
+#[ta_objects::dxo]
 mod definitions {
     use crate::dxo::function::FunctionDB;
     use crate::dxo::yaml::WorkerOutput;
@@ -12,19 +12,21 @@ mod definitions {
         TransactionId, WorkerConfig, WorkerId, WorkerMessageStatus, WorkerStatus, WorkerType,
     };
     use chrono::{DateTime, Utc};
-    use td_common::datetime::IntoDateTimeUtc;
+    use ta_objects::Buildable;
+    use ta_objects::and;
+    use td_common::datetime::Timestamp;
     use td_common::execution_status::WorkerCallbackStatus;
     use td_common::server::ResponseMessagePayload;
     use td_error::TdError;
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(sql_table = "workers")]
-    #[td_type(builder(try_from = FunctionDB, skip_all))]
+    #[dxo(builder(try_from = FunctionDB, skip_all))]
     pub struct WorkerDB {
         #[builder(default)]
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub id: WorkerId,
-        #[td_type(builder(include), extractor)]
+        #[dxo(builder(include), extractor)]
         pub collection_id: CollectionId,
         #[builder(default)]
         pub execution_id: Option<ExecutionId>,
@@ -32,7 +34,7 @@ mod definitions {
         pub transaction_id: Option<TransactionId>,
         #[builder(default)]
         pub function_run_id: Option<FunctionRunId>,
-        #[td_type(builder(include, field = "id"))]
+        #[dxo(builder(include, field = "id"))]
         pub function_version_id: FunctionVersionId,
         #[builder(default = "WorkerMessageStatus::None")]
         pub message_status: WorkerMessageStatus,
@@ -44,16 +46,23 @@ mod definitions {
         pub status: WorkerStatus,
 
         pub worker_type: WorkerType, // added in v4
-        #[td_type(builder(include, field = "enabled"), extractor)]
+        #[dxo(builder(include, field = "enabled"), extractor)]
         pub worker_enabled: Enabled, // added in v4
         pub worker_config: Option<WorkerConfig>, // added in v4
     }
 
-    #[td_type::Dao]
-    #[dao(sql_table = "workers__with_names")]
+    #[ta_objects::Dao]
+    #[dao(sql_table = "workers__with_names",
+        states(
+            CronTriggersToSchedule = and!(Enabled::TRUE, WorkerType::CronTrigger, WorkerStatus::Scheduled),
+            CronTriggersToStop = and!(Enabled::TRUE, WorkerType::CronTrigger, WorkerStatus::StopScheduled),
+            StageTriggersToSchedule = and!(Enabled::TRUE, WorkerType::StageTrigger, WorkerStatus::Scheduled),
+            StageTriggersToStop = and!(Enabled::TRUE, WorkerType::StageTrigger, WorkerStatus::StopScheduled),
+        )
+    )]
     #[inherits(WorkerDB)]
     pub struct WorkerDBWithNames {
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub id: WorkerId,
 
         pub collection: CollectionName,
@@ -63,47 +72,7 @@ mod definitions {
         pub worker_type: WorkerType,
     }
 
-    impl WorkerDBWithNames {
-        // TODO this can be converted to states if creating a stateful select without versioned
-        pub async fn cron_trigger_to_schedule()
-        -> Result<(Enabled, WorkerType, WorkerStatus), TdError> {
-            Ok((
-                Enabled::TRUE,
-                WorkerType::CronTrigger,
-                WorkerStatus::Scheduled,
-            ))
-        }
-
-        pub async fn cron_trigger_to_stop() -> Result<(Enabled, WorkerType, WorkerStatus), TdError>
-        {
-            Ok((
-                Enabled::TRUE,
-                WorkerType::CronTrigger,
-                WorkerStatus::StopScheduled,
-            ))
-        }
-
-        pub async fn stage_trigger_to_schedule()
-        -> Result<(Enabled, WorkerType, WorkerStatus), TdError> {
-            Ok((
-                Enabled::TRUE,
-                WorkerType::StageTrigger,
-                WorkerStatus::Scheduled,
-            ))
-        }
-
-        pub async fn stage_trigger_to_stop() -> Result<(Enabled, WorkerType, WorkerStatus), TdError>
-        {
-            Ok((
-                Enabled::TRUE,
-                WorkerType::StageTrigger,
-                WorkerStatus::StopScheduled,
-            ))
-        }
-    }
-
-    #[td_type::Dto]
-    #[td_type(builder(try_from = WorkerDBWithNames))]
+    #[ta_objects::Dto]
     #[dto(list(on = WorkerDBWithNames))]
     pub struct Worker {
         #[dto(list(pagination_by = "+", filter, filter_like))]
@@ -139,7 +108,7 @@ mod definitions {
 
     pub type CallbackRequest = ResponseMessagePayload<WorkerOutput>;
 
-    #[td_type::Dlo]
+    #[ta_objects::Dlo]
     pub struct UpdateWorkerExecution {
         pub started_on: AtTime,
         pub ended_on: Option<AtTime>,
@@ -151,11 +120,14 @@ mod definitions {
 
         fn try_from(value: &CallbackRequest) -> Result<Self, Self::Error> {
             Ok(UpdateWorkerExecution::builder()
-                .try_started_on(value.start.datetime_utc()?)?
+                .try_started_on(Timestamp::try_from(value.start)?)?
                 .ended_on(
                     value
                         .end
-                        .map(|v| AtTime::try_from(v.datetime_utc()?))
+                        .map(|v| {
+                            let ts = Timestamp::try_from(v)?;
+                            AtTime::try_from(ts)
+                        })
                         .transpose()?,
                 )
                 .status(value.status.clone())
@@ -163,9 +135,9 @@ mod definitions {
         }
     }
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(sql_table = "workers")]
-    #[td_type(builder(try_from = UpdateWorkerExecution))]
+    #[dxo(builder(try_from = UpdateWorkerExecution))]
     pub struct UpdateWorkerDB {
         #[dao(immutable)]
         pub started_on: Option<AtTime>,
@@ -199,7 +171,7 @@ mod definitions {
         }
     }
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(sql_table = "workers")]
     pub struct UpdateWorkerMessageStatusDB {
         message_status: WorkerMessageStatus,
@@ -219,16 +191,14 @@ mod definitions {
         }
     }
 
-    #[td_type::Dto]
-    #[derive(Eq, PartialEq)]
+    #[ta_objects::Dto]
     pub struct CronTriggerConfig {
         pub start: Option<DateTime<Utc>>,
         pub end: Option<DateTime<Utc>>,
         pub mask: CronMask,
     }
 
-    #[td_type::Dto]
-    #[derive(Eq, PartialEq)]
+    #[ta_objects::Dto]
     pub struct StageTriggerConfig {
         pub timeout_threshold_min: TimeoutThresholdMin,
         pub size_threshold: SizeThreshold,

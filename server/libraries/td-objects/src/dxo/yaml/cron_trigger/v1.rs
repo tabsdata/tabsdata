@@ -8,7 +8,7 @@ use crate::types::basic::{
 };
 use td_common::server::HttpRequest;
 
-#[td_type::Dto]
+#[ta_objects::Dto]
 #[derive(Eq, PartialEq)]
 pub struct CronTriggerInput {
     pub info: Info,
@@ -20,7 +20,7 @@ impl Locations for CronTriggerInput {
     }
 }
 
-#[td_type::Dto]
+#[ta_objects::Dto]
 #[derive(Eq, PartialEq)]
 pub struct Info {
     pub worker_id: WorkerId,
@@ -79,7 +79,7 @@ mod tests {
         let serialized = serde_yaml::to_string(&input).unwrap();
         // println!("{}", serialized);
 
-        let scheduled_on = scheduled_on.as_str_millis();
+        let scheduled_on = scheduled_on.to_string();
         let start = serde_json::to_string(&start).unwrap();
         let end = serde_json::to_string(&end).unwrap();
         let function_version_id = function_version_id.unpadded_str();

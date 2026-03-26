@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use utoipa::ToSchema;
 
-#[td_type::Dto]
+#[ta_objects::Dto]
 #[derive(Eq, PartialEq)]
 pub struct FunctionInput {
     pub info: FunctionInfo,
@@ -34,7 +34,7 @@ impl Locations for FunctionInput {
     }
 }
 
-#[td_type::Dto]
+#[ta_objects::Dto]
 #[derive(Eq, PartialEq)]
 pub struct FunctionInfo {
     pub collection_id: CollectionId,
@@ -54,7 +54,7 @@ pub struct FunctionInfo {
     pub scheduled_on: AtTime, // when the request yaml was created
 }
 
-#[td_type::Dto]
+#[ta_objects::Dto]
 #[derive(Eq, PartialEq)]
 pub struct InputTableVersion {
     pub name: TableName,
@@ -89,7 +89,7 @@ impl Locations for InputTableVersion {
     }
 }
 
-#[td_type::Dto]
+#[ta_objects::Dto]
 #[derive(Eq, PartialEq)]
 pub struct InputPartitionTableVersion {
     name: TableName,
@@ -177,7 +177,7 @@ impl Locations for OutputTable {
     }
 }
 
-#[td_type::Dto]
+#[ta_objects::Dto]
 #[derive(Eq, PartialEq)]
 pub struct OutputTableVersion {
     pub name: TableName,
@@ -190,7 +190,7 @@ pub struct OutputTableVersion {
     pub table_pos: TableFunctionParamPos,
 }
 
-#[td_type::Dto]
+#[ta_objects::Dto]
 #[derive(Eq, PartialEq)]
 pub struct OutputPartitionTableVersion {
     name: TableName,
@@ -203,12 +203,12 @@ pub struct OutputPartitionTableVersion {
     table_pos: TableFunctionParamPos,
 }
 
-#[td_type::Dto]
+#[ta_objects::Dto]
 pub struct FunctionOutput {
     pub output: Vec<WrittenTable>,
 }
 
-#[td_type::Dto]
+#[ta_objects::Dto]
 pub struct TableInfo {
     pub column_count: ColumnCount,
     pub row_count: RowCount,
@@ -238,6 +238,7 @@ mod tests {
     use crate::types::basic::{EnvPrefix, FunctionId};
     use itertools::Itertools;
     use std::collections::HashSet;
+    use ta_objects::Buildable;
     use td_error::TdError;
     use url::Url;
 
@@ -343,8 +344,8 @@ mod tests {
         let serialized = serde_yaml::to_string(&input).unwrap();
         // println!("{}", serialized);
 
-        let triggered_on = triggered_on.as_str_millis();
-        let scheduled_on = scheduled_on.as_str_millis();
+        let triggered_on = triggered_on.to_string();
+        let scheduled_on = scheduled_on.to_string();
 
         let defined_on = serde_json::to_string(&defined_on).unwrap();
 

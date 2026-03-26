@@ -2,15 +2,14 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-#[td_type::dxo]
+#[ta_objects::dxo]
 mod definitions {
-    use crate::dxo::transaction::TransactionDBWithStatus;
+    use crate::dxo::transaction::{TransactionDBWithStatus, TransactionDBWithStatusIden};
     use crate::types::basic::{
         CollectionId, ExecutionId, TransactionId, TransactionStatus, TriggeredOn, UserId,
     };
 
-    #[td_type::Dto]
-    #[td_type(builder(try_from = TransactionDBWithStatus))]
+    #[ta_objects::Dto]
     #[dto(list(on = TransactionDBWithStatus))]
     pub struct SynchrotronResponse {
         #[dto(list(filter, filter_like))]

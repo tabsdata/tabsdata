@@ -2,40 +2,40 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-#[td_type::dxo]
+#[ta_objects::dxo]
 mod definitions {
     use crate::dxo::crudl::RequestContext;
     use crate::types::basic::{AtTime, Fixed, RoleId, RoleName, UserId, UserName, UserRoleId};
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(sql_table = "users_roles")]
-    #[td_type(
+    #[dxo(
         updater(try_from = RequestContext, skip_all),
         updater(try_from = FixedUserRole, skip_all)
     )]
     pub struct UserRoleDB {
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         #[builder(default)]
         pub id: UserRoleId,
-        #[td_type(setter)]
+        #[dxo(setter)]
         pub user_id: UserId,
-        #[td_type(setter)]
-        #[td_type(updater(include, try_from = FixedUserRole))]
+        #[dxo(setter)]
+        #[dxo(updater(include, try_from = FixedUserRole))]
         pub role_id: RoleId,
-        #[td_type(updater(include, try_from = RequestContext, field = "time"))]
+        #[dxo(updater(include, try_from = RequestContext, field = "time"))]
         pub added_on: AtTime,
-        #[td_type(updater(include, try_from = RequestContext, field = "user_id"))]
+        #[dxo(updater(include, try_from = RequestContext, field = "user_id"))]
         pub added_by_id: UserId,
         #[builder(default = "Fixed::from(false)")]
-        #[td_type(updater(include, try_from = FixedUserRole))]
+        #[dxo(updater(include, try_from = FixedUserRole))]
         pub fixed: Fixed,
     }
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(sql_table = "users_roles__with_names")]
     #[inherits(UserRoleDB)]
     pub struct UserRoleDBWithNames {
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub role_id: RoleId,
 
         pub user: UserName,
@@ -43,7 +43,7 @@ mod definitions {
         pub added_by: UserName,
     }
 
-    #[td_type::Dlo]
+    #[ta_objects::Dlo]
     pub struct FixedUserRole {
         #[builder(default = "RoleId::user()")]
         pub role_id: RoleId,
@@ -51,15 +51,14 @@ mod definitions {
         pub fixed: Fixed,
     }
 
-    #[td_type::Dto]
+    #[ta_objects::Dto]
     pub struct UserRoleCreate {
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub user: UserName,
     }
 
-    #[td_type::Dto]
+    #[ta_objects::Dto]
     #[dto(list(on = UserRoleDBWithNames))]
-    #[td_type(builder(try_from = UserRoleDBWithNames))]
     pub struct UserRole {
         #[dto(list(pagination_by = "+"))]
         pub id: UserRoleId,

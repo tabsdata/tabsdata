@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-#[td_type::dxo]
+#[ta_objects::dxo]
 mod definitions {
     use crate::dxo::crudl::RequestContext;
     use crate::dxo::role::RoleDB;
@@ -11,39 +11,39 @@ mod definitions {
         RoleId, RoleName, UserId, UserName,
     };
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(sql_table = "permissions")]
-    #[td_type(
+    #[dxo(
         builder(try_from = PermissionCreate, skip_all),
         updater(try_from = RequestContext, skip_all),
         updater(try_from = RoleDB, skip_all)
     )]
     pub struct PermissionDB {
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         #[builder(default)]
         pub id: PermissionId,
-        #[td_type(updater(try_from = RoleDB, field = "id"))]
+        #[dxo(updater(try_from = RoleDB, field = "id"))]
         pub role_id: RoleId,
-        #[td_type(builder(include))]
+        #[dxo(builder(include))]
         pub permission_type: PermissionType,
         pub entity_type: PermissionEntityType,
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub entity_id: EntityId,
-        #[td_type(updater(try_from = RequestContext, field = "user_id"))]
+        #[dxo(updater(try_from = RequestContext, field = "user_id"))]
         pub granted_by_id: UserId,
-        #[td_type(updater(try_from = RequestContext, field = "time"))]
+        #[dxo(updater(try_from = RequestContext, field = "time"))]
         pub granted_on: AtTime,
         #[builder(default = "Fixed::from(false)")]
         pub fixed: Fixed,
     }
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(sql_table = "permissions__with_names")]
     #[inherits(PermissionDB)]
     pub struct PermissionDBWithNames {
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub id: PermissionId,
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub entity_id: Option<EntityId>,
 
         pub granted_by: UserName,
@@ -51,15 +51,14 @@ mod definitions {
         pub entity: Option<EntityName>,
     }
 
-    #[td_type::Dto]
+    #[ta_objects::Dto]
     pub struct PermissionCreate {
         pub permission_type: PermissionType,
         pub entity_name: Option<EntityName>, // None means ALL
     }
 
-    #[td_type::Dto]
+    #[ta_objects::Dto]
     #[dto(list(on = PermissionDBWithNames))]
-    #[td_type(builder(try_from = PermissionDBWithNames))]
     #[inherits(PermissionDBWithNames)]
     pub struct Permission {
         #[dto(list(pagination_by = "+", filter))]
@@ -69,7 +68,7 @@ mod definitions {
 
         #[dto(list(filter, filter_like, order_by))]
         pub role: RoleName,
-        #[dto(list(filter, filter_like))] // TODO should we allow order by on nullable??
+        #[dto(list(filter, filter_like))]
         pub entity: Option<EntityName>,
     }
 }

@@ -2,11 +2,11 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-#[td_type::dxo]
+#[ta_objects::dxo]
 mod definitions {
-    use crate::dxo::Setter;
     use crate::dxo::crudl::RequestContext;
     use crate::dxo::function::{Function, FunctionDBWithNames};
+    use crate::dxo::graph::{FunctionNode, GraphEdge, TableNode};
     use crate::dxo::table_data_version::ExecutionTableDataVersionRead;
     use crate::types::basic::{
         AtTime, CollectionId, CollectionName, Dot, Enabled, ExecutionId, ExecutionName,
@@ -16,22 +16,22 @@ mod definitions {
         UserId, UserName,
     };
     use crate::types::composed::TableVersions;
-    use crate::types::graph::GraphEdge;
-    use crate::types::graph::{FunctionNode, TableNode};
+    use crate::types::json::Json;
     use crate::types::recursion::RecursionOptions;
     use crate::types::status_count::FunctionRunStatusCount;
     use std::collections::{HashMap, HashSet};
+    use ta_objects::Setter;
 
-    #[td_type::Dto]
+    #[ta_objects::Dto]
     pub struct ExecutionRequest {
         pub name: Option<ExecutionName>,
         #[builder(default)]
         #[serde(default)]
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub function_only: FunctionOnly,
         #[builder(default)]
         #[serde(default)]
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub override_disabled_trigger: OverrideDisabledTrigger,
     }
 
@@ -45,66 +45,70 @@ mod definitions {
         }
     }
 
-    #[td_type::Dto]
+    #[ta_objects::Dto]
     pub struct ExecutionRequestInternal {
         pub name: Option<ExecutionName>,
         #[builder(default)]
         #[serde(default)]
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub function_only: FunctionOnly,
         #[builder(default)]
         #[serde(default)]
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub skip_if_running: SkipIfRunning,
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub trigger_type: TriggerType,
     }
 
-    #[td_type::Dao]
-    #[dao(
-        sql_table = "executions",
-        order_by = "triggered_on",
-        versioned(order_by = "triggered_on", partition_by = "id")
-    )]
-    #[td_type(
+    #[ta_objects::Dao]
+    #[dao(sql_table = "executions", order_by(col = "triggered_on", dir = "desc"))]
+    #[dxo(
         builder(try_from = FunctionDBWithNames, skip_all),
         updater(try_from = RequestContext, skip_all),
         updater(try_from = ExecutionRequest, skip_all)
     )]
     pub struct ExecutionDB {
         #[builder(default = "ExecutionId::new()")]
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub id: ExecutionId,
-        #[td_type(updater(try_from = ExecutionRequest, include))]
+        #[dxo(updater(try_from = ExecutionRequest, include))]
         pub name: Option<ExecutionName>,
-        #[td_type(extractor, builder(include))]
+        #[dxo(extractor, builder(include))]
         pub collection_id: CollectionId,
-        #[td_type(builder(include))]
+        #[dxo(builder(include))]
         pub function_id: FunctionId, // Added in v3
-        #[td_type(builder(field = "id"))]
-        #[td_type(extractor)]
+        #[dxo(builder(field = "id"))]
+        #[dxo(extractor)]
         pub function_version_id: FunctionVersionId,
-        #[td_type(updater(try_from = RequestContext, include, field = "time"))]
-        #[td_type(extractor)]
+        #[dxo(updater(try_from = RequestContext, include, field = "time"))]
+        #[dxo(extractor)]
         pub triggered_on: TriggeredOn,
-        #[td_type(updater(try_from = RequestContext, field = "user_id"))]
+        #[dxo(updater(try_from = RequestContext, field = "user_id"))]
         pub triggered_by_id: UserId,
-        #[td_type(setter)]
+        #[dxo(setter)]
         pub trigger_type: TriggerType, // Added in v4
 
-        pub recursion_options: Option<sqlx::types::Json<RecursionOptions>>, // Added in v3
+        pub recursion_options: Option<Json<RecursionOptions>>, // Added in v3
     }
 
     // custom setter to convert to json
     impl Setter<RecursionOptions> for ExecutionDBBuilder {
         fn set(&mut self, value: &RecursionOptions) -> &mut Self {
-            let recursion_options = Some(sqlx::types::Json::from(*value));
+            let recursion_options = Some(Json(*value));
             self.recursion_options = Some(recursion_options);
             self
         }
     }
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
+    #[dao(
+        sql_table = "executions__with_names",
+        versioned(pk = "id", version_by = "triggered_on", partition_by = "function_id")
+    )]
+    #[inherits(ExecutionDB)]
+    pub struct VersionedExecutionDB {}
+
+    #[ta_objects::Dao]
     #[dao(sql_table = "executions__with_names")]
     #[inherits(ExecutionDB)]
     pub struct ExecutionDBWithNames {
@@ -113,26 +117,25 @@ mod definitions {
         pub triggered_by: UserName,
     }
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(sql_table = "executions__with_status")]
     #[inherits(ExecutionDBWithNames)]
     pub struct ExecutionDBWithStatus {
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub id: ExecutionId,
 
         pub started_on: Option<AtTime>,
         pub ended_on: Option<AtTime>,
         pub status: ExecutionStatus,
-        pub function_run_status_count: sqlx::types::Json<HashMap<FunctionRunStatus, StatusCount>>,
+        pub function_run_status_count: Json<HashMap<FunctionRunStatus, StatusCount>>,
     }
 
-    #[td_type::Dto]
-    #[td_type(builder(try_from = ExecutionDBWithStatus))]
+    #[ta_objects::Dto]
     #[dto(list(on = ExecutionDBWithStatus))]
     #[inherits(ExecutionDBWithStatus)]
     pub struct Execution {
-        #[ignore]
-        pub recursion_options: Option<sqlx::types::Json<RecursionOptions>>, // Added in v3
+        #[exclude]
+        pub recursion_options: Option<Json<RecursionOptions>>, // Added in v3
 
         #[dto(list(filter, filter_like, order_by))]
         pub id: ExecutionId,
@@ -163,48 +166,48 @@ mod definitions {
         pub function_run_status_count: FunctionRunStatusCount,
     }
 
-    #[td_type::Dto]
+    #[ta_objects::Dto]
     pub struct ExecutionDetails {
-        #[td_type(setter)]
+        #[dxo(setter)]
         pub execution: Execution,
-        #[td_type(setter)]
+        #[dxo(setter)]
         pub functions: Vec<Function>,
     }
 
-    #[td_type::Dto]
+    #[ta_objects::Dto]
     #[derive(Eq, PartialEq, Hash)]
-    #[td_type(builder(try_from = FunctionNode))]
+    #[dxo(builder(try_from = FunctionNode))]
     pub struct FunctionNodeResponse {
         pub collection_id: CollectionId,
         pub collection: CollectionName,
-        #[td_type(builder(try_from = FunctionDBWithNames, field = "id"))]
+        #[dxo(builder(try_from = FunctionDBWithNames, field = "id"))]
         pub function_version_id: FunctionVersionId,
         pub name: FunctionName,
         pub enabled: Enabled,
     }
 
-    #[td_type::Dto]
+    #[ta_objects::Dto]
     #[derive(Eq, PartialEq, Hash)]
-    #[td_type(builder(try_from = TableNode))]
+    #[dxo(builder(try_from = TableNode))]
     pub struct TableNodeResponse {
         pub collection_id: CollectionId,
         pub collection: CollectionName,
         pub function_version_id: FunctionVersionId,
-        #[td_type(builder(try_from = TableDBWithNames, field = "id"))]
+        #[dxo(builder(try_from = TableDBWithNames, field = "id"))]
         pub table_version_id: TableVersionId,
         pub name: TableName,
         pub system: System,
     }
 
     /// Represents the versions of a table to be included in the response.
-    #[td_type::Dto]
+    #[ta_objects::Dto]
     #[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
     pub struct ResolvedVersionResponse {
         pub inner: Vec<Option<TableDataVersionId>>,
         pub original: TableVersions,
     }
 
-    #[td_type::Dto]
+    #[ta_objects::Dto]
     #[derive(Eq, PartialEq)]
     pub struct ExecutionResponse {
         pub id: ExecutionId,

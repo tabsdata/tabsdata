@@ -8,7 +8,7 @@ use crate::types::basic::{
 };
 use td_common::server::HttpRequest;
 
-#[td_type::Dto]
+#[ta_objects::Dto]
 #[derive(Eq, PartialEq)]
 pub struct StageTriggerInput {
     pub info: Info,
@@ -20,7 +20,7 @@ impl Locations for StageTriggerInput {
     }
 }
 
-#[td_type::Dto]
+#[ta_objects::Dto]
 #[derive(Eq, PartialEq)]
 pub struct Info {
     pub worker_id: WorkerId,
@@ -116,7 +116,7 @@ mod tests {
         let serialized = serde_yaml::to_string(&input).unwrap();
         // println!("{}", serialized);
 
-        let scheduled_on = scheduled_on.as_str_millis();
+        let scheduled_on = scheduled_on.to_string();
         let start = serde_json::to_string(&start).unwrap();
         let end = serde_json::to_string(&end).unwrap();
 

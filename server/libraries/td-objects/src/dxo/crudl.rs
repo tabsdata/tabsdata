@@ -5,28 +5,24 @@
 use crate::types::basic::{AccessTokenId, AtTime, RoleId, UserId};
 use serde::{Deserialize, Serialize};
 use serde_valid::Validate;
-use sqlx::Error;
-use sqlx::error::ErrorKind::{ForeignKeyViolation, UniqueViolation};
-use sqlx::sqlite::SqliteQueryResult;
 use std::fmt::Debug;
-use td_database::sql::DbError;
-use td_error::{TdDomainError, TdError, td_error};
+use td_error::td_error;
 use td_tower::error::{ConnectionError, FromHandlerError};
 
 /// Request context for the logic layer.
-#[td_type::Dlo]
+#[ta_objects::Dlo]
 pub struct RequestContext {
     /// The ID of the access token in the request.
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     pub access_token_id: AccessTokenId,
     /// The ID of the user making the request.
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     pub user_id: UserId,
     /// The role of the user making the request.
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     pub role_id: RoleId,
     /// The time the request was made.
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     pub time: AtTime,
 }
 
@@ -50,7 +46,7 @@ pub trait IntoName<T> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Name<N>(N);
+pub struct Name<N>(pub(crate) N);
 
 impl<N> IntoName<N> for Name<N> {
     fn into_name(self) -> N {
@@ -63,7 +59,7 @@ pub trait IntoData<D> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Data<D>(D);
+pub struct Data<D>(pub(crate) D);
 
 impl<D> IntoData<D> for Data<D> {
     fn into_data(self) -> D {
@@ -72,47 +68,47 @@ impl<D> IntoData<D> for Data<D> {
 }
 
 /// Request to create an entity.
-#[td_type::Dlo]
+#[ta_objects::Dlo]
 pub struct CreateRequest<N: Clone, C: Clone> {
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     pub context: RequestContext,
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     pub name: Name<N>,
     /// The data to create the entity.
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     pub data: Data<C>,
 }
 
 /// Request to update an entity.
-#[td_type::Dlo]
+#[ta_objects::Dlo]
 pub struct UpdateRequest<N: Clone, U: Clone> {
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     pub context: RequestContext,
     /// The logical name of the entity to update.
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     pub name: Name<N>,
     /// The data to update the entity.
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     pub data: Data<U>,
 }
 
 /// Request to delete an entity.
-#[td_type::Dlo]
+#[ta_objects::Dlo]
 pub struct DeleteRequest<N: Clone> {
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     pub context: RequestContext,
     /// The logical name of the entity to delete.
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     pub name: Name<N>,
 }
 
 /// Request to get an entity.
-#[td_type::Dlo]
+#[ta_objects::Dlo]
 pub struct ReadRequest<N: Clone> {
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     pub context: RequestContext,
     /// The logical name of the entity to read.
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     pub name: Name<N>,
 }
 
@@ -123,7 +119,7 @@ fn default_page_len() -> usize {
 }
 
 /// List parameters for list operations defining filtering, sorting and pagination.
-#[td_type::QueryParam]
+#[ta_objects::QueryParam]
 #[derive(Validate)]
 pub struct ListParams {
     /// The desired length for the result list (for now, default is 10000).
@@ -167,13 +163,13 @@ impl Default for ListParams {
 }
 
 /// Request to list entities.
-#[td_type::Dlo]
+#[ta_objects::Dlo]
 pub struct ListRequest<N: Clone> {
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     pub context: RequestContext,
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     pub name: Name<N>,
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     pub list_params: ListParams,
 }
 
@@ -262,7 +258,7 @@ pub enum CrudlErrorX {
 ///
 /// Besides the data, it includes the [`ListParams`] used for the list operation,
 /// the offset and length of the result and a flag indicating if there are more results or not.
-#[td_type::Dto]
+#[ta_objects::Dto]
 pub struct ListResponse<LL: Clone> {
     /// The list parameters of the request.
     pub list_params: ListParams,
@@ -319,103 +315,4 @@ impl<LL: Clone> ListResponseBuilder<LL> {
         self.next_pagination_id = Some(next_pagination_id);
         self
     }
-}
-
-/// Crudl helper function to handle SQL create errors.
-pub fn handle_create_error(e: Error) -> CrudlErrorX {
-    match e {
-        Error::Database(db_err) => {
-            let msg = db_err.message().to_string();
-            match db_err.kind() {
-                UniqueViolation => CrudlErrorX::CannotCreateUniqueValueExists(msg),
-                _ => CrudlErrorX::InternalError(msg),
-            }
-        }
-        _ => CrudlErrorX::InternalError(e.to_string()),
-    }
-}
-
-/// Crudl helper function to handle SQL update errors.
-pub fn handle_update_error(e: Error) -> CrudlErrorX {
-    match e {
-        Error::Database(db_err) => {
-            let msg = db_err.message().to_string();
-            match db_err.kind() {
-                UniqueViolation => CrudlErrorX::CannotUpdateUniqueValueExists(msg),
-                _ => CrudlErrorX::InternalError(msg),
-            }
-        }
-        _ => CrudlErrorX::InternalError(e.to_string()),
-    }
-}
-
-/// Crudl helper function to handle SQL get errors.
-pub fn handle_select_error(e: Error) -> CrudlErrorX {
-    match e {
-        Error::RowNotFound => CrudlErrorX::NotFound,
-        _ => CrudlErrorX::InternalError(e.to_string()),
-    }
-}
-
-/// Converts a SQL error into an app error.
-pub fn handle_sql_err(err: Error) -> TdError {
-    TdError::new(DbError::SqlError(err))
-}
-
-pub fn handle_create_unique_err<AlreadyExisting, DbErr>(
-    already_existing: AlreadyExisting,
-    from_db_err: fn(Error) -> DbErr,
-) -> impl FnOnce(Error) -> TdError
-where
-    AlreadyExisting: TdDomainError + 'static,
-    DbErr: TdDomainError + 'static,
-{
-    move |err| match err {
-        Error::Database(err) if err.kind() == UniqueViolation => TdError::new(already_existing),
-        _ => TdError::new(from_db_err(err)),
-    }
-}
-
-/// Converts a SQL error into an app error with special handling of a NOT_FOUND error.
-///
-/// To be used with SQL [`sqlx::query::QueryAs::fetch_one`] calls.
-pub fn handle_select_one_err<NotFound, DbErr>(
-    not_found: NotFound,
-    from_db_err: fn(Error) -> DbErr,
-) -> impl FnOnce(Error) -> TdError
-where
-    NotFound: TdDomainError + 'static,
-    DbErr: TdDomainError + 'static,
-{
-    move |err| match err {
-        Error::RowNotFound => TdError::new(not_found),
-        _ => TdError::new(from_db_err(err)),
-    }
-}
-
-/// Crudl helper function to handle SQL delete errors.
-pub fn handle_delete_error(e: Error) -> CrudlErrorX {
-    match e {
-        Error::Database(db_err) => {
-            let msg = db_err.message().to_string();
-            match db_err.kind() {
-                ForeignKeyViolation => CrudlErrorX::CannotDelete(msg),
-                _ => CrudlErrorX::InternalError(msg),
-            }
-        }
-        _ => CrudlErrorX::InternalError(e.to_string()),
-    }
-}
-
-/// Crudl helper function to handle SQL list errors.
-pub fn handle_list_error(e: Error) -> CrudlErrorX {
-    CrudlErrorX::InternalError(e.to_string())
-}
-
-/// Helper function to assert that only one row was affected by the SQL operation.
-pub fn assert_one(res: SqliteQueryResult) -> Result<(), CrudlErrorX> {
-    if res.rows_affected() == 0 {
-        return Err(CrudlErrorX::NotFound);
-    }
-    Ok(())
 }

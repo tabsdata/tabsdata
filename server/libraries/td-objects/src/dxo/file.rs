@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::stream::BoxedSyncStream;
+use crate::types::stream::BoxedSyncStream;
 use axum::response::IntoResponse;
 #[allow(unused_imports)]
 use serde_json::json;
