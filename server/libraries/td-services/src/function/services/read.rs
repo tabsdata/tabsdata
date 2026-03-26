@@ -2,7 +2,8 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::function::layers::read::vec_create_table_dependency;
+use crate::function::layers::read::{map_create_worker, vec_create_table_dependency};
+use std::collections::HashMap;
 use ta_services::factory::service_factory;
 use td_authz::tower::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
 use td_authz::{Authz, AuthzContext};
@@ -14,10 +15,12 @@ use td_objects::dxo::function::{
 };
 use td_objects::dxo::table::TableDBWithNames;
 use td_objects::dxo::trigger::TriggerDBWithNames;
+use td_objects::dxo::worker::WorkerDBWithNames;
 use td_objects::rest_urls::FunctionParam;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionIdName, FunctionId, FunctionIdName, TableId, TableName,
+    AtTime, CollectionId, CollectionIdName, FunctionId, FunctionIdName, FunctionVersionId, TableId,
+    TableName, WorkerId, WorkerTypeDto,
 };
 use td_objects::types::composed::{TableDependency, TableTrigger};
 use td_queries::By;
@@ -53,6 +56,7 @@ fn service() {
         from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
         // Read function with tables, triggers and dependencies
         from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
+        from_fn(With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
         // Convert to function read
         from_fn(With::<FunctionDBWithNames>::try_convert_to::<FunctionBuilder, _>),
         from_fn(With::<FunctionBuilder>::build::<Function>),
@@ -96,6 +100,15 @@ fn service() {
         ),
         from_fn(vec_create_table_dependency),
         from_fn(With::<Vec<TableDependency>>::set::<FunctionWithTablesBuilder>),
+        // Workers
+        from_fn(
+            By::<FunctionVersionId>::fetch_all_in::<
+                { WorkerDBWithNames::EnabledTriggers },
+                WorkerDBWithNames,
+            >
+        ),
+        from_fn(map_create_worker),
+        from_fn(With::<HashMap<WorkerTypeDto, WorkerId>>::set::<FunctionWithTablesBuilder>),
         // Build
         from_fn(With::<FunctionWithTablesBuilder>::build::<FunctionWithTables>),
     )
@@ -112,9 +125,9 @@ mod tests {
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues, RoleId,
-        TableNameDto, UserId, UserName,
+        TableNameDto, UserId, UserName, WorkerConfig,
     };
-    use td_objects::types::composed::{TableDependency, TableDependencyDto};
+    use td_objects::types::composed::{TableDependency, TableDependencyDto, TableTriggerDto};
     use td_queries::test_utils::SeedQueries;
     use td_tower::ctx_service::RawOneshot;
 
@@ -147,6 +160,7 @@ mod tests {
                 type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
                 // Read function with tables, triggers and dependencies
                 type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
+                type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
                 // Convert to function read
                 type_of_val(&With::<FunctionDBWithNames>::try_convert_to::<FunctionBuilder, _>),
                 type_of_val(&With::<FunctionBuilder>::build::<Function>),
@@ -193,6 +207,17 @@ mod tests {
                 ),
                 type_of_val(&vec_create_table_dependency),
                 type_of_val(&With::<Vec<TableDependency>>::set::<FunctionWithTablesBuilder>),
+                // Workers
+                type_of_val(
+                    &By::<FunctionVersionId>::fetch_all_in::<
+                        { WorkerDBWithNames::EnabledTriggers },
+                        WorkerDBWithNames,
+                    >,
+                ),
+                type_of_val(&map_create_worker),
+                type_of_val(
+                    &With::<HashMap<WorkerTypeDto, WorkerId>>::set::<FunctionWithTablesBuilder>,
+                ),
                 // Build
                 type_of_val(&With::<FunctionWithTablesBuilder>::build::<FunctionWithTables>),
             ]);
@@ -206,7 +231,7 @@ mod tests {
             .await?;
 
         let dependencies = Some(vec![TableDependencyDto::try_from("cofnig/table@HEAD~2")?]);
-        let triggers = None;
+        let triggers = Some(vec![TableTriggerDto::try_from("cofnig/table")?]);
         let tables = Some(vec![TableNameDto::try_from("table")?]);
 
         let create = FunctionRegister::builder()
@@ -218,6 +243,10 @@ mod tests {
             .dependencies(dependencies.clone())
             .triggers(triggers.clone())
             .tables(tables.clone())
+            .workers(Some(HashMap::from([(
+                WorkerTypeDto::CronTrigger,
+                WorkerConfig::default(),
+            )])))
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
@@ -277,6 +306,10 @@ mod tests {
                 .into_iter()
                 .map(TableName::try_from)
                 .collect::<Result<Vec<_>, _>>()?
+        );
+        assert_eq!(
+            response.workers.keys().cloned().collect::<Vec<_>>(),
+            vec![WorkerTypeDto::CronTrigger]
         );
         Ok(())
     }

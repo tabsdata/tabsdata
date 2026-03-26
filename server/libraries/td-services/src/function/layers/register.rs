@@ -712,19 +712,15 @@ pub async fn build_workers(
                 debug!("No workers specified.");
             }
             1 => {
-                for (worker_type_dto, worker_config) in new {
-                    let worker_type = match worker_type_dto {
-                        WorkerTypeDto::CronTrigger => WorkerType::CronTrigger,
-                        WorkerTypeDto::StageTrigger => WorkerType::StageTrigger,
-                    };
+                for (worker_type, worker_config) in new {
                     let worker_db = builder
                         .deref()
                         .clone()
-                        .worker_type(worker_type)
+                        .worker_type(worker_type.clone())
                         .worker_config(Some(worker_config.clone()))
                         .build()?;
                     new_workers.push(worker_db);
-                    debug!("New worker of type {worker_type_dto} created.");
+                    debug!("New worker of type {worker_type} created.");
                 }
             }
             _ => {

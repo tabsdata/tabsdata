@@ -356,3 +356,12 @@ pub enum WorkerType {
     #[typed_enum(rename = "ST")]
     StageTrigger,
 }
+
+impl From<WorkerTypeDto> for WorkerType {
+    fn from(value: WorkerTypeDto) -> Self {
+        match value {
+            WorkerTypeDto::CronTrigger => WorkerType::CronTrigger,
+            WorkerTypeDto::StageTrigger => WorkerType::StageTrigger,
+        }
+    }
+}

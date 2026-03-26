@@ -17,8 +17,7 @@ use td_objects::dxo::trigger::TriggerDBBuilder;
 use td_objects::dxo::worker::WorkerDBBuilder;
 use td_objects::types::basic::{
     AccessTokenId, AtTime, DataLocation, DependencyPos, DependencyStatus, RoleId, StorageVersion,
-    TableFunctionParamPos, TableId, TableName, TableStatus, TriggerStatus, UserId, WorkerType,
-    WorkerTypeDto,
+    TableFunctionParamPos, TableId, TableName, TableStatus, TriggerStatus, UserId,
 };
 
 pub(crate) async fn seed_function(
@@ -149,10 +148,7 @@ pub(crate) async fn seed_function(
         for (worker_type, worker_config) in workers {
             let worker = builder
                 .clone()
-                .worker_type(match worker_type {
-                    WorkerTypeDto::CronTrigger => WorkerType::CronTrigger,
-                    WorkerTypeDto::StageTrigger => WorkerType::StageTrigger,
-                })
+                .worker_type(worker_type.clone())
                 .worker_config(Some(worker_config.clone()))
                 .build()?;
 
