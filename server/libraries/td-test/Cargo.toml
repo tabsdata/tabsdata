@@ -26,6 +26,10 @@ mock-env = []
 test_logging = []
 test_tower_metadata = []
 test-utils = []
+# database features
+sqlite = ["td-database/sqlite"]
+postgres = ["td-database/postgres"]
+mysql = ["td-database/mysql"]
 
 [package.metadata.cargo-machete]
 ignored = ["openssl", "td-build", "thiserror", "toml"]
@@ -49,7 +53,7 @@ tm-test = { workspace = true }
 ## Libraries
 
 td-common = { workspace = true }
-td-database = { workspace = true }
+td-database = { workspace = true, features = ["test-utils"] }
 td-schema = { workspace = true }
 
 # External dependencies
