@@ -2,46 +2,40 @@
 // Copyright 2025. Tabs Data Inc.
 //
 
-use async_trait::async_trait;
-use std::marker::PhantomData;
+use std::future::Future;
 use std::sync::Arc;
 use td_error::TdError;
 use tokio::sync::Mutex;
 use tracing::debug;
 
 /// A trait for providing a value of type `O`.
-#[async_trait]
-pub trait Provider<'a, O, C: Sync + Send + 'a>: Sync + Send {
+pub trait Provider<O, C> {
     /// Get the value of type `O`.
-    async fn get(&'a self, context: C) -> Result<Arc<O>, TdError>;
+    fn get(&self, context: C) -> impl Future<Output = Result<Arc<O>, TdError>> + Send;
 
-    /// Purges any out of date data from the value of type `O`. Default implementation is a No-Op.
-    async fn purge(&'a self, _context: C) -> Result<(), TdError> {
-        Ok(())
-    }
+    /// Purges any out of date data from the value of type `O`.
+    fn purge(&self, context: C) -> impl Future<Output = Result<(), TdError>> + Send;
 }
 
 /// A [`Provider`] implementation that enables caching for an inner [`Provider`].
 ///
 /// The cache is invalidated when the [`Provider::purge`] method is called.
-pub struct CachedProvider<'a, O, C: Sync + Send + 'a, P: Provider<'a, O, C>> {
+pub struct CachedProvider<O, P> {
     provider: P,
     cache: Mutex<Option<Arc<O>>>,
-    phantom: PhantomData<&'a C>,
 }
 
-impl<'a, O, C: Sync + Send + 'a, P: Provider<'a, O, C>> CachedProvider<'a, O, C, P> {
+impl<O, P> CachedProvider<O, P> {
     /// Create a new [`CachedProvider`] for the given inner [`Provider`].
     pub fn cache(provider: P) -> Self {
         CachedProvider {
             provider,
             cache: Mutex::new(None),
-            phantom: PhantomData,
         }
     }
 }
 
-impl<'a, O, C: Sync + Send + 'a, P: Provider<'a, O, C>> Default for CachedProvider<'a, O, C, P>
+impl<O, P> Default for CachedProvider<O, P>
 where
     P: Default,
 {
@@ -49,16 +43,12 @@ where
         CachedProvider {
             provider: P::default(),
             cache: Mutex::new(None),
-            phantom: PhantomData,
         }
     }
 }
 
-#[async_trait]
-impl<'a, O: Sync + Send, C: Sync + Send + 'a, P: Provider<'a, O, C>> Provider<'a, O, C>
-    for CachedProvider<'a, O, C, P>
-{
-    async fn get(&'a self, context: C) -> Result<Arc<O>, TdError> {
+impl<O: Send + Sync, C: Send, P: Provider<O, C> + Sync> Provider<O, C> for CachedProvider<O, P> {
+    async fn get(&self, context: C) -> Result<Arc<O>, TdError> {
         let mut cache = self.cache.lock().await;
         if cache.is_some() {
             debug!("Using cache");
@@ -71,7 +61,7 @@ impl<'a, O: Sync + Send, C: Sync + Send + 'a, P: Provider<'a, O, C>> Provider<'a
         }
     }
 
-    async fn purge(&'a self, context: C) -> Result<(), TdError> {
+    async fn purge(&self, context: C) -> Result<(), TdError> {
         debug!("Purging provider and invalidating cache");
         self.provider.purge(context).await?;
         *self.cache.lock().await = None;
@@ -82,7 +72,6 @@ impl<'a, O: Sync + Send, C: Sync + Send + 'a, P: Provider<'a, O, C>> Provider<'a
 #[cfg(test)]
 mod tests {
     use crate::provider::Provider;
-    use async_trait::async_trait;
     use std::sync::Arc;
     use td_error::TdError;
     use tokio::sync::Mutex;
@@ -93,16 +82,15 @@ mod tests {
         refresh: Arc<Mutex<bool>>,
     }
 
-    #[async_trait]
-    impl<'a> Provider<'a, String, ()> for MyProvider {
-        async fn get(&'a self, _context: ()) -> Result<Arc<String>, TdError> {
+    impl Provider<String, ()> for MyProvider {
+        async fn get(&self, _context: ()) -> Result<Arc<String>, TdError> {
             let mut counter = self.counter.lock().await;
             let str = format!("Hello {}", *counter);
             *counter += 1;
             Ok(Arc::new(str))
         }
 
-        async fn purge(&'a self, _context: ()) -> Result<(), TdError> {
+        async fn purge(&self, _context: ()) -> Result<(), TdError> {
             *self.refresh.lock().await = true;
             Ok(())
         }

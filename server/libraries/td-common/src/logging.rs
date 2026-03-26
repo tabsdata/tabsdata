@@ -882,25 +882,6 @@ pub fn none<T: Debug>(msg: &str) -> impl Fn(&Option<T>) -> Option<String> + use<
 /// - `some` for [`Some`] values,
 /// - `none(message: &str)` for [`None`] values with a custom message.
 ///
-/// How to use it:
-///
-/// Invoke the `td_log_monad!();` macro after the module's `use` section.
-///
-/// For example:
-///
-/// ```
-///     use crate::td_common::logging::*;
-///     use crate::*;
-///
-///     td_log_monad!();
-///
-///     fn my_function() {
-///         let res = Result::<i32, String>::Ok(42).log::<DEBUG>(ok).log::<ERROR>(err);
-///
-///         let opt = Some("foo").log::<INFO>(some).log::<WARN>(none("No value found"));
-///     }
-/// ```
-///
 /// NOTE: the generation of all the structs and traits in each module is for logging to be able
 /// to capture the module path at compile time (due to how tracing macros work).
 #[macro_export]

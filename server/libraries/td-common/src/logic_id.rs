@@ -31,6 +31,7 @@ use crate::id;
 use crate::id::Id;
 use chrono::{NaiveDate, Utc};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use sqlx::postgres::{PgHasArrayType, PgTypeInfo};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
@@ -292,27 +293,6 @@ where
     }
 }
 
-impl<'q, DB: sqlx::Database, K: KeyId> sqlx::Encode<'q, DB> for IdL<K>
-where
-    String: sqlx::Encode<'q, DB>,
-{
-    fn encode_by_ref(
-        &self,
-        buf: &mut <DB as sqlx::Database>::ArgumentBuffer<'q>,
-    ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
-        let value = self.padded_str();
-        <String as sqlx::Encode<'q, DB>>::encode_by_ref(&value, buf)
-    }
-
-    fn produces(&self) -> Option<DB::TypeInfo> {
-        <String as sqlx::Encode<'q, DB>>::produces(&self.to_string())
-    }
-
-    fn size_hint(&self) -> usize {
-        <String as sqlx::Encode<'q, DB>>::size_hint(&self.to_string())
-    }
-}
-
 impl<'r, DB: sqlx::Database, K: KeyId> sqlx::Decode<'r, DB> for IdL<K>
 where
     String: sqlx::Decode<'r, DB>,
@@ -322,6 +302,15 @@ where
     ) -> Result<Self, Box<dyn std::error::Error + 'static + Send + Sync>> {
         let s = <String as sqlx::Decode<'r, DB>>::decode(value)?;
         Ok(Self::parse(&s)?)
+    }
+}
+
+impl<K: KeyId> PgHasArrayType for IdL<K> {
+    fn array_type_info() -> PgTypeInfo {
+        PgTypeInfo::with_name("_text")
+    }
+    fn array_compatible(ty: &PgTypeInfo) -> bool {
+        <String as PgHasArrayType>::array_compatible(ty)
     }
 }
 

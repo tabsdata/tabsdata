@@ -7,8 +7,8 @@ use std::fmt::{Debug, Display, Formatter};
 use std::ops::Deref;
 
 #[macro_export]
-macro_rules! display_vec {
-    ($($item:expr_2021),* $(,)?) => {
+macro_rules! display_vec_macro {
+    ($($item:expr),* $(,)?) => {
         DisplayVec::new(vec![$($item),*])
     };
 }
@@ -52,6 +52,7 @@ impl<T: Display> Display for DisplayVec<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::display_vec;
     use std::fmt::Debug;
 
     #[test]

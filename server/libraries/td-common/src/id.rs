@@ -3,12 +3,10 @@
 //
 
 use data_encoding::BASE32HEX_NOPAD;
-use serde::{Deserialize, Serialize};
-use sqlx::encode::IsNull;
 use sqlx::error::BoxDynError;
-use sqlx::sqlite::{SqliteArgumentValue, SqliteTypeInfo, SqliteValueRef};
-use sqlx::{Decode, Encode, Sqlite, Type};
-use std::borrow::Cow;
+use sqlx::postgres::{PgHasArrayType, PgTypeInfo};
+use sqlx::{Database, Decode, Type};
+use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::{Add, Deref};
 use std::time::{Duration, SystemTime};
@@ -31,7 +29,7 @@ pub enum IdError {
 /// It is a UUID v7 as a '[u8; 16]'.
 ///
 /// The string representation is a 26 character base32hex string as it does not require URL encoding.
-#[derive(Copy, Clone, Serialize, Deserialize, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[derive(Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct Id([u8; 16]);
 
 impl Id {
@@ -116,35 +114,61 @@ impl From<Id> for String {
     }
 }
 
-impl Type<Sqlite> for Id {
-    fn type_info() -> SqliteTypeInfo {
-        <String as Type<Sqlite>>::type_info()
+impl<'de> serde::Deserialize<'de> for Id {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Id::try_from(&s).map_err(serde::de::Error::custom)
     }
 }
 
-impl Encode<'_, Sqlite> for Id {
-    fn encode_by_ref(
-        &self,
-        args: &mut Vec<SqliteArgumentValue<'_>>,
-    ) -> Result<IsNull, BoxDynError> {
-        let id = self.to_string();
-        args.push(SqliteArgumentValue::Text(Cow::Owned(id)));
-
-        Ok(IsNull::No)
+impl serde::Serialize for Id {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.to_string().serialize(serializer)
     }
 }
 
-impl<'r> Decode<'r, Sqlite> for Id {
-    fn decode(value: SqliteValueRef<'r>) -> Result<Self, BoxDynError> {
-        let id = <String as Decode<Sqlite>>::decode(value)?;
+impl<'r, DB: Database> Decode<'r, DB> for Id
+where
+    String: sqlx::Decode<'r, DB>,
+{
+    fn decode(
+        value: <DB as Database>::ValueRef<'r>,
+    ) -> Result<Self, Box<dyn Error + 'static + Send + Sync>> {
+        let id = <String as Decode<'r, DB>>::decode(value)?;
         Id::try_from(&id).map_err(|e| Box::new(e) as BoxDynError)
+    }
+}
+
+impl<DB: Database> Type<DB> for Id
+where
+    String: sqlx::Type<DB>,
+{
+    fn type_info() -> DB::TypeInfo {
+        <String as Type<DB>>::type_info()
+    }
+    fn compatible(ty: &DB::TypeInfo) -> bool {
+        <String as Type<DB>>::compatible(ty)
+    }
+}
+
+impl PgHasArrayType for Id {
+    fn array_type_info() -> PgTypeInfo {
+        PgTypeInfo::with_name("_text")
+    }
+    fn array_compatible(ty: &PgTypeInfo) -> bool {
+        <String as PgHasArrayType>::array_compatible(ty)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sqlx::SqliteConnection;
     use std::thread::sleep;
     use std::time::{Duration, SystemTime};
     use td_security::DEFAULT_ENCODED_IDS;
@@ -193,44 +217,6 @@ mod tests {
         sleep(Duration::from_millis(1));
         let id2 = id();
         assert!(id1.to_string() < id2.to_string());
-    }
-
-    #[tokio::test]
-    async fn test_sqlx_encode_decode() {
-        let id = id();
-        let db = sqlx::sqlite::SqlitePoolOptions::new()
-            .connect("sqlite::memory:")
-            .await
-            .unwrap();
-        let mut conn = db.acquire().await.unwrap();
-        let conn = &mut conn as &mut SqliteConnection;
-        sqlx::query(
-            r#"
-            CREATE TABLE test (
-                id TEXT PRIMARY KEY
-            )
-            "#,
-        )
-        .execute(&mut *conn)
-        .await
-        .unwrap();
-        sqlx::query("INSERT INTO test (id) VALUES (?)")
-            .bind(id)
-            .execute(&mut *conn)
-            .await
-            .unwrap();
-
-        #[derive(sqlx::FromRow)]
-        struct Row {
-            id: Id,
-        }
-
-        let got: Row = sqlx::query_as("SELECT id FROM test")
-            .fetch_one(&mut *conn)
-            .await
-            .unwrap();
-
-        assert_eq!(id, got.id);
     }
 
     #[test]
