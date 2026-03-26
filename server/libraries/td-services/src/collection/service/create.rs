@@ -3,19 +3,17 @@
 //
 
 use ta_services::factory::service_factory;
+use td_authz::tower::{AuthzOn, SysAdmin, System};
 use td_authz::{Authz, AuthzContext};
 use td_objects::dxo::collection::{
     CollectionCreate, CollectionCreateDB, CollectionCreateDBBuilder, CollectionDBWithNames,
     CollectionRead, CollectionReadBuilder,
 };
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
-use td_objects::sql::DaoQueries;
-use td_objects::tower_service::authz::{AuthzOn, SysAdmin, System};
-use td_objects::tower_service::from::{
-    BuildService, ExtractDataService, ExtractService, TryIntoService, UpdateService, With,
-};
-use td_objects::tower_service::sql::{By, SqlSelectService, insert};
+use td_objects::tower_service::with::With;
 use td_objects::types::basic::CollectionId;
+use td_queries::By;
+use td_queries::insert;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -25,7 +23,6 @@ use td_tower::layers;
     request = CreateRequest<(), CollectionCreate>,
     response = CollectionRead,
     connection = TransactionProvider,
-    context = DaoQueries,
     context = AuthzContext,
 )]
 fn service() {
@@ -36,12 +33,12 @@ fn service() {
         from_fn(With::<CreateRequest<(), CollectionCreate>>::extract_data::<CollectionCreate>),
         from_fn(With::<CollectionCreate>::try_convert_to::<CollectionCreateDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<CollectionCreateDBBuilder, _>),
-        from_fn(With::<CollectionCreateDBBuilder>::build::<CollectionCreateDB, _>),
+        from_fn(With::<CollectionCreateDBBuilder>::build::<CollectionCreateDB>),
         from_fn(insert::<CollectionCreateDB>),
         from_fn(With::<CollectionCreateDB>::extract::<CollectionId>),
-        from_fn(By::<CollectionId>::select::<CollectionDBWithNames>),
+        from_fn(By::<CollectionId>::fetch_one::<CollectionDBWithNames>),
         from_fn(With::<CollectionDBWithNames>::try_convert_to::<CollectionReadBuilder, _>),
-        from_fn(With::<CollectionReadBuilder>::build::<CollectionRead, _>),
+        from_fn(With::<CollectionReadBuilder>::build::<CollectionRead>),
     )
 }
 
@@ -49,18 +46,19 @@ fn service() {
 mod tests {
     use super::*;
     use ta_services::service::TdService;
-    use td_database::sql::DbPool;
+    use td_database::pool::TdPool;
+    use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::sql::{DaoQueries, SelectBy};
     use td_objects::types::basic::{
         AccessTokenId, AtTime, CollectionName, Description, RoleId, UserId, UserName,
     };
+    use td_queries::BasicQueries;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_create_service(db: DbPool) {
+    async fn test_tower_metadata_create_collection(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
         CreateCollectionService::with_defaults(db)
@@ -79,20 +77,20 @@ mod tests {
                     &With::<CollectionCreate>::try_convert_to::<CollectionCreateDBBuilder, _>,
                 ),
                 type_of_val(&With::<RequestContext>::update::<CollectionCreateDBBuilder, _>),
-                type_of_val(&With::<CollectionCreateDBBuilder>::build::<CollectionCreateDB, _>),
+                type_of_val(&With::<CollectionCreateDBBuilder>::build::<CollectionCreateDB>),
                 type_of_val(&insert::<CollectionCreateDB>),
                 type_of_val(&With::<CollectionCreateDB>::extract::<CollectionId>),
-                type_of_val(&By::<CollectionId>::select::<CollectionDBWithNames>),
+                type_of_val(&By::<CollectionId>::fetch_one::<CollectionDBWithNames>),
                 type_of_val(
                     &With::<CollectionDBWithNames>::try_convert_to::<CollectionReadBuilder, _>,
                 ),
-                type_of_val(&With::<CollectionReadBuilder>::build::<CollectionRead, _>),
+                type_of_val(&With::<CollectionReadBuilder>::build::<CollectionRead>),
             ]);
     }
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_create_collection(db: DbPool) {
+    async fn test_create_collection(db: TdPool) {
         let name = CollectionName::try_from("ds0").unwrap();
         let description = Description::try_from("DS0").unwrap();
 
@@ -110,9 +108,7 @@ mod tests {
         )
         .create((), create);
 
-        let service = CreateCollectionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = CreateCollectionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let created = response.unwrap();
@@ -126,13 +122,8 @@ mod tests {
         assert_eq!(created.modified_by_id, UserId::admin());
         assert_eq!(created.modified_by, UserName::admin());
 
-        let found: Vec<CollectionCreateDB> = DaoQueries::default()
-            .select_by::<CollectionCreateDB>(&(&name))
-            .unwrap()
-            .build_query_as()
-            .fetch_all(&db)
-            .await
-            .unwrap();
+        let found: Vec<CollectionCreateDB> =
+            db.fetch_all::<CollectionCreateDB>(&(&name)).await.unwrap();
         assert_eq!(found.len(), 1);
     }
 }

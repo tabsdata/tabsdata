@@ -2,20 +2,22 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
+use std::str::FromStr;
+use td_objects::Buildable;
 use crate::user::UserError;
 use crate::user::service::update::UpdateUserService;
 use ta_services::service::TdService;
-use td_database::sql::DbPool;
+use td_database::pool::TdPool;
 use td_error::assert_service_error;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::user::UserUpdate;
 use td_objects::rest_urls::UserParam;
-use td_objects::types::basic::{AccessTokenId, RoleId, UserEnabled, UserId};
+use td_objects::types::basic::{AccessTokenId, RoleId, UserEnabled, UserIdName, UserId};
 
 #[td_test::test(sqlx)]
 #[tokio::test]
-async fn test_user_cannot_enable_disable_themselves(db: DbPool) {
-    let service = UpdateUserService::with_defaults(db.clone()).service().await;
+async fn test_user_cannot_enable_disable_themselves(db: TdPool) {
+    let service = UpdateUserService::with_defaults(db.clone()).service();
 
     let ctx = RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user());
 
@@ -28,8 +30,7 @@ async fn test_user_cannot_enable_disable_themselves(db: DbPool) {
         .unwrap();
     let request = ctx.update(
         UserParam::builder()
-            .try_user("admin")
-            .unwrap()
+            .user(UserIdName::from_str("admin").unwrap())
             .build()
             .unwrap(),
         update,

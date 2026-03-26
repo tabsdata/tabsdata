@@ -2,33 +2,30 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use async_trait::async_trait;
 use std::ops::Deref;
 use td_error::TdError;
 use td_objects::dxo::user::{UserCreate, UserDBBuilder};
-use td_objects::tower_service::from::With;
+use td_objects::tower_service::with::With;
 use td_objects::types::basic::AtTime;
 use td_security::config::PasswordHashingConfig;
 use td_security::password::create_password_hash;
-use td_tower::extractors::{Input, SrvCtx};
+use td_tower::extractors::{Ref};
 
-#[async_trait]
 pub trait UpdateCreateUserDBBuilder {
-    async fn update_create_user_db_builder(
-        password_hashing_config: SrvCtx<PasswordHashingConfig>,
-        request_time: Input<AtTime>,
-        update: Input<UserCreate>,
-        builder: Input<UserDBBuilder>,
-    ) -> Result<UserDBBuilder, TdError>;
+    fn update_create_user_db_builder(
+        password_hashing_config: Ref<PasswordHashingConfig>,
+        request_time: Ref<AtTime>,
+        update: Ref<UserCreate>,
+        builder: Ref<UserDBBuilder>,
+    ) -> impl Future<Output = Result<UserDBBuilder, TdError>>;
 }
 
-#[async_trait]
 impl UpdateCreateUserDBBuilder for With<UserCreate> {
     async fn update_create_user_db_builder(
-        SrvCtx(password_hashing_config): SrvCtx<PasswordHashingConfig>,
-        Input(request_time): Input<AtTime>,
-        Input(create): Input<UserCreate>,
-        Input(builder): Input<UserDBBuilder>,
+        password_hashing_config: Ref<PasswordHashingConfig>,
+        request_time: Ref<AtTime>,
+        create: Ref<UserCreate>,
+        builder: Ref<UserDBBuilder>,
     ) -> Result<UserDBBuilder, TdError> {
         let mut builder = builder.deref().clone();
         builder

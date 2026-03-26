@@ -4,20 +4,22 @@
 
 use crate::collection::CollectionError;
 use crate::collection::service::update::UpdateCollectionService;
+use std::str::FromStr;
 use ta_services::service::TdService;
-use td_database::sql::DbPool;
+use td_database::pool::TdPool;
 use td_error::assert_service_error;
+use td_objects::Buildable;
 use td_objects::dxo::collection::CollectionUpdate;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::rest_urls::CollectionParam;
-use td_objects::test_utils::seed_collection::seed_collection;
-use td_objects::types::basic::{AccessTokenId, CollectionName, RoleId, UserId};
+use td_objects::types::basic::{AccessTokenId, CollectionIdName, CollectionName, RoleId, UserId};
+use td_queries::test_utils::SeedQueries;
 
 #[td_test::test(sqlx)]
 #[tokio::test]
-async fn test_update_collection_validate(db: DbPool) {
+async fn test_update_collection_validate(db: TdPool) {
     let name = CollectionName::try_from("c0").unwrap();
-    let _ = seed_collection(&db, &name, &UserId::admin()).await;
+    let _ = db.seed_collection(&name, &UserId::admin()).await;
 
     let update = CollectionUpdate::builder()
         .name(None)
@@ -32,14 +34,13 @@ async fn test_update_collection_validate(db: DbPool) {
     )
     .update(
         CollectionParam::builder()
-            .try_collection(name.to_string())
-            .unwrap()
+            .collection(CollectionIdName::from_str(&name.to_string()).unwrap())
             .build()
             .unwrap(),
         update,
     );
 
-    let service = UpdateCollectionService::with_defaults(db).service().await;
+    let service = UpdateCollectionService::with_defaults(db).service();
     assert_service_error(service, request, |err| {
         #[allow(unreachable_patterns)]
         match err {

@@ -3,17 +3,16 @@
 //
 
 use crate::user::UserError;
-use async_trait::async_trait;
 use std::ops::Deref;
 use td_error::TdError;
 use td_objects::dxo::user::{UserDB, UserUpdate, UserUpdateDBBuilder};
-use td_objects::tower_service::from::With;
+use td_objects::tower_service::with::With;
 use td_objects::types::basic::{AtTime, UserId};
 use td_security::config::PasswordHashingConfig;
 use td_security::password::create_password_hash;
-use td_tower::extractors::{Input, SrvCtx};
+use td_tower::extractors::{Ref};
 
-pub async fn update_user_validate(Input(update): Input<UserUpdate>) -> Result<(), TdError> {
+pub async fn update_user_validate(update: Ref<UserUpdate>) -> Result<(), TdError> {
     if update.full_name.is_none()
         && update.email.is_none()
         && update.password.is_none()
@@ -25,9 +24,9 @@ pub async fn update_user_validate(Input(update): Input<UserUpdate>) -> Result<()
 }
 
 pub async fn update_user_validate_password_change(
-    Input(request_user_id): Input<UserId>,
-    Input(update): Input<UserUpdate>,
-    Input(user_db): Input<UserDB>,
+    request_user_id: Ref<UserId>,
+    update: Ref<UserUpdate>,
+    user_db: Ref<UserDB>,
 ) -> Result<(), TdError> {
     #[allow(clippy::collapsible_if)]
     if update.password.is_some() {
@@ -41,9 +40,9 @@ pub async fn update_user_validate_password_change(
 }
 
 pub async fn update_user_validate_enabled(
-    Input(request_user_id): Input<UserId>,
-    Input(user_db): Input<UserDB>,
-    Input(update): Input<UserUpdate>,
+    request_user_id: Ref<UserId>,
+    user_db: Ref<UserDB>,
+    update: Ref<UserUpdate>,
 ) -> Result<(), TdError> {
     if update.enabled.is_some() && *request_user_id == user_db.id {
         return Err(UserError::UserCannotEnableDisableThemselves)?;
@@ -51,23 +50,21 @@ pub async fn update_user_validate_enabled(
     Ok(())
 }
 
-#[async_trait]
 pub trait UpdateUserDBBuilderUpdate {
-    async fn update_user_update_db_builder(
-        password_hashing_config: SrvCtx<PasswordHashingConfig>,
-        request_time: Input<AtTime>,
-        update: Input<UserUpdate>,
-        builder: Input<UserUpdateDBBuilder>,
-    ) -> Result<UserUpdateDBBuilder, TdError>;
+    fn update_user_update_db_builder(
+        password_hashing_config: Ref<PasswordHashingConfig>,
+        request_time: Ref<AtTime>,
+        update: Ref<UserUpdate>,
+        builder: Ref<UserUpdateDBBuilder>,
+    ) -> impl Future<Output = Result<UserUpdateDBBuilder, TdError>>;
 }
 
-#[async_trait]
 impl UpdateUserDBBuilderUpdate for With<UserUpdate> {
     async fn update_user_update_db_builder(
-        SrvCtx(password_hashing_config): SrvCtx<PasswordHashingConfig>,
-        Input(request_time): Input<AtTime>,
-        Input(update): Input<UserUpdate>,
-        Input(builder): Input<UserUpdateDBBuilder>,
+        password_hashing_config: Ref<PasswordHashingConfig>,
+        request_time: Ref<AtTime>,
+        update: Ref<UserUpdate>,
+        builder: Ref<UserUpdateDBBuilder>,
     ) -> Result<UserUpdateDBBuilder, TdError> {
         let mut builder = builder.deref().clone();
         if let Some(full_name) = &update.full_name {

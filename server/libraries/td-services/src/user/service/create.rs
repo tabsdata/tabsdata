@@ -4,6 +4,7 @@
 
 use crate::user::layers::create::UpdateCreateUserDBBuilder;
 use ta_services::factory::service_factory;
+use td_authz::tower::{AuthzOn, SecAdmin, System};
 use td_authz::{Authz, AuthzContext};
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
 use td_objects::dxo::user::{
@@ -12,14 +13,10 @@ use td_objects::dxo::user::{
 use td_objects::dxo::user_role::{
     FixedUserRole, FixedUserRoleBuilder, UserRoleDB, UserRoleDBBuilder,
 };
-use td_objects::sql::DaoQueries;
-use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
-use td_objects::tower_service::from::{
-    BuildService, ExtractDataService, ExtractService, SetService, TryIntoService, UpdateService,
-    With, builder,
-};
-use td_objects::tower_service::sql::{By, SqlSelectService, insert};
+use td_objects::tower_service::with::{With, builder};
 use td_objects::types::basic::{AtTime, UserId};
+use td_queries::By;
+use td_queries::insert;
 use td_security::config::PasswordHashingConfig;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
@@ -30,7 +27,6 @@ use td_tower::layers;
     request = CreateRequest<(), UserCreate>,
     response = UserRead,
     connection = TransactionProvider,
-    context = DaoQueries,
     context = AuthzContext,
     context = PasswordHashingConfig,
 )]
@@ -42,25 +38,25 @@ fn service() {
         from_fn(With::<RequestContext>::extract::<AtTime>),
         from_fn(With::<RequestContext>::extract::<UserId>),
         from_fn(With::<CreateRequest<(), UserCreate>>::extract_data::<UserCreate>),
-        from_fn(builder::<UserDBBuilder>),
+        from_fn(builder::<UserDB>),
         from_fn(With::<RequestContext>::update::<UserDBBuilder, _>),
         from_fn(With::<UserCreate>::update_create_user_db_builder),
-        from_fn(With::<UserDBBuilder>::build::<UserDB, _>),
+        from_fn(With::<UserDBBuilder>::build::<UserDB>),
         from_fn(insert::<UserDB>),
         // Add user to fixed 'user' role
-        from_fn(builder::<UserRoleDBBuilder>),
+        from_fn(builder::<UserRoleDB>),
         from_fn(With::<UserDB>::extract::<UserId>),
         from_fn(With::<UserId>::set::<UserRoleDBBuilder>),
         from_fn(With::<RequestContext>::update::<UserRoleDBBuilder, _>),
-        from_fn(builder::<FixedUserRoleBuilder>),
-        from_fn(With::<FixedUserRoleBuilder>::build::<FixedUserRole, _>),
+        from_fn(builder::<FixedUserRole>),
+        from_fn(With::<FixedUserRoleBuilder>::build::<FixedUserRole>),
         from_fn(With::<FixedUserRole>::update::<UserRoleDBBuilder, _>),
-        from_fn(With::<UserRoleDBBuilder>::build::<UserRoleDB, _>),
+        from_fn(With::<UserRoleDBBuilder>::build::<UserRoleDB>),
         from_fn(insert::<UserRoleDB>),
         from_fn(With::<UserDB>::extract::<UserId>),
-        from_fn(By::<UserId>::select::<UserDBWithNames>),
+        from_fn(By::<UserId>::fetch_one::<UserDBWithNames>),
         from_fn(With::<UserDBWithNames>::try_convert_to::<UserReadBuilder, _>),
-        from_fn(With::<UserReadBuilder>::build::<UserRead, _>),
+        from_fn(With::<UserReadBuilder>::build::<UserRead>),
     )
 }
 
@@ -68,15 +64,16 @@ fn service() {
 mod tests {
     use super::*;
     use ta_services::service::TdService;
-    use td_database::sql::DbPool;
-    use td_objects::sql::SelectBy;
+    use td_database::pool::TdPool;
+    use td_objects::Buildable;
     use td_objects::types::basic::{AccessTokenId, Email, FullName, RoleId, UserEnabled, UserName};
+    use td_queries::BasicQueries;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_create_provider(db: DbPool) {
+    async fn test_tower_metadata_create_user(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
         CreateUserService::with_defaults(db)
@@ -89,34 +86,34 @@ mod tests {
                 type_of_val(&With::<RequestContext>::extract::<AtTime>),
                 type_of_val(&With::<RequestContext>::extract::<UserId>),
                 type_of_val(&With::<CreateRequest<(), UserCreate>>::extract_data::<UserCreate>),
-                type_of_val(&builder::<UserDBBuilder>),
+                type_of_val(&builder::<UserDB>),
                 type_of_val(&With::<RequestContext>::update::<UserDBBuilder, _>),
                 type_of_val(&With::<UserCreate>::update_create_user_db_builder),
-                type_of_val(&With::<UserDBBuilder>::build::<UserDB, _>),
+                type_of_val(&With::<UserDBBuilder>::build::<UserDB>),
                 type_of_val(&insert::<UserDB>),
-                type_of_val(&builder::<UserRoleDBBuilder>),
+                type_of_val(&builder::<UserRoleDB>),
                 type_of_val(&With::<UserDB>::extract::<UserId>),
                 type_of_val(&With::<UserId>::set::<UserRoleDBBuilder>),
                 type_of_val(&With::<RequestContext>::update::<UserRoleDBBuilder, _>),
-                type_of_val(&builder::<FixedUserRoleBuilder>),
-                type_of_val(&With::<FixedUserRoleBuilder>::build::<FixedUserRole, _>),
+                type_of_val(&builder::<FixedUserRole>),
+                type_of_val(&With::<FixedUserRoleBuilder>::build::<FixedUserRole>),
                 type_of_val(&With::<FixedUserRole>::update::<UserRoleDBBuilder, _>),
-                type_of_val(&With::<UserRoleDBBuilder>::build::<UserRoleDB, _>),
+                type_of_val(&With::<UserRoleDBBuilder>::build::<UserRoleDB>),
                 type_of_val(&insert::<UserRoleDB>),
                 type_of_val(&With::<UserDB>::extract::<UserId>),
-                type_of_val(&By::<UserId>::select::<UserDBWithNames>),
+                type_of_val(&By::<UserId>::fetch_one::<UserDBWithNames>),
                 type_of_val(&With::<UserDBWithNames>::try_convert_to::<UserReadBuilder, _>),
-                type_of_val(&With::<UserReadBuilder>::build::<UserRead, _>),
+                type_of_val(&With::<UserReadBuilder>::build::<UserRead>),
             ]);
     }
 
     async fn test_create_user(
-        db: &DbPool,
+        db: &TdPool,
         enabled: UserEnabled,
         expected_enabled: bool,
         with_email: bool,
     ) {
-        let service = CreateUserService::with_defaults(db.clone()).service().await;
+        let service = CreateUserService::with_defaults(db.clone()).service();
 
         let create = UserCreate::builder()
             .try_name("u1".to_string())
@@ -162,32 +159,26 @@ mod tests {
         assert_eq!(created.modified_by, UserName::admin());
         assert_eq!(*created.enabled, expected_enabled);
 
-        let res: Option<UserRoleDB> = DaoQueries::default()
-            .select_by::<UserRoleDB>(&created.id)
-            .unwrap()
-            .build_query_as()
-            .fetch_optional(db)
-            .await
-            .unwrap();
+        let res: Option<UserRoleDB> = db.fetch_optional::<UserRoleDB>(&created.id).await.unwrap();
         assert!(res.is_some());
         assert_eq!(RoleId::user(), res.unwrap().role_id)
     }
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_create_user_enabled_true_with_email(db: DbPool) {
+    async fn test_create_user_enabled_true_with_email(db: TdPool) {
         test_create_user(&db, UserEnabled::from(true), true, true).await;
     }
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_create_user_enabled_false_without_email(db: DbPool) {
+    async fn test_create_user_enabled_false_without_email(db: TdPool) {
         test_create_user(&db, UserEnabled::from(false), false, false).await;
     }
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_create_user_enabled_default_without_email(db: DbPool) {
+    async fn test_create_user_enabled_default_without_email(db: TdPool) {
         test_create_user(&db, UserEnabled::default(), true, false).await;
     }
 }

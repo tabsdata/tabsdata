@@ -4,28 +4,28 @@
 
 use crate::user::UserError;
 use crate::user::service::update::UpdateUserService;
+use std::str::FromStr;
 use ta_services::service::TdService;
-use td_database::sql::DbPool;
+use td_database::pool::TdPool;
 use td_error::assert_service_error;
+use td_objects::Buildable;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::user::UserUpdate;
 use td_objects::rest_urls::UserParam;
-use td_objects::test_utils::seed_user::seed_user;
 use td_objects::types::basic::{
-    AccessTokenId, Email, FullName, Password, RoleId, UserEnabled, UserName,
+    AccessTokenId, Email, FullName, Password, RoleId, UserEnabled, UserIdName, UserName,
 };
+use td_queries::test_utils::SeedQueries;
 
 #[td_test::test(sqlx)]
 #[tokio::test]
-async fn test_update_user_self(db: DbPool) {
-    let user = seed_user(
-        &db,
-        &UserName::try_from("u0").unwrap(),
-        &UserEnabled::from(true),
-    )
-    .await;
+async fn test_update_user_self(db: TdPool) {
+    let user = db
+        .seed_user(&UserName::try_from("u0").unwrap(), &UserEnabled::from(true))
+        .await
+        .unwrap();
 
-    let service = UpdateUserService::with_defaults(db.clone()).service().await;
+    let service = UpdateUserService::with_defaults(db.clone()).service();
 
     let user_update = UserUpdate::builder()
         .full_name(Some(FullName::try_from("U0 Update").unwrap()))
@@ -37,8 +37,7 @@ async fn test_update_user_self(db: DbPool) {
 
     let request = RequestContext::with(AccessTokenId::default(), user.id, RoleId::user()).update(
         UserParam::builder()
-            .try_user("u0")
-            .unwrap()
+            .user(UserIdName::from_str("u0").unwrap())
             .build()
             .unwrap(),
         user_update,
