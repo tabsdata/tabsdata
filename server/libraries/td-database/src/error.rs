@@ -1,0 +1,39 @@
+//
+// Copyright 2026 Tabs Data Inc.
+//
+
+use td_error::td_error;
+
+#[td_error]
+pub enum DbError {
+    #[error("Tabsdata database cannot be opened in the specified database engine: '{0}'")]
+    UnsupportedDatabase(String) = 0,
+    #[error("Tabsdata database schema has not be created. It must be created")]
+    DatabaseSchemaDoesNotExist = 5000,
+    #[error("Tabsdata database must be upgraded: {0}")]
+    DatabaseNeedsUpgrade(String) = 5001,
+    #[error(
+        "Tabsdata database version is '{0}', binary database version is '{1}'. Binary must be upgraded"
+    )]
+    DatabaseIsNewer(String, usize) = 5002,
+    #[error("Tabsdata database corrupted. {0}")]
+    DatabaseCorrupted(String) = 5003,
+    #[error("Database location is missing in the given configuration")]
+    MissingDatabaseLocation = 5004,
+    #[error("Failed to connect to the database: {0}")]
+    FailedToConnectToDatabase(#[from] sqlx::Error) = 5007,
+    #[error("Failed to create or upgrade the database: {0}")]
+    FailedToCreateOrUpgradeDatabaseSchema(#[source] sqlx::migrate::MigrateError) = 5008,
+    #[error("Sql error: {0}")]
+    SqlError(#[source] sqlx::Error) = 5009,
+    #[error("Failed to create database connection URL: {0}")]
+    DatabaseInvalidUrl(String) = 5013,
+    #[error(
+        "Tabsdata instance edition is '{0}', and binary edition is '{1}'. This instance cannot run with '{1}' edition"
+    )]
+    InvalidEdition(String, String) = 5014,
+    #[error("Failed to create or upgrade the database tabsdata edition: {0}")]
+    FailedToCreateOrUpgradeDatabaseEdition(#[source] sqlx::Error) = 5015,
+    #[error("Failed to upgrade the database tabsdata edition: {0}")]
+    CannotUpgradeEdition(String) = 5016,
+}

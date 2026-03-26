@@ -5,8 +5,16 @@
 #[cfg(test)]
 mod tests;
 
+use sea_query::Iden;
 use sqlx::migrate::Migrator;
 use std::sync::LazyLock;
+
+#[derive(Iden)]
+pub enum TabsdataSystem {
+    Table,
+    Name,
+    Value,
+}
 
 /// The name of the system table key for database version.
 pub const DB_VERSION_NAME: &str = "db_version";

@@ -27,6 +27,10 @@ mock-env = []
 test_logging = []
 test_tower_metadata = []
 test-utils = []
+# database features
+sqlite = ["sqlx/sqlite", "sea-query-sqlx/sqlx-sqlite"]
+postgres = ["sqlx/postgres", "sea-query-sqlx/sqlx-postgres"]
+mysql = ["sqlx/mysql", "sea-query-sqlx/sqlx-mysql"]
 
 [package.metadata.cargo-machete]
 ignored = ["openssl", "td-build", "td-database", "thiserror", "strum", "toml"]
@@ -57,11 +61,12 @@ te-system = { workspace = true }
 
 # External dependencies
 
-derive_builder = { workspace = true }
+async-stream = { workspace = true }
 futures-util = { workspace = true }
-itertools = { workspace = true }
-regex = { workspace = true }
+sea-query = { workspace = true, features = ["derive", "sqlx-utils"] }
+sea-query-sqlx = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+serde_with = { workspace = true }
 sqlx = { workspace = true }
 strum = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
