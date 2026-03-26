@@ -3,14 +3,14 @@
 //
 
 use ta_services::factory::service_factory;
+use td_authz::tower::{AuthzOn, SecAdmin, System};
 use td_authz::{Authz, AuthzContext};
+use td_objects::NoFilter;
 use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
 use td_objects::dxo::user::UserRead;
-use td_objects::sql::list::ListQueryParams;
-use td_objects::sql::{DaoQueries, NoListFilter};
-use td_objects::tower_service::authz::{AuthzOn, SecAdmin, System};
-use td_objects::tower_service::from::{ExtractService, TryIntoService, With};
-use td_objects::tower_service::sql::{By, SqlListService};
+use td_objects::list::params::ListQueryParams;
+use td_objects::tower_service::with::With;
+use td_queries::By;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -20,7 +20,6 @@ use td_tower::layers;
     request = ListRequest<()>,
     response = ListResponse<UserRead>,
     connection = ConnectionProvider,
-    context = DaoQueries,
     context = AuthzContext,
 )]
 fn service() {
@@ -30,7 +29,7 @@ fn service() {
         from_fn(Authz::<SecAdmin>::check),
         from_fn(With::<ListRequest<()>>::extract::<ListParams>),
         from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<UserRead>, _>),
-        from_fn(By::<()>::list::<NoListFilter, UserRead>),
+        from_fn(By::<()>::list::<NoFilter, UserRead>),
     )
 }
 
@@ -39,16 +38,16 @@ mod tests {
     use super::*;
     use std::collections::HashSet;
     use ta_services::service::TdService;
-    use td_database::sql::DbPool;
+    use td_database::pool::TdPool;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
-    use td_objects::test_utils::seed_user::seed_user;
     use td_objects::types::basic::{AccessTokenId, RoleId, UserEnabled, UserName};
+    use td_queries::test_utils::SeedQueries;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_list_provider(db: DbPool) {
+    async fn test_tower_metadata_list_users(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
         ListUsersService::with_defaults(db)
@@ -60,27 +59,22 @@ mod tests {
                 type_of_val(&Authz::<SecAdmin>::check),
                 type_of_val(&With::<ListRequest<()>>::extract::<ListParams>),
                 type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<UserRead>, _>),
-                type_of_val(&By::<()>::list::<NoListFilter, UserRead>),
+                type_of_val(&By::<()>::list::<NoFilter, UserRead>),
             ]);
     }
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_list_users(db: DbPool) {
-        let _ = seed_user(
-            &db,
-            &UserName::try_from("u0").unwrap(),
-            &UserEnabled::from(true),
-        )
-        .await;
-        let user1 = seed_user(
-            &db,
-            &UserName::try_from("u1").unwrap(),
-            &UserEnabled::from(true),
-        )
-        .await;
+    async fn test_list_users(db: TdPool) {
+        let _ = db
+            .seed_user(&UserName::try_from("u0").unwrap(), &UserEnabled::from(true))
+            .await;
+        let user1 = db
+            .seed_user(&UserName::try_from("u1").unwrap(), &UserEnabled::from(true))
+            .await
+            .unwrap();
 
-        let service = ListUsersService::with_defaults(db.clone()).service().await;
+        let service = ListUsersService::with_defaults(db.clone()).service();
 
         let request = RequestContext::with(AccessTokenId::default(), user1.id, RoleId::sec_admin())
             .list((), ListParams::default());

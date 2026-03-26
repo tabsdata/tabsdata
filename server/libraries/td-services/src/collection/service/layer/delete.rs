@@ -4,27 +4,27 @@
 
 use std::ops::Deref;
 use td_error::TdError;
-use td_objects::dxo::TryUpdater;
-use td_objects::dxo::crudl::{RequestContext, handle_sql_err};
+use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::table::TableDB;
 use td_objects::dxo::worker::{UpdateWorkerDB, WorkerDB};
-use td_objects::sql::{DaoQueries, UpdateBy};
 use td_objects::types::basic::{
     CollectionId, FunctionStatus, FunctionVersionId, TableStatus, TableVersionId, WorkerType,
 };
-use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
+use td_objects::{Buildable, TryUpdater, and, or};
+use td_queries::BasicQueries;
+use td_tower::extractors::{MutRef, Ref};
 use tracing::debug;
 
 pub async fn build_deleted_functions(
-    Input(request_context): Input<RequestContext>,
-    Input(functions): Input<Vec<FunctionDB>>,
+    request_context: Ref<RequestContext>,
+    functions: Ref<Vec<FunctionDB>>,
 ) -> Result<Vec<FunctionDB>, TdError> {
     let deleted = functions
         .iter()
         .map(|v| {
             v.clone()
-                .to_builder()
+                .into_builder()
                 .try_update_from(request_context.deref())?
                 .id(FunctionVersionId::new())
                 .status(FunctionStatus::Deleted)
@@ -35,14 +35,14 @@ pub async fn build_deleted_functions(
 }
 
 pub async fn build_deleted_tables(
-    Input(request_context): Input<RequestContext>,
-    Input(tables): Input<Vec<TableDB>>,
+    request_context: Ref<RequestContext>,
+    tables: Ref<Vec<TableDB>>,
 ) -> Result<Vec<TableDB>, TdError> {
     let deleted = tables
         .iter()
         .map(|v| {
             v.clone()
-                .to_builder()
+                .into_builder()
                 .try_update_from(request_context.deref())?
                 .id(TableVersionId::default())
                 .status(TableStatus::Deleted)
@@ -53,25 +53,21 @@ pub async fn build_deleted_tables(
 }
 
 pub async fn update_deleted_workers(
-    Connection(connection): Connection,
-    SrvCtx(queries): SrvCtx<DaoQueries>,
-    Input(collection_id): Input<CollectionId>,
+    mut conn: MutRef<DynamicConnection<'static>>,
+    collection_id: Ref<CollectionId>,
 ) -> Result<(), TdError> {
-    let mut conn = connection.lock().await;
-    let conn = conn.get_mut_connection()?;
 
     let update = UpdateWorkerDB::stop_scheduled().await?;
-    let to_stop = [
-        (*collection_id, WorkerType::CronTrigger),
-        (*collection_id, WorkerType::StageTrigger),
-    ];
 
-    let res = queries
-        .update_all_by::<_, WorkerDB>(&update, &to_stop)?
-        .build()
-        .execute(&mut *conn)
-        .await
-        .map_err(handle_sql_err)?;
+    let res = conn
+        .update::<_, WorkerDB>(
+            &update,
+            and!(
+                *collection_id,
+                or!(WorkerType::CronTrigger, WorkerType::StageTrigger)
+            ),
+        )
+        .await?;
     debug!(
         "Set stopped status in {} workers for collection {}.",
         res.rows_affected(),

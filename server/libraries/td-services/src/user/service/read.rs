@@ -3,17 +3,14 @@
 //
 
 use ta_services::factory::service_factory;
+use td_authz::tower::{AuthzOn, Requester, SecAdmin, SystemOrUserId};
 use td_authz::{Authz, AuthzContext};
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::dxo::user::{UserDBWithNames, UserRead, UserReadBuilder};
 use td_objects::rest_urls::UserParam;
-use td_objects::sql::DaoQueries;
-use td_objects::tower_service::authz::{AuthzOn, Requester, SecAdmin, SystemOrUserId};
-use td_objects::tower_service::from::{
-    BuildService, ExtractNameService, ExtractService, TryIntoService, With,
-};
-use td_objects::tower_service::sql::{By, SqlSelectService};
+use td_objects::tower_service::with::With;
 use td_objects::types::basic::{UserId, UserIdName};
+use td_queries::By;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -23,7 +20,6 @@ use td_tower::layers;
     request = ReadRequest<UserParam>,
     response = UserRead,
     connection = ConnectionProvider,
-    context = DaoQueries,
     context = AuthzContext,
 )]
 fn service() {
@@ -31,30 +27,32 @@ fn service() {
         from_fn(With::<ReadRequest<UserParam>>::extract::<RequestContext>),
         from_fn(With::<ReadRequest<UserParam>>::extract_name::<UserParam>),
         from_fn(With::<UserParam>::extract::<UserIdName>),
-        from_fn(By::<UserIdName>::select::<UserDBWithNames>),
+        from_fn(By::<UserIdName>::fetch_one::<UserDBWithNames>),
         from_fn(With::<UserDBWithNames>::extract::<UserId>),
         from_fn(AuthzOn::<SystemOrUserId>::set),
         from_fn(Authz::<SecAdmin, Requester>::check),
         from_fn(With::<UserDBWithNames>::try_convert_to::<UserReadBuilder, _>),
-        from_fn(With::<UserReadBuilder>::build::<UserRead, _>),
+        from_fn(With::<UserReadBuilder>::build::<UserRead>),
     )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
     use ta_services::service::TdService;
-    use td_database::sql::DbPool;
+    use td_database::pool::TdPool;
+    use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::rest_urls::UserParam;
-    use td_objects::test_utils::seed_user::seed_user;
     use td_objects::types::basic::{AccessTokenId, RoleId, UserEnabled, UserName};
+    use td_queries::test_utils::SeedQueries;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_read_provider(db: DbPool) {
+    async fn test_tower_metadata_read_user(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
         ReadUserService::with_defaults(db)
@@ -64,27 +62,29 @@ mod tests {
                 type_of_val(&With::<ReadRequest<UserParam>>::extract::<RequestContext>),
                 type_of_val(&With::<ReadRequest<UserParam>>::extract_name::<UserParam>),
                 type_of_val(&With::<UserParam>::extract::<UserIdName>),
-                type_of_val(&By::<UserIdName>::select::<UserDBWithNames>),
+                type_of_val(&By::<UserIdName>::fetch_one::<UserDBWithNames>),
                 type_of_val(&With::<UserDBWithNames>::extract::<UserId>),
                 type_of_val(&AuthzOn::<SystemOrUserId>::set),
                 type_of_val(&Authz::<SecAdmin, Requester>::check),
                 type_of_val(&With::<UserDBWithNames>::try_convert_to::<UserReadBuilder, _>),
-                type_of_val(&With::<UserReadBuilder>::build::<UserRead, _>),
+                type_of_val(&With::<UserReadBuilder>::build::<UserRead>),
             ]);
     }
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_read_user(db: DbPool) {
+    async fn test_read_user(db: TdPool) {
         let user_name = UserName::try_from("u0").unwrap();
-        let user = seed_user(&db, &user_name, &UserEnabled::from(true)).await;
+        let user = db
+            .seed_user(&user_name, &UserEnabled::from(true))
+            .await
+            .unwrap();
 
-        let service = ReadUserService::with_defaults(db.clone()).service().await;
+        let service = ReadUserService::with_defaults(db.clone()).service();
 
         let request = RequestContext::with(AccessTokenId::default(), user.id, RoleId::user()).read(
             UserParam::builder()
-                .try_user(user_name.to_string())
-                .unwrap()
+                .user(UserIdName::from_str(&user_name.to_string()).unwrap())
                 .build()
                 .unwrap(),
         );

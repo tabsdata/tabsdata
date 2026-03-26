@@ -3,15 +3,14 @@
 //
 
 use crate::collection::CollectionError;
-use async_trait::async_trait;
 use std::ops::Deref;
 use td_error::TdError;
 use td_objects::dxo::collection::{CollectionUpdate, CollectionUpdateDBBuilder};
-use td_objects::tower_service::from::With;
-use td_tower::extractors::Input;
+use td_objects::tower_service::with::With;
+use td_tower::extractors::Ref;
 
 pub async fn update_collection_validate(
-    Input(update): Input<CollectionUpdate>,
+    update: Ref<CollectionUpdate>,
 ) -> Result<(), TdError> {
     if update.name.is_none() && update.description.is_none() {
         return Err(CollectionError::UpdateRequestHasNothingToUpdate)?;
@@ -19,19 +18,17 @@ pub async fn update_collection_validate(
     Ok(())
 }
 
-#[async_trait]
 pub trait UpdateCollectionDBBuilderUpdate {
-    async fn update_collection_update_db_builder(
-        update: Input<CollectionUpdate>,
-        builder: Input<CollectionUpdateDBBuilder>,
-    ) -> Result<CollectionUpdateDBBuilder, TdError>;
+    fn update_collection_update_db_builder(
+        update: Ref<CollectionUpdate>,
+        builder: Ref<CollectionUpdateDBBuilder>,
+    ) -> impl Future<Output = Result<CollectionUpdateDBBuilder, TdError>>;
 }
 
-#[async_trait]
 impl UpdateCollectionDBBuilderUpdate for With<CollectionUpdate> {
     async fn update_collection_update_db_builder(
-        Input(update): Input<CollectionUpdate>,
-        Input(builder): Input<CollectionUpdateDBBuilder>,
+        update: Ref<CollectionUpdate>,
+        builder: Ref<CollectionUpdateDBBuilder>,
     ) -> Result<CollectionUpdateDBBuilder, TdError> {
         let mut builder = builder.deref().clone();
         if let Some(name) = &update.name {

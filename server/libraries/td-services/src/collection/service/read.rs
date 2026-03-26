@@ -3,17 +3,14 @@
 //
 
 use ta_services::factory::service_factory;
+use td_authz::tower::{AuthzOn, NoPermissions, System};
 use td_authz::{Authz, AuthzContext};
 use td_objects::dxo::collection::{CollectionDBWithNames, CollectionRead, CollectionReadBuilder};
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::rest_urls::CollectionParam;
-use td_objects::sql::DaoQueries;
-use td_objects::tower_service::authz::{AuthzOn, NoPermissions, System};
-use td_objects::tower_service::from::{
-    BuildService, ExtractNameService, ExtractService, TryIntoService, With,
-};
-use td_objects::tower_service::sql::{By, SqlSelectService};
+use td_objects::tower_service::with::With;
 use td_objects::types::basic::CollectionIdName;
+use td_queries::By;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -23,7 +20,6 @@ use td_tower::layers;
     request = ReadRequest<CollectionParam>,
     response = CollectionRead,
     connection = ConnectionProvider,
-    context = DaoQueries,
     context = AuthzContext,
 )]
 fn service() {
@@ -33,29 +29,31 @@ fn service() {
         from_fn(Authz::<NoPermissions>::check), // no permission required
         from_fn(With::<ReadRequest<CollectionParam>>::extract_name::<CollectionParam>),
         from_fn(With::<CollectionParam>::extract::<CollectionIdName>),
-        from_fn(By::<CollectionIdName>::select::<CollectionDBWithNames>),
+        from_fn(By::<CollectionIdName>::fetch_one::<CollectionDBWithNames>),
         from_fn(With::<CollectionDBWithNames>::try_convert_to::<CollectionReadBuilder, _>),
-        from_fn(With::<CollectionReadBuilder>::build::<CollectionRead, _>),
+        from_fn(With::<CollectionReadBuilder>::build::<CollectionRead>),
     )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
     use ta_services::service::TdService;
-    use td_database::sql::DbPool;
+    use td_database::pool::TdPool;
+    use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::rest_urls::CollectionParam;
-    use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::types::basic::{
         AccessTokenId, AtTime, CollectionName, Description, RoleId, UserId, UserName,
     };
+    use td_queries::test_utils::SeedQueries;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_read_provider(db: DbPool) {
+    async fn test_tower_metadata_read_collection(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
         ReadCollectionService::with_defaults(db)
@@ -67,31 +65,30 @@ mod tests {
                 type_of_val(&Authz::<NoPermissions>::check), // no permission required
                 type_of_val(&With::<ReadRequest<CollectionParam>>::extract_name::<CollectionParam>),
                 type_of_val(&With::<CollectionParam>::extract::<CollectionIdName>),
-                type_of_val(&By::<CollectionIdName>::select::<CollectionDBWithNames>),
+                type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDBWithNames>),
                 type_of_val(
                     &With::<CollectionDBWithNames>::try_convert_to::<CollectionReadBuilder, _>,
                 ),
-                type_of_val(&With::<CollectionReadBuilder>::build::<CollectionRead, _>),
+                type_of_val(&With::<CollectionReadBuilder>::build::<CollectionRead>),
             ]);
     }
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_read_collection(db: DbPool) {
+    async fn test_read_collection(db: TdPool) {
         let before = AtTime::now();
         let name = CollectionName::try_from("ds0").unwrap();
-        let _ = seed_collection(&db, &name, &UserId::admin()).await;
+        let _ = db.seed_collection(&name, &UserId::admin()).await;
 
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).read(
                 CollectionParam::builder()
-                    .try_collection(name.to_string())
-                    .unwrap()
+                    .collection(CollectionIdName::from_str(&name.to_string()).unwrap())
                     .build()
                     .unwrap(),
             );
 
-        let service = ReadCollectionService::with_defaults(db).service().await;
+        let service = ReadCollectionService::with_defaults(db).service();
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let created = response.unwrap();

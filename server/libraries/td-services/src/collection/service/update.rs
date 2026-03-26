@@ -6,6 +6,7 @@ use crate::collection::service::layer::update::{
     UpdateCollectionDBBuilderUpdate, update_collection_validate,
 };
 use ta_services::factory::service_factory;
+use td_authz::tower::{AuthzOn, SysAdmin, System};
 use td_authz::{Authz, AuthzContext};
 use td_objects::dxo::collection::{
     CollectionDB, CollectionDBWithNames, CollectionRead, CollectionReadBuilder, CollectionUpdate,
@@ -13,14 +14,9 @@ use td_objects::dxo::collection::{
 };
 use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
 use td_objects::rest_urls::CollectionParam;
-use td_objects::sql::DaoQueries;
-use td_objects::tower_service::authz::{AuthzOn, SysAdmin, System};
-use td_objects::tower_service::from::{
-    BuildService, ExtractDataService, ExtractNameService, ExtractService, TryIntoService,
-    UpdateService, With,
-};
-use td_objects::tower_service::sql::{By, SqlSelectService, SqlUpdateService};
+use td_objects::tower_service::with::With;
 use td_objects::types::basic::{CollectionId, CollectionIdName};
+use td_queries::By;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -30,7 +26,6 @@ use td_tower::layers;
     request = UpdateRequest<CollectionParam, CollectionUpdate>,
     response = CollectionRead,
     connection = TransactionProvider,
-    context = DaoQueries,
     context = AuthzContext,
 )]
 fn service() {
@@ -44,7 +39,7 @@ fn service() {
             With::<UpdateRequest<CollectionParam, CollectionUpdate>>::extract_name::<CollectionParam>
         ),
         from_fn(With::<CollectionParam>::extract::<CollectionIdName>),
-        from_fn(By::<CollectionIdName>::select::<CollectionDB>),
+        from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
         from_fn(
             With::<UpdateRequest<CollectionParam, CollectionUpdate>>::extract_data::<
@@ -55,31 +50,33 @@ fn service() {
         from_fn(With::<CollectionDB>::try_convert_to::<CollectionUpdateDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<CollectionUpdateDBBuilder, _>),
         from_fn(With::<CollectionUpdate>::update_collection_update_db_builder),
-        from_fn(With::<CollectionUpdateDBBuilder>::build::<CollectionUpdateDB, _>),
+        from_fn(With::<CollectionUpdateDBBuilder>::build::<CollectionUpdateDB>),
         from_fn(By::<CollectionId>::update::<CollectionUpdateDB, CollectionDB>),
-        from_fn(By::<CollectionId>::select::<CollectionDBWithNames>),
+        from_fn(By::<CollectionId>::fetch_one::<CollectionDBWithNames>),
         from_fn(With::<CollectionDBWithNames>::try_convert_to::<CollectionReadBuilder, _>),
-        from_fn(With::<CollectionReadBuilder>::build::<CollectionRead, _>),
+        from_fn(With::<CollectionReadBuilder>::build::<CollectionRead>),
     )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
     use ta_services::service::TdService;
-    use td_database::sql::DbPool;
+    use td_database::pool::TdPool;
+    use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::rest_urls::CollectionParam;
-    use td_objects::test_utils::seed_collection::seed_collection;
     use td_objects::types::basic::{
         AccessTokenId, AtTime, CollectionName, Description, RoleId, UserId, UserName,
     };
+    use td_queries::test_utils::SeedQueries;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_update_provider(db: DbPool) {
+    async fn test_tower_metadata_update_collection(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
         UpdateCollectionService::with_defaults(db)
@@ -99,7 +96,7 @@ mod tests {
                     >,
                 ),
                 type_of_val(&With::<CollectionParam>::extract::<CollectionIdName>),
-                type_of_val(&By::<CollectionIdName>::select::<CollectionDB>),
+                type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
                 type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
                 type_of_val(
                     &With::<UpdateRequest<CollectionParam, CollectionUpdate>>::extract_data::<
@@ -110,21 +107,21 @@ mod tests {
                 type_of_val(&With::<CollectionDB>::try_convert_to::<CollectionUpdateDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<CollectionUpdateDBBuilder, _>),
                 type_of_val(&With::<CollectionUpdate>::update_collection_update_db_builder),
-                type_of_val(&With::<CollectionUpdateDBBuilder>::build::<CollectionUpdateDB, _>),
+                type_of_val(&With::<CollectionUpdateDBBuilder>::build::<CollectionUpdateDB>),
                 type_of_val(&By::<CollectionId>::update::<CollectionUpdateDB, CollectionDB>),
-                type_of_val(&By::<CollectionId>::select::<CollectionDBWithNames>),
+                type_of_val(&By::<CollectionId>::fetch_one::<CollectionDBWithNames>),
                 type_of_val(
                     &With::<CollectionDBWithNames>::try_convert_to::<CollectionReadBuilder, _>,
                 ),
-                type_of_val(&With::<CollectionReadBuilder>::build::<CollectionRead, _>),
+                type_of_val(&With::<CollectionReadBuilder>::build::<CollectionRead>),
             ]);
     }
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_update_collection(db: DbPool) {
+    async fn test_update_collection(db: TdPool) {
         let create_name = CollectionName::try_from("ds0").unwrap();
-        let _ = seed_collection(&db, &create_name, &UserId::admin()).await;
+        let _ = db.seed_collection(&create_name, &UserId::admin()).await;
 
         let before_update = AtTime::now();
 
@@ -144,14 +141,13 @@ mod tests {
         )
         .update(
             CollectionParam::builder()
-                .try_collection(create_name.to_string())
-                .unwrap()
+                .collection(CollectionIdName::from_str(&create_name.to_string()).unwrap())
                 .build()
                 .unwrap(),
             update,
         );
 
-        let service = UpdateCollectionService::with_defaults(db).service().await;
+        let service = UpdateCollectionService::with_defaults(db).service();
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let updated = response.unwrap();

@@ -6,11 +6,11 @@ use crate::user::UserError;
 use td_error::TdError;
 use td_objects::dxo::user::UserDB;
 use td_objects::types::basic::UserId;
-use td_tower::extractors::Input;
+use td_tower::extractors::Ref;
 
 pub async fn delete_user_validate(
-    Input(user_db): Input<UserDB>,
-    Input(user_id): Input<UserId>,
+    user_db: Ref<UserDB>,
+    user_id: Ref<UserId>,
 ) -> Result<(), TdError> {
     if user_db.id == *user_id {
         Err(UserError::NotAllowedToDeleteThemselves)?

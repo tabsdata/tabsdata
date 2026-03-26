@@ -4,25 +4,23 @@
 
 use crate::user::service::create::CreateUserService;
 use ta_services::service::TdService;
-use td_database::sql::DbPool;
+use td_database::pool::TdPool;
 use td_error::assert_service_error;
+use td_objects::Buildable;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::user::UserCreate;
-use td_objects::test_utils::seed_user::seed_user;
-use td_objects::tower_service::sql::SqlError;
+use td_objects::errors::SqlError;
 use td_objects::types::basic::{AccessTokenId, RoleId, UserEnabled, UserId, UserName};
+use td_queries::test_utils::SeedQueries;
 
 #[td_test::test(sqlx)]
 #[tokio::test]
-async fn test_create_already_existing(db: DbPool) {
-    let _ = seed_user(
-        &db,
-        &UserName::try_from("u0").unwrap(),
-        &UserEnabled::from(true),
-    )
-    .await;
+async fn test_create_already_existing(db: TdPool) {
+    let _ = db
+        .seed_user(&UserName::try_from("u0").unwrap(), &UserEnabled::from(true))
+        .await;
 
-    let service = CreateUserService::with_defaults(db.clone()).service().await;
+    let service = CreateUserService::with_defaults(db.clone()).service();
 
     let create = UserCreate::builder()
         .try_name("u0".to_string())
@@ -44,8 +42,8 @@ async fn test_create_already_existing(db: DbPool) {
     .create((), create);
 
     assert_service_error(service, request, |err| match err {
-        SqlError::InsertError(_, _) => {}
-        other => panic!("Expected 'InsertError', got {other:?}"),
+        SqlError::UniqueViolation(_, _, _) => {}
+        other => panic!("Expected 'UniqueViolation', got {other:?}"),
     })
     .await;
 }

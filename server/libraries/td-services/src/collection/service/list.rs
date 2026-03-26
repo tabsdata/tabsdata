@@ -3,15 +3,14 @@
 //
 
 use ta_services::factory::service_factory;
+use td_authz::tower::NoPermissions;
 use td_authz::{Authz, AuthzContext};
 use td_objects::dxo::collection::CollectionRead;
 use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
-use td_objects::sql::DaoQueries;
-use td_objects::sql::list::ListQueryParams;
-use td_objects::tower_service::authz::NoPermissions;
-use td_objects::tower_service::from::{ExtractService, TryIntoService, With};
-use td_objects::tower_service::sql::{By, SqlListService};
+use td_objects::list::params::ListQueryParams;
+use td_objects::tower_service::with::With;
 use td_objects::types::visible_collections::VisibleCollections;
+use td_queries::By;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -21,7 +20,6 @@ use td_tower::layers;
     request = ListRequest<()>,
     response = ListResponse<CollectionRead>,
     connection = ConnectionProvider,
-    context = DaoQueries,
     context = AuthzContext,
 )]
 fn service() {
@@ -40,22 +38,19 @@ mod tests {
     use std::sync::Arc;
     use ta_services::service::TdService;
     use td_authz::AuthzContext;
-    use td_database::sql::DbPool;
+    use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
-    use td_objects::test_utils::seed_collection::seed_collection;
-    use td_objects::test_utils::seed_role::seed_role;
-    use td_objects::test_utils::seed_user::seed_user;
-    use td_objects::test_utils::seed_user_role::seed_user_role;
     use td_objects::types::basic::{
         AccessTokenId, CollectionName, Description, RoleId, RoleName, UserEnabled, UserId, UserName,
     };
+    use td_queries::test_utils::SeedQueries;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_list_provider(db: DbPool) {
+    async fn test_tower_metadata_list_collections(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
         ListCollectionsService::with_defaults(db)
@@ -74,21 +69,15 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_list_collection(db: DbPool) {
+    async fn test_list_collection(db: TdPool) {
         let name = CollectionName::try_from("ds0").unwrap();
-        let _ = seed_collection(&db, &name, &UserId::admin()).await;
+        let _ = db.seed_collection(&name, &UserId::admin()).await.unwrap();
 
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
                 .list((), ListParams::default());
 
-        let service = ListCollectionsService::new(
-            db,
-            Arc::new(DaoQueries::default()),
-            Arc::new(AuthzContext::default()),
-        )
-        .service()
-        .await;
+        let service = ListCollectionsService::new(db, Arc::new(AuthzContext::default())).service();
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let list = response.unwrap();
@@ -98,34 +87,29 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_list_collection_unauthorized(db: DbPool) -> Result<(), TdError> {
+    async fn test_list_collection_unauthorized(db: TdPool) -> Result<(), TdError> {
         // Create new role without permissions
-        let user = seed_user(
-            &db,
-            &UserName::try_from("joaquin")?,
-            &UserEnabled::from(true),
-        )
-        .await;
-        let role = seed_role(
-            &db,
-            RoleName::try_from("unauthorized_role")?,
-            Description::try_from("any user")?,
-        )
-        .await;
-        let _user_role = seed_user_role(&db, &user.id, &role.id).await;
+        let user = db
+            .seed_user(&UserName::try_from("joaquin")?, &UserEnabled::from(true))
+            .await?;
+        let role = db
+            .seed_role(
+                RoleName::try_from("unauthorized_role")?,
+                Description::try_from("any user")?,
+            )
+            .await?;
+        let _user_role = db.seed_user_role(&user.id, &role.id).await?;
 
         // Create a collection
         let name = CollectionName::try_from("ds0")?;
-        let _ = seed_collection(&db, &name, &UserId::admin()).await;
+        let _ = db.seed_collection(&name, &UserId::admin()).await?;
 
         // All collections are visible to authorized users
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
                 .list((), ListParams::default());
 
-        let service = ListCollectionsService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = ListCollectionsService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let list = response?;
@@ -136,9 +120,7 @@ mod tests {
         let request = RequestContext::with(AccessTokenId::default(), user.id, role.id)
             .list((), ListParams::default());
 
-        let service = ListCollectionsService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = ListCollectionsService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let list = response?;
