@@ -2,14 +2,14 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+use crate::config::DatabaseConfig;
 use crate::error::DbError;
 use crate::pool::TdPool;
-use crate::{DatabaseConfig, db_with_schema};
 use url::Url;
 
 /// Creates a connection pool for the `tabsdata` database.
 pub async fn db() -> Result<TdPool, DbError> {
-    let db = db_with_schema(&test_config(), td_schema::schema()).await?;
+    let db = TdPool::connect(&test_config()).await?;
     db.upgrade().await?;
     db.check().await?;
     Ok(db)
@@ -18,5 +18,8 @@ pub async fn db() -> Result<TdPool, DbError> {
 pub fn test_config() -> DatabaseConfig {
     let db_file = td_common::tdtestdir!().join(format!("{}.db", td_common::id::id()));
     let db_url = Url::from_file_path(db_file).unwrap();
-    DatabaseConfig::new(db_url)
+    let mut config = DatabaseConfig::new(db_url);
+    config.min_connections = 0;
+    config.idle_timeout = std::time::Duration::from_millis(500);
+    config
 }

@@ -20,6 +20,8 @@ version = { workspace = true }
 [lib]
 
 [features]
+default = ["sqlite"]
+
 enterprise = []
 td-test = ["dummy", "mock-env", "test-utils"]
 dummy = []
@@ -27,10 +29,11 @@ mock-env = []
 test_logging = []
 test_tower_metadata = []
 test-utils = []
-# database features
-sqlite = ["sqlx/sqlite", "sea-query-sqlx/sqlx-sqlite"]
-postgres = ["sqlx/postgres", "sea-query-sqlx/sqlx-postgres"]
-mysql = ["sqlx/mysql", "sea-query-sqlx/sqlx-mysql"]
+
+# Backend support features
+sqlite = ["sqlx/sqlite", "sea-query-sqlx/sqlx-sqlite", "td-schema/sqlite"]
+postgres = ["sqlx/postgres", "sea-query-sqlx/sqlx-postgres", "td-schema/postgres"]
+mysql = ["sqlx/mysql", "sea-query-sqlx/sqlx-mysql", "td-schema/mysql"]
 
 [package.metadata.cargo-machete]
 ignored = ["openssl", "td-build", "td-database", "thiserror", "strum", "toml"]

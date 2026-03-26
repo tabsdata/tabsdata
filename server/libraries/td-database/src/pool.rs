@@ -6,18 +6,18 @@ use crate::config::DatabaseConfig;
 use crate::dynamic::{DynamicConnection, DynamicPool, DynamicTransaction};
 use crate::error::DbError;
 use crate::sea_query::builder::SeaQueryExt;
+use crate::sea_query::kind::DatabaseKind;
 use sea_query::{Expr, ExprTrait, Iden, Query};
 use sqlx::Error;
-use sqlx::migrate::Migrator;
 use std::cmp::Ordering;
 use std::fmt::Display;
-use td_schema::{DB_EDITION_NAME, DB_VERSION_NAME, DB_VERSION_VALUE, TabsdataSystem};
+use td_schema::schema::SchemaVersion;
+use td_schema::{CURRENT_VERSION, DB_EDITION_NAME, DB_VERSION_NAME, TabsdataSystem};
 use te_system::edition::{Compatible, Edition, TabsdataEdition};
-use tracing::{debug, trace};
+use tracing::{debug, info, warn};
 
 #[derive(Debug, Clone)]
 pub struct TdPool {
-    pub schema: &'static Migrator,
     pub pool: DynamicPool,
 }
 
@@ -27,30 +27,23 @@ impl AsRef<DynamicPool> for TdPool {
     }
 }
 
-/// Specialized Sqlx [`Pool`] that uses two pools, one for read-only operations and one for
+/// Specialized [`Pool`] that uses two pools, one for read-only operations and one for
 /// read-write operations.
 impl TdPool {
     /// Connects to a database using the given configuration.
     ///
     /// The schema is assumed to be up to date.
-    pub async fn connect(
-        config: &DatabaseConfig,
-        schema: &'static Migrator,
-    ) -> Result<Self, DbError> {
+    pub async fn connect(config: &DatabaseConfig) -> Result<Self, DbError> {
         let pool = config.connect().await?;
         debug!("Connected to database pool: {pool:#?}");
-        trace!("Connected to database with migrator: {schema:#?}");
-        Ok(Self { schema, pool })
+        Ok(Self { pool })
     }
 
     /// Creates a database using the given configuration.
     ///
     /// Creates the schema.
-    pub async fn create(
-        config: &DatabaseConfig,
-        schema: &'static Migrator,
-    ) -> Result<Self, DbError> {
-        let this = Self::connect(config, schema).await?;
+    pub async fn create(config: &DatabaseConfig) -> Result<Self, DbError> {
+        let this = Self::connect(config).await?;
         this.upgrade().await?;
         Ok(this)
     }
@@ -62,8 +55,10 @@ impl TdPool {
     }
 
     pub async fn upgrade(&self) -> Result<(), DbError> {
+        info!("Starting database upgrade");
         self.upgrade_db_version().await?;
         self.upgrade_tabsdata_edition().await?;
+        info!("Database upgrade complete");
         Ok(())
     }
 
@@ -87,7 +82,8 @@ impl TdPool {
         }
     }
 
-    async fn check_db_version(&self) -> Result<(), DbError> {
+    /// Read the current `db_version` from the database.
+    async fn try_read_db_version(&self) -> Result<usize, DbError> {
         let res: String = Query::select()
             .column(TabsdataSystem::Value)
             .from(TabsdataSystem::Table)
@@ -96,33 +92,76 @@ impl TdPool {
             .fetch_one(&self.pool)
             .await
             .map_err(|e| Self::map_system_db_error(e, DB_VERSION_NAME))?;
-        let version = res.parse::<usize>().map_err(|_| {
+        res.parse::<usize>().map_err(|_| {
             DbError::DatabaseCorrupted(format!(
                 "'{}' value '{}' must be an integer",
                 DB_VERSION_NAME, res
             ))
-        })?;
+        })
+    }
 
-        match version.cmp(&DB_VERSION_VALUE) {
+    async fn check_db_version(&self) -> Result<(), DbError> {
+        let version = self.try_read_db_version().await?;
+        match version.cmp(&CURRENT_VERSION) {
             Ordering::Equal => Ok(()),
             Ordering::Less => Err(DbError::DatabaseNeedsUpgrade(format!(
                 "Tabsdata database version is '{}', binary database version is '{}'",
-                version, *DB_VERSION_VALUE
+                version, CURRENT_VERSION
             ))),
             Ordering::Greater => Err(DbError::DatabaseIsNewer(
                 version.to_string(),
-                *DB_VERSION_VALUE,
+                CURRENT_VERSION,
             )),
         }
     }
 
     pub async fn upgrade_db_version(&self) -> Result<(), DbError> {
-        match &self.pool {
-            DynamicPool::Sqlite { rw, .. } => self.schema.run(rw).await,
-            DynamicPool::Postgres { rw, .. } => self.schema.run(rw).await,
-            DynamicPool::MySql { rw, .. } => self.schema.run(rw).await,
+        match self.try_read_db_version().await {
+            Ok(version) if version == CURRENT_VERSION => {
+                debug!(version, "Schema version is up to date");
+            }
+            Ok(version) if version < CURRENT_VERSION => {
+                info!(
+                    from = version,
+                    to = CURRENT_VERSION,
+                    "Upgrading schema version"
+                );
+                for v in (version + 1)..=CURRENT_VERSION {
+                    debug!(delta = v, "Applying schema delta");
+                    let stmts = td_schema::schema::deltas::get(v, self.kind());
+                    self.pool
+                        .execute_batch(&stmts)
+                        .await
+                        .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
+                    debug!(delta = v, "Schema delta applied");
+                }
+                info!(version = CURRENT_VERSION, "Schema upgrade complete");
+            }
+            Ok(version) => {
+                warn!(
+                    database_version = version,
+                    binary_version = CURRENT_VERSION,
+                    "Database is newer than binary"
+                );
+                return Err(DbError::DatabaseIsNewer(
+                    version.to_string(),
+                    CURRENT_VERSION,
+                ));
+            }
+            Err(DbError::DatabaseSchemaDoesNotExist) => {
+                info!(
+                    version = CURRENT_VERSION,
+                    "No existing schema found, creating fresh install"
+                );
+                let stmts = td_schema::schema::current::Schema::build(self.kind());
+                self.pool
+                    .execute_batch(&stmts)
+                    .await
+                    .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
+                info!(version = CURRENT_VERSION, "Fresh schema created");
+            }
+            Err(e) => return Err(e),
         }
-        .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
         Ok(())
     }
 
@@ -170,7 +209,7 @@ impl TdPool {
 
         match instance_edition {
             None => {
-                // if not set, set it to the runtime edition
+                info!(edition = runtime_edition.label(), "Setting initial edition");
                 Query::insert()
                     .into_table(TabsdataSystem::Table)
                     .columns([TabsdataSystem::Name, TabsdataSystem::Value])
@@ -182,13 +221,23 @@ impl TdPool {
                     .map_err(DbError::FailedToCreateOrUpgradeDatabaseEdition)?;
                 Ok(())
             }
-            Some(instance_edition) => {
-                if !runtime_edition.is_compatible(&instance_edition) {
+            Some(ref instance_edition) => {
+                if !runtime_edition.is_compatible(instance_edition) {
+                    warn!(
+                        instance = %instance_edition,
+                        runtime = runtime_edition.label(),
+                        "Incompatible edition"
+                    );
                     Err(DbError::CannotUpgradeEdition(format!(
                         "instance edition is '{instance_edition}' cannot be upgraded to '{}'",
                         runtime_edition.label()
                     )))
-                } else if runtime_edition.requires_upgrade(&instance_edition) {
+                } else if runtime_edition.requires_upgrade(instance_edition) {
+                    info!(
+                        from = %instance_edition,
+                        to = runtime_edition.label(),
+                        "Upgrading edition"
+                    );
                     Query::update()
                         .table(TabsdataSystem::Table)
                         .value(TabsdataSystem::Value, runtime_edition.label())
@@ -199,6 +248,10 @@ impl TdPool {
                         .map_err(DbError::FailedToCreateOrUpgradeDatabaseEdition)?;
                     Ok(())
                 } else {
+                    debug!(
+                        edition = %instance_edition,
+                        "Edition is up to date"
+                    );
                     Ok(())
                 }
             }
@@ -219,6 +272,11 @@ impl TdPool {
     pub fn is_closed(&self) -> bool {
         self.pool.is_closed()
     }
+
+    /// Close the pool, waiting for all connections to be returned and closed.
+    pub async fn close(&self) {
+        self.pool.close().await;
+    }
 }
 
 #[cfg(test)]
@@ -231,15 +289,11 @@ mod tests {
 
     #[tokio::test]
     async fn creates_database_and_schema() {
-        // testing db_schema macro
         let db_file = tdtestdir!().join("test.db");
         let db_url = Url::from_file_path(db_file.clone()).unwrap();
         let config = DatabaseConfig::new(db_url);
-        let db = crate::db_with_schema(&config, td_schema::test_schema())
-            .await
-            .unwrap();
-        db.upgrade_db_version().await.unwrap();
-        let _ = raw_query!(db, "SELECT * FROM foo")
+        let db = TdPool::create(&config).await.unwrap();
+        let _ = raw_query!(db, "SELECT * FROM tabsdata_system")
             .build_query()
             .execute(&db)
             .await
@@ -249,24 +303,23 @@ mod tests {
 
     #[tokio::test]
     async fn open_existing_database() {
-        let schema = td_schema::test_schema();
-
         let db_file = tdtestdir!().join("test.db");
         let db_url = Url::from_file_path(db_file).unwrap();
         let config = DatabaseConfig::new(db_url);
         {
-            let db = TdPool::connect(&config, schema).await.unwrap();
-            db.upgrade_db_version().await.unwrap();
-            raw_query!(db, "INSERT INTO foo values('a', 'A')")
-                .build_query()
-                .execute(&db)
-                .await
-                .unwrap();
+            let db = TdPool::create(&config).await.unwrap();
+            raw_query!(
+                db,
+                "INSERT INTO tabsdata_system values('test_key', 'test_val')"
+            )
+            .build_query()
+            .execute(&db)
+            .await
+            .unwrap();
         }
 
-        let db = TdPool::connect(&config, schema).await.unwrap();
-        db.upgrade_db_version().await.unwrap();
-        let res = raw_query!(db, "SELECT * FROM foo")
+        let db = TdPool::connect(&config).await.unwrap();
+        let res = raw_query!(db, "SELECT * FROM tabsdata_system WHERE name = 'test_key'")
             .build_query()
             .fetch_all(&db)
             .await
@@ -277,34 +330,30 @@ mod tests {
 
     #[tokio::test]
     async fn test_tabsdata_database_schema_does_not_exist() {
-        let schema = td_schema::test_schema();
         let db_file = tdtestdir!().join("test.db");
         let db_url = Url::from_file_path(db_file).unwrap();
         let config = DatabaseConfig::new(db_url);
-        // tabsdata schema does not exist
-        let db = TdPool::connect(&config, schema).await.unwrap();
-        db.upgrade_db_version().await.unwrap();
+        // Connect without upgrade — DB has no tables
+        let db = TdPool::connect(&config).await.unwrap();
         let res = db.check_db_version().await;
         assert!(matches!(res, Err(DbError::DatabaseSchemaDoesNotExist)));
     }
 
     #[tokio::test]
     async fn test_tabsdata_database_schema_ok() {
-        let schema = td_schema::schema();
         let db_file = tdtestdir!().join("test.db");
         let db_url = Url::from_file_path(db_file).unwrap();
         let config = DatabaseConfig::new(db_url);
-        let db = TdPool::create(&config, schema).await.unwrap();
+        let db = TdPool::create(&config).await.unwrap();
         assert!(db.check_db_version().await.is_ok());
     }
 
     #[tokio::test]
     async fn test_tabsdata_database_schema_missing_db_version() {
-        let schema = td_schema::schema();
         let db_file = tdtestdir!().join("test.db");
         let db_url = Url::from_file_path(db_file).unwrap();
         let config = DatabaseConfig::new(db_url);
-        let db = TdPool::create(&config, schema).await.unwrap();
+        let db = TdPool::create(&config).await.unwrap();
 
         raw_query!(db, "DELETE FROM tabsdata_system")
             .build_query()
@@ -318,11 +367,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_tabsdata_database_schema_invalid_db_version() {
-        let schema = td_schema::schema();
         let db_file = tdtestdir!().join("test.db");
         let db_url = Url::from_file_path(db_file).unwrap();
         let config = DatabaseConfig::new(db_url);
-        let db = TdPool::create(&config, schema).await.unwrap();
+        let db = TdPool::create(&config).await.unwrap();
 
         raw_query!(
             db,
@@ -339,11 +387,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_tabsdata_database_schema_db_needs_upgrade() {
-        let schema = td_schema::schema();
         let db_file = tdtestdir!().join("test.db");
         let db_url = Url::from_file_path(db_file).unwrap();
         let config = DatabaseConfig::new(db_url);
-        let db = TdPool::create(&config, schema).await.unwrap();
+        let db = TdPool::create(&config).await.unwrap();
 
         raw_query!(
             db,
@@ -360,11 +407,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_tabsdata_database_schema_app_needs_upgrade() {
-        let schema = td_schema::schema();
         let db_file = tdtestdir!().join("test.db");
         let db_url = Url::from_file_path(db_file).unwrap();
         let config = DatabaseConfig::new(db_url);
-        let db = TdPool::create(&config, schema).await.unwrap();
+        let db = TdPool::create(&config).await.unwrap();
 
         raw_query!(
             db,
@@ -381,11 +427,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_tabsdata_database_edition_upgrade() {
-        let schema = td_schema::schema();
         let db_file = tdtestdir!().join("test.db");
         let db_url = Url::from_file_path(db_file).unwrap();
         let config = DatabaseConfig::new(db_url);
-        let db = TdPool::create(&config, schema).await.unwrap();
+        let db = TdPool::create(&config).await.unwrap();
         let db_edition = db.parse_tabsdata_edition().await.unwrap();
         let runtime_edition = TabsdataEdition;
         assert_eq!(db_edition.unwrap(), runtime_edition.label());
@@ -393,11 +438,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_tabsdata_database_schema_invalid_edition() {
-        let schema = td_schema::schema();
         let db_file = tdtestdir!().join("test.db");
         let db_url = Url::from_file_path(db_file).unwrap();
         let config = DatabaseConfig::new(db_url);
-        let db = TdPool::create(&config, schema).await.unwrap();
+        let db = TdPool::create(&config).await.unwrap();
 
         raw_query!(
             db,
@@ -410,5 +454,53 @@ mod tests {
 
         let res = db.check_tabsdata_edition().await;
         assert!(matches!(res, Err(DbError::InvalidEdition(_, _))));
+    }
+
+    #[tokio::test]
+    async fn test_upgrade_idempotent() {
+        let db_file = tdtestdir!().join("test.db");
+        let db_url = Url::from_file_path(db_file).unwrap();
+        let config = DatabaseConfig::new(db_url);
+        let db = TdPool::connect(&config).await.unwrap();
+
+        // First upgrade: fresh install
+        db.upgrade().await.unwrap();
+        db.check().await.unwrap();
+
+        // Second upgrade: should succeed (no-op)
+        db.upgrade().await.unwrap();
+        db.check().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_execute_batch() {
+        let db_file = tdtestdir!().join("test.db");
+        let db_url = Url::from_file_path(db_file).unwrap();
+        let config = DatabaseConfig::new(db_url);
+        let db = TdPool::connect(&config).await.unwrap();
+
+        let stmts = vec![
+            "CREATE TABLE test_batch (id TEXT PRIMARY KEY, val TEXT)".to_string(),
+            "INSERT INTO test_batch VALUES ('a', 'one')".to_string(),
+            "INSERT INTO test_batch VALUES ('b', 'two')".to_string(),
+        ];
+        db.pool.execute_batch(&stmts).await.unwrap();
+
+        let rows = raw_query!(db, "SELECT * FROM test_batch")
+            .build_query()
+            .fetch_all(&db)
+            .await
+            .unwrap();
+        assert_eq!(rows.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_backend_returns_sqlite() {
+        let db_file = tdtestdir!().join("test.db");
+        let db_url = Url::from_file_path(db_file).unwrap();
+        let config = DatabaseConfig::new(db_url);
+        let db = TdPool::connect(&config).await.unwrap();
+        let backend: td_schema::schema::backend::Backend = db.kind().into();
+        assert_eq!(backend, td_schema::schema::backend::Backend::Sqlite);
     }
 }

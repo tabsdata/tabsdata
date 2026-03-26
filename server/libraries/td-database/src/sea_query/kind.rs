@@ -4,6 +4,7 @@
 
 use crate::dynamic::{DynamicConnection, DynamicPool};
 use crate::pool::TdPool;
+use td_schema::schema::backend::Backend;
 
 #[derive(Debug)]
 pub enum DatabaseBackend {
@@ -13,6 +14,19 @@ pub enum DatabaseBackend {
     Postgres,
     #[cfg(feature = "mysql")]
     MySql,
+}
+
+impl From<DatabaseBackend> for Backend {
+    fn from(backend: DatabaseBackend) -> Self {
+        match backend {
+            #[cfg(feature = "sqlite")]
+            DatabaseBackend::Sqlite => Backend::Sqlite,
+            #[cfg(feature = "postgres")]
+            DatabaseBackend::Postgres => Backend::Postgres,
+            #[cfg(feature = "mysql")]
+            DatabaseBackend::MySql => Backend::MySql,
+        }
+    }
 }
 
 pub trait DatabaseKind {

@@ -4,19 +4,15 @@
 
 //! SQLX:
 //! Generate a test function that sets up a test database with fixtures.
-//! Fixtures are curently passed as a String. The path constructed is relative to the current
-//! test: ./fixtures/<fixture>.sql. If a fixture is passed, no schema is loaded, unless a migrator
-//! is passed.
-//! Migrator should contain DB definitions, and fixtures can contain eitehr definitions or default data.
-//! The function must have a DbPool parameter.
+//! Fixtures are currently passed as a String. The path constructed is relative to the current
+//! test: ./fixtures/<fixture>.sql. If a fixture is passed, no schema is loaded.
+//! The function must have a TdPool parameter.
 //!
-//! By default, the schema is loaded from [`td_schema::schema()`].
+//! By default (no fixtures), the full schema is created via `TdPool::upgrade()`.
 //!
 //! # Examples
 //! #[test(sqlx)]
 //! #[test(sqlx(fixture = "table"))]
-//! #[test(sqlx(migrator = td_schema::schema(), fixture = "table"))]
-//! #[test(sqlx(migrator = td_schema::schema(), fixture = "table"))]
 
 extern crate proc_macro;
 mod scoped_test;

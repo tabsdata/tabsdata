@@ -4,20 +4,19 @@
 
 pub use tm_test::*;
 
+use std::future::Future;
+
 pub mod reqs;
 pub mod sqlx;
 
 #[cfg(feature = "test-utils")]
 pub mod file;
 
-use async_trait::async_trait;
-
 pub enum TestSetupExecution<T> {
     Skip,
     Run(T),
 }
 
-#[async_trait]
 pub trait TestSetup<T> {
-    async fn setup(&self) -> TestSetupExecution<T>;
+    fn setup(&self) -> impl Future<Output = TestSetupExecution<T>> + Send;
 }

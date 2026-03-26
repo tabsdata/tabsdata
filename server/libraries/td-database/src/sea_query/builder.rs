@@ -8,9 +8,7 @@ use crate::sea_query::kind::{DatabaseBackend, DatabaseKind};
 use crate::sea_query::raw::RawSeaQuery;
 use futures_util::future::BoxFuture;
 use futures_util::stream::BoxStream;
-use sea_query::{
-    MysqlQueryBuilder, PostgresQueryBuilder, QueryStatementWriter, SqliteQueryBuilder,
-};
+use sea_query::QueryStatementWriter;
 use sea_query_sqlx::SqlxValues;
 use sqlx::{Either, Error};
 use std::marker::PhantomData;
@@ -27,11 +25,11 @@ where
     fn build_sea_query(self, db: impl DatabaseKind) -> (String, SqlxValues) {
         let (sql, values) = match db.kind() {
             #[cfg(feature = "sqlite")]
-            DatabaseBackend::Sqlite => self.build(SqliteQueryBuilder),
+            DatabaseBackend::Sqlite => self.build(sea_query::SqliteQueryBuilder),
             #[cfg(feature = "postgres")]
-            DatabaseBackend::Postgres => self.build(PostgresQueryBuilder),
+            DatabaseBackend::Postgres => self.build(sea_query::PostgresQueryBuilder),
             #[cfg(feature = "mysql")]
-            DatabaseBackend::MySql => self.build(MysqlQueryBuilder),
+            DatabaseBackend::MySql => self.build(sea_query::MysqlQueryBuilder),
         };
         (sql, SqlxValues(values))
     }

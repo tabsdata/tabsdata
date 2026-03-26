@@ -54,7 +54,6 @@ td-schema = { workspace = true }
 
 # External dependencies
 
-async-trait = { workspace = true }
 chrono = { workspace = true }
 hex = { workspace = true }
 path-slash = { workspace = true }
