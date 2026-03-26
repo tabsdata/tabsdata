@@ -58,6 +58,7 @@ lerna-debug.log*
 *.local
 !**/utest/resources/**/*.log
 CLAUDE.md
+.claude/
 MANIFEST
 !assets/manifest
 !connectors/python/**/assets/manifest/
