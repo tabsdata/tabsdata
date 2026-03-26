@@ -1,9 +1,10 @@
 //
-// Copyright 2025 Tabs Data Inc.
+// Copyright 2026 Tabs Data Inc.
 //
 
 use crate::dxo::dependency::DependencyDBWithNames;
 use crate::dxo::function::FunctionDBWithNames;
+use crate::dxo::graph::{FunctionNode, TableNode};
 use crate::dxo::table::TableDBWithNames;
 use crate::dxo::trigger::TriggerDBWithNames;
 use crate::graph::{TdGraph, TdGraphBuilder};
@@ -15,9 +16,9 @@ use crate::types::basic::{
     TriggerStatus, TriggerVersionId, UserId, UserName,
 };
 use crate::types::composed::TableVersions;
-use crate::types::graph::{FunctionNode, TableNode};
 use std::collections::HashMap;
 use std::sync::LazyLock;
+use ta_objects::Buildable;
 
 static COLLECTION_ID: LazyLock<CollectionId> = LazyLock::new(CollectionId::default);
 static COLLECTION_NAME: LazyLock<CollectionName> =
