@@ -58,6 +58,23 @@ pub struct Private;
 #[ta_objects::typed(bool(default = false))]
 pub struct ReuseFrozen;
 
+#[ta_objects::typed(bool(default = false))]
+#[derive(Eq, PartialEq, Hash)]
+pub struct SchemaChanged;
+
+#[ta_objects::typed(bool)]
+pub struct SchemaDataChanged;
+
+impl From<Option<SchemaChanged>> for SchemaDataChanged {
+    fn from(schema_changed: Option<SchemaChanged>) -> Self {
+        if let Some(schema_changed) = schema_changed {
+            SchemaDataChanged(*schema_changed)
+        } else {
+            SchemaDataChanged(false)
+        }
+    }
+}
+
 #[ta_objects::typed(bool)]
 #[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct SelfDependency;

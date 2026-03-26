@@ -19,12 +19,12 @@ use tracing::{debug, info};
 pub struct Schema;
 
 impl SchemaVersion for Schema {
-    const VERSION: usize = 7;
+    const VERSION: usize = 8;
 
     const FINGERPRINTS: [&'static str; 3] = [
-        "643f8e46bdf4c8393a95d66ab4c85cbfec8ec613cb462720cb4acf326aaa69a6", // Sqlite
-        "3f380381f1a4fba2fead3acc0782304d5ef58ad7aa9b1649a83eb1d369bdc429", // Postgres
-        "a1309f7726600f16592373f87b7d8f25f13d06d4fbd3a2356e7c456b4096e859", // MySql
+        "d5828e880eea828629d6f24116e0411f3860a552804cc0fd21c805e9b22a2b33", // Sqlite
+        "69dd3a9f81f1818b94050db8ebb92b55b176035219c45bd3763480662eaae0c6", // Postgres
+        "513948fb1063049b2f5412f9f7e7748e7811c13f1ee27b96cec4b75b467faaa5", // MySql
     ];
 
     fn build(backend: impl Into<Backend>) -> Vec<String> {

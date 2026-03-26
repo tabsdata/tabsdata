@@ -7,8 +7,9 @@ mod definitions {
     use crate::types::basic::{
         AtTime, CollectionId, CollectionName, ColumnCount, DataChanged, DataLocation, ExecutionId,
         FunctionName, FunctionRunId, FunctionRunStatus, FunctionVersionId, HasData, RowCount,
-        SchemaHash, StorageVersion, TableDataVersionId, TableFunctionParamPos, TableId, TableName,
-        TableVersionId, TransactionId, TriggeredOn, UserId, UserName,
+        SchemaChanged, SchemaDataChanged, SchemaHash, StorageVersion, TableDataVersionId,
+        TableFunctionParamPos, TableId, TableName, TableVersionId, TransactionId, TriggeredOn,
+        UserId, UserName,
     };
 
     #[ta_objects::Dao]
@@ -43,6 +44,8 @@ mod definitions {
         // column_count.is_some() is possible.
         #[builder(default)]
         pub has_data: Option<HasData>,
+        #[builder(default)]
+        pub schema_changed: Option<SchemaChanged>,
         #[builder(default)]
         pub column_count: Option<ColumnCount>,
         #[builder(default)]
@@ -115,6 +118,9 @@ mod definitions {
         #[dxo(builder(field = "has_data"))]
         #[dto(list(filter, filter_like, order_by))]
         pub data_changed: DataChanged,
+        #[dxo(builder(field = "schema_changed"))]
+        #[dto(list(filter, filter_like, order_by))]
+        pub schema_data_changed: SchemaDataChanged,
         #[dto(list(filter, filter_like, order_by))]
         pub execution_id: ExecutionId,
         #[dto(list(filter, filter_like, order_by))]
@@ -156,6 +162,9 @@ mod definitions {
         #[dao(immutable)]
         #[builder(default)]
         pub has_data: Option<HasData>,
+        #[dao(immutable)]
+        #[builder(default)]
+        pub schema_changed: Option<SchemaChanged>,
         #[dao(immutable)]
         #[builder(default)]
         pub column_count: Option<ColumnCount>,

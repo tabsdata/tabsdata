@@ -15,7 +15,7 @@ use td_objects::dxo::worker::{CallbackRequest, UpdateWorkerDB, WorkerDB};
 use td_objects::dxo::yaml::WorkerOutput;
 use td_objects::dxo::yaml::function_runner::v2::WrittenTable;
 use td_objects::types::basic::{
-    Depth, ExecutionId, FunctionRunId, FunctionRunStatus, HasData, WorkerId,
+    Depth, ExecutionId, FunctionRunId, FunctionRunStatus, HasData, SchemaChanged, WorkerId,
 };
 use td_objects::types::recursion::RecursionOptions;
 use td_objects::{Buildable, and, lte};
@@ -237,8 +237,23 @@ pub async fn update_table_data_version_status(
                 .await?;
 
             let update = if let Some(table_info) = table_info {
+                let latest_version_with_data = conn
+                    .fetch_latest_before::<{ TableDataVersionDBWithNames::WithData }, TableDataVersionDBWithNames>(
+                        and!(&data_version.table_id, lte!(&data_version.triggered_on)),
+                        0,
+                    )
+                    .await?;
+
+                let schema_changed = match &latest_version_with_data {
+                    Some(prev) => SchemaChanged::from(
+                        prev.schema_hash.as_ref() != Some(&table_info.schema_hash),
+                    ),
+                    None => SchemaChanged::TRUE,
+                };
+
                 UpdateTableDataVersionDB {
                     has_data: Some(HasData::TRUE),
+                    schema_changed: Some(schema_changed),
                     column_count: Some(table_info.column_count),
                     row_count: Some(table_info.row_count),
                     schema_hash: Some(table_info.schema_hash.clone()),
@@ -255,6 +270,7 @@ pub async fn update_table_data_version_status(
                 if let Some(latest_version_with_data) = latest_version_with_data {
                     UpdateTableDataVersionDB {
                         has_data: Some(HasData::FALSE),
+                        schema_changed: Some(SchemaChanged::FALSE),
                         column_count: latest_version_with_data.column_count,
                         row_count: latest_version_with_data.row_count,
                         schema_hash: latest_version_with_data.schema_hash.clone(),
@@ -263,6 +279,7 @@ pub async fn update_table_data_version_status(
                 } else {
                     UpdateTableDataVersionDB {
                         has_data: Some(HasData::FALSE),
+                        schema_changed: Some(SchemaChanged::FALSE),
                         column_count: None,
                         row_count: None,
                         schema_hash: None,

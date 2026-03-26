@@ -229,6 +229,7 @@ pub enum TableDataVersions {
     TableVersionId,
     FunctionVersionId,
     HasData,
+    SchemaChanged,
     ColumnCount,
     RowCount,
     SchemaHash,
@@ -882,6 +883,11 @@ pub fn tables() -> Vec<TableCreateStatement> {
                     .not_null(),
             )
             .col(ColumnDef::new(TableDataVersions::HasData).boolean().null())
+            .col(
+                ColumnDef::new(TableDataVersions::SchemaChanged)
+                    .boolean()
+                    .null(),
+            )
             .col(
                 ColumnDef::new(TableDataVersions::ColumnCount)
                     .integer()
