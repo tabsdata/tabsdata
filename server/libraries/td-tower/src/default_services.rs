@@ -9,12 +9,14 @@ use crate::ctx_service::CtxResponse;
 use crate::error::{ConnectionError, FromHandlerError};
 use crate::extractors::{Connection, ConnectionType, Input, ReqCtx, SrvCtx};
 use crate::handler::{Handler, IntoHandler};
+#[cfg(feature = "test_tower_metadata")]
+use crate::metadata::{MetadataMutex, type_of, type_of_val};
 use std::any::type_name;
 use std::future::Future;
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::Arc;
-use td_database::sql::DbPool;
+use td_database::pool::TdPool;
 use td_error::TdError;
 use tower::{Layer, Service};
 use tracing::{error, trace};
@@ -230,16 +232,9 @@ where
 
         Box::pin(async move {
             #[cfg(feature = "test_tower_metadata")]
-            {
-                use crate::metadata::{MetadataMutex, type_of};
-
-                // Add types to metadata
-                let Input(metadata) = MetadataMutex::from_handler(&handler).unwrap();
-                let res_type_name = type_of::<SrvCtx<T>>();
-                metadata
-                    .created_type("ContextProviderService", res_type_name)
-                    .await;
-            }
+            MetadataMutex::extract(&handler)
+                .created_type("ContextProviderService", type_of::<SrvCtx<T>>())
+                .await;
 
             // Insert the context into the handler
             handler.insert(SrvCtx(context));
@@ -253,11 +248,11 @@ where
 /// ConnectionProvider is a layer wrapping ConnectionProviderService.
 #[derive(Clone)]
 pub struct ConnectionProvider {
-    db: DbPool,
+    db: TdPool,
 }
 
 impl ConnectionProvider {
-    pub fn new(db: DbPool) -> ConnectionProvider {
+    pub fn new(db: TdPool) -> ConnectionProvider {
         ConnectionProvider { db }
     }
 }
@@ -277,7 +272,7 @@ impl<S> Layer<S> for ConnectionProvider {
 #[derive(Clone)]
 pub struct ConnectionProviderService<S> {
     inner: S,
-    db: DbPool,
+    db: TdPool,
 }
 
 impl<S, Err> Service<Handler> for ConnectionProviderService<S>
@@ -302,28 +297,19 @@ where
         let clone = self.inner.clone();
         let mut inner = std::mem::replace(&mut self.inner, clone);
 
-        let db = self.db.clone(); // this is not cloning the pool, just its arc
+        let db = self.db.clone();
         Box::pin(async move {
             // Create connection
             let connection = db
                 .acquire()
                 .await
-                .map_err(ConnectionError::CannotGetConnection)
-                .map_err(TdError::new)?;
-            let connection = ConnectionType::PoolConnection(connection).into();
+                .map_err(|e| ConnectionError::CannotGetConnection(e).into())?;
             let connection = Connection::new(connection);
 
             #[cfg(feature = "test_tower_metadata")]
-            {
-                use crate::metadata::{MetadataMutex, type_of_val};
-
-                // Add types to metadata
-                let Input(metadata) = MetadataMutex::from_handler(&handler).unwrap();
-                let res_type_name = type_of_val(&connection);
-                metadata
-                    .created_type("ConnectionProviderService", res_type_name)
-                    .await;
-            }
+            MetadataMutex::extract(&handler)
+                .created_type("ConnectionProviderService", type_of_val(&connection))
+                .await;
 
             // Add it to the handler
             handler.insert(connection);
@@ -337,11 +323,11 @@ where
 /// TransactionProvider is a layer wrapping TransactionProviderService.
 #[derive(Clone)]
 pub struct TransactionProvider {
-    db: DbPool,
+    db: TdPool,
 }
 
 impl TransactionProvider {
-    pub fn new(db: DbPool) -> TransactionProvider {
+    pub fn new(db: TdPool) -> TransactionProvider {
         TransactionProvider { db }
     }
 }
@@ -362,7 +348,7 @@ impl<S> Layer<S> for TransactionProvider {
 #[derive(Clone)]
 pub struct TransactionProviderService<S> {
     inner: S,
-    db: DbPool,
+    db: TdPool,
 }
 
 impl<S> Service<Handler> for TransactionProviderService<S>
@@ -392,22 +378,13 @@ where
             let transaction = db
                 .begin()
                 .await
-                .map_err(ConnectionError::CannotBeginTransaction)
-                .map_err(TdError::new)?;
-            let transaction = ConnectionType::Transaction(transaction).into();
+                .map_err(ConnectionError::CannotBeginTransaction)?;
             let connection = Connection::new(transaction);
 
             #[cfg(feature = "test_tower_metadata")]
-            {
-                use crate::metadata::{MetadataMutex, type_of_val};
-
-                // Add types to metadata
-                let Input(metadata) = MetadataMutex::from_handler(&handler).unwrap();
-                let res_type_name = type_of_val(&connection);
-                metadata
-                    .created_type("TransactionProviderService", res_type_name)
-                    .await;
-            }
+            MetadataMutex::extract(&handler)
+                .created_type("TransactionProviderService", type_of_val(&connection))
+                .await;
 
             // Note this just clones the Arc, not the transaction itself
             handler.insert(connection.clone());
@@ -416,30 +393,21 @@ where
             let result = inner.call(handler).await;
 
             #[cfg(feature = "test_tower_metadata")]
-            {
-                use crate::metadata::{MetadataMutex, type_of_val};
-
-                // Add types to metadata
-                let handler = result.as_ref().unwrap();
-                let Input(metadata) = MetadataMutex::from_handler(handler).unwrap();
-                let res_type_name = type_of_val(&connection);
-                metadata
-                    .remove_created("TransactionProviderService", res_type_name)
+            if let Ok(ref handler) = result {
+                MetadataMutex::extract(handler)
+                    .remove_created("TransactionProviderService", type_of_val(&connection))
                     .await;
             }
 
             // Regain the transaction
             let transaction = connection
                 .arc()
-                .lock()
+                .reclaim()
                 .await
-                .take()
-                .ok_or(ConnectionError::ConnectionLost)?;
-            let transaction = if let ConnectionType::Transaction(transaction) = transaction {
-                transaction
-            } else {
-                return Err(ConnectionError::ConnectionLost)?;
-            };
+                .and_then(|conn| match conn {
+                    ConnectionType::Transaction(t) => Ok(t),
+                    _ => Err(ConnectionError::ConnectionLost),
+                })?;
 
             // Commit or rollback based on the result
             match result {
@@ -483,28 +451,6 @@ impl Service<Handler> for ServiceReturn {
     }
 }
 
-#[derive(Default, Clone)]
-pub struct ServiceReturn2;
-
-impl Service<Handler> for ServiceReturn2 {
-    type Response = Handler;
-    // This error is not really used as this service cannot fail, but given that all the tower
-    // must implement From<TdError>, we can just use it here as well.
-    type Error = TdError;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
-
-    fn poll_ready(
-        &mut self,
-        _cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), Self::Error>> {
-        std::task::Poll::Ready(Ok(()))
-    }
-
-    fn call(&mut self, handler: Handler) -> Self::Future {
-        Box::pin(async move { Ok(handler) })
-    }
-}
-
 /// Conditional is a layer wrapping any Handler service with another Service that MUST
 /// return ['Condition'] at some point. It will be used to conditionally execute the service.
 /// Note that the handler used by this service is passed by the main service. Which means that
@@ -515,33 +461,6 @@ impl Service<Handler> for ServiceReturn2 {
 /// * `C` - The condition service. It must return Condition(bool) at some point.
 /// * `DS` - The conditionally executed service.
 /// * `ES` - The else conditionally executed service.
-///
-/// Example:
-/// ```rust
-/// use tower::ServiceBuilder;
-/// use td_tower::default_services::{conditional, Condition, Do, Else, If, ServiceReturn};
-/// use td_tower::error::TdError;
-/// use td_tower::from_fn::from_fn;
-///
-/// async fn condition() -> Result<Condition, TdError> {
-///    Ok(Condition(true))
-/// }
-///
-/// async fn test() -> Result<(), TdError> {
-///   Ok(())
-/// }
-///
-/// conditional(
-///     If(ServiceBuilder::new()
-///         .layer(from_fn(condition))
-///         .service(ServiceReturn)),
-///     Do(ServiceBuilder::new()
-///         .layer(from_fn(test))
-///         .layer(from_fn(test))
-///         .layer(from_fn(test))
-///         .service(ServiceReturn)),
-///     Else(ServiceReturn),
-/// )
 pub fn conditional<C, DS, ES>(
     If(condition): If<C>,
     Do(do_service): Do<DS>,
@@ -687,6 +606,16 @@ where
         Box::pin(async move {
             handler = condition.0.call(handler).await?.into_handler();
 
+            #[cfg(feature = "test_tower_metadata")]
+            {
+                // Metadata mode: record the used type, then run both branches
+                MetadataMutex::extract(&handler)
+                    .used_type("ConditionalService", type_of::<Input<Condition>>())
+                    .await;
+                handler = do_service.0.call(handler).await?.into_handler();
+                handler = else_service.0.call(handler).await?.into_handler();
+            }
+
             #[cfg(not(feature = "test_tower_metadata"))]
             {
                 use crate::extractors::FromHandler;
@@ -706,21 +635,6 @@ where
                 }
             }
 
-            #[cfg(feature = "test_tower_metadata")]
-            {
-                use crate::metadata::{MetadataMutex, type_of};
-
-                // This services uses the Condition
-                let Input(metadata) = MetadataMutex::from_handler(&handler)?;
-                metadata
-                    .used_type("ConditionalService", type_of::<Input<Condition>>())
-                    .await;
-
-                // Metadata tests get info from both services
-                handler = do_service.0.call(handler).await?.into_handler();
-                handler = else_service.0.call(handler).await?.into_handler();
-            }
-
             match inner.call(handler).await {
                 Ok(response) => Ok(response),
                 Err(e) => Err(e),
@@ -733,10 +647,8 @@ where
 mod tests {
     use super::*;
     use crate::ctx_service::RawOneshot;
-    use crate::extractors;
-    use crate::extractors::{Input, IntoMutSqlConnection};
+    use crate::extractors::Input;
     use crate::from_fn::from_fn;
-    use sqlx::Connection;
     use std::ops::Deref;
     use std::sync::Arc;
     use td_error::TdError;
@@ -790,17 +702,15 @@ mod tests {
         let service = ServiceBuilder::new()
             .layer(ServiceEntry::default())
             .layer(ConnectionProvider::new(db))
-            .layer(from_fn(
-                |Connection(c): extractors::Connection| async move {
-                    let mut conn = c.lock().await;
+            .layer(from_fn(|Connection(c): Connection| async move {
+                let mut conn = c.lock().await;
 
-                    let conn = conn.get_mut_connection()?;
-                    let is_ok = conn.ping().await.is_ok();
+                let mut conn = conn.get()?;
+                let is_ok = conn.ping().await.is_ok();
 
-                    assert!(is_ok);
-                    Ok::<_, TdError>(is_ok)
-                },
-            ))
+                assert!(is_ok);
+                Ok::<_, TdError>(is_ok)
+            }))
             .service(ServiceReturn);
 
         let res: bool = service.raw_oneshot(()).await.unwrap();
@@ -813,17 +723,15 @@ mod tests {
         let service = ServiceBuilder::new()
             .layer(ServiceEntry::default())
             .layer(TransactionProvider::new(db))
-            .layer(from_fn(
-                |Connection(c): extractors::Connection| async move {
-                    let mut conn = c.lock().await;
+            .layer(from_fn(|Connection(c): Connection| async move {
+                let mut conn = c.lock().await;
 
-                    let conn = conn.get_mut_connection()?;
-                    let is_ok = conn.ping().await.is_ok();
+                let mut conn = conn.get()?;
+                let is_ok = conn.ping().await.is_ok();
 
-                    assert!(is_ok);
-                    Ok::<_, TdError>(is_ok)
-                },
-            ))
+                assert!(is_ok);
+                Ok::<_, TdError>(is_ok)
+            }))
             .service(ServiceReturn);
 
         let res: bool = service.raw_oneshot(()).await.unwrap();

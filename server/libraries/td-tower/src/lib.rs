@@ -10,6 +10,7 @@ pub mod error;
 pub mod extractors;
 pub mod from_fn;
 pub mod handler;
+#[cfg(feature = "test_tower_metadata")]
 pub mod metadata;
 pub mod service_macro;
 pub mod service_provider;

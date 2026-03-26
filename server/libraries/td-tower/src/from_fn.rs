@@ -8,7 +8,7 @@
 //! Useful for creating services from async functions that operate on extracted inputs.
 
 use crate::error::FromHandlerError;
-use crate::extractors::{FromHandler, Input};
+use crate::extractors::FromHandler;
 use crate::handler::{Handler, IntoHandler};
 use futures_util::future::BoxFuture;
 use std::marker::PhantomData;
@@ -98,26 +98,27 @@ macro_rules! impl_service {
                 let mut f = self.f.clone();
 
                 Box::pin(async move {
+                    #[cfg(feature = "test_tower_metadata")]
+                    {
+                        use $crate::metadata::{type_of_val, MetadataMutex};
+
+                        let mut used_types: Vec<String> = Vec::new();
+                        $(used_types.extend(<$ty as FromHandler>::metadata_used_types());)*
+                        MetadataMutex::record_from_fn::<Out>(
+                            &handler,
+                            &type_of_val(&f),
+                            &used_types,
+                        ).await;
+                        return Ok(ready_inner.call(handler).await?);
+                    }
+
                     #[cfg(not(feature = "test_tower_metadata"))]
                     {
                         $(let $ty = $ty::from_handler(&handler)?;)*
                         let res = f($($ty,)*).await?;
-                        handler.insert(Input(std::sync::Arc::new(res)));
+                        handler.insert($crate::extractors::Input(std::sync::Arc::new(res)));
+                        Ok(ready_inner.call(handler).await?)
                     }
-
-                    #[cfg(feature = "test_tower_metadata")]
-                    {
-                        use $crate::metadata::{type_of, type_of_val, MetadataMutex};
-
-                        let Input(metadata) = MetadataMutex::from_handler(&handler)?;
-                        let fn_name = type_of_val(&f);
-                        metadata.add_fn_name(fn_name.clone()).await;
-
-                        $(metadata.used_type(fn_name.clone(), type_of::<$ty>()).await;)*
-                        metadata.created_type(fn_name.clone(), type_of::<Input<Out>>()).await;
-                    }
-
-                    Ok(ready_inner.call(handler).await?)
                 })
             }
         }

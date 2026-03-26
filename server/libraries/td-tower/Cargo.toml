@@ -68,5 +68,9 @@ tower-service = { workspace = true }
 tracing = { workspace = true }
 utoipa = { workspace = true }
 
+[dev-dependencies]
+td-database = { workspace = true, features = ["td-test"] }
+td-schema = { workspace = true, features = ["td-test"] }
+
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }
