@@ -37,25 +37,25 @@ pub mod internal {
     pub const FUNCTION_VERSIONS: &str = url!("/function-versions");
     pub const FUNCTION_VERSION: &str = url!(FUNCTION_VERSIONS, "/{function_version_id}");
 
-    #[td_type::UrlParam]
+    #[ta_objects::UrlParam]
     pub struct FunctionVersionIdParam {
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub function_version_id: FunctionVersionId,
     }
 
-    #[td_type::Dlo]
+    #[ta_objects::Dlo]
     pub struct FunctionVersionExecution {
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub function_version_id: FunctionVersionId,
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub execution: ExecutionIdName,
     }
 
-    #[td_type::Dlo]
+    #[ta_objects::Dlo]
     pub struct FunctionVersionAtId {
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub function_version_id: FunctionVersionId,
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub at: AtTime,
     }
 
@@ -68,9 +68,9 @@ pub mod internal {
     pub const WORKERS: &str = url!("/workers");
     pub const WORKER: &str = url!(WORKERS, "/{worker_id}");
 
-    #[td_type::UrlParam]
+    #[ta_objects::UrlParam]
     pub struct WorkerIdParam {
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub worker_id: WorkerId,
     }
 
@@ -80,11 +80,11 @@ pub mod internal {
     pub const FUNCTION_RUN: &str = url!(FUNCTION_RUNS, "/{function_run_id}");
     pub const FUNCTION_RUN_WORKER: &str = url!(FUNCTION_RUN, WORKER);
 
-    #[td_type::UrlParam]
+    #[ta_objects::UrlParam]
     pub struct FunctionRunWorkerIdParam {
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub function_run_id: FunctionRunId,
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub worker_id: WorkerId,
     }
 
@@ -112,9 +112,9 @@ pub const CERT_DOWNLOAD: &str = url!("/ssl-cert");
 pub const USERS: &str = url!("/users");
 pub const USER: &str = url!(USERS, "/{user}");
 
-#[td_type::UrlParam]
+#[ta_objects::UrlParam]
 pub struct UserParam {
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     user: UserIdName,
 }
 
@@ -128,9 +128,9 @@ pub const DELETE_USER: &str = url!(USER);
 pub const ROLES: &str = url!("/roles");
 pub const ROLE: &str = url!(ROLES, "/{role}");
 
-#[td_type::UrlParam]
+#[ta_objects::UrlParam]
 pub struct RoleParam {
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     role: RoleIdName,
 }
 
@@ -144,11 +144,11 @@ pub const DELETE_ROLE: &str = url!(ROLE);
 pub const PERMISSIONS: &str = url!(ROLE, "/permissions");
 pub const PERMISSION: &str = url!(PERMISSIONS, "/{permission}");
 
-#[td_type::UrlParam]
+#[ta_objects::UrlParam]
 pub struct RolePermissionParam {
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     role: RoleIdName,
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     permission: PermissionIdName,
 }
 
@@ -160,11 +160,11 @@ pub const DELETE_PERMISSION: &str = url!(PERMISSION);
 pub const USER_ROLES: &str = url!(ROLE, "/users");
 pub const USER_ROLE: &str = url!(USER_ROLES, "/{user}");
 
-#[td_type::UrlParam]
+#[ta_objects::UrlParam]
 pub struct UserRoleParam {
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     role: RoleIdName,
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     user: UserIdName,
 }
 
@@ -177,9 +177,9 @@ pub const DELETE_USER_ROLE: &str = url!(USER_ROLE);
 pub const COLLECTIONS: &str = url!("/collections");
 pub const COLLECTION: &str = url!(COLLECTIONS, "/{collection}");
 
-#[td_type::UrlParam]
+#[ta_objects::UrlParam]
 pub struct CollectionParam {
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     collection: CollectionIdName,
 }
 
@@ -189,11 +189,11 @@ pub const CREATE_COLLECTION: &str = url!(COLLECTIONS);
 pub const UPDATE_COLLECTION: &str = url!(COLLECTION);
 pub const DELETE_COLLECTION: &str = url!(COLLECTION);
 
-#[td_type::UrlParam]
+#[ta_objects::UrlParam]
 pub struct InterCollectionPermissionParam {
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     collection: CollectionIdName,
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     permission: InterCollectionPermissionIdName,
 }
 
@@ -208,11 +208,11 @@ pub const DELETE_INTER_COLLECTION_PERMISSION: &str = url!(INTER_COLLECTION_PERMI
 pub const FUNCTIONS: &str = url!(COLLECTION, "/functions");
 pub const FUNCTION: &str = url!(FUNCTIONS, "/{function}");
 
-#[td_type::UrlParam]
+#[ta_objects::UrlParam]
 pub struct FunctionParam {
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     collection: CollectionIdName,
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     function: FunctionIdName,
 }
 
@@ -229,31 +229,31 @@ pub const FUNCTION_HISTORY: &str = url!(FUNCTION, "/history");
 pub const FUNCTION_EXECUTE: &str = url!(FUNCTION, "/execute");
 
 // Function versions
-#[td_type::QueryParam]
+#[ta_objects::QueryParam]
 pub struct AtTimeParam {
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     #[serde(default)]
     pub at: AtTime,
 }
 
-#[td_type::QueryParam]
+#[ta_objects::QueryParam]
 pub struct SampleOffsetLenParam {
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     #[serde(default)]
     offset: SampleOffset,
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     #[serde(default)]
     len: SampleLen,
 }
 
-#[td_type::QueryParam]
+#[ta_objects::QueryParam]
 pub struct FileFormatParam {
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     #[serde(default)]
     format: FileFormat,
 }
 
-#[td_type::typed_enum]
+#[ta_objects::typed_enum]
 #[derive(Default)]
 pub enum FileFormat {
     #[default]
@@ -262,16 +262,16 @@ pub enum FileFormat {
     Json,
 }
 
-#[td_type::QueryParam]
+#[ta_objects::QueryParam]
 pub struct SqlParam {
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     #[serde(default)]
     sql: Option<Sql>,
 }
 
-#[td_type::QueryParam]
+#[ta_objects::QueryParam]
 pub struct UncommittedParam {
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     #[serde(default)]
     uncommitted: UncommittedStatus,
 }
@@ -280,11 +280,11 @@ pub struct UncommittedParam {
 pub const TABLES: &str = url!(COLLECTION, "/tables");
 pub const TABLE: &str = url!(TABLES, "/{table}");
 
-#[td_type::UrlParam]
+#[ta_objects::UrlParam]
 pub struct TableParam {
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     collection: CollectionIdName,
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     table: TableIdName,
 }
 
@@ -305,9 +305,9 @@ pub const RUNTIME_INFO: &str = url!("/runtime-info");
 pub const EXECUTIONS: &str = url!("/executions");
 pub const EXECUTION: &str = url!(EXECUTIONS, "/{execution}");
 
-#[td_type::UrlParam]
+#[ta_objects::UrlParam]
 pub struct ExecutionParam {
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     pub execution: ExecutionIdName,
 }
 
@@ -316,7 +316,7 @@ pub const EXECUTION_RECOVER: &str = url!(EXECUTION, "/recover");
 pub const EXECUTION_DETAILS: &str = url!(EXECUTION, "/details");
 pub const EXECUTION_LIST: &str = url!(EXECUTIONS);
 
-#[td_type::QueryParam]
+#[ta_objects::QueryParam]
 pub struct AllowDisabledParam {
     #[serde(default)]
     pub with_disabled: AllowDisabled,
@@ -328,9 +328,9 @@ pub const EXECUTION_READ: &str = url!(EXECUTION);
 pub const TRANSACTIONS: &str = url!("/transactions");
 pub const TRANSACTION: &str = url!(TRANSACTIONS, "/{transaction}");
 
-#[td_type::UrlParam]
+#[ta_objects::UrlParam]
 pub struct TransactionParam {
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     transaction: TransactionIdName,
 }
 
@@ -345,16 +345,16 @@ pub const SYNCHROTRON_READ: &str = url!("/synchrotron");
 pub const WORKERS: &str = url!("/workers");
 pub const WORKER: &str = url!(WORKERS, "/{worker}");
 
-#[td_type::UrlParam]
+#[ta_objects::UrlParam]
 pub struct WorkerParam {
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     worker: WorkerIdName,
 }
 
 pub const WORKERS_LIST: &str = url!(WORKERS);
 pub const WORKER_LOGS: &str = url!(WORKER, "/logs");
 
-#[td_type::typed_enum]
+#[ta_objects::typed_enum]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 #[derive(Default)]
@@ -409,12 +409,12 @@ impl LogsExtension {
     }
 }
 
-#[td_type::QueryParam]
+#[ta_objects::QueryParam]
 pub struct WorkerLogsQueryParams {
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     #[serde(default = "extension_default")]
     extension: Vec<LogsExtension>,
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     #[serde(default)]
     /// Empty means all retries available.
     retry: Vec<LogsCastNumber>,
@@ -424,13 +424,13 @@ fn extension_default() -> Vec<LogsExtension> {
     vec![LogsExtension::All]
 }
 
-#[td_type::Dlo]
+#[ta_objects::Dlo]
 pub struct WorkerLogsParams {
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     worker: WorkerIdName,
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     extension: Vec<LogsExtension>,
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     retry: Vec<LogsCastNumber>,
 }
 
@@ -448,13 +448,13 @@ impl WorkerLogsParams {
 pub const FUNCTION_RUNS: &str = url!(FUNCTION, "/executions");
 pub const FUNCTION_RUN: &str = url!(FUNCTION_RUNS, "/{execution}");
 
-#[td_type::UrlParam]
+#[ta_objects::UrlParam]
 pub struct FunctionRunParam {
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     collection: CollectionIdName,
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     function: FunctionIdName,
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     execution: ExecutionIdName,
 }
 

@@ -4,14 +4,14 @@
 
 use crate::dxo::dependency::DependencyDBWithNames;
 use crate::dxo::function::FunctionDBWithNames;
-use crate::dxo::table::TableDBWithNames;
-use crate::dxo::trigger::TriggerDBWithNames;
-use crate::table_ref::Versions;
-use crate::transaction::map::TransactionMapper;
-use crate::types::basic::{FunctionId, TableId, TransactionKey};
-use crate::types::graph::{
+use crate::dxo::graph::{
     FunctionNode, GraphDependency, GraphEdge, GraphNode, GraphOutput, TableNode,
 };
+use crate::dxo::table::TableDBWithNames;
+use crate::dxo::trigger::TriggerDBWithNames;
+use crate::transaction::map::TransactionMapper;
+use crate::types::basic::{FunctionId, TableId, TransactionKey};
+use crate::types::table_ref::Versions;
 use petgraph::dot::{Config, Dot};
 use petgraph::prelude::{DiGraph, EdgeRef, NodeIndex};
 use petgraph::visit::IntoNodeReferences;
@@ -21,6 +21,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::hash::Hash;
 use std::ops::Deref;
+use ta_objects::Buildable;
 use td_error::{TdError, td_error};
 
 #[td_error]

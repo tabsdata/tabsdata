@@ -11,13 +11,14 @@ use crate::types::basic::{
     SchemaFieldType, Sql, TableIdName, UncommittedStatus,
 };
 use polars::prelude::Field;
+use ta_objects::Buildable;
 use td_error::TdError;
 
-#[td_type::Dlo]
+#[ta_objects::Dlo]
 pub struct CollectionAtName {
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     collection: CollectionIdName,
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     at: AtTime,
 }
 
@@ -30,13 +31,13 @@ impl CollectionAtName {
     }
 }
 
-#[td_type::Dlo]
+#[ta_objects::Dlo]
 pub struct FunctionAtIdName {
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     collection: CollectionIdName,
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     function: FunctionIdName,
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     at: AtTime,
 }
 
@@ -50,13 +51,13 @@ impl FunctionAtIdName {
     }
 }
 
-#[td_type::Dlo]
+#[ta_objects::Dlo]
 pub struct TableAtIdName {
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     pub collection: CollectionIdName,
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     pub table: TableIdName,
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     pub at: AtTime,
 }
 
@@ -70,16 +71,16 @@ impl TableAtIdName {
     }
 }
 
-#[td_type::Dlo]
+#[ta_objects::Dlo]
 pub struct TableDataVersionAtIdName {
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     collection: CollectionIdName,
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     table: TableIdName,
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     at: AtTime,
     #[builder(default)]
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     uncommitted: UncommittedStatus,
 }
 
@@ -94,21 +95,21 @@ impl TableDataVersionAtIdName {
     }
 }
 
-#[td_type::Dlo]
+#[ta_objects::Dlo]
 pub struct TableSampleAtName {
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     collection: CollectionIdName,
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     table: TableIdName,
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     at: AtTime,
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     offset: SampleOffset,
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     len: SampleLen,
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     format: FileFormat,
-    #[td_type(extractor)]
+    #[dxo(extractor)]
     sql: Option<Sql>,
 }
 
@@ -132,7 +133,7 @@ impl TableSampleAtName {
     }
 }
 
-#[td_type::Dto]
+#[ta_objects::Dto]
 #[derive(Eq, PartialEq)]
 pub struct SchemaField {
     name: SchemaFieldName,
@@ -151,7 +152,7 @@ impl TryFrom<Field> for SchemaField {
     }
 }
 
-#[td_type::Dto]
+#[ta_objects::Dto]
 #[derive(Eq, PartialEq)]
 pub struct TableSchema {
     pub fields: Vec<SchemaField>,
