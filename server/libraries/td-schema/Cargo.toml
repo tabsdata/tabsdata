@@ -48,7 +48,8 @@ ignored = ["openssl", "td-build", "td-schema", "toml"]
 
 # External dependencies
 
-sqlx = { workspace = true }
+sea-query = { workspace = true, features = ["derive"] }
+sqlx = { workspace = true, features = ["sqlite"] }
 tokio = { workspace = true }
 
 [dev-dependencies]
