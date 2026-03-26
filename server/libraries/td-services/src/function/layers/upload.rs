@@ -9,7 +9,7 @@ use td_objects::dxo::function_upload::FunctionUpload;
 use td_objects::types::basic::{BundleHash, BundleId, CollectionId, DataLocation, StorageVersion};
 use td_storage::location::StorageLocation;
 use td_storage::{Storage, StorageError};
-use td_tower::extractors::{Input, SrvCtx};
+use td_tower::extractors::{Ref};
 use tokio::io::BufWriter;
 use tokio_util::io::StreamReader;
 
@@ -26,12 +26,12 @@ enum UploadError {
 }
 
 pub async fn upload_function_write_to_storage(
-    SrvCtx(storage): SrvCtx<Storage>,
-    Input(bundle_id): Input<BundleId>,
-    Input(storage_version): Input<StorageVersion>,
-    Input(data_location): Input<DataLocation>,
-    Input(collection_id): Input<CollectionId>,
-    Input(request): Input<FunctionUpload>,
+    storage: Ref<Storage>,
+    bundle_id: Ref<BundleId>,
+    storage_version: Ref<StorageVersion>,
+    data_location: Ref<DataLocation>,
+    collection_id: Ref<CollectionId>,
+    request: Ref<FunctionUpload>,
 ) -> Result<BundleHash, TdError> {
     let stream = request
         .stream()

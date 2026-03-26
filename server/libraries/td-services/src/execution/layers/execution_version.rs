@@ -4,19 +4,18 @@
 
 use std::ops::Deref;
 use td_error::{ApiError, TdError, api_error};
-use td_objects::dxo::crudl::handle_sql_err;
+use td_objects::and;
 use td_objects::dxo::execution::{ExecutionDB, ExecutionResponse, ExecutionResponseInternal};
 use td_objects::dxo::function::FunctionDBWithNames;
 use td_objects::dxo::function_run::FunctionRunDB;
-use td_objects::sql::{DaoQueries, SelectBy};
 use td_objects::types::basic::{FunctionRunStatus, FunctionVersionId, SkipIfRunning};
 use td_tower::default_services::Condition;
-use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
+use td_tower::extractors::{MutRef, Ref};
 use tracing::debug;
 
 pub async fn assert_function_version(
-    Input(function_version_id): Input<FunctionVersionId>,
-    Input(function): Input<FunctionDBWithNames>,
+    function_version_id: Ref<FunctionVersionId>,
+    function: Ref<FunctionDBWithNames>,
 ) -> Result<(), TdError> {
     if function.id != *function_version_id {
         Err(api_error!(
@@ -31,26 +30,17 @@ pub async fn assert_function_version(
 }
 
 pub async fn skip_if_running(
-    Connection(conn): Connection,
-    SrvCtx(queries): SrvCtx<DaoQueries>,
-    Input(function_version_id): Input<FunctionVersionId>,
-    Input(skip_if_running): Input<SkipIfRunning>,
-    Input(latest_execution): Input<Option<ExecutionDB>>,
+    mut conn: MutRef<DynamicConnection<'static>>,
+    function_version_id: Ref<FunctionVersionId>,
+    skip_if_running: Ref<SkipIfRunning>,
+    latest_execution: Ref<Option<ExecutionDB>>,
 ) -> Result<Condition, TdError> {
     let running = match latest_execution.as_ref() {
         Some(latest_execution) => {
-            let mut conn = conn.lock().await;
-            let conn = conn.get_mut_connection()?;
 
-            let function_run: FunctionRunDB = queries
-                .select_by::<FunctionRunDB>(&(
-                    function_version_id.deref().clone(),
-                    latest_execution.id.clone(),
-                ))?
-                .build_query_as()
-                .fetch_one(conn)
-                .await
-                .map_err(handle_sql_err)?;
+            let function_run = conn
+                .fetch_one::<FunctionRunDB>(and!(function_version_id.deref(), &latest_execution.id))
+                .await?;
 
             match function_run.status {
                 FunctionRunStatus::Committed
@@ -80,14 +70,14 @@ pub async fn skip_if_running(
 }
 
 pub async fn executed_execute_internal_response(
-    Input(response): Input<ExecutionResponse>,
+    response: Ref<ExecutionResponse>,
 ) -> Result<ExecutionResponseInternal, TdError> {
     let response = ExecutionResponseInternal::Executed(Box::new(response.deref().clone()));
     Ok(response)
 }
 
 pub async fn already_running_execute_internal_response(
-    Input(latest_execution): Input<ExecutionDB>,
+    latest_execution: Ref<ExecutionDB>,
 ) -> Result<ExecutionResponseInternal, TdError> {
     let response = ExecutionResponseInternal::AlreadyRunning(latest_execution.id.clone());
     Ok(response)

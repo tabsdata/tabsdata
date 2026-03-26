@@ -4,7 +4,9 @@
 
 use crate::function::layers::read::vec_create_table_dependency;
 use ta_services::factory::service_factory;
+use td_authz::tower::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
 use td_authz::{Authz, AuthzContext};
+use td_objects::And;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::dxo::dependency::DependencyDBWithNames;
 use td_objects::dxo::function::{
@@ -13,17 +15,12 @@ use td_objects::dxo::function::{
 use td_objects::dxo::table::TableDBWithNames;
 use td_objects::dxo::trigger::TriggerDBWithNames;
 use td_objects::rest_urls::FunctionParam;
-use td_objects::sql::DaoQueries;
-use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
-use td_objects::tower_service::from::{
-    BuildService, ConvertIntoMapService, ExtractNameService, ExtractService, ExtractVecService,
-    SetService, TryIntoService, With, combine,
-};
-use td_objects::tower_service::sql::{By, SqlFindService, SqlSelectAllService, SqlSelectService};
+use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
     AtTime, CollectionId, CollectionIdName, FunctionId, FunctionIdName, TableId, TableName,
 };
 use td_objects::types::composed::{TableDependency, TableTrigger};
+use td_queries::By;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -33,7 +30,6 @@ use td_tower::layers;
     request = ReadRequest<FunctionParam>,
     response = FunctionWithTables,
     connection = ConnectionProvider,
-    context = DaoQueries,
     context = AuthzContext,
 )]
 fn service() {
@@ -43,11 +39,10 @@ fn service() {
         // Extract from request.
         from_fn(With::<FunctionParam>::extract::<CollectionIdName>),
         from_fn(With::<FunctionParam>::extract::<FunctionIdName>),
-        from_fn(combine::<CollectionIdName, FunctionIdName>),
         // Read function version
         from_fn(With::<RequestContext>::extract::<AtTime>),
         from_fn(
-            By::<(CollectionIdName, FunctionIdName)>::select_version::<
+            By::<And![CollectionIdName, FunctionIdName]>::fetch_one_version::<
                 { FunctionDBWithNames::Available },
                 FunctionDBWithNames,
             >
@@ -60,62 +55,73 @@ fn service() {
         from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
         // Convert to function read
         from_fn(With::<FunctionDBWithNames>::try_convert_to::<FunctionBuilder, _>),
-        from_fn(With::<FunctionBuilder>::build::<Function, _>),
+        from_fn(With::<FunctionBuilder>::build::<Function>),
         from_fn(With::<Function>::try_convert_to::<FunctionWithTablesBuilder, _>),
         // Read tables
         from_fn(
-            By::<FunctionId>::select_all_versions::<{ TableDBWithNames::User }, TableDBWithNames>
+            By::<FunctionId>::fetch_all_versions::<{ TableDBWithNames::User }, TableDBWithNames>
         ),
         from_fn(With::<TableDBWithNames>::vec_convert_to::<TableName, _>),
         from_fn(With::<Vec<TableName>>::set::<FunctionWithTablesBuilder>),
         // Read triggers and dependencies
         // Triggers
         from_fn(
-            By::<FunctionId>::select_all_versions::<
+            By::<FunctionId>::fetch_all_versions::<
                 { TriggerDBWithNames::Active },
                 TriggerDBWithNames,
             >
         ),
-        from_fn(With::<TriggerDBWithNames>::extract_vec::<TableId>),
-        from_fn(By::<TableId>::find_versions::<{ TableDBWithNames::Available }, TableDBWithNames>),
+        from_fn(With::<Vec<TriggerDBWithNames>>::extract::<Vec<TableId>>),
+        from_fn(
+            By::<Vec<TableId>>::fetch_all_versions::<
+                { TableDBWithNames::Available },
+                TableDBWithNames,
+            >
+        ),
         from_fn(With::<TableDBWithNames>::vec_convert_to::<TableTrigger, _>),
         from_fn(With::<Vec<TableTrigger>>::set::<FunctionWithTablesBuilder>),
         // Dependencies
         from_fn(
-            By::<FunctionId>::select_all_versions::<
+            By::<FunctionId>::fetch_all_versions::<
                 { DependencyDBWithNames::User },
                 DependencyDBWithNames,
             >
         ),
-        from_fn(With::<DependencyDBWithNames>::extract_vec::<TableId>),
-        from_fn(By::<TableId>::find_versions::<{ TableDBWithNames::Available }, TableDBWithNames>),
+        from_fn(With::<Vec<DependencyDBWithNames>>::extract::<Vec<TableId>>),
+        from_fn(
+            By::<Vec<TableId>>::fetch_all_versions::<
+                { TableDBWithNames::Available },
+                TableDBWithNames,
+            >
+        ),
         from_fn(vec_create_table_dependency),
         from_fn(With::<Vec<TableDependency>>::set::<FunctionWithTablesBuilder>),
         // Build
-        from_fn(With::<FunctionWithTablesBuilder>::build::<FunctionWithTables, _>),
+        from_fn(With::<FunctionWithTablesBuilder>::build::<FunctionWithTables>),
     )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
     use ta_services::service::TdService;
-    use td_database::sql::DbPool;
+    use td_database::pool::TdPool;
     use td_error::TdError;
+    use td_objects::Buildable;
     use td_objects::dxo::function::FunctionRegister;
-    use td_objects::test_utils::seed_collection::seed_collection;
-    use td_objects::test_utils::seed_function::seed_function;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues, RoleId,
         TableNameDto, UserId, UserName,
     };
     use td_objects::types::composed::{TableDependency, TableDependencyDto};
+    use td_queries::test_utils::SeedQueries;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_read_function_version(db: DbPool) {
+    async fn test_tower_metadata_read_function_version(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
         ReadFunctionService::with_defaults(db)
@@ -127,11 +133,10 @@ mod tests {
                 // Extract from request.
                 type_of_val(&With::<FunctionParam>::extract::<CollectionIdName>),
                 type_of_val(&With::<FunctionParam>::extract::<FunctionIdName>),
-                type_of_val(&combine::<CollectionIdName, FunctionIdName>),
                 // Read function version
                 type_of_val(&With::<RequestContext>::extract::<AtTime>),
                 type_of_val(
-                    &By::<(CollectionIdName, FunctionIdName)>::select_version::<
+                    &By::<And![CollectionIdName, FunctionIdName]>::fetch_one_version::<
                         { FunctionDBWithNames::Available },
                         FunctionDBWithNames,
                     >,
@@ -144,11 +149,11 @@ mod tests {
                 type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
                 // Convert to function read
                 type_of_val(&With::<FunctionDBWithNames>::try_convert_to::<FunctionBuilder, _>),
-                type_of_val(&With::<FunctionBuilder>::build::<Function, _>),
+                type_of_val(&With::<FunctionBuilder>::build::<Function>),
                 type_of_val(&With::<Function>::try_convert_to::<FunctionWithTablesBuilder, _>),
                 // Read tables
                 type_of_val(
-                    &By::<FunctionId>::select_all_versions::<
+                    &By::<FunctionId>::fetch_all_versions::<
                         { TableDBWithNames::User },
                         TableDBWithNames,
                     >,
@@ -158,14 +163,14 @@ mod tests {
                 // Read triggers and dependencies
                 // Triggers
                 type_of_val(
-                    &By::<FunctionId>::select_all_versions::<
+                    &By::<FunctionId>::fetch_all_versions::<
                         { TriggerDBWithNames::Active },
                         TriggerDBWithNames,
                     >,
                 ),
-                type_of_val(&With::<TriggerDBWithNames>::extract_vec::<TableId>),
+                type_of_val(&With::<Vec<TriggerDBWithNames>>::extract::<Vec<TableId>>),
                 type_of_val(
-                    &By::<TableId>::find_versions::<
+                    &By::<Vec<TableId>>::fetch_all_versions::<
                         { TableDBWithNames::Available },
                         TableDBWithNames,
                     >,
@@ -174,14 +179,14 @@ mod tests {
                 type_of_val(&With::<Vec<TableTrigger>>::set::<FunctionWithTablesBuilder>),
                 // Dependencies
                 type_of_val(
-                    &By::<FunctionId>::select_all_versions::<
+                    &By::<FunctionId>::fetch_all_versions::<
                         { DependencyDBWithNames::User },
                         DependencyDBWithNames,
                     >,
                 ),
-                type_of_val(&With::<DependencyDBWithNames>::extract_vec::<TableId>),
+                type_of_val(&With::<Vec<DependencyDBWithNames>>::extract::<Vec<TableId>>),
                 type_of_val(
-                    &By::<TableId>::find_versions::<
+                    &By::<Vec<TableId>>::fetch_all_versions::<
                         { TableDBWithNames::Available },
                         TableDBWithNames,
                     >,
@@ -189,15 +194,16 @@ mod tests {
                 type_of_val(&vec_create_table_dependency),
                 type_of_val(&With::<Vec<TableDependency>>::set::<FunctionWithTablesBuilder>),
                 // Build
-                type_of_val(&With::<FunctionWithTablesBuilder>::build::<FunctionWithTables, _>),
+                type_of_val(&With::<FunctionWithTablesBuilder>::build::<FunctionWithTables>),
             ]);
     }
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_read(db: DbPool) -> Result<(), TdError> {
-        let collection =
-            seed_collection(&db, &CollectionName::try_from("cofnig")?, &UserId::admin()).await;
+    async fn test_read(db: TdPool) -> Result<(), TdError> {
+        let collection = db
+            .seed_collection(&CollectionName::try_from("cofnig")?, &UserId::admin())
+            .await?;
 
         let dependencies = Some(vec![TableDependencyDto::try_from("cofnig/table@HEAD~2")?]);
         let triggers = None;
@@ -216,19 +222,20 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let function = seed_function(&db, &collection, &create).await;
+        let function = db.seed_function(&collection, &create).await?;
 
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).read(
                 FunctionParam::builder()
-                    .try_collection(format!("~{}", function.collection_id))?
-                    .try_function("joaquin_workout")?
+                    .collection(CollectionIdName::from_str(&format!(
+                        "~{}",
+                        function.collection_id
+                    ))?)
+                    .function(FunctionIdName::from_str("joaquin_workout")?)
                     .build()?,
             );
 
-        let service = ReadFunctionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = ReadFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         let response = response?;
 

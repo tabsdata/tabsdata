@@ -12,7 +12,7 @@ use crate::execution::layers::read::{
 use crate::graph::layers::{FunctionOrTable, GraphConfig, generate_td_graph};
 use ta_services::factory::service_factory;
 use td_execution::TransactionBy;
-use td_objects::dxo::States;
+use td_objects::States;
 use td_objects::dxo::crudl::ReadRequest;
 use td_objects::dxo::dependency::DependencyDBWithNames;
 use td_objects::dxo::execution::{ExecutionDB, ExecutionResponse};
@@ -21,14 +21,11 @@ use td_objects::dxo::table::TableDB;
 use td_objects::dxo::transaction::TransactionDB;
 use td_objects::dxo::trigger::TriggerDBWithNames;
 use td_objects::rest_urls::ExecutionParam;
-use td_objects::sql::DaoQueries;
-use td_objects::tower_service::from::{
-    ExtractNameService, ExtractService, IntoService, TryIntoService, With,
-};
-use td_objects::tower_service::sql::{By, SqlSelectAllService, SqlSelectService};
+use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
     AtTime, ExecutionId, ExecutionIdName, FunctionId, FunctionVersionId, TriggeredOn,
 };
+use td_queries::By;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -55,7 +52,6 @@ impl<const FUNCTION_STATE: u8>
     request = ReadRequest<ExecutionParam>,
     response = ExecutionResponse,
     connection = ConnectionProvider,
-    context = DaoQueries,
     context = TransactionBy,
 )]
 fn service<const FUNCTION_STATE: u8>()
@@ -67,12 +63,12 @@ where
         from_fn(With::<ReadRequest<ExecutionParam>>::extract_name::<ExecutionParam>),
         // Find Plan and its TriggeredOn (and convert to AtTime).
         from_fn(With::<ExecutionParam>::extract::<ExecutionIdName>),
-        from_fn(By::<ExecutionIdName>::select::<ExecutionDB>),
+        from_fn(By::<ExecutionIdName>::fetch_one::<ExecutionDB>),
         from_fn(With::<ExecutionDB>::extract::<TriggeredOn>),
         from_fn(With::<TriggeredOn>::try_convert_to::<AtTime, _>),
         // Find function that triggered the plan.
         from_fn(With::<ExecutionDB>::extract::<FunctionVersionId>),
-        from_fn(By::<FunctionVersionId>::select::<FunctionDBWithNames>),
+        from_fn(By::<FunctionVersionId>::fetch_one::<FunctionDBWithNames>),
         // Get recursion options
         from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
         from_fn(With::<FunctionId>::convert_to::<FunctionOrTable>),
@@ -83,7 +79,7 @@ where
         from_fn(build_execution_plan),
         // Get transactions
         from_fn(With::<ExecutionDB>::extract::<ExecutionId>),
-        from_fn(By::<ExecutionId>::select_all::<TransactionDB>),
+        from_fn(By::<ExecutionId>::fetch_all::<TransactionDB>),
         from_fn(build_existing_transaction_map),
         // Create execution plan
         from_fn(resolve_execution_plan_versions),
@@ -96,9 +92,11 @@ where
 mod tests {
     use super::*;
     use crate::execution::services::execute::tests::test_execute;
+    use std::str::FromStr;
     use ta_services::service::TdService;
-    use td_database::sql::DbPool;
+    use td_database::pool::TdPool;
     use td_error::TdError;
+    use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
     use td_tower::ctx_service::RawOneshot;
@@ -106,7 +104,7 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_read_execution(db: DbPool) {
+    async fn test_tower_metadata_read_execution(db: TdPool) {
         use crate::graph::layers::build::GraphBuilder;
         use td_tower::metadata::type_of_val;
 
@@ -118,12 +116,12 @@ mod tests {
                 type_of_val(&With::<ReadRequest<ExecutionParam>>::extract_name::<ExecutionParam>),
                 // Find Plan and its TriggeredOn (and convert to AtTime).
                 type_of_val(&With::<ExecutionParam>::extract::<ExecutionIdName>),
-                type_of_val(&By::<ExecutionIdName>::select::<ExecutionDB>),
+                type_of_val(&By::<ExecutionIdName>::fetch_one::<ExecutionDB>),
                 type_of_val(&With::<ExecutionDB>::extract::<TriggeredOn>),
                 type_of_val(&With::<TriggeredOn>::try_convert_to::<AtTime, _>),
                 // Find function that triggered the plan.
                 type_of_val(&With::<ExecutionDB>::extract::<FunctionVersionId>),
-                type_of_val(&By::<FunctionVersionId>::select::<FunctionDBWithNames>),
+                type_of_val(&By::<FunctionVersionId>::fetch_one::<FunctionDBWithNames>),
                 // Get recursion options
                 type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
                 type_of_val(&With::<FunctionId>::convert_to::<FunctionOrTable>),
@@ -150,7 +148,7 @@ mod tests {
                 type_of_val(&build_execution_plan),
                 // Get transactions
                 type_of_val(&With::<ExecutionDB>::extract::<ExecutionId>),
-                type_of_val(&By::<ExecutionId>::select_all::<TransactionDB>),
+                type_of_val(&By::<ExecutionId>::fetch_all::<TransactionDB>),
                 type_of_val(&build_existing_transaction_map),
                 // Create execution plan
                 type_of_val(&resolve_execution_plan_versions),
@@ -161,16 +159,15 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_read_execution(db: DbPool) -> Result<(), TdError> {
+    async fn test_read_execution(db: TdPool) -> Result<(), TdError> {
         let execution = test_execute(db.clone(), false, false, true, false).await?;
 
-        let service = ExecutionReadService::<{ FunctionDB::Executable }>::with_defaults(db.clone())
-            .service()
-            .await;
+        let service =
+            ExecutionReadService::<{ FunctionDB::Executable }>::with_defaults(db.clone()).service();
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).read(
                 ExecutionParam::builder()
-                    .try_execution(execution.id.to_string())?
+                    .execution(ExecutionIdName::from_str(&execution.id.to_string())?)
                     .build()?,
             );
 

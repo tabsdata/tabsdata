@@ -10,7 +10,9 @@ use crate::function::layers::{
 };
 use std::collections::HashMap;
 use ta_services::factory::service_factory;
+use td_authz::tower::{AuthzOn, CollAdmin, CollDev};
 use td_authz::{Authz, AuthzContext};
+use td_objects::And;
 use td_objects::dxo::bundle::BundleDB;
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
@@ -21,21 +23,15 @@ use td_objects::dxo::function::{
 use td_objects::dxo::table::TableDB;
 use td_objects::dxo::trigger::TriggerDBWithNames;
 use td_objects::rest_urls::CollectionParam;
-use td_objects::sql::DaoQueries;
-use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev};
-use td_objects::tower_service::from::{
-    BuildService, DefaultService, EmptyVecService, ExtractDataService, ExtractNameService,
-    ExtractService, SetService, TryIntoService, UpdateService, With, combine,
-};
-use td_objects::tower_service::sql::{
-    By, SqlAssertNotExistsService, SqlDeleteService, SqlSelectService, insert,
-};
+use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
     AtTime, BundleId, CollectionId, CollectionIdName, CollectionName, DataLocation, Enabled,
     FunctionId, FunctionName, FunctionVersionId, ReuseFrozen, StorageVersion, TableNameDto,
     TableType, WorkerConfig, WorkerTypeDto,
 };
 use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
+use td_queries::By;
+use td_queries::insert;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -45,7 +41,6 @@ use td_tower::layers;
     request = CreateRequest<CollectionParam, FunctionRegister>,
     response = Function,
     connection = TransactionProvider,
-    context = DaoQueries,
     context = AuthzContext,
 )]
 fn service() {
@@ -64,7 +59,7 @@ fn service() {
         // Extract collection from request.
         from_fn(With::<CollectionParam>::extract::<CollectionIdName>),
         // Get collection. Extract collection id and name.
-        from_fn(By::<CollectionIdName>::select::<CollectionDB>),
+        from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
         // check requester is coll_admin or coll_dev for the function's collection
         from_fn(AuthzOn::<CollectionId>::set),
@@ -73,11 +68,10 @@ fn service() {
         // Get function.
         from_fn(With::<FunctionRegister>::extract::<FunctionName>),
         // Check function name does not exist in collection at the time of register.
-        from_fn(combine::<CollectionId, FunctionName>),
         from_fn(With::<RequestContext>::extract::<AtTime>),
         // Validate function does not exist
         from_fn(
-            By::<(CollectionId, FunctionName)>::assert_version_not_exists::<
+            By::<And![CollectionId, FunctionName]>::assert_version_not_exists::<
                 { FunctionDBWithNames::Available },
                 FunctionDBWithNames,
             >
@@ -95,7 +89,7 @@ fn service() {
         from_fn(With::<StorageVersion>::set::<FunctionDBBuilder>),
         from_fn(With::<DataLocation>::set::<FunctionDBBuilder>),
         from_fn(With::<Enabled>::set::<FunctionDBBuilder>),
-        from_fn(With::<FunctionDBBuilder>::build::<FunctionDB, _>),
+        from_fn(With::<FunctionDBBuilder>::build::<FunctionDB>),
         from_fn(insert::<FunctionDB>),
         // Remove from bundles
         from_fn(With::<FunctionDB>::extract::<BundleId>),
@@ -127,9 +121,9 @@ fn service() {
         register_workers(),
         // Response
         from_fn(With::<FunctionDB>::extract::<FunctionVersionId>),
-        from_fn(By::<FunctionVersionId>::select::<FunctionDBWithNames>),
+        from_fn(By::<FunctionVersionId>::fetch_one::<FunctionDBWithNames>),
         from_fn(With::<FunctionDBWithNames>::try_convert_to::<FunctionBuilder, _>),
-        from_fn(With::<FunctionBuilder>::build::<Function, _>),
+        from_fn(With::<FunctionBuilder>::build::<Function>),
     )
 }
 
@@ -139,32 +133,32 @@ mod tests {
     use crate::function::layers::register::RegisterFunctionError;
     use crate::function::services::tests::assert_register;
     use std::collections::HashMap;
+    use std::str::FromStr;
     use ta_services::service::TdService;
-    use td_database::sql::DbPool;
+    use td_authz::tower::AuthzError;
+    use td_database::pool::TdPool;
     use td_error::TdError;
     use td_execution::VersionResolverError;
-    use td_objects::dxo::crudl::handle_sql_err;
+    use td_objects::Buildable;
     use td_objects::dxo::worker::WorkerDB;
-    use td_objects::sql::SelectBy;
-    use td_objects::test_utils::seed_collection::seed_collection;
-    use td_objects::test_utils::seed_function::seed_function;
-    use td_objects::test_utils::seed_inter_collection_permission::seed_inter_collection_permission;
-    use td_objects::tower_service::authz::AuthzError;
-    use td_objects::tower_service::sql::SqlError;
+    use td_objects::errors::SqlError;
     use td_objects::types::basic::{
         AccessTokenId, Decorator, FunctionRuntimeValues, RoleId, ToCollectionId, UserId,
         WorkerMessageStatus, WorkerStatus, WorkerType,
     };
+    use td_queries::BasicQueries;
+    use td_queries::test_utils::SeedQueries;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_register_function(db: DbPool) {
+    async fn test_tower_metadata_register_function(db: TdPool) {
         use crate::function::layers::register::{
             build_dependency_versions, build_table_versions, build_tables_trigger_versions,
             build_trigger_versions, build_workers, stop_current_workers,
         };
+        use td_authz::tower::InterColl;
         use td_objects::dxo::dependency::{DependencyDB, DependencyDBBuilder};
         use td_objects::dxo::inter_collection_access::{
             InterCollectionAccess, InterCollectionAccessBuilder,
@@ -172,11 +166,8 @@ mod tests {
         use td_objects::dxo::table::{TableDB, TableDBBuilder};
         use td_objects::dxo::trigger::{TriggerDB, TriggerDBBuilder};
         use td_objects::dxo::worker::{WorkerDB, WorkerDBBuilder};
-        use td_objects::tower_service::authz::InterColl;
-        use td_objects::tower_service::from::{
-            ConvertIntoMapService, TryIntoService, UpdateService, VecBuildService, With,
-        };
-        use td_objects::tower_service::sql::insert_vec;
+        use td_objects::tower_service::with::With;
+        use td_queries::insert_vec;
 
         use td_tower::metadata::type_of_val;
 
@@ -202,7 +193,7 @@ mod tests {
                 // Extract collection from request.
                 type_of_val(&With::<CollectionParam>::extract::<CollectionIdName>),
                 // Get collection. Extract collection id and name.
-                type_of_val(&By::<CollectionIdName>::select::<CollectionDB>),
+                type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
                 type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
                 // check requester is coll_admin or coll_dev for the function's collection
                 type_of_val(&AuthzOn::<CollectionId>::set),
@@ -211,10 +202,9 @@ mod tests {
                 // Get function.
                 type_of_val(&With::<FunctionRegister>::extract::<FunctionName>),
                 // Check function name does not exist in collection.
-                type_of_val(&combine::<CollectionId, FunctionName>),
                 type_of_val(&With::<RequestContext>::extract::<AtTime>),
                 type_of_val(
-                    &By::<(CollectionId, FunctionName)>::assert_version_not_exists::<
+                    &By::<And![CollectionId, FunctionName]>::assert_version_not_exists::<
                         { FunctionDBWithNames::Available },
                         FunctionDBWithNames,
                     >,
@@ -232,7 +222,7 @@ mod tests {
                 type_of_val(&With::<StorageVersion>::set::<FunctionDBBuilder>),
                 type_of_val(&With::<DataLocation>::set::<FunctionDBBuilder>),
                 type_of_val(&With::<Enabled>::set::<FunctionDBBuilder>),
-                type_of_val(&With::<FunctionDBBuilder>::build::<FunctionDB, _>),
+                type_of_val(&With::<FunctionDBBuilder>::build::<FunctionDB>),
                 type_of_val(&insert::<FunctionDB>),
                 // Remove from bundles
                 type_of_val(&With::<FunctionDB>::extract::<BundleId>),
@@ -280,7 +270,7 @@ mod tests {
                     &With::<DependencyDB>::vec_convert_to::<InterCollectionAccessBuilder, _>,
                 ),
                 type_of_val(
-                    &With::<InterCollectionAccessBuilder>::vec_build::<InterCollectionAccess, _>,
+                    &With::<Vec<InterCollectionAccessBuilder>>::build::<Vec<InterCollectionAccess>>,
                 ),
                 type_of_val(&Authz::<InterColl>::check_inter_collection),
                 type_of_val(&insert_vec::<DependencyDB>),
@@ -291,7 +281,7 @@ mod tests {
                 // inter collections check for trigger
                 type_of_val(&With::<TriggerDB>::vec_convert_to::<InterCollectionAccessBuilder, _>),
                 type_of_val(
-                    &With::<InterCollectionAccessBuilder>::vec_build::<InterCollectionAccess, _>,
+                    &With::<Vec<InterCollectionAccessBuilder>>::build::<Vec<InterCollectionAccess>>,
                 ),
                 type_of_val(&Authz::<InterColl>::check_inter_collection),
                 type_of_val(&insert_vec::<TriggerDB>),
@@ -302,17 +292,19 @@ mod tests {
                 type_of_val(&insert_vec::<WorkerDB>),
                 // Response
                 type_of_val(&With::<FunctionDB>::extract::<FunctionVersionId>),
-                type_of_val(&By::<FunctionVersionId>::select::<FunctionDBWithNames>),
+                type_of_val(&By::<FunctionVersionId>::fetch_one::<FunctionDBWithNames>),
                 type_of_val(&With::<FunctionDBWithNames>::try_convert_to::<FunctionBuilder, _>),
-                type_of_val(&With::<FunctionBuilder>::build::<Function, _>),
+                type_of_val(&With::<FunctionBuilder>::build::<Function>),
             ]);
     }
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_register_empty(db: DbPool) -> Result<(), TdError> {
+    async fn test_register_empty(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
+        let collection = db
+            .seed_collection(&collection_name, &UserId::admin())
+            .await?;
 
         let dependencies = None;
         let triggers = None;
@@ -335,14 +327,12 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 CollectionParam::builder()
-                    .try_collection(collection_name.as_str())?
+                    .collection(CollectionIdName::from_str(collection_name.as_str())?)
                     .build()?,
                 create.clone(),
             );
 
-        let service = RegisterFunctionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
@@ -351,9 +341,11 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_register_empty_vec(db: DbPool) -> Result<(), TdError> {
+    async fn test_register_empty_vec(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
+        let collection = db
+            .seed_collection(&collection_name, &UserId::admin())
+            .await?;
 
         let dependencies = Some(vec![]);
         let triggers = Some(vec![]);
@@ -376,14 +368,12 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 CollectionParam::builder()
-                    .try_collection(collection_name.as_str())?
+                    .collection(CollectionIdName::from_str(collection_name.as_str())?)
                     .build()?,
                 create.clone(),
             );
 
-        let service = RegisterFunctionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
@@ -392,9 +382,11 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_register_table_output(db: DbPool) -> Result<(), TdError> {
+    async fn test_register_table_output(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
+        let collection = db
+            .seed_collection(&collection_name, &UserId::admin())
+            .await?;
 
         let dependencies = None;
         let triggers = None;
@@ -417,14 +409,12 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 CollectionParam::builder()
-                    .try_collection(collection_name.as_str())?
+                    .collection(CollectionIdName::from_str(collection_name.as_str())?)
                     .build()?,
                 create.clone(),
             );
 
-        let service = RegisterFunctionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
@@ -434,10 +424,12 @@ mod tests {
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_register_table_output_duplicate_output_tables_err(
-        db: DbPool,
+        db: TdPool,
     ) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
-        let _collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
+        let _collection = db
+            .seed_collection(&collection_name, &UserId::admin())
+            .await?;
 
         let dependencies = None;
         let triggers = None;
@@ -463,14 +455,12 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 CollectionParam::builder()
-                    .try_collection(collection_name.as_str())?
+                    .collection(CollectionIdName::from_str(collection_name.as_str())?)
                     .build()?,
                 create.clone(),
             );
 
-        let service = RegisterFunctionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         let err = response.unwrap_err();
         let err = err.domain_err::<RegisterFunctionError>();
@@ -488,9 +478,11 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_register_table_dependency(db: DbPool) -> Result<(), TdError> {
+    async fn test_register_table_dependency(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
+        let collection = db
+            .seed_collection(&collection_name, &UserId::admin())
+            .await?;
 
         let dependencies = Some(vec![TableDependencyDto::try_from("table_foo")?]);
         let triggers = None;
@@ -513,14 +505,12 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 CollectionParam::builder()
-                    .try_collection(collection_name.as_str())?
+                    .collection(CollectionIdName::from_str(collection_name.as_str())?)
                     .build()?,
                 create.clone(),
             );
 
-        let service = RegisterFunctionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
@@ -529,20 +519,20 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_register_implicit_trigger_none(db: DbPool) -> Result<(), TdError> {
+    async fn test_register_implicit_trigger_none(db: TdPool) -> Result<(), TdError> {
         test_register_trigger(db, None).await
     }
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_register_implicit_trigger_some_empty(db: DbPool) -> Result<(), TdError> {
+    async fn test_register_implicit_trigger_some_empty(db: TdPool) -> Result<(), TdError> {
         let test_triggers = Some(vec![]);
         test_register_trigger(db, test_triggers).await
     }
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_register_implicit_trigger_some(db: DbPool) -> Result<(), TdError> {
+    async fn test_register_implicit_trigger_some(db: TdPool) -> Result<(), TdError> {
         let test_triggers = Some(vec![
             TableTriggerDto::try_from("table_1")?,
             TableTriggerDto::try_from("table_2")?,
@@ -551,11 +541,13 @@ mod tests {
     }
 
     async fn test_register_trigger(
-        db: DbPool,
+        db: TdPool,
         test_triggers: Option<Vec<TableTriggerDto>>,
     ) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
+        let collection = db
+            .seed_collection(&collection_name, &UserId::admin())
+            .await?;
 
         let dependencies = None;
         let triggers = None;
@@ -581,14 +573,12 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 CollectionParam::builder()
-                    .try_collection(collection_name.as_str())?
+                    .collection(CollectionIdName::from_str(collection_name.as_str())?)
                     .build()?,
                 create.clone(),
             );
 
-        let service = RegisterFunctionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let _response = service.raw_oneshot(request).await?;
 
         // Actual test
@@ -618,14 +608,12 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 CollectionParam::builder()
-                    .try_collection(collection_name.as_str())?
+                    .collection(CollectionIdName::from_str(collection_name.as_str())?)
                     .build()?,
                 create.clone(),
             );
 
-        let service = RegisterFunctionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
@@ -634,9 +622,11 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_register_tables_dependencies_triggers(db: DbPool) -> Result<(), TdError> {
+    async fn test_register_tables_dependencies_triggers(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
+        let collection = db
+            .seed_collection(&collection_name, &UserId::admin())
+            .await?;
 
         let dependencies = None;
         let triggers = None;
@@ -662,14 +652,12 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 CollectionParam::builder()
-                    .try_collection(collection_name.as_str())?
+                    .collection(CollectionIdName::from_str(collection_name.as_str())?)
                     .build()?,
                 create.clone(),
             );
 
-        let service = RegisterFunctionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let _response = service.raw_oneshot(request).await?;
 
         // Actual test
@@ -703,14 +691,12 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 CollectionParam::builder()
-                    .try_collection(collection_name.as_str())?
+                    .collection(CollectionIdName::from_str(collection_name.as_str())?)
                     .build()?,
                 create.clone(),
             );
 
-        let service = RegisterFunctionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
@@ -720,7 +706,7 @@ mod tests {
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_register_tables_dependencies_different_collections_permissions_ok(
-        db: DbPool,
+        db: TdPool,
     ) -> Result<(), TdError> {
         test_register_tables_dependencies_triggers_different_collections(db, true, false, true)
             .await
@@ -729,7 +715,7 @@ mod tests {
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_register_tables_dependencies_different_collections_permissions_forbidden(
-        db: DbPool,
+        db: TdPool,
     ) -> Result<(), TdError> {
         test_register_tables_dependencies_triggers_different_collections(db, true, false, false)
             .await
@@ -738,7 +724,7 @@ mod tests {
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_register_tables_triggers_different_collections_with_tr_permissions_ok(
-        db: DbPool,
+        db: TdPool,
     ) -> Result<(), TdError> {
         test_register_tables_dependencies_triggers_different_collections(db, false, true, true)
             .await
@@ -747,30 +733,33 @@ mod tests {
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_register_tables_triggers_different_collections_with_tr_permissions_forbidden(
-        db: DbPool,
+        db: TdPool,
     ) -> Result<(), TdError> {
         test_register_tables_dependencies_triggers_different_collections(db, false, true, false)
             .await
     }
 
     async fn test_register_tables_dependencies_triggers_different_collections(
-        db: DbPool,
+        db: TdPool,
         deps_diff_collection: bool,
         triggers_diff_collection: bool,
         with_permission: bool,
     ) -> Result<(), TdError> {
         let collection_name_1 = CollectionName::try_from("collection_1")?;
-        let collection_1 = seed_collection(&db, &collection_name_1, &UserId::admin()).await;
+        let collection_1 = db
+            .seed_collection(&collection_name_1, &UserId::admin())
+            .await?;
         let collection_name_2 = CollectionName::try_from("collection_2")?;
-        let collection_2 = seed_collection(&db, &collection_name_2, &UserId::admin()).await;
+        let collection_2 = db
+            .seed_collection(&collection_name_2, &UserId::admin())
+            .await?;
 
         if with_permission {
-            seed_inter_collection_permission(
-                &db,
+            db.seed_inter_collection_permission(
                 &collection_1.id,
                 &ToCollectionId::try_from(collection_2.id)?,
             )
-            .await;
+            .await?;
         }
 
         let dependencies = None;
@@ -797,14 +786,12 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 CollectionParam::builder()
-                    .try_collection(collection_name_1.as_str())?
+                    .collection(CollectionIdName::from_str(collection_name_1.as_str())?)
                     .build()?,
                 create.clone(),
             );
 
-        let service = RegisterFunctionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let _response = service.raw_oneshot(request).await?;
 
         let dependencies = Some(vec![]);
@@ -831,14 +818,12 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 CollectionParam::builder()
-                    .try_collection(collection_name_2.as_str())?
+                    .collection(CollectionIdName::from_str(collection_name_2.as_str())?)
                     .build()?,
                 create.clone(),
             );
 
-        let service = RegisterFunctionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let _ = service.raw_oneshot(request).await?;
 
         // Actual test
@@ -886,14 +871,12 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 CollectionParam::builder()
-                    .try_collection(collection_name_2.as_str())?
+                    .collection(CollectionIdName::from_str(collection_name_2.as_str())?)
                     .build()?,
                 create.clone(),
             );
 
-        let service = RegisterFunctionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;
 
         if with_permission {
@@ -910,9 +893,11 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_register_same_name(db: DbPool) -> Result<(), TdError> {
+    async fn test_register_same_name(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
-        let _ = seed_collection(&db, &collection_name, &UserId::admin()).await;
+        let _ = db
+            .seed_collection(&collection_name, &UserId::admin())
+            .await?;
 
         let dependencies = None;
         let triggers = None;
@@ -935,66 +920,65 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 CollectionParam::builder()
-                    .try_collection(collection_name.as_str())?
+                    .collection(CollectionIdName::from_str(collection_name.as_str())?)
                     .build()?,
                 create.clone(),
             );
 
-        let service = RegisterFunctionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request.clone()).await;
         let _ = response?;
 
-        let service = RegisterFunctionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         let response = response;
         let err = response.err().unwrap();
         assert!(matches!(
             err.domain_err(),
-            SqlError::EntityAlreadyExists(_, _, _)
+            SqlError::EntityAlreadyExists(_, _)
         ));
         Ok(())
     }
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_register_private_tables_all_same_collection(db: DbPool) -> Result<(), TdError> {
+    async fn test_register_private_tables_all_same_collection(db: TdPool) -> Result<(), TdError> {
         test_private_tables(db, false, false).await
     }
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_register_private_tables_deps_diff_collection(db: DbPool) -> Result<(), TdError> {
+    async fn test_register_private_tables_deps_diff_collection(db: TdPool) -> Result<(), TdError> {
         test_private_tables(db, true, false).await
     }
 
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_register_private_tables_triggers_diff_collection(
-        db: DbPool,
+        db: TdPool,
     ) -> Result<(), TdError> {
         test_private_tables(db, false, true).await
     }
 
     async fn test_private_tables(
-        db: DbPool,
+        db: TdPool,
         deps_diff_collection: bool,
         triggers_diff_collection: bool,
     ) -> Result<(), TdError> {
         let collection_name_1 = CollectionName::try_from("collection_1")?;
-        let collection_1 = seed_collection(&db, &collection_name_1, &UserId::admin()).await;
+        let collection_1 = db
+            .seed_collection(&collection_name_1, &UserId::admin())
+            .await?;
         let collection_name_2 = CollectionName::try_from("collection_2")?;
-        let collection_2 = seed_collection(&db, &collection_name_2, &UserId::admin()).await;
+        let collection_2 = db
+            .seed_collection(&collection_name_2, &UserId::admin())
+            .await?;
 
-        seed_inter_collection_permission(
-            &db,
+        db.seed_inter_collection_permission(
             &collection_1.id,
             &ToCollectionId::try_from(collection_2.id)?,
         )
-        .await;
+        .await?;
 
         for collection in [&collection_1, &collection_2] {
             let dependencies = None;
@@ -1017,7 +1001,7 @@ mod tests {
                 .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
                 .reuse_frozen_tables(false)
                 .build()?;
-            seed_function(&db, collection, &create).await;
+            db.seed_function(collection, &create).await?;
         }
 
         // Actual test
@@ -1060,14 +1044,12 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 CollectionParam::builder()
-                    .try_collection(collection_name_2.as_str())?
+                    .collection(CollectionIdName::from_str(collection_name_2.as_str())?)
                     .build()?,
                 create.clone(),
             );
 
-        let service = RegisterFunctionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;
 
         if deps_diff_collection || triggers_diff_collection {
@@ -1081,9 +1063,10 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_private_table_flag(db: DbPool) -> Result<(), TdError> {
+    async fn test_private_table_flag(db: TdPool) -> Result<(), TdError> {
         let collection_name_1 = CollectionName::try_from("collection_1")?;
-        seed_collection(&db, &collection_name_1, &UserId::admin()).await;
+        db.seed_collection(&collection_name_1, &UserId::admin())
+            .await?;
 
         let tables = Some(vec![
             TableNameDto::try_from("table0")?,
@@ -1107,23 +1090,16 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 CollectionParam::builder()
-                    .try_collection(collection_name_1.as_str())?
+                    .collection(CollectionIdName::from_str(collection_name_1.as_str())?)
                     .build()?,
                 create,
             );
 
-        let service = RegisterFunctionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;
         assert!(res.is_ok());
 
-        let tables: Vec<TableDB> = DaoQueries::default()
-            .select_by::<TableDB>(&(res.unwrap().id))?
-            .build_query_as()
-            .fetch_all(&db)
-            .await
-            .map_err(handle_sql_err)?;
+        let tables: Vec<TableDB> = db.fetch_all::<TableDB>(&(res.unwrap().id)).await?;
         let map: HashMap<String, TableDB> = tables
             .into_iter()
             .map(|table| (table.name.to_string(), table))
@@ -1135,9 +1111,10 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_dependency_fixed_validation(db: DbPool) -> Result<(), TdError> {
+    async fn test_dependency_fixed_validation(db: TdPool) -> Result<(), TdError> {
         let collection_name_1 = CollectionName::try_from("collection_1")?;
-        seed_collection(&db, &collection_name_1, &UserId::admin()).await;
+        db.seed_collection(&collection_name_1, &UserId::admin())
+            .await?;
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister::builder()
@@ -1158,14 +1135,12 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 CollectionParam::builder()
-                    .try_collection(collection_name_1.as_str())?
+                    .collection(CollectionIdName::from_str(collection_name_1.as_str())?)
                     .build()?,
                 create,
             );
 
-        let service = RegisterFunctionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;
         assert!(res.is_err());
         let err = res.err().unwrap();
@@ -1194,14 +1169,12 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 CollectionParam::builder()
-                    .try_collection(collection_name_1.as_str())?
+                    .collection(CollectionIdName::from_str(collection_name_1.as_str())?)
                     .build()?,
                 create,
             );
 
-        let service = RegisterFunctionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;
         assert!(res.is_err());
         let err = res.err().unwrap();
@@ -1216,9 +1189,10 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_dependency_range_validation(db: DbPool) -> Result<(), TdError> {
+    async fn test_dependency_range_validation(db: TdPool) -> Result<(), TdError> {
         let collection_name_1 = CollectionName::try_from("collection_1")?;
-        seed_collection(&db, &collection_name_1, &UserId::admin()).await;
+        db.seed_collection(&collection_name_1, &UserId::admin())
+            .await?;
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister::builder()
@@ -1239,14 +1213,12 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 CollectionParam::builder()
-                    .try_collection(collection_name_1.as_str())?
+                    .collection(CollectionIdName::from_str(collection_name_1.as_str())?)
                     .build()?,
                 create,
             );
 
-        let service = RegisterFunctionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;
         assert!(res.is_err());
         let err = res.err().unwrap();
@@ -1258,9 +1230,11 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_workers_created(db: DbPool) -> Result<(), TdError> {
+    async fn test_workers_created(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("collection")?;
-        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
+        let collection = db
+            .seed_collection(&collection_name, &UserId::admin())
+            .await?;
 
         let create = FunctionRegister::builder()
             .try_name("function")?
@@ -1281,21 +1255,14 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 CollectionParam::builder()
-                    .try_collection(collection_name.as_str())?
+                    .collection(CollectionIdName::from_str(collection_name.as_str())?)
                     .build()?,
                 create,
             );
-        let service = RegisterFunctionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await?;
 
-        let workers: Vec<WorkerDB> = DaoQueries::default()
-            .select_by::<WorkerDB>(&res.id)?
-            .build_query_as()
-            .fetch_all(&db)
-            .await
-            .unwrap();
+        let workers: Vec<WorkerDB> = db.fetch_all::<WorkerDB>(&res.id).await.unwrap();
         assert_eq!(workers.len(), 1);
         let worker = &workers[0];
         assert_eq!(worker.collection_id, collection.id);
@@ -1314,9 +1281,10 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_multiple_workers_error(db: DbPool) -> Result<(), TdError> {
+    async fn test_multiple_workers_error(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("collection")?;
-        seed_collection(&db, &collection_name, &UserId::admin()).await;
+        db.seed_collection(&collection_name, &UserId::admin())
+            .await?;
 
         let create = FunctionRegister::builder()
             .try_name("function")?
@@ -1338,14 +1306,12 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 CollectionParam::builder()
-                    .try_collection(collection_name.as_str())?
+                    .collection(CollectionIdName::from_str(collection_name.as_str())?)
                     .build()?,
                 create,
             );
 
-        let service = RegisterFunctionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;
         assert!(res.is_err());
         let err = res.err().unwrap();

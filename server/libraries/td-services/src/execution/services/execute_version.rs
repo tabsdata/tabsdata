@@ -10,18 +10,16 @@ use crate::execution::layers::execution_version::{
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
 use td_execution::TransactionBy;
+use td_objects::And;
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
 use td_objects::dxo::execution::{
     ExecutionDB, ExecutionRequest, ExecutionRequestInternal, ExecutionResponseInternal,
 };
 use td_objects::dxo::function::FunctionDBWithNames;
 use td_objects::rest_urls::internal::FunctionVersionIdParam;
-use td_objects::sql::DaoQueries;
-use td_objects::tower_service::from::{
-    ExtractDataService, ExtractNameService, ExtractService, IntoService, With, combine,
-};
-use td_objects::tower_service::sql::{By, SqlSelectService};
+use td_objects::tower_service::with::With;
 use td_objects::types::basic::{AtTime, FunctionId, FunctionVersionId, SkipIfRunning, TriggerType};
+use td_queries::By;
 use td_tower::default_services::{Do, Else, If, TransactionProvider, conditional};
 use td_tower::from_fn::from_fn;
 use td_tower::{layers, service};
@@ -31,7 +29,6 @@ use td_tower::{layers, service};
     request = CreateRequest<FunctionVersionIdParam, ExecutionRequestInternal>,
     response = ExecutionResponseInternal,
     connection = TransactionProvider,
-    context = DaoQueries,
     context = AuthzContext,
     context = TransactionBy,
 )]
@@ -56,11 +53,11 @@ fn service() {
         from_fn(With::<RequestContext>::extract::<AtTime>),
         from_fn(With::<FunctionVersionIdParam>::extract::<FunctionVersionId>),
         // Select trigger function.
-        from_fn(By::<FunctionVersionId>::select::<FunctionDBWithNames>),
+        from_fn(By::<FunctionVersionId>::fetch_one::<FunctionDBWithNames>),
         // Ensure the trigger function is the current active version (never allow older versions to execute)
         from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
         from_fn(
-            By::<FunctionId>::select_version::<{ FunctionDBWithNames::All }, FunctionDBWithNames>
+            By::<FunctionId>::fetch_one_version::<{ FunctionDBWithNames::All }, FunctionDBWithNames>
         ),
         from_fn(assert_function_version),
         // Extract Trigger type
@@ -68,9 +65,8 @@ fn service() {
         conditional(
             If(service!(layers!(
                 // Get latest function run at the time of executing if any
-                from_fn(combine::<FunctionVersionId, TriggerType>),
                 // We only check for executions of the same trigger type
-                from_fn(By::<(FunctionVersionId, TriggerType)>::select_optional::<ExecutionDB>),
+                from_fn(By::<And![FunctionVersionId, TriggerType]>::fetch_optional::<ExecutionDB>),
                 from_fn(With::<ExecutionRequestInternal>::extract::<SkipIfRunning>),
                 from_fn(skip_if_running),
             ))),
@@ -94,28 +90,27 @@ mod tests {
     use super::*;
     use crate::function::services::update::UpdateFunctionService;
     use std::collections::HashSet;
+    use std::str::FromStr;
     use ta_services::service::TdService;
-    use td_database::sql::DbPool;
+    use td_database::pool::TdPool;
     use td_error::TdError;
+    use td_objects::Buildable;
     use td_objects::dxo::execution::ExecutionDB;
     use td_objects::dxo::function::{FunctionDB, FunctionRegister, FunctionUpdate};
     use td_objects::rest_urls::FunctionParam;
-    use td_objects::sql::SelectBy;
-    use td_objects::test_utils::seed_collection::seed_collection;
-    use td_objects::test_utils::seed_execution::{seed_cron_execution, seed_execution};
-    use td_objects::test_utils::seed_function::seed_function;
-    use td_objects::test_utils::seed_function_run::seed_function_run;
-    use td_objects::test_utils::seed_transaction::seed_transaction;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, ExecutionName, FunctionName,
-        FunctionRunStatus, FunctionRuntimeValues, RoleId, TableNameDto, TransactionKey, UserId,
+        AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, ExecutionName,
+        FunctionIdName, FunctionName, FunctionRunStatus, FunctionRuntimeValues, RoleId,
+        TableNameDto, TransactionKey, UserId,
     };
+    use td_queries::BasicQueries;
+    use td_queries::test_utils::SeedQueries;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_execute_version(db: DbPool) {
+    async fn test_tower_metadata_execute_version(db: TdPool) {
         use crate::execution::layers::GraphOpts;
         use crate::execution::layers::execution::{
             assert_function_status, build_execution_plan, build_function_requirements,
@@ -126,6 +121,8 @@ mod tests {
         use crate::graph::layers::FunctionOrTable;
         use crate::graph::layers::build::GraphBuilder;
         use td_authz::Authz;
+        use td_authz::tower::InterColl;
+        use td_authz::tower::{AuthzOn, CollAdmin, CollExec};
         use td_objects::dxo::crudl::RequestContext;
         use td_objects::dxo::dependency::DependencyDBWithNames;
         use td_objects::dxo::execution::{
@@ -140,18 +137,12 @@ mod tests {
         use td_objects::dxo::table_data_version::TableDataVersionDB;
         use td_objects::dxo::transaction::{TransactionDB, TransactionDBBuilder};
         use td_objects::dxo::trigger::TriggerDBWithNames;
-        use td_objects::tower_service::authz::InterColl;
-        use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollExec};
-        use td_objects::tower_service::from::{
-            BuildService, ExtractService, IntoService, SetService, TryIntoService, UpdateService,
-            With,
-        };
-        use td_objects::tower_service::from::{ConvertIntoMapService, VecBuildService};
-        use td_objects::tower_service::sql::{insert, insert_vec};
+        use td_objects::tower_service::with::With;
         use td_objects::types::basic::{
             CollectionId, FunctionId, FunctionOnly, OverrideDisabledTrigger, TriggerType,
         };
         use td_objects::types::recursion::RecursionOptions;
+        use td_queries::{insert, insert_vec};
         use td_tower::metadata::type_of_val;
 
         ExecuteFunctionVersionService::with_defaults(db)
@@ -177,21 +168,20 @@ mod tests {
                 type_of_val(&With::<RequestContext>::extract::<AtTime>),
                 type_of_val(&With::<FunctionVersionIdParam>::extract::<FunctionVersionId>),
                 // Select trigger function.
-                type_of_val(&By::<FunctionVersionId>::select::<FunctionDBWithNames>),
+                type_of_val(&By::<FunctionVersionId>::fetch_one::<FunctionDBWithNames>),
                 // Ensure the trigger function is the current active version (never allow older versions to execute)
                 type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
                 type_of_val(&
-                    By::<FunctionId>::select_version::<{ FunctionDBWithNames::All }, FunctionDBWithNames>
+                    By::<FunctionId>::fetch_one_version::<{ FunctionDBWithNames::All }, FunctionDBWithNames>
                 ),
                 type_of_val(&assert_function_version),
                 type_of_val(&With::<ExecutionRequestInternal>::extract::<TriggerType>),
 
                 // if skip when running
                 // Get latest function run at the time of executing if any
-                type_of_val(&combine::<FunctionVersionId, TriggerType>),
                 // We only check for executions of the same trigger type
                 type_of_val(&
-                    By::<(FunctionVersionId, TriggerType)>::select_optional::<ExecutionDB>
+                    By::<And![FunctionVersionId, TriggerType]>::fetch_optional::<ExecutionDB>
                 ),
                 type_of_val(&With::<ExecutionRequestInternal>::extract::<SkipIfRunning>),
                 type_of_val(&skip_if_running),
@@ -223,7 +213,7 @@ mod tests {
                     &With::<TriggerDBWithNames>::vec_convert_to::<InterCollectionAccessBuilder, _>,
                 ),
                 type_of_val(
-                    &With::<InterCollectionAccessBuilder>::vec_build::<InterCollectionAccess, _>,
+                    &With::<Vec<InterCollectionAccessBuilder>>::build::<Vec<InterCollectionAccess>>,
                 ),
                 type_of_val(&Authz::<InterColl>::check_inter_collection),
                 // Find dependencies. For clarity, we always show the function, even if
@@ -239,7 +229,7 @@ mod tests {
                     &With::<DependencyDBWithNames>::vec_convert_to::<InterCollectionAccessBuilder, _>,
                 ),
                 type_of_val(
-                    &With::<InterCollectionAccessBuilder>::vec_build::<InterCollectionAccess, _>,
+                    &With::<Vec<InterCollectionAccessBuilder>>::build::<Vec<InterCollectionAccess>>,
                 ),
                 type_of_val(&Authz::<InterColl>::check_inter_collection),
                 // Find output tables
@@ -258,7 +248,7 @@ mod tests {
                 type_of_val(&With::<ExecutionRequest>::update::<ExecutionDBBuilder, _>),
                 type_of_val(&With::<TriggerType>::set::<ExecutionDBBuilder>),
                 type_of_val(&With::<RecursionOptions>::set::<ExecutionDBBuilder>),
-                type_of_val(&With::<ExecutionDBBuilder>::build::<ExecutionDB, _>),
+                type_of_val(&With::<ExecutionDBBuilder>::build::<ExecutionDB>),
                 type_of_val(&insert::<ExecutionDB>),
                 // Build transactions
                 type_of_val(&build_transaction_map),
@@ -290,7 +280,7 @@ mod tests {
     // Tests in execute assert the correctness of the execution.
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_execute_version_no_previous_execution(db: DbPool) -> Result<(), TdError> {
+    async fn test_execute_version_no_previous_execution(db: TdPool) -> Result<(), TdError> {
         let (function, response) = test_execute_version(db, None, SkipIfRunning::FALSE).await?;
         let ExecutionResponseInternal::Executed(response) = response else {
             panic!("Expected executed response")
@@ -302,7 +292,7 @@ mod tests {
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_execute_version_no_previous_execution_skip_if_running(
-        db: DbPool,
+        db: TdPool,
     ) -> Result<(), TdError> {
         let (function, response) = test_execute_version(db, None, SkipIfRunning::TRUE).await?;
         let ExecutionResponseInternal::Executed(response) = response else {
@@ -314,7 +304,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_execute_version_previous_execution_running(db: DbPool) -> Result<(), TdError> {
+    async fn test_execute_version_previous_execution_running(db: TdPool) -> Result<(), TdError> {
         let (function, response) = test_execute_version(
             db,
             Some(PreviousRun {
@@ -334,7 +324,7 @@ mod tests {
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_execute_version_previous_execution_running_skip_if_running(
-        db: DbPool,
+        db: TdPool,
     ) -> Result<(), TdError> {
         let (function, response) = test_execute_version(
             db.clone(),
@@ -349,12 +339,7 @@ mod tests {
             panic!("Expected already running response")
         };
         // There should be only one, the previous one.
-        let executions: Vec<ExecutionDB> = DaoQueries::default()
-            .select_by::<ExecutionDB>(&function.id)?
-            .build_query_as()
-            .fetch_all(&db)
-            .await
-            .unwrap();
+        let executions: Vec<ExecutionDB> = db.fetch_all::<ExecutionDB>(&function.id).await.unwrap();
         assert_eq!(executions.len(), 1);
         assert_eq!(executions[0].id, response);
         Ok(())
@@ -362,7 +347,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_execute_version_previous_execution_committed(db: DbPool) -> Result<(), TdError> {
+    async fn test_execute_version_previous_execution_committed(db: TdPool) -> Result<(), TdError> {
         let (function, response) = test_execute_version(
             db,
             Some(PreviousRun {
@@ -382,7 +367,7 @@ mod tests {
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_execute_version_previous_execution_commited_skip_if_running(
-        db: DbPool,
+        db: TdPool,
     ) -> Result<(), TdError> {
         let (function, response) = test_execute_version(
             db,
@@ -403,7 +388,7 @@ mod tests {
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_execute_version_previous_version_different_type_running(
-        db: DbPool,
+        db: TdPool,
     ) -> Result<(), TdError> {
         let (function, response) = test_execute_version(
             db,
@@ -424,7 +409,7 @@ mod tests {
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_execute_version_previous_version_different_type_running_skip_if_running(
-        db: DbPool,
+        db: TdPool,
     ) -> Result<(), TdError> {
         let (function, response) = test_execute_version(
             db,
@@ -448,16 +433,13 @@ mod tests {
     }
 
     async fn test_execute_version(
-        db: DbPool,
+        db: TdPool,
         previous_run: Option<PreviousRun>,
         skip_if_running: SkipIfRunning,
     ) -> Result<(FunctionDB, ExecutionResponseInternal), TdError> {
-        let collection_0 = seed_collection(
-            &db,
-            &CollectionName::try_from("collection_0")?,
-            &UserId::admin(),
-        )
-        .await;
+        let collection_0 = db
+            .seed_collection(&CollectionName::try_from("collection_0")?, &UserId::admin())
+            .await?;
         let function_0 = FunctionName::try_from("function_0")?;
 
         // Create function.
@@ -473,26 +455,26 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
-        let function = seed_function(&db, &collection_0, &create).await;
+        let function = db.seed_function(&collection_0, &create).await?;
 
         if let Some(previous_run) = previous_run {
             let execution = match previous_run.trigger_type {
-                TriggerType::Manual => seed_execution(&db, &function).await,
-                TriggerType::CronTrigger => seed_cron_execution(&db, &function).await,
+                TriggerType::Manual => db.seed_execution(&function).await?,
+                TriggerType::CronTrigger => db.seed_cron_execution(&function).await?,
                 _ => panic!("Unexpected trigger type"),
             };
             let transaction_key = TransactionKey::try_from("ANY")?;
-            let transaction = seed_transaction(&db, &execution, &transaction_key).await;
+            let transaction = db.seed_transaction(&execution, &transaction_key).await?;
 
-            let _function_run = seed_function_run(
-                &db,
-                &collection_0,
-                &function,
-                &execution,
-                &transaction,
-                &previous_run.status,
-            )
-            .await;
+            let _function_run = db
+                .seed_function_run(
+                    &collection_0,
+                    &function,
+                    &execution,
+                    &transaction,
+                    &previous_run.status,
+                )
+                .await?;
         }
 
         // Trigger function
@@ -508,22 +490,17 @@ mod tests {
                     .build()?,
             );
 
-        let service = ExecuteFunctionVersionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = ExecuteFunctionVersionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await?;
         Ok((function, response))
     }
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_execute_version_previous_version_err(db: DbPool) -> Result<(), TdError> {
-        let collection_0 = seed_collection(
-            &db,
-            &CollectionName::try_from("collection_0")?,
-            &UserId::admin(),
-        )
-        .await;
+    async fn test_execute_version_previous_version_err(db: TdPool) -> Result<(), TdError> {
+        let collection_0 = db
+            .seed_collection(&CollectionName::try_from("collection_0")?, &UserId::admin())
+            .await?;
         let function_0 = FunctionName::try_from("function_0")?;
 
         // Trigger function.
@@ -539,22 +516,26 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
-        let function = seed_function(&db, &collection_0, &create).await;
+        let function = db.seed_function(&collection_0, &create).await?;
 
         // Dummy update to create new version
         let update = FunctionUpdate::builder().name(function_0).build()?;
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
                 FunctionParam::builder()
-                    .try_collection(format!("~{}", collection_0.id))?
-                    .try_function(format!("~{}", function.function_id))?
+                    .collection(CollectionIdName::from_str(&format!(
+                        "~{}",
+                        collection_0.id
+                    ))?)
+                    .function(FunctionIdName::from_str(&format!(
+                        "~{}",
+                        function.function_id
+                    ))?)
                     .build()?,
                 update.clone(),
             );
 
-        let service = UpdateFunctionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let updated = service.raw_oneshot(request).await?;
 
         // Now, using function.id will fail
@@ -569,9 +550,7 @@ mod tests {
                     .build()?,
             );
 
-        let service = ExecuteFunctionVersionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = ExecuteFunctionVersionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         let err = response.unwrap_err();
         assert!(err.to_string().contains("Function version missmatch."));

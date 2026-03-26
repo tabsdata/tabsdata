@@ -5,22 +5,19 @@
 use crate::function::layers::register::data_location;
 use crate::function::layers::upload::upload_function_write_to_storage;
 use ta_services::factory::service_factory;
+use td_authz::tower::{AuthzOn, CollAdmin, CollDev};
 use td_authz::{Authz, AuthzContext};
 use td_objects::dxo::bundle::{Bundle, BundleBuilder, BundleDB, BundleDBBuilder};
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
 use td_objects::dxo::function_upload::FunctionUpload;
 use td_objects::rest_urls::CollectionParam;
-use td_objects::sql::DaoQueries;
-use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev};
-use td_objects::tower_service::from::{
-    BuildService, DefaultService, ExtractDataService, ExtractNameService, ExtractService,
-    SetService, TryIntoService, With,
-};
-use td_objects::tower_service::sql::{By, SqlSelectService, insert};
+use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
     BundleHash, BundleId, CollectionId, CollectionIdName, StorageVersion,
 };
+use td_queries::By;
+use td_queries::insert;
 use td_storage::Storage;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
@@ -31,7 +28,6 @@ use td_tower::layers;
     request = CreateRequest<CollectionParam, FunctionUpload>,
     response = Bundle,
     connection = TransactionProvider,
-    context = DaoQueries,
     context = AuthzContext,
     context = Storage,
 )]
@@ -47,7 +43,7 @@ fn service() {
         // Extract function (TODO also use FunctionId to generate data_location)
         from_fn(With::<CollectionParam>::extract::<CollectionIdName>),
         // Extract collection
-        from_fn(By::<CollectionIdName>::select::<CollectionDB>),
+        from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
         // check requester is coll_admin or coll_dev for the function's collection
         from_fn(AuthzOn::<CollectionId>::set),
@@ -63,11 +59,11 @@ fn service() {
         from_fn(With::<BundleId>::set::<BundleDBBuilder>),
         from_fn(With::<CollectionId>::set::<BundleDBBuilder>),
         from_fn(With::<BundleHash>::set::<BundleDBBuilder>),
-        from_fn(With::<BundleDBBuilder>::build::<BundleDB, _>),
+        from_fn(With::<BundleDBBuilder>::build::<BundleDB>),
         from_fn(insert::<BundleDB>),
         // Build response
         from_fn(With::<BundleDB>::try_convert_to::<BundleBuilder, _>),
-        from_fn(With::<BundleBuilder>::build::<Bundle, _>),
+        from_fn(With::<BundleBuilder>::build::<Bundle>),
     )
 }
 
@@ -78,21 +74,22 @@ mod tests {
     use axum::body::Body;
     use axum::extract::Request;
     use sha2::{Digest, Sha256};
+    use std::str::FromStr;
     use ta_services::factory::ServiceFactory;
     use ta_services::service::TdService;
-    use td_database::sql::DbPool;
+    use td_database::pool::TdPool;
     use td_error::TdError;
-    use td_objects::dxo::crudl::handle_sql_err;
-    use td_objects::sql::SelectBy;
-    use td_objects::test_utils::seed_collection::seed_collection;
+    use td_objects::Buildable;
     use td_objects::types::basic::{AccessTokenId, CollectionName, DataLocation, RoleId, UserId};
+    use td_queries::BasicQueries;
+    use td_queries::test_utils::SeedQueries;
     use td_storage::location::StorageLocation;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_upload_function(db: DbPool) -> Result<(), TdError> {
+    async fn test_tower_metadata_upload_function(db: TdPool) -> Result<(), TdError> {
         use td_tower::metadata::type_of_val;
 
         UploadFunctionService::with_defaults(db)
@@ -117,7 +114,7 @@ mod tests {
                 // Extract function (TODO also use FunctionId to generate data_location)
                 type_of_val(&With::<CollectionParam>::extract::<CollectionIdName>),
                 // Extract collection
-                type_of_val(&By::<CollectionIdName>::select::<CollectionDB>),
+                type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
                 type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
                 // check requester is coll_admin or coll_dev for the function's collection
                 type_of_val(&AuthzOn::<CollectionId>::set),
@@ -133,20 +130,22 @@ mod tests {
                 type_of_val(&With::<BundleId>::set::<BundleDBBuilder>),
                 type_of_val(&With::<CollectionId>::set::<BundleDBBuilder>),
                 type_of_val(&With::<BundleHash>::set::<BundleDBBuilder>),
-                type_of_val(&With::<BundleDBBuilder>::build::<BundleDB, _>),
+                type_of_val(&With::<BundleDBBuilder>::build::<BundleDB>),
                 type_of_val(&insert::<BundleDB>),
                 // Build response
                 type_of_val(&With::<BundleDB>::try_convert_to::<BundleBuilder, _>),
-                type_of_val(&With::<BundleBuilder>::build::<Bundle, _>),
+                type_of_val(&With::<BundleBuilder>::build::<Bundle>),
             ]);
         Ok(())
     }
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_upload(db: DbPool) -> Result<(), TdError> {
+    async fn test_upload(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
-        let collection = seed_collection(&db, &collection_name, &UserId::admin()).await;
+        let collection = db
+            .seed_collection(&collection_name, &UserId::admin())
+            .await?;
 
         let payload = "TEXT";
         let request = Request::builder()
@@ -157,24 +156,18 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 CollectionParam::builder()
-                    .try_collection(format!("{}", collection.name))?
+                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
                     .build()?,
                 function_upload,
             );
 
         let context = Context::with_defaults(db.clone());
-        let service = UploadFunctionService::build(&context).service().await;
+        let service = UploadFunctionService::build(&context).service();
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
         // Assert db
-        let queries = DaoQueries::default();
-        let bundle_db: Vec<BundleDB> = queries
-            .select_by::<BundleDB>(&())?
-            .build_query_as()
-            .fetch_all(&db)
-            .await
-            .map_err(handle_sql_err)?;
+        let bundle_db: Vec<BundleDB> = db.fetch_all::<BundleDB>(()).await?;
 
         assert_eq!(bundle_db.len(), 1);
         let bundle = &bundle_db[0];
