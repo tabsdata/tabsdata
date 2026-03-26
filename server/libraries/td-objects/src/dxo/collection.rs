@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-#[td_type::dxo]
+#[ta_objects::dxo]
 mod definitions {
     use crate::dxo::crudl::RequestContext;
     use crate::types::basic::{
@@ -10,39 +10,39 @@ mod definitions {
     };
     use td_common::id::Id;
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(sql_table = "collections")]
-    #[td_type(
+    #[dxo(
         builder(try_from = CollectionCreate, skip_all),
         updater(try_from = RequestContext, skip_all)
     )]
     pub struct CollectionCreateDB {
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         #[builder(default)]
         pub id: CollectionId,
-        #[td_type(builder(include), extractor)]
+        #[dxo(builder(include), extractor)]
         pub name: CollectionName,
-        #[td_type(builder(include))]
+        #[dxo(builder(include))]
         pub description: Description,
-        #[td_type(updater(include, field = "time"))]
+        #[dxo(updater(include, field = "time"))]
         pub created_on: AtTime,
-        #[td_type(updater(include, field = "user_id"))]
+        #[dxo(updater(include, field = "user_id"))]
         pub created_by_id: UserId,
-        #[td_type(updater(include, field = "time"))]
+        #[dxo(updater(include, field = "time"))]
         pub modified_on: AtTime,
-        #[td_type(updater(include, field = "user_id"))]
+        #[dxo(updater(include, field = "user_id"))]
         pub modified_by_id: UserId,
         #[builder(default)]
         pub name_when_deleted: Option<CollectionName>,
     }
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(sql_table = "collections_active")]
-    #[td_type(builder(try_from = CollectionCreateDB))]
+    #[dxo(builder(try_from = CollectionCreateDB))]
     pub struct CollectionDB {
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub id: CollectionId,
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub name: CollectionName,
         pub description: Description,
         pub created_on: AtTime,
@@ -51,9 +51,9 @@ mod definitions {
         pub modified_by_id: UserId,
     }
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(sql_table = "collections")]
-    #[td_type(
+    #[dxo(
         builder(try_from = CollectionDB, skip_all),
         updater(try_from = RequestContext, skip_all),
     )]
@@ -61,12 +61,12 @@ mod definitions {
         #[builder(default = "generate_deleted_name()")]
         pub name: CollectionName,
 
-        #[td_type(updater(include, field = "time"))]
+        #[dxo(updater(include, field = "time"))]
         pub modified_on: AtTime,
-        #[td_type(updater(include, field = "user_id"))]
+        #[dxo(updater(include, field = "user_id"))]
         pub modified_by_id: UserId,
 
-        #[td_type(builder(include, field = "name"))]
+        #[dxo(builder(include, field = "name"))]
         pub name_when_deleted: CollectionName,
     }
 
@@ -74,7 +74,7 @@ mod definitions {
         CollectionName::try_from(format!("deleted_{}", Id::default())).unwrap()
     }
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(sql_table = "collections__with_names")]
     #[inherits(CollectionDB)]
     pub struct CollectionDBWithNames {
@@ -82,36 +82,35 @@ mod definitions {
         pub modified_by: UserName,
     }
 
-    #[td_type::Dto]
+    #[ta_objects::Dto]
     pub struct CollectionCreate {
         pub name: CollectionName,
         pub description: Description,
     }
 
-    #[td_type::Dto]
+    #[ta_objects::Dto]
     pub struct CollectionUpdate {
         pub name: Option<CollectionName>,
         pub description: Option<Description>,
     }
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(sql_table = "collections")]
-    #[td_type(
+    #[dxo(
         builder(try_from = CollectionDB),
         updater(try_from = RequestContext, skip_all)
     )]
     pub struct CollectionUpdateDB {
         pub name: CollectionName,
         pub description: Description,
-        #[td_type(updater(include, field = "time"))]
+        #[dxo(updater(include, field = "time"))]
         pub modified_on: AtTime,
-        #[td_type(updater(include, field = "user_id"))]
+        #[dxo(updater(include, field = "user_id"))]
         pub modified_by_id: UserId,
     }
 
-    #[td_type::Dto]
+    #[ta_objects::Dto]
     #[dto(list(on = CollectionDBWithNames))]
-    #[td_type(builder(try_from = CollectionDBWithNames))]
     #[inherits(CollectionDBWithNames)]
     pub struct CollectionRead {
         #[dto(list(pagination_by = "+"))]

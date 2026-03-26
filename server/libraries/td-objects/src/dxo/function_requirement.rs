@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-#[td_type::dxo]
+#[ta_objects::dxo]
 mod definitions {
     use crate::types::basic::{
         CollectionId, CollectionName, DependencyPos, ExecutionId, FunctionName, FunctionRunId,
@@ -10,11 +10,10 @@ mod definitions {
         TableName, TableVersionId, TransactionId, VersionPos,
     };
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(
         sql_table = "function_requirements",
-        recursive(up = "requirement_function_run_id", down = "function_run_id"),
-        versioned(order_by = "id", partition_by = "id")
+        recursive(up = "requirement_function_run_id", down = "function_run_id")
     )]
     pub struct FunctionRequirementDB {
         #[builder(default)]
@@ -37,14 +36,14 @@ mod definitions {
         pub requirement_version_pos: VersionPos,
     }
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(sql_table = "function_requirements__with_status")]
     #[inherits(FunctionRequirementDB)]
     pub struct FunctionRequirementDBWithStatus {
         pub status: FunctionRunStatus,
     }
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(sql_table = "function_requirements__with_names")]
     #[inherits(FunctionRequirementDBWithStatus)]
     pub struct FunctionRequirementDBWithNames {

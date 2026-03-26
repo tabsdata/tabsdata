@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-#[td_type::dxo]
+#[ta_objects::dxo]
 mod definitions {
     use crate::dxo::crudl::RequestContext;
     use crate::types::basic::{
@@ -15,10 +15,11 @@ mod definitions {
         TableDependency, TableDependencyDto, TableTrigger, TableTriggerDto,
     };
     use std::collections::HashMap;
+    use ta_objects::{and, or};
 
-    #[td_type::Dto]
+    #[ta_objects::Dto]
     pub struct FunctionRegister {
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub name: FunctionName,
         pub description: Description,
         pub bundle_id: BundleId,
@@ -26,31 +27,31 @@ mod definitions {
         pub decorator: Decorator,
         #[builder(default)]
         pub connector: Option<Connector>,
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub dependencies: Option<Vec<TableDependencyDto>>,
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub triggers: Option<Vec<TableTriggerDto>>,
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub tables: Option<Vec<TableNameDto>>,
         #[serde(default)]
         #[builder(default)]
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub table_types: Option<HashMap<TableNameDto, TableType>>, // added in v4
         #[serde(default)]
         pub runtime_values: FunctionRuntimeValues,
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub reuse_frozen_tables: ReuseFrozen,
         #[serde(default)]
         #[builder(default)]
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub enabled: Option<Enabled>, // added in v4
         #[serde(default)]
         #[builder(default)]
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub workers: Option<HashMap<WorkerTypeDto, WorkerConfig>>, // added in v4
     }
 
-    #[td_type::Dto]
+    #[ta_objects::Dto]
     #[derive(Default)]
     #[serde(default)]
     #[builder(default)]
@@ -61,46 +62,48 @@ mod definitions {
         pub snippet: Option<Snippet>,
         pub decorator: Option<Decorator>,
         pub connector: Option<Option<Connector>>,
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub dependencies: Option<Vec<TableDependencyDto>>,
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub triggers: Option<Vec<TableTriggerDto>>,
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub tables: Option<Vec<TableNameDto>>,
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub table_types: Option<HashMap<TableNameDto, TableType>>, // added in v4
         pub runtime_values: Option<FunctionRuntimeValues>,
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub reuse_frozen_tables: ReuseFrozen,
         pub enabled: Option<Enabled>, // added in v4
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub workers: Option<HashMap<WorkerTypeDto, WorkerConfig>>, // added in v4
     }
 
-    #[td_type::Dto]
+    #[ta_objects::Dto]
     pub struct FunctionEnable {
         pub enabled: Enabled, // added in v4
     }
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[derive(Eq, PartialEq)]
     #[dao(
         sql_table = "functions",
         versioned(
-            order_by = "defined_on",
+            pk = "id",
+            version_by = "defined_on",
             partition_by = "function_id",
+            current = "functions_current",
         ),
         states(
             // Active functions are functions which are not deleted that have dependencies Active.
-            Active = [&FunctionStatus::Active],
+            Active = FunctionStatus::Active,
             // Available functions are functions that are not deleted and can be read.
-            Available = [&FunctionStatus::Active, &FunctionStatus::Frozen],
+            Available = or!(FunctionStatus::Active, FunctionStatus::Frozen),
             // To execute a function, we need it to be Active (not Frozen or Deleted) and Enabled.
             // This state is required upfront for recursive queries to generate proper views.
-            Executable = [&(FunctionStatus::Active, Enabled::TRUE)],
+            Executable = and!(FunctionStatus::Active, Enabled::TRUE),
         )
     )]
-    #[td_type(
+    #[dxo(
         builder(try_from = FunctionDB),
         builder(try_from = FunctionRegister, skip_all),
         updater(try_from = FunctionEnable, skip_all),
@@ -108,62 +111,64 @@ mod definitions {
     )]
     pub struct FunctionDB {
         #[builder(default = "FunctionVersionId::new()")]
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub id: FunctionVersionId,
-        #[td_type(setter)]
+        #[dxo(setter)]
         pub collection_id: CollectionId,
-        #[td_type(builder(include))]
+        #[dxo(builder(include))]
         pub name: FunctionName,
-        #[td_type(builder(include))]
+        #[dxo(builder(include))]
         pub description: Description,
-        #[td_type(builder(include))]
+        #[dxo(builder(include))]
         pub decorator: Decorator,
-        #[td_type(builder(include))]
+        #[dxo(builder(include))]
         pub connector: Option<Connector>,
-        #[td_type(builder(include))]
+        #[dxo(builder(include))]
         pub runtime_values: FunctionRuntimeValues,
         #[builder(default)]
-        #[td_type(setter, extractor)]
+        #[dxo(setter, extractor)]
         pub function_id: FunctionId,
-        #[td_type(setter)]
+        #[dxo(setter)]
         pub data_location: DataLocation,
-        #[td_type(setter)]
+        #[dxo(setter)]
         pub storage_version: StorageVersion,
-        #[td_type(extractor)]
-        #[td_type(builder(include))]
+        #[dxo(extractor)]
+        #[dxo(builder(include))]
         pub bundle_id: BundleId,
-        #[td_type(builder(include))]
+        #[dxo(builder(include))]
         pub snippet: Snippet,
-        #[td_type(updater(try_from = RequestContext, field = "time"))]
+        #[dxo(updater(try_from = RequestContext, field = "time"))]
         pub defined_on: AtTime,
-        #[td_type(updater(try_from = RequestContext, field = "user_id"))]
+        #[dxo(updater(try_from = RequestContext, field = "user_id"))]
         pub defined_by_id: UserId,
         #[builder(default = FunctionStatus::Active)]
         pub status: FunctionStatus,
-        #[td_type(setter, updater(include, try_from = FunctionEnable))]
+        #[dxo(setter, updater(include, try_from = FunctionEnable))]
         pub enabled: Enabled, // added in v4
     }
 
-    #[td_type::Dao]
-    #[dao(sql_table = "functions__with_names")]
+    #[ta_objects::Dao]
+    #[dao(
+        sql_table = "functions__with_names",
+        versioned(current = "functions_current__with_names")
+    )]
     #[inherits(FunctionDB)]
     pub struct FunctionDBWithNames {
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub id: FunctionVersionId,
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub collection_id: CollectionId,
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub function_id: FunctionId,
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub enabled: Enabled, //  added in v4
 
         pub collection: CollectionName,
         pub defined_by: UserName,
     }
 
-    #[td_type::Dto]
+    #[ta_objects::Dto]
     #[dto(list(on = FunctionDBWithNames))]
-    #[td_type(builder(try_from = FunctionDBWithNames))]
     #[inherits(FunctionDBWithNames)]
     pub struct Function {
         #[dto(list(pagination_by = "+"))]
@@ -187,23 +192,23 @@ mod definitions {
         pub defined_by: UserName,
     }
 
-    #[td_type::Dto]
-    #[td_type(builder(try_from = Function))]
+    #[ta_objects::Dto]
+    #[dxo(builder(try_from = Function))]
     #[inherits(Function)]
     pub struct FunctionWithTables {
-        #[td_type(builder(skip), setter)]
+        #[dxo(builder(skip), setter)]
         pub dependencies: Vec<TableDependency>,
-        #[td_type(builder(skip), setter)]
+        #[dxo(builder(skip), setter)]
         pub triggers: Vec<TableTrigger>,
-        #[td_type(builder(skip), setter)]
+        #[dxo(builder(skip), setter)]
         pub tables: Vec<TableName>,
     }
 
-    #[td_type::Dto]
-    #[td_type(builder(try_from = FunctionWithTables))]
+    #[ta_objects::Dto]
+    #[dxo(builder(try_from = FunctionWithTables))]
     #[inherits(FunctionWithTables)]
     pub struct FunctionWithAllVersions {
-        #[td_type(builder(skip), setter)]
+        #[dxo(builder(skip), setter)]
         pub all: Vec<Function>,
     }
 }

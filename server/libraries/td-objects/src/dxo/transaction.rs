@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-#[td_type::dxo]
+#[ta_objects::dxo]
 mod definitions {
     use crate::dxo::execution::ExecutionDB;
     use crate::types::basic::{
@@ -10,29 +10,30 @@ mod definitions {
         StatusCount, TransactionByStr, TransactionId, TransactionKey, TransactionStatus,
         TriggeredOn, UserId, UserName,
     };
+    use crate::types::json::Json;
     use crate::types::status_count::FunctionRunStatusCount;
     use std::collections::HashMap;
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(sql_table = "transactions")]
-    #[td_type(builder(try_from = ExecutionDB, skip_all))]
+    #[dxo(builder(try_from = ExecutionDB, skip_all))]
     pub struct TransactionDB {
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub id: TransactionId,
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub collection_id: CollectionId,
-        #[td_type(builder(field = "id"))]
+        #[dxo(builder(field = "id"))]
         pub execution_id: ExecutionId,
         pub transaction_by: TransactionByStr,
         pub transaction_key: TransactionKey,
-        #[td_type(builder(include))]
+        #[dxo(builder(include))]
         pub triggered_on: TriggeredOn,
-        #[td_type(builder(include))]
+        #[dxo(builder(include))]
         pub triggered_by_id: UserId,
     }
 
-    #[td_type::Dlo]
-    #[td_type(builder(try_from = TransactionDB))]
+    #[ta_objects::Dlo]
+    #[dxo(builder(try_from = TransactionDB))]
     pub struct TransactionValue {
         // no default as it has to be calculated depending on the execution
         // tied to its functions, not the execution
@@ -43,7 +44,7 @@ mod definitions {
         pub transaction_key: TransactionKey,
     }
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(sql_table = "transactions__with_status")]
     #[inherits(TransactionDB)]
     pub struct TransactionDBWithStatus {
@@ -54,11 +55,10 @@ mod definitions {
         pub execution: Option<ExecutionName>,
         pub triggered_by: UserName,
 
-        pub function_run_status_count: sqlx::types::Json<HashMap<FunctionRunStatus, StatusCount>>,
+        pub function_run_status_count: Json<HashMap<FunctionRunStatus, StatusCount>>,
     }
 
-    #[td_type::Dto]
-    #[td_type(builder(try_from = TransactionDBWithStatus))]
+    #[ta_objects::Dto]
     #[dto(list(on = TransactionDBWithStatus))]
     #[inherits(TransactionDBWithStatus)]
     pub struct Transaction {

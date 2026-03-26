@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-#[td_type::dxo]
+#[ta_objects::dxo]
 mod definitions {
     use crate::dxo::crudl::RequestContext;
     use crate::dxo::function::FunctionDB;
@@ -10,53 +10,59 @@ mod definitions {
         AtTime, CollectionId, CollectionName, FunctionId, System, TableId, TriggerId,
         TriggerStatus, TriggerVersionId, UserId,
     };
+    use ta_objects::or;
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(
         sql_table = "triggers",
         versioned(
-            order_by = "defined_on",
+            version_by = "defined_on",
             partition_by = "trigger_id",
+            pk = "id",
+            current = "triggers_current",
         ),
         recursive(up = "trigger_by_function_id", down = "function_id"),
         states(
             // Active triggers are available to be used in executions.
-            Active = [&TriggerStatus::Active],
+            Active = TriggerStatus::Active,
             // Frozen triggers mean the trigger exists, but cannot be used in executions.
-            Frozen = [&TriggerStatus::Frozen],
+            Frozen = TriggerStatus::Frozen,
             // Available triggers are all the triggers that are not deleted.
-            Available = [&TriggerStatus::Active, &TriggerStatus::Frozen],
+            Available = or!(TriggerStatus::Active, TriggerStatus::Frozen),
         )
     )]
-    #[td_type(
+    #[dxo(
         builder(try_from = FunctionDB, skip_all),
         updater(try_from = RequestContext, skip_all)
     )]
     pub struct TriggerDB {
         #[builder(default)]
         pub id: TriggerVersionId,
-        #[td_type(builder(include))]
+        #[dxo(builder(include))]
         pub collection_id: CollectionId,
         #[builder(default)]
         pub trigger_id: TriggerId,
-        #[td_type(builder(include, field = "function_id"))]
+        #[dxo(builder(include, field = "function_id"))]
         pub function_id: FunctionId,
         pub trigger_by_collection_id: CollectionId,
         pub trigger_by_function_id: FunctionId,
         pub trigger_by_table_id: TableId,
         pub status: TriggerStatus,
-        #[td_type(updater(include, field = "time"))]
+        #[dxo(updater(include, field = "time"))]
         pub defined_on: AtTime,
-        #[td_type(updater(include, field = "user_id"))]
+        #[dxo(updater(include, field = "user_id"))]
         pub defined_by_id: UserId,
         pub system: System,
     }
 
-    #[td_type::Dao]
-    #[dao(sql_table = "triggers__with_names")]
+    #[ta_objects::Dao]
+    #[dao(
+        sql_table = "triggers__with_names",
+        versioned(current = "triggers_current__with_names")
+    )]
     #[inherits(TriggerDB)]
     pub struct TriggerDBWithNames {
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub trigger_by_table_id: TableId,
 
         pub collection: CollectionName,

@@ -4,7 +4,7 @@
 
 use crate::types::basic::{BuildManifest, PythonVersion, TabsdataVersion};
 
-#[td_type::Dto]
+#[ta_objects::Dto]
 pub struct ServerVersion {
     pub version: TabsdataVersion,
 }
@@ -17,14 +17,14 @@ impl Default for ServerVersion {
     }
 }
 
-#[td_type::Dto]
+#[ta_objects::Dto]
 #[derive(Default)]
 pub struct PythonVersions {
     #[builder(default)]
     pub versions: Vec<PythonVersion>,
 }
 
-#[td_type::Dto]
+#[ta_objects::Dto]
 pub struct RuntimeInfo {
     pub version: TabsdataVersion,
     pub build_manifest: BuildManifest,

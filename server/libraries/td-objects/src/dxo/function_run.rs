@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-#[td_type::dxo]
+#[ta_objects::dxo]
 mod definitions {
     use crate::dxo::execution::ExecutionDB;
     use crate::dxo::worker::UpdateWorkerExecution;
@@ -13,28 +13,27 @@ mod definitions {
     };
     use td_error::TdError;
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(
         sql_table = "function_runs",
-        order_by = "triggered_on",
-        versioned(order_by = "triggered_on", partition_by = "id")
+        order_by(col = "triggered_on", dir = "desc")
     )]
-    #[td_type(builder(try_from = ExecutionDB, skip_all))]
+    #[dxo(builder(try_from = ExecutionDB, skip_all))]
     pub struct FunctionRunDB {
         #[builder(default)]
         pub id: FunctionRunId,
         pub collection_id: CollectionId, // this is not the ExecutionDB function_version_id, as that's the trigger
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub function_id: FunctionId, // added in v4
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub function_version_id: FunctionVersionId, // this is not the ExecutionDB function_version_id, as that's the trigger
-        #[td_type(extractor, builder(field = "id"))]
+        #[dxo(extractor, builder(field = "id"))]
         pub execution_id: ExecutionId,
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub transaction_id: TransactionId,
-        #[td_type(builder(include))]
+        #[dxo(builder(include))]
         pub triggered_on: TriggeredOn,
-        #[td_type(builder(include))]
+        #[dxo(builder(include))]
         pub triggered_by_id: UserId,
         pub trigger: Trigger,
         #[builder(default)]
@@ -45,7 +44,7 @@ mod definitions {
         pub status: FunctionRunStatus,
     }
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(sql_table = "function_runs__with_names")]
     #[inherits(FunctionRunDB)]
     pub struct FunctionRunDBWithNames {
@@ -56,11 +55,11 @@ mod definitions {
         pub triggered_by: UserName,
     }
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(sql_table = "function_runs__to_execute")]
     #[inherits(FunctionRunDBWithNames)]
     pub struct FunctionRunToExecuteDB {
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub id: FunctionRunId,
 
         pub data_location: DataLocation,
@@ -69,14 +68,13 @@ mod definitions {
         pub defined_on: AtTime,
     }
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(sql_table = "function_runs__to_commit")]
     #[inherits(FunctionRunDB)]
     pub struct FunctionRunToCommitDB {}
 
-    #[td_type::Dto]
+    #[ta_objects::Dto]
     #[dto(list(on = FunctionRunDBWithNames))]
-    #[td_type(builder(try_from = FunctionRunDBWithNames))]
     pub struct FunctionRun {
         #[dto(list(filter, filter_like, order_by))]
         pub id: FunctionRunId,
@@ -114,9 +112,9 @@ mod definitions {
         // pub exit_status: i32,
     }
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(sql_table = "function_runs")]
-    #[td_type(builder(try_from = UpdateWorkerExecution))]
+    #[dxo(builder(try_from = UpdateWorkerExecution))]
     pub struct UpdateFunctionRunDB {
         #[dao(immutable)]
         #[builder(default)]
@@ -160,7 +158,7 @@ mod definitions {
         }
     }
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(sql_table = "function_runs")]
     pub struct CommitFunctionRunDB {
         pub status: FunctionRunStatus,

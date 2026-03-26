@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-#[td_type::dxo]
+#[ta_objects::dxo]
 mod definitions {
     use crate::dxo::crudl::RequestContext;
     use crate::types::basic::{
@@ -10,30 +10,30 @@ mod definitions {
         ToCollectionName, UserId, UserName,
     };
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(sql_table = "inter_collection_permissions")]
-    #[td_type(updater(try_from = RequestContext, skip_all))]
+    #[dxo(updater(try_from = RequestContext, skip_all))]
     pub struct InterCollectionPermissionDB {
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         #[builder(default)]
         pub id: InterCollectionPermissionId,
-        #[td_type(setter)]
+        #[dxo(setter)]
         pub from_collection_id: CollectionId, // the collection that grants access
-        #[td_type(setter)]
+        #[dxo(setter)]
         pub to_collection_id: ToCollectionId, // the collection that is granted read access
-        #[td_type(updater(try_from = RequestContext, field = "user_id"))]
+        #[dxo(updater(try_from = RequestContext, field = "user_id"))]
         pub granted_by_id: UserId,
-        #[td_type(updater(try_from = RequestContext, field = "time"))]
+        #[dxo(updater(try_from = RequestContext, field = "time"))]
         pub granted_on: AtTime,
     }
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(sql_table = "inter_collection_permissions__with_names")]
     #[inherits(InterCollectionPermissionDB)]
     pub struct InterCollectionPermissionDBWithNames {
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub id: InterCollectionPermissionId,
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub from_collection_id: CollectionId,
 
         pub from_collection: CollectionName,
@@ -41,15 +41,14 @@ mod definitions {
         pub granted_by: UserName,
     }
 
-    #[td_type::Dto]
+    #[ta_objects::Dto]
     pub struct InterCollectionPermissionCreate {
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub to_collection: ToCollectionName,
     }
 
-    #[td_type::Dto]
+    #[ta_objects::Dto]
     #[dto(list(on = InterCollectionPermissionDBWithNames))]
-    #[td_type(builder(try_from = InterCollectionPermissionDBWithNames))]
     pub struct InterCollectionPermission {
         #[dto(list(pagination_by = "+", filter))]
         pub id: InterCollectionPermissionId,
