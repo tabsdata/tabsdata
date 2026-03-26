@@ -15,6 +15,29 @@ pub trait SeaValue: std::fmt::Debug + Send + Sync {
     /// the `TypeId` of the active variant's inner type.  Used by `col_for_type`
     /// to resolve the right database column at runtime.
     fn as_type_id(&self) -> std::any::TypeId;
+
+    /// Format this value for user display in error messages.
+    ///
+    /// Strings are single-quoted, `None` variants render as `"null"`.
+    fn display_value(&self) -> String {
+        use sea_query::Value;
+        match self.as_sea_value() {
+            Value::Bool(Some(b)) => b.to_string(),
+            Value::TinyInt(Some(i)) => i.to_string(),
+            Value::SmallInt(Some(i)) => i.to_string(),
+            Value::Int(Some(i)) => i.to_string(),
+            Value::BigInt(Some(i)) => i.to_string(),
+            Value::TinyUnsigned(Some(i)) => i.to_string(),
+            Value::SmallUnsigned(Some(i)) => i.to_string(),
+            Value::Unsigned(Some(i)) => i.to_string(),
+            Value::BigUnsigned(Some(i)) => i.to_string(),
+            Value::Float(Some(f)) => f.to_string(),
+            Value::Double(Some(f)) => f.to_string(),
+            Value::String(Some(s)) => format!("'{s}'"),
+            Value::Char(Some(c)) => format!("'{c}'"),
+            _ => "null".to_string(),
+        }
+    }
 }
 
 /// Delegate through references.
