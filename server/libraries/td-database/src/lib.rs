@@ -540,6 +540,7 @@ mod tests {
             "executions___triggered_by_id___idx",
             "executions___triggered_on___idx",
             "function_requirements___function_run_id___idx",
+            "function_requirements___function_version_id___idx",
             "function_requirements___requirement_function_run_id___idx",
             "function_requirements___requirement_table_data_version_id___idx",
             "function_runs___collection_id___idx",

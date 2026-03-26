@@ -6,8 +6,13 @@
 //!
 //! 0. Add `schema_changed` boolean column to `table_data_versions`.
 //! 1. Populate `schema_changed` for existing rows.
+//! 2. Add `function_version_id` column to `function_requirements`.
+//! 3. Populate `function_version_id` from `function_runs`.
+//! 4. Add index on `function_requirements.function_version_id`.
 
-use sea_query::{Alias, ColumnDef, Expr, ExprTrait, Func, Iden, Order, Query, SimpleExpr, Table};
+use sea_query::{
+    Alias, ColumnDef, Expr, ExprTrait, Func, Iden, Index, Order, Query, SimpleExpr, Table,
+};
 
 use crate::schema::SchemaDelta;
 use crate::schema::backend::Backend;
@@ -25,6 +30,20 @@ enum TableDataVersions {
     TriggeredOn,
 }
 
+#[derive(Iden)]
+enum FunctionRequirements {
+    Table,
+    FunctionRunId,
+    FunctionVersionId,
+}
+
+#[derive(Iden)]
+enum FunctionRuns {
+    Table,
+    Id,
+    FunctionVersionId,
+}
+
 /// Marker type for the v7-to-v8 migration.
 pub struct Migration;
 
@@ -32,9 +51,9 @@ impl SchemaDelta for Migration {
     const FROM_VERSION: usize = 7;
     const TO_VERSION: usize = 8;
     const FINGERPRINTS: [&'static str; 3] = [
-        "18a342abf21d83f1f0f83876feab7c0403518217f1761f5bd77ef6b32bfd1407", // Sqlite
-        "de9af0bfc2ccf1ccb57ad365f5a8c8730d062db9d6eedb62e7823fd6756fa332", // Postgres
-        "5ede68f31e0c015aad2e7b88f28d0b4ed73a343d16b4ee0fa46ded15f57de9cd", // MySql
+        "dd37c4b24297fbe3837e485f8e93d0906c499b20839a1a6eb1d79148e676944a", // Sqlite
+        "b003d7ba4a69070a752ec6afb71c670a04d165a35dab4600348302f01947199b", // Postgres
+        "1800e5cdc82652bc6ebaa80610f5eba4f94560c51bb0dec9cc628fb1bea277de", // MySql
     ];
 
     fn up(b: Backend) -> Vec<String> {
@@ -86,20 +105,16 @@ impl SchemaDelta for Migration {
                 )
                 .and_where(Expr::col((prev.clone(), TableDataVersions::HasData)).eq(true))
                 .and_where(
-                    Expr::col((prev.clone(), TableDataVersions::TriggeredOn))
-                        .lt(Expr::col((
-                            TableDataVersions::Table,
-                            TableDataVersions::TriggeredOn,
-                        ))),
+                    Expr::col((prev.clone(), TableDataVersions::TriggeredOn)).lt(Expr::col((
+                        TableDataVersions::Table,
+                        TableDataVersions::TriggeredOn,
+                    ))),
                 )
                 .order_by((prev, TableDataVersions::TriggeredOn), Order::Desc)
                 .limit(1)
                 .to_owned();
 
-            let coalesce_args: Vec<SimpleExpr> = vec![
-                prev_hash.into(),
-                Expr::val("").into(),
-            ];
+            let coalesce_args: Vec<SimpleExpr> = vec![prev_hash.into(), Expr::val("")];
 
             stmts.push(
                 b.build_query(
@@ -120,7 +135,56 @@ impl SchemaDelta for Migration {
             );
         }
 
-        // 3. Mandatory version bump.
+        // 3. Add function_version_id column to function_requirements (NOT NULL, default empty).
+        //    The empty default is a placeholder — step 4 populates every row. Every
+        //    function_requirement has a function_run_id, and every function_run has a
+        //    function_version_id, so no row will remain with the empty default.
+        stmts.push(
+            b.build_schema(
+                Table::alter()
+                    .table(FunctionRequirements::Table)
+                    .add_column(
+                        ColumnDef::new(FunctionRequirements::FunctionVersionId)
+                            .text()
+                            .not_null()
+                            .default(""),
+                    )
+                    .to_owned(),
+            ),
+        );
+
+        // 4. Populate function_version_id from function_runs via function_run_id.
+        stmts.push(
+            b.build_query(
+                Query::update()
+                    .table(FunctionRequirements::Table)
+                    .value(
+                        FunctionRequirements::FunctionVersionId,
+                        Query::select()
+                            .column(FunctionRuns::FunctionVersionId)
+                            .from(FunctionRuns::Table)
+                            .and_where(Expr::col((FunctionRuns::Table, FunctionRuns::Id)).equals((
+                                FunctionRequirements::Table,
+                                FunctionRequirements::FunctionRunId,
+                            )))
+                            .to_owned(),
+                    )
+                    .to_owned(),
+            ),
+        );
+
+        // 5. Add index on function_requirements.function_version_id.
+        stmts.push(
+            b.build_schema(
+                Index::create()
+                    .name("function_requirements___function_version_id___idx")
+                    .table(FunctionRequirements::Table)
+                    .col(FunctionRequirements::FunctionVersionId)
+                    .to_owned(),
+            ),
+        );
+
+        // 6. Mandatory version bump.
         stmts.push(b.update_db_version(Self::TO_VERSION));
 
         info!(

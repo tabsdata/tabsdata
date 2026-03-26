@@ -262,6 +262,7 @@ pub enum FunctionRequirements {
     ExecutionId,
     TransactionId,
     FunctionRunId,
+    FunctionVersionId,
     RequirementTableId,
     RequirementFunctionVersionId,
     RequirementTableVersionId,
@@ -1041,6 +1042,11 @@ pub fn tables() -> Vec<TableCreateStatement> {
             )
             .col(
                 ColumnDef::new(FunctionRequirements::FunctionRunId)
+                    .text()
+                    .not_null(),
+            )
+            .col(
+                ColumnDef::new(FunctionRequirements::FunctionVersionId)
                     .text()
                     .not_null(),
             )

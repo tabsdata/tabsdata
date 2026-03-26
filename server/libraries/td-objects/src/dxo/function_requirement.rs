@@ -23,6 +23,7 @@ mod definitions {
         pub execution_id: ExecutionId,
         pub transaction_id: TransactionId,
         pub function_run_id: FunctionRunId,
+        pub function_version_id: FunctionVersionId,
         pub requirement_table_id: TableId,
         pub requirement_function_version_id: FunctionVersionId,
         pub requirement_table_version_id: TableVersionId,

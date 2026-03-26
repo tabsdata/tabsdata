@@ -33,6 +33,7 @@ pub(crate) async fn seed_function_requirement(
         .execution_id(&execution.id)
         .transaction_id(&transaction.id)
         .function_run_id(function_run.id)
+        .function_version_id(&function_run.function_version_id)
         .requirement_table_id(requirement_table.table_id)
         .requirement_function_version_id(&requirement_table.function_version_id)
         .requirement_table_version_id(requirement_table.id)
