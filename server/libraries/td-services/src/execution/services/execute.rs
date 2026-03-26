@@ -581,6 +581,7 @@ pub(crate) mod tests {
             for table_data_version in table_data_versions {
                 assert_eq!(&table_data_version.execution_id, &response.id);
                 assert_eq!(table_data_version.has_data, None);
+                assert_eq!(table_data_version.schema_changed, None);
                 assert_eq!(table_data_version.status, FunctionRunStatus::Scheduled);
                 assert!(
                     expected_created_tables.contains(&TableName::try_from(format!(

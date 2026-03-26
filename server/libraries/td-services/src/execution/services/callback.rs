@@ -83,8 +83,8 @@ mod tests {
     use td_objects::dxo::yaml::function_runner::v2::{FunctionOutput, TableInfo, WrittenTable};
     use td_objects::types::basic::{
         AccessTokenId, CollectionName, ColumnCount, ExecutionStatus, FunctionName,
-        FunctionRunStatus, HasData, RoleId, RowCount, SchemaHash, TableName, TableNameDto,
-        TransactionStatus, UserId,
+        FunctionRunStatus, HasData, RoleId, RowCount, SchemaChanged, SchemaHash, TableName,
+        TableNameDto, TransactionStatus, UserId,
     };
     use td_objects::types::composed::TableDependencyDto;
     use td_queries::BasicQueries;
@@ -549,6 +549,10 @@ mod tests {
         );
         assert_eq!(table_data_version.status, function_run.status);
         assert_eq!(table_data_version.has_data, Some(HasData::FALSE));
+        assert_eq!(
+            table_data_version.schema_changed,
+            Some(SchemaChanged::FALSE)
+        );
 
         let table_data_versions: Vec<TableDataVersionDBWithNames> = db
             .fetch_all::<TableDataVersionDBWithNames>(&TableName::try_from("t_1")?)
@@ -562,6 +566,7 @@ mod tests {
         );
         assert_eq!(table_data_version.status, function_run.status);
         assert_eq!(table_data_version.has_data, Some(HasData::TRUE));
+        assert_eq!(table_data_version.schema_changed, Some(SchemaChanged::TRUE));
         assert_eq!(
             table_data_version.column_count,
             Some(ColumnCount::try_from(1i64)?)
@@ -703,6 +708,10 @@ mod tests {
         // version_0 (newer) has data, and version_1 (older) does not
         assert_eq!(table_data_version_0.has_data, Some(HasData::TRUE));
         assert_eq!(
+            table_data_version_0.schema_changed,
+            Some(SchemaChanged::TRUE)
+        );
+        assert_eq!(
             table_data_version_0.column_count,
             Some(ColumnCount::try_from(3i64)?)
         );
@@ -715,6 +724,10 @@ mod tests {
             Some(SchemaHash::try_from("hash")?)
         );
         assert_eq!(table_data_version_1.has_data, Some(HasData::FALSE));
+        assert_eq!(
+            table_data_version_1.schema_changed,
+            Some(SchemaChanged::FALSE)
+        );
         assert_eq!(table_data_version_1.column_count, None);
         assert_eq!(table_data_version_1.row_count, None);
         assert_eq!(table_data_version_1.schema_hash, None);
@@ -749,6 +762,10 @@ mod tests {
         // version_0 (newer) has no data, and version_1 (older) does. version_0 inherits data info
         assert_eq!(table_data_version_0.has_data, Some(HasData::FALSE));
         assert_eq!(
+            table_data_version_0.schema_changed,
+            Some(SchemaChanged::FALSE)
+        );
+        assert_eq!(
             table_data_version_0.column_count,
             Some(ColumnCount::try_from(1i64)?)
         );
@@ -761,6 +778,10 @@ mod tests {
             Some(SchemaHash::try_from("hash")?)
         );
         assert_eq!(table_data_version_1.has_data, Some(HasData::TRUE));
+        assert_eq!(
+            table_data_version_1.schema_changed,
+            Some(SchemaChanged::TRUE)
+        );
         assert_eq!(
             table_data_version_1.column_count,
             Some(ColumnCount::try_from(1i64)?)
