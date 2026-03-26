@@ -1,0 +1,106 @@
+//
+// Copyright 2025 Tabs Data Inc.
+//
+
+use crate::BasicQueries;
+use ta_objects::Buildable;
+use td_database::sea_query::executor::SeaExecutor;
+use td_error::TdError;
+use td_objects::dxo::execution::ExecutionDB;
+use td_objects::dxo::function::FunctionDB;
+use td_objects::types::basic::{ExecutionName, TriggerType, TriggeredOn, UserId};
+
+pub(crate) async fn seed_execution(
+    db: impl SeaExecutor + Send,
+    function_version: &FunctionDB,
+) -> Result<ExecutionDB, TdError> {
+    _seed_execution(db, function_version, TriggerType::Manual).await
+}
+
+pub(crate) async fn seed_cron_execution(
+    db: impl SeaExecutor + Send,
+    function_version: &FunctionDB,
+) -> Result<ExecutionDB, TdError> {
+    _seed_execution(db, function_version, TriggerType::CronTrigger).await
+}
+
+async fn _seed_execution(
+    db: impl SeaExecutor + Send,
+    function_version: &FunctionDB,
+    trigger_type: TriggerType,
+) -> Result<ExecutionDB, TdError> {
+    let execution_db = ExecutionDB::builder()
+        .name(ExecutionName::try_from("test_execution")?)
+        .collection_id(function_version.collection_id)
+        .function_id(function_version.function_id)
+        .function_version_id(&function_version.id)
+        .triggered_on(TriggeredOn::now())
+        .triggered_by_id(UserId::admin())
+        .recursion_options(None)
+        .trigger_type(trigger_type)
+        .build()?;
+
+    db.insert::<ExecutionDB>(&execution_db).await?;
+    Ok(execution_db)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::test_utils::SeedQueries;
+    use ta_objects::Buildable;
+    use td_database::pool::TdPool;
+    use td_objects::dxo::function::FunctionRegister;
+    use td_objects::types::basic::{
+        BundleId, CollectionName, Decorator, ExecutionName, TriggeredOn, UserId,
+    };
+    use td_security::ENCODED_ID_SYSTEM;
+
+    #[td_test::test(sqlx)]
+    #[tokio::test]
+    async fn test_seed_execution(db: TdPool) {
+        let collection = db
+            .seed_collection(
+                &CollectionName::try_from("collection").unwrap(),
+                &UserId::try_from(ENCODED_ID_SYSTEM).unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let dependencies = None;
+        let triggers = None;
+        let tables = None;
+
+        let create = FunctionRegister::builder()
+            .try_name("joaquin")
+            .unwrap()
+            .try_description("function_foo description")
+            .unwrap()
+            .bundle_id(BundleId::default())
+            .try_snippet("function_foo snippet")
+            .unwrap()
+            .decorator(Decorator::Publisher)
+            .dependencies(dependencies)
+            .triggers(triggers)
+            .tables(tables)
+            .try_runtime_values("mock runtime values")
+            .unwrap()
+            .reuse_frozen_tables(false)
+            .build()
+            .unwrap();
+
+        let function_version = db.seed_function(&collection, &create).await.unwrap();
+
+        let execution = db.seed_execution(&function_version).await.unwrap();
+        assert_eq!(
+            execution.name,
+            Some(ExecutionName::try_from("test_execution").unwrap())
+        );
+        assert_eq!(execution.collection_id, collection.id);
+        assert_eq!(execution.function_version_id, function_version.id);
+        assert_eq!(
+            **execution.triggered_by_id,
+            **function_version.defined_by_id
+        );
+        assert!(execution.triggered_on < TriggeredOn::now());
+    }
+}
