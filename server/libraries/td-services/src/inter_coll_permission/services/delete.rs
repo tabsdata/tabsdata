@@ -4,19 +4,18 @@
 
 use crate::inter_coll_permission::layers::assert_collection_in_permission;
 use ta_services::factory::service_factory;
+use td_authz::tower::{AuthzOn, CollAdmin, SecAdmin, System};
 use td_authz::{Authz, AuthzContext, refresh_authz_context};
 use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
 use td_objects::dxo::inter_collection_permission::{
     InterCollectionPermissionDB, InterCollectionPermissionDBWithNames,
 };
 use td_objects::rest_urls::InterCollectionPermissionParam;
-use td_objects::sql::DaoQueries;
-use td_objects::tower_service::authz::{AuthzOn, CollAdmin, SecAdmin, System};
-use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
-use td_objects::tower_service::sql::{By, SqlDeleteService, SqlSelectService};
+use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
     CollectionId, CollectionIdName, InterCollectionPermissionId, InterCollectionPermissionIdName,
 };
+use td_queries::By;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -26,7 +25,6 @@ use td_tower::layers;
     request = DeleteRequest<InterCollectionPermissionParam>,
     response = (),
     connection = TransactionProvider,
-    context = DaoQueries,
     context = AuthzContext,
 )]
 fn service() {
@@ -43,7 +41,7 @@ fn service() {
         // find permission
         from_fn(With::<InterCollectionPermissionParam>::extract::<InterCollectionPermissionIdName>),
         from_fn(
-            By::<InterCollectionPermissionIdName>::select::<InterCollectionPermissionDBWithNames>
+            By::<InterCollectionPermissionIdName>::fetch_one::<InterCollectionPermissionDBWithNames>
         ),
         // Check the role in the request matches the role in permission
         from_fn(With::<InterCollectionPermissionParam>::extract::<CollectionIdName>),
@@ -65,23 +63,23 @@ fn service() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
     use ta_services::service::TdService;
-    use td_database::sql::DbPool;
+    use td_authz::tower::AuthzError;
+    use td_database::pool::TdPool;
     use td_error::{TdError, assert_service_error};
+    use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::rest_urls::InterCollectionPermissionParam;
-    use td_objects::test_utils::seed_collection::seed_collection;
-    use td_objects::test_utils::seed_inter_collection_permission::{
-        get_inter_collection_permissions, seed_inter_collection_permission,
-    };
-    use td_objects::tower_service::authz::AuthzError;
-    use td_objects::types::basic::{AccessTokenId, CollectionName, IdOrName, RoleId, UserId};
+    use td_objects::types::basic::{AccessTokenId, CollectionName, RoleId, UserId};
+    use td_queries::BasicQueries;
+    use td_queries::test_utils::SeedQueries;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_delete_inter_collection_permission_service(db: DbPool) {
+    async fn test_tower_metadata_delete_inter_collection_permission(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
         DeleteInterCollectionPermissionService::with_defaults(db)
@@ -108,7 +106,7 @@ mod tests {
                     >,
                 ),
                 type_of_val(
-                    &By::<InterCollectionPermissionIdName>::select::<
+                    &By::<InterCollectionPermissionIdName>::fetch_one::<
                         InterCollectionPermissionDBWithNames,
                     >,
                 ),
@@ -139,14 +137,18 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_delete_permission_ok(db: DbPool) -> Result<(), TdError> {
-        let service = DeleteInterCollectionPermissionService::with_defaults(db.clone())
-            .service()
-            .await;
+    async fn test_delete_permission_ok(db: TdPool) -> Result<(), TdError> {
+        let service = DeleteInterCollectionPermissionService::with_defaults(db.clone()).service();
 
-        let c0 = seed_collection(&db, &CollectionName::try_from("c0")?, &UserId::admin()).await;
-        let c1 = seed_collection(&db, &CollectionName::try_from("c1")?, &UserId::admin()).await;
-        let p = seed_inter_collection_permission(&db, &c0.id, &(*c1.id).into()).await;
+        let c0 = db
+            .seed_collection(&CollectionName::try_from("c0")?, &UserId::admin())
+            .await?;
+        let c1 = db
+            .seed_collection(&CollectionName::try_from("c1")?, &UserId::admin())
+            .await?;
+        let p = db
+            .seed_inter_collection_permission(&c0.id, &(*c1.id).into())
+            .await?;
 
         let request = RequestContext::with(
             AccessTokenId::default(),
@@ -155,35 +157,39 @@ mod tests {
         )
         .delete(
             InterCollectionPermissionParam::builder()
-                .collection(CollectionIdName::try_from("c0")?)
-                .permission(InterCollectionPermissionIdName::from_id(p.id))
+                .collection(CollectionIdName::from_str("c0")?)
+                .permission(InterCollectionPermissionIdName::Id(p.id))
                 .build()?,
         );
 
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
 
-        let permissions = get_inter_collection_permissions(&db, &c0.id).await?;
+        let permissions = db.fetch_all::<InterCollectionPermissionDB>(&c0.id).await?;
         assert_eq!(permissions.len(), 0);
         Ok(())
     }
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_delete_permission_unauthz_err(db: DbPool) -> Result<(), TdError> {
-        let service = DeleteInterCollectionPermissionService::with_defaults(db.clone())
-            .service()
-            .await;
+    async fn test_delete_permission_unauthz_err(db: TdPool) -> Result<(), TdError> {
+        let service = DeleteInterCollectionPermissionService::with_defaults(db.clone()).service();
 
-        let c0 = seed_collection(&db, &CollectionName::try_from("c0")?, &UserId::admin()).await;
-        let c1 = seed_collection(&db, &CollectionName::try_from("c1")?, &UserId::admin()).await;
-        let p = seed_inter_collection_permission(&db, &c0.id, &(*c1.id).into()).await;
+        let c0 = db
+            .seed_collection(&CollectionName::try_from("c0")?, &UserId::admin())
+            .await?;
+        let c1 = db
+            .seed_collection(&CollectionName::try_from("c1")?, &UserId::admin())
+            .await?;
+        let p = db
+            .seed_inter_collection_permission(&c0.id, &(*c1.id).into())
+            .await?;
 
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).delete(
                 InterCollectionPermissionParam::builder()
-                    .collection(CollectionIdName::try_from("c0")?)
-                    .permission(InterCollectionPermissionIdName::from_id(p.id))
+                    .collection(CollectionIdName::from_str("c0")?)
+                    .permission(InterCollectionPermissionIdName::Id(p.id))
                     .build()?,
             );
 
