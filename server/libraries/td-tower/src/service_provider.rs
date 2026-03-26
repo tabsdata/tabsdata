@@ -3,22 +3,18 @@
 //
 
 use crate::ctx_service::CtxResponse;
-use std::convert::Infallible;
-use tower::util::{BoxCloneSyncService, BoxService};
-use tower::{MakeService, ServiceExt, service_fn};
+use tower::util::BoxCloneSyncService;
 use tower_service::Service;
 
 /// A boxed service type that can be used in multiple generic contexts. It will always
 /// wrap the return type in a [`CtxResponse`].
-pub type TdBoxService<T, U, E> = BoxService<T, CtxResponse<U>, E>;
+pub type TdBoxService<T, U, E> = BoxCloneSyncService<T, CtxResponse<U>, E>;
 
-/// [`ServiceProvider`] is a wrapper around a [`BoxService`] that allows for
+/// [`ServiceProvider`] is a wrapper around a [`BoxCloneSyncService`] that allows for
 /// creating new instances of the service. It makes the inner service types' opaque,
 /// for easy use in multiple generic contexts. It has always a wrapped return type in a
 /// [`CtxResponse`].
-pub struct ServiceProvider<Req, Res, Err>(
-    BoxCloneSyncService<(), TdBoxService<Req, Res, Err>, Infallible>,
-);
+pub struct ServiceProvider<Req, Res, Err>(BoxCloneSyncService<Req, CtxResponse<Res>, Err>);
 
 impl<Req, Res, Err> ServiceProvider<Req, Res, Err> {
     pub fn new<S>(inner: S) -> Self
@@ -26,16 +22,12 @@ impl<Req, Res, Err> ServiceProvider<Req, Res, Err> {
         S: Service<Req, Response = CtxResponse<Res>, Error = Err> + Clone + Send + Sync + 'static,
         S::Future: Send + 'static,
     {
-        let inner = BoxCloneSyncService::new(service_fn(move |_: ()| {
-            let inner = inner.clone();
-            async move { Ok::<_, Infallible>(inner.boxed()) }
-        }));
-        ServiceProvider(inner)
+        ServiceProvider(BoxCloneSyncService::new(inner))
     }
 
     /// Creates a new instance of the boxed service.
-    pub async fn make(&self) -> TdBoxService<Req, Res, Err> {
-        self.0.clone().make_service(()).await.unwrap()
+    pub fn make(&self) -> TdBoxService<Req, Res, Err> {
+        self.0.clone()
     }
 }
 
@@ -57,10 +49,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ctx_service::CtxMap;
+    use crate::ctx_service::ReqCtx;
     use futures_util::future::{self, Ready};
     use std::convert::Infallible;
-    use tower_service::Service;
+    use tower::{Service, ServiceExt};
 
     #[derive(Clone)]
     struct TestService;
@@ -78,7 +70,7 @@ mod tests {
         }
 
         fn call(&mut self, _req: ()) -> Self::Future {
-            future::ready(Ok(CtxResponse::new("test response", CtxMap::default())))
+            future::ready(Ok(CtxResponse::new("test response", ReqCtx::default())))
         }
     }
 
@@ -86,7 +78,7 @@ mod tests {
     async fn test_service_provider_new() {
         let service = TestService;
         let provider = ServiceProvider::new(service);
-        let boxed_service = provider.make().await;
+        let boxed_service = provider.make();
         let response = boxed_service.oneshot(()).await.unwrap();
         assert_eq!(*response, "test response");
     }
@@ -95,7 +87,7 @@ mod tests {
     async fn test_into_service_provider() {
         let service = TestService;
         let provider: ServiceProvider<_, _, _> = service.into_service_provider();
-        let boxed_service = provider.make().await;
+        let boxed_service = provider.make();
         let response = boxed_service.oneshot(()).await.unwrap();
         assert_eq!(*response, "test response");
     }

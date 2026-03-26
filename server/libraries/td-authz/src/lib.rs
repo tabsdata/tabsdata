@@ -10,7 +10,7 @@ use td_common::provider::{CachedProvider, Provider};
 use td_database::dynamic::DynamicConnection;
 use td_error::TdError;
 use td_objects::types::basic::{CollectionId, RoleId, ToCollectionId};
-use td_tower::extractors::{Connection, SrvCtx};
+use td_tower::extractors::{MutRef, Ref};
 
 pub mod authz_provider;
 pub mod jwt;
@@ -23,11 +23,9 @@ pub type AuthzContext = AuthzContextImplWithCache;
 /// Layer to refresh the authz context. It must be called every time
 /// permissions and inter_collection_permissions change.
 pub async fn refresh_authz_context(
-    SrvCtx(context): SrvCtx<AuthzContext>,
-    Connection(conn): Connection,
+    context: Ref<AuthzContext>,
+    mut conn: MutRef<DynamicConnection<'static>>,
 ) -> Result<(), TdError> {
-    let mut conn_ = conn.lock().await;
-    let mut conn = conn_.get()?;
     context.refresh(&mut conn).await?;
     Ok(())
 }

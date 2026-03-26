@@ -134,7 +134,7 @@ use td_objects::or;
 use td_objects::types::basic::{CollectionId, RoleId, ToCollectionId, UserId};
 use td_objects::types::visible_collections::VisibleCollections;
 use td_queries::BasicQueries;
-use td_tower::extractors::{Connection, Input, SrvCtx};
+use td_tower::extractors::{MutRef, Ref};
 
 pub trait AuthzContextT: Send + Sync {
     /// Return the permissions for the given role.
@@ -388,21 +388,21 @@ impl AuthzOn<System> {
 
 impl AuthzOn<CollectionId> {
     /// Set the Authorization scope to [`AuthzScope::Collection`] for a [`CollectionId`] in the service context.
-    pub async fn set(Input(collection_id): Input<CollectionId>) -> Result<AuthzScope, TdError> {
+    pub async fn set(collection_id: Ref<CollectionId>) -> Result<AuthzScope, TdError> {
         Ok(AuthzScope::Collection(AuthzEntity::On(*collection_id)))
     }
 }
 
 impl AuthzOn<UserId> {
     /// Set the Authorization scope to [`AuthzScope::User`] for a [`UserId`] in the service context.
-    pub async fn set(Input(user_id): Input<UserId>) -> Result<AuthzScope, TdError> {
+    pub async fn set(user_id: Ref<UserId>) -> Result<AuthzScope, TdError> {
         Ok(AuthzScope::User(AuthzEntity::On(*user_id)))
     }
 }
 
 impl AuthzOn<RoleId> {
     /// Set the Authorization scope to [`AuthzScope::Role`] for a [`RoleId`] in the service context.
-    pub async fn set(Input(role_id): Input<RoleId>) -> Result<AuthzScope, TdError> {
+    pub async fn set(role_id: Ref<RoleId>) -> Result<AuthzScope, TdError> {
         Ok(AuthzScope::Role(AuthzEntity::On(*role_id)))
     }
 }
@@ -414,7 +414,7 @@ pub struct SystemOrUserId {
 
 impl AuthzOn<SystemOrUserId> {
     /// Set the Authorization scope to [`AuthzScope::User`] for a [`UserId`] in the service context.
-    pub async fn set(Input(user_id): Input<UserId>) -> Result<AuthzScope, TdError> {
+    pub async fn set(user_id: Ref<UserId>) -> Result<AuthzScope, TdError> {
         Ok(AuthzScope::User(AuthzEntity::On(*user_id)))
     }
 }
@@ -426,7 +426,7 @@ pub struct SystemOrRoleId {
 
 impl AuthzOn<SystemOrRoleId> {
     /// Set the Authorization scope to [`AuthzScope::Role`] for a [`RoleId`] in the service context.
-    pub async fn set(Input(role_id): Input<RoleId>) -> Result<AuthzScope, TdError> {
+    pub async fn set(role_id: Ref<RoleId>) -> Result<AuthzScope, TdError> {
         Ok(AuthzScope::Role(AuthzEntity::On(*role_id)))
     }
 }
@@ -846,14 +846,11 @@ impl<
     ///
     /// The role permissions are from the [`AuthzContextT`] in the service context.
     pub async fn check(
-        SrvCtx(authz_context): SrvCtx<AC>,
-        Connection(conn): Connection,
-        Input(request_context): Input<RequestContext>,
-        Input(scope): Input<AuthzScope>,
+        authz_context: Ref<AC>,
+        mut conn: MutRef<DynamicConnection<'static>>,
+        request_context: Ref<RequestContext>,
+        scope: Ref<AuthzScope>,
     ) -> Result<(), TdError> {
-        let mut conn = conn.lock().await;
-        let mut conn = conn.get()?;
-
         let mut required_permissions = HashSet::new();
         if let Some(permissions) = C1::any_of(&*authz_context, &mut conn, &scope).await? {
             required_permissions.extend(permissions)
@@ -931,16 +928,12 @@ impl<
     }
 
     pub async fn check_inter_collection(
-        SrvCtx(authz_context): SrvCtx<AC>,
-        Connection(conn): Connection,
-        Input(inter_collection_access_list): Input<Vec<InterCollectionAccess>>,
+        authz_context: Ref<AC>,
+        mut conn: MutRef<DynamicConnection<'static>>,
+        inter_collection_access_list: Ref<Vec<InterCollectionAccess>>,
     ) -> Result<(), TdError> {
-        let mut conn = conn.lock().await;
-        let mut conn = conn.get()?;
-
         // within the same collection access is always allowed, so we filter them out
         let inter_collection_access_list = inter_collection_access_list
-            .deref()
             .iter()
             .filter(|access| *access.source != *access.target)
             .collect::<HashSet<_>>();
@@ -998,13 +991,11 @@ impl<
     }
 
     pub async fn visible_collections(
-        SrvCtx(authz_context): SrvCtx<AC>,
-        Connection(conn): Connection,
-        Input(request_context): Input<RequestContext>,
+        authz_context: Ref<AC>,
+        mut conn: MutRef<DynamicConnection<'static>>,
+        request_context: Ref<RequestContext>,
     ) -> Result<VisibleCollections, TdError> {
         // TODO use C1, C2, etc??
-        let mut conn = conn.lock().await;
-        let mut conn = conn.get()?;
         authz_context
             .visible_collections(&mut conn, &request_context.role_id)
             .await
@@ -1028,7 +1019,7 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::inter_collection_access::InterCollectionAccess;
     use td_objects::types::basic::{AccessTokenId, CollectionId, RoleId, ToCollectionId, UserId};
-    use td_tower::extractors::{Connection, Input, SrvCtx};
+    use td_tower::extractors::{MutRef, Ref};
 
     #[test]
     fn test_is_on_collection() {
@@ -1285,12 +1276,12 @@ mod tests {
     ) {
         let db = td_database::test_utils::db().await.unwrap();
         let conn = db.acquire().await.unwrap();
-        let conn = Connection::new(conn);
+        let conn = MutRef::new(conn);
         let res = Authz::<C1, C2, C3, C4, C5, C6, C7>::check(
-            SrvCtx(authz_context.clone()),
+            Ref::from_arc(authz_context.clone()),
             conn,
-            Input(request_context.clone()),
-            Input(scope.clone()),
+            Ref::from_arc(request_context.clone()),
+            Ref::from_arc(scope.clone()),
         )
         .await;
         match res {
@@ -1318,12 +1309,12 @@ mod tests {
     ) {
         let db = td_database::test_utils::db().await.unwrap();
         let conn = db.acquire().await.unwrap();
-        let conn = Connection::new(conn);
+        let conn = MutRef::new(conn);
         let res = Authz::<C1, C2, C3, C4, C5, C6, C7>::check(
-            SrvCtx(authz_context.clone()),
+            Ref::from_arc(authz_context.clone()),
             conn,
-            Input(request_context.clone()),
-            Input(scope.clone()),
+            Ref::from_arc(request_context.clone()),
+            Ref::from_arc(scope.clone()),
         )
         .await;
         match res {
@@ -2373,15 +2364,13 @@ mod tests {
         let authz_context = Arc::new(authz_context);
 
         let db = td_database::test_utils::db().await.unwrap();
-        let conn = db.acquire().await.unwrap();
-        let conn = Connection::new(conn);
 
         let list = Arc::new(vec![]);
 
         let res = Authz::<InterColl>::check_inter_collection(
-            SrvCtx(authz_context.clone()),
-            conn.clone(),
-            Input(list),
+            Ref::from_arc(authz_context.clone()),
+            MutRef::new(db.acquire().await.unwrap()),
+            Ref::from_arc(list),
         )
         .await;
         assert!(matches!(res, Ok(())));
@@ -2395,9 +2384,9 @@ mod tests {
         ]);
 
         let res = Authz::<InterColl>::check_inter_collection(
-            SrvCtx(authz_context.clone()),
-            conn.clone(),
-            Input(list),
+            Ref::from_arc(authz_context.clone()),
+            MutRef::new(db.acquire().await.unwrap()),
+            Ref::from_arc(list),
         )
         .await;
         assert!(matches!(res, Ok(())));
@@ -2411,9 +2400,9 @@ mod tests {
         ]);
 
         let res = Authz::<InterColl>::check_inter_collection(
-            SrvCtx(authz_context.clone()),
-            conn.clone(),
-            Input(list),
+            Ref::from_arc(authz_context.clone()),
+            MutRef::new(db.acquire().await.unwrap()),
+            Ref::from_arc(list),
         )
         .await;
         assert!(matches!(res, Ok(())));
@@ -2428,8 +2417,6 @@ mod tests {
         let authz_context = Arc::new(authz_context);
 
         let db = td_database::test_utils::db().await.unwrap();
-        let conn = db.acquire().await.unwrap();
-        let conn = Connection::new(conn);
 
         let list = Arc::new(vec![
             InterCollectionAccess::builder()
@@ -2440,9 +2427,9 @@ mod tests {
         ]);
 
         let res = Authz::<InterColl>::check_inter_collection(
-            SrvCtx(authz_context.clone()),
-            conn.clone(),
-            Input(list),
+            Ref::from_arc(authz_context.clone()),
+            MutRef::new(db.acquire().await.unwrap()),
+            Ref::from_arc(list),
         )
         .await;
         let err = res.err().unwrap();
@@ -2460,9 +2447,9 @@ mod tests {
         ]);
 
         let res = Authz::<InterColl>::check_inter_collection(
-            SrvCtx(authz_context.clone()),
-            conn.clone(),
-            Input(list),
+            Ref::from_arc(authz_context.clone()),
+            MutRef::new(db.acquire().await.unwrap()),
+            Ref::from_arc(list),
         )
         .await;
         let err = res.err().unwrap();
@@ -2480,9 +2467,9 @@ mod tests {
         ]);
 
         let res = Authz::<InterColl>::check_inter_collection(
-            SrvCtx(authz_context.clone()),
-            conn.clone(),
-            Input(list),
+            Ref::from_arc(authz_context.clone()),
+            MutRef::new(db.acquire().await.unwrap()),
+            Ref::from_arc(list),
         )
         .await;
         let err = res.err().unwrap();

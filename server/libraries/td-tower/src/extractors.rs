@@ -2,282 +2,311 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::ctx_service::{CtxMap, InnerContext};
-use crate::error::{ConnectionError, FromHandlerError};
+use crate::error::FromHandlerError;
 use crate::handler::Handler;
 use std::any::type_name;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
-use td_database::dynamic::{DynamicConnection, DynamicTransaction};
-use tokio::sync::{Mutex, MutexGuard};
 
 /// Trait for extracting an instance of a type from a `Handler`.
 pub trait FromHandler: Sized {
     /// Extracts an instance of the type from the given `Handler`.
-    fn from_handler(handler: &Handler) -> Result<Self, FromHandlerError>;
+    fn from_handler(handler: &mut Handler) -> Result<Self, FromHandlerError>;
+
+    /// Called after the from_fn closure returns. Default: no-op.
+    /// Used by MutRef to restore values back into the handler.
+    fn post_extract(_handler: &mut Handler) {}
 
     /// Returns the list of types this extractor actually consumes from the handler.
-    ///
-    /// The default returns `[type_of::<Self>()]`, which is correct for simple extractors
-    /// like `Input<T>`, `Connection`, `SrvCtx<T>`, etc.
-    ///
-    /// Composite extractors that consume different/multiple types from the handler
-    /// (e.g. `SqlConditionInput<All2<A, B>>` consumes `Input<A>` and `Input<B>`)
-    /// should override this method to return the actual types consumed.
     #[cfg(feature = "test_tower_metadata")]
     fn metadata_used_types() -> Vec<String> {
         vec![crate::metadata::type_of::<Self>()]
     }
 }
 
-/// Wrapper for an input value. Input values can also be generated in inner services.
-pub struct Input<T>(pub Arc<T>);
+/// Shared read-only reference. Clones the internal Arc.
+pub struct Ref<T: ?Sized>(pub(crate) Arc<T>);
 
-impl<T> Input<T> {
+impl<T> Ref<T> {
     pub fn new(value: T) -> Self {
         Self(Arc::new(value))
     }
-}
 
-impl<T> Clone for Input<T> {
-    fn clone(&self) -> Self {
-        Self(Arc::clone(&self.0))
+    pub fn from_arc(arc: Arc<T>) -> Self {
+        Self(arc)
     }
 }
 
-impl<T> FromHandler for Input<T>
-where
-    T: Send + Sync + 'static,
-{
-    fn from_handler(handler: &Handler) -> Result<Self, FromHandlerError> {
-        let value = match handler.get::<Input<T>>() {
-            // Note that this just clones the Arc, not T itself
-            Some(value) => Ok(value.clone()),
-            None => Err(FromHandlerError::NotFound(String::from(type_name::<T>()))),
-        }?;
+impl<T> Deref for Ref<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        // it will never expect due to rust borrow checker (it won't even compile)
+        self.0.as_ref()
+    }
+}
+
+impl<T> Clone for Ref<T> {
+    fn clone(&self) -> Self {
+        Ref(self.0.clone())
+    }
+}
+
+impl<T: std::fmt::Display> std::fmt::Display for Ref<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl<T> AsRef<T> for Ref<T> {
+    fn as_ref(&self) -> &T {
+        // it will never expect due to rust borrow checker (it won't even compile)
+        self.0.as_ref()
+    }
+}
+
+impl<T: Send + 'static> FromHandler for Ref<T> {
+    fn from_handler(handler: &mut Handler) -> Result<Self, FromHandlerError> {
+        let value = handler
+            .get::<T>()
+            .ok_or_else(|| FromHandlerError::NotFound(type_name::<T>().into()))?;
         Ok(value)
+    }
+
+    #[cfg(feature = "test_tower_metadata")]
+    fn metadata_used_types() -> Vec<String> {
+        vec![crate::metadata::type_of::<T>()]
+    }
+}
+
+/// Internal restoration slot, stored in handler by MutRef::from_handler.
+/// post_extract receives the value from the oneshot channel and restores it.
+struct RefSlot<T>(tokio::sync::oneshot::Receiver<T>);
+
+/// Mutable owned value with auto-restore on drop.
+///
+/// Takes ownership from handler; when dropped, the value is automatically restored
+/// to the handler via `post_extract`. Use `into_inner()` to opt out of auto-restore.
+///
+/// `MutRef::new()` creates a standalone value with no restore slot.
+pub struct MutRef<T> {
+    value: Option<T>,
+    sender: Option<tokio::sync::oneshot::Sender<T>>,
+}
+
+impl<T> MutRef<T> {
+    pub fn new(value: T) -> Self {
+        Self {
+            value: Some(value),
+            sender: None,
+        }
+    }
+}
+
+impl<T> Drop for MutRef<T> {
+    fn drop(&mut self) {
+        if let (Some(value), Some(sender)) = (self.value.take(), self.sender.take()) {
+            let _ = sender.send(value);
+        }
+    }
+}
+
+impl<T> Deref for MutRef<T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        // it will never expect due to rust borrow checker (it won't even compile)
+        self.value.as_ref().expect("MutRef value already consumed")
+    }
+}
+
+impl<T> DerefMut for MutRef<T> {
+    fn deref_mut(&mut self) -> &mut T {
+        // it will never expect due to rust borrow checker (it won't even compile)
+        self.value.as_mut().expect("MutRef value already consumed")
+    }
+}
+
+impl<T: Send + 'static> FromHandler for MutRef<T> {
+    fn from_handler(handler: &mut Handler) -> Result<Self, FromHandlerError> {
+        let value = handler
+            .take::<T>()
+            .ok_or_else(|| FromHandlerError::NotFound(type_name::<T>().into()))?;
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        handler.insert(RefSlot::<T>(receiver));
+        Ok(MutRef {
+            value: Some(value),
+            sender: Some(sender),
+        })
+    }
+
+    fn post_extract(handler: &mut Handler) {
+        // Drop already fired — value was sent through the channel. Move it back to handler.
+        if let Some(mut slot) = handler.remove::<RefSlot<T>>() {
+            if let Ok(value) = slot.0.try_recv() {
+                handler.insert(value);
+            }
+        }
+    }
+
+    #[cfg(feature = "test_tower_metadata")]
+    fn metadata_used_types() -> Vec<String> {
+        vec![crate::metadata::type_of::<T>()]
+    }
+}
+
+/// Owned value. Takes ownership via Arc::try_unwrap. Value is consumed.
+/// Read-only access via Deref. Use `into_inner()` to consume.
+pub struct Owned<T>(T);
+
+impl<T> Owned<T> {
+    pub fn new(value: T) -> Self {
+        Self(value)
+    }
+
+    pub fn into_inner(self) -> T {
+        self.0
+    }
+}
+
+impl<T> Deref for Owned<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T: Send + 'static> FromHandler for Owned<T> {
+    fn from_handler(handler: &mut Handler) -> Result<Self, FromHandlerError> {
+        handler
+            .take::<T>()
+            .map(Owned)
+            .ok_or_else(|| FromHandlerError::NotFound(type_name::<T>().into()))
+    }
+
+    #[cfg(feature = "test_tower_metadata")]
+    fn metadata_used_types() -> Vec<String> {
+        vec![crate::metadata::type_of::<T>()]
     }
 }
 
 // () — trivial extractor for "no input" (e.g. By::<()>::list).
 impl FromHandler for () {
-    fn from_handler(_handler: &Handler) -> Result<Self, FromHandlerError> {
+    fn from_handler(_handler: &mut Handler) -> Result<Self, FromHandlerError> {
         Ok(())
-    }
-}
-
-/// Wrapper for a context value.
-pub struct SrvCtx<T>(pub Arc<T>);
-
-impl<T> SrvCtx<T> {
-    pub fn new(value: T) -> Self {
-        Self(Arc::new(value))
-    }
-}
-
-impl<T> Clone for SrvCtx<T> {
-    fn clone(&self) -> Self {
-        Self(Arc::clone(&self.0))
-    }
-}
-
-impl<T> FromHandler for SrvCtx<T>
-where
-    T: Send + Sync + 'static,
-{
-    fn from_handler(handler: &Handler) -> Result<Self, FromHandlerError> {
-        let value = match handler.get::<SrvCtx<T>>() {
-            // Note that this just clones the Arc, not T itself
-            Some(value) => Ok(value.clone()),
-            None => Err(FromHandlerError::NotFound(String::from(type_name::<T>()))),
-        }?;
-        Ok(value)
-    }
-}
-
-/// The raw connection type — either a transaction or a pool connection.
-#[derive(Debug)]
-pub enum ConnectionType {
-    Transaction(DynamicTransaction<'static>),
-    PoolConnection(DynamicConnection<'static>),
-}
-
-impl From<DynamicTransaction<'static>> for ConnectionType {
-    fn from(transaction: DynamicTransaction<'static>) -> Self {
-        Self::Transaction(transaction)
-    }
-}
-
-impl From<DynamicConnection<'static>> for ConnectionType {
-    fn from(connection: DynamicConnection<'static>) -> Self {
-        Self::PoolConnection(connection)
-    }
-}
-
-/// The locked guard — the only way to access the underlying connection.
-pub struct ConnectionGuard<'a> {
-    guard: MutexGuard<'a, Option<ConnectionType>>,
-}
-
-impl ConnectionGuard<'_> {
-    pub fn get(&mut self) -> Result<DynamicConnection<'_>, ConnectionError> {
-        if let Some(conn) = self.guard.deref_mut() {
-            let conn = match conn {
-                ConnectionType::Transaction(tx) => tx.as_mut_conn(),
-                ConnectionType::PoolConnection(conn) => conn.as_borrowed(),
-            };
-            Ok(conn)
-        } else {
-            Err(ConnectionError::ConnectionLost)
-        }
-    }
-}
-
-/// The actual connection handle — holds the shared state and exposes lock().
-pub struct ConnectionInner {
-    conn: Mutex<Option<ConnectionType>>,
-}
-
-impl ConnectionInner {
-    fn new(conn: ConnectionType) -> Self {
-        Self {
-            conn: Mutex::new(Some(conn)),
-        }
-    }
-
-    pub async fn lock(&self) -> ConnectionGuard<'_> {
-        ConnectionGuard {
-            guard: self.conn.lock().await,
-        }
-    }
-
-    /// Reclaims ownership of the connection — used by layers for commit/rollback.
-    pub(crate) async fn reclaim(&self) -> Result<ConnectionType, ConnectionError> {
-        self.conn
-            .lock()
-            .await
-            .take()
-            .ok_or(ConnectionError::ConnectionLost)
-    }
-}
-
-/// The extractor — a newtype around Arc<ConnectionInner> that implements FromHandler.
-pub struct Connection(pub Arc<ConnectionInner>);
-
-impl Connection {
-    pub fn new(conn: impl Into<ConnectionType>) -> Self {
-        Self(Arc::new(ConnectionInner::new(conn.into())))
-    }
-
-    pub(crate) fn arc(&self) -> Arc<ConnectionInner> {
-        Arc::clone(&self.0)
-    }
-}
-
-impl Clone for Connection {
-    fn clone(&self) -> Self {
-        Self(Arc::clone(&self.0))
-    }
-}
-
-impl FromHandler for Connection {
-    fn from_handler(handler: &Handler) -> Result<Self, FromHandlerError> {
-        handler
-            .get::<Connection>()
-            .map(|c| c.clone())
-            .ok_or_else(|| FromHandlerError::NotFound(String::from("connection")))
-    }
-}
-
-// We have an inner struct just so it looks like the other extractors in the layers.
-#[derive(Debug, Default, Clone)]
-pub struct ReqCtx(pub InnerContext);
-
-impl ReqCtx {
-    pub fn arc(&self) -> Arc<Mutex<Option<CtxMap>>> {
-        self.0.deref().clone()
-    }
-}
-
-impl FromHandler for ReqCtx {
-    fn from_handler(handler: &Handler) -> Result<Self, FromHandlerError> {
-        let value = match handler.get::<ReqCtx>() {
-            Some(value) => Ok(value.clone()),
-            None => Err(FromHandlerError::NotFound(String::from(
-                type_name::<ReqCtx>(),
-            ))),
-        }?;
-        Ok(value)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ctx_service::ReqCtx;
 
     #[tokio::test]
-    async fn test_input_extractor() {
-        let input = Input::new(42);
+    async fn test_ref_extractor() {
         let mut handler = Handler::new();
-        handler.insert(input.clone());
+        handler.set(42i32);
 
-        let retrieved_input: Input<i32> = Input::from_handler(&handler).unwrap();
-        assert_eq!(*retrieved_input.0, 42);
+        let retrieved: Ref<i32> = Ref::from_handler(&mut handler).unwrap();
+        assert_eq!(*retrieved, 42);
     }
 
     #[tokio::test]
-    async fn test_context_extractor() {
-        let context = SrvCtx::new(String::from("test"));
+    async fn test_mutref_extractor() {
         let mut handler = Handler::new();
-        handler.insert(context.clone());
+        handler.set(42i32);
 
-        let retrieved_context: SrvCtx<String> = SrvCtx::from_handler(&handler).unwrap();
-        assert_eq!(*retrieved_context.0, "test");
+        let mut retrieved: MutRef<i32> = MutRef::from_handler(&mut handler).unwrap();
+        *retrieved += 1;
+        assert_eq!(*retrieved, 43);
     }
 
     #[tokio::test]
-    async fn test_connection_extractor_pool_connection() {
+    async fn test_mutref_auto_restore() {
+        let mut handler = Handler::new();
+        handler.set(42i32);
+
+        {
+            let mut retrieved: MutRef<i32> = MutRef::from_handler(&mut handler).unwrap();
+            *retrieved += 1;
+            assert_eq!(*retrieved, 43);
+            // MutRef drops here, sends 43 through the channel
+        }
+
+        // post_extract moves from channel back into handler
+        MutRef::<i32>::post_extract(&mut handler);
+
+        // Value should be restored
+        let restored: MutRef<i32> = MutRef::from_handler(&mut handler).unwrap();
+        assert_eq!(*restored, 43);
+    }
+
+    #[tokio::test]
+    async fn test_mutref_into_inner_no_restore() {
+        let mut handler = Handler::new();
+        handler.set(42i32);
+
+        let retrieved: MutRef<i32> = MutRef::from_handler(&mut handler).unwrap();
+        let val = *retrieved;
+        assert_eq!(val, 42);
+
+        // post_extract should find nothing to restore
+        MutRef::<i32>::post_extract(&mut handler);
+
+        // Value should NOT be in the handler
+        assert!(handler.take::<i32>().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_owned_extractor() {
+        let mut handler = Handler::new();
+        handler.set(42i32);
+
+        let retrieved: Owned<i32> = Owned::from_handler(&mut handler).unwrap();
+        assert_eq!(*retrieved, 42);
+        // Value should be removed from handler
+        assert!(handler.get::<i32>().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_pool_connection() {
         let db = td_database::test_utils::db().await.unwrap();
-        let connection = db.acquire().await.unwrap();
-        let connection = Connection::new(connection);
-
-        let mut handler = Handler::new();
-        handler.insert(connection.clone());
-
-        let retrieved_connection = Connection::from_handler(&handler).unwrap();
-        assert!(Arc::ptr_eq(&retrieved_connection.0, &connection.0));
-
-        let mut conn = connection.0.lock().await;
-        let mut conn = conn.get().unwrap();
+        let mut conn = db.acquire().await.unwrap();
         assert!(conn.ping().await.is_ok());
     }
 
     #[tokio::test]
-    async fn test_connection_extractor_transaction() {
+    async fn test_transaction_as_connection() {
         let db = td_database::test_utils::db().await.unwrap();
         let transaction = db.begin().await.unwrap();
-        let connection = Connection::new(transaction);
-
-        let mut handler = Handler::new();
-        handler.insert(connection.clone());
-
-        let retrieved_connection = Connection::from_handler(&handler).unwrap();
-        assert!(Arc::ptr_eq(&retrieved_connection.0, &connection.0));
-
-        let mut conn = retrieved_connection.0.lock().await;
-        let mut conn = conn.get().unwrap();
+        let mut conn = transaction.into_connection();
         assert!(conn.ping().await.is_ok());
     }
 
     #[tokio::test]
-    async fn test_ctx_extractor() {
+    async fn test_mutref_dynamic_connection() {
+        use td_database::dynamic::DynamicConnection;
+
+        let db = td_database::test_utils::db().await.unwrap();
+        let conn = db.acquire().await.unwrap();
+
+        let mut handler = Handler::new();
+        handler.insert(conn);
+
+        let mut conn: MutRef<DynamicConnection<'static>> =
+            MutRef::from_handler(&mut handler).unwrap();
+        assert!(conn.ping().await.is_ok());
+    }
+
+    #[test]
+    fn test_ctx_extractor() {
         let context = ReqCtx::default();
         let mut handler = Handler::new();
-        handler.insert(context.clone());
+        handler.set(context);
 
-        let retrieved_context: ReqCtx = ReqCtx::from_handler(&handler).unwrap();
-        assert_eq!(retrieved_context.0.error_count().await, 0);
-        assert_eq!(retrieved_context.0.warning_count().await, 0);
-        assert_eq!(retrieved_context.0.notification_count().await, 0);
+        let retrieved: MutRef<ReqCtx> = MutRef::from_handler(&mut handler).unwrap();
+        assert_eq!(retrieved.error_count(), 0);
+        assert_eq!(retrieved.warning_count(), 0);
+        assert_eq!(retrieved.notification_count(), 0);
     }
 }

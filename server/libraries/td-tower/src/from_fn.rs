@@ -28,10 +28,18 @@ pub fn from_fn<F, T>(f: F) -> FromFnLayer<F, T> {
 
 /// A layer that wraps a function and produces a service.
 #[must_use]
-#[derive(Clone)]
 pub struct FromFnLayer<F, T> {
     f: F,
-    _extractor: PhantomData<T>,
+    _extractor: PhantomData<fn() -> T>,
+}
+
+impl<F: Clone, T> Clone for FromFnLayer<F, T> {
+    fn clone(&self) -> Self {
+        Self {
+            f: self.f.clone(),
+            _extractor: PhantomData,
+        }
+    }
 }
 
 impl<I, F, T> Layer<I> for FromFnLayer<F, T>
@@ -39,7 +47,7 @@ where
     F: Clone,
     I: Service<Handler, Error = TdError> + Clone + Send + Sync + 'static,
     I::Response: IntoHandler,
-    I::Future: Send + 'static,
+    I::Future: Send,
 {
     type Service = FromFn<F, T>;
 
@@ -59,11 +67,20 @@ where
 }
 
 /// Service created from a function and an inner service.
-#[derive(Clone)]
 pub struct FromFn<F, T> {
     f: F,
     inner: BoxCloneSyncService<Handler, Handler, TdError>,
-    _extractor: PhantomData<T>,
+    _extractor: PhantomData<fn() -> T>,
+}
+
+impl<F: Clone, T> Clone for FromFn<F, T> {
+    fn clone(&self) -> Self {
+        Self {
+            f: self.f.clone(),
+            inner: self.inner.clone(),
+            _extractor: PhantomData,
+        }
+    }
 }
 
 /// Implements `Service` for `FromFn` for tuples of inputs.
@@ -100,23 +117,24 @@ macro_rules! impl_service {
                 Box::pin(async move {
                     #[cfg(feature = "test_tower_metadata")]
                     {
-                        use $crate::metadata::{type_of_val, MetadataMutex};
+                        use $crate::metadata::{type_of_val, Metadata};
 
                         let mut used_types: Vec<String> = Vec::new();
                         $(used_types.extend(<$ty as FromHandler>::metadata_used_types());)*
-                        MetadataMutex::record_from_fn::<Out>(
-                            &handler,
+                        Metadata::record_from_fn::<Out>(
+                            &mut handler,
                             &type_of_val(&f),
                             &used_types,
-                        ).await;
+                        );
                         return Ok(ready_inner.call(handler).await?);
                     }
 
                     #[cfg(not(feature = "test_tower_metadata"))]
                     {
-                        $(let $ty = $ty::from_handler(&handler)?;)*
+                        $(let $ty = $ty::from_handler(&mut handler)?;)*
                         let res = f($($ty,)*).await?;
-                        handler.insert($crate::extractors::Input(std::sync::Arc::new(res)));
+                        $(<$ty>::post_extract(&mut handler);)*
+                        handler.set(res);
                         Ok(ready_inner.call(handler).await?)
                     }
                 })
@@ -148,13 +166,21 @@ mod tests {
     use super::*;
     use crate::ctx_service::RawOneshot;
     use crate::default_services::{ServiceEntry, ServiceReturn};
-    use crate::extractors::Input;
+    use crate::extractors::{MutRef, Ref};
+    use std::ops::DerefMut;
 
     #[cfg(feature = "test_tower_metadata")]
-    use crate::metadata::{MetadataMutex, type_of_val};
+    use crate::metadata::{Metadata, type_of_val};
 
-    async fn add_one(Input(x): Input<i32>) -> Result<i32, TdError> {
+    async fn add_one(x: Ref<i32>) -> Result<i32, TdError> {
+        let x = x.as_ref();
         Ok(*x + 1)
+    }
+
+    async fn add_one_mut(mut x: MutRef<i32>) -> Result<(), TdError> {
+        let x = x.deref_mut();
+        *x += 1;
+        Ok(())
     }
 
     #[tokio::test]
@@ -163,6 +189,15 @@ mod tests {
             .layer(ServiceEntry::default())
             .layer(from_fn(add_one))
             .layer(from_fn(add_one))
+            .service(ServiceReturn);
+
+        let response: i32 = service.raw_oneshot(3).await.unwrap();
+        assert_eq!(response, 5);
+
+        let service = ServiceBuilder::new()
+            .layer(ServiceEntry::default())
+            .layer(from_fn(add_one_mut))
+            .layer(from_fn(add_one_mut))
             .service(ServiceReturn);
 
         let response: i32 = service.raw_oneshot(3).await.unwrap();
@@ -214,9 +249,7 @@ mod tests {
             .layer(from_fn(test_layer_fn))
             .service(ServiceReturn);
 
-        let response: MetadataMutex = service.raw_oneshot(()).await.unwrap();
-        let metadata = response.get();
-
-        metadata.assert_service::<i32, i32>(&[type_of_val(&add_one), type_of_val(&test_layer_fn)]);
+        let response: Metadata = service.raw_oneshot(()).await.unwrap();
+        response.assert_service::<i32, i32>(&[type_of_val(&add_one), type_of_val(&test_layer_fn)]);
     }
 }

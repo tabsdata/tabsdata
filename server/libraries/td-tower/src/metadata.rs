@@ -2,12 +2,10 @@
 //  Copyright 2024 Tabs Data Inc.
 //
 
-use crate::extractors::{FromHandler, Input};
 use crate::handler::Handler;
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::hash::Hash;
-use tokio::sync::Mutex;
 use tracing::warn;
 
 #[derive(Clone)]
@@ -53,7 +51,7 @@ impl Hash for MetadataType {
 /// {
 ///     use tower::{ServiceBuilder, ServiceExt};
 ///     use tabsdatalib::common::tower_service::default_services::{ServiceEntry, ServiceReturn};
-///     use tabsdatalib::common::tower_service::extractors::{type_of_val, FromHandlerError, MetadataMutex};
+///     use tabsdatalib::common::tower_service::extractors::{type_of_val, FromHandlerError, Metadata};
 ///     use tabsdatalib::common::tower_service::from_fn::from_fn;
 ///
 ///     async fn test_layer_fn() -> Result<(), FromHandlerError> {
@@ -65,8 +63,7 @@ impl Hash for MetadataType {
 ///         .layer(from_fn(test_layer_fn))
 ///         .service(ServiceReturn);
 ///
-///     let response: MetadataMutex = service.raw_oneshot(()).await.unwrap();
-///     let metadata = response.get();
+///     let response: Metadata = service.raw_oneshot(()).await.unwrap();
 ///
 ///     assert_eq!(metadata.fn_names(), &vec![type_of_val(&test_layer_fn)]);
 /// }
@@ -87,8 +84,14 @@ pub struct Metadata {
     unused_types: HashSet<MetadataType>,
 }
 
+impl Default for Metadata {
+    fn default() -> Self {
+        Metadata::with_initial_types(&[])
+    }
+}
+
 impl Metadata {
-    fn with_initial_types(created: &[String]) -> Self {
+    pub fn with_initial_types(created: &[String]) -> Self {
         let created_types = created
             .iter()
             .map(|c| MetadataType {
@@ -106,7 +109,7 @@ impl Metadata {
         }
     }
 
-    pub fn assert_service<I, O>(&self, fn_names: &[String]) {
+    pub fn assert_service<I: 'static, O: 'static>(&self, fn_names: &[String]) {
         self.assert_fn_names(fn_names);
         self.assert_input(&Self::get_type_name::<I>());
         self.assert_output(&Self::get_type_name::<O>());
@@ -119,9 +122,9 @@ impl Metadata {
         }
     }
 
-    fn get_type_name<T>() -> Vec<String> {
-        let type_name = type_of::<Input<T>>();
-        if type_name == type_of::<Input<()>>() {
+    fn get_type_name<T: 'static>() -> Vec<String> {
+        let type_name = type_of::<T>();
+        if type_name == type_of::<()>() {
             Vec::new()
         } else {
             vec![type_name]
@@ -172,33 +175,14 @@ impl Metadata {
     }
 }
 
-#[derive(Debug)]
-pub struct MetadataMutex(Mutex<Metadata>);
-
-impl Default for MetadataMutex {
-    fn default() -> Self {
-        MetadataMutex::with_initial_types(&[])
-    }
-}
-
-impl MetadataMutex {
-    pub fn with_initial_types(created: &[String]) -> Self {
-        MetadataMutex(Mutex::new(Metadata::with_initial_types(created)))
+impl Metadata {
+    pub(crate) fn add_fn_name(&mut self, fn_name: impl Into<String>) {
+        self.fn_types.push(fn_name.into());
     }
 
-    /// Consumes the `MetadataMutex` and returns the inner `Metadata`.
-    pub fn get(self) -> Metadata {
-        self.0.into_inner()
-    }
-
-    pub(crate) async fn add_fn_name(&self, fn_name: impl Into<String>) {
-        self.0.lock().await.fn_types.push(fn_name.into());
-    }
-
-    pub(crate) async fn created_type(&self, fn_name: impl Into<String>, ty: impl Into<String>) {
+    pub(crate) fn created_type(&mut self, fn_name: impl Into<String>, ty: impl Into<String>) {
         let ty = ty.into();
-        if ty == type_of::<Input<()>>() {
-            // We don't care about unit types
+        if ty == type_of::<()>() {
             return;
         }
 
@@ -206,19 +190,17 @@ impl MetadataMutex {
             fn_type: fn_name.into(),
             ty,
         };
-        let mut this = self.0.lock().await;
-        if this.created_types.contains(&metadata_type) {
-            this.overwritten_types.insert(metadata_type.clone());
+        if self.created_types.contains(&metadata_type) {
+            self.overwritten_types.insert(metadata_type.clone());
         } else {
-            this.created_types.insert(metadata_type.clone());
+            self.created_types.insert(metadata_type.clone());
         }
-        this.unused_types.insert(metadata_type.clone());
+        self.unused_types.insert(metadata_type);
     }
 
-    pub(crate) async fn used_type(&self, fn_name: impl Into<String>, ty: impl Into<String>) {
+    pub(crate) fn used_type(&mut self, fn_name: impl Into<String>, ty: impl Into<String>) {
         let ty = ty.into();
-        if ty == type_of::<Input<()>>() {
-            // We don't care about unit types
+        if ty == type_of::<()>() {
             return;
         }
 
@@ -226,55 +208,40 @@ impl MetadataMutex {
             fn_type: fn_name.into(),
             ty,
         };
-        let mut this = self.0.lock().await;
-        this.used_types.insert(metadata_type.clone());
-        this.unused_types.remove(&metadata_type);
-        if !this.created_types.contains(&metadata_type) {
-            this.missing_types.insert(metadata_type.clone());
+        self.used_types.insert(metadata_type.clone());
+        self.unused_types.remove(&metadata_type);
+        if !self.created_types.contains(&metadata_type) {
+            self.missing_types.insert(metadata_type);
         }
     }
 
-    pub(crate) async fn remove_created(&self, fn_name: impl Into<String>, ty: impl Into<String>) {
-        let mut this = self.0.lock().await;
+    pub(crate) fn remove_created(&mut self, fn_name: impl Into<String>, ty: impl Into<String>) {
         let metadata_type = MetadataType {
             fn_type: fn_name.into(),
             ty: ty.into(),
         };
-        this.created_types.remove(&metadata_type);
+        self.created_types.remove(&metadata_type);
     }
 
-    // --- Centralized recording methods ---
-    // These encapsulate common metadata collection patterns so that each service
-    // call site only needs a one-liner instead of a multi-line #[cfg] block.
-    // All callers are behind #[cfg(feature = "test_tower_metadata")], so the
-    // MetadataMutex is guaranteed to be in the handler (inserted by InitService).
-
-    /// Returns the `MetadataMutex` from the handler.
-    ///
-    /// Panics if not found — all callers are behind `#[cfg(feature = "test_tower_metadata")]`
-    /// where `InitService` guarantees its presence.
-    pub fn extract(handler: &Handler) -> std::sync::Arc<MetadataMutex> {
-        let Input(metadata) = Input::<MetadataMutex>::from_handler(handler).expect(
-            "MetadataMutex missing from handler — is InitService (ServiceEntry) in the tower?",
-        );
-        metadata
+    /// Returns a mutable reference to the `Metadata` stored in the handler.
+    pub fn extract(handler: &mut Handler) -> Option<&mut Metadata> {
+        handler.get_mut::<Metadata>()
     }
 
     /// Record a `from_fn` layer's metadata: function name, used types, and
     /// the created output type.
-    pub async fn record_from_fn<Out: 'static>(
-        handler: &Handler,
+    pub fn record_from_fn<Out: 'static>(
+        handler: &mut Handler,
         fn_name: &str,
         used_types: &[String],
     ) {
-        let metadata = Self::extract(handler);
-        metadata.add_fn_name(fn_name.to_string()).await;
-        for ty in used_types {
-            metadata.used_type(fn_name.to_string(), ty.clone()).await;
+        if let Some(metadata) = Self::extract(handler) {
+            metadata.add_fn_name(fn_name.to_string());
+            for ty in used_types {
+                metadata.used_type(fn_name.to_string(), ty.clone());
+            }
+            metadata.created_type(fn_name.to_string(), type_of::<Out>());
         }
-        metadata
-            .created_type(fn_name.to_string(), type_of::<Input<Out>>())
-            .await;
     }
 }
 
@@ -290,43 +257,36 @@ pub fn type_of<T>() -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::extractors::Input;
-    use crate::metadata::{MetadataMutex, type_of, type_of_val};
+    use crate::metadata::{Metadata, type_of, type_of_val};
 
-    #[tokio::test]
-    async fn test_tower_metadata_add_fn_name() {
-        let metadata = MetadataMutex::default();
-        metadata.add_fn_name("test_fn".to_string()).await;
-        let fields = metadata.get();
-        assert_eq!(&fields.fn_types, &vec!["test_fn".to_string()]);
+    #[test]
+    fn test_tower_metadata_add_fn_name() {
+        let mut metadata = Metadata::default();
+        metadata.add_fn_name("test_fn".to_string());
+        assert_eq!(&metadata.fn_types, &vec!["test_fn".to_string()]);
     }
 
-    #[tokio::test]
-    async fn test_tower_metadata_assert_service() {
+    #[test]
+    fn test_tower_metadata_assert_service() {
         struct InputType;
         struct OutputType;
 
-        let metadata = MetadataMutex::default();
-        metadata.add_fn_name("test_fn".to_string()).await;
-        metadata
-            .created_type("fn1", type_of::<Input<OutputType>>())
-            .await;
-        metadata
-            .used_type("fn2", type_of::<Input<InputType>>())
-            .await;
-        let fields = metadata.get();
-        fields.assert_service::<InputType, OutputType>(&["test_fn".to_string()]);
+        let mut metadata = Metadata::default();
+        metadata.add_fn_name("test_fn".to_string());
+        metadata.created_type("fn1", type_of::<OutputType>());
+        metadata.used_type("fn2", type_of::<InputType>());
+        metadata.assert_service::<InputType, OutputType>(&["test_fn".to_string()]);
     }
 
-    #[tokio::test]
-    async fn test_tower_metadata_type_of() {
+    #[test]
+    fn test_tower_metadata_type_of() {
         assert_eq!(type_of_val(&1), "i32");
         assert_eq!(type_of_val(&"string".to_string()), "alloc::string::String");
 
         struct CustomStruct;
         assert_eq!(
             type_of_val(&CustomStruct),
-            "td_tower::metadata::tests::test_tower_metadata_type_of::{{closure}}::CustomStruct"
+            "td_tower::metadata::tests::test_tower_metadata_type_of::CustomStruct"
         );
 
         assert_eq!(

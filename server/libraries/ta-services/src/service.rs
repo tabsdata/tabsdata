@@ -9,9 +9,7 @@ pub trait TdService {
     type Response;
     type Error;
 
-    fn service(
-        &self,
-    ) -> impl Future<Output = TdBoxService<Self::Request, Self::Response, Self::Error>>;
+    fn service(&self) -> TdBoxService<Self::Request, Self::Response, Self::Error>;
 
     #[cfg(feature = "test_tower_metadata")]
     fn metadata(&self) -> impl Future<Output = td_tower::metadata::Metadata>;

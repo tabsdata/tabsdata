@@ -2,14 +2,11 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use async_trait::async_trait;
 use derive_builder::Builder;
 use getset::Getters;
 use serde::Serialize;
 use std::fmt::Debug;
 use std::ops::Deref;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 use tower::ServiceExt;
 use tower_service::Service;
 
@@ -23,13 +20,13 @@ pub struct CtxResponse<U> {
     /// Version of the API.
     version: String,
     /// The context of the response.
-    context: CtxMap,
+    context: ReqCtx,
     /// The data of the entity.
     data: U,
 }
 
 impl<U> CtxResponse<U> {
-    pub fn new(data: U, context: CtxMap) -> Self {
+    pub fn new(data: U, context: ReqCtx) -> Self {
         Self {
             version: API_VERSION.to_string(),
             data,
@@ -97,100 +94,51 @@ pub type Warning = Message;
 pub type Notification = Message;
 
 #[derive(utoipa::ToSchema, Debug, Clone, Default, Eq, PartialEq, Serialize)]
-pub struct CtxMap {
+pub struct ReqCtx {
     errors: Vec<Error>,
     warnings: Vec<Warning>,
     notifications: Vec<Notification>,
 }
 
-#[derive(Debug)]
-pub struct InnerContext(Arc<Mutex<Option<CtxMap>>>);
-
-impl Deref for InnerContext {
-    type Target = Arc<Mutex<Option<CtxMap>>>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl Default for InnerContext {
-    fn default() -> Self {
-        Self(Arc::new(Mutex::new(Some(CtxMap::default()))))
-    }
-}
-
-impl Clone for InnerContext {
-    fn clone(&self) -> Self {
-        Self(Arc::clone(&self.0))
-    }
-}
-
-impl InnerContext {
-    pub async fn error(&self, error: impl Into<Error>) {
-        let mut map = self.0.lock().await;
-        if let Some(map) = map.as_mut() {
-            map.errors.push(error.into());
-        }
+impl ReqCtx {
+    pub fn error(&mut self, error: impl Into<Error>) {
+        self.errors.push(error.into());
     }
 
-    pub async fn error_count(&self) -> usize {
-        let map = self.0.lock().await;
-        if let Some(map) = map.as_ref() {
-            map.errors.len()
-        } else {
-            0
-        }
+    pub fn error_count(&self) -> usize {
+        self.errors.len()
     }
 
-    pub async fn warning(&self, warning: impl Into<Warning>) {
-        let mut map = self.0.lock().await;
-        if let Some(map) = map.as_mut() {
-            map.warnings.push(warning.into());
-        }
+    pub fn warning(&mut self, warning: impl Into<Warning>) {
+        self.warnings.push(warning.into());
     }
 
-    pub async fn warning_count(&self) -> usize {
-        let map = self.0.lock().await;
-        if let Some(map) = map.as_ref() {
-            map.warnings.len()
-        } else {
-            0
-        }
+    pub fn warning_count(&self) -> usize {
+        self.warnings.len()
     }
 
-    pub async fn notification(&self, notification: impl Into<Notification>) {
-        let mut map = self.0.lock().await;
-        if let Some(map) = map.as_mut() {
-            map.notifications.push(notification.into());
-        }
+    pub fn notification(&mut self, notification: impl Into<Notification>) {
+        self.notifications.push(notification.into());
     }
 
-    pub async fn notification_count(&self) -> usize {
-        let map = self.0.lock().await;
-        if let Some(map) = map.as_ref() {
-            map.notifications.len()
-        } else {
-            0
-        }
+    pub fn notification_count(&self) -> usize {
+        self.notifications.len()
     }
 }
 
 /// Raw oneshot service, which returns the inner data of the response.
-#[async_trait]
 pub trait RawOneshot<Req>: Service<Req>
 where
     Req: Send,
 {
-    async fn raw_oneshot(
+    fn raw_oneshot(
         self,
         req: Req,
-    ) -> Result<<Self::Response as IntoData>::Inner, Self::Error>
+    ) -> impl Future<Output = Result<<Self::Response as IntoData>::Inner, Self::Error>>
     where
         Self::Response: IntoData;
 }
 
-#[async_trait]
 impl<S, Req> RawOneshot<Req> for S
 where
     S: Service<Req> + Send,
@@ -235,7 +183,7 @@ mod tests {
 
     #[test]
     fn test_ctx_response_new() {
-        let context = CtxMap::default();
+        let context = ReqCtx::default();
         let data = "test_data";
         let response = CtxResponse::new(data.to_string(), context.clone());
         assert_eq!(response.version, API_VERSION.to_string());
@@ -252,74 +200,60 @@ mod tests {
         assert_eq!(message.message, "Fatal error: terrible");
     }
 
-    #[tokio::test]
-    async fn test_inner_context_default() {
-        let context = InnerContext::default();
-        let map = context.0.lock().await;
-        assert!(map.is_some());
+    #[test]
+    fn test_inner_context_default() {
+        let context = ReqCtx::default();
+        assert_eq!(context.error_count(), 0);
+        assert_eq!(context.warning_count(), 0);
+        assert_eq!(context.notification_count(), 0);
     }
 
-    #[tokio::test]
-    async fn test_inner_context_clone() {
-        let context = InnerContext::default();
-        assert_eq!(Arc::strong_count(&context.0), 1);
-        let cloned_context = context.clone();
-        assert_eq!(Arc::strong_count(&context.0), 2);
-        assert_eq!(Arc::strong_count(&cloned_context.0), 2);
+    #[test]
+    fn test_inner_context_error() {
+        let mut context = ReqCtx::default();
+        context.error(Message {
+            code: "123".to_string(),
+            group: "error_group".to_string(),
+            message: "error_message".to_string(),
+            ..Default::default()
+        });
+        assert_eq!(context.error_count(), 1);
+        assert_eq!(context.warning_count(), 0);
+        assert_eq!(context.notification_count(), 0);
     }
 
-    #[tokio::test]
-    async fn test_inner_context_error() {
-        let context = InnerContext::default();
-        context
-            .error(Message {
-                code: "123".to_string(),
-                group: "error_group".to_string(),
-                message: "error_message".to_string(),
-                ..Default::default()
-            })
-            .await;
-        assert_eq!(context.error_count().await, 1);
-        assert_eq!(context.warning_count().await, 0);
-        assert_eq!(context.notification_count().await, 0);
+    #[test]
+    fn test_inner_context_warning() {
+        let mut context = ReqCtx::default();
+        context.warning(Message {
+            code: "123".to_string(),
+            group: "error_group".to_string(),
+            message: "error_message".to_string(),
+            ..Default::default()
+        });
+        assert_eq!(context.error_count(), 0);
+        assert_eq!(context.warning_count(), 1);
+        assert_eq!(context.notification_count(), 0);
     }
 
-    #[tokio::test]
-    async fn test_inner_context_warning() {
-        let context = InnerContext::default();
-        context
-            .warning(Message {
-                code: "123".to_string(),
-                group: "error_group".to_string(),
-                message: "error_message".to_string(),
-                ..Default::default()
-            })
-            .await;
-        assert_eq!(context.error_count().await, 0);
-        assert_eq!(context.warning_count().await, 1);
-        assert_eq!(context.notification_count().await, 0);
-    }
-
-    #[tokio::test]
-    async fn test_inner_context_notification() {
-        let context = InnerContext::default();
-        context
-            .notification(Message {
-                code: "123".to_string(),
-                group: "error_group".to_string(),
-                message: "error_message".to_string(),
-                ..Default::default()
-            })
-            .await;
-        assert_eq!(context.error_count().await, 0);
-        assert_eq!(context.warning_count().await, 0);
-        assert_eq!(context.notification_count().await, 1);
+    #[test]
+    fn test_inner_context_notification() {
+        let mut context = ReqCtx::default();
+        context.notification(Message {
+            code: "123".to_string(),
+            group: "error_group".to_string(),
+            message: "error_message".to_string(),
+            ..Default::default()
+        });
+        assert_eq!(context.error_count(), 0);
+        assert_eq!(context.warning_count(), 0);
+        assert_eq!(context.notification_count(), 1);
     }
 
     #[tokio::test]
     async fn test_raw_oneshot() {
         let service = service_fn(|req: String| async move {
-            let mut ctx = CtxMap::default();
+            let mut ctx = ReqCtx::default();
             ctx.errors.push(Message {
                 code: "123".to_string(),
                 group: "error_group".to_string(),

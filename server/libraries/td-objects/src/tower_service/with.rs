@@ -7,21 +7,21 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 use ta_objects::{Buildable, Extractor, Setter, TryUpdater};
 use td_error::{TdError, td_error};
-use td_tower::extractors::Input;
+use td_tower::extractors::Ref;
 
 pub struct With<T> {
     _phantom: PhantomData<T>,
 }
 
 impl<T> With<T> {
-    pub async fn convert_to<F>(Input(input): Input<T>) -> Result<F, TdError>
+    pub async fn convert_to<F>(input: Ref<T>) -> Result<F, TdError>
     where
         F: for<'a> From<&'a T>,
     {
         Ok(F::from(input.deref()))
     }
 
-    pub async fn try_convert_to<F, E>(Input(input): Input<T>) -> Result<F, TdError>
+    pub async fn try_convert_to<F, E>(input: Ref<T>) -> Result<F, TdError>
     where
         F: for<'a> TryFrom<&'a T, Error = E>,
         E: Into<TdError>,
@@ -29,7 +29,7 @@ impl<T> With<T> {
         F::try_from(input.deref()).map_err(Into::into)
     }
 
-    pub async fn vec_convert_to<F, E>(Input(input): Input<Vec<T>>) -> Result<Vec<F>, TdError>
+    pub async fn vec_convert_to<F, E>(input: Ref<Vec<T>>) -> Result<Vec<F>, TdError>
     where
         F: for<'a> TryFrom<&'a T, Error = E>,
         E: Into<TdError>,
@@ -40,21 +40,21 @@ impl<T> With<T> {
             .collect()
     }
 
-    pub async fn extract<F>(Input(input): Input<T>) -> Result<F, TdError>
+    pub async fn extract<F>(input: Ref<T>) -> Result<F, TdError>
     where
         T: Extractor<F>,
     {
         Ok(input.extract())
     }
 
-    pub async fn extract_name<F>(Input(input): Input<T>) -> Result<F, TdError>
+    pub async fn extract_name<F>(input: Ref<T>) -> Result<F, TdError>
     where
         T: Extractor<Name<F>>,
     {
         Ok(input.extract().into_name())
     }
 
-    pub async fn extract_data<F>(Input(input): Input<T>) -> Result<F, TdError>
+    pub async fn extract_data<F>(input: Ref<T>) -> Result<F, TdError>
     where
         T: Extractor<Data<F>>,
     {
@@ -62,8 +62,8 @@ impl<T> With<T> {
     }
 
     pub async fn update<F, E>(
-        Input(try_from): Input<T>,
-        Input(updater): Input<F>,
+        try_from: Ref<T>,
+        updater: Ref<F>,
     ) -> Result<F, TdError>
     where
         F: TryUpdater<T, Error = E> + Clone,
@@ -87,14 +87,14 @@ impl<T> With<T> {
         Ok(T::default())
     }
 
-    pub async fn some(Input(value): Input<T>) -> Result<Option<T>, TdError>
+    pub async fn some(value: Ref<T>) -> Result<Option<T>, TdError>
     where
         T: Clone,
     {
         Ok(Some(value.deref().clone()))
     }
 
-    pub async fn set<F>(Input(from): Input<T>, Input(setter): Input<F>) -> Result<F, TdError>
+    pub async fn set<F>(from: Ref<T>, setter: Ref<F>) -> Result<F, TdError>
     where
         F: Setter<T> + Clone,
     {
@@ -103,7 +103,7 @@ impl<T> With<T> {
         Ok(setter)
     }
 
-    pub async fn build<F>(Input(input): Input<T>) -> Result<F, TdError>
+    pub async fn build<F>(input: Ref<T>) -> Result<F, TdError>
     where
         F: Buildable<Builder = T>,
     {
@@ -118,7 +118,7 @@ pub enum WithError {
 }
 
 impl<T> With<Option<T>> {
-    pub async fn unwrap(Input(value): Input<Option<T>>) -> Result<T, TdError>
+    pub async fn unwrap(value: Ref<Option<T>>) -> Result<T, TdError>
     where
         T: Clone,
     {
@@ -128,7 +128,7 @@ impl<T> With<Option<T>> {
             .ok_or(WithError::OptionHasNoValue.into())
     }
 
-    pub async fn unwrap_or_default(Input(value): Input<Option<T>>) -> Result<T, TdError>
+    pub async fn unwrap_or_default(value: Ref<Option<T>>) -> Result<T, TdError>
     where
         T: Default + Clone,
     {
@@ -136,8 +136,8 @@ impl<T> With<Option<T>> {
     }
 
     pub async fn unwrap_or_else<U>(
-        Input(value): Input<Option<T>>,
-        Input(or): Input<U>,
+        value: Ref<Option<T>>,
+        or: Ref<U>,
     ) -> Result<T, TdError>
     where
         T: Clone,
@@ -187,7 +187,7 @@ mod tests {
     #[tokio::test]
     async fn test_convert_to() -> Result<(), TdError> {
         let foo = Foo::builder().try_value(1)?.build()?;
-        let result = With::<Foo>::convert_to::<TypedI32>(Input::new(foo)).await?;
+        let result = With::<Foo>::convert_to::<TypedI32>(Ref::new(foo)).await?;
         assert_eq!(*result, 1);
         Ok(())
     }
@@ -195,7 +195,7 @@ mod tests {
     #[tokio::test]
     async fn test_try_convert_to() -> Result<(), TdError> {
         let foo = Foo::builder().try_value(1)?.build()?;
-        let result = With::<Foo>::try_convert_to::<VarBuilder, _>(Input::new(foo)).await?;
+        let result = With::<Foo>::try_convert_to::<VarBuilder, _>(Ref::new(foo)).await?;
         assert_eq!(result.value.as_deref(), Some(&1));
         Ok(())
     }
@@ -206,7 +206,7 @@ mod tests {
             Foo::builder().try_value(1)?.build()?,
             Foo::builder().try_value(2)?.build()?,
         ];
-        let result = With::<Foo>::vec_convert_to::<VarBuilder, _>(Input::new(items)).await?;
+        let result = With::<Foo>::vec_convert_to::<VarBuilder, _>(Ref::new(items)).await?;
         assert_eq!(result.len(), 2);
         assert_eq!(result[0].value.as_deref(), Some(&1));
         assert_eq!(result[1].value.as_deref(), Some(&2));
@@ -222,7 +222,7 @@ mod tests {
         }
 
         let input = ExtractThis::builder().try_value(1)?.build()?;
-        let result = With::<ExtractThis>::extract::<TypedI32>(Input::new(input)).await?;
+        let result = With::<ExtractThis>::extract::<TypedI32>(Ref::new(input)).await?;
         assert_eq!(*result, 1);
         Ok(())
     }
@@ -241,7 +241,7 @@ mod tests {
         }
 
         let input = ExtractNameThis::builder().try_value(5)?.build()?;
-        let result = With::<ExtractNameThis>::extract_name::<TypedI32>(Input::new(input)).await?;
+        let result = With::<ExtractNameThis>::extract_name::<TypedI32>(Ref::new(input)).await?;
         assert_eq!(*result, 5);
         Ok(())
     }
@@ -261,7 +261,7 @@ mod tests {
         }
 
         let input = ExtractDataThis::builder().try_value(7)?.build()?;
-        let result = With::<ExtractDataThis>::extract_data::<TypedI32>(Input::new(input)).await?;
+        let result = With::<ExtractDataThis>::extract_data::<TypedI32>(Ref::new(input)).await?;
         assert_eq!(*result, 7);
         Ok(())
     }
@@ -280,7 +280,7 @@ mod tests {
             ExtractVecThis::builder().try_value(3)?.build()?,
         ];
         let result =
-            With::<Vec<ExtractVecThis>>::extract::<Vec<TypedI32>>(Input::new(items)).await?;
+            With::<Vec<ExtractVecThis>>::extract::<Vec<TypedI32>>(Ref::new(items)).await?;
         assert_eq!(result.len(), 3);
         assert_eq!(*result[0], 1);
         assert_eq!(*result[1], 2);
@@ -299,7 +299,7 @@ mod tests {
         let updater = Foo::builder().try_value(2)?.build()?;
         let input = UpdateThis::builder();
         let result =
-            With::<Foo>::update::<UpdateThisBuilder, _>(Input::new(updater), Input::new(input))
+            With::<Foo>::update::<UpdateThisBuilder, _>(Ref::new(updater), Ref::new(input))
                 .await?;
         let result = result.build()?;
         assert_eq!(*result.value, 2);
@@ -317,8 +317,8 @@ mod tests {
         let items = vec![VecUpdateThis::builder(), VecUpdateThis::builder()];
         let updater = Foo::builder().try_value(9)?.build()?;
         let result = With::<Foo>::update::<Vec<VecUpdateThisBuilder>, _>(
-            Input::new(updater),
-            Input::new(items),
+            Ref::new(updater),
+            Ref::new(items),
         )
         .await?;
         assert_eq!(result.len(), 2);
@@ -346,7 +346,7 @@ mod tests {
     #[tokio::test]
     async fn test_some() -> Result<(), TdError> {
         let typed: TypedI32 = 42.try_into()?;
-        let result = With::<TypedI32>::some(Input::new(typed)).await?;
+        let result = With::<TypedI32>::some(Ref::new(typed)).await?;
         assert!(result.is_some());
         assert_eq!(*result.unwrap(), 42);
         Ok(())
@@ -363,7 +363,7 @@ mod tests {
         let setter: TypedI32 = 2.try_into()?;
         let input = SetThis::builder();
         let result =
-            With::<TypedI32>::set::<SetThisBuilder>(Input::new(setter), Input::new(input)).await?;
+            With::<TypedI32>::set::<SetThisBuilder>(Ref::new(setter), Ref::new(input)).await?;
         let result = result.build()?;
         assert_eq!(*result.value, 2);
         Ok(())
@@ -373,7 +373,7 @@ mod tests {
     async fn test_build() -> Result<(), TdError> {
         let mut b = Foo::builder();
         b.try_value(2)?;
-        let result = With::<FooBuilder>::build::<Foo>(Input::new(b)).await?;
+        let result = With::<FooBuilder>::build::<Foo>(Ref::new(b)).await?;
         assert_eq!(*result.value, 2);
         Ok(())
     }
@@ -384,7 +384,7 @@ mod tests {
             Var::builder().try_value(3)?.to_owned(),
             Var::builder().try_value(4)?.to_owned(),
         ];
-        let result = With::<Vec<VarBuilder>>::build::<Vec<Var>>(Input::new(items)).await?;
+        let result = With::<Vec<VarBuilder>>::build::<Vec<Var>>(Ref::new(items)).await?;
         assert_eq!(result.len(), 2);
         assert_eq!(*result[0].value, 3);
         assert_eq!(*result[1].value, 4);
@@ -402,7 +402,7 @@ mod tests {
     #[tokio::test]
     async fn test_unwrap_some() -> Result<(), TdError> {
         let option = Some(TypedString::try_from("test")?);
-        let result = With::<Option<TypedString>>::unwrap(Input::new(option)).await?;
+        let result = With::<Option<TypedString>>::unwrap(Ref::new(option)).await?;
         assert_eq!(result, TypedString::try_from("test")?);
         Ok(())
     }
@@ -410,7 +410,7 @@ mod tests {
     #[tokio::test]
     async fn test_unwrap_none() -> Result<(), TdError> {
         let option: Option<TypedString> = None;
-        let result = With::<Option<TypedString>>::unwrap(Input::new(option)).await;
+        let result = With::<Option<TypedString>>::unwrap(Ref::new(option)).await;
         assert!(result.is_err());
         Ok(())
     }
@@ -418,11 +418,11 @@ mod tests {
     #[tokio::test]
     async fn test_unwrap_or_default() -> Result<(), TdError> {
         let some = Some(TypedString::try_from("hello")?);
-        let result = With::<Option<TypedString>>::unwrap_or_default(Input::new(some)).await?;
+        let result = With::<Option<TypedString>>::unwrap_or_default(Ref::new(some)).await?;
         assert_eq!(result, TypedString::try_from("hello")?);
 
         let none: Option<TypedString> = None;
-        let result = With::<Option<TypedString>>::unwrap_or_default(Input::new(none)).await?;
+        let result = With::<Option<TypedString>>::unwrap_or_default(Ref::new(none)).await?;
         assert_eq!(*result, *TypedString::default());
         Ok(())
     }
@@ -432,8 +432,8 @@ mod tests {
         let some = Some(TypedString::try_from("value")?);
         let fallback = TypedString::try_from("fallback")?;
         let result = With::<Option<TypedString>>::unwrap_or_else(
-            Input::new(some),
-            Input::new(fallback.clone()),
+            Ref::new(some),
+            Ref::new(fallback.clone()),
         )
         .await?;
         assert_eq!(result, TypedString::try_from("value")?);
@@ -441,8 +441,8 @@ mod tests {
         let none: Option<TypedString> = None;
         let fallback = TypedString::try_from("fallback")?;
         let result = With::<Option<TypedString>>::unwrap_or_else(
-            Input::new(none),
-            Input::new(fallback.clone()),
+            Ref::new(none),
+            Ref::new(fallback.clone()),
         )
         .await?;
         assert_eq!(result, fallback);
