@@ -20,7 +20,14 @@ version = { workspace = true }
 
 [features]
 enterprise = []
-td-test = ["dummy", "mock-env", "test-utils"]
+td-test = [
+    "dummy",
+    "mock-env",
+    "test-utils",
+    "td-database/td-test",
+    "td-error/td-test",
+    "td-tower/td-test",
+]
 dummy = []
 mock-env = []
 test_logging = []
@@ -33,7 +40,7 @@ postgres = ["td-database/postgres", "sqlx/postgres"]
 mysql = ["td-database/mysql"]
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "td-services", "thiserror"]
+ignored = ["openssl", "regex", "serde", "strum", "thiserror", "utoipa"]
 
 # Build dependencies
 
@@ -57,11 +64,7 @@ td-database = { workspace = true }
 td-error = { workspace = true }
 td-tower = { workspace = true }
 
-## Extensions
-
-
 # External dependencies
-
 
 paste = { workspace = true }
 sea-query = { workspace = true }
@@ -71,12 +74,7 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
-
-# Internal dependencies
-
 td-common = { workspace = true }
-
-# External dependencies
 
 chrono = { workspace = true }
 derive_builder = { workspace = true }

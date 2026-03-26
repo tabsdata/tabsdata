@@ -9,7 +9,7 @@ use td_common::time::UniqueUtc;
 use td_error::TdError;
 use td_objects::dxo::auth::SessionDBBuilder;
 use td_objects::types::basic::AtTime;
-use td_tower::extractors::{Ref};
+use td_tower::extractors::Ref;
 
 pub async fn set_session_expiration(
     jwt_settings: Ref<JwtConfig>,

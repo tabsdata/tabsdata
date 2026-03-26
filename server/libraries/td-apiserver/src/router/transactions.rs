@@ -70,11 +70,7 @@ mod routes {
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<SynchrotronResponse>, ErrorStatus> {
         let request = context.list((), query_params);
-        let response = transaction
-            .synchrotron
-            .service()
-            .oneshot(request)
-            .await?;
+        let response = transaction.synchrotron.service().oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
 }

@@ -129,7 +129,7 @@ impl DatabaseConfig {
     }
 
     pub async fn connect(&self) -> Result<DynamicPool, DbError> {
-        if self.max_connections <= 0 {
+        if self.max_connections == u32::MIN {
             Err(DbError::InvalidMaxConnections(self.max_connections))?
         }
         if self.min_connections > self.max_connections {
@@ -210,15 +210,14 @@ impl DatabaseConfig {
 
     #[cfg(feature = "sqlite")]
     fn try_create_missing_dir(url: Url) {
-        if let Ok(path) = url.to_file_path() {
-            if let Some(parent) = path.parent() {
-                if !parent.exists() {
-                    if let Err(err) = fs::create_dir_all(parent) {
-                        warn!("Failed to create database directory: {parent:?}. Error: {err}");
-                    } else {
-                        debug!("Created database directory: {parent:?}");
-                    }
-                }
+        if let Ok(path) = url.to_file_path()
+            && let Some(parent) = path.parent()
+            && !parent.exists()
+        {
+            if let Err(err) = fs::create_dir_all(parent) {
+                warn!("Failed to create database directory: {parent:?}. Error: {err}");
+            } else {
+                debug!("Created database directory: {parent:?}");
             }
         }
     }

@@ -4,8 +4,7 @@
 
 use sea_query::{
     Alias, Asterisk, ColumnDef, Expr, ExprTrait, Iden, InsertStatement, JoinType, Keyword, Query,
-    Table,
-    TableCreateStatement,
+    Table, TableCreateStatement,
 };
 
 use crate::schema::backend::{Backend, ViewDef};
@@ -28,21 +27,27 @@ pub enum Users {
 }
 
 pub fn tables() -> Vec<TableCreateStatement> {
-    vec![Table::create()
-        .table(Users::Table)
-        .col(ColumnDef::new(Users::Id).text().not_null().primary_key())
-        .col(ColumnDef::new(Users::Name).text().not_null().unique_key())
-        .col(ColumnDef::new(Users::FullName).text().not_null())
-        .col(ColumnDef::new(Users::Email).text().unique_key().null())
-        .col(ColumnDef::new(Users::CreatedOn).timestamp().not_null())
-        .col(ColumnDef::new(Users::CreatedById).text().not_null())
-        .col(ColumnDef::new(Users::ModifiedOn).timestamp().not_null())
-        .col(ColumnDef::new(Users::ModifiedById).text().not_null())
-        .col(ColumnDef::new(Users::PasswordHash).text().not_null())
-        .col(ColumnDef::new(Users::PasswordSetOn).timestamp().not_null())
-        .col(ColumnDef::new(Users::PasswordMustChange).boolean().not_null())
-        .col(ColumnDef::new(Users::Enabled).boolean().not_null())
-        .to_owned()]
+    vec![
+        Table::create()
+            .table(Users::Table)
+            .col(ColumnDef::new(Users::Id).text().not_null().primary_key())
+            .col(ColumnDef::new(Users::Name).text().not_null().unique_key())
+            .col(ColumnDef::new(Users::FullName).text().not_null())
+            .col(ColumnDef::new(Users::Email).text().unique_key().null())
+            .col(ColumnDef::new(Users::CreatedOn).timestamp().not_null())
+            .col(ColumnDef::new(Users::CreatedById).text().not_null())
+            .col(ColumnDef::new(Users::ModifiedOn).timestamp().not_null())
+            .col(ColumnDef::new(Users::ModifiedById).text().not_null())
+            .col(ColumnDef::new(Users::PasswordHash).text().not_null())
+            .col(ColumnDef::new(Users::PasswordSetOn).timestamp().not_null())
+            .col(
+                ColumnDef::new(Users::PasswordMustChange)
+                    .boolean()
+                    .not_null(),
+            )
+            .col(ColumnDef::new(Users::Enabled).boolean().not_null())
+            .to_owned(),
+    ]
 }
 
 pub fn views(b: &Backend) -> Vec<ViewDef> {

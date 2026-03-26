@@ -22,14 +22,20 @@ version = { workspace = true }
 [features]
 api-docs = []
 enterprise = []
-td-test = ["dummy", "mock-env", "test-utils"]
+td-test = [
+    "dummy",
+    "mock-env",
+    "test-utils",
+    "ta-tableframe/td-test",
+    "te-tableframe/td-test",
+]
 dummy = []
 mock-env = []
 test_logging = []
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "strum", "toml", "td-build", "tm-workspace"]
+ignored = ["openssl", "td-build", "td-tableframe", "tm-workspace", "toml"]
 
 # Build dependencies
 
@@ -63,11 +69,9 @@ ta-tableframe = { workspace = true }
 # External dependencies
 
 polars = { workspace = true, features = ["lazy"] }
-strum = { workspace = true, features = ["derive"] }
 
 [dev-dependencies]
-ta-tableframe = { workspace = true, features = ["td-test"] }
-te-tableframe = { workspace = true, features = ["td-test"] }
+td-tableframe = { workspace = true, features = ["td-test"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

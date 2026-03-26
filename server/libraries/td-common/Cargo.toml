@@ -21,7 +21,13 @@ version = { workspace = true }
 
 [features]
 enterprise = []
-td-test = ["dummy", "mock-env", "test-utils"]
+td-test = [
+    "dummy",
+    "mock-env",
+    "test-utils",
+    "td-error/td-test",
+    "td-security/td-test",
+]
 dummy = []
 mock-env = []
 test_logging = []
@@ -30,7 +36,7 @@ test-utils = []
 tokio_console = ["console-subscriber"]
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "toml", "tm-workspace"]
+ignored = ["openssl", "td-common", "tm-workspace", "toml"]
 
 # Build dependencies
 

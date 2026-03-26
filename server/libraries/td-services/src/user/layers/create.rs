@@ -9,7 +9,7 @@ use td_objects::tower_service::with::With;
 use td_objects::types::basic::AtTime;
 use td_security::config::PasswordHashingConfig;
 use td_security::password::create_password_hash;
-use td_tower::extractors::{Ref};
+use td_tower::extractors::Ref;
 
 pub trait UpdateCreateUserDBBuilder {
     fn update_create_user_db_builder(

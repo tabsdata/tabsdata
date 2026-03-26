@@ -21,13 +21,19 @@ version = { workspace = true }
 
 [features]
 enterprise = []
-td-test = ["dummy", "mock-env", "test-utils"]
+td-test = [
+    "dummy",
+    "mock-env",
+    "test-utils",
+    "td-error/td-test",
+    "td-objects/td-test",
+]
 dummy = []
 mock-env = []
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "strum"]
+ignored = ["openssl", "strum", "te-execution"]
 
 [dependencies]
 
@@ -44,7 +50,7 @@ strum = { workspace = true, features = ["derive"] }
 # Development dependencies
 
 [dev-dependencies]
-td-objects = { workspace = true, features = ["td-test"] }
+te-execution = { workspace = true, features = ["td-test"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

@@ -61,10 +61,7 @@ impl<T> With<T> {
         Ok(input.extract().into_data())
     }
 
-    pub async fn update<F, E>(
-        try_from: Ref<T>,
-        updater: Ref<F>,
-    ) -> Result<F, TdError>
+    pub async fn update<F, E>(try_from: Ref<T>, updater: Ref<F>) -> Result<F, TdError>
     where
         F: TryUpdater<T, Error = E> + Clone,
         E: Into<TdError>,
@@ -135,10 +132,7 @@ impl<T> With<Option<T>> {
         Ok(value.deref().clone().unwrap_or_default())
     }
 
-    pub async fn unwrap_or_else<U>(
-        value: Ref<Option<T>>,
-        or: Ref<U>,
-    ) -> Result<T, TdError>
+    pub async fn unwrap_or_else<U>(value: Ref<Option<T>>, or: Ref<U>) -> Result<T, TdError>
     where
         T: Clone,
         U: Into<T> + Clone,
@@ -279,8 +273,7 @@ mod tests {
             ExtractVecThis::builder().try_value(2)?.build()?,
             ExtractVecThis::builder().try_value(3)?.build()?,
         ];
-        let result =
-            With::<Vec<ExtractVecThis>>::extract::<Vec<TypedI32>>(Ref::new(items)).await?;
+        let result = With::<Vec<ExtractVecThis>>::extract::<Vec<TypedI32>>(Ref::new(items)).await?;
         assert_eq!(result.len(), 3);
         assert_eq!(*result[0], 1);
         assert_eq!(*result[1], 2);
@@ -299,8 +292,7 @@ mod tests {
         let updater = Foo::builder().try_value(2)?.build()?;
         let input = UpdateThis::builder();
         let result =
-            With::<Foo>::update::<UpdateThisBuilder, _>(Ref::new(updater), Ref::new(input))
-                .await?;
+            With::<Foo>::update::<UpdateThisBuilder, _>(Ref::new(updater), Ref::new(input)).await?;
         let result = result.build()?;
         assert_eq!(*result.value, 2);
         Ok(())
@@ -316,11 +308,9 @@ mod tests {
 
         let items = vec![VecUpdateThis::builder(), VecUpdateThis::builder()];
         let updater = Foo::builder().try_value(9)?.build()?;
-        let result = With::<Foo>::update::<Vec<VecUpdateThisBuilder>, _>(
-            Ref::new(updater),
-            Ref::new(items),
-        )
-        .await?;
+        let result =
+            With::<Foo>::update::<Vec<VecUpdateThisBuilder>, _>(Ref::new(updater), Ref::new(items))
+                .await?;
         assert_eq!(result.len(), 2);
         let first = result[0].clone().build()?;
         let second = result[1].clone().build()?;
@@ -431,20 +421,16 @@ mod tests {
     async fn test_unwrap_or_else() -> Result<(), TdError> {
         let some = Some(TypedString::try_from("value")?);
         let fallback = TypedString::try_from("fallback")?;
-        let result = With::<Option<TypedString>>::unwrap_or_else(
-            Ref::new(some),
-            Ref::new(fallback.clone()),
-        )
-        .await?;
+        let result =
+            With::<Option<TypedString>>::unwrap_or_else(Ref::new(some), Ref::new(fallback.clone()))
+                .await?;
         assert_eq!(result, TypedString::try_from("value")?);
 
         let none: Option<TypedString> = None;
         let fallback = TypedString::try_from("fallback")?;
-        let result = With::<Option<TypedString>>::unwrap_or_else(
-            Ref::new(none),
-            Ref::new(fallback.clone()),
-        )
-        .await?;
+        let result =
+            With::<Option<TypedString>>::unwrap_or_else(Ref::new(none), Ref::new(fallback.clone()))
+                .await?;
         assert_eq!(result, fallback);
         Ok(())
     }

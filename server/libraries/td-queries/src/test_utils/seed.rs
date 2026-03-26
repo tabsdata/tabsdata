@@ -63,6 +63,7 @@ pub trait SeedQueries {
         function_create: &FunctionRegister,
     ) -> impl Future<Output = Result<FunctionDB, TdError>>;
 
+    #[allow(clippy::too_many_arguments)]
     fn seed_function_requirement(
         self,
         collection: &CollectionDB,

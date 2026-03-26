@@ -492,8 +492,8 @@ mod tests {
         #[ta_objects::typed(f64)]
         struct MyF64;
 
-        let v = MyF64::try_from(3.14f64).unwrap();
-        assert_eq!(v.as_sea_value(), sea_query::Value::Double(Some(3.14)));
+        let v = MyF64::try_from(2.72f64).unwrap();
+        assert_eq!(v.as_sea_value(), sea_query::Value::Double(Some(2.72)));
     }
 
     // ---- NullableSeaValue for basic typed types ------------------------------
@@ -592,12 +592,12 @@ mod tests {
     #[test]
     fn test_sql_condition_i64_type() {
         let v = CondI64::try_from(42i64).unwrap();
-        assert_eq!(cond_sql(&v), r#""num" = 42"#);
+        assert_eq!(cond_sql(v), r#""num" = 42"#);
     }
 
     #[test]
     fn test_sql_condition_bool_type() {
         let v = CondBool::from(true);
-        assert_eq!(cond_sql(&v), r#""flag" = TRUE"#);
+        assert_eq!(cond_sql(v), r#""flag" = TRUE"#);
     }
 }

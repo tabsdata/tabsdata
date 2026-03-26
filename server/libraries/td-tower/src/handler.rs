@@ -41,8 +41,7 @@ impl Handler {
 
     /// Store an existing Arc without double-wrapping.
     pub fn set_arc<T: Send + Sync + 'static>(&mut self, arc: Arc<T>) {
-        self.map
-            .insert(TypeId::of::<Ref<T>>(), Box::new(Ref(arc)));
+        self.map.insert(TypeId::of::<Ref<T>>(), Box::new(Ref(arc)));
     }
 
     /// Clone the Ref for shared read access.

@@ -3,13 +3,15 @@
 //
 
 use std::time::Instant;
-use td_objects::Buildable;
-use td_error::TdError;
-use td_objects::dxo::system::{ApiStatus, HealthStatus};
 use td_database::dynamic::DynamicConnection;
+use td_error::TdError;
+use td_objects::Buildable;
+use td_objects::dxo::system::{ApiStatus, HealthStatus};
 use td_tower::extractors::MutRef;
 
-pub async fn database_status(mut conn: MutRef<DynamicConnection<'static>>) -> Result<ApiStatus, TdError> {
+pub async fn database_status(
+    mut conn: MutRef<DynamicConnection<'static>>,
+) -> Result<ApiStatus, TdError> {
     let start = Instant::now();
 
     let database_status = match conn.ping().await {

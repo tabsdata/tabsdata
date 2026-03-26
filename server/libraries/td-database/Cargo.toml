@@ -23,7 +23,16 @@ version = { workspace = true }
 default = ["sqlite"]
 
 enterprise = []
-td-test = ["dummy", "mock-env", "test-utils"]
+td-test = [
+    "dummy",
+    "mock-env",
+    "test-utils",
+    "td-common/td-test",
+    "td-error/td-test",
+    "td-schema/td-test",
+    "td-security/td-test",
+    "te-system/td-test",
+]
 dummy = []
 mock-env = []
 test_logging = []
@@ -36,7 +45,7 @@ postgres = ["sqlx/postgres", "sea-query-sqlx/sqlx-postgres", "td-schema/postgres
 mysql = ["sqlx/mysql", "sea-query-sqlx/sqlx-mysql", "td-schema/mysql"]
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "td-build", "td-database", "thiserror", "strum", "toml"]
+ignored = ["openssl", "strum", "td-build", "td-database", "thiserror", "toml"]
 
 # Build dependencies
 
@@ -79,7 +88,6 @@ url = { workspace = true, features = ["serde"] }
 
 [dev-dependencies]
 td-database = { workspace = true, features = ["td-test"] }
-td-schema = { workspace = true, features = ["td-test"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

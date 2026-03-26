@@ -22,7 +22,27 @@ version = { workspace = true }
 [features]
 api-docs = []
 enterprise = []
-td-test = ["dummy", "mock-env", "test-utils"]
+td-test = [
+    "dummy",
+    "mock-env",
+    "test-utils",
+    "ta-apiserver/td-test",
+    "ta-services/td-test",
+    "td-authz/td-test",
+    "td-common/td-test",
+    "td-database/td-test",
+    "td-error/td-test",
+    "td-execution/td-test",
+    "td-objects/td-test",
+    "td-process/td-test",
+    "td-queries/td-test",
+    "td-security/td-test",
+    "td-services/td-test",
+    "td-storage/td-test",
+    "td-tower/td-test",
+    "te-apiserver/td-test",
+    "te-services/td-test",
+]
 dummy = []
 mock-env = []
 test_logging = []
@@ -35,7 +55,7 @@ postgres = ["td-services/postgres", "td-authz/postgres", "td-database/postgres",
 mysql = ["td-services/mysql", "td-authz/mysql", "td-database/mysql", "td-queries/mysql"]
 
 [package.metadata.cargo-machete]
-ignored = ["openssl"]
+ignored = ["openssl", "td-apiserver"]
 
 # Build dependencies
 
@@ -103,14 +123,11 @@ utoipa-axum = { workspace = true }
 utoipa-swagger-ui = { workspace = true, features = ["axum", "reqwest"] }
 
 [dev-dependencies]
+td-apiserver = { workspace = true, features = ["td-test"] }
+td-test = { workspace = true }
+
 rand = { workspace = true }
 indicatif = { workspace = true, features = ["rayon"] }
-td-common = { workspace = true, features = ["td-test"] }
-td-objects = { workspace = true, features = ["td-test"] }
-td-queries = { workspace = true, features = ["td-test"] }
-td-services = { workspace = true, features = ["td-test"] }
-td-storage = { workspace = true, features = ["td-test"] }
-td-test = { workspace = true, features = ["td-test"] }
 tracing-subscriber = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]

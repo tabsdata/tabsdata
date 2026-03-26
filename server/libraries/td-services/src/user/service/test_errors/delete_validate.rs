@@ -2,15 +2,15 @@
 // Copyright 2025. Tabs Data Inc.
 //
 
-use std::str::FromStr;
-use td_objects::Buildable;
 use crate::user::UserError;
 use crate::user::service::delete::DeleteUserService;
+use std::str::FromStr;
 use ta_services::service::TdService;
 use td_error::assert_service_error;
+use td_objects::Buildable;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::rest_urls::UserParam;
-use td_objects::types::basic::{AccessTokenId, RoleId, UserIdName, UserId};
+use td_objects::types::basic::{AccessTokenId, RoleId, UserId, UserIdName};
 
 #[tokio::test]
 async fn test_not_allowed_to_delete_themselves() {

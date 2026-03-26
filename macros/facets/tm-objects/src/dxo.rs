@@ -170,15 +170,13 @@ fn merge_dxo_attrs(base: &ItemStruct, child: &ItemStruct) -> Result<Vec<Attribut
         (DxoType::Dao, DxoType::Dlo)
         | (DxoType::Dao, DxoType::Dto)
         | (DxoType::Dlo, DxoType::Dlo)
-        | (DxoType::Dto, DxoType::Dto) => {
-            attrs.extend(
-                child
-                    .attrs
-                    .iter()
-                    .filter(|a| !a.path().is_ident("inherits"))
-                    .cloned(),
-            )
-        }
+        | (DxoType::Dto, DxoType::Dto) => attrs.extend(
+            child
+                .attrs
+                .iter()
+                .filter(|a| !a.path().is_ident("inherits"))
+                .cloned(),
+        ),
         _ => Err(syn::Error::new_spanned(
             child,
             format!(
@@ -231,8 +229,7 @@ fn merge_inherited_fields(base: &ItemStruct, derived: &mut ItemStruct) -> Result
                 .iter()
                 .filter(|f| {
                     if let Some(ident) = &f.ident {
-                        !excluded_idents.contains(ident)
-                            && !has_exclude_attr(f)
+                        !excluded_idents.contains(ident) && !has_exclude_attr(f)
                     } else {
                         true
                     }
@@ -271,13 +268,7 @@ fn merge_inherited_fields(base: &ItemStruct, derived: &mut ItemStruct) -> Result
                 .unnamed
                 .iter()
                 .enumerate()
-                .filter_map(|(i, f)| {
-                    if has_exclude_attr(f) {
-                        Some(i)
-                    } else {
-                        None
-                    }
-                })
+                .filter_map(|(i, f)| if has_exclude_attr(f) { Some(i) } else { None })
                 .collect();
             let base_fields: Vec<_> = base_unnamed
                 .unnamed
@@ -290,10 +281,7 @@ fn merge_inherited_fields(base: &ItemStruct, derived: &mut ItemStruct) -> Result
                 .unnamed
                 .iter()
                 .enumerate()
-                .filter(|(i, f)| {
-                    !excluded_indices.contains(i)
-                        && !has_exclude_attr(f)
-                })
+                .filter(|(i, f)| !excluded_indices.contains(i) && !has_exclude_attr(f))
                 .map(|(_, f)| f.clone())
                 .collect();
             // Now merge fields, keeping order: base fields first (overridden by derived if present), then any extra derived fields

@@ -197,12 +197,12 @@ fn test_schema_fingerprint() {
 /// and must produce non-empty output for every backend.
 #[test]
 fn test_migration_guard_archives_exist() {
-    assert!(
-        archive::MIN_ARCHIVE > 0,
-        "CURRENT_VERSION is {} but MIN_ARCHIVE is 0. \
-         You must create archives before bumping the version.",
-        current::Schema::VERSION
-    );
+    const {
+        assert!(
+            archive::MIN_ARCHIVE > 0,
+            "MIN_ARCHIVE is 0. You must create archives before bumping the version.",
+        );
+    }
 
     for v in archive::MIN_ARCHIVE..current::Schema::VERSION {
         for &b in ALL_BACKENDS {

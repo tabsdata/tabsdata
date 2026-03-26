@@ -3,7 +3,6 @@
 //
 
 use std::ops::Deref;
-use td_objects::{Buildable, TryUpdater};
 use td_error::{TdError, td_error};
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::dependency::DependencyDB;
@@ -14,6 +13,7 @@ use td_objects::types::basic::{
     CollectionName, DependencyStatus, DependencyVersionId, FunctionStatus, FunctionVersionId,
     TableName, TableStatus, TableVersionId, TriggerStatus, TriggerVersionId,
 };
+use td_objects::{Buildable, TryUpdater};
 use td_tower::extractors::Ref;
 
 #[td_error]

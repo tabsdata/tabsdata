@@ -20,17 +20,6 @@ use tracing::{debug, info};
 /// Marker type for the archived v5 schema.
 pub struct Schema;
 
-#[cfg(test)]
-mod tests {
-    use super::Schema;
-    use crate::schema::tests::validate_schema_version;
-
-    #[test]
-    fn test_validate_archive_v5() {
-        validate_schema_version::<Schema>();
-    }
-}
-
 impl SchemaVersion for Schema {
     const VERSION: usize = 5;
 
@@ -105,5 +94,16 @@ impl SchemaVersion for Schema {
             "Archived schema built"
         );
         stmts
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Schema;
+    use crate::schema::tests::validate_schema_version;
+
+    #[test]
+    fn test_validate_archive_v5() {
+        validate_schema_version::<Schema>();
     }
 }

@@ -79,11 +79,7 @@ mod routes {
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<Table>, ErrorStatus> {
         let request = context.list(collection_param, query_params);
-        let response = state
-            .list_by_collection
-            .service()
-            .oneshot(request)
-            .await?;
+        let response = state.list_by_collection.service().oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
 
@@ -100,11 +96,7 @@ mod routes {
         let name = TableAtIdName::new(table_param, at_param);
         let name = TableDataVersionAtIdName::new(name, uncommitted_status);
         let request = context.list(name, query_params);
-        let response = state
-            .list_data_versions
-            .service()
-            .oneshot(request)
-            .await?;
+        let response = state.list_data_versions.service().oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
 

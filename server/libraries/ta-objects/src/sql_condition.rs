@@ -106,7 +106,7 @@ pub fn resolve_leaf_eq<D: DaoCore>(sv: impl SeaValue) -> Result<sea_query::Condi
     let col = D::col_for_type(sv.as_type_id()).ok_or_else(|| {
         SqlError::TypeNotFound(
             std::any::type_name_of_val(&sv).to_string(),
-            D::table().into_table_ref(),
+            Box::new(D::table().into_table_ref()),
         )
     })?;
     Ok(sea_query::Condition::all().add(Expr::col(col).eq(sv.as_sea_value())))
@@ -294,7 +294,7 @@ impl<T: SeaValue> SqlCondition for Lte<T> {
         let col = D::col_for_type(self.0.as_type_id()).ok_or_else(|| {
             SqlError::TypeNotFound(
                 std::any::type_name_of_val(&self.0).to_string(),
-                D::table().into_table_ref(),
+                Box::new(D::table().into_table_ref()),
             )
         })?;
         Ok(sea_query::Condition::all().add(Expr::col(col).lte(self.0.as_sea_value())))

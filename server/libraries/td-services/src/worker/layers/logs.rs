@@ -125,9 +125,7 @@ fn sort_log_paths(paths: &mut [PathBuf]) {
     });
 }
 
-pub async fn get_worker_logs(
-    paths: Ref<Vec<PathBuf>>,
-) -> Result<BoxedSyncStream, TdError> {
+pub async fn get_worker_logs(paths: Ref<Vec<PathBuf>>) -> Result<BoxedSyncStream, TdError> {
     let mut ordered_stream = FuturesOrdered::new();
 
     for path in paths.iter() {

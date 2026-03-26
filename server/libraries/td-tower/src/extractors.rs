@@ -141,10 +141,10 @@ impl<T: Send + 'static> FromHandler for MutRef<T> {
 
     fn post_extract(handler: &mut Handler) {
         // Drop already fired — value was sent through the channel. Move it back to handler.
-        if let Some(mut slot) = handler.remove::<RefSlot<T>>() {
-            if let Ok(value) = slot.0.try_recv() {
-                handler.insert(value);
-            }
+        if let Some(mut slot) = handler.remove::<RefSlot<T>>()
+            && let Ok(value) = slot.0.try_recv()
+        {
+            handler.insert(value);
         }
     }
 

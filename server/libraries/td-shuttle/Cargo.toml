@@ -22,7 +22,14 @@ version = { workspace = true }
 [features]
 api-docs = []
 enterprise = []
-td-test = ["dummy", "mock-env", "test-utils"]
+td-test = [
+    "dummy",
+    "mock-env",
+    "test-utils",
+    "td-common/td-test",
+    "td-error/td-test",
+    "td-process/td-test",
+]
 dummy = []
 mock-env = []
 test_logging = []
@@ -65,7 +72,7 @@ td-test = { workspace = true }
 
 # External dependencies
 
-async-compression= { workspace = true, features = ["tokio", "all-algorithms"] }
+async-compression = { workspace = true, features = ["tokio", "all-algorithms"] }
 async-trait = { workspace = true }
 liblzma-sys = { workspace = true }
 base64 = { workspace = true }
@@ -74,14 +81,14 @@ chrono = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 clap_derive = { workspace = true }
 derive_builder = { workspace = true }
-futures =  { workspace = true }
+futures = { workspace = true }
 futures-util = { workspace = true }
 getset = { workspace = true }
 itertools = { workspace = true }
 object_store = { workspace = true, features = ["aws", "azure", "gcp", "http"] }
 pin-project-lite = { workspace = true }
 polars = { workspace = true, features = ["lazy", "polars-lazy", "async", "csv", "json", "parquet", "cloud", "aws", "azure", "gcp", "sql"] }
-polars-io = { workspace = true, features = ["cloud"]  }
+polars-io = { workspace = true, features = ["cloud"] }
 polars-parquet-format = { workspace = true }
 reqwest = { workspace = true, features = ["json", "stream"] }
 serde = { workspace = true, features = ["derive"] }
@@ -90,17 +97,17 @@ serde_yaml = { workspace = true }
 strum = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
-tokio-util =  { workspace = true }
-tower = { workspace = true, features = [ "full"] }
+tokio-util = { workspace = true }
+tower = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 whoami = { workspace = true }
 wildmatch = { workspace = true }
-uuid = {  workspace = true, features = ["v4"] }
+uuid = { workspace = true, features = ["v4"] }
 libflate = { workspace = true }
 
 [dev-dependencies]
-td-common = { workspace = true, features = ["td-test"] }
+td-shuttle = { workspace = true, features = ["td-test"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

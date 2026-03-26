@@ -9,7 +9,7 @@ use std::ops::Deref;
 use td_error::TdError;
 use td_objects::types::basic::PasswordHash;
 use td_security::config::PasswordHashingConfig;
-use td_tower::extractors::{Ref};
+use td_tower::extractors::Ref;
 
 pub async fn create_password_hash<P: Deref<Target = String>>(
     password_hashing_config: Ref<PasswordHashingConfig>,

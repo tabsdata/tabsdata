@@ -395,23 +395,17 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
             let version_by_str = match &v.version_by {
                 Some(s) => s,
                 None => {
-                    return syn::Error::new_spanned(
-                        ident,
-                        "versioned: `version_by` is required",
-                    )
-                    .to_compile_error()
-                    .into();
+                    return syn::Error::new_spanned(ident, "versioned: `version_by` is required")
+                        .to_compile_error()
+                        .into();
                 }
             };
             let partition_by_str = match &v.partition_by {
                 Some(s) => s,
                 None => {
-                    return syn::Error::new_spanned(
-                        ident,
-                        "versioned: `partition_by` is required",
-                    )
-                    .to_compile_error()
-                    .into();
+                    return syn::Error::new_spanned(ident, "versioned: `partition_by` is required")
+                        .to_compile_error()
+                        .into();
                 }
             };
             let version_variant = iden_variant_from_str(version_by_str);
@@ -482,6 +476,7 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
                 #[allow(non_upper_case_globals)]
                 pub const All: u8 = 0;
             }
+            #[allow(clippy::unused_unit)]
             impl #impl_generics ta_objects::States<0> for #ident #ty_generics #where_clause {
                 fn state() -> impl ta_objects::sql_condition::SqlCondition {
                     ()

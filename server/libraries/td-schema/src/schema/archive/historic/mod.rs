@@ -30,9 +30,7 @@ pub const MAX_VERSION: usize = 5;
 /// Panics if `target_version` is not in range `1..=MAX_VERSION`.
 pub fn get(target_version: usize) -> Vec<String> {
     let sql_files: &[&str] = match target_version {
-        1 => &[
-            include_str!("live/20250531100253_v1.up.sql"),
-        ],
+        1 => &[include_str!("live/20250531100253_v1.up.sql")],
         2 => &[
             include_str!("live/20250922095747_functions.up.sql"),
             include_str!("live/20250922095756_v2.up.sql"),
@@ -250,11 +248,10 @@ fn split_sql(content: &str) -> Vec<String> {
         .map(|s| s.trim())
         .filter(|s| {
             // Keep only fragments that contain at least one non-empty, non-comment line.
-            s.lines()
-                .any(|line| {
-                    let trimmed = line.trim();
-                    !trimmed.is_empty() && !trimmed.starts_with("--")
-                })
+            s.lines().any(|line| {
+                let trimmed = line.trim();
+                !trimmed.is_empty() && !trimmed.starts_with("--")
+            })
         })
         .map(String::from)
         .collect()
@@ -331,10 +328,7 @@ mod tests {
     #[test]
     fn test_normalize_produces_statements() {
         let stmts = normalize();
-        assert!(
-            !stmts.is_empty(),
-            "normalize() produced no statements"
-        );
+        assert!(!stmts.is_empty(), "normalize() produced no statements");
         // Should contain DROP VIEW, ALTER TABLE RENAME, CREATE TABLE,
         // DELETE, INSERT INTO ... SELECT, and DROP TABLE statements.
         assert!(

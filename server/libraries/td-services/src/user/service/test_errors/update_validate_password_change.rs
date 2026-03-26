@@ -2,9 +2,9 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use std::str::FromStr;
 use crate::user::UserError;
 use crate::user::service::update::UpdateUserService;
+use std::str::FromStr;
 use ta_services::service::TdService;
 use td_database::pool::TdPool;
 use td_error::assert_service_error;
@@ -12,7 +12,7 @@ use td_objects::Buildable;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::user::UserUpdate;
 use td_objects::rest_urls::UserParam;
-use td_objects::types::basic::{AccessTokenId, Password, RoleId, UserIdName, UserId};
+use td_objects::types::basic::{AccessTokenId, Password, RoleId, UserId, UserIdName};
 
 #[td_test::test(sqlx)]
 #[tokio::test]

@@ -2,11 +2,11 @@
 // Copyright 2025. Tabs Data Inc.
 //
 
-use td_objects::Buildable;
 use td_authz::jwt::{JwtConfig, TokenClaims, encode_token};
 use td_error::TdError;
+use td_objects::Buildable;
 use td_objects::dxo::auth::{SessionDB, TokenResponseX};
-use td_tower::extractors::{Ref};
+use td_tower::extractors::Ref;
 
 pub async fn create_access_token(
     jwt_settings: Ref<JwtConfig>,

@@ -9,9 +9,7 @@ use td_objects::dxo::collection::{CollectionUpdate, CollectionUpdateDBBuilder};
 use td_objects::tower_service::with::With;
 use td_tower::extractors::Ref;
 
-pub async fn update_collection_validate(
-    update: Ref<CollectionUpdate>,
-) -> Result<(), TdError> {
+pub async fn update_collection_validate(update: Ref<CollectionUpdate>) -> Result<(), TdError> {
     if update.name.is_none() && update.description.is_none() {
         return Err(CollectionError::UpdateRequestHasNothingToUpdate)?;
     }

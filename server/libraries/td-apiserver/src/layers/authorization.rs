@@ -77,12 +77,8 @@ pub async fn authorization_layer(
     let access_token_id: AccessTokenId = token.jti.into();
 
     // Get user_id/role_id from session
-    let mut conn = db
-        .acquire()
-        .await
-        .map_err(|e| TdError::from(SessionError::CouldNotGetDbConn(e)))?;
     let session = sessions
-        .get(&mut conn)
+        .get(&db)
         .await
         .map_err(|e| {
             error!("Could not get session: {}", e);
