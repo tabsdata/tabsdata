@@ -10,11 +10,11 @@ use std::fmt::Display;
 use std::hash::Hash;
 use std::ops::{Deref, DerefMut};
 use td_error::{TdError, td_error};
+use td_objects::dxo::graph::{FunctionNode, GraphEdge, GraphNode, ResolvedVersion, TableNode};
 use td_objects::graph::{MapGraph, PartialGraph, TdGraph};
-use td_objects::table_ref::Versions;
 use td_objects::transaction::map::TransactionMapper;
 use td_objects::types::basic::{FunctionName, TableName, TransactionByStr, TransactionKey};
-use td_objects::types::graph::{FunctionNode, GraphEdge, GraphNode, ResolvedVersion, TableNode};
+use td_objects::types::table_ref::Versions;
 
 #[td_error]
 enum ExecutionPlannerError {
@@ -154,10 +154,9 @@ where
     T: Eq + Hash,
 {
     pub fn main_trigger(&self) -> &F {
-        if let GraphNode::Function(f) = &self.graph.inner[self.trigger_index] {
-            f
-        } else {
-            unreachable!()
+        match &self.graph.inner[self.trigger_index] {
+            GraphNode::Function(f) => f,
+            GraphNode::Table(_) => unreachable!("trigger_index must point to a Function node"),
         }
     }
 
