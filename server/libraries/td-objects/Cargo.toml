@@ -24,7 +24,7 @@ td-test = ["dummy", "mock-env", "test-utils"]
 dummy = []
 mock-env = []
 test_logging = []
-test_tower_metadata = []
+test_tower_metadata = ["td-tower/test_tower_metadata", "ta-objects/test_tower_metadata"]
 test-utils = []
 
 [package.metadata.cargo-machete]
@@ -44,22 +44,19 @@ ignored = ["openssl", "td-build", "td-objects", "td-schema", "thiserror", "toml"
 
 ## Macros
 
-td-type = { workspace = true }
-
 ## Libraries
 
+ta-objects = { workspace = true }
 td-common = { workspace = true }
 td-database = { workspace = true }
 td-error = { workspace = true }
 td-security = { workspace = true }
 td-test = { workspace = true }
 td-tower = { workspace = true }
-tm-sql = { workspace = true }
 
 # External dependencies
 
 aquamarine = { workspace = true }
-async-trait = { workspace = true }
 axum = { workspace = true }
 bytes = { workspace = true }
 constcat = { workspace = true }
@@ -76,6 +73,7 @@ paste = { workspace = true }
 petgraph = { workspace = true, features = ["serde-1"] }
 polars = { workspace = true }
 regex = { workspace = true }
+sea-query = { workspace = true, features = ["sqlx-utils"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
@@ -84,6 +82,8 @@ sqlx = { workspace = true, features = ["json"] }
 strum = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
+tower = { workspace = true }
+tracing = { workspace = true }
 url = { workspace = true }
 utoipa = { workspace = true, features = ["axum_extras", "chrono", "preserve_order", "url", "uuid"] }
 

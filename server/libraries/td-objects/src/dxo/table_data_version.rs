@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-#[td_type::dxo]
+#[ta_objects::dxo]
 mod definitions {
     use crate::types::basic::{
         AtTime, CollectionId, CollectionName, ColumnCount, DataChanged, DataLocation, ExecutionId,
@@ -11,29 +11,31 @@ mod definitions {
         TableVersionId, TransactionId, TriggeredOn, UserId, UserName,
     };
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(
+        data_version,
         sql_table = "table_data_versions",
+        order_by(col = "triggered_on", dir = "desc"),
+        versioned(pk = "id", version_by = "triggered_on", partition_by = "table_id"),
         states(
-            // Table data versions that can be consumed.
-            WithData = [&Some(HasData::TRUE)],
+            WithData = Some(HasData::TRUE),
         )
     )]
     pub struct TableDataVersionDB {
         #[builder(default = "TableDataVersionId::new()")]
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub id: TableDataVersionId,
-        #[sqlx(try_from = "String")]
         pub collection_id: CollectionId,
         pub table_id: TableId,
         pub name: TableName,
         pub table_version_id: TableVersionId,
-        #[td_type(extractor)]
+        #[dxo(extractor)]
         pub function_version_id: FunctionVersionId,
         pub execution_id: ExecutionId,
         pub transaction_id: TransactionId,
         pub function_run_id: FunctionRunId,
         pub function_param_pos: TableFunctionParamPos,
+        pub triggered_on: TriggeredOn,
 
         // Data information
         // Even if the version !has_data, data information might come from previous version,
@@ -54,19 +56,19 @@ mod definitions {
         pub with_data_table_data_version_id: Option<TableDataVersionId>,
     }
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(
+        data_version,
         sql_table = "table_data_versions__with_function",
-        order_by = "triggered_on",
-        versioned(order_by = "triggered_on", partition_by = "table_id"),
+        order_by(col = "triggered_on", dir = "desc"),
+        versioned(pk = "id", version_by = "triggered_on", partition_by = "table_id"),
         states(
-            // Table data versions that can be consumed.
-            Committed = [&FunctionRunStatus::Committed],
+            WithData = Some(HasData::TRUE),
+            Committed = FunctionRunStatus::Committed,
         )
     )]
     #[inherits(TableDataVersionDB)]
     pub struct TableDataVersionDBWithFunction {
-        pub triggered_on: TriggeredOn,
         pub triggered_by_id: UserId,
         pub started_on: Option<AtTime>,
         pub ended_on: Option<AtTime>,
@@ -75,18 +77,18 @@ mod definitions {
         pub storage_version: StorageVersion,
     }
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(sql_table = "table_data_versions__active")]
     #[inherits(TableDataVersionDBWithFunction)]
     pub struct ActiveTableDataVersionDB {}
 
-    #[td_type::Dto]
-    #[td_type(builder(try_from = ActiveTableDataVersionDB))]
+    #[ta_objects::Dto]
+    #[dxo(builder(try_from = ActiveTableDataVersionDB))]
     #[inherits(ActiveTableDataVersionDB)]
     #[derive(Eq, PartialEq, Hash)]
     pub struct ExecutionTableDataVersionRead {}
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(sql_table = "table_data_versions__with_names")]
     #[inherits(TableDataVersionDBWithFunction)]
     pub struct TableDataVersionDBWithNames {
@@ -95,9 +97,8 @@ mod definitions {
         pub created_by: UserName,
     }
 
-    #[td_type::Dto]
+    #[ta_objects::Dto]
     #[dto(list(on = TableDataVersionDBWithNames))]
-    #[td_type(builder(try_from = TableDataVersionDBWithNames))]
     pub struct TableDataVersion {
         #[dto(list(pagination_by = "+", filter, filter_like))]
         pub id: TableDataVersionId,
@@ -111,7 +112,7 @@ mod definitions {
         pub table_version_id: TableVersionId,
         #[dto(list(filter, filter_like, order_by))]
         pub function_version_id: FunctionVersionId,
-        #[td_type(builder(field = "has_data"))]
+        #[dxo(builder(field = "has_data"))]
         #[dto(list(filter, filter_like, order_by))]
         pub data_changed: DataChanged,
         #[dto(list(filter, filter_like, order_by))]
@@ -123,7 +124,7 @@ mod definitions {
         #[dto(list(filter, filter_like, order_by))]
         pub function_param_pos: Option<TableFunctionParamPos>,
 
-        #[td_type(builder(field = "triggered_on"))]
+        #[dxo(builder(field = "triggered_on"))]
         #[dto(list(filter, filter_like, order_by))]
         pub created_at: TriggeredOn,
         #[dto(list(filter, filter_like, order_by))]
@@ -149,7 +150,7 @@ mod definitions {
         pub with_data_table_data_version_id: Option<TableDataVersionId>,
     }
 
-    #[td_type::Dao]
+    #[ta_objects::Dao]
     #[dao(sql_table = "table_data_versions")]
     pub struct UpdateTableDataVersionDB {
         #[dao(immutable)]
