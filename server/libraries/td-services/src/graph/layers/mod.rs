@@ -4,7 +4,7 @@
 
 use crate::do_authz::{DoAuthz, inter_collection_authz};
 use crate::graph::layers::build::GraphBuilder;
-use td_objects::dxo::States;
+use td_objects::States;
 use td_objects::dxo::dependency::DependencyDBWithNames;
 use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::table::TableDB;
@@ -47,7 +47,6 @@ impl From<&TableId> for FunctionOrTable {
 
 // Requires:
 // - Connection (read only is enough)
-// - DaoQueries
 // - FunctionOrTable: entrypoint for the trigger/dependency graph finder
 // - Recursion options: recursion options to find the graphs
 // Generics: define graph options and states.

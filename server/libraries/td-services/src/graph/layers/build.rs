@@ -7,19 +7,17 @@ use itertools::Itertools;
 use std::collections::HashMap;
 use std::ops::Deref;
 use td_error::TdError;
-use td_objects::dxo::States;
-use td_objects::dxo::crudl::handle_sql_err;
+use td_objects::States;
 use td_objects::dxo::dependency::DependencyDBWithNames;
 use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames};
 use td_objects::dxo::table::{TableDB, TableDBWithNames};
 use td_objects::dxo::trigger::TriggerDBWithNames;
 use td_objects::graph::{TdGraph, TdGraphBuilder};
-use td_objects::sql::cte::VersionedQueries;
-use td_objects::sql::recursive::RecursiveQueries;
-use td_objects::sql::{DaoQueries, recursive};
+use td_queries::{OptionsBuilder, RecursiveQueries, VersionedQueries};
 use td_objects::types::basic::{AtTime, FunctionId, TableId};
 use td_objects::types::recursion::RecursionOptions;
-use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
+use td_database::dynamic::DynamicConnection;
+use td_tower::extractors::{Ref, MutRef};
 
 pub struct GraphBuilder<
     C: GraphConfig<TRIGGER_STATE, DEPENDENCY_STATE, FUNCTION_STATE, TABLE_STATE>,
@@ -45,53 +43,47 @@ where
     TableDB: States<TABLE_STATE>,
 {
     pub async fn find_recursive_trigger_graph(
-        SrvCtx(queries): SrvCtx<DaoQueries>,
-        Connection(connection): Connection,
-        Input(at_time): Input<AtTime>,
-        Input(function_or_table): Input<FunctionOrTable>,
-        Input(recursion_options): Input<RecursionOptions>,
+        mut conn: MutRef<DynamicConnection<'static>>,
+        at_time: Ref<AtTime>,
+        function_or_table: Ref<FunctionOrTable>,
+        recursion_options: Ref<RecursionOptions>,
     ) -> Result<Vec<TriggerDBWithNames>, TdError> {
-        let mut conn = connection.lock().await;
-        let conn = conn.get_mut_connection()?;
 
         let trigger_graph = match function_or_table.deref() {
             FunctionOrTable::Function(function_id) => {
-                queries
-                    .select_recursive_versions::<TRIGGER_STATE, TriggerDBWithNames, FUNCTION_STATE, FunctionDB>(
+                conn
+                    .fetch_all_versions_recursive::<TRIGGER_STATE, TriggerDBWithNames, FUNCTION_STATE, FunctionDB>(
                         {
-                            let mut opts = recursive::OptionsBuilder::default()
+                            let mut opts = OptionsBuilder::default()
                                 .recursion(*recursion_options)
                                 .direct_reference(function_id)
+                                .build()?
+                                .versioned()
                                 .d_defined_on(&*at_time)
                                 .r_defined_on(&*at_time);
                             if recursion_options.override_disabled_trigger() {
                                 opts = opts.override_direct_reference_state(
                                     // move from Executable to Active
                                     Some(<FunctionDB as States<{ FunctionDB::Active }>>::state())
-                                );
+                                )?;
                             }
                             opts.build()?
                         },
-                    )?
-                    .build_query_as()
-                    .fetch_all(&mut *conn)
-                    .await
-                    .map_err(handle_sql_err)?
+                    )
+                    .await?
             }
             FunctionOrTable::Table(table_id) => {
-                queries
-                    .select_recursive_versions::<TRIGGER_STATE, TriggerDBWithNames, TABLE_STATE, TableDB>(
-                        recursive::OptionsBuilder::default()
-                            .recursion(*recursion_options)
-                            .direct_reference(table_id)
-                            .d_defined_on(&*at_time)
-                            .r_defined_on(&*at_time)
-                            .build()?,
-                    )?
-                    .build_query_as()
-                    .fetch_all(&mut *conn)
-                    .await
-                    .map_err(handle_sql_err)?
+                conn.fetch_all_versions_recursive::<TRIGGER_STATE, TriggerDBWithNames, TABLE_STATE, TableDB>(
+                    OptionsBuilder::default()
+                        .recursion(*recursion_options)
+                        .direct_reference(table_id)
+                        .build()?
+                        .versioned()
+                        .d_defined_on(&*at_time)
+                        .r_defined_on(&*at_time)
+                        .build()?,
+                )
+                .await?
             }
         };
 
@@ -99,45 +91,40 @@ where
     }
 
     pub async fn find_recursive_dependency_graph(
-        SrvCtx(queries): SrvCtx<DaoQueries>,
-        Connection(connection): Connection,
-        Input(at_time): Input<AtTime>,
-        Input(function_or_table): Input<FunctionOrTable>,
-        Input(recursion_options): Input<RecursionOptions>,
+        mut conn: MutRef<DynamicConnection<'static>>,
+        at_time: Ref<AtTime>,
+        function_or_table: Ref<FunctionOrTable>,
+        recursion_options: Ref<RecursionOptions>,
     ) -> Result<Vec<DependencyDBWithNames>, TdError> {
-        let mut conn = connection.lock().await;
-        let conn = conn.get_mut_connection()?;
 
         let dep_graph = match function_or_table.deref() {
             FunctionOrTable::Function(function_id) =>{
-                queries
-                    .select_recursive_versions::<DEPENDENCY_STATE, DependencyDBWithNames, FUNCTION_STATE, FunctionDB>(
-                        recursive::OptionsBuilder::default()
+                conn
+                    .fetch_all_versions_recursive::<DEPENDENCY_STATE, DependencyDBWithNames, FUNCTION_STATE, FunctionDB>(
+                        OptionsBuilder::default()
                             .recursion(*recursion_options)
                             .direct_reference(function_id)
+                            .build()?
+                            .versioned()
                             .d_defined_on(&*at_time)
                             .r_defined_on(&*at_time)
                             .build()?,
-                    )?
-                    .build_query_as()
-                    .fetch_all(&mut *conn)
-                    .await
-                    .map_err(handle_sql_err)?
+                    )
+                    .await?
             }
             FunctionOrTable::Table(table_id)=> {
-                queries
-                    .select_recursive_versions::<DEPENDENCY_STATE, DependencyDBWithNames, TABLE_STATE, TableDB>(
-                        recursive::OptionsBuilder::default()
+                conn
+                    .fetch_all_versions_recursive::<DEPENDENCY_STATE, DependencyDBWithNames, TABLE_STATE, TableDB>(
+                        OptionsBuilder::default()
                             .recursion(*recursion_options)
                             .direct_reference(table_id)
+                            .build()?
+                            .versioned()
                             .d_defined_on(&*at_time)
                             .r_defined_on(&*at_time)
                             .build()?,
-                    )?
-                    .build_query_as()
-                    .fetch_all(&mut *conn)
-                    .await
-                    .map_err(handle_sql_err)?
+                    )
+                    .await?
             }
         };
 
@@ -145,23 +132,17 @@ where
     }
 
     pub async fn main_function_id(
-        SrvCtx(queries): SrvCtx<DaoQueries>,
-        Connection(connection): Connection,
-        Input(function_or_table): Input<FunctionOrTable>,
-        Input(at_time): Input<AtTime>,
+        mut conn: MutRef<DynamicConnection<'static>>,
+        function_or_table: Ref<FunctionOrTable>,
+        at_time: Ref<AtTime>,
     ) -> Result<FunctionId, TdError> {
-        let mut conn = connection.lock().await;
-        let conn = conn.get_mut_connection()?;
 
         let function_id = match function_or_table.deref() {
             FunctionOrTable::Function(function_id) => *function_id,
             FunctionOrTable::Table(table_id) => {
-                let table: TableDB = queries
-                    .select_versions_at::<TABLE_STATE, TableDB>(Some(&at_time), &table_id)?
-                    .build_query_as()
-                    .fetch_one(&mut *conn)
-                    .await
-                    .map_err(handle_sql_err)?;
+                let table = conn
+                    .fetch_one_at::<TABLE_STATE, TableDB>(table_id, &at_time)
+                    .await?;
                 table.function_id
             }
         };
@@ -170,9 +151,9 @@ where
     }
 
     pub async fn unique_function_ids(
-        Input(function_id): Input<FunctionId>,
-        Input(trigger_graph): Input<Vec<TriggerDBWithNames>>,
-        Input(dep_graph): Input<Vec<DependencyDBWithNames>>,
+        function_id: Ref<FunctionId>,
+        trigger_graph: Ref<Vec<TriggerDBWithNames>>,
+        dep_graph: Ref<Vec<DependencyDBWithNames>>,
     ) -> Result<Vec<FunctionId>, TdError> {
         let trigger_function_ids = trigger_graph
             .iter()
@@ -192,8 +173,8 @@ where
     }
 
     pub async fn unique_triggered_function_ids(
-        Input(function_id): Input<FunctionId>,
-        Input(trigger_graph): Input<Vec<TriggerDBWithNames>>,
+        function_id: Ref<FunctionId>,
+        trigger_graph: Ref<Vec<TriggerDBWithNames>>,
     ) -> Result<Vec<FunctionId>, TdError> {
         let unique_triggered_function_ids = trigger_graph
             .iter()
@@ -206,62 +187,47 @@ where
     }
 
     pub async fn find_triggered_functions_dependency_graph(
-        SrvCtx(queries): SrvCtx<DaoQueries>,
-        Connection(connection): Connection,
-        Input(at_time): Input<AtTime>,
-        Input(triggered_functions): Input<Vec<FunctionId>>,
+        mut conn: MutRef<DynamicConnection<'static>>,
+        at_time: Ref<AtTime>,
+        triggered_functions: Ref<Vec<FunctionId>>,
     ) -> Result<Vec<DependencyDBWithNames>, TdError> {
-        let mut conn = connection.lock().await;
-        let conn = conn.get_mut_connection()?;
 
         // TODO this should be chunked
-        let dep_graph: Vec<DependencyDBWithNames> = queries
-            .find_versions_at::<DEPENDENCY_STATE, DependencyDBWithNames>(
-                Some(&at_time),
+        let dep_graph = conn
+            .fetch_all_at::<DEPENDENCY_STATE, DependencyDBWithNames>(
                 triggered_functions.deref(),
-            )?
-            .build_query_as()
-            .fetch_all(&mut *conn)
-            .await
-            .map_err(handle_sql_err)?;
+                &at_time,
+            )
+            .await?;
 
         Ok(dep_graph)
     }
 
     pub async fn find_functions_output_tables(
-        SrvCtx(queries): SrvCtx<DaoQueries>,
-        Connection(connection): Connection,
-        Input(at_time): Input<AtTime>,
-        Input(functions): Input<Vec<FunctionId>>,
+        mut conn: MutRef<DynamicConnection<'static>>,
+        at_time: Ref<AtTime>,
+        functions: Ref<Vec<FunctionId>>,
     ) -> Result<Vec<TableDBWithNames>, TdError> {
-        let mut conn = connection.lock().await;
-        let conn = conn.get_mut_connection()?;
 
         // Find output tables for each triggered_function
         // TODO this should be chunked
-        let output_tables: Vec<TableDBWithNames> = queries
-            .find_versions_at::<{ TableDBWithNames::Active }, TableDBWithNames>(
-                Some(&at_time),
+        let output_tables = conn
+            .fetch_all_at::<{ TableDBWithNames::Active }, TableDBWithNames>(
                 functions.deref(),
-            )?
-            .build_query_as()
-            .fetch_all(&mut *conn)
-            .await
-            .map_err(handle_sql_err)?;
+                &at_time,
+            )
+            .await?;
 
         Ok(output_tables)
     }
 
     pub async fn find_all_tables_map(
-        SrvCtx(queries): SrvCtx<DaoQueries>,
-        Connection(connection): Connection,
-        Input(at_time): Input<AtTime>,
-        Input(trigger_graph): Input<Vec<TriggerDBWithNames>>,
-        Input(dep_graph): Input<Vec<DependencyDBWithNames>>,
-        Input(output_tables): Input<Vec<TableDBWithNames>>,
+        mut conn: MutRef<DynamicConnection<'static>>,
+        at_time: Ref<AtTime>,
+        trigger_graph: Ref<Vec<TriggerDBWithNames>>,
+        dep_graph: Ref<Vec<DependencyDBWithNames>>,
+        output_tables: Ref<Vec<TableDBWithNames>>,
     ) -> Result<HashMap<TableId, TableDBWithNames>, TdError> {
-        let mut conn = connection.lock().await;
-        let conn = conn.get_mut_connection()?;
 
         let trigger_table_ids = trigger_graph.iter().map(|t| t.trigger_by_table_id);
         let dep_table_ids = dep_graph.iter().map(|t| t.table_id);
@@ -274,15 +240,9 @@ where
             .collect::<Vec<_>>();
 
         // TODO this should be chunked
-        let all_tables: Vec<TableDBWithNames> = queries
-            .find_versions_at::<{ TableDBWithNames::All }, TableDBWithNames>(
-                Some(&at_time),
-                all_table_ids.deref(),
-            )?
-            .build_query_as()
-            .fetch_all(&mut *conn)
-            .await
-            .map_err(handle_sql_err)?;
+        let all_tables = conn
+            .fetch_all_at::<{ TableDBWithNames::All }, TableDBWithNames>(&all_table_ids, &at_time)
+            .await?;
 
         let all_tables = all_tables
             .into_iter()
@@ -293,15 +253,12 @@ where
     }
 
     pub async fn find_all_functions_map(
-        SrvCtx(queries): SrvCtx<DaoQueries>,
-        Connection(connection): Connection,
-        Input(at_time): Input<AtTime>,
-        Input(trigger_graph): Input<Vec<TriggerDBWithNames>>,
-        Input(dep_graph): Input<Vec<DependencyDBWithNames>>,
-        Input(output_tables): Input<Vec<TableDBWithNames>>,
+        mut conn: MutRef<DynamicConnection<'static>>,
+        at_time: Ref<AtTime>,
+        trigger_graph: Ref<Vec<TriggerDBWithNames>>,
+        dep_graph: Ref<Vec<DependencyDBWithNames>>,
+        output_tables: Ref<Vec<TableDBWithNames>>,
     ) -> Result<HashMap<FunctionId, FunctionDBWithNames>, TdError> {
-        let mut conn = connection.lock().await;
-        let conn = conn.get_mut_connection()?;
 
         let trigger_function_ids = trigger_graph
             .iter()
@@ -318,15 +275,12 @@ where
             .collect::<Vec<_>>();
 
         // TODO this should be chunked
-        let all_functions: Vec<FunctionDBWithNames> = queries
-            .find_versions_at::<{ FunctionDBWithNames::All }, FunctionDBWithNames>(
-                Some(&at_time),
-                all_function_ids.deref(),
-            )?
-            .build_query_as()
-            .fetch_all(&mut *conn)
-            .await
-            .map_err(handle_sql_err)?;
+        let all_functions = conn
+            .fetch_all_at::<{ FunctionDBWithNames::All }, FunctionDBWithNames>(
+                &all_function_ids,
+                &at_time,
+            )
+            .await?;
 
         let all_functions = all_functions
             .into_iter()
@@ -337,11 +291,11 @@ where
     }
 
     pub async fn build_td_graph(
-        Input(trigger_graph): Input<Vec<TriggerDBWithNames>>,
-        Input(dep_graph): Input<Vec<DependencyDBWithNames>>,
-        Input(output_tables): Input<Vec<TableDBWithNames>>,
-        Input(all_tables_map): Input<HashMap<TableId, TableDBWithNames>>,
-        Input(all_functions_map): Input<HashMap<FunctionId, FunctionDBWithNames>>,
+        trigger_graph: Ref<Vec<TriggerDBWithNames>>,
+        dep_graph: Ref<Vec<DependencyDBWithNames>>,
+        output_tables: Ref<Vec<TableDBWithNames>>,
+        all_tables_map: Ref<HashMap<TableId, TableDBWithNames>>,
+        all_functions_map: Ref<HashMap<FunctionId, FunctionDBWithNames>>,
     ) -> Result<TdGraph, TdError> {
         let graph = TdGraphBuilder::new(&all_tables_map, &all_functions_map)
             .with_triggers(&trigger_graph)?

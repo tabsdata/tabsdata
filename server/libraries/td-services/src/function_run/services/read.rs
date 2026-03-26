@@ -3,23 +3,20 @@
 //
 
 use ta_services::factory::service_factory;
+use td_authz::tower::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
 use td_authz::{Authz, AuthzContext};
+use td_objects::And;
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::function::FunctionDBWithNames;
 use td_objects::dxo::function_run::{FunctionRun, FunctionRunBuilder, FunctionRunDBWithNames};
 use td_objects::rest_urls::FunctionRunParam;
-use td_objects::sql::DaoQueries;
-use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
-use td_objects::tower_service::from::{
-    BuildService, ExtractNameService, ExtractService, TryIntoService, With, combine,
-};
-use td_objects::tower_service::sql::{By, SqlSelectService};
+use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionIdName, ExecutionId, ExecutionIdName, FunctionIdName,
-    FunctionVersionId,
+    CollectionId, CollectionIdName, ExecutionId, ExecutionIdName, FunctionIdName, FunctionVersionId,
 };
+use td_queries::By;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -29,7 +26,6 @@ use td_tower::layers;
     request = ReadRequest<FunctionRunParam>,
     response = FunctionRun,
     connection = ConnectionProvider,
-    context = DaoQueries,
     context = AuthzContext,
 )]
 fn service() {
@@ -38,17 +34,15 @@ fn service() {
         from_fn(With::<ReadRequest<FunctionRunParam>>::extract_name::<FunctionRunParam>),
         from_fn(With::<FunctionRunParam>::extract::<CollectionIdName>),
         // find collection ID
-        from_fn(By::<CollectionIdName>::select::<CollectionDB>),
+        from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
         // check requester has collection permissions
         from_fn(AuthzOn::<CollectionId>::set),
         from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
         // find function version ID
         from_fn(With::<FunctionRunParam>::extract::<FunctionIdName>),
-        from_fn(combine::<CollectionIdName, FunctionIdName>),
-        from_fn(With::<RequestContext>::extract::<AtTime>),
         from_fn(
-            By::<(CollectionIdName, FunctionIdName)>::select_version::<
+            By::<And![CollectionIdName, FunctionIdName]>::fetch_one_current::<
                 { FunctionDBWithNames::Executable },
                 FunctionDBWithNames,
             >
@@ -56,40 +50,37 @@ fn service() {
         from_fn(With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
         // find execution ID
         from_fn(With::<FunctionRunParam>::extract::<ExecutionIdName>),
-        from_fn(By::<ExecutionIdName>::select::<ExecutionDB>),
+        from_fn(By::<ExecutionIdName>::fetch_one::<ExecutionDB>),
         from_fn(With::<ExecutionDB>::extract::<ExecutionId>),
         // find function run
-        from_fn(combine::<ExecutionId, FunctionVersionId>),
-        from_fn(By::<(ExecutionId, FunctionVersionId)>::select::<FunctionRunDBWithNames>),
+        from_fn(By::<And![ExecutionId, FunctionVersionId]>::fetch_one::<FunctionRunDBWithNames>),
         // Build FunctionRun
         from_fn(With::<FunctionRunDBWithNames>::try_convert_to::<FunctionRunBuilder, _>),
-        from_fn(With::<FunctionRunBuilder>::build::<FunctionRun, _>),
+        from_fn(With::<FunctionRunBuilder>::build::<FunctionRun>),
     )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
     use ta_services::service::TdService;
-    use td_database::sql::DbPool;
+    use td_database::pool::TdPool;
     use td_error::TdError;
+    use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionRegister;
-    use td_objects::test_utils::seed_collection::seed_collection;
-    use td_objects::test_utils::seed_execution::seed_execution;
-    use td_objects::test_utils::seed_function::seed_function;
-    use td_objects::test_utils::seed_function_run::seed_function_run;
-    use td_objects::test_utils::seed_transaction::seed_transaction;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionName, FunctionRunStatus,
         RoleId, TableNameDto, TransactionKey, UserId, UserName,
     };
+    use td_queries::test_utils::SeedQueries;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_read_function_run(db: DbPool) {
+    async fn test_tower_metadata_read_function_run(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
         FunctionRunReadService::with_defaults(db)
@@ -102,17 +93,15 @@ mod tests {
                 ),
                 type_of_val(&With::<FunctionRunParam>::extract::<CollectionIdName>),
                 // find collection ID
-                type_of_val(&By::<CollectionIdName>::select::<CollectionDB>),
+                type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
                 type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
                 // check requester has collection permissions
                 type_of_val(&AuthzOn::<CollectionId>::set),
                 type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
                 // find function version ID
                 type_of_val(&With::<FunctionRunParam>::extract::<FunctionIdName>),
-                type_of_val(&combine::<CollectionIdName, FunctionIdName>),
-                type_of_val(&With::<RequestContext>::extract::<AtTime>),
                 type_of_val(
-                    &By::<(CollectionIdName, FunctionIdName)>::select_version::<
+                    &By::<And![CollectionIdName, FunctionIdName]>::fetch_one_current::<
                         { FunctionDBWithNames::Executable },
                         FunctionDBWithNames,
                     >,
@@ -120,30 +109,26 @@ mod tests {
                 type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
                 // find execution ID
                 type_of_val(&With::<FunctionRunParam>::extract::<ExecutionIdName>),
-                type_of_val(&By::<ExecutionIdName>::select::<ExecutionDB>),
+                type_of_val(&By::<ExecutionIdName>::fetch_one::<ExecutionDB>),
                 type_of_val(&With::<ExecutionDB>::extract::<ExecutionId>),
                 // find function run
-                type_of_val(&combine::<ExecutionId, FunctionVersionId>),
                 type_of_val(
-                    &By::<(ExecutionId, FunctionVersionId)>::select::<FunctionRunDBWithNames>,
+                    &By::<And![ExecutionId, FunctionVersionId]>::fetch_one::<FunctionRunDBWithNames>,
                 ),
                 // Build FunctionRun
                 type_of_val(
                     &With::<FunctionRunDBWithNames>::try_convert_to::<FunctionRunBuilder, _>,
                 ),
-                type_of_val(&With::<FunctionRunBuilder>::build::<FunctionRun, _>),
+                type_of_val(&With::<FunctionRunBuilder>::build::<FunctionRun>),
             ]);
     }
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_read_function_run(db: DbPool) -> Result<(), TdError> {
-        let collection = seed_collection(
-            &db,
-            &CollectionName::try_from("collection")?,
-            &UserId::admin(),
-        )
-        .await;
+    async fn test_read_function_run(db: TdPool) -> Result<(), TdError> {
+        let collection = db
+            .seed_collection(&CollectionName::try_from("collection")?, &UserId::admin())
+            .await?;
 
         let dependencies = None;
         let triggers = None;
@@ -160,34 +145,35 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let function_version = seed_function(&db, &collection, &create).await;
+        let function_version = db.seed_function(&collection, &create).await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
 
-        let execution = seed_execution(&db, &function_version).await;
-        let transaction = seed_transaction(&db, &execution, &transaction_key).await;
-        let function_run = seed_function_run(
-            &db,
-            &collection,
-            &function_version,
-            &execution,
-            &transaction,
-            &FunctionRunStatus::Done,
-        )
-        .await;
+        let execution = db.seed_execution(&function_version).await?;
+        let transaction = db.seed_transaction(&execution, &transaction_key).await?;
+        let function_run = db
+            .seed_function_run(
+                &collection,
+                &function_version,
+                &execution,
+                &transaction,
+                &FunctionRunStatus::Done,
+            )
+            .await?;
 
         // Test
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).read(
                 FunctionRunParam::builder()
-                    .try_collection(format!("{}", collection.name))?
-                    .try_function(format!("{}", function_version.name))?
-                    .try_execution(format!("~{}", execution.id))?
+                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                    .function(FunctionIdName::from_str(&format!(
+                        "{}",
+                        function_version.name
+                    ))?)
+                    .execution(ExecutionIdName::from_str(&format!("~{}", execution.id))?)
                     .build()?,
             );
 
-        let service = FunctionRunReadService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = FunctionRunReadService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         let response = response?;
         assert_eq!(response.id, function_run.id);

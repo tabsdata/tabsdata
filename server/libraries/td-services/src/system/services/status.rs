@@ -23,14 +23,14 @@ fn service() {
 mod tests {
     use super::*;
     use ta_services::service::TdService;
-    use td_database::sql::DbPool;
+    use td_database::pool::TdPool;
     use td_objects::dxo::system::HealthStatus;
     use tower::ServiceExt;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_status_service(db: DbPool) {
+    async fn test_tower_metadata_status(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
         StatusService::with_defaults(db)
@@ -41,8 +41,8 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_database_status_service(db: DbPool) {
-        let service = StatusService::with_defaults(db).service().await;
+    async fn test_database_status_service(db: TdPool) {
+        let service = StatusService::with_defaults(db).service();
         let response = service.oneshot(()).await.unwrap();
 
         assert!(matches!(response.status, HealthStatus::OK));

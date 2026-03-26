@@ -4,16 +4,15 @@
 
 use crate::execution::layers::update_status::update_function_run_status;
 use ta_services::factory::service_factory;
+use td_authz::tower::{AuthzOn, CollAdmin, CollExec};
 use td_authz::{Authz, AuthzContext};
 use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
 use td_objects::dxo::function_run::{FunctionRunDB, UpdateFunctionRunDB};
 use td_objects::dxo::transaction::TransactionDB;
 use td_objects::rest_urls::TransactionParam;
-use td_objects::sql::DaoQueries;
-use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollExec};
-use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
-use td_objects::tower_service::sql::{By, SqlSelectAllService, SqlSelectService};
+use td_objects::tower_service::with::With;
 use td_objects::types::basic::{CollectionId, TransactionId, TransactionIdName};
+use td_queries::By;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -23,7 +22,6 @@ use td_tower::layers;
     request = UpdateRequest<TransactionParam, ()>,
     response = (),
     connection = TransactionProvider,
-    context = DaoQueries,
     context = AuthzContext,
 )]
 fn service() {
@@ -34,13 +32,13 @@ fn service() {
         // Extract function_run_id. We assume it's correct as the callback is constructed by the server.
         from_fn(With::<TransactionParam>::extract::<TransactionIdName>),
         // Find function run.
-        from_fn(By::<TransactionIdName>::select::<TransactionDB>),
+        from_fn(By::<TransactionIdName>::fetch_one::<TransactionDB>),
         // check requester is coll_admin or coll_exec for the transaction's collection
         from_fn(With::<TransactionDB>::extract::<CollectionId>),
         from_fn(AuthzOn::<CollectionId>::set),
         from_fn(Authz::<CollAdmin, CollExec>::check),
         from_fn(With::<TransactionDB>::extract::<TransactionId>),
-        from_fn(By::<TransactionId>::select_all::<FunctionRunDB>),
+        from_fn(By::<TransactionId>::fetch_all::<FunctionRunDB>),
         // Set cancel status
         from_fn(UpdateFunctionRunDB::cancel),
         // Update function requirements status
@@ -54,9 +52,11 @@ mod tests {
     use crate::execution::layers::update_status::tests::{
         TestExecution, TestFunction, TestTransaction, test_status_update,
     };
+    use std::str::FromStr;
     use ta_services::service::TdService;
-    use td_database::sql::DbPool;
+    use td_database::pool::TdPool;
     use td_error::TdError;
+    use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::types::basic::{
         AccessTokenId, CollectionName, ExecutionStatus, FunctionName, FunctionRunStatus, RoleId,
@@ -68,7 +68,7 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_cancel_transaction(db: DbPool) {
+    async fn test_tower_metadata_cancel_transaction(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
         TransactionCancelService::with_defaults(db)
@@ -85,13 +85,13 @@ mod tests {
                 // Extract function_run_id. We assume it's correct as the callback is constructed by the server.
                 type_of_val(&With::<TransactionParam>::extract::<TransactionIdName>),
                 // Find function run.
-                type_of_val(&By::<TransactionIdName>::select::<TransactionDB>),
+                type_of_val(&By::<TransactionIdName>::fetch_one::<TransactionDB>),
                 // check requester is coll_admin or coll_exec for the transaction's collection
                 type_of_val(&With::<TransactionDB>::extract::<CollectionId>),
                 type_of_val(&AuthzOn::<CollectionId>::set),
                 type_of_val(&Authz::<CollAdmin, CollExec>::check),
                 type_of_val(&With::<TransactionDB>::extract::<TransactionId>),
-                type_of_val(&By::<TransactionId>::select_all::<FunctionRunDB>),
+                type_of_val(&By::<TransactionId>::fetch_all::<FunctionRunDB>),
                 // Set cancel status
                 type_of_val(&UpdateFunctionRunDB::cancel),
                 // Update function requirements status
@@ -100,7 +100,7 @@ mod tests {
     }
 
     async fn test_cancel_transaction(
-        db: DbPool,
+        db: TdPool,
         test_executions: Vec<TestExecution>,
         cancel_on: usize,
     ) -> Result<(), TdError> {
@@ -119,14 +119,13 @@ mod tests {
                     RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
                         .update(
                             TransactionParam::builder()
-                                .try_transaction(transaction)?
+                                .transaction(TransactionIdName::from_str(&transaction)?)
                                 .build()?,
                             (),
                         );
 
                 TransactionCancelService::with_defaults(db.clone())
                     .service()
-                    .await
                     .raw_oneshot(request)
                     .await
             }
@@ -136,7 +135,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_cancel_transaction_unique(db: DbPool) -> Result<(), TdError> {
+    async fn test_cancel_transaction_unique(db: TdPool) -> Result<(), TdError> {
         test_cancel_transaction(
             db,
             vec![TestExecution {
@@ -160,7 +159,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_cancel_transaction_multiple_function(db: DbPool) -> Result<(), TdError> {
+    async fn test_cancel_transaction_multiple_function(db: TdPool) -> Result<(), TdError> {
         test_cancel_transaction(
             db,
             vec![TestExecution {
@@ -194,7 +193,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_cancel_transaction_multiple_transaction(db: DbPool) -> Result<(), TdError> {
+    async fn test_cancel_transaction_multiple_transaction(db: TdPool) -> Result<(), TdError> {
         test_cancel_transaction(
             db,
             vec![TestExecution {
@@ -231,7 +230,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_cancel_transaction_multiple_execution(db: DbPool) -> Result<(), TdError> {
+    async fn test_cancel_transaction_multiple_execution(db: TdPool) -> Result<(), TdError> {
         test_cancel_transaction(
             db,
             vec![
@@ -271,7 +270,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_cancel_transaction_downstream(db: DbPool) -> Result<(), TdError> {
+    async fn test_cancel_transaction_downstream(db: TdPool) -> Result<(), TdError> {
         test_cancel_transaction(
             db,
             vec![
@@ -311,7 +310,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_cancel_transaction_different_collection(db: DbPool) -> Result<(), TdError> {
+    async fn test_cancel_transaction_different_collection(db: TdPool) -> Result<(), TdError> {
         test_cancel_transaction(
             db,
             vec![TestExecution {
@@ -345,7 +344,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_cancel_transaction_status_transitions(db: DbPool) -> Result<(), TdError> {
+    async fn test_cancel_transaction_status_transitions(db: TdPool) -> Result<(), TdError> {
         let cancel_transition_for = async move |initial: FunctionRunStatus| -> Result<(), TdError> {
             let db = db.clone();
             test_cancel_transaction(

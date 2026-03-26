@@ -3,12 +3,12 @@
 //
 
 use ta_services::factory::service_factory;
+use td_objects::NoFilter;
 use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse};
 use td_objects::dxo::function_run::FunctionRun;
-use td_objects::sql::list::ListQueryParams;
-use td_objects::sql::{DaoQueries, NoListFilter};
-use td_objects::tower_service::from::{ExtractService, TryIntoService, With};
-use td_objects::tower_service::sql::{By, SqlListService};
+use td_objects::list::params::ListQueryParams;
+use td_objects::tower_service::with::With;
+use td_queries::By;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -18,7 +18,6 @@ use td_tower::layers;
     request = ListRequest<()>,
     response = ListResponse<FunctionRun>,
     connection = ConnectionProvider,
-    context = DaoQueries,
 )]
 fn service() {
     layers!(
@@ -27,7 +26,7 @@ fn service() {
         // List all function runs in the system.
         from_fn(With::<ListRequest<()>>::extract::<ListParams>),
         from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<FunctionRun>, _>),
-        from_fn(By::<()>::list::<NoListFilter, FunctionRun>),
+        from_fn(By::<()>::list::<NoFilter, FunctionRun>),
     )
 }
 
@@ -35,25 +34,22 @@ fn service() {
 mod tests {
     use super::*;
     use ta_services::service::TdService;
-    use td_database::sql::DbPool;
+    use td_database::pool::TdPool;
     use td_error::TdError;
+    use td_objects::Buildable;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::function::FunctionRegister;
-    use td_objects::test_utils::seed_collection::seed_collection;
-    use td_objects::test_utils::seed_execution::seed_execution;
-    use td_objects::test_utils::seed_function::seed_function;
-    use td_objects::test_utils::seed_function_run::seed_function_run;
-    use td_objects::test_utils::seed_transaction::seed_transaction;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRunStatus, RoleId,
         TableNameDto, TransactionKey, UserId,
     };
+    use td_queries::test_utils::SeedQueries;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_list_function_run(db: DbPool) {
+    async fn test_tower_metadata_list_function_run(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
         FunctionRunListService::with_defaults(db)
@@ -62,19 +58,16 @@ mod tests {
             .assert_service::<ListRequest<()>, ListResponse<FunctionRun>>(&[
                 type_of_val(&With::<ListRequest<()>>::extract::<ListParams>),
                 type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<FunctionRun>, _>),
-                type_of_val(&By::<()>::list::<NoListFilter, FunctionRun>),
+                type_of_val(&By::<()>::list::<NoFilter, FunctionRun>),
             ]);
     }
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_list_function_run(db: DbPool) -> Result<(), TdError> {
-        let collection = seed_collection(
-            &db,
-            &CollectionName::try_from("collection")?,
-            &UserId::admin(),
-        )
-        .await;
+    async fn test_list_function_run(db: TdPool) -> Result<(), TdError> {
+        let collection = db
+            .seed_collection(&CollectionName::try_from("collection")?, &UserId::admin())
+            .await?;
 
         let dependencies = None;
         let triggers = None;
@@ -91,58 +84,53 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let function_version = seed_function(&db, &collection, &create).await;
+        let function_version = db.seed_function(&collection, &create).await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
 
-        let execution1 = seed_execution(&db, &function_version).await;
-        let execution2 = seed_execution(&db, &function_version).await;
+        let execution1 = db.seed_execution(&function_version).await?;
+        let execution2 = db.seed_execution(&function_version).await?;
 
         let function_runs = [
-            seed_function_run(
-                &db,
+            db.seed_function_run(
                 &collection,
                 &function_version,
                 &execution1,
-                &seed_transaction(&db, &execution1, &transaction_key).await,
+                &db.seed_transaction(&execution1, &transaction_key).await?,
                 &FunctionRunStatus::Done,
             )
-            .await,
-            seed_function_run(
-                &db,
+            .await?,
+            db.seed_function_run(
                 &collection,
                 &function_version,
                 &execution1,
-                &seed_transaction(&db, &execution1, &transaction_key).await,
+                &db.seed_transaction(&execution1, &transaction_key).await?,
                 &FunctionRunStatus::Done,
             )
-            .await,
-            seed_function_run(
-                &db,
+            .await?,
+            db.seed_function_run(
                 &collection,
                 &function_version,
                 &execution1,
-                &seed_transaction(&db, &execution1, &transaction_key).await,
+                &db.seed_transaction(&execution1, &transaction_key).await?,
                 &FunctionRunStatus::Done,
             )
-            .await,
-            seed_function_run(
-                &db,
+            .await?,
+            db.seed_function_run(
                 &collection,
                 &function_version,
                 &execution1,
-                &seed_transaction(&db, &execution2, &transaction_key).await,
+                &db.seed_transaction(&execution2, &transaction_key).await?,
                 &FunctionRunStatus::Done,
             )
-            .await,
-            seed_function_run(
-                &db,
+            .await?,
+            db.seed_function_run(
                 &collection,
                 &function_version,
                 &execution1,
-                &seed_transaction(&db, &execution2, &transaction_key).await,
+                &db.seed_transaction(&execution2, &transaction_key).await?,
                 &FunctionRunStatus::Done,
             )
-            .await,
+            .await?,
         ];
 
         // Test
@@ -150,9 +138,7 @@ mod tests {
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
                 .list((), ListParams::default());
 
-        let service = FunctionRunListService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = FunctionRunListService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await?;
         assert_eq!(response.len, function_runs.len());
         assert_eq!(response.data[0].id, function_runs[0].id);
