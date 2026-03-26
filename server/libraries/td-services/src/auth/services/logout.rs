@@ -3,17 +3,13 @@
 //
 
 use crate::auth::layers::refresh_sessions::refresh_sessions;
-use crate::auth::session::Sessions;
-
 use ta_services::factory::service_factory;
+use td_authz::session_provider::Sessions;
 use td_objects::dxo::auth::{SessionDB, SessionLogoutDB, SessionLogoutDBBuilder};
 use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
-use td_objects::sql::DaoQueries;
-use td_objects::tower_service::from::{
-    BuildService, DefaultService, ExtractService, SetService, With,
-};
-use td_objects::tower_service::sql::{By, SqlUpdateService};
+use td_objects::tower_service::with::With;
 use td_objects::types::basic::{AccessTokenId, AtTime};
+use td_queries::By;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -23,7 +19,6 @@ use td_tower::layers;
     request = UpdateRequest<(), ()>,
     response = (),
     connection = TransactionProvider,
-    context = DaoQueries,
     context = Sessions,
 )]
 fn service() {
@@ -35,7 +30,7 @@ fn service() {
         // logout corresponding session
         from_fn(With::<SessionLogoutDBBuilder>::default),
         from_fn(With::<AtTime>::set::<SessionLogoutDBBuilder>),
-        from_fn(With::<SessionLogoutDBBuilder>::build::<SessionLogoutDB, _>),
+        from_fn(With::<SessionLogoutDBBuilder>::build::<SessionLogoutDB>),
         from_fn(By::<AccessTokenId>::update::<SessionLogoutDB, SessionDB>),
         // invalidate sessions cache
         from_fn(refresh_sessions),
@@ -46,21 +41,22 @@ fn service() {
 mod tests {
     use super::*;
     use crate::Context;
-    use crate::auth::jwt::decode_token;
     use crate::auth::services::AuthServices;
-    use crate::auth::services::tests::get_session;
     use ta_services::factory::ServiceFactory;
     use ta_services::service::TdService;
-    use td_database::sql::DbPool;
+    use td_authz::jwt::decode_token;
+    use td_database::pool::TdPool;
     use td_error::TdError;
+    use td_objects::Buildable;
     use td_objects::dxo::auth::Login;
     use td_objects::types::basic::{Password, RoleId, RoleName, SessionStatus, UserId, UserName};
+    use td_queries::BasicQueries;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_logout(db: DbPool) {
+    async fn test_tower_metadata_logout(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
         LogoutService::with_defaults(db.clone())
@@ -74,7 +70,7 @@ mod tests {
                 // logout corresponding session
                 type_of_val(&With::<SessionLogoutDBBuilder>::default),
                 type_of_val(&With::<AtTime>::set::<SessionLogoutDBBuilder>),
-                type_of_val(&With::<SessionLogoutDBBuilder>::build::<SessionLogoutDB, _>),
+                type_of_val(&With::<SessionLogoutDBBuilder>::build::<SessionLogoutDB>),
                 type_of_val(&By::<AccessTokenId>::update::<SessionLogoutDB, SessionDB>),
                 // invalidate sessions cache
                 type_of_val(&refresh_sessions),
@@ -83,10 +79,10 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_logout_ok(db: DbPool) -> Result<(), TdError> {
+    async fn test_logout_ok(db: TdPool) -> Result<(), TdError> {
         let context = Context::with_defaults(db.clone());
         let auth_services = AuthServices::build(&context);
-        let service = auth_services.login.service().await;
+        let service = auth_services.login.service();
 
         let request = Login::builder()
             .name(UserName::try_from("admin")?)
@@ -97,16 +93,17 @@ mod tests {
         assert!(res.is_ok());
         let token_response = res?;
         let access_token = &token_response.access_token;
-        let access_token_id = *decode_token(&context.jwt_config, access_token)?.jti();
+        let access_token_id =
+            AccessTokenId::from(decode_token(&context.jwt_config, access_token)?.jti);
 
-        let service = auth_services.logout.service().await;
+        let service = auth_services.logout.service();
 
         let request =
             RequestContext::with(access_token_id, UserId::admin(), RoleId::user()).update((), ());
         let res = service.raw_oneshot(request).await;
         assert!(res.is_ok());
 
-        let session = get_session(&db, &access_token_id.into()).await;
+        let session = db.fetch_optional::<SessionDB>(access_token_id).await?;
         match session {
             Some(session) => {
                 assert_eq!(session.status, SessionStatus::InvalidLogout);

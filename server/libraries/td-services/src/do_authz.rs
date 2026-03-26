@@ -9,8 +9,8 @@ use td_error::TdError;
 use td_objects::dxo::inter_collection_access::{
     InterCollectionAccess, InterCollectionAccessBuilder,
 };
-use td_objects::tower_service::authz::InterColl;
-use td_objects::tower_service::from::{ConvertIntoMapService, VecBuildService, With};
+use td_authz::tower::InterColl;
+use td_objects::tower_service::with::With;
 use td_tower::from_fn::from_fn;
 use td_tower::{layer, layers};
 
@@ -44,7 +44,7 @@ where
         layers!(
             // inter collection authz check
             from_fn(With::<T>::vec_convert_to::<InterCollectionAccessBuilder, _>),
-            from_fn(With::<InterCollectionAccessBuilder>::vec_build::<InterCollectionAccess, _>),
+            from_fn(With::<Vec<InterCollectionAccessBuilder>>::build::<Vec<InterCollectionAccess>>),
             from_fn(Authz::<InterColl>::check_inter_collection),
         )
     } else {

@@ -2,14 +2,15 @@
 // Copyright 2025. Tabs Data Inc.
 //
 
-use crate::auth::jwt::{JwtConfig, TokenClaims, encode_token};
+use td_objects::Buildable;
+use td_authz::jwt::{JwtConfig, TokenClaims, encode_token};
 use td_error::TdError;
 use td_objects::dxo::auth::{SessionDB, TokenResponseX};
-use td_tower::extractors::{Input, SrvCtx};
+use td_tower::extractors::{Ref};
 
 pub async fn create_access_token(
-    SrvCtx(jwt_settings): SrvCtx<JwtConfig>,
-    Input(session): Input<SessionDB>,
+    jwt_settings: Ref<JwtConfig>,
+    session: Ref<SessionDB>,
 ) -> Result<TokenResponseX, TdError> {
     const BEARER: &str = "Bearer";
 

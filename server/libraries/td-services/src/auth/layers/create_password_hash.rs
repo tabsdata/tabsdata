@@ -9,11 +9,11 @@ use std::ops::Deref;
 use td_error::TdError;
 use td_objects::types::basic::PasswordHash;
 use td_security::config::PasswordHashingConfig;
-use td_tower::extractors::{Input, SrvCtx};
+use td_tower::extractors::{Ref};
 
 pub async fn create_password_hash<P: Deref<Target = String>>(
-    SrvCtx(password_hashing_config): SrvCtx<PasswordHashingConfig>,
-    Input(password): Input<P>,
+    password_hashing_config: Ref<PasswordHashingConfig>,
+    password: Ref<P>,
 ) -> Result<PasswordHash, TdError> {
     let hash = password_hashing_config
         .password_hasher()
