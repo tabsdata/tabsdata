@@ -5,10 +5,10 @@
 use crate::execution::services::runtime_info::RuntimeContext;
 use td_error::TdError;
 use td_objects::dxo::runtime_info::RuntimeInfo;
-use td_tower::extractors::SrvCtx;
+use td_tower::extractors::Ref;
 
 pub async fn runtime_info(
-    SrvCtx(runtime_context): SrvCtx<RuntimeContext>,
+    runtime_context: Ref<RuntimeContext>,
 ) -> Result<RuntimeInfo, TdError> {
     Ok(runtime_context.info().clone())
 }

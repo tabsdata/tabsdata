@@ -16,11 +16,11 @@ use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::table::{TableDB, TableDBBuilder};
 use td_objects::dxo::trigger::{TriggerDB, TriggerDBBuilder};
 use td_objects::dxo::worker::{WorkerDB, WorkerDBBuilder};
-use td_objects::tower_service::from::{TryIntoService, UpdateService, With};
-use td_objects::tower_service::sql::insert_vec;
+use td_queries::insert_vec;
+use td_objects::tower_service::with::With;
 use td_objects::types::basic::{CollectionName, TableNameDto};
 use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
-use td_tower::extractors::Input;
+use td_tower::extractors::Ref;
 use td_tower::from_fn::from_fn;
 use td_tower::{layer, layers};
 
@@ -122,8 +122,8 @@ pub enum PrivateTableError {
 }
 
 pub async fn check_private_tables<T: ReferencedTable + Send + Sync>(
-    Input(this_collection): Input<CollectionName>,
-    Input(referenced_tables): Input<Option<Vec<T>>>,
+    this_collection: Ref<CollectionName>,
+    referenced_tables: Ref<Option<Vec<T>>>,
 ) -> Result<(), TdError> {
     if let Some(referenced_tables) = referenced_tables.deref() {
         let out_of_reach_private_tables = referenced_tables

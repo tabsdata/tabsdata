@@ -7,16 +7,14 @@ use crate::execution::layers::execution::trigger_type_manual;
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
 use td_execution::TransactionBy;
+use td_objects::And;
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
 use td_objects::dxo::execution::{ExecutionRequest, ExecutionResponse};
 use td_objects::dxo::function::FunctionDBWithNames;
 use td_objects::rest_urls::FunctionParam;
-use td_objects::sql::DaoQueries;
-use td_objects::tower_service::from::{
-    ExtractDataService, ExtractNameService, ExtractService, With, combine,
-};
-use td_objects::tower_service::sql::{By, SqlSelectService};
+use td_objects::tower_service::with::With;
 use td_objects::types::basic::{AtTime, CollectionIdName, FunctionIdName};
+use td_queries::By;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -26,7 +24,6 @@ use td_tower::layers;
     request = CreateRequest<FunctionParam, ExecutionRequest>,
     response = ExecutionResponse,
     connection = TransactionProvider,
-    context = DaoQueries,
     context = AuthzContext,
     context = TransactionBy,
 )]
@@ -43,10 +40,9 @@ fn service() {
         from_fn(With::<RequestContext>::extract::<AtTime>),
         from_fn(With::<FunctionParam>::extract::<CollectionIdName>),
         from_fn(With::<FunctionParam>::extract::<FunctionIdName>),
-        from_fn(combine::<CollectionIdName, FunctionIdName>),
         // Select trigger function.
         from_fn(
-            By::<(CollectionIdName, FunctionIdName)>::select_version::<
+            By::<And![CollectionIdName, FunctionIdName]>::fetch_one_version::<
                 { FunctionDBWithNames::All },
                 FunctionDBWithNames,
             >
@@ -61,12 +57,13 @@ pub(crate) mod tests {
     use super::*;
     use std::collections::HashSet;
     use std::error::Error;
+    use std::str::FromStr;
     use std::sync::LazyLock;
     use ta_services::service::TdService;
-    use td_database::sql::DbPool;
+    use td_authz::tower::AuthzError;
+    use td_database::pool::TdPool;
     use td_error::TdError;
     use td_execution::EXECUTION_GRAPH_OPTIONS;
-    use td_objects::dxo::crudl::handle_sql_err;
     use td_objects::dxo::execution::ExecutionDBWithStatus;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::function_requirement::FunctionRequirementDBWithNames;
@@ -75,15 +72,6 @@ pub(crate) mod tests {
     use td_objects::dxo::table::TableDB;
     use td_objects::dxo::table_data_version::TableDataVersionDBWithNames;
     use td_objects::dxo::transaction::TransactionDBWithStatus;
-    use td_objects::sql::SelectBy;
-    use td_objects::test_utils::seed_collection::seed_collection;
-    use td_objects::test_utils::seed_execution::seed_execution;
-    use td_objects::test_utils::seed_function::seed_function;
-    use td_objects::test_utils::seed_function_run::seed_function_run;
-    use td_objects::test_utils::seed_inter_collection_permission::seed_inter_collection_permission;
-    use td_objects::test_utils::seed_table_data_version::seed_table_data_version;
-    use td_objects::test_utils::seed_transaction::seed_transaction;
-    use td_objects::tower_service::authz::AuthzError;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, Depth, Enabled, ExecutionName,
         ExecutionStatus, FunctionName, FunctionRunStatus, FunctionRuntimeValues,
@@ -91,12 +79,15 @@ pub(crate) mod tests {
         TransactionStatus, TriggeredOn, UserId,
     };
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
+    use td_objects::{Buildable, and};
+    use td_queries::BasicQueries;
+    use td_queries::test_utils::SeedQueries;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_execute(db: DbPool) {
+    async fn test_tower_metadata_execute(db: TdPool) {
         use crate::execution::layers::GraphOpts;
         use crate::execution::layers::execution::{
             assert_function_status, build_execution_plan, build_function_requirements,
@@ -107,6 +98,8 @@ pub(crate) mod tests {
         use crate::graph::layers::FunctionOrTable;
         use crate::graph::layers::build::GraphBuilder;
         use td_authz::Authz;
+        use td_authz::tower::InterColl;
+        use td_authz::tower::{AuthzOn, CollAdmin, CollExec};
         use td_objects::dxo::crudl::RequestContext;
         use td_objects::dxo::dependency::DependencyDBWithNames;
         use td_objects::dxo::execution::{ExecutionDB, ExecutionDBBuilder, ExecutionRequest};
@@ -119,16 +112,10 @@ pub(crate) mod tests {
         use td_objects::dxo::table_data_version::TableDataVersionDB;
         use td_objects::dxo::transaction::{TransactionDB, TransactionDBBuilder};
         use td_objects::dxo::trigger::TriggerDBWithNames;
-        use td_objects::tower_service::authz::InterColl;
-        use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollExec};
-        use td_objects::tower_service::from::{
-            BuildService, ExtractService, IntoService, SetService, TryIntoService, UpdateService,
-            With,
-        };
-        use td_objects::tower_service::from::{ConvertIntoMapService, VecBuildService};
-        use td_objects::tower_service::sql::{insert, insert_vec};
+        use td_objects::tower_service::with::With;
         use td_objects::types::basic::{CollectionId, FunctionId, FunctionOnly, TriggerType};
         use td_objects::types::recursion::RecursionOptions;
+        use td_queries::{insert, insert_vec};
         use td_tower::metadata::type_of_val;
 
         ExecuteFunctionService::with_defaults(db)
@@ -155,10 +142,9 @@ pub(crate) mod tests {
             type_of_val(&With::<RequestContext>::extract::<AtTime>),
             type_of_val(&With::<FunctionParam>::extract::<CollectionIdName>),
             type_of_val(&With::<FunctionParam>::extract::<FunctionIdName>),
-            type_of_val(&combine::<CollectionIdName, FunctionIdName>),
             // Select trigger function.
             type_of_val(
-                &By::<(CollectionIdName, FunctionIdName)>::select_version::<
+                &By::<And![CollectionIdName, FunctionIdName]>::fetch_one_version::<
                     { FunctionDBWithNames::All },
                     FunctionDBWithNames,
                 >,
@@ -184,7 +170,7 @@ pub(crate) mod tests {
                 &With::<TriggerDBWithNames>::vec_convert_to::<InterCollectionAccessBuilder, _>,
             ),
             type_of_val(
-                &With::<InterCollectionAccessBuilder>::vec_build::<InterCollectionAccess, _>,
+                &With::<Vec<InterCollectionAccessBuilder>>::build::<Vec<InterCollectionAccess>>,
             ),
             type_of_val(&Authz::<InterColl>::check_inter_collection),
             // Find dependencies. For clarity, we always show the function, even if
@@ -200,7 +186,7 @@ pub(crate) mod tests {
                 &With::<DependencyDBWithNames>::vec_convert_to::<InterCollectionAccessBuilder, _>,
             ),
             type_of_val(
-                &With::<InterCollectionAccessBuilder>::vec_build::<InterCollectionAccess, _>,
+                &With::<Vec<InterCollectionAccessBuilder>>::build::<Vec<InterCollectionAccess>>,
             ),
             type_of_val(&Authz::<InterColl>::check_inter_collection),
             // Find output tables
@@ -219,7 +205,7 @@ pub(crate) mod tests {
             type_of_val(&With::<ExecutionRequest>::update::<ExecutionDBBuilder, _>),
             type_of_val(&With::<TriggerType>::set::<ExecutionDBBuilder>),
             type_of_val(&With::<RecursionOptions>::set::<ExecutionDBBuilder>),
-            type_of_val(&With::<ExecutionDBBuilder>::build::<ExecutionDB, _>),
+            type_of_val(&With::<ExecutionDBBuilder>::build::<ExecutionDB>),
             type_of_val(&insert::<ExecutionDB>),
             // Build transactions
             type_of_val(&build_transaction_map),
@@ -248,7 +234,7 @@ pub(crate) mod tests {
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_execute_dependencies_different_collections_permissions_ok(
-        db: DbPool,
+        db: TdPool,
     ) -> Result<(), TdError> {
         let _ = test_execute(db, true, false, true, false).await?;
         Ok(())
@@ -257,7 +243,7 @@ pub(crate) mod tests {
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_execute_dependencies_different_collections_permissions_forbidden(
-        db: DbPool,
+        db: TdPool,
     ) -> Result<(), TdError> {
         let _ = test_execute(db, true, false, false, false).await;
         Ok(())
@@ -266,7 +252,7 @@ pub(crate) mod tests {
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_execute_trigger_different_collections_permissions_ok(
-        db: DbPool,
+        db: TdPool,
     ) -> Result<(), TdError> {
         let _ = test_execute(db, false, true, true, false).await;
         Ok(())
@@ -275,7 +261,7 @@ pub(crate) mod tests {
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_execute_trigger_different_collections_permissions_forbidden(
-        db: DbPool,
+        db: TdPool,
     ) -> Result<(), TdError> {
         let _ = test_execute(db, false, true, false, false).await;
         Ok(())
@@ -283,7 +269,7 @@ pub(crate) mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_execute_single_function(db: DbPool) -> Result<(), TdError> {
+    async fn test_execute_single_function(db: TdPool) -> Result<(), TdError> {
         let _ = test_execute(db, true, false, true, true).await?;
         Ok(())
     }
@@ -306,37 +292,40 @@ pub(crate) mod tests {
     });
 
     pub(crate) async fn test_execute(
-        db: DbPool,
+        db: TdPool,
         deps_diff_collection: bool,
         triggers_diff_collection: bool,
         with_permission: bool,
         single_function: bool,
     ) -> Result<ExecutionResponse, TdError> {
-        let collection_0 = seed_collection(&db, &COLLECTION_NAMES[0], &UserId::admin()).await;
-        let collection_1 = seed_collection(&db, &COLLECTION_NAMES[1], &UserId::admin()).await;
-        let collection_2 = seed_collection(&db, &COLLECTION_NAMES[2], &UserId::admin()).await;
+        let collection_0 = db
+            .seed_collection(&COLLECTION_NAMES[0], &UserId::admin())
+            .await?;
+        let collection_1 = db
+            .seed_collection(&COLLECTION_NAMES[1], &UserId::admin())
+            .await?;
+        let collection_2 = db
+            .seed_collection(&COLLECTION_NAMES[2], &UserId::admin())
+            .await?;
 
-        seed_inter_collection_permission(
-            &db,
+        db.seed_inter_collection_permission(
             &collection_0.id,
             &ToCollectionId::try_from(&collection_1.id)?,
         )
-        .await;
+        .await?;
 
-        seed_inter_collection_permission(
-            &db,
+        db.seed_inter_collection_permission(
             &collection_0.id,
             &ToCollectionId::try_from(&collection_2.id)?,
         )
-        .await;
+        .await?;
 
         if with_permission {
-            seed_inter_collection_permission(
-                &db,
+            db.seed_inter_collection_permission(
                 &collection_1.id,
                 &ToCollectionId::try_from(&collection_2.id)?,
             )
-            .await;
+            .await?;
         }
 
         let graph_depth = if single_function {
@@ -360,7 +349,7 @@ pub(crate) mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _ = seed_function(&db, &collection_0, &create).await;
+        let _ = db.seed_function(&collection_0, &create).await?;
 
         let create = FunctionRegister::builder()
             .name(FUNCTION_NAMES[1].clone())
@@ -381,7 +370,7 @@ pub(crate) mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _ = seed_function(&db, &collection_1, &create).await;
+        let _ = db.seed_function(&collection_1, &create).await?;
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister::builder()
@@ -403,7 +392,7 @@ pub(crate) mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _ = seed_function(&db, &collection_2, &create).await;
+        let _ = db.seed_function(&collection_2, &create).await?;
 
         let deps_collection = if deps_diff_collection {
             &COLLECTION_NAMES[1]
@@ -438,13 +427,13 @@ pub(crate) mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _ = seed_function(&db, &collection_2, &create).await;
+        let _ = db.seed_function(&collection_2, &create).await?;
 
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 FunctionParam::builder()
-                    .try_collection(collection_0.name.to_string())?
-                    .try_function(FUNCTION_NAMES[0].to_string())?
+                    .collection(CollectionIdName::from_str(&collection_0.name.to_string())?)
+                    .function(FunctionIdName::from_str(&FUNCTION_NAMES[0].to_string())?)
                     .build()?,
                 ExecutionRequest::builder()
                     .name(Some(ExecutionName::try_from("test_execution")?))
@@ -452,9 +441,7 @@ pub(crate) mod tests {
                     .build()?,
             );
 
-        let service = ExecuteFunctionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = ExecuteFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
 
         // Test assertions
@@ -546,15 +533,10 @@ pub(crate) mod tests {
             assert_eq!(expected_created_tables, created_tables);
 
             // Asser db
-            let queries = DaoQueries::default();
 
             // Execution
-            let executions: Vec<ExecutionDBWithStatus> = queries
-                .select_by::<ExecutionDBWithStatus>(&())?
-                .build_query_as()
-                .fetch_all(&db)
-                .await
-                .map_err(handle_sql_err)?;
+            let executions: Vec<ExecutionDBWithStatus> =
+                db.fetch_all::<ExecutionDBWithStatus>(()).await?;
             assert_eq!(executions.len(), 1);
             assert_eq!(executions[0].id, response.id);
             assert_eq!(executions[0].name, response.name);
@@ -562,12 +544,8 @@ pub(crate) mod tests {
             assert_eq!(executions[0].status, ExecutionStatus::Scheduled);
 
             // Transaction
-            let transactions: Vec<TransactionDBWithStatus> = queries
-                .select_by::<TransactionDBWithStatus>(&())?
-                .build_query_as()
-                .fetch_all(&db)
-                .await
-                .map_err(handle_sql_err)?;
+            let transactions: Vec<TransactionDBWithStatus> =
+                db.fetch_all::<TransactionDBWithStatus>(()).await?;
             assert!(transactions.len() == 1 || transactions.len() == 3);
             for transaction in transactions {
                 assert_eq!(&transaction.execution_id, &response.id);
@@ -575,35 +553,21 @@ pub(crate) mod tests {
             }
 
             // FunctionRun
-            let function: FunctionDBWithNames = queries
-                .select_by::<FunctionDBWithNames>(&FUNCTION_NAMES[0])?
-                .build_query_as()
-                .fetch_one(&db)
-                .await
-                .map_err(handle_sql_err)?;
-            let function_runs: Vec<FunctionRunDB> = queries
-                .select_by::<FunctionRunDB>(&function.id)?
-                .build_query_as()
-                .fetch_all(&db)
-                .await
-                .map_err(handle_sql_err)?;
+            let function: FunctionDBWithNames = db
+                .fetch_one::<FunctionDBWithNames>(&FUNCTION_NAMES[0])
+                .await?;
+            let function_runs: Vec<FunctionRunDB> =
+                db.fetch_all::<FunctionRunDB>(&function.id).await?;
             assert_eq!(function_runs.len(), 1);
             assert_eq!(function_runs[0].collection_id, collection_0.id);
             assert_eq!(function_runs[0].execution_id, response.id);
             assert_eq!(function_runs[0].status, FunctionRunStatus::Scheduled);
 
-            let function: FunctionDBWithNames = queries
-                .select_by::<FunctionDBWithNames>(&FunctionName::try_from("function_2")?)?
-                .build_query_as()
-                .fetch_one(&db)
-                .await
-                .map_err(handle_sql_err)?;
-            let function_runs: Vec<FunctionRunDB> = queries
-                .select_by::<FunctionRunDB>(&function.id)?
-                .build_query_as()
-                .fetch_all(&db)
-                .await
-                .map_err(handle_sql_err)?;
+            let function: FunctionDBWithNames = db
+                .fetch_one::<FunctionDBWithNames>(&FunctionName::try_from("function_2")?)
+                .await?;
+            let function_runs: Vec<FunctionRunDB> =
+                db.fetch_all::<FunctionRunDB>(&function.id).await?;
             // it can vary depending on the execution
             for function_run in function_runs {
                 assert_eq!(&function_run.execution_id, &response.id);
@@ -611,12 +575,8 @@ pub(crate) mod tests {
             }
 
             // TableDataVersion
-            let table_data_versions: Vec<TableDataVersionDBWithNames> = queries
-                .select_by::<TableDataVersionDBWithNames>(&())?
-                .build_query_as()
-                .fetch_all(&db)
-                .await
-                .map_err(handle_sql_err)?;
+            let table_data_versions: Vec<TableDataVersionDBWithNames> =
+                db.fetch_all::<TableDataVersionDBWithNames>(()).await?;
             assert_eq!(table_data_versions.len(), expected_created_tables.len());
             for table_data_version in table_data_versions {
                 assert_eq!(&table_data_version.execution_id, &response.id);
@@ -631,12 +591,8 @@ pub(crate) mod tests {
             }
 
             // FunctionCondition
-            let function_requirements: Vec<FunctionRequirementDBWithNames> = queries
-                .select_by::<FunctionRequirementDBWithNames>(&())?
-                .build_query_as()
-                .fetch_all(&db)
-                .await
-                .map_err(handle_sql_err)?;
+            let function_requirements: Vec<FunctionRequirementDBWithNames> =
+                db.fetch_all::<FunctionRequirementDBWithNames>(()).await?;
             let expected_num_function_requirements = if graph_depth.is_some() {
                 0
             } else {
@@ -693,7 +649,7 @@ pub(crate) mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_execute_initial_status_upstream_scheduled(db: DbPool) -> Result<(), TdError> {
+    async fn test_execute_initial_status_upstream_scheduled(db: TdPool) -> Result<(), TdError> {
         test_execute_upstream_initial_status(
             db,
             FunctionRunStatus::Scheduled,
@@ -704,7 +660,7 @@ pub(crate) mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_execute_initial_status_upstream_on_hold(db: DbPool) -> Result<(), TdError> {
+    async fn test_execute_initial_status_upstream_on_hold(db: TdPool) -> Result<(), TdError> {
         test_execute_upstream_initial_status(
             db,
             FunctionRunStatus::OnHold,
@@ -715,7 +671,7 @@ pub(crate) mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_execute_initial_status_upstream_failed(db: DbPool) -> Result<(), TdError> {
+    async fn test_execute_initial_status_upstream_failed(db: TdPool) -> Result<(), TdError> {
         test_execute_upstream_initial_status(
             db,
             FunctionRunStatus::Failed,
@@ -725,11 +681,13 @@ pub(crate) mod tests {
     }
 
     async fn test_execute_upstream_initial_status(
-        db: DbPool,
+        db: TdPool,
         upstream_status: FunctionRunStatus,
         expected_initial_status: FunctionRunStatus,
     ) -> Result<(), TdError> {
-        let collection = seed_collection(&db, &COLLECTION_NAMES[0], &UserId::admin()).await;
+        let collection = db
+            .seed_collection(&COLLECTION_NAMES[0], &UserId::admin())
+            .await?;
 
         let create = FunctionRegister::builder()
             .name(FUNCTION_NAMES[0].clone())
@@ -744,7 +702,7 @@ pub(crate) mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let function_0 = seed_function(&db, &collection, &create).await;
+        let function_0 = db.seed_function(&collection, &create).await?;
 
         let create = FunctionRegister::builder()
             .name(FUNCTION_NAMES[1].clone())
@@ -759,7 +717,7 @@ pub(crate) mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let function_1 = seed_function(&db, &collection, &create).await;
+        let function_1 = db.seed_function(&collection, &create).await?;
 
         let create = FunctionRegister::builder()
             .name(FUNCTION_NAMES[2].clone())
@@ -780,90 +738,68 @@ pub(crate) mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _function_2 = seed_function(&db, &collection, &create).await;
+        let _function_2 = db.seed_function(&collection, &create).await?;
 
         // seed a function_run for function_0, with OnHold status
-        let execution = seed_execution(&db, &function_0).await;
+        let execution = db.seed_execution(&function_0).await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
-        let transaction = seed_transaction(&db, &execution, &transaction_key).await;
-        let function_run = seed_function_run(
-            &db,
-            &collection,
-            &function_0,
-            &execution,
-            &transaction,
-            &upstream_status,
-        )
-        .await;
+        let transaction = db.seed_transaction(&execution, &transaction_key).await?;
+        let function_run = db
+            .seed_function_run(
+                &collection,
+                &function_0,
+                &execution,
+                &transaction,
+                &upstream_status,
+            )
+            .await?;
         let table_name = TableName::try_from("table_0")?;
-        let table: TableDB = DaoQueries::default()
-            .select_by::<TableDB>(&(&collection.id, &table_name))?
-            .build_query_as()
-            .fetch_one(&db)
-            .await
-            .unwrap();
-        let _table_data_version = seed_table_data_version(
-            &db,
-            &collection,
-            &execution,
-            &transaction,
-            &function_run,
-            &table,
-        )
-        .await;
+        let table = db
+            .fetch_one::<TableDB>(and!(&collection.id, &table_name))
+            .await?;
+        let _table_data_version = db
+            .seed_table_data_version(&collection, &execution, &transaction, &function_run, &table)
+            .await?;
 
         // seed a function_run for function_1, with Done status
-        let execution = seed_execution(&db, &function_1).await;
+        let execution = db.seed_execution(&function_1).await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
-        let transaction = seed_transaction(&db, &execution, &transaction_key).await;
-        let function_run = seed_function_run(
-            &db,
-            &collection,
-            &function_1,
-            &execution,
-            &transaction,
-            &FunctionRunStatus::Done,
-        )
-        .await;
+        let transaction = db.seed_transaction(&execution, &transaction_key).await?;
+        let function_run = db
+            .seed_function_run(
+                &collection,
+                &function_1,
+                &execution,
+                &transaction,
+                &FunctionRunStatus::Done,
+            )
+            .await?;
         let table_name = TableName::try_from("table_1")?;
-        let table: TableDB = DaoQueries::default()
-            .select_by::<TableDB>(&(&collection.id, &table_name))?
-            .build_query_as()
-            .fetch_one(&db)
-            .await
-            .unwrap();
-        let _table_data_version = seed_table_data_version(
-            &db,
-            &collection,
-            &execution,
-            &transaction,
-            &function_run,
-            &table,
-        )
-        .await;
+        let table = db
+            .fetch_one::<TableDB>(and!(&collection.id, &table_name))
+            .await?;
+        let _table_data_version = db
+            .seed_table_data_version(&collection, &execution, &transaction, &function_run, &table)
+            .await?;
 
         // And then run function_2
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 FunctionParam::builder()
-                    .try_collection(collection.name.to_string())?
-                    .try_function(FUNCTION_NAMES[2].to_string())?
+                    .collection(CollectionIdName::from_str(&collection.name.to_string())?)
+                    .function(FunctionIdName::from_str(&FUNCTION_NAMES[2].to_string())?)
                     .build()?,
                 ExecutionRequest::builder()
                     .name(Some(ExecutionName::try_from("test_execution")?))
                     .build()?,
             );
 
-        let service = ExecuteFunctionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = ExecuteFunctionService::with_defaults(db.clone()).service();
         let _response = service.raw_oneshot(request).await?;
 
         // there should only be one function run for function_2
-        let function_run: FunctionRunDBWithNames = DaoQueries::default()
-            .select_by::<FunctionRunDBWithNames>(&FUNCTION_NAMES[2])?
-            .build_query_as()
-            .fetch_one(&db)
+        let function_run: FunctionRunDBWithNames = db
+            .fetch_one::<FunctionRunDBWithNames>(&FUNCTION_NAMES[2])
             .await
             .unwrap();
 
@@ -874,7 +810,7 @@ pub(crate) mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_execute_disabled_trigger_err(db: DbPool) -> Result<(), TdError> {
+    async fn test_execute_disabled_trigger_err(db: TdPool) -> Result<(), TdError> {
         let res = test_execute_disabled_trigger(db, OverrideDisabledTrigger::FALSE).await?;
         let err = res.unwrap_err();
         assert_eq!(
@@ -886,7 +822,7 @@ pub(crate) mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_execute_disabled_trigger_override(db: DbPool) -> Result<(), TdError> {
+    async fn test_execute_disabled_trigger_override(db: TdPool) -> Result<(), TdError> {
         let response = test_execute_disabled_trigger(db, OverrideDisabledTrigger::TRUE).await?;
         let response = response?;
 
@@ -942,10 +878,12 @@ pub(crate) mod tests {
     }
 
     async fn test_execute_disabled_trigger(
-        db: DbPool,
+        db: TdPool,
         override_disabled_trigger: OverrideDisabledTrigger,
     ) -> Result<Result<ExecutionResponse, TdError>, TdError> {
-        let collection = seed_collection(&db, &COLLECTION_NAMES[0], &UserId::admin()).await;
+        let collection = db
+            .seed_collection(&COLLECTION_NAMES[0], &UserId::admin())
+            .await?;
 
         let create = FunctionRegister::builder()
             .name(FUNCTION_NAMES[0].clone())
@@ -960,7 +898,7 @@ pub(crate) mod tests {
             .reuse_frozen_tables(false)
             .enabled(Enabled::FALSE)
             .build()?;
-        let _function_0 = seed_function(&db, &collection, &create).await;
+        let _function_0 = db.seed_function(&collection, &create).await?;
 
         let create = FunctionRegister::builder()
             .name(FUNCTION_NAMES[1].clone())
@@ -974,13 +912,13 @@ pub(crate) mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
-        let _function_1 = seed_function(&db, &collection, &create).await;
+        let _function_1 = db.seed_function(&collection, &create).await?;
 
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
                 FunctionParam::builder()
-                    .try_collection(collection.name.to_string())?
-                    .try_function(FUNCTION_NAMES[0].to_string())?
+                    .collection(CollectionIdName::from_str(&collection.name.to_string())?)
+                    .function(FunctionIdName::from_str(&FUNCTION_NAMES[0].to_string())?)
                     .build()?,
                 ExecutionRequest::builder()
                     .name(Some(ExecutionName::try_from("test_execution")?))
@@ -988,9 +926,7 @@ pub(crate) mod tests {
                     .build()?,
             );
 
-        let service = ExecuteFunctionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = ExecuteFunctionService::with_defaults(db.clone()).service();
 
         Ok(service.raw_oneshot(request).await)
     }

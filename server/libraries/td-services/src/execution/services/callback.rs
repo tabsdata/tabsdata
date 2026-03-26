@@ -14,12 +14,9 @@ use td_objects::dxo::worker::{
     CallbackRequest, UpdateWorkerDB, UpdateWorkerDBBuilder, UpdateWorkerExecution, WorkerDB,
 };
 use td_objects::rest_urls::internal::FunctionRunWorkerIdParam;
-use td_objects::sql::DaoQueries;
-use td_objects::tower_service::from::{
-    BuildService, ExtractDataService, ExtractNameService, ExtractService, TryIntoService, With,
-};
-use td_objects::tower_service::sql::{By, SqlAssertExistsService, SqlSelectAllService};
+use td_objects::tower_service::with::With;
 use td_objects::types::basic::{FunctionRunId, WorkerId};
+use td_queries::By;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -29,7 +26,6 @@ use td_tower::layers;
     request = UpdateRequest<FunctionRunWorkerIdParam, CallbackRequest>,
     response = (),
     connection = TransactionProvider,
-    context = DaoQueries,
 )]
 fn service() {
     layers!(
@@ -52,15 +48,15 @@ fn service() {
         from_fn(By::<WorkerId>::assert_exists::<WorkerDB>),
         // Update worker status.
         from_fn(With::<UpdateWorkerExecution>::try_convert_to::<UpdateWorkerDBBuilder, _>),
-        from_fn(With::<UpdateWorkerDBBuilder>::build::<UpdateWorkerDB, _>),
+        from_fn(With::<UpdateWorkerDBBuilder>::build::<UpdateWorkerDB>),
         from_fn(update_worker_status),
         // Extract function_run_id.
         from_fn(With::<FunctionRunWorkerIdParam>::extract::<FunctionRunId>),
         // Find function run (we will always have 1).
-        from_fn(By::<FunctionRunId>::select_all::<FunctionRunDB>),
+        from_fn(By::<FunctionRunId>::fetch_all::<FunctionRunDB>),
         // Update function run status.
         from_fn(With::<UpdateWorkerExecution>::try_convert_to::<UpdateFunctionRunDBBuilder, _>),
-        from_fn(With::<UpdateFunctionRunDBBuilder>::build::<UpdateFunctionRunDB, _>),
+        from_fn(With::<UpdateFunctionRunDBBuilder>::build::<UpdateFunctionRunDB>),
         from_fn(update_function_run_status),
         // Update table data versions status.
         from_fn(update_table_data_version_status),
@@ -77,26 +73,27 @@ mod tests {
     use td_common::execution_status::WorkerCallbackStatus;
     use td_common::server::{MessageAction, ResponseMessagePayloadBuilder, WorkerClass};
     use td_common::status::ExitStatus;
-    use td_database::sql::DbPool;
+    use td_database::pool::TdPool;
     use td_error::TdError;
-    use td_objects::dxo::crudl::{RequestContext, handle_sql_err};
+    use td_objects::Buildable;
+    use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function_run::FunctionRunDBWithNames;
     use td_objects::dxo::table_data_version::TableDataVersionDBWithNames;
     use td_objects::dxo::yaml::WorkerOutput;
     use td_objects::dxo::yaml::function_runner::v2::{FunctionOutput, TableInfo, WrittenTable};
-    use td_objects::sql::SelectBy;
     use td_objects::types::basic::{
         AccessTokenId, CollectionName, ColumnCount, ExecutionStatus, FunctionName,
         FunctionRunStatus, HasData, RoleId, RowCount, SchemaHash, TableName, TableNameDto,
         TransactionStatus, UserId,
     };
     use td_objects::types::composed::TableDependencyDto;
+    use td_queries::BasicQueries;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_callback(db: DbPool) {
+    async fn test_tower_metadata_callback(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
         ExecutionCallbackService::with_defaults(db)
@@ -122,15 +119,15 @@ mod tests {
                 type_of_val(&By::<WorkerId>::assert_exists::<WorkerDB>),
                 // Update worker status.
                 type_of_val(&With::<UpdateWorkerExecution>::try_convert_to::<UpdateWorkerDBBuilder, _>),
-                type_of_val(&With::<UpdateWorkerDBBuilder>::build::<UpdateWorkerDB, _>),
+                type_of_val(&With::<UpdateWorkerDBBuilder>::build::<UpdateWorkerDB>),
                 type_of_val(&update_worker_status),
                 // Extract function_run_id. We assume it's correct as the callback is constructed by the server.
                 type_of_val(&With::<FunctionRunWorkerIdParam>::extract::<FunctionRunId>),
                 // Find function run (we will always have 1).
-                type_of_val(&By::<FunctionRunId>::select_all::<FunctionRunDB>),
+                type_of_val(&By::<FunctionRunId>::fetch_all::<FunctionRunDB>),
                 // Update function run status.
                 type_of_val(&With::<UpdateWorkerExecution>::try_convert_to::<UpdateFunctionRunDBBuilder, _>),
-                type_of_val(&With::<UpdateFunctionRunDBBuilder>::build::<UpdateFunctionRunDB, _>),
+                type_of_val(&With::<UpdateFunctionRunDBBuilder>::build::<UpdateFunctionRunDB>),
                 type_of_val(&update_function_run_status),
                 // Update table data versions status.
                 type_of_val(&update_table_data_version_status),
@@ -138,7 +135,7 @@ mod tests {
     }
 
     async fn test_callback(
-        db: DbPool,
+        db: TdPool,
         test_executions: Vec<TestExecution>,
         callback_function: &str,
         callback_status: WorkerCallbackStatus,
@@ -187,9 +184,7 @@ mod tests {
                             response,
                         );
 
-                let service = ExecutionCallbackService::with_defaults(db.clone())
-                    .service()
-                    .await;
+                let service = ExecutionCallbackService::with_defaults(db.clone()).service();
                 service.raw_oneshot(request).await
             }
         })
@@ -198,7 +193,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_callback_running(db: DbPool) -> Result<(), TdError> {
+    async fn test_callback_running(db: TdPool) -> Result<(), TdError> {
         test_callback(
             db,
             vec![TestExecution {
@@ -224,7 +219,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_callback_running_multiple_function_runs(db: DbPool) -> Result<(), TdError> {
+    async fn test_callback_running_multiple_function_runs(db: TdPool) -> Result<(), TdError> {
         test_callback(
             db,
             vec![TestExecution {
@@ -260,7 +255,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_callback_running_multiple_transactions(db: DbPool) -> Result<(), TdError> {
+    async fn test_callback_running_multiple_transactions(db: TdPool) -> Result<(), TdError> {
         test_callback(
             db,
             vec![TestExecution {
@@ -299,7 +294,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_callback_published(db: DbPool) -> Result<(), TdError> {
+    async fn test_callback_published(db: TdPool) -> Result<(), TdError> {
         test_callback(
             db,
             vec![TestExecution {
@@ -335,7 +330,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_callback_published_downstream(db: DbPool) -> Result<(), TdError> {
+    async fn test_callback_published_downstream(db: TdPool) -> Result<(), TdError> {
         test_callback(
             db,
             vec![TestExecution {
@@ -384,7 +379,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_callback_done(db: DbPool) -> Result<(), TdError> {
+    async fn test_callback_done(db: TdPool) -> Result<(), TdError> {
         test_callback(
             db,
             vec![TestExecution {
@@ -420,7 +415,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_callback_failed(db: DbPool) -> Result<(), TdError> {
+    async fn test_callback_failed(db: TdPool) -> Result<(), TdError> {
         test_callback(
             db,
             vec![TestExecution {
@@ -456,7 +451,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_callback_failed_downstream(db: DbPool) -> Result<(), TdError> {
+    async fn test_callback_failed_downstream(db: TdPool) -> Result<(), TdError> {
         test_callback(
             db,
             vec![TestExecution {
@@ -492,7 +487,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_callback_table_data_version_status(db: DbPool) -> Result<(), TdError> {
+    async fn test_callback_table_data_version_status(db: TdPool) -> Result<(), TdError> {
         test_callback(
             db.clone(),
             vec![TestExecution {
@@ -536,22 +531,15 @@ mod tests {
         .await?;
 
         // Assertions
-        let queries = DaoQueries::default();
-        let function_runs: Vec<FunctionRunDBWithNames> = queries
-            .select_by::<FunctionRunDBWithNames>(&FunctionName::try_from("f_0")?)?
-            .build_query_as()
-            .fetch_all(&db)
-            .await
-            .map_err(handle_sql_err)?;
+        let function_runs: Vec<FunctionRunDBWithNames> = db
+            .fetch_all::<FunctionRunDBWithNames>(&FunctionName::try_from("f_0")?)
+            .await?;
         assert_eq!(function_runs.len(), 1);
         let function_run = &function_runs[0];
 
-        let table_data_versions: Vec<TableDataVersionDBWithNames> = queries
-            .select_by::<TableDataVersionDBWithNames>(&TableName::try_from("t_0")?)?
-            .build_query_as()
-            .fetch_all(&db)
-            .await
-            .map_err(handle_sql_err)?;
+        let table_data_versions: Vec<TableDataVersionDBWithNames> = db
+            .fetch_all::<TableDataVersionDBWithNames>(&TableName::try_from("t_0")?)
+            .await?;
         assert_eq!(table_data_versions.len(), 1);
         let table_data_version = &table_data_versions[0];
         assert_eq!(table_data_version.triggered_on, function_run.triggered_on);
@@ -562,13 +550,9 @@ mod tests {
         assert_eq!(table_data_version.status, function_run.status);
         assert_eq!(table_data_version.has_data, Some(HasData::FALSE));
 
-        let queries = DaoQueries::default();
-        let table_data_versions: Vec<TableDataVersionDBWithNames> = queries
-            .select_by::<TableDataVersionDBWithNames>(&TableName::try_from("t_1")?)?
-            .build_query_as()
-            .fetch_all(&db)
-            .await
-            .map_err(handle_sql_err)?;
+        let table_data_versions: Vec<TableDataVersionDBWithNames> = db
+            .fetch_all::<TableDataVersionDBWithNames>(&TableName::try_from("t_1")?)
+            .await?;
         assert_eq!(table_data_versions.len(), 1);
         let table_data_version = &table_data_versions[0];
         assert_eq!(table_data_version.triggered_on, function_run.triggered_on);
@@ -596,7 +580,7 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_callback_table_data_version_data_information(db: DbPool) -> Result<(), TdError> {
+    async fn test_callback_table_data_version_data_information(db: TdPool) -> Result<(), TdError> {
         test_callback(
             db.clone(),
             vec![TestExecution {
@@ -682,24 +666,17 @@ mod tests {
         .await?;
 
         // Assertions
-        let queries = DaoQueries::default();
-        let function_runs: Vec<FunctionRunDBWithNames> = queries
-            .select_by::<FunctionRunDBWithNames>(&FunctionName::try_from("f_0")?)?
-            .build_query_as()
-            .fetch_all(&db)
-            .await
-            .map_err(handle_sql_err)?;
+        let function_runs = db
+            .fetch_all::<FunctionRunDBWithNames>(&FunctionName::try_from("f_0")?)
+            .await?;
         assert_eq!(function_runs.len(), 2);
         let function_run_0 = &function_runs[0];
         let function_run_1 = &function_runs[1];
 
         // t_0
-        let table_data_versions: Vec<TableDataVersionDBWithNames> = queries
-            .select_by::<TableDataVersionDBWithNames>(&TableName::try_from("t_0")?)?
-            .build_query_as()
-            .fetch_all(&db)
-            .await
-            .map_err(handle_sql_err)?;
+        let table_data_versions = db
+            .fetch_all::<TableDataVersionDBWithNames>(&TableName::try_from("t_0")?)
+            .await?;
         assert_eq!(table_data_versions.len(), 2);
         let table_data_version_0 = &table_data_versions[0];
         let table_data_version_1 = &table_data_versions[1];
@@ -723,32 +700,29 @@ mod tests {
         assert_eq!(table_data_version_0.status, function_run_0.status);
         assert_eq!(table_data_version_1.status, function_run_1.status);
 
-        // version_0 has no data, and version_1 does
-        assert_eq!(table_data_version_0.has_data, Some(HasData::FALSE));
-        assert_eq!(table_data_version_0.column_count, None);
-        assert_eq!(table_data_version_0.row_count, None);
-        assert_eq!(table_data_version_0.schema_hash, None);
-        assert_eq!(table_data_version_1.has_data, Some(HasData::TRUE));
+        // version_0 (newer) has data, and version_1 (older) does not
+        assert_eq!(table_data_version_0.has_data, Some(HasData::TRUE));
         assert_eq!(
-            table_data_version_1.column_count,
+            table_data_version_0.column_count,
             Some(ColumnCount::try_from(3i64)?)
         );
         assert_eq!(
-            table_data_version_1.row_count,
+            table_data_version_0.row_count,
             Some(RowCount::try_from(4i64)?)
         );
         assert_eq!(
-            table_data_version_1.schema_hash,
+            table_data_version_0.schema_hash,
             Some(SchemaHash::try_from("hash")?)
         );
+        assert_eq!(table_data_version_1.has_data, Some(HasData::FALSE));
+        assert_eq!(table_data_version_1.column_count, None);
+        assert_eq!(table_data_version_1.row_count, None);
+        assert_eq!(table_data_version_1.schema_hash, None);
 
         // t_1
-        let table_data_versions: Vec<TableDataVersionDBWithNames> = queries
-            .select_by::<TableDataVersionDBWithNames>(&TableName::try_from("t_1")?)?
-            .build_query_as()
-            .fetch_all(&db)
-            .await
-            .map_err(handle_sql_err)?;
+        let table_data_versions = db
+            .fetch_all::<TableDataVersionDBWithNames>(&TableName::try_from("t_1")?)
+            .await?;
         assert_eq!(table_data_versions.len(), 2);
         let table_data_version_0 = &table_data_versions[0];
         let table_data_version_1 = &table_data_versions[1];
@@ -772,8 +746,8 @@ mod tests {
         assert_eq!(table_data_version_0.status, function_run_0.status);
         assert_eq!(table_data_version_1.status, function_run_1.status);
 
-        // version_0 has data, and version_1 does not. so version_1 is the data expected in both
-        assert_eq!(table_data_version_0.has_data, Some(HasData::TRUE));
+        // version_0 (newer) has no data, and version_1 (older) does. version_0 inherits data info
+        assert_eq!(table_data_version_0.has_data, Some(HasData::FALSE));
         assert_eq!(
             table_data_version_0.column_count,
             Some(ColumnCount::try_from(1i64)?)
@@ -786,7 +760,7 @@ mod tests {
             table_data_version_0.schema_hash,
             Some(SchemaHash::try_from("hash")?)
         );
-        assert_eq!(table_data_version_1.has_data, Some(HasData::FALSE));
+        assert_eq!(table_data_version_1.has_data, Some(HasData::TRUE));
         assert_eq!(
             table_data_version_1.column_count,
             Some(ColumnCount::try_from(1i64)?)

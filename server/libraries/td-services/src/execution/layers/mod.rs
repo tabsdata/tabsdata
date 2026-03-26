@@ -21,11 +21,9 @@ use td_objects::dxo::table::TableDB;
 use td_objects::dxo::table_data_version::TableDataVersionDB;
 use td_objects::dxo::transaction::{TransactionDB, TransactionDBBuilder};
 use td_objects::dxo::trigger::TriggerDBWithNames;
-use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollExec};
-use td_objects::tower_service::from::{
-    BuildService, ExtractService, IntoService, SetService, TryIntoService, UpdateService, With,
-};
-use td_objects::tower_service::sql::{insert, insert_vec};
+use td_queries::{insert, insert_vec};
+use td_authz::tower::{AuthzOn, CollAdmin, CollExec};
+use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
     CollectionId, FunctionId, FunctionOnly, OverrideDisabledTrigger, TriggerType,
 };
@@ -57,7 +55,6 @@ impl
 
 // Requires:
 // - Transaction connection
-// - DaoQueries
 // - AuthzContext
 // - ExecutionRequest
 // - TransactionBy
@@ -87,7 +84,7 @@ pub fn execute() {
         from_fn(With::<ExecutionRequest>::update::<ExecutionDBBuilder, _>),
         from_fn(With::<TriggerType>::set::<ExecutionDBBuilder>),
         from_fn(With::<RecursionOptions>::set::<ExecutionDBBuilder>),
-        from_fn(With::<ExecutionDBBuilder>::build::<ExecutionDB, _>),
+        from_fn(With::<ExecutionDBBuilder>::build::<ExecutionDB>),
         from_fn(insert::<ExecutionDB>),
         // Build transactions
         from_fn(build_transaction_map),

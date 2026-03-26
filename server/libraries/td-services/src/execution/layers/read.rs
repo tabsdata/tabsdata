@@ -10,10 +10,10 @@ use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::transaction::{TransactionDB, TransactionValueBuilder};
 use td_objects::transaction::map::TransactionMap;
 use td_objects::types::recursion::RecursionOptions;
-use td_tower::extractors::{Input, SrvCtx};
+use td_tower::extractors::{Ref};
 
 pub async fn with_existing_recursion_options(
-    Input(execution): Input<ExecutionDB>,
+    execution: Ref<ExecutionDB>,
 ) -> Result<RecursionOptions, TdError> {
     // We are using the depth defined, if any, or defaulting to EXECUTION_GRAPH_DEPTH.
     let options = execution
@@ -26,8 +26,8 @@ pub async fn with_existing_recursion_options(
 
 // Similar to build_transaction_map, but using already existing transactions instead of creating new ones.
 pub async fn build_existing_transaction_map(
-    SrvCtx(transaction_by): SrvCtx<TransactionBy>,
-    Input(transactions): Input<Vec<TransactionDB>>,
+    transaction_by: Ref<TransactionBy>,
+    transactions: Ref<Vec<TransactionDB>>,
 ) -> Result<TransactionMap<TransactionBy>, TdError> {
     // Map transactions to their keys.
     let mut mapped_transactions = HashMap::new();

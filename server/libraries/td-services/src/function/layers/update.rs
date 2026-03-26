@@ -4,14 +4,13 @@
 
 use std::ops::Deref;
 use td_error::{TdError, td_error};
-use td_objects::dxo::crudl::handle_sql_err;
+use td_objects::and;
 use td_objects::dxo::function::{FunctionDBBuilder, FunctionDBWithNames, FunctionUpdate};
-use td_objects::sql::DaoQueries;
-use td_objects::sql::cte::VersionedQueries;
 use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionName, FunctionName, FunctionStatus, FunctionVersionId,
+    CollectionId, CollectionName, FunctionName, FunctionStatus, FunctionVersionId,
 };
-use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, SrvCtx};
+use td_queries::CurrentQueries;
+use td_tower::extractors::{MutRef, Ref};
 
 #[td_error]
 enum UpdateFunctionError {
@@ -20,29 +19,21 @@ enum UpdateFunctionError {
 }
 
 pub async fn assert_function_name_not_exists(
-    Connection(connection): Connection,
-    SrvCtx(queries): SrvCtx<DaoQueries>,
-    Input(at_time): Input<AtTime>,
-    Input(collection_id): Input<CollectionId>,
-    Input(collection_name): Input<CollectionName>,
-    Input(function): Input<FunctionDBWithNames>,
-    Input(function_update): Input<FunctionUpdate>,
+    mut conn: MutRef<DynamicConnection<'static>>,
+    collection_id: Ref<CollectionId>,
+    collection_name: Ref<CollectionName>,
+    function: Ref<FunctionDBWithNames>,
+    function_update: Ref<FunctionUpdate>,
 ) -> Result<(), TdError> {
     if let Some(name) = &function_update.name
         && *name != function.name
     {
-        let mut conn = connection.lock().await;
-        let conn = conn.get_mut_connection()?;
 
-        let found: Option<FunctionDBWithNames> = queries
-            .select_versions_at::<{ FunctionDBWithNames::Available }, FunctionDBWithNames>(
-                Some(&at_time),
-                &(&*collection_id, &name),
-            )?
-            .build_query_as()
-            .fetch_optional(&mut *conn)
-            .await
-            .map_err(handle_sql_err)?;
+        let found = conn
+            .fetch_optional_current::<{ FunctionDBWithNames::Available }, FunctionDBWithNames>(
+                and!(*collection_id, name),
+            )
+            .await?;
 
         if found.is_some() {
             Err(UpdateFunctionError::FunctionAlreadyExists(
@@ -56,8 +47,8 @@ pub async fn assert_function_name_not_exists(
 }
 
 pub async fn update_function_db_builder(
-    Input(builder): Input<FunctionDBBuilder>,
-    Input(update): Input<FunctionUpdate>,
+    builder: Ref<FunctionDBBuilder>,
+    update: Ref<FunctionUpdate>,
 ) -> Result<FunctionDBBuilder, TdError> {
     let mut builder = builder.deref().clone();
     // change the version id and set it to active

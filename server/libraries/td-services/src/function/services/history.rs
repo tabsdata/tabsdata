@@ -3,21 +3,20 @@
 //
 
 use ta_services::factory::service_factory;
+use td_authz::tower::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
 use td_authz::{Authz, AuthzContext};
+use td_objects::And;
+use td_objects::NoFilter;
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
 use td_objects::dxo::function::{Function, FunctionDBWithNames};
+use td_objects::list::params::ListQueryParams;
 use td_objects::rest_urls::params::FunctionAtIdName;
-use td_objects::sql::list::ListQueryParams;
-use td_objects::sql::{DaoQueries, NoListFilter};
-use td_objects::tower_service::authz::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
-use td_objects::tower_service::from::{
-    ExtractNameService, ExtractService, TryIntoService, With, combine,
-};
-use td_objects::tower_service::sql::{By, SqlListService, SqlSelectService};
+use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
     AtTime, CollectionId, CollectionIdName, FunctionId, FunctionIdName,
 };
+use td_queries::By;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -27,7 +26,6 @@ use td_tower::layers;
     request = ListRequest<FunctionAtIdName>,
     response = ListResponse<Function>,
     connection = ConnectionProvider,
-    context = DaoQueries,
     context = AuthzContext,
 )]
 fn service() {
@@ -36,7 +34,7 @@ fn service() {
         from_fn(With::<ListRequest<FunctionAtIdName>>::extract_name::<FunctionAtIdName>),
         from_fn(With::<FunctionAtIdName>::extract::<CollectionIdName>),
         // find collection ID
-        from_fn(By::<CollectionIdName>::select::<CollectionDB>),
+        from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
         // check requester has collection permissions
         from_fn(AuthzOn::<CollectionId>::set),
@@ -45,9 +43,8 @@ fn service() {
         from_fn(With::<FunctionAtIdName>::extract::<AtTime>),
         // find function ID at time (as name could change in time)
         from_fn(With::<FunctionAtIdName>::extract::<FunctionIdName>),
-        from_fn(combine::<CollectionId, FunctionIdName>),
         from_fn(
-            By::<(CollectionId, FunctionIdName)>::select_version::<
+            By::<And![CollectionId, FunctionIdName]>::fetch_one_version::<
                 { FunctionDBWithNames::Available },
                 FunctionDBWithNames,
             >
@@ -58,7 +55,11 @@ fn service() {
         from_fn(With::<ListRequest<FunctionAtIdName>>::extract::<ListParams>),
         from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<Function>, _>),
         from_fn(
-            By::<FunctionId>::list_at::<NoListFilter, { FunctionDBWithNames::Available }, Function>
+            By::<FunctionId>::list_history_at::<
+                NoFilter,
+                { FunctionDBWithNames::Available },
+                Function,
+            >
         ),
     )
 }
@@ -68,23 +69,24 @@ mod tests {
     use super::*;
     use crate::function::services::delete::DeleteFunctionService;
     use crate::function::services::update::UpdateFunctionService;
+    use std::str::FromStr;
     use ta_services::service::TdService;
-    use td_database::sql::DbPool;
+    use td_database::pool::TdPool;
     use td_error::TdError;
+    use td_objects::Buildable;
     use td_objects::dxo::crudl::{ListParams, ListParamsBuilder};
     use td_objects::dxo::function::{FunctionRegister, FunctionUpdate};
     use td_objects::rest_urls::FunctionParam;
-    use td_objects::test_utils::seed_collection::seed_collection;
-    use td_objects::test_utils::seed_function::seed_function;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionName, RoleId, UserId,
     };
+    use td_queries::test_utils::SeedQueries;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_function_history(db: DbPool) {
+    async fn test_tower_metadata_function_history(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
         FunctionHistoryService::with_defaults(db)
@@ -97,7 +99,7 @@ mod tests {
                 ),
                 type_of_val(&With::<FunctionAtIdName>::extract::<CollectionIdName>),
                 // find collection ID
-                type_of_val(&By::<CollectionIdName>::select::<CollectionDB>),
+                type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
                 type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
                 // check requester has collection permissions
                 type_of_val(&AuthzOn::<CollectionId>::set),
@@ -106,9 +108,8 @@ mod tests {
                 type_of_val(&With::<FunctionAtIdName>::extract::<AtTime>),
                 // find function ID at time (as name could change in time)
                 type_of_val(&With::<FunctionAtIdName>::extract::<FunctionIdName>),
-                type_of_val(&combine::<CollectionId, FunctionIdName>),
                 type_of_val(
-                    &By::<(CollectionId, FunctionIdName)>::select_version::<
+                    &By::<And![CollectionId, FunctionIdName]>::fetch_one_version::<
                         { FunctionDBWithNames::Available },
                         FunctionDBWithNames,
                     >,
@@ -119,8 +120,8 @@ mod tests {
                 type_of_val(&With::<ListRequest<FunctionAtIdName>>::extract::<ListParams>),
                 type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<Function>, _>),
                 type_of_val(
-                    &By::<FunctionId>::list_at::<
-                        NoListFilter,
+                    &By::<FunctionId>::list_history_at::<
+                        NoFilter,
                         { FunctionDBWithNames::Available },
                         Function,
                     >,
@@ -130,13 +131,10 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_function_history(db: DbPool) -> Result<(), TdError> {
-        let collection = seed_collection(
-            &db,
-            &CollectionName::try_from("collection")?,
-            &UserId::admin(),
-        )
-        .await;
+    async fn test_function_history(db: TdPool) -> Result<(), TdError> {
+        let collection = db
+            .seed_collection(&CollectionName::try_from("collection")?, &UserId::admin())
+            .await?;
 
         let t0 = AtTime::now();
 
@@ -153,7 +151,7 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let _ = seed_function(&db, &collection, &create).await;
+        let _ = db.seed_function(&collection, &create).await?;
 
         let t1 = AtTime::now();
 
@@ -168,15 +166,13 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
                 FunctionParam::builder()
-                    .try_collection(format!("{}", collection.name))?
-                    .try_function("function_1")?
+                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                    .function(FunctionIdName::from_str("function_1")?)
                     .build()?,
                 update.clone(),
             );
 
-        let service = UpdateFunctionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         let _response = response?;
 
@@ -186,13 +182,11 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).delete(
                 FunctionParam::builder()
-                    .try_collection(format!("{}", collection.name))?
-                    .try_function("function_2")?
+                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                    .function(FunctionIdName::from_str("function_2")?)
                     .build()?,
             );
-        let service = DeleteFunctionService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = DeleteFunctionService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
 
         let t3 = AtTime::now();
@@ -210,7 +204,7 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let _ = seed_function(&db, &collection, &create).await;
+        let _ = db.seed_function(&collection, &create).await?;
 
         let t4 = AtTime::now();
 
@@ -219,16 +213,14 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
                 FunctionAtIdName::builder()
-                    .try_collection(format!("~{}", collection.id))?
-                    .try_function("function_1")?
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .function(FunctionIdName::from_str("function_1")?)
                     .at(t0)
                     .build()?,
                 ListParams::default(),
             );
 
-        let service = FunctionHistoryService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = FunctionHistoryService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         let response = response;
         assert!(response.is_err());
@@ -236,8 +228,8 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
                 FunctionAtIdName::builder()
-                    .try_collection(format!("~{}", collection.id))?
-                    .try_function("function_1")?
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .function(FunctionIdName::from_str("function_1")?)
                     .at(t1)
                     .build()?,
                 ListParamsBuilder::default()
@@ -245,9 +237,7 @@ mod tests {
                     .build()?,
             );
 
-        let service = FunctionHistoryService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = FunctionHistoryService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         let response = response?;
         let data = response.data;
@@ -259,16 +249,14 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
                 FunctionAtIdName::builder()
-                    .try_collection(format!("~{}", collection.id))?
-                    .try_function("function_2")?
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .function(FunctionIdName::from_str("function_2")?)
                     .at(t2)
                     .build()?,
                 ListParams::default(),
             );
 
-        let service = FunctionHistoryService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = FunctionHistoryService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         let response = response?;
         let data = response.data;
@@ -280,16 +268,14 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
                 FunctionAtIdName::builder()
-                    .try_collection(format!("~{}", collection.id))?
-                    .try_function("function_2")?
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .function(FunctionIdName::from_str("function_2")?)
                     .at(t3)
                     .build()?,
                 ListParams::default(),
             );
 
-        let service = FunctionHistoryService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = FunctionHistoryService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         let response = response;
         assert!(response.is_err());
@@ -297,8 +283,8 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
                 FunctionAtIdName::builder()
-                    .try_collection(format!("~{}", collection.id))?
-                    .try_function("function_1")?
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .function(FunctionIdName::from_str("function_1")?)
                     .at(t4)
                     .build()?,
                 ListParamsBuilder::default()
@@ -307,9 +293,7 @@ mod tests {
                     .unwrap(),
             );
 
-        let service = FunctionHistoryService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = FunctionHistoryService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         let response = response?;
         let data = response.data;

@@ -5,17 +5,14 @@
 use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
-use td_error::display_vec::DisplayVec;
+use td_error::DisplayVec;
 use td_error::{ApiError, TdError, api_error, td_error};
 use td_execution::VersionResolver;
 use td_objects::dxo::collection::CollectionDB;
-use td_objects::dxo::crudl::handle_sql_err;
 use td_objects::dxo::dependency::{DependencyDB, DependencyDBBuilder};
 use td_objects::dxo::table::{TableDB, TableDBBuilder, TableDBWithNames};
 use td_objects::dxo::trigger::{TriggerDB, TriggerDBBuilder, TriggerDBWithNames};
 use td_objects::dxo::worker::{UpdateWorkerDB, WorkerDB, WorkerDBBuilder};
-use td_objects::sql::cte::VersionedQueries;
-use td_objects::sql::{DaoQueries, FindBy, UpdateBy};
 use td_objects::system::{
     SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES, SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES,
 };
@@ -28,7 +25,11 @@ use td_objects::types::basic::{
 use td_objects::types::composed::{
     TableDependency, TableDependencyDto, TableTrigger, TableTriggerDto,
 };
-use td_tower::extractors::{Connection, Input, IntoMutSqlConnection, ReqCtx, SrvCtx};
+use td_objects::{Buildable, and, or};
+use td_queries::BasicQueries;
+use td_queries::VersionedQueries;
+use td_tower::ctx_service::ReqCtx;
+use td_tower::extractors::{MutRef, Ref};
 use tracing::{debug, error};
 
 #[td_error]
@@ -50,23 +51,20 @@ pub enum RegisterFunctionError {
 }
 
 pub async fn data_location(
-    Input(_collection): Input<CollectionDB>,
-    // Input(_function): Input<FunctionDBWithNames>,
+    _collection: Ref<CollectionDB>,
+    // _function: Ref<FunctionDBWithNames>,
 ) -> Result<DataLocation, TdError> {
     Ok(DataLocation::default())
 }
 
 pub async fn validate_tables_do_not_exist(
-    Connection(connection): Connection,
-    SrvCtx(queries): SrvCtx<DaoQueries>,
-    Input(collection_id): Input<CollectionId>,
-    Input(collection_name): Input<CollectionName>,
-    Input(existing_versions): Input<Vec<TableDB>>,
-    Input(new_tables): Input<Option<Vec<TableNameDto>>>,
-    Input(at_time): Input<AtTime>,
+    mut conn: MutRef<DynamicConnection<'static>>,
+    collection_id: Ref<CollectionId>,
+    collection_name: Ref<CollectionName>,
+    existing_versions: Ref<Vec<TableDB>>,
+    new_tables: Ref<Option<Vec<TableNameDto>>>,
+    at_time: Ref<AtTime>,
 ) -> Result<(), TdError> {
-    let mut conn = connection.lock().await;
-    let conn = conn.get_mut_connection()?;
 
     if let Some(new_tables) = new_tables.as_ref() {
         // First, validate there are no duplicates in the new tables.
@@ -97,39 +95,20 @@ pub async fn validate_tables_do_not_exist(
                 if existing_tables_map.contains_key(&(collection_id.deref(), t)) {
                     None
                 } else {
-                    Some((collection_id.deref(), t))
+                    Some(and!(collection_id.deref(), t))
                 }
             })
             .collect();
 
-        let tables_found: Vec<TableDBWithNames> = queries
-            .find_versions_at::<{ TableDBWithNames::Available }, TableDBWithNames>(
-                Some(&at_time),
-                &new_tables_lookup,
-            )?
-            .build_query_as()
-            .fetch_all(&mut *conn)
-            .await
-            .map_err(handle_sql_err)?;
+        let tables_found = conn
+            .fetch_all_at::<{ TableDBWithNames::Available }, TableDBWithNames>(
+                new_tables_lookup,
+                &at_time,
+            )
+            .await?;
 
         if !tables_found.is_empty() {
-            let new_tables_set: HashSet<_> = new_tables_lookup.iter().collect();
-            let tables_found: HashSet<_> = tables_found
-                .iter()
-                .map(|t| (collection_id.deref(), &t.name))
-                .collect();
-
-            let duplicate_tables: Vec<_> = tables_found
-                .into_iter()
-                .filter_map(|(c, t)| {
-                    if new_tables_set.contains(&(c, t)) {
-                        Some(t.clone())
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-
+            let duplicate_tables: Vec<_> = tables_found.into_iter().map(|t| t.name).collect();
             Err(RegisterFunctionError::TableAlreadyExists(
                 duplicate_tables.into(),
                 collection_name.deref().clone(),
@@ -142,15 +121,15 @@ pub async fn validate_tables_do_not_exist(
 
 #[allow(clippy::too_many_arguments)]
 pub async fn build_table_versions(
-    ReqCtx(ctx): ReqCtx,
-    Input(collection_id): Input<CollectionId>,
-    Input(collection_name): Input<CollectionName>,
-    Input(function_id): Input<FunctionId>,
-    Input(existing_versions): Input<Vec<TableDB>>,
-    Input(new_tables): Input<Option<Vec<TableNameDto>>>,
-    Input(new_tables_types): Input<Option<HashMap<TableNameDto, TableType>>>,
-    Input(table_version_builder): Input<TableDBBuilder>,
-    Input(reuse_frozen): Input<ReuseFrozen>,
+    mut ctx: MutRef<ReqCtx>,
+    collection_id: Ref<CollectionId>,
+    collection_name: Ref<CollectionName>,
+    function_id: Ref<FunctionId>,
+    existing_versions: Ref<Vec<TableDB>>,
+    new_tables: Ref<Option<Vec<TableNameDto>>>,
+    new_tables_types: Ref<Option<HashMap<TableNameDto, TableType>>>,
+    table_version_builder: Ref<TableDBBuilder>,
+    reuse_frozen: Ref<ReuseFrozen>,
 ) -> Result<Vec<TableDB>, TdError> {
     let mut new_table_versions = HashMap::new();
 
@@ -208,8 +187,7 @@ pub async fn build_table_versions(
                             table_name.clone(),
                             collection_name.deref().clone(),
                             "unfreezing with new table definition".to_string(),
-                        ))
-                        .await;
+                        ));
 
                         &existing_version.table_id
                     } else {
@@ -265,25 +243,19 @@ pub async fn build_table_versions(
 }
 
 pub async fn build_tables_trigger_versions(
-    Connection(connection): Connection,
-    SrvCtx(queries): SrvCtx<DaoQueries>,
-    Input(at_time): Input<AtTime>,
-    Input(new_table_versions): Input<Vec<TableDB>>,
+    mut conn: MutRef<DynamicConnection<'static>>,
+    at_time: Ref<AtTime>,
+    new_table_versions: Ref<Vec<TableDB>>,
 ) -> Result<Vec<TriggerDB>, TdError> {
-    let mut conn = connection.lock().await;
-    let conn = conn.get_mut_connection()?;
 
     // Find existing downstream triggers (using table ids)
     let table_ids = new_table_versions
         .iter()
         .map(|t| t.table_id)
         .collect::<Vec<_>>();
-    let existing_triggers: Vec<TriggerDB> = queries
-        .find_versions_at::<{ TriggerDB::All }, TriggerDB>(Some(&at_time), &table_ids)?
-        .build_query_as()
-        .fetch_all(&mut *conn)
-        .await
-        .map_err(handle_sql_err)?;
+    let existing_triggers = conn
+        .fetch_all_at::<{ TriggerDB::All }, TriggerDB>(&table_ids, &at_time)
+        .await?;
 
     // Freeze triggers if the table is frozen, or reactivate them if the table is active again.
     // This has to be done downstream, because tables trigger functions.
@@ -306,7 +278,7 @@ pub async fn build_tables_trigger_versions(
                     Some(
                         trigger
                             .clone()
-                            .to_builder()
+                            .into_builder()
                             .id(TriggerVersionId::default())
                             .status(TriggerStatus::Frozen)
                             .defined_on(*at_time)
@@ -319,7 +291,7 @@ pub async fn build_tables_trigger_versions(
                     Some(
                         trigger
                             .clone()
-                            .to_builder()
+                            .into_builder()
                             .id(TriggerVersionId::default())
                             .trigger_by_function_id(table.function_id)
                             .status(TriggerStatus::Active)
@@ -337,17 +309,14 @@ pub async fn build_tables_trigger_versions(
 
 #[allow(clippy::too_many_arguments)]
 pub async fn build_dependency_versions(
-    Connection(connection): Connection,
-    SrvCtx(queries): SrvCtx<DaoQueries>,
-    Input(existing_versions): Input<Vec<DependencyDB>>,
-    Input(new_dependencies): Input<Option<Vec<TableDependencyDto>>>,
-    Input(collection_in_context): Input<CollectionName>,
-    Input(function_id): Input<FunctionId>,
-    Input(dependency_version_builder): Input<DependencyDBBuilder>,
-    Input(at_time): Input<AtTime>,
+    mut conn: MutRef<DynamicConnection<'static>>,
+    existing_versions: Ref<Vec<DependencyDB>>,
+    new_dependencies: Ref<Option<Vec<TableDependencyDto>>>,
+    collection_in_context: Ref<CollectionName>,
+    function_id: Ref<FunctionId>,
+    dependency_version_builder: Ref<DependencyDBBuilder>,
+    at_time: Ref<AtTime>,
 ) -> Result<Vec<DependencyDB>, TdError> {
-    let mut conn = connection.lock().await;
-    let conn = conn.get_mut_connection()?;
 
     let mut new_dependency_versions = HashMap::new();
 
@@ -407,18 +376,18 @@ pub async fn build_dependency_versions(
         let dependency_tables_lookup: Vec<_> = new_dependencies
             .iter()
             .map(|(_, d)| {
-                (
+                and!(
                     d.collection.as_ref().unwrap_or(&*collection_in_context),
                     &d.table,
                 )
             })
             .collect();
-        let tables_found: Vec<TableDBWithNames> = queries
-            .find_by::<TableDBWithNames>(&dependency_tables_lookup)?
-            .build_query_as()
-            .fetch_all(&mut *conn)
-            .await
-            .map_err(handle_sql_err)?;
+        let tables_found = conn
+            .fetch_all_at::<{ TableDBWithNames::Available }, TableDBWithNames>(
+                dependency_tables_lookup,
+                &at_time,
+            )
+            .await?;
         tables_found
     };
 
@@ -460,7 +429,7 @@ pub async fn build_dependency_versions(
             .triggered_on(&TriggeredOn::try_from(&*at_time)?)
             .error_on_desc_range(true)
             .build()?
-            .resolve(queries.deref(), &mut *conn)
+            .resolve(&mut conn)
             .await?;
 
         // Reuse dependency id if the dependency is the same
@@ -534,17 +503,15 @@ pub async fn build_dependency_versions(
 
 #[allow(clippy::too_many_arguments)]
 pub async fn build_trigger_versions(
-    Connection(connection): Connection,
-    SrvCtx(queries): SrvCtx<DaoQueries>,
-    Input(existing_versions): Input<Vec<TriggerDBWithNames>>,
-    Input(new_tables): Input<Option<Vec<TableNameDto>>>,
-    Input(new_triggers): Input<Option<Vec<TableTriggerDto>>>,
-    Input(new_dependencies): Input<Option<Vec<TableDependencyDto>>>,
-    Input(collection_in_context): Input<CollectionName>,
-    Input(trigger_version_builder): Input<TriggerDBBuilder>,
+    mut conn: MutRef<DynamicConnection<'static>>,
+    existing_versions: Ref<Vec<TriggerDBWithNames>>,
+    new_tables: Ref<Option<Vec<TableNameDto>>>,
+    new_triggers: Ref<Option<Vec<TableTriggerDto>>>,
+    new_dependencies: Ref<Option<Vec<TableDependencyDto>>>,
+    collection_in_context: Ref<CollectionName>,
+    trigger_version_builder: Ref<TriggerDBBuilder>,
+    at_time: Ref<AtTime>,
 ) -> Result<Vec<TriggerDB>, TdError> {
-    let mut conn = connection.lock().await;
-    let conn = conn.get_mut_connection()?;
 
     let mut new_trigger_versions = HashMap::new();
 
@@ -588,7 +555,7 @@ pub async fn build_trigger_versions(
         let trigger_tables_lookup: Vec<_> = new_triggers
             .iter()
             .map(|d| {
-                (
+                and!(
                     d.collection.as_ref().unwrap_or(&*collection_in_context),
                     &d.table,
                 )
@@ -596,12 +563,12 @@ pub async fn build_trigger_versions(
             .collect();
 
         // Here, even function created tables are already populated in the tables list.
-        let tables_found: Vec<_> = queries
-            .find_by::<TableDBWithNames>(&trigger_tables_lookup)?
-            .build_query_as()
-            .fetch_all(&mut *conn)
-            .await
-            .map_err(handle_sql_err)?;
+        let tables_found = conn
+            .fetch_all_at::<{ TableDBWithNames::Available }, TableDBWithNames>(
+                trigger_tables_lookup,
+                &at_time,
+            )
+            .await?;
         tables_found
     };
 
@@ -688,25 +655,17 @@ pub async fn build_trigger_versions(
 }
 
 pub async fn stop_current_workers(
-    Connection(connection): Connection,
-    SrvCtx(queries): SrvCtx<DaoQueries>,
-    Input(function_version_id): Input<Option<FunctionVersionId>>,
+    mut conn: MutRef<DynamicConnection<'static>>,
+    function_version_id: Ref<Option<FunctionVersionId>>,
 ) -> Result<(), TdError> {
-    let mut conn = connection.lock().await;
-    let conn = conn.get_mut_connection()?;
 
     if let Some(function_version_id) = function_version_id.deref() {
         // we cannot stop function workers
-        let to_stop = [
-            (function_version_id, WorkerType::CronTrigger),
-            (function_version_id, WorkerType::StageTrigger),
-        ];
-        let workers: Vec<WorkerDB> = queries
-            .find_by::<WorkerDB>(&to_stop)?
-            .build_query_as()
-            .fetch_all(&mut *conn)
-            .await
-            .map_err(handle_sql_err)?;
+        let to_stop = and!(
+            function_version_id,
+            or!(WorkerType::CronTrigger, WorkerType::StageTrigger),
+        );
+        let workers = conn.fetch_all::<WorkerDB>(to_stop).await?;
 
         // only if the status is allowed to be updated
         let mut to_stop = vec![];
@@ -735,12 +694,7 @@ pub async fn stop_current_workers(
         }
 
         let update = UpdateWorkerDB::stop_scheduled().await?;
-        let res = queries
-            .update_all_by::<_, WorkerDB>(&update, &to_stop)?
-            .build()
-            .execute(&mut *conn)
-            .await
-            .map_err(handle_sql_err)?;
+        let res = conn.update::<_, WorkerDB>(&update, &to_stop).await?;
         debug!(
             "Set stopped status in {} workers for function version {}.",
             res.rows_affected(),
@@ -752,11 +706,10 @@ pub async fn stop_current_workers(
 }
 
 pub async fn build_workers(
-    Connection(connection): Connection,
-    SrvCtx(queries): SrvCtx<DaoQueries>,
-    Input(builder): Input<WorkerDBBuilder>,
-    Input(function_version_id): Input<Option<FunctionVersionId>>,
-    Input(new): Input<Option<HashMap<WorkerTypeDto, WorkerConfig>>>,
+    mut conn: MutRef<DynamicConnection<'static>>,
+    builder: Ref<WorkerDBBuilder>,
+    function_version_id: Ref<Option<FunctionVersionId>>,
+    new: Ref<Option<HashMap<WorkerTypeDto, WorkerConfig>>>,
 ) -> Result<Vec<WorkerDB>, TdError> {
     let mut new_workers = vec![];
     if let Some(new) = new.deref() {
@@ -791,19 +744,12 @@ pub async fn build_workers(
         }
     } else if let Some(function_version_id) = function_version_id.deref() {
         // if there is no info about new workers, we recreate what was present for the new version
-        let mut conn = connection.lock().await;
-        let conn = conn.get_mut_connection()?;
 
-        let to_recreate = [
-            (function_version_id, WorkerType::CronTrigger),
-            (function_version_id, WorkerType::StageTrigger),
-        ];
-        let current_workers: Vec<WorkerDB> = queries
-            .find_by::<WorkerDB>(&to_recreate)?
-            .build_query_as()
-            .fetch_all(&mut *conn)
-            .await
-            .map_err(handle_sql_err)?;
+        let to_recreate = and!(
+            function_version_id,
+            or!(WorkerType::CronTrigger, WorkerType::StageTrigger),
+        );
+        let current_workers = conn.fetch_all::<WorkerDB>(to_recreate).await?;
         for worker in current_workers {
             let worker_db = builder
                 .deref()

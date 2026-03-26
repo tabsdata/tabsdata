@@ -6,10 +6,10 @@ use std::ops::Deref;
 use td_error::TdError;
 use td_objects::dxo::function::{FunctionDB, FunctionDBBuilder};
 use td_objects::types::basic::{FunctionStatus, FunctionVersionId};
-use td_tower::extractors::Input;
+use td_tower::extractors::Ref;
 
 pub async fn build_deleted_function_version(
-    Input(existing_function_version): Input<FunctionDBBuilder>,
+    existing_function_version: Ref<FunctionDBBuilder>,
 ) -> Result<FunctionDB, TdError> {
     let deleted_version = existing_function_version
         .deref()
