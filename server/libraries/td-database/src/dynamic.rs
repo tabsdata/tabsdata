@@ -93,15 +93,59 @@ impl DynamicPool {
             DynamicPool::MySql { ro, rw } => ro.is_closed() && rw.is_closed(),
         }
     }
+
+    /// Close both pools, waiting for all connections to be returned and closed.
+    pub async fn close(&self) {
+        match self {
+            #[cfg(feature = "sqlite")]
+            DynamicPool::Sqlite { ro, rw } => {
+                ro.close().await;
+                rw.close().await;
+            }
+            #[cfg(feature = "postgres")]
+            DynamicPool::Postgres { ro, rw } => {
+                ro.close().await;
+                rw.close().await;
+            }
+            #[cfg(feature = "mysql")]
+            DynamicPool::MySql { ro, rw } => {
+                ro.close().await;
+                rw.close().await;
+            }
+        }
+    }
+
+    /// Execute a batch of SQL statements on the read-write pool.
+    pub async fn execute_batch(&self, stmts: &[String]) -> Result<(), Error> {
+        for stmt in stmts {
+            match self {
+                #[cfg(feature = "sqlite")]
+                DynamicPool::Sqlite { rw, .. } => {
+                    sqlx::query(stmt).execute(rw).await?;
+                }
+                #[cfg(feature = "postgres")]
+                DynamicPool::Postgres { rw, .. } => {
+                    sqlx::query(stmt).execute(rw).await?;
+                }
+                #[cfg(feature = "mysql")]
+                DynamicPool::MySql { rw, .. } => {
+                    sqlx::query(stmt).execute(rw).await?;
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 // Connection
 
-/// A helper to store either the owned guard from the pool or a raw borrow.
+/// A helper to store either the owned guard from the pool, a raw borrow,
+/// or an owned transaction.
 #[derive(Debug)]
 pub enum ConnectionHolder<'c, DB: sqlx::Database, G> {
     Owned(G),
     Borrowed(&'c mut DB::Connection),
+    OwnedTransaction(Transaction<'c, DB>),
 }
 
 // Implement Deref so we can access the underlying connection easily
@@ -115,6 +159,7 @@ where
         match self {
             Self::Owned(g) => g.deref(),
             Self::Borrowed(r) => r,
+            Self::OwnedTransaction(tx) => tx.deref(),
         }
     }
 }
@@ -128,6 +173,7 @@ where
         match self {
             Self::Owned(g) => g.deref_mut(),
             Self::Borrowed(r) => r,
+            Self::OwnedTransaction(tx) => tx.deref_mut(),
         }
     }
 }
@@ -164,6 +210,27 @@ impl<'c> DynamicConnection<'c> {
             }
             #[cfg(feature = "mysql")]
             Self::MySql(h) => DynamicConnection::MySql(ConnectionHolder::Borrowed(h.deref_mut())),
+        }
+    }
+
+    /// Try to extract the embedded transaction from this connection.
+    /// Returns `Some(DynamicTransaction)` if this connection was created via
+    /// `DynamicTransaction::into_connection()`, otherwise returns `None`.
+    pub fn into_transaction(self) -> Option<DynamicTransaction<'c>> {
+        match self {
+            #[cfg(feature = "sqlite")]
+            Self::Sqlite(ConnectionHolder::OwnedTransaction(tx)) => {
+                Some(DynamicTransaction::Sqlite(tx))
+            }
+            #[cfg(feature = "postgres")]
+            Self::Postgres(ConnectionHolder::OwnedTransaction(tx)) => {
+                Some(DynamicTransaction::Postgres(tx))
+            }
+            #[cfg(feature = "mysql")]
+            Self::MySql(ConnectionHolder::OwnedTransaction(tx)) => {
+                Some(DynamicTransaction::MySql(tx))
+            }
+            _ => None,
         }
     }
 }
@@ -215,6 +282,23 @@ impl DynamicTransaction<'_> {
             }
             #[cfg(feature = "mysql")]
             Self::MySql(tx) => DynamicConnection::MySql(ConnectionHolder::Borrowed(tx.as_mut())),
+        }
+    }
+}
+
+impl<'c> DynamicTransaction<'c> {
+    /// Convert this transaction into a `DynamicConnection` by embedding the
+    /// transaction inside the `OwnedTransaction` variant of `ConnectionHolder`.
+    pub fn into_connection(self) -> DynamicConnection<'c> {
+        match self {
+            #[cfg(feature = "sqlite")]
+            Self::Sqlite(tx) => DynamicConnection::Sqlite(ConnectionHolder::OwnedTransaction(tx)),
+            #[cfg(feature = "postgres")]
+            Self::Postgres(tx) => {
+                DynamicConnection::Postgres(ConnectionHolder::OwnedTransaction(tx))
+            }
+            #[cfg(feature = "mysql")]
+            Self::MySql(tx) => DynamicConnection::MySql(ConnectionHolder::OwnedTransaction(tx)),
         }
     }
 }

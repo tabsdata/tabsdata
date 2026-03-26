@@ -8,7 +8,6 @@ compile_error!("You must enable at least one database feature: `sqlite`, `postgr
 use crate::config::DatabaseConfig;
 use crate::error::DbError;
 use crate::pool::TdPool;
-use sqlx::migrate::Migrator;
 
 pub mod config;
 pub mod dynamic;
@@ -20,24 +19,20 @@ pub mod sea_query;
 pub mod test_utils;
 
 /// Creates a connection pool for the `tabsdata` database.
-///
-/// If the database does not exist, it is created.
 pub async fn db(config: &DatabaseConfig) -> Result<TdPool, DbError> {
-    db_with_schema(config, td_schema::schema()).await
-}
-
-pub async fn db_with_schema(
-    config: &DatabaseConfig,
-    schema: &'static Migrator,
-) -> Result<TdPool, DbError> {
-    TdPool::connect(config, schema).await
+    TdPool::connect(config).await
 }
 
 #[cfg(test)]
 mod tests {
     use crate::config::DatabaseConfig;
+    use crate::pool::TdPool;
     use crate::raw_query;
     use crate::sea_query::builder::SeaQueryExt;
+    use crate::sea_query::kind::DatabaseKind;
+    use std::collections::BTreeMap;
+    use td_common::tdtestdir;
+    use td_schema::schema::SchemaVersion;
     use td_security::{
         ENCODED_ID_CA_ALL_SEC_ADMIN, ENCODED_ID_CA_ALL_SYS_ADMIN, ENCODED_ID_CD_ALL_SYS_ADMIN,
         ENCODED_ID_CD_ALL_USER, ENCODED_ID_CR_ALL_SYS_ADMIN, ENCODED_ID_CR_ALL_USER,
@@ -48,6 +43,106 @@ mod tests {
         ENCODED_ID_USER_ROLE_ADMIN_USER,
     };
     use url::Url;
+
+    // -----------------------------------------------------------------------
+    // Schema introspection helpers
+    // -----------------------------------------------------------------------
+
+    async fn schema_table_names(db: &TdPool) -> Vec<String> {
+        let mut names: Vec<String> = raw_query!(
+            db,
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+        )
+        .build_query_scalar()
+        .fetch_all(db)
+        .await
+        .unwrap();
+        names.sort();
+        names
+    }
+
+    async fn schema_view_names(db: &TdPool) -> Vec<String> {
+        let mut names: Vec<String> = raw_query!(
+            db,
+            "SELECT name FROM sqlite_master WHERE type = 'view' ORDER BY name"
+        )
+        .build_query_scalar()
+        .fetch_all(db)
+        .await
+        .unwrap();
+        names.sort();
+        names
+    }
+
+    async fn schema_index_names(db: &TdPool) -> Vec<String> {
+        let mut names: Vec<String> = raw_query!(
+            db,
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND name NOT LIKE 'sqlite_autoindex_%' ORDER BY name"
+        )
+        .build_query_scalar()
+        .fetch_all(db)
+        .await
+        .unwrap();
+        names.sort();
+        names
+    }
+
+    async fn schema_db_version(db: &TdPool) -> String {
+        raw_query!(
+            db,
+            "SELECT value FROM tabsdata_system WHERE name = 'db_version'"
+        )
+        .build_query_scalar()
+        .fetch_one(db)
+        .await
+        .unwrap()
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, sqlx::FromRow)]
+    struct ColumnInfo {
+        name: String,
+        #[sqlx(rename = "type")]
+        col_type: String,
+        notnull: bool,
+        pk: bool,
+    }
+
+    async fn schema_table_columns(db: &TdPool, table: &str) -> Vec<ColumnInfo> {
+        let sql = format!(
+            "SELECT \"name\", \"type\", \"notnull\", \"pk\" FROM pragma_table_info('{table}')"
+        );
+        let query = crate::sea_query::raw::RawSeaQuery(sea_query::raw_sql::seaql::query(&sql));
+        let mut cols: Vec<ColumnInfo> = query.build_query_as().fetch_all(db).await.unwrap();
+        cols.sort();
+        cols
+    }
+
+    #[derive(Debug, PartialEq, Eq)]
+    struct SchemaFingerprint {
+        tables: Vec<String>,
+        views: Vec<String>,
+        indices: Vec<String>,
+        columns: BTreeMap<String, Vec<ColumnInfo>>,
+        db_version: String,
+    }
+
+    async fn capture_schema_fingerprint(db: &TdPool) -> SchemaFingerprint {
+        let tables = schema_table_names(db).await;
+        let views = schema_view_names(db).await;
+        let indices = schema_index_names(db).await;
+        let mut columns = BTreeMap::new();
+        for table in &tables {
+            columns.insert(table.clone(), schema_table_columns(db, table).await);
+        }
+        let db_version = schema_db_version(db).await;
+        SchemaFingerprint {
+            tables,
+            views,
+            indices,
+            columns,
+            db_version,
+        }
+    }
 
     #[tokio::test]
     async fn test_tabsdata_db_schema_creation() {
@@ -344,5 +439,213 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(row.id, ENCODED_ID_CR_ALL_USER);
+    }
+
+    // -------------------------------------------------------------------
+    // Schema validation tests — use real TdPool / DynamicPool
+    // -------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn test_schema_tables() {
+        let db = crate::test_utils::db().await.unwrap();
+        let tables = schema_table_names(&db).await;
+
+        let expected = vec![
+            "bundles",
+            "collections",
+            "dependencies",
+            "dependencies_current",
+            "executions",
+            "function_requirements",
+            "function_runs",
+            "functions",
+            "functions_current",
+            "inter_collection_permissions",
+            "permissions",
+            "roles",
+            "sessions",
+            "table_data_versions",
+            "table_partitions",
+            "tables",
+            "tables_current",
+            "tabsdata_system",
+            "transactions",
+            "triggers",
+            "triggers_current",
+            "users",
+            "users_roles",
+            "workers",
+        ];
+        assert_eq!(tables, expected);
+    }
+
+    #[tokio::test]
+    async fn test_schema_views() {
+        let db = crate::test_utils::db().await.unwrap();
+        let views = schema_view_names(&db).await;
+
+        let expected = vec![
+            "collections__with_names",
+            "collections_active",
+            "dependencies__with_names",
+            "dependencies_current__with_names",
+            "execution_status_summary",
+            "executions__with_names",
+            "executions__with_status",
+            "function_requirements__with_names",
+            "function_requirements__with_status",
+            "function_runs__to_commit",
+            "function_runs__to_execute",
+            "function_runs__with_names",
+            "functions__with_names",
+            "functions_current__with_names",
+            "global_status_summary",
+            "inter_collection_permissions__with_names",
+            "permissions__with_names",
+            "roles__with_names",
+            "sessions__with_names",
+            "table_data_versions__active",
+            "table_data_versions__with_function",
+            "table_data_versions__with_names",
+            "tables__with_names",
+            "tables_current__with_names",
+            "transaction_status_summary",
+            "transactions__with_names",
+            "transactions__with_status",
+            "triggers__read",
+            "triggers__with_names",
+            "triggers_current__with_names",
+            "users__with_names",
+            "users_roles__with_names",
+            "workers__with_names",
+        ];
+        assert_eq!(views, expected);
+    }
+
+    #[tokio::test]
+    async fn test_schema_indices() {
+        let db = crate::test_utils::db().await.unwrap();
+        let indices = schema_index_names(&db).await;
+
+        let expected = vec![
+            "bundles___collection_id___idx",
+            "collections___name___idx",
+            "dependencies___dependency_id__defined_on__id___idx",
+            "dependencies___function_id___idx",
+            "dependencies___table_function_id___idx",
+            "dependencies_current___function_id___idx",
+            "dependencies_current___table_function_id___idx",
+            "executions___collection_id___idx",
+            "executions___function_version_id___idx",
+            "executions___triggered_by_id___idx",
+            "executions___triggered_on___idx",
+            "function_requirements___function_run_id___idx",
+            "function_requirements___requirement_function_run_id___idx",
+            "function_requirements___requirement_table_data_version_id___idx",
+            "function_runs___collection_id___idx",
+            "function_runs___execution_id__status___idx",
+            "function_runs___function_version_id___idx",
+            "function_runs___status___idx",
+            "function_runs___transaction_id__status___idx",
+            "functions___collection_id___idx",
+            "functions___function_id__defined_on__id___idx",
+            "functions_current___collection_id___idx",
+            "functions_current___status___idx",
+            "inter_collection_permissions___from_collection_id__to_collection_id__idx",
+            "permissions___role_id__permission_type__entity___idx",
+            "roles___name___idx",
+            "roles___user_id__role_id___idx",
+            "sessions___expires_on___idx",
+            "sessions___user_id___idx",
+            "table_data_versions___collection_id___idx",
+            "table_data_versions___execution_id___idx",
+            "table_data_versions___function_run_id___idx",
+            "table_data_versions___table_id___has_data___idx",
+            "table_data_versions___table_id__triggered_on__id___idx",
+            "tables___function_id__status___idx",
+            "tables___status___idx",
+            "tables___table_id__defined_on__id___idx",
+            "tables_current___collection_id___idx",
+            "tables_current___function_id___idx",
+            "tables_current___status___idx",
+            "transactions___collection_id___idx",
+            "transactions___execution_id___idx",
+            "triggers___collection_id___idx",
+            "triggers___function_id___idx",
+            "triggers___trigger_by_function_id___idx",
+            "triggers___trigger_id__defined_on__id___idx",
+            "triggers_current___collection_id___idx",
+            "triggers_current___function_id___idx",
+            "triggers_current___trigger_by_function_id___idx",
+            "users___enabled___idx",
+            "users___name___idx",
+        ];
+        assert_eq!(indices, expected);
+    }
+
+    #[tokio::test]
+    async fn test_schema_version() {
+        let db = crate::test_utils::db().await.unwrap();
+        let version = schema_db_version(&db).await;
+        assert_eq!(
+            version,
+            td_schema::CURRENT_VERSION.to_string(),
+            "db_version mismatch"
+        );
+    }
+
+    /// Migration invariant: for each archived version N,
+    /// archive(N) + deltas(N+1..=CURRENT) must produce a schema identical to
+    /// a fresh install via TdPool::create().
+    ///
+    /// Both paths go through the real DynamicPool::execute_batch().
+    #[tokio::test]
+    async fn test_migration_invariant() {
+        use td_schema::schema::{archive, current, deltas};
+
+        // Fresh-install fingerprint via production path.
+        let fresh_db = crate::test_utils::db().await.unwrap();
+        let fresh_fp = capture_schema_fingerprint(&fresh_db).await;
+
+        for archive_version in archive::MIN_ARCHIVE..current::Schema::VERSION {
+            // Build migrated DB: archive + deltas via DynamicPool::execute_batch.
+            let config = crate::test_utils::test_config();
+            let migrated_db = TdPool::connect(&config).await.unwrap();
+
+            let archive_stmts = archive::build(archive_version, migrated_db.kind());
+            migrated_db
+                .pool
+                .execute_batch(&archive_stmts)
+                .await
+                .unwrap();
+
+            for delta_target in (archive_version + 1)..=current::Schema::VERSION {
+                let delta_stmts = deltas::get(delta_target, migrated_db.kind());
+                migrated_db.pool.execute_batch(&delta_stmts).await.unwrap();
+            }
+
+            let migrated_fp = capture_schema_fingerprint(&migrated_db).await;
+
+            assert_eq!(
+                fresh_fp.tables, migrated_fp.tables,
+                "Table set mismatch: archive v{archive_version} + deltas vs fresh"
+            );
+            assert_eq!(
+                fresh_fp.views, migrated_fp.views,
+                "View set mismatch: archive v{archive_version} + deltas vs fresh"
+            );
+            assert_eq!(
+                fresh_fp.indices, migrated_fp.indices,
+                "Index set mismatch: archive v{archive_version} + deltas vs fresh"
+            );
+            assert_eq!(
+                fresh_fp.columns, migrated_fp.columns,
+                "Column definitions mismatch: archive v{archive_version} + deltas vs fresh"
+            );
+            assert_eq!(
+                fresh_fp.db_version, migrated_fp.db_version,
+                "db_version mismatch: archive v{archive_version} + deltas vs fresh"
+            );
+        }
     }
 }

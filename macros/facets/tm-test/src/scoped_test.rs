@@ -8,9 +8,8 @@ use darling::FromMeta;
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span};
 use quote::quote;
-use std::path::PathBuf;
-use syn::{FnArg, ItemFn, LitStr, Signature, Type, TypePath, parse_macro_input};
-use td_shared::meta_parser::{OptionWrapper, SynMetaOrLit, some_or_none};
+use syn::{FnArg, ItemFn, Signature, Type, TypePath, parse_macro_input};
+use td_shared::meta_parser::{OptionWrapper, SynMetaOrLit};
 use td_shared::parse_meta;
 
 #[derive(Debug, FromMeta)]
@@ -91,42 +90,51 @@ pub fn scoped_test(args: TokenStream, item: TokenStream) -> TokenStream {
     expanded.into()
 }
 
+/// A wrapper around `syn::Path` that implements `FromMeta` for darling parsing.
+///
+/// Allows `fixture = some::path::Type` in proc macro attributes.
+#[derive(Debug, Clone)]
+struct FixturePath(syn::Path);
+
+impl FromMeta for FixturePath {
+    fn from_expr(expr: &syn::Expr) -> darling::Result<Self> {
+        match expr {
+            syn::Expr::Path(expr_path) => Ok(FixturePath(expr_path.path.clone())),
+            _ => Err(darling::Error::unexpected_expr_type(expr)),
+        }
+    }
+}
+
 #[derive(Debug, Default, FromMeta)]
 pub struct SqlxArguments {
-    migrator: Option<SynMetaOrLit>,
     #[darling(multiple, rename = "fixture")]
-    fixtures: Vec<LitStr>,
+    fixtures: Vec<FixturePath>,
 }
 
 fn sqlx_test(func_sig: &Signature, args: Option<SqlxArguments>) -> InnerFnSetup {
-    let (migrator, fixtures) = match args {
+    let (install_schema, fixtures) = match args {
         Some(args) => {
-            let migrator = some_or_none(args.migrator);
             let fixtures = args
                 .fixtures
                 .iter()
                 .map(|f| {
-                    PathBuf::new()
-                        .join("fixtures")
-                        .join(f.value())
-                        .with_extension("sql")
-                })
-                .map(|f| {
-                    let f = f.to_string_lossy();
-                    quote! { include_str!(#f) }
+                    let path = &f.0;
+                    quote! { <#path as td_schema::schema::Fixture>::build }
                 })
                 .collect::<Vec<_>>();
-            (migrator, fixtures)
+            // Install schema if no fixtures provided
+            let install_schema = fixtures.is_empty();
+            (install_schema, fixtures)
         }
-        None => (quote! { None }, vec![]),
+        None => (true, vec![]),
     };
 
-    // Check if the function has a DbPool parameter
+    // Check if the function has a TdPool parameter
     // Get fn arg and its type
-    let (name, ty) = get_fn_args(func_sig, &Ident::new("DbPool", Span::call_site()));
+    let (name, ty) = get_fn_args(func_sig, &Ident::new("TdPool", Span::call_site()));
 
     let setup = quote! {
-        td_test::sqlx::SqlxTestSetup::new(#migrator, vec![#(#fixtures),*]).setup().await
+        td_test::sqlx::SqlxTestSetup::new(#install_schema, vec![#(#fixtures),*]).setup().await
     };
 
     InnerFnSetup {

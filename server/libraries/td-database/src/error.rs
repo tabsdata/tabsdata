@@ -8,6 +8,12 @@ use td_error::td_error;
 pub enum DbError {
     #[error("Tabsdata database cannot be opened in the specified database engine: '{0}'")]
     UnsupportedDatabase(String) = 0,
+    #[error("Max connections must be greater than 0. Current: '{0}'")]
+    InvalidMaxConnections(u32) = 1,
+    #[error(
+        "Max connections must be greater than min connections. Current max: '{0}'. Current min: '{1}'"
+    )]
+    InvalidConnections(u32, u32) = 2,
     #[error("Tabsdata database schema has not be created. It must be created")]
     DatabaseSchemaDoesNotExist = 5000,
     #[error("Tabsdata database must be upgraded: {0}")]
@@ -23,7 +29,7 @@ pub enum DbError {
     #[error("Failed to connect to the database: {0}")]
     FailedToConnectToDatabase(#[from] sqlx::Error) = 5007,
     #[error("Failed to create or upgrade the database: {0}")]
-    FailedToCreateOrUpgradeDatabaseSchema(#[source] sqlx::migrate::MigrateError) = 5008,
+    FailedToCreateOrUpgradeDatabaseSchema(#[source] sqlx::Error) = 5008,
     #[error("Sql error: {0}")]
     SqlError(#[source] sqlx::Error) = 5009,
     #[error("Failed to create database connection URL: {0}")]

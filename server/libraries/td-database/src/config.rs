@@ -129,6 +129,16 @@ impl DatabaseConfig {
     }
 
     pub async fn connect(&self) -> Result<DynamicPool, DbError> {
+        if self.max_connections <= 0 {
+            Err(DbError::InvalidMaxConnections(self.max_connections))?
+        }
+        if self.min_connections > self.max_connections {
+            Err(DbError::InvalidConnections(
+                self.max_connections,
+                self.min_connections,
+            ))?
+        }
+
         let url = self.url.as_ref().ok_or(DbError::MissingDatabaseLocation)?;
         let conn_options = self.conn_options(url)?;
 

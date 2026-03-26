@@ -3,7 +3,6 @@
 //
 
 use crate::{TestSetup, TestSetupExecution};
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use sha2::{Digest, Sha256};
 use std::any::type_name;
@@ -93,10 +92,9 @@ impl<'a, R> ReqsTestSetup<'a, R> {
     }
 }
 
-#[async_trait]
 impl<R> TestSetup<R> for ReqsTestSetup<'_, R>
 where
-    R: TestRequirements + Sync,
+    R: TestRequirements + Send + Sync,
 {
     /// Creates AWS test playground or skips the test if not available.
     async fn setup(&self) -> TestSetupExecution<R> {

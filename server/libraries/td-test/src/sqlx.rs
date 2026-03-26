@@ -3,40 +3,43 @@
 //
 
 use crate::{TestSetup, TestSetupExecution};
-use async_trait::async_trait;
-use sqlx::Executor;
-use td_database::sql::{DbPool, DbSchema};
+use td_database::pool::TdPool;
+use td_database::sea_query::kind::DatabaseKind;
+use td_schema::schema::backend::Backend;
 
-pub struct SqlxTestSetup<'a> {
-    schema: Option<&'static DbSchema>,
-    fixtures: Vec<&'a str>,
+pub struct SqlxTestSetup {
+    install_schema: bool,
+    fixture_builders: Vec<fn(Backend) -> Vec<String>>,
 }
 
-impl<'a> SqlxTestSetup<'a> {
+impl SqlxTestSetup {
     #[allow(dead_code)]
-    pub fn new(schema: Option<&'static DbSchema>, fixtures: Vec<&'a str>) -> Self {
-        Self { schema, fixtures }
+    pub fn new(install_schema: bool, fixture_builders: Vec<fn(Backend) -> Vec<String>>) -> Self {
+        Self {
+            install_schema,
+            fixture_builders,
+        }
     }
 }
 
-#[async_trait]
-impl TestSetup<DbPool> for SqlxTestSetup<'_> {
-    /// Similar to [`sqlx::testing::setup_test_db`], but generating DbPool.
-    async fn setup(&self) -> TestSetupExecution<DbPool> {
+impl TestSetup<TdPool> for SqlxTestSetup {
+    /// Similar to [`sqlx::testing::setup_test_db`], but generating TdPool.
+    async fn setup(&self) -> TestSetupExecution<TdPool> {
         let config = td_database::test_utils::test_config();
-        let schema = self.schema.unwrap_or_else(|| {
-            if self.fixtures.is_empty() {
-                td_schema::schema()
-            } else {
-                &DbSchema::DEFAULT
-            }
-        });
+        let db = TdPool::connect(&config).await.unwrap();
 
-        let db = DbPool::connect(&config, schema).await.unwrap();
-        schema.run(&db.rw_pool).await.unwrap();
+        if self.install_schema {
+            db.upgrade().await.unwrap();
+        }
 
-        for fixture in &self.fixtures {
-            db.execute(*fixture).await.unwrap();
+        if !self.fixture_builders.is_empty() {
+            let backend = db.kind().into();
+            let stmts: Vec<String> = self
+                .fixture_builders
+                .iter()
+                .flat_map(|f| f(backend))
+                .collect();
+            db.pool.execute_batch(&stmts).await.unwrap();
         }
 
         TestSetupExecution::Run(db)
