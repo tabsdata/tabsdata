@@ -7,8 +7,8 @@ pub mod params;
 use crate::types::basic::{
     AllowDisabled, AtTime, CollectionIdName, ExecutionIdName, FunctionIdName, FunctionRunId,
     FunctionVersionId, InterCollectionPermissionIdName, LogsCastNumber, PermissionIdName,
-    RoleIdName, SampleLen, SampleOffset, Sql, TableIdName, TransactionIdName, UncommittedStatus,
-    UserIdName, WorkerId, WorkerIdName,
+    RoleIdName, SampleLen, SampleOffset, Sql, TableDataVersionId, TableIdName, TransactionIdName,
+    UncommittedStatus, UserIdName, WorkerId, WorkerIdName,
 };
 use td_common::logging::LOG_EXTENSION;
 use td_common::server::{ERR_LOG_FILE_NAME, FN_LOG_FILE_NAME, OUT_LOG_FILE_NAME, TD_LOG_FILE_NAME};
@@ -311,10 +311,18 @@ pub struct ExecutionParam {
     pub execution: ExecutionIdName,
 }
 
+#[ta_objects::UrlParam]
+pub struct TableDataVersionParam {
+    #[dxo(extractor)]
+    pub table_data_version: TableDataVersionId,
+}
+
 pub const EXECUTION_CANCEL: &str = url!(EXECUTION, "/cancel");
 pub const EXECUTION_RECOVER: &str = url!(EXECUTION, "/recover");
 pub const EXECUTION_DETAILS: &str = url!(EXECUTION, "/details");
 pub const EXECUTION_LIST: &str = url!(EXECUTIONS);
+pub const EXECUTION_LIST_BY_TABLE_DATA_VERSION: &str =
+    url!("/table-data-versions/{table_data_version}/executions");
 
 #[ta_objects::QueryParam]
 pub struct AllowDisabledParam {
