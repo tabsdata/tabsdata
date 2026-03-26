@@ -2,9 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::auth::jwt::JwtConfig;
 use crate::auth::services::AuthServices;
-use crate::auth::session::Sessions;
 use crate::collection::service::CollectionServices;
 use crate::execution::services::ExecutionServices;
 use crate::execution::services::runtime_info::RuntimeContext;
@@ -24,9 +22,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use ta_services::factory::{FieldAccessors, ServiceFactory};
 use td_authz::AuthzContext;
-use td_database::sql::DbPool;
+use td_authz::jwt::JwtConfig;
+use td_authz::session_provider::Sessions;
+use td_database::pool::TdPool;
 use td_execution::TransactionBy;
-use td_objects::sql::DaoQueries;
 use td_objects::types::addresses::ApiServerAddresses;
 use td_security::config::PasswordHashingConfig;
 use td_storage::Storage;
@@ -70,8 +69,7 @@ pub struct Services {
 
 #[derive(FieldAccessors, FromRef, Clone)]
 pub struct Context {
-    pub db: DbPool,
-    pub queries: Arc<DaoQueries>,
+    pub db: TdPool,
     pub server_addresses: Arc<ApiServerAddresses>,
     pub jwt_config: Arc<JwtConfig>,
     pub auth_context: Arc<AuthzContext>,
@@ -85,10 +83,9 @@ pub struct Context {
 
 #[cfg(feature = "test-utils")]
 impl Context {
-    pub fn with_defaults(db: DbPool) -> Self {
+    pub fn with_defaults(db: TdPool) -> Self {
         Self {
             db,
-            queries: Arc::new(DaoQueries::default()),
             server_addresses: Arc::new(ApiServerAddresses::default()),
             jwt_config: Arc::new(JwtConfig::default()),
             auth_context: Arc::new(AuthzContext::default()),

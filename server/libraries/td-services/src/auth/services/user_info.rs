@@ -1,3 +1,7 @@
+//
+// Copyright 2025. Tabs Data Inc.
+//
+
 use ta_services::factory::service_factory;
 use td_objects::dxo::auth::UserInfoUserRoleDB;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
@@ -5,16 +9,9 @@ use td_objects::dxo::permission::{Permission, PermissionBuilder, PermissionDBWit
 use td_objects::dxo::user::{
     UserDBWithNames, UserInfo, UserInfoBuilder, UserInfoRoleIdName, UserInfoRoleIdNameBuilder,
 };
-//
-// Copyright 2025. Tabs Data Inc.
-//
-use td_objects::sql::DaoQueries;
-use td_objects::tower_service::from::{
-    BuildService, ConvertIntoMapService, ExtractService, SetService, TryIntoService,
-    VecBuildService, With,
-};
-use td_objects::tower_service::sql::{By, SqlSelectAllService, SqlSelectService};
+use td_objects::tower_service::with::With;
 use td_objects::types::basic::{RoleId, UserId};
+use td_queries::By;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -24,7 +21,6 @@ use td_tower::layers;
     request = ReadRequest<()>,
     response = UserInfo,
     connection = ConnectionProvider,
-    context = DaoQueries,
 )]
 fn service() {
     layers!(
@@ -33,25 +29,25 @@ fn service() {
         from_fn(With::<RequestContext>::extract::<UserId>),
         from_fn(With::<RequestContext>::extract::<RoleId>),
         // get user from database
-        from_fn(By::<UserId>::select::<UserDBWithNames>),
+        from_fn(By::<UserId>::fetch_one::<UserDBWithNames>),
         // get user roles from database
-        from_fn(By::<UserId>::select_all::<UserInfoUserRoleDB>),
+        from_fn(By::<UserId>::fetch_all::<UserInfoUserRoleDB>),
         // get user current role permissions
-        from_fn(By::<RoleId>::select_all::<PermissionDBWithNames>),
+        from_fn(By::<RoleId>::fetch_all::<PermissionDBWithNames>),
         // set user data
         from_fn(With::<UserDBWithNames>::try_convert_to::<UserInfoBuilder, _>),
         // set current role
         from_fn(With::<RoleId>::set::<UserInfoBuilder>),
         // set permissions of current role
         from_fn(With::<PermissionDBWithNames>::vec_convert_to::<PermissionBuilder, _>),
-        from_fn(With::<PermissionBuilder>::vec_build::<Permission, _>),
+        from_fn(With::<Vec<PermissionBuilder>>::build::<Vec<Permission>>),
         from_fn(With::<Vec<Permission>>::set::<UserInfoBuilder>),
         // set all user roles
         from_fn(With::<UserInfoUserRoleDB>::vec_convert_to::<UserInfoRoleIdNameBuilder, _>),
-        from_fn(With::<UserInfoRoleIdNameBuilder>::vec_build::<UserInfoRoleIdName, _>),
+        from_fn(With::<Vec<UserInfoRoleIdNameBuilder>>::build::<Vec<UserInfoRoleIdName>>),
         from_fn(With::<Vec<UserInfoRoleIdName>>::set::<UserInfoBuilder>),
         // build UserInfo
-        from_fn(With::<UserInfoBuilder>::build::<UserInfo, _>),
+        from_fn(With::<UserInfoBuilder>::build::<UserInfo>),
     )
 }
 
@@ -59,12 +55,13 @@ fn service() {
 mod tests {
     use super::*;
     use crate::Context;
-    use crate::auth::jwt::decode_token;
     use crate::auth::services::AuthServices;
     use ta_services::factory::ServiceFactory;
     use ta_services::service::TdService;
-    use td_database::sql::DbPool;
+    use td_authz::jwt::decode_token;
+    use td_database::pool::TdPool;
     use td_error::TdError;
+    use td_objects::Buildable;
     use td_objects::dxo::auth::Login;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::types::basic::{Password, RoleName, UserName};
@@ -73,7 +70,7 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_user_info(db: DbPool) {
+    async fn test_tower_metadata_user_info(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
         UserInfoService::with_defaults(db)
@@ -85,36 +82,38 @@ mod tests {
                 type_of_val(&With::<RequestContext>::extract::<UserId>),
                 type_of_val(&With::<RequestContext>::extract::<RoleId>),
                 // get user from database
-                type_of_val(&By::<UserId>::select::<UserDBWithNames>),
+                type_of_val(&By::<UserId>::fetch_one::<UserDBWithNames>),
                 // get user roles from database
-                type_of_val(&By::<UserId>::select_all::<UserInfoUserRoleDB>),
+                type_of_val(&By::<UserId>::fetch_all::<UserInfoUserRoleDB>),
                 // get user current role permissions
-                type_of_val(&By::<RoleId>::select_all::<PermissionDBWithNames>),
+                type_of_val(&By::<RoleId>::fetch_all::<PermissionDBWithNames>),
                 // set user data
                 type_of_val(&With::<UserDBWithNames>::try_convert_to::<UserInfoBuilder, _>),
                 // set current role
                 type_of_val(&With::<RoleId>::set::<UserInfoBuilder>),
                 // set permissions of current role
                 type_of_val(&With::<PermissionDBWithNames>::vec_convert_to::<PermissionBuilder, _>),
-                type_of_val(&With::<PermissionBuilder>::vec_build::<Permission, _>),
+                type_of_val(&With::<Vec<PermissionBuilder>>::build::<Vec<Permission>>),
                 type_of_val(&With::<Vec<Permission>>::set::<UserInfoBuilder>),
                 // set all user roles
                 type_of_val(
                     &With::<UserInfoUserRoleDB>::vec_convert_to::<UserInfoRoleIdNameBuilder, _>,
                 ),
-                type_of_val(&With::<UserInfoRoleIdNameBuilder>::vec_build::<UserInfoRoleIdName, _>),
+                type_of_val(
+                    &With::<Vec<UserInfoRoleIdNameBuilder>>::build::<Vec<UserInfoRoleIdName>>,
+                ),
                 type_of_val(&With::<Vec<UserInfoRoleIdName>>::set::<UserInfoBuilder>),
                 // build UserInfo
-                type_of_val(&With::<UserInfoBuilder>::build::<UserInfo, _>),
+                type_of_val(&With::<UserInfoBuilder>::build::<UserInfo>),
             ]);
     }
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_user_info_ok(db: DbPool) -> Result<(), TdError> {
+    async fn test_user_info_ok(db: TdPool) -> Result<(), TdError> {
         let context = Context::with_defaults(db.clone());
         let auth_services = AuthServices::build(&context);
-        let service = auth_services.login.service().await;
+        let service = auth_services.login.service();
 
         let request = Login::builder()
             .name(UserName::try_from("admin")?)
@@ -125,9 +124,9 @@ mod tests {
         assert!(res.is_ok());
         let token_response = res?;
         let access_token = &token_response.access_token;
-        let access_token_id = *decode_token(&context.jwt_config, access_token)?.jti();
+        let access_token_id = decode_token(&context.jwt_config, access_token)?.jti;
 
-        let service = auth_services.user_info.service().await;
+        let service = auth_services.user_info.service();
 
         let request =
             RequestContext::with(access_token_id, UserId::admin(), RoleId::user()).read(());

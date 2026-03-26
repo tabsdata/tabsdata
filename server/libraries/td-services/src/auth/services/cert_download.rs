@@ -5,7 +5,7 @@
 use crate::auth::layers::cert_download::get_certificate_pem_file;
 use std::path::PathBuf;
 use ta_services::factory::service_factory;
-use td_objects::stream::BoxedSyncStream;
+use td_objects::types::stream::BoxedSyncStream;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
 
@@ -56,7 +56,7 @@ mod tests {
             .await
             .unwrap();
 
-        let service = CertDownloadService::new(Arc::new(tls_path)).service().await;
+        let service = CertDownloadService::new(Arc::new(tls_path)).service();
         let response = service.raw_oneshot(()).await?;
         let mut response = response.into_inner();
         let bytes = response.next().await.unwrap()?;
@@ -69,7 +69,7 @@ mod tests {
     #[tokio::test]
     async fn test_cert_download_err() -> Result<(), TdError> {
         let tls_path = td_common::tdtestdir!();
-        let service = CertDownloadService::new(Arc::new(tls_path)).service().await;
+        let service = CertDownloadService::new(Arc::new(tls_path)).service();
         let response = service.raw_oneshot(()).await;
         assert!(response.is_err());
         Ok(())

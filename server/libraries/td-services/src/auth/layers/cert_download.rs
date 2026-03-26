@@ -7,8 +7,8 @@ use futures_util::FutureExt;
 use std::path::PathBuf;
 use td_common::server::SSL_CERT_PEM_FILE;
 use td_error::{TdError, td_error};
-use td_objects::stream::BoxedSyncStream;
-use td_tower::extractors::SrvCtx;
+use td_objects::types::stream::BoxedSyncStream;
+use td_tower::extractors::Ref;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 
@@ -23,7 +23,7 @@ enum CertDownloadError {
 }
 
 pub async fn get_certificate_pem_file(
-    SrvCtx(ssl_folder): SrvCtx<PathBuf>,
+    ssl_folder: Ref<PathBuf>,
 ) -> Result<BoxedSyncStream, TdError> {
     let cert_file = ssl_folder.join(SSL_CERT_PEM_FILE);
     if !cert_file.exists() {

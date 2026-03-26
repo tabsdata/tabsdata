@@ -2,18 +2,18 @@
 // Copyright 2025. Tabs Data Inc.
 //
 
-use crate::auth::jwt::JwtConfig;
 use std::ops::Deref;
 use std::time::Duration;
+use td_authz::jwt::JwtConfig;
 use td_common::time::UniqueUtc;
 use td_error::TdError;
 use td_objects::dxo::auth::SessionDBBuilder;
 use td_objects::types::basic::AtTime;
-use td_tower::extractors::{Input, SrvCtx};
+use td_tower::extractors::{Ref};
 
 pub async fn set_session_expiration(
-    SrvCtx(jwt_settings): SrvCtx<JwtConfig>,
-    Input(session_builder): Input<SessionDBBuilder>,
+    jwt_settings: Ref<JwtConfig>,
+    session_builder: Ref<SessionDBBuilder>,
 ) -> Result<SessionDBBuilder, TdError> {
     let duration = Duration::from_secs(jwt_settings.access_token_expiration as u64);
     let expires_on: AtTime = (UniqueUtc::now_millis() + duration).try_into()?;
