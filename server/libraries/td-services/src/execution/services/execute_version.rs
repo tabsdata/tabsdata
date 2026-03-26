@@ -16,7 +16,7 @@ use td_objects::dxo::execution::{
     ExecutionDB, ExecutionRequest, ExecutionRequestInternal, ExecutionResponseInternal,
 };
 use td_objects::dxo::function::FunctionDBWithNames;
-use td_objects::rest_urls::internal::FunctionVersionIdParam;
+use td_objects::rest_urls::FunctionVersionIdParam;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{AtTime, FunctionId, FunctionVersionId, SkipIfRunning, TriggerType};
 use td_queries::By;

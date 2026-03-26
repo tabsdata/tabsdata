@@ -314,6 +314,7 @@ pub async fn build_function_requirements(
             .execution_id(&transaction.execution_id)
             .transaction_id(&transaction.id)
             .function_run_id(function_runs_map[&function.function_version_id].id)
+            .function_version_id(&function.function_version_id)
             // condition
             .requirement_table_id(table.table_id)
             .requirement_function_version_id(&table.function_version_id)

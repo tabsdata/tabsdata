@@ -37,12 +37,6 @@ pub mod internal {
     pub const FUNCTION_VERSIONS: &str = url!("/function-versions");
     pub const FUNCTION_VERSION: &str = url!(FUNCTION_VERSIONS, "/{function_version_id}");
 
-    #[ta_objects::UrlParam]
-    pub struct FunctionVersionIdParam {
-        #[dxo(extractor)]
-        pub function_version_id: FunctionVersionId,
-    }
-
     #[ta_objects::Dlo]
     pub struct FunctionVersionExecution {
         #[dxo(extractor)]
@@ -317,10 +311,18 @@ pub struct TableDataVersionParam {
     pub table_data_version: TableDataVersionId,
 }
 
+#[ta_objects::UrlParam]
+pub struct FunctionVersionIdParam {
+    #[dxo(extractor)]
+    pub function_version_id: FunctionVersionId,
+}
+
 pub const EXECUTION_CANCEL: &str = url!(EXECUTION, "/cancel");
 pub const EXECUTION_RECOVER: &str = url!(EXECUTION, "/recover");
 pub const EXECUTION_DETAILS: &str = url!(EXECUTION, "/details");
 pub const EXECUTION_LIST: &str = url!(EXECUTIONS);
+pub const EXECUTION_LIST_BY_FUNCTION_VERSION: &str =
+    url!("/function-versions/{function_version_id}/executions");
 pub const EXECUTION_LIST_BY_TABLE_DATA_VERSION: &str =
     url!("/table-data-versions/{table_data_version}/executions");
 
