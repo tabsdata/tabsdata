@@ -2,19 +2,17 @@
 // Copyright 2025. Tabs Data Inc.
 //
 
+use crate::tower::{AuthzEntity, Permission};
 use crate::{AuthzData, Provider};
-use async_trait::async_trait;
 use itertools::Itertools;
-use sqlx::SqliteConnection;
 use std::collections::HashMap;
 use std::sync::Arc;
+use td_database::dynamic::DynamicConnection;
 use td_error::TdError;
-use td_objects::dxo::crudl::handle_sql_err;
 use td_objects::dxo::inter_collection_permission::InterCollectionPermissionDB;
 use td_objects::dxo::permission::PermissionDB;
-use td_objects::sql::{DaoQueries, SelectBy};
-use td_objects::tower_service::authz::{AuthzEntity, Permission};
 use td_objects::types::basic::{CollectionId, PermissionType, RoleId, ToCollectionId};
+use td_queries::BasicQueries;
 
 /// Provider that gets permissions and inter-permissions mapping from the database on every `get` call.
 pub struct SqlAuthzDataProvider;
@@ -41,16 +39,11 @@ impl SqlAuthzDataProvider {
         Ok(perm)
     }
 
-    async fn get_permissions<'a>(
-        &'a self,
-        conn: &'a mut SqliteConnection,
+    async fn get_permissions(
+        &self,
+        conn: &mut DynamicConnection<'_>,
     ) -> Result<HashMap<RoleId, Arc<Vec<Permission>>>, TdError> {
-        let permissions: Vec<PermissionDB> = DaoQueries::default()
-            .select_by::<PermissionDB>(&())?
-            .build_query_as()
-            .fetch_all(conn)
-            .await
-            .map_err(handle_sql_err)?;
+        let permissions = conn.fetch_all::<PermissionDB>(()).await?;
         let role_permissions_map = permissions
             .iter()
             .map(|p| (p.role_id, Self::try_to_permission(p).unwrap()))
@@ -61,16 +54,11 @@ impl SqlAuthzDataProvider {
         Ok(role_permissions_map)
     }
 
-    async fn get_inter_collection_permissions<'a>(
-        &'a self,
-        conn: &'a mut SqliteConnection,
+    async fn get_inter_collection_permissions(
+        &self,
+        conn: &mut DynamicConnection<'_>,
     ) -> Result<HashMap<CollectionId, Arc<Vec<ToCollectionId>>>, TdError> {
-        let permissions: Vec<InterCollectionPermissionDB> = DaoQueries::default()
-            .select_by::<InterCollectionPermissionDB>(&())?
-            .build_query_as()
-            .fetch_all(conn)
-            .await
-            .map_err(handle_sql_err)?;
+        let permissions = conn.fetch_all::<InterCollectionPermissionDB>(()).await?;
         let permissions_map = permissions
             .iter()
             .map(|p| (p.from_collection_id, p.to_collection_id))
@@ -82,12 +70,11 @@ impl SqlAuthzDataProvider {
     }
 }
 
-#[async_trait]
-impl<'a> Provider<'a, AuthzData, &'a mut SqliteConnection> for SqlAuthzDataProvider {
-    async fn get(&'a self, context: &'a mut SqliteConnection) -> Result<Arc<AuthzData>, TdError> {
-        let permissions = self.get_permissions(context).await?;
+impl<'a, 'c> Provider<AuthzData, &'a mut DynamicConnection<'c>> for SqlAuthzDataProvider {
+    async fn get(&self, context: &'a mut DynamicConnection<'c>) -> Result<Arc<AuthzData>, TdError> {
+        let permissions = self.get_permissions(&mut *context).await?;
         let inter_collections_permissions_value_can_read_key =
-            self.get_inter_collection_permissions(context).await?;
+            self.get_inter_collection_permissions(&mut *context).await?;
         let inter_collections_permissions_key_can_read_value =
             inter_collections_permissions_value_can_read_key
                 .iter()
@@ -110,21 +97,24 @@ impl<'a> Provider<'a, AuthzData, &'a mut SqliteConnection> for SqlAuthzDataProvi
         };
         Ok(Arc::new(authz_data))
     }
+
+    async fn purge(&self, _context: &'a mut DynamicConnection<'c>) -> Result<(), TdError> {
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::sql::SqlAuthzDataProvider;
+    use crate::authz_provider::SqlAuthzDataProvider;
     use td_common::provider::Provider;
-    use td_database::sql::DbPool;
+    use td_database::pool::TdPool;
     use td_error::TdError;
-    use td_objects::test_utils::seed_collection::seed_collection;
-    use td_objects::test_utils::seed_inter_collection_permission::seed_inter_collection_permission;
     use td_objects::types::basic::{CollectionName, RoleId, ToCollectionId, UserId};
+    use td_queries::test_utils::SeedQueries;
 
-    #[td_test::test(sqlx(migrator = td_schema::schema()))]
+    #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_get_permissions(db: DbPool) -> Result<(), TdError> {
+    async fn test_get_permissions(db: TdPool) -> Result<(), TdError> {
         let provider = SqlAuthzDataProvider;
         let permissions = provider
             .get_permissions(&mut db.acquire().await.unwrap())
@@ -136,15 +126,24 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx(migrator = td_schema::schema()))]
+    #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_get_inter_collection_permissions(db: DbPool) -> Result<(), TdError> {
-        let c0 = seed_collection(&db, &CollectionName::try_from("c0")?, &UserId::admin()).await;
-        let c1 = seed_collection(&db, &CollectionName::try_from("c1")?, &UserId::admin()).await;
-        let c2 = seed_collection(&db, &CollectionName::try_from("c2")?, &UserId::admin()).await;
-        seed_inter_collection_permission(&db, &c0.id, &ToCollectionId::try_from(c1.id)?).await;
-        seed_inter_collection_permission(&db, &c0.id, &ToCollectionId::try_from(c2.id)?).await;
-        seed_inter_collection_permission(&db, &c1.id, &ToCollectionId::try_from(c2.id)?).await;
+    async fn test_get_inter_collection_permissions(db: TdPool) -> Result<(), TdError> {
+        let c0 = db
+            .seed_collection(&CollectionName::try_from("c0")?, &UserId::admin())
+            .await?;
+        let c1 = db
+            .seed_collection(&CollectionName::try_from("c1")?, &UserId::admin())
+            .await?;
+        let c2 = db
+            .seed_collection(&CollectionName::try_from("c2")?, &UserId::admin())
+            .await?;
+        db.seed_inter_collection_permission(&c0.id, &ToCollectionId::try_from(c1.id)?)
+            .await?;
+        db.seed_inter_collection_permission(&c0.id, &ToCollectionId::try_from(c2.id)?)
+            .await?;
+        db.seed_inter_collection_permission(&c1.id, &ToCollectionId::try_from(c2.id)?)
+            .await?;
 
         let provider = SqlAuthzDataProvider;
         let permissions = provider
@@ -157,15 +156,24 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx(migrator = td_schema::schema()))]
+    #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_provider_get(db: DbPool) -> Result<(), TdError> {
-        let c0 = seed_collection(&db, &CollectionName::try_from("c0")?, &UserId::admin()).await;
-        let c1 = seed_collection(&db, &CollectionName::try_from("c1")?, &UserId::admin()).await;
-        let c2 = seed_collection(&db, &CollectionName::try_from("c2")?, &UserId::admin()).await;
-        seed_inter_collection_permission(&db, &c0.id, &ToCollectionId::try_from(&c1.id)?).await;
-        seed_inter_collection_permission(&db, &c0.id, &ToCollectionId::try_from(&c2.id)?).await;
-        seed_inter_collection_permission(&db, &c1.id, &ToCollectionId::try_from(&c2.id)?).await;
+    async fn test_provider_get(db: TdPool) -> Result<(), TdError> {
+        let c0 = db
+            .seed_collection(&CollectionName::try_from("c0")?, &UserId::admin())
+            .await?;
+        let c1 = db
+            .seed_collection(&CollectionName::try_from("c1")?, &UserId::admin())
+            .await?;
+        let c2 = db
+            .seed_collection(&CollectionName::try_from("c2")?, &UserId::admin())
+            .await?;
+        db.seed_inter_collection_permission(&c0.id, &ToCollectionId::try_from(&c1.id)?)
+            .await?;
+        db.seed_inter_collection_permission(&c0.id, &ToCollectionId::try_from(&c2.id)?)
+            .await?;
+        db.seed_inter_collection_permission(&c1.id, &ToCollectionId::try_from(&c2.id)?)
+            .await?;
 
         let provider = SqlAuthzDataProvider;
         let authz_data = provider.get(&mut db.acquire().await.unwrap()).await?;
