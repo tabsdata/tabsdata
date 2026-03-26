@@ -90,10 +90,16 @@ where
 
 /// Build a CTE that ranks all versions by recency per partition.
 ///
-/// Neither the condition nor the state filter are applied here — only the
-/// time upper-bound. This matches the old code where ROW_NUMBER was computed
-/// over ALL rows, and both the condition and state filter were applied on
-/// the outer query after ranking.
+/// Only the time upper-bound is applied here. The caller's condition
+/// is intentionally **not** pushed into the CTE because `SqlCondition`
+/// can be a non-partition filter (e.g., a FK like `function_version_id`
+/// on the tables table). Moving such filters inside the CTE would change
+/// which row is `rn=1`, altering query semantics. The condition is
+/// applied on the outer query by [`select_latest_from_cte`] instead.
+///
+/// For partition-scoped queries, see `table_data_version::ranked_cte()`
+/// which explicitly accepts the partition value and safely filters inside
+/// the CTE.
 pub(crate) fn latest_ranked_cte<D>(on: &D::VersionOrder) -> Result<WithClause, SqlError>
 where
     D: VersionedDao,
@@ -164,7 +170,8 @@ where
             .with(latest_ranked_cte::<D>(on)?)
             .build_query_as()
             .fetch_one(self)
-            .await?;
+            .await
+            .map_err(SqlError::on_read::<D>)?;
         Ok(r)
     }
 
@@ -183,7 +190,8 @@ where
             .with(latest_ranked_cte::<D>(on)?)
             .build_query_as()
             .fetch_optional(self)
-            .await?;
+            .await
+            .map_err(SqlError::on_read::<D>)?;
         Ok(r)
     }
 
@@ -201,7 +209,8 @@ where
             .with(latest_ranked_cte::<D>(on)?)
             .build_query_as()
             .fetch_all(self)
-            .await?;
+            .await
+            .map_err(SqlError::on_read::<D>)?;
         Ok(r)
     }
 
@@ -221,7 +230,11 @@ where
             .cond_where(filter.condition::<<D as ListDto>::Dao>()?)
             .take();
         let mut query = params.apply_to(base).with(with);
-        let daos: Vec<<D as ListDto>::Dao> = query.build_query_as().fetch_all(self).await?;
+        let daos: Vec<<D as ListDto>::Dao> = query
+            .build_query_as()
+            .fetch_all(self)
+            .await
+            .map_err(SqlError::on_read::<<D as ListDto>::Dao>)?;
         daos.iter()
             .map(|dao| D::from_dao(dao).map_err(SqlError::DtoConversionError))
             .collect()
@@ -242,7 +255,11 @@ where
             .cond_where(filter.condition::<<D as ListDto>::Dao>()?)
             .take();
         let mut query = params.apply_to(base);
-        let daos: Vec<<D as ListDto>::Dao> = query.build_query_as().fetch_all(self).await?;
+        let daos: Vec<<D as ListDto>::Dao> = query
+            .build_query_as()
+            .fetch_all(self)
+            .await
+            .map_err(SqlError::on_read::<<D as ListDto>::Dao>)?;
         daos.iter()
             .map(|dao| D::from_dao(dao).map_err(SqlError::DtoConversionError))
             .collect()

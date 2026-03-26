@@ -3,6 +3,8 @@
 //
 
 mod basic;
+mod current;
+mod function_run;
 mod logic_id;
 mod recursive;
 mod session;
@@ -12,6 +14,8 @@ mod versioned;
 
 pub use {
     basic::BasicQueries,
+    current::CurrentQueries,
+    function_run::FunctionRunQueries,
     logic_id::initialize_logical_ids,
     recursive::*,
     session::SessionQueries,
@@ -19,6 +23,9 @@ pub use {
     tower::by::{By, insert, insert_vec},
     versioned::VersionedQueries,
 };
+
+#[cfg(feature = "test-utils")]
+pub mod fixtures;
 
 #[cfg(feature = "test-utils")]
 pub mod test_utils;
