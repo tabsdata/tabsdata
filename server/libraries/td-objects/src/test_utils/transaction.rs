@@ -2,9 +2,9 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::dxo::graph::FunctionNode;
 use crate::transaction::map::TransactionMapper;
 use crate::types::basic::TransactionKey;
-use crate::types::graph::FunctionNode;
 use strum::{Display, EnumString};
 use td_error::TdError;
 
