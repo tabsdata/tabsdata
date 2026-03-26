@@ -5,18 +5,15 @@
 use crate::table::layers::download::get_table_download;
 use crate::table::layers::find_data_version_location_at;
 use ta_services::factory::service_factory;
+use td_authz::tower::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead, InterCollRead};
 use td_authz::{Authz, AuthzContext};
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::rest_urls::params::TableAtIdName;
-use td_objects::sql::DaoQueries;
-use td_objects::stream::BoxedSyncStream;
-use td_objects::tower_service::authz::{
-    AuthzOn, CollAdmin, CollDev, CollExec, CollRead, InterCollRead,
-};
-use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
-use td_objects::tower_service::sql::{By, SqlSelectService};
+use td_objects::tower_service::with::With;
 use td_objects::types::basic::{CollectionId, CollectionIdName};
+use td_objects::types::stream::BoxedSyncStream;
+use td_queries::By;
 use td_storage::Storage;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
@@ -27,7 +24,6 @@ use td_tower::layers;
     request = ReadRequest<TableAtIdName>,
     response = BoxedSyncStream,
     connection = ConnectionProvider,
-    context = DaoQueries,
     context = AuthzContext,
     context = Storage,
 )]
@@ -38,7 +34,7 @@ fn service() {
         from_fn(With::<ReadRequest<TableAtIdName>>::extract_name::<TableAtIdName>),
         // find collection ID
         from_fn(With::<TableAtIdName>::extract::<CollectionIdName>),
-        from_fn(By::<CollectionIdName>::select::<CollectionDB>),
+        from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
         // check requester has collection permissions
         from_fn(AuthzOn::<CollectionId>::set),
@@ -63,40 +59,35 @@ pub(crate) mod tests {
     };
     use std::io::Cursor;
     use std::path::Path;
+    use std::str::FromStr;
     use ta_services::factory::ServiceFactory;
     use ta_services::service::TdService;
     use td_common::absolute_path::AbsolutePath;
-    use td_database::sql::DbPool;
+    use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
     use td_objects::dxo::table::TableDB;
     use td_objects::rest_urls::{AtTimeParam, TableParam};
-    use td_objects::sql::SelectBy;
-    use td_objects::test_utils::seed_collection::seed_collection;
-    use td_objects::test_utils::seed_execution::seed_execution;
-    use td_objects::test_utils::seed_function::seed_function;
-    use td_objects::test_utils::seed_function_run::seed_function_run;
-    use td_objects::test_utils::seed_table_data_version::{
-        seed_table_data_version, seed_table_data_version_with_data,
-    };
-    use td_objects::test_utils::seed_transaction::seed_transaction;
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BundleId, CollectionName, Decorator, FunctionRunStatus, RoleId,
-        StorageVersion, TableName, TableNameDto, TransactionKey, UserId,
+        StorageVersion, TableIdName, TableName, TableNameDto, TransactionKey, UserId,
     };
+    use td_objects::{Buildable, and};
+    use td_queries::BasicQueries;
+    use td_queries::test_utils::SeedQueries;
     use td_storage::location::StorageLocation;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_download_service(db: DbPool) {
+    async fn test_tower_metadata_table_download(db: TdPool) {
         use crate::table::layers::storage::resolve_table_location;
         use td_objects::dxo::table::TableDBWithNames;
-        use td_objects::tower_service::from::{TryIntoService, combine};
         use td_objects::types::basic::{TableId, TableIdName, TriggeredOn};
 
+        use td_objects::And;
         use td_tower::metadata::type_of_val;
 
         TableDownloadService::with_defaults(db)
@@ -108,7 +99,7 @@ pub(crate) mod tests {
                 type_of_val(&With::<ReadRequest<TableAtIdName>>::extract_name::<TableAtIdName>),
                 // find collection ID
                 type_of_val(&With::<TableAtIdName>::extract::<CollectionIdName>),
-                type_of_val(&By::<CollectionIdName>::select::<CollectionDB>),
+                type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
                 type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
                 // check requester has collection permissions
                 type_of_val(&AuthzOn::<CollectionId>::set),
@@ -120,9 +111,8 @@ pub(crate) mod tests {
                 type_of_val(&With::<TableAtIdName>::extract::<AtTime>),
                 // Only active or frozen tables
                 // Find Table ID, looking at the version at the time
-                type_of_val(&combine::<CollectionIdName, TableIdName>),
                 type_of_val(
-                    &By::<(CollectionIdName, TableIdName)>::select_version::<
+                    &By::<And![CollectionIdName, TableIdName]>::fetch_one_version::<
                         { TableDBWithNames::Available },
                         TableDBWithNames,
                     >,
@@ -140,15 +130,13 @@ pub(crate) mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_download(db: DbPool) -> Result<(), TdError> {
+    async fn test_download(db: TdPool) -> Result<(), TdError> {
         let context = Context::with_defaults(db);
 
-        let collection = seed_collection(
-            &context.db,
-            &CollectionName::try_from("collection")?,
-            &UserId::admin(),
-        )
-        .await;
+        let collection = context
+            .db
+            .seed_collection(&CollectionName::try_from("collection")?, &UserId::admin())
+            .await?;
 
         let created_tables = vec![TableNameDto::try_from("t0")?];
         let dependencies = None;
@@ -166,7 +154,7 @@ pub(crate) mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let function = seed_function(&context.db, &collection, &create).await;
+        let function = context.db.seed_function(&collection, &create).await?;
 
         let (collection_name, collection_id) = (collection.name.clone(), collection.id);
         let get_download = async move |context: &Context,
@@ -178,13 +166,13 @@ pub(crate) mod tests {
                 RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
                     .read(TableAtIdName::new(
                         TableParam::builder()
-                            .try_collection(format!("~{}", collection_id))?
-                            .try_table(table)?
+                            .collection(CollectionIdName::from_str(&format!("~{}", collection_id))?)
+                            .table(TableIdName::from_str(table)?)
                             .build()?,
                         AtTimeParam::builder().at(at_time).build()?,
                     ));
             let service = TableDownloadService::build(context);
-            let response = service.service().await.raw_oneshot(request).await?;
+            let response = service.service().raw_oneshot(request).await?;
             let mut stream = response.into_inner();
             let bytes_with_ids = match stream.next().await {
                 Some(res) => res?,
@@ -195,13 +183,16 @@ pub(crate) mod tests {
                 RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
                     .read(TableAtIdName::new(
                         TableParam::builder()
-                            .try_collection(format!("{}", collection_name))?
-                            .try_table(table)?
+                            .collection(CollectionIdName::from_str(&format!(
+                                "{}",
+                                collection_name
+                            ))?)
+                            .table(TableIdName::from_str(table)?)
                             .build()?,
                         AtTimeParam::builder().at(at_time).build()?,
                     ));
             let service = TableDownloadService::build(context);
-            let response = service.service().await.raw_oneshot(request).await?;
+            let response = service.service().raw_oneshot(request).await?;
             let mut stream = response.into_inner();
             let bytes_with_names = match stream.next().await {
                 Some(res) => res?,
@@ -230,39 +221,42 @@ pub(crate) mod tests {
         // 3 function runs, 2 with data and 1 without, per table
         let mut at_times = vec![AtTime::now()];
         for i in 0..3 {
-            let execution = seed_execution(&context.db, function).await;
+            let execution = context.db.seed_execution(function).await?;
             let transaction_key = TransactionKey::try_from("ANY")?;
-            let transaction = seed_transaction(&context.db, &execution, &transaction_key).await;
+            let transaction = context
+                .db
+                .seed_transaction(&execution, &transaction_key)
+                .await?;
 
             at_times.push(AtTime::now());
-            let function_run = seed_function_run(
-                &context.db,
-                collection,
-                function,
-                &execution,
-                &transaction,
-                &FunctionRunStatus::Committed,
-            )
-            .await;
+            let function_run = context
+                .db
+                .seed_function_run(
+                    collection,
+                    function,
+                    &execution,
+                    &transaction,
+                    &FunctionRunStatus::Committed,
+                )
+                .await?;
 
             for table in tables {
-                let table_version = DaoQueries::default()
-                    .select_by::<TableDB>(&(collection.id, table))?
-                    .build_query_as()
-                    .fetch_one(&context.db)
-                    .await
-                    .unwrap();
+                let table_version = context
+                    .db
+                    .fetch_one::<TableDB>(and!(collection.id, table))
+                    .await?;
 
                 if i % 2 == 0 {
-                    let table_data_version = seed_table_data_version_with_data(
-                        &context.db,
-                        collection,
-                        &execution,
-                        &transaction,
-                        &function_run,
-                        &table_version,
-                    )
-                    .await;
+                    let table_data_version = context
+                        .db
+                        .seed_table_data_version_with_data(
+                            collection,
+                            &execution,
+                            &transaction,
+                            &function_run,
+                            &table_version,
+                        )
+                        .await?;
 
                     let (path, _) = StorageLocation::try_from(&storage_location)
                         .unwrap()
@@ -311,15 +305,16 @@ pub(crate) mod tests {
                     .collect()
                     .unwrap();
                 } else {
-                    seed_table_data_version(
-                        &context.db,
-                        collection,
-                        &execution,
-                        &transaction,
-                        &function_run,
-                        &table_version,
-                    )
-                    .await;
+                    context
+                        .db
+                        .seed_table_data_version(
+                            collection,
+                            &execution,
+                            &transaction,
+                            &function_run,
+                            &table_version,
+                        )
+                        .await?;
                 };
             }
         }

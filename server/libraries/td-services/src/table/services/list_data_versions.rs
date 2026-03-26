@@ -4,23 +4,20 @@
 
 use crate::table::layers::list_data_versions::build_query_params;
 use ta_services::factory::service_factory;
+use td_authz::tower::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead, InterCollRead};
 use td_authz::{Authz, AuthzContext};
+use td_objects::And;
+use td_objects::NoFilter;
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
 use td_objects::dxo::table::TableDBWithNames;
 use td_objects::dxo::table_data_version::{TableDataVersion, TableDataVersionDBWithNames};
 use td_objects::rest_urls::params::TableDataVersionAtIdName;
-use td_objects::sql::{DaoQueries, NoListFilter};
-use td_objects::tower_service::authz::{
-    AuthzOn, CollAdmin, CollDev, CollExec, CollRead, InterCollRead,
-};
-use td_objects::tower_service::from::{
-    ExtractNameService, ExtractService, TryIntoService, With, combine,
-};
-use td_objects::tower_service::sql::{By, SqlListService, SqlSelectService};
+use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
     AtTime, CollectionId, CollectionIdName, TableId, TableIdName, TriggeredOn, UncommittedStatus,
 };
+use td_queries::By;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -30,7 +27,6 @@ use td_tower::layers;
     request = ListRequest<TableDataVersionAtIdName>,
     response = ListResponse<TableDataVersion>,
     connection = ConnectionProvider,
-    context = DaoQueries,
     context = AuthzContext,
 )]
 fn service() {
@@ -41,7 +37,7 @@ fn service() {
         ),
         // find collection ID
         from_fn(With::<TableDataVersionAtIdName>::extract::<CollectionIdName>),
-        from_fn(By::<CollectionIdName>::select::<CollectionDB>),
+        from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
         // check requester has collection permissions
         from_fn(AuthzOn::<CollectionId>::set),
@@ -51,9 +47,8 @@ fn service() {
         from_fn(With::<AtTime>::try_convert_to::<TriggeredOn, _>),
         // find table ID
         from_fn(With::<TableDataVersionAtIdName>::extract::<TableIdName>),
-        from_fn(combine::<CollectionIdName, TableIdName>),
         from_fn(
-            By::<(CollectionIdName, TableIdName)>::select_version::<
+            By::<And![CollectionIdName, TableIdName]>::fetch_one_current::<
                 { TableDBWithNames::Available },
                 TableDBWithNames,
             >
@@ -64,8 +59,8 @@ fn service() {
         from_fn(With::<TableDataVersionAtIdName>::extract::<UncommittedStatus>),
         from_fn(build_query_params),
         from_fn(
-            By::<TableId>::list_at::<
-                NoListFilter,
+            By::<TableId>::list_history_at::<
+                NoFilter,
                 { TableDataVersionDBWithNames::All },
                 TableDataVersion,
             >
@@ -76,29 +71,26 @@ fn service() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
     use ta_services::service::TdService;
-    use td_database::sql::DbPool;
+    use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::dxo::crudl::ListParams;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::table::TableDB;
-    use td_objects::sql::SelectBy;
-    use td_objects::test_utils::seed_collection::seed_collection;
-    use td_objects::test_utils::seed_execution::seed_execution;
-    use td_objects::test_utils::seed_function::seed_function;
-    use td_objects::test_utils::seed_function_run::seed_function_run;
-    use td_objects::test_utils::seed_table_data_version::seed_table_data_version;
-    use td_objects::test_utils::seed_transaction::seed_transaction;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRunStatus, RoleId, TableName,
         TableNameDto, TransactionKey, UserId,
     };
+    use td_objects::{Buildable, and};
+    use td_queries::BasicQueries;
+    use td_queries::test_utils::SeedQueries;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_list_data_versions(db: DbPool) {
+    async fn test_tower_metadata_list_data_versions(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
         TableListDataVersionsService::with_defaults(db)
@@ -115,7 +107,7 @@ mod tests {
                 ),
                 // find collection ID
                 type_of_val(&With::<TableDataVersionAtIdName>::extract::<CollectionIdName>),
-                type_of_val(&By::<CollectionIdName>::select::<CollectionDB>),
+                type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
                 type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
                 // check requester has collection permissions
                 type_of_val(&AuthzOn::<CollectionId>::set),
@@ -125,9 +117,8 @@ mod tests {
                 type_of_val(&With::<AtTime>::try_convert_to::<TriggeredOn, _>),
                 // find table ID
                 type_of_val(&With::<TableDataVersionAtIdName>::extract::<TableIdName>),
-                type_of_val(&combine::<CollectionIdName, TableIdName>),
                 type_of_val(
-                    &By::<(CollectionIdName, TableIdName)>::select_version::<
+                    &By::<And![CollectionIdName, TableIdName]>::fetch_one_current::<
                         { TableDBWithNames::Available },
                         TableDBWithNames,
                     >,
@@ -138,8 +129,8 @@ mod tests {
                 type_of_val(&With::<TableDataVersionAtIdName>::extract::<UncommittedStatus>),
                 type_of_val(&build_query_params),
                 type_of_val(
-                    &By::<TableId>::list_at::<
-                        NoListFilter,
+                    &By::<TableId>::list_history_at::<
+                        NoFilter,
                         { TableDataVersionDBWithNames::All },
                         TableDataVersion,
                     >,
@@ -149,13 +140,10 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_list_table_data_versions(db: DbPool) -> Result<(), TdError> {
-        let collection = seed_collection(
-            &db,
-            &CollectionName::try_from("collection")?,
-            &UserId::admin(),
-        )
-        .await;
+    async fn test_list_table_data_versions(db: TdPool) -> Result<(), TdError> {
+        let collection = db
+            .seed_collection(&CollectionName::try_from("collection")?, &UserId::admin())
+            .await?;
 
         let dependencies = None;
         let triggers = None;
@@ -172,90 +160,90 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let function_version = seed_function(&db, &collection, &create).await;
+        let function_version = db.seed_function(&collection, &create).await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
 
         // First data_version
         let t0 = AtTime::now();
 
-        let execution = seed_execution(&db, &function_version).await;
-        let transaction = seed_transaction(&db, &execution, &transaction_key).await;
-        let function_run = seed_function_run(
-            &db,
-            &collection,
-            &function_version,
-            &execution,
-            &transaction,
-            &FunctionRunStatus::Committed,
-        )
-        .await;
+        let execution = db.seed_execution(&function_version).await?;
+        let transaction = db.seed_transaction(&execution, &transaction_key).await?;
+        let function_run = db
+            .seed_function_run(
+                &collection,
+                &function_version,
+                &execution,
+                &transaction,
+                &FunctionRunStatus::Committed,
+            )
+            .await?;
 
         let t1 = AtTime::now();
 
-        let table_version = DaoQueries::default()
-            .select_by::<TableDB>(&(&collection.id, &TableName::try_from(tables[0].clone())?))?
-            .build_query_as()
-            .fetch_one(&db)
-            .await
-            .unwrap();
+        let table_version: TableDB = db
+            .fetch_one(and!(
+                &collection.id,
+                &TableName::try_from(tables[0].clone())?
+            ))
+            .await?;
 
-        let v1 = seed_table_data_version(
-            &db,
-            &collection,
-            &execution,
-            &transaction,
-            &function_run,
-            &table_version,
-        )
-        .await;
+        let v1 = db
+            .seed_table_data_version(
+                &collection,
+                &execution,
+                &transaction,
+                &function_run,
+                &table_version,
+            )
+            .await?;
 
         // Second data_version
-        let execution = seed_execution(&db, &function_version).await;
-        let transaction = seed_transaction(&db, &execution, &transaction_key).await;
-        let function_run = seed_function_run(
-            &db,
-            &collection,
-            &function_version,
-            &execution,
-            &transaction,
-            &FunctionRunStatus::Committed,
-        )
-        .await;
+        let execution = db.seed_execution(&function_version).await?;
+        let transaction = db.seed_transaction(&execution, &transaction_key).await?;
+        let function_run = db
+            .seed_function_run(
+                &collection,
+                &function_version,
+                &execution,
+                &transaction,
+                &FunctionRunStatus::Committed,
+            )
+            .await?;
 
-        let v2 = seed_table_data_version(
-            &db,
-            &collection,
-            &execution,
-            &transaction,
-            &function_run,
-            &table_version,
-        )
-        .await;
+        let v2 = db
+            .seed_table_data_version(
+                &collection,
+                &execution,
+                &transaction,
+                &function_run,
+                &table_version,
+            )
+            .await?;
 
         let t2 = AtTime::now();
 
         // Third uncommitted data_version
-        let execution = seed_execution(&db, &function_version).await;
-        let transaction = seed_transaction(&db, &execution, &transaction_key).await;
-        let function_run = seed_function_run(
-            &db,
-            &collection,
-            &function_version,
-            &execution,
-            &transaction,
-            &FunctionRunStatus::Done,
-        )
-        .await;
+        let execution = db.seed_execution(&function_version).await?;
+        let transaction = db.seed_transaction(&execution, &transaction_key).await?;
+        let function_run = db
+            .seed_function_run(
+                &collection,
+                &function_version,
+                &execution,
+                &transaction,
+                &FunctionRunStatus::Done,
+            )
+            .await?;
 
-        let v3 = seed_table_data_version(
-            &db,
-            &collection,
-            &execution,
-            &transaction,
-            &function_run,
-            &table_version,
-        )
-        .await;
+        let v3 = db
+            .seed_table_data_version(
+                &collection,
+                &execution,
+                &transaction,
+                &function_run,
+                &table_version,
+            )
+            .await?;
 
         let t3 = AtTime::now();
 
@@ -264,16 +252,14 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
                 TableDataVersionAtIdName::builder()
-                    .try_collection(format!("~{}", collection.id))?
-                    .try_table(format!("{}", table_version.name))?
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .table(TableIdName::from_str(&format!("{}", table_version.name))?)
                     .at(t0)
                     .build()?,
                 ListParams::default(),
             );
 
-        let service = TableListDataVersionsService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = TableListDataVersionsService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         let response = response?;
         let data = response.data;
@@ -284,16 +270,14 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
                 TableDataVersionAtIdName::builder()
-                    .try_collection(format!("~{}", collection.id))?
-                    .try_table(format!("{}", table_version.name))?
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .table(TableIdName::from_str(&format!("{}", table_version.name))?)
                     .at(t1)
                     .build()?,
                 ListParams::default(),
             );
 
-        let service = TableListDataVersionsService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = TableListDataVersionsService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         let response = response?;
         let data = response.data;
@@ -305,16 +289,14 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
                 TableDataVersionAtIdName::builder()
-                    .try_collection(format!("~{}", collection.id))?
-                    .try_table(format!("{}", table_version.name))?
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .table(TableIdName::from_str(&format!("{}", table_version.name))?)
                     .at(t2)
                     .build()?,
                 ListParams::default(),
             );
 
-        let service = TableListDataVersionsService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = TableListDataVersionsService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         let response = response?;
         let data = response.data;
@@ -327,17 +309,15 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
                 TableDataVersionAtIdName::builder()
-                    .try_collection(format!("~{}", collection.id))?
-                    .try_table(format!("{}", table_version.name))?
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .table(TableIdName::from_str(&format!("{}", table_version.name))?)
                     .at(t3)
                     .uncommitted(false)
                     .build()?,
                 ListParams::default(),
             );
 
-        let service = TableListDataVersionsService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = TableListDataVersionsService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         let response = response?;
         let data = response.data;
@@ -350,17 +330,15 @@ mod tests {
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
                 TableDataVersionAtIdName::builder()
-                    .try_collection(format!("~{}", collection.id))?
-                    .try_table(format!("{}", table_version.name))?
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .table(TableIdName::from_str(&format!("{}", table_version.name))?)
                     .at(t3)
                     .uncommitted(true)
                     .build()?,
                 ListParams::default(),
             );
 
-        let service = TableListDataVersionsService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = TableListDataVersionsService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         let response = response?;
         let data = response.data;

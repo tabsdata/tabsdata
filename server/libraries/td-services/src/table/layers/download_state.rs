@@ -7,13 +7,13 @@ use td_objects::dxo::function::FunctionDBWithNames;
 use td_objects::dxo::table::TableDBWithNames;
 use td_objects::rest_urls::params::TableAtIdName;
 use td_objects::system::TD_FN_STATE_PREFIX;
-use td_objects::types::basic::{AtTime, CollectionIdName, IdOrName, TableIdName};
-use td_tower::extractors::Input;
+use td_objects::types::basic::{AtTime, CollectionIdName, TableIdName};
+use td_tower::extractors::Ref;
 
 pub async fn get_table_at_id_name(
-    Input(at_time): Input<AtTime>,
-    Input(function): Input<FunctionDBWithNames>,
-    Input(system_tables): Input<Vec<TableDBWithNames>>,
+    at_time: Ref<AtTime>,
+    function: Ref<FunctionDBWithNames>,
+    system_tables: Ref<Vec<TableDBWithNames>>,
 ) -> Result<TableAtIdName, TdError> {
     let state_tables = system_tables
         .iter()
@@ -27,8 +27,8 @@ pub async fn get_table_at_id_name(
         ))?,
     };
     let table_at_id = TableAtIdName {
-        collection: CollectionIdName::from_id(function.collection_id),
-        table: TableIdName::from_id(state_table.table_id),
+        collection: CollectionIdName::Id(function.collection_id),
+        table: TableIdName::Id(state_table.table_id),
         at: *at_time,
     };
     Ok(table_at_id)

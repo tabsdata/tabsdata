@@ -5,13 +5,13 @@
 use futures_util::TryStreamExt;
 use sync_wrapper::SyncStream;
 use td_error::TdError;
-use td_objects::stream::BoxedSyncStream;
+use td_objects::types::stream::BoxedSyncStream;
 use td_storage::{SPath, Storage};
-use td_tower::extractors::{Input, SrvCtx};
+use td_tower::extractors::{Ref};
 
 pub async fn get_table_download(
-    SrvCtx(storage): SrvCtx<Storage>,
-    Input(table_path): Input<Option<SPath>>,
+    storage: Ref<Storage>,
+    table_path: Ref<Option<SPath>>,
 ) -> Result<BoxedSyncStream, TdError> {
     match &*table_path {
         Some(path) => {

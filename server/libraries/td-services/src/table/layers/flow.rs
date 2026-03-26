@@ -9,9 +9,9 @@ use td_objects::dxo::execution::{FunctionNodeResponseBuilder, TableNodeResponseB
 use td_objects::dxo::table::{TableDBWithNames, TableFlowGraphResponse};
 use td_objects::graph::{MapGraph, TdGraph};
 use td_objects::types::composed::TableVersions;
-use td_objects::types::graph::GraphNode;
+use td_objects::dxo::graph::GraphNode;
 use td_objects::types::recursion::RecursionOptions;
-use td_tower::extractors::Input;
+use td_tower::extractors::Ref;
 
 pub async fn with_recursion_options() -> Result<RecursionOptions, TdError> {
     Ok(RecursionOptions::new(None, None))
@@ -19,8 +19,8 @@ pub async fn with_recursion_options() -> Result<RecursionOptions, TdError> {
 
 // similar to execution response
 pub async fn build_response(
-    Input(table): Input<TableDBWithNames>,
-    Input(graph): Input<TdGraph>,
+    table: Ref<TableDBWithNames>,
+    graph: Ref<TdGraph>,
 ) -> Result<TableFlowGraphResponse, TdError> {
     let graph = graph
         .map(

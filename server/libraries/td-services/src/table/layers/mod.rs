@@ -3,11 +3,11 @@
 //
 
 use crate::table::layers::storage::resolve_table_location;
-use td_objects::dxo::Extractor;
 use td_objects::dxo::table::TableDBWithNames;
-use td_objects::tower_service::from::{ExtractService, TryIntoService, With, combine};
-use td_objects::tower_service::sql::{By, SqlSelectService};
+use td_objects::tower_service::with::With;
 use td_objects::types::basic::{AtTime, CollectionIdName, TableId, TableIdName, TriggeredOn};
+use td_objects::{And, Extractor};
+use td_queries::By;
 use td_tower::from_fn::from_fn;
 use td_tower::{layer, layers};
 
@@ -34,9 +34,8 @@ where
         from_fn(With::<E>::extract::<TableIdName>),
         from_fn(With::<E>::extract::<AtTime>),
         // Find Table ID, looking at the version at the time
-        from_fn(combine::<CollectionIdName, TableIdName>),
         from_fn(
-            By::<(CollectionIdName, TableIdName)>::select_version::<
+            By::<And![CollectionIdName, TableIdName]>::fetch_one_version::<
                 { TableDBWithNames::Available },
                 TableDBWithNames,
             >
