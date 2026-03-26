@@ -22,8 +22,9 @@ mod routes {
         Execution, ExecutionDetails, ExecutionRequest, ExecutionResponse,
     };
     use td_objects::rest_urls::{
-        AllowDisabledParam, EXECUTION_CANCEL, EXECUTION_DETAILS, EXECUTION_LIST, EXECUTION_READ,
-        EXECUTION_RECOVER, ExecutionParam, FUNCTION_EXECUTE, FunctionParam,
+        AllowDisabledParam, EXECUTION_CANCEL, EXECUTION_DETAILS, EXECUTION_LIST,
+        EXECUTION_LIST_BY_TABLE_DATA_VERSION, EXECUTION_READ, EXECUTION_RECOVER, ExecutionParam,
+        FUNCTION_EXECUTE, FunctionParam, TableDataVersionParam,
     };
     use td_services::execution::services::ExecutionServices;
     use tower::ServiceExt;
@@ -76,6 +77,23 @@ mod routes {
     ) -> Result<ListStatus<Execution>, ErrorStatus> {
         let request = context.list((), query_params);
         let response = executions.list.service().oneshot(request).await?;
+        Ok(ListStatus::OK(response))
+    }
+
+    #[apiserver_path(method = get, path = EXECUTION_LIST_BY_TABLE_DATA_VERSION, tag = EXECUTION_TAG)]
+    #[doc = "List executions by table data version"]
+    pub async fn list_by_table_data_version(
+        State(executions): State<Arc<ExecutionServices>>,
+        Extension(context): Extension<RequestContext>,
+        Path(param): Path<TableDataVersionParam>,
+        Query(query_params): Query<ListParams>,
+    ) -> Result<ListStatus<Execution>, ErrorStatus> {
+        let request = context.list(param, query_params);
+        let response = executions
+            .list_by_table_data_version
+            .service()
+            .oneshot(request)
+            .await?;
         Ok(ListStatus::OK(response))
     }
 

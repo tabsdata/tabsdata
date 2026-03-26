@@ -19,6 +19,7 @@ mod definitions {
         #[builder(default)]
         pub id: RequirementId,
         pub collection_id: CollectionId,
+        #[dxo(extractor)]
         pub execution_id: ExecutionId,
         pub transaction_id: TransactionId,
         pub function_run_id: FunctionRunId,
