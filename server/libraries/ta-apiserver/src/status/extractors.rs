@@ -2,14 +2,16 @@
 //   Copyright 2024 Tabs Data Inc.
 //
 
-//! Wrapper for axum::extract::Json to control error handling.
+//! Wrapper for axum::extract::JSON to control error handling.
 
 use crate::status::error_status::ErrorStatus;
-use axum::extract::FromRequest;
+use axum::body::Body;
 use axum::extract::rejection::JsonRejection;
+use axum::extract::{FromRequest, Request};
 use axum::response::{IntoResponse, Response};
+use std::fmt::Debug;
 use td_error::{TdError, td_error};
-use tracing::error;
+use tracing::{debug, error};
 
 #[td_error]
 pub enum JsonError {
@@ -17,23 +19,44 @@ pub enum JsonError {
     JsonError(#[from] JsonRejection) = 0,
 }
 
-#[derive(FromRequest)]
-#[from_request(via(axum::Json), rejection(JsonError))]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Json<T>(pub T);
+
+impl<S, T> FromRequest<S> for Json<T>
+where
+    T: Debug,
+    axum::Json<T>: FromRequest<S>,
+    JsonError: From<<axum::Json<T> as FromRequest<S>>::Rejection>,
+    S: Send + Sync,
+{
+    type Rejection = JsonError;
+    async fn from_request(req: Request<Body>, state: &S) -> Result<Self, Self::Rejection> {
+        <axum::Json<T> as FromRequest<_, _>>::from_request(req, state)
+            .await
+            .map(|axum::Json(value)| {
+                debug!("JSON request: {:#?}", value);
+                Json(value)
+            })
+            .map_err(From::from)
+    }
+}
 
 impl<T> IntoResponse for Json<T>
 where
+    T: Debug,
     axum::Json<T>: IntoResponse,
 {
     fn into_response(self) -> Response {
-        axum::Json(self.0).into_response()
+        let Json(value) = self;
+        debug!("JSON response: {:#?}", value);
+        axum::Json(value).into_response()
     }
 }
 
 impl IntoResponse for JsonError {
     fn into_response(self) -> Response {
         let error: TdError = self.into();
-        error!("{}", error);
+        error!("Response error: {}", error);
         ErrorStatus::from(error).into_response()
     }
 }
@@ -49,7 +72,7 @@ mod tests {
     use tower::ServiceExt;
 
     #[allow(dead_code)]
-    #[derive(Deserialize)]
+    #[derive(Debug, Deserialize)]
     struct TestPayload {
         field: String,
     }
