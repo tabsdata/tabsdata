@@ -6,18 +6,16 @@ use crate::do_authz::SKIP_AUTHZ;
 use crate::graph::layers::{FunctionOrTable, GraphConfig, generate_td_graph};
 use crate::table::layers::flow::{build_response, with_recursion_options};
 use ta_services::factory::service_factory;
+use td_objects::And;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::dxo::dependency::DependencyDBWithNames;
 use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::table::{TableDB, TableDBWithNames, TableFlowGraphResponse};
 use td_objects::dxo::trigger::TriggerDBWithNames;
 use td_objects::rest_urls::TableParam;
-use td_objects::sql::DaoQueries;
-use td_objects::tower_service::from::{
-    ExtractNameService, ExtractService, IntoService, With, combine,
-};
-use td_objects::tower_service::sql::{By, SqlSelectService};
+use td_objects::tower_service::with::With;
 use td_objects::types::basic::{AtTime, CollectionIdName, TableId, TableIdName};
+use td_queries::By;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -43,7 +41,6 @@ impl
     request = ReadRequest<TableParam>,
     response = TableFlowGraphResponse,
     connection = ConnectionProvider,
-    context = DaoQueries,
 )]
 fn service() {
     layers!(
@@ -54,9 +51,8 @@ fn service() {
         from_fn(With::<TableParam>::extract::<CollectionIdName>),
         from_fn(With::<TableParam>::extract::<TableIdName>),
         // Find main table
-        from_fn(combine::<CollectionIdName, TableIdName>),
         from_fn(
-            By::<(CollectionIdName, TableIdName)>::select_version::<
+            By::<And![CollectionIdName, TableIdName]>::fetch_one_version::<
                 { TableDBWithNames::Available },
                 TableDBWithNames,
             >
@@ -76,27 +72,28 @@ mod tests {
     use super::*;
     use itertools::Itertools;
     use std::collections::HashMap;
+    use std::str::FromStr;
     use std::sync::LazyLock;
     use ta_services::service::TdService;
-    use td_database::sql::DbPool;
+    use td_database::pool::TdPool;
     use td_error::TdError;
-    use td_objects::dxo::crudl::{RequestContext, handle_sql_err};
+    use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionRegister;
-    use td_objects::sql::cte::VersionedQueries;
-    use td_objects::test_utils::seed_collection::seed_collection;
-    use td_objects::test_utils::seed_function::seed_function;
+    use td_objects::dxo::graph::GraphEdge;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionName, FunctionRuntimeValues,
         RoleId, TableName, TableNameDto, UserId,
     };
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
-    use td_objects::types::graph::GraphEdge;
+    use td_objects::{Buildable, and};
+    use td_queries::CurrentQueries;
+    use td_queries::test_utils::SeedQueries;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_read_execution(db: DbPool) {
+    async fn test_tower_metadata_table_flow_graph(db: TdPool) {
         use crate::graph::layers::build::GraphBuilder;
         use td_tower::metadata::type_of_val;
 
@@ -111,9 +108,8 @@ mod tests {
                 type_of_val(&With::<TableParam>::extract::<CollectionIdName>),
                 type_of_val(&With::<TableParam>::extract::<TableIdName>),
                 // Find main table
-                type_of_val(&combine::<CollectionIdName, TableIdName>),
                 type_of_val(
-                    &By::<(CollectionIdName, TableIdName)>::select_version::<
+                    &By::<And![CollectionIdName, TableIdName]>::fetch_one_version::<
                         { TableDBWithNames::Available },
                         TableDBWithNames,
                     >,
@@ -156,9 +152,11 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_table_graph_no_deps(db: DbPool) -> Result<(), TdError> {
+    async fn test_table_graph_no_deps(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("collection_0")?;
-        let collection_0 = seed_collection(&db, &collection_name, &UserId::admin()).await;
+        let collection_0 = db
+            .seed_collection(&collection_name, &UserId::admin())
+            .await?;
 
         let create = FunctionRegister::builder()
             .name(FUNCTION_NAMES[0].clone())
@@ -176,32 +174,27 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let function_0 = seed_function(&db, &collection_0, &create).await;
+        let function_0 = db.seed_function(&collection_0, &create).await?;
 
         // Actual test
-        let service = TableFlowGraphService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = TableFlowGraphService::with_defaults(db.clone()).service();
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).read(
                 TableParam::builder()
-                    .try_collection(collection_name.to_string())?
-                    .try_table("table_0")?
+                    .collection(CollectionIdName::from_str(&collection_name.to_string())?)
+                    .table(TableIdName::from_str("table_0")?)
                     .build()?,
             );
 
         let response = service.raw_oneshot(request).await?;
 
         // Assertions
-        let central_table: TableDBWithNames = DaoQueries::default()
-            .select_versions_at::<{ TableDBWithNames::All }, TableDBWithNames>(
-                None,
-                &(function_0.id.clone(), TableName::try_from("table_0")?),
-            )?
-            .build_query_as()
-            .fetch_one(&db)
-            .await
-            .map_err(handle_sql_err)?;
+        let central_table = db
+            .fetch_one_current::<{ TableDBWithNames::All }, TableDBWithNames>(and!(
+                &function_0.id,
+                TableName::try_from("table_0")?
+            ))
+            .await?;
         assert_eq!(response.table, central_table.id);
 
         let expected_functions = [&function_0]
@@ -249,9 +242,11 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_table_graph_downstream(db: DbPool) -> Result<(), TdError> {
+    async fn test_table_graph_downstream(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("collection_0")?;
-        let collection_0 = seed_collection(&db, &collection_name, &UserId::admin()).await;
+        let collection_0 = db
+            .seed_collection(&collection_name, &UserId::admin())
+            .await?;
 
         let create = FunctionRegister::builder()
             .name(FUNCTION_NAMES[0].clone())
@@ -266,7 +261,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let function_0 = seed_function(&db, &collection_0, &create).await;
+        let function_0 = db.seed_function(&collection_0, &create).await?;
 
         let create = FunctionRegister::builder()
             .name(FUNCTION_NAMES[1].clone())
@@ -284,7 +279,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let function_1 = seed_function(&db, &collection_0, &create).await;
+        let function_1 = db.seed_function(&collection_0, &create).await?;
 
         let create = FunctionRegister::builder()
             .name(FUNCTION_NAMES[2].clone())
@@ -299,32 +294,27 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let function_2 = seed_function(&db, &collection_0, &create).await;
+        let function_2 = db.seed_function(&collection_0, &create).await?;
 
         // Actual test
-        let service = TableFlowGraphService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = TableFlowGraphService::with_defaults(db.clone()).service();
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).read(
                 TableParam::builder()
-                    .try_collection(collection_name.to_string())?
-                    .try_table("table_0")?
+                    .collection(CollectionIdName::from_str(&collection_name.to_string())?)
+                    .table(TableIdName::from_str("table_0")?)
                     .build()?,
             );
 
         let response = service.raw_oneshot(request).await?;
 
         // Assertions
-        let central_table: TableDBWithNames = DaoQueries::default()
-            .select_versions_at::<{ TableDBWithNames::All }, TableDBWithNames>(
-                None,
-                &(function_0.id.clone(), TableName::try_from("table_0")?),
-            )?
-            .build_query_as()
-            .fetch_one(&db)
-            .await
-            .map_err(handle_sql_err)?;
+        let central_table: TableDBWithNames = db
+            .fetch_one_current::<{ TableDBWithNames::All }, TableDBWithNames>(and!(
+                &function_0.id,
+                TableName::try_from("table_0")?
+            ))
+            .await?;
         assert_eq!(response.table, central_table.id);
 
         let expected_functions = [&function_0, &function_1, &function_2]
@@ -395,9 +385,11 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_table_graph_upstream(db: DbPool) -> Result<(), TdError> {
+    async fn test_table_graph_upstream(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("collection_0")?;
-        let collection_0 = seed_collection(&db, &collection_name, &UserId::admin()).await;
+        let collection_0 = db
+            .seed_collection(&collection_name, &UserId::admin())
+            .await?;
 
         let create = FunctionRegister::builder()
             .name(FUNCTION_NAMES[0].clone())
@@ -412,7 +404,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let function_0 = seed_function(&db, &collection_0, &create).await;
+        let function_0 = db.seed_function(&collection_0, &create).await?;
 
         let create = FunctionRegister::builder()
             .name(FUNCTION_NAMES[1].clone())
@@ -430,7 +422,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _function_1 = seed_function(&db, &collection_0, &create).await;
+        let _function_1 = db.seed_function(&collection_0, &create).await?;
 
         let create = FunctionRegister::builder()
             .name(FUNCTION_NAMES[2].clone())
@@ -445,32 +437,27 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let function_2 = seed_function(&db, &collection_0, &create).await;
+        let function_2 = db.seed_function(&collection_0, &create).await?;
 
         // Actual test
-        let service = TableFlowGraphService::with_defaults(db.clone())
-            .service()
-            .await;
+        let service = TableFlowGraphService::with_defaults(db.clone()).service();
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).read(
                 TableParam::builder()
-                    .try_collection(collection_name.to_string())?
-                    .try_table("table_3")?
+                    .collection(CollectionIdName::from_str(&collection_name.to_string())?)
+                    .table(TableIdName::from_str("table_3")?)
                     .build()?,
             );
 
         let response = service.raw_oneshot(request).await?;
 
         // Assertions
-        let central_table: TableDBWithNames = DaoQueries::default()
-            .select_versions_at::<{ TableDBWithNames::All }, TableDBWithNames>(
-                None,
-                &(function_2.id.clone(), TableName::try_from("table_3")?),
-            )?
-            .build_query_as()
-            .fetch_one(&db)
-            .await
-            .map_err(handle_sql_err)?;
+        let central_table = db
+            .fetch_one_current::<{ TableDBWithNames::All }, TableDBWithNames>(and!(
+                &function_2.id,
+                TableName::try_from("table_3")?
+            ))
+            .await?;
         assert_eq!(response.table, central_table.id);
 
         let expected_functions = [&function_0, &function_2]

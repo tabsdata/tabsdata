@@ -5,22 +5,19 @@
 use crate::table::layers::find_data_version_location_at;
 use crate::table::layers::sample::get_table_sample;
 use ta_services::factory::service_factory;
+use td_authz::tower::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead, InterCollRead};
 use td_authz::{Authz, AuthzContext};
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::dxo::table::TableDBWithNames;
 use td_objects::rest_urls::FileFormat;
 use td_objects::rest_urls::params::TableSampleAtName;
-use td_objects::sql::DaoQueries;
-use td_objects::stream::BoxedSyncStream;
-use td_objects::tower_service::authz::{
-    AuthzOn, CollAdmin, CollDev, CollExec, CollRead, InterCollRead,
-};
-use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
-use td_objects::tower_service::sql::{By, SqlSelectService};
+use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
     CollectionId, CollectionIdName, SampleLen, SampleOffset, Sql, TableName,
 };
+use td_objects::types::stream::BoxedSyncStream;
+use td_queries::By;
 use td_storage::Storage;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
@@ -31,7 +28,6 @@ use td_tower::layers;
     request = ReadRequest<TableSampleAtName>,
     response = BoxedSyncStream,
     connection = ConnectionProvider,
-    context = DaoQueries,
     context = AuthzContext,
     context = Storage,
 )]
@@ -42,7 +38,7 @@ fn service() {
         from_fn(With::<ReadRequest<TableSampleAtName>>::extract_name::<TableSampleAtName>),
         // find collection ID
         from_fn(With::<TableSampleAtName>::extract::<CollectionIdName>),
-        from_fn(By::<CollectionIdName>::select::<CollectionDB>),
+        from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
         // check requester has collection permissions
         from_fn(AuthzOn::<CollectionId>::set),
@@ -72,11 +68,11 @@ mod tests {
     };
     use std::io::Cursor;
     use std::path::Path;
+    use std::str::FromStr;
     use std::sync::Arc;
     use ta_services::service::TdService;
     use td_common::absolute_path::AbsolutePath;
-
-    use td_database::sql::DbPool;
+    use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionRegister;
@@ -84,19 +80,13 @@ mod tests {
     use td_objects::rest_urls::{
         AtTimeParam, FileFormatParam, SampleOffsetLenParam, SqlParam, TableParam,
     };
-    use td_objects::sql::SelectBy;
-    use td_objects::test_utils::seed_collection::seed_collection;
-    use td_objects::test_utils::seed_execution::seed_execution;
-    use td_objects::test_utils::seed_function::seed_function;
-    use td_objects::test_utils::seed_function_run::seed_function_run;
-    use td_objects::test_utils::seed_table_data_version::{
-        seed_table_data_version, seed_table_data_version_with_data,
-    };
-    use td_objects::test_utils::seed_transaction::seed_transaction;
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BundleId, CollectionName, Decorator, FunctionRunStatus, RoleId,
-        StorageVersion, TableNameDto, TransactionKey, UserId,
+        StorageVersion, TableIdName, TableNameDto, TransactionKey, UserId,
     };
+    use td_objects::{Buildable, and};
+    use td_queries::BasicQueries;
+    use td_queries::test_utils::SeedQueries;
     use td_storage::location::StorageLocation;
     use td_storage::{MountDef, Storage};
     use td_tower::ctx_service::RawOneshot;
@@ -105,10 +95,10 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_sample_service(db: DbPool) {
+    async fn test_tower_metadata_table_sample(db: TdPool) {
         use crate::table::layers::storage::resolve_table_location;
+        use td_objects::And;
         use td_objects::dxo::table::TableDBWithNames;
-        use td_objects::tower_service::from::{TryIntoService, combine};
         use td_objects::types::basic::{Sql, TableId, TableIdName, TriggeredOn};
 
         use td_tower::metadata::type_of_val;
@@ -128,54 +118,50 @@ mod tests {
             .build()
             .unwrap();
         let storage = Storage::from(vec![mound_def]).unwrap();
-        TableSampleService::new(
-            db,
-            Arc::new(DaoQueries::default()),
-            Arc::new(AuthzContext::default()),
-            Arc::new(storage),
-        )
-        .metadata()
-        .await
-        .assert_service::<ReadRequest<TableSampleAtName>, BoxedSyncStream>(&[
-            // Extract parameters
-            type_of_val(&With::<ReadRequest<TableSampleAtName>>::extract::<RequestContext>),
-            type_of_val(&With::<ReadRequest<TableSampleAtName>>::extract_name::<TableSampleAtName>),
-            // find collection ID
-            type_of_val(&With::<TableSampleAtName>::extract::<CollectionIdName>),
-            type_of_val(&By::<CollectionIdName>::select::<CollectionDB>),
-            type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
-            // check requester has collection permissions
-            type_of_val(&AuthzOn::<CollectionId>::set),
-            type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check),
-            // Find table data version location.
-            // Extract parameters
-            type_of_val(&With::<TableSampleAtName>::extract::<CollectionIdName>),
-            type_of_val(&With::<TableSampleAtName>::extract::<TableIdName>),
-            type_of_val(&With::<TableSampleAtName>::extract::<AtTime>),
-            // Only active or frozen tables
-            // Find Table ID, looking at the version at the time
-            type_of_val(&combine::<CollectionIdName, TableIdName>),
-            type_of_val(
-                &By::<(CollectionIdName, TableIdName)>::select_version::<
-                    { TableDBWithNames::Available },
-                    TableDBWithNames,
-                >,
-            ),
-            type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
-            // Only committed transactions, at the triggered on time
-            type_of_val(&With::<AtTime>::try_convert_to::<TriggeredOn, _>),
-            // Find the latest data version of the table ID, at that time
-            // Resolve the location of the data version. This takes into account versions without
-            // data changes (in which the previous version is resolved)
-            type_of_val(&resolve_table_location),
-            // Get sample.
-            type_of_val(&With::<TableSampleAtName>::extract::<SampleOffset>),
-            type_of_val(&With::<TableSampleAtName>::extract::<SampleLen>),
-            type_of_val(&With::<TableSampleAtName>::extract::<FileFormat>),
-            type_of_val(&With::<TableDBWithNames>::extract::<TableName>),
-            type_of_val(&With::<TableSampleAtName>::extract::<Option<Sql>>),
-            type_of_val(&get_table_sample),
-        ]);
+        TableSampleService::new(db, Arc::new(AuthzContext::default()), Arc::new(storage))
+            .metadata()
+            .await
+            .assert_service::<ReadRequest<TableSampleAtName>, BoxedSyncStream>(&[
+                // Extract parameters
+                type_of_val(&With::<ReadRequest<TableSampleAtName>>::extract::<RequestContext>),
+                type_of_val(
+                    &With::<ReadRequest<TableSampleAtName>>::extract_name::<TableSampleAtName>,
+                ),
+                // find collection ID
+                type_of_val(&With::<TableSampleAtName>::extract::<CollectionIdName>),
+                type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
+                type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
+                // check requester has collection permissions
+                type_of_val(&AuthzOn::<CollectionId>::set),
+                type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check),
+                // Find table data version location.
+                // Extract parameters
+                type_of_val(&With::<TableSampleAtName>::extract::<CollectionIdName>),
+                type_of_val(&With::<TableSampleAtName>::extract::<TableIdName>),
+                type_of_val(&With::<TableSampleAtName>::extract::<AtTime>),
+                // Only active or frozen tables
+                // Find Table ID, looking at the version at the time
+                type_of_val(
+                    &By::<And![CollectionIdName, TableIdName]>::fetch_one_version::<
+                        { TableDBWithNames::Available },
+                        TableDBWithNames,
+                    >,
+                ),
+                type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
+                // Only committed transactions, at the triggered on time
+                type_of_val(&With::<AtTime>::try_convert_to::<TriggeredOn, _>),
+                // Find the latest data version of the table ID, at that time
+                // Resolve the location of the data version. This takes into account versions without
+                // data changes (in which the previous version is resolved)
+                type_of_val(&resolve_table_location),
+                // Get sample.
+                type_of_val(&With::<TableSampleAtName>::extract::<SampleOffset>),
+                type_of_val(&With::<TableSampleAtName>::extract::<SampleLen>),
+                type_of_val(&With::<TableSampleAtName>::extract::<FileFormat>),
+                type_of_val(&With::<TableDBWithNames>::extract::<TableName>),
+                type_of_val(&With::<TableSampleAtName>::extract::<Option<Sql>>),
+                type_of_val(&get_table_sample),
+            ]);
     }
 
     //noinspection DuplicatedCode
@@ -189,12 +175,9 @@ mod tests {
         ])?;
         let storage = Arc::new(storage);
 
-        let collection = seed_collection(
-            &db,
-            &CollectionName::try_from("collection")?,
-            &UserId::admin(),
-        )
-        .await;
+        let collection = db
+            .seed_collection(&CollectionName::try_from("collection")?, &UserId::admin())
+            .await?;
 
         let created_tables = vec![TableNameDto::try_from("t0")?];
         let dependencies = None;
@@ -212,47 +195,42 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let function_version = seed_function(&db, &collection, &create).await;
+        let function_version = db.seed_function(&collection, &create).await?;
 
         let storage_location = StorageVersion::default();
 
         // 3 function runs, 2 with data and 1 without, per table
         let mut at_times = vec![AtTime::now()];
         for i in 0..3 {
-            let execution = seed_execution(&db, &function_version).await;
+            let execution = db.seed_execution(&function_version).await?;
             let transaction_key = TransactionKey::try_from("ANY")?;
-            let transaction = seed_transaction(&db, &execution, &transaction_key).await;
+            let transaction = db.seed_transaction(&execution, &transaction_key).await?;
 
             at_times.push(AtTime::now());
-            let function_run = seed_function_run(
-                &db,
-                &collection,
-                &function_version,
-                &execution,
-                &transaction,
-                &FunctionRunStatus::Committed,
-            )
-            .await;
+            let function_run = db
+                .seed_function_run(
+                    &collection,
+                    &function_version,
+                    &execution,
+                    &transaction,
+                    &FunctionRunStatus::Committed,
+                )
+                .await?;
 
             for table in &created_tables {
                 let table = TableName::try_from(table)?;
-                let table_version = DaoQueries::default()
-                    .select_by::<TableDB>(&(&collection.id, &table))?
-                    .build_query_as()
-                    .fetch_one(&db)
-                    .await
-                    .unwrap();
+                let table_version: TableDB = db.fetch_one(and!(&collection.id, &table)).await?;
 
                 if i % 2 == 0 {
-                    let table_data_version = seed_table_data_version_with_data(
-                        &db,
-                        &collection,
-                        &execution,
-                        &transaction,
-                        &function_run,
-                        &table_version,
-                    )
-                    .await;
+                    let table_data_version = db
+                        .seed_table_data_version_with_data(
+                            &collection,
+                            &execution,
+                            &transaction,
+                            &function_run,
+                            &table_version,
+                        )
+                        .await?;
 
                     let (path, _) = StorageLocation::try_from(&storage_location)
                         .unwrap()
@@ -301,21 +279,20 @@ mod tests {
                     .collect()
                     .unwrap();
                 } else {
-                    seed_table_data_version(
-                        &db,
+                    db.seed_table_data_version(
                         &collection,
                         &execution,
                         &transaction,
                         &function_run,
                         &table_version,
                     )
-                    .await;
+                    .await?;
                 };
             }
         }
 
         async fn get_sample(
-            db: DbPool,
+            db: TdPool,
             storage: Arc<Storage>,
             collection: &str,
             table: &str,
@@ -323,21 +300,15 @@ mod tests {
             offset: i64,
             len: i64,
         ) -> Result<Bytes, TdError> {
-            let service = TableSampleService::new(
-                db,
-                Arc::new(DaoQueries::default()),
-                Arc::new(AuthzContext::default()),
-                storage,
-            )
-            .service()
-            .await;
+            let service =
+                TableSampleService::new(db, Arc::new(AuthzContext::default()), storage).service();
 
             let request =
                 RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
                     .read(TableSampleAtName::new(
                         TableParam::builder()
-                            .try_collection(collection)?
-                            .try_table(table)?
+                            .collection(CollectionIdName::from_str(collection)?)
+                            .table(TableIdName::from_str(table)?)
                             .build()?,
                         AtTimeParam::builder().at(at_time).build()?,
                         SampleOffsetLenParam::builder()

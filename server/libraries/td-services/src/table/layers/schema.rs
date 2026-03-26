@@ -5,11 +5,12 @@
 use crate::table::layers::storage::StorageServiceError;
 use polars::prelude::cloud::CloudOptions;
 use polars::prelude::{Field, LazyFrame, PlPath, PolarsError, ScanArgsParquet, SchemaExt};
+use td_objects::Buildable;
 use td_error::{TdError, td_error};
 use td_objects::rest_urls::params::{SchemaField, TableSchema};
 use td_storage::{SPath, Storage};
 use td_tableframe::common::drop_system_columns;
-use td_tower::extractors::{Input, SrvCtx};
+use td_tower::extractors::{Ref};
 
 #[td_error]
 enum SchemaError {
@@ -18,8 +19,8 @@ enum SchemaError {
 }
 
 pub async fn get_table_schema(
-    SrvCtx(storage): SrvCtx<Storage>,
-    Input(table_path): Input<Option<SPath>>,
+    storage: Ref<Storage>,
+    table_path: Ref<Option<SPath>>,
 ) -> Result<TableSchema, TdError> {
     fn get_schema(mut lazy_frame: LazyFrame) -> Result<TableSchema, TdError> {
         let schema = lazy_frame

@@ -15,11 +15,11 @@ use std::io::Cursor;
 use std::ops::Deref;
 use td_error::{TdError, td_error};
 use td_objects::rest_urls::FileFormat;
-use td_objects::stream::BoxedSyncStream;
 use td_objects::types::basic::{SampleLen, SampleOffset, Sql, TableName};
+use td_objects::types::stream::BoxedSyncStream;
 use td_storage::{SPath, Storage};
 use td_tableframe::common::drop_system_columns;
-use td_tower::extractors::{Input, SrvCtx};
+use td_tower::extractors::Ref;
 
 #[td_error]
 enum SampleError {
@@ -36,13 +36,13 @@ enum SampleError {
 }
 
 pub async fn get_table_sample(
-    SrvCtx(storage): SrvCtx<Storage>,
-    Input(offset): Input<SampleOffset>,
-    Input(len): Input<SampleLen>,
-    Input(format): Input<FileFormat>,
-    Input(sql): Input<Option<Sql>>,
-    Input(table_name): Input<TableName>,
-    Input(table_path): Input<Option<SPath>>,
+    storage: Ref<Storage>,
+    offset: Ref<SampleOffset>,
+    len: Ref<SampleLen>,
+    format: Ref<FileFormat>,
+    sql: Ref<Option<Sql>>,
+    table_name: Ref<TableName>,
+    table_path: Ref<Option<SPath>>,
 ) -> Result<BoxedSyncStream, TdError> {
     fn write_sample(mut dataframe: DataFrame, format: &FileFormat) -> Result<Bytes, SampleError> {
         let mut buffer = Vec::new();
@@ -128,7 +128,7 @@ mod tests {
     use td_objects::rest_urls::FileFormat;
     use td_objects::types::basic::{SampleLen, SampleOffset, Sql, TableName};
     use td_storage::SPath;
-    use td_tower::extractors::{Input, SrvCtx};
+    use td_tower::extractors::Ref;
 
     // Parquet file with (id, name) columns, 10 rows, id = 0..9
     fn create_table_file(path: &Path) {
@@ -175,13 +175,13 @@ mod tests {
         create_table_file(Path::new(adjusted_path));
 
         let stream = get_table_sample(
-            SrvCtx::new(storage),
-            Input::new(SampleOffset::try_from(offset as i64).unwrap()),
-            Input::new(SampleLen::try_from(len as i64).unwrap()),
-            Input::new(format),
-            Input::new(sql),
-            Input::new(TableName::try_from("my_table").unwrap()),
-            Input::new(Some(table_path)),
+            Ref::new(storage),
+            Ref::new(SampleOffset::try_from(offset as i64).unwrap()),
+            Ref::new(SampleLen::try_from(len as i64).unwrap()),
+            Ref::new(format),
+            Ref::new(sql),
+            Ref::new(TableName::try_from("my_table").unwrap()),
+            Ref::new(Some(table_path)),
         )
         .await?;
 
@@ -396,13 +396,13 @@ mod tests {
         let storage = td_storage::Storage::from(vec![mount_def])?;
 
         let stream = get_table_sample(
-            SrvCtx::new(storage),
-            Input::new(SampleOffset::default()),
-            Input::new(SampleLen::default()),
-            Input::new(format),
-            Input::new(sql),
-            Input::new(TableName::try_from("my_table").unwrap()),
-            Input::new(None),
+            Ref::new(storage),
+            Ref::new(SampleOffset::default()),
+            Ref::new(SampleLen::default()),
+            Ref::new(format),
+            Ref::new(sql),
+            Ref::new(TableName::try_from("my_table").unwrap()),
+            Ref::new(None),
         )
         .await?;
 

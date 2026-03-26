@@ -5,17 +5,14 @@
 use crate::table::layers::find_data_version_location_at;
 use crate::table::layers::schema::get_table_schema;
 use ta_services::factory::service_factory;
+use td_authz::tower::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead, InterCollRead};
 use td_authz::{Authz, AuthzContext};
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::rest_urls::params::{TableAtIdName, TableSchema};
-use td_objects::sql::DaoQueries;
-use td_objects::tower_service::authz::{
-    AuthzOn, CollAdmin, CollDev, CollExec, CollRead, InterCollRead,
-};
-use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
-use td_objects::tower_service::sql::{By, SqlSelectService};
+use td_objects::tower_service::with::With;
 use td_objects::types::basic::{CollectionId, CollectionIdName};
+use td_queries::By;
 use td_storage::Storage;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
@@ -26,7 +23,6 @@ use td_tower::layers;
     request = ReadRequest<TableAtIdName>,
     response = TableSchema,
     connection = ConnectionProvider,
-    context = DaoQueries,
     context = AuthzContext,
     context = Storage,
 )]
@@ -37,7 +33,7 @@ fn service() {
         from_fn(With::<ReadRequest<TableAtIdName>>::extract_name::<TableAtIdName>),
         from_fn(With::<TableAtIdName>::extract::<CollectionIdName>),
         // Find collection ID
-        from_fn(By::<CollectionIdName>::select::<CollectionDB>),
+        from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
         // Check permissions
         from_fn(AuthzOn::<CollectionId>::set),
@@ -59,30 +55,24 @@ mod tests {
         SinkTarget,
     };
     use std::path::Path;
+    use std::str::FromStr;
     use std::sync::Arc;
     use ta_services::service::TdService;
     use td_common::absolute_path::AbsolutePath;
-
-    use td_database::sql::DbPool;
+    use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::table::TableDB;
     use td_objects::rest_urls::params::SchemaField;
     use td_objects::rest_urls::{AtTimeParam, TableParam};
-    use td_objects::sql::SelectBy;
-    use td_objects::test_utils::seed_collection::seed_collection;
-    use td_objects::test_utils::seed_execution::seed_execution;
-    use td_objects::test_utils::seed_function::seed_function;
-    use td_objects::test_utils::seed_function_run::seed_function_run;
-    use td_objects::test_utils::seed_table_data_version::{
-        seed_table_data_version, seed_table_data_version_with_data,
-    };
-    use td_objects::test_utils::seed_transaction::seed_transaction;
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BundleId, CollectionName, Decorator, FunctionRunStatus, RoleId,
-        StorageVersion, TableName, TableNameDto, TransactionKey, UserId,
+        StorageVersion, TableIdName, TableName, TableNameDto, TransactionKey, UserId,
     };
+    use td_objects::{Buildable, and};
+    use td_queries::BasicQueries;
+    use td_queries::test_utils::SeedQueries;
     use td_storage::location::StorageLocation;
     use td_storage::{MountDef, Storage};
     use td_tower::ctx_service::RawOneshot;
@@ -91,10 +81,10 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_schema_service(db: DbPool) {
+    async fn test_tower_metadata_table_schema(db: TdPool) {
         use crate::table::layers::storage::resolve_table_location;
+        use td_objects::And;
         use td_objects::dxo::table::TableDBWithNames;
-        use td_objects::tower_service::from::{TryIntoService, combine};
         use td_objects::types::basic::{TableId, TableIdName, TriggeredOn};
 
         use td_tower::metadata::type_of_val;
@@ -107,7 +97,7 @@ mod tests {
                 type_of_val(&With::<ReadRequest<TableAtIdName>>::extract_name::<TableAtIdName>),
                 type_of_val(&With::<TableAtIdName>::extract::<CollectionIdName>),
                 // find collection ID
-                type_of_val(&By::<CollectionIdName>::select::<CollectionDB>),
+                type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
                 type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
                 // check requester has collection permissions
                 type_of_val(&AuthzOn::<CollectionId>::set),
@@ -119,9 +109,8 @@ mod tests {
                 type_of_val(&With::<TableAtIdName>::extract::<AtTime>),
                 // Only active or frozen tables
                 // Find Table ID, looking at the version at the time
-                type_of_val(&combine::<CollectionIdName, TableIdName>),
                 type_of_val(
-                    &By::<(CollectionIdName, TableIdName)>::select_version::<
+                    &By::<And![CollectionIdName, TableIdName]>::fetch_one_version::<
                         { TableDBWithNames::Available },
                         TableDBWithNames,
                     >,
@@ -149,12 +138,9 @@ mod tests {
         ])?;
         let storage = Arc::new(storage);
 
-        let collection = seed_collection(
-            &db,
-            &CollectionName::try_from("collection")?,
-            &UserId::admin(),
-        )
-        .await;
+        let collection = db
+            .seed_collection(&CollectionName::try_from("collection")?, &UserId::admin())
+            .await?;
 
         let created_tables = vec![TableNameDto::try_from("t0")?];
         let dependencies = None;
@@ -172,47 +158,42 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let function_version = seed_function(&db, &collection, &create).await;
+        let function_version = db.seed_function(&collection, &create).await?;
 
         let storage_location = StorageVersion::default();
 
         // 3 function runs, 2 with data and 1 without, per table
         let mut at_times = vec![AtTime::now()];
         for i in 0..3 {
-            let execution = seed_execution(&db, &function_version).await;
+            let execution = db.seed_execution(&function_version).await?;
             let transaction_key = TransactionKey::try_from("ANY")?;
-            let transaction = seed_transaction(&db, &execution, &transaction_key).await;
+            let transaction = db.seed_transaction(&execution, &transaction_key).await?;
 
             at_times.push(AtTime::now());
-            let function_run = seed_function_run(
-                &db,
-                &collection,
-                &function_version,
-                &execution,
-                &transaction,
-                &FunctionRunStatus::Committed,
-            )
-            .await;
+            let function_run = db
+                .seed_function_run(
+                    &collection,
+                    &function_version,
+                    &execution,
+                    &transaction,
+                    &FunctionRunStatus::Committed,
+                )
+                .await?;
 
             for table in &created_tables {
                 let table = TableName::try_from(table)?;
-                let table_version = DaoQueries::default()
-                    .select_by::<TableDB>(&(collection.id, &table))?
-                    .build_query_as()
-                    .fetch_one(&db)
-                    .await
-                    .unwrap();
+                let table_version: TableDB = db.fetch_one(and!(collection.id, &table)).await?;
 
                 if i % 2 == 0 {
-                    let table_data_version = seed_table_data_version_with_data(
-                        &db,
-                        &collection,
-                        &execution,
-                        &transaction,
-                        &function_run,
-                        &table_version,
-                    )
-                    .await;
+                    let table_data_version = db
+                        .seed_table_data_version_with_data(
+                            &collection,
+                            &execution,
+                            &transaction,
+                            &function_run,
+                            &table_version,
+                        )
+                        .await?;
 
                     let (path, _) = StorageLocation::try_from(&storage_location)
                         .unwrap()
@@ -261,41 +242,34 @@ mod tests {
                     .collect()
                     .unwrap();
                 } else {
-                    seed_table_data_version(
-                        &db,
+                    db.seed_table_data_version(
                         &collection,
                         &execution,
                         &transaction,
                         &function_run,
                         &table_version,
                     )
-                    .await;
+                    .await?;
                 };
             }
         }
 
         async fn get_schema(
-            db: DbPool,
+            db: TdPool,
             storage: Arc<Storage>,
             collection: &str,
             table: &str,
             at_time: &AtTime,
         ) -> Result<TableSchema, TdError> {
-            let service = TableSchemaService::new(
-                db,
-                Arc::new(DaoQueries::default()),
-                Arc::new(AuthzContext::default()),
-                storage,
-            )
-            .service()
-            .await;
+            let service =
+                TableSchemaService::new(db, Arc::new(AuthzContext::default()), storage).service();
 
             let request =
                 RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
                     .read(TableAtIdName::new(
                         TableParam::builder()
-                            .try_collection(collection)?
-                            .try_table(table)?
+                            .collection(CollectionIdName::from_str(collection)?)
+                            .table(TableIdName::from_str(table)?)
                             .build()?,
                         AtTimeParam::builder().at(at_time).build()?,
                     ));

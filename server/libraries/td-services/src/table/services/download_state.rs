@@ -11,11 +11,10 @@ use td_objects::dxo::function::FunctionDBWithNames;
 use td_objects::dxo::table::TableDBWithNames;
 use td_objects::rest_urls::internal::FunctionVersionAtId;
 use td_objects::rest_urls::params::TableAtIdName;
-use td_objects::sql::DaoQueries;
-use td_objects::stream::BoxedSyncStream;
-use td_objects::tower_service::from::{ExtractNameService, ExtractService, With};
-use td_objects::tower_service::sql::{By, SqlSelectAllService, SqlSelectService};
+use td_objects::tower_service::with::With;
 use td_objects::types::basic::{AtTime, FunctionVersionId};
+use td_objects::types::stream::BoxedSyncStream;
+use td_queries::By;
 use td_storage::Storage;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
@@ -26,7 +25,6 @@ use td_tower::layers;
     request = ReadRequest<FunctionVersionAtId>,
     response = BoxedSyncStream,
     connection = ConnectionProvider,
-    context = DaoQueries,
     context = Storage,
 )]
 fn service() {
@@ -37,14 +35,14 @@ fn service() {
         // get function
         from_fn(With::<FunctionVersionAtId>::extract::<FunctionVersionId>),
         from_fn(
-            By::<FunctionVersionId>::select_version::<
+            By::<FunctionVersionId>::fetch_one_version::<
                 { FunctionDBWithNames::Available },
                 FunctionDBWithNames,
             >
         ),
         // find system tables
         from_fn(
-            By::<FunctionVersionId>::select_all_versions::<
+            By::<FunctionVersionId>::fetch_all_versions::<
                 { TableDBWithNames::System },
                 TableDBWithNames,
             >
@@ -65,32 +63,31 @@ mod tests {
     use futures_util::StreamExt;
     use ta_services::factory::ServiceFactory;
     use ta_services::service::TdService;
-    use td_database::sql::DbPool;
+    use td_database::pool::TdPool;
     use td_error::TdError;
+    use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::system::TD_FN_STATE_PREFIX;
-    use td_objects::test_utils::seed_collection::seed_collection;
-    use td_objects::test_utils::seed_function::seed_function;
-    use td_objects::test_utils::seed_system_tables::seed_system_tables;
     use td_objects::types::basic::{AccessTokenId, RoleId};
     use td_objects::types::basic::{
         AtTime, BundleId, CollectionName, Decorator, TableNameDto, UserId,
     };
+    use td_queries::test_utils::SeedQueries;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_download_state_service(db: DbPool) {
+    async fn test_tower_metadata_table_download_state(db: TdPool) {
         use crate::table::layers::storage::resolve_table_location;
         use td_objects::dxo::table::TableDBWithNames;
-        use td_objects::tower_service::from::{TryIntoService, combine};
-        use td_objects::tower_service::sql::SqlSelectService;
+
         use td_objects::types::basic::{
             AtTime, CollectionIdName, TableId, TableIdName, TriggeredOn,
         };
 
+        use td_objects::And;
         use td_tower::metadata::type_of_val;
 
         TableStateDownloadService::with_defaults(db)
@@ -105,14 +102,14 @@ mod tests {
                 // get function
                 type_of_val(&With::<FunctionVersionAtId>::extract::<FunctionVersionId>),
                 type_of_val(
-                    &By::<FunctionVersionId>::select_version::<
+                    &By::<FunctionVersionId>::fetch_one_version::<
                         { FunctionDBWithNames::Available },
                         FunctionDBWithNames,
                     >,
                 ),
                 // find system table
                 type_of_val(
-                    &By::<FunctionVersionId>::select_all_versions::<
+                    &By::<FunctionVersionId>::fetch_all_versions::<
                         { TableDBWithNames::System },
                         TableDBWithNames,
                     >,
@@ -124,9 +121,8 @@ mod tests {
                 type_of_val(&With::<TableAtIdName>::extract::<TableIdName>),
                 type_of_val(&With::<TableAtIdName>::extract::<AtTime>),
                 // Find Table ID, looking at the version at the time
-                type_of_val(&combine::<CollectionIdName, TableIdName>),
                 type_of_val(
-                    &By::<(CollectionIdName, TableIdName)>::select_version::<
+                    &By::<And![CollectionIdName, TableIdName]>::fetch_one_version::<
                         { TableDBWithNames::Available },
                         TableDBWithNames,
                     >,
@@ -144,15 +140,13 @@ mod tests {
 
     #[td_test::test(sqlx)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_download_state(db: DbPool) -> Result<(), TdError> {
+    async fn test_download_state(db: TdPool) -> Result<(), TdError> {
         let context = Context::with_defaults(db);
 
-        let collection = seed_collection(
-            &context.db,
-            &CollectionName::try_from("collection")?,
-            &UserId::admin(),
-        )
-        .await;
+        let collection = context
+            .db
+            .seed_collection(&CollectionName::try_from("collection")?, &UserId::admin())
+            .await?;
 
         let created_tables = vec![TableNameDto::try_from("t0")?];
         let dependencies = None;
@@ -170,8 +164,8 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let function = seed_function(&context.db, &collection, &create).await;
-        let system_tables = seed_system_tables(&context.db, &function).await;
+        let function = context.db.seed_function(&collection, &create).await?;
+        let system_tables = context.db.seed_system_tables(&function).await?;
         let td_fn_state_table = system_tables
             .iter()
             .find(|t| t.name.starts_with(TD_FN_STATE_PREFIX))
@@ -191,7 +185,7 @@ mod tests {
                         at: *at_time,
                     });
             let service = TableStateDownloadService::build(context);
-            let response = service.service().await.raw_oneshot(request).await?;
+            let response = service.service().raw_oneshot(request).await?;
             let mut stream = response.into_inner();
             let bytes_with_ids = match stream.next().await {
                 Some(res) => res?,
@@ -205,7 +199,7 @@ mod tests {
                         at: *at_time,
                     });
             let service = TableStateDownloadService::build(context);
-            let response = service.service().await.raw_oneshot(request).await?;
+            let response = service.service().raw_oneshot(request).await?;
             let mut stream = response.into_inner();
             let bytes_with_names = match stream.next().await {
                 Some(res) => res?,
