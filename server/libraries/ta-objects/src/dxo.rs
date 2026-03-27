@@ -91,27 +91,10 @@ pub trait TypedColumns {
     fn col_for_type(type_id: std::any::TypeId) -> Option<Self::Iden>;
 }
 
-/// Shared structural metadata for any entity that maps to a database table.
-pub trait DaoCore:
-    Buildable
-    + TypedColumns
-    + td_database::dynamic::DynamicFromRow
-    + Send
-    + Sync
-    + Unpin
-    + std::fmt::Debug
-{
+/// Minimal structural metadata shared by all DAO types (read, write, update).
+pub trait DaoCore: Buildable + TypedColumns + Send + Sync + std::fmt::Debug {
     /// Table identifier.
     fn table() -> Self::Iden;
-
-    /// All columns in the same order as `values()`.
-    fn columns() -> impl IntoIterator<Item = Self::Iden>;
-
-    /// Row values in column order — used to build INSERT.
-    fn insert_values(&self) -> impl IntoIterator<Item = sea_query::Expr>;
-
-    /// Default result ordering.
-    fn order_by() -> impl IntoIterator<Item = (Self::Iden, sea_query::Order)>;
 
     /// Human-readable entity name for error messages (e.g., "User", "Collection").
     fn display_name() -> &'static str;
@@ -120,10 +103,23 @@ pub trait DaoCore:
     fn column_display_values(&self) -> Vec<(String, String)>;
 }
 
-/// A plain, directly-queryable database table. Full CRUDL.
-pub trait Dao: DaoCore {
-    /// Row values in column order — used to build UPDATE.
+/// Update capability. Implemented by update-only DAOs (`#[DaoUpdate]`) and
+/// by regular DAOs that support both read and update operations.
+pub trait DaoUpdate: DaoCore {
+    /// Column-value pairs for the UPDATE SET clause.
     fn update_values(&self) -> impl IntoIterator<Item = (Self::Iden, sea_query::Expr)>;
+}
+
+/// Full read/write DAO for a directly-queryable database table.
+pub trait Dao: DaoCore + td_database::dynamic::DynamicFromRow + Unpin {
+    /// All columns in the same order as `insert_values()`.
+    fn columns() -> impl IntoIterator<Item = Self::Iden>;
+
+    /// Row values in column order — used to build INSERT.
+    fn insert_values(&self) -> impl IntoIterator<Item = sea_query::Expr>;
+
+    /// Default result ordering.
+    fn order_by() -> impl IntoIterator<Item = (Self::Iden, sea_query::Order)>;
 }
 
 /// An append-only versioned table. Never queried directly — always through
@@ -135,7 +131,7 @@ pub trait Dao: DaoCore {
 /// - **Partition**: groups rows into per-entity version histories.
 /// - **VersionOrder**: determines "latest" within a partition; also used for
 ///   point-in-time filtering (`WHERE version_order <= ?`).
-pub trait VersionedDao: DaoCore {
+pub trait VersionedDao: Dao {
     type Pk: crate::SeaValue;
     fn pk_col() -> Self::Iden;
 
@@ -161,10 +157,10 @@ pub trait States<const S: u8>: DaoCore {
 }
 
 /// A `VersionedDao` supporting version range queries (HEAD~N, INITIAL+N, ranges).
-pub trait DataVersionDao: VersionedDao + Dao {}
+pub trait DataVersionDao: VersionedDao + DaoUpdate {}
 
 /// Hierarchical traversal via recursive CTEs. Only for `DataAccessObject`.
-pub trait Recursive: DaoCore {
+pub trait Recursive: Dao {
     type Key: crate::SeaValue + 'static;
     fn recurse_up() -> Self::Iden;
     fn recurse_down() -> Self::Iden;
@@ -175,7 +171,7 @@ pub trait Dto: Buildable {}
 
 /// DTO trait for list/filter endpoints.
 pub trait ListDto: Dto + Clone + Send + Sync {
-    type Dao: DaoCore;
+    type Dao: Dao;
 
     /// Resolve a filter field name (eq/ne/gt/ge/lt/le/btw/is) to a DAO column.
     /// `None` = field not valid for this role.

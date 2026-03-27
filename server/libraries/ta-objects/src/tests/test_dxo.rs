@@ -8,7 +8,7 @@
 mod tests {
     use crate as ta_objects;
 
-    use crate::dxo::{Buildable, DaoCore, VersionedDao};
+    use crate::dxo::{Buildable, Dao, DaoCore, VersionedDao};
     use sea_query::Iden;
 
     // ---- Typed helpers -------------------------------------------------------

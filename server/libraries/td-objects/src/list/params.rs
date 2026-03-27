@@ -7,7 +7,7 @@ use crate::parse::IDENTIFIER_PATTERN;
 use crate::types::basic::LikeFilter;
 use itertools::Itertools;
 use regex::Regex;
-use sea_query::{Condition, Expr, ExprTrait, Iden, Order as SeaOrder, SelectStatement};
+use sea_query::{Condition, Expr, ExprTrait, Iden, LikeExpr, Order as SeaOrder, SelectStatement};
 use std::str::FromStr;
 use std::sync::LazyLock;
 use ta_objects::{ListDto, SeaValue, TypedColumns};
@@ -372,7 +372,10 @@ pub(crate) fn parse_condition<D: ListDto>(
             let col = D::filter_like_col(field)
                 .ok_or_else(|| ListError::UndefinedLikeFilter(field.to_string()))?;
             let pat = convert_to_like_pattern(value)?;
-            (col, Expr::col(col).like(pat.as_str()))
+            (
+                col,
+                Expr::col(col).like(LikeExpr::new(pat.as_str()).escape('\\')),
+            )
         }
         BTW => {
             let parts = value.split("::").collect::<Vec<_>>();
@@ -722,6 +725,99 @@ mod tests {
         assert!(res.is_ok());
         let qp = res.unwrap();
         assert!(qp.pagination.is_some());
+    }
+
+    #[test]
+    fn test_like_filter_generates_escape_clause() {
+        use sea_query::{Query, SqliteQueryBuilder};
+
+        let list_params = ListParamsBuilder::default()
+            .len(10usize)
+            .filter(vec!["a:lk:test*".to_string()])
+            .build()
+            .unwrap();
+        let qp: ListQueryParams<TestDto> = (&list_params).try_into().unwrap();
+
+        let sql = qp
+            .apply_to(
+                Query::select()
+                    .column(<TestDao as TypedColumns>::Iden::A)
+                    .from(<TestDao as TypedColumns>::Iden::Table)
+                    .to_owned(),
+            )
+            .to_string(SqliteQueryBuilder);
+
+        assert!(
+            sql.contains(r"ESCAPE '\'"),
+            "LIKE filter must include ESCAPE clause: {sql}"
+        );
+        assert!(
+            sql.contains("LIKE 'test%'"),
+            "* should be converted to SQL %: {sql}"
+        );
+    }
+
+    #[test]
+    fn test_like_filter_escapes_sql_wildcards() {
+        use sea_query::{Query, SqliteQueryBuilder};
+
+        // SQL % in user input should be escaped
+        let list_params = ListParamsBuilder::default()
+            .len(10usize)
+            .filter(vec!["a:lk:100%".to_string()])
+            .build()
+            .unwrap();
+        let qp: ListQueryParams<TestDto> = (&list_params).try_into().unwrap();
+
+        let sql = qp
+            .apply_to(
+                Query::select()
+                    .column(<TestDao as TypedColumns>::Iden::A)
+                    .from(<TestDao as TypedColumns>::Iden::Table)
+                    .to_owned(),
+            )
+            .to_string(SqliteQueryBuilder);
+
+        assert!(
+            sql.contains(r"LIKE '100\%'"),
+            "SQL % must be escaped in LIKE pattern: {sql}"
+        );
+        assert!(
+            sql.contains(r"ESCAPE '\'"),
+            "ESCAPE clause required for escaped wildcards: {sql}"
+        );
+    }
+
+    #[test]
+    fn test_like_filter_wildcard_and_escape_combined() {
+        use sea_query::{Query, SqliteQueryBuilder};
+
+        // Mix: * wildcard + escaped \* literal + SQL _ escaped
+        let list_params = ListParamsBuilder::default()
+            .len(10usize)
+            .filter(vec![r"a:lk:*foo\_bar\*".to_string()])
+            .build()
+            .unwrap();
+        let qp: ListQueryParams<TestDto> = (&list_params).try_into().unwrap();
+
+        let sql = qp
+            .apply_to(
+                Query::select()
+                    .column(<TestDao as TypedColumns>::Iden::A)
+                    .from(<TestDao as TypedColumns>::Iden::Table)
+                    .to_owned(),
+            )
+            .to_string(SqliteQueryBuilder);
+
+        // *     → %
+        // foo   → foo
+        // \_    → \_  (SQL _ always escaped)
+        // bar   → bar
+        // \*    → *   (escaped user wildcard → literal *)
+        assert!(
+            sql.contains(r"LIKE '%foo\_bar*'"),
+            "Combined wildcards and escapes must be correct: {sql}"
+        );
     }
 
     #[test]

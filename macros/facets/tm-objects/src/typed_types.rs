@@ -104,6 +104,29 @@ pub fn typed_basic(args: TokenStream, item: TokenStream) -> TokenStream {
 // Shared codegen helpers
 // ---------------------------------------------------------------------------
 
+/// Emits a compact `Debug` impl that delegates to the inner value's Debug.
+/// Unlike `#[derive(Debug)]`, this does NOT expand to multi-line with `{:#?}`.
+fn impl_compact_debug(name: &Ident) -> proc_macro2::TokenStream {
+    quote! {
+        impl std::fmt::Debug for #name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                std::fmt::Debug::fmt(&self.0, f)
+            }
+        }
+    }
+}
+
+/// Emits a redacted `Debug` impl that hides the inner value.
+fn impl_redacted_debug(name: &Ident) -> proc_macro2::TokenStream {
+    quote! {
+        impl std::fmt::Debug for #name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "***")
+            }
+        }
+    }
+}
+
 /// Emits SeaValue + NullableSeaValue together so the Some/None variants always stay in sync.
 fn impl_sea_value(
     name: &Ident,
@@ -404,6 +427,8 @@ fn impl_utoipa_int64(name: &Ident) -> proc_macro2::TokenStream {
 
 #[derive(Debug, Default, FromMeta)]
 pub struct TypedString {
+    #[darling(default)]
+    secret: bool,
     default: Option<SynMetaOrLit>,
     len: Option<SynMetaOrLit>,
     min_len: Option<SynMetaOrLit>,
@@ -416,6 +441,8 @@ pub fn typed_string(input: &ItemStruct, typed: Option<TypedString>) -> proc_macr
     let attrs = &input.attrs;
     let name = &input.ident;
     let err = format_ident!("{}Error", name);
+
+    let secret = typed.as_ref().is_some_and(|t| t.secret);
 
     let (default, len, min_len, max_len, regex, parser) = match typed {
         None => (None, None, None, None, None, None),
@@ -491,11 +518,19 @@ pub fn typed_string(input: &ItemStruct, typed: Option<TypedString>) -> proc_macr
     let common = impl_common_traits(name, &quote! { String });
     let try_from = impl_try_from_str(name);
 
+    let debug_impl = if secret {
+        impl_redacted_debug(name)
+    } else {
+        impl_compact_debug(name)
+    };
+
     quote! {
         #(#attrs)*
-        #[derive(Debug, Clone, sqlx::Type, utoipa::ToSchema)]
+        #[derive(Clone, sqlx::Type, utoipa::ToSchema)]
         #[sqlx(transparent)]
         pub struct #name(String);
+
+        #debug_impl
 
         #[td_error::td_error]
         pub enum #err {
@@ -554,11 +589,14 @@ pub fn typed_int<T: FromStr + ToTokens + PartialOrd>(
     input: &ItemStruct,
     typed: Option<TypedNumeric<T>>,
 ) -> proc_macro2::TokenStream {
+    let name = &input.ident;
     let body = typed_numeric(input, typed, quote! { std::num::ParseIntError });
+    let debug_impl = impl_compact_debug(name);
     quote! {
-        #[derive(Debug, Clone, Copy, sqlx::Type, utoipa::ToSchema)]
+        #[derive(Clone, Copy, sqlx::Type, utoipa::ToSchema)]
         #[sqlx(transparent)]
         #body
+        #debug_impl
     }
 }
 
@@ -566,11 +604,14 @@ pub fn typed_float<T: FromStr + ToTokens + PartialOrd>(
     input: &ItemStruct,
     typed: Option<TypedNumeric<T>>,
 ) -> proc_macro2::TokenStream {
+    let name = &input.ident;
     let body = typed_numeric(input, typed, quote! { std::num::ParseFloatError });
+    let debug_impl = impl_compact_debug(name);
     quote! {
-        #[derive(Debug, Clone, Copy, sqlx::Type, utoipa::ToSchema)]
+        #[derive(Clone, Copy, sqlx::Type, utoipa::ToSchema)]
         #[sqlx(transparent)]
         #body
+        #debug_impl
     }
 }
 
@@ -688,12 +729,15 @@ pub fn typed_bool(input: &ItemStruct, typed: Option<TypedBool>) -> proc_macro2::
 
     let typed_value = impl_typed_value_bool(name, &err);
     let common = impl_common_traits(name, &quote! { bool });
+    let debug_impl = impl_compact_debug(name);
 
     quote! {
         #(#attrs)*
-        #[derive(Debug, Clone, Copy, sqlx::Type, utoipa::ToSchema)]
+        #[derive(Clone, Copy, sqlx::Type, utoipa::ToSchema)]
         #[sqlx(transparent)]
         pub struct #name(bool);
+
+        #debug_impl
 
         #[td_error::td_error]
         pub enum #err {
@@ -740,12 +784,15 @@ pub fn typed_id(input: &ItemStruct, typed: Option<TypedId>) -> proc_macro2::Toke
     let common = impl_common_traits(name, &quote! { td_common::id::Id });
     let try_from = impl_try_from_str(name);
     let utoipa = impl_utoipa_string(name);
+    let debug_impl = impl_compact_debug(name);
 
     quote! {
         #(#attrs)*
-        #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, sqlx::Type)]
+        #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, sqlx::Type)]
         #[sqlx(transparent)]
         pub struct #name(td_common::id::Id);
+
+        #debug_impl
 
         impl Default for #name {
             fn default() -> Self { Self(#default_tok) }
@@ -790,6 +837,7 @@ pub fn typed_idlogic(input: &ItemStruct, typed: TypedIdL) -> proc_macro2::TokenS
     let common = impl_common_traits(name, &quote! { td_common::logic_id::IdL::<#key> });
     let try_from = impl_try_from_str(name);
     let utoipa = impl_utoipa_string(name);
+    let debug_impl = impl_compact_debug(name);
 
     quote! {
         #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -800,9 +848,11 @@ pub fn typed_idlogic(input: &ItemStruct, typed: TypedIdL) -> proc_macro2::TokenS
         }
 
         #(#attrs)*
-        #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, sqlx::Type)]
+        #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, sqlx::Type)]
         #[sqlx(transparent)]
         pub struct #name(td_common::logic_id::IdL<#key>);
+
+        #debug_impl
 
         static #gen_var: std::sync::OnceLock<td_common::logic_id::IdLGenerator<#key>> =
             std::sync::OnceLock::new();
@@ -867,12 +917,15 @@ pub fn typed_timestamp(
     let common = impl_common_traits(name, &quote! { td_common::datetime::Timestamp });
     let try_from = impl_try_from_str(name);
     let utoipa = impl_utoipa_int64(name);
+    let debug_impl = impl_compact_debug(name);
 
     quote! {
         #(#attrs)*
-        #[derive(Debug, Clone, Copy, sqlx::Type)]
+        #[derive(Clone, Copy, sqlx::Type)]
         #[sqlx(transparent)]
         pub struct #name(td_common::datetime::Timestamp);
+
+        #debug_impl
 
         #[td_error::td_error]
         pub enum #err {
@@ -931,11 +984,14 @@ pub fn typed_composed(input: &ItemStruct, typed: ComposedTyped) -> proc_macro2::
     let inner = &typed.inner;
     let utoipa = impl_utoipa_string(name);
     let try_from = impl_try_from_str(name);
+    let debug_impl = impl_compact_debug(name);
 
     quote! {
         #(#attrs)*
-        #[derive(Debug, Clone)]
+        #[derive(Clone)]
         pub struct #name(#inner);
+
+        #debug_impl
 
         #utoipa
 

@@ -27,7 +27,7 @@ async fn test_cannot_change_self_password(db: TdPool) {
 
     let update = UserUpdate::builder()
         .full_name(None)
-        .email(None)
+        .email(Option::<Option<_>>::None)
         .password(Some(Password::try_from("new_password").unwrap()))
         .enabled(None)
         .build()

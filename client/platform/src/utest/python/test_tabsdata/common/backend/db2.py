@@ -36,6 +36,8 @@ DB2_FORWARDED_PORT = "50000/tcp"
 DB2_DB_NAME = "testdb"
 DB2_DB_USER = "db2inst1"
 DB2_DOCKER_DONE_MESSAGE = "Setup has completed."
+DB2_TABSDATA_SETUP_DONE_MESSAGE = "tabsdata container setup finished"
+DB2_TABSDATA_SETUP_DONE_MARKER = "/tmp/tabsdata_setup_done"
 
 VALID_DB2_PREFIXES = ["DB20"]
 
@@ -197,6 +199,60 @@ def wait_for_db2_ready(port):
                 sleep(retry)
 
 
+def log_tabsdata_setup_done(container):
+    container.exec_run(
+        ["bash", "-c",
+         f"echo '{DB2_TABSDATA_SETUP_DONE_MESSAGE}' > {DB2_TABSDATA_SETUP_DONE_MARKER}"],
+    )
+    logger.info(f"Created setup marker '{DB2_TABSDATA_SETUP_DONE_MARKER}' in container")
+
+
+def wait_for_tabsdata_setup_done(container):
+    import docker
+
+    @retry(
+        stop=stop_after_attempt(CONTAINER_MAXIMUM_RETRY_COUNT),
+        wait=wait_incrementing(start=1, increment=1),
+        reraise=True,
+    )
+    def try_read():
+        logger.info(f"Checking for setup marker '{DB2_TABSDATA_SETUP_DONE_MARKER}' "
+                     f"in container '{container.name}'...")
+        try:
+            container.get_archive(DB2_TABSDATA_SETUP_DONE_MARKER)
+        except docker.errors.NotFound:
+            raise RuntimeError(
+                f"The marker '{DB2_TABSDATA_SETUP_DONE_MARKER}' "
+                f"does not yet exist in container '{container.name}'")
+        logger.info(f"Found setup marker '{DB2_TABSDATA_SETUP_DONE_MARKER}' "
+                     f"in container '{container.name}'")
+
+    try:
+        try_read()
+    except Exception as exception:
+        logger.error(f"Failed to find setup marker '{DB2_TABSDATA_SETUP_DONE_MARKER}' "
+                     f"in container '{container.name}' "
+                     f"after {CONTAINER_MAXIMUM_RETRY_COUNT} attempts: "
+                     f"{exception}")
+        raise
+
+
+def resize_db2_buffer_pool(container):
+    logger.info("Resizing DB2 buffer pool to 256 MB")
+    exit_code, output = container.exec_run(
+        ["bash", "-l", "-c",
+         f"db2 connect to {DB2_DB_NAME} && "
+         f"db2 alter bufferpool ibmdefaultbp size 65536"],
+        user="db2inst1",
+    )
+    output_text = output.decode("utf-8", errors="replace")
+    if exit_code != 0:
+        raise RuntimeError(
+            f"DB2 buffer pool resize failed with code {exit_code}: {output_text}"
+        )
+    logger.info(f"DB2 buffer pool resized to 256 MB: {output_text}")
+
+
 def create_docker_db2_database(
     name: str = DEFAULT_PYTEST_DB2_DOCKER_CONTAINER_NAME,
 ):
@@ -209,6 +265,8 @@ def create_docker_db2_database(
     if containers := client.containers.list(filters={"name": f"^{name}$"}):
         logger.info("DB2 container already exists")
         container = containers[0]
+        wait_for_db2_setup_complete(container)
+        wait_for_tabsdata_setup_done(container)
         port = get_container_port_binding(container, DB2_FORWARDED_PORT)
         wait_for_db2_ready(port)
         return port
@@ -344,4 +402,6 @@ def create_docker_db2_database(
         finally:
             mydb.close()
         logger.info("DB2 container created successfully")
+        resize_db2_buffer_pool(container)
+        log_tabsdata_setup_done(container)
         return port

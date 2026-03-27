@@ -52,7 +52,7 @@ mod definitions {
     }
 
     #[ta_objects::Dao]
-    #[dao(sql_table = "roles")]
+    #[dao(update, sql_table = "roles")]
     #[dxo(
         builder(try_from = RoleUpdate, skip_all),
         updater(try_from = RequestContext, skip_all),

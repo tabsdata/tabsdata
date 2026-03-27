@@ -9,8 +9,7 @@
 mod tests {
     use crate as ta_objects;
 
-    use crate::Dao;
-    use crate::dxo::{DaoCore, Recursive, States, TypedColumns, VersionedDao};
+    use crate::dxo::{Dao, DaoCore, DaoUpdate, Recursive, States, TypedColumns, VersionedDao};
     use crate::or;
     use crate::sql_condition::resolve_condition;
     use crate::{Buildable, and};
@@ -441,6 +440,111 @@ mod tests {
         assert_eq!(dao.description, Some(Description::try_from("d1").unwrap()));
     }
 
+    // ---- Option fields skip None in update_values ----------------------------
+
+    #[test]
+    fn test_option_none_skipped_in_update_values() {
+        let dao = ItemDao::builder()
+            .id(ItemId::try_from("i1").unwrap())
+            .name(Name::try_from("n1").unwrap())
+            .description(None)
+            .build()
+            .unwrap();
+        let sql = Query::update()
+            .table(ItemDaoIden::Table)
+            .values(dao.update_values())
+            .to_string(SqliteQueryBuilder);
+        assert!(
+            !sql.contains("description"),
+            "None Option field should be skipped in UPDATE: {sql}"
+        );
+    }
+
+    #[test]
+    fn test_option_some_included_in_update_values() {
+        let dao = ItemDao::builder()
+            .id(ItemId::try_from("i1").unwrap())
+            .name(Name::try_from("n1").unwrap())
+            .description(Description::try_from("d1").unwrap())
+            .build()
+            .unwrap();
+        let sql = Query::update()
+            .table(ItemDaoIden::Table)
+            .values(dao.update_values())
+            .to_string(SqliteQueryBuilder);
+        assert!(
+            sql.contains(r#""description" = 'd1'"#),
+            "Some Option field should be included in UPDATE: {sql}"
+        );
+    }
+
+    // ---- Option<Option<T>> tri-state in update_values -------------------------
+
+    #[ta_objects::Dao]
+    #[dao(sql_table = "nullable_items")]
+    struct NullableDao {
+        id: ItemId,
+        name: Name,
+        #[builder(default)]
+        description: Option<Option<Description>>,
+    }
+
+    #[test]
+    fn test_double_option_none_skipped_in_update_values() {
+        // None (outer) → column should be skipped entirely.
+        let dao = NullableDao::builder()
+            .id(ItemId::try_from("i1").unwrap())
+            .name(Name::try_from("n1").unwrap())
+            .build()
+            .unwrap();
+        let sql = Query::update()
+            .table(NullableDaoIden::Table)
+            .values(dao.update_values())
+            .to_string(SqliteQueryBuilder);
+        assert!(
+            !sql.contains("description"),
+            "None (outer) should skip column in UPDATE: {sql}"
+        );
+    }
+
+    #[test]
+    fn test_double_option_some_none_sets_null_in_update_values() {
+        // Some(None) → column should be SET to NULL.
+        let dao = NullableDao::builder()
+            .id(ItemId::try_from("i1").unwrap())
+            .name(Name::try_from("n1").unwrap())
+            .description(Some(None))
+            .build()
+            .unwrap();
+        let sql = Query::update()
+            .table(NullableDaoIden::Table)
+            .values(dao.update_values())
+            .to_string(SqliteQueryBuilder);
+        assert!(
+            sql.contains(r#""description" = NULL"#),
+            "Some(None) should SET column to NULL: {sql}"
+        );
+    }
+
+    #[test]
+    fn test_double_option_some_some_sets_value_in_update_values() {
+        // Some(Some(v)) → column should be SET to the value.
+        let dao = NullableDao::builder()
+            .id(ItemId::try_from("i1").unwrap())
+            .name(Name::try_from("n1").unwrap())
+            .description(Some(Some(Description::try_from("d1").unwrap())))
+            .build()
+            .unwrap();
+        let sql = Query::update()
+            .table(NullableDaoIden::Table)
+            .values(dao.update_values())
+            .to_string(SqliteQueryBuilder);
+        assert!(
+            sql.contains(r#""description" = 'd1'"#),
+            "Some(Some(v)) should SET column to value: {sql}"
+        );
+    }
+
     // ---- Immutable fields ----------------------------------------------------
 
     #[ta_objects::Dao]
@@ -513,5 +617,54 @@ mod tests {
         for (col, (val_col, _)) in cols.iter().zip(vals.iter()) {
             assert_eq!(col.quoted(), val_col.quoted());
         }
+    }
+
+    // ---- Update-only Dao (#[dao(update)]) ------------------------------------
+
+    #[ta_objects::Dao]
+    #[dao(update, sql_table = "items")]
+    struct UpdateItemDB {
+        #[builder(default)]
+        name: Option<Name>,
+        #[builder(default)]
+        description: Option<Description>,
+    }
+
+    #[test]
+    fn test_update_dao_has_table() {
+        let table = UpdateItemDB::table();
+        assert_eq!(table.quoted(), "items");
+    }
+
+    #[test]
+    fn test_update_dao_has_display_name() {
+        assert_eq!(UpdateItemDB::display_name(), "Update Item");
+    }
+
+    #[test]
+    fn test_update_dao_update_values() {
+        let dao = UpdateItemDB::builder()
+            .name(Name::try_from("n1").unwrap())
+            .build()
+            .unwrap();
+        let sql = Query::update()
+            .table(UpdateItemDBIden::Table)
+            .values(dao.update_values())
+            .to_string(SqliteQueryBuilder);
+        assert!(
+            sql.contains(r#""name" = 'n1'"#),
+            "update dao should produce SET: {sql}"
+        );
+        assert!(
+            !sql.contains("description"),
+            "None fields should be skipped: {sql}"
+        );
+    }
+
+    #[test]
+    fn test_update_dao_has_typed_columns() {
+        let col = UpdateItemDB::col_for_type(TypeId::of::<Option<Name>>());
+        assert!(col.is_some());
+        assert_eq!(col.unwrap().quoted(), "name");
     }
 }

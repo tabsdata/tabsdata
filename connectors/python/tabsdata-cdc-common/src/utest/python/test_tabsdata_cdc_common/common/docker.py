@@ -51,6 +51,8 @@ def ensure_container(
     if containers := client.containers.list(filters={"name": f"^{name}$"}):
         logger.info(f"CDC container '{name}' already exists; reusing it.")
         container = containers[0]
+        if message is not None:
+            ensure_readiness(container, message)
         host_port = get_container_port_binding(container, forwarded_port_key)
         return container, host_port, False
 

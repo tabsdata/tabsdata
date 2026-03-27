@@ -157,7 +157,7 @@ mod definitions {
     }
 
     #[ta_objects::Dao]
-    #[dao(sql_table = "table_data_versions")]
+    #[dao(update, sql_table = "table_data_versions")]
     pub struct UpdateTableDataVersionDB {
         #[dao(immutable)]
         #[builder(default)]

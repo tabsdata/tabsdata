@@ -449,9 +449,7 @@ class DatabricksSource(SourcePlugin):
             if self._download_threads <= 1:
                 self._process_chunks(next_link, chunk_writer)
             else:
-                with ThreadPoolExecutor(
-                    max_process_chunkss=self._download_threads
-                ) as executor:
+                with ThreadPoolExecutor(max_workers=self._download_threads) as executor:
                     futures = [
                         executor.submit(self._process_chunks, next_link, chunk_writer)
                         for _ in range(self._download_threads)

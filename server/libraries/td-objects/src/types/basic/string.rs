@@ -11,7 +11,7 @@ use std::fmt::Debug;
 use td_error::{ApiError, api_error};
 use td_security::{ADMIN_USER, SEC_ADMIN_ROLE, SYS_ADMIN_ROLE, USER_ROLE};
 
-#[ta_objects::typed(string)]
+#[ta_objects::typed(string(secret))]
 pub struct AccessToken;
 
 #[ta_objects::typed(string(default = "<unavailable>"))]
@@ -101,7 +101,7 @@ pub struct FunctionName;
 
 // JSON blob with `version`, `envs` & `secrets` top entries.
 // info used in decorator.
-#[ta_objects::typed(string(max_len = 4096, default = "{}"))]
+#[ta_objects::typed(string(secret, max_len = 4096, default = "{}"))]
 #[derive(Eq, PartialEq)]
 pub struct FunctionRuntimeValues;
 
@@ -111,10 +111,10 @@ pub struct LikeFilter;
 const MIN_PASSWORD_LEN: usize = 8;
 const MAX_PASSWORD_LEN: usize = 64;
 
-#[ta_objects::typed(string(min_len = MIN_PASSWORD_LEN, max_len = MAX_PASSWORD_LEN))]
+#[ta_objects::typed(string(secret, min_len = MIN_PASSWORD_LEN, max_len = MAX_PASSWORD_LEN))]
 pub struct NewPassword;
 
-#[ta_objects::typed(string(min_len = MIN_PASSWORD_LEN, max_len = MAX_PASSWORD_LEN))]
+#[ta_objects::typed(string(secret, min_len = MIN_PASSWORD_LEN, max_len = MAX_PASSWORD_LEN))]
 pub struct OldPassword;
 
 #[ta_objects::typed(string(min_len = 1, max_len = 1024))]
@@ -127,17 +127,17 @@ pub struct PartitionName;
 #[ta_objects::typed(string)]
 pub struct PartitionFileName;
 
-#[ta_objects::typed(string(min_len = MIN_PASSWORD_LEN, max_len = MAX_PASSWORD_LEN))]
+#[ta_objects::typed(string(secret, min_len = MIN_PASSWORD_LEN, max_len = MAX_PASSWORD_LEN))]
 pub struct Password;
 
-#[ta_objects::typed(string)]
+#[ta_objects::typed(string(secret))]
 #[derive(Eq, PartialEq)]
 pub struct PasswordHash;
 
 #[ta_objects::typed(string)]
 pub struct PythonVersion;
 
-#[ta_objects::typed(string)]
+#[ta_objects::typed(string(secret))]
 pub struct RefreshToken;
 
 #[ta_objects::typed(string(parser = parse_role))]

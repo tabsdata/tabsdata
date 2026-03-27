@@ -22,7 +22,7 @@ babel==2.18.0
 beautifulsoup4==4.14.3
 boolean-py==5.0
 boto3==1.42.73
-botocore==1.42.76
+botocore==1.42.77
 build==1.4.0
 cachecontrol==0.14.4
 cattrs==24.1.3
@@ -69,7 +69,7 @@ google-cloud-core==2.5.0
 google-cloud-storage==3.10.0
 google-crc32c==1.8.0
 google-resumable-media==2.8.0
-googleapis-common-protos==1.73.0
+googleapis-common-protos==1.73.1
 gtts==2.2.4
 h11==0.16.0
 halo==0.0.31
@@ -144,7 +144,7 @@ plaster-pastedeploy==1.0.1
 platformdirs==4.9.4
 pluggy==1.6.0
 prompt-toolkit==3.0.52
-proto-plus==1.27.1
+proto-plus==1.27.2
 protobuf==6.33.6
 psutil==7.2.2
 psycopg2-binary==2.9.11
@@ -176,7 +176,7 @@ pytest-reporter-html1==0.9.5
 pytest-timeout==2.4.0
 pytest-xdist==3.8.0
 python-dateutil==2.9.0.post0
-python-discovery==1.2.0
+python-discovery==1.2.1
 python-dotenv==1.2.2
 python-slugify==8.0.4
 pytimeparse==1.1.8
@@ -223,7 +223,7 @@ tzdata==2025.3
 tzlocal==5.3.1
 url-normalize==2.2.1
 urllib3==2.6.3
-uv==0.11.1
+uv==0.11.2
 uvicorn==0.42.0
 venusian==3.1.1
 virtualenv==21.2.0

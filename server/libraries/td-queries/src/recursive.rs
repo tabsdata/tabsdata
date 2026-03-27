@@ -10,7 +10,7 @@ use sea_query::{
 use ta_objects::SeaValue;
 use ta_objects::errors::SqlError;
 use ta_objects::sql_condition::{SqlCondition, resolve_condition};
-use ta_objects::{DaoCore, Recursive, States, VersionedDao};
+use ta_objects::{Dao, DaoCore, Recursive, States, VersionedDao};
 use td_database::sea_query::builder::SeaQueryExt;
 use td_database::sea_query::executor::SeaExecutor;
 use td_error::TdError;
@@ -147,8 +147,8 @@ pub trait RecursiveQueries {
         opts: Options<'_>,
     ) -> impl Future<Output = Result<Vec<D>, SqlError>>
     where
-        D: DaoCore + Recursive,
-        R: DaoCore;
+        D: Dao + Recursive,
+        R: Dao;
 
     /// Fetch rows reachable from `direct_reference` via versioned recursion,
     /// applying ROW_NUMBER ranking and state filtering.
@@ -314,8 +314,8 @@ fn direction_versions_cte<D, R>(
     str_search_fn: &str,
 ) -> Result<CommonTableExpression, SqlError>
 where
-    D: DaoCore + Recursive,
-    R: DaoCore,
+    D: Dao + Recursive,
+    R: Dao,
 {
     // Resolve direction-specific parameters
     let (start_col, follow_col, path_iden, depth_iden, cte_name, self_alias, max_depth) =
@@ -532,8 +532,8 @@ async fn build_and_execute_recursive<D, R, E>(
     down_enabled: bool,
 ) -> Result<Vec<D>, SqlError>
 where
-    D: DaoCore + Recursive,
-    R: DaoCore,
+    D: Dao + Recursive,
+    R: Dao,
     E: SeaExecutor + Send,
 {
     let str_search_fn = match executor.kind() {
@@ -587,8 +587,8 @@ where
 {
     async fn fetch_all_recursive<D, R>(self, opts: Options<'_>) -> Result<Vec<D>, SqlError>
     where
-        D: DaoCore + Recursive,
-        R: DaoCore,
+        D: Dao + Recursive,
+        R: Dao,
     {
         let up_enabled = is_direction_enabled(opts.recursion.max_upstream_depth());
         let down_enabled = is_direction_enabled(opts.recursion.max_downstream_depth());

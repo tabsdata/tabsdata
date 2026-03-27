@@ -10,6 +10,7 @@ import time
 
 import pyarrow as pa
 from pyarrow import schema
+from tenacity import retry, stop_after_delay, wait_fixed
 
 from tabsdata._io.cloud_staging.common.dialect import Dialect
 from tabsdata._io.cloud_staging.common.errors import SchemaError
@@ -20,6 +21,15 @@ from tabsdata._io.cloud_staging.starrocks.cloud_storage import StarRocksCloudSto
 from tabsdata._io.cloud_staging.starrocks.config import StarRocksConfig
 
 logger = logging.getLogger(__name__)
+
+STARROCKS_QUERY_RETRY_TIMEOUT_SECONDS = 300
+STARROCKS_QUERY_RETRY_INTERVAL_SECONDS = 5
+
+_starrocks_retry = retry(
+    stop=stop_after_delay(STARROCKS_QUERY_RETRY_TIMEOUT_SECONDS),
+    wait=wait_fixed(STARROCKS_QUERY_RETRY_INTERVAL_SECONDS),
+    reraise=True,
+)
 
 
 # ── Type conversion: PyArrow → StarRocks ─────────────────────────────────────────────
@@ -349,6 +359,7 @@ class StarRocksDialect(Dialect):
             )
         return self._conn
 
+    @_starrocks_retry
     def _execute(self, sql: str, params=None):
         """Execute a query and return all result rows."""
         conn = self._get_connection()
@@ -356,6 +367,7 @@ class StarRocksDialect(Dialect):
             cursor.execute(sql, params)
             return cursor.fetchall()
 
+    @_starrocks_retry
     def _command(self, sql: str, params=None):
         """Execute a statement that does not return rows."""
         conn = self._get_connection()
