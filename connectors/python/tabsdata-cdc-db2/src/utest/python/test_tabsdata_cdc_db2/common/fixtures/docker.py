@@ -51,6 +51,8 @@ DEFAULT_PYTEST_DB2_CDC_DOCKER_CONTAINER_NAME: str = f"{CDC_CONTAINER_PREFIX}db2-
 DB2_CDC_FORWARDED_PORT: str = "50000/tcp"
 DB2_CDC_IMAGE: str = "icr.io/db2_community/db2:latest"
 DB2_CDC_DOCKER_DONE_MESSAGE: str = "Setup has completed."
+DB2_CDC_TABSDATA_SETUP_DONE_MESSAGE: str = "tabsdata container setup finished"
+DB2_CDC_TABSDATA_SETUP_DONE_MARKER: str = "/tmp/tabsdata_setup_done"
 
 DB2_CDC_DATABASE: str = CDC_DATABASE
 DB2_CDC_ROOT_USER: str = "db2inst1"
@@ -368,13 +370,13 @@ def send_capstart_signal(
                 f"'{staging_table}', "
                 f"?"
                 f")",
-                (schema.upper(), table.upper(), map_id),
+                (schema.upper(), table.upper(), i_map_id),
             )
             cursor.execute(
                 f"insert into {DB2_CDC_ASN_SCHEMA}.ibmsnap_signal "
                 f"(signal_type, signal_subtype, signal_input_in, signal_state) "
                 f"values ('CMD', 'CAPSTART', ?, 'P')",
-                (map_id,),
+                (i_map_id,),
             )
         return i_map_id
 
@@ -1138,6 +1140,53 @@ def await_cdc_db2_container(port: int) -> None:
     ensure_connection(connect, "Db2 CDC")
 
 
+def log_tabsdata_setup_done(container: Container) -> None:
+    container.exec_run(
+        ["bash", "-c",
+         f"echo '{DB2_CDC_TABSDATA_SETUP_DONE_MESSAGE}' > {DB2_CDC_TABSDATA_SETUP_DONE_MARKER}"],
+    )
+    logger.info(f"Created setup marker '{DB2_CDC_TABSDATA_SETUP_DONE_MARKER}' in container")
+
+
+def wait_for_tabsdata_setup_done(container: Container) -> None:
+    @retry(
+        stop=stop_after_attempt(CONTAINER_MAXIMUM_RETRY_COUNT),
+        wait=wait_incrementing(start=1, increment=1),
+        reraise=True,
+    )
+    def try_read():
+        logger.info(f"Checking for setup marker '{DB2_CDC_TABSDATA_SETUP_DONE_MARKER}' "
+                     f"in container '{container.name}'...")
+        try:
+            container.get_archive(DB2_CDC_TABSDATA_SETUP_DONE_MARKER)
+        except docker.errors.NotFound:
+            raise RuntimeError(
+                f"The marker '{DB2_CDC_TABSDATA_SETUP_DONE_MARKER}' "
+                f"does not yet exist in container '{container.name}'")
+        logger.info(f"Found setup marker '{DB2_CDC_TABSDATA_SETUP_DONE_MARKER}' "
+                     f"in container '{container.name}'")
+
+    try:
+        try_read()
+    except Exception as exception:
+        logger.error(
+            f"Failed to find setup marker '{DB2_CDC_TABSDATA_SETUP_DONE_MARKER}' "
+            f"in container '{container.name}' "
+            f"after {CONTAINER_MAXIMUM_RETRY_COUNT} attempts: "
+            f"{exception}")
+        raise
+
+
+def resize_db2_buffer_pool(container: Container) -> None:
+    logger.info("Resizing DB2 CDC buffer pool to 256 MB")
+    output = db2_exec(
+        container,
+        f"db2 connect to {DB2_CDC_DATABASE} && "
+        f"db2 alter bufferpool ibmdefaultbp size 65536",
+    )
+    logger.info(f"DB2 CDC buffer pool resized to 256 MB: {output}")
+
+
 def setup_cdc_db2_container(container: Container, port: int) -> str:
     get_db2_home(container)
     setup_db2_archive(container)
@@ -1162,6 +1211,10 @@ def create_cdc_db2_database(
     if created:
         signal = setup_cdc_db2_container(container, port)
         check_cdc_db2_container(port, signal)
+        resize_db2_buffer_pool(container)
+        log_tabsdata_setup_done(container)
+    else:
+        wait_for_tabsdata_setup_done(container)
 
     return container, port
 

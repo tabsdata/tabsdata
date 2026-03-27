@@ -23,7 +23,7 @@ async fn test_user_cannot_enable_disable_themselves(db: TdPool) {
 
     let update = UserUpdate::builder()
         .full_name(None)
-        .email(None)
+        .email(Option::<Option<_>>::None)
         .password(None)
         .enabled(Some(UserEnabled::from(false)))
         .build()

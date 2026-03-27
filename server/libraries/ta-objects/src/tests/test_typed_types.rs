@@ -600,4 +600,29 @@ mod tests {
         let v = CondBool::from(true);
         assert_eq!(cond_sql(v), r#""flag" = TRUE"#);
     }
+
+    // ---- Compact Debug + secret tests ---------------------------------------
+
+    #[test]
+    fn test_string_compact_debug() {
+        #[ta_objects::typed(string)]
+        struct PublicString;
+
+        let s = PublicString::parse("visible").unwrap();
+        // Debug delegates to inner value, no newtype wrapper shown
+        assert_eq!(format!("{:?}", s), r#""visible""#);
+        assert_eq!(format!("{:#?}", s), r#""visible""#);
+    }
+
+    #[test]
+    fn test_string_secret_debug() {
+        #[ta_objects::typed(string(secret))]
+        struct SecretString;
+
+        let s = SecretString::parse("my_secret_value").unwrap();
+        assert_eq!(format!("{:?}", s), "***");
+        assert!(!format!("{:?}", s).contains("my_secret_value"));
+        // Inner value still accessible via Deref
+        assert_eq!(&*s, "my_secret_value");
+    }
 }

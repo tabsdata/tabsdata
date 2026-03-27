@@ -70,8 +70,8 @@ impl UpdateUserDBBuilderUpdate for With<UserUpdate> {
         if let Some(full_name) = &update.full_name {
             builder.full_name(full_name);
         }
-        if update.email.is_some() {
-            builder.email(update.email.as_ref().cloned());
+        if let Some(email) = &update.email {
+            builder.email(email.clone());
         }
         if let Some(password) = &update.password {
             builder.try_password_hash(create_password_hash(

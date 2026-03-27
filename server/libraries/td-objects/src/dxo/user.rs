@@ -66,15 +66,17 @@ mod definitions {
     }
 
     #[ta_objects::Dto]
+    #[derive(Default)]
+    #[serde(default)]
     pub struct UserUpdate {
         pub full_name: Option<FullName>,
-        pub email: Option<Email>,
+        pub email: Option<Option<Email>>,
         pub password: Option<Password>,
         pub enabled: Option<UserEnabled>,
     }
 
     #[ta_objects::Dao]
-    #[dao(sql_table = "users")]
+    #[dao(update, sql_table = "users")]
     #[dxo(
         builder(try_from = UserDB),
         updater(try_from = RequestContext, skip_all)

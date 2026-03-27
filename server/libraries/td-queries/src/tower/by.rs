@@ -8,7 +8,7 @@ use std::ops::Deref;
 use ta_objects::errors::{SqlError, format_hint};
 use ta_objects::sql_condition::{ConditionExtract, SqlRef};
 use ta_objects::{
-    CurrentDao, Dao, DaoCore, ListDto, ListFilterExtract, ListRef, States, VersionedDao,
+    CurrentDao, Dao, DaoCore, DaoUpdate, ListDto, ListFilterExtract, ListRef, States, VersionedDao,
 };
 use td_database::dynamic::DynamicConnection;
 use td_error::TdError;
@@ -17,7 +17,7 @@ use td_objects::list::params::ListQueryParams;
 use td_objects::list::response::build_list_response;
 use td_tower::extractors::{MutRef, Ref};
 
-pub async fn insert<D: DaoCore>(
+pub async fn insert<D: Dao>(
     mut conn: MutRef<DynamicConnection<'static>>,
     dao: Ref<D>,
 ) -> Result<(), TdError> {
@@ -25,7 +25,7 @@ pub async fn insert<D: DaoCore>(
     Ok(())
 }
 
-pub async fn insert_vec<D: DaoCore>(
+pub async fn insert_vec<D: Dao>(
     mut conn: MutRef<DynamicConnection<'static>>,
     daos: Ref<Vec<D>>,
 ) -> Result<(), TdError> {
@@ -48,7 +48,7 @@ where
         by: SqlRef<E>,
     ) -> Result<D, TdError>
     where
-        D: DaoCore,
+        D: Dao,
     {
         let result = conn.fetch_one(&by).await?;
         Ok(result)
@@ -59,7 +59,7 @@ where
         by: SqlRef<E>,
     ) -> Result<Option<D>, TdError>
     where
-        D: DaoCore,
+        D: Dao,
     {
         let result = conn.fetch_optional(&by).await?;
         Ok(result)
@@ -70,7 +70,7 @@ where
         by: SqlRef<E>,
     ) -> Result<Vec<D>, TdError>
     where
-        D: DaoCore,
+        D: Dao,
     {
         let result = conn.fetch_all(&by).await?;
         Ok(result)
@@ -81,7 +81,7 @@ where
         by: SqlRef<E>,
     ) -> Result<Vec<D>, TdError>
     where
-        D: DaoCore + States<S>,
+        D: Dao + States<S>,
     {
         let result = conn.fetch_all_in::<S, D>(&by).await?;
         Ok(result)
@@ -93,8 +93,8 @@ where
         by: SqlRef<E>,
     ) -> Result<(), TdError>
     where
-        D: Dao,
-        U: Dao,
+        D: DaoCore,
+        U: DaoUpdate,
     {
         let _result = conn.update::<U, D>(update.deref(), &by).await?;
         Ok(())
@@ -105,7 +105,7 @@ where
         by: SqlRef<E>,
     ) -> Result<(), TdError>
     where
-        D: Dao,
+        D: DaoCore,
     {
         let _result = conn.delete::<D>(&by).await?;
         Ok(())
@@ -116,7 +116,7 @@ where
         by: SqlRef<E>,
     ) -> Result<(), TdError>
     where
-        D: DaoCore,
+        D: Dao,
     {
         let result: Option<D> = conn.fetch_optional(&by).await?;
         match result {

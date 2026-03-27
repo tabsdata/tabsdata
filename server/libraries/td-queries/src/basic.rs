@@ -5,7 +5,7 @@
 use sea_query::{Query, SelectStatement};
 use ta_objects::errors::SqlError;
 use ta_objects::sql_condition::{SqlCondition, resolve_condition};
-use ta_objects::{Dao, DaoCore, ListDto, ListFilter, States};
+use ta_objects::{Dao, DaoCore, DaoUpdate, ListDto, ListFilter, States};
 use td_database::dynamic::DynamicQueryResult;
 use td_database::sea_query::builder::SeaQueryExt;
 use td_database::sea_query::executor::SeaExecutor;
@@ -14,28 +14,28 @@ use td_objects::list::params::ListQueryParams;
 pub trait BasicQueries {
     fn insert<D>(self, dao: &D) -> impl Future<Output = Result<DynamicQueryResult, SqlError>>
     where
-        D: DaoCore;
+        D: Dao;
 
     fn fetch_one<D>(
         self,
         condition: impl SqlCondition,
     ) -> impl Future<Output = Result<D, SqlError>>
     where
-        D: DaoCore;
+        D: Dao;
 
     fn fetch_optional<D>(
         self,
         condition: impl SqlCondition,
     ) -> impl Future<Output = Result<Option<D>, SqlError>>
     where
-        D: DaoCore;
+        D: Dao;
 
     fn fetch_all<D>(
         self,
         condition: impl SqlCondition,
     ) -> impl Future<Output = Result<Vec<D>, SqlError>>
     where
-        D: DaoCore;
+        D: Dao;
 
     fn update<U, D>(
         self,
@@ -43,15 +43,15 @@ pub trait BasicQueries {
         condition: impl SqlCondition,
     ) -> impl Future<Output = Result<DynamicQueryResult, SqlError>>
     where
-        U: Dao,
-        D: Dao;
+        U: DaoUpdate,
+        D: DaoCore;
 
     fn delete<D>(
         self,
         condition: impl SqlCondition,
     ) -> impl Future<Output = Result<DynamicQueryResult, SqlError>>
     where
-        D: Dao;
+        D: DaoCore;
 
     fn list<F: ListFilter, D>(
         self,
@@ -67,7 +67,7 @@ pub trait BasicQueries {
         condition: impl SqlCondition,
     ) -> impl Future<Output = Result<Vec<D>, SqlError>>
     where
-        D: DaoCore + States<S>;
+        D: Dao + States<S>;
 
     /// Find the nth most recent row matching `condition` and state, using the
     /// DAO's default ordering. `offset = 0` returns the most recent match,
@@ -78,12 +78,12 @@ pub trait BasicQueries {
         offset: u64,
     ) -> impl Future<Output = Result<Option<D>, SqlError>>
     where
-        D: DaoCore + States<S>;
+        D: Dao + States<S>;
 }
 
 pub(crate) fn select<D>(condition: impl SqlCondition) -> Result<SelectStatement, SqlError>
 where
-    D: DaoCore,
+    D: Dao,
 {
     let query = Query::select()
         .from(D::table())
@@ -100,7 +100,7 @@ where
 {
     async fn insert<D>(self, dao: &D) -> Result<DynamicQueryResult, SqlError>
     where
-        D: DaoCore,
+        D: Dao,
     {
         let r = Query::insert()
             .into_table(D::table())
@@ -115,7 +115,7 @@ where
 
     async fn fetch_one<D>(self, condition: impl SqlCondition) -> Result<D, SqlError>
     where
-        D: DaoCore,
+        D: Dao,
     {
         let r = select::<D>(condition)?
             .limit(1)
@@ -128,7 +128,7 @@ where
 
     async fn fetch_optional<D>(self, condition: impl SqlCondition) -> Result<Option<D>, SqlError>
     where
-        D: DaoCore,
+        D: Dao,
     {
         let r = select::<D>(condition)?
             .limit(1)
@@ -141,7 +141,7 @@ where
 
     async fn fetch_all<D>(self, condition: impl SqlCondition) -> Result<Vec<D>, SqlError>
     where
-        D: DaoCore,
+        D: Dao,
     {
         let r = select::<D>(condition)?
             .build_query_as()
@@ -157,8 +157,8 @@ where
         condition: impl SqlCondition,
     ) -> Result<DynamicQueryResult, SqlError>
     where
-        U: Dao,
-        D: Dao,
+        U: DaoUpdate,
+        D: DaoCore,
     {
         let r = Query::update()
             .table(U::table())
@@ -173,7 +173,7 @@ where
 
     async fn delete<D>(self, condition: impl SqlCondition) -> Result<DynamicQueryResult, SqlError>
     where
-        D: Dao,
+        D: DaoCore,
     {
         let r = Query::delete()
             .from_table(D::table())
@@ -216,7 +216,7 @@ where
         condition: impl SqlCondition,
     ) -> Result<Vec<D>, SqlError>
     where
-        D: DaoCore + States<S>,
+        D: Dao + States<S>,
     {
         let r = select::<D>(condition)?
             .cond_where(resolve_condition::<D>(D::state())?)
@@ -233,7 +233,7 @@ where
         offset: u64,
     ) -> Result<Option<D>, SqlError>
     where
-        D: DaoCore + States<S>,
+        D: Dao + States<S>,
     {
         let mut query = select::<D>(condition)?
             .cond_where(resolve_condition::<D>(D::state())?)

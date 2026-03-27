@@ -35,7 +35,7 @@ async fn test_update_request_has_nothing_to_update(db: TdPool) {
 
     let update = UserUpdate::builder()
         .full_name(None)
-        .email(None)
+        .email(Option::<Option<_>>::None)
         .password(None)
         .enabled(None)
         .build()

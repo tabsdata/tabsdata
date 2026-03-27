@@ -34,7 +34,7 @@ where
         <axum::Json<T> as FromRequest<_, _>>::from_request(req, state)
             .await
             .map(|axum::Json(value)| {
-                debug!("JSON request: {:#?}", value);
+                debug!("JSON request:\n {:#?} \n", value);
                 Json(value)
             })
             .map_err(From::from)
@@ -48,7 +48,7 @@ where
 {
     fn into_response(self) -> Response {
         let Json(value) = self;
-        debug!("JSON response: {:#?}", value);
+        debug!("JSON response:\n {:#?} \n", value);
         axum::Json(value).into_response()
     }
 }

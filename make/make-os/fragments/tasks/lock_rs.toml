@@ -17,8 +17,8 @@ script = [
     debug "🚀 cargo generate-lockfile"
     exec --fail-on-error cargo generate-lockfile
 
-    debug "🚀 cargo update --verbose -p planus --precise 1.1.1"
-    exit_code = exec --get-exit-code cargo update --verbose -p planus --precise 1.1.1
+    # debug "🚀 cargo update --verbose -p planus --precise 1.1.1"
+    # exit_code = exec --get-exit-code cargo update --verbose -p planus --precise 1.1.1
     ''']
 
 
@@ -37,8 +37,8 @@ script = [
     debug "🚀 cargo generate-lockfile"
     exec --fail-on-error cargo generate-lockfile
 
-    debug "🚀 cargo update --verbose -p planus --precise 1.1.1"
-    exit_code = exec --get-exit-code cargo update --verbose -p planus --precise 1.1.1
+    # debug "🚀 cargo update --verbose -p planus --precise 1.1.1"
+    # exit_code = exec --get-exit-code cargo update --verbose -p planus --precise 1.1.1
     ''']
 
 [tasks.__os__lock_rs_expansions]
@@ -67,8 +67,8 @@ script = [
     debug "🚀 cargo generate-lockfile"
     exec --fail-on-error cargo generate-lockfile
 
-    debug "🚀 cargo update --verbose -p planus --precise 1.1.1"
-    exit_code = exec --get-exit-code cargo update --verbose -p planus --precise 1.1.1
+    # debug "🚀 cargo update --verbose -p planus --precise 1.1.1"
+    # exit_code = exec --get-exit-code cargo update --verbose -p planus --precise 1.1.1
     ''']
 
 [tasks.__os__lock_rs_expansions_polars]
@@ -86,6 +86,6 @@ script = [
     debug "🚀 cargo generate-lockfile"
     exec --fail-on-error cargo generate-lockfile
 
-    debug "🚀 cargo update --verbose -p planus --precise 1.1.1"
-    exit_code = exec --get-exit-code cargo update --verbose -p planus --precise 1.1.1
+    # debug "🚀 cargo update --verbose -p planus --precise 1.1.1"
+    # exit_code = exec --get-exit-code cargo update --verbose -p planus --precise 1.1.1
     ''']

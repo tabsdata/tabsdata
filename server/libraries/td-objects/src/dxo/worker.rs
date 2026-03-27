@@ -137,7 +137,7 @@ mod definitions {
     }
 
     #[ta_objects::Dao]
-    #[dao(sql_table = "workers")]
+    #[dao(update, sql_table = "workers")]
     #[dxo(builder(try_from = UpdateWorkerExecution))]
     pub struct UpdateWorkerDB {
         #[dao(immutable)]
@@ -173,7 +173,7 @@ mod definitions {
     }
 
     #[ta_objects::Dao]
-    #[dao(sql_table = "workers")]
+    #[dao(update, sql_table = "workers")]
     pub struct UpdateWorkerMessageStatusDB {
         message_status: WorkerMessageStatus,
     }

@@ -95,7 +95,7 @@ mod definitions {
     }
 
     #[ta_objects::Dao]
-    #[dao(sql_table = "collections")]
+    #[dao(update, sql_table = "collections")]
     #[dxo(
         builder(try_from = CollectionDB),
         updater(try_from = RequestContext, skip_all)

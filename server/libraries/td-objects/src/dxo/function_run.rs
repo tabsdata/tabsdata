@@ -113,7 +113,7 @@ mod definitions {
     }
 
     #[ta_objects::Dao]
-    #[dao(sql_table = "function_runs")]
+    #[dao(update, sql_table = "function_runs")]
     #[dxo(builder(try_from = UpdateWorkerExecution))]
     pub struct UpdateFunctionRunDB {
         #[dao(immutable)]

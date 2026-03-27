@@ -25,7 +25,7 @@ def write_requirements_lock(root_path, output_path):
             ],
             capture_output=True,
             text=True,
-            timeout=60,
+            timeout=300,
             cwd=root_path,
         )
         if uv_output.returncode == 0:

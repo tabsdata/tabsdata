@@ -31,6 +31,7 @@ use syn::{DeriveInput, Expr, Fields, ItemStruct, Type, parse_macro_input};
 #[derive(Debug, FromDeriveInput, FromAttributes)]
 #[darling(attributes(dao))]
 pub struct DaoArguments {
+    update: Flag,
     sql_table: Option<String>,
     order_by: Option<OrderByArguments>,
     versioned: Option<VersionedArguments>,
@@ -45,6 +46,9 @@ pub struct DaoArguments {
 impl ToTokens for DaoArguments {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let mut args = Vec::new();
+        if self.update.is_present() {
+            args.push(quote! { update });
+        }
         if let Some(sql_table) = &self.sql_table {
             args.push(quote! { sql_table = #sql_table });
         }
@@ -100,6 +104,11 @@ impl ToTokens for DaoArguments {
 impl DaoArguments {
     pub fn override_with(self, other: DaoArguments) -> DaoArguments {
         DaoArguments {
+            update: if other.update.is_present() {
+                other.update
+            } else {
+                self.update
+            },
             sql_table: other.sql_table.or(self.sql_table),
             order_by: other.order_by.or(self.order_by),
             versioned: match (self.versioned, other.versioned) {
@@ -181,15 +190,52 @@ macro_rules! require_field {
 
 // ---- Entry points ----------------------------------------------------------
 
-/// Attribute macro that wraps a struct with DAO derives (DaoType, Builder, FromRow).
+/// Attribute macro that wraps a struct with DAO derives (DaoType, Builder, and
+/// optionally FromRow).  When the struct carries `#[dao(update, …)]` the type
+/// is update-only and `sqlx::FromRow` is skipped (never read from DB).
 pub fn dao(_args: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemStruct);
-    quote! {
-        #[derive(Debug, Clone, ta_objects::DaoType, derive_builder::Builder, sqlx::FromRow)]
-        #[builder(try_setter, setter(into))]
-        #input
+    let is_update = is_dao_update_attr(&input);
+    if is_update {
+        quote! {
+            #[derive(Debug, Clone, ta_objects::DaoType, derive_builder::Builder)]
+            #[builder(try_setter, setter(into))]
+            #input
+        }
+        .into()
+    } else {
+        quote! {
+            #[derive(Debug, Clone, ta_objects::DaoType, derive_builder::Builder, sqlx::FromRow)]
+            #[builder(try_setter, setter(into))]
+            #input
+        }
+        .into()
     }
-    .into()
+}
+
+/// Check whether any `#[dao(...)]` attribute on the struct contains `update`.
+fn is_dao_update_attr(input: &ItemStruct) -> bool {
+    input.attrs.iter().any(|a| {
+        if !a.path().is_ident("dao") {
+            return false;
+        }
+        // Parse the token list inside #[dao(...)]; look for a bare `update` ident.
+        a.parse_args_with(|tokens: syn::parse::ParseStream| {
+            while !tokens.is_empty() {
+                if tokens.peek(syn::Ident) {
+                    let ident: Ident = tokens.parse()?;
+                    if ident == "update" {
+                        return Ok(true);
+                    }
+                } else {
+                    // Skip non-ident tokens (commas, nested groups, etc.)
+                    let _: proc_macro2::TokenTree = tokens.parse()?;
+                }
+            }
+            Ok(false)
+        })
+        .unwrap_or(false)
+    })
 }
 
 /// Derive macro that generates the Iden enum, DaoCore, TypedColumns, and trait
@@ -283,25 +329,12 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
         _ => quote! { sea_query::Order::Desc },
     };
 
-    // ---- DaoCore -----------------------------------------------------------
+    // ---- DaoCore (minimal) -------------------------------------------------
     let display_name = struct_name_to_display_name(&ident.to_string());
     let dao_core = quote! {
         impl #impl_generics ta_objects::DaoCore for #ident #ty_generics #where_clause {
             fn table() -> Self::Iden {
                 #table_iden::Table
-            }
-            fn columns() -> impl IntoIterator<Item = Self::Iden>
-            {
-                [#(#table_iden::#field_iden_variants),*]
-            }
-            fn insert_values(&self) -> impl IntoIterator<Item = sea_query::Expr>
-            {
-                use ta_objects::SeaValue;
-                [#(self.#field_names.as_sea_value().into()),*]
-            }
-            fn order_by() -> impl IntoIterator<Item = (Self::Iden, sea_query::Order)>
-            {
-                [(#table_iden::#order_col_variant, #order_dir)]
             }
             fn display_name() -> &'static str {
                 #display_name
@@ -338,8 +371,11 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
         }
     };
 
-    // ---- DataAccessObject or VersionedDao ----------------------------------
-    let update_exprs: Vec<proc_macro2::TokenStream> = fields
+    // ---- DaoUpdate (update_values) -----------------------------------------
+    //
+    // For `Option<T>` fields (non-immutable): skip them when `None` so that
+    // partial-update DTOs don't SET columns to NULL.
+    let update_stmts: Vec<proc_macro2::TokenStream> = fields
         .iter()
         .filter(|f| !is_sqlx_skip(f))
         .map(|f| {
@@ -348,7 +384,7 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
             if is_dao_immutable(f) {
                 // CASE WHEN col IS NULL THEN ? ELSE col END — set-once semantics.
                 quote! {
-                    (
+                    __values.push((
                         #table_iden::#variant,
                         sea_query::Expr::case(
                             sea_query::Expr::col(#table_iden::#variant).is_null(),
@@ -356,33 +392,86 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
                         )
                         .finally(sea_query::Expr::col(#table_iden::#variant))
                         .into()
-                    )
+                    ));
+                }
+            } else if is_option_type(f) {
+                // Only include the column when the value is Some.
+                quote! {
+                    if let Some(ref __v) = self.#name {
+                        __values.push((
+                            #table_iden::#variant,
+                            __v.as_sea_value().into()
+                        ));
+                    }
                 }
             } else {
                 quote! {
-                    (
+                    __values.push((
                         #table_iden::#variant,
                         self.#name.as_sea_value().into()
-                    )
+                    ));
                 }
             }
         })
         .collect();
 
-    let dao_impl = quote! {
-        impl #impl_generics ta_objects::Dao
+    let dao_update_impl = quote! {
+        impl #impl_generics ta_objects::DaoUpdate
             for #ident #ty_generics #where_clause {
                 fn update_values(&self) -> impl IntoIterator<Item = (Self::Iden, sea_query::Expr)>
                 {
                     use ta_objects::SeaValue;
                     use sea_query::ExprTrait;
-                    [#(#update_exprs),*]
+                    let mut __values = Vec::new();
+                    #(#update_stmts)*
+                    __values
                 }
         }
     };
 
+    // ---- Update-only path: skip Dao, VersionedDao, States, Recursive -------
+    if parsed.update.is_present() && parsed.versioned.is_some() {
+        return syn::Error::new_spanned(
+            ident,
+            "`update` and `versioned` are incompatible — update DAOs cannot be versioned",
+        )
+        .to_compile_error()
+        .into();
+    }
+    if parsed.update.is_present() {
+        let td_type = td_type(&input, &item);
+        return quote! {
+            #iden_enum
+            #typed_columns
+            #dao_core
+            #dao_update_impl
+            #td_type
+        }
+        .into();
+    }
+
+    // ---- Dao (full read/write: columns, insert_values, order_by) -----------
+    let dao_read = quote! {
+        impl #impl_generics ta_objects::Dao for #ident #ty_generics #where_clause {
+            fn columns() -> impl IntoIterator<Item = Self::Iden>
+            {
+                [#(#table_iden::#field_iden_variants),*]
+            }
+            fn insert_values(&self) -> impl IntoIterator<Item = sea_query::Expr>
+            {
+                use ta_objects::SeaValue;
+                [#(self.#field_names.as_sea_value().into()),*]
+            }
+            fn order_by() -> impl IntoIterator<Item = (Self::Iden, sea_query::Order)>
+            {
+                [(#table_iden::#order_col_variant, #order_dir)]
+            }
+        }
+    };
+
+    // ---- Access trait: DaoUpdate, VersionedDao, or both --------------------
     let access_trait = match (&parsed.versioned, parsed.data_version.is_present()) {
-        (None, false) => dao_impl,
+        (None, false) => dao_update_impl,
         (Some(v), is_data_version) => {
             let pk_str = match &v.pk {
                 Some(s) => s,
@@ -454,7 +543,7 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
                     impl #impl_generics ta_objects::DataVersionDao
                         for #ident #ty_generics #where_clause {}
                 };
-                quote! { #versioned_impl #dao_impl #data_version_impl }
+                quote! { #versioned_impl #dao_update_impl #data_version_impl }
             } else {
                 versioned_impl
             }
@@ -548,6 +637,7 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
         #iden_enum
         #typed_columns
         #dao_core
+        #dao_read
         #access_trait
         #states
         #recursive
@@ -658,4 +748,14 @@ fn is_dao_immutable(f: &syn::Field) -> bool {
             .map(|ident| ident == "immutable")
             .unwrap_or(false)
     })
+}
+
+/// Returns `true` when the field type is `Option<…>`.
+fn is_option_type(f: &syn::Field) -> bool {
+    if let Type::Path(tp) = &f.ty
+        && let Some(seg) = tp.path.segments.last()
+    {
+        return seg.ident == "Option";
+    }
+    false
 }

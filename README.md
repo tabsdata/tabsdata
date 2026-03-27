@@ -34,7 +34,7 @@ macOS and Windows.
 To install and run the binary distribution use the following command:
 
 ```
-pip install tabsdata
+pip install "tabsdata[all]"
 ```
 
 ### Tabsdata Binary Distribution Documentation

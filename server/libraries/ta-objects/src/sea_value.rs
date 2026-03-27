@@ -57,6 +57,14 @@ pub trait NullableSeaValue: SeaValue + Sized {
     fn null_sea_value() -> sea_query::Value;
 }
 
+// Option<T> is NullableSeaValue whenever T is — enables Option<Option<T>>
+// as a tri-state: None = skip, Some(None) = SET NULL, Some(Some(v)) = SET v.
+impl<T: NullableSeaValue + 'static> NullableSeaValue for Option<T> {
+    fn null_sea_value() -> sea_query::Value {
+        T::null_sea_value()
+    }
+}
+
 // Option<T> is SeaValue whenever T opts in to NullableSeaValue.
 impl<T: NullableSeaValue + 'static> SeaValue for Option<T> {
     fn as_sea_value(&self) -> sea_query::Value {
