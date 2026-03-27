@@ -200,9 +200,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.2.57"
+version = "1.2.58"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a0dd1ca384932ff3641c8718a02769f1698e7563dc6974ffd03346116310423"
+checksum = "e1e928d4b69e3077709075a938a05ffbedfa53a84c8f766efbf8220bb1ff60e1"
 dependencies = [
  "find-msvc-tools",
  "shlex",
@@ -3178,9 +3178,9 @@ dependencies = [
 
 [[package]]
 name = "mio"
-version = "1.1.1"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a69bcab0ad47271a0234d9422b131806bf3968021e5dc9328caf2d4cd58557fc"
+checksum = "50b7e5b27aa02a74bac8c3f23f448f8d87ff11f92d3aac1a6ed369ee08cc56c1"
 dependencies = [
  "libc",
  "wasi 0.11.1+wasi-snapshot-preview1",
@@ -4137,9 +4137,9 @@ dependencies = [
 
 [[package]]
 name = "rust_decimal"
-version = "1.40.0"
+version = "1.41.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61f703d19852dbf87cbc513643fa81428361eb6940f1ac14fd58155d295a3eb0"
+checksum = "2ce901f9a19d251159075a4c37af514c3b8ef99c22e02dd8c19161cf397ee94a"
 dependencies = [
  "arrayvec",
  "num-traits",
@@ -4848,7 +4848,7 @@ dependencies = [
 
 [[package]]
 name = "ta-system"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "openssl",
  "td-build",
@@ -4862,7 +4862,7 @@ checksum = "adb6935a6f5c20170eeceb1a3835a49e12e19d792f6dd344ccc76a985ca5a6ca"
 
 [[package]]
 name = "td-attach"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "darling 0.23.0",
  "openssl",
@@ -4874,7 +4874,7 @@ dependencies = [
 
 [[package]]
 name = "td-build"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4893,7 +4893,7 @@ dependencies = [
 
 [[package]]
 name = "td-common"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -4944,7 +4944,7 @@ dependencies = [
 
 [[package]]
 name = "td-error"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "anyhow",
  "derive_builder",
@@ -4959,7 +4959,7 @@ dependencies = [
 
 [[package]]
 name = "td-security"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "argon2",
  "derive_builder",
@@ -4970,7 +4970,7 @@ dependencies = [
 
 [[package]]
 name = "te-system"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "openssl",
  "ta-system",
@@ -5088,7 +5088,7 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tm-error"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "openssl",
  "quote",
@@ -5097,7 +5097,7 @@ dependencies = [
 
 [[package]]
 name = "tm-pyo3"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "openssl",
  "quote",
@@ -5106,7 +5106,7 @@ dependencies = [
 
 [[package]]
 name = "tm-workspace"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "openssl",
  "quote",
@@ -5118,7 +5118,7 @@ dependencies = [
 
 [[package]]
 name = "to-expansions"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "openssl",
  "ta-system",
@@ -5129,7 +5129,7 @@ dependencies = [
 
 [[package]]
 name = "to-foundation"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "openssl",
  "pyo3",

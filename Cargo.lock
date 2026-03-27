@@ -329,9 +329,9 @@ dependencies = [
 
 [[package]]
 name = "aws-lc-sys"
-version = "0.39.0"
+version = "0.39.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fa7e52a4c5c547c741610a2c6f123f3881e409b714cd27e6798ef020c514f0a"
+checksum = "83a25cf98105baa966497416dbd42565ce3a8cf8dbfd59803ec9ad46f3126399"
 dependencies = [
  "cc",
  "cmake",
@@ -699,9 +699,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.2.57"
+version = "1.2.58"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a0dd1ca384932ff3641c8718a02769f1698e7563dc6974ffd03346116310423"
+checksum = "e1e928d4b69e3077709075a938a05ffbedfa53a84c8f766efbf8220bb1ff60e1"
 dependencies = [
  "find-msvc-tools",
  "jobserver",
@@ -4666,9 +4666,9 @@ dependencies = [
 
 [[package]]
 name = "mio"
-version = "1.1.1"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a69bcab0ad47271a0234d9422b131806bf3968021e5dc9328caf2d4cd58557fc"
+checksum = "50b7e5b27aa02a74bac8c3f23f448f8d87ff11f92d3aac1a6ed369ee08cc56c1"
 dependencies = [
  "libc",
  "wasi 0.11.1+wasi-snapshot-preview1",
@@ -7746,7 +7746,7 @@ dependencies = [
 
 [[package]]
 name = "ta-apiserver"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "axum",
  "derive_builder",
@@ -7770,7 +7770,7 @@ dependencies = [
 
 [[package]]
 name = "ta-objects"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "chrono",
  "derive_builder",
@@ -7796,7 +7796,7 @@ dependencies = [
 
 [[package]]
 name = "ta-services"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "openssl",
  "ta-services",
@@ -7806,7 +7806,7 @@ dependencies = [
 
 [[package]]
 name = "ta-system"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "openssl",
  "ta-system",
@@ -7815,7 +7815,7 @@ dependencies = [
 
 [[package]]
 name = "ta-tableframe"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "openssl",
  "ta-tableframe",
@@ -7850,7 +7850,7 @@ dependencies = [
 
 [[package]]
 name = "tabsdata"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "openssl",
  "td-apiserver",
@@ -7861,7 +7861,7 @@ dependencies = [
 
 [[package]]
 name = "td-apiforge"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "darling 0.23.0",
  "openssl",
@@ -7873,7 +7873,7 @@ dependencies = [
 
 [[package]]
 name = "td-apiserver"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -7927,7 +7927,7 @@ dependencies = [
 
 [[package]]
 name = "td-attach"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "darling 0.23.0",
  "openssl",
@@ -7939,7 +7939,7 @@ dependencies = [
 
 [[package]]
 name = "td-authz"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "chrono",
  "itertools 0.14.0",
@@ -7961,7 +7961,7 @@ dependencies = [
 
 [[package]]
 name = "td-build"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -7980,7 +7980,7 @@ dependencies = [
 
 [[package]]
 name = "td-common"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -8033,7 +8033,7 @@ dependencies = [
 
 [[package]]
 name = "td-crontrigger"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -8060,7 +8060,7 @@ dependencies = [
 
 [[package]]
 name = "td-database"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "async-stream",
  "futures-util",
@@ -8086,7 +8086,7 @@ dependencies = [
 
 [[package]]
 name = "td-error"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "anyhow",
  "derive_builder",
@@ -8103,7 +8103,7 @@ dependencies = [
 
 [[package]]
 name = "td-execution"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "derive_builder",
  "itertools 0.14.0",
@@ -8124,7 +8124,7 @@ dependencies = [
 
 [[package]]
 name = "td-objects"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "aquamarine",
  "axum",
@@ -8164,7 +8164,7 @@ dependencies = [
 
 [[package]]
 name = "td-process"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "clap",
  "clap_derive",
@@ -8194,7 +8194,7 @@ dependencies = [
 
 [[package]]
 name = "td-python"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "openssl",
  "rand 0.10.0",
@@ -8212,7 +8212,7 @@ dependencies = [
 
 [[package]]
 name = "td-queries"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "chrono",
  "derive_builder",
@@ -8239,7 +8239,7 @@ dependencies = [
 
 [[package]]
 name = "td-schema"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "hex",
  "openssl",
@@ -8251,7 +8251,7 @@ dependencies = [
 
 [[package]]
 name = "td-security"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "argon2",
  "derive_builder",
@@ -8263,7 +8263,7 @@ dependencies = [
 
 [[package]]
 name = "td-server"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "clap",
  "openssl",
@@ -8285,7 +8285,7 @@ dependencies = [
 
 [[package]]
 name = "td-services"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "argon2",
  "axum",
@@ -8333,7 +8333,7 @@ dependencies = [
 
 [[package]]
 name = "td-shared"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "darling 0.23.0",
  "duct",
@@ -8345,7 +8345,7 @@ dependencies = [
 
 [[package]]
 name = "td-shuttle"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "async-compression",
  "async-trait",
@@ -8394,7 +8394,7 @@ dependencies = [
 
 [[package]]
 name = "td-storage"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "bytes",
  "derive_builder",
@@ -8419,7 +8419,7 @@ dependencies = [
 
 [[package]]
 name = "td-supervisor"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "async-trait",
  "atomic_enum",
@@ -8477,7 +8477,7 @@ dependencies = [
 
 [[package]]
 name = "td-tableframe"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "openssl",
  "polars",
@@ -8491,7 +8491,7 @@ dependencies = [
 
 [[package]]
 name = "td-test"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "chrono",
  "hex",
@@ -8509,7 +8509,7 @@ dependencies = [
 
 [[package]]
 name = "td-tower"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "derive_builder",
  "futures-util",
@@ -8533,7 +8533,7 @@ dependencies = [
 
 [[package]]
 name = "td-xtask"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "clap",
  "clap_derive",
@@ -8542,7 +8542,7 @@ dependencies = [
 
 [[package]]
 name = "te-apiserver"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "clap",
  "getset",
@@ -8558,7 +8558,7 @@ dependencies = [
 
 [[package]]
 name = "te-execution"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "openssl",
  "serde",
@@ -8570,7 +8570,7 @@ dependencies = [
 
 [[package]]
 name = "te-services"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "axum",
  "openssl",
@@ -8581,7 +8581,7 @@ dependencies = [
 
 [[package]]
 name = "te-system"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "openssl",
  "ta-system",
@@ -8591,7 +8591,7 @@ dependencies = [
 
 [[package]]
 name = "te-tableframe"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "openssl",
  "ta-tableframe",
@@ -8769,7 +8769,7 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tm-error"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "openssl",
  "quote",
@@ -8778,7 +8778,7 @@ dependencies = [
 
 [[package]]
 name = "tm-objects"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "darling 0.23.0",
  "heck 0.5.0",
@@ -8791,7 +8791,7 @@ dependencies = [
 
 [[package]]
 name = "tm-services"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "openssl",
  "quote",
@@ -8800,7 +8800,7 @@ dependencies = [
 
 [[package]]
 name = "tm-test"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "darling 0.23.0",
  "openssl",
@@ -8812,7 +8812,7 @@ dependencies = [
 
 [[package]]
 name = "tm-tower"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "openssl",
  "quote",
@@ -8821,7 +8821,7 @@ dependencies = [
 
 [[package]]
 name = "tm-workspace"
-version = "1.9.0"
+version = "1.10.0"
 dependencies = [
  "openssl",
  "quote",
@@ -8839,7 +8839,7 @@ checksum = "27ad5e34374e03cfffefc301becb44e9dc3c17584f414349ebe29ed26661822d"
 dependencies = [
  "bytes",
  "libc",
- "mio 1.1.1",
+ "mio 1.2.0",
  "parking_lot",
  "pin-project-lite",
  "signal-hook-registry",

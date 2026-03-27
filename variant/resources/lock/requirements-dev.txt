@@ -22,7 +22,7 @@ babel==2.18.0
 beautifulsoup4==4.14.3
 boolean-py==5.0
 boto3==1.42.73
-botocore==1.42.77
+botocore==1.42.78
 build==1.4.0
 cachecontrol==0.14.4
 cattrs==24.1.3
