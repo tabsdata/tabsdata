@@ -3,6 +3,7 @@
 #
 
 import logging
+import os
 import random
 import string
 from datetime import datetime, timedelta, timezone
@@ -27,7 +28,10 @@ from test_tabsdata_cdc_db2.common.sql import Db2CdcSampler
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-@pytest.mark.skip(reason="There is no support for pure hot schema evolution with sql replica; used only for development.")
+
+@pytest.mark.skipif(
+    os.environ.get("TD_ON_GA") == "true",
+    reason="There is no support for pure hot schema evolution with sql replica; used only for development.")
 @pytest.mark.cdc_db2
 @pytest.mark.slow
 @pytest.mark.tdfntrigger(venv=False)
