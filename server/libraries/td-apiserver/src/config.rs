@@ -376,7 +376,7 @@ mod tests {
         // Test with some fields not set in Params
         let partial_params = Params {
             #[cfg(target_os = "windows")]
-            database_url: Some(String::from("file:///c:/test.db")),
+            database_url: Some(Url::from_str("file:///c:/test.db").unwrap()),
             #[cfg(not(target_os = "windows"))]
             database_url: Some(Url::from_str("file:///test.db").unwrap()),
             database_log_level: None,
