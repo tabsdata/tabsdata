@@ -376,7 +376,17 @@ fn importer_lazy_frame(
                     .and_then(|mut s| s.next_back())
                     .map(|s| s.to_string())
                     .unwrap_or_else(|| format!("<n/a>{url}")),
-                FileInfo::Uri => url.to_string(),
+                FileInfo::Uri => {
+                    // On Windows, Url::join may misinterpret a drive letter (e.g.
+                    // "C:") as a URL scheme, producing "c:/Users/..." instead of
+                    // "file:///C:/Users/...". Detect this by checking for a
+                    // single-letter scheme and reconstruct the proper file URI.
+                    if url.scheme().len() == 1 {
+                        format!("file:///{}", url.as_str())
+                    } else {
+                        url.to_string()
+                    }
+                }
             };
             lazy_frame
                 .with_row_index(TD_ORIGIN_FILE_LINE, Some(1))

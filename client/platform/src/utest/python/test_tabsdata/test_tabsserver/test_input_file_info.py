@@ -5,6 +5,8 @@
 import logging
 import os
 import uuid
+from urllib.parse import urlparse
+from urllib.request import pathname2url
 
 import polars as pl
 import pytest
@@ -178,7 +180,7 @@ def verify_file_info_columns(
     )
     path_value = path_values[0]
 
-    expected_filename = expected_uri.rsplit("/", 1)[-1]
+    expected_filename = urlparse(expected_uri).path.rsplit("/", 1)[-1]
     match file_info:
         case "name":
             assert path_value == expected_filename, (
@@ -221,7 +223,7 @@ def test_file_info_local(tmp_path, file_format, file_info):
     assert len(output) == 1
 
     result_df = output[0].as_pl_df(with_sys_columns=True)
-    expected_uri = f"file://{data_path}"
+    expected_uri = "file://" + pathname2url(os.path.abspath(data_path))
     verify_file_info_columns(result_df, file_info, file_format, expected_uri)
 
 

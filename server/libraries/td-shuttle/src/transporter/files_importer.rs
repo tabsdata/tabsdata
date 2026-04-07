@@ -940,8 +940,14 @@ mod tests {
             .build()
             .unwrap();
 
+        let from_filename = from_file
+            .url()
+            .path_segments()
+            .and_then(|s| s.last())
+            .unwrap()
+            .to_string();
         let meta = ObjectMeta {
-            location: ObjectStorePath::from(from_file.url().path()),
+            location: ObjectStorePath::from(from_filename.as_str()),
             last_modified: Utc::now(),
             size: 1024,
             e_tag: Some("e_tag".to_string()),
@@ -1272,8 +1278,14 @@ mod tests {
             .build()
             .unwrap();
 
+        let from_filename = from_file
+            .url()
+            .path_segments()
+            .and_then(|s| s.last())
+            .unwrap()
+            .to_string();
         let meta = ObjectMeta {
-            location: ObjectStorePath::from(from_file.url().path()),
+            location: ObjectStorePath::from(from_filename.as_str()),
             last_modified: Utc::now(),
             size: 1024,
             e_tag: Some("e_tag".to_string()),

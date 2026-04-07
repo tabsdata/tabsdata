@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any, List, Union
 
 import polars as pl
 from tenacity import retry, stop_after_attempt, wait_fixed
+from typing_extensions import deprecated
 
 from tabsdata._io.inputs.sql_inputs import (
     _replace_initial_values,
@@ -29,6 +30,7 @@ from tabsdata._io.outputs.shared_enums import (
 from tabsdata._io.plugin import DestinationPlugin, SourcePlugin
 from tabsdata._secret import DirectSecret, Secret
 from tabsdata._tabsserver.function.offset_utils import OffsetReturn
+from tabsdata._utils.annotations import unstable, unstable_category
 from tabsdata.exceptions import ErrorCode, SourceConfigurationError
 
 if TYPE_CHECKING:
@@ -78,6 +80,18 @@ def _table_fqn_4sql(table: str) -> str:
         )
 
 
+@unstable()
+@deprecated(
+    """Class 'DatabricksSource' is considered unstable and is subject to change in future releases.""",  # noqa: E231,E241,E501
+    category=unstable_category(
+        reason=(
+            "Class 'DatabricksSource' may undergo API and feature changes as it evolves"
+            " toward full capability and stability."
+        ),
+        since="1.9.0",
+        replacement="There is no current stable replacement for this class.",
+    ),
+)
 class DatabricksSource(SourcePlugin):
     """
     :categories: source
