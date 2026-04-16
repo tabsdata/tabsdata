@@ -141,7 +141,7 @@ target/
 Thumbs.db
 variant/assets/manifest/SOURCETRACK.yaml
 variant/assets/manifest/THIRD-PARTY
-# variant/resources/lock/requirements.txt
+# variant/resources/lock/tabsdata-requirements.txt
 var/
 venv.bak/
 venv/

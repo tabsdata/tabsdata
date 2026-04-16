@@ -115,6 +115,7 @@ REQUIRE_SERVER_BINARIES = "REQUIRE_SERVER_BINARIES"
 REQUIRE_THIRD_PARTY = "REQUIRE_THIRD_PARTY"
 TD_IGNORE_CONNECTOR_REQUIREMENTS = "TD_IGNORE_CONNECTOR_REQUIREMENTS"
 TD_SKIP_NON_EXISTING_ASSETS = "TD_SKIP_NON_EXISTING_ASSETS"
+TD_SETUP_GENERATE_LOCKS = "TD_SETUP_GENERATE_LOCKS"
 
 HostPackageSource: TypeAlias = Literal[
     "Development",
@@ -822,7 +823,9 @@ def inject_tabsdata_version(required_modules: list[str]) -> list[str]:  # noqa: 
             )
         return lock_map
 
-    requirements_lock_map = load_requirements_lock("resources/lock/requirements.txt")
+    requirements_lock_map = load_requirements_lock(
+        "resources/lock/tabsdata-requirements.txt"
+    )
 
     if tabsdata_provider in (
         "Archive (Project)",
@@ -832,7 +835,7 @@ def inject_tabsdata_version(required_modules: list[str]) -> list[str]:  # noqa: 
         "Folder (Frozen)",
     ):
         requirements_dev_lock_map = load_requirements_lock(
-            "resources/lock/requirements-dev.txt"
+            "resources/lock/tabsdata-requirements-dev.txt"
         )
         requirements_lock_map.update(requirements_dev_lock_map)
 
@@ -1841,6 +1844,7 @@ def install_host_package(  # noqa: C901
             pip_environment[REQUIRE_THIRD_PARTY] = "false"
             pip_environment[TD_IGNORE_CONNECTOR_REQUIREMENTS] = "true"
             pip_environment[TD_SKIP_NON_EXISTING_ASSETS] = "true"
+            pip_environment[TD_SETUP_GENERATE_LOCKS] = "false"
         result = subprocess.run(
             pip_install_requirements_command,
             shell=True,

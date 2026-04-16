@@ -138,6 +138,7 @@ script = [
     set_env REQUIRE_THIRD_PARTY "true"
     set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
     set_env TD_SKIP_NON_EXISTING_ASSETS "false"
+    set_env TD_SETUP_GENERATE_LOCKS "false"
 
     set_env TD_WHEELS_FLAVOUR "4repo"
 
@@ -194,6 +195,7 @@ script = [
     array_push ${lines} "unset TD_INHERIT_TABSDATA_PACKAGES"
     array_push ${lines} "unset TD_PYTHON_LINKED_TO_REPOSITORY"
     array_push ${lines} "unset TD_SKIP_NON_EXISTING_ASSETS"
+    array_push ${lines} "unset TD_SETUP_GENERATE_LOCKS"
     array_push ${lines} ""
     array_push ${lines} "❗ The following commands will install your local wheels on a 'td4repo' conda environment using a local devpi:"
     array_push ${lines} "❗ (Note: The finer details are left to you. The commands below assume you generated the wheels only with the 'wheels_4repo' task.)"
@@ -222,6 +224,7 @@ script = [
     set_env REQUIRE_THIRD_PARTY "true"
     set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
     set_env TD_SKIP_NON_EXISTING_ASSETS "false"
+    set_env TD_SETUP_GENERATE_LOCKS "false"
 
     set_env TD_WHEELS_FLAVOUR "4whl"
 
@@ -273,6 +276,7 @@ script = [
     array_push ${lines} "export TD_INHERIT_TABSDATA_PACKAGES=true"
     array_push ${lines} "export TD_PYTHON_LINKED_TO_REPOSITORY=false"
     array_push ${lines} "export TD_SKIP_NON_EXISTING_ASSETS=true"
+    array_push ${lines} "export TD_SETUP_GENERATE_LOCKS=false"
     array_push ${lines} ""
     array_push ${lines} "❗ The following commands will install your local wheels on a 'td4whl' conda environment using a direct wheels:"
     array_push ${lines} "❗ (Note: The finer details are left to you. The commands below assume you generated the wheels only with the 'wheels_4whl' task.)"

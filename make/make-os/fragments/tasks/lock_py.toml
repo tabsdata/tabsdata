@@ -113,22 +113,63 @@ script = [
     debug "🚀 python ${LOCK_REQUIREMENTS_SCRIPT} ${PROJECT_TABSDATA_ROOT_FOLDER}"
     exec --fail-on-error python ${LOCK_REQUIREMENTS_SCRIPT} ${PROJECT_TABSDATA_ROOT_FOLDER}
 
-    debug "🚀 uv pip compile --upgrade --no-header --no-annotate --format requirements.txt --quiet --output-file ./variant/resources/lock/requirements.txt ./requirements/requirements-third-party-all.txt"
-    exec --fail-on-error uv pip compile --upgrade --no-header --no-annotate --format requirements.txt --quiet --output-file ./variant/resources/lock/requirements.txt ./requirements/requirements-third-party-all.txt
+    project_root_folder_basename = basename ${PROJECT_TABSDATA_ROOT_FOLDER}
 
-    debug "🚀 uv pip compile --upgrade --no-header --no-annotate --format requirements.txt --quiet --output-file ./variant/resources/lock/requirements-dev.txt ./requirements/requirements-dev-third-party-all.txt"
-    exec --fail-on-error uv pip compile --upgrade --no-header --no-annotate --format requirements.txt --quiet --output-file ./variant/resources/lock/requirements-dev.txt ./requirements/requirements-dev-third-party.txt
+    is_tabsdata = eq ${project_root_folder_basename} "tabsdata"
+    is_tabsdata_ee = eq ${project_root_folder_basename} "tabsdata-ee"
+
+    tabsdata_agent_root = set "${PROJECT_TABSDATA_ROOT_FOLDER}/../tabsdata-ag"
+    tabsdata_agent_root_exists = is_directory ${tabsdata_agent_root}
+
+    lock_command = array
+    array_push ${lock_command} uv pip compile --upgrade --no-header --no-annotate --format requirements.txt --quiet
+    array_push ${lock_command} --output-file ./variant/resources/lock/tabsdata-requirements.txt
+    array_push ${lock_command} ./requirements/requirements-third-party-all.txt
+    if ${is_tabsdata} or ${is_tabsdata_ee}
+        if ${tabsdata_agent_root_exists}
+            info "🔅 Including tabsdata agent requirements from: ${tabsdata_agent_root}/requirements/requirements-third-party-all.txt"
+            array_push ${lock_command} ${tabsdata_agent_root}/requirements/requirements-third-party-all.txt
+        else
+            info "🔅 Skipping tabsdata agent requirements as ../tabsdata-ag does not exist"
+        end
+    end
+    lock_exec_command = array_join ${lock_command} " "
+    debug "🚀 ${lock_exec_command}"
+    exec --fail-on-error %{lock_exec_command}
+
+    lock_dev_command = array
+    array_push ${lock_dev_command} uv pip compile --upgrade --no-header --no-annotate --format requirements.txt --quiet
+    array_push ${lock_dev_command} --output-file ./variant/resources/lock/tabsdata-requirements-dev.txt
+    array_push ${lock_dev_command} -c ./requirements/requirements-third-party-all.txt
+    if ${is_tabsdata} or ${is_tabsdata_ee}
+        if ${tabsdata_agent_root_exists}
+            info "🔅 Including tabsdata agent dev constraints from: ${tabsdata_agent_root}/requirements/requirements-third-party-all.txt"
+            array_push ${lock_dev_command} -c ${tabsdata_agent_root}/requirements/requirements-third-party-all.txt
+        else
+            info "🔅 Skipping tabsdata agent dev requirements as ../tabsdata-ag does not exist"
+        end
+    end
+    array_push ${lock_dev_command} ./requirements/requirements-dev-third-party.txt
+    if ${is_tabsdata} or ${is_tabsdata_ee}
+        if ${tabsdata_agent_root_exists}
+            info "🔅 Including tabsdata agent dev requirements from: ${tabsdata_agent_root}/requirements/requirements-dev-third-party.txt"
+            array_push ${lock_dev_command} ${tabsdata_agent_root}/requirements/requirements-dev-third-party.txt
+        end
+    end
+    lock_dev_exec_command = array_join ${lock_dev_command} " "
+    debug "🚀 ${lock_dev_exec_command}"
+    exec --fail-on-error %{lock_dev_exec_command}
 
     current_year = exec python -c "import datetime; print(datetime.datetime.now().year)"
     current_year = trim ${current_year.stdout}
 
-    debug "📝 Adding copyright header to requirements.txt"
-    content = readfile ./variant/resources/lock/requirements.txt
-    writefile ./variant/resources/lock/requirements.txt "#\n# Copyright ${current_year} Tabs Data Inc.\n#\n\n${content}"
+    debug "📝 Adding copyright header to tabsdata-requirements.txt"
+    content = readfile ./variant/resources/lock/tabsdata-requirements.txt
+    writefile ./variant/resources/lock/tabsdata-requirements.txt "#\n# Copyright ${current_year} Tabs Data Inc.\n#\n\n${content}"
 
-    debug "📝 Adding copyright header to requirements-dev.txt"
-    content = readfile ./variant/resources/lock/requirements-dev.txt
-    writefile ./variant/resources/lock/requirements-dev.txt "#\n# Copyright ${current_year} Tabs Data Inc.\n#\n\n${content}"
+    debug "📝 Adding copyright header to tabsdata-requirements-dev.txt"
+    content = readfile ./variant/resources/lock/tabsdata-requirements-dev.txt
+    writefile ./variant/resources/lock/tabsdata-requirements-dev.txt "#\n# Copyright ${current_year} Tabs Data Inc.\n#\n\n${content}"
     ''']
 
 [tasks.__os__lock_py_connectors]
