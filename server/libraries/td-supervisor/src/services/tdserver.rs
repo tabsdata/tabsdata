@@ -998,6 +998,7 @@ fn command_upgrade(arguments: UpgradeArguments) {
                             );
                             exit(Success.code())
                         }
+                        set_log_level(Level::INFO);
                         show_std_out_and_err(&output);
                         error!(
                             "Bad exit code upgrading database '{}': {}",

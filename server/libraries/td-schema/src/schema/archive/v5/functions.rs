@@ -160,7 +160,6 @@ pub enum TableDataVersions {
     FunctionRunId,
     FunctionParamPos,
     WithDataTableDataVersionId,
-    TriggeredOn,
 }
 
 #[derive(Iden)]

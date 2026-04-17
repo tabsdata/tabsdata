@@ -21,6 +21,7 @@ use sqlx::{
     sqlite::{SqliteQueryResult, SqliteRow},
 };
 use std::ops::DerefMut;
+use tracing::debug;
 
 // Pool
 
@@ -195,7 +196,14 @@ impl<'c> DynamicConnection<'c> {
 
     /// Execute a batch of SQL statements on this connection.
     pub async fn execute_batch(&mut self, stmts: &[String]) -> Result<(), Error> {
-        for stmt in stmts {
+        let total = stmts.len();
+        for (idx, stmt) in stmts.iter().enumerate() {
+            debug!(
+                stmt_index = idx + 1,
+                stmt_total = total,
+                sql = stmt.as_str(),
+                "Executing batch statement"
+            );
             match self {
                 #[cfg(feature = "sqlite")]
                 Self::Sqlite(h) => {
@@ -209,7 +217,7 @@ impl<'c> DynamicConnection<'c> {
                 Self::MySql(h) => {
                     sqlx::query(stmt).execute(&mut **h).await?;
                 }
-            }
+            };
         }
         Ok(())
     }

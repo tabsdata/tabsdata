@@ -232,6 +232,11 @@ pub fn normalize() -> Vec<String> {
         stmts.push(format!("DROP TABLE \"__old_{table}\""));
     }
 
+    // 7. Rebuild all indices to ensure consistency after the heavy DDL
+    //    (renames + rebuilds can leave SQLite index state stale within
+    //    the transaction, triggering SQLITE_CORRUPT_INDEX on later queries).
+    stmts.push("REINDEX".to_string());
+
     // Re-enable FK enforcement.
     stmts.push("PRAGMA foreign_keys = ON".to_string());
 

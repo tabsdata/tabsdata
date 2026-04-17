@@ -184,14 +184,6 @@ fn table_data_version_indices() -> Vec<IndexCreateStatement> {
             .col(TableDataVersions::TableId)
             .col(TableDataVersions::HasData)
             .to_owned(),
-        // Composite index for versioned queries: PARTITION BY table_id ORDER BY triggered_on DESC, id DESC
-        Index::create()
-            .name("table_data_versions___table_id__triggered_on__id___idx")
-            .table(TableDataVersions::Table)
-            .col(TableDataVersions::TableId)
-            .col(TableDataVersions::TriggeredOn)
-            .col(TableDataVersions::Id)
-            .to_owned(),
     ]
 }
 

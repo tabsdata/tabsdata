@@ -23,6 +23,8 @@ use tracing::info;
 #[derive(Iden)]
 enum TableDataVersions {
     Table,
+    Id,
+    TableId,
     FunctionVersionId,
     FunctionRunId,
     TriggeredOn,
@@ -145,9 +147,9 @@ impl SchemaDelta for Migration {
     const FROM_VERSION: usize = 6;
     const TO_VERSION: usize = 7;
     const FINGERPRINTS: [&'static str; 3] = [
-        "7d0b3b43a3542dc399eb4c2f9feed9009fb40516a9f8ea3efcb93998c4d425d6", // Sqlite
-        "8db53553761f7fc24f1c53d32710c70740d1b814f542beb45416dcc7126008da", // Postgres
-        "2947417889055a12c2d621e6fd51c5bd057f3355a516c970da5b25d2439af46d", // MySql
+        "0f39251e4ef93ee863b54091acaaf8ea7d98b03cf281f7ccc426bd087531e20b", // Sqlite
+        "a44f915d715532dda4832ca08e136699996686d3d9a849b396ebe2e62d92f558", // Postgres
+        "40d31379fc933664d9835b3c540ac7f20e8739b8749f18ac9f1e10f8617725ea", // MySql
     ];
 
     fn up(b: Backend) -> Vec<String> {
@@ -857,7 +859,20 @@ impl SchemaDelta for Migration {
             )),
         );
 
-        // 18. Indices on _current tables
+        // 18. Index on table_data_versions for the new triggered_on column
+        stmts.push(
+            b.build_schema(
+                Index::create()
+                    .name("table_data_versions___table_id__triggered_on__id___idx")
+                    .table(TableDataVersions::Table)
+                    .col(TableDataVersions::TableId)
+                    .col(TableDataVersions::TriggeredOn)
+                    .col(TableDataVersions::Id)
+                    .to_owned(),
+            ),
+        );
+
+        // 19. Indices on _current tables
         stmts.push(
             b.build_schema(
                 Index::create()
@@ -952,7 +967,7 @@ impl SchemaDelta for Migration {
             ),
         );
 
-        // 19. Mandatory version bump.
+        // 20. Mandatory version bump.
         stmts.push(b.update_db_version(Self::TO_VERSION));
 
         info!(

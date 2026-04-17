@@ -24,9 +24,9 @@ impl SchemaVersion for Schema {
     const VERSION: usize = 5;
 
     const FINGERPRINTS: [&'static str; 3] = [
-        "a38fb3a284a90ce994d88a094a045177bbf28dc0964d92a66887981329d98ab8", // Sqlite
-        "141cf456cbdff5ed85683af916b0239b4c8bf27147df1f3ec3e812dd05b6f9e9", // Postgres
-        "3d0bb60856c06e76788603c645fcc09d3b1de107f9064deb248be15ce2169b1c", // MySql
+        "68d13fea51a8d5b3b020e784714cf1a17c2f2dfd8b692c6e9484750e66e386db", // Sqlite
+        "214722cf93be668a0010aecaf9e2d0af3978cf81cd9801dbc6756c4a78d9e2b5", // Postgres
+        "bd872226d84a50d9b4303f4aabe6dc460b8f54861dcdc672fff488b24944ce1b", // MySql
     ];
 
     fn build(backend: impl Into<Backend>) -> Vec<String> {
