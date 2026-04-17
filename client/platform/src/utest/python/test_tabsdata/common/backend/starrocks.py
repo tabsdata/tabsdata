@@ -294,7 +294,7 @@ def create_docker_starrocks_database(
         return port
 
     container = client.containers.run(
-        "starrocks/allin1-ubuntu:latest",
+        "starrocks/allin1-ubuntu:4.0.8",
         name=name,
         ports={STARROCKS_MYSQL_FORWARDED_PORT: None},
         detach=True,
