@@ -33,7 +33,7 @@ use td_objects::types::basic::{
     Trigger, TriggerType, VersionPos,
 };
 use td_objects::types::recursion::RecursionOptions;
-use td_queries::BasicQueries;
+use td_queries::ChunkedQueries;
 use td_tower::api_message;
 use td_tower::ctx_service::ReqCtx;
 use td_tower::extractors::{MutRef, Ref};
@@ -369,7 +369,7 @@ pub async fn update_initial_function_run_status(
         .collect::<Vec<_>>();
 
     let function_runs_upstream = conn
-        .fetch_all::<FunctionRunDB>(&function_reqs_upstream)
+        .fetch_all_chunked::<FunctionRunDB, _>(&function_reqs_upstream)
         .await?;
 
     let mut function_run_updates = HashMap::new();
@@ -400,9 +400,8 @@ pub async fn update_initial_function_run_status(
     for (status, function_run_ids) in function_run_updates {
         let update = UpdateFunctionRunDB::builder().status(status).build()?;
         let function_run_ids: Vec<_> = function_run_ids.iter().collect();
-        // TODO this is not getting chunked
         let _ = conn
-            .update::<_, FunctionRunDB>(&update, &function_run_ids)
+            .update_chunked::<_, FunctionRunDB, _>(&update, &function_run_ids)
             .await?;
     }
 

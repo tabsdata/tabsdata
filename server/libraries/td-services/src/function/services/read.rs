@@ -77,7 +77,7 @@ fn service() {
         ),
         from_fn(With::<Vec<TriggerDBWithNames>>::extract::<Vec<TableId>>),
         from_fn(
-            By::<Vec<TableId>>::fetch_all_versions::<
+            By::<Vec<TableId>>::fetch_all_versions_chunked::<
                 { TableDBWithNames::Available },
                 TableDBWithNames,
             >
@@ -93,7 +93,7 @@ fn service() {
         ),
         from_fn(With::<Vec<DependencyDBWithNames>>::extract::<Vec<TableId>>),
         from_fn(
-            By::<Vec<TableId>>::fetch_all_versions::<
+            By::<Vec<TableId>>::fetch_all_versions_chunked::<
                 { TableDBWithNames::Available },
                 TableDBWithNames,
             >
@@ -184,7 +184,7 @@ mod tests {
                 ),
                 type_of_val(&With::<Vec<TriggerDBWithNames>>::extract::<Vec<TableId>>),
                 type_of_val(
-                    &By::<Vec<TableId>>::fetch_all_versions::<
+                    &By::<Vec<TableId>>::fetch_all_versions_chunked::<
                         { TableDBWithNames::Available },
                         TableDBWithNames,
                     >,
@@ -200,7 +200,7 @@ mod tests {
                 ),
                 type_of_val(&With::<Vec<DependencyDBWithNames>>::extract::<Vec<TableId>>),
                 type_of_val(
-                    &By::<Vec<TableId>>::fetch_all_versions::<
+                    &By::<Vec<TableId>>::fetch_all_versions_chunked::<
                         { TableDBWithNames::Available },
                         TableDBWithNames,
                     >,

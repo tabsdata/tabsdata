@@ -138,30 +138,6 @@ mod tests {
         );
     }
 
-    // ----- Vec<T> -------------------------------------------------------------
-
-    #[test]
-    fn test_vec_empty() {
-        let v: Vec<VCol> = vec![];
-        assert_eq!(sql(&v), "FALSE");
-    }
-
-    #[test]
-    fn test_vec_single() {
-        let v = vec![VCol::try_from("only").unwrap()];
-        assert_eq!(sql(&v), r#""v" = 'only'"#);
-    }
-
-    #[test]
-    fn test_vec_multiple() {
-        let v = vec![
-            VCol::try_from("x").unwrap(),
-            VCol::try_from("y").unwrap(),
-            VCol::try_from("z").unwrap(),
-        ];
-        assert_eq!(sql(&v), r#""v" = 'x' OR "v" = 'y' OR "v" = 'z'"#);
-    }
-
     // ----- Nesting ------------------------------------------------------------
 
     #[test]
@@ -197,20 +173,6 @@ mod tests {
             sql(and!(or!(a, b), or!(c, d))),
             r#"("v" = 'c1' OR "v" = 'c2') AND ("v" = 't1' OR "v" = 't2')"#
         );
-    }
-
-    // ----- Vec wrapped in and!/or! -------------------------------------------
-
-    #[test]
-    fn test_all1_vec() {
-        let v = vec![VCol::try_from("a").unwrap(), VCol::try_from("b").unwrap()];
-        assert_eq!(sql(and!(v)), r#""v" = 'a' OR "v" = 'b'"#);
-    }
-
-    #[test]
-    fn test_any1_vec() {
-        let v = vec![VCol::try_from("a").unwrap(), VCol::try_from("b").unwrap()];
-        assert_eq!(sql(or!(v)), r#""v" = 'a' OR "v" = 'b'"#);
     }
 
     // ----- Type-position macros -----------------------------------------------
@@ -280,12 +242,6 @@ mod tests {
         let b = VCol::try_from("b").unwrap();
         let cond = or!(a, b);
         assert!(resolve_condition::<UnmappedDao>(&cond).is_err());
-    }
-
-    #[test]
-    fn test_resolver_error_propagates_vec() {
-        let v = vec![VCol::try_from("a").unwrap()];
-        assert!(resolve_condition::<UnmappedDao>(&v).is_err());
     }
 
     #[test]

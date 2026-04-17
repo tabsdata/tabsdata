@@ -101,14 +101,19 @@ pub fn leaf_display_values<D: DaoCore>(sv: &impl SeaValue) -> Vec<(String, Strin
     }
 }
 
-/// Resolves a single [`SeaValue`] leaf to `col = val` for the given DAO.
-pub fn resolve_leaf_eq<D: DaoCore>(sv: impl SeaValue) -> Result<sea_query::Condition, SqlError> {
-    let col = D::col_for_type(sv.as_type_id()).ok_or_else(|| {
+/// Look up the column that maps to a [`SeaValue`]'s type in the given DAO.
+fn col_for_sea_value<D: DaoCore>(sv: &impl SeaValue) -> Result<D::Iden, SqlError> {
+    D::col_for_type(sv.as_type_id()).ok_or_else(|| {
         SqlError::TypeNotFound(
-            std::any::type_name_of_val(&sv).to_string(),
+            std::any::type_name_of_val(sv).to_string(),
             Box::new(D::table().into_table_ref()),
         )
-    })?;
+    })
+}
+
+/// Resolves a single [`SeaValue`] leaf to `col = val` for the given DAO.
+pub fn resolve_leaf_eq<D: DaoCore>(sv: impl SeaValue) -> Result<sea_query::Condition, SqlError> {
+    let col = col_for_sea_value::<D>(&sv)?;
     Ok(sea_query::Condition::all().add(Expr::col(col).eq(sv.as_sea_value())))
 }
 
@@ -139,17 +144,6 @@ impl SqlCondition for () {
 impl<T: NullableSeaValue + SqlCondition + 'static> SqlCondition for Option<T> {
     fn resolve<D: DaoCore>(&self) -> Result<sea_query::Condition, SqlError> {
         resolve_leaf_eq::<D>(self)
-    }
-}
-
-/// `Vec<T>` produces an OR over its elements (empty vec matches no rows).
-impl<T: SqlCondition> SqlCondition for Vec<T> {
-    fn resolve<D: DaoCore>(&self) -> Result<sea_query::Condition, SqlError> {
-        let mut cond = sea_query::Condition::any();
-        for item in self {
-            cond = cond.add(item.resolve::<D>()?);
-        }
-        Ok(cond)
     }
 }
 
@@ -291,12 +285,7 @@ pub struct Lte<T>(pub T);
 
 impl<T: SeaValue> SqlCondition for Lte<T> {
     fn resolve<D: DaoCore>(&self) -> Result<sea_query::Condition, SqlError> {
-        let col = D::col_for_type(self.0.as_type_id()).ok_or_else(|| {
-            SqlError::TypeNotFound(
-                std::any::type_name_of_val(&self.0).to_string(),
-                Box::new(D::table().into_table_ref()),
-            )
-        })?;
+        let col = col_for_sea_value::<D>(&self.0)?;
         Ok(sea_query::Condition::all().add(Expr::col(col).lte(self.0.as_sea_value())))
     }
 }
@@ -400,22 +389,6 @@ impl ConditionExtract for () {
     #[cfg(feature = "test_tower_metadata")]
     fn metadata_used_types() -> Vec<String> {
         vec![]
-    }
-}
-
-impl<T: Send + Sync + 'static> ConditionExtract for Vec<T>
-where
-    Vec<T>: SqlCondition,
-{
-    type Storage = Ref<Vec<T>>;
-
-    fn extract(handler: &mut Handler) -> Result<Self::Storage, FromHandlerError> {
-        Self::Storage::from_handler(handler)
-    }
-
-    #[cfg(feature = "test_tower_metadata")]
-    fn metadata_used_types() -> Vec<String> {
-        Self::Storage::metadata_used_types()
     }
 }
 

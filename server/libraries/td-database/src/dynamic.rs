@@ -2,6 +2,7 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+use crate::sea_query::kind::DatabaseBackend;
 use sqlx::pool::PoolConnection;
 use sqlx::{Connection, Decode, Error, FromRow, Transaction, Type};
 #[cfg(feature = "mysql")]
@@ -335,6 +336,18 @@ impl From<MySqlQueryResult> for DynamicQueryResult {
 }
 
 impl DynamicQueryResult {
+    /// Create a zero-rows-affected result for the given database backend.
+    pub fn empty(backend: &DatabaseBackend) -> Self {
+        match backend {
+            #[cfg(feature = "sqlite")]
+            DatabaseBackend::Sqlite => DynamicQueryResult::Sqlite(SqliteQueryResult::default()),
+            #[cfg(feature = "postgres")]
+            DatabaseBackend::Postgres => DynamicQueryResult::Postgres(PgQueryResult::default()),
+            #[cfg(feature = "mysql")]
+            DatabaseBackend::MySql => DynamicQueryResult::MySql(MySqlQueryResult::default()),
+        }
+    }
+
     pub fn rows_affected(&self) -> u64 {
         match self {
             #[cfg(feature = "sqlite")]
@@ -343,6 +356,29 @@ impl DynamicQueryResult {
             DynamicQueryResult::Postgres(res) => res.rows_affected(),
             #[cfg(feature = "mysql")]
             DynamicQueryResult::MySql(res) => res.rows_affected(),
+        }
+    }
+}
+
+impl Extend<DynamicQueryResult> for DynamicQueryResult {
+    fn extend<T: IntoIterator<Item = DynamicQueryResult>>(&mut self, iter: T) {
+        #[allow(unreachable_patterns)]
+        for elem in iter {
+            match (&mut *self, elem) {
+                #[cfg(feature = "sqlite")]
+                (DynamicQueryResult::Sqlite(a), DynamicQueryResult::Sqlite(b)) => {
+                    a.extend(std::iter::once(b));
+                }
+                #[cfg(feature = "postgres")]
+                (DynamicQueryResult::Postgres(a), DynamicQueryResult::Postgres(b)) => {
+                    a.extend(std::iter::once(b));
+                }
+                #[cfg(feature = "mysql")]
+                (DynamicQueryResult::MySql(a), DynamicQueryResult::MySql(b)) => {
+                    a.extend(std::iter::once(b));
+                }
+                _ => unreachable!("mixed database variants"),
+            }
         }
     }
 }

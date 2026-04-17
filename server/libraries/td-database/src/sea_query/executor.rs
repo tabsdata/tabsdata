@@ -16,6 +16,15 @@ use sqlx::{Either, Error};
 
 /// Sqlx executor for SeaQueries.
 pub trait SeaExecutor: DatabaseKind {
+    /// A short-lived executor obtained by reborrowing `self`.
+    type Reused<'a>: SeaExecutor + Send
+    where
+        Self: 'a;
+
+    /// Obtain a short-lived executor for one query in a loop.
+    /// For pools this is a no-op copy; for connections it reborrows.
+    fn reuse(&mut self) -> Self::Reused<'_>;
+
     fn execute<'e>(
         self,
         query: impl SeaQuerySqlxBuild,
@@ -432,6 +441,14 @@ macro_rules! impl_sea_executor {
 // `TdPool` delegates to `DynamicPool` via `as_ref()`.
 // Writes use the `rw` pool field; reads use `ro`.
 impl SeaExecutor for &'_ TdPool {
+    type Reused<'a>
+        = &'a TdPool
+    where
+        Self: 'a;
+    fn reuse(&mut self) -> Self::Reused<'_> {
+        self
+    }
+
     impl_sea_executor!(
         (pool; ro),     // read context
         (pool; rw)      // write context
@@ -439,13 +456,29 @@ impl SeaExecutor for &'_ TdPool {
 }
 
 impl SeaExecutor for &'_ DynamicPool {
+    type Reused<'a>
+        = &'a DynamicPool
+    where
+        Self: 'a;
+    fn reuse(&mut self) -> Self::Reused<'_> {
+        self
+    }
+
     impl_sea_executor!(
         (pool; ro),     // read context
         (pool; rw)      // write context
     );
 }
 
-impl SeaExecutor for &'_ mut DynamicConnection<'_> {
+impl<'c> SeaExecutor for &'_ mut DynamicConnection<'c> {
+    type Reused<'a>
+        = &'a mut DynamicConnection<'c>
+    where
+        Self: 'a;
+    fn reuse(&mut self) -> Self::Reused<'_> {
+        &mut **self
+    }
+
     impl_sea_executor!(
         (conn), // read context
         (conn)  // write context

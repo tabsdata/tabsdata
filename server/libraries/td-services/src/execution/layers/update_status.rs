@@ -19,7 +19,9 @@ use td_objects::types::basic::{
 };
 use td_objects::types::recursion::RecursionOptions;
 use td_objects::{Buildable, and, lte};
-use td_queries::{BasicQueries, FunctionRunQueries, OptionsBuilder, RecursiveQueries};
+use td_queries::{
+    BasicQueries, ChunkedQueries, FunctionRunQueries, OptionsBuilder, RecursiveQueries,
+};
 use td_tower::ctx_service::ReqCtx;
 use td_tower::extractors::{MutRef, Ref};
 
@@ -144,9 +146,8 @@ pub async fn update_function_run_status(
         return Ok(());
     }
 
-    // TODO this is not getting chunked
     let _ = conn
-        .update::<_, FunctionRunDB>(update.deref(), &function_run_ids)
+        .update_chunked::<_, FunctionRunDB, _>(update.deref(), &function_run_ids)
         .await?;
 
     // Publish function runs if needed, including downstream publishing.
@@ -165,8 +166,9 @@ pub async fn update_function_run_status(
         let to_commit: Vec<_> = to_commit.iter().map(|f| f.id).collect();
 
         let update = CommitFunctionRunDB::default();
-        // TODO this is not getting chunked
-        let _ = conn.update::<_, FunctionRunDB>(&update, &to_commit).await?;
+        let _ = conn
+            .update_chunked::<_, FunctionRunDB, _>(&update, &to_commit)
+            .await?;
     }
 
     // Downstream updates.
@@ -205,9 +207,8 @@ pub async fn update_function_run_status(
     for (status, function_run_ids) in downstream_function_run_updates {
         let update = UpdateFunctionRunDB::builder().status(status).build()?;
         let function_run_ids: Vec<_> = function_run_ids.iter().collect();
-        // TODO this is not getting chunked
         let _ = conn
-            .update::<_, FunctionRunDB>(&update, &function_run_ids)
+            .update_chunked::<_, FunctionRunDB, _>(&update, &function_run_ids)
             .await?;
     }
 

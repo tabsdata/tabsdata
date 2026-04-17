@@ -53,20 +53,28 @@ fn service() {
         from_fn(By::<CollectionId>::fetch_all_current::<{ TableDB::Available }, TableDB>),
         from_fn(With::<Vec<TableDB>>::extract::<Vec<TableId>>),
         // Find functions that use the tables and freeze them
-        from_fn(By::<Vec<TableId>>::fetch_all_current::<{ DependencyDB::Active }, DependencyDB>),
+        from_fn(
+            By::<Vec<TableId>>::fetch_all_current_chunked::<{ DependencyDB::Active }, DependencyDB>
+        ),
         from_fn(With::<Vec<DependencyDB>>::extract::<Vec<FunctionId>>),
-        from_fn(By::<Vec<FunctionId>>::fetch_all_current::<{ FunctionDB::Active }, FunctionDB>),
+        from_fn(
+            By::<Vec<FunctionId>>::fetch_all_current_chunked::<{ FunctionDB::Active }, FunctionDB>
+        ),
         from_fn(build_frozen_functions),
         from_fn(insert_vec::<FunctionDB>),
         // Delete tables in the collection
         from_fn(build_deleted_tables),
         from_fn(insert_vec::<TableDB>),
         // Find triggers for the tables in the collection and delete them
-        from_fn(By::<Vec<TableId>>::fetch_all_current::<{ TriggerDB::Available }, TriggerDB>),
+        from_fn(
+            By::<Vec<TableId>>::fetch_all_current_chunked::<{ TriggerDB::Available }, TriggerDB>
+        ),
         from_fn(build_deleted_triggers),
         from_fn(insert_vec::<TriggerDB>),
         // Find dependencies for the tables in the collection and delete them
-        from_fn(By::<Vec<TableId>>::fetch_all_current::<{ DependencyDB::Active }, DependencyDB>),
+        from_fn(
+            By::<Vec<TableId>>::fetch_all_current_chunked::<{ DependencyDB::Active }, DependencyDB>
+        ),
         from_fn(build_deleted_dependencies),
         from_fn(insert_vec::<DependencyDB>),
         // Find functions in the collection
@@ -135,20 +143,40 @@ mod tests {
                 type_of_val(&By::<CollectionId>::fetch_all_current::<{ TableDB::Available }, TableDB>),
                 type_of_val(&With::<Vec<TableDB>>::extract::<Vec<TableId>>),
                 // Find functions that use the tables and freeze them
-                type_of_val(&By::<Vec<TableId>>::fetch_all_current::<{ DependencyDB::Active }, DependencyDB>),
+                type_of_val(
+                    &By::<Vec<TableId>>::fetch_all_current_chunked::<
+                        { DependencyDB::Active },
+                        DependencyDB,
+                    >,
+                ),
                 type_of_val(&With::<Vec<DependencyDB>>::extract::<Vec<FunctionId>>),
-                type_of_val(&By::<Vec<FunctionId>>::fetch_all_current::<{ FunctionDB::Active }, FunctionDB>),
+                type_of_val(
+                    &By::<Vec<FunctionId>>::fetch_all_current_chunked::<
+                        { FunctionDB::Active },
+                        FunctionDB,
+                    >,
+                ),
                 type_of_val(&build_frozen_functions),
                 type_of_val(&insert_vec::<FunctionDB>),
                 // Delete tables in the collection
                 type_of_val(&build_deleted_tables),
                 type_of_val(&insert_vec::<TableDB>),
                 // Find triggers for the tables in the collection and delete them
-                type_of_val(&By::<Vec<TableId>>::fetch_all_current::<{ TriggerDB::Available }, TriggerDB>),
+                type_of_val(
+                    &By::<Vec<TableId>>::fetch_all_current_chunked::<
+                        { TriggerDB::Available },
+                        TriggerDB,
+                    >,
+                ),
                 type_of_val(&build_deleted_triggers),
                 type_of_val(&insert_vec::<TriggerDB>),
                 // Find dependencies for the tables in the collection and delete them
-                type_of_val(&By::<Vec<TableId>>::fetch_all_current::<{ DependencyDB::Active }, DependencyDB>),
+                type_of_val(
+                    &By::<Vec<TableId>>::fetch_all_current_chunked::<
+                        { DependencyDB::Active },
+                        DependencyDB,
+                    >,
+                ),
                 type_of_val(&build_deleted_dependencies),
                 type_of_val(&insert_vec::<DependencyDB>),
                 // Find functions in the collection

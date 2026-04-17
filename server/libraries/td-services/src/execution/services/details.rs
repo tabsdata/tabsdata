@@ -40,7 +40,7 @@ fn service() {
         from_fn(By::<ExecutionId>::fetch_all::<FunctionRunDB>),
         // Find all functions.
         from_fn(With::<Vec<FunctionRunDB>>::extract::<Vec<FunctionVersionId>>),
-        from_fn(By::<Vec<FunctionVersionId>>::fetch_all::<FunctionDBWithNames>),
+        from_fn(By::<Vec<FunctionVersionId>>::fetch_all_chunked::<FunctionDBWithNames>),
         from_fn(With::<FunctionDBWithNames>::vec_convert_to::<FunctionBuilder, _>),
         from_fn(With::<Vec<FunctionBuilder>>::build::<Vec<Function>>),
         from_fn(With::<Vec<Function>>::set::<ExecutionDetailsBuilder>),
@@ -89,7 +89,9 @@ mod tests {
                 type_of_val(&By::<ExecutionId>::fetch_all::<FunctionRunDB>),
                 // Find all functions.
                 type_of_val(&With::<Vec<FunctionRunDB>>::extract::<Vec<FunctionVersionId>>),
-                type_of_val(&By::<Vec<FunctionVersionId>>::fetch_all::<FunctionDBWithNames>),
+                type_of_val(
+                    &By::<Vec<FunctionVersionId>>::fetch_all_chunked::<FunctionDBWithNames>,
+                ),
                 type_of_val(&With::<FunctionDBWithNames>::vec_convert_to::<FunctionBuilder, _>),
                 type_of_val(&With::<Vec<FunctionBuilder>>::build::<Vec<Function>>),
                 type_of_val(&With::<Vec<Function>>::set::<ExecutionDetailsBuilder>),

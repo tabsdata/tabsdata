@@ -2,16 +2,14 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::execution::layers::list::list_executions_by_tdv;
 use ta_services::factory::service_factory;
-use td_objects::NoFilter;
 use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse};
 use td_objects::dxo::execution::Execution;
-use td_objects::dxo::function_requirement::FunctionRequirementDB;
 use td_objects::list::params::ListQueryParams;
 use td_objects::rest_urls::TableDataVersionParam;
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::{ExecutionId, TableDataVersionId};
-use td_queries::By;
+use td_objects::types::basic::TableDataVersionId;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -29,14 +27,10 @@ fn service() {
         from_fn(With::<TableDataVersionParam>::extract::<TableDataVersionId>),
         // Wrap into Option to match the nullable column.
         from_fn(With::<TableDataVersionId>::some),
-        // Fetch function requirements that used this TDV as input.
-        from_fn(By::<Option<TableDataVersionId>>::fetch_all::<FunctionRequirementDB>),
-        // Extract distinct execution IDs.
-        from_fn(With::<Vec<FunctionRequirementDB>>::extract::<Vec<ExecutionId>>),
-        // List executions with pagination.
+        // List executions with pagination (single JOIN query).
         from_fn(With::<ListRequest<TableDataVersionParam>>::extract::<ListParams>),
         from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<Execution>, _>),
-        from_fn(By::<Vec<ExecutionId>>::list::<NoFilter, Execution>),
+        from_fn(list_executions_by_tdv),
     )
 }
 
@@ -78,14 +72,10 @@ mod tests {
                 type_of_val(&With::<TableDataVersionParam>::extract::<TableDataVersionId>),
                 // Wrap into Option to match the nullable column.
                 type_of_val(&With::<TableDataVersionId>::some),
-                // Fetch function requirements that used this TDV as input.
-                type_of_val(&By::<Option<TableDataVersionId>>::fetch_all::<FunctionRequirementDB>),
-                // Extract distinct execution IDs.
-                type_of_val(&With::<Vec<FunctionRequirementDB>>::extract::<Vec<ExecutionId>>),
-                // List executions with pagination.
+                // List executions with pagination (single JOIN query).
                 type_of_val(&With::<ListRequest<TableDataVersionParam>>::extract::<ListParams>),
                 type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<Execution>, _>),
-                type_of_val(&By::<Vec<ExecutionId>>::list::<NoFilter, Execution>),
+                type_of_val(&list_executions_by_tdv),
             ]);
     }
 

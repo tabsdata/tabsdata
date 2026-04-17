@@ -1,0 +1,37 @@
+//
+// Copyright 2026 Tabs Data Inc.
+//
+
+use std::ops::Deref;
+use td_database::dynamic::DynamicConnection;
+use td_objects::dxo::crudl::{ListParams, ListResponse};
+use td_objects::dxo::execution::Execution;
+use td_objects::list::params::ListQueryParams;
+use td_objects::list::response::build_list_response;
+use td_objects::types::basic::{FunctionVersionId, TableDataVersionId};
+use td_queries::ExecutionQueries;
+use td_tower::extractors::{MutRef, Ref};
+
+pub async fn list_executions_by_tdv(
+    mut conn: MutRef<DynamicConnection<'static>>,
+    tdv_id: Ref<Option<TableDataVersionId>>,
+    list_params: Ref<ListParams>,
+    query_params: Ref<ListQueryParams<Execution>>,
+) -> Result<ListResponse<Execution>, td_error::TdError> {
+    let result = conn
+        .list_executions_by_table_data_version(tdv_id.deref(), &query_params)
+        .await?;
+    build_list_response(&list_params, &query_params, result)
+}
+
+pub async fn list_executions_by_fv(
+    mut conn: MutRef<DynamicConnection<'static>>,
+    fv_id: Ref<FunctionVersionId>,
+    list_params: Ref<ListParams>,
+    query_params: Ref<ListQueryParams<Execution>>,
+) -> Result<ListResponse<Execution>, td_error::TdError> {
+    let result = conn
+        .list_executions_by_function_version(fv_id.deref(), &query_params)
+        .await?;
+    build_list_response(&list_params, &query_params, result)
+}

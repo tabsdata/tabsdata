@@ -16,7 +16,7 @@ use td_objects::dxo::trigger::TriggerDBWithNames;
 use td_objects::graph::{TdGraph, TdGraphBuilder};
 use td_objects::types::basic::{AtTime, FunctionId, TableId};
 use td_objects::types::recursion::RecursionOptions;
-use td_queries::{OptionsBuilder, RecursiveQueries, VersionedQueries};
+use td_queries::{ChunkedQueries, OptionsBuilder, RecursiveQueries, VersionedQueries};
 use td_tower::extractors::{MutRef, Ref};
 
 pub struct GraphBuilder<
@@ -188,9 +188,8 @@ where
         at_time: Ref<AtTime>,
         triggered_functions: Ref<Vec<FunctionId>>,
     ) -> Result<Vec<DependencyDBWithNames>, TdError> {
-        // TODO this should be chunked
         let dep_graph = conn
-            .fetch_all_at::<DEPENDENCY_STATE, DependencyDBWithNames>(
+            .fetch_all_at_chunked::<DEPENDENCY_STATE, DependencyDBWithNames, _>(
                 triggered_functions.deref(),
                 &at_time,
             )
@@ -205,9 +204,8 @@ where
         functions: Ref<Vec<FunctionId>>,
     ) -> Result<Vec<TableDBWithNames>, TdError> {
         // Find output tables for each triggered_function
-        // TODO this should be chunked
         let output_tables = conn
-            .fetch_all_at::<{ TableDBWithNames::Active }, TableDBWithNames>(
+            .fetch_all_at_chunked::<{ TableDBWithNames::Active }, TableDBWithNames, _>(
                 functions.deref(),
                 &at_time,
             )
@@ -233,9 +231,11 @@ where
             .unique()
             .collect::<Vec<_>>();
 
-        // TODO this should be chunked
         let all_tables = conn
-            .fetch_all_at::<{ TableDBWithNames::All }, TableDBWithNames>(&all_table_ids, &at_time)
+            .fetch_all_at_chunked::<{ TableDBWithNames::All }, TableDBWithNames, _>(
+                &all_table_ids,
+                &at_time,
+            )
             .await?;
 
         let all_tables = all_tables
@@ -267,9 +267,8 @@ where
             .unique()
             .collect::<Vec<_>>();
 
-        // TODO this should be chunked
         let all_functions = conn
-            .fetch_all_at::<{ FunctionDBWithNames::All }, FunctionDBWithNames>(
+            .fetch_all_at_chunked::<{ FunctionDBWithNames::All }, FunctionDBWithNames, _>(
                 &all_function_ids,
                 &at_time,
             )

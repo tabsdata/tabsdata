@@ -70,7 +70,7 @@ where
         // Update statuses.
         from_fn(With::<Vec<FunctionRunToExecuteDB>>::extract::<Vec<FunctionRunId>>),
         from_fn(UpdateFunctionRunDB::run_requested),
-        from_fn(By::<Vec<FunctionRunId>>::update::<UpdateFunctionRunDB, FunctionRunDB>),
+        from_fn(By::<Vec<FunctionRunId>>::update_chunked::<UpdateFunctionRunDB, FunctionRunDB>),
     )
 }
 
@@ -94,9 +94,9 @@ where
         // Update statuses.
         from_fn(With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
         from_fn(UpdateWorkerDB::run_requested),
-        from_fn(By::<Vec<WorkerId>>::update::<UpdateWorkerDB, WorkerDB>),
+        from_fn(By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerDB, WorkerDB>),
         from_fn(UpdateWorkerMessageStatusDB::locked),
-        from_fn(By::<Vec<WorkerId>>::update::<UpdateWorkerMessageStatusDB, WorkerDB>),
+        from_fn(By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerMessageStatusDB, WorkerDB>),
     )
 }
 
@@ -117,9 +117,9 @@ where
         // Update statuses.
         from_fn(With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
         from_fn(UpdateWorkerDB::stop_requested),
-        from_fn(By::<Vec<WorkerId>>::update::<UpdateWorkerDB, WorkerDB>),
+        from_fn(By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerDB, WorkerDB>),
         from_fn(UpdateWorkerMessageStatusDB::locked),
-        from_fn(By::<Vec<WorkerId>>::update::<UpdateWorkerMessageStatusDB, WorkerDB>),
+        from_fn(By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerMessageStatusDB, WorkerDB>),
     )
 }
 
@@ -144,9 +144,9 @@ where
         // Update statuses.
         from_fn(With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
         from_fn(UpdateWorkerDB::run_requested),
-        from_fn(By::<Vec<WorkerId>>::update::<UpdateWorkerDB, WorkerDB>),
+        from_fn(By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerDB, WorkerDB>),
         from_fn(UpdateWorkerMessageStatusDB::locked),
-        from_fn(By::<Vec<WorkerId>>::update::<UpdateWorkerMessageStatusDB, WorkerDB>),
+        from_fn(By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerMessageStatusDB, WorkerDB>),
     )
 }
 
@@ -167,9 +167,9 @@ where
         // Update statuses.
         from_fn(With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
         from_fn(UpdateWorkerDB::stop_requested),
-        from_fn(By::<Vec<WorkerId>>::update::<UpdateWorkerDB, WorkerDB>),
+        from_fn(By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerDB, WorkerDB>),
         from_fn(UpdateWorkerMessageStatusDB::locked),
-        from_fn(By::<Vec<WorkerId>>::update::<UpdateWorkerMessageStatusDB, WorkerDB>),
+        from_fn(By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerMessageStatusDB, WorkerDB>),
     )
 }
 
@@ -228,7 +228,7 @@ mod tests {
                 type_of_val(&With::<Vec<FunctionRunToExecuteDB>>::extract::<Vec<FunctionRunId>>),
                 type_of_val(&UpdateFunctionRunDB::run_requested),
                 type_of_val(
-                    &By::<Vec<FunctionRunId>>::update::<UpdateFunctionRunDB, FunctionRunDB>,
+                    &By::<Vec<FunctionRunId>>::update_chunked::<UpdateFunctionRunDB, FunctionRunDB>,
                 ),
                 // CronTrigger
                 // Stop
@@ -244,9 +244,11 @@ mod tests {
                 // Update statuses.
                 type_of_val(&With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
                 type_of_val(&UpdateWorkerDB::stop_requested),
-                type_of_val(&By::<Vec<WorkerId>>::update::<UpdateWorkerDB, WorkerDB>),
+                type_of_val(&By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerDB, WorkerDB>),
                 type_of_val(&UpdateWorkerMessageStatusDB::locked),
-                type_of_val(&By::<Vec<WorkerId>>::update::<UpdateWorkerMessageStatusDB, WorkerDB>),
+                type_of_val(
+                    &By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerMessageStatusDB, WorkerDB>,
+                ),
                 // Start
                 type_of_val(
                     &By::<()>::fetch_all_in::<
@@ -260,9 +262,11 @@ mod tests {
                 // Update statuses.
                 type_of_val(&With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
                 type_of_val(&UpdateWorkerDB::run_requested),
-                type_of_val(&By::<Vec<WorkerId>>::update::<UpdateWorkerDB, WorkerDB>),
+                type_of_val(&By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerDB, WorkerDB>),
                 type_of_val(&UpdateWorkerMessageStatusDB::locked),
-                type_of_val(&By::<Vec<WorkerId>>::update::<UpdateWorkerMessageStatusDB, WorkerDB>),
+                type_of_val(
+                    &By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerMessageStatusDB, WorkerDB>,
+                ),
                 // StageTrigger
                 // Stop
                 type_of_val(
@@ -277,9 +281,11 @@ mod tests {
                 // Update statuses.
                 type_of_val(&With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
                 type_of_val(&UpdateWorkerDB::stop_requested),
-                type_of_val(&By::<Vec<WorkerId>>::update::<UpdateWorkerDB, WorkerDB>),
+                type_of_val(&By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerDB, WorkerDB>),
                 type_of_val(&UpdateWorkerMessageStatusDB::locked),
-                type_of_val(&By::<Vec<WorkerId>>::update::<UpdateWorkerMessageStatusDB, WorkerDB>),
+                type_of_val(
+                    &By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerMessageStatusDB, WorkerDB>,
+                ),
                 // Start
                 type_of_val(
                     &By::<()>::fetch_all_in::<
@@ -293,9 +299,11 @@ mod tests {
                 // Update statuses.
                 type_of_val(&With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
                 type_of_val(&UpdateWorkerDB::run_requested),
-                type_of_val(&By::<Vec<WorkerId>>::update::<UpdateWorkerDB, WorkerDB>),
+                type_of_val(&By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerDB, WorkerDB>),
                 type_of_val(&UpdateWorkerMessageStatusDB::locked),
-                type_of_val(&By::<Vec<WorkerId>>::update::<UpdateWorkerMessageStatusDB, WorkerDB>),
+                type_of_val(
+                    &By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerMessageStatusDB, WorkerDB>,
+                ),
             ]);
         Ok(())
     }

@@ -27,8 +27,7 @@ use td_objects::types::composed::{
     TableDependency, TableDependencyDto, TableTrigger, TableTriggerDto,
 };
 use td_objects::{Buildable, and, or};
-use td_queries::BasicQueries;
-use td_queries::VersionedQueries;
+use td_queries::{BasicQueries, ChunkedQueries};
 use td_tower::ctx_service::ReqCtx;
 use td_tower::extractors::{MutRef, Ref};
 use tracing::{debug, error};
@@ -85,24 +84,19 @@ pub async fn validate_tables_do_not_exist(
             .iter()
             .map(|t| ((&t.collection_id, &t.name), t))
             .collect::<HashMap<_, _>>();
-        let new_tables_lookup = new_tables
+        let new_table_names: Vec<TableName> = new_tables
             .iter()
             .map(TableName::try_from)
+            .filter_ok(|t| !existing_tables_map.contains_key(&(collection_id.deref(), t)))
             .collect::<Result<Vec<_>, _>>()?;
-        let new_tables_lookup: Vec<_> = new_tables_lookup
-            .iter()
-            .filter_map(|t| {
-                if existing_tables_map.contains_key(&(collection_id.deref(), t)) {
-                    None
-                } else {
-                    Some(and!(collection_id.deref(), t))
-                }
-            })
-            .collect();
 
+        let new_table_lookups: Vec<_> = new_table_names
+            .iter()
+            .map(|t| and!(collection_id.deref(), t))
+            .collect();
         let tables_found = conn
-            .fetch_all_at::<{ TableDBWithNames::Available }, TableDBWithNames>(
-                new_tables_lookup,
+            .fetch_all_at_chunked::<{ TableDBWithNames::Available }, TableDBWithNames, _>(
+                &new_table_lookups,
                 &at_time,
             )
             .await?;
@@ -253,7 +247,7 @@ pub async fn build_tables_trigger_versions(
         .map(|t| t.table_id)
         .collect::<Vec<_>>();
     let existing_triggers = conn
-        .fetch_all_at::<{ TriggerDB::All }, TriggerDB>(&table_ids, &at_time)
+        .fetch_all_at_chunked::<{ TriggerDB::All }, TriggerDB, _>(&table_ids, &at_time)
         .await?;
 
     // Freeze triggers if the table is frozen, or reactivate them if the table is active again.
@@ -365,28 +359,20 @@ pub async fn build_dependency_versions(
         .chain(system_dependencies)
         .collect::<Vec<_>>();
 
-    // Create new dependency versions
-    let tables_found = if new_dependencies.is_empty() {
-        Vec::new()
-    } else {
-        // Here, even function created tables are already populated in the tables list.
-        // TODO this is not getting chunked. If there are too many we can have issues.
-        let dependency_tables_lookup: Vec<_> = new_dependencies
-            .iter()
-            .map(|(_, d)| {
-                and!(
-                    d.collection.as_ref().unwrap_or(&*collection_in_context),
-                    &d.table,
-                )
-            })
-            .collect();
-
-        conn.fetch_all_at::<{ TableDBWithNames::Available }, TableDBWithNames>(
-            dependency_tables_lookup,
+    // Here, even function created tables are already populated in the tables list.
+    let dep_lookups: Vec<_> = new_dependencies
+        .iter()
+        .map(|(_, d)| {
+            let col = d.collection.as_ref().unwrap_or(&*collection_in_context);
+            and!(col, &d.table)
+        })
+        .collect();
+    let tables_found = conn
+        .fetch_all_at_chunked::<{ TableDBWithNames::Available }, TableDBWithNames, _>(
+            &dep_lookups,
             &at_time,
         )
-        .await?
-    };
+        .await?;
 
     let tables_found: HashMap<_, _> = tables_found
         .iter()
@@ -542,30 +528,20 @@ pub async fn build_trigger_versions(
             .collect()
     };
 
-    // Create new trigger versions
-    let tables_found = if new_triggers.is_empty() {
-        Vec::new()
-    } else {
-        // Here, even function created tables are already populated in the tables list.
-        // TODO this is not getting chunked. If there are too many we can have issues.
-        let trigger_tables_lookup: Vec<_> = new_triggers
-            .iter()
-            .map(|d| {
-                and!(
-                    d.collection.as_ref().unwrap_or(&*collection_in_context),
-                    &d.table,
-                )
-            })
-            .collect();
-
-        // Here, even function created tables are already populated in the tables list.
-
-        conn.fetch_all_at::<{ TableDBWithNames::Available }, TableDBWithNames>(
-            trigger_tables_lookup,
+    // Here, even function created tables are already populated in the tables list.
+    let trigger_lookups: Vec<_> = new_triggers
+        .iter()
+        .map(|d| {
+            let col = d.collection.as_ref().unwrap_or(&*collection_in_context);
+            and!(col, &d.table)
+        })
+        .collect();
+    let tables_found = conn
+        .fetch_all_at_chunked::<{ TableDBWithNames::Available }, TableDBWithNames, _>(
+            &trigger_lookups,
             &at_time,
         )
-        .await?
-    };
+        .await?;
 
     let tables_found: HashMap<_, _> = tables_found
         .iter()
@@ -688,7 +664,9 @@ pub async fn stop_current_workers(
         }
 
         let update = UpdateWorkerDB::stop_scheduled().await?;
-        let res = conn.update::<_, WorkerDB>(&update, &to_stop).await?;
+        let res = conn
+            .update_chunked::<_, WorkerDB, _>(&update, &to_stop)
+            .await?;
         debug!(
             "Set stopped status in {} workers for function version {}.",
             res.rows_affected(),

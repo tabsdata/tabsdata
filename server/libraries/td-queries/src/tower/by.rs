@@ -2,11 +2,12 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-use crate::{BasicQueries, CurrentQueries, VersionedQueries};
+use crate::{BasicQueries, ChunkedQueries, CurrentQueries, VersionedQueries};
 use std::marker::PhantomData;
 use std::ops::Deref;
 use ta_objects::errors::{SqlError, format_hint};
 use ta_objects::sql_condition::{ConditionExtract, SqlRef};
+use ta_objects::sql_condition::SqlCondition;
 use ta_objects::{
     CurrentDao, Dao, DaoCore, DaoUpdate, ListDto, ListFilterExtract, ListRef, States, VersionedDao,
 };
@@ -289,5 +290,60 @@ where
             .list_current::<S, F, D>(&by, &filter, &query_params)
             .await?;
         build_list_response(&list_params, &query_params, result)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Chunked By methods — for Vec<T> where T: SqlCondition
+// ---------------------------------------------------------------------------
+
+impl<T: SqlCondition + 'static> By<Vec<T>> {
+    pub async fn fetch_all_chunked<D>(
+        mut conn: MutRef<DynamicConnection<'static>>,
+        values: Ref<Vec<T>>,
+    ) -> Result<Vec<D>, TdError>
+    where
+        D: Dao,
+    {
+        Ok(conn.fetch_all_chunked::<D, T>(values.deref()).await?)
+    }
+
+    pub async fn update_chunked<U, D>(
+        mut conn: MutRef<DynamicConnection<'static>>,
+        update: Ref<U>,
+        values: Ref<Vec<T>>,
+    ) -> Result<(), TdError>
+    where
+        D: DaoCore,
+        U: DaoUpdate,
+    {
+        conn.update_chunked::<U, D, T>(update.deref(), values.deref())
+            .await?;
+        Ok(())
+    }
+
+    pub async fn fetch_all_versions_chunked<const S: u8, D>(
+        mut conn: MutRef<DynamicConnection<'static>>,
+        on: Ref<D::VersionOrder>,
+        values: Ref<Vec<T>>,
+    ) -> Result<Vec<D>, TdError>
+    where
+        D: VersionedDao + States<S>,
+    {
+        Ok(conn
+            .fetch_all_at_chunked::<S, D, T>(values.deref(), on.deref())
+            .await?)
+    }
+
+    pub async fn fetch_all_current_chunked<const S: u8, D>(
+        mut conn: MutRef<DynamicConnection<'static>>,
+        values: Ref<Vec<T>>,
+    ) -> Result<Vec<D>, TdError>
+    where
+        D: CurrentDao + States<S>,
+    {
+        Ok(conn
+            .fetch_all_current_chunked::<S, D, T>(values.deref())
+            .await?)
     }
 }

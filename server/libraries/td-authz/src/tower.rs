@@ -130,10 +130,9 @@ use td_error::TdError;
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::inter_collection_access::InterCollectionAccess;
-use td_objects::or;
 use td_objects::types::basic::{CollectionId, RoleId, ToCollectionId, UserId};
 use td_objects::types::visible_collections::VisibleCollections;
-use td_queries::BasicQueries;
+use td_queries::ChunkedQueries;
 use td_tower::extractors::{MutRef, Ref};
 
 pub trait AuthzContextT: Send + Sync {
@@ -967,7 +966,9 @@ impl<
             .flat_map(|access| vec![*access.source, *access.target])
             .map(CollectionId::from)
             .collect::<Vec<_>>();
-        let collections = conn.fetch_all::<CollectionDB>(or!(collection_ids)).await?;
+        let collections = conn
+            .fetch_all_chunked::<CollectionDB, _>(&collection_ids)
+            .await?;
 
         let collection_id_name_map: HashMap<_, _> = collections
             .into_iter()

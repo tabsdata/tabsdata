@@ -63,7 +63,9 @@ fn service() {
         // at the current time.
         from_fn(By::<TableId>::fetch_all_versions::<{ DependencyDB::Active }, DependencyDB>),
         from_fn(With::<Vec<DependencyDB>>::extract::<Vec<FunctionId>>),
-        from_fn(By::<Vec<FunctionId>>::fetch_all_versions::<{ FunctionDB::Active }, FunctionDB>),
+        from_fn(
+            By::<Vec<FunctionId>>::fetch_all_versions_chunked::<{ FunctionDB::Active }, FunctionDB>
+        ),
         from_fn(build_frozen_functions),
         from_fn(insert_vec::<FunctionDB>),
         // Insert into trigger_versions(sql) entries with status=Deleted,
@@ -141,7 +143,12 @@ mod tests {
                     &By::<TableId>::fetch_all_versions::<{ DependencyDB::Active }, DependencyDB>,
                 ),
                 type_of_val(&With::<Vec<DependencyDB>>::extract::<Vec<FunctionId>>),
-                type_of_val(&By::<Vec<FunctionId>>::fetch_all_versions::<{ FunctionDB::Active }, FunctionDB>),
+                type_of_val(
+                    &By::<Vec<FunctionId>>::fetch_all_versions_chunked::<
+                        { FunctionDB::Active },
+                        FunctionDB,
+                    >,
+                ),
                 type_of_val(&build_frozen_functions),
                 type_of_val(&insert_vec::<FunctionDB>),
                 // Insert into trigger_versions(sql) entries with status=Deleted,
