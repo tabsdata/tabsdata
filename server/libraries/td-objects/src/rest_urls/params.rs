@@ -59,14 +59,18 @@ pub struct TableAtIdName {
     pub table: TableIdName,
     #[dxo(extractor)]
     pub at: AtTime,
+    #[builder(default)]
+    #[dxo(extractor)]
+    pub uncommitted: UncommittedStatus,
 }
 
 impl TableAtIdName {
-    pub fn new(table: TableParam, at: AtTimeParam) -> Self {
+    pub fn new(table: TableParam, at: AtTimeParam, uncommitted: UncommittedParam) -> Self {
         Self {
             collection: table.collection,
             table: table.table,
             at: at.at,
+            uncommitted: uncommitted.uncommitted,
         }
     }
 }
@@ -85,12 +89,12 @@ pub struct TableDataVersionAtIdName {
 }
 
 impl TableDataVersionAtIdName {
-    pub fn new(table: TableAtIdName, uncommitted_param: UncommittedParam) -> Self {
+    pub fn new(table: TableAtIdName) -> Self {
         Self {
             collection: table.collection,
             table: table.table,
             at: table.at,
-            uncommitted: uncommitted_param.uncommitted,
+            uncommitted: table.uncommitted,
         }
     }
 }
@@ -103,6 +107,9 @@ pub struct TableSampleAtName {
     table: TableIdName,
     #[dxo(extractor)]
     at: AtTime,
+    #[builder(default)]
+    #[dxo(extractor)]
+    uncommitted: UncommittedStatus,
     #[dxo(extractor)]
     offset: SampleOffset,
     #[dxo(extractor)]
@@ -117,6 +124,7 @@ impl TableSampleAtName {
     pub fn new(
         table: TableParam,
         at: AtTimeParam,
+        uncommitted: UncommittedParam,
         offset_len: SampleOffsetLenParam,
         format: FileFormatParam,
         sql: SqlParam,
@@ -125,6 +133,7 @@ impl TableSampleAtName {
             collection: table.collection,
             table: table.table,
             at: at.at,
+            uncommitted: uncommitted.uncommitted,
             offset: offset_len.offset,
             len: offset_len.len,
             format: format.format,

@@ -51,8 +51,9 @@ mod routes {
         Extension(context): Extension<RequestContext>,
         Path(table_param): Path<TableParam>,
         Query(at_param): Query<AtTimeParam>,
+        Query(uncommitted_status): Query<UncommittedParam>,
     ) -> Result<ParquetFile, ErrorStatus> {
-        let name = TableAtIdName::new(table_param, at_param);
+        let name = TableAtIdName::new(table_param, at_param, uncommitted_status);
         let request = context.read(name);
         let response = tables.download.service().raw_oneshot(request).await?;
         Ok(ParquetFile(response))
@@ -93,8 +94,8 @@ mod routes {
         Query(at_param): Query<AtTimeParam>,
         Query(uncommitted_status): Query<UncommittedParam>,
     ) -> Result<ListStatus<TableDataVersion>, ErrorStatus> {
-        let name = TableAtIdName::new(table_param, at_param);
-        let name = TableDataVersionAtIdName::new(name, uncommitted_status);
+        let name = TableAtIdName::new(table_param, at_param, uncommitted_status);
+        let name = TableDataVersionAtIdName::new(name);
         let request = context.list(name, query_params);
         let response = state.list_data_versions.service().oneshot(request).await?;
         Ok(ListStatus::OK(response))
@@ -110,10 +111,12 @@ mod routes {
         Query(offset_len_param): Query<SampleOffsetLenParam>,
         Query(file_format_param): Query<FileFormatParam>,
         Query(sql_param): Query<SqlParam>,
+        Query(uncommitted_status): Query<UncommittedParam>,
     ) -> Result<CsvFile, ErrorStatus> {
         let name = TableSampleAtName::new(
             table_param,
             at_param,
+            uncommitted_status,
             offset_len_param,
             file_format_param,
             sql_param,
@@ -130,8 +133,9 @@ mod routes {
         Extension(context): Extension<RequestContext>,
         Path(table_param): Path<TableParam>,
         Query(at_param): Query<AtTimeParam>,
+        Query(uncommitted_status): Query<UncommittedParam>,
     ) -> Result<GetStatus<TableSchema>, ErrorStatus> {
-        let name = TableAtIdName::new(table_param, at_param);
+        let name = TableAtIdName::new(table_param, at_param, uncommitted_status);
         let request = context.read(name);
         let response = state.schema.service().oneshot(request).await?;
         Ok(GetStatus::OK(response))

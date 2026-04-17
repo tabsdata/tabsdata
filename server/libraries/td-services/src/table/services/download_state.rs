@@ -84,7 +84,7 @@ mod tests {
         use td_objects::dxo::table::TableDBWithNames;
 
         use td_objects::types::basic::{
-            AtTime, CollectionIdName, TableId, TableIdName, TriggeredOn,
+            AtTime, CollectionIdName, TableId, TableIdName, TriggeredOn, UncommittedStatus,
         };
 
         use td_objects::And;
@@ -120,6 +120,7 @@ mod tests {
                 type_of_val(&With::<TableAtIdName>::extract::<CollectionIdName>),
                 type_of_val(&With::<TableAtIdName>::extract::<TableIdName>),
                 type_of_val(&With::<TableAtIdName>::extract::<AtTime>),
+                type_of_val(&With::<TableAtIdName>::extract::<UncommittedStatus>),
                 // Find Table ID, looking at the version at the time
                 type_of_val(
                     &By::<And![CollectionIdName, TableIdName]>::fetch_one_version::<

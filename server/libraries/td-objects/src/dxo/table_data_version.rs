@@ -11,6 +11,7 @@ mod definitions {
         TableFunctionParamPos, TableId, TableName, TableVersionId, TransactionId, TriggeredOn,
         UserId, UserName,
     };
+    use ta_objects::and;
 
     #[ta_objects::Dao]
     #[dao(
@@ -68,6 +69,7 @@ mod definitions {
         states(
             WithData = Some(HasData::TRUE),
             Committed = FunctionRunStatus::Committed,
+            CommittedWithData = and!(Some(HasData::TRUE), FunctionRunStatus::Committed),
         )
     )]
     #[inherits(TableDataVersionDB)]

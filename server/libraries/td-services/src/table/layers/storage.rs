@@ -6,7 +6,7 @@ use polars::prelude::PolarsError;
 use td_database::dynamic::DynamicConnection;
 use td_error::{TdError, td_error};
 use td_objects::dxo::table_data_version::TableDataVersionDBWithNames;
-use td_objects::types::basic::{TableId, TriggeredOn};
+use td_objects::types::basic::{TableId, TriggeredOn, UncommittedStatus};
 use td_objects::{and, lte};
 use td_queries::BasicQueries;
 use td_storage::SPath;
@@ -27,13 +27,22 @@ pub async fn resolve_table_location(
     mut conn: MutRef<DynamicConnection<'static>>,
     triggered_on: Ref<TriggeredOn>,
     table_id: Ref<TableId>,
+    uncommitted: Ref<UncommittedStatus>,
 ) -> Result<Option<SPath>, TdError> {
-    let data_version = conn
-        .fetch_latest_before::<{ TableDataVersionDBWithNames::WithData }, TableDataVersionDBWithNames>(
-            and!(table_id.as_ref(), lte!(triggered_on.as_ref())),
+    let condition = and!(table_id.as_ref(), lte!(triggered_on.as_ref()));
+    let data_version = if **uncommitted {
+        conn.fetch_latest_before::<{ TableDataVersionDBWithNames::WithData }, TableDataVersionDBWithNames>(
+            condition,
             0,
         )
-        .await?;
+        .await?
+    } else {
+        conn.fetch_latest_before::<{ TableDataVersionDBWithNames::CommittedWithData }, TableDataVersionDBWithNames>(
+            condition,
+            0,
+        )
+        .await?
+    };
 
     if let Some(data_version) = data_version {
         let (path, _) = get_spath(&data_version);
@@ -58,7 +67,6 @@ mod tests {
     use super::*;
     use crate::function::services::update::UpdateFunctionService;
     use std::str::FromStr;
-    use std::sync::Arc;
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
     use td_objects::dxo::collection::CollectionDB;
@@ -302,21 +310,32 @@ mod tests {
         Ok((execution, transaction, function_run, table))
     }
 
+    async fn _resolve(
+        db: &TdPool,
+        table_id: TableId,
+        uncommitted: bool,
+    ) -> Result<Option<SPath>, TdError> {
+        let connection = db.acquire().await.unwrap();
+        resolve_table_location(
+            MutRef::new(connection),
+            Ref::new(TriggeredOn::now()),
+            Ref::new(table_id),
+            Ref::new(if uncommitted {
+                UncommittedStatus::TRUE
+            } else {
+                UncommittedStatus::FALSE
+            }),
+        )
+        .await
+    }
+
     async fn _run_test(
         db: TdPool,
         lookup_data_version: Option<TableDataVersionDB>,
         expected_data_version: Option<TableDataVersionDB>,
     ) -> Result<(), TdError> {
         let found = if let Some(lookup_data_version) = lookup_data_version {
-            let lookup_data_version = Arc::new(lookup_data_version);
-
-            let connection = db.acquire().await.unwrap();
-            resolve_table_location(
-                MutRef::new(connection),
-                Ref::new(TriggeredOn::now()),
-                Ref::new(lookup_data_version.table_id),
-            )
-            .await?
+            _resolve(&db, lookup_data_version.table_id, true).await?
         } else {
             None
         };
@@ -330,6 +349,152 @@ mod tests {
             None
         };
         assert_eq!(found, expected);
+        Ok(())
+    }
+
+    async fn _setup_committed_table(
+        db: TdPool,
+    ) -> Result<
+        (
+            CollectionDB,
+            ExecutionDB,
+            TransactionDB,
+            FunctionRunDB,
+            TableDB,
+        ),
+        TdError,
+    > {
+        let collection = db
+            .seed_collection(&CollectionName::try_from("collection")?, &UserId::admin())
+            .await?;
+
+        let create = FunctionRegister::builder()
+            .try_name("joaquin")?
+            .try_description("function_foo description")?
+            .bundle_id(BundleId::default())
+            .try_snippet("function_foo snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(None)
+            .triggers(None)
+            .tables(vec![TableNameDto::try_from("table_1")?])
+            .try_runtime_values("mock runtime values")?
+            .reuse_frozen_tables(false)
+            .build()?;
+
+        let function = db.seed_function(&collection, &create).await?;
+        let execution = db.seed_execution(&function).await?;
+        let transaction_key = TransactionKey::try_from("ANY")?;
+        let transaction = db.seed_transaction(&execution, &transaction_key).await?;
+
+        let function_run = db
+            .seed_function_run(
+                &collection,
+                &function,
+                &execution,
+                &transaction,
+                &FunctionRunStatus::Committed,
+            )
+            .await?;
+
+        let table: TableDB = db.fetch_one(&function.id).await?;
+        Ok((collection, execution, transaction, function_run, table))
+    }
+
+    // Tests for committed vs uncommitted behavior
+
+    #[td_test::test(sqlx)]
+    #[tokio::test]
+    async fn test_resolve_committed_data_version_with_uncommitted_true(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        // Committed data version with data should be found when uncommitted=true
+        let (collection, execution, transaction, function_run, table) =
+            _setup_committed_table(db.clone()).await?;
+
+        let dv = db
+            .seed_table_data_version_with_data(
+                &collection,
+                &execution,
+                &transaction,
+                &function_run,
+                &table,
+            )
+            .await?;
+
+        let found = _resolve(&db, dv.table_id, true).await?;
+        assert!(found.is_some());
+        Ok(())
+    }
+
+    #[td_test::test(sqlx)]
+    #[tokio::test]
+    async fn test_resolve_committed_data_version_with_uncommitted_false(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        // Committed data version with data should be found when uncommitted=false
+        let (collection, execution, transaction, function_run, table) =
+            _setup_committed_table(db.clone()).await?;
+
+        let dv = db
+            .seed_table_data_version_with_data(
+                &collection,
+                &execution,
+                &transaction,
+                &function_run,
+                &table,
+            )
+            .await?;
+
+        let found = _resolve(&db, dv.table_id, false).await?;
+        assert!(found.is_some());
+        Ok(())
+    }
+
+    #[td_test::test(sqlx)]
+    #[tokio::test]
+    async fn test_resolve_uncommitted_data_version_with_uncommitted_true(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        // Non-committed data version with data should be found when uncommitted=true
+        let (collection, execution, transaction, function_run, table) =
+            _setup_table(db.clone()).await?;
+
+        let dv = db
+            .seed_table_data_version_with_data(
+                &collection,
+                &execution,
+                &transaction,
+                &function_run,
+                &table,
+            )
+            .await?;
+
+        let found = _resolve(&db, dv.table_id, true).await?;
+        assert!(found.is_some());
+        Ok(())
+    }
+
+    #[td_test::test(sqlx)]
+    #[tokio::test]
+    async fn test_resolve_uncommitted_data_version_with_uncommitted_false(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        // Non-committed data version with data should NOT be found when uncommitted=false
+        let (collection, execution, transaction, function_run, table) =
+            _setup_table(db.clone()).await?;
+
+        let dv = db
+            .seed_table_data_version_with_data(
+                &collection,
+                &execution,
+                &transaction,
+                &function_run,
+                &table,
+            )
+            .await?;
+
+        let found = _resolve(&db, dv.table_id, false).await?;
+        assert!(found.is_none());
         Ok(())
     }
 }

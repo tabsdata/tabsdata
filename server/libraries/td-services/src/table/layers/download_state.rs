@@ -7,7 +7,7 @@ use td_objects::dxo::function::FunctionDBWithNames;
 use td_objects::dxo::table::TableDBWithNames;
 use td_objects::rest_urls::params::TableAtIdName;
 use td_objects::system::TD_FN_STATE_PREFIX;
-use td_objects::types::basic::{AtTime, CollectionIdName, TableIdName};
+use td_objects::types::basic::{AtTime, CollectionIdName, TableIdName, UncommittedStatus};
 use td_tower::extractors::Ref;
 
 pub async fn get_table_at_id_name(
@@ -30,6 +30,8 @@ pub async fn get_table_at_id_name(
         collection: CollectionIdName::Id(function.collection_id),
         table: TableIdName::Id(state_table.table_id),
         at: *at_time,
+        // Internal path: allow uncommitted versions for now.
+        uncommitted: UncommittedStatus::TRUE,
     };
     Ok(table_at_id)
 }

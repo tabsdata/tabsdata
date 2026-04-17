@@ -78,11 +78,11 @@ mod tests {
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::table::TableDB;
     use td_objects::rest_urls::{
-        AtTimeParam, FileFormatParam, SampleOffsetLenParam, SqlParam, TableParam,
+        AtTimeParam, FileFormatParam, SampleOffsetLenParam, SqlParam, TableParam, UncommittedParam,
     };
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BundleId, CollectionName, Decorator, FunctionRunStatus, RoleId,
-        StorageVersion, TableIdName, TableNameDto, TransactionKey, UserId,
+        StorageVersion, TableIdName, TableNameDto, TransactionKey, UncommittedStatus, UserId,
     };
     use td_objects::{Buildable, and};
     use td_queries::BasicQueries;
@@ -99,7 +99,7 @@ mod tests {
         use crate::table::layers::storage::resolve_table_location;
         use td_objects::And;
         use td_objects::dxo::table::TableDBWithNames;
-        use td_objects::types::basic::{Sql, TableId, TableIdName, TriggeredOn};
+        use td_objects::types::basic::{Sql, TableId, TableIdName, TriggeredOn, UncommittedStatus};
 
         use td_tower::metadata::type_of_val;
 
@@ -139,6 +139,7 @@ mod tests {
                 type_of_val(&With::<TableSampleAtName>::extract::<CollectionIdName>),
                 type_of_val(&With::<TableSampleAtName>::extract::<TableIdName>),
                 type_of_val(&With::<TableSampleAtName>::extract::<AtTime>),
+                type_of_val(&With::<TableSampleAtName>::extract::<UncommittedStatus>),
                 // Only active or frozen tables
                 // Find Table ID, looking at the version at the time
                 type_of_val(
@@ -311,6 +312,9 @@ mod tests {
                             .table(TableIdName::from_str(table)?)
                             .build()?,
                         AtTimeParam::builder().at(at_time).build()?,
+                        UncommittedParam::builder()
+                            .uncommitted(UncommittedStatus::TRUE)
+                            .build()?,
                         SampleOffsetLenParam::builder()
                             .try_offset(offset)?
                             .try_len(len)?

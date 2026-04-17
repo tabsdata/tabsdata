@@ -65,10 +65,11 @@ mod tests {
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::table::TableDB;
     use td_objects::rest_urls::params::SchemaField;
-    use td_objects::rest_urls::{AtTimeParam, TableParam};
+    use td_objects::rest_urls::{AtTimeParam, TableParam, UncommittedParam};
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BundleId, CollectionName, Decorator, FunctionRunStatus, RoleId,
-        StorageVersion, TableIdName, TableName, TableNameDto, TransactionKey, UserId,
+        StorageVersion, TableIdName, TableName, TableNameDto, TransactionKey, UncommittedStatus,
+        UserId,
     };
     use td_objects::{Buildable, and};
     use td_queries::BasicQueries;
@@ -85,7 +86,7 @@ mod tests {
         use crate::table::layers::storage::resolve_table_location;
         use td_objects::And;
         use td_objects::dxo::table::TableDBWithNames;
-        use td_objects::types::basic::{TableId, TableIdName, TriggeredOn};
+        use td_objects::types::basic::{TableId, TableIdName, TriggeredOn, UncommittedStatus};
 
         use td_tower::metadata::type_of_val;
 
@@ -107,6 +108,7 @@ mod tests {
                 type_of_val(&With::<TableAtIdName>::extract::<CollectionIdName>),
                 type_of_val(&With::<TableAtIdName>::extract::<TableIdName>),
                 type_of_val(&With::<TableAtIdName>::extract::<AtTime>),
+                type_of_val(&With::<TableAtIdName>::extract::<UncommittedStatus>),
                 // Only active or frozen tables
                 // Find Table ID, looking at the version at the time
                 type_of_val(
@@ -272,6 +274,9 @@ mod tests {
                             .table(TableIdName::from_str(table)?)
                             .build()?,
                         AtTimeParam::builder().at(at_time).build()?,
+                        UncommittedParam::builder()
+                            .uncommitted(UncommittedStatus::TRUE)
+                            .build()?,
                     ));
             service.raw_oneshot(request).await
         }
