@@ -70,7 +70,9 @@ pub(crate) mod tests {
     use td_objects::dxo::function_run::FunctionRunDB;
     use td_objects::dxo::function_run::FunctionRunDBWithNames;
     use td_objects::dxo::table::TableDB;
-    use td_objects::dxo::table_data_version::TableDataVersionDBWithNames;
+    use td_objects::dxo::table_data_version::{
+        TableDataVersionDBWithFunction, TableDataVersionDBWithNames,
+    };
     use td_objects::dxo::transaction::TransactionDBWithStatus;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, Depth, Enabled, ExecutionName,
@@ -607,11 +609,14 @@ pub(crate) mod tests {
             let mut function_idxs = HashSet::new();
             for function_condition in &function_requirements {
                 assert_eq!(function_condition.execution_id, response.id);
-                if function_condition.requirement_table == TableName::try_from("table_3")? {
-                    // Self dependency on fist execution, version does not exist, requirement done.
-                    assert_eq!(function_condition.status, FunctionRunStatus::Committed);
-                } else {
-                    assert_eq!(function_condition.status, FunctionRunStatus::Scheduled);
+                if let Some(id) = function_condition.requirement_function_run_id {
+                    let tdv: TableDataVersionDBWithFunction = db.fetch_one(id).await?;
+                    if function_condition.requirement_table == TableName::try_from("table_3")? {
+                        // Self dependency on fist execution, version does not exist, requirement done.
+                        assert_eq!(tdv.status, FunctionRunStatus::Committed);
+                    } else {
+                        assert_eq!(tdv.status, FunctionRunStatus::Scheduled);
+                    }
                 }
 
                 if let Some(dependency_pos) = &function_condition.requirement_dependency_pos {

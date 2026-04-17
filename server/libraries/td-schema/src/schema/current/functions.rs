@@ -1513,47 +1513,13 @@ pub fn views(b: &Backend) -> Vec<ViewDef> {
         ));
     }
 
-    // function_requirements__with_status
+    // function_requirements__with_status — removed in v9
+    // function_requirements__with_names (joins directly from function_requirements)
     {
-        let tdv_view = Alias::new("table_data_versions__with_function");
-        v.push(ViewDef::new(
-            "function_requirements__with_status",
-            Query::select()
-                .expr(Expr::col((FunctionRequirements::Table, Asterisk)))
-                .expr_as(
-                    Expr::case(
-                        Expr::col((
-                            FunctionRequirements::Table,
-                            FunctionRequirements::RequirementTableDataVersionId,
-                        ))
-                        .is_null(),
-                        Expr::val("C"),
-                    )
-                    .finally(Expr::col((tdv_view.clone(), Alias::new("status")))),
-                    Alias::new("status"),
-                )
-                .from(FunctionRequirements::Table)
-                .join_as(
-                    JoinType::LeftJoin,
-                    tdv_view.clone(),
-                    tdv_view.clone(),
-                    Expr::col((
-                        FunctionRequirements::Table,
-                        FunctionRequirements::RequirementTableDataVersionId,
-                    ))
-                    .equals((tdv_view, Alias::new("id"))),
-                )
-                .to_owned(),
-        ));
-    }
-
-    // function_requirements__with_names
-    {
-        let req_view = Alias::new("function_requirements__with_status");
         v.push(ViewDef::new(
             "function_requirements__with_names",
             Query::select()
-                .expr(Expr::col((req_view.clone(), Asterisk)))
+                .expr(Expr::col((FunctionRequirements::Table, Asterisk)))
                 .expr_as(
                     Expr::col((Collections::Table, Collections::Name)),
                     Alias::new("collection"),
@@ -1566,18 +1532,21 @@ pub fn views(b: &Backend) -> Vec<ViewDef> {
                     Expr::col((Tables::Table, Alias::new("name"))),
                     Alias::new("requirement_table"),
                 )
-                .from(req_view.clone())
+                .from(FunctionRequirements::Table)
                 .join(
                     JoinType::LeftJoin,
                     Collections::Table,
-                    Expr::col((req_view.clone(), FunctionRequirements::CollectionId))
-                        .equals((Collections::Table, Collections::Id)),
+                    Expr::col((
+                        FunctionRequirements::Table,
+                        FunctionRequirements::CollectionId,
+                    ))
+                    .equals((Collections::Table, Collections::Id)),
                 )
                 .join(
                     JoinType::LeftJoin,
                     Tables::Table,
                     Expr::col((
-                        req_view.clone(),
+                        FunctionRequirements::Table,
                         FunctionRequirements::RequirementTableVersionId,
                     ))
                     .equals((Tables::Table, Tables::Id)),
@@ -1585,8 +1554,11 @@ pub fn views(b: &Backend) -> Vec<ViewDef> {
                 .join(
                     JoinType::LeftJoin,
                     Functions::Table,
-                    Expr::col((req_view, FunctionRequirements::RequirementFunctionVersionId))
-                        .equals((Functions::Table, Functions::Id)),
+                    Expr::col((
+                        FunctionRequirements::Table,
+                        FunctionRequirements::RequirementFunctionVersionId,
+                    ))
+                    .equals((Functions::Table, Functions::Id)),
                 )
                 .to_owned(),
         ));

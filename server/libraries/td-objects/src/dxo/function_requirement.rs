@@ -6,8 +6,8 @@
 mod definitions {
     use crate::types::basic::{
         CollectionId, CollectionName, DependencyPos, ExecutionId, FunctionName, FunctionRunId,
-        FunctionRunStatus, FunctionVersionId, InputIdx, RequirementId, TableDataVersionId, TableId,
-        TableName, TableVersionId, TransactionId, VersionPos,
+        FunctionVersionId, InputIdx, RequirementId, TableDataVersionId, TableId, TableName,
+        TableVersionId, TransactionId, VersionPos,
     };
 
     #[ta_objects::Dao]
@@ -39,15 +39,8 @@ mod definitions {
     }
 
     #[ta_objects::Dao]
-    #[dao(sql_table = "function_requirements__with_status")]
-    #[inherits(FunctionRequirementDB)]
-    pub struct FunctionRequirementDBWithStatus {
-        pub status: FunctionRunStatus,
-    }
-
-    #[ta_objects::Dao]
     #[dao(sql_table = "function_requirements__with_names")]
-    #[inherits(FunctionRequirementDBWithStatus)]
+    #[inherits(FunctionRequirementDB)]
     pub struct FunctionRequirementDBWithNames {
         pub collection: CollectionName,
         pub function: FunctionName,

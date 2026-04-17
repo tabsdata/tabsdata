@@ -493,7 +493,6 @@ mod tests {
             "executions__with_names",
             "executions__with_status",
             "function_requirements__with_names",
-            "function_requirements__with_status",
             "function_runs__with_names",
             "functions__with_names",
             "functions_current__with_names",

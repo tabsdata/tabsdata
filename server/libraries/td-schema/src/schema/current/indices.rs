@@ -369,13 +369,13 @@ fn function_requirement_indices() -> Vec<IndexCreateStatement> {
             .table(FunctionRequirements::Table)
             .col(FunctionRequirements::FunctionVersionId)
             .to_owned(),
-        // For function_requirements__with_status view JOIN
+        // For list_executions_by_table_data_version query
         Index::create()
             .name("function_requirements___requirement_table_data_version_id___idx")
             .table(FunctionRequirements::Table)
             .col(FunctionRequirements::RequirementTableDataVersionId)
             .to_owned(),
-        // For update_initial_function_run_status: querying the __with_status view by execution_id
+        // For querying function_requirements__with_names by execution_id
         Index::create()
             .name("function_requirements___execution_id___idx")
             .table(FunctionRequirements::Table)
