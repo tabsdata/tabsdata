@@ -5,6 +5,7 @@
 import logging
 import os
 import uuid
+from pathlib import Path
 
 import polars as pl
 import pytest
@@ -221,7 +222,7 @@ def test_file_info_local(tmp_path, file_format, file_info):
     assert len(output) == 1
 
     result_df = output[0].as_pl_df(with_sys_columns=True)
-    expected_uri = f"file://{data_path}"
+    expected_uri = Path(data_path).as_uri()
     verify_file_info_columns(result_df, file_info, file_format, expected_uri)
 
 

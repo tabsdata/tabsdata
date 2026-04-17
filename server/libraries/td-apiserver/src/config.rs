@@ -341,7 +341,7 @@ mod tests {
         #[cfg(target_os = "windows")]
         assert_eq!(
             resolved_config.database.url,
-            Some(Url::from_str("file:///test.db").unwrap())
+            Some(Url::from_str("file:///c:/test.db").unwrap())
         );
         #[cfg(not(target_os = "windows"))]
         assert_eq!(
