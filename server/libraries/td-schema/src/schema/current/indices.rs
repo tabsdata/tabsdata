@@ -375,6 +375,12 @@ fn function_requirement_indices() -> Vec<IndexCreateStatement> {
             .table(FunctionRequirements::Table)
             .col(FunctionRequirements::RequirementTableDataVersionId)
             .to_owned(),
+        // For update_initial_function_run_status: querying the __with_status view by execution_id
+        Index::create()
+            .name("function_requirements___execution_id___idx")
+            .table(FunctionRequirements::Table)
+            .col(FunctionRequirements::ExecutionId)
+            .to_owned(),
     ]
 }
 

@@ -7,11 +7,11 @@ use crate::scheduler::layers::request::{
     create_locked_cron_trigger_workers_stop_request,
     create_locked_function_runner_workers_start_request,
     create_locked_stage_trigger_workers_start_request,
-    create_locked_stage_trigger_workers_stop_request,
+    create_locked_stage_trigger_workers_stop_request, fetch_function_runs_to_execute,
 };
 use ta_services::factory::service_factory;
 use td_common::server::{FileWorkerMessageQueue, WorkerMessageQueue};
-use td_objects::dxo::function_run::{FunctionRunDB, FunctionRunToExecuteDB, UpdateFunctionRunDB};
+use td_objects::dxo::function_run::{FunctionRunDB, FunctionRunToExecute, UpdateFunctionRunDB};
 use td_objects::dxo::worker::{
     UpdateWorkerDB, UpdateWorkerMessageStatusDB, WorkerDB, WorkerDBWithNames,
 };
@@ -61,14 +61,13 @@ where
 {
     layers!(
         // Get all function runs that are ready to execute.
-        // This is, with status scheduled and with all requirements done.
-        from_fn(By::<()>::fetch_all::<FunctionRunToExecuteDB>),
+        from_fn(fetch_function_runs_to_execute),
         // Create a locked message for each function run.
         from_fn(create_locked_function_runner_workers_start_request::<T>),
         // And insert generated messages.
         from_fn(insert_vec::<WorkerDB>),
         // Update statuses.
-        from_fn(With::<Vec<FunctionRunToExecuteDB>>::extract::<Vec<FunctionRunId>>),
+        from_fn(With::<Vec<FunctionRunToExecute>>::extract::<Vec<FunctionRunId>>),
         from_fn(UpdateFunctionRunDB::run_requested),
         from_fn(By::<Vec<FunctionRunId>>::update_chunked::<UpdateFunctionRunDB, FunctionRunDB>),
     )
@@ -216,8 +215,7 @@ mod tests {
             .assert_service::<(), ()>(&[
                 // Function
                 // Get all function runs that are ready to execute.
-                // This is, with status scheduled and with all requirements done.
-                type_of_val(&By::<()>::fetch_all::<FunctionRunToExecuteDB>),
+                type_of_val(&fetch_function_runs_to_execute),
                 // Create a locked message for each function run.
                 type_of_val(
                     &create_locked_function_runner_workers_start_request::<FileWorkerMessageQueue>,
@@ -225,7 +223,7 @@ mod tests {
                 // And insert generated messages.
                 type_of_val(&insert_vec::<WorkerDB>),
                 // Update statuses.
-                type_of_val(&With::<Vec<FunctionRunToExecuteDB>>::extract::<Vec<FunctionRunId>>),
+                type_of_val(&With::<Vec<FunctionRunToExecute>>::extract::<Vec<FunctionRunId>>),
                 type_of_val(&UpdateFunctionRunDB::run_requested),
                 type_of_val(
                     &By::<Vec<FunctionRunId>>::update_chunked::<UpdateFunctionRunDB, FunctionRunDB>,

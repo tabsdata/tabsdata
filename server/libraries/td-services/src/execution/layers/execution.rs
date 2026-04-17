@@ -23,17 +23,18 @@ use td_objects::dxo::function_requirement::FunctionRequirementDB;
 use td_objects::dxo::function_run::{FunctionRunDB, FunctionRunDBBuilder, UpdateFunctionRunDB};
 use td_objects::dxo::graph::{FunctionNodeBuilder, GraphEdge, GraphNode, ResolvedVersion};
 use td_objects::dxo::table_data_version::{
-    ExecutionTableDataVersionReadBuilder, TableDataVersionDB,
+    ActiveTableDataVersionDB, ExecutionTableDataVersionReadBuilder, TableDataVersionDB,
 };
 use td_objects::dxo::transaction::{TransactionDB, TransactionDBBuilder};
 use td_objects::graph::{MapGraph, TdGraph};
 use td_objects::transaction::map::{TransactionMap, TransactionMapper};
 use td_objects::types::basic::{
     Depth, Dot, FunctionOnly, FunctionRunStatus, FunctionStatus, InputIdx, OverrideDisabledTrigger,
-    Trigger, TriggerType, VersionPos,
+    TableId, Trigger, TriggerType, VersionPos,
 };
 use td_objects::types::recursion::RecursionOptions;
-use td_queries::ChunkedQueries;
+use td_objects::types::table_ref::Versions;
+use td_queries::{ChunkedQueries, FunctionRequirementQueries};
 use td_tower::api_message;
 use td_tower::ctx_service::ReqCtx;
 use td_tower::extractors::{MutRef, Ref};
@@ -215,8 +216,11 @@ pub async fn resolve_execution_plan_versions(
     execution: Ref<ExecutionDB>,
     execution_plan: Ref<ExecutionPlan>,
 ) -> Result<ResolvedExecutionPlan, TdError> {
-    // Phase 1: Pre-resolve all edge versions sequentially
+    // Phase 1: Pre-resolve all edge versions, caching by (table_id, versions)
+    // since triggered_on is the same for every edge in an execution.
     let mut edge_results: Vec<ResolvedVersion> = Vec::new();
+    let mut cache: HashMap<(TableId, Versions), Vec<Option<ActiveTableDataVersionDB>>> =
+        HashMap::new();
     for edge in execution_plan.graph.inner.edge_references() {
         let source = &execution_plan.graph.inner[edge.source()];
         let target = &execution_plan.graph.inner[edge.target()];
@@ -247,14 +251,21 @@ pub async fn resolve_execution_plan_versions(
             Cow::Borrowed(versions_inner)
         };
 
-        let found = VersionResolver::builder()
-            .function_id(&function.function_id)
-            .table_id(&table.table_id)
-            .versions(&lookup_versions)
-            .triggered_on(&triggered_on)
-            .build()?
-            .resolve(&mut conn)
-            .await?;
+        let cache_key = (table.table_id, lookup_versions.clone().into_owned());
+        let found = if let Some(cached) = cache.get(&cache_key) {
+            cached.clone()
+        } else {
+            let result = VersionResolver::builder()
+                .function_id(&function.function_id)
+                .table_id(&table.table_id)
+                .versions(&lookup_versions)
+                .triggered_on(&triggered_on)
+                .build()?
+                .resolve(&mut conn)
+                .await?;
+            cache.insert(cache_key, result.clone());
+            result
+        };
 
         let found = found
             .into_iter()
@@ -359,49 +370,18 @@ pub async fn build_function_requirements(
 // similar to `update_function_run_status`
 pub async fn update_initial_function_run_status(
     mut conn: MutRef<DynamicConnection<'static>>,
-    function_runs: Ref<Vec<FunctionRunDB>>,
-    function_reqs: Ref<Vec<FunctionRequirementDB>>,
+    execution: Ref<ExecutionDB>,
 ) -> Result<(), TdError> {
-    let function_reqs_upstream = function_reqs
-        .iter()
-        .filter_map(|req| req.requirement_function_run_id)
-        .unique()
-        .collect::<Vec<_>>();
+    // Direct join: function_requirements → function_runs via requirement_function_run_id.
+    // Returns only the distinct function_run_ids whose upstream is Failed/OnHold.
+    let on_hold_ids = conn.fetch_blocked_function_run_ids(&execution.id).await?;
 
-    let function_runs_upstream = conn
-        .fetch_all_chunked::<FunctionRunDB, _>(&function_reqs_upstream)
-        .await?;
-
-    let mut function_run_updates = HashMap::new();
-    for fr in function_runs.iter() {
-        // collect all upstream runs for this function_run
-        let upstream_runs = function_reqs
-            .iter()
-            .filter(|req| req.function_run_id == fr.id)
-            .filter_map(|req| req.requirement_function_run_id)
-            .filter_map(|id| function_runs_upstream.iter().find(|ufr| ufr.id == id))
-            .collect::<Vec<_>>();
-
-        // and update status accordingly
-        if upstream_runs.iter().any(|ufr| {
-            matches!(
-                ufr.status,
-                FunctionRunStatus::Failed | FunctionRunStatus::OnHold
-            )
-        }) {
-            // any upstream Failed, OnHold → OnHold
-            function_run_updates
-                .entry(FunctionRunStatus::OnHold)
-                .or_insert_with(HashSet::new)
-                .extend(std::iter::once(fr.id));
-        }
-    }
-
-    for (status, function_run_ids) in function_run_updates {
-        let update = UpdateFunctionRunDB::builder().status(status).build()?;
-        let function_run_ids: Vec<_> = function_run_ids.iter().collect();
+    if !on_hold_ids.is_empty() {
+        let update = UpdateFunctionRunDB::builder()
+            .status(FunctionRunStatus::OnHold)
+            .build()?;
         let _ = conn
-            .update_chunked::<_, FunctionRunDB, _>(&update, &function_run_ids)
+            .update_chunked::<_, FunctionRunDB, _>(&update, &on_hold_ids)
             .await?;
     }
 

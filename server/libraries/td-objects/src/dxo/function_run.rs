@@ -55,10 +55,10 @@ mod definitions {
         pub triggered_by: UserName,
     }
 
-    #[ta_objects::Dao]
-    #[dao(sql_table = "function_runs__to_execute")]
+    #[ta_objects::Dlo]
+    #[derive(sqlx::FromRow)] // not a Dao, just a logic layer built from combining them
     #[inherits(FunctionRunDBWithNames)]
-    pub struct FunctionRunToExecuteDB {
+    pub struct FunctionRunToExecute {
         #[dxo(extractor)]
         pub id: FunctionRunId,
 
@@ -67,11 +67,6 @@ mod definitions {
         pub bundle_id: BundleId,
         pub defined_on: AtTime,
     }
-
-    #[ta_objects::Dao]
-    #[dao(sql_table = "function_runs__to_commit")]
-    #[inherits(FunctionRunDB)]
-    pub struct FunctionRunToCommitDB {}
 
     #[ta_objects::Dto]
     #[dto(list(on = FunctionRunDBWithNames))]

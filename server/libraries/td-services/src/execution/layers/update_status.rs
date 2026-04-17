@@ -162,8 +162,7 @@ pub async fn update_function_run_status(
             .collect::<HashSet<_>>()
             .into_iter()
             .collect();
-        let to_commit = conn.fetch_to_commit(&execution_ids).await?;
-        let to_commit: Vec<_> = to_commit.iter().map(|f| f.id).collect();
+        let to_commit = conn.fetch_function_runs_to_commit(&execution_ids).await?;
 
         let update = CommitFunctionRunDB::default();
         let _ = conn

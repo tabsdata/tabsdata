@@ -25,6 +25,7 @@ pub mod historic;
 pub(crate) mod v5;
 pub(crate) mod v6;
 pub(crate) mod v7;
+pub(crate) mod v8;
 
 use crate::schema::SchemaVersion;
 use crate::schema::backend::Backend;
@@ -40,6 +41,7 @@ pub fn build(version: usize, backend: impl Into<Backend>) -> Vec<String> {
         5 => v5::Schema::build(backend),
         6 => v6::Schema::build(backend),
         7 => v7::Schema::build(backend),
+        8 => v8::Schema::build(backend),
         _ => panic!("No archived schema for version {version}"),
     }
 }
@@ -54,6 +56,7 @@ pub fn fingerprints(version: usize) -> [&'static str; 3] {
         5 => v5::Schema::FINGERPRINTS,
         6 => v6::Schema::FINGERPRINTS,
         7 => v7::Schema::FINGERPRINTS,
+        8 => v8::Schema::FINGERPRINTS,
         _ => panic!("No archived schema for version {version}"),
     }
 }

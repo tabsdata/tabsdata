@@ -3,9 +3,9 @@
 //
 
 use sea_query::{
-    Alias, Asterisk, ColumnDef, CommonTableExpression, Expr, ExprTrait, ForeignKey,
-    ForeignKeyAction, Func, Iden, InsertStatement, JoinType, Order, OverStatement, Query, Table,
-    TableCreateStatement, WindowStatement, WithClause,
+    Alias, Asterisk, ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Func, Iden,
+    InsertStatement, JoinType, Order, OverStatement, Query, Table, TableCreateStatement,
+    WindowStatement,
 };
 
 use super::collections::Collections;
@@ -1684,113 +1684,6 @@ pub fn views(b: &Backend) -> Vec<ViewDef> {
                 )
                 .group_by_col((txn_view, Alias::new("id")))
                 .to_owned(),
-        ));
-    }
-
-    // function_runs__to_execute (CTE)
-    {
-        let cte_select = Query::select()
-            .distinct()
-            .column(Alias::new("function_run_id"))
-            .from(Alias::new("function_requirements__with_status"))
-            .and_where(Expr::col(Alias::new("status")).is_not_in(["D", "C"]))
-            .to_owned();
-
-        let cte = CommonTableExpression::new()
-            .query(cte_select)
-            .table_name(Alias::new("runs_with_pending_reqs"))
-            .to_owned();
-
-        let with_clause = WithClause::new().cte(cte).to_owned();
-
-        let fr_view = Alias::new("function_runs__with_names");
-        let pending_cte = Alias::new("runs_with_pending_reqs");
-        v.push(ViewDef::with_cte(
-            "function_runs__to_execute",
-            Query::select()
-                .expr(Expr::col((fr_view.clone(), Asterisk)))
-                .expr(Expr::col((Functions::Table, Functions::DataLocation)))
-                .expr(Expr::col((Functions::Table, Functions::StorageVersion)))
-                .expr(Expr::col((Functions::Table, Functions::BundleId)))
-                .expr(Expr::col((Functions::Table, Functions::DefinedOn)))
-                .from(fr_view.clone())
-                .join(
-                    JoinType::Join,
-                    Functions::Table,
-                    Expr::col((fr_view.clone(), Alias::new("function_version_id")))
-                        .equals((Functions::Table, Functions::Id)),
-                )
-                .join_as(
-                    JoinType::LeftJoin,
-                    pending_cte.clone(),
-                    pending_cte.clone(),
-                    Expr::col((fr_view.clone(), Alias::new("id")))
-                        .equals((pending_cte.clone(), Alias::new("function_run_id"))),
-                )
-                .and_where(Expr::col((fr_view, Alias::new("status"))).is_in(["S", "RS"]))
-                .and_where(Expr::col((pending_cte, Alias::new("function_run_id"))).is_null())
-                .to_owned(),
-            with_clause,
-        ));
-    }
-
-    // function_runs__to_commit (2 CTEs)
-    {
-        let cte1_select = Query::select()
-            .column(FunctionRuns::TransactionId)
-            .from(FunctionRuns::Table)
-            .group_by_col(FunctionRuns::TransactionId)
-            .and_having(
-                Expr::expr(Func::sum(
-                    Expr::case(Expr::col(FunctionRuns::Status).ne("D"), 1).finally(0),
-                ))
-                .eq(0),
-            )
-            .to_owned();
-
-        let cte1 = CommonTableExpression::new()
-            .query(cte1_select)
-            .table_name(Alias::new("transactions_with_done_runs"))
-            .to_owned();
-
-        let cte2_select = Query::select()
-            .distinct()
-            .column(Alias::new("transaction_id"))
-            .from(Alias::new("function_requirements__with_status"))
-            .and_where(Expr::col(Alias::new("status")).is_not_in(["D", "C"]))
-            .to_owned();
-
-        let cte2 = CommonTableExpression::new()
-            .query(cte2_select)
-            .table_name(Alias::new("transactions_with_pending_reqs"))
-            .to_owned();
-
-        let with_clause = WithClause::new().cte(cte1).cte(cte2).to_owned();
-
-        let done_cte = Alias::new("transactions_with_done_runs");
-        let pending_cte = Alias::new("transactions_with_pending_reqs");
-        v.push(ViewDef::with_cte(
-            "function_runs__to_commit",
-            Query::select()
-                .expr(Expr::col((FunctionRuns::Table, Asterisk)))
-                .from(FunctionRuns::Table)
-                .join_as(
-                    JoinType::Join,
-                    done_cte.clone(),
-                    done_cte.clone(),
-                    Expr::col((FunctionRuns::Table, FunctionRuns::TransactionId))
-                        .equals((done_cte, Alias::new("transaction_id"))),
-                )
-                .join_as(
-                    JoinType::LeftJoin,
-                    pending_cte.clone(),
-                    pending_cte.clone(),
-                    Expr::col((FunctionRuns::Table, FunctionRuns::TransactionId))
-                        .equals((pending_cte.clone(), Alias::new("transaction_id"))),
-                )
-                .and_where(Expr::col((pending_cte, Alias::new("transaction_id"))).is_null())
-                .to_owned(),
-            with_clause,
         ));
     }
 

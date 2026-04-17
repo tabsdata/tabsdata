@@ -31,6 +31,7 @@
 pub(crate) mod v5_to_v6;
 pub(crate) mod v6_to_v7;
 pub(crate) mod v7_to_v8;
+pub(crate) mod v8_to_v9;
 
 use crate::schema::SchemaDelta;
 use crate::schema::backend::Backend;
@@ -47,6 +48,7 @@ pub fn get(target_version: usize, backend: impl Into<Backend>) -> Vec<String> {
         6 => v5_to_v6::Migration::up(backend),
         7 => v6_to_v7::Migration::up(backend),
         8 => v7_to_v8::Migration::up(backend),
+        9 => v8_to_v9::Migration::up(backend),
         _ => panic!("No delta migration for version {target_version}"),
     }
 }
@@ -61,6 +63,7 @@ pub fn fingerprints(target_version: usize) -> [&'static str; 3] {
         6 => v5_to_v6::Migration::FINGERPRINTS,
         7 => v6_to_v7::Migration::FINGERPRINTS,
         8 => v7_to_v8::Migration::FINGERPRINTS,
+        9 => v8_to_v9::Migration::FINGERPRINTS,
         _ => panic!("No delta migration for version {target_version}"),
     }
 }

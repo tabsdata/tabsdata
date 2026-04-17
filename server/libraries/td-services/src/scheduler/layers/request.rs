@@ -17,7 +17,7 @@ use td_database::dynamic::DynamicConnection;
 use td_error::{ApiError, TdError, api_error, td_error};
 use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::function_requirement::FunctionRequirementDBWithNames;
-use td_objects::dxo::function_run::FunctionRunToExecuteDB;
+use td_objects::dxo::function_run::FunctionRunToExecute;
 use td_objects::dxo::table_data_version::TableDataVersionDBWithNames;
 use td_objects::dxo::worker::{WorkerDB, WorkerDBWithNames};
 use td_objects::dxo::yaml::cron_trigger::v1::CronTriggerInput;
@@ -38,7 +38,7 @@ use td_objects::types::basic::{
     WorkerType,
 };
 use td_objects::{Buildable, and, lte};
-use td_queries::BasicQueries;
+use td_queries::{BasicQueries, FunctionRunQueries};
 use td_storage::Storage;
 use td_storage::location::StorageLocation;
 use td_tower::extractors::{MutRef, Ref};
@@ -50,12 +50,19 @@ pub enum WorkerRequestError {
     UrlParse(#[from] url::ParseError) = 5000,
 }
 
+pub async fn fetch_function_runs_to_execute(
+    mut conn: MutRef<DynamicConnection<'static>>,
+) -> Result<Vec<FunctionRunToExecute>, TdError> {
+    let result = conn.fetch_function_runs_to_execute().await?;
+    Ok(result)
+}
+
 pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessageQueue>(
     message_queue: Ref<T>,
     storage: Ref<Storage>,
     server_addresses: Ref<InternalServerAddresses>,
     mut conn: MutRef<DynamicConnection<'static>>,
-    function_runs: Ref<Vec<FunctionRunToExecuteDB>>,
+    function_runs: Ref<Vec<FunctionRunToExecute>>,
 ) -> Result<Vec<WorkerDB>, TdError> {
     let mut results = Vec::new();
     for f in function_runs.iter() {
