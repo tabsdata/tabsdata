@@ -13,15 +13,18 @@
 //! impl SchemaDelta for Migration {
 //!     const FROM_VERSION: usize = N;
 //!     const TO_VERSION: usize = N + 1;
+//!     const FINGERPRINTS: [&'static str; 3] = ["", "", ""];
 //!     fn up(b: Backend) -> Vec<String> { /* ... */ }
 //! }
 //! ```
 //!
 //! ## Adding a new delta
 //!
-//! 1. Create `vN_to_v{N+1}.rs` with `pub struct Migration;` and `impl SchemaDelta`.
+//! 1. Create `vN_to_v{N+1}.rs` with `pub struct Migration;` and `impl SchemaDelta`
+//!    (include `FINGERPRINTS` — leave empty initially, fill after running tests).
 //! 2. Add `pub(crate) mod vN_to_v{N+1};` to this file.
-//! 3. Add a match arm: `{N+1} => vN_to_v{N+1}::Migration::up(backend),`.
+//! 3. Add a match arm to `get()`: `{N+1} => vN_to_v{N+1}::Migration::up(backend),`.
+//! 4. Add a match arm to `fingerprints()`: `{N+1} => vN_to_v{N+1}::Migration::FINGERPRINTS,`.
 //!
 //! The last statement in every delta **must** update `db_version` using
 //! the helper: `b.update_db_version(Self::TO_VERSION)`.

@@ -14,10 +14,12 @@
 //!
 //! 1. Copy the entire `current/` directory to `archive/vN/`.
 //!    (`current/` already uses `super::` imports, so the copy works as-is.)
-//! 2. Add `pub struct Schema;` and `impl SchemaVersion for Schema { ... }` to `vN/mod.rs`.
+//! 2. In `vN/mod.rs`: hardcode `const VERSION: usize = N;`, keep `FINGERPRINTS`
+//!    with the real hash values, and remove the delegating `pub fn build()`.
 //! 3. Add `pub(crate) mod vN;` to this file.
-//! 4. Add a match arm: `N => vN::Schema::build(backend),`.
-//! 5. Set `MIN_ARCHIVE` to N (or keep the existing value if earlier archives exist).
+//! 4. Add a match arm to `build()`: `N => vN::Schema::build(backend),`.
+//! 5. Add a match arm to `fingerprints()`: `N => vN::Schema::FINGERPRINTS,`.
+//! 6. Set `MIN_ARCHIVE` to N (or keep the existing value if earlier archives exist).
 //!
 //! See the project README for a full guide and example.
 

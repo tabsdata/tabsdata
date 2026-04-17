@@ -23,16 +23,18 @@ use backend::Backend;
 /// any step.
 ///
 /// 1. Copy `current/` to `archive/v{VERSION}/` and freeze the archive copy
-///    (hardcode `VERSION`, remove `FINGERPRINT` override).
+///    (hardcode `VERSION`, remove the delegating `pub fn build()`).
 /// 2. Create `deltas/v{VERSION}_to_v{NEW_VERSION}.rs` implementing
 ///    [`SchemaDelta`]. The last statement **must** bump `db_version`.
-/// 3. Wire up the new archive and delta in their respective `mod.rs` files.
+/// 3. Wire up the new archive and delta in their respective `mod.rs` files
+///    (both `build()`/`get()` and `fingerprints()` match arms).
 /// 4. Add `validate_schema_version` / `validate_delta` tests in each new module.
 /// 5. Make your schema changes in `current/`.
 /// 6. Bump [`VERSION`](SchemaVersion::VERSION) in `current::Schema`.
-/// 7. Run `cargo test -p td-schema` — copy the new fingerprint from the error
-///    and update [`FINGERPRINT`](SchemaVersion::FINGERPRINT) in `current::Schema`.
-/// 8. Verify: `cargo test -p td-schema && cargo test -p td-database --features sqlite`.
+///    Run `cargo test -p td-schema` — copy the new fingerprints from the error
+///    and update [`FINGERPRINTS`](SchemaVersion::FINGERPRINTS) in `current::Schema`
+///    and in the new delta.
+/// 7. Verify: `cargo test -p td-schema && cargo test -p td-database --features sqlite`.
 ///
 /// See `README.md` for the full guide with code examples.
 pub trait SchemaVersion {

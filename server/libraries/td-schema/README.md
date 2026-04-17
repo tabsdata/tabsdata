@@ -25,15 +25,21 @@ src/schema/
 │   ├── permissions.rs
 │   └── indices.rs      # All secondary indices
 ├── archive/            # Frozen snapshots of previous versions
-│   ├── mod.rs          # build(version, backend), MIN_ARCHIVE
+│   ├── mod.rs          # build(version, backend), fingerprints(version), MIN_ARCHIVE
 │   ├── v5/             # Schema (impl SchemaVersion) — frozen copy at v5
+│   ├── v6/             # Schema (impl SchemaVersion) — frozen copy at v6
+│   ├── v7/             # Schema (impl SchemaVersion) — frozen copy at v7
+│   ├── v8/             # Schema (impl SchemaVersion) — frozen copy at v8
 │   └── historic/       # Legacy sqlx migration SQL files (v0–v5, SQLite-only)
 │       ├── mod.rs      # get(), initial_v0_schema(), normalize()
 │       ├── live/       # Frozen .up.sql / .down.sql migration files
 │       └── README.md   # Documentation — DO NOT MODIFY the SQL files
 ├── deltas/             # Incremental migration scripts
-│   ├── mod.rs          # get(target_version, backend)
-│   └── v5_to_v6.rs     # Migration (impl SchemaDelta) — v5 to v6
+│   ├── mod.rs          # get(target_version, backend), fingerprints(target_version)
+│   ├── v5_to_v6.rs     # Migration (impl SchemaDelta) — v5 to v6
+│   ├── v6_to_v7.rs     # Migration (impl SchemaDelta) — v6 to v7
+│   ├── v7_to_v8.rs     # Migration (impl SchemaDelta) — v7 to v8
+│   └── v8_to_v9.rs     # Migration (impl SchemaDelta) — v8 to v9
 └── tests.rs            # Trait validation, fingerprint, migration guards
 ```
 
@@ -46,23 +52,26 @@ contract:
 /// A complete schema snapshot for a specific database version.
 pub trait SchemaVersion {
     const VERSION: usize;
-    const FINGERPRINT: &'static str = "";  // only current overrides this
-    fn build(backend: Backend) -> Vec<String>;
+    const FINGERPRINTS: [&'static str; backend::BACKEND_COUNT];
+    fn build(backend: impl Into<Backend>) -> Vec<String>;
 }
 
 /// An incremental migration from one database version to the next.
 pub trait SchemaDelta {
     const FROM_VERSION: usize;
     const TO_VERSION: usize;
+    const FINGERPRINTS: [&'static str; backend::BACKEND_COUNT];
     fn up(backend: Backend) -> Vec<String>;
 }
 ```
 
-- `current::Schema` implements `SchemaVersion` (the live version) and overrides
-  `FINGERPRINT` with the SHA-256 hash of the SQL output across all backends.
-- Each `archive::vN::Schema` implements `SchemaVersion` (frozen snapshots) —
-  they use the default empty `FINGERPRINT` since their output is frozen.
-- Each `deltas::vN_to_vM::Migration` implements `SchemaDelta`.
+- `current::Schema` implements `SchemaVersion` (the live version) with
+  `FINGERPRINTS` containing the SHA-256 hashes of the SQL output, one per
+  backend (Sqlite, Postgres, MySql).
+- Each `archive::vN::Schema` implements `SchemaVersion` (frozen snapshots)
+  with `FINGERPRINTS` containing the hashes at the time the archive was created.
+- Each `deltas::vN_to_vM::Migration` implements `SchemaDelta` with
+  `FINGERPRINTS` containing the hashes of the delta output per backend.
 
 ## How it works
 
@@ -70,7 +79,9 @@ pub trait SchemaDelta {
 |------|---------|
 | `current::Schema::build(backend)` | Generates the **full schema** for a fresh install at `Schema::VERSION`. |
 | `archive::build(version, backend)` | Dispatches to the archived `SchemaVersion` for a **previous** version. |
+| `archive::fingerprints(version)` | Returns the stored per-backend fingerprints for an archived version. |
 | `deltas::get(target, backend)` | Dispatches to the `SchemaDelta` that upgrades from `target - 1` to `target`. |
+| `deltas::fingerprints(target)` | Returns the stored per-backend fingerprints for a delta. |
 
 **Fresh installs** run `current::Schema::build()`.
 **Existing databases (v6+)** apply deltas **incrementally**: going from v6 to
@@ -96,11 +107,12 @@ cp -r src/schema/current src/schema/archive/v6
 ```
 
 Then clean up the archive copy:
-- Remove `FINGERPRINT` override and the delegating `pub fn build()` from the archive's `mod.rs`.
 - Freeze the version in the `SchemaVersion` impl: change `const VERSION` from
-  `Schema::VERSION` (dynamic) to a literal (e.g., `6`).
-- In `system.rs`, replace the `super::Schema` / `SchemaVersion` imports with a
-  local constant: `const ARCHIVE_VERSION: usize = 6;` and use it in the seed data.
+  `Self::VERSION` (dynamic) to a literal (e.g., `8`).
+- Remove the delegating `pub fn build()` convenience function at the bottom
+  of the archive's `mod.rs` (only `current/mod.rs` needs it).
+- Keep `FINGERPRINTS` as-is — the hashes are already correct for the frozen
+  version.
 
 The result should look like:
 
@@ -111,9 +123,16 @@ use crate::schema::backend::Backend;
 pub struct Schema;
 
 impl SchemaVersion for Schema {
-    const VERSION: usize = 6;
+    const VERSION: usize = 8;
 
-    fn build(b: Backend) -> Vec<String> {
+    const FINGERPRINTS: [&'static str; 3] = [
+        "...", // Sqlite
+        "...", // Postgres
+        "...", // MySql
+    ];
+
+    fn build(backend: impl Into<Backend>) -> Vec<String> {
+        let backend = backend.into();
         // ... existing build body ...
     }
 }
@@ -121,12 +140,21 @@ impl SchemaVersion for Schema {
 
 Wire it up in `archive/mod.rs`:
 ```rust
-pub(crate) mod v6;
+pub(crate) mod v8;
 
-pub fn build(version: usize, backend: Backend) -> Vec<String> {
+pub fn build(version: usize, backend: impl Into<Backend>) -> Vec<String> {
+    let backend = backend.into();
     match version {
-        5 => v5::Schema::build(backend),
-        6 => v6::Schema::build(backend),   // <- new
+        // ... existing arms ...
+        8 => v8::Schema::build(backend),   // <- new
+        _ => panic!("No archived schema for version {version}"),
+    }
+}
+
+pub fn fingerprints(version: usize) -> [&'static str; 3] {
+    match version {
+        // ... existing arms ...
+        8 => v8::Schema::FINGERPRINTS,   // <- new
         _ => panic!("No archived schema for version {version}"),
     }
 }
@@ -134,17 +162,22 @@ pub fn build(version: usize, backend: Backend) -> Vec<String> {
 
 ### 2. Create the delta
 
-Create `deltas/v6_to_v7.rs`:
+Create `deltas/v8_to_v9.rs`:
 
 ```rust
-use crate::schema::backend::Backend;
 use crate::schema::SchemaDelta;
+use crate::schema::backend::Backend;
 
 pub struct Migration;
 
 impl SchemaDelta for Migration {
-    const FROM_VERSION: usize = 6;
-    const TO_VERSION: usize = 7;
+    const FROM_VERSION: usize = 8;
+    const TO_VERSION: usize = 9;
+    const FINGERPRINTS: [&'static str; 3] = [
+        "", // Sqlite  — filled in by step 6
+        "", // Postgres
+        "", // MySql
+    ];
 
     fn up(b: Backend) -> Vec<String> {
         vec![
@@ -160,12 +193,21 @@ impl SchemaDelta for Migration {
 
 Wire it up in `deltas/mod.rs`:
 ```rust
-pub(crate) mod v6_to_v7;
+pub(crate) mod v8_to_v9;
 
-pub fn get(target_version: usize, backend: Backend) -> Vec<String> {
+pub fn get(target_version: usize, backend: impl Into<Backend>) -> Vec<String> {
+    let backend = backend.into();
     match target_version {
-        6 => v5_to_v6::Migration::up(backend),
-        7 => v6_to_v7::Migration::up(backend),  // <- new
+        // ... existing arms ...
+        9 => v8_to_v9::Migration::up(backend),  // <- new
+        _ => panic!("No delta migration for version {target_version}"),
+    }
+}
+
+pub fn fingerprints(target_version: usize) -> [&'static str; 3] {
+    match target_version {
+        // ... existing arms ...
+        9 => v8_to_v9::Migration::FINGERPRINTS,  // <- new
         _ => panic!("No delta migration for version {target_version}"),
     }
 }
@@ -219,16 +261,17 @@ impl SchemaVersion for Schema {
 }
 ```
 
-### 6. Update the fingerprint
+### 6. Update the fingerprints
 
-Run the tests -- the fingerprint test will fail and print the new hash:
+Run the tests — the fingerprint test will fail and print the new hashes:
 
 ```bash
 cargo test -p td-schema
 ```
 
-Copy the `Actual fingerprint` value from the error output and update
-`FINGERPRINT` in the `SchemaVersion` impl in `current/mod.rs`.
+Copy the `Actual fingerprints` values from the error output and update
+`FINGERPRINTS` in the `SchemaVersion` impl in `current/mod.rs`. Also update
+`FINGERPRINTS` in the new delta's `SchemaDelta` impl.
 
 ### 7. Verify
 
