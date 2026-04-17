@@ -13,7 +13,6 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, TypeAlias, Union, cast
 
 import boto3
-from botocore.client import BaseClient
 from mypy_boto3_glue.client import GlueClient
 from pydantic import PositiveInt
 from typing_extensions import deprecated
@@ -834,10 +833,6 @@ class KafkaTrigger(StageTrigger):
             ProtobufKafkaSerde,
         )
 
-        schema_registry_client = self._build_schema_registry_client()
-
-        from confluent_kafka.schema_registry import SchemaRegistryClient
-
         def _raise_unsupported():
             raise ValueError(
                 f"Serde not created: unsupported data format '{self.data_format}'."
@@ -863,53 +858,54 @@ class KafkaTrigger(StageTrigger):
         def sr_serde():
             return {
                 _AVRO: lambda: AvroSrKafkaSerde(
-                    schema_registry_client=schema_registry_client,
+                    schema_registry_client=self._build_schema_registry_client(),
                     avro_schema=self.schema,
                 ),
                 _JSON: lambda: JsonSrKafkaSerde(
-                    schema_registry_client=schema_registry_client,
+                    schema_registry_client=self._build_schema_registry_client(),
                     json_schema=self.schema,
                 ),
                 _PROTOBUF: lambda: ProtobufSrKafkaSerde(
-                    schema_registry_client=schema_registry_client,
+                    serializer_registry_client=(self._build_schema_registry_client()),
+                    deserializer_registry_client=(self._build_schema_registry_client()),
                     protobuf_schema=self.schema,
                     message_name=self.data_format.message_name,
                     working_dir=working_dir,
                 ),
             }.get(format_key(), lambda: _raise_unsupported())()
 
-        def glue_serde():
+        def glue_serde(registry: AwsGlueSchemaRegistry):
+            glue_client = self._build_schema_registry_client()
             return {
                 _AVRO: lambda: AvroGlueKafkaSerde(
-                    glue_client=schema_registry_client,
-                    registry_name=self.conn.schema_registry.registry_name,
-                    schema_name=self.conn.schema_registry.schema_name,
+                    glue_client=glue_client,
+                    registry_name=registry.registry_name,
+                    schema_name=registry.schema_name,
                     avro_schema=self.schema,
                 ),
                 _JSON: lambda: JsonGlueKafkaSerde(
-                    glue_client=schema_registry_client,
-                    registry_name=self.conn.schema_registry.registry_name,
-                    schema_name=self.conn.schema_registry.schema_name,
+                    glue_client=glue_client,
+                    registry_name=registry.registry_name,
+                    schema_name=registry.schema_name,
                     json_schema=self.schema,
                 ),
                 _PROTOBUF: lambda: ProtobufGlueKafkaSerde(
-                    glue_client=schema_registry_client,
-                    registry_name=self.conn.schema_registry.registry_name,
-                    schema_name=self.conn.schema_registry.schema_name,
+                    glue_client=glue_client,
+                    registry_name=registry.registry_name,
+                    schema_name=registry.schema_name,
                     protobuf_schema=self.schema,
                     message_name=self.data_format.message_name,
                     working_dir=working_dir,
                 ),
             }.get(format_key(), lambda: _raise_unsupported())()
 
-        match schema_registry_client:
+        sr = self.conn.schema_registry
+        match sr:
             case None:
                 return non_sr_serde()
-            case SchemaRegistryClient():
+            case ConfluentSchemaRegistry():
                 return sr_serde()
-            case BaseClient():
-                return glue_serde()
+            case AwsGlueSchemaRegistry() as glue_sr:
+                return glue_serde(glue_sr)
             case _:
-                raise ValueError(
-                    f"Unsupported schema registry client: {schema_registry_client}"
-                )
+                raise ValueError(f"Unsupported schema registry type: {type(sr)}")
