@@ -18,6 +18,7 @@ use crate::transporter::logic::to_file_to_import_instructions;
 use async_trait::async_trait;
 use itertools::Itertools;
 use object_store::ObjectMeta;
+use object_store::path::Path as ObjectStorePath;
 use polars::prelude::{ParquetCompression, ParquetWriteOptions};
 use std::path::Path;
 use std::sync::Arc;
@@ -132,11 +133,22 @@ fn create_file_import_instructions(
     files_to_import: Vec<(Url, ObjectMeta)>,
 ) -> Result<Vec<crate::transporter::logic::FileImportInstructions>, TransporterError> {
     let importer_options: Arc<ImporterOptions> = Arc::new(import_request.try_into()?);
+    let base_path = base_url(import_request.source()).path().to_string();
 
     files_to_import
         .into_iter()
         .enumerate()
-        .map(|(idx, (_url, meta))| (idx, meta))
+        .map(|(idx, (url, mut meta))| {
+            // Set location to the path relative to base_url so that
+            // to_file_to_import_instructions can reconstruct the from_url
+            // correctly via base_url.join(location). Stripping the base
+            // path prefix works across Unix (/), Windows (/c:/), and
+            // cloud (/) schemes.
+            let path = url.path();
+            let relative = path.strip_prefix(base_path.as_str()).unwrap_or(path);
+            meta.location = ObjectStorePath::from(relative);
+            (idx, meta)
+        })
         .map(crate::transporter::logic::take_files_limit())
         .sorted_by(crate::transporter::logic::file_last_modified_comparator())
         .map(to_file_to_import_instructions(&importer_options))
