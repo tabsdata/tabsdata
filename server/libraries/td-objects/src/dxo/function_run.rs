@@ -76,9 +76,9 @@ mod definitions {
     #[ta_objects::Dto]
     #[dto(list(on = FunctionRunDBWithNames))]
     pub struct FunctionRun {
-        #[dto(list(filter, filter_like, order_by))]
+        #[dto(list(filter, order_by))]
         pub id: FunctionRunId,
-        #[dto(list(filter, filter_like, order_by))]
+        #[dto(list(filter, order_by))]
         pub collection_id: CollectionId,
         #[dto(list(filter, order_by))]
         pub function_version_id: FunctionVersionId,
@@ -86,14 +86,14 @@ mod definitions {
         pub execution_id: ExecutionId,
         #[dto(list(filter, filter_like, order_by))]
         pub transaction_id: TransactionId,
-        #[dto(list(pagination_by = "+", filter, filter_like))]
+        #[dto(list(pagination_by = "+", filter))]
         pub triggered_on: TriggeredOn,
         pub trigger: Trigger,
-        #[dto(list(filter, filter_like))]
+        #[dto(list(filter))]
         pub started_on: Option<AtTime>,
-        #[dto(list(filter, filter_like))]
+        #[dto(list(filter))]
         pub ended_on: Option<AtTime>,
-        #[dto(list(filter, filter_like, order_by))]
+        #[dto(list(filter, order_by))]
         pub status: FunctionRunStatus,
 
         #[dto(list(filter, filter_like, order_by))]

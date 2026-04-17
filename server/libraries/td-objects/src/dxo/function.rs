@@ -177,13 +177,13 @@ mod definitions {
         pub name: FunctionName,
         #[dto(list(filter, filter_like, order_by))]
         pub description: Description,
-        #[dto(list(filter, filter_like, order_by))]
+        #[dto(list(filter, order_by))]
         pub decorator: Decorator,
         #[dto(list(filter, filter_like, order_by))]
         pub connector: Option<Connector>,
-        #[dto(list(filter, filter_like, order_by))]
+        #[dto(list(filter, order_by))]
         pub defined_on: AtTime,
-        #[dto(list(filter, filter_like, order_by))]
+        #[dto(list(filter, order_by))]
         pub status: FunctionStatus,
 
         #[dto(list(filter, filter_like, order_by))]

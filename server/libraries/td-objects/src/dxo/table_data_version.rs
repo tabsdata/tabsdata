@@ -105,41 +105,41 @@ mod definitions {
     pub struct TableDataVersion {
         #[dto(list(pagination_by = "+", filter, filter_like))]
         pub id: TableDataVersionId,
-        #[dto(list(filter, filter_like, order_by))]
+        #[dto(list(filter, order_by))]
         pub collection_id: CollectionId,
-        #[dto(list(filter, filter_like, order_by))]
+        #[dto(list(filter, order_by))]
         pub table_id: TableId,
         #[dto(list(filter, filter_like, order_by))]
         pub name: TableName,
-        #[dto(list(filter, filter_like, order_by))]
+        #[dto(list(filter, order_by))]
         pub table_version_id: TableVersionId,
         #[dto(list(filter, filter_like, order_by))]
         pub function_version_id: FunctionVersionId,
         #[dxo(builder(field = "has_data"))]
-        #[dto(list(filter, filter_like, order_by))]
+        #[dto(list(filter))]
         pub data_changed: DataChanged,
         #[dxo(builder(field = "schema_changed"))]
-        #[dto(list(filter, filter_like, order_by))]
+        #[dto(list(filter))]
         pub schema_data_changed: SchemaDataChanged,
         #[dto(list(filter, filter_like, order_by))]
         pub execution_id: ExecutionId,
         #[dto(list(filter, filter_like, order_by))]
         pub transaction_id: TransactionId,
-        #[dto(list(filter, filter_like, order_by))]
+        #[dto(list(filter, order_by))]
         pub function_run_id: FunctionRunId,
-        #[dto(list(filter, filter_like, order_by))]
+        #[dto(list(filter, order_by))]
         pub function_param_pos: Option<TableFunctionParamPos>,
 
         #[dxo(builder(field = "triggered_on"))]
-        #[dto(list(filter, filter_like, order_by))]
+        #[dto(list(filter, order_by))]
         pub created_at: TriggeredOn,
-        #[dto(list(filter, filter_like, order_by))]
+        #[dto(list(filter, order_by))]
         pub triggered_by_id: UserId,
-        #[dto(list(filter, filter_like, order_by))]
+        #[dto(list(filter, order_by))]
         pub started_on: Option<AtTime>,
-        #[dto(list(filter, filter_like, order_by))]
+        #[dto(list(filter, order_by))]
         pub ended_on: Option<AtTime>,
-        #[dto(list(filter, filter_like, order_by))]
+        #[dto(list(filter, order_by))]
         pub status: FunctionRunStatus,
 
         #[dto(list(filter, filter_like, order_by))]

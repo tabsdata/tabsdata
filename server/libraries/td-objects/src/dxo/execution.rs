@@ -141,9 +141,9 @@ mod definitions {
         pub id: ExecutionId,
         #[dto(list(filter, filter_like))]
         pub name: Option<ExecutionName>,
-        #[dto(list(filter, filter_like, order_by))]
+        #[dto(list(filter, order_by))]
         pub collection_id: CollectionId,
-        #[dto(list(pagination_by = "+", filter, filter_like))]
+        #[dto(list(pagination_by = "+", filter))]
         pub triggered_on: TriggeredOn,
 
         #[dto(list(filter, filter_like, order_by))]
@@ -154,14 +154,14 @@ mod definitions {
         pub function_version_id: FunctionVersionId,
         #[dto(list(filter, filter_like, order_by))]
         pub triggered_by: UserName,
-        #[dto(list(filter, filter_like, order_by))]
+        #[dto(list(filter, order_by))]
         pub trigger_type: TriggerType, // Added in v4
 
-        #[dto(list(filter, filter_like))]
+        #[dto(list(filter))]
         pub started_on: Option<AtTime>,
-        #[dto(list(filter, filter_like))]
+        #[dto(list(filter))]
         pub ended_on: Option<AtTime>,
-        #[dto(list(filter, filter_like, order_by))]
+        #[dto(list(filter, order_by))]
         pub status: ExecutionStatus,
         pub function_run_status_count: FunctionRunStatusCount,
     }

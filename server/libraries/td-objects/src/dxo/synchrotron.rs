@@ -14,15 +14,15 @@ mod definitions {
     pub struct SynchrotronResponse {
         #[dto(list(filter, filter_like))]
         pub id: TransactionId,
-        #[dto(list(filter, filter_like))]
+        #[dto(list(filter))]
         pub collection_id: CollectionId,
         #[dto(list(filter, filter_like))]
         pub execution_id: ExecutionId,
-        #[dto(list(pagination_by = "+", filter, filter_like))]
+        #[dto(list(pagination_by = "+", filter))]
         pub triggered_on: TriggeredOn,
-        #[dto(list(filter, filter_like))]
+        #[dto(list(filter))]
         pub triggered_by_id: UserId,
-        #[dto(list(filter, filter_like))]
+        #[dto(list(filter))]
         pub status: TransactionStatus,
     }
 }

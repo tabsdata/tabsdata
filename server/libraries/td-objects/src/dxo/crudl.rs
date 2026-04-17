@@ -122,8 +122,9 @@ fn default_page_len() -> usize {
 #[ta_objects::QueryParam]
 #[derive(Validate)]
 pub struct ListParams {
-    /// The desired length for the result list (for now, default is 10000).
+    /// The desired length for the result list (for now, default is 50).
     #[validate(minimum = 0)]
+    #[validate(maximum = 1000)]
     #[builder(default = "default_page_len()")]
     #[serde(default = "default_page_len")]
     pub len: usize,

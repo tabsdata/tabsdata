@@ -76,25 +76,25 @@ mod definitions {
     #[ta_objects::Dto]
     #[dto(list(on = WorkerDBWithNames))]
     pub struct Worker {
-        #[dto(list(pagination_by = "+", filter, filter_like))]
+        #[dto(list(pagination_by = "+", filter))]
         pub id: WorkerId,
-        #[dto(list(filter, filter_like, order_by))]
+        #[dto(list(filter, order_by))]
         pub collection_id: CollectionId,
         #[dto(list(filter, filter_like, order_by))]
         pub execution_id: Option<ExecutionId>,
         #[dto(list(filter, filter_like, order_by))]
         pub transaction_id: Option<TransactionId>,
-        #[dto(list(filter, filter_like, order_by))]
+        #[dto(list(filter, order_by))]
         pub function_run_id: Option<FunctionRunId>,
         #[dto(list(filter, filter_like, order_by))]
         pub function_version_id: FunctionVersionId,
-        #[dto(list(filter, filter_like, order_by))]
+        #[dto(list(filter, order_by))]
         pub message_status: WorkerMessageStatus,
-        #[dto(list(filter, filter_like, order_by))]
+        #[dto(list(filter, order_by))]
         pub started_on: Option<AtTime>,
-        #[dto(list(filter, filter_like, order_by))]
+        #[dto(list(filter, order_by))]
         pub ended_on: Option<AtTime>,
-        #[dto(list(filter, filter_like, order_by))]
+        #[dto(list(filter, order_by))]
         pub status: WorkerStatus,
 
         #[dto(list(filter, filter_like, order_by))]
