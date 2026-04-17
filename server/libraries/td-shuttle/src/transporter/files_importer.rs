@@ -41,7 +41,8 @@ fn extract_from_url<T>(url: &Url, extractor: impl Fn(&Url) -> T) -> T {
 
 /// Return the base URL of the source location.
 ///
-/// For file:// schemes, it returns file:/// or file:///c:/ depending on running OS
+/// For file:// schemes, it returns file:/// on Unix or file:///X:/ on Windows,
+/// where X is the drive letter extracted from the actual source URL.
 ///
 /// For s3:// schemes, it returns s3://<bucket>
 ///
@@ -52,7 +53,7 @@ fn extract_from_url<T>(url: &Url, extractor: impl Fn(&Url) -> T) -> T {
 fn base_url(source: &WildcardSource) -> Url {
     let url = source.location().url();
     extract_from_url(&url, |url| match url.scheme() {
-        "file" => Url::parse(&crate::transporter::args::root_folder()).unwrap(),
+        "file" => crate::transporter::common::file_root_url(url),
         "s3" => Url::parse(&format!("s3://{}", url.authority())).unwrap(),
         "az" => Url::parse(&format!("az://{}", url.authority())).unwrap(),
         "gs" => Url::parse(&format!("gs://{}", url.authority())).unwrap(),

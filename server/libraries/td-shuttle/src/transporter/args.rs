@@ -300,13 +300,14 @@ fn load_file(config_path: &str) -> Result<String, ParamsError> {
 impl Params {
     /// Return the base URL of the source location.
     ///
-    /// For file:// schemes, it returns file:/// or file:///c:/ depending on running OS
+    /// For file:// schemes, it returns file:/// on Unix or file:///X:/ on Windows,
+    /// where X is the drive letter extracted from the actual source URL.
     ///
     /// For s3:// schemes, it returns s3://<bucket>
     ///
     pub fn base_url(&self) -> Url {
         match self.location.scheme() {
-            "file" => Url::parse(&root_folder()).unwrap(),
+            "file" => crate::transporter::common::file_root_url(&self.location),
             "s3" => {
                 let bucket = self.location.authority();
                 Url::parse(&format!("s3://{bucket}")).unwrap()

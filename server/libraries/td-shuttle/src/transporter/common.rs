@@ -9,6 +9,30 @@ use object_store::{ObjectStore, parse_url_opts};
 use std::collections::HashMap;
 use url::Url;
 
+/// Extract the file system root URL from a file:// URL.
+///
+/// On Unix returns `file:///`. On Windows extracts the drive letter from the
+/// URL path (e.g. `file:///C:/foo` → `file:///C:/`) to preserve the original
+/// case and avoid mismatches with case-sensitive `strip_prefix` or `Url::join`
+/// interpreting the drive letter as a URL scheme.
+pub fn file_root_url(url: &Url) -> Url {
+    let mut root = url.clone();
+    let path = url.path();
+    let bytes = path.as_bytes();
+    // On Windows, file:// URLs have paths like /C:/some/path — keep /C:/
+    if bytes.len() >= 4
+        && bytes[0] == b'/'
+        && bytes[1].is_ascii_alphabetic()
+        && bytes[2] == b':'
+        && bytes[3] == b'/'
+    {
+        root.set_path(&path[..4]);
+    } else {
+        root.set_path("/");
+    }
+    root
+}
+
 pub fn create_store<L>(
     location: &Location<L>,
 ) -> Result<(Box<dyn ObjectStore>, Path), TransporterError>
