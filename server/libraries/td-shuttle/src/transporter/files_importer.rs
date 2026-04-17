@@ -943,7 +943,7 @@ mod tests {
         let from_filename = from_file
             .url()
             .path_segments()
-            .and_then(|s| s.last())
+            .and_then(|mut s| s.next_back())
             .unwrap()
             .to_string();
         let meta = ObjectMeta {
@@ -1281,7 +1281,7 @@ mod tests {
         let from_filename = from_file
             .url()
             .path_segments()
-            .and_then(|s| s.last())
+            .and_then(|mut s| s.next_back())
             .unwrap()
             .to_string();
         let meta = ObjectMeta {

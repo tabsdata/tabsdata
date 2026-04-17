@@ -128,7 +128,9 @@ mod tests {
                 type_of_val(&With::<DeleteRequest<CollectionParam>>::extract::<RequestContext>),
                 type_of_val(&AuthzOn::<System>::set),
                 type_of_val(&Authz::<SysAdmin>::check),
-                type_of_val(&With::<DeleteRequest<CollectionParam>>::extract_name::<CollectionParam>),
+                type_of_val(
+                    &With::<DeleteRequest<CollectionParam>>::extract_name::<CollectionParam>,
+                ),
                 // Get collection
                 type_of_val(&With::<CollectionParam>::extract::<CollectionIdName>),
                 type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
@@ -140,7 +142,9 @@ mod tests {
                 type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
                 type_of_val(&By::<CollectionId>::update::<CollectionDeleteDB, CollectionDB>),
                 // Find tables in the collection
-                type_of_val(&By::<CollectionId>::fetch_all_current::<{ TableDB::Available }, TableDB>),
+                type_of_val(
+                    &By::<CollectionId>::fetch_all_current::<{ TableDB::Available }, TableDB>,
+                ),
                 type_of_val(&With::<Vec<TableDB>>::extract::<Vec<TableId>>),
                 // Find functions that use the tables and freeze them
                 type_of_val(
@@ -180,7 +184,9 @@ mod tests {
                 type_of_val(&build_deleted_dependencies),
                 type_of_val(&insert_vec::<DependencyDB>),
                 // Find functions in the collection
-                type_of_val(&By::<CollectionId>::fetch_all_current::<{ FunctionDB::Available }, FunctionDB>),
+                type_of_val(
+                    &By::<CollectionId>::fetch_all_current::<{ FunctionDB::Available }, FunctionDB>,
+                ),
                 // Delete functions in the collection (note this will delete possible frozen
                 // functions created in the previous step, this is, functions using tables
                 // in the same collection)

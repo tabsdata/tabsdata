@@ -101,6 +101,7 @@ mod routes {
         Ok(ListStatus::OK(response))
     }
 
+    #[allow(clippy::too_many_arguments)]
     #[apiserver_path(method = get, path = SAMPLE_TABLE, tag = TABLES_TAG)]
     #[doc = "Get a sample of a table"]
     pub async fn sample(
