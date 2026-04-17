@@ -566,7 +566,10 @@ mod tests {
         );
         assert_eq!(table_data_version.status, function_run.status);
         assert_eq!(table_data_version.has_data, Some(HasData::TRUE));
-        assert_eq!(table_data_version.schema_changed, Some(SchemaChanged::TRUE));
+        assert_eq!(
+            table_data_version.schema_changed,
+            Some(SchemaChanged::FALSE)
+        );
         assert_eq!(
             table_data_version.column_count,
             Some(ColumnCount::try_from(1i64)?)
@@ -709,7 +712,7 @@ mod tests {
         assert_eq!(table_data_version_0.has_data, Some(HasData::TRUE));
         assert_eq!(
             table_data_version_0.schema_changed,
-            Some(SchemaChanged::TRUE)
+            Some(SchemaChanged::FALSE)
         );
         assert_eq!(
             table_data_version_0.column_count,
@@ -780,7 +783,7 @@ mod tests {
         assert_eq!(table_data_version_1.has_data, Some(HasData::TRUE));
         assert_eq!(
             table_data_version_1.schema_changed,
-            Some(SchemaChanged::TRUE)
+            Some(SchemaChanged::FALSE)
         );
         assert_eq!(
             table_data_version_1.column_count,

@@ -248,7 +248,7 @@ pub async fn update_table_data_version_status(
                     Some(prev) => SchemaChanged::from(
                         prev.schema_hash.as_ref() != Some(&table_info.schema_hash),
                     ),
-                    None => SchemaChanged::TRUE,
+                    None => SchemaChanged::FALSE,
                 };
 
                 UpdateTableDataVersionDB {
