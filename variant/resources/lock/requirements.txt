@@ -28,7 +28,7 @@ confluent-kafka==2.13.2
 connectorx==0.4.5
 cramjam==2.11.0
 croniter==6.2.2
-cryptography==46.0.6
+cryptography==46.0.7
 databricks-sdk==0.102.0
 databricks-sql-connector==4.2.5
 dnspython==2.8.0
