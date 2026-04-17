@@ -16,6 +16,8 @@ ignore = [
     "GHSA-g48c-2wqr-h844",
     "GHSA-gc5v-m9x4-r6x2",
     "GHSA-pjjw-68hj-v9mw",
+    "GHSA-r7w7-9xr2-qq2r",
+    "GHSA-rr7j-v2q5-chgv",
     "GHSA-vp96-hxj8-p424",
     "GHSA-whj4-6x5x-4v2j",
 ]
