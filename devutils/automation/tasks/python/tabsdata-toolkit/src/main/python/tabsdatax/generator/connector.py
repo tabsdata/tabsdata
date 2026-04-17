@@ -610,4 +610,4 @@ def main(package: str, backend: str, root: Path | None, verbose: bool) -> None:
 
 
 if __name__ == "__main__":
-    main()
+    main.main()

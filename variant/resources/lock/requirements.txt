@@ -24,7 +24,7 @@ click==8.3.1
 clickhouse-connect==0.14.1
 cloudpickle==3.1.2
 colorama==0.4.6
-confluent-kafka==2.13.2
+confluent-kafka==2.14.0
 connectorx==0.4.5
 cramjam==2.11.0
 croniter==6.2.2
@@ -49,7 +49,7 @@ googleapis-common-protos==1.74.0
 grpc-google-iam-v1==0.14.4
 grpcio==1.80.0
 grpcio-status==1.80.0
-grpcio-tools==1.78.0
+grpcio-tools==1.80.0
 h11==0.16.0
 httpcore==1.0.9
 httpx==0.28.1

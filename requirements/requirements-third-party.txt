@@ -18,7 +18,7 @@ fastparquet==2026.3.0
 filelock==3.25.2
 google-cloud-storage==3.10.0
 google-cloud-storage-control==1.10.0
-grpcio-tools==1.78.0
+grpcio-tools==1.80.0
 humanize==4.15.0
 hvac==2.4.0
 ibm_db==3.2.8

@@ -141,7 +141,8 @@ class ProtobufSrKafkaSerde(SrKafkaSerde):
 
     def __init__(
         self,
-        schema_registry_client: SchemaRegistryClient,
+        serializer_registry_client: SchemaRegistryClient,
+        deserializer_registry_client: SchemaRegistryClient,
         protobuf_schema: str,
         message_name: str,
         working_dir: str,
@@ -149,8 +150,16 @@ class ProtobufSrKafkaSerde(SrKafkaSerde):
         """
         Initializes the Confluent Protobuf serde with a Protobuf schema.
 
+        Separate registry clients are required because the Confluent client
+        caches schemas by id. The serializer's register call caches the schema
+        in proto-text format (as returned by registries like Redpanda v26+),
+        but the deserializer needs it in base64-encoded binary
+        (format=serialized). A shared client causes a cache hit with the
+        wrong format, breaking protobuf deserialization.
+
         Args:
-            schema_registry_client: Confluent Schema Registry client.
+            serializer_registry_client: Schema Registry client for the serializer.
+            deserializer_registry_client: Schema Registry client for the deserializer.
             protobuf_schema: Protobuf schema string.
             message_name: The name of the message class to be used for
                           serialization/deserialization.
@@ -159,8 +168,10 @@ class ProtobufSrKafkaSerde(SrKafkaSerde):
         super().__init__()
         msg_class = get_protobuf_class(working_dir, protobuf_schema, message_name)
 
-        self._serializer = self._make_serializer(schema_registry_client, msg_class)
-        self._deserializer = self._make_deserializer(schema_registry_client, msg_class)
+        self._serializer = self._make_serializer(serializer_registry_client, msg_class)
+        self._deserializer = self._make_deserializer(
+            deserializer_registry_client, msg_class
+        )
         self._schema = protobuf_schema
         self._message_name = message_name
         self._working_dir = working_dir

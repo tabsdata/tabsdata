@@ -279,12 +279,16 @@ def confluent_sr_protobuf_serde(
         proto_schema = open(proto_file_path, "r").read()
 
         message_name = "PersonV1"
-        sr_client = (
+        serializer_client = (
+            kafka_schema_registry(config) if not mock else confluent_sr_mock_registry
+        )
+        deserializer_client = (
             kafka_schema_registry(config) if not mock else confluent_sr_mock_registry
         )
 
         return ProtobufSrKafkaSerde(
-            schema_registry_client=sr_client,
+            serializer_registry_client=serializer_client,
+            deserializer_registry_client=deserializer_client,
             protobuf_schema=proto_schema,
             message_name=message_name,
             working_dir=str(working_dir),
