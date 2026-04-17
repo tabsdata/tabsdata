@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use strum::{Display, EnumString, ParseError};
 use ta_services::factory::FieldAccessors;
 use td_authz::jwt::JwtConfig;
-use td_database::config::DatabaseConfig;
+use td_database::config::{BackendConfig, DatabaseConfig};
 use td_error::{TdError, td_error};
 use td_execution::TransactionBy;
 use td_objects::types::addresses::{
@@ -21,6 +21,7 @@ use td_objects::types::addresses::{
 use td_security::config::PasswordHashingConfig;
 use td_storage::{MountDef, StorageError};
 use te_apiserver::config::{ExtendedConfig, ExtendedParams};
+use tracing::log::LevelFilter;
 use url::Url;
 
 #[derive(Clone, Serialize, Deserialize, FieldAccessors)]
@@ -140,7 +141,7 @@ pub struct Params {
     database_url: Option<Url>,
     #[clap(long)]
     /// Database log level
-    database_log_level: Option<String>,
+    database_log_level: Option<LevelFilter>,
     #[clap(long)]
     /// Storage location (it must be a file:// URI)
     storage_url: Option<String>,
@@ -224,10 +225,13 @@ impl Params {
             database: {
                 let mut config = config.database;
                 if let Some(url) = &self.database_url {
-                    config.url = Some(url.clone());
+                    config.conn = Some(match config.conn {
+                        Some(existing) => existing.with_url(url.clone())?,
+                        None => BackendConfig::from_url(url.clone())?,
+                    });
                 }
-                if let Some(log_level) = &self.database_log_level {
-                    config.log_level = log_level.clone();
+                if let Some(log_level) = self.database_log_level {
+                    config.pool.log_level = log_level;
                 }
                 config
             },
@@ -289,7 +293,7 @@ mod tests {
     #[test]
     fn test_default_config() {
         let config = Config::default();
-        assert_eq!(config.database.url, None);
+        assert_eq!(config.database.url(), None);
         assert_eq!(
             *config.addresses,
             NonEmptyAddresses::new(nonempty![SocketAddr::from(([127, 0, 0, 1], 2457))])
@@ -340,13 +344,13 @@ mod tests {
         );
         #[cfg(target_os = "windows")]
         assert_eq!(
-            resolved_config.database.url,
-            Some(Url::from_str("file:///test.db").unwrap())
+            resolved_config.database.url(),
+            Some(&Url::from_str("file:///test.db").unwrap())
         );
         #[cfg(not(target_os = "windows"))]
         assert_eq!(
-            resolved_config.database.url,
-            Some(Url::from_str("file:///test.db").unwrap())
+            resolved_config.database.url(),
+            Some(&Url::from_str("file:///test.db").unwrap())
         );
         assert!(resolved_config.clone().storage.is_some());
         #[cfg(target_os = "windows")]

@@ -101,10 +101,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db_url = args.db_url.unwrap_or_else(|| {
         Url::from_file_path(td_common::tdtestdir!().join("tabsdata.db")).unwrap()
     });
-    let database_config = DatabaseConfig {
-        url: Some(db_url),
-        ..Default::default()
-    };
+    let database_config = DatabaseConfig::new(db_url).unwrap();
     info!("Connecting to database with: {database_config:?}");
     let db = td_database::db(&database_config).await?;
     db.upgrade().await?;

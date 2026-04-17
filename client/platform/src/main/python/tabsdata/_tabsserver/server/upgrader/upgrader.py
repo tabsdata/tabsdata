@@ -23,8 +23,6 @@ from tabsdata._tabsserver.server.upgrader.upgraders.v1.v1_0.upgrade import (
 from tabsdata._tabsserver.server.upgrader.upgraders.v1.v1_1.upgrade import (
     Upgrade_1_0_to_1_1,
 )
-from tabsdata._tabsserver.server.upgrader.upgraders.v1.v1_10.upgrade import \
-    Upgrade_1_9_to_1_10
 from tabsdata._tabsserver.server.upgrader.upgraders.v1.v1_2.upgrade import (
     Upgrade_1_1_to_1_2,
 )
@@ -48,6 +46,9 @@ from tabsdata._tabsserver.server.upgrader.upgraders.v1.v1_8.upgrade import (
 )
 from tabsdata._tabsserver.server.upgrader.upgraders.v1.v1_9.upgrade import (
     Upgrade_1_8_to_1_9,
+)
+from tabsdata._tabsserver.server.upgrader.upgraders.v1.v1_10.upgrade import (
+    Upgrade_1_9_to_1_10,
 )
 from tabsdata._tabsserver.utils import TimeBlock
 

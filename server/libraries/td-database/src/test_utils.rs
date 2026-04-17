@@ -18,8 +18,8 @@ pub async fn db() -> Result<TdPool, DbError> {
 pub fn test_config() -> DatabaseConfig {
     let db_file = td_common::tdtestdir!().join(format!("{}.db", td_common::id::id()));
     let db_url = Url::from_file_path(db_file).unwrap();
-    let mut config = DatabaseConfig::new(db_url);
-    config.min_connections = 0;
-    config.idle_timeout = std::time::Duration::from_millis(500);
+    let mut config = DatabaseConfig::new(db_url).unwrap();
+    config.pool.min_connections = 0;
+    config.pool.idle_timeout = std::time::Duration::from_millis(500);
     config
 }

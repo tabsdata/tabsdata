@@ -40,7 +40,7 @@ pub fn run() {
             // Connect to db
             let db = match td_database::db(&config.database).await {
                 Ok(db) => {
-                    info!("Connected to database: {:?}", config.database.url.as_ref());
+                    info!("Connected to database: {:?}", config.database.url());
                     if let Some(db_schema) = &params.db_schema {
                         match db_schema {
                             DbSchema::Create => {

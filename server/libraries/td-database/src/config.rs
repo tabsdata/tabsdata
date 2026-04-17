@@ -4,57 +4,242 @@
 
 use crate::dynamic::DynamicPool;
 use crate::error::DbError;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_with::DurationSeconds;
 use serde_with::serde_as;
 use sqlx::any::AnyConnectOptions;
 use sqlx::pool::PoolOptions;
 use sqlx::{ConnectOptions, Database};
 use std::fs;
-use std::str::FromStr;
+use std::ops::Deref;
 use std::time::Duration;
 use tracing::log::LevelFilter;
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 use url::Url;
 
 const SLOW_QUERIES_THRESHOLD: u64 = 5000;
 
-/// Configuration for a database.
-#[serde_as]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DatabaseConfig {
-    /// The database URI.
-    #[serde(default)]
-    pub url: Option<Url>,
-    /// The minimum number of database connections, defaults to `1`.
-    #[serde(default = "min_connections")]
-    pub min_connections: u32,
-    /// The maximum number of database connections, defaults to `10`.
-    #[serde(default = "max_connections")]
-    pub max_connections: u32,
-    /// The maximum time to wait for a database connection to be acquired, defaults to `30 seconds`.
-    #[serde(default = "acquire_timeout")]
-    #[serde_as(as = "DurationSeconds<u64>")]
-    pub acquire_timeout: Duration,
-    /// The maximum lifetime of a database connection, defaults to `60 minutes`.
-    #[serde(default = "max_lifetime")]
-    #[serde_as(as = "DurationSeconds<u64>")]
-    pub max_lifetime: Duration,
-    /// The maximum time a database connection can be idle, defaults to `60 seconds`.
-    #[serde(default = "idle_timeout")]
-    #[serde_as(as = "DurationSeconds<u64>")]
-    pub idle_timeout: Duration,
-    /// Whether to test the connection before acquiring it, defaults to `true`.
-    #[serde(default = "test_before_acquire")]
-    pub test_before_acquire: bool,
-    /// Log level to be used by the configured connection pool.
-    #[serde(default = "log_level")]
-    pub log_level: String,
-    /// Database specifics
-    pub sqlite: Option<SqliteConfig>,
-    pub postgres: Option<PostgresConfig>,
-    pub mysql: Option<MySqlConfig>,
+// ── DB-specific config structs ──────────────────────────────────────────
+
+#[cfg(feature = "sqlite")]
+#[derive(Debug, Clone, Serialize)]
+pub struct SqliteUrl(Url);
+
+#[cfg(feature = "sqlite")]
+impl Deref for SqliteUrl {
+    type Target = Url;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
+
+#[cfg(feature = "sqlite")]
+impl TryFrom<Url> for SqliteUrl {
+    type Error = String;
+
+    fn try_from(url: Url) -> Result<Self, Self::Error> {
+        let scheme = url.scheme();
+        if sqlx::Sqlite::URL_SCHEMES.contains(&scheme) || scheme.eq_ignore_ascii_case("file") {
+            Ok(SqliteUrl(url))
+        } else {
+            Err(format!("expected sqlite URL, found scheme '{scheme}'"))
+        }
+    }
+}
+
+#[cfg(feature = "sqlite")]
+impl<'de> Deserialize<'de> for SqliteUrl {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Url::deserialize(deserializer)?
+            .try_into()
+            .map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg(feature = "sqlite")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SqliteConfig {
+    url: SqliteUrl,
+}
+
+#[cfg(feature = "postgres")]
+#[derive(Debug, Clone, Serialize)]
+pub struct PostgresUrl(Url);
+
+#[cfg(feature = "postgres")]
+impl Deref for PostgresUrl {
+    type Target = Url;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[cfg(feature = "postgres")]
+impl TryFrom<Url> for PostgresUrl {
+    type Error = String;
+
+    fn try_from(url: Url) -> Result<Self, Self::Error> {
+        let scheme = url.scheme();
+        if sqlx::Postgres::URL_SCHEMES.contains(&scheme) {
+            Ok(PostgresUrl(url))
+        } else {
+            Err(format!("expected postgres URL, found scheme '{scheme}'"))
+        }
+    }
+}
+
+#[cfg(feature = "postgres")]
+impl<'de> Deserialize<'de> for PostgresUrl {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Url::deserialize(deserializer)?
+            .try_into()
+            .map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg(feature = "postgres")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PostgresConfig {
+    url: PostgresUrl,
+}
+
+#[cfg(feature = "mysql")]
+#[derive(Debug, Clone, Serialize)]
+pub struct MySqlUrl(Url);
+
+#[cfg(feature = "mysql")]
+impl Deref for MySqlUrl {
+    type Target = Url;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[cfg(feature = "mysql")]
+impl TryFrom<Url> for MySqlUrl {
+    type Error = String;
+
+    fn try_from(url: Url) -> Result<Self, Self::Error> {
+        let scheme = url.scheme();
+        if sqlx::MySql::URL_SCHEMES.contains(&scheme) {
+            Ok(MySqlUrl(url))
+        } else {
+            Err(format!("expected mysql URL, found scheme '{scheme}'"))
+        }
+    }
+}
+
+#[cfg(feature = "mysql")]
+impl<'de> Deserialize<'de> for MySqlUrl {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Url::deserialize(deserializer)?
+            .try_into()
+            .map_err(serde::de::Error::custom)
+    }
+}
+#[cfg(feature = "mysql")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MySqlConfig {
+    url: MySqlUrl,
+}
+
+// ── DbConnConfig enum ──────────────────────────────────────────────────
+
+/// Database connection configuration. Each variant pairs a URL with the
+/// backend-specific config, making URL/config mismatches impossible.
+///
+/// The backend is determined by which config key is present (`sqlite`,
+/// `postgres`, or `mysql`). When none is present the backend is inferred
+/// from the URL scheme.
+///
+/// ```yaml
+/// url: file:///tmp/app.db
+/// sqlite:
+///   journal_mode: wal
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum BackendConfig {
+    #[cfg(feature = "sqlite")]
+    Sqlite(SqliteConfig),
+    #[cfg(feature = "postgres")]
+    Postgres(PostgresConfig),
+    #[cfg(feature = "mysql")]
+    MySql(MySqlConfig),
+}
+
+impl BackendConfig {
+    /// Returns the connection URL regardless of variant.
+    pub fn url(&self) -> &Url {
+        match self {
+            #[cfg(feature = "sqlite")]
+            Self::Sqlite(c) => &c.url,
+            #[cfg(feature = "postgres")]
+            Self::Postgres(c) => &c.url,
+            #[cfg(feature = "mysql")]
+            Self::MySql(c) => &c.url,
+        }
+    }
+
+    /// Infer the backend variant from the URL scheme.
+    pub fn from_url(url: Url) -> Result<Self, DbError> {
+        #[cfg(feature = "sqlite")]
+        if let Ok(sqlite_url) = SqliteUrl::try_from(url.clone()) {
+            return Ok(BackendConfig::Sqlite(SqliteConfig { url: sqlite_url }));
+        }
+        #[cfg(feature = "postgres")]
+        if let Ok(pg_url) = PostgresUrl::try_from(url.clone()) {
+            return Ok(BackendConfig::Postgres(PostgresConfig { url: pg_url }));
+        }
+        #[cfg(feature = "mysql")]
+        if let Ok(my_url) = MySqlUrl::try_from(url.clone()) {
+            return Ok(BackendConfig::MySql(MySqlConfig { url: my_url }));
+        }
+        Err(DbError::UnsupportedDatabase(url.scheme().to_string()))
+    }
+
+    /// Replace the URL, preserving backend-specific config when the backend
+    /// stays the same, or resetting to defaults when the backend changes.
+    pub fn with_url(self, url: Url) -> Result<Self, DbError> {
+        let new = Self::from_url(url)?;
+        Ok(match (self, new) {
+            #[cfg(feature = "sqlite")]
+            (Self::Sqlite(_old), Self::Sqlite(new)) => {
+                debug!("URL changed, preserving sqlite backend");
+                let new = SqliteConfig { url: new.url };
+                Self::Sqlite(new)
+            }
+            #[cfg(feature = "postgres")]
+            (Self::Postgres(_old), Self::Postgres(new)) => {
+                debug!("URL changed, preserving postgres backend");
+                let new = PostgresConfig { url: new.url };
+                Self::Postgres(new)
+            }
+            #[cfg(feature = "mysql")]
+            (Self::MySql(_old), Self::MySql(new)) => {
+                debug!("URL changed, preserving mysql backend");
+                let new = MySqlConfig { url: new.url };
+                Self::MySql(new)
+            }
+            #[allow(unreachable_patterns)]
+            (old, new) => {
+                debug!("Backend changed from {old:?} to {new:?}, config reset to defaults");
+                new
+            }
+        })
+    }
+}
+
+// ── Pool config ─────────────────────────────────────────────────────────
 
 fn min_connections() -> u32 {
     1
@@ -80,23 +265,81 @@ fn test_before_acquire() -> bool {
     true
 }
 
-fn log_level() -> String {
-    LevelFilter::Off.to_string()
+fn log_level() -> LevelFilter {
+    LevelFilter::Off
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SqliteConfig {}
+mod log_level_serde {
+    use serde::{Deserializer, Serializer};
+    use std::str::FromStr;
+    use tracing::log::LevelFilter;
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct PostgresConfig {}
+    pub(crate) fn serialize<S>(level: &LevelFilter, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&level.to_string())
+    }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct MySqlConfig {}
+    pub(crate) fn deserialize<'de, D>(deserializer: D) -> Result<LevelFilter, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct V;
+        impl<'de> serde::de::Visitor<'de> for V {
+            type Value = LevelFilter;
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("a LevelFilter - off, error, warn, info, debug, trace")
+            }
+            fn visit_bool<E: serde::de::Error>(self, _v: bool) -> Result<LevelFilter, E> {
+                // If off is not inbetween "", serde thinks it is a bool in some cases.
+                Ok(LevelFilter::Off)
+            }
+            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<LevelFilter, E> {
+                LevelFilter::from_str(v).map_err(serde::de::Error::custom)
+            }
+            fn visit_string<E: serde::de::Error>(self, v: String) -> Result<LevelFilter, E> {
+                LevelFilter::from_str(&v).map_err(serde::de::Error::custom)
+            }
+        }
 
-impl Default for DatabaseConfig {
+        deserializer.deserialize_any(V)
+    }
+}
+
+/// Connection pool settings shared across all database backends.
+#[serde_as]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PoolConfig {
+    /// The minimum number of database connections, defaults to `1`.
+    #[serde(default = "min_connections")]
+    pub min_connections: u32,
+    /// The maximum number of database connections, defaults to `10`.
+    #[serde(default = "max_connections")]
+    pub max_connections: u32,
+    /// The maximum time to wait for a database connection to be acquired, defaults to `30 seconds`.
+    #[serde(default = "acquire_timeout")]
+    #[serde_as(as = "DurationSeconds<u64>")]
+    pub acquire_timeout: Duration,
+    /// The maximum lifetime of a database connection, defaults to `60 minutes`.
+    #[serde(default = "max_lifetime")]
+    #[serde_as(as = "DurationSeconds<u64>")]
+    pub max_lifetime: Duration,
+    /// The maximum time a database connection can be idle, defaults to `60 seconds`.
+    #[serde(default = "idle_timeout")]
+    #[serde_as(as = "DurationSeconds<u64>")]
+    pub idle_timeout: Duration,
+    /// Whether to test the connection before acquiring it, defaults to `true`.
+    #[serde(default = "test_before_acquire")]
+    pub test_before_acquire: bool,
+    /// Log level to be used by the configured connection pool.
+    #[serde(default = "log_level", with = "log_level_serde")]
+    pub log_level: LevelFilter,
+}
+
+impl Default for PoolConfig {
     fn default() -> Self {
         Self {
-            url: None,
             min_connections: min_connections(),
             max_connections: max_connections(),
             acquire_timeout: acquire_timeout(),
@@ -104,48 +347,55 @@ impl Default for DatabaseConfig {
             idle_timeout: idle_timeout(),
             test_before_acquire: test_before_acquire(),
             log_level: log_level(),
-            sqlite: Default::default(),
-            postgres: Default::default(),
-            mysql: Default::default(),
         }
     }
+}
+
+// ── DatabaseConfig ─────────────────────────────────────────────────────
+
+/// Configuration for a database connection pool.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct DatabaseConfig {
+    /// The database connection configuration.
+    #[serde(default, flatten)]
+    pub conn: Option<BackendConfig>,
+    /// Connection pool settings.
+    #[serde(default, flatten)]
+    pub pool: PoolConfig,
 }
 
 impl DatabaseConfig {
-    pub fn new<P: Into<Url>>(db_url: P) -> Self {
-        Self {
-            url: Some(db_url.into()),
-            min_connections: min_connections(),
-            max_connections: max_connections(),
-            acquire_timeout: acquire_timeout(),
-            max_lifetime: max_lifetime(),
-            idle_timeout: idle_timeout(),
-            test_before_acquire: test_before_acquire(),
-            log_level: log_level(),
-            sqlite: Default::default(),
-            postgres: Default::default(),
-            mysql: Default::default(),
-        }
+    pub fn url(&self) -> Option<&Url> {
+        self.conn.as_ref().map(|c| c.url())
+    }
+
+    pub fn new<P: Into<Url>>(db_url: P) -> Result<Self, DbError> {
+        let config = Self {
+            conn: Some(BackendConfig::from_url(db_url.into())?),
+            ..Default::default()
+        };
+        Ok(config)
     }
 
     pub async fn connect(&self) -> Result<DynamicPool, DbError> {
-        if self.max_connections == u32::MIN {
-            Err(DbError::InvalidMaxConnections(self.max_connections))?
+        if self.pool.max_connections == u32::MIN {
+            Err(DbError::InvalidMaxConnections(self.pool.max_connections))?
         }
-        if self.min_connections > self.max_connections {
+        if self.pool.min_connections > self.pool.max_connections {
             Err(DbError::InvalidConnections(
-                self.max_connections,
-                self.min_connections,
+                self.pool.max_connections,
+                self.pool.min_connections,
             ))?
         }
 
-        let url = self.url.as_ref().ok_or(DbError::MissingDatabaseLocation)?;
+        let conn_config = self.conn.as_ref().ok_or(DbError::MissingDatabaseLocation)?;
+        let url = conn_config.url();
         let conn_options = self.conn_options(url)?;
 
-        match url.scheme() {
+        match conn_config {
             #[cfg(feature = "sqlite")]
-            s if sqlx::Sqlite::URL_SCHEMES.contains(&s) || s.eq_ignore_ascii_case("file") => {
-                Self::try_create_missing_dir(url.clone());
+            BackendConfig::Sqlite(c) => {
+                Self::try_create_missing_dir(&c.url);
                 let (rw, ro) = (
                     // important to create rw first so create_if_missing kicks in
                     self.connect_sqlite(&conn_options, false).await?,
@@ -154,7 +404,7 @@ impl DatabaseConfig {
                 Ok(DynamicPool::Sqlite { ro, rw })
             }
             #[cfg(feature = "postgres")]
-            s if sqlx::Postgres::URL_SCHEMES.contains(&s) => {
+            BackendConfig::Postgres { .. } => {
                 let (rw, ro) = (
                     self.connect_postgres(&conn_options, false).await?,
                     self.connect_postgres(&conn_options, true).await?,
@@ -162,35 +412,20 @@ impl DatabaseConfig {
                 Ok(DynamicPool::Postgres { ro, rw })
             }
             #[cfg(feature = "mysql")]
-            s if sqlx::MySql::URL_SCHEMES.contains(&s) => {
+            BackendConfig::MySql { .. } => {
                 let (rw, ro) = (
                     self.connect_mysql(&conn_options, false).await?,
                     self.connect_mysql(&conn_options, true).await?,
                 );
                 Ok(DynamicPool::MySql { ro, rw })
             }
-            _ => Err(DbError::UnsupportedDatabase(url.scheme().to_string())),
         }
     }
 
     fn conn_options(&self, url: &Url) -> Result<AnyConnectOptions, DbError> {
         let conn_options = AnyConnectOptions::from_url(url)
             .map_err(DbError::FailedToConnectToDatabase)?
-            .log_statements({
-                match LevelFilter::from_str(&self.log_level) {
-                    Ok(level) => {
-                        info!("Using sqlx log level: {level}");
-                        level
-                    }
-                    Err(_) => {
-                        warn!(
-                            "Invalid sqlx log level configured: {}. Disabling logging.",
-                            self.log_level
-                        );
-                        LevelFilter::Off
-                    }
-                }
-            })
+            .log_statements(self.pool.log_level)
             .log_slow_statements(
                 LevelFilter::Warn,
                 Duration::from_millis(SLOW_QUERIES_THRESHOLD),
@@ -200,16 +435,24 @@ impl DatabaseConfig {
 
     fn pool_options<DB: Database>(&self, read_only: bool) -> PoolOptions<DB> {
         PoolOptions::new()
-            .min_connections(if read_only { self.min_connections } else { 1 })
-            .max_connections(if read_only { self.max_connections } else { 1 })
-            .acquire_timeout(self.acquire_timeout)
-            .max_lifetime(self.max_lifetime)
-            .idle_timeout(self.idle_timeout)
-            .test_before_acquire(self.test_before_acquire)
+            .min_connections(if read_only {
+                self.pool.min_connections
+            } else {
+                1
+            })
+            .max_connections(if read_only {
+                self.pool.max_connections
+            } else {
+                1
+            })
+            .acquire_timeout(self.pool.acquire_timeout)
+            .max_lifetime(self.pool.max_lifetime)
+            .idle_timeout(self.pool.idle_timeout)
+            .test_before_acquire(self.pool.test_before_acquire)
     }
 
     #[cfg(feature = "sqlite")]
-    fn try_create_missing_dir(url: Url) {
+    fn try_create_missing_dir(url: &Url) {
         if let Ok(path) = url.to_file_path()
             && let Some(parent) = path.parent()
             && !parent.exists()
@@ -292,9 +535,198 @@ impl DatabaseConfig {
                     Ok(())
                 })
             });
-        debug!("Database(read_only:{read_only}). Pool options:. {pool_options:#?}");
+        debug!("Database(read_only:{read_only}). Pool options: {pool_options:#?}");
 
         let pool = pool_options.connect_with(conn_options).await?;
         Ok(pool)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── DbConnConfig round-trip ───────────────────────────────────────
+
+    #[test]
+    fn conn_sqlite_explicit() {
+        let yaml = "url: file:///tmp/test.db";
+        let conn: BackendConfig = serde_yaml::from_str(yaml).unwrap();
+        assert!(matches!(conn, BackendConfig::Sqlite(_)));
+        assert_eq!(conn.url().as_str(), "file:///tmp/test.db");
+    }
+
+    #[test]
+    fn conn_sqlite_round_trip() {
+        let conn = BackendConfig::from_url(Url::parse("file:///tmp/test.db").unwrap()).unwrap();
+        let yaml = serde_yaml::to_string(&conn).unwrap();
+        let conn2: BackendConfig = serde_yaml::from_str(&yaml).unwrap();
+        assert!(matches!(conn2, BackendConfig::Sqlite(_)));
+        assert_eq!(conn.url(), conn2.url());
+    }
+
+    #[cfg(feature = "postgres")]
+    #[test]
+    fn conn_postgres_round_trip() {
+        let conn =
+            BackendConfig::from_url(Url::parse("postgres://user:pass@localhost/mydb").unwrap())
+                .unwrap();
+        let yaml = serde_yaml::to_string(&conn).unwrap();
+        let conn2: BackendConfig = serde_yaml::from_str(&yaml).unwrap();
+        assert!(matches!(conn2, BackendConfig::Postgres(_)));
+        assert_eq!(conn.url(), conn2.url());
+    }
+
+    #[cfg(feature = "mysql")]
+    #[test]
+    fn conn_mysql_round_trip() {
+        let conn = BackendConfig::from_url(Url::parse("mysql://user:pass@localhost/mydb").unwrap())
+            .unwrap();
+        let yaml = serde_yaml::to_string(&conn).unwrap();
+        let conn2: BackendConfig = serde_yaml::from_str(&yaml).unwrap();
+        assert!(matches!(conn2, BackendConfig::MySql(_)));
+        assert_eq!(conn.url(), conn2.url());
+    }
+
+    #[test]
+    fn conn_infer_sqlite_from_url() {
+        let yaml = "url: file:///tmp/inferred.db";
+        let conn: BackendConfig = serde_yaml::from_str(yaml).unwrap();
+        assert!(matches!(conn, BackendConfig::Sqlite(_)));
+        assert_eq!(conn.url().as_str(), "file:///tmp/inferred.db");
+    }
+
+    #[cfg(feature = "postgres")]
+    #[test]
+    fn conn_infer_postgres_from_url() {
+        let yaml = "url: postgres://user:pass@localhost/mydb";
+        let conn: BackendConfig = serde_yaml::from_str(yaml).unwrap();
+        assert!(matches!(conn, BackendConfig::Postgres(_)));
+    }
+
+    #[cfg(feature = "mysql")]
+    #[test]
+    fn conn_infer_mysql_from_url() {
+        let yaml = "url: mysql://user:pass@localhost/mydb";
+        let conn: BackendConfig = serde_yaml::from_str(yaml).unwrap();
+        assert!(matches!(conn, BackendConfig::MySql(_)));
+    }
+
+    #[test]
+    fn conn_unknown_scheme_errors() {
+        let yaml = "url: oracle://localhost/mydb";
+        let result = serde_yaml::from_str::<BackendConfig>(yaml);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn conn_missing_url_errors() {
+        let yaml = "sqlite: {}";
+        let result = serde_yaml::from_str::<BackendConfig>(yaml);
+        assert!(result.is_err());
+    }
+
+    // ── DatabaseConfig ────────────────────────────────────────────────
+
+    #[test]
+    fn database_config_conn_inferred() {
+        let yaml = "
+url: file:///tmp/test.db
+min_connections: 2
+max_connections: 20
+";
+        let cfg: DatabaseConfig = serde_yaml::from_str(yaml).unwrap();
+        assert!(matches!(cfg.conn, Some(BackendConfig::Sqlite(_))));
+        assert_eq!(
+            cfg.conn.as_ref().unwrap().url().as_str(),
+            "file:///tmp/test.db"
+        );
+        assert_eq!(cfg.pool.min_connections, 2);
+        assert_eq!(cfg.pool.max_connections, 20);
+        // defaults kick in for unset fields
+        assert_eq!(cfg.pool.acquire_timeout, Duration::from_secs(30));
+        assert!(cfg.pool.test_before_acquire);
+    }
+
+    #[test]
+    fn database_config_no_conn() {
+        let yaml = "
+max_connections: 5
+";
+        let cfg: DatabaseConfig = serde_yaml::from_str(yaml).unwrap();
+        assert!(cfg.conn.is_none());
+        assert_eq!(cfg.pool.max_connections, 5);
+        // rest defaults
+        assert_eq!(cfg.pool.min_connections, 1);
+    }
+
+    #[test]
+    fn database_config_log_level() {
+        let yaml = "log_level: off";
+        let cfg: DatabaseConfig = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(cfg.pool.log_level, LevelFilter::Off);
+
+        let yaml = r#"log_level: "off""#;
+        let cfg: DatabaseConfig = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(cfg.pool.log_level, LevelFilter::Off);
+
+        let yaml = "log_level: trace";
+        let cfg: DatabaseConfig = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(cfg.pool.log_level, LevelFilter::Trace);
+
+        let yaml = "log_level: dEbuG";
+        let cfg: DatabaseConfig = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(cfg.pool.log_level, LevelFilter::Debug);
+    }
+
+    #[test]
+    fn database_config_empty_yaml() {
+        let cfg: DatabaseConfig = serde_yaml::from_str("{}").unwrap();
+        assert!(cfg.conn.is_none());
+        assert_eq!(cfg.pool.min_connections, 1);
+        assert_eq!(cfg.pool.max_connections, 10);
+    }
+
+    #[test]
+    fn database_config_round_trip() {
+        let original = DatabaseConfig {
+            conn: Some(BackendConfig::from_url(Url::parse("file:///tmp/rt.db").unwrap()).unwrap()),
+            pool: PoolConfig {
+                min_connections: 3,
+                max_connections: 15,
+                ..Default::default()
+            },
+        };
+        let yaml = serde_yaml::to_string(&original).unwrap();
+        let restored: DatabaseConfig = serde_yaml::from_str(&yaml).unwrap();
+
+        assert_eq!(
+            original.conn.as_ref().unwrap().url().as_str(),
+            restored.conn.as_ref().unwrap().url().as_str()
+        );
+        assert_eq!(restored.pool.min_connections, 3);
+        assert_eq!(restored.pool.max_connections, 15);
+    }
+
+    // ── PoolConfig defaults ───────────────────────────────────────────
+
+    #[test]
+    fn pool_config_all_defaults() {
+        let cfg: PoolConfig = serde_yaml::from_str("{}").unwrap();
+        assert_eq!(cfg, PoolConfig::default());
+    }
+
+    #[test]
+    fn pool_config_partial_override() {
+        let yaml = "
+idle_timeout: 120
+test_before_acquire: false
+";
+        let cfg: PoolConfig = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(cfg.idle_timeout, Duration::from_secs(120));
+        assert!(!cfg.test_before_acquire);
+        // rest defaults
+        assert_eq!(cfg.min_connections, 1);
+        assert_eq!(cfg.max_connections, 10);
     }
 }

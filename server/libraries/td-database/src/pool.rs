@@ -366,7 +366,7 @@ mod tests {
     async fn creates_database_and_schema() {
         let db_file = tdtestdir!().join("test.db");
         let db_url = Url::from_file_path(db_file.clone()).unwrap();
-        let config = DatabaseConfig::new(db_url);
+        let config = DatabaseConfig::new(db_url).unwrap();
         let db = TdPool::create(&config).await.unwrap();
         let _ = raw_query!(db, "SELECT * FROM tabsdata_system")
             .build_query()
@@ -380,7 +380,7 @@ mod tests {
     async fn open_existing_database() {
         let db_file = tdtestdir!().join("test.db");
         let db_url = Url::from_file_path(db_file).unwrap();
-        let config = DatabaseConfig::new(db_url);
+        let config = DatabaseConfig::new(db_url).unwrap();
         {
             let db = TdPool::create(&config).await.unwrap();
             raw_query!(
@@ -407,7 +407,7 @@ mod tests {
     async fn test_tabsdata_database_schema_does_not_exist() {
         let db_file = tdtestdir!().join("test.db");
         let db_url = Url::from_file_path(db_file).unwrap();
-        let config = DatabaseConfig::new(db_url);
+        let config = DatabaseConfig::new(db_url).unwrap();
         // Connect without upgrade — DB has no tables
         let db = TdPool::connect(&config).await.unwrap();
         let res = db.check_db_version().await;
@@ -418,7 +418,7 @@ mod tests {
     async fn test_tabsdata_database_schema_ok() {
         let db_file = tdtestdir!().join("test.db");
         let db_url = Url::from_file_path(db_file).unwrap();
-        let config = DatabaseConfig::new(db_url);
+        let config = DatabaseConfig::new(db_url).unwrap();
         let db = TdPool::create(&config).await.unwrap();
         assert!(db.check_db_version().await.is_ok());
     }
@@ -427,7 +427,7 @@ mod tests {
     async fn test_tabsdata_database_schema_missing_db_version() {
         let db_file = tdtestdir!().join("test.db");
         let db_url = Url::from_file_path(db_file).unwrap();
-        let config = DatabaseConfig::new(db_url);
+        let config = DatabaseConfig::new(db_url).unwrap();
         let db = TdPool::create(&config).await.unwrap();
 
         raw_query!(db, "DELETE FROM tabsdata_system")
@@ -444,7 +444,7 @@ mod tests {
     async fn test_tabsdata_database_schema_invalid_db_version() {
         let db_file = tdtestdir!().join("test.db");
         let db_url = Url::from_file_path(db_file).unwrap();
-        let config = DatabaseConfig::new(db_url);
+        let config = DatabaseConfig::new(db_url).unwrap();
         let db = TdPool::create(&config).await.unwrap();
 
         raw_query!(
@@ -464,7 +464,7 @@ mod tests {
     async fn test_tabsdata_database_schema_db_needs_upgrade() {
         let db_file = tdtestdir!().join("test.db");
         let db_url = Url::from_file_path(db_file).unwrap();
-        let config = DatabaseConfig::new(db_url);
+        let config = DatabaseConfig::new(db_url).unwrap();
         let db = TdPool::create(&config).await.unwrap();
 
         raw_query!(
@@ -484,7 +484,7 @@ mod tests {
     async fn test_tabsdata_database_schema_app_needs_upgrade() {
         let db_file = tdtestdir!().join("test.db");
         let db_url = Url::from_file_path(db_file).unwrap();
-        let config = DatabaseConfig::new(db_url);
+        let config = DatabaseConfig::new(db_url).unwrap();
         let db = TdPool::create(&config).await.unwrap();
 
         raw_query!(
@@ -504,7 +504,7 @@ mod tests {
     async fn test_tabsdata_database_edition_upgrade() {
         let db_file = tdtestdir!().join("test.db");
         let db_url = Url::from_file_path(db_file).unwrap();
-        let config = DatabaseConfig::new(db_url);
+        let config = DatabaseConfig::new(db_url).unwrap();
         let db = TdPool::create(&config).await.unwrap();
         let db_edition = db.parse_tabsdata_edition().await.unwrap();
         let runtime_edition = TabsdataEdition;
@@ -515,7 +515,7 @@ mod tests {
     async fn test_tabsdata_database_schema_invalid_edition() {
         let db_file = tdtestdir!().join("test.db");
         let db_url = Url::from_file_path(db_file).unwrap();
-        let config = DatabaseConfig::new(db_url);
+        let config = DatabaseConfig::new(db_url).unwrap();
         let db = TdPool::create(&config).await.unwrap();
 
         raw_query!(
@@ -535,7 +535,7 @@ mod tests {
     async fn test_upgrade_idempotent() {
         let db_file = tdtestdir!().join("test.db");
         let db_url = Url::from_file_path(db_file).unwrap();
-        let config = DatabaseConfig::new(db_url);
+        let config = DatabaseConfig::new(db_url).unwrap();
         let db = TdPool::connect(&config).await.unwrap();
 
         // First upgrade: fresh install
@@ -551,7 +551,7 @@ mod tests {
     async fn test_execute_batch() {
         let db_file = tdtestdir!().join("test.db");
         let db_url = Url::from_file_path(db_file).unwrap();
-        let config = DatabaseConfig::new(db_url);
+        let config = DatabaseConfig::new(db_url).unwrap();
         let db = TdPool::connect(&config).await.unwrap();
 
         let stmts = vec![
@@ -575,7 +575,7 @@ mod tests {
     async fn test_backend_returns_sqlite() {
         let db_file = tdtestdir!().join("test.db");
         let db_url = Url::from_file_path(db_file).unwrap();
-        let config = DatabaseConfig::new(db_url);
+        let config = DatabaseConfig::new(db_url).unwrap();
         let db = TdPool::connect(&config).await.unwrap();
         let backend: td_schema::schema::backend::Backend = db.kind().into();
         assert_eq!(backend, td_schema::schema::backend::Backend::Sqlite);

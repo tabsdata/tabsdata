@@ -8069,6 +8069,7 @@ dependencies = [
  "sea-query-sqlx",
  "serde",
  "serde_with",
+ "serde_yaml",
  "sqlx",
  "strum 0.28.0",
  "td-build",
