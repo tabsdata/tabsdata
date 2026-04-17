@@ -2,10 +2,11 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::execution::layers::update_status::update_function_run_status;
+use crate::execution::layers::update_status::{notify_scheduler, update_function_run_status};
 use ta_services::factory::service_factory;
 use td_authz::tower::{AuthzOn, CollAdmin, CollExec};
 use td_authz::{Authz, AuthzContext};
+use td_execution::SchedulerNotify;
 use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
 use td_objects::dxo::function_run::{FunctionRunDB, UpdateFunctionRunDB};
 use td_objects::dxo::transaction::TransactionDB;
@@ -23,6 +24,7 @@ use td_tower::layers;
     response = (),
     connection = TransactionProvider,
     context = AuthzContext,
+    context = SchedulerNotify,
 )]
 fn service() {
     layers!(
@@ -43,6 +45,8 @@ fn service() {
         from_fn(UpdateFunctionRunDB::recover),
         // Update function requirements status
         from_fn(update_function_run_status),
+        // Notify scheduler of status change.
+        from_fn(notify_scheduler),
     )
 }
 
@@ -96,6 +100,8 @@ mod tests {
                 type_of_val(&UpdateFunctionRunDB::recover),
                 // Update function requirements status
                 type_of_val(&update_function_run_status),
+                // Notify scheduler of status change.
+                type_of_val(&notify_scheduler),
             ]);
     }
 

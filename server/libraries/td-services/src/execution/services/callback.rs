@@ -3,9 +3,11 @@
 //
 
 use crate::execution::layers::update_status::{
-    update_function_run_status, update_table_data_version_status, update_worker_status,
+    notify_scheduler, update_function_run_status, update_table_data_version_status,
+    update_worker_status,
 };
 use ta_services::factory::service_factory;
+use td_execution::SchedulerNotify;
 use td_objects::dxo::crudl::UpdateRequest;
 use td_objects::dxo::function_run::{
     FunctionRunDB, UpdateFunctionRunDB, UpdateFunctionRunDBBuilder,
@@ -26,6 +28,7 @@ use td_tower::layers;
     request = UpdateRequest<FunctionRunWorkerIdParam, CallbackRequest>,
     response = (),
     connection = TransactionProvider,
+    context = SchedulerNotify,
 )]
 fn service() {
     layers!(
@@ -60,6 +63,8 @@ fn service() {
         from_fn(update_function_run_status),
         // Update table data versions status.
         from_fn(update_table_data_version_status),
+        // Notify scheduler of status change.
+        from_fn(notify_scheduler),
     )
 }
 
@@ -131,6 +136,8 @@ mod tests {
                 type_of_val(&update_function_run_status),
                 // Update table data versions status.
                 type_of_val(&update_table_data_version_status),
+                // Notify scheduler of status change.
+                type_of_val(&notify_scheduler),
             ]);
     }
 

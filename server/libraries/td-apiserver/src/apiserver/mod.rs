@@ -14,6 +14,7 @@ use td_authz::AuthzContext;
 use td_authz::session_provider::Sessions;
 use td_common::server_runner::ServerRunnable;
 use td_database::pool::TdPool;
+use td_execution::SchedulerNotify;
 use td_services::execution::services::runtime_info::RuntimeContext;
 use td_services::{Context, Services};
 use td_storage::Storage;
@@ -39,7 +40,9 @@ impl ApiServerCtx {
         db: TdPool,
         storage: Arc<Storage>,
         runtime_context: Arc<RuntimeContext>,
+        scheduler_notify: SchedulerNotify,
     ) -> Self {
+        let scheduler_notify = Arc::new(scheduler_notify);
         let context = Context {
             db: db.clone(),
             server_addresses: Arc::new(config.addresses.clone()),
@@ -56,6 +59,7 @@ impl ApiServerCtx {
             storage: storage.clone(),
             runtime_context: runtime_context.clone(),
             transaction_by: Arc::new(config.transaction_by.clone()),
+            scheduler_notify: scheduler_notify.clone(),
         };
         let services = Services::build(&context);
         let extended_context = ExtendedContext::build(&context, &config.extended_config);

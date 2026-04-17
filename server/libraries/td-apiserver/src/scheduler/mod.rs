@@ -8,6 +8,7 @@ use std::sync::Arc;
 use td_common::server::FileWorkerMessageQueue;
 use td_common::server_runner::ServerRunnable;
 use td_database::pool::TdPool;
+use td_execution::SchedulerNotify;
 use td_objects::types::addresses::InternalServerAddresses;
 use td_services::scheduler::services::SchedulerContext;
 use td_storage::Storage;
@@ -25,12 +26,15 @@ impl SchedulerCtx {
         storage: Arc<Storage>,
         worker_queue: Arc<FileWorkerMessageQueue>,
         internal_addresses: Arc<InternalServerAddresses>,
+        scheduler_notify: SchedulerNotify,
     ) -> Self {
+        let scheduler_notify = Arc::new(scheduler_notify);
         let context = SchedulerContext {
             db,
             storage,
             worker_queue,
             internal_addresses,
+            scheduler_notify: scheduler_notify.clone(),
         };
 
         Self { context }

@@ -6,6 +6,7 @@ use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
 use td_database::dynamic::DynamicConnection;
 use td_error::{TdError, td_error};
+use td_execution::SchedulerNotify;
 use td_objects::dxo::function_requirement::FunctionRequirementDBWithNames;
 use td_objects::dxo::function_run::{CommitFunctionRunDB, FunctionRunDB, UpdateFunctionRunDB};
 use td_objects::dxo::table_data_version::{
@@ -211,6 +212,11 @@ pub async fn update_function_run_status(
             .await?;
     }
 
+    Ok(())
+}
+
+pub async fn notify_scheduler(notify: Ref<SchedulerNotify>) -> Result<(), TdError> {
+    notify.notify();
     Ok(())
 }
 

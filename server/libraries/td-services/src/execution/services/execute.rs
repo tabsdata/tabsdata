@@ -4,8 +4,10 @@
 
 use crate::execution::layers::execute;
 use crate::execution::layers::execution::trigger_type_manual;
+use crate::execution::layers::update_status::notify_scheduler;
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
+use td_execution::SchedulerNotify;
 use td_execution::TransactionBy;
 use td_objects::And;
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
@@ -26,6 +28,7 @@ use td_tower::layers;
     connection = TransactionProvider,
     context = AuthzContext,
     context = TransactionBy,
+    context = SchedulerNotify,
 )]
 fn service() {
     layers!(
@@ -49,6 +52,8 @@ fn service() {
         ),
         from_fn(trigger_type_manual),
         execute(),
+        // Notify scheduler to pick up the newly created function runs.
+        from_fn(notify_scheduler),
     )
 }
 
@@ -230,6 +235,8 @@ pub(crate) mod tests {
             type_of_val(&update_initial_function_run_status),
             // Execution plan response
             type_of_val(&build_response),
+            // Notify scheduler of new function runs.
+            type_of_val(&notify_scheduler),
         ]);
     }
 

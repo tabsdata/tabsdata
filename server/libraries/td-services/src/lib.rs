@@ -25,6 +25,7 @@ use td_authz::AuthzContext;
 use td_authz::jwt::JwtConfig;
 use td_authz::session_provider::Sessions;
 use td_database::pool::TdPool;
+use td_execution::SchedulerNotify;
 use td_execution::TransactionBy;
 use td_objects::types::addresses::ApiServerAddresses;
 use td_security::config::PasswordHashingConfig;
@@ -79,6 +80,7 @@ pub struct Context {
     pub storage: Arc<Storage>,
     pub runtime_context: Arc<RuntimeContext>,
     pub transaction_by: Arc<TransactionBy>,
+    pub scheduler_notify: Arc<SchedulerNotify>,
 }
 
 #[cfg(feature = "test-utils")]
@@ -95,6 +97,7 @@ impl Context {
             storage: Arc::new(Storage::default()),
             runtime_context: Arc::new(RuntimeContext::default()),
             transaction_by: Arc::new(TransactionBy::default()),
+            scheduler_notify: Arc::new(SchedulerNotify::new()),
         }
     }
 }

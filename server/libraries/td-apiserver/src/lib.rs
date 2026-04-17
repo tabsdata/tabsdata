@@ -12,6 +12,7 @@ use td_common::server::FileWorkerMessageQueue;
 use td_common::server_runner::ServerRunner;
 use td_common::status::ExitStatus;
 use td_database::error::DbError;
+use td_execution::SchedulerNotify;
 use td_process::launcher::cli::Cli;
 use td_queries::initialize_logical_ids;
 use td_services::execution::services::runtime_info::RuntimeContext;
@@ -171,12 +172,16 @@ pub fn run() {
             })?;
             let runtime_context = Arc::new(runtime_context);
 
+            // Create shared scheduler notify
+            let scheduler_notify = SchedulerNotify::new();
+
             // Create context
             let server_context = ApiServerCtx::new(
                 config.clone(),
                 db.clone(),
                 storage.clone(),
                 runtime_context.clone(),
+                scheduler_notify.clone(),
             );
 
             // Create required servers
@@ -201,6 +206,7 @@ pub fn run() {
                 storage.clone(),
                 worker_message_queue.clone(),
                 internal_addresses.clone(),
+                scheduler_notify,
             );
             let function_request_server = FunctionRequester::new(&scheduler_context).await;
             let function_dispatch_server = FunctionDispatcher::new(&scheduler_context).await;
