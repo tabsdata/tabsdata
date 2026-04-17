@@ -265,3 +265,129 @@ where
             .collect()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sea_query::{Asterisk, SqliteQueryBuilder};
+    use ta_objects::Dao;
+
+    #[ta_objects::typed(string)]
+    struct TestId;
+
+    #[ta_objects::typed(string)]
+    struct TestPartition;
+
+    #[ta_objects::typed(i64)]
+    struct TestDefinedOn;
+
+    #[ta_objects::typed_enum]
+    enum TestVStatus {
+        #[typed_enum(rename = "A")]
+        Active,
+    }
+
+    #[Dao]
+    #[dao(
+        sql_table = "test_versioned",
+        versioned(pk = "id", version_by = "defined_on", partition_by = "partition_id"),
+        states(Active = TestVStatus::Active)
+    )]
+    struct TestVersionedDao {
+        id: TestId,
+        partition_id: TestPartition,
+        status: TestVStatus,
+        defined_on: TestDefinedOn,
+    }
+
+    #[test]
+    fn test_select_at_all() {
+        let id = TestPartition::try_from("p1").unwrap();
+        let on = TestDefinedOn::try_from(100i64).unwrap();
+        let sql = select_at::<{ TestVersionedDao::All }, TestVersionedDao>(&id, &on)
+            .unwrap()
+            .to_string(SqliteQueryBuilder);
+        assert!(
+            sql.contains(r#"FROM "test_versioned""#),
+            "should select from table: {sql}"
+        );
+        assert!(
+            sql.contains(r#""partition_id" = 'p1'"#),
+            "should filter by partition: {sql}"
+        );
+        assert!(
+            sql.contains(r#""defined_on" <= 100"#),
+            "should filter by version order: {sql}"
+        );
+    }
+
+    #[test]
+    fn test_select_at_active() {
+        let id = TestPartition::try_from("p1").unwrap();
+        let on = TestDefinedOn::try_from(100i64).unwrap();
+        let sql = select_at::<{ TestVersionedDao::Active }, TestVersionedDao>(&id, &on)
+            .unwrap()
+            .to_string(SqliteQueryBuilder);
+        assert!(
+            sql.contains(r#""status" = 'A'"#),
+            "should filter by state: {sql}"
+        );
+    }
+
+    #[test]
+    fn test_latest_ranked_cte() {
+        let on = TestDefinedOn::try_from(100i64).unwrap();
+        let with = latest_ranked_cte::<TestVersionedDao>(&on).unwrap();
+        let sql = Query::select()
+            .column(Asterisk)
+            .from(Cte::Ranked)
+            .take()
+            .with(with)
+            .to_string(SqliteQueryBuilder);
+        assert!(sql.contains("ROW_NUMBER()"), "should use ROW_NUMBER: {sql}");
+        assert!(
+            sql.contains(r#""defined_on" <= 100"#),
+            "should bound by version order: {sql}"
+        );
+        assert!(
+            sql.contains(r#""ranked""#),
+            "CTE should be named ranked: {sql}"
+        );
+    }
+
+    #[test]
+    fn test_select_latest_from_cte_all() {
+        let id = TestPartition::try_from("p1").unwrap();
+        let sql = select_latest_from_cte::<{ TestVersionedDao::All }, TestVersionedDao>(&id)
+            .unwrap()
+            .to_string(SqliteQueryBuilder);
+        assert!(
+            sql.contains(r#"FROM "ranked""#),
+            "should select from ranked CTE: {sql}"
+        );
+        assert!(sql.contains(r#""rn" = 1"#), "should filter rn = 1: {sql}");
+        assert!(
+            sql.contains(r#""partition_id" = 'p1'"#),
+            "should filter by condition: {sql}"
+        );
+    }
+
+    #[test]
+    fn test_full_versioned_query() {
+        let id = TestPartition::try_from("p1").unwrap();
+        let on = TestDefinedOn::try_from(100i64).unwrap();
+        let sql = select_latest_from_cte::<{ TestVersionedDao::Active }, TestVersionedDao>(&id)
+            .unwrap()
+            .order_by_columns(TestVersionedDao::order_by())
+            .take()
+            .with(latest_ranked_cte::<TestVersionedDao>(&on).unwrap())
+            .to_string(SqliteQueryBuilder);
+        assert!(sql.starts_with("WITH"), "should be a WITH query: {sql}");
+        assert!(sql.contains("ROW_NUMBER()"), "should use ROW_NUMBER: {sql}");
+        assert!(sql.contains(r#""rn" = 1"#), "should filter rn = 1: {sql}");
+        assert!(
+            sql.contains(r#""status" = 'A'"#),
+            "should filter by state: {sql}"
+        );
+    }
+}

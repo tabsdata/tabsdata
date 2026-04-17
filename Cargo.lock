@@ -8228,6 +8228,7 @@ dependencies = [
  "td-database",
  "td-error",
  "td-objects",
+ "td-queries",
  "td-schema",
  "td-security",
  "td-test",

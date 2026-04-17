@@ -6,8 +6,7 @@ use crate::{BasicQueries, ChunkedQueries, CurrentQueries, VersionedQueries};
 use std::marker::PhantomData;
 use std::ops::Deref;
 use ta_objects::errors::{SqlError, format_hint};
-use ta_objects::sql_condition::{ConditionExtract, SqlRef};
-use ta_objects::sql_condition::SqlCondition;
+use ta_objects::sql_condition::{ConditionExtract, SqlCondition, SqlRef};
 use ta_objects::{
     CurrentDao, Dao, DaoCore, DaoUpdate, ListDto, ListFilterExtract, ListRef, States, VersionedDao,
 };
@@ -30,9 +29,7 @@ pub async fn insert_vec<D: Dao>(
     mut conn: MutRef<DynamicConnection<'static>>,
     daos: Ref<Vec<D>>,
 ) -> Result<(), TdError> {
-    for dao in daos.deref() {
-        conn.insert(dao).await?;
-    }
+    conn.insert_vec::<D>(daos.deref()).await?;
     Ok(())
 }
 

@@ -94,6 +94,66 @@ where
     Ok(query)
 }
 
+pub(crate) fn insert_query<D: Dao>(dao: &D) -> Result<sea_query::InsertStatement, SqlError> {
+    let mut query = Query::insert();
+    query
+        .into_table(D::table())
+        .columns(D::columns())
+        .values(dao.insert_values())?;
+    Ok(query)
+}
+
+pub(crate) fn update_query<U: DaoUpdate, D: DaoCore>(
+    dao: &U,
+    condition: impl SqlCondition,
+) -> Result<sea_query::UpdateStatement, SqlError> {
+    let query = Query::update()
+        .table(U::table())
+        .values(dao.update_values())
+        .cond_where(resolve_condition::<D>(condition)?)
+        .take();
+    Ok(query)
+}
+
+pub(crate) fn delete_query<D: DaoCore>(
+    condition: impl SqlCondition,
+) -> Result<sea_query::DeleteStatement, SqlError> {
+    let query = Query::delete()
+        .from_table(D::table())
+        .cond_where(resolve_condition::<D>(condition)?)
+        .take();
+    Ok(query)
+}
+
+pub(crate) fn select_in<const S: u8, D>(
+    condition: impl SqlCondition,
+) -> Result<SelectStatement, SqlError>
+where
+    D: Dao + States<S>,
+{
+    let query = select::<D>(condition)?
+        .cond_where(resolve_condition::<D>(D::state())?)
+        .take();
+    Ok(query)
+}
+
+pub(crate) fn select_latest_before<const S: u8, D>(
+    condition: impl SqlCondition,
+    offset: u64,
+) -> Result<SelectStatement, SqlError>
+where
+    D: Dao + States<S>,
+{
+    let mut query = select::<D>(condition)?
+        .cond_where(resolve_condition::<D>(D::state())?)
+        .limit(1)
+        .take();
+    if offset > 0 {
+        query.offset(offset);
+    }
+    Ok(query)
+}
+
 impl<E> BasicQueries for E
 where
     E: SeaExecutor + Send,
@@ -102,10 +162,7 @@ where
     where
         D: Dao,
     {
-        let r = Query::insert()
-            .into_table(D::table())
-            .columns(D::columns())
-            .values(dao.insert_values())?
+        let r = insert_query::<D>(dao)?
             .build_query()
             .execute(self)
             .await
@@ -160,10 +217,7 @@ where
         U: DaoUpdate,
         D: DaoCore,
     {
-        let r = Query::update()
-            .table(U::table())
-            .values(dao.update_values())
-            .cond_where(resolve_condition::<D>(condition)?)
+        let r = update_query::<U, D>(dao, condition)?
             .build_query()
             .execute(self)
             .await
@@ -175,9 +229,7 @@ where
     where
         D: DaoCore,
     {
-        let r = Query::delete()
-            .from_table(D::table())
-            .cond_where(resolve_condition::<D>(condition)?)
+        let r = delete_query::<D>(condition)?
             .build_query()
             .execute(self)
             .await
@@ -218,8 +270,7 @@ where
     where
         D: Dao + States<S>,
     {
-        let r = select::<D>(condition)?
-            .cond_where(resolve_condition::<D>(D::state())?)
+        let r = select_in::<S, D>(condition)?
             .build_query_as()
             .fetch_all(self)
             .await
@@ -227,6 +278,9 @@ where
         Ok(r)
     }
 
+    /// Find the nth most recent row matching `condition` and state, using the
+    /// DAO's default ordering. `offset = 0` returns the most recent match,
+    /// `offset = 1` the second most recent, and so on.
     async fn fetch_latest_before<const S: u8, D>(
         self,
         condition: impl SqlCondition,
@@ -235,18 +289,149 @@ where
     where
         D: Dao + States<S>,
     {
-        let mut query = select::<D>(condition)?
-            .cond_where(resolve_condition::<D>(D::state())?)
-            .limit(1)
-            .take();
-        if offset > 0 {
-            query.offset(offset);
-        }
-        let r = query
+        let r = select_latest_before::<S, D>(condition, offset)?
             .build_query_as()
             .fetch_optional(self)
             .await
             .map_err(SqlError::on_read::<D>)?;
         Ok(r)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sea_query::SqliteQueryBuilder;
+    use ta_objects::Buildable;
+
+    #[ta_objects::typed(string)]
+    struct TestId;
+
+    #[ta_objects::typed(string)]
+    struct TestName;
+
+    #[ta_objects::typed_enum]
+    enum TestStatus {
+        #[typed_enum(rename = "A")]
+        Active,
+    }
+
+    #[ta_objects::Dao]
+    #[dao(sql_table = "test_basic", states(Active = TestStatus::Active))]
+    struct TestDao {
+        id: TestId,
+        name: TestName,
+        status: TestStatus,
+    }
+
+    #[test]
+    fn test_select_with_condition() {
+        let id = TestId::try_from("abc").unwrap();
+        let sql = select::<TestDao>(&id)
+            .unwrap()
+            .to_string(SqliteQueryBuilder);
+        assert_eq!(
+            sql,
+            r#"SELECT "id", "name", "status" FROM "test_basic" WHERE "id" = 'abc' ORDER BY "id" DESC"#
+        );
+    }
+
+    #[test]
+    fn test_select_no_condition() {
+        let sql = select::<TestDao>(()).unwrap().to_string(SqliteQueryBuilder);
+        assert_eq!(
+            sql,
+            r#"SELECT "id", "name", "status" FROM "test_basic" WHERE TRUE ORDER BY "id" DESC"#
+        );
+    }
+
+    #[test]
+    fn test_insert_query_sql() {
+        let dao = TestDao::builder()
+            .id(TestId::try_from("i1").unwrap())
+            .name(TestName::try_from("n1").unwrap())
+            .status(TestStatus::Active)
+            .build()
+            .unwrap();
+        let sql = insert_query::<TestDao>(&dao)
+            .unwrap()
+            .to_string(SqliteQueryBuilder);
+        assert_eq!(
+            sql,
+            r#"INSERT INTO "test_basic" ("id", "name", "status") VALUES ('i1', 'n1', 'A')"#
+        );
+    }
+
+    #[test]
+    fn test_update_query_sql() {
+        let dao = TestDao::builder()
+            .id(TestId::try_from("i1").unwrap())
+            .name(TestName::try_from("updated").unwrap())
+            .status(TestStatus::Active)
+            .build()
+            .unwrap();
+        let id = TestId::try_from("i1").unwrap();
+        let sql = update_query::<TestDao, TestDao>(&dao, &id)
+            .unwrap()
+            .to_string(SqliteQueryBuilder);
+        assert!(sql.starts_with(r#"UPDATE "test_basic" SET"#), "{sql}");
+        assert!(sql.contains(r#"WHERE "id" = 'i1'"#), "{sql}");
+    }
+
+    #[test]
+    fn test_delete_query_sql() {
+        let id = TestId::try_from("del").unwrap();
+        let sql = delete_query::<TestDao>(&id)
+            .unwrap()
+            .to_string(SqliteQueryBuilder);
+        assert_eq!(sql, r#"DELETE FROM "test_basic" WHERE "id" = 'del'"#);
+    }
+
+    #[test]
+    fn test_select_in_all_state() {
+        let id = TestId::try_from("abc").unwrap();
+        let sql = select_in::<{ TestDao::All }, TestDao>(&id)
+            .unwrap()
+            .to_string(SqliteQueryBuilder);
+        assert_eq!(
+            sql,
+            r#"SELECT "id", "name", "status" FROM "test_basic" WHERE "id" = 'abc' ORDER BY "id" DESC"#
+        );
+    }
+
+    #[test]
+    fn test_select_in_active_state() {
+        let id = TestId::try_from("abc").unwrap();
+        let sql = select_in::<{ TestDao::Active }, TestDao>(&id)
+            .unwrap()
+            .to_string(SqliteQueryBuilder);
+        assert_eq!(
+            sql,
+            r#"SELECT "id", "name", "status" FROM "test_basic" WHERE "id" = 'abc' AND "status" = 'A' ORDER BY "id" DESC"#
+        );
+    }
+
+    #[test]
+    fn test_select_latest_before_no_offset() {
+        let id = TestId::try_from("abc").unwrap();
+        let sql = select_latest_before::<{ TestDao::Active }, TestDao>(&id, 0)
+            .unwrap()
+            .to_string(SqliteQueryBuilder);
+        assert_eq!(
+            sql,
+            r#"SELECT "id", "name", "status" FROM "test_basic" WHERE "id" = 'abc' AND "status" = 'A' ORDER BY "id" DESC LIMIT 1"#
+        );
+    }
+
+    #[test]
+    fn test_select_latest_before_with_offset() {
+        let id = TestId::try_from("abc").unwrap();
+        let sql = select_latest_before::<{ TestDao::Active }, TestDao>(&id, 3)
+            .unwrap()
+            .to_string(SqliteQueryBuilder);
+        assert_eq!(
+            sql,
+            r#"SELECT "id", "name", "status" FROM "test_basic" WHERE "id" = 'abc' AND "status" = 'A' ORDER BY "id" DESC LIMIT 1 OFFSET 3"#
+        );
     }
 }

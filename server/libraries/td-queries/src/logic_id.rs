@@ -25,12 +25,28 @@ use td_objects::types::basic::{
 
 /// Errors that can occur during logical ID initialization.
 #[td_error]
-enum LogicIdsError {
+pub(crate) enum LogicIdsError {
     /// Indicates that the last ID for a given key could not be found.
     #[error("Could not find id column for '{0}'")]
     UnknownIdColumn(String) = 5000,
     #[error("Could not find last id for '{0}': {1}")]
     CouldNotFindLastId(String, Box<dyn std::error::Error + Send + Sync>) = 5001,
+}
+
+/// Build the SELECT query for finding the last logical ID.
+pub(crate) fn find_last_idl_query<D, ID>() -> Result<sea_query::SelectStatement, LogicIdsError>
+where
+    D: DaoCore,
+    ID: 'static,
+{
+    let id_col = D::col_for_type(std::any::TypeId::of::<ID>())
+        .ok_or_else(|| LogicIdsError::UnknownIdColumn(std::any::type_name::<ID>().to_string()))?;
+    Ok(Query::select()
+        .columns([id_col])
+        .from(D::table())
+        .order_by(id_col, Order::Desc)
+        .limit(1)
+        .take())
 }
 
 /// Fetches the last logical ID for a given D from the database.
@@ -43,13 +59,8 @@ where
     ID: DynamicType + DynamicDecode + Send + Unpin + 'static,
     K: KeyId,
 {
-    let id_col = D::col_for_type(std::any::TypeId::of::<ID>())
-        .ok_or_else(|| LogicIdsError::UnknownIdColumn(K::key().to_string()))?;
-    let res = Query::select()
-        .columns([id_col])
-        .from(D::table())
-        .order_by(id_col, Order::Desc)
-        .limit(1)
+    let res = find_last_idl_query::<D, ID>()
+        .map_err(|_| LogicIdsError::UnknownIdColumn(K::key().to_string()))?
         .build_query_scalar()
         .fetch_optional(db)
         .await
@@ -224,5 +235,60 @@ mod tests {
         assert_eq!(id, expected);
 
         Ok(())
+    }
+
+    // --- SQL generation tests ---
+
+    mod sql {
+        use super::*;
+        use sea_query::SqliteQueryBuilder;
+
+        #[test]
+        fn test_find_last_idl_execution() {
+            let sql = find_last_idl_query::<ExecutionDB, ExecutionId>()
+                .unwrap()
+                .to_string(SqliteQueryBuilder);
+            assert!(
+                sql.contains(r#"FROM "executions""#),
+                "should query executions: {sql}"
+            );
+            assert!(sql.contains("ORDER BY"), "should order: {sql}");
+            assert!(sql.contains("DESC"), "should order desc: {sql}");
+            assert!(sql.contains("LIMIT 1"), "should limit 1: {sql}");
+        }
+
+        #[test]
+        fn test_find_last_idl_function() {
+            let sql = find_last_idl_query::<FunctionDB, FunctionVersionId>()
+                .unwrap()
+                .to_string(SqliteQueryBuilder);
+            assert!(
+                sql.contains(r#"FROM "functions""#),
+                "should query functions: {sql}"
+            );
+            assert!(sql.contains("LIMIT 1"), "should limit 1: {sql}");
+        }
+
+        #[test]
+        fn test_find_last_idl_transaction() {
+            let sql = find_last_idl_query::<TransactionDB, TransactionId>()
+                .unwrap()
+                .to_string(SqliteQueryBuilder);
+            assert!(
+                sql.contains(r#"FROM "transactions""#),
+                "should query transactions: {sql}"
+            );
+        }
+
+        #[test]
+        fn test_find_last_idl_table_data_version() {
+            let sql = find_last_idl_query::<TableDataVersionDB, TableDataVersionId>()
+                .unwrap()
+                .to_string(SqliteQueryBuilder);
+            assert!(
+                sql.contains("table_data_version"),
+                "should query table_data_versions: {sql}"
+            );
+        }
     }
 }

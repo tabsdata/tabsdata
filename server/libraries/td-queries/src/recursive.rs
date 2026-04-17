@@ -1932,4 +1932,237 @@ mod tests {
         }
         Ok(())
     }
+
+    // ===================================================================
+    // SQL generation tests
+    // ===================================================================
+
+    mod sql {
+        use super::*;
+        use sea_query::SqliteQueryBuilder;
+
+        #[test]
+        fn test_versions_cte_basic() {
+            let cte = versions_cte_basic::<BasicTestDao>(Cte::ReferenceVersions);
+            let sql = Query::select()
+                .column(Asterisk)
+                .from(Cte::ReferenceVersions)
+                .to_owned()
+                .with(WithClause::new().cte(cte).to_owned())
+                .to_string(SqliteQueryBuilder);
+            assert!(sql.starts_with("WITH"), "should be a WITH query: {sql}");
+            assert!(
+                sql.contains(r#""test_basic_table""#),
+                "should select from the DAO table: {sql}"
+            );
+            assert!(
+                sql.contains(r#""reference_versions""#),
+                "should name the CTE: {sql}"
+            );
+        }
+
+        #[test]
+        fn test_versioned_ranked_cte_no_defined_on() {
+            let state_cond = resolve_condition::<TestDao>(TestStatus::Active).unwrap();
+            let cte = versioned_ranked_cte::<TestDao>(None, state_cond, Cte::RecursionVersions);
+            let sql = Query::select()
+                .column(Asterisk)
+                .from(Cte::RecursionVersions)
+                .to_owned()
+                .with(WithClause::new().cte(cte).to_owned())
+                .to_string(SqliteQueryBuilder);
+            assert!(sql.contains("ROW_NUMBER"), "should use ROW_NUMBER: {sql}");
+            assert!(sql.contains(r#""rn" = 1"#), "should filter rn = 1: {sql}");
+            assert!(
+                sql.contains(r#""status" = 'A'"#),
+                "should filter by state: {sql}"
+            );
+            assert!(
+                !sql.contains("<="),
+                "should NOT have defined_on filter: {sql}"
+            );
+        }
+
+        #[test]
+        fn test_versioned_ranked_cte_with_defined_on() {
+            let state_cond = resolve_condition::<TestDao>(TestStatus::Active).unwrap();
+            let on = AtTime::try_from(
+                "2025-04-02T08:19:50.543+00:00"
+                    .parse::<DateTime<Utc>>()
+                    .unwrap(),
+            )
+            .unwrap();
+            let cte =
+                versioned_ranked_cte::<TestDao>(Some(&on), state_cond, Cte::RecursionVersions);
+            let sql = Query::select()
+                .column(Asterisk)
+                .from(Cte::RecursionVersions)
+                .to_owned()
+                .with(WithClause::new().cte(cte).to_owned())
+                .to_string(SqliteQueryBuilder);
+            assert!(
+                sql.contains("<="),
+                "should have defined_on upper bound: {sql}"
+            );
+            assert!(sql.contains("ROW_NUMBER"), "should use ROW_NUMBER: {sql}");
+        }
+
+        #[test]
+        fn test_direction_versions_cte_upstream() {
+            let recursion = RecursionOptions::new(None, Some(Depth::ZERO));
+            let direct_ref = TestId::try_from("MMM").unwrap();
+            let cte = direction_versions_cte::<BasicTestDao, BasicReference>(
+                &recursion,
+                &direct_ref,
+                Direction::Upstream,
+                "INSTR",
+            )
+            .unwrap();
+            let sql = Query::select()
+                .column(Asterisk)
+                .from(Cte::UpstreamVersions)
+                .to_owned()
+                .with(
+                    WithClause::new()
+                        .recursive(true)
+                        .cte(versions_cte_basic::<BasicReference>(Cte::ReferenceVersions))
+                        .cte(versions_cte_basic::<BasicTestDao>(Cte::RecursionVersions))
+                        .cte(cte)
+                        .to_owned(),
+                )
+                .to_string(SqliteQueryBuilder);
+            assert!(sql.contains("RECURSIVE"), "should be recursive: {sql}");
+            assert!(sql.contains("UNION ALL"), "should have UNION ALL: {sql}");
+            assert!(
+                sql.contains(r#""upstream_versions""#),
+                "should name CTE upstream_versions: {sql}"
+            );
+            assert!(
+                sql.contains("'MMM'"),
+                "should reference direct value: {sql}"
+            );
+            assert!(
+                sql.contains("INSTR"),
+                "should use INSTR for cycle detection: {sql}"
+            );
+            assert!(sql.contains("CONCAT"), "should use CONCAT for path: {sql}");
+        }
+
+        #[test]
+        fn test_direction_versions_cte_downstream() {
+            let recursion = RecursionOptions::new(Some(Depth::ZERO), None);
+            let direct_ref = TestId::try_from("MMM").unwrap();
+            let cte = direction_versions_cte::<BasicTestDao, BasicReference>(
+                &recursion,
+                &direct_ref,
+                Direction::Downstream,
+                "INSTR",
+            )
+            .unwrap();
+            let sql = Query::select()
+                .column(Asterisk)
+                .from(Cte::DownstreamVersions)
+                .to_owned()
+                .with(
+                    WithClause::new()
+                        .recursive(true)
+                        .cte(versions_cte_basic::<BasicReference>(Cte::ReferenceVersions))
+                        .cte(versions_cte_basic::<BasicTestDao>(Cte::RecursionVersions))
+                        .cte(cte)
+                        .to_owned(),
+                )
+                .to_string(SqliteQueryBuilder);
+            assert!(
+                sql.contains(r#""downstream_versions""#),
+                "should name CTE downstream_versions: {sql}"
+            );
+            assert!(sql.contains("UNION ALL"), "should have UNION ALL: {sql}");
+        }
+
+        #[test]
+        fn test_direction_versions_cte_with_depth_limit() {
+            let recursion =
+                RecursionOptions::new(Some(Depth::ZERO), Some(Depth::try_from(3).unwrap()));
+            let direct_ref = TestId::try_from("MMM").unwrap();
+            let cte = direction_versions_cte::<BasicTestDao, BasicReference>(
+                &recursion,
+                &direct_ref,
+                Direction::Downstream,
+                "INSTR",
+            )
+            .unwrap();
+            let sql = Query::select()
+                .column(Asterisk)
+                .from(Cte::DownstreamVersions)
+                .to_owned()
+                .with(
+                    WithClause::new()
+                        .recursive(true)
+                        .cte(versions_cte_basic::<BasicReference>(Cte::ReferenceVersions))
+                        .cte(versions_cte_basic::<BasicTestDao>(Cte::RecursionVersions))
+                        .cte(cte)
+                        .to_owned(),
+                )
+                .to_string(SqliteQueryBuilder);
+            assert!(sql.contains("< 3"), "should have depth limit < 3: {sql}");
+        }
+
+        #[test]
+        fn test_recursive_versions_cte_both() {
+            let cte = recursive_versions_cte(true, true);
+            let sql = Query::select()
+                .column(Asterisk)
+                .from(Cte::RecursiveVersions)
+                .to_owned()
+                .with(WithClause::new().cte(cte).to_owned())
+                .to_string(SqliteQueryBuilder);
+            assert!(
+                sql.contains(r#""upstream_versions""#),
+                "should include upstream: {sql}"
+            );
+            assert!(
+                sql.contains(r#""downstream_versions""#),
+                "should include downstream: {sql}"
+            );
+            assert!(sql.contains("UNION ALL"), "should union both: {sql}");
+        }
+
+        #[test]
+        fn test_recursive_versions_cte_upstream_only() {
+            let cte = recursive_versions_cte(true, false);
+            let sql = Query::select()
+                .column(Asterisk)
+                .from(Cte::RecursiveVersions)
+                .to_owned()
+                .with(WithClause::new().cte(cte).to_owned())
+                .to_string(SqliteQueryBuilder);
+            assert!(
+                sql.contains(r#""upstream_versions""#),
+                "should include upstream: {sql}"
+            );
+            assert!(
+                !sql.contains(r#""downstream_versions""#),
+                "should NOT include downstream: {sql}"
+            );
+        }
+
+        #[test]
+        fn test_recursive_versions_cte_downstream_only() {
+            let cte = recursive_versions_cte(false, true);
+            let sql = Query::select()
+                .column(Asterisk)
+                .from(Cte::RecursiveVersions)
+                .to_owned()
+                .with(WithClause::new().cte(cte).to_owned())
+                .to_string(SqliteQueryBuilder);
+            assert!(
+                !sql.contains(r#""upstream_versions""#),
+                "should NOT include upstream: {sql}"
+            );
+            assert!(
+                sql.contains(r#""downstream_versions""#),
+                "should include downstream: {sql}"
+            );
+        }
+    }
 }

@@ -2,7 +2,7 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-use sea_query::{Alias, Condition, Query, SelectStatement};
+use sea_query::{Condition, Query, SelectStatement};
 use ta_objects::errors::SqlError;
 use ta_objects::sql_condition::{SqlCondition, resolve_condition};
 use ta_objects::{CurrentDao, ListDto, ListFilter, States};
@@ -49,7 +49,7 @@ where
 {
     let query = Query::select()
         .columns(D::columns())
-        .from(Alias::new(D::current_table_name()))
+        .from(D::current_table_name())
         .cond_where(
             Condition::all()
                 .add(resolve_condition::<D>(condition)?)
@@ -127,5 +127,92 @@ where
         daos.iter()
             .map(|dao| D::from_dao(dao).map_err(SqlError::DtoConversionError))
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sea_query::SqliteQueryBuilder;
+    use ta_objects::Dao;
+
+    #[ta_objects::typed(string)]
+    struct TestId;
+
+    #[ta_objects::typed(string)]
+    struct TestPartition;
+
+    #[ta_objects::typed_enum]
+    enum TestStatus {
+        #[typed_enum(rename = "A")]
+        Active,
+    }
+
+    #[ta_objects::typed(string)]
+    struct TestDefinedOn;
+
+    #[Dao]
+    #[dao(
+        sql_table = "test_current_table",
+        versioned(
+            pk = "id",
+            version_by = "defined_on",
+            partition_by = "partition_id",
+            current = "test_current_view"
+        ),
+        states(Active = TestStatus::Active)
+    )]
+    struct TestCurrentDao {
+        id: TestId,
+        partition_id: TestPartition,
+        status: TestStatus,
+        defined_on: TestDefinedOn,
+    }
+
+    #[test]
+    fn test_select_current_all() {
+        let id = TestPartition::try_from("p1").unwrap();
+        let sql = select_current::<{ TestCurrentDao::All }, TestCurrentDao>(&id)
+            .unwrap()
+            .to_string(SqliteQueryBuilder);
+        assert!(
+            sql.contains(r#"FROM "test_current_view""#),
+            "should select from current view: {sql}"
+        );
+        assert!(
+            sql.contains(r#""partition_id" = 'p1'"#),
+            "should filter by condition: {sql}"
+        );
+    }
+
+    #[test]
+    fn test_select_current_active() {
+        let id = TestPartition::try_from("p1").unwrap();
+        let sql = select_current::<{ TestCurrentDao::Active }, TestCurrentDao>(&id)
+            .unwrap()
+            .to_string(SqliteQueryBuilder);
+        assert!(
+            sql.contains(r#"FROM "test_current_view""#),
+            "should select from current view: {sql}"
+        );
+        assert!(
+            sql.contains(r#""partition_id" = 'p1'"#),
+            "should filter by condition: {sql}"
+        );
+        assert!(
+            sql.contains(r#""status" = 'A'"#),
+            "should filter by active state: {sql}"
+        );
+    }
+
+    #[test]
+    fn test_select_current_no_condition() {
+        let sql = select_current::<{ TestCurrentDao::All }, TestCurrentDao>(())
+            .unwrap()
+            .to_string(SqliteQueryBuilder);
+        assert!(
+            sql.contains(r#"FROM "test_current_view""#),
+            "should select from current view: {sql}"
+        );
     }
 }

@@ -6,6 +6,7 @@ mod basic;
 mod chunked;
 mod current;
 mod execution;
+mod function_requirement;
 mod function_run;
 mod logic_id;
 mod recursive;
@@ -19,6 +20,7 @@ pub use {
     chunked::ChunkedQueries,
     current::CurrentQueries,
     execution::ExecutionQueries,
+    function_requirement::FunctionRequirementQueries,
     function_run::FunctionRunQueries,
     logic_id::initialize_logical_ids,
     recursive::*,

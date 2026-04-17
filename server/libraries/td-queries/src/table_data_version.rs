@@ -818,4 +818,159 @@ mod tests {
         assert!(r.is_none());
         Ok(())
     }
+
+    // --- SQL generation tests ---
+
+    mod sql {
+        use super::*;
+        use sea_query::{Asterisk, Query, SqliteQueryBuilder};
+
+        #[test]
+        fn test_ranked_cte_sql() {
+            let with = ranked_cte::<TestDvDao>(P0.deref(), ON.deref()).unwrap();
+            let sql = Query::select()
+                .column(Asterisk)
+                .from(Cte::Ranked)
+                .take()
+                .with(with)
+                .to_string(SqliteQueryBuilder);
+            assert!(sql.starts_with("WITH"), "should be a WITH query: {sql}");
+            assert!(sql.contains("ROW_NUMBER()"), "should use ROW_NUMBER: {sql}");
+            assert!(
+                sql.contains("COUNT(*)"),
+                "should include COUNT for total_count: {sql}"
+            );
+            assert!(
+                sql.contains(r#""partition_id" = 'p0'"#),
+                "should filter by partition: {sql}"
+            );
+        }
+
+        #[test]
+        fn test_version_condition_none() {
+            let cond = version_condition::<TestDvDao>(&Versions::None).unwrap();
+            let sql = Query::select()
+                .column(Asterisk)
+                .from(Cte::Ranked)
+                .cond_where(cond)
+                .to_string(SqliteQueryBuilder);
+            assert!(
+                sql.contains(r#""rn" = 1"#),
+                "Versions::None should produce rn = 1: {sql}"
+            );
+        }
+
+        #[test]
+        fn test_version_condition_single_head() {
+            let cond = version_condition::<TestDvDao>(&Versions::Single(Version::Head(0))).unwrap();
+            let sql = Query::select()
+                .column(Asterisk)
+                .from(Cte::Ranked)
+                .cond_where(cond)
+                .to_string(SqliteQueryBuilder);
+            assert!(
+                sql.contains(r#""rn" = 1"#),
+                "HEAD should produce rn = 1: {sql}"
+            );
+        }
+
+        #[test]
+        fn test_version_condition_single_head_back() {
+            let cond =
+                version_condition::<TestDvDao>(&Versions::Single(Version::Head(-2))).unwrap();
+            let sql = Query::select()
+                .column(Asterisk)
+                .from(Cte::Ranked)
+                .cond_where(cond)
+                .to_string(SqliteQueryBuilder);
+            assert!(
+                sql.contains(r#""rn" = 3"#),
+                "HEAD~2 should produce rn = 3: {sql}"
+            );
+        }
+
+        #[test]
+        fn test_version_condition_single_initial() {
+            let cond =
+                version_condition::<TestDvDao>(&Versions::Single(Version::Initial(0))).unwrap();
+            let sql = Query::select()
+                .column(Asterisk)
+                .from(Cte::Ranked)
+                .cond_where(cond)
+                .to_string(SqliteQueryBuilder);
+            assert!(
+                sql.contains(r#""rn" = "total_count""#),
+                "INITIAL should produce rn = total_count: {sql}"
+            );
+        }
+
+        #[test]
+        fn test_version_condition_single_fixed() {
+            let dv = TableDataVersionId::try_from("DV20260101.0000000002").unwrap();
+            let cond =
+                version_condition::<TestDvDao>(&Versions::Single(Version::Fixed(dv))).unwrap();
+            let sql = Query::select()
+                .column(Asterisk)
+                .from(Cte::Ranked)
+                .cond_where(cond)
+                .to_string(SqliteQueryBuilder);
+            assert!(
+                sql.contains(r#""id" = 'DV20260101.0000000002'"#),
+                "Fixed version should match id: {sql}"
+            );
+        }
+
+        #[test]
+        fn test_version_condition_list_empty() {
+            let cond = version_condition::<TestDvDao>(&Versions::List(vec![])).unwrap();
+            let sql = Query::select()
+                .column(Asterisk)
+                .from(Cte::Ranked)
+                .cond_where(cond)
+                .to_string(SqliteQueryBuilder);
+            assert!(
+                sql.contains("1 = 0"),
+                "empty list should produce 1 = 0: {sql}"
+            );
+        }
+
+        #[test]
+        fn test_version_condition_list_multiple() {
+            let cond = version_condition::<TestDvDao>(&Versions::List(vec![
+                Version::Head(0),
+                Version::Head(-1),
+            ]))
+            .unwrap();
+            let sql = Query::select()
+                .column(Asterisk)
+                .from(Cte::Ranked)
+                .cond_where(cond)
+                .to_string(SqliteQueryBuilder);
+            assert!(sql.contains("OR"), "list should use OR: {sql}");
+        }
+
+        #[test]
+        fn test_version_condition_range() {
+            let cond = version_condition::<TestDvDao>(&Versions::Range(
+                Version::Head(-2),
+                Version::Head(0),
+            ))
+            .unwrap();
+            let sql = Query::select()
+                .column(Asterisk)
+                .from(Cte::Ranked)
+                .cond_where(cond)
+                .to_string(SqliteQueryBuilder);
+            assert!(
+                sql.contains(r#""rn" <="#) && sql.contains(r#""rn" >="#),
+                "range should bound rn: {sql}"
+            );
+        }
+
+        #[test]
+        fn test_version_condition_new_errors() {
+            let result = version_condition::<TestDvDao>(&Versions::New);
+            assert!(result.is_err(), "Versions::New should error");
+        }
+    }
 }
