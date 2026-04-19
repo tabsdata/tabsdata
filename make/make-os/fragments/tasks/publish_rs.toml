@@ -1,0 +1,15 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+[tasks.__os__publish_rs]
+plugin = "td-task-tracker"
+category = "11 - Publish"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    warn "⏳ Nothing to do."
+    ''']

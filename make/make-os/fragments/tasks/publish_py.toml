@@ -1,0 +1,162 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+[tasks.__os__publish_py_tabsdata]
+plugin = "td-task-tracker"
+category = "11 - Publish"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    devpi_index = set ""
+    devpi_user = set "tabsdata"
+    devpi_password = set "tabsdata"
+
+    arguments = split ${CARGO_MAKE_TASK_ARGS} ;
+    q_arguments = array_length ${arguments}
+    index = set 0
+    while less_than ${index} ${q_arguments}
+        argument = array_get ${arguments} ${index}
+        next_index = calc ${index} + 1
+        if eq ${argument} "--index"
+            devpi_index = array_get ${arguments} ${next_index}
+            index = set ${next_index}
+        elseif eq ${argument} "--user"
+            devpi_user = array_get ${arguments} ${next_index}
+            index = set ${next_index}
+        elseif eq ${argument} "--password"
+            devpi_password = array_get ${arguments} ${next_index}
+            index = set ${next_index}
+        end
+        index = calc ${index} + 1
+    end
+
+    info "📚 Using devpi index: ${devpi_index}"
+    info "👩 Using devpi user: ${devpi_user}"
+    info "👆 Using devpi password: ${devpi_password}"
+
+    is_empty_index = is_empty ${devpi_index}
+    if ${is_empty_index}
+        error "❌ --index is required. Usage: cargo make publish --index <url> [--user <user>] [--password <pw>]"
+        trigger_error "Missing --index argument"
+    end
+
+    set_env PIP_INDEX_URL ${devpi_index}
+    set_env UV_DEFAULT_INDEX ${devpi_index}
+
+    info "📦 Publishing tabsdata wheels to ${devpi_index}"
+
+    cd "${PROJECT_TABSDATA_ROOT_FOLDER}"
+
+    dist_folder = set "${PROJECT_TABSDATA_ROOT_FOLDER}/target/python/dist"
+    wheels = glob_array ${dist_folder}/*.whl
+
+    for wheel in ${wheels}
+        filename = basename ${wheel}
+        info "📦 🛞 Processing wheel: ${filename}"
+
+        parts = split ${filename} -
+        package_name = array_get ${parts} 0
+        package_version = array_get ${parts} 1
+
+        info "🗑️ 🛞 Removing existing ${package_name}==${package_version} (if any)..."
+        exec bash -c "devpi use ${devpi_index} && devpi login ${devpi_user} --password ${devpi_password} && devpi remove -y ${package_name}==${package_version}"
+
+        info "📤 🛞 Uploading ${filename}..."
+        exec --fail-on-error twine upload --repository-url ${devpi_index} -u ${devpi_user} -p ${devpi_password} ${wheel}
+
+        info "🧹 🛞 Cleaning uv cache for ${package_name}..."
+        exec --fail-on-error uv cache clean ${package_name}
+
+        info "🧹 🛞 Cleaning pip cache for ${package_name}..."
+        exec --fail-on-error pip cache remove ${package_name}
+
+        info "🔖 🛞 Published ${filename}"
+    end
+    ''']
+
+[tasks.__os__publish_py_connectors]
+plugin = "td-task-tracker"
+category = "11 - Publish"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    devpi_index = set ""
+    devpi_user = set "tabsdata"
+    devpi_password = set "tabsdata"
+
+    arguments = split ${CARGO_MAKE_TASK_ARGS} ;
+    q_arguments = array_length ${arguments}
+    index = set 0
+    while less_than ${index} ${q_arguments}
+        argument = array_get ${arguments} ${index}
+        next_index = calc ${index} + 1
+        if eq ${argument} "--index"
+            devpi_index = array_get ${arguments} ${next_index}
+            index = set ${next_index}
+        elseif eq ${argument} "--user"
+            devpi_user = array_get ${arguments} ${next_index}
+            index = set ${next_index}
+        elseif eq ${argument} "--password"
+            devpi_password = array_get ${arguments} ${next_index}
+            index = set ${next_index}
+        end
+        index = calc ${index} + 1
+    end
+
+    info "📚 Using devpi index: ${devpi_index}"
+    info "👩 Using devpi user: ${devpi_user}"
+    info "👆 Using devpi password: ${devpi_password}"
+
+    is_empty_index = is_empty ${devpi_index}
+    if ${is_empty_index}
+        error "❌ --index is required. Usage: cargo make publish --index <url> [--user <user>] [--password <pw>]"
+        trigger_error "Missing --index argument"
+    end
+
+    set_env PIP_INDEX_URL ${devpi_index}
+    set_env UV_DEFAULT_INDEX ${devpi_index}
+
+    info "📦 Publishing OS connector wheels to ${devpi_index}"
+
+    cd "${PROJECT_TABSDATA_ROOT_FOLDER}"
+
+    connectors = glob_array ${OS_CONNECTORS_PY_ROOT_FOLDER}/tabsdata-*
+
+    for connector in ${connectors}
+        is_connector = is_dir ${connector}
+        if ${is_connector}
+            dist_folder = set "${connector}/target/python/dist"
+            wheels = glob_array ${dist_folder}/*.whl
+
+            for wheel in ${wheels}
+                filename = basename ${wheel}
+                info "📦 🛞 Processing wheel: ${filename}"
+
+                parts = split ${filename} -
+                package_name = array_get ${parts} 0
+                package_version = array_get ${parts} 1
+
+                info "🗑️ 🛞 Removing existing ${package_name}==${package_version} (if any)..."
+                exec bash -c "devpi use ${devpi_index} && devpi login ${devpi_user} --password ${devpi_password} && devpi remove -y ${package_name}==${package_version}"
+
+                info "📤 🛞 Uploading ${filename}..."
+                exec --fail-on-error twine upload --repository-url ${devpi_index} -u ${devpi_user} -p ${devpi_password} ${wheel}
+
+                info "🧹 🛞 Cleaning uv cache for ${package_name}..."
+                exec --fail-on-error uv cache clean ${package_name}
+
+                info "🧹 🛞 Cleaning pip cache for ${package_name}..."
+                exec --fail-on-error pip cache remove ${package_name}
+
+                info "🔖 🛞 Published ${filename}"
+            end
+        end
+    end
+    ''']
