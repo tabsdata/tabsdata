@@ -6,7 +6,7 @@
 
 use getset::{Getters, Setters};
 use netstat2::{AddressFamilyFlags, ProtocolFlags, ProtocolSocketInfo, TcpState, get_sockets_info};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::fs::{File, OpenOptions, remove_file};
 use std::io::{Read, Write};
@@ -170,7 +170,7 @@ impl WorkerTracker {
     // Checks the status of the worker by reading the pid file and checking if the worker according to content PID is running.
     pub fn check_worker_status(&self) -> WorkerStatus {
         let pid_path = self.get_worker_pid_path();
-        check_status(pid_path)
+        check_status(pid_path, None)
     }
 
     // Gets the path to the worker ok file.
@@ -277,11 +277,15 @@ pub fn delete_pid_file(pid_path: PathBuf) -> Result<(), TrackerError> {
     Ok(())
 }
 
-pub fn check_status(pid_path: PathBuf) -> WorkerStatus {
+pub fn check_status(pid_path: PathBuf, live_pids: Option<&HashSet<i32>>) -> WorkerStatus {
     if pid_path.exists() {
         match read_pid_file(pid_path) {
             Ok(Some(pid)) => {
-                if check_process(pid) {
+                let alive = match live_pids {
+                    Some(pids) => pids.contains(&pid),
+                    None => check_process(pid),
+                };
+                if alive {
                     WorkerStatus::Running { pid }
                 } else {
                     WorkerStatus::NotRunning { pid }
@@ -293,6 +297,16 @@ pub fn check_status(pid_path: PathBuf) -> WorkerStatus {
     } else {
         WorkerStatus::NoPidFile
     }
+}
+
+pub fn snapshot_live_pids() -> HashSet<i32> {
+    let mut system = sysinfo::System::new_all();
+    system.refresh_all();
+    system
+        .processes()
+        .keys()
+        .map(|pid| pid.as_u32() as i32)
+        .collect()
 }
 
 pub fn get_ok_path(work_path: PathBuf) -> PathBuf {

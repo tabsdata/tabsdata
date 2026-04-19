@@ -10,7 +10,7 @@ use crate::component::runner::RunnerError::{
     DescriberFailure, IOError, InvalidMessageType, MissingStartDate, MissingStdOutError,
     ReadStdOutError, StartNotificationError, VoidEphemeralMessage, WorkerExited,
 };
-use crate::component::tracker::{WorkerStatus, check_status, get_pid_path};
+use crate::component::tracker::{WorkerStatus, check_status, get_pid_path, snapshot_live_pids};
 use crate::launch::worker::{TabsDataWorker, Worker, notify};
 use crate::resource::instance::{
     copy_mold_tree, get_instance_path_for_instance, get_repository_path_for_instance,
@@ -36,7 +36,7 @@ use indexmap::IndexMap;
 use path_slash::PathBufExt;
 use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::env::{set_current_dir, set_var};
 use std::ffi::OsString;
 use std::fmt::{Display, Formatter};
@@ -108,6 +108,8 @@ pub const WAIT_FOR_EPHEMERAL_MILLISECONDS: u64 = 1000;
 pub const CONTROLLERS_ALIVE_CHECK_MILLISECONDS: u64 = 30000;
 
 pub const EPHEMERAL_WAIT_MILLISECONDS: u64 = 500;
+
+pub const EPHEMERAL_STOP_CONCURRENCY: usize = 64;
 
 #[allow(unused_qualifications)]
 #[atomic_enum]
@@ -2432,28 +2434,28 @@ impl Supervisor {
             .join(worker.name())
             .join(WORK_FOLDER)
             .join(CAST_FOLDER);
-        match read_dir(&cast_path) {
-            Ok(nodes) => {
-                for node in nodes {
-                    match node {
-                        Ok(entry) => {
-                            let path = entry.path();
-                            if path.is_dir() {
-                                let instance = path.join(WORK_FOLDER);
-                                self.stop_worker(instance, signal).await?;
-                            }
-                        }
-                        Err(ref e) => {
-                            warn!(
-                                "Folder '{:?}' for ephemeral worker '{}' instance cannot be processed. Skipping processes termination request: '{}'",
-                                node,
-                                worker.name(),
-                                e
-                            );
+        let cast_folders: Vec<PathBuf> = match read_dir(&cast_path) {
+            Ok(nodes) => nodes
+                .filter_map(|node| match node {
+                    Ok(entry) => {
+                        let path = entry.path();
+                        if path.is_dir() {
+                            Some(path.join(WORK_FOLDER))
+                        } else {
+                            None
                         }
                     }
-                }
-            }
+                    Err(ref e) => {
+                        warn!(
+                            "Folder '{:?}' for ephemeral worker '{}' instance cannot be processed. Skipping processes termination request: '{}'",
+                            node,
+                            worker.name(),
+                            e
+                        );
+                        None
+                    }
+                })
+                .collect(),
             Err(e) => {
                 warn!(
                     "Folder '{:?}' for ephemeral worker '{}' cannot be traversed. Skipping process termination request: {}",
@@ -2461,8 +2463,23 @@ impl Supervisor {
                     worker.name(),
                     e
                 );
+                return Ok(());
             }
-        }
+        };
+
+        let live_pids = Arc::new(snapshot_live_pids());
+
+        futures::stream::iter(cast_folders)
+            .for_each_concurrent(EPHEMERAL_STOP_CONCURRENCY, |cast_folder| {
+                let live_pids = live_pids.clone();
+                async move {
+                    let _ = tokio::task::spawn_blocking(move || {
+                        Self::stop_worker(cast_folder, signal, Some(&live_pids));
+                    })
+                    .await;
+                }
+            })
+            .await;
         Ok(())
     }
 
@@ -2518,7 +2535,7 @@ impl Supervisor {
             .join(class.as_ref())
             .join(worker.name())
             .join(WORK_FOLDER);
-        self.stop_worker(work_path, signal).await?;
+        Self::stop_worker(work_path, signal, None);
         Ok(())
     }
 
@@ -2533,8 +2550,7 @@ impl Supervisor {
                 .filter(|process| process.parent() == Some(Pid::from_u32(pid)))
                 .collect();
             for worker in &workers {
-                self.stop_process(worker.pid().as_u32() as i32, signal)
-                    .await?;
+                Self::stop_process(worker.pid().as_u32() as i32, signal, None);
             }
         } else {
             warn!(
@@ -2542,42 +2558,6 @@ impl Supervisor {
                 pid
             );
         }
-        Ok(())
-    }
-
-    async fn stop_worker(&self, work_path: PathBuf, signal: Signal) -> Result<(), RuntimeError> {
-        match check_status(get_pid_path(work_path.clone())) {
-            WorkerStatus::Running { pid } => {
-                let _ = self.stop_process(pid, signal).await;
-            }
-            _ => {
-                warn!(
-                    "Process at work path '{}' not running. Skipping signaling request.",
-                    work_path.display()
-                );
-            }
-        };
-        Ok(())
-    }
-    async fn stop_process(&self, pid: i32, signal: Signal) -> Result<(), RuntimeError> {
-        if pid > 0 {
-            info!("Sending termination signal to process with pid: {}", pid);
-            match terminate_process(pid, signal) {
-                Ok(()) => info!(
-                    "Successfully sent termination signal to process with pid: {}",
-                    pid
-                ),
-                Err(e) => error!(
-                    "Failed to send termination signal to process with pid: {}: {}",
-                    pid, e
-                ),
-            }
-        } else {
-            warn!(
-                "Process does not have a positive pid ({}). Skipping processes termination request.",
-                pid
-            );
-        };
         Ok(())
     }
 
@@ -2686,6 +2666,52 @@ impl Supervisor {
             parameters.extend(self.params.clone().arguments);
         }
         Ok(parameters)
+    }
+}
+
+impl Supervisor {
+    fn stop_worker(work_path: PathBuf, signal: Signal, live_pids: Option<&HashSet<i32>>) {
+        match check_status(get_pid_path(work_path.clone()), live_pids) {
+            WorkerStatus::Running { pid } => {
+                Self::stop_process(pid, signal, live_pids);
+            }
+            _ => {
+                trace!(
+                    "Process at work path '{}' not running. Skipping signaling request.",
+                    work_path.display()
+                );
+            }
+        }
+    }
+
+    fn stop_process(pid: i32, signal: Signal, live_pids: Option<&HashSet<i32>>) {
+        if pid <= 0 {
+            warn!(
+                "Process does not have a positive pid ({}). Skipping processes termination request.",
+                pid
+            );
+            return;
+        }
+        if let Some(pids) = live_pids
+            && !pids.contains(&pid)
+        {
+            trace!(
+                "Process with pid {} not in live snapshot. Skipping signaling request.",
+                pid
+            );
+            return;
+        }
+        info!("Sending termination signal to process with pid: {}", pid);
+        match terminate_process(pid, signal) {
+            Ok(()) => info!(
+                "Successfully sent termination signal to process with pid: {}",
+                pid
+            ),
+            Err(e) => error!(
+                "Failed to send termination signal to process with pid: {}: {}",
+                pid, e
+            ),
+        }
     }
 }
 
