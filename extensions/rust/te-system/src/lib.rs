@@ -3,3 +3,4 @@
 //
 
 pub mod edition;
+pub mod license;

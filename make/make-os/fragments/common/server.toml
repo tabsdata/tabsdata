@@ -233,6 +233,8 @@ script = [
 
                 instance_arguments = array
                 array_push ${instance_arguments} ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver}
+                array_push ${instance_arguments} --accept-terms
+                array_push ${instance_arguments} y
                 array_push ${instance_arguments} start
                 array_push ${instance_arguments} --instance
                 array_push ${instance_arguments} ${instance}
@@ -377,7 +379,7 @@ script = [
                     debug "🌀 Supervisor workers to check: ${workers_list}"
                 end
 
-                debug "🚀 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} status --instance ${instance}"
+                debug "🚀 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} --accept-terms y status --instance ${instance}"
 
                 status_timeout = calc 5 * 60
                 status_sleep = set 10000
@@ -392,7 +394,7 @@ script = [
                     current_timestamp = trim ${output_timestamp.stdout}
                     info "☕️ (${current_timestamp}) Checking workers..."
 
-                    output = exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} status --instance ${instance}
+                    output = exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} --accept-terms y status --instance ${instance}
 
                     workers_started = set true
                     stopped_workers = array
@@ -513,15 +515,15 @@ script = [
             if not is_empty ${instance}
                 info "🔅 Stopping instance: ${instance}"
 
-                debug "🚀 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} stop --instance ${instance}"
+                debug "🚀 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} --accept-terms y stop --instance ${instance}"
 
                 on_ga = get_env TD_ON_GA
                 on_ga_true = eq ${on_ga} "true"
 
                 if ${on_ga_true}
-                    exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} stop --instance ${instance}
+                    exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} --accept-terms y stop --instance ${instance}
                 else
-                    output = exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} stop --instance ${instance}
+                    output = exec --fail-on-error ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} --accept-terms y stop --instance ${instance}
                 end
             end
         end

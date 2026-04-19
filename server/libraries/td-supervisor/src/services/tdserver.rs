@@ -17,7 +17,7 @@ use crate::services::bootloader::{
 };
 use crate::services::supervisor::TD_ARGUMENT_KEY;
 use crate::services::supervisor::WorkerLocation::Relative;
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 use clap_derive::{Args, Subcommand};
 use colored::Colorize;
 use getset::Getters;
@@ -122,8 +122,12 @@ pub enum TabsCliError {
                   These commands rely on file 'pid' to control the state of any instance."
 )]
 struct Arguments {
+    /// Accept or decline the license terms without interactive prompt [y/yes/n/no]
+    #[arg(long, global = true)]
+    accept_terms: Option<String>,
+
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 }
 
 #[derive(Debug, Clone, Subcommand)]
@@ -490,56 +494,60 @@ impl TabsDataCli {
     async fn run(&self) {
         let arguments = Arguments::parse();
         match arguments.command {
+            None => {
+                Arguments::command().print_help().ok();
+                println!();
+            }
             /*
-            Commands::Settings(arguments) => {
+            Some(Commands::Settings(arguments)) => {
                 command_settings(arguments);
             }
              */
             /*
-            Commands::Profile(arguments) => {
+            Some(Commands::Profile(arguments)) => {
                 command_profile(arguments);
             }
              */
-            Commands::Banner(arguments) => {
+            Some(Commands::Banner(arguments)) => {
                 command_banner(arguments);
             }
-            Commands::License(arguments) => {
+            Some(Commands::License(arguments)) => {
                 command_license(arguments);
             }
-            Commands::Information(arguments) => {
+            Some(Commands::Information(arguments)) => {
                 command_information(arguments);
             }
-            Commands::About(arguments) => {
+            Some(Commands::About(arguments)) => {
                 command_about(arguments);
             }
-            Commands::Create(arguments) => {
+            Some(Commands::Create(arguments)) => {
                 command_create(arguments);
             }
-            Commands::Upgrade(arguments) => {
+            Some(Commands::Upgrade(arguments)) => {
                 command_upgrade(arguments);
             }
-            Commands::Delete(arguments) => {
+            Some(Commands::Delete(arguments)) => {
                 command_delete(arguments);
             }
-            Commands::Start(arguments) => {
+            Some(Commands::Start(arguments)) => {
                 command_start(arguments);
             }
-            Commands::Restart(arguments) => {
+            Some(Commands::Restart(arguments)) => {
                 command_restart(arguments);
             }
-            Commands::Stop(arguments) => {
+            Some(Commands::Stop(arguments)) => {
                 command_stop(arguments);
             }
-            Commands::Status(arguments) => {
+            Some(Commands::Status(arguments)) => {
                 command_status(arguments);
             }
-            Commands::Log(arguments) => {
+            Some(Commands::Log(arguments)) => {
                 command_log(arguments).await;
             }
-            Commands::Clean(arguments) => {
+            Some(Commands::Clean(arguments)) => {
                 command_clean(arguments);
             }
-            Commands::Instances(arguments) => {
+            Some(Commands::Instances(arguments)) => {
                 command_instances(arguments);
             }
         }

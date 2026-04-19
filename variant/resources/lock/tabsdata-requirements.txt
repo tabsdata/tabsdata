@@ -13,7 +13,7 @@ avro==1.12.1
 base32hex==1.0.2
 boto3==1.42.73
 boto3-stubs==1.42.73
-botocore==1.42.86
+botocore==1.42.87
 botocore-stubs==1.42.41
 build==1.4.2
 cachetools==6.2.6
@@ -37,8 +37,8 @@ fastavro==1.12.1
 fastparquet==2026.3.0
 filelock==3.25.2
 fsspec==2026.3.0
-google-api-core==2.30.2
-google-auth==2.49.1
+google-api-core==2.30.3
+google-auth==2.49.2
 google-cloud-bigquery==3.40.1
 google-cloud-core==2.5.1
 google-cloud-storage==3.10.0
@@ -64,12 +64,12 @@ isodate==0.7.2
 jmespath==1.1.0
 jsonschema==4.26.0
 jsonschema-specifications==2025.9.1
-lxml==6.0.2
+lxml==6.0.3
 lz4==4.4.5
 markdown-it-py==4.0.0
 mdurl==0.1.2
 mmh3==5.2.1
-more-itertools==11.0.1
+more-itertools==11.0.2
 mypy-boto3-glue==1.42.70
 mysql-replication==1.0.15
 numpy==2.4.3
