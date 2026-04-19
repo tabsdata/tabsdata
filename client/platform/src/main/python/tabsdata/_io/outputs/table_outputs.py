@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import TYPE_CHECKING
 
 import polars as pl
@@ -15,6 +16,7 @@ from tabsdata._tabsserver.function.store_results_utils import (
     get_table_meta_info_from_lf,
 )
 from tabsdata._tabsserver.function.yaml_parsing import Table
+from tabsdata._utils.constants import TRUE_VALUES
 from tabsdata.exceptions import (
     DestinationConfigurationError,
     ErrorCode,
@@ -27,6 +29,8 @@ if TYPE_CHECKING:
     from tabsdata._tabsserver.function.results_collection import ResultsCollection
 
 logger = logging.getLogger(__name__)
+
+TD_LAZY_SINK = "TD_LAZY_SINK"
 
 
 class TableOutput(DestinationPlugin):
@@ -171,13 +175,12 @@ def _store_results_in_table(  # noqa: C901
                 idx=result_value._idx,
                 properties=result_value._properties,
             )
+            use_lazy_sink = os.environ.get(TD_LAZY_SINK, "") in TRUE_VALUES
             lazy_sink = sink_lf_to_location(
                 tf._to_lazy(),
                 execution_context,
                 table.location,
-                # Disabling parallel sink execution as feature from Polar's side is
-                # still unstable and producing errors.
-                lazy=False,
+                lazy=use_lazy_sink,
             )
             if lazy_sink is not None:
                 lazy_sinks.append(lazy_sink)
@@ -218,6 +221,12 @@ def _store_results_in_table(  # noqa: C901
         #       originate from the same user-provided output lazy frame.
 
         pl.collect_all(lazy_sinks)
+    if execution_context.pending_cloud_copies:
+        logger.debug(
+            f"Collecting {execution_context.pending_cloud_copies!r} cloud "
+            f"lazy sinks for execution."
+        )
+        execution_context.pending_cloud_copies.collect()
     logger.info("Results stored in tables")
     logger.debug(f"Modified tables: {modified_tables}")
     return modified_tables

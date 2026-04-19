@@ -71,6 +71,9 @@ class ExecutionContext:
         self.request = parse_request_yaml(self.paths.request_file)
         self.request.work = work
         self.mount_options = MountOptions(mount_options_dict or {})
+        # Lazy-initialised by sink_lf_to_location; import kept local to
+        # avoid circular dependency at module level.
+        self.pending_cloud_copies = None
 
     @property
     def user_provided_function(self) -> Callable:
