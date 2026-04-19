@@ -17,8 +17,6 @@ from typing import Callable, List, Literal, LiteralString, Tuple
 import cloudpickle
 import yaml
 
-from tabsdata._io.plugin import DestinationPlugin, SourcePlugin
-from tabsdata._io.stage_trigger import StageTrigger
 from tabsdata._tdfunction import TabsdataFunction
 from tabsdata._utils.constants import TABSDATA_MODULE_NAME, TRUE_VALUES
 from tabsdata._utils.envs import is_env_enabled
@@ -41,6 +39,8 @@ CODE_FOLDER = "original_code"
 COMPRESSED_CONTEXT_FOLDER = "context.tar.gz"
 CONFIG_ENTRY_POINT_FUNCTION_FILE_KEY = "functionFile"
 CONFIG_ENTRY_POINT_KEY = "entryPoint"
+CONFIG_TABSDATA_FUNCTION_KEY = "tabsdataFunction"
+CONFIG_TABSDATA_FUNCTION_FUNCTION_FILE_KEY = "functionFile"
 CONFIG_FILE_NAME = "configuration.json"
 CONFIG_INPUTS_KEY = "inputs"
 CONFIG_OUTPUT_KEY = "output"
@@ -92,16 +92,13 @@ BASE_BINARIES = [
 LOCAL_PACKAGES_FOLDER = "local_packages"
 
 PLUGINS_FOLDER = "plugins"
-
 STAGE_TRIGGER_FOLDER = "stageTrigger"
 STAGE_TRIGGER_FILE = "StageTrigger.pkl"
 STAGE_TRIGGER_KEY = "stage-trigger"
-
 ACTIONS_FOLDER = "actions"
 CONFIG_INPUT_ACTIONS_KEY = "input_actions"
 INPUT_ACTIONS_KEY = "on-input-actions"
 INPUT_ACTIONS_FILE = "InputActions.pkl"
-
 CONFIG_OUTPUT_ACTIONS_KEY = "output_actions"
 OUTPUT_ACTIONS_KEY = "on-output-actions"
 OUTPUT_ACTIONS_FILE = "OutputActions.pkl"
@@ -131,23 +128,7 @@ class CustomJSONEncoder(json.JSONEncoder):
 def create_configuration(function: TabsdataFunction, save_location: str):
     os.makedirs(save_location, exist_ok=True)
     configuration = dict()
-    configuration[CONFIG_INPUTS_KEY] = create_input_configuration(
-        function, save_location
-    )
-    configuration[CONFIG_ENTRY_POINT_KEY] = generate_entry_point_field(function)
-    configuration[CONFIG_OUTPUT_KEY] = create_output_configuration(
-        function, save_location
-    )
-
-    configuration[CONFIG_INPUT_ACTIONS_KEY] = create_input_actions_configuration(
-        function, save_location
-    )
-    configuration[CONFIG_OUTPUT_ACTIONS_KEY] = create_output_actions_configuration(
-        function, save_location
-    )
-    configuration[CONFIG_TRIGGERBY_KEY] = create_trigger_by_configuration(
-        function, save_location
-    )
+    configuration[CONFIG_TABSDATA_FUNCTION_KEY] = generate_entry_point_field(function)
 
     if save_location:
         with open(os.path.join(save_location, CONFIG_FILE_NAME), "w") as file:
@@ -155,98 +136,12 @@ def create_configuration(function: TabsdataFunction, save_location: str):
     return configuration
 
 
-def create_output_configuration(function: TabsdataFunction, save_location: str) -> dict:
-    return convert_to_dict_and_store_if_plugin(function.output, save_location)
-
-
-def convert_to_dict_and_store_if_plugin(
-    to_convert: SourcePlugin | DestinationPlugin, save_location: str
-) -> dict:
-    configuration_dict = to_convert._to_dict() if to_convert else {}
-    if isinstance(to_convert, SourcePlugin) or isinstance(
-        to_convert, DestinationPlugin
-    ):
-        plugins_location = os.path.join(save_location, PLUGINS_FOLDER)
-        os.makedirs(plugins_location, exist_ok=True)
-        with open(
-            os.path.join(
-                plugins_location,
-                configuration_dict.get(to_convert.IDENTIFIER),
-            ),
-            "wb",
-        ) as f:
-            cloudpickle.dump(to_convert, f)
-    return configuration_dict
-
-
-def create_input_configuration(function: TabsdataFunction, save_location: str) -> dict:
-    return convert_to_dict_and_store_if_plugin(function.input, save_location)
-
-
 def generate_entry_point_field(function):
     return {
-        CONFIG_ENTRY_POINT_FUNCTION_FILE_KEY: (
+        CONFIG_TABSDATA_FUNCTION_FUNCTION_FILE_KEY: (
             f"{function.original_function.__name__}.pkl"
         ),
     }
-
-
-# noinspection PyUnresolvedReferences
-def create_input_actions_configuration(
-    function: TabsdataFunction, save_location: str
-) -> dict:
-    if not hasattr(function, "input_actions") or not function.input_actions:
-        return {}
-
-    actions_location = os.path.join(save_location, ACTIONS_FOLDER)
-    os.makedirs(actions_location, exist_ok=True)
-    with open(
-        os.path.join(
-            actions_location,
-            INPUT_ACTIONS_FILE,
-        ),
-        "wb",
-    ) as f:
-        cloudpickle.dump(function.input_actions, f)
-    return {INPUT_ACTIONS_KEY: INPUT_ACTIONS_FILE}
-
-
-def create_trigger_by_configuration(
-    function: TabsdataFunction, save_location: str
-) -> dict:
-    if not isinstance(function.trigger_by, StageTrigger):
-        return {}
-
-    actions_location = os.path.join(save_location, STAGE_TRIGGER_FOLDER)
-    os.makedirs(actions_location, exist_ok=True)
-    with open(
-        os.path.join(
-            actions_location,
-            STAGE_TRIGGER_FILE,
-        ),
-        "wb",
-    ) as f:
-        cloudpickle.dump(function.trigger_by, f)
-    return {STAGE_TRIGGER_KEY: STAGE_TRIGGER_FILE}
-
-
-def create_output_actions_configuration(
-    function: TabsdataFunction, save_location: str
-) -> dict:
-    if not hasattr(function, "output_actions") or not function.output_actions:
-        return {}
-
-    actions_location = os.path.join(save_location, ACTIONS_FOLDER)
-    os.makedirs(actions_location, exist_ok=True)
-    with open(
-        os.path.join(
-            actions_location,
-            OUTPUT_ACTIONS_FILE,
-        ),
-        "wb",
-    ) as f:
-        cloudpickle.dump(function.output_actions, f)
-    return {OUTPUT_ACTIONS_KEY: OUTPUT_ACTIONS_FILE}
 
 
 def create_tarball(source_dir: str, output_filename: str):
@@ -359,13 +254,13 @@ def obtain_ordered_dists() -> List[str]:
     )
 
 
-def store_pickled_function(function, save_location):
+def store_pickled_tabsdata_function(function, save_location):
     code_folder = os.path.join(save_location, CODE_FOLDER)
     os.makedirs(code_folder, exist_ok=True)
     with open(
         os.path.join(code_folder, f"{function.original_function.__name__}.pkl"), "wb"
     ) as f:
-        cloudpickle.dump(function.original_function, f)
+        cloudpickle.dump(function, f)
 
 
 def store_file_contents(path_to_persist: str, save_location: str):
@@ -538,7 +433,7 @@ def create_bundle_archive(
 
     # Store the code of the function
     store_function_codebase(path_to_persist, uncompressed_context_location)
-    store_pickled_function(function, uncompressed_context_location)
+    store_pickled_tabsdata_function(function, uncompressed_context_location)
 
     # Create a requirements.yaml file with the dependencies and Python version
     if requirements:

@@ -43,10 +43,8 @@ def store_results(
     results: ResultsCollection,
 ):
     logger.info(pad_string("[Storing results]"))
-    logger.info(
-        f"Storing results in destination '{execution_context.function_config.output}'"
-    )
     destination_plugin = execution_context.destination
+    logger.info(f"Storing results in destination '{destination_plugin}'")
     logger.debug("Running the destination plugin")
     destination_plugin._run(execution_context, results)
     logger.debug("Destination plugin run completed successfully")

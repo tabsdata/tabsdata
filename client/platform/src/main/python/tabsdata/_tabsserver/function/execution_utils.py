@@ -82,7 +82,7 @@ def execute_stage_trigger(
     execution_context: ExecutionContext,
 ):
     logger.info(pad_string("[Executing stage trigger]"))
-    stage_trigger = execution_context.stage_trigger
+    stage_trigger = execution_context.trigger_by
     logger.debug(f"Using stage trigger: {stage_trigger}")
     request: StageTriggerYaml = execution_context.request
     if not isinstance(stage_trigger, StageTrigger):
@@ -241,16 +241,9 @@ def post_function_run(
 
 
 def check_actions(execution_context: ExecutionContext):
-    try:
-        # noinspection PyUnresolvedReferences
-        input_actions = execution_context.user_provided_function.input_actions
-    except AttributeError:
-        input_actions = []
+    input_actions = execution_context.input_actions
     filter_actions(input_actions)
-    try:
-        output_actions = execution_context.user_provided_function.output_actions
-    except AttributeError:
-        output_actions = []
+    output_actions = execution_context.output_actions
     filter_actions(output_actions)
 
 

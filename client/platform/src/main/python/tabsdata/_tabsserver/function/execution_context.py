@@ -17,6 +17,7 @@ from tabsdata._tabsserver.function.configuration_utils import load_function_conf
 from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata._tabsserver.function.status import Status
 from tabsdata._tabsserver.function.yaml_parsing import parse_request_yaml
+from tabsdata._tdfunction import TabsdataFunction
 from tabsdata._utils.bundle_utils import (
     ACTIONS_FOLDER,
     CODE_FOLDER,
@@ -26,6 +27,8 @@ from tabsdata._utils.bundle_utils import (
     CONFIG_INPUTS_KEY,
     CONFIG_OUTPUT_ACTIONS_KEY,
     CONFIG_OUTPUT_KEY,
+    CONFIG_TABSDATA_FUNCTION_FUNCTION_FILE_KEY,
+    CONFIG_TABSDATA_FUNCTION_KEY,
     CONFIG_TRIGGERBY_KEY,
     INPUT_ACTIONS_KEY,
     OUTPUT_ACTIONS_KEY,
@@ -76,88 +79,127 @@ class ExecutionContext:
         self.pending_cloud_copies = None
 
     @property
+    def tabsdata_function(self) -> TabsdataFunction:
+        if not hasattr(self, "_tabsdata_function"):
+            if self.paths.tabsdata_function_file:
+                with open(self.paths.tabsdata_function_file, "rb") as f:
+                    self._tabsdata_function = cloudpickle.load(f)
+            else:
+                self._tabsdata_function = None
+        return self._tabsdata_function
+
+    @property
     def user_provided_function(self) -> Callable:
-        if not hasattr(self, "_user_provided_function"):
-            with open(self.paths.function_file, "rb") as f:
-                self._user_provided_function = cloudpickle.load(f)
-        return self._user_provided_function
+        if self.tabsdata_function is not None:
+            return self.tabsdata_function.original_function
+        else:
+            if not hasattr(self, "_user_provided_function"):
+                with open(self.paths.original_function_file, "rb") as f:
+                    self._user_provided_function = cloudpickle.load(f)
+            return self._user_provided_function
 
     @property
     def source(self) -> SourcePlugin | None:
-        if not hasattr(self, "_source_plugin"):
-            importer_plugin_file = self.function_config.input.get(
-                SourcePlugin.IDENTIFIER
-            )
-            if importer_plugin_file is None:
-                raise ValueError("Source plugin not found in function configuration")
-            else:
-                with open(
-                    os.path.join(self.paths.plugins_folder, importer_plugin_file), "rb"
-                ) as f:
-                    self._source_plugin = cloudpickle.load(f)
-        return self._source_plugin
+        if self.tabsdata_function is not None:
+            return self.tabsdata_function.input
+        else:
+            if not hasattr(self, "_source_plugin"):
+                importer_plugin_file = self.function_config.input.get(
+                    SourcePlugin.IDENTIFIER
+                )
+                if importer_plugin_file is None:
+                    raise ValueError(
+                        "Source plugin not found in function configuration"
+                    )
+                else:
+                    with open(
+                        os.path.join(self.paths.plugins_folder, importer_plugin_file),
+                        "rb",
+                    ) as f:
+                        self._source_plugin = cloudpickle.load(f)
+            return self._source_plugin
 
     @property
     def destination(self) -> DestinationPlugin | None:
-        if not hasattr(self, "_destination_plugin"):
-            destination_plugin_file = self.function_config.output.get(
-                DestinationPlugin.IDENTIFIER
-            )
-            if destination_plugin_file is None:
-                self._destination_plugin = None
-            else:
-                with open(
-                    os.path.join(self.paths.plugins_folder, destination_plugin_file),
-                    "rb",
-                ) as f:
-                    self._destination_plugin = cloudpickle.load(f)
-        return self._destination_plugin
+        if self.tabsdata_function is not None:
+            return self.tabsdata_function.output
+        else:
+            if not hasattr(self, "_destination_plugin"):
+                destination_plugin_file = self.function_config.output.get(
+                    DestinationPlugin.IDENTIFIER
+                )
+                if destination_plugin_file is None:
+                    self._destination_plugin = None
+                else:
+                    with open(
+                        os.path.join(
+                            self.paths.plugins_folder, destination_plugin_file
+                        ),
+                        "rb",
+                    ) as f:
+                        self._destination_plugin = cloudpickle.load(f)
+            return self._destination_plugin
 
     @property
     def input_actions(self) -> list[OnTablesAction] | None:
-        if not hasattr(self, "_input_actions"):
-            input_actions_file = self.function_config.input_actions.get(
-                INPUT_ACTIONS_KEY
-            )
-            if input_actions_file is None:
-                self._input_actions = []
-            else:
-                with open(
-                    os.path.join(self.paths.actions_folder, input_actions_file),
-                    "rb",
-                ) as f:
-                    self._input_actions = cloudpickle.load(f)
-        return self._input_actions
+        # return self.tabsdata_function.input_actions Note: until input actions
+        # exist, this will fail
+        if self.tabsdata_function is not None:
+            return []
+        else:
+            if not hasattr(self, "_input_actions"):
+                input_actions_file = self.function_config.input_actions.get(
+                    INPUT_ACTIONS_KEY
+                )
+                if input_actions_file is None:
+                    self._input_actions = []
+                else:
+                    with open(
+                        os.path.join(self.paths.actions_folder, input_actions_file),
+                        "rb",
+                    ) as f:
+                        self._input_actions = cloudpickle.load(f)
+            return self._input_actions if self._input_actions is not None else []
 
     @property
     def output_actions(self) -> list[OnTablesAction] | None:
-        if not hasattr(self, "_output_actions"):
-            output_actions_file = self.function_config.output_actions.get(
-                OUTPUT_ACTIONS_KEY
-            )
-            if output_actions_file is None:
-                self._output_actions = []
-            else:
-                with open(
-                    os.path.join(self.paths.actions_folder, output_actions_file),
-                    "rb",
-                ) as f:
-                    self._output_actions = cloudpickle.load(f)
-        return self._output_actions
+        if self.tabsdata_function is not None:
+            return self.tabsdata_function.output_actions
+        else:
+            if not hasattr(self, "_output_actions"):
+                output_actions_file = self.function_config.output_actions.get(
+                    OUTPUT_ACTIONS_KEY
+                )
+                if output_actions_file is None:
+                    self._output_actions = []
+                else:
+                    with open(
+                        os.path.join(self.paths.actions_folder, output_actions_file),
+                        "rb",
+                    ) as f:
+                        self._output_actions = cloudpickle.load(f)
+            return self._output_actions if self._output_actions is not None else []
 
     @property
-    def stage_trigger(self) -> StageTrigger | None:
-        if not hasattr(self, "_stage_trigger"):
-            stage_trigger_file = self.function_config.trigger_by.get(STAGE_TRIGGER_KEY)
-            if stage_trigger_file is None:
-                self._stage_trigger = None
-            else:
-                with open(
-                    os.path.join(self.paths.stage_trigger_folder, stage_trigger_file),
-                    "rb",
-                ) as f:
-                    self._stage_trigger = cloudpickle.load(f)
-        return self._stage_trigger
+    def trigger_by(self) -> StageTrigger | None:
+        if self.tabsdata_function is not None:
+            return self.tabsdata_function.trigger_by
+        else:
+            if not hasattr(self, "_stage_trigger"):
+                stage_trigger_file = self.function_config.trigger_by.get(
+                    STAGE_TRIGGER_KEY
+                )
+                if stage_trigger_file is None:
+                    self._stage_trigger = None
+                else:
+                    with open(
+                        os.path.join(
+                            self.paths.stage_trigger_folder, stage_trigger_file
+                        ),
+                        "rb",
+                    ) as f:
+                        self._stage_trigger = cloudpickle.load(f)
+            return self._stage_trigger
 
     @property
     def function_config(self) -> FunctionConfig:
@@ -269,6 +311,13 @@ class FunctionConfig:
         """
         return self.function_config.get(CONFIG_TRIGGERBY_KEY, {})
 
+    @property
+    def tabsdata_function(self) -> dict:
+        """
+        Get the tabsdata function.
+        """
+        return self.function_config.get(CONFIG_TABSDATA_FUNCTION_KEY, {})
+
     def __getitem__(self, item):
         """
         Get the item from the function configuration.
@@ -314,15 +363,28 @@ class ExecutionPaths:
         return os.path.join(self.response_folder, RESPONSE_FILE_NAME)
 
     @property
-    def function_file(self) -> str:
+    def original_function_file(self) -> str | None:
         """
         Get the function file path.
         """
         entry_point = self.parent_context.function_config.entry_point
         if not entry_point:
-            raise ValueError("Entry point not found in the function configuration")
+            return None
         return os.path.join(
             self.code_folder, entry_point[CONFIG_ENTRY_POINT_FUNCTION_FILE_KEY]
+        )
+
+    @property
+    def tabsdata_function_file(self) -> str | None:
+        """
+        Get the tabsdata function file path.
+        """
+        tabsdata_function = self.parent_context.function_config.tabsdata_function
+        if not tabsdata_function:
+            return None
+        return os.path.join(
+            self.code_folder,
+            tabsdata_function[CONFIG_TABSDATA_FUNCTION_FUNCTION_FILE_KEY],
         )
 
     def create_required_folders(self):
