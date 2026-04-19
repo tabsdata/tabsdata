@@ -1,0 +1,98 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+# Parse publish/assembly arguments from CARGO_MAKE_TASK_ARGS.
+# After inclusion, the following variables are available:
+#   devpi_index                - The devpi index URL (empty if not provided)
+#   devpi_user                 - The devpi user (default: tabsdata)
+#   devpi_password             - The devpi password (default: tabsdata)
+#   included_packages_filter   - Comma-separated included package names (empty = all)
+#   included_packages_map      - Map of included package names for exact lookup
+#   excluded_packages_filter   - Comma-separated excluded package names (empty = none)
+#   excluded_packages_map      - Map of excluded package names for exact lookup
+
+devpi_index = set ""
+devpi_user = set "tabsdata"
+devpi_password = set "tabsdata"
+included_packages_filter = set ""
+included_packages_map = map
+excluded_packages_filter = set ""
+excluded_packages_map = map
+
+_collecting_included = set false
+_collecting_excluded = set false
+
+_pi_arguments = split ${CARGO_MAKE_TASK_ARGS} ;
+_pi_q_arguments = array_length ${_pi_arguments}
+
+_pi_offset = set 0
+
+while less_than ${_pi_offset} ${_pi_q_arguments}
+    _pi_argument = array_get ${_pi_arguments} ${_pi_offset}
+
+    if ${_collecting_included}
+        _starts_with_dash = starts_with ${_pi_argument} "-"
+        if ${_starts_with_dash}
+            _collecting_included = set false
+            _pi_offset = calc ${_pi_offset} - 1
+        else
+            map_put ${included_packages_map} ${_pi_argument} true
+            if is_empty ${included_packages_filter}
+                included_packages_filter = set ${_pi_argument}
+            else
+                included_packages_filter = concat ${included_packages_filter} , ${_pi_argument}
+            end
+        end
+    elseif ${_collecting_excluded}
+        _starts_with_dash = starts_with ${_pi_argument} "-"
+        if ${_starts_with_dash}
+            _collecting_excluded = set false
+            _pi_offset = calc ${_pi_offset} - 1
+        else
+            map_put ${excluded_packages_map} ${_pi_argument} true
+            if is_empty ${excluded_packages_filter}
+                excluded_packages_filter = set ${_pi_argument}
+            else
+                excluded_packages_filter = concat ${excluded_packages_filter} , ${_pi_argument}
+            end
+        end
+    elseif eq ${_pi_argument} "--index"
+        _pi_next_index = calc ${_pi_offset} + 1
+        devpi_index = array_get ${_pi_arguments} ${_pi_next_index}
+        _pi_offset = set ${_pi_next_index}
+    elseif eq ${_pi_argument} "--user"
+        _pi_next_index = calc ${_pi_offset} + 1
+        devpi_user = array_get ${_pi_arguments} ${_pi_next_index}
+        _pi_offset = set ${_pi_next_index}
+    elseif eq ${_pi_argument} "--password"
+        _pi_next_index = calc ${_pi_offset} + 1
+        devpi_password = array_get ${_pi_arguments} ${_pi_next_index}
+        _pi_offset = set ${_pi_next_index}
+    elseif eq ${_pi_argument} "--included-packages"
+        _collecting_included = set true
+        _collecting_excluded = set false
+    elseif eq ${_pi_argument} "--excluded-packages"
+        _collecting_excluded = set true
+        _collecting_included = set false
+    end
+
+    _pi_offset = calc ${_pi_offset} + 1
+end
+
+_has_included = not is_empty ${included_packages_filter}
+_has_excluded = not is_empty ${excluded_packages_filter}
+if ${_has_included} and ${_has_excluded}
+    error "❌ Cannot combine --included-packages and --excluded-packages."
+    trigger_error "Cannot combine --included-packages and --excluded-packages"
+end
+
+info "📚 Using devpi index: ${devpi_index}"
+info "👩 Using devpi user: ${devpi_user}"
+info "👆 Using devpi password: ${devpi_password}"
+if ${_has_included}
+    info "📦 Including packages: ${included_packages_filter}"
+end
+if ${_has_excluded}
+    info "📦 Excluding packages: ${excluded_packages_filter}"
+end

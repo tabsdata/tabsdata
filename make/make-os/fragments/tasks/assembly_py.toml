@@ -10,54 +10,72 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/pi.ds
 
-    set_env PYTHONWARNINGS ignore
-
-    cd "${PROJECT_TABSDATA_ROOT_FOLDER}"
-
-    td_pypi_linked = get_env TD_PYTHON_LINKED_TO_REPOSITORY
-    if eq ${td_pypi_linked} ""
-        info "🔗 Unespecified link to python repository status... defaulting to true"
-        td_pypi_linked = set "true"
-    else
-        info "🔗 Specified link to python repository status: ${td_pypi_linked}"
+    skip_package = set false
+    if not is_empty ${included_packages_filter}
+        has_package = map_contains_key ${included_packages_map} tabsdata
+        if not ${has_package}
+            skip_package = set true
+        end
     end
-    if eq ${td_pypi_linked} "true"
-        set_env REQUIRE_SERVER_BINARIES "true"
-        set_env REQUIRE_THIRD_PARTY "true"
-        set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
-        set_env TD_SKIP_NON_EXISTING_ASSETS "false"
-        set_env TD_SETUP_GENERATE_LOCKS "false"
-    else
-        set_env REQUIRE_SERVER_BINARIES "false"
-        set_env REQUIRE_THIRD_PARTY "false"
-        set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "true"
-        set_env TD_SKIP_NON_EXISTING_ASSETS "true"
-        set_env TD_SETUP_GENERATE_LOCKS "false"
+    if not is_empty ${excluded_packages_filter}
+        has_package = map_contains_key ${excluded_packages_map} tabsdata
+        if ${has_package}
+            skip_package = set true
+        end
     end
-    # This must be false when using a local PyPi reopsitory.
-    set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES "true"
+    if ${skip_package}
+        info "⏭️ Skipping tabsdata (filtered out)"
+    else
+        set_env PYTHONWARNINGS ignore
 
-    in_folder = pwd
-    trace "🧶 Base folder for assembly - tabsdata: ${in_folder}"
+        cd "${PROJECT_TABSDATA_ROOT_FOLDER}"
 
-    debug "🚀 python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
-    exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
+        td_pypi_linked = get_env TD_PYTHON_LINKED_TO_REPOSITORY
+        if eq ${td_pypi_linked} ""
+            info "🔗 Unespecified link to python repository status... defaulting to true"
+            td_pypi_linked = set "true"
+        else
+            info "🔗 Specified link to python repository status: ${td_pypi_linked}"
+        end
+        if eq ${td_pypi_linked} "true"
+            set_env REQUIRE_SERVER_BINARIES "true"
+            set_env REQUIRE_THIRD_PARTY "true"
+            set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
+            set_env TD_SKIP_NON_EXISTING_ASSETS "false"
+            set_env TD_SETUP_GENERATE_LOCKS "false"
+        else
+            set_env REQUIRE_SERVER_BINARIES "false"
+            set_env REQUIRE_THIRD_PARTY "false"
+            set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "true"
+            set_env TD_SKIP_NON_EXISTING_ASSETS "true"
+            set_env TD_SETUP_GENERATE_LOCKS "false"
+        end
+        # This must be false when using a local PyPi reopsitory.
+        set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES "true"
 
-    in_folder = pwd
-    trace "🧶 Base folder for assembly - tabsdata: ${in_folder}"
-    listing = exec python -c "import os; print('\\n'.join(os.listdir('${in_folder}')))"
-    listing = trim ${listing.stdout}
-    trace "🛟 Contents of base folder for assembly - tabsdata: ${in_folder}\n${listing}"
-    listing = exec python -c "import os; print('\\n'.join(os.listdir('${in_folder}/target')) if os.path.exists('${in_folder}/target') else '')"
-    listing = trim ${listing.stdout}
-    trace "🚧 Contents of base/target folder for assembly - tabsdata\n${listing}"
-    listing = exec python -c "import os; print('\\n'.join(os.listdir('${in_folder}/target/python')) if os.path.exists('${in_folder}/target/python') else '')"
-    listing = trim ${listing.stdout}
-    trace "🚦 Contents of base/target/python folder for assembly - tabsdata\n${listing}"
-    listing = exec python -c "import os; print('\\n'.join(os.listdir('${in_folder}/target/python/dist')) if os.path.exists('${in_folder}/target/python/dist') else '')"
-    listing = trim ${listing.stdout}
-    trace "⚓️ Contents of base/target/python/dist folder for assembly - tabsdata\n${listing}"
+        in_folder = pwd
+        trace "🧶 Base folder for assembly - tabsdata: ${in_folder}"
+
+        debug "🚀 python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
+        exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
+
+        in_folder = pwd
+        trace "🧶 Base folder for assembly - tabsdata: ${in_folder}"
+        listing = exec python -c "import os; print('\\n'.join(os.listdir('${in_folder}')))"
+        listing = trim ${listing.stdout}
+        trace "🛟 Contents of base folder for assembly - tabsdata: ${in_folder}\n${listing}"
+        listing = exec python -c "import os; print('\\n'.join(os.listdir('${in_folder}/target')) if os.path.exists('${in_folder}/target') else '')"
+        listing = trim ${listing.stdout}
+        trace "🚧 Contents of base/target folder for assembly - tabsdata\n${listing}"
+        listing = exec python -c "import os; print('\\n'.join(os.listdir('${in_folder}/target/python')) if os.path.exists('${in_folder}/target/python') else '')"
+        listing = trim ${listing.stdout}
+        trace "🚦 Contents of base/target/python folder for assembly - tabsdata\n${listing}"
+        listing = exec python -c "import os; print('\\n'.join(os.listdir('${in_folder}/target/python/dist')) if os.path.exists('${in_folder}/target/python/dist') else '')"
+        listing = trim ${listing.stdout}
+        trace "⚓️ Contents of base/target/python/dist folder for assembly - tabsdata\n${listing}"
+    end
     ''']
 
 [tasks.__os__assembly_py_connectors]
@@ -68,6 +86,7 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/pi.ds
 
     set_env PYTHONWARNINGS ignore
 
@@ -78,51 +97,69 @@ script = [
     for connector in ${connectors}
         is_connector = is_dir ${connector}
         if ${is_connector}
-            cd ${connector}
-
-            td_pypi_linked = get_env TD_PYTHON_LINKED_TO_REPOSITORY
-            if eq ${td_pypi_linked} ""
-                info "🔗 Unespecified link to python repository status... defaulting to true"
-                td_pypi_linked = set "true"
-            else
-                info "🔗 Specified link to python repository status: ${td_pypi_linked}"
+            connector_name = basename ${connector}
+            skip_package = set false
+            if not is_empty ${included_packages_filter}
+                has_package = map_contains_key ${included_packages_map} ${connector_name}
+                if not ${has_package}
+                    skip_package = set true
+                end
             end
-            if eq ${td_pypi_linked} "true"
-                set_env REQUIRE_SERVER_BINARIES "true"
-                set_env REQUIRE_THIRD_PARTY "true"
-                set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
-                set_env TD_SKIP_NON_EXISTING_ASSETS "false"
-                set_env TD_SETUP_GENERATE_LOCKS "false"
-            else
-                set_env REQUIRE_SERVER_BINARIES "false"
-                set_env REQUIRE_THIRD_PARTY "false"
-                set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "true"
-                set_env TD_SKIP_NON_EXISTING_ASSETS "true"
-                set_env TD_SETUP_GENERATE_LOCKS "false"
+            if not is_empty ${excluded_packages_filter}
+                has_package = map_contains_key ${excluded_packages_map} ${connector_name}
+                if ${has_package}
+                    skip_package = set true
+                end
             end
-            # This must be false when using a local PyPi reopsitory.
-            set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES "true"
+            if ${skip_package}
+                info "⏭️ Skipping ${connector_name} (filtered out)"
+            else
+                cd ${connector}
 
-            in_folder = pwd
-            trace "🧶 Base folder for assembly - ${connector}: ${in_folder}"
+                td_pypi_linked = get_env TD_PYTHON_LINKED_TO_REPOSITORY
+                if eq ${td_pypi_linked} ""
+                    info "🔗 Unespecified link to python repository status... defaulting to true"
+                    td_pypi_linked = set "true"
+                else
+                    info "🔗 Specified link to python repository status: ${td_pypi_linked}"
+                end
+                if eq ${td_pypi_linked} "true"
+                    set_env REQUIRE_SERVER_BINARIES "true"
+                    set_env REQUIRE_THIRD_PARTY "true"
+                    set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "false"
+                    set_env TD_SKIP_NON_EXISTING_ASSETS "false"
+                    set_env TD_SETUP_GENERATE_LOCKS "false"
+                else
+                    set_env REQUIRE_SERVER_BINARIES "false"
+                    set_env REQUIRE_THIRD_PARTY "false"
+                    set_env TD_IGNORE_CONNECTOR_REQUIREMENTS "true"
+                    set_env TD_SKIP_NON_EXISTING_ASSETS "true"
+                    set_env TD_SETUP_GENERATE_LOCKS "false"
+                end
+                # This must be false when using a local PyPi reopsitory.
+                set_env PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES "true"
 
-            debug "🚀 python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
-            exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
+                in_folder = pwd
+                trace "🧶 Base folder for assembly - ${connector}: ${in_folder}"
 
-            in_folder = pwd
-            trace "🧶 Base folder for assembly - ${connector}: ${in_folder}"
-            listing = exec python -c "import os; print('\\n'.join(os.listdir('${in_folder}')))"
-            listing = trim ${listing.stdout}
-            trace "🛟 Contents of base folder for assembly - ${connector}: ${in_folder}\n${listing}"
-            listing = exec python -c "import os; print('\\n'.join(os.listdir('${in_folder}/target')) if os.path.exists('${in_folder}/target') else '')"
-            listing = trim ${listing.stdout}
-            trace "🚧 Contents of base/target folder for assembly - ${connector}\n${listing}"
-            listing = exec python -c "import os; print('\\n'.join(os.listdir('${in_folder}/target/python')) if os.path.exists('${in_folder}/target/python') else '')"
-            listing = trim ${listing.stdout}
-            trace "🚦 Contents of base/target/python folder for assembly - ${connector}\n${listing}"
-            listing = exec python -c "import os; print('\\n'.join(os.listdir('${in_folder}/target/python/dist')) if os.path.exists('${in_folder}/target/python/dist') else '')"
-            listing = trim ${listing.stdout}
-            trace "⚓️ Contents of base/target/python/dist folder for assembly - ${connector}\n${listing}"
+                debug "🚀 python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist"
+                exec --fail-on-error python setup.py --quiet sdist --dist-dir target/python/dist bdist_wheel --dist-dir target/python/dist
+
+                in_folder = pwd
+                trace "🧶 Base folder for assembly - ${connector}: ${in_folder}"
+                listing = exec python -c "import os; print('\\n'.join(os.listdir('${in_folder}')))"
+                listing = trim ${listing.stdout}
+                trace "🛟 Contents of base folder for assembly - ${connector}: ${in_folder}\n${listing}"
+                listing = exec python -c "import os; print('\\n'.join(os.listdir('${in_folder}/target')) if os.path.exists('${in_folder}/target') else '')"
+                listing = trim ${listing.stdout}
+                trace "🚧 Contents of base/target folder for assembly - ${connector}\n${listing}"
+                listing = exec python -c "import os; print('\\n'.join(os.listdir('${in_folder}/target/python')) if os.path.exists('${in_folder}/target/python') else '')"
+                listing = trim ${listing.stdout}
+                trace "🚦 Contents of base/target/python folder for assembly - ${connector}\n${listing}"
+                listing = exec python -c "import os; print('\\n'.join(os.listdir('${in_folder}/target/python/dist')) if os.path.exists('${in_folder}/target/python/dist') else '')"
+                listing = trim ${listing.stdout}
+                trace "⚓️ Contents of base/target/python/dist folder for assembly - ${connector}\n${listing}"
+            end
         end
     end
     ''']
