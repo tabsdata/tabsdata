@@ -32,10 +32,20 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dynamic = ["version"]
+dependencies = [
+    "pytest==9.0.2",
+    "rich==14.3.3",
+    "rich-click==1.9.7",
+    "tenacity==9.1.4"
+]
+
+[project.entry-points.pytest11]
+tdx-harvester = "tabsdatax.pytest.plugins.harvester.plugin"
 
 [project.scripts]
 tdx_gconnector = "tabsdatax.generator.connector:main"
 tdx_pyoutdated = "tabsdatax.cmake.pyoutdated:main"
+tdx-harvester-monitor = "tabsdatax.pytest.plugins.harvester.client:main"
 
 [project.urls]
 Homepage = "https://tabsdata.com"
