@@ -14,6 +14,7 @@ REQUIRE_SERVER_BINARIES = "REQUIRE_SERVER_BINARIES"
 REQUIRE_THIRD_PARTY = "REQUIRE_THIRD_PARTY"
 TD_IGNORE_CONNECTOR_REQUIREMENTS = "TD_IGNORE_CONNECTOR_REQUIREMENTS"
 TD_SKIP_NON_EXISTING_ASSETS = "TD_SKIP_NON_EXISTING_ASSETS"
+TD_SETUP_GENERATE_LOCKS = "TD_SETUP_GENERATE_LOCKS"
 
 TD_USE_MUSLLINUX = "TD_USE_MUSLLINUX"
 
@@ -26,6 +27,7 @@ class SetupConfiguration:
     require_third_party: bool
     ignore_connector_requirements: bool
     skip_non_existing_assets: bool
+    setup_generate_locks: bool
 
 
 def load_setup_configuration() -> SetupConfiguration:
@@ -41,6 +43,9 @@ def load_setup_configuration() -> SetupConfiguration:
         ),
         skip_non_existing_assets=(
             os.getenv(TD_SKIP_NON_EXISTING_ASSETS, "True").lower() in TRUE_VALUES
+        ),
+        setup_generate_locks=(
+            os.getenv(TD_SETUP_GENERATE_LOCKS, "False").lower() in TRUE_VALUES
         ),
     )
 

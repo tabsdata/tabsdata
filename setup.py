@@ -151,10 +151,7 @@ ensure_egg_folder()
 build_manifest_path = os.path.join(package_assets_folder, "manifest", "BUILD")
 tdabout.write_build_manifest(Path(ROOT), build_manifest_path)
 
-requirements_lock_path = os.path.join(
-    package_resources_folder, "lock", "requirements.txt"
-)
-tdlock.write_requirements_lock(Path(ROOT), requirements_lock_path)
+tdlock.generate_requirements_lock(ROOT, package_resources_folder)
 
 TABSDATA_VERSION = read_file(
     "assets",
