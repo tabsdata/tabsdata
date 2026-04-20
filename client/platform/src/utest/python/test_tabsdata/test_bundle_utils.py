@@ -11,6 +11,8 @@ import pytest
 import yaml
 
 import tabsdata as td
+import tarfile
+
 from tabsdata._utils.bundle_utils import (
     CODE_FOLDER,
     CONFIG_FILE_NAME,
@@ -24,10 +26,12 @@ from tabsdata._utils.bundle_utils import (
     PYTHON_VERSION_KEY,
     REQUIREMENTS_FILE_NAME,
     SaveTarget,
+    _delete_if_exists_and_create_directory,
     copy_and_verify_requirements_file,
     create_bundle_archive,
     create_configuration,
     create_requirements,
+    create_tarball,
     generate_entry_point_field,
     store_file_contents,
     store_folder_contents,
@@ -808,3 +812,146 @@ def test_register_invalid_python_version_with_custom_requirements(tmp_path):
             valid_python_versions=["3.9.2"],
         )
     assert e.value.error_code == ErrorCode.RE12
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for _delete_if_exists_and_create_directory
+# ---------------------------------------------------------------------------
+
+
+class TestDeleteIfExistsAndCreateDirectory:
+    def test_creates_new_directory(self, tmp_path):
+        target = os.path.join(tmp_path, "new_dir")
+        assert not os.path.exists(target)
+        _delete_if_exists_and_create_directory(target)
+        assert os.path.isdir(target)
+
+    def test_replaces_existing_directory(self, tmp_path):
+        target = os.path.join(tmp_path, "existing_dir")
+        os.makedirs(target)
+        stale_file = os.path.join(target, "stale.txt")
+        with open(stale_file, "w") as f:
+            f.write("stale content")
+        assert os.path.exists(stale_file)
+
+        _delete_if_exists_and_create_directory(target)
+
+        assert os.path.isdir(target)
+        assert not os.path.exists(stale_file), (
+            "Stale file should have been removed"
+        )
+
+    def test_raises_on_rmtree_failure(self, tmp_path):
+        target = os.path.join(tmp_path, "locked_dir")
+        os.makedirs(target)
+
+        with patch("tabsdata._utils.bundle_utils.shutil.rmtree") as mock_rmtree:
+            mock_rmtree.side_effect = OSError("Permission denied")
+            with pytest.raises(OSError, match="Failed to remove pre-existing"):
+                _delete_if_exists_and_create_directory(target)
+
+    def test_rmtree_failure_chains_original_error(self, tmp_path):
+        target = os.path.join(tmp_path, "locked_dir")
+        os.makedirs(target)
+
+        with patch("tabsdata._utils.bundle_utils.shutil.rmtree") as mock_rmtree:
+            mock_rmtree.side_effect = OSError("Permission denied")
+            with pytest.raises(OSError) as exc_info:
+                _delete_if_exists_and_create_directory(target)
+            assert exc_info.value.__cause__ is not None
+            assert "Permission denied" in str(exc_info.value.__cause__)
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for create_configuration (CustomJSONEncoder removed, always writes)
+# ---------------------------------------------------------------------------
+
+
+class TestCreateConfiguration:
+    def test_always_writes_config_file(self, tmp_path):
+        dummy_function = DummyFunction(
+            name="test_fn", module="test_module", original_file="test.py"
+        )
+        save_location = str(tmp_path / "save")
+        os.makedirs(save_location)
+        create_configuration(dummy_function, save_location)
+        config_path = os.path.join(save_location, CONFIG_FILE_NAME)
+        assert os.path.exists(config_path)
+        with open(config_path) as f:
+            data = json.load(f)
+        assert CONFIG_TABSDATA_FUNCTION_KEY in data
+        assert (
+            data[CONFIG_TABSDATA_FUNCTION_KEY][CONFIG_TABSDATA_FUNCTION_FUNCTION_FILE_KEY]
+            == "test_fn.pkl"
+        )
+
+    def test_config_is_valid_json_without_custom_encoder(self, tmp_path):
+        """Verify the configuration is serializable with the standard encoder."""
+        dummy_function = DummyFunction(
+            name="plain_fn", module="mod", original_file="f.py"
+        )
+        save_location = str(tmp_path / "save")
+        os.makedirs(save_location)
+        result = create_configuration(dummy_function, save_location)
+        # Should round-trip through standard json without CustomJSONEncoder
+        serialized = json.dumps(result)
+        assert json.loads(serialized) == result
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for copy_and_verify_requirements_file error chaining
+# ---------------------------------------------------------------------------
+
+
+class TestCopyAndVerifyRequirementsFileErrorChaining:
+    def test_file_not_found_chains_original_error(self, tmp_path):
+        with pytest.raises(RegistrationError) as exc_info:
+            copy_and_verify_requirements_file(
+                save_location=str(tmp_path),
+                requirements_file="/nonexistent/path/requirements.yaml",
+            )
+        assert exc_info.value.code == "RE-007"
+        assert exc_info.value.__cause__ is not None
+        assert isinstance(exc_info.value.__cause__, FileNotFoundError)
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for create_tarball
+# ---------------------------------------------------------------------------
+
+
+class TestCreateTarball:
+    def test_creates_valid_tarball(self, tmp_path):
+        source_dir = tmp_path / "source"
+        source_dir.mkdir()
+        (source_dir / "file1.txt").write_text("content1")
+        sub_dir = source_dir / "subdir"
+        sub_dir.mkdir()
+        (sub_dir / "file2.txt").write_text("content2")
+
+        output_file = str(tmp_path / "output.tar.gz")
+        create_tarball(str(source_dir), output_file)
+
+        assert os.path.exists(output_file)
+        with tarfile.open(output_file, "r:gz") as tar:
+            names = tar.getnames()
+            # Should contain files from the source directory
+            assert len(names) >= 3  # root + file1.txt + subdir + file2.txt
+
+    def test_tarball_is_extractable(self, tmp_path):
+        source_dir = tmp_path / "source"
+        source_dir.mkdir()
+        (source_dir / "hello.txt").write_text("hello world")
+
+        output_file = str(tmp_path / "output.tar.gz")
+        create_tarball(str(source_dir), output_file)
+
+        extract_dir = tmp_path / "extracted"
+        extract_dir.mkdir()
+        with tarfile.open(output_file, "r:gz") as tar:
+            tar.extractall(path=str(extract_dir))
+
+        # Find the extracted file (arcname=os.path.sep means root-level extraction)
+        extracted_files = list(extract_dir.rglob("hello.txt"))
+        assert len(extracted_files) == 1
+        assert extracted_files[0].read_text() == "hello world"

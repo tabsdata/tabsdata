@@ -68,7 +68,7 @@ IGNORED_FOLDERS = (
     "test_*",
     "tests",
     "tests_*",
-    "utest",
+    "itest",
     "utest",
     "testing_resources",
     "venv",
@@ -114,25 +114,13 @@ REQUIREMENTS_FILE_NAME = "requirements.yaml"
 LOCAL_PACKAGES_WITH_BINARIES = "TD_LOCAL_PACKAGES_WITH_BINARIES"
 
 
-class CustomJSONEncoder(json.JSONEncoder):
-    def default(self, obj):
-        try:
-            return super().default(obj)
-        except Exception as e:
-            try:
-                return obj._to_dict()
-            except Exception:
-                raise e
-
-
 def create_configuration(function: TabsdataFunction, save_location: str):
     os.makedirs(save_location, exist_ok=True)
     configuration = dict()
     configuration[CONFIG_TABSDATA_FUNCTION_KEY] = generate_entry_point_field(function)
 
-    if save_location:
-        with open(os.path.join(save_location, CONFIG_FILE_NAME), "w") as file:
-            json.dump(configuration, file, cls=CustomJSONEncoder)
+    with open(os.path.join(save_location, CONFIG_FILE_NAME), "w") as file:
+        json.dump(configuration, file)
     return configuration
 
 
@@ -201,8 +189,8 @@ def copy_and_verify_requirements_file(
     try:
         with open(requirements_file, "r") as file:
             data = yaml.safe_load(file)
-    except FileNotFoundError:
-        raise RegistrationError(ErrorCode.RE7, requirements_file)
+    except FileNotFoundError as e:
+        raise RegistrationError(ErrorCode.RE7, requirements_file) from e
     if not data.get(PYTHON_VERSION_KEY):
         raise RegistrationError(
             ErrorCode.RE8, PYTHON_VERSION_KEY, requirements_file, data
@@ -473,7 +461,15 @@ def create_bundle_archive(
 def _delete_if_exists_and_create_directory(directory: str):
     if os.path.isdir(directory):
         logger.warning(f"Deleting directory '{directory}' to store new context.")
-        shutil.rmtree(directory, ignore_errors=True)
+        try:
+            shutil.rmtree(directory)
+        except OSError as e:
+            raise OSError(
+                f"Failed to remove pre-existing bundle directory '{directory}'. "
+                f"This may cause function registration to include stale files "
+                f"from a previous bundle. Please remove the directory manually "
+                f"and retry."
+            ) from e
     os.makedirs(directory, exist_ok=True)
 
 
