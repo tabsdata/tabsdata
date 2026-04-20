@@ -147,7 +147,8 @@ fn create_file_import_instructions(
             // cloud (/) schemes.
             let path = url.path();
             let relative = path.strip_prefix(base_path.as_str()).unwrap_or(path);
-            meta.location = ObjectStorePath::parse(relative).unwrap_or(ObjectStorePath::from(relative));
+            meta.location =
+                ObjectStorePath::parse(relative).unwrap_or(ObjectStorePath::from(relative));
             (idx, meta)
         })
         .map(crate::transporter::logic::take_files_limit())
