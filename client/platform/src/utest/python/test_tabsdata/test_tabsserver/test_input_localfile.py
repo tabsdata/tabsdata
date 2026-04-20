@@ -14,7 +14,7 @@ import pytest
 from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
 from tabsdata._tabsserver.invoker import REQUEST_FILE_NAME
 from tabsdata._tabsserver.invoker import invoke as tabsserver_main
-from tabsdata._utils.bundle_utils import create_bundle_archive
+from tabsdata.api.tabsdata_server import _create_archive
 from test_tabsdata.bootest import TDLOCAL_FOLDER
 from test_tabsdata.common.constants import PYTEST_DEFAULT_ENVIRONMENT_PREFIX
 from test_tabsdata.conftest import (
@@ -22,6 +22,7 @@ from test_tabsdata.conftest import (
     LOCAL_PACKAGES_LIST,
     TESTING_RESOURCES_FOLDER,
     clean_polars_df,
+    get_function_registration_path,
     read_json_and_clean,
     write_v2_function_yaml_file,
 )
@@ -92,9 +93,10 @@ LOCAL_DEV_FOLDER = TDLOCAL_FOLDER
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_file_wildcard(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-    context_archive = create_bundle_archive(
-        input_file_wildcard, local_packages=LOCAL_PACKAGES_LIST, save_location=tmp_path
-    )
+    function_path = get_function_registration_path(input_file_wildcard)
+    context_archive = _create_archive(
+        function_path, local_packages=LOCAL_PACKAGES_LIST, temporary_directory=tmp_path
+    ).context_location
 
     input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
@@ -137,11 +139,12 @@ def test_input_file_wildcard(tmp_path):
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_file_csv_string_format(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-    context_archive = create_bundle_archive(
-        input_file_csv_string_format,
+    function_path = get_function_registration_path(input_file_csv_string_format)
+    context_archive = _create_archive(
+        function_path,
         local_packages=LOCAL_PACKAGES_LIST,
-        save_location=tmp_path,
-    )
+        temporary_directory=tmp_path,
+    ).context_location
     input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
@@ -184,12 +187,12 @@ def test_input_file_csv_string_format(tmp_path):
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_file_parquet_string_format(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-    context_archive = create_bundle_archive(
-        input_file_parquet_string_format,
+    function_path = get_function_registration_path(input_file_parquet_string_format)
+    context_archive = _create_archive(
+        function_path,
         local_packages=LOCAL_PACKAGES_LIST,
-        save_location=tmp_path,
-    )
-
+        temporary_directory=tmp_path,
+    ).context_location
     input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
@@ -232,11 +235,12 @@ def test_input_file_parquet_string_format(tmp_path):
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_file_parquet_wildcard(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-    context_archive = create_bundle_archive(
-        input_file_parquet_wildcard,
+    function_path = get_function_registration_path(input_file_parquet_wildcard)
+    context_archive = _create_archive(
+        function_path,
         local_packages=LOCAL_PACKAGES_LIST,
-        save_location=tmp_path,
-    )
+        temporary_directory=tmp_path,
+    ).context_location
 
     input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
@@ -279,11 +283,12 @@ def test_input_file_parquet_wildcard(tmp_path):
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_file_csv_separator(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-    context_archive = create_bundle_archive(
-        input_file_csv_separator,
+    function_path = get_function_registration_path(input_file_csv_separator)
+    context_archive = _create_archive(
+        function_path,
         local_packages=LOCAL_PACKAGES_LIST,
-        save_location=tmp_path,
-    )
+        temporary_directory=tmp_path,
+    ).context_location
 
     input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
@@ -327,11 +332,12 @@ def test_input_file_csv_separator(tmp_path):
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_file_csv_modified_path(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-    context_archive = create_bundle_archive(
-        input_file_csv_modified_path,
+    function_path = get_function_registration_path(input_file_csv_modified_path)
+    context_archive = _create_archive(
+        function_path,
         local_packages=LOCAL_PACKAGES_LIST,
-        save_location=tmp_path,
-    )
+        temporary_directory=tmp_path,
+    ).context_location
 
     input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
@@ -375,11 +381,12 @@ def test_input_file_csv_modified_path(tmp_path):
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_file_csv_modified_format(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-    context_archive = create_bundle_archive(
-        input_file_csv_modified_format,
+    function_path = get_function_registration_path(input_file_csv_modified_format)
+    context_archive = _create_archive(
+        function_path,
         local_packages=LOCAL_PACKAGES_LIST,
-        save_location=tmp_path,
-    )
+        temporary_directory=tmp_path,
+    ).context_location
 
     input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
@@ -423,11 +430,12 @@ def test_input_file_csv_modified_format(tmp_path):
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_file_log_string_format(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-    context_archive = create_bundle_archive(
-        input_file_log_string_format,
+    function_path = get_function_registration_path(input_file_log_string_format)
+    context_archive = _create_archive(
+        function_path,
         local_packages=LOCAL_PACKAGES_LIST,
-        save_location=tmp_path,
-    )
+        temporary_directory=tmp_path,
+    ).context_location
 
     input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
@@ -471,11 +479,12 @@ def test_input_file_log_string_format(tmp_path):
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_file_log_wildcard(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-    context_archive = create_bundle_archive(
-        input_file_log_wildcard,
+    function_path = get_function_registration_path(input_file_log_wildcard)
+    context_archive = _create_archive(
+        function_path,
         local_packages=LOCAL_PACKAGES_LIST,
-        save_location=tmp_path,
-    )
+        temporary_directory=tmp_path,
+    ).context_location
 
     input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
@@ -518,11 +527,12 @@ def test_input_file_log_wildcard(tmp_path):
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_file_ndjson_string_format(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-    context_archive = create_bundle_archive(
-        input_file_ndjson_string_format,
+    function_path = get_function_registration_path(input_file_ndjson_string_format)
+    context_archive = _create_archive(
+        function_path,
         local_packages=LOCAL_PACKAGES_LIST,
-        save_location=tmp_path,
-    )
+        temporary_directory=tmp_path,
+    ).context_location
 
     input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
@@ -566,11 +576,12 @@ def test_input_file_ndjson_string_format(tmp_path):
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_file_ndjson_wildcard(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-    context_archive = create_bundle_archive(
-        input_file_ndjson_wildcard,
+    function_path = get_function_registration_path(input_file_ndjson_wildcard)
+    context_archive = _create_archive(
+        function_path,
         local_packages=LOCAL_PACKAGES_LIST,
-        save_location=tmp_path,
-    )
+        temporary_directory=tmp_path,
+    ).context_location
 
     input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
@@ -613,11 +624,12 @@ def test_input_file_ndjson_wildcard(tmp_path):
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_file_csv_dtype_inference(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-    context_archive = create_bundle_archive(
-        input_file_csv_dtype_inference,
+    function_path = get_function_registration_path(input_file_csv_dtype_inference)
+    context_archive = _create_archive(
+        function_path,
         local_packages=LOCAL_PACKAGES_LIST,
-        save_location=tmp_path,
-    )
+        temporary_directory=tmp_path,
+    ).context_location
     input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
@@ -649,11 +661,12 @@ def test_input_file_csv_dtype_inference(tmp_path):
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_file_ndjson_dtype_inference(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-    context_archive = create_bundle_archive(
-        input_file_ndjson_dtype_inference,
+    function_path = get_function_registration_path(input_file_ndjson_dtype_inference)
+    context_archive = _create_archive(
+        function_path,
         local_packages=LOCAL_PACKAGES_LIST,
-        save_location=tmp_path,
-    )
+        temporary_directory=tmp_path,
+    ).context_location
 
     input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
@@ -686,11 +699,12 @@ def test_input_file_ndjson_dtype_inference(tmp_path):
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_file_not_found(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-    context_archive = create_bundle_archive(
-        input_file_not_found,
+    function_path = get_function_registration_path(input_file_not_found)
+    context_archive = _create_archive(
+        function_path,
         local_packages=LOCAL_PACKAGES_LIST,
-        save_location=tmp_path,
-    )
+        temporary_directory=tmp_path,
+    ).context_location
     input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
     os.makedirs(response_folder, exist_ok=True)
@@ -739,11 +753,12 @@ def test_input_file_not_found(tmp_path):
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_file_avro_string_format(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-    context_archive = create_bundle_archive(
-        input_file_avro_string_format,
+    function_path = get_function_registration_path(input_file_avro_string_format)
+    context_archive = _create_archive(
+        function_path,
         local_packages=LOCAL_PACKAGES_LIST,
-        save_location=tmp_path,
-    )
+        temporary_directory=tmp_path,
+    ).context_location
 
     input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)
@@ -787,11 +802,12 @@ def test_input_file_avro_string_format(tmp_path):
 @mock.patch("sys.stdin", StringIO("FAKE_PREFIX_ROOT: FAKE_VALUE\n"))
 def test_input_file_avro_wildcard(tmp_path):
     logs_folder = os.path.join(LOCAL_DEV_FOLDER, inspect.currentframe().f_code.co_name)
-    context_archive = create_bundle_archive(
-        input_file_avro_wildcard,
+    function_path = get_function_registration_path(input_file_avro_wildcard)
+    context_archive = _create_archive(
+        function_path,
         local_packages=LOCAL_PACKAGES_LIST,
-        save_location=tmp_path,
-    )
+        temporary_directory=tmp_path,
+    ).context_location
 
     input_yaml_file = os.path.join(tmp_path, REQUEST_FILE_NAME)
     response_folder = os.path.join(tmp_path, RESPONSE_FOLDER)

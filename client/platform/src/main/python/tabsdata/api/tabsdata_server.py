@@ -10,6 +10,7 @@ import json
 import os
 import sys
 import tempfile
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Generator, List, cast
@@ -449,18 +450,7 @@ class Collection:
             .get("data", {})
             .get("python_versions")
         )
-        (
-            tables,
-            table_types,
-            string_dependencies,
-            trigger_by,
-            function_snippet,
-            context_location,
-            decorator_function_name,
-            decorator_type,
-            source_or_destination_name,
-            workers,
-        ) = _create_archive(
+        archive = _create_archive(
             function_path,
             temporary_directory,
             path_to_bundle,
@@ -469,6 +459,17 @@ class Collection:
             valid_python_versions,
             collection=self.name,
         )
+
+        tables = archive.tables
+        table_types = archive.table_types
+        string_dependencies = archive.string_dependencies
+        trigger_by = archive.trigger_string_list
+        function_snippet = archive.function_snippet
+        context_location = archive.context_location
+        decorator_function_name = archive.function_name
+        decorator_type = archive.function_type
+        source_or_destination_name = archive.source_or_destination
+        workers = archive.workers
 
         function_name = function_name or decorator_function_name
 
@@ -568,18 +569,7 @@ class Collection:
             .get("data", {})
             .get("python_versions")
         )
-        (
-            tables,
-            table_types,
-            string_dependencies,
-            trigger_by,
-            function_snippet,
-            context_location,
-            decorator_new_function_name,
-            decorator_type,
-            source_or_destination_name,
-            workers,
-        ) = _create_archive(
+        archive = _create_archive(
             function_path,
             temporary_directory,
             directory_to_bundle,
@@ -588,6 +578,17 @@ class Collection:
             valid_python_versions,
             collection=self.name,
         )
+
+        tables = archive.tables
+        table_types = archive.table_types
+        string_dependencies = archive.string_dependencies
+        trigger_by = archive.trigger_string_list
+        function_snippet = archive.function_snippet
+        context_location = archive.context_location
+        decorator_new_function_name = archive.function_name
+        decorator_type = archive.function_type
+        source_or_destination_name = archive.source_or_destination
+        workers = archive.workers
 
         with open(context_location, "rb") as file:
             bundle = file.read()
@@ -4602,18 +4603,7 @@ def _create_archive(
     local_packages=None,
     valid_python_versions: list[str] = None,
     collection=None,
-) -> tuple[
-    list[str],
-    dict[str, str],
-    list[str],
-    list[str],
-    str,
-    str,
-    str,
-    str,
-    str,
-    dict[str, str],
-]:
+) -> TabsdataFunctionArchive:
     function = _dynamic_import_function_from_path(function_path)
     function_name: str = function.name
     function_output = function.output
@@ -4671,7 +4661,11 @@ def _create_archive(
         function_snippet = "Function source code not available"
     context_location = create_bundle_archive(
         function,
-        save_location=temporary_directory.name,
+        save_location=(
+            temporary_directory.name
+            if isinstance(temporary_directory, tempfile.TemporaryDirectory)
+            else temporary_directory
+        ),
         path_to_code=path_to_bundle,
         requirements=requirements,
         local_packages=local_packages,
@@ -4694,7 +4688,7 @@ def _create_archive(
     elif function_type == "S":
         source_or_destination = function.output.__class__.__name__
 
-    return (
+    return TabsdataFunctionArchive(
         tables,
         table_types,
         string_dependencies,
@@ -4706,6 +4700,20 @@ def _create_archive(
         source_or_destination,
         workers,
     )
+
+
+@dataclass
+class TabsdataFunctionArchive:
+    tables: list[str]
+    table_types: dict[str, str]
+    string_dependencies: list[str]
+    trigger_string_list: list[str]
+    function_snippet: str
+    context_location: str
+    function_name: str
+    function_type: str
+    source_or_destination: str
+    workers: dict[str, str]
 
 
 _UTC_FORMATS = [

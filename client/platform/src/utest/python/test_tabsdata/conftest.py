@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
 import os
 import pathlib
@@ -21,7 +22,7 @@ from xdist.workermanage import WorkerController
 
 # noinspection PyProtectedMember
 import tabsdata._utils.tableframe._constants as td_constants
-from tabsdata._tdfunction import TableInput, TableOutput
+from tabsdata._tdfunction import TableInput, TableOutput, TabsdataFunction
 from tabsdata._utils.constants import TABSDATA_TOOLKIT_MODULE_NAME
 
 # noinspection PyProtectedMember
@@ -73,6 +74,11 @@ check_assets()
 pytest_plugins = ["test_tabsdata.fntest"]
 
 os.environ["POLARS_VERBOSE"] = "0"
+
+
+def get_function_registration_path(fn: TabsdataFunction):
+    return inspect.getfile(fn.original_function) + "::" + fn.original_function.__name__
+
 
 def pytest_configure(config: pytest.Config):
     setup_tests_logging()
