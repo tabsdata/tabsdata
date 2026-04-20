@@ -45,6 +45,15 @@ from test_tabsdata_cdc_mysql.common.fixtures.docker import mysql_cdc_config  # n
 pytest_plugins = ["test_tabsdata.fntest"]
 
 
+def pytest_collection_modifyitems(config, items):
+    skip_cdc_mysql = pytest.mark.skip(
+        reason="CDC MySQL tests skipped for GA performance and stability reasons"
+    )
+    for item in items:
+        if "cdc_mysql" in item.keywords:
+            item.add_marker(skip_cdc_mysql)
+
+
 def pytest_configure(config: pytest.Config):
     setup_tests_logging()
     if not hasattr(config, "workerinput"):

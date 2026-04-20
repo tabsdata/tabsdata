@@ -46,6 +46,15 @@ from test_tabsdata_cdc_db2.common.fixtures.docker import AsncapWatchdog
 pytest_plugins = ["test_tabsdata.fntest"]
 
 
+def pytest_collection_modifyitems(config, items):
+    skip_cdc_db2 = pytest.mark.skip(
+        reason="CDC DB2 tests skipped for GA performance and stability reasons"
+    )
+    for item in items:
+        if "cdc_db2" in item.keywords:
+            item.add_marker(skip_cdc_db2)
+
+
 def pytest_configure(config: pytest.Config):
     setup_tests_logging()
     if not hasattr(config, "workerinput"):

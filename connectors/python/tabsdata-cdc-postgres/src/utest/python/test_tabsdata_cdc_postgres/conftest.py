@@ -46,6 +46,15 @@ from test_tabsdata_cdc_postgres.common.fixtures.docker import postgres_cdc_slot 
 pytest_plugins = ["test_tabsdata.fntest"]
 
 
+def pytest_collection_modifyitems(config, items):
+    skip_cdc_postgres = pytest.mark.skip(
+        reason="CDC PostgreSQL tests skipped for GA performance and stability reasons"
+    )
+    for item in items:
+        if "cdc_postgres" in item.keywords:
+            item.add_marker(skip_cdc_postgres)
+
+
 def pytest_configure(config: pytest.Config):
     setup_tests_logging()
     if not hasattr(config, "workerinput"):

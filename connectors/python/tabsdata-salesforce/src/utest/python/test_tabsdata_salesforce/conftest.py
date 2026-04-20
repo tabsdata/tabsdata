@@ -81,6 +81,15 @@ def sf_config():
     yield config
 
 
+def pytest_collection_modifyitems(config, items):
+    skip_salesforce = pytest.mark.skip(
+        reason="Salesforce data has changed in an incompatible way"
+    )
+    for item in items:
+        if "salesforce" in item.keywords:
+            item.add_marker(skip_salesforce)
+
+
 def pytest_configure(config: pytest.Config):
     setup_tests_logging()
     if not hasattr(config, "workerinput"):
