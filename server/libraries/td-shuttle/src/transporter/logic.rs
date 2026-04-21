@@ -12,8 +12,8 @@ use object_store::path::Path;
 use object_store::{ObjectMeta, ObjectStore, parse_url_opts};
 use polars::prelude::cloud::CloudOptions;
 use polars::prelude::{
-    IntoLazy, LazyCsvReader, LazyFileListReader, LazyFrame, LazyJsonLineReader, PlPath,
-    PolarsError, SinkOptions, lit, nth,
+    LazyCsvReader, LazyFileListReader, LazyFrame, LazyJsonLineReader, PlPath, PolarsError,
+    SinkOptions, lit, nth,
 };
 use polars_io::utils::sync_on_close::SyncOnCloseType;
 use serde::{Deserialize, Serialize};
@@ -282,6 +282,12 @@ fn import_file_with_polars(
     progress_meter: Arc<ProgressMeter>,
      */
 ) -> Result<(), PolarsError> {
+    #[allow(unused_unsafe)]
+    // Setting env vars is not thread-safe; use with care.
+    unsafe {
+        std::env::set_var("POLARS_FORCE_ASYNC", "1");
+    }
+
     debug!(
         "Started importing file from {} to {}",
         import.from_url, import.to_url
@@ -318,8 +324,8 @@ fn importer_lazy_frame(
     let format = importer_options.format();
 
     let lazy_frame = match format {
-        // Parquet files embed their schema in the file metadata. Therefore, we do not need to tune the number of rows
-        // necessary to properly infer all columns data type.
+        // Parquet files embed their schema in the file metadata. Therefore, we do not need to tune
+        // the number of rows necessary to properly infer all columns data type.
         Format::Parquet(config) => {
             let mut parquet_config = config.scan_config();
             parquet_config.cloud_options = Some(cloud_config);
@@ -337,24 +343,16 @@ fn importer_lazy_frame(
             let reader = LazyJsonLineReader::new(PlPath::new(url_str.as_str()))
                 .with_infer_schema_length(None);
             let reader = options.apply_to(reader);
-            // HACK!! NDJSON does not do streaming writes yet https://github.com/pola-rs/polars/issues/10964
-            // TODO: we should read from the object store in chunks (get_ranges), write each chunk to a local temp parquet file
-            // TODO: and the create a LazyFrame from the local parquet files and concatenate them into a single LazyFrame
-            // TODO: then business as usual.
-            reader
-                .with_cloud_options(Some(cloud_config))
-                .finish()?
-                .collect()?
-                .lazy()
+            reader.with_cloud_options(Some(cloud_config)).finish()?
         }
-        // As log column is treated as n string, we do not need a full scan to infer data type.
+        // As log column is treated as a string, we do not need a full scan to infer data type.
         Format::Log(options) => {
             let file_name = url
                 .path_segments()
                 .unwrap_or_else(|| panic!("URL {url} does not refer to a file"))
                 .next_back()
                 .unwrap_or_else(|| panic!("URL {url} does not refer to a file"));
-            let reader = LazyCsvReader::new(PlPath::new(url_str.as_str()));
+            let reader = LazyCsvReader::new(PlPath::new(url_str.as_str())).with_cache(false);
             let reader = options.apply_to(reader);
             reader
                 .with_cloud_options(Some(cloud_config))
