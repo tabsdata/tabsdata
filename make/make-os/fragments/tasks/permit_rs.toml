@@ -64,6 +64,8 @@ script = [
         array_push ${crates_array} "cargo-workspaces"
         array_push ${crates_array} "cross"
         array_push ${crates_array} "mdbook"
+        array_push ${crates_array} "mdbook-d2"
+        array_push ${crates_array} "mdbook-mermaid"
         crates = array_join ${crates_array} " "
 
         exec --fail-on-error rustup component add %{components}
