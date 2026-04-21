@@ -7,8 +7,6 @@ from __future__ import annotations
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, List, Tuple, Union
 
-# noinspection PyProtectedMember
-import tabsdata._utils.tableframe._generators as td_generators
 from tabsdata._tabsserver.function.execution_utils import load_sources
 from tabsdata._tabsserver.function.offset_utils import OffsetReturn
 from tabsdata._tabsserver.function.store_results_utils import (
@@ -185,7 +183,6 @@ class SourcePlugin:
             f"Imported files to '{working_dir}'. Resulting files: '{resulting_files}'"
         )
 
-        idx = getattr(self, "_shared_idx", None) or td_generators.IdxGenerator()
         if isinstance(resulting_files, str) or resulting_files is None:
             # Leaving this logic so that if users implement a plugin that
             # returns the wrong type, they will get a clear error message.
@@ -225,9 +222,7 @@ class SourcePlugin:
             # If the plugin is configured to ignore the working directory, we load
             # the sources from the execution context.
             working_dir = None
-        parameters = load_sources(
-            self._ec, resulting_files, idx, working_dir=working_dir
-        )
+        parameters = load_sources(self._ec, resulting_files, working_dir=working_dir)
         logger.debug(f"List of parameters obtained after plugin import: {parameters}")
         return parameters
 

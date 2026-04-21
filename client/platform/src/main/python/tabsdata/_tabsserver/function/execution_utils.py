@@ -40,7 +40,10 @@ from tabsdata._utils.tableframe._context import TableFrameContext
 from tabsdata.dataquality import DataQuality
 from tabsdata.tableframe._actions.dataquality.processor import DataQualityProcessor
 from tabsdata.tableframe.lazyframe.frame import DataTable, TableFrame
-from tabsdata.tableframe.lazyframe.properties import TableFrameProperties
+from tabsdata.tableframe.lazyframe.properties import (
+    TableFrameProperties,
+    TableFramePropertiesBuilder,
+)
 
 if TYPE_CHECKING:
     from tabsdata._tabsserver.function.execution_context import ExecutionContext
@@ -345,6 +348,7 @@ def obtain_user_provided_function_parameters(
     # TODO: this logic will most likely be removed as the final way to verify this
     #  flow is discussed:
     from tabsdata._io.inputs.stage_input import ManifestStage, Stage
+    from tabsdata._io.inputs.table_inputs import TableInput
     from tabsdata.connector.cdc.common._connector import CdcTrigger
 
     stage_trigger = execution_context.stage_trigger
@@ -362,20 +366,38 @@ def obtain_user_provided_function_parameters(
 
     # noinspection PyProtectedMember
     parameters = source._run(execution_context)
+    # Raw-data persistence applies only to publisher sources. ``TableInput``
+    # bypasses ``load_sources`` entirely (its ``stream`` uses
+    # ``scan_tf_from_table`` to return repository-indexed TableFrames that
+    # already carry their own idx and metadata), so re-stamping them as raw
+    # data would both overwrite valid metadata and fail because non-publisher
+    # functions are not provisioned with a raw-data location. The framework's
+    # ``TableInput`` class is the sole gatekeeper here: a custom plugin
+    # subclassing ``SourcePlugin`` cannot look like a ``TableInput`` and so
+    # cannot bypass persistence; conversely, anyone subclassing ``TableInput``
+    # inherits its repository-loading ``stream`` and is correct to skip it.
+    if not isinstance(source, TableInput):
+        parameters = store_sources_raw_data(execution_context, parameters)
     return parameters
 
 
 def load_sources(
     execution_context: ExecutionContext,
     local_sources: list | str | None,
-    idx: td_generators.IdxGenerator | None = None,
     working_dir: str | None = None,
 ) -> InputTableSpec:
     """
-    Given a list of sources, load them into tabsdata TableFrames.
+    Given a list of sources, normalize them into tabsdata TableFrames so that the
+    return value is an InputTableSpec (a list whose elements are TableFrames or
+    nested lists of TableFrames).
+
+    Idx generation and request-derived metadata are intentionally NOT applied
+    here: those are part of the raw-data persistence concern and are handled by
+    ``store_sources_raw_data`` / ``store_source_raw_data`` so that the framework
+    owns idx assignment regardless of how the source plugin produced its output.
+
     :param execution_context: The context of the function.
     :param local_sources: A list of lists of paths to parquet files. Each element is
-    :param idx: Table index generator to use for global indexing.
         either a string to a single file or a list of strings to multiple files.
     :param working_dir: The working directory where the sources are located. If
         populated, it will be prepended to the source paths.
@@ -387,22 +409,19 @@ def load_sources(
     logger.debug(f"Loading list of sources: {local_sources}")
     if working_dir:
         logger.debug(f"Using working directory '{working_dir}'")
-    if idx is None:
-        idx = td_generators.IdxGenerator()
     sources: list[TableFrame | list[TableFrame]] = []
     for source in local_sources:
         logger.debug(f"Loading single source: {source}")
         if isinstance(source, list):
             sources.append(
                 load_sources_from_list(
-                    execution_context, idx, source, working_dir=working_dir
+                    execution_context, source, working_dir=working_dir
                 )
             )
         else:
             sources.append(
                 load_source(
                     execution_context,
-                    idx,
                     make_tableframe_context(source, working_dir=working_dir),
                 )
             )
@@ -411,7 +430,6 @@ def load_sources(
 
 def load_sources_from_list(
     execution_context: ExecutionContext,
-    idx: td_generators.IdxGenerator,
     source_list: list,
     working_dir: str | None = None,
 ) -> list[TableFrame]:
@@ -420,7 +438,6 @@ def load_sources_from_list(
         sources.append(
             load_source(
                 execution_context,
-                idx,
                 make_tableframe_context(source, working_dir=working_dir),
             )
         )
@@ -449,12 +466,11 @@ def make_tableframe_context(
 
 
 # When table_frame_context.table is not None, it means the table was loaded from the
-# repository, implying it already has an index (idx).
-# When table_frame_context.table is None, it means the table was loaded from a
-# publisher, implying it requires a new index (idx).
+# repository (already indexed). When table_frame_context.table is None, the table was
+# loaded from a publisher and is treated as raw data; idx and metadata are assigned
+# later, by ``store_source_raw_data``.
 def load_source(
     execution_context: ExecutionContext,
-    idx: td_generators.IdxGenerator,
     table_frame_context: TableFrameContext | None,
 ) -> TableFrame | None:
     if table_frame_context is None:
@@ -470,20 +486,66 @@ def load_source(
     logger.debug("Loaded parquet file successfully")
 
     if table_frame_context.table is None:
-        return store_source_raw_data(execution_context, lf, idx)
+        # Wrap the LazyFrame in a TableFrame so the InputTableSpec contract
+        # (every element is a TableFrame or a nested list of TableFrames) is
+        # satisfied. The idx and properties applied here are placeholders:
+        # ``store_source_raw_data`` re-stamps the TableFrame in 'raw' mode with
+        # the framework-managed idx and request-derived properties before
+        # sinking it, so the framework owns idx generation regardless of how
+        # the source plugin produced its output.
+        return TableFrame.__build__(
+            df=lf,
+            mode="raw",
+            idx=td_generators.IdxGenerator(),
+            properties=TableFramePropertiesBuilder.empty(),
+        )
     else:
         raise ValueError(
-            "The code should not be reaching this point after the rework in TD-461"
+            "Unreachable branch in load_source: a TableFrameContext with a "
+            "non-None 'table' represents a repository-loaded TableFrame, "
+            "which since the TD-461 rework is built directly by "
+            "execute_table_importer via scan_tf_from_table and never flows "
+            "through load_source."
         )
+
+
+def store_sources_raw_data(
+    execution_context: ExecutionContext,
+    sources: InputTableSpec,
+) -> InputTableSpec:
+    """
+    Walk an InputTableSpec and persist every TableFrame it contains as raw data
+    in the function data location. Returns a new InputTableSpec where each
+    TableFrame has been re-read from its persisted location so that downstream
+    steps in the flow see the materialized version.
+
+    A single ``IdxGenerator`` is created here and shared across every persisted
+    TableFrame in the spec, ensuring globally unique indices regardless of how
+    many groups, nested lists or custom plugins contributed to ``sources``.
+    """
+    logger.debug("Persisting plugin output as raw data")
+    idx = td_generators.IdxGenerator()
+    persisted: list = []
+    for source in sources:
+        if isinstance(source, list):
+            persisted.append([
+                store_source_raw_data(execution_context, s, idx) for s in source
+            ])
+        else:
+            persisted.append(store_source_raw_data(execution_context, source, idx))
+    return persisted
 
 
 # ToDo: Pending storing metadata. This will require deciding how to determine which
 #       information defines each raw data file depending on the source type.
 def store_source_raw_data(
     execution_context: ExecutionContext,
-    lf: pl.LazyFrame,
+    source: TableFrame | None,
     idx: td_generators.IdxGenerator,
-) -> TableFrame:
+) -> TableFrame | None:
+    if source is None:
+        return None
+
     logger.info("Storing raw data...")
 
     request = execution_context.request
@@ -502,8 +564,14 @@ def store_source_raw_data(
         .with_timestamp(request.triggered_on)
         .build()
     )
+
+    # Re-stamp the TableFrame in 'raw' mode with the framework-managed idx and
+    # request-derived properties, dropping any system columns that may have
+    # been populated upstream (placeholders set by ``load_source``, or
+    # arbitrary values set by a custom plugin's ``stream`` implementation).
+    # noinspection PyProtectedMember
     tf = TableFrame.__build__(
-        df=lf,
+        df=source._to_lazy(),
         mode="raw",
         idx=idx,
         properties=properties,
@@ -516,8 +584,7 @@ def store_source_raw_data(
 
     logger.debug(f"Performing sink of raw data to '{file_location}'")
     # noinspection PyProtectedMember
-    lf = tf._to_lazy()
-    sink_lf_to_location(lf, execution_context, file_location)
+    sink_lf_to_location(tf._to_lazy(), execution_context, file_location)
     logger.debug("File for raw data stored successfully")
     # noinspection PyProtectedMember
     return TableFrame.__build__(
