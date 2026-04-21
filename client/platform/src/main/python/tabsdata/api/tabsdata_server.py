@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import importlib.machinery
 import importlib.util
 import inspect
 import json
@@ -4829,8 +4831,62 @@ def _split_python_function_path(path: str):
 def _dynamic_import_function_from_path(path: str) -> TabsdataFunction:  # noqa: C901
     """
     Dynamically import a function from a path in the form of 'path::function_name'.
-    :param path:
-    :return:
+
+    Import isolation notes
+    ----------------------
+    Naively loading the user's file with ``module_name = basename(file_path)`` and
+    prepending its directory to ``sys.path`` (the previous behavior) caused two
+    latent bugs:
+
+    1. Installed-package shadowing. A user file named after an installed package
+       (e.g. ``databricks.py``, ``snowflake.py``, ``kafka.py``) would end up
+       registered as ``sys.modules["databricks"]`` before its body ran. Any
+       subsequent ``import databricks.sdk`` inside connector code would then
+       resolve to the user's file, fail to find ``.sdk``, and surface as a
+       misleading "package is missing some dependencies" ImportError.
+    2. Cross-registration collisions. Two user files sharing a basename
+       (``a/pub.py`` and ``b/pub.py``) both map to ``sys.modules["pub"]``,
+       overwriting each other within a single process.
+
+    To close both channels we:
+
+      * Build a *synthetic package* per user directory, named
+        ``td_usr_pkg<sha1(dir)>``, whose ``__path__`` points at that directory.
+        The name is unique, inert, and cannot collide with anything on PyPI.
+      * Register the user's file as a submodule of that synthetic package, e.g.
+        ``td_usr_pkg<dir_hash>.<basename>``. This keeps
+        ``sys.modules["databricks"]`` untouched, so real packages resolve
+        correctly.
+      * Do NOT mutate ``sys.path``. The synthetic package's ``__path__`` is the
+        only place Python will look for siblings of the user's file, and only
+        when the user asks for them explicitly via a relative import.
+
+    What this DOES support
+    ----------------------
+      * Any user filename, including names that collide with installed
+        packages (``databricks.py``, ``snowflake.py``, ``kafka.py``, ...).
+      * Multiple user files with the same basename registered from different
+        directories in the same process.
+      * Relative imports between sibling user files, e.g. inside ``pub.py``:
+            from . import helpers
+            from .shared import CONSTANT
+
+    What this does NOT support (and may raise at registration/exec time)
+    --------------------------------------------------------------------
+      * Absolute imports of sibling user files. Writing ``from helpers import
+        X`` inside a user file will NOT find a sibling ``helpers.py``; Python's
+        absolute-import machinery only consults ``sys.path``, which we
+        deliberately don't touch. Users must use relative imports
+        (``from . import helpers``) for siblings.
+      * Absolute imports of a sibling whose name matches an installed package
+        are especially ambiguous and will silently resolve to the installed
+        package. Again: use relative imports for siblings.
+      * User files that rely on ``__name__`` / ``__package__`` matching the
+        on-disk layout will observe the synthetic names
+        (``td_usr_pkg<hash>.<basename>``) instead. Anything that
+        round-trips through those values (pickle of module-defined classes,
+        logging config keyed on ``__name__``, ``if __name__ == '__main__'``
+        guards at import time) will see the synthetic name.
     """
     file_path, function_name = _split_python_function_path(path)
     file_path = os.path.abspath(file_path)
@@ -4841,21 +4897,35 @@ def _dynamic_import_function_from_path(path: str) -> TabsdataFunction:  # noqa: 
             )
         else:
             raise FileNotFoundError(f"File not found: {file_path}")
-    sys.path.insert(0, os.path.dirname(file_path))
-    try:
-        module_name = os.path.splitext(os.path.basename(file_path))[0]
-    except ValueError:
-        raise ValueError(
-            f"Invalid file path: {file_path}. Expected format is "
-            "'/path/to/file.py::function_name'."
+
+    folder_path = os.path.dirname(file_path)
+    folder_name = os.path.splitext(os.path.basename(file_path))[0]
+
+    # One synthetic package per user directory. The digest makes the name
+    # unique across directories and inert against collisions with real
+    # packages; the ``td_usr_pkg`` prefix makes it recognizable in
+    # tracebacks.
+    folder_digest = hashlib.sha1(folder_path.encode("utf-8")).hexdigest()[:12]
+    package_name = f"td_usr_pkg_{folder_digest}"
+    if package_name not in sys.modules:
+        pacakge_spec = importlib.machinery.ModuleSpec(
+            package_name, loader=None, is_package=True
         )
-    spec = importlib.util.spec_from_file_location(module_name, file_path)
-    if spec is None:
+        pacakge_spec.submodule_search_locations = [folder_path]
+        sys.modules[package_name] = importlib.util.module_from_spec(pacakge_spec)
+
+    module_name = f"{package_name}.{folder_name}"
+    module_spec = importlib.util.spec_from_file_location(
+        module_name,
+        file_path,
+        submodule_search_locations=[folder_path],
+    )
+    if module_spec is None or module_spec.loader is None:
         raise ImportError(
             f"Failed to load module spec from {file_path}. "
             "The file may not be a valid Python module."
         )
-    module = importlib.util.module_from_spec(spec)
+    module = importlib.util.module_from_spec(module_spec)
     if module is None:
         raise ImportError(
             f"Failed to create module from spec for {file_path}. "
@@ -4863,8 +4933,10 @@ def _dynamic_import_function_from_path(path: str) -> TabsdataFunction:  # noqa: 
         )
     sys.modules[module_name] = module
     try:
-        spec.loader.exec_module(module)
-    except Exception as e:
+        module_spec.loader.exec_module(module)
+    except BaseException as e:
+        # Don't leave a half-initialized module behind to poison later imports.
+        sys.modules.pop(module_name, None)
         raise ImportError(f"Failed to execute module {file_path}: {str(e)}")
     try:
         function = getattr(module, function_name)

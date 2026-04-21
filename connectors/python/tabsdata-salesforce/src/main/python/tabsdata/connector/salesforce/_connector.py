@@ -201,11 +201,12 @@ class SalesforceSource(SourcePlugin):
         try:
             from dateutil import parser
             from simple_salesforce import Salesforce, api  # noqa: F401
-        except ImportError:
+        except ImportError as e:
             raise ImportError(
-                "The 'tabsdata-salesforce' package is missing some dependencies. You"
-                "can get them by installing 'tabsdata['salesforce']'"
-            )
+                "The 'tabsdata-salesforce' package is missing some dependencies. "
+                "You can get them by installing 'tabsdata['salesforce']'"
+                f" (cause: {e})"
+            ) from e
         self.credentials = credentials
         self.query = query
         self.include_deleted = include_deleted
@@ -424,11 +425,12 @@ class SalesforceReportSource(SourcePlugin):
         try:
             from dateutil import parser  # noqa: F401
             from simple_salesforce import Salesforce, api  # noqa: F401
-        except ImportError:
+        except ImportError as e:
             raise ImportError(
-                "The 'tabsdata-salesforce' package is missing some dependencies. You"
-                "can get them by installing 'tabsdata['salesforce']'"
-            )
+                "The 'tabsdata-salesforce' package is missing some dependencies. "
+                "You can get them by installing 'tabsdata['salesforce']'"
+                f" (cause: {e})"
+            ) from e
         self.credentials = credentials
         self.instance_url = instance_url
         self.api_version = kwargs.get("api_version") or api.DEFAULT_API_VERSION

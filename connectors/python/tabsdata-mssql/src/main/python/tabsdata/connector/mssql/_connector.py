@@ -77,11 +77,12 @@ class MSSQLSource(SourcePlugin):
 
         try:
             import pyodbc  # noqa: F401
-        except ImportError:
+        except ImportError as e:
             raise ImportError(
-                "The 'tabsdata-mssql' package is missing some dependencies. You"
-                "can get them by installing 'tabsdata['mssql']'"
-            )
+                "The 'tabsdata-mssql' package is missing some dependencies. "
+                "You can get them by installing 'tabsdata['mssql']'"
+                f" (cause: {e})"
+            ) from e
 
         self.connection_string = connection_string
         self.query = query
@@ -330,11 +331,12 @@ class MSSQLDestination(DestinationPlugin):
         try:
             import fastparquet  # noqa: F401
             import pyodbc  # noqa: F401
-        except ImportError:
+        except ImportError as e:
             raise ImportError(
-                "The 'tabsdata-mssql' package is missing some dependencies. You"
-                "can get them by installing 'tabsdata['mssql']'"
-            )
+                "The 'tabsdata-mssql' package is missing some dependencies. "
+                "You can get them by installing 'tabsdata['mssql']'"
+                f" (cause: {e})"
+            ) from e
 
         self.connection_string = connection_string
         self.destination_table = destination_table

@@ -400,11 +400,12 @@ class KafkaTrigger(StageTrigger):
             from confluent_kafka.schema_registry import (  # noqa: F401
                 SchemaRegistryClient,
             )
-        except ImportError:
+        except ImportError as e:
             raise ImportError(
-                "The 'tabsdata-kafka' package is missing some dependencies. You"
-                "can get them by installing 'tabsdata['kafka']'"
-            )
+                "The 'tabsdata-kafka' package is missing some dependencies. "
+                "You can get them by installing 'tabsdata['kafka']'"
+                f" (cause: {e})"
+            ) from e
         self._conn = conn
         self._topic = topic
         self._data_format = data_format

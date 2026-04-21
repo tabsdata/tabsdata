@@ -104,11 +104,12 @@ class MongoDBDestination(DestinationPlugin):
         try:
             import pymongo  # noqa: F401
             from pymongo.errors import ConnectionFailure  # noqa: F401
-        except ImportError:
+        except ImportError as e:
             raise ImportError(
-                "The 'tabsdata-mongodb' package is missing some dependencies. You"
-                "can get them by installing 'tabsdata['mongodb']'"
-            )
+                "The 'tabsdata-mongodb' package is missing some dependencies. "
+                "You can get them by installing 'tabsdata['mongodb']'"
+                f" (cause: {e})"
+            ) from e
         self.uri = uri
         self.collections_with_ids = collections_with_ids
         self.credentials = credentials

@@ -104,11 +104,12 @@ class SnowflakeDestination(DestinationPlugin):
 
             warnings.filterwarnings("ignore", module="snowflake")
             from snowflake.connector import connect  # noqa: F401
-        except ImportError:
+        except ImportError as e:
             raise ImportError(
-                "The 'tabsdata-snowflake' package is missing some dependencies. You"
-                "can get them by installing 'tabsdata['snowflake']'"
-            )
+                "The 'tabsdata-snowflake' package is missing some dependencies. "
+                "You can get them by installing 'tabsdata['snowflake']'"
+                f" (cause: {e})"
+            ) from e
         finally:
             restore_snowflake_logger_levels()
         self.connection_parameters = connection_parameters

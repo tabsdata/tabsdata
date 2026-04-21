@@ -239,11 +239,12 @@ class BigQueryDest(DestinationPlugin):
         """
         try:
             from google.cloud import bigquery  # noqa: F401
-        except ImportError:
+        except ImportError as e:
             raise ImportError(
-                "The 'tabsdata-bigquery' package is missing some dependencies. You"
-                "can get them by installing 'tabsdata['bigquery']'"
-            )
+                "The 'tabsdata-bigquery' package is missing some dependencies. "
+                "You can get them by installing 'tabsdata['bigquery']'"
+                f" (cause: {e})"
+            ) from e
         self.conn = conn
         self.tables = tables
         self.if_table_exists = if_table_exists

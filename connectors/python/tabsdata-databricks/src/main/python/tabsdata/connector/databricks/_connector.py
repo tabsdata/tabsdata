@@ -138,11 +138,12 @@ class DatabricksSource(SourcePlugin):
             # noinspection PyShadowingNames
             import databricks.sdk as dbsdk  # noqa: F401
             from databricks.sdk.core import Config, pat_auth  # noqa: F401
-        except ImportError:
+        except ImportError as e:
             raise ImportError(
-                "The 'tabsdata-databricks' package is missing some dependencies. You"
-                "can get them by installing 'tabsdata['databricks']'"
-            )
+                "The 'tabsdata-databricks' package is missing some dependencies. "
+                "You can get them by installing 'tabsdata['databricks']'"
+                f" (cause: {e})"
+            ) from e
         self.host_url = host_url
         self.token = token
         self.queries = queries
@@ -571,11 +572,12 @@ class DatabricksDestination(DestinationPlugin):
             # noinspection PyShadowingNames
             import databricks.sql as dbsql  # noqa: F401
             from databricks.sdk.core import Config, pat_auth  # noqa: F401
-        except ImportError:
+        except ImportError as e:
             raise ImportError(
-                "The 'tabsdata-databricks' package is missing some dependencies. You"
-                "can get them by installing 'tabsdata['databricks']'"
-            )
+                "The 'tabsdata-databricks' package is missing some dependencies. "
+                "You can get them by installing 'tabsdata['databricks']'"
+                f" (cause: {e})"
+            ) from e
         self.host_url = host_url
         self.token = token
         self.volume = volume
