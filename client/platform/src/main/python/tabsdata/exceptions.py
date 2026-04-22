@@ -2358,6 +2358,8 @@ class ErrorCode(Enum):
     DECE116 = object()
     DECE117 = object()
     DECE118 = object()
+    DECE119 = object()
+    DECE120 = object()
 
     # source configuration errors
     SOCE100 = object()

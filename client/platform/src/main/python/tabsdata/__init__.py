@@ -169,7 +169,9 @@ from tabsdata.connector.salesforce.input.salesforce_input import SalesforceSrc
 from tabsdata.connector.salesforce.input.salesforce_report_input import (
     SalesforceReportSrc,
 )
+from tabsdata.connector.snowflake._connection import SnowflakeConn
 from tabsdata.connector.snowflake._connector import SnowflakeDestination
+from tabsdata.connector.snowflake.output.snowflake_output import SnowflakeDest
 from tabsdata.tableframe.dtypes import (
     FLOAT_DTYPES,
     INTEGER_DTYPES,
@@ -286,6 +288,7 @@ __all__ = [
     "S3Dest",
     "GCSDest",
     "S3Destination",
+    "SnowflakeDest",
     "SnowflakeDestination",
     "StarRocksDest",
     # Triggers
@@ -315,6 +318,7 @@ __all__ = [
     "PostgresConn",
     "S3Conn",
     "SalesforceConn",
+    "SnowflakeConn",
     "StarRocksConn",
     # Cloud staging configs
     "AzureConfig",
