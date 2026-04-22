@@ -58,7 +58,9 @@ def obtain_sqlalchemy_url(conn: SQLConnConfig) -> URL:
     validate_user_password(user=user, password=password)
     if ODBC_CONNECT_PARAM in conn_url.query:
         conn.cx_src_configs_sql["UID"] = user
+        conn.cx_dst_configs_sql["UID"] = user
         conn.cx_src_configs_sql["PWD"] = password
+        conn.cx_dst_configs_sql["PWD"] = password
     else:
         conn_url = conn_url.set(
             username=user,

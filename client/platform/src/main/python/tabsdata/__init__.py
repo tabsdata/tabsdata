@@ -143,6 +143,7 @@ from tabsdata.connector.mongodb._connector import MongoDBDestination
 from tabsdata.connector.mssql._connector import MSSQLDestination, MSSQLSource
 from tabsdata.connector.mssql.connection.mssql_connection import MSSQLConn
 from tabsdata.connector.mssql.input.mssql_input import MSSQLSrc
+from tabsdata.connector.mssql.output.mssql_output import MSSQLDest
 from tabsdata.connector.salesforce._connector import (
     SalesforceReportSource,
     SalesforceSource,
@@ -245,6 +246,7 @@ __all__ = [
     "MariaDBDest",
     "MariaDBDestination",
     "MongoDBDestination",
+    "MSSQLDest",
     "MSSQLDestination",
     "MySQLDest",
     "MySQLDestination",

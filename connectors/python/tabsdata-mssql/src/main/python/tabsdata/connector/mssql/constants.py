@@ -4,4 +4,5 @@
 
 from typing import Literal
 
-MSSQLLoaderSpec = Literal["polars_sqlalchemy", "pandas"]
+MSSQLSrcLoaderSpec = Literal["polars_sqlalchemy", "pandas"]
+MSSQLDestWriterSpec = Literal["polars_sqlalchemy"]

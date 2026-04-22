@@ -141,3 +141,11 @@ class MSSQLConn(Conn):
             and self.cx_src_configs_mssql == other.cx_src_configs_mssql
             and self.cx_dst_configs_mssql == other.cx_dst_configs_mssql
         )
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}({self.connection_string_or_uri},"
+            f" enforce_connection_params={self.enforce_connection_params},"
+            f" cx_src_configs_mssql={self.cx_src_configs_mssql},"
+            f" cx_dst_configs_mssql={self.cx_dst_configs_mssql})"
+        )

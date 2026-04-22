@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from tabsdata._io.outputs.sql.oracle_output import OracleDest
     from tabsdata._io.outputs.sql.postgres_output import PostgresDest
     from tabsdata.connector.mssql.input.mssql_input import MSSQLSrc
+    from tabsdata.connector.mssql.output.mssql_output import MSSQLDest
 
 
 logger = logging.getLogger(__name__)
@@ -66,7 +67,7 @@ def get_sql_source_helper(
 
 
 def get_sql_dest_helper(
-    dest: Union[MySQLDest, PostgresDest, MariaDBDest, OracleDest],
+    dest: Union[MySQLDest, PostgresDest, MariaDBDest, OracleDest, MSSQLDest],
 ) -> Union[SQLAlchemyDestHelper]:
     """
     Factory function to get the appropriate SQL destination helper based on the
@@ -205,13 +206,14 @@ def _get_sql_source_config(
 
 
 def _get_sql_dest_config(
-    dest: Union[MySQLDest, PostgresDest, MariaDBDest, OracleDest],
+    dest: Union[MySQLDest, PostgresDest, MariaDBDest, OracleDest, MSSQLDest],
 ) -> SQLDestConfig:
     # Runtime import for isinstance checks:
     from tabsdata._io.outputs.sql.mariadb_output import MariaDBDest as _MariaDBDest
     from tabsdata._io.outputs.sql.mysql_output import MySQLDest as _MySQLDest
     from tabsdata._io.outputs.sql.oracle_output import OracleDest as _OracleDest
     from tabsdata._io.outputs.sql.postgres_output import PostgresDest as _PostgresDest
+    from tabsdata.connector.mssql.output.mssql_output import MSSQLDest as _MSSQLDest
 
     if isinstance(dest, _MySQLDest):
         return SQLDestConfig(
@@ -266,6 +268,21 @@ def _get_sql_dest_config(
                 enforce_connection_params=dest.conn.enforce_connection_params,
                 cx_src_configs_sql=dest.conn.cx_src_configs_oracle,
                 cx_dst_configs_sql=dest.conn.cx_dst_configs_oracle,
+            ),
+            destination_tables=dest.destination_tables,
+            if_table_exists=dest.if_table_exists,
+            transactional=dest.transactional,
+            chunk_size=dest.chunk_size,
+            loader=dest.loader,
+        )
+    elif isinstance(dest, _MSSQLDest):
+        return SQLDestConfig(
+            conn=SQLConnConfig(
+                uri=dest.conn.uri,
+                credentials=dest.conn.credentials,
+                enforce_connection_params=dest.conn.enforce_connection_params,
+                cx_src_configs_sql=dest.conn.cx_src_configs_mssql,
+                cx_dst_configs_sql=dest.conn.cx_dst_configs_mssql,
             ),
             destination_tables=dest.destination_tables,
             if_table_exists=dest.if_table_exists,

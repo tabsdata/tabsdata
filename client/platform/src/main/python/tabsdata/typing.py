@@ -35,7 +35,7 @@ from tabsdata.connector.kafka.typing import (
     SchemaIdCompatibles,
     SchemaIdSpec,
 )
-from tabsdata.connector.mssql.constants import MSSQLLoaderSpec
+from tabsdata.connector.mssql.constants import MSSQLDestWriterSpec, MSSQLSrcLoaderSpec
 
 __all__ = [
     "Db2SrcLoaderSpec",
@@ -44,7 +44,8 @@ __all__ = [
     "KafkaServersSpec",
     "MariaDBDestWriterSpec",
     "MariaDBSrcLoaderSpec",
-    "MSSQLLoaderSpec",
+    "MSSQLDestWriterSpec",
+    "MSSQLSrcLoaderSpec",
     "MySQLDestWriterSpec",
     "MySQLSrcLoaderSpec",
     "OnTablesAction",

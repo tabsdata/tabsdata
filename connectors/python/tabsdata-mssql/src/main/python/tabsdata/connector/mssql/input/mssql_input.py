@@ -23,7 +23,7 @@ from tabsdata._utils.sql_utils import (
 )
 from tabsdata._utils.validation import _td_validate_call
 from tabsdata.connector.mssql.connection.mssql_connection import MSSQLConn
-from tabsdata.connector.mssql.constants import MSSQLLoaderSpec
+from tabsdata.connector.mssql.constants import MSSQLSrcLoaderSpec
 from tabsdata.exceptions import (
     ErrorCode,
     SourceConfigurationError,
@@ -50,7 +50,7 @@ class MSSQLSrc(SourcePlugin):
         initial_values: Optional[dict[str, Any]] = None,
         transactional: bool = True,
         chunk_size: PositiveInt = 100000,
-        loader: MSSQLLoaderSpec = "polars_sqlalchemy",
+        loader: MSSQLSrcLoaderSpec = "polars_sqlalchemy",
         schema_overrides: SchemaOverrideSpec = None,
     ):
         """
@@ -156,23 +156,23 @@ class MSSQLSrc(SourcePlugin):
         return self._chunk_size
 
     @property
-    def loader(self) -> MSSQLLoaderSpec:
+    def loader(self) -> MSSQLSrcLoaderSpec:
         """
         The data processing loader to use for executing SQL imports.
         """
         return self._loader.value
 
-    def _validate_loader(self, loader: MSSQLLoaderSpec):
+    def _validate_loader(self, loader: MSSQLSrcLoaderSpec):
         """
         Validate the loader parameter used to execute SQL imports.
         Args:
             loader: The data processing loader to use for executing SQL imports.
         """
-        if loader not in get_args(MSSQLLoaderSpec):
+        if loader not in get_args(MSSQLSrcLoaderSpec):
             raise SourceConfigurationError(
                 ErrorCode.SOCE52,
                 self.__class__.__name__,
-                get_args(MSSQLLoaderSpec),
+                get_args(MSSQLSrcLoaderSpec),
                 loader,
             )
         return _LoaderSpec(loader)
