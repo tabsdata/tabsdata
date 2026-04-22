@@ -4,9 +4,11 @@
 
 import importlib.metadata
 
+from tabsdata.connector.mongodb._connection import MongoDBConn
 from tabsdata.connector.mongodb._connector import MongoDBDestination
+from tabsdata.connector.mongodb.output.mongodb_output import MongoDBDest
 
-__all__ = ["MongoDBDestination"]
+__all__ = ["MongoDBConn", "MongoDBDest", "MongoDBDestination"]
 
 # noinspection PyBroadException
 try:

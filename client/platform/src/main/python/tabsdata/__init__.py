@@ -150,7 +150,9 @@ from tabsdata.connector.kafka.typing import (
 )
 
 # noinspection PyProtectedMember
+from tabsdata.connector.mongodb._connection import MongoDBConn
 from tabsdata.connector.mongodb._connector import MongoDBDestination
+from tabsdata.connector.mongodb.output.mongodb_output import MongoDBDest
 
 # noinspection PyProtectedMember
 from tabsdata.connector.mssql._connector import MSSQLDestination, MSSQLSource
@@ -271,6 +273,7 @@ __all__ = [
     "LocalFileDestination",
     "MariaDBDest",
     "MariaDBDestination",
+    "MongoDBDest",
     "MongoDBDestination",
     "MSSQLDest",
     "MSSQLDestination",
@@ -303,6 +306,7 @@ __all__ = [
     "KafkaConn",
     "MSSQLConn",
     "MariaDBConn",
+    "MongoDBConn",
     "MySQLCdcConn",
     "MySQLConn",
     "NamedConn",
