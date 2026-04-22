@@ -44,6 +44,7 @@ from tabsdata._io.connections.clickhouse_connection import ClickHouseConn
 from tabsdata._io.connections.connections import Conn
 from tabsdata._io.connections.db2_connection import Db2Conn
 from tabsdata._io.connections.druid_connection import DruidConn
+from tabsdata._io.connections.file_connections.azure_connection import AzureConn
 from tabsdata._io.connections.file_connections.gcp_connection import GCSConn
 from tabsdata._io.connections.file_connections.s3_connection import S3Conn
 from tabsdata._io.connections.mariadb_connection import MariaDBConn
@@ -74,6 +75,7 @@ from tabsdata._io.inputs.stage_input import Stage
 
 # noinspection PyProtectedMember
 from tabsdata._io.inputs.table_inputs import TableInput
+from tabsdata._io.outputs.file.azure_output import AzureDest
 from tabsdata._io.outputs.file.gcs_output import GCSDest
 from tabsdata._io.outputs.file.s3_output import S3Dest
 
@@ -240,6 +242,7 @@ __all__ = [
     "TableOutput",
     # Destinations
     "AWSGlue",
+    "AzureDest",
     "AzureDestination",
     "BigQueryDest",
     "ClickHouseDest",
@@ -270,26 +273,27 @@ __all__ = [
     "MySQLCdcTrigger",
     "PostgresCdcTrigger",
     # Connections
+    "AzureConn",
     "BigQueryConn",
     "ClickHouseConn",
-    "Db2Conn",
     "Db2CdcConn",
+    "Db2Conn",
     "DruidConn",
+    "GCSConn",
     "KafkaConn",
-    "MariaDBConn",
     "MSSQLConn",
+    "MariaDBConn",
     "MySQLCdcConn",
     "MySQLConn",
     "OracleConn",
-    "PostgresConn",
     "PostgresCdcConn",
+    "PostgresConn",
+    "S3Conn",
     "StarRocksConn",
     # Cloud staging configs
     "AzureConfig",
     "GCSConfig",
     "S3Config",
-    "S3Conn",
-    "GCSConn",
     # Credentials
     "AwsGlueSchemaRegistryCredentialsSpec",
     "KafkaCredentialsSpec",
