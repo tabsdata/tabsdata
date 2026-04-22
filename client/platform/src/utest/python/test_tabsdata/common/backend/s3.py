@@ -51,7 +51,7 @@ def s3_config():
     if not uri:
         raise Exception(
             f"The environment variable {config['URI_ENV']} is not set. Unable to run "
-            "tests using the 'azure_config' fixture."
+            "tests using the 's3_config' fixture."
         )
     config["URI"] = uri
     bucket_name = uri.replace("s3://", "").split("/", 1)[0]

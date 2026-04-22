@@ -104,6 +104,13 @@ class ErrorCode(Enum):
             " 'scheme://path'. The URI provided was '{}'."
         ),
     }
+    CXCE10 = {
+        "code": "CXCE-010",
+        "message": (
+            "The 'bucket_uri' parameter in a {} cannot contain a path."
+            " It must be of the form '{}'. Got '{}' instead."
+        ),
+    }
     DCE1 = {
         "code": "DCE-001",
         "message": (
@@ -2377,10 +2384,12 @@ class ErrorCode(Enum):
     }
     CDC4 = {
         "code": "CDC-004",
-        "message": "CD table {}.{} not found in ASN registration table "
-        "{}.ibmsnap_register. Refer to the documentation for instructions on "
-        "configuring Db2 table replication using ASN, or contact your system "
-        "administrator to configure it.",
+        "message": (
+            "CD table {}.{} not found in ASN registration table "
+            "{}.ibmsnap_register. Refer to the documentation for instructions on "
+            "configuring Db2 table replication using ASN, or contact your system "
+            "administrator to configure it."
+        ),
     }
     CDC5 = {
         "code": "CDC-005",
@@ -2392,13 +2401,17 @@ class ErrorCode(Enum):
     }
     CDC7 = {
         "code": "CDC-007",
-        "message": "Column count mismatch for table {}.{}: "
-        "catalog returned {} columns but inspector returned {}",
+        "message": (
+            "Column count mismatch for table {}.{}: "
+            "catalog returned {} columns but inspector returned {}"
+        ),
     }
     CDC8 = {
         "code": "CDC-008",
-        "message": "Column name mismatch for table {}.{}: "
-        "catalog column '{}' does not match inspector column '{}'",
+        "message": (
+            "Column name mismatch for table {}.{}: "
+            "catalog column '{}' does not match inspector column '{}'"
+        ),
     }
     CDC9 = {
         "code": "CDC-009",
@@ -2406,8 +2419,10 @@ class ErrorCode(Enum):
     }
     CDC10 = {
         "code": "CDC-010",
-        "message": "Buffer sentinel has no base offset; ingester must provide a "
-        "base offset at initialization",
+        "message": (
+            "Buffer sentinel has no base offset; ingester must provide a "
+            "base offset at initialization"
+        ),
     }
     CDC11 = {
         "code": "CDC-011",
@@ -2509,18 +2524,24 @@ class ErrorCode(Enum):
     }
     CDCDB25 = {
         "code": "CDCDB2-005",
-        "message": "CD table contains prefixed columns that cannot be matched "
-        "to any source column: {} | {} | {} (prefix: {!r})",
+        "message": (
+            "CD table contains prefixed columns that cannot be matched "
+            "to any source column: {} | {} | {} (prefix: {!r})"
+        ),
     }
     CDCDB26 = {
         "code": "CDCDB2-006",
-        "message": "CD table is not configured with a before-image prefix; "
-        "cannot match old-value columns",
+        "message": (
+            "CD table is not configured with a before-image prefix; "
+            "cannot match old-value columns"
+        ),
     }
     CDCDB27 = {
         "code": "CDCDB2-007",
-        "message": "CD table contains non-prefixed columns that cannot be matched "
-        "to any before-image column: {} | {} | {} (prefix: {!r})",
+        "message": (
+            "CD table contains non-prefixed columns that cannot be matched "
+            "to any before-image column: {} | {} | {} (prefix: {!r})"
+        ),
     }
 
     # Cloud staging configuration errors

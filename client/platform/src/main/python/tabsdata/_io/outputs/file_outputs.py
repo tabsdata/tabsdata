@@ -1439,10 +1439,14 @@ def _store_results_in_intermediate_files(
 
 
 def _obtain_destination_path_list(destination):
+    from tabsdata._io.outputs.file.s3_output import S3Dest
+
     if isinstance(destination, LocalFileDestination):
         destination_path = destination.path
     elif isinstance(destination, (AzureDestination, GCSDestination, S3Destination)):
         destination_path = destination.uri
+    elif isinstance(destination, S3Dest):
+        destination_path = destination._full_uri
     else:
         logger.error(f"Storing results in destination '{destination}' not supported.")
         raise TypeError(
@@ -1517,6 +1521,8 @@ def _store_result_using_transporter(
     output_folder: str,
     request: FunctionYaml,
 ) -> str:
+    from tabsdata._io.outputs.file.s3_output import S3Dest
+
     logger.info(
         f"Storing result in destination file '{destination_path}' from intermediate"
         f" file '{intermediate_file}'"
@@ -1532,6 +1538,17 @@ def _store_result_using_transporter(
             secret_key=TransporterEnv(SERVER_SIDE_AWS_SECRET_ACCESS_KEY),
             region=(
                 TransporterEnv(SERVER_SIDE_AWS_REGION) if destination.region else None
+            ),
+        )
+    elif isinstance(destination, S3Dest):
+        destination = TransporterS3(
+            destination_path,
+            access_key=TransporterEnv(SERVER_SIDE_AWS_ACCESS_KEY_ID),
+            secret_key=TransporterEnv(SERVER_SIDE_AWS_SECRET_ACCESS_KEY),
+            region=(
+                TransporterEnv(SERVER_SIDE_AWS_REGION)
+                if destination.conn.region
+                else None
             ),
         )
     elif isinstance(destination, AzureDestination):
