@@ -4,9 +4,19 @@
 
 import importlib.metadata
 
+from tabsdata.connector.salesforce._connection import SalesforceConn
 from tabsdata.connector.salesforce._connector import SalesforceSource
+from tabsdata.connector.salesforce.input.salesforce_input import SalesforceSrc
+from tabsdata.connector.salesforce.input.salesforce_report_input import (
+    SalesforceReportSrc,
+)
 
-__all__ = ["SalesforceSource"]
+__all__ = [
+    "SalesforceConn",
+    "SalesforceReportSrc",
+    "SalesforceSrc",
+    "SalesforceSource",
+]
 
 # noinspection PyBroadException
 try:

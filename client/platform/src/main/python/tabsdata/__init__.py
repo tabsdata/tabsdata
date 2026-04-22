@@ -154,10 +154,15 @@ from tabsdata.connector.mssql._connector import MSSQLDestination, MSSQLSource
 from tabsdata.connector.mssql.connection.mssql_connection import MSSQLConn
 from tabsdata.connector.mssql.input.mssql_input import MSSQLSrc
 from tabsdata.connector.mssql.output.mssql_output import MSSQLDest
+from tabsdata.connector.salesforce._connection import SalesforceConn
 from tabsdata.connector.salesforce._connector import (
     SalesforceReportSource,
     SalesforceSource,
     SalesforceTokenCredentials,
+)
+from tabsdata.connector.salesforce.input.salesforce_input import SalesforceSrc
+from tabsdata.connector.salesforce.input.salesforce_report_input import (
+    SalesforceReportSrc,
 )
 from tabsdata.connector.snowflake._connector import SnowflakeDestination
 from tabsdata.tableframe.dtypes import (
@@ -243,7 +248,9 @@ __all__ = [
     "PostgresSrc",
     "S3Source",
     "S3Src",
+    "SalesforceSrc",
     "SalesforceReportSource",
+    "SalesforceReportSrc",
     "SalesforceSource",
     # Outputs
     "TableOutput",
@@ -297,6 +304,7 @@ __all__ = [
     "PostgresCdcConn",
     "PostgresConn",
     "S3Conn",
+    "SalesforceConn",
     "StarRocksConn",
     # Cloud staging configs
     "AzureConfig",
