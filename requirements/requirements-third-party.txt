@@ -8,6 +8,7 @@ base32hex==1.0.2
 boto3==1.42.73
 boto3-stubs[glue]==1.42.73
 click==8.3.1
+click-repl==0.3.0
 clickhouse-connect==0.14.1
 cloudpickle==3.1.2
 colorama==0.4.6
@@ -35,6 +36,7 @@ pillow==12.1.1
 pip-tools==7.5.3
 platformdirs==4.9.4
 polars==1.39.3
+prompt-toolkit==3.0.52
 protobuf==6.33.6
 pycountries==1.2.1
 pyyaml==6.0.3

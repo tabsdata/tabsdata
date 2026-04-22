@@ -97,6 +97,15 @@ cli.add_command(user)
 
 
 @cli.command()
+@click.pass_context
+def shell(ctx: click.Context):
+    """Start an interactive shell session"""
+    from tabsdata._cli.shell import run_shell
+
+    run_shell(ctx, cli, __version__)
+
+
+@cli.command()
 @click.argument("mode", type=click.Choice(["on", "off"]))
 @click.pass_context
 def hints(ctx: click.Context, mode: str):

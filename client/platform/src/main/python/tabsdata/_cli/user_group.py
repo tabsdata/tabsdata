@@ -45,7 +45,9 @@ def create(
     name = name or logical_prompt(ctx, "Name of the user")
     if password is None:
         password = logical_prompt(ctx, "Password for the user", hide_input=True)
-        second_password = click.prompt("Please re-enter the password", hide_input=True)
+        second_password = logical_prompt(
+            ctx, "Please re-enter the password", hide_input=True
+        )
         if password != second_password:
             raise click.ClickException("Passwords do not match.")
     full_name = full_name or logical_prompt(

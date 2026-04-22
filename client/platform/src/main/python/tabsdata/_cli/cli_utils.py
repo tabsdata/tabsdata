@@ -49,6 +49,36 @@ def beautify_time(time: str) -> str:
     return time
 
 
+def prompt_with_escape(message, default=None, hide_input=False):
+    """Prompt using prompt_toolkit so that both Ctrl+C and ESC abort."""
+    from prompt_toolkit import PromptSession
+    from prompt_toolkit.key_binding import KeyBindings
+
+    kb = KeyBindings()
+
+    @kb.add("escape")
+    def _(event):
+        event.app.exit(exception=KeyboardInterrupt)
+
+    suffix = ": "
+    if default is not None:
+        prompt_text = f"{message} [{default}]{suffix}"
+    else:
+        prompt_text = f"{message}{suffix}"
+
+    session = PromptSession()
+    session.app.ttimeoutlen = 0.1
+    session.app.timeoutlen = 0.1
+
+    result = session.prompt(
+        prompt_text,
+        key_bindings=kb,
+        is_password=hide_input,
+    )
+
+    return result if result else default
+
+
 def logical_prompt(
     ctx: click.Context, message: str, default_value=None, hide_input: bool = False
 ):
@@ -65,7 +95,18 @@ def logical_prompt(
                 "required values or avoid using '--no-prompt'."
             )
         return default_value
-    return click.prompt(message, default=default_value, hide_input=hide_input)
+    try:
+        import sys
+
+        if sys.stdin.isatty():
+            return prompt_with_escape(
+                message, default=default_value, hide_input=hide_input
+            )
+        else:
+            return click.prompt(message, default=default_value, hide_input=hide_input)
+    except (KeyboardInterrupt, EOFError):
+        click.echo()
+        raise click.exceptions.Exit(0)
 
 
 def utils_login(
