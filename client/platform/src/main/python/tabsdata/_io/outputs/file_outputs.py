@@ -1439,13 +1439,14 @@ def _store_results_in_intermediate_files(
 
 
 def _obtain_destination_path_list(destination):
+    from tabsdata._io.outputs.file.gcs_output import GCSDest
     from tabsdata._io.outputs.file.s3_output import S3Dest
 
     if isinstance(destination, LocalFileDestination):
         destination_path = destination.path
     elif isinstance(destination, (AzureDestination, GCSDestination, S3Destination)):
         destination_path = destination.uri
-    elif isinstance(destination, S3Dest):
+    elif isinstance(destination, (S3Dest, GCSDest)):
         destination_path = destination._full_uri
     else:
         logger.error(f"Storing results in destination '{destination}' not supported.")
@@ -1521,6 +1522,7 @@ def _store_result_using_transporter(
     output_folder: str,
     request: FunctionYaml,
 ) -> str:
+    from tabsdata._io.outputs.file.gcs_output import GCSDest
     from tabsdata._io.outputs.file.s3_output import S3Dest
 
     logger.info(
@@ -1557,7 +1559,7 @@ def _store_result_using_transporter(
             account_name=TransporterEnv(SERVER_SIDE_AZURE_ACCOUNT_NAME),
             account_key=TransporterEnv(SERVER_SIDE_AZURE_ACCOUNT_KEY),
         )
-    elif isinstance(destination, GCSDestination):
+    elif isinstance(destination, (GCSDestination, GCSDest)):
         destination = TransporterGCS(
             destination_path,
             service_account_key=TransporterEnv(SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON),

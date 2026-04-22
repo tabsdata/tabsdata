@@ -44,6 +44,7 @@ from tabsdata._io.connections.clickhouse_connection import ClickHouseConn
 from tabsdata._io.connections.connections import Conn
 from tabsdata._io.connections.db2_connection import Db2Conn
 from tabsdata._io.connections.druid_connection import DruidConn
+from tabsdata._io.connections.file_connections.gcp_connection import GCSConn
 from tabsdata._io.connections.file_connections.s3_connection import S3Conn
 from tabsdata._io.connections.mariadb_connection import MariaDBConn
 from tabsdata._io.connections.mysql_connection import MySQLConn
@@ -73,6 +74,7 @@ from tabsdata._io.inputs.stage_input import Stage
 
 # noinspection PyProtectedMember
 from tabsdata._io.inputs.table_inputs import TableInput
+from tabsdata._io.outputs.file.gcs_output import GCSDest
 from tabsdata._io.outputs.file.s3_output import S3Dest
 
 # noinspection PyProtectedMember
@@ -257,6 +259,7 @@ __all__ = [
     "PostgresDest",
     "PostgresDestination",
     "S3Dest",
+    "GCSDest",
     "S3Destination",
     "SnowflakeDestination",
     "StarRocksDest",
@@ -286,6 +289,7 @@ __all__ = [
     "GCSConfig",
     "S3Config",
     "S3Conn",
+    "GCSConn",
     # Credentials
     "AwsGlueSchemaRegistryCredentialsSpec",
     "KafkaCredentialsSpec",
