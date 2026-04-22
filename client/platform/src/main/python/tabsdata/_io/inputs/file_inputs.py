@@ -1326,6 +1326,7 @@ def _read_avro_in_chunks(avro_path, chunk_size):
 
 
 def _obtain_source_object(user_source, origin_location_uri):
+    from tabsdata._io.inputs.file.azure_input import AzureSrc
     from tabsdata._io.inputs.file.gcs_input import GCSSrc
     from tabsdata._io.inputs.file.s3_input import S3Src
 
@@ -1354,7 +1355,7 @@ def _obtain_source_object(user_source, origin_location_uri):
             origin_location_uri,
             service_account_key=TransporterEnv(SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON),
         )
-    elif isinstance(user_source, AzureSource):
+    elif isinstance(user_source, (AzureSource, AzureSrc)):
         transporter_source = TransporterAzure(
             origin_location_uri,
             account_name=TransporterEnv(SERVER_SIDE_AZURE_ACCOUNT_NAME),

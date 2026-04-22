@@ -52,6 +52,7 @@ from tabsdata._io.connections.mysql_connection import MySQLConn
 from tabsdata._io.connections.oracle_connection import OracleConn
 from tabsdata._io.connections.postgres_connection import PostgresConn
 from tabsdata._io.connections.starrocks_connection import StarRocksConn
+from tabsdata._io.inputs.file.azure_input import AzureSrc
 from tabsdata._io.inputs.file.gcs_input import GCSSrc
 from tabsdata._io.inputs.file.s3_input import S3Src
 from tabsdata._io.inputs.file_inputs import (
@@ -223,6 +224,7 @@ __all__ = [
     "TableInput",
     # Sources
     "AzureSource",
+    "AzureSrc",
     "DatabricksSource",
     "Db2Src",
     "GCSSource",

@@ -31,9 +31,9 @@ from tabsdata._tabsserver.function.offset_utils import (
     OFFSET_LAST_MODIFIED_VARIABLE_NAME,
 )
 from tabsdata._utils.datetime import (
+    NoTimezoneError,
     datetime_to_microseconds_iso_str,
     normalize_iso_datetime,
-    NoTimezoneError,
 )
 from tabsdata._utils.file_utils import (
     execute_file_copy,

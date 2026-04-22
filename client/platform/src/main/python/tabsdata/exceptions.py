@@ -2373,6 +2373,7 @@ class ErrorCode(Enum):
     SOCE112 = object()
     SOCE113 = object()
     SOCE114 = object()
+    SOCE115 = object()
 
     # stage trigger configuration errors
     STCE100 = object()
