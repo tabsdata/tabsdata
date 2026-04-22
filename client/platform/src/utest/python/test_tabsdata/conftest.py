@@ -74,6 +74,8 @@ check_assets()
 pytest_plugins = ["test_tabsdata.fntest"]
 
 os.environ["POLARS_VERBOSE"] = "0"
+os.environ["POLARS_FORCE_ASYNC"] = "1"
+
 
 
 def get_function_registration_path(fn: TabsdataFunction):
@@ -255,19 +257,24 @@ APISERVER_URL = (
 
 LOCAL_PACKAGES_LIST = [
     ROOT_PROJECT_DIR,
-    os.path.join(ROOT_PROJECT_DIR,
-    "devutils",
-    "automation",
-    "tasks",
-    "python",
-    TABSDATA_TOOLKIT_MODULE_NAME,)]
+    os.path.join(
+        ROOT_PROJECT_DIR,
+        "devutils",
+        "automation",
+        "tasks",
+        "python",
+        TABSDATA_TOOLKIT_MODULE_NAME,
+    ),
+]
 
 for connector in gather_connectors():
     LOCAL_PACKAGES_LIST.append(
-        os.path.join(ROOT_PROJECT_DIR,
-        "connectors",
-        "python",
-        connector,)
+        os.path.join(
+            ROOT_PROJECT_DIR,
+            "connectors",
+            "python",
+            connector,
+        )
     )
 
 MOCK_COLLECTION = "td_collection"
@@ -739,9 +746,7 @@ def testing_collection_with_table(worker_id, tabsserver_connection):
                 "ready to be consumed yet."
             )
         else:
-            logger.debug(
-                f"No dataversions found for table yet: '{table.dataversions}'"
-            )
+            logger.debug(f"No dataversions found for table yet: '{table.dataversions}'")
         logger.debug(f"Table '{random_id}' - '{file_path}' does not have data yet")
         raise ValueError(
             f"Data from the table is not yet available for"

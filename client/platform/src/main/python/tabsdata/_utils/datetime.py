@@ -35,7 +35,15 @@ def normalize_iso_datetime(value: str | datetime | None) -> datetime | None:
         value (str | datetime): The date to normalize. The date and time can
             be provided as a string in
             [ISO 8601 format](https://en.wikipedia.org/wiki/ISO_8601) or as
-            a datetime object. If no timezone is provided, an exception is raised.
+            a datetime object.
+    Returns:
+        datetime: The normalized datetime object. If the input value is None, None is
+            returned.
+    Raises:
+        NoTimezoneError: If the input value does not contain timezone information.
+        ValueError: If the input value is not a valid ISO 8601 string or a datetime
+            object.
+        TypeError: If the input value is not a string, datetime object, or None.
     """
 
     if value:

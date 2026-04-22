@@ -22,12 +22,12 @@ def validate_file_info(value: str | FileInfo | None) -> FileInfo | None:
             return FileInfo(value.lower())
         except ValueError:
             raise FormatConfigurationError(
-                ErrorCode.FOCE5,
+                ErrorCode.FOCE7,
                 ["name", "uri", None],
                 value,
             )
     raise FormatConfigurationError(
-        ErrorCode.FOCE5,
+        ErrorCode.FOCE7,
         ["name", "uri", None],
         type(value),
     )

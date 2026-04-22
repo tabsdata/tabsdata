@@ -114,6 +114,8 @@ pub async fn wildcard_copy(request: WildcardCopyRequest) -> Result<CopyReport, T
 
     let report = copy(copy_request).await?;
 
+    let report = CopyReport::new(report.files().clone(), updated_lastmod_info)?;
+
     tracing::trace!("Transporter wildcard copy report:\n {:#?}", report);
 
     Ok(report)
@@ -238,6 +240,8 @@ mod tests {
         assert_eq!(report.files().len(), 1);
         let file_report = &report.files()[0];
         assert_eq!(file_report.to, target_url.join("file1.csv").unwrap());
+        // initial_lastmod was provided, so the finder produces an updated lastmod_info
+        assert!(report.lastmod_info().is_some());
     }
 
     use crate::transporter::compression::CompressionAlgorithm;
@@ -357,6 +361,9 @@ mod tests {
 
         let report = wildcard_copy(request).await.unwrap();
         assert_eq!(report.files().len(), files_to_create.len());
+        // No initial_lastmod or lastmod_info provided in the request, so the report's
+        // lastmod_info should remain None.
+        assert!(report.lastmod_info().is_none());
 
         for file_base_name in files_to_create {
             let file_name_with_ext = format!("{}.{}", file_base_name, source_ext);

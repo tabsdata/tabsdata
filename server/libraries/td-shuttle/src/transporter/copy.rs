@@ -73,7 +73,7 @@ pub async fn copy(request: CopyRequest) -> Result<CopyReport, TransporterError> 
     match run_tasks(parallelism, req).await {
         Ok(reports) => {
             debug!("Finished copy");
-            Ok(CopyReport::new(reports))
+            CopyReport::new(reports, None)
         }
         Err(err) => {
             debug!("Copy failed: {:?}", err);

@@ -52,6 +52,7 @@ from tabsdata._io.connections.mysql_connection import MySQLConn
 from tabsdata._io.connections.oracle_connection import OracleConn
 from tabsdata._io.connections.postgres_connection import PostgresConn
 from tabsdata._io.connections.starrocks_connection import StarRocksConn
+from tabsdata._io.inputs.file.s3_input import S3Src
 from tabsdata._io.inputs.file_inputs import (
     AzureSource,
     GCSSource,
@@ -236,6 +237,7 @@ __all__ = [
     "PostgresSource",
     "PostgresSrc",
     "S3Source",
+    "S3Src",
     "SalesforceReportSource",
     "SalesforceSource",
     # Outputs

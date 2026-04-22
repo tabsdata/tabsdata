@@ -1326,6 +1326,8 @@ def _read_avro_in_chunks(avro_path, chunk_size):
 
 
 def _obtain_source_object(user_source, origin_location_uri):
+    from tabsdata._io.inputs.file.s3_input import S3Src
+
     if isinstance(user_source, S3Source):
         transporter_source = TransporterS3(
             origin_location_uri,
@@ -1333,6 +1335,17 @@ def _obtain_source_object(user_source, origin_location_uri):
             secret_key=TransporterEnv(SERVER_SIDE_AWS_SECRET_ACCESS_KEY),
             region=(
                 TransporterEnv(SERVER_SIDE_AWS_REGION) if user_source.region else None
+            ),
+        )
+    elif isinstance(user_source, S3Src):
+        transporter_source = TransporterS3(
+            origin_location_uri,
+            access_key=TransporterEnv(SERVER_SIDE_AWS_ACCESS_KEY_ID),
+            secret_key=TransporterEnv(SERVER_SIDE_AWS_SECRET_ACCESS_KEY),
+            region=(
+                TransporterEnv(SERVER_SIDE_AWS_REGION)
+                if user_source.conn.region
+                else None
             ),
         )
     elif isinstance(user_source, GCSSource):

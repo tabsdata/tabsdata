@@ -865,6 +865,38 @@ class V1CopyFormat(CopyYaml):
         return f"{self.__class__.__name__}(content={self.content})"
 
 
+class V1WildCardCopyFormat(CopyYaml):
+    """
+    Simple class to enable us to generate copy yaml files for the transporter
+    """
+
+    def __init__(
+        self,
+        source: (
+            TransporterAzure | TransporterGCS | TransporterLocalFile | TransporterS3
+        ),
+        target: (
+            TransporterAzure | TransporterGCS | TransporterLocalFile | TransporterS3
+        ),
+        initial_lastmod=None,
+        lastmod_info=None,
+    ):
+        self.content = {
+            "source": {
+                "location": source,
+                "initial_lastmod": initial_lastmod,
+                "lastmod_info": lastmod_info,
+                "decompression": "auto",
+            },
+            "target": target,
+            "decompression": "auto",
+            "parallelism": 1,
+        }
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(content={self.content})"
+
+
 class ImportYaml(ABC):
     """Just an abstract class to help with type hinting."""
 
@@ -1061,6 +1093,19 @@ def v1_copy_format_representer(
     return dumper.represent_mapping("!CopyV1", v1_copy_format.content)
 
 
+def v1_wildcard_copy_format_representer(
+    dumper: yaml.SafeDumper, v1_wildcard_copy_format: V1WildCardCopyFormat
+) -> yaml.nodes.MappingNode:
+    """Represent a V1WildCardCopyFormat instance as a YAML mapping node."""
+    dumper.add_representer(TransporterEnv, v1_env_representer)
+    dumper.add_representer(TransporterLiteral, v1_literal_representer)
+    dumper.add_representer(TransporterAzure, v1_azure_representer)
+    dumper.add_representer(TransporterGCS, v1_gcs_representer)
+    dumper.add_representer(TransporterLocalFile, v1_local_file_representer)
+    dumper.add_representer(TransporterS3, v1_s3_representer)
+    return dumper.represent_mapping("!WildcardCopyV1", v1_wildcard_copy_format.content)
+
+
 def v1_literal_representer(
     dumper: yaml.SafeDumper, literal: TransporterLiteral
 ) -> yaml.nodes.ScalarNode:
@@ -1112,6 +1157,19 @@ def get_copy_dumper():
 
     CopyDumper.add_representer(V1CopyFormat, v1_copy_format_representer)
     return CopyDumper
+
+
+def get_wildcard_copy_dumper():
+    """Add representers to a YAML serializer."""
+
+    # To avoid modifying the global SafeDumper.
+    class WildcardCopyDumper(yaml.SafeDumper):
+        pass
+
+    WildcardCopyDumper.add_representer(
+        V1WildCardCopyFormat, v1_wildcard_copy_format_representer
+    )
+    return WildcardCopyDumper
 
 
 def get_import_dumper():
@@ -1185,6 +1243,15 @@ def store_copy_as_yaml(copy: V1CopyFormat, copy_file: str):
         )
 
 
+def store_wildcard_copy_as_yaml(copy: V1WildCardCopyFormat, copy_file: str):
+    with open(copy_file, "w") as file:
+        yaml.dump(
+            copy,
+            file,
+            Dumper=get_wildcard_copy_dumper(),
+        )
+
+
 def store_import_as_yaml(copy: V1ImportFormat, import_request_file: str):
     with open(import_request_file, "w") as file:
         yaml.dump(
@@ -1250,3 +1317,63 @@ def get_import_report_yaml_loader():
 def parse_import_report_yaml(yaml_file: str) -> ImportReportYaml:
     with open(yaml_file, "r") as file:
         return yaml.load(file, Loader=get_import_report_yaml_loader())
+
+
+class WildcardCopyReportYaml(ABC):
+    """Just an abstract class to help with type hinting."""
+
+    @property
+    @abstractmethod
+    def files(self) -> list[dict]:
+        """Return the files section of the YAML file."""
+
+    @property
+    @abstractmethod
+    def lastmod_info(self) -> str | None:
+        """Return the lastmod_info section of the YAML file."""
+
+
+class V1WildcardCopyReportFormat(WildcardCopyReportYaml):
+    """
+    Simple class to parse wildcard copy report yaml files for the transporter.
+    """
+
+    def __init__(self, content: dict):
+        self.content = content
+
+    @property
+    def files(self) -> list[dict]:
+        """Return the files section of the YAML file."""
+        return self.content.get("files", [])
+
+    @property
+    def lastmod_info(self) -> str | None:
+        """Return the lastmod_info section of the YAML file."""
+        return self.content.get("lastmod_info")
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(content={self.content})"
+
+
+def v1_wildcard_copy_report_constructor(loader, node):
+    return V1WildcardCopyReportFormat(loader.construct_mapping(node))
+
+
+def get_wildcard_copy_report_yaml_loader():
+    """Add constructors to PyYAML loader."""
+
+    # To avoid modifying the global SafeLoader.
+    class WildcardCopyReportYamlLoader(yaml.SafeLoader):
+        pass
+
+    # When more versions are added, they will be listed here, and each will have its
+    # own constructor.
+    WildcardCopyReportYamlLoader.add_constructor(
+        "!WildcardCopyV1", v1_wildcard_copy_report_constructor
+    )
+    return WildcardCopyReportYamlLoader
+
+
+def parse_wildcard_copy_report_yaml(yaml_file: str) -> WildcardCopyReportYaml:
+    with open(yaml_file, "r") as file:
+        return yaml.load(file, Loader=get_wildcard_copy_report_yaml_loader())

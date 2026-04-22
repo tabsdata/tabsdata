@@ -1508,6 +1508,10 @@ class ErrorCode(Enum):
             " inferred from the file extension. Please provide it explicitly."
         ),
     }
+    FOCE7 = {
+        "code": "FOCE-007",
+        "message": "The 'file_info' parameter must be one of {}, got '{}' instead.",
+    }
     RE1 = {
         "code": "RE-001",
         "message": (
@@ -2367,6 +2371,7 @@ class ErrorCode(Enum):
     SOCE110 = object()
     SOCE111 = object()
     SOCE112 = object()
+    SOCE113 = object()
 
     # stage trigger configuration errors
     STCE100 = object()

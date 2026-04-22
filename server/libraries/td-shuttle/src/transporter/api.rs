@@ -922,13 +922,22 @@ pub struct FileCopyReport {
 #[getset(get = "pub")]
 pub struct CopyReport {
     files: Vec<FileCopyReport>,
+    lastmod_info: Option<String>,
 }
 
 impl CopyReport {
-    pub fn new(file_reports: Vec<FileCopyReport>) -> Self {
-        Self {
+    pub fn new(
+        file_reports: Vec<FileCopyReport>,
+        last_modified_info: Option<LastModifiedInfoState>,
+    ) -> Result<Self, TransporterError> {
+        let last_modified_info = match last_modified_info {
+            None => None,
+            Some(info) => Some(encode_info(&info, LAST_MODIFIED_INFO_TYPE)?),
+        };
+        Ok(Self {
             files: file_reports,
-        }
+            lastmod_info: last_modified_info,
+        })
     }
 }
 
@@ -1057,52 +1066,57 @@ impl TransporterReport {
                     ),
                 },
             ],
+            lastmod_info: None,
         })
     }
 
     fn sample_wildcard_copy() -> Self {
-        TransporterReport::WildcardCopyV1(CopyReport {
-            files: vec![
-                FileCopyReport {
-                    copy_type: CopyType::RawParallel,
-                    idx: 0,
-                    #[cfg(not(target_os = "windows"))]
-                    from: Url::parse("file:///import-dir/file0.parquet").unwrap(),
-                    #[cfg(target_os = "windows")]
-                    from: Url::parse("file:///c:/import-dir/file0.parquet").unwrap(),
-                    size: 1024,
-                    #[cfg(not(target_os = "windows"))]
-                    to: Url::parse("file:///export-dir/file0.parquet").unwrap(),
-                    #[cfg(target_os = "windows")]
-                    to: Url::parse("file:///c:/export-dir/file0.parquet").unwrap(),
-                    started_at: DateTime::from(
-                        DateTime::parse_from_rfc3339("2024-01-01T00:00:00Z").unwrap(),
-                    ),
-                    ended_at: DateTime::from(
-                        DateTime::parse_from_rfc3339("2024-01-01T00:10:00Z").unwrap(),
-                    ),
-                },
-                FileCopyReport {
-                    copy_type: CopyType::Compression,
-                    idx: 0,
-                    #[cfg(not(target_os = "windows"))]
-                    from: Url::parse("file:///import-dir/file1.parquet").unwrap(),
-                    #[cfg(target_os = "windows")]
-                    from: Url::parse("file:///c:/import-dir/file1.parquet").unwrap(),
-                    size: 1024,
-                    #[cfg(not(target_os = "windows"))]
-                    to: Url::parse("file:///export-dir/file1.parquet").unwrap(),
-                    #[cfg(target_os = "windows")]
-                    to: Url::parse("file:///c:/export-dir/file1.parquet").unwrap(),
-                    started_at: DateTime::from(
-                        DateTime::parse_from_rfc3339("2024-01-01T00:10:01Z").unwrap(),
-                    ),
-                    ended_at: DateTime::from(
-                        DateTime::parse_from_rfc3339("2024-01-01T00:20:00Z").unwrap(),
-                    ),
-                },
-            ],
-        })
+        TransporterReport::WildcardCopyV1(
+            CopyReport::new(
+                vec![
+                    FileCopyReport {
+                        copy_type: CopyType::RawParallel,
+                        idx: 0,
+                        #[cfg(not(target_os = "windows"))]
+                        from: Url::parse("file:///import-dir/file0.parquet").unwrap(),
+                        #[cfg(target_os = "windows")]
+                        from: Url::parse("file:///c:/import-dir/file0.parquet").unwrap(),
+                        size: 1024,
+                        #[cfg(not(target_os = "windows"))]
+                        to: Url::parse("file:///export-dir/file0.parquet").unwrap(),
+                        #[cfg(target_os = "windows")]
+                        to: Url::parse("file:///c:/export-dir/file0.parquet").unwrap(),
+                        started_at: DateTime::from(
+                            DateTime::parse_from_rfc3339("2024-01-01T00:00:00Z").unwrap(),
+                        ),
+                        ended_at: DateTime::from(
+                            DateTime::parse_from_rfc3339("2024-01-01T00:10:00Z").unwrap(),
+                        ),
+                    },
+                    FileCopyReport {
+                        copy_type: CopyType::Compression,
+                        idx: 0,
+                        #[cfg(not(target_os = "windows"))]
+                        from: Url::parse("file:///import-dir/file1.parquet").unwrap(),
+                        #[cfg(target_os = "windows")]
+                        from: Url::parse("file:///c:/import-dir/file1.parquet").unwrap(),
+                        size: 1024,
+                        #[cfg(not(target_os = "windows"))]
+                        to: Url::parse("file:///export-dir/file1.parquet").unwrap(),
+                        #[cfg(target_os = "windows")]
+                        to: Url::parse("file:///c:/export-dir/file1.parquet").unwrap(),
+                        started_at: DateTime::from(
+                            DateTime::parse_from_rfc3339("2024-01-01T00:10:01Z").unwrap(),
+                        ),
+                        ended_at: DateTime::from(
+                            DateTime::parse_from_rfc3339("2024-01-01T00:20:00Z").unwrap(),
+                        ),
+                    },
+                ],
+                Some(LastModifiedInfoState::new(Utc::now())),
+            )
+            .unwrap(),
+        )
     }
 
     fn sample_error() -> Self {
