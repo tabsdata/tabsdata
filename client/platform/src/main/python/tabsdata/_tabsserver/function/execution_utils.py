@@ -351,13 +351,13 @@ def obtain_user_provided_function_parameters(
     from tabsdata._io.inputs.table_inputs import TableInput
     from tabsdata.connector.cdc.common._connector import CdcTrigger
 
-    stage_trigger = execution_context.stage_trigger
+    trigger_by = execution_context.trigger_by
     source = execution_context.source
-    if isinstance(stage_trigger, CdcTrigger) and isinstance(source, Stage):
+    if isinstance(trigger_by, CdcTrigger) and isinstance(source, Stage):
         # The isinstance check is redundant, but it helps ensure everything is going
         # as expected
         logger.debug(
-            f"Using a CdcTrigger for this function ({stage_trigger}), "
+            f"Using a CdcTrigger for this function ({trigger_by}), "
             f"so we will use a ManifestStage instead of the Stage {source}"
         )
         source = ManifestStage(use_existing_data=source.use_existing_data)
