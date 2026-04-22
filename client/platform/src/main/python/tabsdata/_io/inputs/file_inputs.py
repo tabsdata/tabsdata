@@ -1326,6 +1326,7 @@ def _read_avro_in_chunks(avro_path, chunk_size):
 
 
 def _obtain_source_object(user_source, origin_location_uri):
+    from tabsdata._io.inputs.file.gcs_input import GCSSrc
     from tabsdata._io.inputs.file.s3_input import S3Src
 
     if isinstance(user_source, S3Source):
@@ -1348,7 +1349,7 @@ def _obtain_source_object(user_source, origin_location_uri):
                 else None
             ),
         )
-    elif isinstance(user_source, GCSSource):
+    elif isinstance(user_source, (GCSSource, GCSSrc)):
         transporter_source = TransporterGCS(
             origin_location_uri,
             service_account_key=TransporterEnv(SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON),

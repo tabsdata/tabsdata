@@ -24,6 +24,7 @@ from tabsdata._format import (
 )
 
 if TYPE_CHECKING:
+    from tabsdata._io.inputs.file.gcs_input import GCSSrc
     from tabsdata._io.inputs.file.s3_input import S3Src
 from tabsdata._io.inputs.file_inputs import (
     LocalFileSource,
@@ -76,7 +77,7 @@ def _obtain_transporter_copy(
     origin_location_uri: str,
     destination_folder: str,
     initial_last_modified: str | None,
-    user_source: LocalFileSource | S3Src,
+    user_source: LocalFileSource | S3Src | GCSSrc,
     lastmod_info: str = None,
 ):
     # Create the transporter source object
@@ -107,7 +108,7 @@ def _obtain_transporter_copy(
 
 
 def execute_file_copy(
-    source: LocalFileSource | S3Src,
+    source: LocalFileSource | S3Src | GCSSrc,
     destination_folder: str,
 ) -> tuple[list[str], list[str]]:
     """
@@ -187,7 +188,7 @@ def _execute_single_file_copy(
     destination_folder: str,
     file_format: FileFormat,
     initial_last_modified: str | None,
-    user_source: LocalFileSource | S3Src,
+    user_source: LocalFileSource | S3Src | GCSSrc,
     lastmod_info: str = None,
 ) -> tuple[
     list[str | list[str]],
