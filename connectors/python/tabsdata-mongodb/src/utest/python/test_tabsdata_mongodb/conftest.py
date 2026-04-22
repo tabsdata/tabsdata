@@ -10,6 +10,7 @@ from test_tabsdata.common.constants import (
     DOCKER_COMPOSE_CONTAINER_INFIX,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
 )
+from test_tabsdata.common.container import wait_for_container_running
 from test_tabsdata.common.docker import remove_docker_containers
 
 logger = logging.getLogger(__name__)
@@ -91,10 +92,12 @@ def create_docker_mongodb_database():
     remove_docker_containers(DEFAULT_PYTEST_MONGODB_DOCKER_CONTAINER_NAME)
     logger.info("Starting MongoDB container")
     client = docker.from_env()
-    if client.containers.list(
+    if containers := client.containers.list(
+        all=True,
         filters={"name": f"^{DEFAULT_PYTEST_MONGODB_DOCKER_CONTAINER_NAME}$"}
     ):
         logger.info("MongoDB container already exists")
+        wait_for_container_running(containers[0])
         return
     else:
         client.containers.run(
@@ -159,10 +162,12 @@ def create_docker_mongodb_database_with_replica_set():
     )
     logger.info("Starting MongoDB container with replica set")
     client = docker.from_env()
-    if client.containers.list(
+    if containers := client.containers.list(
+        all=True,
         filters={"name": f"^{DEFAULT_PYTEST_MONGODB_WITH_REPLICA_SET_DOCKER_CONTAINER_NAME}$"}
     ):
         logger.info("MongoDB container with replica set already exists")
+        wait_for_container_running(containers[0])
         return
     else:
         compose_file = os.path.join(os.path.dirname(__file__), "compose.yaml")

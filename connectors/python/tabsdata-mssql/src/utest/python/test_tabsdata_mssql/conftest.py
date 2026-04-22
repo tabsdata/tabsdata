@@ -13,6 +13,7 @@ from test_tabsdata.common.constants import (
     DOCKER_REGULAR_CONTAINER_INFIX,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
 )
+from test_tabsdata.common.container import wait_for_container_running
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -276,9 +277,10 @@ def create_docker_mssql_database(name: str, port: int, version: int) -> tuple[st
     logger.info(f"Using port: {port}")
     logger.info(f"Using version: {version}")
     client = docker.from_env()
-    if containers := client.containers.list(filters={"name": f"^{name}$"}):
+    if containers := client.containers.list(all=True, filters={"name": f"^{name}$"}):
         logger.info("Microsoft SQL Server container already exists")
         container = containers[0]
+        wait_for_container_running(container)
         port = get_container_port_binding(container, MSSQL_FORWARDED_PORT)
         return (
             (

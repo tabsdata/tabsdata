@@ -25,7 +25,10 @@ from test_tabsdata.common.constants import (
     CONTAINER_MAXIMUM_RETRY_COUNT,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX, DOCKER_REGULAR_CONTAINER_INFIX,
 )
-from test_tabsdata.common.container import get_container_port_binding
+from test_tabsdata.common.container import (
+    get_container_port_binding,
+    wait_for_container_running,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -151,9 +154,10 @@ def create_docker_postgres_database(
 
     logger.info("Starting Postgres container")
     client = docker.from_env()
-    if containers := client.containers.list(filters={"name": f"^{name}$"}):
+    if containers := client.containers.list(all=True, filters={"name": f"^{name}$"}):
         logger.info("Postgres container already exists")
         container = containers[0]
+        wait_for_container_running(container)
         return get_container_port_binding(container, POSTGRES_FORWARDED_PORT)
     else:
         container = client.containers.run(

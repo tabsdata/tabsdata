@@ -17,6 +17,7 @@ from test_tabsdata.common.constants import (
     CONTAINER_MAXIMUM_RETRY_COUNT,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX, DOCKER_REGULAR_CONTAINER_INFIX,
 )
+from test_tabsdata.common.container import wait_for_container_running
 
 logger = logging.getLogger(__name__)
 
@@ -38,10 +39,13 @@ def create_docker_hashicorp_vault(s3_config: dict):
 
     logger.info("Starting HashiCorp vault container")
     client = docker.from_env()
-    if client.containers.list(
+    if containers := client.containers.list(
+        all=True,
         filters={"name": f"^{DEFAULT_PYTEST_HASHICORP_DOCKER_CONTAINER_NAME}$"}
     ):
         logger.info("HashiCorp vault container already exists")
+        container = containers[0]
+        wait_for_container_running(container)
         return
     else:
         client.containers.run(

@@ -21,7 +21,10 @@ from test_tabsdata.common.constants import (
     DB_HOST,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX, DOCKER_REGULAR_CONTAINER_INFIX,
 )
-from test_tabsdata.common.container import get_container_port_binding
+from test_tabsdata.common.container import (
+    get_container_port_binding,
+    wait_for_container_running,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -286,9 +289,10 @@ def create_docker_starrocks_database(
 
     logger.info("Starting StarRocks container")
     client = docker.from_env()
-    if containers := client.containers.list(filters={"name": name}):
+    if containers := client.containers.list(all=True, filters={"name": name}):
         logger.info("StarRocks container already exists")
         container = containers[0]
+        wait_for_container_running(container)
         port = get_container_port_binding(container, STARROCKS_MYSQL_FORWARDED_PORT)
         _prepare_docker_starrocks_database(port)
         return port

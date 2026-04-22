@@ -29,7 +29,10 @@ from test_tabsdata.common.constants import (
     DOCKER_COMPOSE_CONTAINER_INFIX,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
 )
-from test_tabsdata.common.container import get_container_port_binding
+from test_tabsdata.common.container import (
+    get_container_port_binding,
+    wait_for_container_running,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +120,7 @@ def druid_config(tmp_path_factory, worker_id, request) -> DruidConfig:
 def _get_compose_container(client, project_name: str, service: str):
     """Get a Docker container for a compose service by project and service name."""
     containers = client.containers.list(
+        all=True,
         filters={
             "label": [
                 f"com.docker.compose.project={project_name}",
@@ -151,10 +155,12 @@ def create_docker_druid(
     coordinator = _get_compose_container(client, name, "coordinator")
     if coordinator:
         logger.info("Druid cluster already running")
+        wait_for_container_running(coordinator)
         overlord_port = get_container_port_binding(
             coordinator, DRUID_OVERLORD_FORWARDED_PORT
         )
         router = _get_compose_container(client, name, "router")
+        wait_for_container_running(router)
         router_port = get_container_port_binding(
             router, DRUID_ROUTER_FORWARDED_PORT
         )

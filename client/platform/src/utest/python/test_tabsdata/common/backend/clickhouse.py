@@ -20,7 +20,10 @@ from test_tabsdata.common.constants import (
     DB_PASSWORD,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX, DOCKER_REGULAR_CONTAINER_INFIX,
 )
-from test_tabsdata.common.container import get_container_port_binding
+from test_tabsdata.common.container import (
+    get_container_port_binding,
+    wait_for_container_running,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -151,9 +154,10 @@ def create_docker_clickhouse_database(
 
     logger.info("Starting ClickHouse container")
     client = docker.from_env()
-    if containers := client.containers.list(filters={"name": name}):
+    if containers := client.containers.list(all=True, filters={"name": name}):
         logger.info("ClickHouse container already exists")
         container = containers[0]
+        wait_for_container_running(container)
         return get_container_port_binding(container, CLICKHOUSE_FORWARDED_PORT)
 
     container = client.containers.run(

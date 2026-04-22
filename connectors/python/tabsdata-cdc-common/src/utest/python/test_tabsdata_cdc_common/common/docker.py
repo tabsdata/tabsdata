@@ -17,7 +17,10 @@ from test_tabsdata.common.constants import (
     CONTAINER_MAXIMUM_RETRY_COUNT,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX, DB_PASSWORD, DOCKER_REGULAR_CONTAINER_INFIX,
 )
-from test_tabsdata.common.container import get_container_port_binding
+from test_tabsdata.common.container import (
+    get_container_port_binding,
+    wait_for_container_running,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -48,9 +51,10 @@ def ensure_container(
     client = docker.from_env()
     forwarded_port_key = next(iter(forwarded_ports))
 
-    if containers := client.containers.list(filters={"name": f"^{name}$"}):
+    if containers := client.containers.list(all=True, filters={"name": f"^{name}$"}):
         logger.info(f"CDC container '{name}' already exists; reusing it.")
         container = containers[0]
+        wait_for_container_running(container)
         if message is not None:
             ensure_readiness(container, message)
         host_port = get_container_port_binding(container, forwarded_port_key)
