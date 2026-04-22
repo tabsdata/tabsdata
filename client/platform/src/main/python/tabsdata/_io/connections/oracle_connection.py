@@ -111,6 +111,14 @@ class OracleConn(Conn):
         """
         return self._cx_dst_configs_oracle
 
+    @classmethod
+    def _load_from_dict(cls, configs: dict) -> "OracleConn":
+        credentials = configs.get("credentials")
+        if isinstance(credentials, dict):
+            configs = dict(configs)
+            configs["credentials"] = UserPasswordCredentials(**credentials)
+        return cls(**configs)
+
     def __eq__(self, other):
         if not isinstance(other, OracleConn):
             return False

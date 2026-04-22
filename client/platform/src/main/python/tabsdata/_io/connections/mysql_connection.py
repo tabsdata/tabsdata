@@ -79,7 +79,9 @@ class MySQLConn(Conn):
         """
         return self._credentials
 
-    def _build_credentials(self, credentials: Optional[UserPasswordCredentials]):
+    def _build_credentials(
+        self, credentials: Optional[UserPasswordCredentials]
+    ) -> Optional[UserPasswordCredentials]:
         """
         Build the credentials required to access the MySQLDatabase.
         Args:
@@ -109,6 +111,14 @@ class MySQLConn(Conn):
         The destination configuration parameters for the MySQL connection.
         """
         return self._cx_dst_configs_mysql
+
+    @classmethod
+    def _load_from_dict(cls, configs: dict) -> "MySQLConn":
+        credentials = configs.get("credentials")
+        if isinstance(credentials, dict):
+            configs = dict(configs)
+            configs["credentials"] = UserPasswordCredentials(**credentials)
+        return cls(**configs)
 
     def __repr__(self):
         return (

@@ -129,6 +129,14 @@ class Db2Conn(Conn):
         """
         return self._cx_dst_configs_db2
 
+    @classmethod
+    def _load_from_dict(cls, configs: dict) -> "Db2Conn":
+        credentials = configs.get("credentials")
+        if isinstance(credentials, dict):
+            configs = dict(configs)
+            configs["credentials"] = UserPasswordCredentials(**credentials)
+        return cls(**configs)
+
     def __eq__(self, other):
         if not isinstance(other, Db2Conn):
             return False

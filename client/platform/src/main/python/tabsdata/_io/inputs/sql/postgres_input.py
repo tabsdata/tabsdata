@@ -9,6 +9,7 @@ from typing import Any, Optional, get_args
 
 from pydantic import PositiveInt
 
+from tabsdata._io.connections.named_connection.named_connection import NamedConn
 from tabsdata._io.connections.postgres_connection import PostgresConn
 from tabsdata._io.constants import _LoaderSpec
 from tabsdata._io.inputs.sql.shared_types import (
@@ -48,7 +49,7 @@ class PostgresSrc(SourcePlugin):
     @_td_validate_call(ErrorCode.SOCE106)
     def __init__(
         self,
-        conn: PostgresConn,
+        conn: PostgresConn | NamedConn,
         queries: QueriesSpec,
         initial_values: Optional[dict[str, Any]] = None,
         transactional: bool = True,
@@ -80,7 +81,7 @@ class PostgresSrc(SourcePlugin):
                 the column to. The type casting from the original column type to the
                 desired type must be supported.
         """
-        self._conn = conn
+        self.conn = conn
         self._queries = self._normalize_queries(queries)
         self._initial_values = initial_values or {}
         self._transactional = transactional
@@ -89,11 +90,16 @@ class PostgresSrc(SourcePlugin):
         self._schema_overrides = self._validate_schema_overrides(schema_overrides)
 
     @property
-    def conn(self) -> PostgresConn:
+    def conn(self) -> PostgresConn | NamedConn:
         """
         The Postgres connection configuration.
         """
         return self._conn
+
+    @conn.setter
+    @_td_validate_call(ErrorCode.SOCE106)
+    def conn(self, conn: PostgresConn | NamedConn):
+        self._conn = conn
 
     @property
     def queries(self) -> list[str]:

@@ -13,6 +13,7 @@ from tabsdata._io.cloud_staging.common.storage_config import (
     AzureConfig,
     GCSConfig,
     S3Config,
+    build_staging_from_dict,
 )
 from tabsdata._io.connections.connections import Conn
 from tabsdata._utils.annotations import unstable, unstable_category
@@ -190,6 +191,17 @@ class ClickHouseConn(Conn):
         return credentials
 
     # ── Dunder methods ────────────────────────────────────────────────────────────────
+
+    @classmethod
+    def _load_from_dict(cls, configs: dict) -> "ClickHouseConn":
+        configs = dict(configs)
+        credentials = configs.get("credentials")
+        if isinstance(credentials, dict):
+            configs["credentials"] = UserPasswordCredentials(**credentials)
+        staging = configs.get("staging")
+        if isinstance(staging, dict):
+            configs["staging"] = build_staging_from_dict(staging)
+        return cls(**configs)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ClickHouseConn):

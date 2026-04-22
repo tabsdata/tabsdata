@@ -63,6 +63,14 @@ class MySQLCdcConn(CdcConn, MySQLConn):
             cx_src_configs_mysql=cx_src_configs_mysql,
         )
 
+    @classmethod
+    def _load_from_dict(cls, configs: dict) -> "MySQLCdcConn":
+        credentials = configs.get("credentials")
+        if isinstance(credentials, dict):
+            configs = dict(configs)
+            configs["credentials"] = UserPasswordCredentials(**credentials)
+        return cls(**configs)
+
     @property
     def _cx_configs(self) -> dict:
         return self.cx_src_configs_mysql

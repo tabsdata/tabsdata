@@ -113,6 +113,14 @@ class PostgresConn(Conn):
         """
         return self._cx_dst_configs_postgres
 
+    @classmethod
+    def _load_from_dict(cls, configs: dict) -> "PostgresConn":
+        credentials = configs.get("credentials")
+        if isinstance(credentials, dict):
+            configs = dict(configs)
+            configs["credentials"] = UserPasswordCredentials(**credentials)
+        return cls(**configs)
+
     def __eq__(self, other):
         if not isinstance(other, PostgresConn):
             return False

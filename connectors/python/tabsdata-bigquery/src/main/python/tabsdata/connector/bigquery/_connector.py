@@ -13,6 +13,7 @@ import polars as pl
 
 from tabsdata._credentials import GCPCredentials, GCPServiceAccountKeyCredentials
 from tabsdata._io.connections.connections import Conn
+from tabsdata._io.connections.named_connection.named_connection import NamedConn
 from tabsdata._io.inputs.table_inputs import TableInput
 from tabsdata._io.outputs.file_outputs import GCSDestination
 from tabsdata._io.outputs.shared_enums import (
@@ -184,6 +185,14 @@ class BigQueryConn(Conn):
             )
         self._enforce_connection_params = enforce_connection_params
 
+    @classmethod
+    def _load_from_dict(cls, configs: dict) -> "BigQueryConn":
+        credentials = configs.get("credentials")
+        if isinstance(credentials, dict):
+            configs = dict(configs)
+            configs["credentials"] = GCPServiceAccountKeyCredentials(**credentials)
+        return cls(**configs)
+
     def __repr__(self):
         return (
             f"BigQueryConn(gcs_folder='{self.gcs_folder}', "
@@ -206,7 +215,7 @@ class BigQueryDest(DestinationPlugin):
 
     def __init__(
         self,
-        conn: BigQueryConn,
+        conn: BigQueryConn | NamedConn,
         tables: Optional[TableSpec] = None,
         if_table_exists: IfTableExistStrategySpec = "append",
         schema_strategy: SchemaStrategySpec = "update",
@@ -302,15 +311,15 @@ class BigQueryDest(DestinationPlugin):
         self._tables = qualified_tables
 
     @property
-    def conn(self) -> BigQueryConn:
+    def conn(self) -> BigQueryConn | NamedConn:
         return self._conn
 
     @conn.setter
-    def conn(self, conn: BigQueryConn):
-        if not isinstance(conn, BigQueryConn):
+    def conn(self, conn: BigQueryConn | NamedConn):
+        if not isinstance(conn, (BigQueryConn, NamedConn)):
             raise TypeError(
-                "The 'conn' parameter must be a BigQueryConn instance, got "
-                f"{type(conn)} instead."
+                "The 'conn' parameter must be a BigQueryConn or NamedConn instance, got"
+                f" {type(conn)} instead."
             )
         self._conn = conn
 

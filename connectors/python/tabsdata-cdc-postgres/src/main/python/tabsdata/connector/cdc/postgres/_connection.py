@@ -63,6 +63,14 @@ class PostgresCdcConn(CdcConn, PostgresConn):
             cx_src_configs_postgres=cx_src_configs_postgres,
         )
 
+    @classmethod
+    def _load_from_dict(cls, configs: dict) -> "PostgresCdcConn":
+        credentials = configs.get("credentials")
+        if isinstance(credentials, dict):
+            configs = dict(configs)
+            configs["credentials"] = UserPasswordCredentials(**credentials)
+        return cls(**configs)
+
     @property
     def _cx_configs(self) -> dict:
         return self.cx_src_configs_postgres

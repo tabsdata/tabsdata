@@ -17,6 +17,8 @@ from mypy_boto3_glue.client import GlueClient
 from pydantic import PositiveInt
 from typing_extensions import deprecated
 
+from tabsdata._credentials import S3AccessKeyCredentials, UserPasswordCredentials
+
 # noinspection PyProtectedMember
 from tabsdata._io.connections.connections import Conn
 
@@ -245,6 +247,46 @@ class AwsGlueSchemaRegistry(KafkaSchemaRegistry):
 SchemaRegistrySpec: TypeAlias = Union[ConfluentSchemaRegistry | AwsGlueSchemaRegistry]
 
 
+def build_schema_registry_from_dict(sr_dict: dict) -> SchemaRegistrySpec:
+    """
+    Build a ConfluentSchemaRegistry or AwsGlueSchemaRegistry from a plain
+    dictionary.
+
+    The dictionary must contain a ``"type"`` key with one of ``"confluent"``
+    or ``"aws_glue"``.  The remaining keys are passed to the corresponding
+    registry class constructor after converting any nested credential dicts
+    into their proper credential objects.
+
+    Args:
+        sr_dict: A dictionary with a ``"type"`` key and the remaining keys
+            matching the registry class constructor.
+    Returns:
+        A ConfluentSchemaRegistry or AwsGlueSchemaRegistry instance.
+    """
+    sr_dict = dict(sr_dict)
+    sr_type = sr_dict.pop("type", None)
+    if sr_type is None:
+        raise ValueError(
+            "schema_registry dict must contain a 'type' key ('confluent' or 'aws_glue')"
+        )
+
+    if sr_type == "confluent":
+        credentials = sr_dict.get("credentials")
+        if isinstance(credentials, dict):
+            sr_dict["credentials"] = UserPasswordCredentials(**credentials)
+        return ConfluentSchemaRegistry(**sr_dict)
+    elif sr_type == "aws_glue":
+        credentials = sr_dict.get("credentials")
+        if isinstance(credentials, dict):
+            sr_dict["credentials"] = S3AccessKeyCredentials(**credentials)
+        return AwsGlueSchemaRegistry(**sr_dict)
+    else:
+        raise ValueError(
+            f"Unknown schema registry type: '{sr_type}'. "
+            "Expected 'confluent' or 'aws_glue'."
+        )
+
+
 @unstable()
 @deprecated(
     """Class 'KafkaConn' is considered unstable and is subject to change in future releases.""",  # noqa: E231,E241,E501
@@ -333,6 +375,19 @@ class KafkaConn(Conn):
         Source-specific configuration parameters for the Kafka connection.
         """
         return self._cx_src_configs
+
+    @classmethod
+    def _load_from_dict(cls, configs: dict) -> "KafkaConn":
+        configs = dict(configs)
+        credentials = configs.get("credentials")
+        if isinstance(credentials, dict):
+            configs["credentials"] = UserPasswordCredentials(**credentials)
+        schema_registry = configs.get("schema_registry")
+        if isinstance(schema_registry, dict):
+            configs["schema_registry"] = build_schema_registry_from_dict(
+                schema_registry
+            )
+        return cls(**configs)
 
 
 @unstable()

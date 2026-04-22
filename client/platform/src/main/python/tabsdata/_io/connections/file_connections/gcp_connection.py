@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 from urllib.parse import urlparse
 
-from tabsdata._credentials import GCPCredentials
+from tabsdata._credentials import GCPCredentials, GCPServiceAccountKeyCredentials
 from tabsdata._io.connections.connections import Conn
 from tabsdata._io.constants import GCS_SCHEME
 from tabsdata._utils.validation import _td_validate_call
@@ -179,6 +179,14 @@ class GCSConn(Conn):
             f"cx_dst_configs_gcs={self.cx_dst_configs_gcs}, "
             f"enforce_connection_params={self.enforce_connection_params})"
         )
+
+    @classmethod
+    def _load_from_dict(cls, configs: dict) -> "GCSConn":
+        credentials = configs.get("credentials")
+        if isinstance(credentials, dict):
+            configs = dict(configs)
+            configs["credentials"] = GCPServiceAccountKeyCredentials(**credentials)
+        return cls(**configs)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, GCSConn):

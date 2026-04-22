@@ -10,6 +10,7 @@ from typing import Optional
 import polars as pl
 from pydantic import PositiveInt
 
+from tabsdata._io.connections.named_connection.named_connection import NamedConn
 from tabsdata._io.connections.oracle_connection import OracleConn
 from tabsdata._io.constants import _LoaderSpec
 from tabsdata._io.outputs.shared_enums import (
@@ -32,7 +33,7 @@ class OracleDest(DestinationPlugin):
     @_td_validate_call(ErrorCode.DECE108)
     def __init__(
         self,
-        conn: OracleConn,
+        conn: OracleConn | NamedConn,
         destination_tables: str | list[str],
         if_table_exists: IfTableExistStrategySpec = "append",
         transactional: bool = True,
@@ -65,7 +66,7 @@ class OracleDest(DestinationPlugin):
         self.loader = loader
 
     @property
-    def conn(self) -> OracleConn:
+    def conn(self) -> OracleConn | NamedConn:
         """
         The Oracle connection configuration.
         """

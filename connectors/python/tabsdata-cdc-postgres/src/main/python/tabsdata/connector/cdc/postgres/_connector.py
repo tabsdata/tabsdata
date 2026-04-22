@@ -11,6 +11,7 @@ from typing import Any
 
 from typing_extensions import deprecated
 
+from tabsdata._io.connections.named_connection.named_connection import NamedConn
 from tabsdata._utils.annotations import unstable, unstable_category
 
 # noinspection PyProtectedMember
@@ -74,7 +75,7 @@ class PostgresCdcTrigger(CdcTrigger):
     @_td_validate_call(ErrorCode.CDCPOSTGRES2)
     def __init__(
         self,
-        conn: PostgresCdcConn,
+        conn: PostgresCdcConn | NamedConn,
         tables: QualifiedTablesSpec,
         start_from: PostgresCdcStartFromSpec,
         cdc_format: CdcFormat = CdcFormat(),

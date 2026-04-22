@@ -131,6 +131,14 @@ class MSSQLConn(Conn):
                 f"{quote_plus(connection_string)}"
             )
 
+    @classmethod
+    def _load_from_dict(cls, configs: dict) -> "MSSQLConn":
+        credentials = configs.get("credentials")
+        if isinstance(credentials, dict):
+            configs = dict(configs)
+            configs["credentials"] = UserPasswordCredentials(**credentials)
+        return cls(**configs)
+
     def __eq__(self, other) -> bool:
         if not isinstance(other, MSSQLConn):
             return False

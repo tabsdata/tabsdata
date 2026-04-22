@@ -9,6 +9,7 @@ from typing import Any, Optional, get_args
 
 from pydantic import PositiveInt
 
+from tabsdata._io.connections.named_connection.named_connection import NamedConn
 from tabsdata._io.constants import _LoaderSpec
 from tabsdata._io.inputs.sql.shared_types import QueriesSpec, SchemaOverrideSpec
 from tabsdata._io.plugin import SourcePlugin
@@ -45,7 +46,7 @@ class MSSQLSrc(SourcePlugin):
     @_td_validate_call(ErrorCode.SOCE108)
     def __init__(
         self,
-        conn: MSSQLConn,
+        conn: MSSQLConn | NamedConn,
         queries: QueriesSpec,
         initial_values: Optional[dict[str, Any]] = None,
         transactional: bool = True,
@@ -81,7 +82,7 @@ class MSSQLSrc(SourcePlugin):
                 TableFrame DataType to cast the column to. The type casting from
                 the original column type to the desired type must be supported.
         """
-        self._conn = conn
+        self.conn = conn
         self._queries = self._normalize_queries(queries)
         self._initial_values = initial_values or {}
         self._transactional = transactional
@@ -90,11 +91,16 @@ class MSSQLSrc(SourcePlugin):
         self._schema_overrides = self._validate_schema_overrides(schema_overrides)
 
     @property
-    def conn(self) -> MSSQLConn:
+    def conn(self) -> MSSQLConn | NamedConn:
         """
         The MSSQL connection configuration.
         """
         return self._conn
+
+    @conn.setter
+    @_td_validate_call(ErrorCode.SOCE108)
+    def conn(self, conn: MSSQLConn | NamedConn):
+        self._conn = conn
 
     @property
     def queries(self) -> list[str]:

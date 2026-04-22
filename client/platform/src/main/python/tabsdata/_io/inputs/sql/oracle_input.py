@@ -8,6 +8,7 @@ from typing import Any, Optional, get_args
 
 from pydantic import PositiveInt
 
+from tabsdata._io.connections.named_connection.named_connection import NamedConn
 from tabsdata._io.connections.oracle_connection import OracleConn
 from tabsdata._io.constants import _LoaderSpec
 from tabsdata._io.inputs.sql.shared_types import (
@@ -47,7 +48,7 @@ class OracleSrc(SourcePlugin):
     @_td_validate_call(ErrorCode.SOCE104)
     def __init__(
         self,
-        conn: OracleConn,
+        conn: OracleConn | NamedConn,
         queries: QueriesSpec,
         initial_values: Optional[dict[str, Any]] = None,
         transactional: bool = True,
@@ -79,7 +80,7 @@ class OracleSrc(SourcePlugin):
                 the column to. The type casting from the original column type to the
                 desired type must be supported.
         """
-        self._conn = conn
+        self.conn = conn
         self._queries = self._normalize_queries(queries)
         self._initial_values = initial_values or {}
         self._transactional = transactional
@@ -88,11 +89,16 @@ class OracleSrc(SourcePlugin):
         self._schema_overrides = self._validate_schema_overrides(schema_overrides)
 
     @property
-    def conn(self) -> OracleConn:
+    def conn(self) -> OracleConn | NamedConn:
         """
         The Oracle connection configuration.
         """
         return self._conn
+
+    @conn.setter
+    @_td_validate_call(ErrorCode.SOCE104)
+    def conn(self, conn: OracleConn | NamedConn):
+        self._conn = conn
 
     @property
     def queries(self) -> list[str]:

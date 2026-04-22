@@ -17,6 +17,7 @@ from tabsdata._format import (
     get_implicit_format_from_list,
 )
 from tabsdata._io.connections.file_connections.s3_connection import S3Conn
+from tabsdata._io.connections.named_connection.named_connection import NamedConn
 from tabsdata._io.outputs.file_outputs import (
     AWSGlue,
     _store_results_in_intermediate_files,
@@ -52,7 +53,7 @@ class S3Dest(DestinationPlugin):
     @_td_validate_call(ErrorCode.DECE111)
     def __init__(
         self,
-        conn: S3Conn,
+        conn: S3Conn | NamedConn,
         path: str | list[str],
         format: str | FileFormat | None = None,
         catalog: AWSGlue | None = None,
@@ -78,7 +79,7 @@ class S3Dest(DestinationPlugin):
         self.catalog = catalog
 
     @property
-    def conn(self) -> S3Conn:
+    def conn(self) -> S3Conn | NamedConn:
         """
         The S3 connection configuration for this destination.
         """
@@ -86,7 +87,7 @@ class S3Dest(DestinationPlugin):
 
     @conn.setter
     @_td_validate_call(ErrorCode.DECE111)
-    def conn(self, conn: S3Conn):
+    def conn(self, conn: S3Conn | NamedConn):
         """
         Set the S3 connection configuration for this destination.
 
@@ -94,6 +95,7 @@ class S3Dest(DestinationPlugin):
             conn: The S3 connection configuration to set.
         """
         self._conn = conn
+        self._rebuild_full_uri()
 
     @property
     def path(self) -> list[str]:
@@ -116,11 +118,27 @@ class S3Dest(DestinationPlugin):
         else:
             self._path = path
 
+        self._rebuild_full_uri()
+
+    def _rebuild_full_uri(self):
+        """
+        Rebuild the internal URI list from the current path and connection.
+
+        The conn setter runs before the path setter during __init__, so _path may
+        not exist yet on the first call. When conn is a NamedConn placeholder, the
+        bucket URI is not yet known; URIs will be built when the NamedConn is
+        replaced with a resolved S3Conn.
+        """
+        if not hasattr(self, "_path"):
+            return
+        if not hasattr(self._conn, "bucket_uri"):
+            self._full_uri = []
+            return
         self._full_uri = []
         for p in self._path:
             if p.startswith("/"):
                 p = p[1:]
-            full_uri = f"{self.conn.bucket_uri}/{quote(p, safe='/$')}"
+            full_uri = f"{self._conn.bucket_uri}/{quote(p, safe='/$')}"
             self._full_uri.append(full_uri)
 
     @property

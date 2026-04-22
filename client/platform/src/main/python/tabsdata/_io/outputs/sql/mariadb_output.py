@@ -11,6 +11,7 @@ import polars as pl
 from pydantic import PositiveInt
 
 from tabsdata._io.connections.mariadb_connection import MariaDBConn
+from tabsdata._io.connections.named_connection.named_connection import NamedConn
 from tabsdata._io.constants import _LoaderSpec
 from tabsdata._io.outputs.shared_enums import (
     IfTableExistStrategySpec,
@@ -34,7 +35,7 @@ class MariaDBDest(DestinationPlugin):
     @_td_validate_call(ErrorCode.DECE105)
     def __init__(
         self,
-        conn: MariaDBConn,
+        conn: MariaDBConn | NamedConn,
         destination_tables: str | list[str],
         if_table_exists: IfTableExistStrategySpec = "append",
         transactional: bool = True,
@@ -59,7 +60,7 @@ class MariaDBDest(DestinationPlugin):
                 Defaults to 100000.
             loader: The data processing loader to use for executing DB write operation.
         """
-        self._conn = conn
+        self.conn = conn
         self._destination_tables = self._normalize_destination_tables(
             destination_tables
         )
@@ -69,11 +70,16 @@ class MariaDBDest(DestinationPlugin):
         self._loader = _LoaderSpec(loader)
 
     @property
-    def conn(self) -> MariaDBConn:
+    def conn(self) -> MariaDBConn | NamedConn:
         """
         The MariaDB connection configuration.
         """
         return self._conn
+
+    @conn.setter
+    @_td_validate_call(ErrorCode.DECE105)
+    def conn(self, conn: MariaDBConn | NamedConn):
+        self._conn = conn
 
     @property
     def destination_tables(self) -> list[str]:

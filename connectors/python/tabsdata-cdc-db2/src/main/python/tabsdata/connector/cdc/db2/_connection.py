@@ -63,6 +63,14 @@ class Db2CdcConn(CdcConn, Db2Conn):
             cx_src_configs_db2=cx_src_configs_db2,
         )
 
+    @classmethod
+    def _load_from_dict(cls, configs: dict) -> "Db2CdcConn":
+        credentials = configs.get("credentials")
+        if isinstance(credentials, dict):
+            configs = dict(configs)
+            configs["credentials"] = UserPasswordCredentials(**credentials)
+        return cls(**configs)
+
     @property
     def _cx_configs(self) -> dict:
         return self.cx_src_configs_db2

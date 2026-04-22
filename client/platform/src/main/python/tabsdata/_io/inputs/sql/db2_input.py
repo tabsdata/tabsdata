@@ -11,6 +11,7 @@ from pydantic import PositiveInt
 from typing_extensions import deprecated
 
 from tabsdata._io.connections.db2_connection import Db2Conn
+from tabsdata._io.connections.named_connection.named_connection import NamedConn
 from tabsdata._io.constants import _LoaderSpec
 from tabsdata._io.inputs.sql.shared_types import (
     Db2SrcLoaderSpec,
@@ -63,7 +64,7 @@ class Db2Src(SourcePlugin):
     @_td_validate_call(ErrorCode.SOCE111)
     def __init__(
         self,
-        conn: Db2Conn,
+        conn: Db2Conn | NamedConn,
         queries: QueriesSpec,
         initial_values: Optional[dict[str, Any]] = None,
         transactional: bool = True,
@@ -95,7 +96,7 @@ class Db2Src(SourcePlugin):
                 the column to. The type casting from the original column type to the
                 desired type must be supported.
         """
-        self._conn = conn
+        self.conn = conn
         self._queries = self._normalize_queries(queries)
         self._initial_values = initial_values or {}
         self._transactional = transactional
@@ -104,11 +105,16 @@ class Db2Src(SourcePlugin):
         self._schema_overrides = self._validate_schema_overrides(schema_overrides)
 
     @property
-    def conn(self) -> Db2Conn:
+    def conn(self) -> Db2Conn | NamedConn:
         """
         The Db2 connection configuration.
         """
         return self._conn
+
+    @conn.setter
+    @_td_validate_call(ErrorCode.SOCE111)
+    def conn(self, conn: Db2Conn | NamedConn):
+        self._conn = conn
 
     @property
     def queries(self) -> list[str]:

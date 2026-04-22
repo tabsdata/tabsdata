@@ -6,7 +6,7 @@ import logging
 from typing import TypeAlias
 from urllib.parse import urlparse
 
-from tabsdata._credentials import S3Credentials
+from tabsdata._credentials import S3AccessKeyCredentials, S3Credentials
 from tabsdata._io.connections.connections import Conn
 from tabsdata._io.constants import S3_SCHEME, SupportedAWSS3Regions
 from tabsdata._utils.validation import _td_validate_call
@@ -222,6 +222,14 @@ class S3Conn(Conn):
                 S3 connection.
         """
         self._enforce_connection_params = enforce_connection_params
+
+    @classmethod
+    def _load_from_dict(cls, configs: dict) -> "S3Conn":
+        credentials = configs.get("credentials")
+        if isinstance(credentials, dict):
+            configs = dict(configs)
+            configs["credentials"] = S3AccessKeyCredentials(**credentials)
+        return cls(**configs)
 
     def __eq__(self, other):
         if not isinstance(other, S3Conn):

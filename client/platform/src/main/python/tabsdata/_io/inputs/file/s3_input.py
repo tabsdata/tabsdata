@@ -23,6 +23,7 @@ from tabsdata._format import (
 )
 from tabsdata._info import FileInfo, validate_file_info
 from tabsdata._io.connections.file_connections.s3_connection import S3Conn
+from tabsdata._io.connections.named_connection.named_connection import NamedConn
 from tabsdata._io.plugin import SourcePlugin
 from tabsdata._tabsserver.function.cloud_connectivity_utils import (
     obtain_and_set_s3_credentials,
@@ -70,7 +71,7 @@ class S3Src(SourcePlugin):
     @_td_validate_call(ErrorCode.SOCE113)
     def __init__(
         self,
-        conn: S3Conn,
+        conn: S3Conn | NamedConn,
         path: str | list[str],
         format: str | FileFormat | None = None,
         initial_last_modified: str | datetime | None = None,
@@ -108,7 +109,7 @@ class S3Src(SourcePlugin):
         self.infer_schema_length = infer_schema_length
 
     @property
-    def conn(self) -> S3Conn:
+    def conn(self) -> S3Conn | NamedConn:
         """
         The S3 connection configuration for this source.
         """
@@ -116,7 +117,7 @@ class S3Src(SourcePlugin):
 
     @conn.setter
     @_td_validate_call(ErrorCode.SOCE113)
-    def conn(self, conn: S3Conn):
+    def conn(self, conn: S3Conn | NamedConn):
         """
         Set the S3 connection configuration for this source.
 
@@ -124,6 +125,7 @@ class S3Src(SourcePlugin):
             conn: The S3 connection configuration to set.
         """
         self._conn = conn
+        self._rebuild_uri_list()
 
     @property
     def path(self) -> list[str]:
@@ -148,11 +150,27 @@ class S3Src(SourcePlugin):
         else:
             self._path = path
 
+        self._rebuild_uri_list()
+
+    def _rebuild_uri_list(self):
+        """
+        Rebuild the internal URI list from the current path and connection.
+
+        The conn setter runs before the path setter during __init__, so _path may
+        not exist yet on the first call. When the connection is a placeholder
+        without a bucket_uri (e.g. a NamedConn not yet resolved), URIs will be
+        built when the placeholder is replaced with a resolved S3Conn.
+        """
+        if not hasattr(self, "_path"):
+            return
+        if not hasattr(self._conn, "bucket_uri"):
+            self._uri_list = []
+            return
         self._uri_list = []
         for p in self._path:
             if p.startswith("/"):
                 p = p[1:]
-            full_uri = f"{self.conn.bucket_uri}/{quote(p, safe='/$*')}"
+            full_uri = f"{self._conn.bucket_uri}/{quote(p, safe='/$*')}"
             self._uri_list.append(full_uri)
 
     @property

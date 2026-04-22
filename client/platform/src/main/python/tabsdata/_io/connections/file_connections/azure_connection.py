@@ -5,7 +5,7 @@
 import logging
 from urllib.parse import urlparse
 
-from tabsdata._credentials import AzureCredentials
+from tabsdata._credentials import AzureAccountKeyCredentials, AzureCredentials
 from tabsdata._io.connections.connections import Conn
 from tabsdata._io.constants import AZURE_SCHEME
 from tabsdata._utils.validation import _td_validate_call
@@ -177,6 +177,14 @@ class AzureConn(Conn):
             f"cx_dst_configs_azure={self.cx_dst_configs_azure}, "
             f"enforce_connection_params={self.enforce_connection_params})"
         )
+
+    @classmethod
+    def _load_from_dict(cls, configs: dict) -> "AzureConn":
+        credentials = configs.get("credentials")
+        if isinstance(credentials, dict):
+            configs = dict(configs)
+            configs["credentials"] = AzureAccountKeyCredentials(**credentials)
+        return cls(**configs)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, AzureConn):

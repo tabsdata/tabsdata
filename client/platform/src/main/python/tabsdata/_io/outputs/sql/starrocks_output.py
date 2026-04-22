@@ -24,6 +24,7 @@ from tabsdata._io.cloud_staging.starrocks.cloud_storage import (
 )
 from tabsdata._io.cloud_staging.starrocks.config import StarRocksConfig
 from tabsdata._io.cloud_staging.starrocks.dialect import StarRocksDialect
+from tabsdata._io.connections.named_connection.named_connection import NamedConn
 from tabsdata._io.connections.starrocks_connection import StarRocksConn
 from tabsdata._io.outputs.shared_enums import (
     IfTableExistStrategySpec,
@@ -65,7 +66,7 @@ class StarRocksDest(DestinationPlugin):
     @_td_validate_call(ErrorCode.DECE110)
     def __init__(
         self,
-        conn: StarRocksConn,
+        conn: StarRocksConn | NamedConn,
         destination_tables: str | list[str],
         if_table_exists: IfTableExistStrategySpec = "append",
         schema_evolution: SchemaEvolutionSpec = "none",
@@ -91,7 +92,7 @@ class StarRocksDest(DestinationPlugin):
                 * ``'iceberg'`` — apply Iceberg-style schema evolution (add columns,
                   drop columns, widen types, make columns nullable).
         """
-        self._conn = conn
+        self.conn = conn
         self._destination_tables = self._normalize_destination_tables(
             destination_tables
         )
@@ -101,11 +102,16 @@ class StarRocksDest(DestinationPlugin):
     # ── Properties ────────────────────────────────────────────────────────────────────
 
     @property
-    def conn(self) -> StarRocksConn:
+    def conn(self) -> StarRocksConn | NamedConn:
         """
         The StarRocks connection configuration.
         """
         return self._conn
+
+    @conn.setter
+    @_td_validate_call(ErrorCode.DECE110)
+    def conn(self, conn: StarRocksConn | NamedConn):
+        self._conn = conn
 
     @property
     def destination_tables(self) -> list[str]:

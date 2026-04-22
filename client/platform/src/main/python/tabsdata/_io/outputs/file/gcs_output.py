@@ -17,6 +17,7 @@ from tabsdata._format import (
     get_implicit_format_from_list,
 )
 from tabsdata._io.connections.file_connections.gcp_connection import GCSConn
+from tabsdata._io.connections.named_connection.named_connection import NamedConn
 from tabsdata._io.outputs.file_outputs import (
     FRAGMENT_INDEX_PLACEHOLDER,
     _store_results_in_intermediate_files,
@@ -51,7 +52,7 @@ class GCSDest(DestinationPlugin):
     @_td_validate_call(ErrorCode.DECE114)
     def __init__(
         self,
-        conn: GCSConn,
+        conn: GCSConn | NamedConn,
         path: str | list[str],
         format: str | FileFormat | None = None,
     ):
@@ -75,7 +76,7 @@ class GCSDest(DestinationPlugin):
         self.format = format
 
     @property
-    def conn(self) -> GCSConn:
+    def conn(self) -> GCSConn | NamedConn:
         """
         The GCS connection configuration for this destination.
         """
@@ -83,7 +84,7 @@ class GCSDest(DestinationPlugin):
 
     @conn.setter
     @_td_validate_call(ErrorCode.DECE114)
-    def conn(self, conn: GCSConn):
+    def conn(self, conn: GCSConn | NamedConn):
         """
         Set the GCS connection configuration for this destination.
 
@@ -91,6 +92,7 @@ class GCSDest(DestinationPlugin):
             conn: The GCS connection configuration to set.
         """
         self._conn = conn
+        self._rebuild_full_uri()
 
     @property
     def path(self) -> list[str]:
@@ -113,12 +115,7 @@ class GCSDest(DestinationPlugin):
         else:
             self._path = path
 
-        self._full_uri = []
-        for p in self._path:
-            if p.startswith("/"):
-                p = p[1:]
-            full_uri = f"{self.conn.bucket_uri}/{quote(p, safe='/$')}"
-            self._full_uri.append(full_uri)
+        self._rebuild_full_uri()
 
         if not self.allow_fragments:
             for p in self._path:
@@ -128,6 +125,27 @@ class GCSDest(DestinationPlugin):
                         FRAGMENT_INDEX_PLACEHOLDER,
                         p,
                     )
+
+    def _rebuild_full_uri(self):
+        """
+        Rebuild the internal URI list from the current path and connection.
+
+        The conn setter runs before the path setter during __init__, so _path may
+        not exist yet on the first call. When conn is a NamedConn placeholder, the
+        bucket URI is not yet known; URIs will be built when the NamedConn is
+        replaced with a resolved GCSConn.
+        """
+        if not hasattr(self, "_path"):
+            return
+        if not hasattr(self._conn, "bucket_uri"):
+            self._full_uri = []
+            return
+        self._full_uri = []
+        for p in self._path:
+            if p.startswith("/"):
+                p = p[1:]
+            full_uri = f"{self._conn.bucket_uri}/{quote(p, safe='/$')}"
+            self._full_uri.append(full_uri)
 
     @property
     def format(self) -> FileFormat:

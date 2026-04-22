@@ -10,6 +10,7 @@ from typing import Optional
 import polars as pl
 from pydantic import PositiveInt
 
+from tabsdata._io.connections.named_connection.named_connection import NamedConn
 from tabsdata._io.constants import _LoaderSpec
 from tabsdata._io.outputs.shared_enums import (
     IfTableExistStrategySpec,
@@ -32,7 +33,7 @@ class MSSQLDest(DestinationPlugin):
     @_td_validate_call(ErrorCode.DECE109)
     def __init__(
         self,
-        conn: MSSQLConn,
+        conn: MSSQLConn | NamedConn,
         destination_tables: str | list[str],
         if_table_exists: IfTableExistStrategySpec = "append",
         transactional: bool = True,
@@ -65,7 +66,7 @@ class MSSQLDest(DestinationPlugin):
         self.loader = loader
 
     @property
-    def conn(self) -> MSSQLConn:
+    def conn(self) -> MSSQLConn | NamedConn:
         """
         The MSSQL connection configuration.
         """

@@ -23,6 +23,7 @@ from tabsdata._format import (
 )
 from tabsdata._info import FileInfo, validate_file_info
 from tabsdata._io.connections.file_connections.gcp_connection import GCSConn
+from tabsdata._io.connections.named_connection.named_connection import NamedConn
 from tabsdata._io.plugin import SourcePlugin
 from tabsdata._tabsserver.function.cloud_connectivity_utils import (
     obtain_and_set_gcp_credentials,
@@ -69,7 +70,7 @@ class GCSSrc(SourcePlugin):
     @_td_validate_call(ErrorCode.SOCE114)
     def __init__(
         self,
-        conn: GCSConn,
+        conn: GCSConn | NamedConn,
         path: str | list[str],
         format: str | FileFormat | None = None,
         initial_last_modified: str | datetime | None = None,
@@ -106,7 +107,7 @@ class GCSSrc(SourcePlugin):
         self.infer_schema_length = infer_schema_length
 
     @property
-    def conn(self) -> GCSConn:
+    def conn(self) -> GCSConn | NamedConn:
         """
         The GCS connection configuration for this source.
         """
@@ -114,7 +115,7 @@ class GCSSrc(SourcePlugin):
 
     @conn.setter
     @_td_validate_call(ErrorCode.SOCE114)
-    def conn(self, conn: GCSConn):
+    def conn(self, conn: GCSConn | NamedConn):
         """
         Set the GCS connection configuration for this source.
 
@@ -122,6 +123,7 @@ class GCSSrc(SourcePlugin):
             conn: The GCS connection configuration to set.
         """
         self._conn = conn
+        self._rebuild_uri_list()
 
     @property
     def path(self) -> list[str]:
@@ -145,11 +147,27 @@ class GCSSrc(SourcePlugin):
         else:
             self._path = path
 
+        self._rebuild_uri_list()
+
+    def _rebuild_uri_list(self):
+        """
+        Rebuild the internal URI list from the current path and connection.
+
+        The conn setter runs before the path setter during __init__, so _path may
+        not exist yet on the first call. When the connection is a placeholder
+        without a bucket_uri (e.g. a NamedConn not yet resolved), URIs will be
+        built when the placeholder is replaced with a resolved GCSConn.
+        """
+        if not hasattr(self, "_path"):
+            return
+        if not hasattr(self._conn, "bucket_uri"):
+            self._uri_list = []
+            return
         self._uri_list = []
         for p in self._path:
             if p.startswith("/"):
                 p = p[1:]
-            full_uri = f"{self.conn.bucket_uri}/{quote(p, safe='/$*')}"
+            full_uri = f"{self._conn.bucket_uri}/{quote(p, safe='/$*')}"
             self._uri_list.append(full_uri)
 
     @property

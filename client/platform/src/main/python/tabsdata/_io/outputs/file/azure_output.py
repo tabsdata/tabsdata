@@ -17,6 +17,7 @@ from tabsdata._format import (
     get_implicit_format_from_list,
 )
 from tabsdata._io.connections.file_connections.azure_connection import AzureConn
+from tabsdata._io.connections.named_connection.named_connection import NamedConn
 from tabsdata._io.outputs.file_outputs import (
     FRAGMENT_INDEX_PLACEHOLDER,
     _store_results_in_intermediate_files,
@@ -51,7 +52,7 @@ class AzureDest(DestinationPlugin):
     @_td_validate_call(ErrorCode.DECE116)
     def __init__(
         self,
-        conn: AzureConn,
+        conn: AzureConn | NamedConn,
         path: str | list[str],
         format: str | FileFormat | None = None,
     ):
@@ -75,7 +76,7 @@ class AzureDest(DestinationPlugin):
         self.format = format
 
     @property
-    def conn(self) -> AzureConn:
+    def conn(self) -> AzureConn | NamedConn:
         """
         The Azure connection configuration for this destination.
         """
@@ -83,7 +84,7 @@ class AzureDest(DestinationPlugin):
 
     @conn.setter
     @_td_validate_call(ErrorCode.DECE116)
-    def conn(self, conn: AzureConn):
+    def conn(self, conn: AzureConn | NamedConn):
         """
         Set the Azure connection configuration for this destination.
 
@@ -91,6 +92,7 @@ class AzureDest(DestinationPlugin):
             conn: The Azure connection configuration to set.
         """
         self._conn = conn
+        self._rebuild_full_uri()
 
     @property
     def path(self) -> list[str]:
@@ -113,12 +115,7 @@ class AzureDest(DestinationPlugin):
         else:
             self._path = path
 
-        self._full_uri = []
-        for p in self._path:
-            if p.startswith("/"):
-                p = p[1:]
-            full_uri = f"{self.conn.container_uri}/{quote(p, safe='/$')}"
-            self._full_uri.append(full_uri)
+        self._rebuild_full_uri()
 
         if not self.allow_fragments:
             for p in self._path:
@@ -128,6 +125,27 @@ class AzureDest(DestinationPlugin):
                         FRAGMENT_INDEX_PLACEHOLDER,
                         p,
                     )
+
+    def _rebuild_full_uri(self):
+        """
+        Rebuild the internal URI list from the current path and connection.
+
+        The conn setter runs before the path setter during __init__, so _path may
+        not exist yet on the first call. When conn is a NamedConn placeholder, the
+        container URI is not yet known; URIs will be built when the NamedConn is
+        replaced with a resolved AzureConn.
+        """
+        if not hasattr(self, "_path"):
+            return
+        if not hasattr(self._conn, "container_uri"):
+            self._full_uri = []
+            return
+        self._full_uri = []
+        for p in self._path:
+            if p.startswith("/"):
+                p = p[1:]
+            full_uri = f"{self._conn.container_uri}/{quote(p, safe='/$')}"
+            self._full_uri.append(full_uri)
 
     @property
     def format(self) -> FileFormat:

@@ -10,6 +10,7 @@ from typing import Optional
 import polars as pl
 from pydantic import PositiveInt
 
+from tabsdata._io.connections.named_connection.named_connection import NamedConn
 from tabsdata._io.connections.postgres_connection import PostgresConn
 from tabsdata._io.constants import _LoaderSpec
 from tabsdata._io.outputs.shared_enums import (
@@ -34,7 +35,7 @@ class PostgresDest(DestinationPlugin):
     @_td_validate_call(ErrorCode.DECE107)
     def __init__(
         self,
-        conn: PostgresConn,
+        conn: PostgresConn | NamedConn,
         destination_tables: str | list[str],
         if_table_exists: IfTableExistStrategySpec = "append",
         transactional: bool = True,
@@ -59,7 +60,7 @@ class PostgresDest(DestinationPlugin):
                 Defaults to 100000.
             loader: The data processing loader to use for executing DB write operation.
         """
-        self._conn = conn
+        self.conn = conn
         self._destination_tables = self._normalize_destination_tables(
             destination_tables
         )
@@ -69,11 +70,16 @@ class PostgresDest(DestinationPlugin):
         self._loader = _LoaderSpec(loader)
 
     @property
-    def conn(self) -> PostgresConn:
+    def conn(self) -> PostgresConn | NamedConn:
         """
         The Postgres connection configuration.
         """
         return self._conn
+
+    @conn.setter
+    @_td_validate_call(ErrorCode.DECE107)
+    def conn(self, conn: PostgresConn | NamedConn):
+        self._conn = conn
 
     @property
     def destination_tables(self) -> list[str]:

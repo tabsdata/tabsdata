@@ -26,6 +26,7 @@ from tabsdata._io.cloud_staging.druid.cloud_storage import (
 from tabsdata._io.cloud_staging.druid.config import DruidConfig
 from tabsdata._io.cloud_staging.druid.dialect import DUMMY_TIME_COLUMN, DruidDialect
 from tabsdata._io.connections.druid_connection import DruidConn
+from tabsdata._io.connections.named_connection.named_connection import NamedConn
 from tabsdata._io.outputs.shared_enums import IfTableExistStrategySpec
 from tabsdata._io.plugin import DestinationPlugin
 from tabsdata._utils.annotations import unstable, unstable_category
@@ -64,7 +65,7 @@ class DruidDest(DestinationPlugin):
     @_td_validate_call(ErrorCode.DECE112)
     def __init__(
         self,
-        conn: DruidConn,
+        conn: DruidConn | NamedConn,
         destination_tables: str | list[str],
         if_table_exists: IfTableExistStrategySpec = "append",
     ):
@@ -84,7 +85,7 @@ class DruidDest(DestinationPlugin):
                 * ``'replace'`` — drop existing segments and replace with
                   new data.
         """
-        self._conn = conn
+        self.conn = conn
         self._destination_tables = self._normalize_destination_tables(
             destination_tables
         )
@@ -93,11 +94,16 @@ class DruidDest(DestinationPlugin):
     # ── Properties ────────────────────────────────────────────────────────────────────
 
     @property
-    def conn(self) -> DruidConn:
+    def conn(self) -> DruidConn | NamedConn:
         """
         The Druid connection configuration.
         """
         return self._conn
+
+    @conn.setter
+    @_td_validate_call(ErrorCode.DECE112)
+    def conn(self, conn: DruidConn | NamedConn):
+        self._conn = conn
 
     @property
     def destination_tables(self) -> list[str]:

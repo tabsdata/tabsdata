@@ -11,6 +11,7 @@ from typing import Any
 
 from typing_extensions import deprecated
 
+from tabsdata._io.connections.named_connection.named_connection import NamedConn
 from tabsdata._utils.annotations import unstable, unstable_category
 
 # noinspection PyProtectedMember
@@ -67,7 +68,7 @@ class MySQLCdcTrigger(CdcTrigger):
     @_td_validate_call(ErrorCode.CDCMYSQL2)
     def __init__(
         self,
-        conn: MySQLCdcConn,
+        conn: MySQLCdcConn | NamedConn,
         tables: QualifiedTablesSpec,
         start_from: MySQLCdcStartFromSpec,
         cdc_format: CdcFormat = CdcFormat(),

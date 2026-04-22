@@ -25,6 +25,7 @@ from tabsdata._io.cloud_staging.common.storage_config import (
     S3Config,
 )
 from tabsdata._io.connections.clickhouse_connection import ClickHouseConn
+from tabsdata._io.connections.named_connection.named_connection import NamedConn
 from tabsdata._io.outputs.shared_enums import (
     IfTableExistStrategySpec,
     SchemaEvolutionSpec,
@@ -65,7 +66,7 @@ class ClickHouseDest(DestinationPlugin):
     @_td_validate_call(ErrorCode.DECE110)
     def __init__(
         self,
-        conn: ClickHouseConn,
+        conn: ClickHouseConn | NamedConn,
         destination_tables: str | list[str],
         if_table_exists: IfTableExistStrategySpec = "append",
         schema_evolution: SchemaEvolutionSpec = "none",
@@ -91,7 +92,7 @@ class ClickHouseDest(DestinationPlugin):
                 * ``'iceberg'`` — apply Iceberg-style schema evolution (add columns,
                   drop columns, widen types, make columns nullable).
         """
-        self._conn = conn
+        self.conn = conn
         self._destination_tables = self._normalize_destination_tables(
             destination_tables
         )
@@ -101,11 +102,16 @@ class ClickHouseDest(DestinationPlugin):
     # ── Properties ────────────────────────────────────────────────────────────────────
 
     @property
-    def conn(self) -> ClickHouseConn:
+    def conn(self) -> ClickHouseConn | NamedConn:
         """
         The ClickHouse connection configuration.
         """
         return self._conn
+
+    @conn.setter
+    @_td_validate_call(ErrorCode.DECE110)
+    def conn(self, conn: ClickHouseConn | NamedConn):
+        self._conn = conn
 
     @property
     def destination_tables(self) -> list[str]:

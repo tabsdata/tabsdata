@@ -11,6 +11,7 @@ from typing import Any
 
 from typing_extensions import deprecated
 
+from tabsdata._io.connections.named_connection.named_connection import NamedConn
 from tabsdata._utils.annotations import unstable, unstable_category
 
 # noinspection PyProtectedMember
@@ -66,7 +67,7 @@ class Db2CdcTrigger(CdcTrigger):
     @_td_validate_call(ErrorCode.CDCDB22)
     def __init__(
         self,
-        conn: Db2CdcConn,
+        conn: Db2CdcConn | NamedConn,
         tables: QualifiedTablesSpec,
         start_from: Db2CdcStartFromSpec,
         cdc_format: CdcFormat = CdcFormat(),

@@ -95,7 +95,7 @@ class CdcTrigger(StageTrigger):
             end: Optional datetime for the trigger to stop working.
         """
         super().__init__(start=start, end=end)
-        self._conn = conn
+        self.conn = conn
         self._tables = tables
         self._cdc_format = cdc_format
         self._buffer_max_rows = buffer_max_rows
@@ -124,6 +124,15 @@ class CdcTrigger(StageTrigger):
         CDC connection configuration.
         """
         return self._conn
+
+    @conn.setter
+    def conn(self, value: Conn):
+        """
+        Set the CDC connection configuration.
+        """
+        if not isinstance(value, Conn):
+            raise ValueError(f"conn must be an instance of Conn, got {type(value)}")
+        self._conn = value
 
     @property
     def tables(self) -> list[str] | None:

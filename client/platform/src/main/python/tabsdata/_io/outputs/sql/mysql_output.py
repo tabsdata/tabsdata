@@ -11,6 +11,7 @@ import polars as pl
 from pydantic import PositiveInt
 
 from tabsdata._io.connections.mysql_connection import MySQLConn
+from tabsdata._io.connections.named_connection.named_connection import NamedConn
 from tabsdata._io.constants import _LoaderSpec
 from tabsdata._io.outputs.shared_enums import (
     IfTableExistStrategySpec,
@@ -34,7 +35,7 @@ class MySQLDest(DestinationPlugin):
     @_td_validate_call(ErrorCode.DECE106)
     def __init__(
         self,
-        conn: MySQLConn,
+        conn: MySQLConn | NamedConn,
         destination_tables: str | list[str],
         if_table_exists: IfTableExistStrategySpec = "append",
         transactional: bool = True,
@@ -49,7 +50,7 @@ class MySQLDest(DestinationPlugin):
             destination_tables: The tables to create. If multiple tables are provided,
                 they must be provided as a list.
             if_table_exists: The strategy to
-                follow when the table already exists. Defaults to 'append'.
+                follow when the table already exists. Defaults to ‘append’.
                 - ‘replace’ will create a new database table, overwriting an existing
                 one.
                 - ‘append’ will append to an existing table.
@@ -59,7 +60,7 @@ class MySQLDest(DestinationPlugin):
                 Defaults to 100000.
             loader: The data processing loader to use for executing DB write operation.
         """
-        self._conn = conn
+        self.conn = conn
         self._destination_tables = self._normalize_destination_tables(
             destination_tables
         )
@@ -69,11 +70,16 @@ class MySQLDest(DestinationPlugin):
         self._loader = _LoaderSpec(loader)
 
     @property
-    def conn(self) -> MySQLConn:
+    def conn(self) -> MySQLConn | NamedConn:
         """
         The MySQL connection configuration.
         """
         return self._conn
+
+    @conn.setter
+    @_td_validate_call(ErrorCode.DECE106)
+    def conn(self, conn: MySQLConn | NamedConn):
+        self._conn = conn
 
     @property
     def destination_tables(self) -> list[str]:

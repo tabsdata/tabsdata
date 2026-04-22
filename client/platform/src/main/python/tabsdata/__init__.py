@@ -49,6 +49,7 @@ from tabsdata._io.connections.file_connections.gcp_connection import GCSConn
 from tabsdata._io.connections.file_connections.s3_connection import S3Conn
 from tabsdata._io.connections.mariadb_connection import MariaDBConn
 from tabsdata._io.connections.mysql_connection import MySQLConn
+from tabsdata._io.connections.named_connection.named_connection import NamedConn
 from tabsdata._io.connections.oracle_connection import OracleConn
 from tabsdata._io.connections.postgres_connection import PostgresConn
 from tabsdata._io.connections.starrocks_connection import StarRocksConn
@@ -291,6 +292,7 @@ __all__ = [
     "MariaDBConn",
     "MySQLCdcConn",
     "MySQLConn",
+    "NamedConn",
     "OracleConn",
     "PostgresCdcConn",
     "PostgresConn",
