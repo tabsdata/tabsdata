@@ -85,6 +85,7 @@ from tabsdata._io.outputs.sql.clickhouse_output import ClickHouseDest
 from tabsdata._io.outputs.sql.druid_output import DruidDest
 from tabsdata._io.outputs.sql.mariadb_output import MariaDBDest
 from tabsdata._io.outputs.sql.mysql_output import MySQLDest
+from tabsdata._io.outputs.sql.oracle_output import OracleDest
 from tabsdata._io.outputs.sql.postgres_output import PostgresDest
 from tabsdata._io.outputs.sql.starrocks_output import StarRocksDest
 
@@ -247,6 +248,7 @@ __all__ = [
     "MSSQLDestination",
     "MySQLDest",
     "MySQLDestination",
+    "OracleDest",
     "OracleDestination",
     "PostgresDest",
     "PostgresDestination",

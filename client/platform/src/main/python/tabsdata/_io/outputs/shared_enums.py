@@ -11,9 +11,10 @@ SchemaStrategySpec: TypeAlias = Literal["update", "strict"]
 
 # Not including 'pandas' in the loader spec since pl.write_database uses pandas.to_sql
 # under the hood by default
-MySQLDestWriterSpec = Literal["polars_sqlalchemy"]
-PostgresDestWriterSpec = Literal["polars_sqlalchemy"]
 MariaDBDestWriterSpec = Literal["polars_sqlalchemy"]
+MySQLDestWriterSpec = Literal["polars_sqlalchemy"]
+OracleDestWriterSpec = Literal["polars_sqlalchemy"]
+PostgresDestWriterSpec = Literal["polars_sqlalchemy"]
 
 
 class IfTableExistsStrategy(Enum):
