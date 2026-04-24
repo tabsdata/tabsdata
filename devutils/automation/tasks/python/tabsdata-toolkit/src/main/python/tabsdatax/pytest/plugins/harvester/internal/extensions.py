@@ -32,9 +32,12 @@ def _get_plugin_module_name(plugin: object) -> str:
 def _classify_plugin(name: str, plugin: object) -> str | None:
     """Classify a plugin.  Returns None to skip it entirely.
 
-    - ``"builtin"``     — ships with pytest (module starts with ``_pytest`` or ``pytest``)
-    - ``"first-party"`` — from tabsdata-toolkit (module starts with ``tabsdatax``)
-    - ``"third-party"`` — installed package extending pytest (everything else that's real)
+    - ``"builtin"``     — ships with pytest
+      (module starts with ``_pytest`` or ``pytest``)
+    - ``"first-party"`` — from tabsdata-toolkit
+      (module starts with ``tabsdatax``)
+    - ``"third-party"`` — installed package extending
+      pytest (everything else that's real)
     - ``None``          — skip (conftest files, path-based entries, pluggy internals)
     """
     if not name or isinstance(name, int):

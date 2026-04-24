@@ -52,11 +52,13 @@ def init_db(harvester_folder: str) -> None:
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             fixture     TEXT    NOT NULL,
             scope       TEXT    NOT NULL,
-            event       TEXT    NOT NULL,   -- 'setup_start', 'setup_end', 'teardown_end'
+            event       TEXT    NOT NULL,
+            -- 'setup_start', 'setup_end', 'teardown_end'
             worker      TEXT    NOT NULL DEFAULT '',
             pid         INTEGER NOT NULL DEFAULT 0,
             timestamp   REAL    NOT NULL,
-            duration    REAL              -- NULL for 'setup_start', filled for 'setup_end'/'teardown_end'
+            duration    REAL
+            -- NULL for setup_start, filled for others
         );
 
         CREATE INDEX IF NOT EXISTS idx_fixture_events_fixture
@@ -95,6 +97,7 @@ def reset_db(harvester_folder: str) -> None:
 # Write helpers (called by workers and controller)
 # ---------------------------------------------------------------------------
 
+
 def record_fixture_setup_start(
     harvester_folder: str,
     fixture: str,
@@ -122,7 +125,9 @@ def record_fixture_setup_end(
     """Record that a fixture setup has completed."""
     conn = get_connection(harvester_folder)
     conn.execute(
-        "INSERT INTO fixture_events (fixture, scope, event, worker, pid, timestamp, duration)"
+        "INSERT INTO fixture_events"
+        " (fixture, scope, event, worker, pid,"
+        " timestamp, duration)"
         " VALUES (?, ?, 'setup_end', ?, ?, ?, ?)",
         (fixture, scope, worker, os.getpid(), time.time(), duration),
     )
@@ -166,6 +171,7 @@ def record_test_completion(
 # Query helpers (called by the monitor)
 # ---------------------------------------------------------------------------
 
+
 def query_fixture_stats(harvester_folder: str) -> list[dict]:
     """Return aggregated fixture setup/teardown stats.
 
@@ -185,10 +191,15 @@ def query_fixture_stats(harvester_folder: str) -> list[dict]:
                 fixture,
                 scope,
                 SUM(CASE WHEN event = 'setup_end' THEN 1 ELSE 0 END) as setup_count,
-                SUM(CASE WHEN event = 'teardown_end' THEN 1 ELSE 0 END) as teardown_count,
-                AVG(CASE WHEN event = 'setup_end' THEN duration END) as avg_setup_duration,
-                MAX(CASE WHEN event = 'setup_end' THEN duration END) as max_setup_duration,
-                SUM(CASE WHEN event = 'setup_end' THEN duration ELSE 0 END) as total_setup_duration,
+                SUM(CASE WHEN event = 'teardown_end'
+                    THEN 1 ELSE 0 END) as teardown_count,
+                AVG(CASE WHEN event = 'setup_end'
+                    THEN duration END) as avg_setup_duration,
+                MAX(CASE WHEN event = 'setup_end'
+                    THEN duration END) as max_setup_duration,
+                SUM(CASE WHEN event = 'setup_end'
+                    THEN duration ELSE 0 END)
+                    as total_setup_duration,
                 SUM(CASE WHEN event = 'setup_start' THEN 1 ELSE 0 END)
                 - SUM(CASE WHEN event = 'setup_end' THEN 1 ELSE 0 END) as active_setups
             FROM fixture_events

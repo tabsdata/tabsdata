@@ -10,19 +10,21 @@ mapping functions used by ``client.py``.
 
 from __future__ import annotations
 
-from rich.bar import Bar
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from rich.table import Table
+
 from rich.console import Group as RichGroup
 from rich.text import Text as RichText
-
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.widgets import DataTable, Sparkline, Static
 
 from tabsdatax.pytest.plugins.harvester.internal.constants import (
+    FIXTURE_SCOPE_ORDER,
     Color,
     Emoji,
-    FIXTURE_SCOPE_ORDER,
-    FixtureLifecycle,
 )
 
 
@@ -46,24 +48,33 @@ class HarvesterDataTable(DataTable):
     }
     """
 
-    def _render_cell(self, row_index, column_index, base_style, width,
-                     cursor=False, hover=False):
+    def _render_cell(
+        self, row_index, column_index, base_style, width, cursor=False, hover=False
+    ):
         # Render normally
         lines = super()._render_cell(
-            row_index, column_index, base_style, width,
-            cursor=cursor, hover=hover,
+            row_index,
+            column_index,
+            base_style,
+            width,
+            cursor=cursor,
+            hover=hover,
         )
         if not cursor or row_index == -1:  # skip header
             return lines
 
         # Re-render WITHOUT cursor to get original colors,
         # then only take the background from the cursor render
-        from rich.style import Style
         from rich.segment import Segment
+        from rich.style import Style
 
         original_lines = super()._render_cell(
-            row_index, column_index, base_style, width,
-            cursor=False, hover=hover,
+            row_index,
+            column_index,
+            base_style,
+            width,
+            cursor=False,
+            hover=hover,
         )
 
         # Get cursor background from the component class
@@ -139,7 +150,9 @@ class TableSection(Vertical):
 
     """
 
-    def __init__(self, title: str, table_id: str, table_height: int = 14, **kwargs) -> None:
+    def __init__(
+        self, title: str, table_id: str, table_height: int = 14, **kwargs
+    ) -> None:
         super().__init__()
         self.title_text = title
         self.table_id = table_id
@@ -217,13 +230,28 @@ class SummaryHeader(Vertical):
             yield Static("", id="summary-text")
             with Horizontal(id="sparkline-container"):
                 with Vertical(classes="sparkline-col"):
-                    yield Sparkline(data=[0], min_color="#5080c0", max_color="#5080c0", id="spark-all")
+                    yield Sparkline(
+                        data=[0],
+                        min_color="#5080c0",
+                        max_color="#5080c0",
+                        id="spark-all",
+                    )
                     yield Static("All", classes="spark-label")
                 with Vertical(classes="sparkline-col"):
-                    yield Sparkline(data=[0], min_color="#50b850", max_color="#50b850", id="spark-passed")
+                    yield Sparkline(
+                        data=[0],
+                        min_color="#50b850",
+                        max_color="#50b850",
+                        id="spark-passed",
+                    )
                     yield Static("Passed", classes="spark-label")
                 with Vertical(classes="sparkline-col"):
-                    yield Sparkline(data=[0], min_color="#e05050", max_color="#e05050", id="spark-failed")
+                    yield Sparkline(
+                        data=[0],
+                        min_color="#e05050",
+                        max_color="#e05050",
+                        id="spark-failed",
+                    )
                     yield Static("Failed", classes="spark-label")
                 yield Static("", id="sparkline-legend")
 
@@ -251,6 +279,7 @@ class SummaryHeader(Vertical):
         # --- Title and PID ---
         try:
             from importlib.metadata import version as pkg_version
+
             ver = pkg_version("tabsdata-toolkit")
         except Exception:
             ver = "?"
@@ -267,7 +296,9 @@ class SummaryHeader(Vertical):
         # --- Start time and elapsed ---
         time_line = RichText()
         if session_start_ts:
-            started = _time.strftime("%Y-%m-%d %H:%M:%S", _time.localtime(session_start_ts))
+            started = _time.strftime(
+                "%Y-%m-%d %H:%M:%S", _time.localtime(session_start_ts)
+            )
             elapsed = _time.time() - session_start_ts
             time_line.append("Started: ", style=Color.DIM)
             time_line.append(started, style=f"bold {Color.WHITE}")
@@ -292,7 +323,9 @@ class SummaryHeader(Vertical):
                 running_duration += rt.elapsed
                 running_count += 1
 
-        total_db = (avg_passed_db or 0) * count_passed_db + (avg_failed_db or 0) * count_failed_db
+        total_db = (avg_passed_db or 0) * count_passed_db + (
+            avg_failed_db or 0
+        ) * count_failed_db
         count_all = count_passed_db + count_failed_db + running_count
         avg_all = (total_db + running_duration) / count_all if count_all > 0 else None
 
@@ -304,12 +337,16 @@ class SummaryHeader(Vertical):
             avg_line.append("🎯 All: ?", style=Color.DIM)
         avg_line.append("   ", style=Color.DIM)
         if avg_passed_db is not None:
-            avg_line.append(f"✅ Passed: {format_duration(avg_passed_db)}", style=Color.STATUS_DONE)
+            avg_line.append(
+                f"✅ Passed: {format_duration(avg_passed_db)}", style=Color.STATUS_DONE
+            )
         else:
             avg_line.append("✅ Passed: ?", style=Color.DIM)
         avg_line.append("   ", style=Color.DIM)
         if avg_failed_db is not None:
-            avg_line.append(f"❌ Failed: {format_duration(avg_failed_db)}", style=Color.STATUS_ERROR)
+            avg_line.append(
+                f"❌ Failed: {format_duration(avg_failed_db)}", style=Color.STATUS_ERROR
+            )
         else:
             avg_line.append("❌ Failed: ?", style=Color.DIM)
         parts.append(avg_line)
@@ -330,8 +367,12 @@ class SummaryHeader(Vertical):
         f_total = sum(f.get("total", 0) for f in fixtures.values()) if fixtures else 0
         f_passed = sum(f.get("passed", 0) for f in fixtures.values()) if fixtures else 0
         f_failed = sum(f.get("failed", 0) for f in fixtures.values()) if fixtures else 0
-        f_skipped = sum(f.get("skipped", 0) for f in fixtures.values()) if fixtures else 0
-        f_remaining = sum(f.get("remaining", 0) for f in fixtures.values()) if fixtures else 0
+        f_skipped = (
+            sum(f.get("skipped", 0) for f in fixtures.values()) if fixtures else 0
+        )
+        f_remaining = (
+            sum(f.get("remaining", 0) for f in fixtures.values()) if fixtures else 0
+        )
         if collected and f_total < collected:
             none_total = collected - f_total
             none_done = max(0, total_done - (f_passed + f_failed + f_skipped))
@@ -340,9 +381,36 @@ class SummaryHeader(Vertical):
             f_passed += max(0, none_done)
 
         progress_table = self._build_progress_table([
-            ("Tests",    collected, passed,   failed,   skipped,   running, pending_count, Color.BAR_TESTS),
-            ("Markers",  m_total,   m_passed, m_failed, m_skipped, 0,       m_pending,    Color.BAR_MARKERS),
-            ("Fixtures", f_total,   f_passed, f_failed, f_skipped, 0,       f_remaining,  Color.BAR_FIXTURES),
+            (
+                "Tests",
+                collected,
+                passed,
+                failed,
+                skipped,
+                running,
+                pending_count,
+                Color.BAR_TESTS,
+            ),
+            (
+                "Markers",
+                m_total,
+                m_passed,
+                m_failed,
+                m_skipped,
+                0,
+                m_pending,
+                Color.BAR_MARKERS,
+            ),
+            (
+                "Fixtures",
+                f_total,
+                f_passed,
+                f_failed,
+                f_skipped,
+                0,
+                f_remaining,
+                Color.BAR_FIXTURES,
+            ),
         ])
         parts.append(progress_table)
 
@@ -374,8 +442,16 @@ class SummaryHeader(Vertical):
 
         if has_data:
             spark_all.data = self._build_distribution(all_d, num_bins)
-            spark_passed.data = self._build_distribution(passed_d, num_bins) if len(passed_d) > 1 else [0]
-            spark_failed.data = self._build_distribution(failed_d, num_bins) if len(failed_d) > 1 else [0]
+            spark_passed.data = (
+                self._build_distribution(passed_d, num_bins)
+                if len(passed_d) > 1
+                else [0]
+            )
+            spark_failed.data = (
+                self._build_distribution(failed_d, num_bins)
+                if len(failed_d) > 1
+                else [0]
+            )
             container.display = True
 
             min_d = min(all_d)
@@ -395,6 +471,7 @@ class SummaryHeader(Vertical):
     def _build_distribution(durations: list[float], num_bins: int = 40) -> list[float]:
         """Build a smoothed histogram from raw durations for the sparkline."""
         import math
+
         if not durations:
             return [0.0]
 
@@ -452,7 +529,7 @@ class SummaryHeader(Vertical):
         line.append("  autouse", style=Color.DIM)
         return line
 
-    def _build_progress_table(self, rows: list) -> "Table":
+    def _build_progress_table(self, rows: list) -> Table:
         """Build an aligned table of progress bars.
 
         Each *row* is a tuple:
@@ -498,15 +575,42 @@ class SummaryHeader(Vertical):
             ratio_text.append(f"{done}", style=Color.WHITE)
             ratio_text.append(f"/{total}", style=Color.DIM)
 
-            passed_t = RichText(f"{passed} passed", style=Color.STATUS_DONE) if passed else RichText("")
-            failed_t = RichText(f"{failed} failed", style=Color.STATUS_ERROR) if failed else RichText("")
-            skipped_t = RichText(f"{skipped} skipped", style=Color.STATUS_PENDING) if skipped else RichText("")
-            running_t = RichText(f"{running} running", style=Color.STATUS_RUNNING) if running else RichText("")
-            pending_t = RichText(f"{pending} pending", style=Color.DIM) if pending else RichText("")
+            passed_t = (
+                RichText(f"{passed} passed", style=Color.STATUS_DONE)
+                if passed
+                else RichText("")
+            )
+            failed_t = (
+                RichText(f"{failed} failed", style=Color.STATUS_ERROR)
+                if failed
+                else RichText("")
+            )
+            skipped_t = (
+                RichText(f"{skipped} skipped", style=Color.STATUS_PENDING)
+                if skipped
+                else RichText("")
+            )
+            running_t = (
+                RichText(f"{running} running", style=Color.STATUS_RUNNING)
+                if running
+                else RichText("")
+            )
+            pending_t = (
+                RichText(f"{pending} pending", style=Color.DIM)
+                if pending
+                else RichText("")
+            )
 
             tbl.add_row(
-                label, bar, pct_text, ratio_text,
-                passed_t, failed_t, skipped_t, running_t, pending_t,
+                label,
+                bar,
+                pct_text,
+                ratio_text,
+                passed_t,
+                failed_t,
+                skipped_t,
+                running_t,
+                pending_t,
             )
 
         return tbl
@@ -599,7 +703,9 @@ def fixture_lifecycle_text(lifecycle: str) -> str:
     return lifecycle
 
 
-def fixture_state_circle(total: int, passed: int, failed: int, skipped: int) -> RichText:
+def fixture_state_circle(
+    total: int, passed: int, failed: int, skipped: int
+) -> RichText:
     """Return a colored ⬤ for a fixture's execution state."""
     executed = passed + failed + skipped
     if executed == 0:
@@ -653,11 +759,11 @@ def plugin_type_display(plugin_type: str) -> str:
 def plugin_type_icon(plugin_type: str) -> str:
     """Return an emoji for plugin type."""
     if plugin_type == "first-party":
-        return "🏠"   # home — our own
+        return "🏠"  # home — our own
     elif plugin_type == "third-party":
-        return "📦"   # package — external
+        return "📦"  # package — external
     else:
-        return "🧱"   # bricks — builtin
+        return "🧱"  # bricks — builtin
 
 
 # Sort order: first-party first, then third-party, then builtin
@@ -687,35 +793,37 @@ def plugin_active_text(active: bool) -> str:
 # ---------------------------------------------------------------------------
 # Cell text helper
 # ---------------------------------------------------------------------------
-from rich.text import Text as RichText
 
 # Table index → text color mapping
 _TABLE_COLORS = [
-    Color.TABLE_PHASES,    # 0 — Session Phases
+    Color.TABLE_PHASES,  # 0 — Session Phases
     Color.TABLE_FIXTURES,  # 1 — Fixtures
-    Color.TABLE_MARKERS,   # 2 — Markers
-    Color.TABLE_PLUGINS,   # 3 — Plugins
-    Color.TABLE_RUNNING,   # 4 — Running Tests
-    Color.TABLE_FAILED,    # 5 — Failed Tests
+    Color.TABLE_MARKERS,  # 2 — Markers
+    Color.TABLE_PLUGINS,  # 3 — Plugins
+    Color.TABLE_RUNNING,  # 4 — Running Tests
+    Color.TABLE_FAILED,  # 5 — Failed Tests
 ]
 
 # Table index → header color mapping (brighter version of text color)
 _HEADER_COLORS = [
-    Color.HDR_PHASES,      # 0
-    Color.HDR_FIXTURES,    # 1
-    Color.HDR_MARKERS,     # 2
-    Color.HDR_PLUGINS,     # 3
-    Color.HDR_RUNNING,     # 4
-    Color.HDR_FAILED,      # 5
+    Color.HDR_PHASES,  # 0
+    Color.HDR_FIXTURES,  # 1
+    Color.HDR_MARKERS,  # 2
+    Color.HDR_PLUGINS,  # 3
+    Color.HDR_RUNNING,  # 4
+    Color.HDR_FAILED,  # 5
 ]
 
 
 def text_for(table_index: int):
     """Return a helper that wraps values with the color for *table_index*."""
-    color = _TABLE_COLORS[table_index] if table_index < len(_TABLE_COLORS) else Color.WHITE
+    color = (
+        _TABLE_COLORS[table_index] if table_index < len(_TABLE_COLORS) else Color.WHITE
+    )
 
     def _wrap(value) -> RichText:
         return RichText(str(value), style=color)
+
     return _wrap
 
 
@@ -733,12 +841,17 @@ def header_for(table_index: int):
     Call ``refresh_headers()`` after data is loaded to extend the ``▁``
     fill to match actual column widths.
     """
-    color = _HEADER_COLORS[table_index] if table_index < len(_HEADER_COLORS) else Color.WHITE
+    color = (
+        _HEADER_COLORS[table_index]
+        if table_index < len(_HEADER_COLORS)
+        else Color.WHITE
+    )
 
     def _wrap(label: str) -> RichText:
         t = RichText()
         t.append(label, style=f"bold {color}")
         return t
+
     _wrap._hdr_color = color  # type: ignore[attr-defined]
     return _wrap
 

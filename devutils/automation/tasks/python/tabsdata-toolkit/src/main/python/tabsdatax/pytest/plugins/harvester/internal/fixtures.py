@@ -15,7 +15,6 @@ and within each scope alphabetically.
 
 from __future__ import annotations
 
-import time
 from typing import TYPE_CHECKING
 
 from tabsdatax.pytest.plugins.harvester.internal.constants import (
@@ -117,9 +116,14 @@ class FixtureTracker:
             self._known.add(fname)
             self._counts[fname] = {
                 "scope": scope,
-                "remaining": count, "passed": 0, "failed": 0, "skipped": 0,
-                "setup_count": 0, "teardown_count": 0,
-                "in_setup": 0, "in_teardown": 0,
+                "remaining": count,
+                "passed": 0,
+                "failed": 0,
+                "skipped": 0,
+                "setup_count": 0,
+                "teardown_count": 0,
+                "in_setup": 0,
+                "in_teardown": 0,
             }
             is_autouse = fname in autouse_fixtures
             self._writer.enqueue(
@@ -146,9 +150,7 @@ class FixtureTracker:
             return
         c["setup_count"] = c.get("setup_count", 0) + 1
         c["in_setup"] = c.get("in_setup", 0) + 1
-        self._writer.enqueue(
-            MetaMessage(kind="fixture", key=fname, payload=dict(c))
-        )
+        self._writer.enqueue(MetaMessage(kind="fixture", key=fname, payload=dict(c)))
 
     def on_setup_complete(self, fixturedef, request) -> None:
         """Called after fixture setup completes.  Decrements the active
@@ -160,9 +162,7 @@ class FixtureTracker:
         if c is None:
             return
         c["in_setup"] = max(0, c.get("in_setup", 0) - 1)
-        self._writer.enqueue(
-            MetaMessage(kind="fixture", key=fname, payload=dict(c))
-        )
+        self._writer.enqueue(MetaMessage(kind="fixture", key=fname, payload=dict(c)))
 
     def on_teardown(self, fixturedef, request) -> None:
         """Called from ``pytest_fixture_post_finalizer`` — after teardown."""
@@ -173,9 +173,7 @@ class FixtureTracker:
         if c is None:
             return
         c["teardown_count"] = c.get("teardown_count", 0) + 1
-        self._writer.enqueue(
-            MetaMessage(kind="fixture", key=fname, payload=dict(c))
-        )
+        self._writer.enqueue(MetaMessage(kind="fixture", key=fname, payload=dict(c)))
 
     def on_test_complete(self, nodeid: str, outcome: str) -> None:
         """Decrement remaining count for all fixtures used by this test.

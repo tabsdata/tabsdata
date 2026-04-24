@@ -14,7 +14,6 @@ import time
 
 from tabsdatax.pytest.plugins.harvester.internal.constants import (
     SESSION_PHASES_ORDERED,
-    SessionPhase,
 )
 from tabsdatax.pytest.plugins.harvester.internal.schema import PhaseState
 from tabsdatax.pytest.plugins.harvester.internal.writer import MetaMessage, MetaWriter

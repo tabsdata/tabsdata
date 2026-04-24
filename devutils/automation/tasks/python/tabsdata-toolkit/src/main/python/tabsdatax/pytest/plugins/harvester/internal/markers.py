@@ -58,8 +58,11 @@ class MarkerTracker:
 
         for name, count in marker_counts.items():
             self._counts[name] = {
-                "total": count, "passed": 0, "failed": 0,
-                "skipped": 0, "pending": count,
+                "total": count,
+                "passed": 0,
+                "failed": 0,
+                "skipped": 0,
+                "pending": count,
             }
             self._writer.enqueue(
                 MetaMessage(
@@ -86,6 +89,4 @@ class MarkerTracker:
             c["pending"] = max(0, c["pending"] - 1)
             if outcome in ("passed", "failed", "skipped"):
                 c[outcome] = c[outcome] + 1
-            self._writer.enqueue(
-                MetaMessage(kind="marker", key=name, payload=dict(c))
-            )
+            self._writer.enqueue(MetaMessage(kind="marker", key=name, payload=dict(c)))

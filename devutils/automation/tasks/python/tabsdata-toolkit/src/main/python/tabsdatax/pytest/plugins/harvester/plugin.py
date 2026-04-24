@@ -67,11 +67,11 @@ from tabsdatax.pytest.plugins.harvester.internal.constants import (
     PYTEST_PLUGIN_XDIST,
     PYTEST_WORKERINPUT,
     PYTEST_XDIST_WORKER,
-    SessionPhase,
     TDX_HARVESTER_FOLDER_ARG,
     TDX_HARVESTER_FOLDER_DEF,
     TDX_HARVESTER_FOLDER_ENV,
     TDX_HARVESTER_FOLDER_OPT,
+    SessionPhase,
     TestField,
     TestFilePrefix,
     TestPhase,
@@ -85,6 +85,7 @@ from tabsdatax.pytest.plugins.harvester.internal.database import (
     record_test_completion,
     reset_db,
 )
+from tabsdatax.pytest.plugins.harvester.internal.extensions import PluginTracker
 from tabsdatax.pytest.plugins.harvester.internal.fixtures import FixtureTracker
 from tabsdatax.pytest.plugins.harvester.internal.helpers import (
     filepath,
@@ -97,7 +98,6 @@ from tabsdatax.pytest.plugins.harvester.internal.helpers import (
 )
 from tabsdatax.pytest.plugins.harvester.internal.markers import MarkerTracker
 from tabsdatax.pytest.plugins.harvester.internal.phases import PhaseTracker
-from tabsdatax.pytest.plugins.harvester.internal.extensions import PluginTracker
 from tabsdatax.pytest.plugins.harvester.internal.writer import (
     MetaMessage,
     MetaWriter,
@@ -190,10 +190,13 @@ def pytest_configure(config: pytest.Config) -> None:
         # Store controller PID and start time so the monitor can detect
         # session restarts and show elapsed time
         writer.enqueue(
-            MetaMessage(kind="full_sync", payload={
-                "pid": os.getpid(),
-                "session_start_ts": time.time(),
-            })
+            MetaMessage(
+                kind="full_sync",
+                payload={
+                    "pid": os.getpid(),
+                    "session_start_ts": time.time(),
+                },
+            )
         )
 
         phase_tracker = PhaseTracker(writer)
@@ -255,7 +258,6 @@ def pytest_collection_modifyitems(
     marker_tracker: MarkerTracker | None = _get(config, _CFG_MARKER_TRACKER)
     if marker_tracker:
         marker_tracker.register_all(items)
-
 
 
 @pytest.hookimpl(wrapper=True)
@@ -372,20 +374,40 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo):
     match call.when:
         case TestPhase.SETUP:
             handle_setup(
-                g_harvester_folder, data_path, data, nodeid, call, report,
+                g_harvester_folder,
+                data_path,
+                data,
+                nodeid,
+                call,
+                report,
             )
         case TestPhase.CALL:
             handle_call(
-                g_harvester_folder, data_path, data, nodeid, call, report,
+                g_harvester_folder,
+                data_path,
+                data,
+                nodeid,
+                call,
+                report,
             )
             # Tracker updates happen in pytest_runtest_logreport
         case TestPhase.TEARDOWN:
             handle_teardown(
-                g_harvester_folder, data_path, data, nodeid, call, report,
+                g_harvester_folder,
+                data_path,
+                data,
+                nodeid,
+                call,
+                report,
             )
         case _:
             handle_unknown(
-                g_harvester_folder, data_path, data, nodeid, call, report,
+                g_harvester_folder,
+                data_path,
+                data,
+                nodeid,
+                call,
+                report,
             )
 
     return report
@@ -418,7 +440,11 @@ def _notify_trackers_on_result(
         worker = os.environ.get(PYTEST_XDIST_WORKER, "")
         try:
             record_test_completion(
-                g_harvester_folder, nodeid, outcome, report.duration, worker,
+                g_harvester_folder,
+                nodeid,
+                outcome,
+                report.duration,
+                worker,
             )
         except Exception:
             pass
@@ -442,9 +468,8 @@ def pytest_runtest_logreport(report: pytest.TestReport) -> None:
 
     # Count test results from the "call" phase, plus setup failures/skips
     # (setup failures/skips mean the test never reaches "call")
-    should_count = (
-        report.when == "call"
-        or (report.when == "setup" and (report.failed or report.skipped))
+    should_count = report.when == "call" or (
+        report.when == "setup" and (report.failed or report.skipped)
     )
     if should_count and g_config is not None:
         _notify_trackers_on_result(g_config, report.nodeid, report)

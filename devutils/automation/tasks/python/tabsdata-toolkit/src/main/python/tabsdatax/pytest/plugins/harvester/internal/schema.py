@@ -55,8 +55,8 @@ class FixtureState:
     skipped: int = 0
     setup_count: int = 0
     teardown_count: int = 0
-    in_setup: int = 0       # number of concurrent setups active right now
-    in_teardown: int = 0    # number of concurrent teardowns active right now
+    in_setup: int = 0  # number of concurrent setups active right now
+    in_teardown: int = 0  # number of concurrent teardowns active right now
     setup_ts: float | None = None
     teardown_ts: float | None = None
 
@@ -180,19 +180,16 @@ class MetaState:
             session_start_ts=data.get("session_start_ts"),
             last_update_ts=data.get("last_update_ts"),
             phases={
-                k: PhaseState.from_dict(v)
-                for k, v in data.get("phases", {}).items()
+                k: PhaseState.from_dict(v) for k, v in data.get("phases", {}).items()
             },
             fixtures={
                 k: FixtureState.from_dict(v)
                 for k, v in data.get("fixtures", {}).items()
             },
             markers={
-                k: MarkerState.from_dict(v)
-                for k, v in data.get("markers", {}).items()
+                k: MarkerState.from_dict(v) for k, v in data.get("markers", {}).items()
             },
             plugins={
-                k: PluginState.from_dict(v)
-                for k, v in data.get("plugins", {}).items()
+                k: PluginState.from_dict(v) for k, v in data.get("plugins", {}).items()
             },
         )

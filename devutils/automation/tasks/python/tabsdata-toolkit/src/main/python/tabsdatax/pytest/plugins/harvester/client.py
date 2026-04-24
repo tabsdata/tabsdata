@@ -27,24 +27,19 @@ import time
 from dataclasses import dataclass, field
 
 import rich_click as click
-from tenacity import retry, retry_if_result, stop_after_attempt, wait_fixed
-
 from rich.text import Text as RichText
-
+from tenacity import retry, retry_if_result, stop_after_attempt, wait_fixed
 from textual.app import App, ComposeResult
 from textual.containers import VerticalScroll
 from textual.widgets import DataTable, Footer
 
 from tabsdatax.pytest.plugins.harvester.internal.constants import (
-    MONITOR_REFRESH_INTERVAL_SECONDS,
-    PREFIX_TO_COUNTER,
     PREFIXES_FAILED,
     SESSION_PHASES_ORDERED,
     SUDO_REFRESH_INTERVAL_SECONDS,
     SUDO_REFRESH_TIMEOUT_SECONDS,
     TDX_HARVESTER_FOLDER_DEF,
     TDX_HARVESTER_FOLDER_ENV,
-    Color,
     Emoji,
     TestFilePrefix,
 )
@@ -61,9 +56,7 @@ from tabsdatax.pytest.plugins.harvester.internal.dashboard import (
     marker_state_circle,
     phase_display_name,
     phase_status_circle,
-    phase_status_text,
     plugin_active_circle,
-    plugin_active_text,
     plugin_sort_key,
     plugin_type_icon,
     text_for,
@@ -204,7 +197,8 @@ class TestRecord:
         if self.status == "Running":
             return time.time() - self.start
         return sum(
-            d for d in (self.duration_setup, self.duration_call, self.duration_teardown)
+            d
+            for d in (self.duration_setup, self.duration_call, self.duration_teardown)
             if d is not None
         )
 
@@ -252,7 +246,11 @@ def scan_test_files(
     use_py_spy: bool = False,
     full_trace: bool = False,
 ) -> tuple[list[TestRecord], list[TestRecord], int, int, int]:
-    """Scan per-test JSON files. Returns (running, failed, passed_count, skipped_count, orphaned_count)."""
+    """Scan per-test JSON files.
+
+    Returns (running, failed, passed_count, skipped_count,
+    orphaned_count).
+    """
     running: list[TestRecord] = []
     failed: list[TestRecord] = []
     passed = 0
@@ -384,6 +382,7 @@ class HarvesterDashboard(App):
     def action_kill_session(self) -> None:
         """Send SIGKILL (kill -9) to the pytest session process."""
         import signal
+
         pid = self._meta.pid
         if pid and pid_exists(pid):
             try:
@@ -505,21 +504,30 @@ class HarvesterDashboard(App):
     def _init_phases_table(self) -> None:
         t, h = text_for(0), header_for(0)
         dt = self.query_one("#phases", DataTable)
-        ac = lambda label, key: self._add_col(dt, h, label, key)
+
+        def ac(label, key):
+            self._add_col(dt, h, label, key)
+
         ac("Phase", "phase")
         ac("State", "status_icon")
         ac("Start", "start")
         ac("Duration", "duration")
         for phase in SESSION_PHASES_ORDERED:
             dt.add_row(
-                t(phase_display_name(phase)), phase_status_circle("pending"),
-                t(""), t(""), key=phase,
+                t(phase_display_name(phase)),
+                phase_status_circle("pending"),
+                t(""),
+                t(""),
+                key=phase,
             )
 
     def _init_fixtures_table(self) -> None:
         h = header_for(1)
         dt = self.query_one("#fixtures", DataTable)
-        ac = lambda label, key: self._add_col(dt, h, label, key)
+
+        def ac(label, key):
+            self._add_col(dt, h, label, key)
+
         ac("Fixture", "fixture")
         dt.add_column("", key="autouse_icon")
         ac("State", "state_icon")
@@ -536,7 +544,10 @@ class HarvesterDashboard(App):
     def _init_markers_table(self) -> None:
         h = header_for(2)
         dt = self.query_one("#markers", DataTable)
-        ac = lambda label, key: self._add_col(dt, h, label, key)
+
+        def ac(label, key):
+            self._add_col(dt, h, label, key)
+
         ac("Marker", "marker")
         ac("State", "state_icon")
         ac("Total", "total")
@@ -548,7 +559,10 @@ class HarvesterDashboard(App):
     def _init_plugins_table(self) -> None:
         h = header_for(3)
         dt = self.query_one("#plugins", DataTable)
-        ac = lambda label, key: self._add_col(dt, h, label, key)
+
+        def ac(label, key):
+            self._add_col(dt, h, label, key)
+
         ac("Plugin", "plugin")
         ac("State", "active_icon")
         ac("Type", "type")
@@ -557,7 +571,10 @@ class HarvesterDashboard(App):
     def _init_running_table(self) -> None:
         h = header_for(4)
         dt = self.query_one("#running", DataTable)
-        ac = lambda label, key: self._add_col(dt, h, label, key)
+
+        def ac(label, key):
+            self._add_col(dt, h, label, key)
+
         ac("#", "idx")
         ac("Test", "test")
         ac("Parameters", "params")
@@ -573,7 +590,10 @@ class HarvesterDashboard(App):
     def _init_failed_table(self) -> None:
         h = header_for(5)
         dt = self.query_one("#failed", DataTable)
-        ac = lambda label, key: self._add_col(dt, h, label, key)
+
+        def ac(label, key):
+            self._add_col(dt, h, label, key)
+
         ac("#", "idx")
         ac("Test", "test")
         ac("Parameters", "params")
@@ -602,8 +622,17 @@ class HarvesterDashboard(App):
         # I/O in thread
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(None, self._collect_data)
-        (meta, running, failed, passed, skipped, orphaned,
-         db_stats, test_averages, test_durations) = result
+        (
+            meta,
+            running,
+            failed,
+            passed,
+            skipped,
+            orphaned,
+            db_stats,
+            test_averages,
+            test_durations,
+        ) = result
 
         # UI updates on main thread
         self._meta = meta
@@ -635,7 +664,9 @@ class HarvesterDashboard(App):
 
         # Scan test files
         running, failed, passed, skipped, orphaned = scan_test_files(
-            self._folder, self._use_py_spy, self._full_trace,
+            self._folder,
+            self._use_py_spy,
+            self._full_trace,
         )
 
         # Query DB
@@ -643,7 +674,17 @@ class HarvesterDashboard(App):
         test_averages = query_test_averages(self._folder)
         test_durations = query_test_durations(self._folder)
 
-        return meta, running, failed, passed, skipped, orphaned, db_stats, test_averages, test_durations
+        return (
+            meta,
+            running,
+            failed,
+            passed,
+            skipped,
+            orphaned,
+            db_stats,
+            test_averages,
+            test_durations,
+        )
 
     def _apply_updates(self) -> None:
         """Apply cached data to UI widgets. Called on main thread."""
@@ -679,16 +720,28 @@ class HarvesterDashboard(App):
         dt = self.query_one("#phases", DataTable)
         for phase in SESSION_PHASES_ORDERED:
             dt.add_row(
-                t(phase_display_name(phase)), phase_status_circle("pending"),
-                t(""), t(""), key=phase,
+                t(phase_display_name(phase)),
+                phase_status_circle("pending"),
+                t(""),
+                t(""),
+                key=phase,
             )
         # Reset the summary header with empty data
         header = self.query_one(SummaryHeader)
         header.update_summary(
-            collected=0, passed=0, failed=0, skipped=0,
-            running=0, orphaned=0, markers={}, fixtures={},
-            pid=0, session_start_ts=None,
-            test_averages={}, running_tests=[], test_durations=[],
+            collected=0,
+            passed=0,
+            failed=0,
+            skipped=0,
+            running=0,
+            orphaned=0,
+            markers={},
+            fixtures={},
+            pid=0,
+            session_start_ts=None,
+            test_averages={},
+            running_tests=[],
+            test_durations=[],
         )
 
     def _check_session_restart(self) -> bool:
@@ -729,12 +782,16 @@ class HarvesterDashboard(App):
         collected = self._meta.collected or 0
 
         # Convert meta dicts for the summary widget
-        markers_raw = {
-            k: v.to_dict() for k, v in self._meta.markers.items()
-        } if self._meta.markers else {}
-        fixtures_raw = {
-            k: v.to_dict() for k, v in self._meta.fixtures.items()
-        } if self._meta.fixtures else {}
+        markers_raw = (
+            {k: v.to_dict() for k, v in self._meta.markers.items()}
+            if self._meta.markers
+            else {}
+        )
+        fixtures_raw = (
+            {k: v.to_dict() for k, v in self._meta.fixtures.items()}
+            if self._meta.fixtures
+            else {}
+        )
 
         header = self.query_one(SummaryHeader)
         header.update_summary(
@@ -787,7 +844,9 @@ class HarvesterDashboard(App):
         existing_keys = {rk.value for rk in dt.rows}
         for name in sorted_names:
             fix = fixtures[name]
-            circle = fixture_state_circle(fix.total, fix.passed, fix.failed, fix.skipped)
+            circle = fixture_state_circle(
+                fix.total, fix.passed, fix.failed, fix.skipped
+            )
 
             # Merge DB stats
             stats = db_stats.get(name, {})
@@ -796,7 +855,9 @@ class HarvesterDashboard(App):
             avg_setup = stats.get("avg_setup_duration")
             avg_setup_str = format_duration(avg_setup) if avg_setup else ""
 
-            autouse_icon = RichText("Ⓐ", style=Emoji.CIRCLE_PURPLE_STYLE) if fix.autouse else ""
+            autouse_icon = (
+                RichText("Ⓐ", style=Emoji.CIRCLE_PURPLE_STYLE) if fix.autouse else ""
+            )
 
             if name in existing_keys:
                 dt.update_cell(name, "autouse_icon", autouse_icon)
@@ -812,10 +873,18 @@ class HarvesterDashboard(App):
                 dt.update_cell(name, "avg_setup", t(avg_setup_str))
             else:
                 dt.add_row(
-                    t(name), autouse_icon, circle,
-                    fixture_scope_icon(fix.scope), t(fixture_scope_text(fix.scope)),
-                    t(fix.total), t(fix.passed), t(fix.failed), t(fix.remaining),
-                    t(setup_count), t(teardown_count), t(avg_setup_str),
+                    t(name),
+                    autouse_icon,
+                    circle,
+                    fixture_scope_icon(fix.scope),
+                    t(fixture_scope_text(fix.scope)),
+                    t(fix.total),
+                    t(fix.passed),
+                    t(fix.failed),
+                    t(fix.remaining),
+                    t(setup_count),
+                    t(teardown_count),
+                    t(avg_setup_str),
                     key=name,
                 )
 
@@ -825,7 +894,9 @@ class HarvesterDashboard(App):
         markers = self._meta.markers
         existing_keys = {rk.value for rk in dt.rows}
         for name, state in sorted(markers.items()):
-            circle = marker_state_circle(state.total, state.passed, state.failed, state.skipped)
+            circle = marker_state_circle(
+                state.total, state.passed, state.failed, state.skipped
+            )
             if name in existing_keys:
                 dt.update_cell(name, "state_icon", circle)
                 dt.update_cell(name, "total", t(state.total))
@@ -835,8 +906,13 @@ class HarvesterDashboard(App):
                 dt.update_cell(name, "pending", t(state.pending))
             else:
                 dt.add_row(
-                    t(name), circle, t(state.total), t(state.passed),
-                    t(state.failed), t(state.skipped), t(state.pending),
+                    t(name),
+                    circle,
+                    t(state.total),
+                    t(state.passed),
+                    t(state.failed),
+                    t(state.skipped),
+                    t(state.pending),
                     key=name,
                 )
 
@@ -859,7 +935,8 @@ class HarvesterDashboard(App):
                 dt.add_row(
                     t(name),
                     plugin_active_circle(state.active),
-                    t(state.plugin_type.title()), icon,
+                    t(state.plugin_type.title()),
+                    icon,
                     key=name,
                 )
 
@@ -901,21 +978,40 @@ class HarvesterDashboard(App):
                 frame = f"{test.top_frame.function}  {test.top_frame.location}"
                 depth = str(test.stack_depth) if test.stack_depth else ""
             dt.add_row(
-                t(str(idx)), t(test.test_name), t(test.test_params),
-                t(test.worker), t(format_time(test.start)),
+                t(str(idx)),
+                t(test.test_name),
+                t(test.test_params),
+                t(test.worker),
+                t(format_time(test.start)),
                 t(format_duration(test.elapsed)),
-                t(setup_d), t(call_d), t(teardown_d),
-                t(frame), t(depth),
+                t(setup_d),
+                t(call_d),
+                t(teardown_d),
+                t(frame),
+                t(depth),
                 key=test.nodeid,
             )
             # Full stack trace as additional rows (one per frame)
             if self._full_trace and test.all_frames:
                 for fi, sf in enumerate(test.all_frames):
-                    connector = "\u251c\u2500" if fi < len(test.all_frames) - 1 else "\u2514\u2500"
+                    connector = (
+                        "\u251c\u2500"
+                        if fi < len(test.all_frames) - 1
+                        else "\u2514\u2500"
+                    )
                     trace_line = f"  {connector} {sf.function}  ({sf.location})"
                     dt.add_row(
-                        t(""), t(trace_line), t(""), t(""), t(""),
-                        t(""), t(""), t(""), t(""), t(""), t(""),
+                        t(""),
+                        t(trace_line),
+                        t(""),
+                        t(""),
+                        t(""),
+                        t(""),
+                        t(""),
+                        t(""),
+                        t(""),
+                        t(""),
+                        t(""),
                         key=f"{test.nodeid}__trace_{fi}",
                     )
 
@@ -948,11 +1044,18 @@ class HarvesterDashboard(App):
             end_time = format_time(test.stop) if test.stop else ""
 
             row = [
-                t(str(idx)), t(test.test_name), t(test.test_params),
-                t(test.status), t(where), t(error_summary),
-                t(start_time), t(end_time),
+                t(str(idx)),
+                t(test.test_name),
+                t(test.test_params),
+                t(test.status),
+                t(where),
+                t(error_summary),
+                t(start_time),
+                t(end_time),
                 t(format_duration(test.elapsed)),
-                t(setup_d), t(call_d), t(teardown_d),
+                t(setup_d),
+                t(call_d),
+                t(teardown_d),
             ]
             if self._details:
                 row.append(t(test.json_path))
@@ -1021,8 +1124,7 @@ def main(
     use_py_spy = not nospy and has_py_spy()
     if not nospy and not use_py_spy:
         print(
-            "py-spy not found — stack frames disabled. "
-            "Install with: pip install py-spy"
+            "py-spy not found — stack frames disabled. Install with: pip install py-spy"
         )
     if use_py_spy:
         print("Authenticating for py-spy (sudo) ...")
