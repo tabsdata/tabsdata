@@ -195,14 +195,12 @@ impl Importer for FilesImporter {
         let import_reports = if import_request.format().using_polars() {
             let import_instructions =
                 create_file_import_instructions(import_request, files_to_import)?;
-            let import_reports: Vec<_> = tokio::task::spawn_blocking(move || {
+            let import_reports: Vec<_> = tokio::task::block_in_place(move || {
                 import_instructions
                     .into_iter()
                     .map(crate::transporter::logic::run_polars_import)
                     .collect::<Vec<_>>()
             })
-            .await
-            .map_err(|e| TransporterError::CouldNotRunImportFiles(e.to_string()))?
             .into_iter()
             .collect::<Result<_, crate::transporter::logic::ImportError>>()
             .map_err(|e| TransporterError::ImportFilesTaskFailed(e.to_string()))?;
