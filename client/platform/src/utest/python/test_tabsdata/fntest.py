@@ -41,6 +41,7 @@ from tabsdata._tabsserver.function.execution_context import (
 )
 from tabsdata._tabsserver.function.global_utils import (
     DEFAULT_DEVELOPMENT_LOCKS_LOCATION,
+    convert_path_to_uri,
     convert_uri_to_path,
 )
 from tabsdata._tabsserver.function.response_utils import RESPONSE_FILE_NAME
@@ -801,7 +802,7 @@ def _trigger(
         mount_options_dict={},
     )
 
-    checkpoint_location = Location({FunctionConstants.URI_KEY.value: str(checkpoint)})
+    checkpoint_location = Location({FunctionConstants.URI_KEY.value: convert_path_to_uri(str(checkpoint))})
     context = LocalFileStageTriggerContext(
         staging_folder=str(staging),
         trigger_config=CallConfig(
