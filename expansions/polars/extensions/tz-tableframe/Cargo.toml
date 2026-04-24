@@ -65,7 +65,7 @@ ta-tableframe = { workspace = true }
 
 # External dependencies
 
-polars = { workspace = true, features = ["default", "fmt", "dtype-date", "dtype-struct", "timezones"] }
+polars = { workspace = true, features = ["default", "fmt", "dtype-date", "dtype-decimal", "dtype-struct", "dtype-u8", "timezones"] }
 polars-plan = { workspace = true, features = ["python"] }
 polars-mem-engine = { workspace = true, features = ["python"] }
 pyo3 = { workspace = true, features = ["abi3-py312", "anyhow", "macros", "multiple-pymethods", "num-bigint", "num-complex", "num-rational", "rust_decimal", "serde", "smallvec"] }

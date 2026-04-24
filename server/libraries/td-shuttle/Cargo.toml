@@ -87,7 +87,7 @@ getset = { workspace = true }
 itertools = { workspace = true }
 object_store = { workspace = true, features = ["aws", "azure", "gcp", "http"] }
 pin-project-lite = { workspace = true }
-polars = { workspace = true, features = ["lazy", "polars-lazy", "async", "csv", "json", "parquet", "cloud", "aws", "azure", "gcp", "sql"] }
+polars = { workspace = true, features = ["lazy", "polars-lazy", "async", "csv", "json", "parquet", "cloud", "aws", "azure", "gcp", "sql", "dtype-date", "dtype-decimal", "dtype-struct", "dtype-u8", "timezones"] }
 polars-io = { workspace = true, features = ["cloud"] }
 polars-parquet-format = { workspace = true }
 reqwest = { workspace = true, features = ["json", "stream"] }

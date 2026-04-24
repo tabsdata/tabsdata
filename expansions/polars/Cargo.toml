@@ -122,7 +122,7 @@ features = ["vendored"]
 
 [workspace.dependencies.polars]
 version = "0.52.0"
-features = ["default", "fmt", "dtype-date", "dtype-struct", "timezones"]
+features = ["default", "fmt", "dtype-date", "dtype-decimal", "dtype-struct", "dtype-u8", "timezones"]
 
 [workspace.dependencies.polars-plan]
 version = "0.52.0"
