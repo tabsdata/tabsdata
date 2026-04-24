@@ -8,10 +8,12 @@ from typing import Optional
 import polars as pl
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Connection
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 from tenacity import (
     before_sleep_log,
     retry,
+    retry_if_exception_type,
     stop_after_delay,
     wait_fixed,
 )
@@ -82,6 +84,7 @@ class SQLAlchemyDestHelper:
     @retry(
         stop=stop_after_delay(CONNECTION_RETRY_TIMEOUT),
         wait=wait_fixed(CONNECTION_RETRY_DELAY),
+        retry=retry_if_exception_type(OperationalError),
         before_sleep=before_sleep_log(
             logger,  # type: ignore[arg-type]
             logging.WARNING,
