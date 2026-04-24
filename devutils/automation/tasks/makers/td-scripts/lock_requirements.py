@@ -3,6 +3,7 @@
 #
 
 import argparse
+import configparser
 import importlib.util
 import io
 import os
@@ -13,10 +14,11 @@ from os import getcwd
 from pathlib import Path
 from types import ModuleType
 
+# noinspection PyPackageRequirements
 from packaging.utils import canonicalize_name
 
 # noinspection PyPackageRequirements
-from tomlkit import array, dumps, parse
+from tomlkit import array, dumps, parse, table
 
 
 def read(*paths, **kwargs):
@@ -35,14 +37,15 @@ TABSDATA_VERSION = read(os.path.join("assets", "manifest", "VERSION"))
 
 
 # noinspection DuplicatedCode
-def load(module_name) -> ModuleType:
+def load(module_name: str) -> ModuleType:
     spec = importlib.util.spec_from_file_location(
         module_name,
         os.path.join(
-            os.getenv("MAKE_LIBRARIES_PATH"),
+            os.getenv("MAKE_LIBRARIES_PATH", ""),
             f"{module_name}.py",
         ),
     )
+    assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -55,6 +58,17 @@ def is_under_templates(path: Path, root: str) -> bool:
     templates_folder = Path(root) / "templates"
     try:
         path.resolve().relative_to(templates_folder.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def is_under_tabsdata_toolkit(path: Path, root: str) -> bool:
+    toolkit_folder = (
+        Path(root) / "devutils" / "automation" / "tasks" / "python" / "tabsdata-toolkit"
+    )
+    try:
+        path.resolve().relative_to(toolkit_folder.resolve())
         return True
     except ValueError:
         return False
@@ -423,6 +437,92 @@ def lock_connectors_constants(root: str, connectors: list[tuple[str, str]]) -> N
         logger.debug("⚠️️ constants.py TABSDATA_CONNECTORS_NAMES already up to date")
 
 
+def read_markers_from_pytest_ini(pytest_ini_path: Path) -> list[str]:
+    config = configparser.RawConfigParser()
+    config.read(pytest_ini_path, encoding="utf-8")
+
+    markers_value = config.get("pytest", "markers", fallback="")
+    markers: list[str] = []
+    for line in markers_value.strip().splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith(("#", "@")):
+            continue
+        colon_pos = stripped.find(":")
+        if colon_pos > 0 and stripped[:colon_pos].strip().isidentifier():
+            markers.append(stripped)
+        elif markers:
+            markers[-1] = markers[-1] + " " + stripped
+
+    return markers
+
+
+def lock_pyproject_markers(root: str) -> None:
+    tabsdata_pytest_ini_path = Path(
+        os.path.join(
+            root,
+            "client",
+            "platform",
+            "src",
+            "utest",
+            "python",
+            "test_tabsdata",
+            "pytest.ini",
+        )
+    ).resolve()
+    if not tabsdata_pytest_ini_path.is_file():
+        logger.warning(
+            f"⚠️ Main pytest.ini not found at {tabsdata_pytest_ini_path}, "
+            f"skipping marker sync"
+        )
+        return
+
+    markers = read_markers_from_pytest_ini(tabsdata_pytest_ini_path)
+    if not markers:
+        logger.warning("⚠️ No markers found in main pytest.ini")
+        return
+
+    def sync_markers(pyproject_file: Path):
+        document = parse(pyproject_file.read_text())
+
+        tool = document.get("tool")
+        if tool is None:
+            tool = table()
+            document.add("tool", tool)
+
+        pytest_section = tool.get("pytest")
+        if pytest_section is None:
+            pytest_section = table()
+            tool.add("pytest", pytest_section)
+
+        ini_options = pytest_section.get("ini_options")
+        if ini_options is None:
+            ini_options = table()
+            pytest_section.add("ini_options", ini_options)
+
+        markers_array = array()
+        markers_array.multiline(True)
+        for marker_line in markers:
+            markers_array.append(marker_line)
+
+        ini_options["markers"] = markers_array
+        pyproject_file.write_text(dumps(document))
+        logger.info(f"🔏 Synced {len(markers)} markers to {pyproject_file}")
+
+    for path in Path(root).rglob("pyproject.toml"):
+        if (
+            path.is_file()
+            and not is_under_templates(path, root)
+            and not is_under_tabsdata_toolkit(path, root)
+        ):
+            sync_markers(path)
+
+    tabsdata_ag_root = Path(root).parent / "tabsdata-ag"
+    if tabsdata_ag_root.is_dir():
+        for path in tabsdata_ag_root.rglob("pyproject.toml"):
+            if path.is_file() and not is_under_templates(path, str(tabsdata_ag_root)):
+                sync_markers(path)
+
+
 # noinspection DuplicatedCode
 def lock_pytest_ini(root: str) -> None:
     tabsdata_pytest_ini_file = os.path.join(
@@ -482,6 +582,9 @@ def lock_pytest_ini(root: str) -> None:
             if is_under_templates(path, root):
                 logger.debug(f"⏭️ Skipping templates file: {path}")
                 continue
+            if is_under_tabsdata_toolkit(path, root):
+                logger.debug(f"⏭️ Skipping tabsdata-toolkit file: {path}")
+                continue
             logger.info(f"🔏 Locking pytest.ini file: {path}")
             shutil.copy2(tabsdata_pytest_ini_path, path)
 
@@ -528,6 +631,7 @@ def lock(root: str):
         lock_connectors_constants(root, connectors)
     lock_requirements_first_party_versions(root)
     lock_pyprojects(Path(root), connectors, python_modules, polars_modules)
+    lock_pyproject_markers(root)
     lock_pytest_ini(root)
 
     logger.info("🔑 Python connectors, dependencies and requirements locked!")
