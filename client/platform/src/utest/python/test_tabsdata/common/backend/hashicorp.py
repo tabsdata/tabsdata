@@ -53,8 +53,10 @@ def create_docker_hashicorp_vault(s3_config: dict):
             name=DEFAULT_PYTEST_HASHICORP_DOCKER_CONTAINER_NAME,
             environment=[
                 f"VAULT_DEV_ROOT_TOKEN_ID={HASHICORP_TESTING_TOKEN}",
+                "SKIP_SETCAP=true",
             ],
             ports={"8200/tcp": HASHICORP_PORT},
+            cap_add=["IPC_LOCK"],
             detach=True,
         )
         # Wait for the database to be ready
