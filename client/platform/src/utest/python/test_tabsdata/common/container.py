@@ -7,26 +7,30 @@
 import logging
 from time import sleep
 
-from test_tabsdata.common.constants import CONTAINER_MAXIMUM_RETRY_COUNT
+from test_tabsdata.common.constants import (
+    CONTAINER_WAIT_POLL_INTERVAL_SECONDS,
+    CONTAINER_WAIT_TIMEOUT_SECONDS,
+)
 
 logger = logging.getLogger(__name__)
 
 
 def wait_for_container_running(container):
-    retry = 0
+    elapsed = 0
     while container.status != "running":
-        retry += 1
-        if retry == CONTAINER_MAXIMUM_RETRY_COUNT:
+        if elapsed >= CONTAINER_WAIT_TIMEOUT_SECONDS:
             raise Exception(
                 f"Container {container.name} did not reach 'running' state "
-                f"after {CONTAINER_MAXIMUM_RETRY_COUNT} retries "
+                f"after {CONTAINER_WAIT_TIMEOUT_SECONDS} seconds "
                 f"(current status: {container.status})"
             )
         logger.info(
             f"Waiting for container {container.name} to be running "
-            f"(status: {container.status}); retrying in {retry} second(s)..."
+            f"(status: {container.status}); retrying in "
+            f"{CONTAINER_WAIT_POLL_INTERVAL_SECONDS} second(s)..."
         )
-        sleep(retry)
+        sleep(CONTAINER_WAIT_POLL_INTERVAL_SECONDS)
+        elapsed += CONTAINER_WAIT_POLL_INTERVAL_SECONDS
         container.reload()
 
 
