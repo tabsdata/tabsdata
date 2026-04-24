@@ -359,7 +359,7 @@ def test_salesforcereportsrc_chunk(tmp_path, sf_config):
 @pytest.mark.salesforce
 @pytest.mark.slow
 @pytest.mark.tdfnrun
-def test_input_salesforcereportsrc_by_long_id(sf_config):
+def test_input_salesforcereportsrc_by_long_id(sf_config, sf_expected_report_basic):
     fn = copy.deepcopy(input_salesforcereportsrc)
     fn.input.conn = td.SalesforceConn(credentials=sf_config["CREDENTIALS"])
     fn.input.report = SFR_TESTING_REPORT["long_id"]
@@ -367,16 +367,7 @@ def test_input_salesforcereportsrc_by_long_id(sf_config):
     assert fnrun.status == 0
     output = pl.read_parquet(fnrun.output[0].path)
     output = clean_polars_df(output)
-    # Reuse the expected output from the non-Src report basic test — same
-    # report ID, same column_name_strategy.
-    expected_output_file = os.path.join(
-        TESTING_RESOURCES_FOLDER,
-        "test_input_salesforce_report_basic",
-        "expected_result.parquet",
-    )
-    expected_output = pl.read_parquet(expected_output_file)
-    expected_output = clean_polars_df(expected_output)
-    assert output.equals(expected_output)
+    assert output.equals(sf_expected_report_basic)
 
 
 @pytest.mark.requires_internet

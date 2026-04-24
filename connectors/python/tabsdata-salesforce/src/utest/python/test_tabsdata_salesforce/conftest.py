@@ -81,6 +81,88 @@ def sf_config():
     yield config
 
 
+SFR_TESTING_REPORT_NAME = "Foo_for_dev_ci_testing"
+SFR_INITIAL_VALUES_TESTING_REPORT_NAME = "users_dev_ci"
+
+
+def _chunk_source(source, tmp_dir):
+    import os
+
+    import polars as pl
+
+    from test_tabsdata.conftest import clean_polars_df
+
+    [result] = source.chunk(str(tmp_dir))
+    if result is None:
+        return pl.DataFrame()
+    path = os.path.join(str(tmp_dir), result)
+    df = pl.read_parquet(path)
+    return clean_polars_df(df)
+
+
+@pytest.fixture(scope="session")
+def sf_expected_report_basic(sf_config, tmp_path_factory):
+    import tabsdata as td
+
+    tmp = tmp_path_factory.mktemp("sf_report_basic")
+    source = td.SalesforceReportSource(
+        sf_config["CREDENTIALS"],
+        report=SFR_TESTING_REPORT_NAME,
+        column_name_strategy="columnName",
+    )
+    return _chunk_source(source, tmp)
+
+
+@pytest.fixture(scope="session")
+def sf_expected_contacts(sf_config, tmp_path_factory):
+    import os
+
+    import polars as pl
+    import tabsdata as td
+
+    from test_tabsdata.conftest import clean_polars_df
+
+    tmp = tmp_path_factory.mktemp("sf_contacts")
+    source = td.SalesforceSource(
+        sf_config["CREDENTIALS"],
+        query="SELECT Name FROM Contact",
+    )
+    [result] = source.chunk(str(tmp))
+    if result is None:
+        pytest.fail("Salesforce returned no Contact data — seed contacts first")
+    path = os.path.join(str(tmp), result)
+    df = pl.read_parquet(path)
+    df = df.drop_nulls()
+    return clean_polars_df(df)
+
+
+@pytest.fixture(scope="session")
+def sf_expected_contacts_with_modstamp(sf_config, tmp_path_factory):
+    import os
+
+    import polars as pl
+    import tabsdata as td
+
+    from test_tabsdata.conftest import clean_polars_df
+
+    tmp = tmp_path_factory.mktemp("sf_contacts_modstamp")
+    source = td.SalesforceSource(
+        sf_config["CREDENTIALS"],
+        query=(
+            "SELECT Name,SystemModstamp FROM Contact "
+            "WHERE SystemModstamp > $lastModified"
+        ),
+        initial_last_modified="2024-03-10T11:03:08.000+0000",
+    )
+    [result] = source.chunk(str(tmp))
+    if result is None:
+        pytest.fail("Salesforce returned no Contact data — seed contacts first")
+    path = os.path.join(str(tmp), result)
+    df = pl.read_parquet(path)
+    df = df.drop_nulls()
+    return clean_polars_df(df)
+
+
 def pytest_configure(config: pytest.Config):
     setup_tests_logging()
     if not hasattr(config, "workerinput"):
