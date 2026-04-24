@@ -3,6 +3,7 @@
 #
 
 import copy
+import json
 import logging
 import os
 import uuid
@@ -14,6 +15,10 @@ import pytest
 
 import tabsdata as td
 from tabsdata._secret import DirectSecret, EnvironmentSecret
+from tabsdata._tabsserver.function.named_connection_utils import (
+    CONNECTIONS_FOLDER,
+    TD_URI_REPOSITORY,
+)
 from tabsdata.exceptions import ParameterValidationError
 from test_tabsdata.conftest import (
     clean_polars_df,
@@ -33,12 +38,33 @@ from test_tabsdata_snowflake.test_output_snowflake_none.example import (
 from test_tabsdata_snowflake.test_output_snowflake_list_none.example import (
     output_snowflake_list_none,
 )
+from test_tabsdata_snowflake.test_output_snowflake_named_conn.example import (
+    testing_tabsdata_function as output_snowflake_named_conn_generator,
+)
 
 # noinspection PyPackageRequirements
 from snowflake.connector.errors import ProgrammingError
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+SNOWFLAKE_NAMED_CONN_NAME = "test_snowflake_named"
+
+
+def _write_named_conn_repository(tmp_path, name, conn_type, conn_configs):
+    """Create a temporary repository with a single named-connection JSON."""
+    repo_dir = os.path.join(str(tmp_path), "repository")
+    connections_dir = os.path.join(repo_dir, CONNECTIONS_FOLDER)
+    os.makedirs(connections_dir, exist_ok=True)
+    cx_dict = {
+        "name": name,
+        "type": conn_type,
+        "conn_configs": conn_configs,
+    }
+    connection_file = os.path.join(connections_dir, f"{name.lower()}.json")
+    with open(connection_file, "w") as f:
+        json.dump(cx_dict, f)
+    return repo_dir
 
 
 def _fake_conn() -> td.SnowflakeConn:
@@ -118,15 +144,17 @@ def test_snowflakeconn_setter_validation_raises():
 @pytest.mark.snowflake
 @pytest.mark.unit
 def test_snowflakeconn_load_from_dict_plain():
-    conn = td.SnowflakeConn._load_from_dict({
-        "account": "a",
-        "user": "u",
-        "password": "p",
-        "role": "r",
-        "database": "d",
-        "schema": "s",
-        "warehouse": "w",
-    })
+    conn = td.SnowflakeConn._load_from_dict(
+        {
+            "account": "a",
+            "user": "u",
+            "password": "p",
+            "role": "r",
+            "database": "d",
+            "schema": "s",
+            "warehouse": "w",
+        }
+    )
     assert conn.account == DirectSecret("a")
     assert conn.user == DirectSecret("u")
     assert conn.password == DirectSecret("p")
@@ -139,15 +167,17 @@ def test_snowflakeconn_load_from_dict_plain():
 @pytest.mark.snowflake
 @pytest.mark.unit
 def test_snowflakeconn_load_from_dict_with_nested_secrets():
-    conn = td.SnowflakeConn._load_from_dict({
-        "account": "a",
-        "user": {"environment-secret": {"environment_variable_name": "USR"}},
-        "password": "p",
-        "role": "r",
-        "database": "d",
-        "schema": "s",
-        "warehouse": "w",
-    })
+    conn = td.SnowflakeConn._load_from_dict(
+        {
+            "account": "a",
+            "user": {"environment-secret": {"environment_variable_name": "USR"}},
+            "password": "p",
+            "role": "r",
+            "database": "d",
+            "schema": "s",
+            "warehouse": "w",
+        }
+    )
     assert conn.user == EnvironmentSecret("USR")
     assert conn.account == DirectSecret("a")
 
@@ -358,6 +388,67 @@ def test_output_snowflakedest(snowflake_connection, snowflake_config):
         TESTING_RESOURCES_FOLDER, "test_output_snowflake_basic", "mock_table.parquet"
     )
     fnrun = tdfnrun(fn, input_tables=mock_parquet_table)
+    try:
+        assert fnrun.status == 0
+        cursor = snowflake_connection.cursor()
+        cursor.execute(f"SELECT * FROM {table_name}")
+        results = cursor.fetchall()
+        output = pl.DataFrame(
+            results, ["Duration", "Pulse", "Maxpulse", "Calories"], orient="row"
+        )
+        output = clean_polars_df(output)
+        expected_output_file = os.path.join(
+            TESTING_RESOURCES_FOLDER,
+            "test_output_snowflake_basic",
+            "expected_result.json",
+        )
+        expected_output = read_json_and_clean(expected_output_file)
+        assert output.equals(expected_output)
+    finally:
+        cursor = snowflake_connection.cursor()
+        cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
+        cursor.close()
+
+
+# --- NamedConn e2e ---
+
+
+@pytest.mark.requires_internet
+@pytest.mark.slow
+@pytest.mark.snowflake
+@pytest.mark.tdfnrun
+def test_output_snowflake_with_named_conn(
+    snowflake_config, snowflake_connection, tmp_path, monkeypatch
+):
+    repo_dir = _write_named_conn_repository(
+        tmp_path,
+        SNOWFLAKE_NAMED_CONN_NAME,
+        "SnowflakeConn",
+        {
+            "account": os.environ.get(snowflake_config["ACCOUNT_ENV"]),
+            "user": os.environ.get(snowflake_config["USER_ENV"]),
+            "password": os.environ.get(snowflake_config["PAT_ENV"]),
+            "role": os.environ.get(snowflake_config["ROLE_ENV"]),
+            "database": os.environ.get(snowflake_config["DATABASE_ENV"]),
+            "schema": os.environ.get(snowflake_config["SCHEMA_ENV"]),
+            "warehouse": os.environ.get(snowflake_config["WAREHOUSE_ENV"]),
+        },
+    )
+    monkeypatch.setenv(TD_URI_REPOSITORY, repo_dir)
+
+    table_name = f"namedconn_table_{uuid.uuid4()}".replace("-", "_")
+    testing_function = output_snowflake_named_conn_generator(
+        conn_name=SNOWFLAKE_NAMED_CONN_NAME,
+        table_name=table_name,
+    )
+    mock_parquet_table = os.path.join(
+        TESTING_RESOURCES_FOLDER, "test_output_snowflake_basic", "mock_table.parquet"
+    )
+
+    fnrun = tdfnrun(
+        function=testing_function,
+        input_tables=mock_parquet_table,
+    )
     try:
         assert fnrun.status == 0
         cursor = snowflake_connection.cursor()

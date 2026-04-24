@@ -3,6 +3,7 @@
 #
 
 import copy
+import json
 import logging
 import os
 
@@ -13,6 +14,10 @@ import pymongo
 import pytest
 
 import tabsdata as td
+from tabsdata._tabsserver.function.named_connection_utils import (
+    CONNECTIONS_FOLDER,
+    TD_URI_REPOSITORY,
+)
 from tabsdata.exceptions import ParameterValidationError
 from test_tabsdata.conftest import (
     read_json_and_clean,
@@ -37,11 +42,32 @@ from test_tabsdata_mongodb.test_output_mongodb_none.example import (
 from test_tabsdata_mongodb.test_output_mongodb_list_none.example import (
     output_mongodb_list_none,
 )
+from test_tabsdata_mongodb.test_output_mongodb_named_conn.example import (
+    testing_tabsdata_function as output_mongodb_named_conn_generator,
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 URI = "mongodb://localhost:27017"
+
+MONGODB_NAMED_CONN_NAME = "test_mongodb_named"
+
+
+def _write_named_conn_repository(tmp_path, name, conn_type, conn_configs):
+    """Create a temporary repository with a single named-connection JSON."""
+    repo_dir = os.path.join(str(tmp_path), "repository")
+    connections_dir = os.path.join(repo_dir, CONNECTIONS_FOLDER)
+    os.makedirs(connections_dir, exist_ok=True)
+    cx_dict = {
+        "name": name,
+        "type": conn_type,
+        "conn_configs": conn_configs,
+    }
+    connection_file = os.path.join(connections_dir, f"{name.lower()}.json")
+    with open(connection_file, "w") as f:
+        json.dump(cx_dict, f)
+    return repo_dir
 
 
 # --- MongoDBConn unit tests ---
@@ -356,6 +382,53 @@ def test_output_mongodbdest(testing_mongodb):
         TESTING_RESOURCES_FOLDER, "test_output_mongodb_basic", "mock_table.parquet"
     )
     fnrun = tdfnrun(fn, input_tables=mock_parquet_table)
+    assert fnrun.status == 0
+
+    client = pymongo.MongoClient(MONGODB_URI_WITH_CREDENTIALS)
+    collection = client[database_name][collection_name]
+    expected_output_file = os.path.join(
+        TESTING_RESOURCES_FOLDER,
+        "test_output_mongodb_basic",
+        "expected_result.json",
+    )
+    expected_output = read_json_and_clean(expected_output_file)
+    assert len(expected_output) == collection.count_documents({})
+
+
+# --- NamedConn e2e ---
+
+
+@pytest.mark.mongodb
+@pytest.mark.requires_internet
+@pytest.mark.slow
+@pytest.mark.tdfnrun
+def test_output_mongodb_with_named_conn(testing_mongodb, tmp_path, monkeypatch):
+    repo_dir = _write_named_conn_repository(
+        tmp_path,
+        MONGODB_NAMED_CONN_NAME,
+        "MongoDBConn",
+        {
+            "uri": MONGODB_URI_WITHOUT_CREDENTIALS,
+            "credentials": {"user": DB_USER, "password": DB_PASSWORD},
+        },
+    )
+    monkeypatch.setenv(TD_URI_REPOSITORY, repo_dir)
+
+    database_name = "test_output_mongodb_named_conn_database"
+    collection_name = "test_output_mongodb_named_conn_collection"
+    testing_function = output_mongodb_named_conn_generator(
+        conn_name=MONGODB_NAMED_CONN_NAME,
+        database_name=database_name,
+        collection_name=collection_name,
+    )
+    mock_parquet_table = os.path.join(
+        TESTING_RESOURCES_FOLDER, "test_output_mongodb_basic", "mock_table.parquet"
+    )
+
+    fnrun = tdfnrun(
+        function=testing_function,
+        input_tables=mock_parquet_table,
+    )
     assert fnrun.status == 0
 
     client = pymongo.MongoClient(MONGODB_URI_WITH_CREDENTIALS)

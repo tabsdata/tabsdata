@@ -2,7 +2,9 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
+import json
 import logging
+import os
 import uuid
 
 import polars as pl
@@ -10,6 +12,10 @@ import pytest
 
 import tabsdata as td
 from tabsdata._secret import DirectSecret, EnvironmentSecret
+from tabsdata._tabsserver.function.named_connection_utils import (
+    CONNECTIONS_FOLDER,
+    TD_URI_REPOSITORY,
+)
 from tabsdata.connector.databricks._connector import _table_fqn_4sql
 from tabsdata.exceptions import ParameterValidationError, SourceConfigurationError
 from test_tabsdata.fntest import tdfnrun
@@ -22,9 +28,30 @@ from test_tabsdata_databricks.test_input_databricks import (
     generate_persons_data,
     write_databricks_table,
 )
+from test_tabsdata_databricks.test_input_databricks_named_conn.example import (
+    testing_tabsdata_function as input_databricks_named_conn_generator,
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+DATABRICKS_NAMED_CONN_NAME = "test_databricks_named"
+
+
+def _write_named_conn_repository(tmp_path, name, conn_type, conn_configs):
+    """Create a temporary repository with a single named-connection JSON."""
+    repo_dir = os.path.join(str(tmp_path), "repository")
+    connections_dir = os.path.join(repo_dir, CONNECTIONS_FOLDER)
+    os.makedirs(connections_dir, exist_ok=True)
+    cx_dict = {
+        "name": name,
+        "type": conn_type,
+        "conn_configs": conn_configs,
+    }
+    connection_file = os.path.join(connections_dir, f"{name.lower()}.json")
+    with open(connection_file, "w") as f:
+        json.dump(cx_dict, f)
+    return repo_dir
 
 
 # --- DatabricksConn unit tests ---
@@ -376,6 +403,58 @@ def test_databrickssrc_full_table_single_tdfnrun(
         output = fnrun.output
         assert len(output) == 1
 
+        result_df = output[0].as_pl_df(with_sys_columns=False)
+        check_databricks_table(result_df, df)
+    finally:
+        delete_databricks_table(databricks_client, table_name)
+
+
+# --- NamedConn e2e ---
+
+
+@pytest.mark.databricks
+@pytest.mark.requires_internet
+@pytest.mark.slow
+@pytest.mark.tdfnrun
+@pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
+def test_input_databricks_with_named_conn(
+    databricks_config, databricks_client, tmp_path, monkeypatch
+):
+    repo_dir = _write_named_conn_repository(
+        tmp_path,
+        DATABRICKS_NAMED_CONN_NAME,
+        "DatabricksConn",
+        {
+            "host_url": databricks_config["HOST"],
+            "token": databricks_config["TOKEN"],
+        },
+    )
+    monkeypatch.setenv(TD_URI_REPOSITORY, repo_dir)
+
+    warehouse_name = databricks_config["WAREHOUSE_NAME"]
+    catalog = databricks_config["CATALOG"]
+    schema = databricks_config["SCHEMA"]
+    df = generate_persons_data()
+    table_name = (
+        f"{catalog}.{schema}.test_input_databricks_named_conn_"
+        f"{uuid.uuid4().hex[:12]}"
+    )
+    table_sql = _table_fqn_4sql(table_name)
+
+    try:
+        write_databricks_table(databricks_config, tmp_path, table_name, df)
+
+        testing_function = input_databricks_named_conn_generator(
+            conn_name=DATABRICKS_NAMED_CONN_NAME,
+            query=f"select * from {table_sql}",
+            warehouse=warehouse_name,
+        )
+
+        fnrun = tdfnrun(function=testing_function)
+        assert fnrun.status == 0
+
+        output = fnrun.output
+        assert len(output) == 1
         result_df = output[0].as_pl_df(with_sys_columns=False)
         check_databricks_table(result_df, df)
     finally:

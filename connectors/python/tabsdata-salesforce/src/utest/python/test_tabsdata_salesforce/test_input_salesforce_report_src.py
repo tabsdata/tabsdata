@@ -3,6 +3,7 @@
 #
 
 import copy
+import json
 import logging
 import os
 
@@ -12,6 +13,10 @@ import polars as pl
 import pytest
 
 import tabsdata as td
+from tabsdata._tabsserver.function.named_connection_utils import (
+    CONNECTIONS_FOLDER,
+    TD_URI_REPOSITORY,
+)
 from tabsdata.exceptions import ParameterValidationError
 from test_tabsdata.conftest import (
     clean_polars_df,
@@ -27,9 +32,31 @@ from test_tabsdata_salesforce.test_input_salesforcereportsrc_basic.example impor
 from test_tabsdata_salesforce.test_input_salesforcereportsrc_initial_values.example import (  # noqa: E501
     input_salesforcereportsrc_initial_values,
 )
+from test_tabsdata_salesforce.test_input_salesforcereportsrc_named_conn.example import (
+    testing_tabsdata_function as input_salesforcereportsrc_named_conn_generator,
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+SALESFORCE_NAMED_CONN_NAME = "test_salesforce_named"
+
+
+def _write_named_conn_repository(tmp_path, name, conn_type, conn_configs):
+    """Create a temporary repository with a single named-connection JSON."""
+    repo_dir = os.path.join(str(tmp_path), "repository")
+    connections_dir = os.path.join(repo_dir, CONNECTIONS_FOLDER)
+    os.makedirs(connections_dir, exist_ok=True)
+    cx_dict = {
+        "name": name,
+        "type": conn_type,
+        "conn_configs": conn_configs,
+    }
+    connection_file = os.path.join(connections_dir, f"{name.lower()}.json")
+    with open(connection_file, "w") as f:
+        json.dump(cx_dict, f)
+    return repo_dir
+
 
 SFR_TESTING_REPORT = {
     "long_id": "00OgL000004gpqDUAQ",
@@ -407,3 +434,38 @@ def test_input_salesforcereportsrc_initial_values_by_label(sf_config):
     assert fnrun2.status == 0
     assert not fnrun2.output[0].path.exists()
     assert not fnrun2.offset.exists()
+
+
+# --- NamedConn e2e ---
+
+
+@pytest.mark.requires_internet
+@pytest.mark.salesforce
+@pytest.mark.slow
+@pytest.mark.tdfnrun
+def test_input_salesforcereportsrc_with_named_conn(sf_config, tmp_path, monkeypatch):
+    repo_dir = _write_named_conn_repository(
+        tmp_path,
+        SALESFORCE_NAMED_CONN_NAME,
+        "SalesforceConn",
+        {
+            "credentials": {
+                "username": os.environ.get(sf_config["USERNAME_ENV"]),
+                "password": os.environ.get(sf_config["PASSWORD_ENV"]),
+                "security_token": os.environ.get(sf_config["SECURITY_TOKEN_ENV"]),
+            }
+        },
+    )
+    monkeypatch.setenv(TD_URI_REPOSITORY, repo_dir)
+
+    testing_function = input_salesforcereportsrc_named_conn_generator(
+        conn_name=SALESFORCE_NAMED_CONN_NAME,
+        report_id=SFR_TESTING_REPORT["long_id"],
+        column_name_strategy="columnName",
+    )
+
+    fnrun = tdfnrun(function=testing_function)
+    assert fnrun.status == 0
+
+    output = pl.read_parquet(fnrun.output[0].path)
+    assert not output.is_empty()

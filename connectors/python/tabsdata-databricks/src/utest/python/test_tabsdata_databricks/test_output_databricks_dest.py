@@ -3,6 +3,7 @@
 #
 
 import copy
+import json
 import logging
 import os
 import uuid
@@ -12,6 +13,10 @@ import pytest
 
 import tabsdata as td
 from tabsdata._secret import DirectSecret, EnvironmentSecret
+from tabsdata._tabsserver.function.named_connection_utils import (
+    CONNECTIONS_FOLDER,
+    TD_URI_REPOSITORY,
+)
 from tabsdata.connector.databricks._connector import _table_fqn_4sql
 from tabsdata.exceptions import ParameterValidationError
 from test_tabsdata.conftest import (
@@ -35,12 +40,33 @@ from test_tabsdata_databricks.test_output_databricks_none.example import (
 from test_tabsdata_databricks.test_output_databricks_list_none.example import (
     output_databricks_list_none,
 )
+from test_tabsdata_databricks.test_output_databricks_named_conn.example import (
+    testing_tabsdata_function as output_databricks_named_conn_generator,
+)
 
 # noinspection PyPackageRequirements
 from databricks.sql import ServerOperationError
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+DATABRICKS_NAMED_CONN_NAME = "test_databricks_named"
+
+
+def _write_named_conn_repository(tmp_path, name, conn_type, conn_configs):
+    """Create a temporary repository with a single named-connection JSON."""
+    repo_dir = os.path.join(str(tmp_path), "repository")
+    connections_dir = os.path.join(repo_dir, CONNECTIONS_FOLDER)
+    os.makedirs(connections_dir, exist_ok=True)
+    cx_dict = {
+        "name": name,
+        "type": conn_type,
+        "conn_configs": conn_configs,
+    }
+    connection_file = os.path.join(connections_dir, f"{name.lower()}.json")
+    with open(connection_file, "w") as f:
+        json.dump(cx_dict, f)
+    return repo_dir
 
 
 # --- DatabricksDest unit tests ---
@@ -156,9 +182,7 @@ def test_databricksdest_conn_setter_rebuilds_inner(databricks_config):
     first_inner = dest._databricks_destination
     assert first_inner is not None
 
-    new_conn = td.DatabricksConn(
-        host_url="https://other.databricks.com", token="t2"
-    )
+    new_conn = td.DatabricksConn(host_url="https://other.databricks.com", token="t2")
     dest.conn = new_conn
     assert dest.conn is new_conn
     assert dest._databricks_destination is not first_inner
@@ -388,6 +412,72 @@ def test_output_databricksdest(databricks_client, sql_conn, databricks_config):
     try:
         assert fnrun.status == 0
 
+        expected_output_file = os.path.join(
+            TESTING_RESOURCES_FOLDER,
+            "test_output_databricks_basic",
+            "expected_result.json",
+        )
+        query = f"SELECT * FROM {full_table_name}"
+        output = pl.read_database(query, sql_conn)
+        expected_output = read_json_and_clean(expected_output_file)
+        assert expected_output.equals(clean_polars_df(output.drop("_rescued_data")))
+    finally:
+        # noinspection PyBroadException
+        try:
+            databricks_client.tables.delete(full_name=full_table_name)
+        except Exception:
+            pass
+
+
+# --- NamedConn e2e ---
+
+
+@pytest.mark.databricks
+@pytest.mark.requires_internet
+@pytest.mark.slow
+@pytest.mark.tdfnrun
+@pytest.mark.timeout(DATABRICKS_BUDGET_SAFETY_TIMEOUT)
+def test_output_databricks_with_named_conn(
+    databricks_config, databricks_client, sql_conn, tmp_path, monkeypatch
+):
+    repo_dir = _write_named_conn_repository(
+        tmp_path,
+        DATABRICKS_NAMED_CONN_NAME,
+        "DatabricksConn",
+        {
+            "host_url": databricks_config["HOST"],
+            "token": databricks_config["TOKEN"],
+        },
+    )
+    monkeypatch.setenv(TD_URI_REPOSITORY, repo_dir)
+
+    volume = databricks_config["VOLUME"]
+    warehouse_name = databricks_config["WAREHOUSE_NAME"]
+    catalog = databricks_config["CATALOG"]
+    schema = databricks_config["SCHEMA"]
+    table_name = f"test_output_databricks_named_conn_{uuid.uuid4().hex[:12]}"
+    full_table_name = _table_fqn_4sql(f"{catalog}.{schema}.{table_name}")
+
+    testing_function = output_databricks_named_conn_generator(
+        conn_name=DATABRICKS_NAMED_CONN_NAME,
+        table_name=table_name,
+        volume=volume,
+        warehouse=warehouse_name,
+        catalog=catalog,
+        schema=schema,
+    )
+    mock_parquet_table = os.path.join(
+        TESTING_RESOURCES_FOLDER,
+        "test_output_databricks_basic",
+        "mock_table.parquet",
+    )
+
+    fnrun = tdfnrun(
+        function=testing_function,
+        input_tables=mock_parquet_table,
+    )
+    try:
+        assert fnrun.status == 0
         expected_output_file = os.path.join(
             TESTING_RESOURCES_FOLDER,
             "test_output_databricks_basic",

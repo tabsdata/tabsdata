@@ -21,6 +21,9 @@ from tabsdata._tabsserver.function import environment_import_utils
 from tabsdata._tabsserver.function.checkpoint_store import CheckpointStore
 from tabsdata._tabsserver.function.global_utils import convert_uri_to_path
 from tabsdata._tabsserver.function.logging_utils import pad_string
+from tabsdata._tabsserver.function.named_connection_utils import (
+    resolve_named_conn_if_needed,
+)
 from tabsdata._tabsserver.function.native_tables_utils import (
     scan_lf_from_location,
     sink_lf_to_location,
@@ -363,6 +366,8 @@ def obtain_user_provided_function_parameters(
         source = ManifestStage(use_existing_data=source.use_existing_data)
         logger.debug(f"Using new ManifestStage {source}")
         execution_context._source_plugin = source
+
+    resolve_named_conn_if_needed(source)
 
     # noinspection PyProtectedMember
     parameters = source._run(execution_context)

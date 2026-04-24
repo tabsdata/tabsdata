@@ -16,6 +16,9 @@ import polars as pl
 
 import tabsdata._utils.tableframe._helpers as td_helpers
 from tabsdata._tabsserver.function.logging_utils import pad_string
+from tabsdata._tabsserver.function.named_connection_utils import (
+    resolve_named_conn_if_needed,
+)
 
 # noinspection PyProtectedMember
 from tabsdata._utils.tableframe._common import drop_system_columns
@@ -44,6 +47,7 @@ def store_results(
 ):
     logger.info(pad_string("[Storing results]"))
     destination_plugin = execution_context.destination
+    resolve_named_conn_if_needed(destination_plugin)
     logger.info(f"Storing results in destination '{destination_plugin}'")
     logger.debug("Running the destination plugin")
     destination_plugin._run(execution_context, results)
