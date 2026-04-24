@@ -5,7 +5,9 @@
 use crate::component::describer::{
     DescriberError, TabsDataWorkerDescriber, TabsDataWorkerDescriberBuilder,
 };
-use crate::component::tracker::{WorkerStatus, WorkerTracker, get_listening_ports_for_pids};
+use crate::component::tracker::{
+    WorkerStatus, WorkerTracker, check_status, get_listening_ports_for_pids, get_pid_path,
+};
 use crate::launch::worker::{TabsDataWorker, Worker};
 use crate::resource::instance::{
     get_instance_path_for_instance, get_repository_path_for_instance,
@@ -15,8 +17,10 @@ use crate::services::bootloader::{
     BOOTLOADER, BOOTLOADER_ARGUMENT_INSTANCE, BOOTLOADER_ARGUMENT_PROFILE,
     BOOTLOADER_ARGUMENT_REPOSITORY, BOOTLOADER_ARGUMENT_WORKSPACE,
 };
-use crate::services::supervisor::TD_ARGUMENT_KEY;
 use crate::services::supervisor::WorkerLocation::Relative;
+use crate::services::supervisor::{
+    Configuration, TD_ARGUMENT_KEY, WORKER_CONTROL_FILE, WorkerControlAction, WorkerControlFile,
+};
 use clap::{CommandFactory, Parser};
 use clap_derive::{Args, Subcommand};
 use colored::Colorize;
@@ -47,9 +51,9 @@ use td_common::logging::set_log_level;
 use td_common::os::{name_program, terminate_process};
 use td_common::server::WorkerClass::Regular;
 use td_common::server::{
-    AVAILABLE_ENVIRONMENTS_FOLDER, CONFIG_FOLDER, DATABASE_FILE, DATABASE_FOLDER,
-    ENVIRONMENTS_FOLDER, ETC_FOLDER, INSTANCES_FOLDER, MSG_FOLDER, STORAGE_FOLDER,
-    TD_DETACHED_SUBPROCESSES, WORK_FOLDER,
+    AVAILABLE_ENVIRONMENTS_FOLDER, CONFIG_FILE, CONFIG_FOLDER, DATABASE_FILE, DATABASE_FOLDER,
+    ENVIRONMENTS_FOLDER, ETC_FOLDER, INSTANCES_FOLDER, MSG_FOLDER, PROC_FOLDER, REGULAR_FOLDER,
+    STORAGE_FOLDER, TD_DETACHED_SUBPROCESSES, WORK_FOLDER,
 };
 use td_common::status::ExitStatus::{GeneralError, NoAction, Success};
 use td_process::launcher::arg::InheritedArgumentKey;
@@ -185,6 +189,9 @@ enum Commands {
 
     #[command(about = "Show the status of Tabsdata instances")]
     Instances(InstancesArguments),
+
+    #[command(about = "Manage individual workers of a running Tabsdata instance")]
+    Worker(WorkerArguments),
 }
 
 #[derive(Debug, Clone, Getters, Args)]
@@ -488,6 +495,33 @@ struct InstancesArguments {
     hosted: bool,
 }
 
+#[derive(Debug, Clone, Args)]
+struct WorkerArguments {
+    #[command(subcommand)]
+    command: WorkerCommands,
+}
+
+#[derive(Debug, Clone, Subcommand)]
+enum WorkerCommands {
+    #[command(about = "Restart a regular worker of a running Tabsdata instance")]
+    Restart(WorkerRestartArguments),
+}
+
+#[derive(Debug, Clone, Getters, Args)]
+#[getset(get = "pub")]
+struct WorkerRestartArguments {
+    #[command(flatten)]
+    control: ControlArguments,
+
+    /// Name of the regular worker to restart.
+    #[arg(
+        long,
+        required = true,
+        long_help = "Name of the regular worker to restart, as defined in config.yaml."
+    )]
+    name: String,
+}
+
 pub struct TabsDataCli {}
 
 impl TabsDataCli {
@@ -549,6 +583,9 @@ impl TabsDataCli {
             }
             Some(Commands::Instances(arguments)) => {
                 command_instances(arguments);
+            }
+            Some(Commands::Worker(arguments)) => {
+                command_worker(arguments);
             }
         }
     }
@@ -1951,6 +1988,155 @@ fn command_instances(arguments: InstancesArguments) {
         status_hosted_instances();
     } else {
         status_running_instances();
+    }
+}
+
+fn command_worker(arguments: WorkerArguments) {
+    match arguments.command {
+        WorkerCommands::Restart(arguments) => {
+            command_worker_restart(arguments);
+        }
+    }
+}
+
+fn command_worker_restart(arguments: WorkerRestartArguments) {
+    let worker_name = arguments.name().clone();
+
+    let supervisor_instance = get_instance_path_for_instance(arguments.control.instance());
+    let supervisor_instance_absolute = to_absolute(&supervisor_instance.clone()).unwrap();
+
+    let supervisor_workspace =
+        get_workspace_path_for_instance(&arguments.control.instance().clone());
+    let supervisor_work = supervisor_workspace.clone().join(WORK_FOLDER);
+
+    let supervisor_tracker = WorkerTracker::new(supervisor_work.clone());
+    match supervisor_tracker.check_worker_status() {
+        WorkerStatus::Running { .. } => {}
+        other => {
+            error!(
+                "Tabsdata instance '{}' is not running: '{:?}'. Cannot restart worker.",
+                supervisor_instance_absolute.display(),
+                other
+            );
+            exit(GeneralError.code());
+        }
+    }
+
+    let config_path = supervisor_workspace.join(CONFIG_FOLDER).join(CONFIG_FILE);
+    let config_content = match fs::read_to_string(&config_path) {
+        Ok(content) => content,
+        Err(e) => {
+            error!(
+                "Failed to read configuration at '{}': {}",
+                config_path.display(),
+                e
+            );
+            exit(GeneralError.code());
+        }
+    };
+    let config: Configuration = match serde_yaml::from_str(&config_content) {
+        Ok(config) => config,
+        Err(e) => {
+            error!("Failed to parse configuration: {}", e);
+            exit(GeneralError.code());
+        }
+    };
+
+    if !config
+        .controllers()
+        .regular()
+        .workers()
+        .contains_key(&worker_name)
+    {
+        let regular_workers: Vec<&String> =
+            config.controllers().regular().workers().keys().collect();
+        error!(
+            "Worker '{}' is not a regular worker. Available regular workers: {:?}",
+            worker_name, regular_workers
+        );
+        exit(GeneralError.code());
+    }
+
+    let worker_work_path = supervisor_work
+        .clone()
+        .join(PROC_FOLDER)
+        .join(REGULAR_FOLDER)
+        .join(&worker_name)
+        .join(WORK_FOLDER);
+
+    let ctl_path = worker_work_path.join(WORKER_CONTROL_FILE);
+    let ctl_content = WorkerControlFile {
+        action: WorkerControlAction::Restart,
+    };
+    match serde_yaml::to_string(&ctl_content) {
+        Ok(yaml) => {
+            if let Err(e) = fs::write(&ctl_path, yaml) {
+                error!(
+                    "Failed to write control file '{}': {}",
+                    ctl_path.display(),
+                    e
+                );
+                exit(GeneralError.code());
+            }
+        }
+        Err(e) => {
+            error!("Failed to serialize control file: {}", e);
+            exit(GeneralError.code());
+        }
+    }
+
+    let pid_path = get_pid_path(worker_work_path.clone());
+    match check_status(pid_path, None) {
+        WorkerStatus::Running { pid } => {
+            info!(
+                "Sending termination signal to regular worker '{}' (pid: {})",
+                worker_name, pid
+            );
+            if let Err(e) = terminate_process(pid, Signal::Term) {
+                error!(
+                    "Failed to terminate worker '{}' with pid '{}': {}",
+                    worker_name, pid, e
+                );
+                // Clean up the .ctl file on failure
+                let _ = fs::remove_file(&ctl_path);
+                exit(GeneralError.code());
+            }
+
+            let start = Instant::now();
+            loop {
+                if start.elapsed() > STOP_TIMEOUT {
+                    error!(
+                        "Worker '{}' with pid {} did not stop within {:?}",
+                        worker_name, pid, STOP_TIMEOUT
+                    );
+                    exit(GeneralError.code());
+                }
+                match check_status(get_pid_path(worker_work_path.clone()), None) {
+                    WorkerStatus::Running { .. } => {
+                        info!(
+                            "Waiting for worker '{}' with pid {} to stop...",
+                            worker_name, pid
+                        );
+                        sleep(STOP_WAIT);
+                    }
+                    _ => {
+                        break;
+                    }
+                }
+            }
+            info!(
+                "Worker '{}' with pid {} stopped. The supervisor will restart it.",
+                worker_name, pid
+            );
+        }
+        other => {
+            error!(
+                "Regular worker '{}' is not running: '{:?}'. Cannot restart.",
+                worker_name, other
+            );
+            let _ = fs::remove_file(&ctl_path);
+            exit(GeneralError.code());
+        }
     }
 }
 

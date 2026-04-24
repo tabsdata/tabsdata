@@ -111,6 +111,19 @@ pub const EPHEMERAL_WAIT_MILLISECONDS: u64 = 500;
 
 pub const EPHEMERAL_STOP_CONCURRENCY: usize = 64;
 
+pub const WORKER_CONTROL_FILE: &str = ".ctl";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum WorkerControlAction {
+    Restart,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkerControlFile {
+    pub action: WorkerControlAction,
+}
+
 #[allow(unused_qualifications)]
 #[atomic_enum]
 enum ControllerState {
@@ -147,7 +160,7 @@ pub struct Configuration {
 
 #[derive(Default, Debug, Clone, Serialize, Getters)]
 #[getset(get = "pub")]
-struct ControllersConfig {
+pub(crate) struct ControllersConfig {
     #[serde(default)]
     init: ControllerConfig,
     #[serde(default)]
@@ -158,9 +171,11 @@ struct ControllersConfig {
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, Getters)]
 #[getset(get = "pub")]
-struct ControllerConfig {
+pub(crate) struct ControllerConfig {
+    #[serde(default)]
     name: String,
     // 0 means no limit
+    #[serde(default)]
     concurrency: u16,
     #[serde(default, deserialize_with = "workers_to_map")]
     workers: IndexMap<String, WorkerConfig>,
@@ -510,6 +525,7 @@ pub struct Supervisor {
     dropping: Arc<AtomicBool>,
     state: SupervisorState,
     running_tasks_map: Arc<Mutex<RunningTasksMap>>,
+    started_at: std::time::SystemTime,
 }
 
 type WorkerCommandLine = (String, Vec<String>, Vec<String>);
@@ -621,6 +637,7 @@ impl Supervisor {
             dropping: Arc::new(AtomicBool::new(false)),
             state: State::new(),
             running_tasks_map: Arc::new(Mutex::new(HashMap::new())),
+            started_at: std::time::SystemTime::now(),
         }
     }
 
@@ -1223,6 +1240,24 @@ impl Supervisor {
         self: Arc<Self>,
         receiver: Receiver<SupervisorMessage>,
     ) -> Result<(), RuntimeError> {
+        for (name, _) in self.config.controllers.regular.workers.iter() {
+            let ctl_path = self
+                .params
+                .work()
+                .join(PROC_FOLDER)
+                .join(Regular.as_ref())
+                .join(name)
+                .join(WORK_FOLDER)
+                .join(WORKER_CONTROL_FILE);
+            if ctl_path.exists() {
+                info!(
+                    "Removing stale control file for regular worker '{}': {:?}",
+                    name, ctl_path
+                );
+                let _ = std::fs::remove_file(&ctl_path);
+            }
+        }
+
         let controller = &self.config.controllers.regular.clone();
         let mark = self.regular_mark.clone();
         self.start_workers(
@@ -1335,17 +1370,98 @@ impl Supervisor {
                 Some((worker_name, run_id, result)) = running_tasks.next(), if can_poll_task => {
                     debug!("{} branch: task completed for worker '{}' (run_id: {})", controller_class, worker_name, run_id);
                     match result {
-                        Ok((_worker, _run_id, outcome)) => {
+                        Ok((worker, _run_id, outcome)) => {
                             let mut map = running_tasks_map.lock().await;
                             if let Some(worker_tasks) = map.get_mut(&worker_name) {
                                 worker_tasks.remove(&run_id);
                             }
                             drop(map);
 
+                            let restart_requested = controller.name == Regular.as_ref()
+                                && self.check_and_consume_restart_ctl(&controller.name, &worker_name);
+
                             match outcome {
+                                Ok(()) if restart_requested => {
+                                    info!("{} worker '{}' (run_id: {}) exited normally but restart requested via .ctl — re-spawning",
+                                        controller_class, worker_name, run_id);
+
+                                    let new_worker = worker.clone();
+                                    let new_worker_name = worker.name().clone();
+                                    let new_run_id = new_worker_name.clone();
+                                    let new_self_arc = Arc::clone(&self);
+                                    let new_log_prefix = controller_class.clone();
+                                    let new_run_id_clone = new_run_id.clone();
+                                    let new_handle = tokio::spawn(async move {
+                                        let outcome = start_worker_function(new_self_arc, new_worker.clone(), None).await
+                                            .map_err(|e| RuntimeError::new(format!("{new_log_prefix} RunnerError: {e:?} - {new_worker:?}")));
+                                        (new_worker, new_run_id_clone, outcome)
+                                    });
+
+                                    let new_abort_handle = new_handle.abort_handle();
+                                    let new_run_info = RunInfo {
+                                        _abort_handle: new_abort_handle,
+                                        _worker_config: worker.clone(),
+                                        intentionally_stopped: Arc::new(AtomicBool::new(false)),
+                                        shutdown_in_progress: Arc::new(AtomicBool::new(false)),
+                                        pid: None,
+                                        interceptor: None,
+                                    };
+
+                                    let mut map = running_tasks_map.lock().await;
+                                    map.entry(new_worker_name.clone())
+                                        .or_insert_with(HashMap::new)
+                                        .insert(new_run_id.clone(), new_run_info);
+                                    drop(map);
+
+                                    let new_run_id_for_future = new_run_id.clone();
+                                    let new_wrapped_future = Box::pin(async move {
+                                        let result = new_handle.await;
+                                        (new_worker_name, new_run_id_for_future, result)
+                                    });
+                                    running_tasks.push(new_wrapped_future);
+                                }
                                 Ok(()) => {
                                     info!("{} task for worker '{}' (run_id: {}) finished successfully",
                                         controller_class, worker_name, run_id);
+                                }
+                                Err(_e) if restart_requested => {
+                                    info!("{} worker '{}' (run_id: {}) restart requested via .ctl — re-spawning",
+                                        controller_class, worker_name, run_id);
+
+                                    let new_worker = worker.clone();
+                                    let new_worker_name = worker.name().clone();
+                                    let new_run_id = new_worker_name.clone();
+                                    let new_self_arc = Arc::clone(&self);
+                                    let new_log_prefix = controller_class.clone();
+                                    let new_run_id_clone = new_run_id.clone();
+                                    let new_handle = tokio::spawn(async move {
+                                        let outcome = start_worker_function(new_self_arc, new_worker.clone(), None).await
+                                            .map_err(|e| RuntimeError::new(format!("{new_log_prefix} RunnerError: {e:?} - {new_worker:?}")));
+                                        (new_worker, new_run_id_clone, outcome)
+                                    });
+
+                                    let new_abort_handle = new_handle.abort_handle();
+                                    let new_run_info = RunInfo {
+                                        _abort_handle: new_abort_handle,
+                                        _worker_config: worker.clone(),
+                                        intentionally_stopped: Arc::new(AtomicBool::new(false)),
+                                        shutdown_in_progress: Arc::new(AtomicBool::new(false)),
+                                        pid: None,
+                                        interceptor: None,
+                                    };
+
+                                    let mut map = running_tasks_map.lock().await;
+                                    map.entry(new_worker_name.clone())
+                                        .or_insert_with(HashMap::new)
+                                        .insert(new_run_id.clone(), new_run_info);
+                                    drop(map);
+
+                                    let new_run_id_for_future = new_run_id.clone();
+                                    let new_wrapped_future = Box::pin(async move {
+                                        let result = new_handle.await;
+                                        (new_worker_name, new_run_id_for_future, result)
+                                    });
+                                    running_tasks.push(new_wrapped_future);
                                 }
                                 Err(e) => {
                                     error!("{} task for worker '{}' (run_id: {}) finished unsuccessfully: {:?}",
@@ -1376,9 +1492,59 @@ impl Supervisor {
                                 let is_ephemeral = controller.name == Ephemeral.as_ref();
 
                                 if !is_ephemeral {
-                                    let message = format!("{controller_class} task cancelled abruptly with error: {e:?}");
-                                    error!(message);
-                                    return Err(RuntimeError::new(message));
+                                    let restart_requested = self.check_and_consume_restart_ctl(
+                                        &controller.name, &worker_name,
+                                    );
+
+                                    if restart_requested {
+                                        info!("{} worker '{}' (run_id: {}) restart requested via .ctl after cancellation — re-spawning",
+                                            controller_class, worker_name, run_id);
+
+                                        if let Some(worker) = controller.workers.get(&worker_name) {
+                                            let new_worker = worker.clone();
+                                            let new_worker_name = worker.name().clone();
+                                            let new_run_id = new_worker_name.clone();
+                                            let new_self_arc = Arc::clone(&self);
+                                            let new_log_prefix = controller_class.clone();
+                                            let new_run_id_clone = new_run_id.clone();
+                                            let new_handle = tokio::spawn(async move {
+                                                let outcome = start_worker_function(new_self_arc, new_worker.clone(), None).await
+                                                    .map_err(|e| RuntimeError::new(format!("{new_log_prefix} RunnerError: {e:?} - {new_worker:?}")));
+                                                (new_worker, new_run_id_clone, outcome)
+                                            });
+
+                                            let new_abort_handle = new_handle.abort_handle();
+                                            let new_run_info = RunInfo {
+                                                _abort_handle: new_abort_handle,
+                                                _worker_config: worker.clone(),
+                                                intentionally_stopped: Arc::new(AtomicBool::new(false)),
+                                                shutdown_in_progress: Arc::new(AtomicBool::new(false)),
+                                                pid: None,
+                                                interceptor: None,
+                                            };
+
+                                            let mut map = running_tasks_map.lock().await;
+                                            map.entry(new_worker_name.clone())
+                                                .or_insert_with(HashMap::new)
+                                                .insert(new_run_id.clone(), new_run_info);
+                                            drop(map);
+
+                                            let new_run_id_for_future = new_run_id.clone();
+                                            let new_wrapped_future = Box::pin(async move {
+                                                let result = new_handle.await;
+                                                (new_worker_name, new_run_id_for_future, result)
+                                            });
+                                            running_tasks.push(new_wrapped_future);
+                                        } else {
+                                            let message = format!("{controller_class} worker '{}' not found in config for restart", worker_name);
+                                            error!(message);
+                                            return Err(RuntimeError::new(message));
+                                        }
+                                    } else {
+                                        let message = format!("{controller_class} task cancelled abruptly with error: {e:?}");
+                                        error!(message);
+                                        return Err(RuntimeError::new(message));
+                                    }
                                 } else if !intentionally_stopped {
                                     let message = format!("{controller_class} task cancelled abruptly with error: {e:?}");
                                     error!(message);
@@ -2670,6 +2836,59 @@ impl Supervisor {
 }
 
 impl Supervisor {
+    fn check_and_consume_restart_ctl(&self, controller_name: &str, worker_name: &str) -> bool {
+        let ctl_path = self
+            .params
+            .work()
+            .join(PROC_FOLDER)
+            .join(controller_name)
+            .join(worker_name)
+            .join(WORK_FOLDER)
+            .join(WORKER_CONTROL_FILE);
+
+        if !ctl_path.exists() {
+            return false;
+        }
+
+        if let Ok(metadata) = std::fs::metadata(&ctl_path)
+            && let Ok(modified) = metadata.modified()
+            && modified < self.started_at
+        {
+            debug!(
+                "Ignoring stale control file for worker '{}': {:?}",
+                worker_name, ctl_path
+            );
+            let _ = std::fs::remove_file(&ctl_path);
+            return false;
+        }
+
+        let restart = match std::fs::read_to_string(&ctl_path) {
+            Ok(content) => match serde_yaml::from_str::<WorkerControlFile>(&content) {
+                Ok(ctl) => matches!(ctl.action, WorkerControlAction::Restart),
+                Err(e) => {
+                    warn!(
+                        "Failed to parse control file for worker '{}': {}",
+                        worker_name, e
+                    );
+                    false
+                }
+            },
+            Err(e) => {
+                warn!(
+                    "Failed to read control file for worker '{}': {}",
+                    worker_name, e
+                );
+                false
+            }
+        };
+
+        if restart {
+            let _ = std::fs::remove_file(&ctl_path);
+        }
+
+        restart
+    }
+
     fn stop_worker(work_path: PathBuf, signal: Signal, live_pids: Option<&HashSet<i32>>) {
         match check_status(get_pid_path(work_path.clone()), live_pids) {
             WorkerStatus::Running { pid } => {
