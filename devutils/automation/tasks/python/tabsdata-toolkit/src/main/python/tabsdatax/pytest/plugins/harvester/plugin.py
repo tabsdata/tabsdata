@@ -110,6 +110,7 @@ from tabsdatax.pytest.plugins.harvester.internal.writer import (
 g_harvester_folder: str | None = None
 g_is_xdist_controller: bool = False
 g_config: pytest.Config | None = None
+g_collected: int = 0
 
 # Tracker config attribute keys
 _CFG_WRITER = "_tdx_meta_writer"
@@ -146,7 +147,7 @@ def pytest_configure(config: pytest.Config) -> None:
     Module globals ``g_harvester_folder`` and ``g_is_xdist_controller``
     are set here — each process (controller + workers) gets its own copy.
     """
-    global g_harvester_folder, g_is_xdist_controller, g_config
+    global g_harvester_folder, g_is_xdist_controller, g_config, g_collected
 
     harvester_folder = config.getoption(
         TDX_HARVESTER_FOLDER_ARG,
@@ -235,6 +236,8 @@ def pytest_collection_modifyitems(
     items: list[pytest.Item],
 ) -> None:
     """Register fixtures and markers, write collected count."""
+    global g_collected
+
     if not g_harvester_folder or not items:
         return
 
@@ -242,12 +245,13 @@ def pytest_collection_modifyitems(
     if phase_tracker:
         phase_tracker.transition(SessionPhase.COLLECTION)
 
+    g_collected = len(items)
     writer: MetaWriter | None = _get(config, _CFG_WRITER)
     if writer:
         writer.enqueue(
             MetaMessage(
                 kind="full_sync",
-                payload={"collected": len(items)},
+                payload={"collected": g_collected},
             )
         )
 
@@ -258,6 +262,32 @@ def pytest_collection_modifyitems(
     marker_tracker: MarkerTracker | None = _get(config, _CFG_MARKER_TRACKER)
     if marker_tracker:
         marker_tracker.register_all(items)
+
+
+def pytest_deselected(items: list[pytest.Item]) -> None:
+    """Adjust tracker counts when tests are excluded by filters (-m, -k)."""
+    global g_collected
+
+    if not g_config:
+        return
+
+    marker_tracker: MarkerTracker | None = _get(g_config, _CFG_MARKER_TRACKER)
+    if marker_tracker:
+        marker_tracker.on_deselected(items)
+
+    fixture_tracker: FixtureTracker | None = _get(g_config, _CFG_FIXTURE_TRACKER)
+    if fixture_tracker:
+        fixture_tracker.on_deselected(items)
+
+    g_collected = max(0, g_collected - len(items))
+    writer: MetaWriter | None = _get(g_config, _CFG_WRITER)
+    if writer:
+        writer.enqueue(
+            MetaMessage(
+                kind="full_sync",
+                payload={"collected": g_collected},
+            )
+        )
 
 
 @pytest.hookimpl(wrapper=True)
@@ -275,26 +305,43 @@ def pytest_fixture_setup(fixturedef, request):
         record_fixture_setup_start(g_harvester_folder, fname, scope, worker)
 
     t0 = time.time()
-    result = yield
-    duration = time.time() - t0
-
-    if fixture_tracker:
-        fixture_tracker.on_setup_complete(fixturedef, request)
-    if g_harvester_folder:
-        record_fixture_setup_end(g_harvester_folder, fname, scope, duration, worker)
+    try:
+        result = yield
+    finally:
+        duration = time.time() - t0
+        if fixture_tracker:
+            fixture_tracker.on_setup_complete(fixturedef, request)
+        if g_harvester_folder:
+            record_fixture_setup_end(g_harvester_folder, fname, scope, duration, worker)
 
     return result
 
 
+_torn_down: set[str] = set()
+
+
 def pytest_fixture_post_finalizer(fixturedef, request) -> None:
+    # For non-function-scoped fixtures, pytest calls this hook for every test
+    # that uses the fixture, not just when the fixture is actually torn down.
+    # Only record the first teardown per fixture per process.
+    fname = fixturedef.argname
+    scope = str(fixturedef.scope or "function")
+    if scope != "function":
+        key = f"{fname}:{scope}"
+        if key in _torn_down:
+            return
+        # Only count as torn down if the cached result was invalidated.
+        cached = getattr(fixturedef, "cached_result", None)
+        if cached is not None:
+            return
+        _torn_down.add(key)
+
     # Tracker updates (controller only)
     fixture_tracker: FixtureTracker | None = _get(request.config, _CFG_FIXTURE_TRACKER)
     if fixture_tracker:
         fixture_tracker.on_teardown(fixturedef, request)
 
     # DB write (works on both controller and workers)
-    fname = fixturedef.argname
-    scope = str(fixturedef.scope or "function")
     worker = os.environ.get(PYTEST_XDIST_WORKER, "")
     if g_harvester_folder:
         record_fixture_teardown_end(g_harvester_folder, fname, scope, worker)
@@ -435,16 +482,18 @@ def _notify_trackers_on_result(
     if fixture_tracker:
         fixture_tracker.on_test_complete(nodeid, outcome)
 
-    # Record test completion in DB for averages and distribution
-    if g_harvester_folder and outcome in ("passed", "failed"):
-        worker = os.environ.get(PYTEST_XDIST_WORKER, "")
+    # Record test completion in DB for averages and distribution.
+    # Only on controller / non-xdist to avoid double-counting
+    # (under xdist, workers also fire logreport).
+    is_worker = bool(os.environ.get(PYTEST_XDIST_WORKER))
+    if g_harvester_folder and not is_worker and outcome in ("passed", "failed"):
         try:
             record_test_completion(
                 g_harvester_folder,
                 nodeid,
                 outcome,
                 report.duration,
-                worker,
+                "",  # controller doesn't have a worker id
             )
         except Exception:
             pass

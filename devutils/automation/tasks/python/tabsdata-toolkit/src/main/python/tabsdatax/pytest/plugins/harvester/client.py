@@ -755,22 +755,14 @@ class HarvesterDashboard(App):
         if new_pid == 0:
             return False
         if self._session_pid == 0:
-            # First time seeing a PID — store it, but clear if already dead
+            # First time seeing a PID — store it
             self._session_pid = new_pid
-            if not pid_exists(new_pid):
-                self._clear_dashboard()
-                return True
             return False
         if new_pid != self._session_pid:
-            # New session started
+            # New session started — clear old data and let new data populate
             self._session_pid = new_pid
             self._clear_dashboard()
-            return False  # Don't skip — let the new data populate
-        # Check if the process is still alive
-        if not pid_exists(new_pid):
-            self._session_pid = 0
-            self._clear_dashboard()
-            return True
+            return False
         return False
 
     def _update_summary(self) -> None:
@@ -804,6 +796,7 @@ class HarvesterDashboard(App):
             markers=markers_raw,
             fixtures=fixtures_raw,
             pid=self._meta.pid,
+            pid_alive=pid_exists(self._meta.pid) if self._meta.pid else False,
             session_start_ts=self._meta.session_start_ts,
             test_averages=self._cached_test_averages,
             running_tests=self._cached_running,
@@ -853,7 +846,7 @@ class HarvesterDashboard(App):
             setup_count = stats.get("setup_count", 0)
             teardown_count = stats.get("teardown_count", 0)
             avg_setup = stats.get("avg_setup_duration")
-            avg_setup_str = format_duration(avg_setup) if avg_setup else ""
+            avg_setup_str = format_duration(avg_setup) if avg_setup is not None else ""
 
             autouse_icon = (
                 RichText("Ⓐ", style=Emoji.CIRCLE_PURPLE_STYLE) if fix.autouse else ""

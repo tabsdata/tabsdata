@@ -25,6 +25,7 @@ class PhaseTracker:
     def __init__(self, writer: MetaWriter) -> None:
         self._writer = writer
         self._current: str | None = None
+        self._start_times: dict[str, float] = {}
         # Initialize all phases as pending
         for phase in SESSION_PHASES_ORDERED:
             writer.enqueue(
@@ -41,6 +42,7 @@ class PhaseTracker:
         if self._current and self._current != phase:
             self._close_phase(self._current, now)
         self._current = phase
+        self._start_times[phase] = now
         self._writer.enqueue(
             MetaMessage(
                 kind="phase",
@@ -61,6 +63,7 @@ class PhaseTracker:
         if self._current:
             self._close_phase(self._current, now)
         self._current = new_phase
+        self._start_times[new_phase] = now
         self._writer.enqueue(
             MetaMessage(
                 kind="phase",
@@ -81,9 +84,8 @@ class PhaseTracker:
             self._current = None
 
     def _close_phase(self, phase: str, end_ts: float) -> None:
-        state = self._writer.state.phases.get(phase)
-        start = state.start if state else None
-        duration = (end_ts - start) if start else None
+        start = self._start_times.get(phase)
+        duration = (end_ts - start) if start is not None else None
         self._writer.enqueue(
             MetaMessage(
                 kind="phase",

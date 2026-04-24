@@ -245,7 +245,7 @@ class SummaryHeader(Vertical):
                         id="spark-passed",
                     )
                     yield Static("Passed", classes="spark-label")
-                with Vertical(classes="sparkline-col"):
+                with Vertical(classes="sparkline-col", id="spark-failed-col"):
                     yield Sparkline(
                         data=[0],
                         min_color="#e05050",
@@ -266,6 +266,7 @@ class SummaryHeader(Vertical):
         markers: dict,
         fixtures: dict,
         pid: int = 0,
+        pid_alive: bool = False,
         session_start_ts: float | None = None,
         test_averages: dict | None = None,
         running_tests: list | None = None,
@@ -290,7 +291,11 @@ class SummaryHeader(Vertical):
 
         pid_line = RichText()
         pid_line.append("Main pytest process: ", style=Color.DIM)
-        pid_line.append(str(pid) if pid else "—", style=f"bold {Color.WHITE}")
+        if pid:
+            pid_color = Color.STATUS_DONE if pid_alive else Color.STATUS_ERROR
+            pid_line.append(str(pid), style=f"bold {pid_color}")
+        else:
+            pid_line.append("—", style=f"bold {Color.WHITE}")
         parts.append(pid_line)
 
         # --- Start time and elapsed ---
@@ -356,7 +361,10 @@ class SummaryHeader(Vertical):
         total_done = passed + failed + skipped + orphaned
         pending_count = max(0, collected - total_done - running) if collected else 0
 
-        # --- Tests per marker (aggregated) ---
+        # --- Tests per marker (aggregated across markers) ---
+        # A test with N markers contributes 1 to each marker's counters,
+        # so the aggregated totals are larger than the test count.
+        # Markers only update on completion, so pending includes running.
         m_total = sum(m.get("total", 0) for m in markers.values()) if markers else 0
         m_passed = sum(m.get("passed", 0) for m in markers.values()) if markers else 0
         m_failed = sum(m.get("failed", 0) for m in markers.values()) if markers else 0
@@ -447,18 +455,20 @@ class SummaryHeader(Vertical):
                 if len(passed_d) > 1
                 else [0]
             )
-            spark_failed.data = (
-                self._build_distribution(failed_d, num_bins)
-                if len(failed_d) > 1
-                else [0]
-            )
+            failed_col = self.query_one("#spark-failed-col")
+            if failed_d:
+                spark_failed.data = self._build_distribution(failed_d, num_bins)
+                failed_col.display = True
+            else:
+                spark_failed.data = [0]
+                failed_col.display = False
             container.display = True
 
             min_d = min(all_d)
             max_d = max(all_d)
             legend_text = RichText()
             legend_text.append(f"{format_duration(min_d)}", style=Color.DIM)
-            legend_text.append(" ← duration → ", style=Color.DIM)
+            legend_text.append(" ⟵  duration  ⟶  ", style=Color.DIM)
             legend_text.append(f"{format_duration(max_d)}", style=Color.DIM)
             legend.update(legend_text)
         else:
@@ -507,7 +517,7 @@ class SummaryHeader(Vertical):
     def _legend() -> RichText:
         c = Emoji.CIRCLE
         line = RichText()
-        line.append(" State: ", style=f"bold {Color.DIM}")
+        line.append(" State: ", style=f"bold {Color.WHITE}")
         line.append(c, style=Emoji.CIRCLE_BLUE_STYLE)
         line.append("  pending   ", style=Color.DIM)
         line.append(c, style=Emoji.CIRCLE_ORANGE_STYLE)
@@ -519,12 +529,12 @@ class SummaryHeader(Vertical):
         line.append(c, style=Emoji.CIRCLE_PURPLE_STYLE)
         line.append("  unknown", style=Color.DIM)
         line.append("    ", style=Color.DIM)
-        line.append("Scope: ", style=f"bold {Color.DIM}")
+        line.append("Scope: ", style=f"bold {Color.WHITE}")
         line.append(f"{Emoji.SESSION} session   ", style=Color.DIM)
         line.append(f"{Emoji.MODULE} module   ", style=Color.DIM)
         line.append(f"{Emoji.FUNCTION} function", style=Color.DIM)
         line.append("    ", style=Color.DIM)
-        line.append("Fixture: ", style=f"bold {Color.DIM}")
+        line.append("Fixture: ", style=f"bold {Color.WHITE}")
         line.append("Ⓐ", style=Emoji.CIRCLE_PURPLE_STYLE)
         line.append("  autouse", style=Color.DIM)
         return line
@@ -541,22 +551,64 @@ class SummaryHeader(Vertical):
         BAR_WIDTH = 40
 
         tbl = Table(
-            show_header=False,
+            show_header=True,
             show_edge=False,
             show_lines=False,
             box=None,
             padding=(0, 1),
             expand=False,
         )
-        tbl.add_column("label", style=f"bold {Color.WHITE}", no_wrap=True, min_width=10)
-        tbl.add_column("bar", no_wrap=True, min_width=BAR_WIDTH + 2)
-        tbl.add_column("pct", justify="right", no_wrap=True, min_width=7)
-        tbl.add_column("ratio", justify="right", no_wrap=True, min_width=12)
-        tbl.add_column("passed", justify="right", no_wrap=True, min_width=10)
-        tbl.add_column("failed", justify="right", no_wrap=True, min_width=10)
-        tbl.add_column("skipped", justify="right", no_wrap=True, min_width=10)
-        tbl.add_column("running", justify="right", no_wrap=True, min_width=10)
-        tbl.add_column("pending", justify="right", no_wrap=True, min_width=10)
+        tbl.add_column("", style=f"bold {Color.WHITE}", no_wrap=True, min_width=10)
+        tbl.add_column("", no_wrap=True, min_width=BAR_WIDTH + 2)
+        tbl.add_column(
+            "Percentage",
+            justify="right",
+            no_wrap=True,
+            min_width=7,
+            header_style=Color.WHITE,
+        )
+        tbl.add_column(
+            "Progress",
+            justify="right",
+            no_wrap=True,
+            min_width=12,
+            header_style=Color.WHITE,
+        )
+        tbl.add_column(
+            "Passed",
+            justify="right",
+            no_wrap=True,
+            min_width=10,
+            header_style=Color.STATUS_DONE,
+        )
+        tbl.add_column(
+            "Failed",
+            justify="right",
+            no_wrap=True,
+            min_width=10,
+            header_style=Color.STATUS_ERROR,
+        )
+        tbl.add_column(
+            "Skipped",
+            justify="right",
+            no_wrap=True,
+            min_width=10,
+            header_style=Color.STATUS_PENDING,
+        )
+        tbl.add_column(
+            "Running",
+            justify="right",
+            no_wrap=True,
+            min_width=10,
+            header_style=Color.STATUS_RUNNING,
+        )
+        tbl.add_column(
+            "Pending",
+            justify="right",
+            no_wrap=True,
+            min_width=10,
+            header_style=Color.DIM,
+        )
 
         for label, total, passed, failed, skipped, running, pending, bar_color in rows:
             done = passed + failed + skipped
@@ -570,36 +622,16 @@ class SummaryHeader(Vertical):
                 finished_style=bar_color,
             )
 
-            pct_text = RichText(f"{pct:5.1f}%", style=f"bold {Color.WHITE}")
+            pct_text = RichText(f"{pct:6.2f}%", style=f"bold {Color.WHITE}")
             ratio_text = RichText()
             ratio_text.append(f"{done}", style=Color.WHITE)
             ratio_text.append(f"/{total}", style=Color.DIM)
 
-            passed_t = (
-                RichText(f"{passed} passed", style=Color.STATUS_DONE)
-                if passed
-                else RichText("")
-            )
-            failed_t = (
-                RichText(f"{failed} failed", style=Color.STATUS_ERROR)
-                if failed
-                else RichText("")
-            )
-            skipped_t = (
-                RichText(f"{skipped} skipped", style=Color.STATUS_PENDING)
-                if skipped
-                else RichText("")
-            )
-            running_t = (
-                RichText(f"{running} running", style=Color.STATUS_RUNNING)
-                if running
-                else RichText("")
-            )
-            pending_t = (
-                RichText(f"{pending} pending", style=Color.DIM)
-                if pending
-                else RichText("")
-            )
+            passed_t = RichText(str(passed), style=Color.STATUS_DONE)
+            failed_t = RichText(str(failed), style=Color.STATUS_ERROR)
+            skipped_t = RichText(str(skipped), style=Color.STATUS_PENDING)
+            running_t = RichText(str(running), style=Color.STATUS_RUNNING)
+            pending_t = RichText(str(pending), style=Color.DIM)
 
             tbl.add_row(
                 label,

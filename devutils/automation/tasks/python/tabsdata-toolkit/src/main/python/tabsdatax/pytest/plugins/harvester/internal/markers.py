@@ -46,14 +46,11 @@ class MarkerTracker:
         marker_counts: dict[str, int] = {}
 
         for item in items:
-            item_markers = set()
-            for marker in item.iter_markers():
-                name = marker.name
-                item_markers.add(name)
-                marker_counts[name] = marker_counts.get(name, 0) + 1
+            item_markers = {marker.name for marker in item.iter_markers()}
             if not item_markers:
                 item_markers.add(MARKER_NONE)
-                marker_counts[MARKER_NONE] = marker_counts.get(MARKER_NONE, 0) + 1
+            for name in item_markers:
+                marker_counts[name] = marker_counts.get(name, 0) + 1
             self._test_markers[item.nodeid] = item_markers
 
         for name, count in marker_counts.items():
@@ -74,6 +71,20 @@ class MarkerTracker:
                     ).to_dict(),
                 )
             )
+
+    def on_deselected(self, items: list[pytest.Item]) -> None:
+        """Subtract deselected items from marker counts."""
+        for item in items:
+            markers = self._test_markers.pop(item.nodeid, set())
+            for name in markers:
+                c = self._counts.get(name)
+                if c is None:
+                    continue
+                c["total"] = max(0, c["total"] - 1)
+                c["pending"] = max(0, c["pending"] - 1)
+                self._writer.enqueue(
+                    MetaMessage(kind="marker", key=name, payload=dict(c))
+                )
 
     def on_test_result(self, nodeid: str, outcome: str) -> None:
         """Update marker counters for a completed test.

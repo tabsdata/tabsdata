@@ -116,6 +116,7 @@ class FixtureTracker:
             self._known.add(fname)
             self._counts[fname] = {
                 "scope": scope,
+                "total": count,
                 "remaining": count,
                 "passed": 0,
                 "failed": 0,
@@ -139,6 +140,20 @@ class FixtureTracker:
                     ).to_dict(),
                 )
             )
+
+    def on_deselected(self, items: list[pytest.Item]) -> None:
+        """Subtract deselected items from fixture counts."""
+        for item in items:
+            fixtures = self._test_fixtures.pop(item.nodeid, set())
+            for fname in fixtures:
+                c = self._counts.get(fname)
+                if c is None:
+                    continue
+                c["total"] = max(0, c["total"] - 1)
+                c["remaining"] = max(0, c["remaining"] - 1)
+                self._writer.enqueue(
+                    MetaMessage(kind="fixture", key=fname, payload=dict(c))
+                )
 
     def on_setup(self, fixturedef, request) -> None:
         """Called from ``pytest_fixture_setup`` — before setup runs."""

@@ -29,18 +29,38 @@ def db_path(harvester_folder: str) -> str:
 
 
 def get_connection(harvester_folder: str) -> sqlite3.Connection:
-    """Get or create a thread-local SQLite connection with WAL mode."""
+    """Get or create a thread-local SQLite connection with WAL mode.
+
+    Detects when the DB file has been replaced (e.g. by ``shutil.rmtree``
+    at session start) and reconnects so readers never use a stale handle.
+    """
     path = db_path(harvester_folder)
     conn = getattr(_local, "conn", None)
     conn_path = getattr(_local, "conn_path", None)
     if conn is not None and conn_path == path:
-        return conn
+        # Check if the file was replaced (inode changed).
+        try:
+            current_ino = os.stat(path).st_ino
+        except OSError:
+            current_ino = None
+        cached_ino = getattr(_local, "conn_ino", None)
+        if current_ino is not None and current_ino == cached_ino:
+            return conn
+        # File was replaced or deleted — close stale connection.
+        try:
+            conn.close()
+        except Exception:
+            pass
     conn = sqlite3.connect(path, timeout=10)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.row_factory = sqlite3.Row
     _local.conn = conn
     _local.conn_path = path
+    try:
+        _local.conn_ino = os.stat(path).st_ino
+    except OSError:
+        _local.conn_ino = None
     return conn
 
 
