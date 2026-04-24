@@ -61,7 +61,7 @@ class DruidConfig:
     credentials: UserPasswordCredentials | None
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def druid_config(tmp_path_factory, worker_id, request) -> DruidConfig:
     marker = request.node.get_closest_marker("druid")
     prefix = marker.kwargs.get("env_prefix", "DRUID0") if marker else "DRUID0"
@@ -168,10 +168,21 @@ def create_docker_druid(
 
     # Start the full stack — compose handles health checks, dependencies,
     # networking, and volumes declaratively.
-    subprocess.run(
+    result = subprocess.run(
         ["docker", "compose", "-p", name, "-f", COMPOSE_FILE, "up", "-d"],
-        check=True,
+        capture_output=True,
+        text=True,
     )
+    if result.returncode != 0:
+        logger.error(
+            f"Failed to start Druid compose stack '{name}' "
+            f"(exit code {result.returncode}):\n"
+            f"stdout: {result.stdout}\n"
+            f"stderr: {result.stderr}"
+        )
+        raise subprocess.CalledProcessError(
+            result.returncode, result.args, result.stdout, result.stderr
+        )
 
     # Fetch port bindings via the Docker SDK
     coordinator = _get_compose_container(client, name, "coordinator")

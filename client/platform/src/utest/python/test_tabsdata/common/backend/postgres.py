@@ -53,7 +53,7 @@ class PostgresConfig:
     credentials: Credentials
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def postgres_config(tmp_path_factory, worker_id, request) -> PostgresConfig:
     marker = request.node.get_closest_marker("postgres")
     prefix = marker.kwargs.get("env_prefix", "POSTGRES0") if marker else "POSTGRES0"
@@ -160,17 +160,21 @@ def create_docker_postgres_database(
         wait_for_container_running(container)
         return get_container_port_binding(container, POSTGRES_FORWARDED_PORT)
     else:
-        container = client.containers.run(
-            "postgres:17.2",
-            name=name,
-            environment=[
-                f"POSTGRES_DB={DB_NAME}",
-                f"POSTGRES_USER={DB_USER}",
-                f"POSTGRES_PASSWORD={DB_PASSWORD}",
-            ],
-            ports={POSTGRES_FORWARDED_PORT: None},
-            detach=True,
-        )
+        try:
+            container = client.containers.run(
+                "postgres:17.2",
+                name=name,
+                environment=[
+                    f"POSTGRES_DB={DB_NAME}",
+                    f"POSTGRES_USER={DB_USER}",
+                    f"POSTGRES_PASSWORD={DB_PASSWORD}",
+                ],
+                ports={POSTGRES_FORWARDED_PORT: None},
+                detach=True,
+            )
+        except Exception as e:
+            logger.error(f"Failed to create Postgres container '{name}': {e}")
+            raise
         container.reload()
         port = get_container_port_binding(container, POSTGRES_FORWARDED_PORT)
         # Wait for the database to be ready

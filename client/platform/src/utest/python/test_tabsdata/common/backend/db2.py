@@ -17,11 +17,10 @@ from filelock import FileLock
 
 from tabsdata._credentials import Credentials, UserPasswordCredentials
 from tabsdata._utils.constants import TRUE_VALUES
-from tenacity import retry, stop_after_attempt, wait_incrementing
+from tenacity import retry, stop_after_delay, wait_fixed
 from test_tabsdata.common.constants import (
     DB_HOST,
     DB_PASSWORD,
-    CONTAINER_MAXIMUM_RETRY_COUNT,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX, DOCKER_REGULAR_CONTAINER_INFIX,
 )
 from test_tabsdata.common.container import (
@@ -57,7 +56,7 @@ class DB2Config:
     credentials: Credentials
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def db2_config(tmp_path_factory, worker_id, request) -> DB2Config:
     marker = request.node.get_closest_marker("db2")
     prefix = marker.kwargs.get("env_prefix", "DB20") if marker else "DB20"
@@ -145,10 +144,14 @@ def db2_config(tmp_path_factory, worker_id, request) -> DB2Config:
         return config
 
 
+DB2_WAIT_TIMEOUT_SECONDS = 900  # 15 minutes
+DB2_WAIT_POLL_INTERVAL_SECONDS = 5
+
+
 def wait_for_db2_setup_complete(container):
     @retry(
-        stop=stop_after_attempt(CONTAINER_MAXIMUM_RETRY_COUNT),
-        wait=wait_incrementing(start=1, increment=1),
+        stop=stop_after_delay(DB2_WAIT_TIMEOUT_SECONDS),
+        wait=wait_fixed(DB2_WAIT_POLL_INTERVAL_SECONDS),
         reraise=True,
     )
     def try_read():
@@ -166,7 +169,7 @@ def wait_for_db2_setup_complete(container):
     except Exception as exception:
         logger.error(f"Failed to find message '{DB2_DOCKER_DONE_MESSAGE}' "
                      f"in container '{container.name}' "
-                     f"logs after {CONTAINER_MAXIMUM_RETRY_COUNT} attempts: "
+                     f"logs after {DB2_WAIT_TIMEOUT_SECONDS}s: "
                      f"{exception}")
         raise
 
@@ -174,7 +177,7 @@ def wait_for_db2_setup_complete(container):
 def wait_for_db2_ready(port):
     import ibm_db_dbi as db
 
-    retry = 0
+    elapsed = 0
     while True:
         try:
             connection = db.connect(
@@ -191,15 +194,18 @@ def wait_for_db2_ready(port):
             logger.info(f"DB2 readiness check passed on port {port}")
             return
         except Exception as err:
-            retry += 1
-            if retry == CONTAINER_MAXIMUM_RETRY_COUNT:
-                logger.error(f"DB2 readiness check failed after {retry} retries: {err}")
+            elapsed += DB2_WAIT_POLL_INTERVAL_SECONDS
+            if elapsed >= DB2_WAIT_TIMEOUT_SECONDS:
+                logger.error(
+                    f"DB2 readiness check failed after {elapsed}s: {err}"
+                )
                 raise err
             else:
                 logger.warning(
-                    f"DB2 readiness check failed, retrying in {retry} second(s): {err}"
+                    f"DB2 readiness check failed, retrying in "
+                    f"{DB2_WAIT_POLL_INTERVAL_SECONDS} second(s): {err}"
                 )
-                sleep(retry)
+                sleep(DB2_WAIT_POLL_INTERVAL_SECONDS)
 
 
 def log_tabsdata_setup_done(container):
@@ -214,8 +220,8 @@ def wait_for_tabsdata_setup_done(container):
     import docker
 
     @retry(
-        stop=stop_after_attempt(CONTAINER_MAXIMUM_RETRY_COUNT),
-        wait=wait_incrementing(start=1, increment=1),
+        stop=stop_after_delay(DB2_WAIT_TIMEOUT_SECONDS),
+        wait=wait_fixed(DB2_WAIT_POLL_INTERVAL_SECONDS),
         reraise=True,
     )
     def try_read():
@@ -235,7 +241,7 @@ def wait_for_tabsdata_setup_done(container):
     except Exception as exception:
         logger.error(f"Failed to find setup marker '{DB2_TABSDATA_SETUP_DONE_MARKER}' "
                      f"in container '{container.name}' "
-                     f"after {CONTAINER_MAXIMUM_RETRY_COUNT} attempts: "
+                     f"after {DB2_WAIT_TIMEOUT_SECONDS}s: "
                      f"{exception}")
         raise
 
@@ -275,20 +281,24 @@ def create_docker_db2_database(
         wait_for_db2_ready(port)
         return port
     else:
-        container = client.containers.run(
-            "icr.io/db2_community/db2:latest",
-            name=name,
-            platform="linux/amd64",
-            environment=[
-                f"DB2INST1_PASSWORD={DB_PASSWORD}",
-                "LICENSE=accept",
-                f"DBNAME={DB2_DB_NAME}",
+        try:
+            container = client.containers.run(
+                "icr.io/db2_community/db2:latest",
+                name=name,
+                platform="linux/amd64",
+                environment=[
+                    f"DB2INST1_PASSWORD={DB_PASSWORD}",
+                    "LICENSE=accept",
+                    f"DBNAME={DB2_DB_NAME}",
 
-            ],
-            ports={DB2_FORWARDED_PORT: None},
-            detach=True,
-            privileged=True,
-        )
+                ],
+                ports={DB2_FORWARDED_PORT: None},
+                detach=True,
+                privileged=True,
+            )
+        except Exception as e:
+            logger.error(f"Failed to create DB2 container '{name}': {e}")
+            raise
         container.reload()
         wait_for_db2_setup_complete(container)
         port = get_container_port_binding(container, DB2_FORWARDED_PORT)

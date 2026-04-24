@@ -75,7 +75,11 @@ def ensure_container(
         run_kwargs["entrypoint"] = entrypoint
     if platform is not None:
         run_kwargs["platform"] = platform
-    container = client.containers.run(image, **run_kwargs)
+    try:
+        container = client.containers.run(image, **run_kwargs)
+    except Exception as e:
+        logger.error(f"Failed to create CDC container '{name}' from image '{image}': {e}")
+        raise
     container.reload()
     if message is not None:
         ensure_readiness(container, message)

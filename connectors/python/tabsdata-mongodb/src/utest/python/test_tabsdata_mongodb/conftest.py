@@ -69,11 +69,22 @@ DEFAULT_PYTEST_MONGODB_DOCKER_CONTAINER_NAME = (
     f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}{DOCKER_REGULAR_CONTAINER_INFIX}mongodb"
 )
 MONGODB_PORT = 27018
-MONGODB_URI_WITHOUT_CREDENTIALS = f"mongodb://{DB_HOST}:{MONGODB_PORT}"
+MONGODB_TIMEOUT_MS = 300000  # 5 minutes
+MONGODB_CONNECTION_OPTIONS = (
+    "retryWrites=true&retryReads=true"
+    f"&serverSelectionTimeoutMS={MONGODB_TIMEOUT_MS}"
+    f"&connectTimeoutMS={MONGODB_TIMEOUT_MS}"
+    f"&socketTimeoutMS={MONGODB_TIMEOUT_MS}"
+)
+MONGODB_URI_WITHOUT_CREDENTIALS = (
+    f"mongodb://{DB_HOST}:{MONGODB_PORT}"
+    f"/?{MONGODB_CONNECTION_OPTIONS}"
+)
 MONGODB_URI_WITH_CREDENTIALS = (
     "mongodb://"
     f"{quote_plus(DB_USER)}:"
     f"{quote_plus(DB_PASSWORD)}@{DB_HOST}:{MONGODB_PORT}"
+    f"/?{MONGODB_CONNECTION_OPTIONS}"
 )
 
 DEFAULT_PYTEST_MONGODB_DOCKER_COMPOSE_CONTAINER_NAME = (
@@ -82,7 +93,10 @@ DEFAULT_PYTEST_MONGODB_DOCKER_COMPOSE_CONTAINER_NAME = (
 DEFAULT_PYTEST_MONGODB_WITH_REPLICA_SET_DOCKER_CONTAINER_NAME = (
     f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}{DOCKER_REGULAR_CONTAINER_INFIX}mongodb-rs"
 )
-MONGODB_WITH_REPLICA_SET_URI = "mongodb://127.0.0.1:27017/?replicaSet=rs0"
+MONGODB_WITH_REPLICA_SET_URI = (
+    "mongodb://127.0.0.1:27017"
+    f"/?replicaSet=rs0&{MONGODB_CONNECTION_OPTIONS}"
+)
 
 
 def create_docker_mongodb_database():
@@ -100,16 +114,23 @@ def create_docker_mongodb_database():
         wait_for_container_running(containers[0])
         return
     else:
-        client.containers.run(
-            "mongo:6.0.21",
-            name=DEFAULT_PYTEST_MONGODB_DOCKER_CONTAINER_NAME,
-            environment=[
-                f"MONGO_INITDB_ROOT_USERNAME={DB_USER}",
-                f"MONGO_INITDB_ROOT_PASSWORD={DB_PASSWORD}",
-            ],
-            ports={"27017/tcp": MONGODB_PORT},
-            detach=True,
-        )
+        try:
+            client.containers.run(
+                "mongo:6.0.21",
+                name=DEFAULT_PYTEST_MONGODB_DOCKER_CONTAINER_NAME,
+                environment=[
+                    f"MONGO_INITDB_ROOT_USERNAME={DB_USER}",
+                    f"MONGO_INITDB_ROOT_PASSWORD={DB_PASSWORD}",
+                ],
+                ports={"27017/tcp": MONGODB_PORT},
+                detach=True,
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to create MongoDB container "
+                f"'{DEFAULT_PYTEST_MONGODB_DOCKER_CONTAINER_NAME}': {e}"
+            )
+            raise
         # Wait for the database to be ready
         retry = 0
         while True:
@@ -171,7 +192,7 @@ def create_docker_mongodb_database_with_replica_set():
         return
     else:
         compose_file = os.path.join(os.path.dirname(__file__), "compose.yaml")
-        subprocess.run(
+        result = subprocess.run(
             [
                 "docker",
                 "compose",
@@ -180,8 +201,19 @@ def create_docker_mongodb_database_with_replica_set():
                 "up",
                 "-d",
             ],
-            check=True,
+            capture_output=True,
+            text=True,
         )
+        if result.returncode != 0:
+            logger.error(
+                f"Failed to start MongoDB replica set compose stack "
+                f"(exit code {result.returncode}):\n"
+                f"stdout: {result.stdout}\n"
+                f"stderr: {result.stderr}"
+            )
+            raise subprocess.CalledProcessError(
+                result.returncode, result.args, result.stdout, result.stderr
+            )
         # Wait for the database to be ready
         retry = 0
         while True:

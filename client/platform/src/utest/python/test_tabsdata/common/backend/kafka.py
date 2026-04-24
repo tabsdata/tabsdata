@@ -63,7 +63,7 @@ class KafkaConfig:
     credentials: Credentials
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def kafka_config(tmp_path_factory, worker_id, request) -> KafkaConfig:
     marker = request.node.get_closest_marker("kafka")
     prefix = marker.kwargs.get("env_prefix", "KAFKA0") if marker else "KAFKA0"
@@ -268,24 +268,28 @@ def create_docker_kafka_container(
             line.lstrip() for line in startup_command.splitlines()
         )
 
-        container = client.containers.run(
-            "redpandadata/redpanda:latest",
-            name=name,
-            entrypoint="/bin/sh",
-            command=["-c", startup_command],
-            ports={
-                f"{KAFKA_EXTERNAL_LISTENER_PORT}/tcp": kafka_port,
-                f"{KAFKA_SCHEMA_REGISTRY_EXTERNAL_PORT}/tcp": schema_registry_port,
-                f"{KAFKA_ADMIN_EXTERNAL_PORT}/tcp": admin_port,
-            },
-            labels={
-                "kafka_port": str(kafka_port),
-                "schema_registry_port": str(schema_registry_port),
-                "admin_port": str(admin_port),
-            },
-            detach=True,
-            remove=False,
-        )
+        try:
+            container = client.containers.run(
+                "redpandadata/redpanda:latest",
+                name=name,
+                entrypoint="/bin/sh",
+                command=["-c", startup_command],
+                ports={
+                    f"{KAFKA_EXTERNAL_LISTENER_PORT}/tcp": kafka_port,
+                    f"{KAFKA_SCHEMA_REGISTRY_EXTERNAL_PORT}/tcp": schema_registry_port,
+                    f"{KAFKA_ADMIN_EXTERNAL_PORT}/tcp": admin_port,
+                },
+                labels={
+                    "kafka_port": str(kafka_port),
+                    "schema_registry_port": str(schema_registry_port),
+                    "admin_port": str(admin_port),
+                },
+                detach=True,
+                remove=False,
+            )
+        except Exception as e:
+            logger.error(f"Failed to create Kafka/Redpanda container '{name}': {e}")
+            raise
 
         container.reload()
         actual_kafka_port = get_container_port_binding(

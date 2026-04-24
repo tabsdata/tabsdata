@@ -55,7 +55,7 @@ class OracleConfig:
     credentials: Credentials
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def oracle_config(tmp_path_factory, worker_id, request) -> OracleConfig:
     marker = request.node.get_closest_marker("oracle")
     prefix = marker.kwargs.get("env_prefix", "ORACLE0") if marker else "ORACLE0"
@@ -157,15 +157,19 @@ def create_docker_oracle_database(
         wait_for_container_running(container)
         return get_container_port_binding(container, ORACLE_FORWARDED_PORT)
     else:
-        container = client.containers.run(
-            "container-registry.oracle.com/database/free:23.6.0.0-lite",
-            name=name,
-            environment=[
-                f"ORACLE_PWD={DB_PASSWORD}",
-            ],
-            ports={ORACLE_FORWARDED_PORT: None},
-            detach=True,
-        )
+        try:
+            container = client.containers.run(
+                "gvenzl/oracle-free:23-slim",
+                name=name,
+                environment=[
+                    f"ORACLE_PASSWORD={DB_PASSWORD}",
+                ],
+                ports={ORACLE_FORWARDED_PORT: None},
+                detach=True,
+            )
+        except Exception as e:
+            logger.error(f"Failed to create Oracle container '{name}': {e}")
+            raise
         container.reload()
         port = get_container_port_binding(container, ORACLE_FORWARDED_PORT)
         # Wait for the database to be ready

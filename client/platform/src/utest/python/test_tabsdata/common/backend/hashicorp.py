@@ -48,17 +48,24 @@ def create_docker_hashicorp_vault(s3_config: dict):
         wait_for_container_running(container)
         return
     else:
-        client.containers.run(
-            "hashicorp/vault",
-            name=DEFAULT_PYTEST_HASHICORP_DOCKER_CONTAINER_NAME,
-            environment=[
-                f"VAULT_DEV_ROOT_TOKEN_ID={HASHICORP_TESTING_TOKEN}",
-                "SKIP_SETCAP=true",
-            ],
-            ports={"8200/tcp": HASHICORP_PORT},
-            cap_add=["IPC_LOCK"],
-            detach=True,
-        )
+        try:
+            client.containers.run(
+                "hashicorp/vault",
+                name=DEFAULT_PYTEST_HASHICORP_DOCKER_CONTAINER_NAME,
+                environment=[
+                    f"VAULT_DEV_ROOT_TOKEN_ID={HASHICORP_TESTING_TOKEN}",
+                    "SKIP_SETCAP=true",
+                ],
+                ports={"8200/tcp": HASHICORP_PORT},
+                cap_add=["IPC_LOCK"],
+                detach=True,
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to create HashiCorp Vault container "
+                f"'{DEFAULT_PYTEST_HASHICORP_DOCKER_CONTAINER_NAME}': {e}"
+            )
+            raise
         # Wait for the database to be ready
         retry = 0
         while True:

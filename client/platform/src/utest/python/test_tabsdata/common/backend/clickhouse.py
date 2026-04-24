@@ -67,7 +67,7 @@ def clickhouse_client(clickhouse_config):
     yield ch_client
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def clickhouse_config(tmp_path_factory, worker_id, request) -> ClickHouseTestConfig:
     marker = request.node.get_closest_marker("clickhouse")
     prefix = marker.kwargs.get("env_prefix", "CLICKHOUSE0") if marker else "CLICKHOUSE0"
@@ -160,19 +160,23 @@ def create_docker_clickhouse_database(
         wait_for_container_running(container)
         return get_container_port_binding(container, CLICKHOUSE_FORWARDED_PORT)
 
-    container = client.containers.run(
-        "clickhouse/clickhouse-server:latest",
-        name=name,
-        environment=[
-            f"CLICKHOUSE_PASSWORD={DB_PASSWORD}",
-            "CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1",
-        ],
-        ports={CLICKHOUSE_FORWARDED_PORT: None},
-        ulimits=[
-            docker.types.Ulimit(name="nofile", soft=262144, hard=262144),
-        ],
-        detach=True,
-    )
+    try:
+        container = client.containers.run(
+            "clickhouse/clickhouse-server:latest",
+            name=name,
+            environment=[
+                f"CLICKHOUSE_PASSWORD={DB_PASSWORD}",
+                "CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1",
+            ],
+            ports={CLICKHOUSE_FORWARDED_PORT: None},
+            ulimits=[
+                docker.types.Ulimit(name="nofile", soft=262144, hard=262144),
+            ],
+            detach=True,
+        )
+    except Exception as e:
+        logger.error(f"Failed to create ClickHouse container '{name}': {e}")
+        raise
     container.reload()
     port = get_container_port_binding(container, CLICKHOUSE_FORWARDED_PORT)
 

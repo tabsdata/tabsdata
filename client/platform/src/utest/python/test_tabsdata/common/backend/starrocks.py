@@ -75,7 +75,7 @@ def starrocks_client(starrocks_config):
     conn.close()
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def starrocks_config(tmp_path_factory, worker_id, request) -> StarRocksTestConfig:
     marker = request.node.get_closest_marker("starrocks")
     prefix = (
@@ -297,12 +297,16 @@ def create_docker_starrocks_database(
         _prepare_docker_starrocks_database(port)
         return port
 
-    container = client.containers.run(
-        "starrocks/allin1-ubuntu:4.0.8",
-        name=name,
-        ports={STARROCKS_MYSQL_FORWARDED_PORT: None},
-        detach=True,
-    )
+    try:
+        container = client.containers.run(
+            "starrocks/allin1-ubuntu:4.0.8",
+            name=name,
+            ports={STARROCKS_MYSQL_FORWARDED_PORT: None},
+            detach=True,
+        )
+    except Exception as e:
+        logger.error(f"Failed to create StarRocks container '{name}': {e}")
+        raise
     container.reload()
     port = get_container_port_binding(container, STARROCKS_MYSQL_FORWARDED_PORT)
     _prepare_docker_starrocks_database(port)

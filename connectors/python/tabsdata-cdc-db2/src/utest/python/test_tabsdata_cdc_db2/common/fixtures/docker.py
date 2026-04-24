@@ -20,14 +20,17 @@ import pytest
 import docker
 from docker.models.containers import Container
 from filelock import FileLock
-from tenacity import retry, stop_after_attempt, wait_incrementing
+from tenacity import retry, stop_after_attempt, stop_after_delay, wait_fixed, wait_incrementing
 
 from tabsdata._utils.constants import TRUE_VALUES
 from test_tabsdata.common.constants import (
-    CONTAINER_MAXIMUM_RETRY_COUNT,
     DB_HOST,
     DB_PASSWORD,
 )
+
+# DB2 on emulation (linux/amd64 on ARM) can take 13+ minutes to initialize.
+DB2_WAIT_TIMEOUT_SECONDS = 900  # 15 minutes
+DB2_WAIT_POLL_INTERVAL_SECONDS = 5
 from test_tabsdata_cdc_common.common.docker import (
     CDC_CONTAINER_PREFIX,
     CDC_DATABASE,
@@ -272,10 +275,10 @@ def setup_cdc_db2_asncap(container: Container, port: int) -> None:
     wait_asncap_responsive(container)
     wait_asncap_initialized(port, q_asncap_inits)
 
-    def wait_for_state(retries: int = CONTAINER_MAXIMUM_RETRY_COUNT) -> None:
+    def wait_for_state(timeout: int = DB2_WAIT_TIMEOUT_SECONDS) -> None:
         @retry(
-            stop=stop_after_attempt(retries),
-            wait=wait_incrementing(start=1, increment=1),
+            stop=stop_after_delay(timeout),
+            wait=wait_fixed(DB2_WAIT_POLL_INTERVAL_SECONDS),
             reraise=True,
         )
         def check() -> None:
@@ -388,8 +391,8 @@ def send_capstart_signal(
 
 def wait_capstart_consumed(port: int, map_id: str) -> None:
     @retry(
-        stop=stop_after_attempt(CONTAINER_MAXIMUM_RETRY_COUNT),
-        wait=wait_incrementing(start=1, increment=1),
+        stop=stop_after_delay(DB2_WAIT_TIMEOUT_SECONDS),
+        wait=wait_fixed(DB2_WAIT_POLL_INTERVAL_SECONDS),
         reraise=True,
     )
     def check() -> None:
@@ -422,8 +425,8 @@ def wait_registration_active(port: int, schema: str, table: str) -> None:
     source_table = f"{schema.upper()}.{table.upper()}"
 
     @retry(
-        stop=stop_after_attempt(CONTAINER_MAXIMUM_RETRY_COUNT),
-        wait=wait_incrementing(start=1, increment=1),
+        stop=stop_after_delay(DB2_WAIT_TIMEOUT_SECONDS),
+        wait=wait_fixed(DB2_WAIT_POLL_INTERVAL_SECONDS),
         reraise=True,
     )
     def check() -> None:
@@ -468,8 +471,8 @@ def wait_capstop_consumed(port: int, schema: str, table: str) -> None:
     source_table = f"{schema.upper()}.{table.upper()}"
 
     @retry(
-        stop=stop_after_attempt(CONTAINER_MAXIMUM_RETRY_COUNT),
-        wait=wait_incrementing(start=1, increment=1),
+        stop=stop_after_delay(DB2_WAIT_TIMEOUT_SECONDS),
+        wait=wait_fixed(DB2_WAIT_POLL_INTERVAL_SECONDS),
         reraise=True,
     )
     def check() -> None:
@@ -535,8 +538,8 @@ def start_asncap(container: Container) -> None:
 
 def wait_asncap_responsive(container: Container) -> None:
     @retry(
-        stop=stop_after_attempt(CONTAINER_MAXIMUM_RETRY_COUNT),
-        wait=wait_incrementing(start=1, increment=1),
+        stop=stop_after_delay(DB2_WAIT_TIMEOUT_SECONDS),
+        wait=wait_fixed(DB2_WAIT_POLL_INTERVAL_SECONDS),
         reraise=True,
     )
     def check() -> None:
@@ -560,8 +563,8 @@ def count_asncap_inits(port: int) -> int:
 
 def wait_asncap_initialized(port: int, previous_q_asncap_inits: int) -> None:
     @retry(
-        stop=stop_after_attempt(CONTAINER_MAXIMUM_RETRY_COUNT),
-        wait=wait_incrementing(start=1, increment=1),
+        stop=stop_after_delay(DB2_WAIT_TIMEOUT_SECONDS),
+        wait=wait_fixed(DB2_WAIT_POLL_INTERVAL_SECONDS),
         reraise=True,
     )
     def check_trace() -> None:
@@ -621,8 +624,8 @@ def stop_asncap(container: Container) -> None:
 
 def reinit_asncap(container: Container) -> None:
     @retry(
-        stop=stop_after_attempt(CONTAINER_MAXIMUM_RETRY_COUNT),
-        wait=wait_incrementing(start=1, increment=1),
+        stop=stop_after_delay(DB2_WAIT_TIMEOUT_SECONDS),
+        wait=wait_fixed(DB2_WAIT_POLL_INTERVAL_SECONDS),
         reraise=True,
     )
     def attempt() -> None:
@@ -956,8 +959,8 @@ def check_cdc_db2_log(port: int) -> None:
 
 def check_cdc_db2_asn_registration(port: int, signal: str) -> None:
     @retry(
-        stop=stop_after_attempt(CONTAINER_MAXIMUM_RETRY_COUNT),
-        wait=wait_incrementing(start=1, increment=1),
+        stop=stop_after_delay(DB2_WAIT_TIMEOUT_SECONDS),
+        wait=wait_fixed(DB2_WAIT_POLL_INTERVAL_SECONDS),
         reraise=True,
     )
     def check() -> None:
@@ -1002,7 +1005,7 @@ def check_cdc_db2_asn_registration(port: int, signal: str) -> None:
     except Exception as exception:
         logger.error(
             f"Registration for signal table '{signal}' did not become active "
-            f"after {CONTAINER_MAXIMUM_RETRY_COUNT} attempts: {exception}"
+            f"after {DB2_WAIT_TIMEOUT_SECONDS}s: {exception}"
         )
         raise
 
@@ -1040,8 +1043,8 @@ def check_cdc_db2_asn_operation(port: int, signal: str) -> None:
             )
 
         @retry(
-            stop=stop_after_attempt(CONTAINER_MAXIMUM_RETRY_COUNT),
-            wait=wait_incrementing(start=1, increment=1),
+            stop=stop_after_delay(DB2_WAIT_TIMEOUT_SECONDS),
+            wait=wait_fixed(DB2_WAIT_POLL_INTERVAL_SECONDS),
             reraise=True,
         )
         def wait_for_captured_data() -> None:
@@ -1150,8 +1153,8 @@ def log_tabsdata_setup_done(container: Container) -> None:
 
 def wait_for_tabsdata_setup_done(container: Container) -> None:
     @retry(
-        stop=stop_after_attempt(CONTAINER_MAXIMUM_RETRY_COUNT),
-        wait=wait_incrementing(start=1, increment=1),
+        stop=stop_after_delay(DB2_WAIT_TIMEOUT_SECONDS),
+        wait=wait_fixed(DB2_WAIT_POLL_INTERVAL_SECONDS),
         reraise=True,
     )
     def try_read():
@@ -1172,7 +1175,7 @@ def wait_for_tabsdata_setup_done(container: Container) -> None:
         logger.error(
             f"Failed to find setup marker '{DB2_CDC_TABSDATA_SETUP_DONE_MARKER}' "
             f"in container '{container.name}' "
-            f"after {CONTAINER_MAXIMUM_RETRY_COUNT} attempts: "
+            f"after {DB2_WAIT_TIMEOUT_SECONDS}s: "
             f"{exception}")
         raise
 

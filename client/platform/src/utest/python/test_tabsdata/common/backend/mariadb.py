@@ -54,7 +54,7 @@ class MariaDBConfig:
     credentials: Credentials
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def mariadb_config(tmp_path_factory, worker_id, request) -> MariaDBConfig:
     marker = request.node.get_closest_marker("mariadb")
     prefix = marker.kwargs.get("env_prefix", "MARIADB0") if marker else "MARIADB0"
@@ -162,18 +162,22 @@ def create_docker_mariadb_database(
         wait_for_container_running(container)
         return get_container_port_binding(container, MARIADB_FORWARDED_PORT)
     else:
-        container = client.containers.run(
-            "mariadb:11.4.4",
-            name=name,
-            environment=[
-                "MARIADB_ROOT_PASSWORD=password",
-                f"MARIADB_DATABASE={DB_NAME}",
-                f"MARIADB_USER={DB_USER}",
-                f"MARIADB_PASSWORD={DB_PASSWORD}",
-            ],
-            ports={MARIADB_FORWARDED_PORT: None},
-            detach=True,
-        )
+        try:
+            container = client.containers.run(
+                "mariadb:11.4.4",
+                name=name,
+                environment=[
+                    "MARIADB_ROOT_PASSWORD=password",
+                    f"MARIADB_DATABASE={DB_NAME}",
+                    f"MARIADB_USER={DB_USER}",
+                    f"MARIADB_PASSWORD={DB_PASSWORD}",
+                ],
+                ports={MARIADB_FORWARDED_PORT: None},
+                detach=True,
+            )
+        except Exception as e:
+            logger.error(f"Failed to create MariaDB container '{name}': {e}")
+            raise
         container.reload()
         port = get_container_port_binding(container, MARIADB_FORWARDED_PORT)
         # Wait for the database to be ready

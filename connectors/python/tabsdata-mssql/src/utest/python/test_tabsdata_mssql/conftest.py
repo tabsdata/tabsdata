@@ -294,16 +294,20 @@ def create_docker_mssql_database(name: str, port: int, version: int) -> tuple[st
     else:
         import pyodbc
 
-        container = client.containers.run(
-            f"mcr.microsoft.com/mssql/server:{version}-latest",
-            name=name,
-            environment=[
-                f"MSSQL_SA_PASSWORD={DB_PASSWORD}",
-                "ACCEPT_EULA=Y",
-            ],
-            ports={MSSQL_FORWARDED_PORT: None},
-            detach=True,
-        )
+        try:
+            container = client.containers.run(
+                f"mcr.microsoft.com/mssql/server:{version}-latest",
+                name=name,
+                environment=[
+                    f"MSSQL_SA_PASSWORD={DB_PASSWORD}",
+                    "ACCEPT_EULA=Y",
+                ],
+                ports={MSSQL_FORWARDED_PORT: None},
+                detach=True,
+            )
+        except Exception as e:
+            logger.error(f"Failed to create MSSQL container '{name}': {e}")
+            raise
         container.reload()
         port = get_container_port_binding(container, MSSQL_FORWARDED_PORT)
         # Wait for the database to be ready

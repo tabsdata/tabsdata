@@ -52,7 +52,7 @@ class MySQLConfig:
     credentials: Credentials
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def mysql_config(tmp_path_factory, worker_id, request) -> MySQLConfig:
     marker = request.node.get_closest_marker("mysql")
     prefix = marker.kwargs.get("env_prefix", "MYSQL0") if marker else "MYSQL0"
@@ -165,18 +165,22 @@ def create_docker_mysql_database(
         wait_for_container_running(container)
         return get_container_port_binding(container, MYSQL_FORWARDED_PORT)
     else:
-        container = client.containers.run(
-            "mysql:9.1.0",
-            name=name,
-            environment=[
-                "MYSQL_ROOT_PASSWORD=password",
-                f"MYSQL_DATABASE={DB_NAME}",
-                f"MYSQL_USER={DB_USER}",
-                f"MYSQL_PASSWORD={DB_PASSWORD}",
-            ],
-            ports={MYSQL_FORWARDED_PORT: None},
-            detach=True,
-        )
+        try:
+            container = client.containers.run(
+                "mysql:9.1.0",
+                name=name,
+                environment=[
+                    "MYSQL_ROOT_PASSWORD=password",
+                    f"MYSQL_DATABASE={DB_NAME}",
+                    f"MYSQL_USER={DB_USER}",
+                    f"MYSQL_PASSWORD={DB_PASSWORD}",
+                ],
+                ports={MYSQL_FORWARDED_PORT: None},
+                detach=True,
+            )
+        except Exception as e:
+            logger.error(f"Failed to create MySQL container '{name}': {e}")
+            raise
         container.reload()
         port = get_container_port_binding(container, MYSQL_FORWARDED_PORT)
         # Wait for the database to be ready
