@@ -16,7 +16,7 @@ from tabsdata.connector.cdc.mysql._connection import MySQLCdcConn
 from tabsdata.connector.cdc.mysql._connector import MySQLCdcTrigger
 from test_tabsdata_cdc_common.common.shared import TRIGGER_END_MINUTES
 from test_tabsdata_cdc_common.common.schema import run_schema_evolution_test
-from test_tabsdata_cdc_common.common.evolution import SCHEMA_CHANGE_PARAMS
+from test_tabsdata_cdc_common.common.evolution import MULTI_CHANGES, ALL_CHANGES
 from test_tabsdata_cdc_mysql.common.db import server_id
 from test_tabsdata_cdc_mysql.common.sql import MySQLCdcSampler
 
@@ -28,7 +28,7 @@ logger.setLevel(logging.DEBUG)
 @pytest.mark.cdc_mysql
 @pytest.mark.slow
 @pytest.mark.tdfntrigger(venv=False)
-@pytest.mark.parametrize("change_kinds", SCHEMA_CHANGE_PARAMS)
+@pytest.mark.parametrize("change_kinds", MULTI_CHANGES + ALL_CHANGES)
 def test_schema_evolution(mysql_cdc_config, change_kinds):
     config = mysql_cdc_config
     schema = config.database

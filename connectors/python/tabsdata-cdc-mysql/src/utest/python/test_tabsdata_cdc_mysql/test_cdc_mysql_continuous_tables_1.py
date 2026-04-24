@@ -8,17 +8,17 @@ import string
 from datetime import datetime, timedelta, timezone
 
 import mysql.connector
-import polars as pl
 import pytest
 
 from tabsdata._credentials import UserPasswordCredentials
 from tabsdata.connector.cdc.common._model import TableObject
 from tabsdata.connector.cdc.mysql._connection import MySQLCdcConn
 from tabsdata.connector.cdc.mysql._connector import MySQLCdcTrigger
-from tabsdata.connector.cdc.mysql.typing import GtidPosition
 from test_tabsdata_cdc_common.common.shared import TRIGGER_END_MINUTES
-from test_tabsdata_cdc_common.common.schema import run_schema_evolution_offset_test
-from test_tabsdata_cdc_common.common.evolution import SCHEMA_CHANGE_PARAMS
+from test_tabsdata_cdc_common.common.continuous import (
+    continuous_dml_params_tables_1,
+    run_continuous_dml_test,
+)
 from test_tabsdata_cdc_mysql.common.db import server_id
 from test_tabsdata_cdc_mysql.common.sql import MySQLCdcSampler
 
@@ -30,16 +30,18 @@ logger.setLevel(logging.DEBUG)
 @pytest.mark.cdc_mysql
 @pytest.mark.slow
 @pytest.mark.tdfntrigger(venv=False)
-@pytest.mark.parametrize("change_kinds", SCHEMA_CHANGE_PARAMS)
-def test_schema_evolution_offset(mysql_cdc_config, change_kinds):
+@continuous_dml_params_tables_1
+def test_continuous_dml(mysql_cdc_config, q_tables, q_threads):
     config = mysql_cdc_config
     schema = config.database
 
     suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=12))
-    name = f"td_sco_{suffix}"
-    table = TableObject(schema=schema, table=name)
+    tables = [
+        TableObject(schema=schema, table=f"td_con_{suffix}_t{i}")
+        for i in range(q_tables)
+    ]
 
-    logger.debug(f"Tracking table: {table}")
+    logger.debug(f"Tracking tables: {tables}")
 
     connection = mysql.connector.connect(
         host=config.host,
@@ -54,6 +56,10 @@ def test_schema_evolution_offset(mysql_cdc_config, change_kinds):
     cursor = connection.cursor()
     sampler = MySQLCdcSampler(config.container, config.port, cursor)
 
+    for table in tables:
+        sampler.create_table(table)
+    connection.commit()
+
     uri = f"mysql://{config.host}:{config.port}/{schema}"
     credentials = UserPasswordCredentials(
         user=config.cdc_user,
@@ -64,34 +70,38 @@ def test_schema_evolution_offset(mysql_cdc_config, change_kinds):
         credentials=credentials,
     )
 
-    def trigger_factory(
-        iteration: int,
-        checkpoint_df: pl.DataFrame | None,
-    ) -> MySQLCdcTrigger:
-        if iteration == 0 or checkpoint_df is None or checkpoint_df.is_empty():
-            start_from = "head"
-        else:
-            gtid = checkpoint_df["gtid"][0]
-            start_from = GtidPosition(gtid=gtid)
-        return MySQLCdcTrigger(
-            conn=conn,
-            tables=[table.qualified],
-            start_from=start_from,
-            server_id=server_id(),
-            blocking_timeout_seconds=3,
-            buffer_max_rows=5,
-            buffer_max_bytes=None,
-            buffer_max_secs=10,
-            trigger_max_rows=7,
-            trigger_max_bytes=None,
-            trigger_max_secs=10,
-            end=datetime.now(timezone.utc) + timedelta(minutes=TRIGGER_END_MINUTES),
-        )
+    trigger = MySQLCdcTrigger(
+        conn=conn,
+        tables=[table.qualified for table in tables],
+        start_from="head",
+        server_id=server_id(),
+        blocking_timeout_seconds=4,
+        buffer_max_rows=64,
+        buffer_max_secs=4,
+        trigger_max_rows=128,
+        trigger_max_secs=4,
+        end=datetime.now(timezone.utc) + timedelta(minutes=TRIGGER_END_MINUTES),
+    )
 
-    run_schema_evolution_offset_test(
+    def dml_worker_factory():
+        w_conn = mysql.connector.connect(
+            host=config.host,
+            port=config.port,
+            database=schema,
+            user=config.root_user,
+            password=config.root_password,
+            use_pure=True,
+        )
+        w_conn.autocommit = False
+        w_cursor = w_conn.cursor()
+        w_sampler = MySQLCdcSampler(config.container, config.port, w_cursor)
+        return w_conn, w_sampler
+
+    run_continuous_dml_test(
         sampler=sampler,
         connection=connection,
-        table=table,
-        trigger_factory=trigger_factory,
-        change_kinds=change_kinds,
+        tables=tables,
+        trigger=trigger,
+        dml_worker_threads=q_threads,
+        dml_worker_factory=dml_worker_factory,
     )

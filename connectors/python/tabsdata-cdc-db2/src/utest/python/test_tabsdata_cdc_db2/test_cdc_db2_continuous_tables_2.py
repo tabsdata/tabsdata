@@ -16,7 +16,7 @@ from tabsdata.connector.cdc.db2._connection import Db2CdcConn
 from tabsdata.connector.cdc.db2._connector import Db2CdcTrigger
 from test_tabsdata_cdc_common.common.shared import TRIGGER_END_MINUTES
 from test_tabsdata_cdc_common.common.continuous import (
-    continuous_dml_params,
+    continuous_dml_params_tables_2,
     run_continuous_dml_test,
 )
 from test_tabsdata_cdc_db2.common.fixtures.docker import DB2_CDC_STAGING_TABLE_PREFIX
@@ -30,7 +30,7 @@ logger.setLevel(logging.DEBUG)
 @pytest.mark.cdc_db2
 @pytest.mark.slow
 @pytest.mark.tdfntrigger(venv=False)
-@continuous_dml_params
+@continuous_dml_params_tables_2
 def test_continuous_dml(db2_cdc_config, q_tables, q_threads):
     config = db2_cdc_config
     schema = config.cdc_user

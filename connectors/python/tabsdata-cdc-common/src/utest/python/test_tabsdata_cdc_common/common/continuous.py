@@ -48,17 +48,25 @@ Q_CONTINUOUS_UPDATES = 8
 Q_CONTINUOUS_DELETES = 4
 MINIMUM_TRANSACTION_TIME = 1.0
 
-continuous_dml_params = pytest.mark.parametrize(
-    ("q_tables", "q_threads"),
-    [
-        pytest.param(
-            q_tables,
-            q_threads,
-            id=f"tables={q_tables}-threads={q_threads}",)
-        for q_tables in [1, 2, 4]
-        for q_threads in [1, 2, 4]
-    ],
-)
+def _continuous_dml_mark(*table_counts):
+    return pytest.mark.parametrize(
+        ("q_tables", "q_threads"),
+        [
+            pytest.param(
+                q_tables,
+                q_threads,
+                id=f"tables={q_tables}-threads={q_threads}",
+            )
+            for q_tables in table_counts
+            for q_threads in [1, 2, 4]
+        ],
+    )
+
+
+continuous_dml_params = _continuous_dml_mark(1, 2, 4)
+continuous_dml_params_tables_1 = _continuous_dml_mark(1)
+continuous_dml_params_tables_2 = _continuous_dml_mark(2)
+continuous_dml_params_tables_4 = _continuous_dml_mark(4)
 
 
 def validate_continuous_output(

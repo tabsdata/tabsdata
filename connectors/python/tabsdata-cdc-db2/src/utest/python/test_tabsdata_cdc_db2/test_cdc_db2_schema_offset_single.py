@@ -19,9 +19,11 @@ from tabsdata.connector.cdc.db2._connector import Db2CdcTrigger
 from tabsdata.connector.cdc.db2.typing import TableCommitSeqPosition
 from test_tabsdata_cdc_common.common.shared import TRIGGER_END_MINUTES
 from test_tabsdata_cdc_common.common.schema import run_schema_evolution_offset_test
-from test_tabsdata_cdc_common.common.evolution import SCHEMA_CHANGE_PARAMS
-from test_tabsdata_cdc_db2.common.fixtures.docker import DB2_CDC_STAGING_TABLE_PREFIX, \
+from test_tabsdata_cdc_common.common.evolution import SINGLE_CHANGES
+from test_tabsdata_cdc_db2.common.fixtures.docker import (
+    DB2_CDC_STAGING_TABLE_PREFIX,
     CdcMode
+)
 from test_tabsdata_cdc_db2.common.sql import Db2CdcSampler
 
 
@@ -35,15 +37,15 @@ logger.setLevel(logging.DEBUG)
 @pytest.mark.cdc_db2
 @pytest.mark.slow
 @pytest.mark.tdfntrigger(venv=False)
-@pytest.mark.parametrize("change_kinds", SCHEMA_CHANGE_PARAMS)
-def test_schema_evolution(db2_cdc_config, change_kinds):
+@pytest.mark.parametrize("change_kinds", SINGLE_CHANGES)
+def test_schema_evolution_offset(db2_cdc_config, change_kinds):
     mode: CdcMode = CdcMode.HARD
 
     config = db2_cdc_config
     schema = config.cdc_user
 
     suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=12))
-    name = f"td_sch_{suffix}"
+    name = f"td_sco_{suffix}"
     table = TableObject(schema=schema, table=name)
 
     cd_table = TableObject(schema="asn", table=f"{DB2_CDC_STAGING_TABLE_PREFIX}{name}")
@@ -90,8 +92,11 @@ def test_schema_evolution(db2_cdc_config, change_kinds):
             tables=[cd_table.qualified if mode is CdcMode.HARD else sampler._cd_qualified_table],
             start_from=start_from,
             blocking_timeout_seconds=6,
-            buffer_max_rows=10_000,
+            buffer_max_rows=5,
+            buffer_max_bytes=None,
             buffer_max_secs=10,
+            trigger_max_rows=7,
+            trigger_max_bytes=None,
             trigger_max_secs=10,
             end=datetime.now(timezone.utc) + timedelta(minutes=TRIGGER_END_MINUTES),
         )
