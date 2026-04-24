@@ -72,17 +72,8 @@ script = [
     debug "🔷 _____ Generating python binaries..."
     cm_run_task __os__setup_context_test_py
 
-    no-server = set false
-    arguments = split ${CARGO_MAKE_TASK_ARGS} ;
-    for argument in ${arguments}
-        if eq ${argument} "--no-server"
-            no-server = set true
-        end
-    end
-
-    if ${no-server}
-        info "🚜 Starting tabsdata server skipped."
-    else
+    server = get_env TD_SERVER
+    if eq ${server} "true"
         debug "🔷 _____ Starting tabsdata server (pytest)..."
 
         set_env TD_INHERIT_TABSDATA_PACKAGES "true"
@@ -93,6 +84,8 @@ script = [
         cm_run_task __os__drop_pytest_tabsdata_servers
         cm_run_task __os__start_pytest_tabsdata_servers
         cm_run_task __os__status_pytest_tabsdata_servers
+    else
+        info "🚜 Starting tabsdata server skipped."
     end
     ''']
 
@@ -106,20 +99,12 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    no-server = set false
-    arguments = split ${CARGO_MAKE_TASK_ARGS} ;
-    for argument in ${arguments}
-        if eq ${argument} "--no-server"
-            no-server = set true
-        end
-    end
-
-    if ${no-server}
-        info "🚜 Stopping tabsdata server skipped."
-    else
+    server = get_env TD_SERVER
+    if eq ${server} "true"
         debug "🔷 _____ Stopping tabsdata server (pytest)..."
-
         cm_run_task __os__stop_pytest_tabsdata_servers
+    else
+        info "🚜 Stopping tabsdata server skipped."
     end
     ''']
 

@@ -32,18 +32,24 @@ script = [
 
     cd ${PROJECT_TABSDATA_ROOT_FOLDER}
 
-    on_ga = get_env TD_ON_GA
-    on_ga_true = eq ${on_ga} "true"
-    if ${on_ga_true}
-        info "🔷 💎 ::::: Using 'crystallize' as packages deployment model..."
-        cm_run_task dehydrate
-        cm_run_task uncrystallize
-        cm_run_task crystallize
+    deploy = get_env TD_DEPLOY
+    if eq ${deploy} "true"
+        on_ga = get_env TD_ON_GA
+        on_ga_true = eq ${on_ga} "true"
+        if ${on_ga_true}
+            info "🔷 💎 ::::: Using 'crystallize' as packages deployment model..."
+            cm_run_task dehydrate
+            cm_run_task uncrystallize
+            cm_run_task crystallize
+        else
+            info "🔷 💧 ::::: Using 'hydrate' as packages deployment model..."
+            cm_run_task uncrystallize
+            cm_run_task dehydrate
+            cm_run_task hydrate
+        end
+        cm_run_task __os__check_hydrate_py
     else
-        info "🔷 💧 ::::: Using 'hydrate' as packages deployment model..."
-        cm_run_task uncrystallize
-        cm_run_task dehydrate
-        cm_run_task hydrate
+        debug "🔷 _____ Skipping packages deployment (TD_DEPLOY=false)."
     end
 
     debug "🔷 _____ Setting up tabsdata pytest python path..."
@@ -122,5 +128,8 @@ script = [
         debug "🔅 tabsdata agent development python package location set to: ${set_td_tabsdata_agent_dev_pkg}"
     end
 
-    cm_run_task __os__check_hydrate_py
+    deploy = get_env TD_DEPLOY
+    if eq ${deploy} "true"
+        cm_run_task __os__check_hydrate_py
+    end
     ''']

@@ -314,6 +314,11 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
+    deploy = get_env TD_DEPLOY
+    if eq ${deploy} "false"
+        debug "🔷 🔷 _____ Skipping hydration check (TD_DEPLOY=false)."
+    else
+
     set_env PYTHONWARNINGS ignore
 
     debug "🔷 🔷 _____ Checking Python hydration by importing key modules..."
@@ -379,5 +384,7 @@ script = [
         warn "   Error: ${result.stderr}"
     else
         debug "✅ Successfully imported: td.TableFrame"
+    end
+
     end
     ''']
