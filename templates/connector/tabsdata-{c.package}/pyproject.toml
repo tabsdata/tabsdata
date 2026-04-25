@@ -44,6 +44,14 @@ Homepage = "https://tabsdata.com"
 Documentation = "https://docs.tabsdata.com"
 Source = "https://github.com/tabsdata/tabsdata"
 
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+    "ignore::pytest.PytestUnknownMarkWarning",
+    "ignore::authlib.deprecate.AuthlibDeprecationWarning",
+]
+
 [tool.coverage.html]
 directory = "coverage_html_report"
 

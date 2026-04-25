@@ -46,6 +46,12 @@ Documentation = "https://docs.tabsdata.com"
 Source = "https://github.com/tabsdata/tabsdata"
 
 [tool.pytest.ini_options]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+    "ignore::pytest.PytestUnknownMarkWarning",
+    "ignore::authlib.deprecate.AuthlibDeprecationWarning",
+]
 markers = [
     "agent: mark tests that require the tabsdata-agent package.",
     "ai_provider: mark tests that require an ai provider (accepted values: openai).",
