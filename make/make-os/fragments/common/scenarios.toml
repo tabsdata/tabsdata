@@ -58,6 +58,10 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
+    set_env TD_INHERIT_TABSDATA_PACKAGES "true"
+    set_env TD_OVERRIDE_BUILD_TIMESTAMP "true"
+    set_env TD_BUILD_TIMESTAMP "0"
+
     debug "🔷 _____ Copying assets..."
     cm_run_task __os__generate_assets
 
@@ -77,7 +81,7 @@ script = [
         debug "🔷 _____ Starting tabsdata server (pytest)..."
 
         set_env TD_INHERIT_TABSDATA_PACKAGES "true"
-        set_env TD_OVERRIDE_BUILD_TIMESTAMP "false"
+        set_env TD_OVERRIDE_BUILD_TIMESTAMP "true"
         set_env TD_BUILD_TIMESTAMP "0"
 
         cm_run_task __os__stop_pytest_tabsdata_servers
