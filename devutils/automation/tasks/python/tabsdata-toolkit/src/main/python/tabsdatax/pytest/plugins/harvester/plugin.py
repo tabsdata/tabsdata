@@ -111,6 +111,7 @@ g_harvester_folder: str | None = None
 g_is_xdist_controller: bool = False
 g_config: pytest.Config | None = None
 g_collected: int = 0
+g_completed: int = 0
 
 # Tracker config attribute keys
 _CFG_WRITER = "_tdx_meta_writer"
@@ -147,7 +148,8 @@ def pytest_configure(config: pytest.Config) -> None:
     Module globals ``g_harvester_folder`` and ``g_is_xdist_controller``
     are set here — each process (controller + workers) gets its own copy.
     """
-    global g_harvester_folder, g_is_xdist_controller, g_config, g_collected
+    global g_harvester_folder, g_is_xdist_controller, g_config, g_collected, g_completed
+    g_completed = 0
 
     harvester_folder = config.getoption(
         TDX_HARVESTER_FOLDER_ARG,
@@ -509,6 +511,8 @@ def pytest_runtest_logreport(report: pytest.TestReport) -> None:
     We use this as the single place to update marker/fixture counters
     and ensure the RUN phase is active.
     """
+    global g_completed
+
     # Ensure we're in RUN phase on first test report
     if g_config is not None:
         phase_tracker: PhaseTracker | None = _get(g_config, _CFG_PHASE_TRACKER)
@@ -522,6 +526,12 @@ def pytest_runtest_logreport(report: pytest.TestReport) -> None:
     )
     if should_count and g_config is not None:
         _notify_trackers_on_result(g_config, report.nodeid, report)
+        # Transition to Reporting when all tests complete
+        g_completed += 1
+        if g_collected > 0 and g_completed >= g_collected:
+            _pt = _get(g_config, _CFG_PHASE_TRACKER)
+            if _pt:
+                _pt.transition(SessionPhase.REPORTING)
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:

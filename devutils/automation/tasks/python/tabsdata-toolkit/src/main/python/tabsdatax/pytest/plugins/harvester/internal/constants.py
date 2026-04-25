@@ -40,6 +40,7 @@ class SessionPhase(StrEnum):
     SESSION_START = "session_start"
     COLLECTION = "collection"
     RUN = "run"
+    REPORTING = "reporting"
     SESSION_FINISH = "session_finish"
     UNCONFIGURE = "unconfigure"
 

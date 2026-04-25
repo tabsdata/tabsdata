@@ -271,6 +271,7 @@ class SummaryHeader(Vertical):
         test_averages: dict | None = None,
         running_tests: list | None = None,
         test_durations: list[float] | None = None,
+        session_end_ts: float | None = None,
     ) -> None:
         """Rebuild the summary with current data."""
         import time as _time
@@ -288,6 +289,7 @@ class SummaryHeader(Vertical):
         title.append("Tabsdata Harvester Monitor", style=f"bold {Color.WHITE}")
         title.append(f"  v{ver}", style=Color.DIM)
         parts.append(title)
+        parts.append(RichText(""))
 
         pid_line = RichText()
         pid_line.append("Main pytest process: ", style=Color.DIM)
@@ -304,9 +306,18 @@ class SummaryHeader(Vertical):
             started = _time.strftime(
                 "%Y-%m-%d %H:%M:%S", _time.localtime(session_start_ts)
             )
-            elapsed = _time.time() - session_start_ts
+            if session_end_ts:
+                elapsed = session_end_ts - session_start_ts
+            else:
+                elapsed = _time.time() - session_start_ts
             time_line.append("Started: ", style=Color.DIM)
             time_line.append(started, style=f"bold {Color.WHITE}")
+            if session_end_ts:
+                ended = _time.strftime(
+                    "%Y-%m-%d %H:%M:%S", _time.localtime(session_end_ts)
+                )
+                time_line.append("  Ended: ", style=Color.DIM)
+                time_line.append(ended, style=f"bold {Color.WHITE}")
             time_line.append("  Elapsed: ", style=Color.DIM)
             time_line.append(format_duration(elapsed), style=f"bold {Color.WHITE}")
         else:
@@ -687,6 +698,7 @@ _PHASE_DISPLAY_NAMES = {
     "session_start": "Session Start",
     "collection": "Collection",
     "run": "Run",
+    "reporting": "Reporting",
     "session_finish": "Session Finish",
     "unconfigure": "Unconfigure",
 }

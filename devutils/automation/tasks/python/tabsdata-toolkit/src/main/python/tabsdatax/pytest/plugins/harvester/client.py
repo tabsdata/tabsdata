@@ -30,8 +30,8 @@ import rich_click as click
 from rich.text import Text as RichText
 from tenacity import retry, retry_if_result, stop_after_attempt, wait_fixed
 from textual.app import App, ComposeResult
-from textual.containers import VerticalScroll
-from textual.widgets import DataTable, Footer
+from textual.containers import Horizontal, VerticalScroll
+from textual.widgets import DataTable, Footer, Static
 
 from tabsdatax.pytest.plugins.harvester.internal.constants import (
     PREFIXES_FAILED,
@@ -401,6 +401,21 @@ class HarvesterDashboard(App):
         background: #282838;
     }
 
+    .panel-pair {
+        height: auto;
+        margin-bottom: 1;
+    }
+
+    .panel-pair > TableSection {
+        width: 1fr;
+        margin-bottom: 0;
+    }
+
+    #bottom-spacer {
+        height: 3;
+        background: #282838;
+    }
+
     Footer {
         background: #2e5090;
         color: #ffffff;
@@ -440,34 +455,37 @@ class HarvesterDashboard(App):
         self._running_keys: set[str] = set()
         self._failed_keys_ordered: tuple = ()
         self._failed_keys: set[str] = set()
+        self._reporting_detected_at: float | None = None
 
     def compose(self) -> ComposeResult:
         with VerticalScroll(id="outer-scroll"):
             yield SummaryHeader()
-            yield TableSection(
-                title="Session Phases",
-                table_id="phases",
-                table_height=len(SESSION_PHASES_ORDERED) + 1,
-                table_index=0,
-            )
-            yield TableSection(
-                title="Fixtures",
-                table_id="fixtures",
-                table_height=16,
-                table_index=1,
-            )
-            yield TableSection(
-                title="Markers",
-                table_id="markers",
-                table_height=14,
-                table_index=2,
-            )
-            yield TableSection(
-                title="Plugins",
-                table_id="plugins",
-                table_height=12,
-                table_index=3,
-            )
+            with Horizontal(classes="panel-pair"):
+                yield TableSection(
+                    title="Session Phases",
+                    table_id="phases",
+                    table_height=len(SESSION_PHASES_ORDERED) + 1,
+                    table_index=0,
+                )
+                yield TableSection(
+                    title="Plugins",
+                    table_id="plugins",
+                    table_height=12,
+                    table_index=3,
+                )
+            with Horizontal(classes="panel-pair"):
+                yield TableSection(
+                    title="Markers",
+                    table_id="markers",
+                    table_height=28,
+                    table_index=2,
+                )
+                yield TableSection(
+                    title="Fixtures",
+                    table_id="fixtures",
+                    table_height=28,
+                    table_index=1,
+                )
             yield TableSection(
                 title=f"Running Tests [{Emoji.CIRCLE_GREEN_STYLE}]{Emoji.CIRCLE}[/]",
                 table_id="running",
@@ -477,9 +495,10 @@ class HarvesterDashboard(App):
             yield TableSection(
                 title=f"Failed Tests [{Emoji.CIRCLE_RED_STYLE}]{Emoji.CIRCLE}[/]",
                 table_id="failed",
-                table_height=30,
+                table_height=12,
                 table_index=5,
             )
+            yield Static("", id="bottom-spacer")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -714,6 +733,7 @@ class HarvesterDashboard(App):
             dt.clear()
         self._running_keys = set()
         self._failed_keys_ordered = ()
+        self._reporting_detected_at = None
         self._meta = MetaState()
         # Re-add phase rows (columns survive clear, but rows don't)
         t = text_for(0)
@@ -785,6 +805,14 @@ class HarvesterDashboard(App):
             else {}
         )
 
+        # When PID is dead, freeze elapsed at last phase end time
+        pid_alive_val = pid_exists(self._meta.pid) if self._meta.pid else False
+        session_end_ts = None
+        if self._meta.pid and not pid_alive_val:
+            for ps in self._meta.phases.values():
+                if ps.end and (session_end_ts is None or ps.end > session_end_ts):
+                    session_end_ts = ps.end
+
         header = self.query_one(SummaryHeader)
         header.update_summary(
             collected=collected,
@@ -796,11 +824,12 @@ class HarvesterDashboard(App):
             markers=markers_raw,
             fixtures=fixtures_raw,
             pid=self._meta.pid,
-            pid_alive=pid_exists(self._meta.pid) if self._meta.pid else False,
+            pid_alive=pid_alive_val,
             session_start_ts=self._meta.session_start_ts,
             test_averages=self._cached_test_averages,
             running_tests=self._cached_running,
             test_durations=self._cached_test_durations,
+            session_end_ts=session_end_ts,
         )
 
     # ------------------------------------------------------------------
@@ -809,16 +838,60 @@ class HarvesterDashboard(App):
     def _update_phases(self) -> None:
         t = text_for(0)
         dt = self.query_one("#phases", DataTable)
+
+        # Early Reporting detection: all tests done but meta still shows RUN
+        collected = self._meta.collected or 0
+        total_done = (
+            self._cached_passed
+            + len(self._cached_failed)
+            + self._cached_skipped
+            + self._cached_orphaned
+        )
+        running_count = len(self._cached_running)
+        all_done = collected > 0 and running_count == 0 and total_done >= collected
+
+        run_state = self._meta.phases.get("run")
+        reporting_state = self._meta.phases.get("reporting")
+        early_reporting = (
+            all_done
+            and run_state
+            and run_state.status == "active"
+            and (not reporting_state or reporting_state.status == "pending")
+        )
+
+        if early_reporting:
+            if self._reporting_detected_at is None:
+                self._reporting_detected_at = time.time()
+        elif reporting_state and reporting_state.status != "pending":
+            self._reporting_detected_at = None
+
         for phase in SESSION_PHASES_ORDERED:
             state = self._meta.phases.get(phase)
-            if state:
-                dt.update_cell(phase, "status_icon", phase_status_circle(state.status))
-                dt.update_cell(phase, "start", t(format_time(state.start)))
-                if state.status == "active" and state.start:
-                    duration = time.time() - state.start
-                else:
-                    duration = state.duration
-                dt.update_cell(phase, "duration", t(format_duration(duration)))
+            if not state:
+                continue
+
+            status = state.status
+            start = state.start
+            duration = state.duration
+
+            # Override RUN and REPORTING during early detection
+            if early_reporting and self._reporting_detected_at:
+                if phase == "run":
+                    status = "done"
+                    duration = (
+                        self._reporting_detected_at - state.start
+                        if state.start
+                        else None
+                    )
+                elif phase == "reporting":
+                    status = "active"
+                    start = self._reporting_detected_at
+
+            dt.update_cell(phase, "status_icon", phase_status_circle(status))
+            dt.update_cell(phase, "start", t(format_time(start)))
+            if status == "active" and start:
+                duration = time.time() - start
+            dt.update_cell(phase, "duration", t(format_duration(duration)))
 
     def _update_fixtures(self) -> None:
         t = text_for(1)
