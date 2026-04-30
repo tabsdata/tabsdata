@@ -28,7 +28,6 @@ TESTING_RESOURCES_FOLDER = TESTING_RESOURCES_PATH
 enrich_sys_path()
 _enrich_sys_path()
 
-from time import sleep
 from urllib.parse import quote_plus
 
 import pytest
@@ -99,11 +98,34 @@ MONGODB_WITH_REPLICA_SET_URI = (
 )
 
 
-def create_docker_mongodb_database():
-    import docker  # Lazy import
+def wait_for_mongodb_ready(uri, label="MongoDB"):
     import pymongo  # Lazy import
 
-    remove_docker_containers(DEFAULT_PYTEST_MONGODB_DOCKER_CONTAINER_NAME)
+    from tenacity import retry, stop_after_delay, wait_fixed
+
+    max_delay = CONTAINER_MAXIMUM_RETRY_COUNT * (CONTAINER_MAXIMUM_RETRY_COUNT + 1) // 2
+
+    @retry(
+        stop=stop_after_delay(max_delay),
+        wait=wait_fixed(2),
+        reraise=True,
+    )
+    def try_connect():
+        logger.info(f"Attempting to connect to {label}...")
+        client = pymongo.MongoClient(uri)
+        client.admin.command("ping")
+        logger.info(f"Successfully connected to {label}")
+
+    try:
+        try_connect()
+    except Exception as err:
+        logger.error(f"Failed to connect to {label} after {max_delay}s: {err}")
+        raise
+
+
+def create_docker_mongodb_database():
+    import docker  # Lazy import
+
     logger.info("Starting MongoDB container")
     client = docker.from_env()
     if containers := client.containers.list(
@@ -112,45 +134,28 @@ def create_docker_mongodb_database():
     ):
         logger.info("MongoDB container already exists")
         wait_for_container_running(containers[0])
+        wait_for_mongodb_ready(MONGODB_URI_WITH_CREDENTIALS)
         return
-    else:
-        try:
-            client.containers.run(
-                "mongo:6.0.21",
-                name=DEFAULT_PYTEST_MONGODB_DOCKER_CONTAINER_NAME,
-                environment=[
-                    f"MONGO_INITDB_ROOT_USERNAME={DB_USER}",
-                    f"MONGO_INITDB_ROOT_PASSWORD={DB_PASSWORD}",
-                ],
-                ports={"27017/tcp": MONGODB_PORT},
-                detach=True,
-            )
-        except Exception as e:
-            logger.error(
-                f"Failed to create MongoDB container "
-                f"'{DEFAULT_PYTEST_MONGODB_DOCKER_CONTAINER_NAME}': {e}"
-            )
-            raise
-        # Wait for the database to be ready
-        retry = 0
-        while True:
-            uri = MONGODB_URI_WITH_CREDENTIALS
-            try:
-                client = pymongo.MongoClient(uri)
-                client.admin.command("ping")
-                break
-            except Exception as err:
-                retry += 1
-                if retry == CONTAINER_MAXIMUM_RETRY_COUNT:
-                    logger.error(f"Error connecting to MongoDB: {err}")
-                    raise err
-                else:
-                    logger.warning(
-                        f"Error connecting to MongoDB, retrying in {retry} second(s)"
-                    )
-                    sleep(retry)
-        logger.info("MongoDB container created successfully")
-        return
+    remove_docker_containers(DEFAULT_PYTEST_MONGODB_DOCKER_CONTAINER_NAME)
+    try:
+        client.containers.run(
+            "mongo:6.0.21",
+            name=DEFAULT_PYTEST_MONGODB_DOCKER_CONTAINER_NAME,
+            environment=[
+                f"MONGO_INITDB_ROOT_USERNAME={DB_USER}",
+                f"MONGO_INITDB_ROOT_PASSWORD={DB_PASSWORD}",
+            ],
+            ports={"27017/tcp": MONGODB_PORT},
+            detach=True,
+        )
+    except Exception as e:
+        logger.error(
+            f"Failed to create MongoDB container "
+            f"'{DEFAULT_PYTEST_MONGODB_DOCKER_CONTAINER_NAME}': {e}"
+        )
+        raise
+    wait_for_mongodb_ready(MONGODB_URI_WITH_CREDENTIALS)
+    logger.info("MongoDB container created successfully")
 
 
 @pytest.fixture(scope="session")
@@ -175,12 +180,7 @@ def create_docker_mongodb_database_with_replica_set():
     import subprocess  # Lazy import
 
     import docker  # Lazy import
-    import pymongo  # Lazy import
 
-    remove_docker_containers(
-        f"({DEFAULT_PYTEST_MONGODB_DOCKER_COMPOSE_CONTAINER_NAME}"
-        f"|{DEFAULT_PYTEST_MONGODB_WITH_REPLICA_SET_DOCKER_CONTAINER_NAME})"
-    )
     logger.info("Starting MongoDB container with replica set")
     client = docker.from_env()
     if containers := client.containers.list(
@@ -189,52 +189,41 @@ def create_docker_mongodb_database_with_replica_set():
     ):
         logger.info("MongoDB container with replica set already exists")
         wait_for_container_running(containers[0])
-        return
-    else:
-        compose_file = os.path.join(os.path.dirname(__file__), "compose.yaml")
-        result = subprocess.run(
-            [
-                "docker",
-                "compose",
-                "-f",
-                compose_file,
-                "up",
-                "-d",
-            ],
-            capture_output=True,
-            text=True,
+        wait_for_mongodb_ready(
+            MONGODB_WITH_REPLICA_SET_URI, label="MongoDB with replica set"
         )
-        if result.returncode != 0:
-            logger.error(
-                f"Failed to start MongoDB replica set compose stack "
-                f"(exit code {result.returncode}):\n"
-                f"stdout: {result.stdout}\n"
-                f"stderr: {result.stderr}"
-            )
-            raise subprocess.CalledProcessError(
-                result.returncode, result.args, result.stdout, result.stderr
-            )
-        # Wait for the database to be ready
-        retry = 0
-        while True:
-            uri = MONGODB_WITH_REPLICA_SET_URI
-            try:
-                client = pymongo.MongoClient(uri)
-                client.admin.command("ping")
-                break
-            except Exception as err:
-                retry += 1
-                if retry == CONTAINER_MAXIMUM_RETRY_COUNT:
-                    logger.error(f"Error connecting to MongoDB with replica set: {err}")
-                    raise err
-                else:
-                    logger.warning(
-                        "Error connecting to MongoDB with replica set, retrying in"
-                        f" {retry} second(s)"
-                    )
-                    sleep(retry)
-        logger.info("MongoDB container with replica set created successfully")
         return
+    remove_docker_containers(
+        f"({DEFAULT_PYTEST_MONGODB_DOCKER_COMPOSE_CONTAINER_NAME}"
+        f"|{DEFAULT_PYTEST_MONGODB_WITH_REPLICA_SET_DOCKER_CONTAINER_NAME})"
+    )
+    compose_file = os.path.join(os.path.dirname(__file__), "compose.yaml")
+    result = subprocess.run(
+        [
+            "docker",
+            "compose",
+            "-f",
+            compose_file,
+            "up",
+            "-d",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        logger.error(
+            f"Failed to start MongoDB replica set compose stack "
+            f"(exit code {result.returncode}):\n"
+            f"stdout: {result.stdout}\n"
+            f"stderr: {result.stderr}"
+        )
+        raise subprocess.CalledProcessError(
+            result.returncode, result.args, result.stdout, result.stderr
+        )
+    wait_for_mongodb_ready(
+        MONGODB_WITH_REPLICA_SET_URI, label="MongoDB with replica set"
+    )
+    logger.info("MongoDB container with replica set created successfully")
 
 
 @pytest.fixture(scope="session")
