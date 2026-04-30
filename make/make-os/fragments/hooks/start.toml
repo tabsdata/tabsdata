@@ -91,9 +91,24 @@ script = [
     PATH = get_env PATH
     debug "✅ Real PATH: ${PATH}"
 
+    no_permit = set false
+    arguments = split ${CARGO_MAKE_TASK_ARGS} ;
+    for argument in ${arguments}
+        argument = trim ${argument}
+        is_no_permit = eq ${argument} "--no-permit"
+        if ${is_no_permit}
+            no_permit = set true
+        end
+    end
+
     make_task = get_env CARGO_MAKE_TASK
     if eq ${make_task} "docs"
         noop
+    elseif eq ${make_task} "setup"
+        noop
+    elseif ${no_permit}
+        warn "✈️ Skipping permit (--no-permit)"
+        echo ""
     else
         td_run_permit = get_env TD_RUN_PERMIT
         if eq ${td_run_permit} "false"

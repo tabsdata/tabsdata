@@ -1,0 +1,63 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+[tasks.__os__setup_py]
+plugin = "td-task-tracker"
+category = "80 - Verify"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    on_ga = get_env TD_ON_GA
+    on_ga_true = eq ${on_ga} "true"
+
+    cd ${PROJECT_TABSDATA_ROOT_FOLDER}
+
+    info "♻️ Updating pip to latest version..."
+
+    virtual_env = get_env VIRTUAL_ENV
+    if is_empty ${virtual_env}
+        if ${on_ga_true}
+            debug "🚀 uv pip install --system --upgrade pip"
+            exec --fail-on-error uv pip install --system --upgrade pip
+        else
+            debug "🚀 uv pip install --system --quiet --upgrade pip"
+            exec --fail-on-error uv pip install --system --quiet --upgrade pip
+        end
+    else
+        if ${on_ga_true}
+            debug "🚀 uv pip install --upgrade pip"
+            exec --fail-on-error uv pip install --upgrade pip
+        else
+            debug "🚀 uv pip install --quiet --upgrade pip"
+            exec --fail-on-error uv pip install --quiet --upgrade pip
+        end
+    end
+
+    info "♻️ Installing tabsdata-toolkit dependencies..."
+    virtual_env = get_env VIRTUAL_ENV
+    if is_empty ${virtual_env}
+        if ${on_ga_true}
+            debug "🚀 uv pip install --system -r ./devutils/automation/tasks/python/tabsdata-toolkit/pyproject.toml"
+            exec --fail-on-error uv pip install --system -r ./devutils/automation/tasks/python/tabsdata-toolkit/pyproject.toml
+        else
+            debug "🚀 uv pip install --system --quiet -r ./devutils/automation/tasks/python/tabsdata-toolkit/pyproject.toml"
+            exec --fail-on-error uv pip install --system --quiet -r ./devutils/automation/tasks/python/tabsdata-toolkit/pyproject.toml
+        end
+    else
+        if ${on_ga_true}
+            debug "🚀 uv pip install -r ./devutils/automation/tasks/python/tabsdata-toolkit/pyproject.toml"
+            exec --fail-on-error uv pip install -r ./devutils/automation/tasks/python/tabsdata-toolkit/pyproject.toml
+        else
+            debug "🚀 uv pip install --quiet -r ./devutils/automation/tasks/python/tabsdata-toolkit/pyproject.toml"
+            exec --fail-on-error uv pip install --quiet -r ./devutils/automation/tasks/python/tabsdata-toolkit/pyproject.toml
+        end
+    end
+
+    info "♻️ Installing tabsdata-toolkit in editable mode..."
+    debug "🚀 uv pip install --quiet -e ./devutils/automation/tasks/python/tabsdata-toolkit --config-settings editable_mode=compat --no-build-isolation"
+    exec --fail-on-error uv pip install --quiet -e ./devutils/automation/tasks/python/tabsdata-toolkit --config-settings editable_mode=compat --no-build-isolation
+    ''']

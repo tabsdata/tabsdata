@@ -147,6 +147,38 @@ run_task = [
     ] }
 ]
 
+[tasks.setup]
+plugin = "td-task-tracker"
+category = "80 - Verify"
+description = "Setup Python environment with latest pip and editable toolkit"
+env = { "TD_RUN_PERMIT" = "false" }
+run_task = [
+    { name = [
+        "setup_py",
+        "setup_rs"
+    ] }
+]
+
+[tasks.setup_rs]
+plugin = "td-task-tracker"
+category = "80 - Verify"
+description = "Task 'setup' for Rust projects"
+run_task = [
+    { name = [
+        "__os__setup_rs"
+    ] }
+]
+
+[tasks.setup_py]
+plugin = "td-task-tracker"
+category = "80 - Verify"
+description = "Task 'setup' for Python projects"
+run_task = [
+    { name = [
+        "__os__setup_py"
+    ] }
+]
+
 [tasks.clean]
 plugin = "td-task-tracker"
 category = "01 - Clean"

@@ -18,6 +18,6 @@ alias = "book_dguide"
 plugin = "td-task-tracker"
 alias = "book_dguide"
 
-[tasks.setup]
+[tasks.prepare]
 plugin = "td-task-tracker"
 alias = "permit"

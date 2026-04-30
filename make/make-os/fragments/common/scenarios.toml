@@ -76,6 +76,12 @@ script = [
     debug "🔷 _____ Generating python binaries..."
     cm_run_task __os__setup_context_test_py
 
+    td_symlink_polars_libs = get_env TD_SYMLINK_POLARS_LIBS
+    if eq ${td_symlink_polars_libs} "true"
+        set_env TD_SYMLINK_POLARS_LIBS_PYTEST true
+        info "🔗 Setting TD_SYMLINK_POLARS_LIBS_PYTEST to true as TD_SYMLINK_POLARS_LIBS is also set to true"
+    end
+
     server = get_env TD_SERVER
     if eq ${server} "true"
         debug "🔷 _____ Starting tabsdata server (pytest)..."
