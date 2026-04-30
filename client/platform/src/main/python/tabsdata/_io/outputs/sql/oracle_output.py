@@ -26,7 +26,10 @@ logger = logging.getLogger(__name__)
 
 
 class OracleDest(DestinationPlugin):
-    """
+    """Write to Oracle.
+
+    Required: conn (OracleConn),
+    destination_tables (str or list[str]).
     Destination plugin for writing data to Oracle.
     """
 

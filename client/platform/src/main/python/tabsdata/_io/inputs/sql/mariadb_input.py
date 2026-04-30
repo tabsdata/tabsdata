@@ -40,7 +40,7 @@ logger.setLevel(logging.DEBUG)
 
 
 class MariaDBSrc(SourcePlugin):
-    """
+    """Read from MariaDB. Required: conn (MariaDBConn), queries (str or list[str]).
     :categories: source
 
     Source plugin for reading data from MariaDB.

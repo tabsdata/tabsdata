@@ -53,7 +53,10 @@ logger = logging.getLogger(__name__)
     ),
 )
 class StarRocksDest(DestinationPlugin):
-    """
+    """Write to StarRocks.
+
+    Required: conn (StarRocksConn),
+    destination_tables (str or list[str]).
     :categories: destination
 
     Destination plugin for writing data to StarRocks using cloud-staged bulk loading.

@@ -55,7 +55,7 @@ logger.setLevel(logging.DEBUG)
     ),
 )
 class Db2CdcTrigger(CdcTrigger):
-    """
+    """DB2 CDC trigger. Required: conn (Db2CdcConn), tracked_tables.
     :categories: trigger
 
     A `CdcTrigger` that captures changes from a Db2 database using SQL Replication.

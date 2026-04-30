@@ -53,7 +53,7 @@ logger.setLevel(logging.DEBUG)
 
 
 class S3Src(SourcePlugin):
-    """
+    """Read from S3. Required: conn (S3Conn), path (str or list[str]).
     Source plugin for reading data from an S3 bucket.
     """
 

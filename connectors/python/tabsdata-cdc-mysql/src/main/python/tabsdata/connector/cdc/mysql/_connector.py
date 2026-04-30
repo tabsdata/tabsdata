@@ -56,7 +56,7 @@ logger.setLevel(logging.DEBUG)
     ),
 )
 class MySQLCdcTrigger(CdcTrigger):
-    """
+    """MySQL CDC trigger. Required: conn (MySQLCdcConn), tracked_tables.
     :categories: trigger
 
     A `CdcTrigger` that captures changes from a MySQL database using binlog replication.

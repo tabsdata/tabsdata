@@ -2,6 +2,11 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
+
+# LEGACY: This file contains old-style classes that are deprecated.
+# New code should use the classes in the sql/ and file/ subdirectories.
+# See the class docstrings for the recommended replacement.
+
 from __future__ import annotations
 
 import logging
@@ -57,7 +62,7 @@ logging.getLogger("urllib3").setLevel(logging.ERROR)
     ),
 )
 class MariaDBDestination(DestinationPlugin):
-    """
+    """Legacy: Write to MariaDB. Use MariaDBDest instead.
     :categories: destination
 
     MariaDB-based data outputs.
@@ -238,7 +243,7 @@ class MariaDBDestination(DestinationPlugin):
     ),
 )
 class MySQLDestination(DestinationPlugin):
-    """
+    """Legacy: Write to MySQL. Use MySQLDest instead.
     :categories: destination
 
     MySQL-based data outputs.
@@ -401,7 +406,7 @@ class MySQLDestination(DestinationPlugin):
 
 
 class OracleDestination(DestinationPlugin):
-    """
+    """Legacy: Write to Oracle. Use OracleDest instead.
     :categories: destination
 
     Oracle-based data outputs.
@@ -577,7 +582,7 @@ class OracleDestination(DestinationPlugin):
     ),
 )
 class PostgresDestination(DestinationPlugin):
-    """
+    """Legacy: Write to PostgreSQL. Use PostgresDest instead.
     :categories: destination
 
     Postgres-based data outputs.

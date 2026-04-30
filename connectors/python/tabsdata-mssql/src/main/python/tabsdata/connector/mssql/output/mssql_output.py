@@ -26,7 +26,10 @@ logger = logging.getLogger(__name__)
 
 
 class MSSQLDest(DestinationPlugin):
-    """
+    """Write to MSSQL.
+
+    Required: conn (MSSQLConn),
+    destination_tables (str or list[str]).
     Destination plugin for writing data to MSSQL.
     """
 

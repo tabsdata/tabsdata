@@ -35,22 +35,34 @@ def td_context(
 
 
 class SourcePlugin:
-    """
+    """Base class for data sources (used with @td.publisher).
+
     :categories: plugin
 
-    Parent class for publisher connectors.
+    Execution protocol:
+        The framework calls ``_run()`` which handles offset loading,
+        execution context setup, and validation. It then delegates
+        to ``stream()`` for the actual data import.
 
-    Methods:
-        def chunk(working_dir) -> Union[str, Tuple[str, ...], List[str]]
-            Trigger the import of the data. The method will receive a folder where it
-            must store the data as parquet files, and return a list of the paths of
-            the files created. This files will then be loaded and mapped to the
-            dataset function in positional order, so if you want file.parquet to be
-            the first argument of the dataset function, you must return it first. If
-            you want a parameter to receive multiple files, return a list of the paths.
-            For example, you would give the following return to provide a first argument
-            with a single file and a second argument with two files:
-            return ["file1.parquet", ["file2.parquet", "file3.parquet"]]
+    To implement a custom source, override ``stream()``::
+
+        class MySource(SourcePlugin):
+            def stream(self, working_dir: str):
+                # Fetch data and return list of TableFrames
+                ...
+                return [table_frame_1, table_frame_2]
+
+    Alternatively, override ``chunk()`` to return file paths
+    instead of TableFrames (the framework will load them)::
+
+        class MySource(SourcePlugin):
+            def chunk(self, working_dir: str):
+                # Write parquet files and return paths
+                ...
+                return ["file1.parquet", "file2.parquet"]
+
+    Do NOT override ``_run()`` — it contains framework logic
+    for offset handling, context management, and validation.
     """
 
     IDENTIFIER = "source-plugin"
@@ -92,16 +104,11 @@ class SourcePlugin:
     def _run(
         self, execution_context: ExecutionContext
     ) -> List[TableFrame | None | List[TableFrame | None]]:
-        """
-        Run the plugin. This method will be called by the framework and should not be
-            called directly. It will call the stream method to import the data and
-            return the result.
+        """Framework method — do NOT override.
 
-        Args:
-            execution_context (ExecutionContext): The execution context of the function.
-
-        Returns:
-            Union[TableFrame, Tuple[TableFrame, ...], List[TableFrame]]
+        Override ``stream()`` or ``chunk()`` instead.
+        This method handles offset loading, context setup,
+        and result validation before/after calling stream().
         """
         self._tabsdata_internal_logger = execution_context.logger
         logger = self._tabsdata_internal_logger
@@ -291,17 +298,33 @@ class SourcePlugin:
 
 
 class DestinationPlugin:
-    """
+    """Base class for data destinations (used with @td.subscriber).
+
     :categories: plugin
 
-    Parent class for subscriber connectors.
+    Execution protocol:
+        The framework calls ``_run()`` which handles result
+        conversion (TableFrame → LazyFrame), execution context
+        setup, and validation. It then delegates to ``stream()``
+        for the actual data export.
 
-    Methods:
+    To implement a custom destination, override ``stream()``::
 
-        trigger_output(working_dir, ``*args``, ``**kwargs``):
-            Trigger the exporting of the data. This function will
-            receive the resulting data from the dataset function
-            and must store it in the desired location.
+        class MyDest(DestinationPlugin):
+            def stream(self, working_dir: str, *results):
+                # results are polars LazyFrames or None
+                for result in results:
+                    if result is not None:
+                        df = result.collect()
+                        # write df to your destination
+                        ...
+
+    Alternatively, override ``chunk()`` to write intermediate
+    parquet files, then ``write()`` to send them to the
+    final destination.
+
+    Do NOT override ``_run()`` — it contains framework logic
+    for result conversion, context management, and validation.
     """
 
     IDENTIFIER = "destination-plugin"
@@ -333,6 +356,12 @@ class DestinationPlugin:
         )
 
     def _run(self, execution_context: ExecutionContext, results: ResultsCollection):
+        """Framework method — do NOT override.
+
+        Override ``stream()``, ``chunk()``, or ``write()`` instead.
+        This method handles result conversion, context setup,
+        and type validation before/after calling stream().
+        """
         self._tabsdata_internal_logger = execution_context.logger
         logger = self._tabsdata_internal_logger
         logger.info(f"Exporting files with plugin '{str(self)}'")

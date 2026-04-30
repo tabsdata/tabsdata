@@ -22,7 +22,10 @@ S3ConnCredentialsSpec: TypeAlias = S3Credentials
 
 
 class S3Conn(Conn):
-    """
+    """S3 connection config.
+
+    Required: bucket_uri (str), credentials.
+    Optional: region.
     Represents a connection configuration to an S3 bucket.
     """
 

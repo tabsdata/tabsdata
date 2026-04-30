@@ -36,7 +36,7 @@ logger.setLevel(logging.DEBUG)
     ),
 )
 class MySQLCdcConn(CdcConn, MySQLConn):
-    """
+    """MySQL CDC connection config. Extends MySQLConn with CDC settings.
     MySQL CDC connection configuration.
     """
 

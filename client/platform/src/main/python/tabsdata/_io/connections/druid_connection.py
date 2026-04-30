@@ -39,7 +39,9 @@ StagingConfig = Union[S3Config, AzureConfig, GCSConfig]
     ),
 )
 class DruidConn(Conn):
-    """
+    """Apache Druid connection config.
+
+    Required: host, port, database, credentials, staging.
     Represents a connection configuration for Apache Druid with cloud-staged
     bulk loading.
 

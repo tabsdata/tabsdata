@@ -26,7 +26,10 @@ logger = logging.getLogger(__name__)
 
 
 class PostgresDest(DestinationPlugin):
-    """
+    """Write to PostgreSQL.
+
+    Required: conn (PostgresConn),
+    destination_tables (str or list[str]).
     :categories: destination
 
     Destination plugin for writing data to PostgreSQL.

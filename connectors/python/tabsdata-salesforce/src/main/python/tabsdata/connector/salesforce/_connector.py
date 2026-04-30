@@ -157,7 +157,7 @@ class SalesforceTokenCredentials(SalesforceCredentials):
 
 
 class SalesforceSource(SourcePlugin):
-    """
+    """Legacy: Read from Salesforce. Use SalesforceSrc instead.
     :categories: source
 
     Salesforce (SOQL query) based data inputs (not Salesforce Reports).
@@ -351,7 +351,7 @@ def _maximum_date(date1: str, date2: str):
 
 
 class SalesforceReportSource(SourcePlugin):
-    """
+    """Legacy: Read Salesforce reports. Use SalesforceReportSrc instead.
     :categories: source
 
     Salesforce Reports based data inputs.

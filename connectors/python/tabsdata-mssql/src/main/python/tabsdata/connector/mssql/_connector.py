@@ -47,7 +47,7 @@ logger.setLevel(logging.DEBUG)
     ),
 )
 class MSSQLSource(SourcePlugin):
-    """
+    """Legacy: Read from MSSQL. Use MSSQLSrc instead.
     :categories: source
 
     Microsoft SQL Server based data inputs.
@@ -296,7 +296,7 @@ class MSSQLSource(SourcePlugin):
 
 
 class MSSQLDestination(DestinationPlugin):
-    """
+    """Legacy: Write to MSSQL. Use MSSQLDest instead.
     :categories: destination
 
     MSSQL-based data outputs.

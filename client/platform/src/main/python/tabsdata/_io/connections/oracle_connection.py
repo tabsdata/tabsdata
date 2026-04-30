@@ -15,7 +15,10 @@ from tabsdata.exceptions import (
 
 
 class OracleConn(Conn):
-    """
+    """Oracle connection config.
+
+    Required: uri (str).
+    Optional: credentials (UserPasswordCredentials).
     Represents a connection configuration to Oracle.
     """
 

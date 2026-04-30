@@ -35,7 +35,7 @@ logger.setLevel(logging.DEBUG)
 
 
 class GCSDest(DestinationPlugin):
-    """
+    """Write to Google Cloud Storage. Required: conn (GCSConn), path (str or list[str]).
     Destination plugin for writing data to a GCS bucket.
     """
 

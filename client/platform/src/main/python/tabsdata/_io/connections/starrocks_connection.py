@@ -38,7 +38,9 @@ StagingConfig = Union[S3Config, AzureConfig, GCSConfig]
     ),
 )
 class StarRocksConn(Conn):
-    """
+    """StarRocks connection config.
+
+    Required: host, port, database, credentials, staging.
     Represents a connection configuration for StarRocks with cloud-staged bulk
     loading.
 

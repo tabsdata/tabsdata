@@ -8,7 +8,9 @@ ENV_PREFIX = "env:"
 
 @dataclass(init=False)
 class NamedConn(Conn):
-    """
+    """Named connection reference.
+
+    Required: name (str). Resolved at runtime.
     Represents a named connection configuration that can be referenced by name in source
     and destination plugins.
     """

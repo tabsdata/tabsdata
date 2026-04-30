@@ -2,6 +2,11 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
+
+# LEGACY: This file contains old-style classes that are deprecated.
+# New code should use the classes in the sql/ and file/ subdirectories.
+# See the class docstrings for the recommended replacement.
+
 import logging
 import os
 import subprocess
@@ -86,7 +91,7 @@ logger = logging.getLogger(__name__)
 
 # noinspection PyShadowingBuiltins,DuplicatedCode
 class AzureSource(SourcePlugin):
-    """
+    """Legacy: Read from Azure. Use AzureSrc instead. Required: uri, credentials.
     :categories: source
 
     Azure-file-based data inputs.
@@ -335,7 +340,7 @@ class AzureSource(SourcePlugin):
 
 # noinspection PyShadowingBuiltins,DuplicatedCode
 class GCSSource(SourcePlugin):
-    """
+    """Legacy: Read from GCS. Use GCSSrc instead. Required: uri, credentials.
     :categories: source
 
     GCS-file-based data inputs.
@@ -583,7 +588,7 @@ class GCSSource(SourcePlugin):
 
 # noinspection PyShadowingBuiltins,DuplicatedCode
 class LocalFileSource(SourcePlugin):
-    """
+    """Read from local files. Required: uri (str or list[str]).
     :categories: source
 
     Local-file-based data inputs.
@@ -815,7 +820,7 @@ class LocalFileSource(SourcePlugin):
 
 # noinspection PyShadowingBuiltins,DuplicatedCode
 class S3Source(SourcePlugin):
-    """
+    """Legacy: Read from S3. Use S3Src instead. Required: uri, credentials.
     :categories: source
 
     S3-file-based data inputs.

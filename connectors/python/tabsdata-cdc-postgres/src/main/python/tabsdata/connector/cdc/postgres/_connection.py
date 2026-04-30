@@ -36,7 +36,7 @@ logger.setLevel(logging.DEBUG)
     ),
 )
 class PostgresCdcConn(CdcConn, PostgresConn):
-    """
+    """PostgreSQL CDC connection config. Extends PostgresConn with CDC settings.
     PostgreSQL CDC connection configuration.
     """
 

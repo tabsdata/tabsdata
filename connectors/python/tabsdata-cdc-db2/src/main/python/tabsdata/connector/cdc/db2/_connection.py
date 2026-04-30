@@ -36,7 +36,7 @@ logger.setLevel(logging.DEBUG)
     ),
 )
 class Db2CdcConn(CdcConn, Db2Conn):
-    """
+    """DB2 CDC connection config. Extends Db2Conn with CDC settings.
     Db2 CDC connection configuration.
     """
 

@@ -52,7 +52,9 @@ logger.setLevel(logging.DEBUG)
 
 
 class GCSSrc(SourcePlugin):
-    """
+    """Read from Google Cloud Storage.
+
+    Required: conn (GCSConn), path (str or list[str]).
     Source plugin for reading data from a GCS bucket.
     """
 

@@ -23,7 +23,10 @@ logger.setLevel(logging.DEBUG)
 
 
 class DatabricksDest(DestinationPlugin):
-    """
+    """Write to Databricks.
+
+    Required: conn (DatabricksConn),
+    destination_tables (str or list[str]).
     Destination plugin for writing data to Databricks.
     """
 

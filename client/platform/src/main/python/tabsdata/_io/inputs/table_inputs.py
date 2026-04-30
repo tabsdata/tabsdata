@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 class TableInput(SourcePlugin):
-    """
+    """Read from internal tables. Required: table (str or list[str]).
     Table-based data inputs.
     """
 

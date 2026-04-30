@@ -16,7 +16,10 @@ logger.setLevel(logging.DEBUG)
 
 
 class MongoDBConn(Conn):
-    """
+    """MongoDB connection config.
+
+    Required: uri (str).
+    Optional: credentials (UserPasswordCredentials).
     Connection configuration for MongoDB.
     """
 

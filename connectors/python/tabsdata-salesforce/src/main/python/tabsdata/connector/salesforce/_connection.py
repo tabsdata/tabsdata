@@ -19,7 +19,7 @@ logger.setLevel(logging.DEBUG)
 
 
 class SalesforceConn(Conn):
-    """
+    """Salesforce connection config. Required: credentials (SalesforceTokenCredentials).
     Connection configuration for Salesforce.
     """
 

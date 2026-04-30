@@ -40,7 +40,7 @@ logger.setLevel(logging.DEBUG)
 
 
 class PostgresSrc(SourcePlugin):
-    """
+    """Read from PostgreSQL. Required: conn (PostgresConn), queries (str or list[str]).
     :categories: source
 
     Source plugin for reading data from Postgres.

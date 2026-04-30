@@ -26,7 +26,10 @@ logger = logging.getLogger(__name__)
 
 
 class MySQLDest(DestinationPlugin):
-    """
+    """Write to MySQL.
+
+    Required: conn (MySQLConn),
+    destination_tables (str or list[str]).
     :categories: destination
 
     Destination plugin for writing data to MySQL.

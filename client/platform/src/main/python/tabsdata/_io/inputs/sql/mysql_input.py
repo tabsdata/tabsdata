@@ -40,7 +40,7 @@ logger.setLevel(logging.DEBUG)
 
 
 class MySQLSrc(SourcePlugin):
-    """
+    """Read from MySQL. Required: conn (MySQLConn), queries (str or list[str]).
     :categories: source
 
     Source plugin for reading data from MySQL.

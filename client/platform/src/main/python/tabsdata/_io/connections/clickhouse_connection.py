@@ -38,7 +38,9 @@ StagingConfig = Union[S3Config, AzureConfig, GCSConfig]
     ),
 )
 class ClickHouseConn(Conn):
-    """
+    """ClickHouse connection config.
+
+    Required: host, port, database, credentials, staging.
     Represents a connection configuration for ClickHouse with cloud-staged bulk
     loading.
 

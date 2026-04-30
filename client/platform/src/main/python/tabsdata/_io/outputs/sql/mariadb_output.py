@@ -26,7 +26,10 @@ logger = logging.getLogger(__name__)
 
 
 class MariaDBDest(DestinationPlugin):
-    """
+    """Write to MariaDB.
+
+    Required: conn (MariaDBConn),
+    destination_tables (str or list[str]).
     :categories: destination
 
     Destination plugin for writing data to MySQL.

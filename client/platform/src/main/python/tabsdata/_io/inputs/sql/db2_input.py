@@ -55,7 +55,7 @@ logger.setLevel(logging.DEBUG)
     ),
 )
 class Db2Src(SourcePlugin):
-    """
+    """Read from DB2. Required: conn (Db2Conn), queries (str or list[str]).
     :categories: source
 
     Source plugin for reading data from Db2.

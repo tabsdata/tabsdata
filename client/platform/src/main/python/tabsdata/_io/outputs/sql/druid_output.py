@@ -51,7 +51,10 @@ logger = logging.getLogger(__name__)
     ),
 )
 class DruidDest(DestinationPlugin):
-    """
+    """Write to Apache Druid.
+
+    Required: conn (DruidConn),
+    destination_tables (str or list[str]).
     :categories: destination
 
     Destination plugin for writing data to Apache Druid using cloud-staged

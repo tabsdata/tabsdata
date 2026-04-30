@@ -20,7 +20,10 @@ logger.setLevel(logging.DEBUG)
 
 
 class DatabricksSrc(SourcePlugin):
-    """
+    """Read from Databricks.
+
+    Required: conn (DatabricksConn),
+    queries (str or list[str]).
     Source plugin for reading data from Databricks.
     """
 

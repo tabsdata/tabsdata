@@ -16,7 +16,9 @@ logger.setLevel(logging.DEBUG)
 
 
 class SnowflakeConn(Conn):
-    """
+    """Snowflake connection config.
+
+    Required: account (str), credentials.
     Connection configuration for Snowflake.
     """
 

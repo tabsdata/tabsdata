@@ -34,7 +34,7 @@ TD_LAZY_SINK = "TD_LAZY_SINK"
 
 
 class TableOutput(DestinationPlugin):
-    """
+    """Write to internal tables. Required: table (str or list[str]).
     :categories: destination
 
     Table-based data outputs.

@@ -39,7 +39,7 @@ logger.setLevel(logging.DEBUG)
 
 
 class OracleSrc(SourcePlugin):
-    """
+    """Read from Oracle. Required: conn (OracleConn), queries (str or list[str]).
     :categories: source
 
     Source plugin for reading data from Oracle.

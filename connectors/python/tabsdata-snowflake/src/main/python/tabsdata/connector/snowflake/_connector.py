@@ -48,7 +48,7 @@ def restore_snowflake_logger_levels():
 
 
 class SnowflakeDestination(DestinationPlugin):
-    """
+    """Legacy: Write to Snowflake. Use SnowflakeDest instead.
     :categories: destination
 
     Snowflake based data outputs.

@@ -2,6 +2,11 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
+
+# LEGACY: This file contains old-style classes that are deprecated.
+# New code should use the classes in the sql/ and file/ subdirectories.
+# See the class docstrings for the recommended replacement.
+
 from __future__ import annotations
 
 import datetime
@@ -418,7 +423,7 @@ def build_catalog(catalog) -> AWSGlue:
 
 
 class AzureDestination(DestinationPlugin):
-    """
+    """Legacy: Write to Azure. Use AzureDest instead. Required: uri, credentials.
     :categories: destination
 
     Azure-file-based data outputs.
@@ -625,7 +630,7 @@ class AzureDestination(DestinationPlugin):
 
 
 class GCSDestination(DestinationPlugin):
-    """
+    """Legacy: Write to GCS. Use GCSDest instead. Required: uri, credentials.
     :categories: destination
 
     GCS-file-based data outputs.
@@ -828,7 +833,7 @@ class GCSDestination(DestinationPlugin):
 
 
 class LocalFileDestination(DestinationPlugin):
-    """
+    """Write to local files. Required: path (str or list[str]).
     :categories: destination
 
     LocalFile-based data outputs.
@@ -1003,7 +1008,7 @@ class LocalFileDestination(DestinationPlugin):
 
 
 class S3Destination(DestinationPlugin):
-    """
+    """Legacy: Write to S3. Use S3Dest instead. Required: uri, credentials.
     :categories: destination
 
     S3-file-based data outputs.

@@ -17,7 +17,10 @@ from tabsdata.exceptions import (
 
 
 class MariaDBConn(Conn):
-    """
+    """MariaDB connection config.
+
+    Required: uri (str).
+    Optional: credentials (UserPasswordCredentials).
     Represents a connection configuration to MariaDB.
     """
 

@@ -20,7 +20,10 @@ logger.setLevel(logging.DEBUG)
 
 
 class SnowflakeDest(DestinationPlugin):
-    """
+    """Write to Snowflake.
+
+    Required: conn (SnowflakeConn),
+    destination_tables (str or list[str]).
     Destination plugin for writing data to Snowflake.
     """
 

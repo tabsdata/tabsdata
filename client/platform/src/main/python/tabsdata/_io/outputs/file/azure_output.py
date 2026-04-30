@@ -35,7 +35,7 @@ logger.setLevel(logging.DEBUG)
 
 
 class AzureDest(DestinationPlugin):
-    """
+    """Write to Azure Blob Storage. Required: conn (AzureConn), path (str or list[str]).
     Destination plugin for writing data to an Azure Blob Storage container.
     """
 

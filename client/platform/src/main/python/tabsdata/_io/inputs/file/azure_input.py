@@ -52,7 +52,9 @@ logger.setLevel(logging.DEBUG)
 
 
 class AzureSrc(SourcePlugin):
-    """
+    """Read from Azure Blob Storage.
+
+    Required: conn (AzureConn), path (str or list[str]).
     Source plugin for reading data from an Azure Blob Storage container.
     """
 

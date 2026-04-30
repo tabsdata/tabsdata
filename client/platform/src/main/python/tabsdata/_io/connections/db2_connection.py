@@ -32,7 +32,10 @@ from tabsdata.exceptions import (
     ),
 )
 class Db2Conn(Conn):
-    """
+    """DB2 connection config.
+
+    Required: uri (str).
+    Optional: credentials (UserPasswordCredentials).
     Represents a connection configuration to Db2.
     """
 

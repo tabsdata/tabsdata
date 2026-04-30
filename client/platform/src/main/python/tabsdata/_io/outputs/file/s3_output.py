@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 
 class S3Dest(DestinationPlugin):
-    """
+    """Write to S3. Required: conn (S3Conn), path (str or list[str]).
     Destination plugin for writing data to an S3 bucket.
     """
 

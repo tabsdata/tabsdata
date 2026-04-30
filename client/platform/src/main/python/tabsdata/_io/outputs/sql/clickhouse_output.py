@@ -53,7 +53,10 @@ logger = logging.getLogger(__name__)
     ),
 )
 class ClickHouseDest(DestinationPlugin):
-    """
+    """Write to ClickHouse via cloud-staged bulk loading.
+
+    Required: conn (ClickHouseConn),
+    destination_tables (str or list[str]).
     :categories: destination
 
     Destination plugin for writing data to ClickHouse using cloud-staged bulk loading.

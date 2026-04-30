@@ -19,7 +19,10 @@ logger.setLevel(logging.DEBUG)
 
 
 class MSSQLConn(Conn):
-    """
+    """MSSQL connection config.
+
+    Required: connection_string_or_uri (str).
+    Optional: credentials (UserPasswordCredentials).
     Represents a connection configuration to Microsoft SQL Server (MSSQL).
     """
 

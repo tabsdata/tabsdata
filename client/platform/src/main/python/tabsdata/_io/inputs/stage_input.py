@@ -63,7 +63,7 @@ class StageManifest:
 
 
 class Stage(SourcePlugin):
-    """
+    """Read from file staging area. Required: uri (str or list[str]).
     :categories: source
 
     Inputs that have been placed in a stage, usually from a StageTrigger.

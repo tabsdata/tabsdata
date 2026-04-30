@@ -16,7 +16,9 @@ logger.setLevel(logging.DEBUG)
 
 
 class DatabricksConn(Conn):
-    """
+    """Databricks connection config.
+
+    Required: server_hostname, http_path, access_token.
     Connection configuration for Databricks.
     """
 

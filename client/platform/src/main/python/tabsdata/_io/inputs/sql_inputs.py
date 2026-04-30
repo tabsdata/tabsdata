@@ -2,6 +2,11 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
+
+# LEGACY: This file contains old-style classes that are deprecated.
+# New code should use the classes in the sql/ and file/ subdirectories.
+# See the class docstrings for the recommended replacement.
+
 import logging
 import os
 from datetime import datetime, timezone
@@ -61,7 +66,7 @@ def _validate_initial_values_type(initial_values: dict):
     ),
 )
 class MariaDBSource(SourcePlugin):
-    """
+    """Legacy: Read from MariaDB. Use MariaDBSrc instead.
     :categories: source
 
     MariaDB-based data inputs.
@@ -232,7 +237,7 @@ class MariaDBSource(SourcePlugin):
     ),
 )
 class MySQLSource(SourcePlugin):
-    """
+    """Legacy: Read from MySQL. Use MySQLSrc instead.
     :categories: source
 
     MySQL-based data inputs.
@@ -402,7 +407,7 @@ class MySQLSource(SourcePlugin):
     ),
 )
 class OracleSource(SourcePlugin):
-    """
+    """Legacy: Read from Oracle. Use OracleSrc instead.
     :categories: source
 
     Oracle-based data inputs.
@@ -570,7 +575,7 @@ class OracleSource(SourcePlugin):
     ),
 )
 class PostgresSource(SourcePlugin):
-    """
+    """Legacy: Read from PostgreSQL. Use PostgresSrc instead.
     :categories: source
 
     Postgres-based data inputs.

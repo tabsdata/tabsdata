@@ -20,7 +20,9 @@ logger = logging.getLogger(__name__)
 
 
 class GCSConn(Conn):
-    """
+    """GCS connection config.
+
+    Required: bucket_uri (str), credentials.
     Represents a connection configuration to a GCS storage bucket.
     """
 

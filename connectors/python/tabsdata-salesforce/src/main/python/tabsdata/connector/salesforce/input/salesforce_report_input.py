@@ -21,7 +21,10 @@ logger.setLevel(logging.DEBUG)
 
 
 class SalesforceReportSrc(SourcePlugin):
-    """
+    """Read Salesforce reports.
+
+    Required: conn (SalesforceConn),
+    queries (str or list[str]).
     Source plugin for reading data from Salesforce reports.
     """
 

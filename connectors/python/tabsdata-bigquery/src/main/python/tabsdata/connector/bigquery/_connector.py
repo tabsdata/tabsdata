@@ -33,7 +33,9 @@ logger.setLevel(logging.DEBUG)
 
 
 class BigQueryConn(Conn):
-    """
+    """BigQuery connection config.
+
+    Required: project (str), credentials.
     For connection configuration to BigQueryDest.
     """
 
@@ -205,7 +207,10 @@ class BigQueryConn(Conn):
 
 
 class BigQueryDest(DestinationPlugin):
-    """
+    """Write to BigQuery.
+
+    Required: conn (BigQueryConn),
+    destination_tables (str or list[str]).
     :categories: destination
 
     BigQuery based data outputs.

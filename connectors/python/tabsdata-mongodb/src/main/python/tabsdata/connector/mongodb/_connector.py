@@ -26,7 +26,7 @@ MONGODB_ID_COLUMN = "_id"
 
 
 class MongoDBDestination(DestinationPlugin):
-    """
+    """Legacy: Write to MongoDB. Use MongoDBDest instead.
     :categories: destination
 
     MongoDB-based data outputs.

@@ -61,7 +61,7 @@ logger.setLevel(logging.DEBUG)
     ),
 )
 class PostgresCdcTrigger(CdcTrigger):
-    """
+    """PostgreSQL CDC trigger. Required: conn (PostgresCdcConn), tracked_tables.
     :categories: trigger
 
     A `CdcTrigger` that captures changes from a PostgreSQL database using WAL

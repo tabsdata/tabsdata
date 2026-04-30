@@ -93,7 +93,7 @@ def _table_fqn_4sql(table: str) -> str:
     ),
 )
 class DatabricksSource(SourcePlugin):
-    """
+    """Legacy: Read from Databricks. Use DatabricksSrc instead.
     :categories: source
 
     Databricks based data inputs.
@@ -499,7 +499,7 @@ class DatabricksSource(SourcePlugin):
 
 
 class DatabricksDestination(DestinationPlugin):
-    """
+    """Legacy: Write to Databricks. Use DatabricksDest instead.
     :categories: destination
 
     Databricks based data outputs.

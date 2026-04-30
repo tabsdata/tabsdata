@@ -18,7 +18,9 @@ logger = logging.getLogger(__name__)
 
 
 class AzureConn(Conn):
-    """
+    """Azure Blob Storage connection config.
+
+    Required: bucket_uri (str), credentials.
     Represents a connection configuration to an Azure Blob Storage container.
     """
 

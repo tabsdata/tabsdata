@@ -20,7 +20,10 @@ logger.setLevel(logging.DEBUG)
 
 
 class MongoDBDest(DestinationPlugin):
-    """
+    """Write to MongoDB.
+
+    Required: conn (MongoDBConn),
+    destination_tables (str or list[str]).
     Destination plugin for writing data to MongoDB. Thin proxy around
     MongoDBDestination that takes a MongoDBConn for the connection
     parameters and forwards all other options.

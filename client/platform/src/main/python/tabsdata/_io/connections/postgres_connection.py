@@ -16,7 +16,10 @@ from tabsdata.exceptions import (
 
 
 class PostgresConn(Conn):
-    """
+    """PostgreSQL connection config.
+
+    Required: uri (str).
+    Optional: credentials (UserPasswordCredentials).
     Represents a connection configuration to Postgres.
     """
 
