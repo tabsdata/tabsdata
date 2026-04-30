@@ -75,14 +75,26 @@ class ConfigResolver:
                 raise ValueError("Hashicorp URL and token must be provided")
             vault_namespace = self.hashicorp_config["namespace"]
             hashicorp_secret_specs = match.group(1)
-            path, name = hashicorp_secret_specs.split(";")
+            parts = hashicorp_secret_specs.split(";", 1)
+            if len(parts) != 2:
+                raise ValueError(
+                    f"Invalid Hashicorp secret spec '{hashicorp_secret_specs}'. "
+                    f"Expected format: 'path;name'."
+                )
+            path, name = parts
             client = hvac.Client(
                 url=vault_url, token=vault_token, namespace=vault_namespace
             )
             secret = client.secrets.kv.read_secret_version(
                 path, raise_on_deleted_version=False
             )
-            secret_value = secret["data"]["data"][name]
+            try:
+                secret_value = secret["data"]["data"][name]
+            except (KeyError, TypeError) as e:
+                raise ValueError(
+                    f"Secret key '{name}' not found at Vault path '{path}'. "
+                    f"Verify the path and key name are correct."
+                ) from e
             leaf = leaf.replace(match.group(0), secret_value)
             match = re.search(HASHICORP_PATTERN, leaf)
         return leaf

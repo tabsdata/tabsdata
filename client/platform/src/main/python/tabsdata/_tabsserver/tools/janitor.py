@@ -27,8 +27,11 @@ def delete_file(file: Path):
 
 
 def delete_folder(folder: Path):
-    shutil.rmtree(folder)
-    logger.info(f"Deleted folder: {folder}")
+    try:
+        shutil.rmtree(folder)
+        logger.info(f"Deleted folder: {folder}")
+    except OSError as e:
+        logger.error(f"Failed to delete folder '{folder}': {e}")
 
 
 def path_age(path: Path, now_ms: int) -> int:
@@ -56,9 +59,13 @@ def is_folder_expired(folder: Path, now_ms: int, retention_ms: int) -> bool:
     if not is_file_expired(folder, now_ms, retention_ms):
         return False
     if folder.is_dir():
-        for child in folder.iterdir():
-            if not is_folder_expired(child, now_ms, retention_ms):
-                return False
+        try:
+            for child in folder.iterdir():
+                if not is_folder_expired(child, now_ms, retention_ms):
+                    return False
+        except OSError as e:
+            logger.warning(f"Could not inspect children of '{folder}': {e}")
+            return False
     return True
 
 
@@ -278,8 +285,6 @@ def main():
         default_path=log_config_file,
         logs_folder=logs_folder,
     )
-    global logger
-    logger = logging.getLogger(__name__)
 
     folders = [
         complete_messages_folder,

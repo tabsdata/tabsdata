@@ -134,47 +134,22 @@ def resolve_valid_python_versions(
     allowed_python_versions_path = os.path.join(etc, allowed_python_versions_file)
     valid_python_versions_path = os.path.join(etc, valid_python_versions_file)
 
-    available_python_versions = (
-        set(
-            (
-                yaml.safe_load(
-                    open(available_python_versions_path, "r", encoding="utf-8")
-                )
-                or {}
-            ).get("versions", [])
-        )
-        if Path(available_python_versions_path).exists()
-        else set()
-    )
+    def _load_versions(path: str) -> set:
+        if not Path(path).exists():
+            return set()
+        with open(path, "r", encoding="utf-8") as f:
+            return set((yaml.safe_load(f) or {}).get("versions", []))
 
-    allowed_python_versions = (
-        set(
-            (
-                yaml.safe_load(
-                    open(allowed_python_versions_path, "r", encoding="utf-8")
-                )
-                or {}
-            ).get("versions", [])
-        )
-        if Path(allowed_python_versions_path).exists()
-        else set()
-    )
+    available_python_versions = _load_versions(available_python_versions_path)
+    allowed_python_versions = _load_versions(allowed_python_versions_path)
 
+    candidates = (
+        available_python_versions.intersection(allowed_python_versions)
+        if allowed_python_versions
+        else available_python_versions
+    )
     valid_python_versions = sorted(
-        (
-            available_python_versions.intersection(allowed_python_versions)
-            if allowed_python_versions
-            else available_python_versions
-        ),
-        key=parse_version,
-    )
-
-    valid_python_versions = sorted(
-        [
-            valid_python_version
-            for valid_python_version in valid_python_versions
-            if parse_version(valid_python_version) >= min_python_version
-        ],
+        [v for v in candidates if parse_version(v) >= min_python_version],
         key=parse_version,
     )
 

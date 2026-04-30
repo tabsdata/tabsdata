@@ -20,7 +20,7 @@ def get_resolved_mounts(identifier: str, options: dict) -> dict:
 
 
 def resolve(input_data: str) -> dict[str, str]:
-    parsed_data = yaml.safe_load(input_data)
+    parsed_data = yaml.safe_load(input_data) or {}
     mount_list = parsed_data.get("storage", {}).get("mounts", [])
     resolved_mounts = {}
     for mount in mount_list:

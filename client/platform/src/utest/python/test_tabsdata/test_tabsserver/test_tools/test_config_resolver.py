@@ -3,6 +3,7 @@
 #
 
 import os
+from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
@@ -399,6 +400,97 @@ def test_resolve_yaml_hashicorp_env(testing_hashicorp_vault, tmp_path, monkeypat
         destination_path, ["hashicorp", "env"]
     )
     assert resolved_collection == expected_result
+
+
+# ---------------------------------------------------------------------------
+# Vault spec and response validation
+# ---------------------------------------------------------------------------
+
+
+class TestConfigResolverVaultSpecValidation:
+    def test_no_semicolon_does_not_match_pattern(self):
+        """A spec without semicolon doesn't match the regex, so it's a no-op."""
+        resolver = ConfigResolver(
+            hashicorp_url="http://vault:8200",
+            hashicorp_token="test-token",
+        )
+        leaf = "${hashicorp:path_without_semicolon}"
+        result = resolver.resolve_hashicorp_token(leaf)
+        assert result == leaf
+
+    def test_spec_with_multiple_semicolons_uses_first_split(self):
+        resolver = ConfigResolver(
+            hashicorp_url="http://vault:8200",
+            hashicorp_token="test-token",
+        )
+        mock_client = MagicMock()
+        mock_client.secrets.kv.read_secret_version.return_value = {
+            "data": {"data": {"name;extra": "secret_value"}}
+        }
+        with patch(
+            "tabsdata._tabsserver.tools.config_resolver.hvac.Client",
+            return_value=mock_client,
+        ):
+            result = resolver.resolve_hashicorp_token(
+                "${hashicorp:path;name;extra}"
+            )
+        assert result == "secret_value"
+
+
+class TestConfigResolverVaultResponseValidation:
+    def test_missing_key_in_vault_raises_valueerror(self):
+        resolver = ConfigResolver(
+            hashicorp_url="http://vault:8200",
+            hashicorp_token="test-token",
+        )
+        mock_client = MagicMock()
+        mock_client.secrets.kv.read_secret_version.return_value = {
+            "data": {"data": {"other_key": "value"}}
+        }
+        with patch(
+            "tabsdata._tabsserver.tools.config_resolver.hvac.Client",
+            return_value=mock_client,
+        ):
+            with pytest.raises(ValueError, match="Secret key 'missing_key' not found"):
+                resolver.resolve_hashicorp_token(
+                    "${hashicorp:path;missing_key}"
+                )
+
+    def test_none_vault_response_raises_valueerror(self):
+        resolver = ConfigResolver(
+            hashicorp_url="http://vault:8200",
+            hashicorp_token="test-token",
+        )
+        mock_client = MagicMock()
+        mock_client.secrets.kv.read_secret_version.return_value = None
+        with patch(
+            "tabsdata._tabsserver.tools.config_resolver.hvac.Client",
+            return_value=mock_client,
+        ):
+            with pytest.raises(ValueError, match="Secret key"):
+                resolver.resolve_hashicorp_token(
+                    "${hashicorp:path;key}"
+                )
+
+    def test_vault_response_chains_original_error(self):
+        resolver = ConfigResolver(
+            hashicorp_url="http://vault:8200",
+            hashicorp_token="test-token",
+        )
+        mock_client = MagicMock()
+        mock_client.secrets.kv.read_secret_version.return_value = {
+            "data": {"data": {}}
+        }
+        with patch(
+            "tabsdata._tabsserver.tools.config_resolver.hvac.Client",
+            return_value=mock_client,
+        ):
+            with pytest.raises(ValueError) as exc_info:
+                resolver.resolve_hashicorp_token(
+                    "${hashicorp:some/path;missing}"
+                )
+            assert exc_info.value.__cause__ is not None
+            assert isinstance(exc_info.value.__cause__, KeyError)
 
 
 @pytest.mark.config_resolver

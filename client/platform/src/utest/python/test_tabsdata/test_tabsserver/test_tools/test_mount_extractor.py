@@ -37,3 +37,41 @@ def test_resolve_example_yaml():
     }
 
     assert result == expected_result
+
+
+# ---------------------------------------------------------------------------
+# None/empty input handling
+# ---------------------------------------------------------------------------
+
+
+class TestMountExtractorNoneInput:
+    def test_empty_string_returns_empty_dict(self):
+        result = resolve("")
+        assert result == {}
+
+    def test_empty_yaml_document_returns_empty_dict(self):
+        result = resolve("---\n")
+        assert result == {}
+
+    def test_null_yaml_returns_empty_dict(self):
+        result = resolve("null")
+        assert result == {}
+
+    def test_yaml_without_storage_key(self):
+        result = resolve("other_key: value")
+        assert result == {}
+
+    def test_yaml_with_empty_mounts(self):
+        result = resolve("storage:\n  mounts: []")
+        assert result == {}
+
+    def test_yaml_with_valid_mounts(self):
+        yaml_input = (
+            "storage:\n"
+            "  mounts:\n"
+            "    - id: S3A\n"
+            "      options:\n"
+            "        aws_key: MY_KEY\n"
+        )
+        result = resolve(yaml_input)
+        assert result == {"S3A_AWS_KEY": "MY_KEY"}
