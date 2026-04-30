@@ -10,7 +10,7 @@ use tracing::info;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-#[attach(signal = "apiserver")]
+#[attach(signal = "td_apiserver")]
 fn main() {
     hooks::panic();
 

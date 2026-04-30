@@ -9,7 +9,7 @@ use td_process::launcher::hooks;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-#[attach(signal = "crontrigger")]
+#[attach(signal = "td_crontrigger")]
 fn main() {
     hooks::panic();
 
