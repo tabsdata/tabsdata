@@ -1175,31 +1175,17 @@ run_task = [
     ] }
 ]
 
-[tasks.wheels_4repo]
+[tasks.wheels]
 plugin = "td-task-tracker"
 category = "10 - Bundle"
-description = "Generate wheels for installation using a repository"
+description = "Generate wheels (--devpi | --standalone)"
 run_task = [
     { name = [
-        "__os__wheels_4repo_ingest",
+        "__os__wheels_ingest",
         "assembly",
         "__os__wheels_rs",
         "__os__wheels_py",
-        "__os__wheels_4repo_digest"
-    ] }
-]
-
-[tasks.wheels_4whl]
-plugin = "td-task-tracker"
-category = "10 - Bundle"
-description = "Generate wheels for installation avoiding a repository"
-run_task = [
-    { name = [
-        "__os__wheels_4whl_ingest",
-        "assembly",
-        "__os__wheels_rs",
-        "__os__wheels_py",
-        "__os__wheels_4whl_digest"
+        "__os__wheels_digest"
     ] }
 ]
 
