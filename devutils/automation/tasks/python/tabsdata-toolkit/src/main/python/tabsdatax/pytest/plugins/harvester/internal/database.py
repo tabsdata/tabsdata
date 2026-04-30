@@ -257,6 +257,38 @@ def query_test_averages(harvester_folder: str) -> dict:
         return {}
 
 
+def query_tests_per_minute(
+    harvester_folder: str, session_start_ts: float | None = None
+) -> list[dict]:
+    """Return test counts bucketed by minute since session start.
+
+    Each element is a dict with keys:
+        minute, total, passed, failed, skipped
+    """
+    path = db_path(harvester_folder)
+    if not os.path.exists(path) or session_start_ts is None:
+        return []
+    try:
+        conn = get_connection(harvester_folder)
+        rows = conn.execute(
+            """
+            select
+                cast((timestamp - ?) / 60 as integer) + 1 as minute,
+                count(*)                                    as total,
+                sum(case when outcome = 'passed'  then 1 else 0 end) as passed,
+                sum(case when outcome = 'failed'  then 1 else 0 end) as failed,
+                sum(case when outcome = 'skipped' then 1 else 0 end) as skipped
+            from test_completions
+            group by cast((timestamp - ?) / 60 as integer)
+            order by minute
+            """,
+            (session_start_ts, session_start_ts),
+        ).fetchall()
+        return [dict(row) for row in rows]
+    except (sqlite3.OperationalError, sqlite3.DatabaseError):
+        return []
+
+
 def query_test_durations(harvester_folder: str) -> dict[str, list[float]]:
     """Return test durations by outcome, for distribution rendering.
 

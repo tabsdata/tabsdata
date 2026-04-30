@@ -190,6 +190,19 @@ class SummaryHeader(Vertical):
         height: auto;
     }
 
+    SummaryHeader > Horizontal > #per-minute-panel {
+        height: 13;
+        width: 120;
+        margin: 0 0 0 2;
+        overflow-y: auto;
+        scrollbar-size: 1 1;
+    }
+
+    SummaryHeader > Horizontal > #per-minute-panel > #per-minute-text {
+        width: auto;
+        height: auto;
+    }
+
     SummaryHeader > Horizontal > #sparkline-container {
         height: 100%;
         width: auto;
@@ -254,6 +267,8 @@ class SummaryHeader(Vertical):
                     )
                     yield Static("Failed", classes="spark-label")
                 yield Static("", id="sparkline-legend")
+            with Vertical(id="per-minute-panel"):
+                yield Static("", id="per-minute-text")
 
     def update_summary(
         self,
@@ -272,6 +287,7 @@ class SummaryHeader(Vertical):
         running_tests: list | None = None,
         test_durations: list[float] | None = None,
         session_end_ts: float | None = None,
+        tests_per_minute: list | None = None,
     ) -> None:
         """Rebuild the summary with current data."""
         import time as _time
@@ -487,6 +503,188 @@ class SummaryHeader(Vertical):
             spark_passed.data = [0]
             spark_failed.data = [0]
             container.display = False
+
+        # Update per-minute panel
+        per_minute_widget = self.query_one("#per-minute-text", Static)
+        pm_table = self._build_per_minute_table(
+            tests_per_minute or [], collected, session_start_ts,
+        )
+        per_minute_widget.update(pm_table)
+
+    @staticmethod
+    def _build_per_minute_table(
+        tests_per_minute: list,
+        collected: int,
+        session_start_ts: float | None = None,
+    ) -> "RichGroup":
+        """Build a table showing test counts per elapsed minute.
+
+        Rows at minutes that are multiples of 5 are rendered in bold.
+        Remaining = collected - cumulative done so far.
+        Always shows rows up to the current elapsed minute.
+        """
+        from rich.table import Table
+
+        title = RichText()
+        title.append("Tests per Minute", style=f"bold {Color.WHITE}")
+
+        tbl = Table(
+            show_header=True,
+            show_edge=False,
+            show_lines=False,
+            box=None,
+            padding=(0, 1),
+            expand=False,
+        )
+        tbl.add_column(
+            "Minute",
+            justify="right",
+            no_wrap=True,
+            min_width=6,
+            header_style=Color.WHITE,
+        )
+        tbl.add_column(
+            "Total",
+            justify="right",
+            no_wrap=True,
+            min_width=6,
+            header_style=Color.TABLE_PHASES,
+        )
+        tbl.add_column(
+            "",
+            justify="right",
+            no_wrap=True,
+            min_width=6,
+            header_style=Color.DIM,
+        )
+        tbl.add_column(
+            "Passed",
+            justify="right",
+            no_wrap=True,
+            min_width=6,
+            header_style=Color.STATUS_DONE,
+        )
+        tbl.add_column(
+            "",
+            justify="right",
+            no_wrap=True,
+            min_width=6,
+            header_style=Color.DIM,
+        )
+        tbl.add_column(
+            "Failed",
+            justify="right",
+            no_wrap=True,
+            min_width=6,
+            header_style=Color.STATUS_ERROR,
+        )
+        tbl.add_column(
+            "",
+            justify="right",
+            no_wrap=True,
+            min_width=6,
+            header_style=Color.DIM,
+        )
+        tbl.add_column(
+            "Skipped",
+            justify="right",
+            no_wrap=True,
+            min_width=6,
+            header_style=Color.STATUS_PENDING,
+        )
+        tbl.add_column(
+            "",
+            justify="right",
+            no_wrap=True,
+            min_width=6,
+            header_style=Color.DIM,
+        )
+        tbl.add_column(
+            "Remaining",
+            justify="right",
+            no_wrap=True,
+            min_width=6,
+            header_style=Color.STATUS_RUNNING,
+        )
+        tbl.add_column(
+            "Percentage",
+            justify="right",
+            no_wrap=True,
+            min_width=10,
+            header_style=Color.MAGENTA,
+        )
+
+        # Build a lookup and fill gaps so every minute from 1..current appears
+        import time as _time
+
+        by_minute = {int(r.get("minute", 0)): r for r in tests_per_minute}
+        data_max = max(by_minute.keys()) if by_minute else 0
+        if session_start_ts:
+            elapsed_minutes = int((_time.time() - session_start_ts) / 60) + 1
+        else:
+            elapsed_minutes = data_max
+        max_minute = max(data_max, elapsed_minutes, 1)
+        empty_row = {"total": 0, "passed": 0, "failed": 0, "skipped": 0}
+        all_minutes = []
+        for m in range(1, max_minute + 1):
+            all_minutes.append(by_minute.get(m, {"minute": m, **empty_row}))
+
+        # Compute cumulative values in chronological order
+        computed = []
+        cum_total = 0
+        cum_passed = 0
+        cum_failed = 0
+        cum_skipped = 0
+        for row in all_minutes:
+            total = int(row.get("total", 0))
+            passed = int(row.get("passed", 0))
+            failed = int(row.get("failed", 0))
+            skipped = int(row.get("skipped", 0))
+            cum_total += total
+            cum_passed += passed
+            cum_failed += failed
+            cum_skipped += skipped
+            remaining = max(0, collected - cum_total)
+            rem_pct = (remaining / collected * 100) if collected > 0 else 0
+            computed.append((
+                row, cum_total, cum_passed, cum_failed, cum_skipped,
+                remaining, rem_pct,
+            ))
+
+        # Display most recent first
+        for (
+            row, c_total, c_passed, c_failed, c_skipped, remaining, rem_pct
+        ) in reversed(computed):
+            minute = int(row.get("minute", 0))
+            total = int(row.get("total", 0))
+            passed = int(row.get("passed", 0))
+            failed = int(row.get("failed", 0))
+            skipped = int(row.get("skipped", 0))
+
+            is_milestone = minute % 5 == 0
+
+            if is_milestone:
+                ms = "bold underline "
+                m_txt = RichText(f"▸ {minute}", style=f"{ms}{Color.WHITE}")
+            else:
+                ms = ""
+                m_txt = RichText(str(minute), style=Color.WHITE)
+
+            tbl.add_row(
+                m_txt,
+                RichText(str(total), style=f"{ms}{Color.TABLE_PHASES}"),
+                RichText(str(c_total), style=f"{ms}{Color.DIM}"),
+                RichText(str(passed), style=f"{ms}{Color.STATUS_DONE}"),
+                RichText(str(c_passed), style=f"{ms}{Color.DIM}"),
+                RichText(str(failed), style=f"{ms}{Color.STATUS_ERROR}"),
+                RichText(str(c_failed), style=f"{ms}{Color.DIM}"),
+                RichText(str(skipped), style=f"{ms}{Color.STATUS_PENDING}"),
+                RichText(str(c_skipped), style=f"{ms}{Color.DIM}"),
+                RichText(str(remaining), style=f"{ms}{Color.STATUS_RUNNING}"),
+                RichText(f"{rem_pct:.1f}%", style=f"{ms}{Color.MAGENTA}"),
+            )
+
+        return RichGroup(title, RichText(""), tbl)
 
     @staticmethod
     def _build_distribution(durations: list[float], num_bins: int = 40) -> list[float]:

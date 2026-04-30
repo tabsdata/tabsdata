@@ -65,6 +65,7 @@ from tabsdatax.pytest.plugins.harvester.internal.database import (
     query_fixture_stats,
     query_test_averages,
     query_test_durations,
+    query_tests_per_minute,
 )
 from tabsdatax.pytest.plugins.harvester.internal.schema import MetaState
 
@@ -452,6 +453,7 @@ class HarvesterDashboard(App):
         self._cached_db_stats: list = []
         self._cached_test_averages: dict = {}
         self._cached_test_durations: list = []
+        self._cached_tests_per_minute: list = []
         self._running_keys: set[str] = set()
         self._failed_keys_ordered: tuple = ()
         self._failed_keys: set[str] = set()
@@ -651,6 +653,7 @@ class HarvesterDashboard(App):
             db_stats,
             test_averages,
             test_durations,
+            tests_per_minute,
         ) = result
 
         # UI updates on main thread
@@ -665,6 +668,7 @@ class HarvesterDashboard(App):
         self._cached_db_stats = db_stats
         self._cached_test_averages = test_averages
         self._cached_test_durations = test_durations
+        self._cached_tests_per_minute = tests_per_minute
         self._apply_updates()
 
     def _collect_data(self):
@@ -692,6 +696,9 @@ class HarvesterDashboard(App):
         db_stats = query_fixture_stats(self._folder)
         test_averages = query_test_averages(self._folder)
         test_durations = query_test_durations(self._folder)
+        tests_per_minute = query_tests_per_minute(
+            self._folder, meta.session_start_ts
+        )
 
         return (
             meta,
@@ -703,6 +710,7 @@ class HarvesterDashboard(App):
             db_stats,
             test_averages,
             test_durations,
+            tests_per_minute,
         )
 
     def _apply_updates(self) -> None:
@@ -762,6 +770,7 @@ class HarvesterDashboard(App):
             test_averages={},
             running_tests=[],
             test_durations=[],
+            tests_per_minute=[],
         )
 
     def _check_session_restart(self) -> bool:
@@ -830,6 +839,7 @@ class HarvesterDashboard(App):
             running_tests=self._cached_running,
             test_durations=self._cached_test_durations,
             session_end_ts=session_end_ts,
+            tests_per_minute=self._cached_tests_per_minute,
         )
 
     # ------------------------------------------------------------------
