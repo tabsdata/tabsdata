@@ -258,10 +258,11 @@ class Collection:
             data = response.json().get("data")
             next_pagination_id = data.get("next_pagination_id")
             next_step = data.get("next")
-            raw_functions = data.get("data")
+            raw_functions = data.get("data") or []
             for raw_function in raw_functions:
-                raw_function = Function(self.connection, **raw_function)
-                yield raw_function
+                if "collection" not in raw_function:
+                    raw_function["collection"] = self
+                yield Function(self.connection, **raw_function)
             first_page = False
 
     def list_permissions(
@@ -299,7 +300,7 @@ class Collection:
             data = response.json().get("data")
             next_pagination_id = data.get("next_pagination_id")
             next_step = data.get("next")
-            raw_permissions = data.get("data")
+            raw_permissions = data.get("data") or []
             for raw_permission in raw_permissions:
                 built_permission = InterCollectionPermission(
                     self.connection, **raw_permission, collection=self
@@ -369,7 +370,7 @@ class Collection:
             data = response.json().get("data")
             next_pagination_id = data.get("next_pagination_id")
             next_step = data.get("next")
-            raw_tables = data.get("data")
+            raw_tables = data.get("data") or []
             for raw_table in raw_tables:
                 raw_table = Table(self.connection, self, **raw_table)
                 yield raw_table
@@ -445,40 +446,43 @@ class Collection:
         """
 
         temporary_directory = tempfile.TemporaryDirectory(dir=tabsdata_temp_folder())
-        valid_python_versions = (
-            self.connection
-            .runtime_info_get()
-            .json()
-            .get("data", {})
-            .get("python_versions")
-        )
-        archive = _create_archive(
-            function_path,
-            temporary_directory,
-            path_to_bundle,
-            requirements,
-            local_packages,
-            valid_python_versions,
-            collection=self.name,
-        )
+        try:
+            valid_python_versions = (
+                self.connection
+                .runtime_info_get()
+                .json()
+                .get("data", {})
+                .get("python_versions")
+            )
+            archive = _create_archive(
+                function_path,
+                temporary_directory,
+                path_to_bundle,
+                requirements,
+                local_packages,
+                valid_python_versions,
+                collection=self.name,
+            )
 
-        tables = archive.tables
-        table_types = archive.table_types
-        string_dependencies = archive.string_dependencies
-        trigger_by = archive.trigger_string_list
-        function_snippet = archive.function_snippet
-        context_location = archive.context_location
-        decorator_function_name = archive.function_name
-        decorator_type = archive.function_type
-        source_or_destination_name = archive.source_or_destination
-        workers = archive.workers
+            tables = archive.tables
+            table_types = archive.table_types
+            string_dependencies = archive.string_dependencies
+            trigger_by = archive.trigger_string_list
+            function_snippet = archive.function_snippet
+            context_location = archive.context_location
+            decorator_function_name = archive.function_name
+            decorator_type = archive.function_type
+            source_or_destination_name = archive.source_or_destination
+            workers = archive.workers
 
-        function_name = function_name or decorator_function_name
+            function_name = function_name or decorator_function_name
 
-        description = description or function_name
+            description = description or function_name
 
-        with open(context_location, "rb") as file:
-            bundle = file.read()
+            with open(context_location, "rb") as file:
+                bundle = file.read()
+        finally:
+            temporary_directory.cleanup()
 
         response = self.connection.function_upload_bundle(
             collection_name=self.name,
@@ -564,36 +568,39 @@ class Collection:
             APIServerError: If the function could not be updated.
         """
         temporary_directory = tempfile.TemporaryDirectory(dir=tabsdata_temp_folder())
-        valid_python_versions = (
-            self.connection
-            .runtime_info_get()
-            .json()
-            .get("data", {})
-            .get("python_versions")
-        )
-        archive = _create_archive(
-            function_path,
-            temporary_directory,
-            directory_to_bundle,
-            requirements,
-            local_packages,
-            valid_python_versions,
-            collection=self.name,
-        )
+        try:
+            valid_python_versions = (
+                self.connection
+                .runtime_info_get()
+                .json()
+                .get("data", {})
+                .get("python_versions")
+            )
+            archive = _create_archive(
+                function_path,
+                temporary_directory,
+                directory_to_bundle,
+                requirements,
+                local_packages,
+                valid_python_versions,
+                collection=self.name,
+            )
 
-        tables = archive.tables
-        table_types = archive.table_types
-        string_dependencies = archive.string_dependencies
-        trigger_by = archive.trigger_string_list
-        function_snippet = archive.function_snippet
-        context_location = archive.context_location
-        decorator_new_function_name = archive.function_name
-        decorator_type = archive.function_type
-        source_or_destination_name = archive.source_or_destination
-        workers = archive.workers
+            tables = archive.tables
+            table_types = archive.table_types
+            string_dependencies = archive.string_dependencies
+            trigger_by = archive.trigger_string_list
+            function_snippet = archive.function_snippet
+            context_location = archive.context_location
+            decorator_new_function_name = archive.function_name
+            decorator_type = archive.function_type
+            source_or_destination_name = archive.source_or_destination
+            workers = archive.workers
 
-        with open(context_location, "rb") as file:
-            bundle = file.read()
+            with open(context_location, "rb") as file:
+                bundle = file.read()
+        finally:
+            temporary_directory.cleanup()
 
         response = self.connection.function_upload_bundle(
             collection_name=self.name,
@@ -1300,7 +1307,7 @@ class Function:
             data = response.json().get("data")
             next_pagination_id = data.get("next_pagination_id")
             next_step = data.get("next")
-            raw_functions = data.get("data")
+            raw_functions = data.get("data") or []
             for raw_function in raw_functions:
                 raw_function["collection"] = self.collection
                 built_function = Function(
@@ -1981,7 +1988,7 @@ class Role:
             data = response.json().get("data")
             next_pagination_id = data.get("next_pagination_id")
             next_step = data.get("next")
-            raw_permissions = data.get("data")
+            raw_permissions = data.get("data") or []
             for raw_permission in raw_permissions:
                 built_permission = RolePermission(
                     self.connection,
@@ -2025,7 +2032,7 @@ class Role:
             data = response.json().get("data")
             next_pagination_id = data.get("next_pagination_id")
             next_step = data.get("next")
-            raw_users = data.get("data")
+            raw_users = data.get("data") or []
             for raw_user in raw_users:
                 if "name" not in raw_user:
                     raw_user["name"] = raw_user.get("user")
@@ -2472,7 +2479,7 @@ class Table:
             data = response.json().get("data")
             next_pagination_id = data.get("next_pagination_id")
             next_step = data.get("next")
-            raw_dataversions = data.get("data")
+            raw_dataversions = data.get("data") or []
             for raw_dataversion in raw_dataversions:
                 built_dataversion = DataVersion(
                     self.connection,
@@ -3390,7 +3397,7 @@ class TabsdataServer:
             data = response.json().get("data")
             next_pagination_id = data.get("next_pagination_id")
             next_step = data.get("next")
-            raw_collections = data.get("data")
+            raw_collections = data.get("data") or []
             for raw_collection in raw_collections:
                 built_collection = Collection(self.connection, **raw_collection)
                 yield built_collection
@@ -3542,7 +3549,7 @@ class TabsdataServer:
             data = response.json().get("data")
             next_pagination_id = data.get("next_pagination_id")
             next_step = data.get("next")
-            raw_executions = data.get("data")
+            raw_executions = data.get("data") or []
             for raw_execution in raw_executions:
                 built_execution = Execution(self.connection, **raw_execution)
                 yield built_execution
@@ -3710,7 +3717,7 @@ class TabsdataServer:
             data = response.json().get("data")
             next_pagination_id = data.get("next_pagination_id")
             next_step = data.get("next")
-            raw_function_runs = data.get("data")
+            raw_function_runs = data.get("data") or []
             for raw_function_run in raw_function_runs:
                 built_function_run = FunctionRun(self.connection, **raw_function_run)
                 yield built_function_run
@@ -4052,7 +4059,7 @@ class TabsdataServer:
             data = response.json().get("data")
             next_pagination_id = data.get("next_pagination_id")
             next_step = data.get("next")
-            raw_roles = data.get("data")
+            raw_roles = data.get("data") or []
             for raw_role in raw_roles:
                 built_role = Role(self.connection, **raw_role)
                 yield built_role
@@ -4345,7 +4352,7 @@ class TabsdataServer:
             data = response.json().get("data")
             next_pagination_id = data.get("next_pagination_id")
             next_step = data.get("next")
-            raw_transactions = data.get("data")
+            raw_transactions = data.get("data") or []
             for raw_transaction in raw_transactions:
                 built_transaction = Transaction(self.connection, **raw_transaction)
                 yield built_transaction
@@ -4504,7 +4511,7 @@ class TabsdataServer:
             data = response.json().get("data")
             next_pagination_id = data.get("next_pagination_id")
             next_step = data.get("next")
-            raw_users = data.get("data")
+            raw_users = data.get("data") or []
             for raw_user in raw_users:
                 built_user = User(self.connection, **raw_user)
                 yield built_user
@@ -4590,7 +4597,7 @@ class TabsdataServer:
             data = response.json().get("data")
             next_pagination_id = data.get("next_pagination_id")
             next_step = data.get("next")
-            raw_workers = data.get("data")
+            raw_workers = data.get("data") or []
             for raw_worker in raw_workers:
                 built_worker = Worker(self.connection, **raw_worker)
                 yield built_worker

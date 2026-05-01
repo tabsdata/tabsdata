@@ -122,7 +122,7 @@ def _obtain_certificate_file_path(url: str) -> str:
         )
         full_path = os.path.join(DEFAULT_TABSDATA_CERTIFICATE_FOLDER, file_name)
         return full_path
-    except Exception as e:
+    except (AttributeError, TypeError, ValueError) as e:
         raise ValueError(
             f"Invalid URL '{url}' for obtaining certificate file path. Please ensure "
             f"that it is a valid URL, with a hostname and a port: {e}"
@@ -130,7 +130,9 @@ def _obtain_certificate_file_path(url: str) -> str:
 
 
 class APIServerError(Exception):
-    def __init__(self, dictionary: dict):
+    def __init__(self, dictionary):
+        if not isinstance(dictionary, dict):
+            dictionary = {"error_description": str(dictionary)}
         self.code = dictionary.get("code")
         self.error = dictionary.get("error")
         self.error_description = dictionary.get("error_description")
@@ -213,14 +215,13 @@ class APIServer:
                 verify=self.certificate_file,
             )
         else:
-            with GET_HTTP_SESSION as session:
-                return session.get(
-                    self.url + path,
-                    headers=headers,
-                    timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
-                    params=params,
-                    verify=self.certificate_file,
-                )
+            return GET_HTTP_SESSION.get(
+                self.url + path,
+                headers=headers,
+                timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
+                params=params,
+                verify=self.certificate_file,
+            )
 
     def post(
         self,
@@ -251,16 +252,15 @@ class APIServer:
                 verify=self.certificate_file,
             )
         else:
-            with DEFAULT_HTTP_SESSION as session:
-                return session.post(
-                    self.url + path,
-                    headers=headers,
-                    timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
-                    json=json,
-                    data=data,
-                    params=params,
-                    verify=self.certificate_file,
-                )
+            return DEFAULT_HTTP_SESSION.post(
+                self.url + path,
+                headers=headers,
+                timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
+                json=json,
+                data=data,
+                params=params,
+                verify=self.certificate_file,
+            )
 
     def post_binary(self, path, data, refresh_if_needed=True):
         headers = {}
@@ -280,14 +280,13 @@ class APIServer:
                 verify=self.certificate_file,
             )
         else:
-            with DEFAULT_HTTP_SESSION as session:
-                return session.post(
-                    self.url + path,
-                    headers=headers,
-                    timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
-                    data=data,
-                    verify=self.certificate_file,
-                )
+            return DEFAULT_HTTP_SESSION.post(
+                self.url + path,
+                headers=headers,
+                timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
+                data=data,
+                verify=self.certificate_file,
+            )
 
     def delete(self, path, refresh_if_needed=True):
         headers = {}
@@ -305,13 +304,12 @@ class APIServer:
                 verify=self.certificate_file,
             )
         else:
-            with DEFAULT_HTTP_SESSION as session:
-                return session.delete(
-                    self.url + path,
-                    headers=headers,
-                    timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
-                    verify=self.certificate_file,
-                )
+            return DEFAULT_HTTP_SESSION.delete(
+                self.url + path,
+                headers=headers,
+                timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
+                verify=self.certificate_file,
+            )
 
     def _store_in_file(self, file_path: str):
         with open(file_path, "w") as file:
@@ -358,17 +356,18 @@ class APIServer:
         )
         time_of_request = time.time()
         response = self.post(endpoint, json=data, refresh_if_needed=False)
+        response_data = response.json()
         if HTTPStatus(response.status_code).is_success:
-            self.bearer_token = response.json()["access_token"]
-            self.refresh_token = response.json()["refresh_token"]
-            self.token_type = response.json()["token_type"]
-            self.expires_in = response.json()["expires_in"]
+            self.bearer_token = response_data["access_token"]
+            self.refresh_token = response_data["refresh_token"]
+            self.token_type = response_data["token_type"]
+            self.expires_in = response_data["expires_in"]
             self.expiration_time = time_of_request + self.expires_in
             if self.credentials_file:
                 self._store_in_file(self.credentials_file)
             return response
         else:
-            raise APIServerError(response.json())
+            raise APIServerError(response_data)
 
     def authentication_logout(self, raise_for_status: bool = True):
         endpoint = "/auth/logout"
@@ -412,34 +411,36 @@ class APIServer:
             refresh_if_needed=False,
             content_type="application/x-www-form-urlencoded",
         )
+        response_data = response.json()
         if HTTPStatus(response.status_code).is_success:
-            self.bearer_token = response.json()["access_token"]
-            self.refresh_token = response.json()["refresh_token"]
-            self.token_type = response.json()["token_type"]
-            self.expires_in = response.json()["expires_in"]
+            self.bearer_token = response_data["access_token"]
+            self.refresh_token = response_data["refresh_token"]
+            self.token_type = response_data["token_type"]
+            self.expires_in = response_data["expires_in"]
             self.expiration_time = time_of_request + self.expires_in
             if self.credentials_file:
                 self._store_in_file(self.credentials_file)
             return response
         else:
-            raise APIServerError(response.json())
+            raise APIServerError(response_data)
 
     def authentication_role_change(self, role: str):
         endpoint = "/auth/role_change"
         data = {"role": role}
         time_of_request = time.time()
         response = self.post(endpoint, json=data)
+        response_data = response.json()
         if HTTPStatus(response.status_code).is_success:
-            self.bearer_token = response.json()["access_token"]
-            self.refresh_token = response.json()["refresh_token"]
-            self.token_type = response.json()["token_type"]
-            self.expires_in = response.json()["expires_in"]
+            self.bearer_token = response_data["access_token"]
+            self.refresh_token = response_data["refresh_token"]
+            self.token_type = response_data["token_type"]
+            self.expires_in = response_data["expires_in"]
             self.expiration_time = time_of_request + self.expires_in
             if self.credentials_file:
                 self._store_in_file(self.credentials_file)
             return response
         else:
-            raise APIServerError(response.json())
+            raise APIServerError(response_data)
 
     def authz_inter_coll_perm_create(
         self, collection: str, to_collection: str, raise_for_status: bool = True
