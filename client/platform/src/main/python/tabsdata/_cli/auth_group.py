@@ -168,10 +168,7 @@ def password_change(
         "Old password",
         hide_input=True,
     )
-    if new_password:
-        # If the new password is provided, we don't need to ask for it again
-        pass
-    else:
+    if not new_password:
         new_password = logical_prompt(
             ctx,
             "New password",

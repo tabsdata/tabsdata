@@ -238,9 +238,9 @@ def obtain_list_fn_run_filters(
 
     request_filter = []
     if status:
-        request_filter.append([
+        request_filter.extend(
             f"status:eq:{user_function_run_status_to_api(s)}" for s in status
-        ])
+        )
     if exe_name:
         request_filter.append(f"execution:lk:{exe_name}")
     if execution_id:
@@ -419,9 +419,9 @@ def obtain_list_exec_filters(
     """
     request_filter = []
     if status:
-        request_filter.append([
+        request_filter.extend(
             f"status:eq:{user_execution_status_to_api(s)}" for s in status
-        ])
+        )
     if exe_name:
         request_filter.append(f"name:lk:{exe_name}")
     if fn:
@@ -613,9 +613,9 @@ def obtain_list_trx_filters(
     """
     request_filter = []
     if status:
-        request_filter.append([
+        request_filter.extend(
             f"status:eq:{user_transaction_status_to_api(s)}" for s in status
-        ])
+        )
     if exe_name:
         request_filter.append(f"execution:lk:{exe_name}")
     if execution_id:
@@ -790,9 +790,9 @@ def obtain_list_worker_filters(
 
     request_filter = []
     if status:
-        request_filter.append([
+        request_filter.extend(
             f"status:eq:{user_worker_status_to_api(s)}" for s in status
-        ])
+        )
     if exe_name:
         request_filter.append(f"execution:lk:{exe_name}")
     if execution_id:

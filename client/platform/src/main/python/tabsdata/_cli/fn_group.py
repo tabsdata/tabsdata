@@ -781,14 +781,13 @@ def disable(
     name: str,
     coll: str,
 ):
+    """Disables a function"""
     name = name or logical_prompt(ctx, "Name of the function to be updated")
     coll = (
         coll
         or get_currently_pinned_object(ctx, "collection")
         or logical_prompt(ctx, "Name of the collection to which the function belongs")
     )
-
-    """Disables a function"""
     click.echo(f"Disabling function '{name}' in collection '{coll}'")
     click.echo("-" * 10)
     try:

@@ -152,9 +152,8 @@ def request_login_information(ctx: click.Context):
 
 def initialise_tabsdata_server_connection(ctx: click.Context):
     try:
-        credentials = json.load(
-            open(os.path.join(DEFAULT_TABSDATA_DIRECTORY, CONNECTION_FILE))
-        )
+        with open(os.path.join(DEFAULT_TABSDATA_DIRECTORY, CONNECTION_FILE)) as f:
+            credentials = json.load(f)
         connection = APIServer(
             credentials.get("url"),
             credentials_file=get_credentials_file_path(ctx),
@@ -316,8 +315,6 @@ def show_hint(ctx: click.Context, hint: str, final_empty_line: bool = False):
         click.echo("Use 'td hints off' to stop seeing these hints.")
         if final_empty_line:
             click.echo()
-    else:
-        pass
 
 
 def hint_common_solutions(ctx: click.Context, e: Exception):

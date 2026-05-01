@@ -10,6 +10,12 @@ import pytest
 from click.testing import CliRunner
 
 from tabsdata._cli.cli import cli
+from tabsdata._cli.exe_group import (
+    obtain_list_exec_filters,
+    obtain_list_fn_run_filters,
+    obtain_list_trx_filters,
+    obtain_list_worker_filters,
+)
 from tabsdata.api.status_utils.execution import EXECUTION_FINAL_STATUSES
 from tabsdata.api.status_utils.transaction import TRANSACTION_FINAL_STATUSES
 from tabsdata.api.tabsdata_server import Execution
@@ -1036,3 +1042,197 @@ def test_fn_run_list_by_all_options_fails(
     )
     logger.debug(result.output)
     assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for filter construction helpers
+# ---------------------------------------------------------------------------
+
+
+def _assert_flat_list_of_strings(result):
+    """Assert that result is a flat list where every element is a string."""
+    assert isinstance(result, list)
+    for i, item in enumerate(result):
+        assert isinstance(item, str), (
+            f"Element at index {i} is {type(item).__name__}, not str: {item!r}"
+        )
+
+
+class TestObtainListFnRunFilters:
+    def test_no_filters(self):
+        result = obtain_list_fn_run_filters(
+            status=None, exe_name=None, execution_id=None,
+            fn=None, collection=None, trx=None,
+        )
+        assert result == []
+
+    def test_single_status(self):
+        result = obtain_list_fn_run_filters(
+            status=("done",), exe_name=None, execution_id=None,
+            fn=None, collection=None, trx=None,
+        )
+        _assert_flat_list_of_strings(result)
+        assert len(result) == 1
+        assert "status:eq:" in result[0]
+
+    def test_multiple_statuses_produces_flat_list(self):
+        result = obtain_list_fn_run_filters(
+            status=("done", "failed"), exe_name=None, execution_id=None,
+            fn=None, collection=None, trx=None,
+        )
+        _assert_flat_list_of_strings(result)
+        assert len(result) == 2
+
+    def test_multiple_statuses_with_other_filters(self):
+        result = obtain_list_fn_run_filters(
+            status=("done", "failed"), exe_name="my_exec",
+            execution_id="exec-123", fn="my_fn",
+            collection="my_coll", trx="trx-456",
+        )
+        _assert_flat_list_of_strings(result)
+        status_filters = [f for f in result if f.startswith("status:eq:")]
+        assert len(status_filters) == 2
+        assert "execution:lk:my_exec" in result
+        assert "execution_id:eq:exec-123" in result
+        assert "name:eq:my_fn" in result
+        assert "collection:eq:my_coll" in result
+        assert "transaction_id:eq:trx-456" in result
+
+    def test_non_status_filters_only(self):
+        result = obtain_list_fn_run_filters(
+            status=None, exe_name="my_exec", execution_id=None,
+            fn=None, collection="my_coll", trx=None,
+        )
+        _assert_flat_list_of_strings(result)
+        assert len(result) == 2
+
+
+class TestObtainListExecFilters:
+    def test_no_filters(self):
+        result = obtain_list_exec_filters(
+            status=None, exe_name=None, fn=None, collection=None, at=None,
+        )
+        assert result == []
+
+    def test_single_status(self):
+        result = obtain_list_exec_filters(
+            status=("finished",), exe_name=None, fn=None,
+            collection=None, at=None,
+        )
+        _assert_flat_list_of_strings(result)
+        assert len(result) == 1
+
+    def test_multiple_statuses_produces_flat_list(self):
+        result = obtain_list_exec_filters(
+            status=("finished", "stalled"), exe_name=None, fn=None,
+            collection=None, at=None,
+        )
+        _assert_flat_list_of_strings(result)
+        assert len(result) == 2
+
+    def test_multiple_statuses_with_other_filters(self):
+        result = obtain_list_exec_filters(
+            status=("finished", "stalled"), exe_name="my_exec",
+            fn="my_fn", collection="my_coll", at=None,
+        )
+        _assert_flat_list_of_strings(result)
+        status_filters = [f for f in result if f.startswith("status:eq:")]
+        assert len(status_filters) == 2
+        assert "name:lk:my_exec" in result
+        assert "function:eq:my_fn" in result
+        assert "collection:eq:my_coll" in result
+
+
+class TestObtainListTrxFilters:
+    def test_no_filters(self):
+        result = obtain_list_trx_filters(
+            status=None, exe_name=None, execution_id=None,
+            collection=None, at=None,
+        )
+        assert result == []
+
+    def test_single_status(self):
+        result = obtain_list_trx_filters(
+            status=("committed",), exe_name=None, execution_id=None,
+            collection=None, at=None,
+        )
+        _assert_flat_list_of_strings(result)
+        assert len(result) == 1
+
+    def test_multiple_statuses_produces_flat_list(self):
+        result = obtain_list_trx_filters(
+            status=("committed", "stalled"), exe_name=None, execution_id=None,
+            collection=None, at=None,
+        )
+        _assert_flat_list_of_strings(result)
+        assert len(result) == 2
+
+    def test_multiple_statuses_with_other_filters(self):
+        result = obtain_list_trx_filters(
+            status=("committed", "stalled"), exe_name="my_exec",
+            execution_id="exec-123", collection="my_coll", at=None,
+        )
+        _assert_flat_list_of_strings(result)
+        status_filters = [f for f in result if f.startswith("status:eq:")]
+        assert len(status_filters) == 2
+        assert "execution:lk:my_exec" in result
+        assert "execution_id:eq:exec-123" in result
+        assert "collection:eq:my_coll" in result
+
+
+class TestObtainListWorkerFilters:
+    def test_no_filters(self):
+        result = obtain_list_worker_filters()
+        assert result == []
+
+    def test_single_status(self):
+        result = obtain_list_worker_filters(status=("done",))
+        _assert_flat_list_of_strings(result)
+        assert len(result) == 1
+
+    def test_multiple_statuses_produces_flat_list(self):
+        result = obtain_list_worker_filters(status=("done", "failed"))
+        _assert_flat_list_of_strings(result)
+        assert len(result) == 2
+
+    def test_multiple_statuses_with_other_filters(self):
+        result = obtain_list_worker_filters(
+            status=("done", "failed"), exe_name="my_exec",
+            execution_id="exec-123", fn="my_fn",
+            fn_run="run-789", collection="my_coll",
+            trx="trx-456", worker_type="runner",
+        )
+        _assert_flat_list_of_strings(result)
+        status_filters = [f for f in result if f.startswith("status:eq:")]
+        assert len(status_filters) == 2
+        assert "execution:lk:my_exec" in result
+        assert "execution_id:eq:exec-123" in result
+        assert "function:eq:my_fn" in result
+        assert "function_run_id:eq:run-789" in result
+        assert "collection:eq:my_coll" in result
+        assert "transaction_id:eq:trx-456" in result
+        assert "worker_type:eq:runner" in result
+
+
+@pytest.mark.parametrize("filter_fn, kwargs", [
+    (obtain_list_fn_run_filters, dict(
+        status=("done", "failed", "running"),
+        exe_name=None, execution_id=None,
+        fn=None, collection=None, trx=None,
+    )),
+    (obtain_list_exec_filters, dict(
+        status=("finished", "stalled", "running"),
+        exe_name=None, fn=None, collection=None, at=None,
+    )),
+    (obtain_list_trx_filters, dict(
+        status=("committed", "stalled", "running"),
+        exe_name=None, execution_id=None, collection=None, at=None,
+    )),
+    (obtain_list_worker_filters, dict(
+        status=("done", "failed", "running"),
+    )),
+])
+def test_no_nested_lists_in_filters(filter_fn, kwargs):
+    """Regression test: filter functions must never produce nested lists."""
+    result = filter_fn(**kwargs)
+    _assert_flat_list_of_strings(result)
