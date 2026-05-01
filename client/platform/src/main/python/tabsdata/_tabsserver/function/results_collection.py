@@ -48,14 +48,7 @@ class ResultsCollection:
         for result in self.results:
             result.check_integrity()
 
-    def convert_none_to_empty_frame(self):
-        self.results = tuple(
-            result.convert_none_to_empty_frame() for result in self.results
-        )
-
     def normalize_frame(self):
-        # Abandoned policy to convert None to empty frame.
-        # self.convert_none_to_empty_frame()
         pass
 
 
@@ -87,34 +80,5 @@ class Result:
         else:
             raise TypeError(f"Invalid result type '{type(self.value)}'")
 
-    def convert_none_to_empty_frame(self) -> Result:
-        self.value = _convert_none_to_empty_frame(self.value)
-        return self
-
     def normalize_frame(self) -> Result:
-        # Abandoned policy to convert None to empty frame.
-        # return self.convert_none_to_empty_frame()
         return self
-
-
-# Converting None results to empty TableFrame is now an abandoned policy.
-def _convert_none_to_empty_frame(
-    results: VALID_SINGLE_RESULT,
-) -> VALID_SINGLE_RESULT:
-    if results is None:
-        logger.debug("Result is None. Returning empty frame.")
-        return TableFrame({})
-    elif isinstance(results, TableFrame):
-        return results
-    elif isinstance(results, list):
-        return [_convert_none_to_empty_frame(table) for table in results]
-    else:
-        raise TypeError(f"Invalid result type: {type(results)}")
-
-
-def _normalize_frame(
-    results: VALID_SINGLE_RESULT,
-) -> VALID_SINGLE_RESULT:
-    # Abandoned policy to convert None to empty frame.
-    # return _convert_none_to_empty_frame(results)
-    return results

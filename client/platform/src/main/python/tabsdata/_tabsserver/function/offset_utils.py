@@ -208,6 +208,12 @@ class Offset:
         logger.debug("Loading current offset")
         system_input = request.system_input
         logger.debug(f"System input: {system_input}")
+        if not system_input or len(system_input) <= OFFSET_LIST_POSITION:
+            raise ValueError(
+                f"System input is missing the offset table at position "
+                f"{OFFSET_LIST_POSITION}. System input has "
+                f"{len(system_input) if system_input else 0} entries."
+            )
         td_offset_table = system_input[OFFSET_LIST_POSITION]
         logger.debug(f"TD offset table: {td_offset_table}")
         logger.debug(f"TD offset table location: {td_offset_table.location}")
@@ -281,6 +287,12 @@ class Offset:
         """
         logger.info(f"Storing offset {str(self)}")
         system_output = request.system_output
+        if not system_output or len(system_output) <= OFFSET_LIST_POSITION:
+            raise ValueError(
+                f"System output is missing the offset table at position "
+                f"{OFFSET_LIST_POSITION}. System output has "
+                f"{len(system_output) if system_output else 0} entries."
+            )
         offset_output_table = system_output[OFFSET_LIST_POSITION]
         self.output_table_name = offset_output_table.name
         destination_table_uri = offset_output_table.uri

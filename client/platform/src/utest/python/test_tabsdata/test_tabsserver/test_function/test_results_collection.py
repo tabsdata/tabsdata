@@ -6,7 +6,6 @@ import pytest
 
 import tabsdata as td
 from tabsdata._tabsserver.function.results_collection import Result, ResultsCollection
-from test_tabsdata.conftest import clean_polars_df
 
 # noinspection PyUnresolvedReferences
 from .. import pytestmark  # noqa: F401
@@ -179,29 +178,28 @@ def test_results_collection_check_collection_integrity():
     results.check_collection_integrity()
 
 
-def test_convert_none_to_empty_frame():
-    results = ResultsCollection(None)
-    results.convert_none_to_empty_frame()
-    assert isinstance(results.results[0].value, td.TableFrame)
-    df = results.results[0].value._to_lazy().collect()
-    assert clean_polars_df(df).is_empty()
+# ---------------------------------------------------------------------------
+# Unit tests for normalize_frame (no-op after dead code removal)
+# ---------------------------------------------------------------------------
 
-    results = ResultsCollection(CORRECT_TF)
-    results.convert_none_to_empty_frame()
-    assert results.results[0].value == CORRECT_TF
 
-    results = ResultsCollection([CORRECT_TF, None, CORRECT_TF])
-    results.convert_none_to_empty_frame()
-    assert results.results[0].value[0] == CORRECT_TF
-    assert isinstance(results.results[0].value[1], td.TableFrame)
-    df = results.results[0].value[1]._to_lazy().collect()
-    assert clean_polars_df(df).is_empty()
-    assert results.results[0].value[2] == CORRECT_TF
+class TestNormalizeFrame:
+    def test_result_normalize_frame_returns_self(self):
+        result = Result(CORRECT_TF)
+        returned = result.normalize_frame()
+        assert returned is result
+        assert returned.value is CORRECT_TF
 
-    results = ResultsCollection((CORRECT_TF, None, CORRECT_TF))
-    results.convert_none_to_empty_frame()
-    assert results.results[0].value == CORRECT_TF
-    assert isinstance(results.results[1].value, td.TableFrame)
-    df = results.results[1].value._to_lazy().collect()
-    assert clean_polars_df(df).is_empty()
-    assert results.results[2].value == CORRECT_TF
+    def test_result_normalize_frame_preserves_none(self):
+        result = Result(None)
+        returned = result.normalize_frame()
+        assert returned is result
+        assert returned.value is None
+
+    def test_collection_normalize_frame_preserves_results(self):
+        results = ResultsCollection((CORRECT_TF, None, CORRECT_TF))
+        results.normalize_frame()
+        assert results[0].value is CORRECT_TF
+        assert results[1].value is None
+        assert results[2].value is CORRECT_TF
+
