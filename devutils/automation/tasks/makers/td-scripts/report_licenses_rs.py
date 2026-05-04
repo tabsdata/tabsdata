@@ -84,6 +84,7 @@ normalized_licenses = {
     "APACHE-2.0;; BSD-3-CLAUSE": "Apache License Version 2.0 or BSD Revised License (BSD-3-Clause)",                                                                                           # noqa: E231,E241,E501
     "APACHE-2.0;; CNRI-PYTHON": "Apache License Version 2.0 or Python Software Foundation License Version 2.0",                                                                                # noqa: E231,E241,E501
     "APACHE-2.0;; MIT": "Apache License Version 2.0 or MIT License",                                                                                                                           # noqa: E231,E241,E501
+    "APACHE-2.0;; UPL-1.0": "Apache License Version 2.0 or Universal Permissive License Version 1.0",                                                                                          # noqa: E231,E241,E501
     "Apache-2.0": "Apache License Version 2.0",                                                                                                                                                # noqa: E231,E241,E501
     "APACHE-2.0": "Apache License Version 2.0",                                                                                                                                                # noqa: E231,E241,E501
     "Artistic-2.0 OR CC0-1.0": "Artistic License Version 2.0 or Creative Commons Zero Version 1.0 Universal",                                                                                  # noqa: E231,E241,E501
@@ -107,6 +108,8 @@ normalized_licenses = {
     "CC0-1.0": "Creative Commons Zero Version 1.0 Universal",                                                                                                                                  # noqa: E231,E241,E501
     "CDLA-Permissive-2.0": "Community Data License Agreement Permissive Version 2.0",                                                                                                          # noqa: E231,E241,E501
     "CMU LICENSE (MIT-CMU)": "MIT License (CMU Variant)",                                                                                                                                      # noqa: E231,E241,E501
+    "GNU GENERAL PUBLIC LICENSE _GPL_": "GNU General Public License (GPL)",                                                                                                                    # noqa: E231,E241,E501
+    "GNU LIBRARY;; LESSER GENERAL PUBLIC LICENSE _LGPL_": "GNU Lesser General Public License (LGPL)",                                                                                          # noqa: E231,E241,E501
     "ISC AND (Apache-2.0 OR ISC) AND OpenSSL": "Internet Systems Consortium License, and Apache License Version 2.0 or Internet Systems Consortium License, and OpenSSL License",              # noqa: E231,E241,E501
     "ISC AND (Apache-2.0 OR ISC)": "Internet Systems Consortium License, and Apache License Version 2.0 or Internet Systems Consortium License",                                               # noqa: E231,E241,E501
     "ISC LICENSE _ISCL_": "Internet Systems Consortium License",                                                                                                                               # noqa: E231,E241,E501

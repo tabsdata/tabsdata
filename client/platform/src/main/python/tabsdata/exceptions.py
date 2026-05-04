@@ -111,6 +111,19 @@ class ErrorCode(Enum):
             " It must be of the form '{}'. Got '{}' instead."
         ),
     }
+    CXCE11 = {
+        "code": "CXCE-11",
+        "message": "Only one of category and objects can be set",
+    }
+    CXCE12 = {
+        "code": "CXCE-012",
+        "message": "One of category and objects must be set",
+    }
+    CXCE13 = {
+        "code": "CXCE-013",
+        "message": "Invalid category '{}'. Valid categories are: {}",
+    }
+
     DCE1 = {
         "code": "DCE-001",
         "message": (

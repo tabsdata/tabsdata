@@ -21,7 +21,7 @@ use tracing::{debug, error, trace};
 /// function-run status changes (callback, cancel, recover, execute). This
 /// interval only exists as a safety net to pick up pending work after a server
 /// restart or if a notification is missed.
-const CHECK_FREQUENCY: Duration = Duration::from_secs(30);
+const CHECK_FREQUENCY: Duration = Duration::from_secs(1);
 
 pub struct FunctionRequesterV1 {
     request_service: ServiceProvider<(), (), BoxError>,
