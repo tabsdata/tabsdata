@@ -1,9 +1,50 @@
 import os
 from dataclasses import dataclass
+from enum import Enum
+from typing import ClassVar
 
 from tabsdata._io.connections.connections import Conn
 
 ENV_PREFIX = "env:"
+
+
+class ConnMode(str, Enum):
+    Src = "src"
+    Dest = "dest"
+
+
+@dataclass(frozen=True)
+class _ConnDef:
+    """Schema of a connection definition document."""
+
+    KIND: ClassVar[str] = "connectionDef"
+    API_VERSION: ClassVar[str] = "1.0"
+
+    kind: str
+    apiVersion: str
+    name: str
+    conn_mode: ConnMode
+    conn_type: str
+    conn_configs: dict
+
+    @classmethod
+    def from_dict(cls, cx_dict: dict) -> "_ConnDef":
+        kind = cx_dict.get("kind")
+        if kind != cls.KIND:
+            raise ValueError(f"Expected kind '{cls.KIND}', got '{kind}'")
+        api_version = cx_dict.get("apiVersion")
+        if api_version != cls.API_VERSION:
+            raise ValueError(
+                f"Expected apiVersion '{cls.API_VERSION}', got '{api_version}'"
+            )
+        return cls(
+            kind=kind,
+            apiVersion=api_version,
+            name=cx_dict["name"],
+            conn_mode=ConnMode(cx_dict["conn_mode"]),
+            conn_type=cx_dict["conn_type"],
+            conn_configs=cx_dict.get("conn_configs", {}),
+        )
 
 
 @dataclass(init=False)
@@ -40,8 +81,11 @@ class NamedConn(Conn):
         Args:
             cx_dict: A dictionary with the following structure:
                 {
-                    "label": "<connection name>",
-                    "type": "<Conn class name, e.g. MySQLConn>",
+                    "kind": "connectionDef",
+                    "apiVersion": "1.0",
+                    "name": "<connection name>",
+                    "conn_mode": "src" | "dest",
+                    "conn_type": "<Conn class name, e.g. MySQLConn>",
                     "conn_configs": {
                         "<param>": "<value>",
                         "env:<param>": "<ENV_VAR_NAME>",
@@ -53,21 +97,20 @@ class NamedConn(Conn):
         Returns:
             The actual connection configuration corresponding to this NamedConn's name.
         """
-        label = cx_dict["name"]
-        if label != self.name:
+        conn_def = _ConnDef.from_dict(cx_dict)
+
+        if conn_def.name != self.name:
             raise ValueError(
-                f"Connection dictionary label '{label}' does not match "
+                f"Connection dictionary name '{conn_def.name}' does not match "
                 f"NamedConn name '{self.name}'"
             )
 
-        conn_type = cx_dict["type"]
         subclasses = {sub.__name__: sub for sub in Conn.__subclasses__()}
-        conn_cls = subclasses.get(conn_type)
+        conn_cls = subclasses.get(conn_def.conn_type)
         if conn_cls is None:
-            raise ValueError(f"Unknown connection type: '{conn_type}'")
+            raise ValueError(f"Unknown connection type: '{conn_def.conn_type}'")
 
-        conn_configs = cx_dict.get("conn_configs", {})
-        resolved = _resolve_env_vars(conn_configs)
+        resolved = _resolve_env_vars(conn_def.conn_configs)
 
         return conn_cls._load_from_dict(resolved)
 

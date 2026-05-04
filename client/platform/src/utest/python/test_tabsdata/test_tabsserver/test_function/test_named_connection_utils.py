@@ -100,8 +100,11 @@ class TestLoadNamedConnFileErrors:
     def test_raises_when_name_mismatch(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
+            "kind": "connectionDef",
+            "apiVersion": "1.0",
+            "conn_mode": "src",
             "name": "wrong_name",
-            "type": "MySQLConn",
+            "conn_type": "MySQLConn",
             "conn_configs": {"uri": "mysql://localhost/db"},
         }
         _write_connection_json(str(tmp_path), "my_conn", cx_dict)
@@ -112,8 +115,11 @@ class TestLoadNamedConnFileErrors:
     def test_raises_when_unknown_type(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
+            "kind": "connectionDef",
+            "apiVersion": "1.0",
+            "conn_mode": "src",
             "name": "my_conn",
-            "type": "FakeConn",
+            "conn_type": "FakeConn",
             "conn_configs": {"uri": "fake://localhost"},
         }
         _write_connection_json(str(tmp_path), "my_conn", cx_dict)
@@ -131,8 +137,11 @@ class TestLoadNamedConnLowercaseLookup:
     def test_uppercase_name_resolves_to_lowercase_file(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
+            "kind": "connectionDef",
+            "apiVersion": "1.0",
+            "conn_mode": "src",
             "name": "My_Conn",
-            "type": "MySQLConn",
+            "conn_type": "MySQLConn",
             "conn_configs": {"uri": "mysql://localhost/mydb"},
         }
         # File is written with lowercase name
@@ -143,8 +152,11 @@ class TestLoadNamedConnLowercaseLookup:
     def test_mixed_case_name_resolves_to_lowercase_file(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
+            "kind": "connectionDef",
+            "apiVersion": "1.0",
+            "conn_mode": "src",
             "name": "MyDatabase",
-            "type": "PostgresConn",
+            "conn_type": "PostgresConn",
             "conn_configs": {"uri": "postgresql://localhost/mydb"},
         }
         _write_connection_json(str(tmp_path), "mydatabase", cx_dict)
@@ -161,8 +173,11 @@ class TestLoadNamedConnMySQL:
     def test_plain(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
+            "kind": "connectionDef",
+            "apiVersion": "1.0",
+            "conn_mode": "src",
             "name": "mysql_conn",
-            "type": "MySQLConn",
+            "conn_type": "MySQLConn",
             "conn_configs": {"uri": "mysql://localhost/mydb"},
         }
         _write_connection_json(str(tmp_path), "mysql_conn", cx_dict)
@@ -173,8 +188,11 @@ class TestLoadNamedConnMySQL:
     def test_with_credentials(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
+            "kind": "connectionDef",
+            "apiVersion": "1.0",
+            "conn_mode": "src",
             "name": "mysql_creds",
-            "type": "MySQLConn",
+            "conn_type": "MySQLConn",
             "conn_configs": {
                 "uri": "mysql://localhost/mydb",
                 "credentials": {"user": "admin", "password": "secret"},
@@ -190,8 +208,11 @@ class TestLoadNamedConnMySQL:
         monkeypatch.setenv("TEST_MYSQL_USER", "env_user")
         monkeypatch.setenv("TEST_MYSQL_PASS", "env_pass")
         cx_dict = {
+            "kind": "connectionDef",
+            "apiVersion": "1.0",
+            "conn_mode": "src",
             "name": "mysql_env",
-            "type": "MySQLConn",
+            "conn_type": "MySQLConn",
             "conn_configs": {
                 "uri": "mysql://localhost/mydb",
                 "credentials": {
@@ -209,8 +230,11 @@ class TestLoadNamedConnMySQL:
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         monkeypatch.setenv("TEST_MYSQL_URI", "mysql://envhost/envdb")
         cx_dict = {
+            "kind": "connectionDef",
+            "apiVersion": "1.0",
+            "conn_mode": "src",
             "name": "mysql_env_uri",
-            "type": "MySQLConn",
+            "conn_type": "MySQLConn",
             "conn_configs": {"env:uri": "TEST_MYSQL_URI"},
         }
         _write_connection_json(str(tmp_path), "mysql_env_uri", cx_dict)
@@ -222,8 +246,11 @@ class TestLoadNamedConnMySQL:
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         monkeypatch.delenv("NONEXISTENT_VAR_12345", raising=False)
         cx_dict = {
+            "kind": "connectionDef",
+            "apiVersion": "1.0",
+            "conn_mode": "src",
             "name": "mysql_bad_env",
-            "type": "MySQLConn",
+            "conn_type": "MySQLConn",
             "conn_configs": {"env:uri": "NONEXISTENT_VAR_12345"},
         }
         _write_connection_json(str(tmp_path), "mysql_bad_env", cx_dict)
@@ -240,8 +267,11 @@ class TestLoadNamedConnPostgres:
     def test_plain(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
+            "kind": "connectionDef",
+            "apiVersion": "1.0",
+            "conn_mode": "src",
             "name": "pg_conn",
-            "type": "PostgresConn",
+            "conn_type": "PostgresConn",
             "conn_configs": {"uri": "postgresql://localhost/mydb"},
         }
         _write_connection_json(str(tmp_path), "pg_conn", cx_dict)
@@ -252,8 +282,11 @@ class TestLoadNamedConnPostgres:
     def test_with_credentials(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
+            "kind": "connectionDef",
+            "apiVersion": "1.0",
+            "conn_mode": "src",
             "name": "pg_creds",
-            "type": "PostgresConn",
+            "conn_type": "PostgresConn",
             "conn_configs": {
                 "uri": "postgresql://localhost/mydb",
                 "credentials": {"user": "pgadmin", "password": "pgpass"},
@@ -274,8 +307,11 @@ class TestLoadNamedConnMariaDB:
     def test_plain(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
+            "kind": "connectionDef",
+            "apiVersion": "1.0",
+            "conn_mode": "src",
             "name": "maria_conn",
-            "type": "MariaDBConn",
+            "conn_type": "MariaDBConn",
             "conn_configs": {"uri": "mariadb://localhost/mydb"},
         }
         _write_connection_json(str(tmp_path), "maria_conn", cx_dict)
@@ -286,8 +322,11 @@ class TestLoadNamedConnMariaDB:
     def test_with_credentials(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
+            "kind": "connectionDef",
+            "apiVersion": "1.0",
+            "conn_mode": "src",
             "name": "maria_creds",
-            "type": "MariaDBConn",
+            "conn_type": "MariaDBConn",
             "conn_configs": {
                 "uri": "mariadb://localhost/mydb",
                 "credentials": {"user": "maria", "password": "mariapass"},
@@ -308,8 +347,11 @@ class TestLoadNamedConnOracle:
     def test_plain(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
+            "kind": "connectionDef",
+            "apiVersion": "1.0",
+            "conn_mode": "src",
             "name": "oracle_conn",
-            "type": "OracleConn",
+            "conn_type": "OracleConn",
             "conn_configs": {"uri": "oracle://localhost:1521/orcl"},
         }
         _write_connection_json(str(tmp_path), "oracle_conn", cx_dict)
@@ -320,8 +362,11 @@ class TestLoadNamedConnOracle:
     def test_with_credentials(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
+            "kind": "connectionDef",
+            "apiVersion": "1.0",
+            "conn_mode": "src",
             "name": "oracle_creds",
-            "type": "OracleConn",
+            "conn_type": "OracleConn",
             "conn_configs": {
                 "uri": "oracle://localhost:1521/orcl",
                 "credentials": {"user": "sys", "password": "oraclepass"},
@@ -342,8 +387,11 @@ class TestLoadNamedConnMSSQL:
     def test_plain(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
+            "kind": "connectionDef",
+            "apiVersion": "1.0",
+            "conn_mode": "src",
             "name": "mssql_conn",
-            "type": "MSSQLConn",
+            "conn_type": "MSSQLConn",
             "conn_configs": {
                 "connection_string_or_uri": "mssql://localhost/mydb",
             },
@@ -355,8 +403,11 @@ class TestLoadNamedConnMSSQL:
     def test_with_credentials(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
+            "kind": "connectionDef",
+            "apiVersion": "1.0",
+            "conn_mode": "src",
             "name": "mssql_creds",
-            "type": "MSSQLConn",
+            "conn_type": "MSSQLConn",
             "conn_configs": {
                 "connection_string_or_uri": "mssql://localhost/mydb",
                 "credentials": {"user": "sa", "password": "mssqlpass"},
@@ -372,8 +423,11 @@ class TestLoadNamedConnMSSQL:
         monkeypatch.setenv("TEST_MSSQL_USER", "env_sa")
         monkeypatch.setenv("TEST_MSSQL_PASS", "env_mssqlpass")
         cx_dict = {
+            "kind": "connectionDef",
+            "apiVersion": "1.0",
+            "conn_mode": "src",
             "name": "mssql_env",
-            "type": "MSSQLConn",
+            "conn_type": "MSSQLConn",
             "conn_configs": {
                 "connection_string_or_uri": "mssql://localhost/mydb",
                 "credentials": {
@@ -397,8 +451,11 @@ class TestLoadNamedConnS3:
     def test_plain(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
+            "kind": "connectionDef",
+            "apiVersion": "1.0",
+            "conn_mode": "src",
             "name": "s3_conn",
-            "type": "S3Conn",
+            "conn_type": "S3Conn",
             "conn_configs": {
                 "bucket_uri": "s3://mybucket",
                 "credentials": {
@@ -414,8 +471,11 @@ class TestLoadNamedConnS3:
     def test_with_region(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
+            "kind": "connectionDef",
+            "apiVersion": "1.0",
+            "conn_mode": "src",
             "name": "s3_region",
-            "type": "S3Conn",
+            "conn_type": "S3Conn",
             "conn_configs": {
                 "bucket_uri": "s3://mybucket",
                 "credentials": {
@@ -437,8 +497,11 @@ class TestLoadNamedConnS3:
             "TEST_AWS_SECRET", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
         )
         cx_dict = {
+            "kind": "connectionDef",
+            "apiVersion": "1.0",
+            "conn_mode": "src",
             "name": "s3_env",
-            "type": "S3Conn",
+            "conn_type": "S3Conn",
             "conn_configs": {
                 "bucket_uri": "s3://mybucket",
                 "credentials": {
@@ -461,12 +524,15 @@ class TestLoadNamedConnGCS:
     def test_plain(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
+            "kind": "connectionDef",
+            "apiVersion": "1.0",
+            "conn_mode": "src",
             "name": "gcs_conn",
-            "type": "GCSConn",
+            "conn_type": "GCSConn",
             "conn_configs": {
                 "bucket_uri": "gs://mybucket",
                 "credentials": {
-                    "service_account_key": '{"type": "service_account"}',
+                    "service_account_key": '{"conn_type": "service_account"}',
                 },
             },
         }
@@ -476,10 +542,13 @@ class TestLoadNamedConnGCS:
 
     def test_with_env_credentials(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
-        monkeypatch.setenv("TEST_GCS_KEY", '{"type": "service_account"}')
+        monkeypatch.setenv("TEST_GCS_KEY", '{"conn_type": "service_account"}')
         cx_dict = {
+            "kind": "connectionDef",
+            "apiVersion": "1.0",
+            "conn_mode": "src",
             "name": "gcs_env",
-            "type": "GCSConn",
+            "conn_type": "GCSConn",
             "conn_configs": {
                 "bucket_uri": "gs://mybucket",
                 "credentials": {
@@ -501,8 +570,11 @@ class TestResolveNamedConnIfNeeded:
     def test_resolves_named_conn_on_source_plugin(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
+            "kind": "connectionDef",
+            "apiVersion": "1.0",
+            "conn_mode": "src",
             "name": "my_mysql",
-            "type": "MySQLConn",
+            "conn_type": "MySQLConn",
             "conn_configs": {"uri": "mysql://localhost/mydb"},
         }
         _write_connection_json(str(tmp_path), "my_mysql", cx_dict)
@@ -515,8 +587,11 @@ class TestResolveNamedConnIfNeeded:
     def test_resolves_named_conn_on_destination_plugin(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
+            "kind": "connectionDef",
+            "apiVersion": "1.0",
+            "conn_mode": "dest",
             "name": "my_pg",
-            "type": "PostgresConn",
+            "conn_type": "PostgresConn",
             "conn_configs": {"uri": "postgresql://localhost/mydb"},
         }
         _write_connection_json(str(tmp_path), "my_pg", cx_dict)

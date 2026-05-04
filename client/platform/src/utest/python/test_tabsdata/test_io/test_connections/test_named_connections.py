@@ -68,11 +68,11 @@ def test_named_conn_is_conn():
 def test_load_label_mismatch():
     nc = NamedConn(name="my_conn")
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "wrong_name",
-        "label": "Wrong Name Connection",
-        "type": "MySQLConn",
+        "conn_type": "MySQLConn",
         "conn_configs": {"uri": "mysql://localhost/db"},
     }
     with pytest.raises(ValueError, match="does not match"):
@@ -83,11 +83,11 @@ def test_load_label_mismatch():
 def test_load_unknown_type():
     nc = NamedConn(name="my_conn")
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "my_conn",
-        "label": "My Connection",
-        "type": "NonExistentConn",
+        "conn_type": "NonExistentConn",
         "conn_configs": {},
     }
     with pytest.raises(ValueError, match="Unknown connection type"):
@@ -101,11 +101,11 @@ def test_load_unknown_type():
 def test_load_mysql_conn_plain():
     nc = NamedConn(name="mysql_conn")
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "mysql_conn",
-        "label": "MySQL Connection",
-        "type": "MySQLConn",
+        "conn_type": "MySQLConn",
         "conn_configs": {
             "uri": "mysql://localhost/mydb",
         },
@@ -120,11 +120,11 @@ def test_load_mysql_conn_plain():
 def test_load_mysql_conn_with_credentials():
     nc = NamedConn(name="mysql_conn_1")
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "mysql_conn_1",
-        "label": "MySQL Connection",
-        "type": "MySQLConn",
+        "conn_type": "MySQLConn",
         "conn_configs": {
             "uri": "mysql://localhost/mydb",
             "credentials": {
@@ -144,11 +144,11 @@ def test_load_mysql_conn_with_env_credentials(monkeypatch):
     monkeypatch.setenv("TEST_MYSQL_PASSWORD", "env_secret")
     nc = NamedConn(name="mysql_conn_2")
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "mysql_conn_2",
-        "label": "MySQL Connection",
-        "type": "MySQLConn",
+        "conn_type": "MySQLConn",
         "conn_configs": {
             "uri": "mysql://localhost/mydb",
             "credentials": {
@@ -169,11 +169,11 @@ def test_load_mysql_conn_with_env_uri(monkeypatch):
     monkeypatch.setenv("TEST_MYSQL_URI", "mysql://envhost/envdb")
     nc = NamedConn(name="mysql_conn_3")
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "mysql_conn_3",
-        "label": "MySQL Connection",
-        "type": "MySQLConn",
+        "conn_type": "MySQLConn",
         "conn_configs": {
             "env:uri": "TEST_MYSQL_URI",
         },
@@ -192,11 +192,11 @@ def test_load_mysql_conn_all_env_vars(monkeypatch):
     monkeypatch.setenv("TEST_CX_SRC_TIMEOUT", "30")
     nc = NamedConn(name="mysql_conn_all_env")
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "mysql_conn_all_env",
-        "label": "MySQL Connection",
-        "type": "MySQLConn",
+        "conn_type": "MySQLConn",
         "conn_configs": {
             "env:uri": "TEST_MYSQL_URI_ALL",
             "credentials": {
@@ -223,11 +223,11 @@ def test_load_mysql_conn_all_env_vars(monkeypatch):
 def test_load_mysql_conn_missing_env_var():
     nc = NamedConn(name="mysql_conn_4")
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "mysql_conn_4",
-        "label": "MySQL Connection",
-        "type": "MySQLConn",
+        "conn_type": "MySQLConn",
         "conn_configs": {
             "env:uri": "NONEXISTENT_ENV_VAR_12345",
         },
@@ -243,11 +243,11 @@ def test_load_mysql_conn_missing_env_var():
 def test_load_postgres_conn_plain():
     nc = NamedConn(name="pg_conn")
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "pg_conn",
-        "label": "Postgres Connection",
-        "type": "PostgresConn",
+        "conn_type": "PostgresConn",
         "conn_configs": {
             "uri": "postgresql://localhost/mydb",
         },
@@ -261,11 +261,11 @@ def test_load_postgres_conn_plain():
 def test_load_postgres_conn_with_credentials():
     nc = NamedConn(name="pg_conn_1")
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "pg_conn_1",
-        "label": "Postgres Connection",
-        "type": "PostgresConn",
+        "conn_type": "PostgresConn",
         "conn_configs": {
             "uri": "postgresql://localhost/mydb",
             "credentials": {
@@ -285,11 +285,11 @@ def test_load_postgres_conn_with_env_credentials(monkeypatch):
     monkeypatch.setenv("TEST_PG_PASSWORD", "env_pgpass")
     nc = NamedConn(name="pg_conn_2")
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "pg_conn_2",
-        "label": "Postgres Connection",
-        "type": "PostgresConn",
+        "conn_type": "PostgresConn",
         "conn_configs": {
             "uri": "postgresql://localhost/mydb",
             "credentials": {
@@ -310,11 +310,11 @@ def test_load_postgres_conn_with_env_credentials(monkeypatch):
 def test_load_mssql_conn_plain():
     nc = NamedConn(name="mssql_conn")
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "mssql_conn",
-        "label": "MSSQL Connection",
-        "type": "MSSQLConn",
+        "conn_type": "MSSQLConn",
         "conn_configs": {
             "connection_string_or_uri": "mssql://localhost/mydb",
         },
@@ -328,11 +328,11 @@ def test_load_mssql_conn_plain():
 def test_load_mssql_conn_with_credentials():
     nc = NamedConn(name="mssql_conn_1")
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "mssql_conn_1",
-        "label": "MSSQL Connection",
-        "type": "MSSQLConn",
+        "conn_type": "MSSQLConn",
         "conn_configs": {
             "connection_string_or_uri": "mssql://localhost/mydb",
             "credentials": {
@@ -352,11 +352,11 @@ def test_load_mssql_conn_with_env_credentials(monkeypatch):
     monkeypatch.setenv("TEST_MSSQL_PASSWORD", "env_mssqlpass")
     nc = NamedConn(name="mssql_conn_2")
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "mssql_conn_2",
-        "label": "MSSQL Connection",
-        "type": "MSSQLConn",
+        "conn_type": "MSSQLConn",
         "conn_configs": {
             "connection_string_or_uri": "mssql://localhost/mydb",
             "credentials": {
@@ -377,11 +377,11 @@ def test_load_mssql_conn_with_env_credentials(monkeypatch):
 def test_load_s3_conn_plain():
     nc = NamedConn(name="s3_conn")
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "s3_conn",
-        "label": "S3 Connection",
-        "type": "S3Conn",
+        "conn_type": "S3Conn",
         "conn_configs": {
             "bucket_uri": "s3://mybucket",
             "credentials": {
@@ -404,11 +404,11 @@ def test_load_s3_conn_with_env_credentials(monkeypatch):
     )
     nc = NamedConn(name="s3_conn_1")
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "s3_conn_1",
-        "label": "S3 Connection",
-        "type": "S3Conn",
+        "conn_type": "S3Conn",
         "conn_configs": {
             "bucket_uri": "s3://mybucket",
             "credentials": {
@@ -431,11 +431,11 @@ def test_load_s3_conn_with_env_credentials(monkeypatch):
 def test_load_s3_conn_with_region():
     nc = NamedConn(name="s3_conn_2")
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "s3_conn_2",
-        "label": "S3 Connection",
-        "type": "S3Conn",
+        "conn_type": "S3Conn",
         "conn_configs": {
             "bucket_uri": "s3://mybucket",
             "credentials": {
@@ -460,11 +460,11 @@ def test_load_azure_conn_all_env_vars(monkeypatch):
     monkeypatch.setenv("TEST_AZURE_ACCOUNT_KEY", "env_key")
     nc = NamedConn(name="azure_conn_all_env")
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "azure_conn_all_env",
-        "label": "Azure Connection",
-        "type": "AzureConn",
+        "conn_type": "AzureConn",
         "conn_configs": {
             "env:container_uri": "TEST_AZURE_CONTAINER_URI",
             "credentials": {
@@ -492,11 +492,11 @@ def test_azuresrc_with_named_conn_replaced_by_resolved_azure_conn(monkeypatch):
     assert src.conn is nc
 
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "azure_src_conn",
-        "label": "Azure Connection",
-        "type": "AzureConn",
+        "conn_type": "AzureConn",
         "conn_configs": {
             "env:container_uri": "TEST_AZURESRC_CONTAINER_URI",
             "credentials": {
@@ -526,11 +526,11 @@ def test_azuredest_with_named_conn_replaced_by_resolved_azure_conn(monkeypatch):
     assert dest.conn is nc
 
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "dest",
         "name": "azure_dest_conn",
-        "label": "Azure Connection",
-        "type": "AzureConn",
+        "conn_type": "AzureConn",
         "conn_configs": {
             "env:container_uri": "TEST_AZUREDEST_CONTAINER_URI",
             "credentials": {
@@ -563,11 +563,11 @@ def test_s3src_with_named_conn_replaced_by_resolved_s3_conn(monkeypatch):
     assert src.conn is nc
 
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "s3_src_conn",
-        "label": "S3 Connection",
-        "type": "S3Conn",
+        "conn_type": "S3Conn",
         "conn_configs": {
             "env:bucket_uri": "TEST_S3SRC_BUCKET_URI",
             "credentials": {
@@ -603,11 +603,11 @@ def test_s3dest_with_named_conn_replaced_by_resolved_s3_conn(monkeypatch):
     assert dest.conn is nc
 
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "dest",
         "name": "s3_dest_conn",
-        "label": "S3 Connection",
-        "type": "S3Conn",
+        "conn_type": "S3Conn",
         "conn_configs": {
             "env:bucket_uri": "TEST_S3DEST_BUCKET_URI",
             "credentials": {
@@ -642,11 +642,11 @@ def test_gcssrc_with_named_conn_replaced_by_resolved_gcs_conn(monkeypatch):
     assert src.conn is nc
 
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "gcs_src_conn",
-        "label": "GCS Connection",
-        "type": "GCSConn",
+        "conn_type": "GCSConn",
         "conn_configs": {
             "env:bucket_uri": "TEST_GCSSRC_BUCKET_URI",
             "credentials": {
@@ -674,11 +674,11 @@ def test_gcsdest_with_named_conn_replaced_by_resolved_gcs_conn(monkeypatch):
     assert dest.conn is nc
 
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "dest",
         "name": "gcs_dest_conn",
-        "label": "GCS Connection",
-        "type": "GCSConn",
+        "conn_type": "GCSConn",
         "conn_configs": {
             "env:bucket_uri": "TEST_GCSDEST_BUCKET_URI",
             "credentials": {
@@ -705,11 +705,11 @@ def test_gcsdest_with_named_conn_replaced_by_resolved_gcs_conn(monkeypatch):
 def test_load_missing_nested_env_var():
     nc = NamedConn(name="mysql_conn_5")
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "mysql_conn_5",
-        "label": "MySQL Connection",
-        "type": "MySQLConn",
+        "conn_type": "MySQLConn",
         "conn_configs": {
             "uri": "mysql://localhost/mydb",
             "credentials": {
@@ -726,11 +726,11 @@ def test_load_missing_nested_env_var():
 def test_load_empty_conn_configs():
     nc = NamedConn(name="mysql_conn_6")
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "mysql_conn_6",
-        "label": "MySQL Connection",
-        "type": "MySQLConn",
+        "conn_type": "MySQLConn",
         "conn_configs": {},
     }
     # MySQLConn requires uri, so this should fail at construction
@@ -749,11 +749,11 @@ def test_load_empty_conn_configs():
 @pytest.mark.unit
 def test_mysql_conn_load_from_dict_plain():
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "mysql_conn_7",
-        "label": "MySQL Connection",
-        "type": "MySQLConn",
+        "conn_type": "MySQLConn",
         "conn_configs": {"uri": "mysql://localhost/mydb"},
     }
     conn = MySQLConn._load_from_dict(cx_dict["conn_configs"])
@@ -765,11 +765,11 @@ def test_mysql_conn_load_from_dict_plain():
 @pytest.mark.unit
 def test_mysql_conn_load_from_dict_with_credentials():
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "mysql_conn_8",
-        "label": "MySQL Connection",
-        "type": "MySQLConn",
+        "conn_type": "MySQLConn",
         "conn_configs": {
             "uri": "mysql://localhost/mydb",
             "credentials": {"user": "admin", "password": "secret"},
@@ -786,11 +786,11 @@ def test_mysql_conn_load_from_dict_with_credentials():
 @pytest.mark.unit
 def test_mariadb_conn_load_from_dict_plain():
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "mariadb_conn",
-        "label": "MariaDB Connection",
-        "type": "MariaDBConn",
+        "conn_type": "MariaDBConn",
         "conn_configs": {"uri": "mariadb://localhost/mydb"},
     }
     conn = MariaDBConn._load_from_dict(cx_dict["conn_configs"])
@@ -802,11 +802,11 @@ def test_mariadb_conn_load_from_dict_plain():
 @pytest.mark.unit
 def test_mariadb_conn_load_from_dict_with_credentials():
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "mariadb_conn_1",
-        "label": "MariaDB Connection",
-        "type": "MariaDBConn",
+        "conn_type": "MariaDBConn",
         "conn_configs": {
             "uri": "mariadb://localhost/mydb",
             "credentials": {"user": "admin", "password": "secret"},
@@ -823,11 +823,11 @@ def test_mariadb_conn_load_from_dict_with_credentials():
 @pytest.mark.unit
 def test_postgres_conn_load_from_dict_plain():
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "pg_conn_3",
-        "label": "Postgres Connection",
-        "type": "PostgresConn",
+        "conn_type": "PostgresConn",
         "conn_configs": {"uri": "postgresql://localhost/mydb"},
     }
     conn = PostgresConn._load_from_dict(cx_dict["conn_configs"])
@@ -839,11 +839,11 @@ def test_postgres_conn_load_from_dict_plain():
 @pytest.mark.unit
 def test_postgres_conn_load_from_dict_with_credentials():
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "pg_conn_4",
-        "label": "Postgres Connection",
-        "type": "PostgresConn",
+        "conn_type": "PostgresConn",
         "conn_configs": {
             "uri": "postgresql://localhost/mydb",
             "credentials": {"user": "pgadmin", "password": "pgpass"},
@@ -860,11 +860,11 @@ def test_postgres_conn_load_from_dict_with_credentials():
 @pytest.mark.unit
 def test_oracle_conn_load_from_dict_plain():
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "oracle_conn",
-        "label": "Oracle Connection",
-        "type": "OracleConn",
+        "conn_type": "OracleConn",
         "conn_configs": {"uri": "oracle://localhost/mydb"},
     }
     conn = OracleConn._load_from_dict(cx_dict["conn_configs"])
@@ -876,11 +876,11 @@ def test_oracle_conn_load_from_dict_plain():
 @pytest.mark.unit
 def test_oracle_conn_load_from_dict_with_credentials():
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "oracle_conn_1",
-        "label": "Oracle Connection",
-        "type": "OracleConn",
+        "conn_type": "OracleConn",
         "conn_configs": {
             "uri": "oracle://localhost/mydb",
             "credentials": {"user": "oraadmin", "password": "orapass"},
@@ -897,11 +897,11 @@ def test_oracle_conn_load_from_dict_with_credentials():
 @pytest.mark.unit
 def test_mssql_conn_load_from_dict_plain():
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "mssql_conn_3",
-        "label": "MSSQL Connection",
-        "type": "MSSQLConn",
+        "conn_type": "MSSQLConn",
         "conn_configs": {
             "connection_string_or_uri": "mssql://localhost/mydb",
         },
@@ -915,11 +915,11 @@ def test_mssql_conn_load_from_dict_plain():
 @pytest.mark.unit
 def test_mssql_conn_load_from_dict_with_credentials():
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "mssql_conn_4",
-        "label": "MSSQL Connection",
-        "type": "MSSQLConn",
+        "conn_type": "MSSQLConn",
         "conn_configs": {
             "connection_string_or_uri": "mssql://localhost/mydb",
             "credentials": {"user": "sa", "password": "mssqlpass"},
@@ -936,11 +936,11 @@ def test_mssql_conn_load_from_dict_with_credentials():
 @pytest.mark.unit
 def test_db2_conn_load_from_dict_plain():
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "db2_conn",
-        "label": "Db2 Connection",
-        "type": "Db2Conn",
+        "conn_type": "Db2Conn",
         "conn_configs": {"uri": "db2://localhost/mydb"},
     }
     conn = Db2Conn._load_from_dict(cx_dict["conn_configs"])
@@ -952,11 +952,11 @@ def test_db2_conn_load_from_dict_plain():
 @pytest.mark.unit
 def test_db2_conn_load_from_dict_with_credentials():
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "db2_conn_1",
-        "label": "Db2 Connection",
-        "type": "Db2Conn",
+        "conn_type": "Db2Conn",
         "conn_configs": {
             "uri": "db2://localhost/mydb",
             "credentials": {"user": "db2admin", "password": "db2pass"},
@@ -973,11 +973,11 @@ def test_db2_conn_load_from_dict_with_credentials():
 @pytest.mark.unit
 def test_s3_conn_load_from_dict():
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "s3_conn_3",
-        "label": "S3 Connection",
-        "type": "S3Conn",
+        "conn_type": "S3Conn",
         "conn_configs": {
             "bucket_uri": "s3://mybucket",
             "credentials": {
@@ -995,11 +995,11 @@ def test_s3_conn_load_from_dict():
 @pytest.mark.unit
 def test_s3_conn_load_from_dict_with_region():
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "s3_conn_4",
-        "label": "S3 Connection",
-        "type": "S3Conn",
+        "conn_type": "S3Conn",
         "conn_configs": {
             "bucket_uri": "s3://mybucket",
             "credentials": {
@@ -1020,11 +1020,11 @@ def test_s3_conn_load_from_dict_with_region():
 @pytest.mark.unit
 def test_gcs_conn_load_from_dict():
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "gcs_conn",
-        "label": "GCS Connection",
-        "type": "GCSConn",
+        "conn_type": "GCSConn",
         "conn_configs": {
             "bucket_uri": "gs://mybucket",
             "credentials": {
@@ -1044,11 +1044,11 @@ def test_gcs_conn_load_from_dict():
 @pytest.mark.unit
 def test_azure_conn_load_from_dict():
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "azure_conn",
-        "label": "Azure Connection",
-        "type": "AzureConn",
+        "conn_type": "AzureConn",
         "conn_configs": {
             "container_uri": "az://mycontainer",
             "credentials": {
@@ -1069,11 +1069,11 @@ def test_azure_conn_load_from_dict():
 @pytest.mark.unit
 def test_clickhouse_conn_load_from_dict_s3_staging():
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "clickhouse_conn",
-        "label": "ClickHouse Connection",
-        "type": "ClickHouseConn",
+        "conn_type": "ClickHouseConn",
         "conn_configs": {
             "host": "clickhouse.example.com",
             "staging": {
@@ -1099,11 +1099,11 @@ def test_clickhouse_conn_load_from_dict_s3_staging():
 @pytest.mark.unit
 def test_clickhouse_conn_load_from_dict_azure_staging():
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "clickhouse_conn_1",
-        "label": "ClickHouse Connection",
-        "type": "ClickHouseConn",
+        "conn_type": "ClickHouseConn",
         "conn_configs": {
             "host": "clickhouse.example.com",
             "staging": {
@@ -1126,11 +1126,11 @@ def test_clickhouse_conn_load_from_dict_azure_staging():
 @pytest.mark.unit
 def test_clickhouse_conn_load_from_dict_gcs_staging():
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "clickhouse_conn_2",
-        "label": "ClickHouse Connection",
-        "type": "ClickHouseConn",
+        "conn_type": "ClickHouseConn",
         "conn_configs": {
             "host": "clickhouse.example.com",
             "staging": {
@@ -1157,11 +1157,11 @@ def test_clickhouse_conn_load_from_dict_gcs_staging():
 @pytest.mark.unit
 def test_clickhouse_conn_load_from_dict_with_credentials():
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "clickhouse_conn_3",
-        "label": "ClickHouse Connection",
-        "type": "ClickHouseConn",
+        "conn_type": "ClickHouseConn",
         "conn_configs": {
             "host": "clickhouse.example.com",
             "staging": {
@@ -1188,11 +1188,11 @@ def test_clickhouse_conn_load_from_dict_with_credentials():
 @pytest.mark.unit
 def test_druid_conn_load_from_dict_s3_staging():
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "druid_conn",
-        "label": "Druid Connection",
-        "type": "DruidConn",
+        "conn_type": "DruidConn",
         "conn_configs": {
             "overlord_url": "http://druid-overlord:8090",
             "staging": {
@@ -1216,11 +1216,11 @@ def test_druid_conn_load_from_dict_s3_staging():
 @pytest.mark.unit
 def test_druid_conn_load_from_dict_with_credentials():
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "druid_conn_1",
-        "label": "Druid Connection",
-        "type": "DruidConn",
+        "conn_type": "DruidConn",
         "conn_configs": {
             "overlord_url": "http://druid-overlord:8090",
             "staging": {
@@ -1247,11 +1247,11 @@ def test_druid_conn_load_from_dict_with_credentials():
 @pytest.mark.unit
 def test_starrocks_conn_load_from_dict_s3_staging():
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "starrocks_conn",
-        "label": "StarRocks Connection",
-        "type": "StarRocksConn",
+        "conn_type": "StarRocksConn",
         "conn_configs": {
             "host": "starrocks-fe.example.com",
             "staging": {
@@ -1275,11 +1275,11 @@ def test_starrocks_conn_load_from_dict_s3_staging():
 @pytest.mark.unit
 def test_starrocks_conn_load_from_dict_with_credentials():
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "starrocks_conn_1",
-        "label": "StarRocks Connection",
-        "type": "StarRocksConn",
+        "conn_type": "StarRocksConn",
         "conn_configs": {
             "host": "starrocks-fe.example.com",
             "staging": {
@@ -1329,11 +1329,11 @@ def test_staging_from_dict_unknown_provider():
 @pytest.mark.unit
 def test_bigquery_conn_load_from_dict_plain():
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "bigquery_conn",
-        "label": "BigQuery Connection",
-        "type": "BigQueryConn",
+        "conn_type": "BigQueryConn",
         "conn_configs": {
             "gcs_folder": "gs://my-staging-bucket/bq",
             "credentials": {"service_account_key": "test_key_content"},
@@ -1352,11 +1352,11 @@ def test_bigquery_conn_load_from_dict_plain():
 @pytest.mark.unit
 def test_bigquery_conn_load_from_dict_no_project():
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "bigquery_conn_1",
-        "label": "BigQuery Connection",
-        "type": "BigQueryConn",
+        "conn_type": "BigQueryConn",
         "conn_configs": {
             "gcs_folder": "gs://my-staging-bucket/bq",
             "credentials": {"service_account_key": "test_key_content"},
@@ -1374,11 +1374,11 @@ def test_bigquery_conn_load_from_dict_no_project():
 @pytest.mark.unit
 def test_db2_cdc_conn_load_from_dict_plain():
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "db2_cdc_conn",
-        "label": "Db2 CDC Connection",
-        "type": "Db2CdcConn",
+        "conn_type": "Db2CdcConn",
         "conn_configs": {"uri": "db2://localhost/mydb"},
     }
     conn = Db2CdcConn._load_from_dict(cx_dict["conn_configs"])
@@ -1390,11 +1390,11 @@ def test_db2_cdc_conn_load_from_dict_plain():
 @pytest.mark.unit
 def test_db2_cdc_conn_load_from_dict_with_credentials():
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "db2_cdc_conn_1",
-        "label": "Db2 CDC Connection",
-        "type": "Db2CdcConn",
+        "conn_type": "Db2CdcConn",
         "conn_configs": {
             "uri": "db2://localhost/mydb",
             "credentials": {"user": "db2admin", "password": "db2pass"},
@@ -1411,11 +1411,11 @@ def test_db2_cdc_conn_load_from_dict_with_credentials():
 @pytest.mark.unit
 def test_mysql_cdc_conn_load_from_dict_plain():
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "mysql_cdc_conn",
-        "label": "MySQL CDC Connection",
-        "type": "MySQLCdcConn",
+        "conn_type": "MySQLCdcConn",
         "conn_configs": {"uri": "mysql://localhost/mydb"},
     }
     conn = MySQLCdcConn._load_from_dict(cx_dict["conn_configs"])
@@ -1427,11 +1427,11 @@ def test_mysql_cdc_conn_load_from_dict_plain():
 @pytest.mark.unit
 def test_mysql_cdc_conn_load_from_dict_with_credentials():
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "mysql_cdc_conn_1",
-        "label": "MySQL CDC Connection",
-        "type": "MySQLCdcConn",
+        "conn_type": "MySQLCdcConn",
         "conn_configs": {
             "uri": "mysql://localhost/mydb",
             "credentials": {"user": "admin", "password": "secret"},
@@ -1448,11 +1448,11 @@ def test_mysql_cdc_conn_load_from_dict_with_credentials():
 @pytest.mark.unit
 def test_postgres_cdc_conn_load_from_dict_plain():
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "postgres_cdc_conn",
-        "label": "Postgres CDC Connection",
-        "type": "PostgresCdcConn",
+        "conn_type": "PostgresCdcConn",
         "conn_configs": {
             "uri": "postgresql://localhost/mydb",
         },
@@ -1466,11 +1466,11 @@ def test_postgres_cdc_conn_load_from_dict_plain():
 @pytest.mark.unit
 def test_postgres_cdc_conn_load_from_dict_with_credentials():
     cx_dict = {
-        "kind": "connection",
+        "kind": "connectionDef",
         "apiVersion": "1.0",
+        "conn_mode": "src",
         "name": "postgres_cdc_conn_1",
-        "label": "Postgres CDC Connection",
-        "type": "PostgresCdcConn",
+        "conn_type": "PostgresCdcConn",
         "conn_configs": {
             "uri": "postgresql://localhost/mydb",
             "credentials": {"user": "pgadmin", "password": "pgpass"},
