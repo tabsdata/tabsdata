@@ -150,6 +150,7 @@ def make_source(
             return td.S3Source(
                 uri=uri,
                 credentials=s3_config["CREDENTIALS"],
+                region=s3_config["REGION"],
                 format=file_format,
                 file_info=file_info,
             )
