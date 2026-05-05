@@ -44,7 +44,7 @@ py-cpuinfo==9.0.0
 py-spy==0.4.1
 pydevd_pycharm==261.22158.220
 pygame==2.6.1
-pysentry-rs==0.4.3
+pysentry-rs==0.4.5
 pytest-check==2.7.7
 pytest-cov==7.0.0
 pytest-env==1.6.0
