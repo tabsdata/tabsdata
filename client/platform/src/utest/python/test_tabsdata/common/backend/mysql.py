@@ -27,6 +27,7 @@ from test_tabsdata.common.constants import (
 )
 from test_tabsdata.common.container import (
     get_container_port_binding,
+    pull_docker_image,
     wait_for_container_running,
 )
 
@@ -165,6 +166,7 @@ def create_docker_mysql_database(
         wait_for_container_running(container)
         return get_container_port_binding(container, MYSQL_FORWARDED_PORT)
     else:
+        pull_docker_image("mysql:9.1.0")
         try:
             container = client.containers.run(
                 "mysql:9.1.0",

@@ -10,7 +10,11 @@ from test_tabsdata.common.constants import (
     DOCKER_COMPOSE_CONTAINER_INFIX,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
 )
-from test_tabsdata.common.container import wait_for_container_running
+from test_tabsdata.common.container import (
+    pull_compose_images,
+    pull_docker_image,
+    wait_for_container_running,
+)
 from test_tabsdata.common.docker import remove_docker_containers
 
 logger = logging.getLogger(__name__)
@@ -137,6 +141,7 @@ def create_docker_mongodb_database():
         wait_for_mongodb_ready(MONGODB_URI_WITH_CREDENTIALS)
         return
     remove_docker_containers(DEFAULT_PYTEST_MONGODB_DOCKER_CONTAINER_NAME)
+    pull_docker_image("mongo:6.0.21")
     try:
         client.containers.run(
             "mongo:6.0.21",
@@ -198,6 +203,7 @@ def create_docker_mongodb_database_with_replica_set():
         f"|{DEFAULT_PYTEST_MONGODB_WITH_REPLICA_SET_DOCKER_CONTAINER_NAME})"
     )
     compose_file = os.path.join(os.path.dirname(__file__), "compose.yaml")
+    pull_compose_images(compose_file)
     result = subprocess.run(
         [
             "docker",

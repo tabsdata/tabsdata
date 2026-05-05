@@ -19,6 +19,7 @@ from test_tabsdata.common.constants import (
 )
 from test_tabsdata.common.container import (
     get_container_port_binding,
+    pull_docker_image,
     wait_for_container_running,
 )
 
@@ -75,6 +76,7 @@ def ensure_container(
         run_kwargs["entrypoint"] = entrypoint
     if platform is not None:
         run_kwargs["platform"] = platform
+    pull_docker_image(image, platform=platform)
     try:
         container = client.containers.run(image, **run_kwargs)
     except Exception as e:

@@ -27,6 +27,7 @@ from test_tabsdata.common.constants import (
 )
 from test_tabsdata.common.container import (
     get_container_port_binding,
+    pull_docker_image,
     wait_for_container_running,
 )
 
@@ -160,6 +161,7 @@ def create_docker_postgres_database(
         wait_for_container_running(container)
         return get_container_port_binding(container, POSTGRES_FORWARDED_PORT)
     else:
+        pull_docker_image("postgres:17.2")
         try:
             container = client.containers.run(
                 "postgres:17.2",

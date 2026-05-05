@@ -17,7 +17,7 @@ from test_tabsdata.common.constants import (
     CONTAINER_MAXIMUM_RETRY_COUNT,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX, DOCKER_REGULAR_CONTAINER_INFIX,
 )
-from test_tabsdata.common.container import wait_for_container_running
+from test_tabsdata.common.container import pull_docker_image, wait_for_container_running
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +48,7 @@ def create_docker_hashicorp_vault(s3_config: dict):
         wait_for_container_running(container)
         return
     else:
+        pull_docker_image("hashicorp/vault")
         try:
             client.containers.run(
                 "hashicorp/vault",

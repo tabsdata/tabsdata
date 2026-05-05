@@ -25,6 +25,7 @@ from test_tabsdata.common.constants import (
 )
 from test_tabsdata.common.container import (
     get_container_port_binding,
+    pull_docker_image,
     wait_for_container_running,
 )
 
@@ -281,6 +282,7 @@ def create_docker_db2_database(
         wait_for_db2_ready(port)
         return port
     else:
+        pull_docker_image("icr.io/db2_community/db2:latest", platform="linux/amd64")
         try:
             container = client.containers.run(
                 "icr.io/db2_community/db2:latest",

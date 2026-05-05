@@ -31,6 +31,7 @@ from test_tabsdata.common.constants import (
 )
 from test_tabsdata.common.container import (
     get_container_port_binding,
+    pull_compose_images,
     wait_for_container_running,
 )
 
@@ -166,8 +167,7 @@ def create_docker_druid(
         )
         return overlord_port, router_port
 
-    # Start the full stack — compose handles health checks, dependencies,
-    # networking, and volumes declaratively.
+    pull_compose_images(COMPOSE_FILE)
     result = subprocess.run(
         ["docker", "compose", "-p", name, "-f", COMPOSE_FILE, "up", "-d"],
         capture_output=True,

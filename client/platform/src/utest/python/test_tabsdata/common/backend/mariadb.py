@@ -28,6 +28,7 @@ from test_tabsdata.common.constants import (
 )
 from test_tabsdata.common.container import (
     get_container_port_binding,
+    pull_docker_image,
     wait_for_container_running,
 )
 
@@ -162,6 +163,7 @@ def create_docker_mariadb_database(
         wait_for_container_running(container)
         return get_container_port_binding(container, MARIADB_FORWARDED_PORT)
     else:
+        pull_docker_image("mariadb:11.4.4")
         try:
             container = client.containers.run(
                 "mariadb:11.4.4",

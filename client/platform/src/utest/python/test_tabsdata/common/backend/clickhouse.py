@@ -22,6 +22,7 @@ from test_tabsdata.common.constants import (
 )
 from test_tabsdata.common.container import (
     get_container_port_binding,
+    pull_docker_image,
     wait_for_container_running,
 )
 
@@ -160,6 +161,7 @@ def create_docker_clickhouse_database(
         wait_for_container_running(container)
         return get_container_port_binding(container, CLICKHOUSE_FORWARDED_PORT)
 
+    pull_docker_image("clickhouse/clickhouse-server:latest")
     try:
         container = client.containers.run(
             "clickhouse/clickhouse-server:latest",

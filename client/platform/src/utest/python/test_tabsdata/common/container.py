@@ -10,6 +10,8 @@ from time import sleep
 from test_tabsdata.common.constants import (
     CONTAINER_WAIT_POLL_INTERVAL_SECONDS,
     CONTAINER_WAIT_TIMEOUT_SECONDS,
+    IMAGE_PULL_MAXIMUM_RETRY_COUNT,
+    IMAGE_PULL_TIMEOUT_SECONDS,
 )
 
 logger = logging.getLogger(__name__)
@@ -40,3 +42,48 @@ def get_container_port_binding(container, port: str) -> int:
         return int(port_binding[0]["HostPort"])
     else:
         raise Exception(f"Port {port} is not bound in the container.")
+
+
+def pull_docker_image(image, platform=None):
+    import docker
+    from tenacity import retry, stop_after_attempt, wait_fixed
+
+    client = docker.from_env(timeout=IMAGE_PULL_TIMEOUT_SECONDS)
+    pull_kwargs = {}
+    if platform is not None:
+        pull_kwargs["platform"] = platform
+
+    @retry(
+        stop=stop_after_attempt(IMAGE_PULL_MAXIMUM_RETRY_COUNT),
+        wait=wait_fixed(30),
+        reraise=True,
+    )
+    def try_pull():
+        logger.info(f"Pulling Docker image '{image}'...")
+        client.images.pull(image, **pull_kwargs)
+        logger.info(f"Successfully pulled Docker image '{image}'")
+
+    try:
+        try_pull()
+    except Exception as err:
+        logger.error(
+            f"Failed to pull Docker image '{image}' "
+            f"after {IMAGE_PULL_MAXIMUM_RETRY_COUNT} attempts: {err}"
+        )
+        raise
+
+
+def pull_compose_images(compose_file):
+    import yaml
+
+    with open(compose_file) as f:
+        compose = yaml.safe_load(f)
+
+    images = set()
+    for service in compose.get("services", {}).values():
+        image = service.get("image")
+        if image:
+            images.add(image)
+
+    for image in sorted(images):
+        pull_docker_image(image)

@@ -23,6 +23,7 @@ from test_tabsdata.common.constants import (
 )
 from test_tabsdata.common.container import (
     get_container_port_binding,
+    pull_docker_image,
     wait_for_container_running,
 )
 
@@ -297,6 +298,7 @@ def create_docker_starrocks_database(
         _prepare_docker_starrocks_database(port)
         return port
 
+    pull_docker_image("starrocks/allin1-ubuntu:4.0.8")
     try:
         container = client.containers.run(
             "starrocks/allin1-ubuntu:4.0.8",

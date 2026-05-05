@@ -22,6 +22,7 @@ from test_tabsdata.common.constants import (
 )
 from test_tabsdata.common.container import (
     get_container_port_binding,
+    pull_docker_image,
     wait_for_container_running,
 )
 from test_tabsdata.common.system import get_free_port
@@ -268,6 +269,7 @@ def create_docker_kafka_container(
             line.lstrip() for line in startup_command.splitlines()
         )
 
+        pull_docker_image("redpandadata/redpanda:latest")
         try:
             container = client.containers.run(
                 "redpandadata/redpanda:latest",

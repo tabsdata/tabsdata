@@ -13,7 +13,7 @@ from test_tabsdata.common.constants import (
     DOCKER_REGULAR_CONTAINER_INFIX,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
 )
-from test_tabsdata.common.container import wait_for_container_running
+from test_tabsdata.common.container import pull_docker_image, wait_for_container_running
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -294,6 +294,7 @@ def create_docker_mssql_database(name: str, port: int, version: int) -> tuple[st
     else:
         import pyodbc
 
+        pull_docker_image(f"mcr.microsoft.com/mssql/server:{version}-latest")
         try:
             container = client.containers.run(
                 f"mcr.microsoft.com/mssql/server:{version}-latest",
