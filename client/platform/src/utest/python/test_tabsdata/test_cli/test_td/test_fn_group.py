@@ -1,0 +1,596 @@
+#
+# Copyright 2024 Tabs Data Inc.
+#
+
+import logging
+import os
+import uuid
+
+import pytest
+from click.testing import CliRunner
+
+from tabsdata._cli.td.cli import cli
+from test_tabsdata.conftest import (
+    ABSOLUTE_TEST_FOLDER_LOCATION,
+    LOCAL_PACKAGES_LIST,
+    TESTING_RESOURCES_FOLDER,
+)
+
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_wrong_command_raises_exception(login, testing_collection):
+    runner = CliRunner()
+    result = runner.invoke(cli, ["--no-prompt", "fn", "potato"])
+    assert result.exit_code == 2
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_function_register_prompt(
+    testing_collection, function_path, tabsserver_connection
+):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["fn", "register"],
+        input=f"{testing_collection}\n{function_path}\n",
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+    functions = tabsserver_connection.list_functions(testing_collection)
+    assert len(functions) == 1
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_function_register_no_prompt(
+    testing_collection, function_path, tabsserver_connection
+):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "fn",
+            "register",
+            "--coll",
+            testing_collection,
+            "--path",
+            function_path,
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+    functions = tabsserver_connection.list_functions(testing_collection)
+    assert len(functions) == 1
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_function_register_with_update(
+    testing_collection, function_path, tabsserver_connection
+):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "fn",
+            "register",
+            "--coll",
+            testing_collection,
+            "--path",
+            function_path,
+            "--update",
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+    functions = tabsserver_connection.list_functions(testing_collection)
+    assert len(functions) == 1
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "fn",
+            "register",
+            "--coll",
+            testing_collection,
+            "--path",
+            function_path,
+            "--update",
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+    functions = tabsserver_connection.list_functions(testing_collection)
+    assert len(functions) == 1
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_function_register_no_prompt_multiple_local_packages(
+    testing_collection, function_path, tabsserver_connection
+):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "fn",
+            "register",
+            "--coll",
+            testing_collection,
+            "--path",
+            function_path,
+            "--local-pkg",
+            os.getcwd(),
+            "--local-pkg",
+            os.getcwd(),
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+    functions = tabsserver_connection.list_functions(testing_collection)
+    assert len(functions) == 1
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_function_delete_cli(testing_collection, function_path, tabsserver_connection):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "fn",
+            "register",
+            "--coll",
+            testing_collection,
+            "--path",
+            function_path,
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+    functions = tabsserver_connection.list_functions(testing_collection)
+    assert len(functions) == 1
+    result = runner.invoke(
+        cli,
+        [
+            "fn",
+            "delete",
+            "--name",
+            "test_input_plugin",
+            "--coll",
+            testing_collection,
+        ],
+        input="delete\n",
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+    functions = tabsserver_connection.list_functions(testing_collection)
+    assert len(functions) == 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_function_delete_no_prompt(
+    testing_collection, function_path, tabsserver_connection
+):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "fn",
+            "register",
+            "--coll",
+            testing_collection,
+            "--path",
+            function_path,
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+    functions = tabsserver_connection.list_functions(testing_collection)
+    assert len(functions) == 1
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "fn",
+            "delete",
+            "--name",
+            "test_input_plugin",
+            "--coll",
+            testing_collection,
+            "--confirm",
+            "delete",
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+    functions = tabsserver_connection.list_functions(testing_collection)
+    assert len(functions) == 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_function_delete_wrong_options_raises_error(
+    testing_collection, function_path, tabsserver_connection
+):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "collection",
+            "delete",
+            "--name",
+            "test_function_delete_no_exists_raises_error",
+            "--coll",
+            testing_collection,
+            "--confirm",
+            "delete",
+        ],
+    )
+    assert result.exit_code != 0
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "fn",
+            "register",
+            "--coll",
+            testing_collection,
+            "--path",
+            function_path,
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+    functions = tabsserver_connection.list_functions(testing_collection)
+    assert len(functions) == 1
+    result = runner.invoke(
+        cli,
+        [
+            "fn",
+            "delete",
+            "--name",
+            "test_input_plugin",
+            "--coll",
+            testing_collection,
+            "--confirm",
+            "yes",
+        ],
+    )
+    assert result.exit_code != 0
+    result = runner.invoke(
+        cli,
+        [
+            "fn",
+            "delete",
+            "--name",
+            "test_input_plugin",
+            "--coll",
+            testing_collection,
+        ],
+        input="yes\n",
+    )
+    assert result.exit_code != 0
+    result = runner.invoke(
+        cli,
+        [
+            "--no-promptfunction",
+            "delete",
+            "--name",
+            "test_input_plugin",
+            "--coll",
+            testing_collection,
+        ],
+        input="delete\n",
+    )
+    assert result.exit_code != 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_function_list(testing_collection, function_path, tabsserver_connection):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "fn",
+            "register",
+            "--coll",
+            testing_collection,
+            "--path",
+            function_path,
+        ],
+    )
+    logger.debug(result.output)
+    result = runner.invoke(cli, ["fn", "list", "--coll", testing_collection])
+    logger.debug(result.output)
+    assert result.exit_code == 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_function_update(testing_collection, function_path, tabsserver_connection):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "fn",
+            "register",
+            "--coll",
+            testing_collection,
+            "--path",
+            function_path,
+        ],
+    )
+    logger.debug(result.output)
+    functions = tabsserver_connection.list_functions(testing_collection)
+    assert len(functions) == 1
+    result = runner.invoke(
+        cli,
+        [
+            "fn",
+            "update",
+            "--name",
+            "test_input_plugin",
+            "--coll",
+            testing_collection,
+            "--description",
+            "new_description",
+            "--path",
+            function_path,
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+    functions = tabsserver_connection.list_functions(testing_collection)
+    assert len(functions) == 1
+    assert functions[0].description == "new_description"
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_function_info(testing_collection, function_path, tabsserver_connection):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "fn",
+            "register",
+            "--coll",
+            testing_collection,
+            "--path",
+            function_path,
+        ],
+    )
+    logger.debug(result.output)
+    functions = tabsserver_connection.list_functions(testing_collection)
+    assert len(functions) != 0
+    result = runner.invoke(
+        cli,
+        [
+            "fn",
+            "info",
+            "--coll",
+            testing_collection,
+            "--name",
+            "test_input_plugin",
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_function_info_show_versions(
+    testing_collection, function_path, tabsserver_connection
+):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "fn",
+            "register",
+            "--coll",
+            testing_collection,
+            "--path",
+            function_path,
+        ],
+    )
+    logger.debug(result.output)
+    functions = tabsserver_connection.list_functions(testing_collection)
+    assert len(functions) == 1
+    result = runner.invoke(
+        cli,
+        [
+            "--no-prompt",
+            "fn",
+            "info",
+            "--coll",
+            testing_collection,
+            "--name",
+            "test_input_plugin",
+            "--show-history",
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_function_trigger(testing_collection, function_path, tabsserver_connection):
+    runner = CliRunner()
+    arguments = [
+        "--no-prompt",
+        "fn",
+        "register",
+        "--coll",
+        testing_collection,
+        "--path",
+        function_path,
+    ]
+    for package in LOCAL_PACKAGES_LIST:
+        arguments.extend(["--local-pkg", package])
+    result = runner.invoke(
+        cli,
+        arguments,
+    )
+    logger.debug(result.output)
+    functions = tabsserver_connection.list_functions(testing_collection)
+    assert len(functions) == 1
+    result = runner.invoke(
+        cli,
+        [
+            "fn",
+            "info",
+            "--coll",
+            testing_collection,
+            "--name",
+            "test_input_plugin",
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+    result = runner.invoke(
+        cli,
+        [
+            "fn",
+            "trigger",
+            "--coll",
+            testing_collection,
+            "--name",
+            "test_input_plugin",
+            "--detach",
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_function_trigger_execution_name(
+    testing_collection, function_path, tabsserver_connection
+):
+    runner = CliRunner()
+    arguments = [
+        "--no-prompt",
+        "fn",
+        "register",
+        "--coll",
+        testing_collection,
+        "--path",
+        function_path,
+    ]
+    for package in LOCAL_PACKAGES_LIST:
+        arguments.extend(["--local-pkg", package])
+    result = runner.invoke(
+        cli,
+        arguments,
+    )
+    logger.debug(result.output)
+    result = runner.invoke(
+        cli,
+        [
+            "fn",
+            "info",
+            "--coll",
+            testing_collection,
+            "--name",
+            "test_input_plugin",
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+    result = runner.invoke(
+        cli,
+        [
+            "fn",
+            "trigger",
+            "--coll",
+            testing_collection,
+            "--name",
+            "test_input_plugin",
+            "--plan-name",
+            "test_execution_name",
+            "--detach",
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_function_info_error(testing_collection):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "fn",
+            "info",
+            "--name",
+            "test_function_info_error",
+            "--coll",
+            testing_collection,
+        ],
+    )
+    assert result.exit_code != 0
+
+
+@pytest.mark.integration
+@pytest.mark.skip(
+    "Skipping until it is decided if read-run will be shown to end "
+    "users or if it will be removed completely."
+)
+def test_function_cli_read_run(login, tabsserver_connection):
+    collection = tabsserver_connection.create_collection(
+        f"test_function_class_read_run_{uuid.uuid4().hex[:16]}"
+    )
+    file_path = os.path.join(
+        TESTING_RESOURCES_FOLDER,
+        "test_input_file_csv_string_format",
+        "example.py",
+    )
+    function_path = file_path + "::input_file_csv_string_format"
+    function = collection.register_function(
+        function_path, local_packages=LOCAL_PACKAGES_LIST
+    )
+    plan = function.trigger(
+        f"test_function_class_read_run_plan_{uuid.uuid4().hex[:16]}"
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "fn",
+            "read-run",
+            "--coll",
+            collection.name,
+            "--name",
+            "input_file_csv_string_format",
+            "--plan",
+            plan.id,
+        ],
+    )
+    logger.debug(result.output)
+    assert result.exit_code == 0

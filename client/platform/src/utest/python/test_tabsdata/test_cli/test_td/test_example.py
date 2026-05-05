@@ -1,0 +1,334 @@
+#
+# Copyright 2025 Tabs Data Inc.
+#
+
+import importlib
+import inspect
+import logging
+import os
+import tempfile
+from time import sleep
+
+import pytest
+from click.testing import CliRunner
+
+from tabsdata._cli.td.cli import cli
+from tabsdata._tdfunction import TabsdataFunction
+from tabsdata._utils.temps import tabsdata_temp_folder
+from tabsdata.extensions._tableframe.extension_test import instance as checker
+from test_tabsdata.common.constants import EXECUTION_MAXIMUM_RETRY_COUNT
+from test_tabsdata.conftest import LOCAL_PACKAGES_LIST
+
+# noinspection PyUnresolvedReferences
+from . import pytestmark  # noqa: F401
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+
+def import_all_tabsdatafunctions(module_name):
+    module = importlib.import_module(module_name)
+    tabsdatafunctions = {
+        name: obj
+        for name, obj in inspect.getmembers(
+            module, lambda x: isinstance(x, TabsdataFunction)
+        )
+    }
+    return tabsdatafunctions
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_examples(login, tabsserver_connection):
+
+    import tabsdata
+
+    print(f"tabsdata namespace locations: {tabsdata.__path__}")
+    import tabsdata.extensions
+
+    print(f"tabsdata.extensions namespace locations: {tabsdata.extensions.__path__}")
+    import tabsdata.extensions._tableframe
+
+    print(
+        "tabsdata.extensions._tableframe namespace locations: "
+        f"{tabsdata.extensions._tableframe.__path__}"
+    )
+    import tabsdata.extensions._tableframe.extension
+
+    print(
+        "tabsdata.extensions._tableframe.extension: "
+        f"{tabsdata.extensions._tableframe.extension.__file__}"
+    )
+    import tabsdata.extensions._tableframe.extension
+
+    print(
+        "tabsdata.extensions._tableframe.extension_test: "
+        f"{tabsdata.extensions._tableframe.extension_test.__file__}"
+    )
+
+    with tempfile.TemporaryDirectory(
+        ignore_cleanup_errors=True,
+        dir=tabsdata_temp_folder(),
+    ) as working_folder:
+        assert working_folder
+        logger.debug(f"Temporary working folder: {working_folder}")
+        working_folder = os.path.join(working_folder, "example")
+        logger.debug(f"Working folder: {working_folder}")
+
+        runner = CliRunner()
+
+        result = runner.invoke(
+            cli,
+            [
+                "examples",
+                "--dir",
+                working_folder,
+            ],
+        )
+        log_and_assert(result)
+
+        working_folder = os.path.join(working_folder, "example-000")
+        output_folder = os.path.join(working_folder, "output")
+
+        assert os.path.exists(working_folder)
+        assert os.path.exists(os.path.join(working_folder, "input", "persons.csv"))
+
+        os.chdir(working_folder)
+
+        result = runner.invoke(
+            cli,
+            [
+                "collection",
+                "create",
+                "--name",
+                "examples",
+                "--description",
+                '"Examples"',
+            ],
+        )
+        log_and_assert(result)
+
+        # Test the publisher
+        result = runner.invoke(
+            cli,
+            [
+                "fn",
+                "register",
+                "--coll",
+                "examples",
+                "--path",
+                f"{os.path.join(working_folder, "publisher.py")}::pub",
+                *[arg for path in LOCAL_PACKAGES_LIST for arg in ("--local-pkg", path)],
+            ],
+        )
+        log_and_assert(result)
+        result = runner.invoke(
+            cli,
+            [
+                "fn",
+                "trigger",
+                "--coll",
+                "examples",
+                "--name",
+                "pub",
+            ],
+        )
+        log_and_assert(result)
+        result = runner.invoke(cli, ["exe", "list-trx"])
+        log_and_assert(result)
+        transactions = tabsserver_connection.transactions
+        logger.debug(transactions)
+        assert transactions
+        retry = 0
+        while retry < EXECUTION_MAXIMUM_RETRY_COUNT:
+            sleep(retry)
+            result = runner.invoke(
+                cli,
+                [
+                    "table",
+                    "schema",
+                    "--coll",
+                    "examples",
+                    "--name",
+                    "persons",
+                ],
+            )
+            logger.debug(result.output)
+            if result.exit_code == 0:
+                break
+            retry += 1
+        result = runner.invoke(
+            cli,
+            [
+                "table",
+                "schema",
+                "--coll",
+                "examples",
+                "--name",
+                "persons",
+            ],
+        )
+        log_and_assert(result)
+
+        # Test the transformer
+        result = runner.invoke(
+            cli,
+            [
+                "fn",
+                "register",
+                "--coll",
+                "examples",
+                "--path",
+                f"{os.path.join(working_folder, "transformer.py")}::tfr",
+                *[arg for path in LOCAL_PACKAGES_LIST for arg in ("--local-pkg", path)],
+            ],
+        )
+        log_and_assert(result)
+        result = runner.invoke(
+            cli,
+            [
+                "fn",
+                "trigger",
+                "--coll",
+                "examples",
+                "--name",
+                "tfr",
+            ],
+        )
+        log_and_assert(result)
+        result = runner.invoke(
+            cli,
+            [
+                "exe",
+                "list-trx",
+            ],
+        )
+        log_and_assert(result)
+        transactions = tabsserver_connection.transactions
+        logger.debug(transactions)
+        assert transactions
+        retry = 0
+        while retry < EXECUTION_MAXIMUM_RETRY_COUNT:
+            sleep(retry)
+            result = runner.invoke(
+                cli,
+                [
+                    "table",
+                    "schema",
+                    "--coll",
+                    "examples",
+                    "--name",
+                    "spanish",
+                ],
+            )
+            logger.debug(result.output)
+            if result.exit_code == 0:
+                break
+            retry += 1
+        result = runner.invoke(
+            cli,
+            [
+                "table",
+                "schema",
+                "--coll",
+                "examples",
+                "--name",
+                "spanish",
+            ],
+        )
+        log_and_assert(result)
+
+        # Test the subscriber
+        result = runner.invoke(
+            cli,
+            [
+                "fn",
+                "register",
+                "--coll",
+                "examples",
+                "--path",
+                f"{os.path.join(working_folder, "subscriber.py")}::sub",
+                *[arg for path in LOCAL_PACKAGES_LIST for arg in ("--local-pkg", path)],
+            ],
+        )
+        log_and_assert(result)
+        result = runner.invoke(
+            cli,
+            [
+                "fn",
+                "trigger",
+                "--coll",
+                "examples",
+                "--name",
+                "sub",
+            ],
+        )
+        log_and_assert(result)
+
+        result = runner.invoke(
+            cli,
+            [
+                "exe",
+                "list-trx",
+            ],
+        )
+        log_and_assert(result)
+        transactions = tabsserver_connection.transactions
+        logger.debug(transactions)
+        assert transactions
+        retry = 0
+        while retry < EXECUTION_MAXIMUM_RETRY_COUNT:
+            if os.path.exists(
+                os.path.join(output_folder, "spanish.jsonl")
+            ) and os.path.exists(os.path.join(output_folder, "french.jsonl")):
+                break
+            sleep(retry)
+            retry += 1
+
+        # See the files were exported correctly
+        assert os.path.exists(os.path.join(output_folder, "spanish.jsonl"))
+        assert os.path.exists(os.path.join(output_folder, "french.jsonl"))
+
+        # Clean up
+        for file in os.listdir(output_folder):
+            os.remove(os.path.join(output_folder, file))
+        assert not os.path.exists(os.path.join(output_folder, "spanish.jsonl"))
+        assert not os.path.exists(os.path.join(output_folder, "french.jsonl"))
+
+        # Multi-trigger
+        result = runner.invoke(
+            cli,
+            [
+                "fn",
+                "trigger",
+                "--coll",
+                "examples",
+                "--name",
+                "pub",
+            ],
+        )
+        log_and_assert(result)
+        result = runner.invoke(cli, ["exe", "list-trx"])
+        log_and_assert(result)
+        transactions = tabsserver_connection.transactions
+        logger.debug(transactions)
+        assert transactions
+        retry_check_test_examples(output_folder)
+
+
+def log_and_assert(result):
+    logger.debug(result.output)
+    assert result.exit_code == 0
+
+
+def retry_check_test_examples(output_folder):
+    retry = 0
+    while retry < EXECUTION_MAXIMUM_RETRY_COUNT:
+        sleep(retry)
+        retry += 1
+        try:
+            checker.check_test_examples(output_folder)
+            break
+        except AssertionError:
+            pass
+    checker.check_test_examples(output_folder)

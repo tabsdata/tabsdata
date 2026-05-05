@@ -154,7 +154,8 @@ for path in yaml_root_folder_tabsdatak.rglob("*.yaml"):
     yaml_files_tabsdatak.append(str(relative_path))
 
 console_scripts: list[str] = [
-    "td = tabsdata._cli.cli:cli",
+    "td = tabsdata._cli.td.cli:cli",
+    "tdconn = tabsdata._cli.tdconn.cli:cli",
     "tdorachk = tabsdata._tabsserver.tools.x_oracle_check:cli",
     "td_cfgrsv = tabsdata._tabsserver.tools.config_resolver:main",
     "td_invoker = tabsdata._tabsserver.invoker:main",

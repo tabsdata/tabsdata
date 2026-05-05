@@ -685,23 +685,23 @@ script = [
     is_zero = eq ${exit_code} "0"
     is_five = eq ${exit_code} "5"
     if ${is_zero} or ${is_five}
-        info "⌛️ Tests finished with zero-or-five exit code: '${exit_code}'"
+        info "⌛️ Pytest finished with zero-or-five exit code: '${exit_code}'"
     else
-        info "⌛️ Tests finished with non-zero-or-five exit code: '${exit_code}'"
+        info "⌛️ Pytest finished with non-zero-or-five exit code: '${exit_code}'"
         skipe_test_py = get_env skipe_test_py
         if not is_empty ${skipe_test_py}
             echo ""
             error "🧨🧨🧨🧨"
-            error "🧨 TASK 'test_parallel_py' FAILED with exit code '${exit_code}' — error skipped (--skipe)"
+            error "🧨 TASK 'test_py' FAILED with exit code '${exit_code}' — error skipped (--skipe)"
             error "🧨🧨🧨🧨"
             echo ""
         else
             TD_FAIL_FAST_PY = get_env TD_FAIL_FAST_PY
             if not ${TD_FAIL_FAST_PY}
-                info "⌛️ Setting TD_TESTS_CODE_PY to ${exit_code}..."
+                info "⌛️ Setting Pytest TD_TESTS_CODE_PY to ${exit_code}..."
                 set_env TD_TESTS_CODE_PY ${exit_code}
             else
-                info "⌛️ Failing fast..."
+                info "⌛️ Pytest failing fast..."
                 code = exit ${exit_code}
             end
         end
@@ -709,7 +709,7 @@ script = [
 
     exec --fail-on-error python ${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/report_coverage.py ./.coverage/json/coverage.json .
 
-    info "📊 Report generated at: 👉 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/reports/pytest/tabsdata/pytest.html\n"
+    info "📊 Pytest report generated at: 👉 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/reports/pytest/tabsdata/pytest.html\n"
     ''']
 
 [tasks.outdated]

@@ -45,7 +45,8 @@ Documentation = "https://docs.tabsdata.com"
 Source = "https://github.com/tabsdata/tabsdata"
 
 [tool.pytest.ini_options]
-norecursedirs = ["templates"]
+norecursedirs = ["templates", "itest"]
+collect_ignore_glob = ["**/itest/**"]
 filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::PendingDeprecationWarning",
