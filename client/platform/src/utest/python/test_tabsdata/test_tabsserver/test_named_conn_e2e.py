@@ -66,15 +66,18 @@ AZURE_NAMED_CONN_NAME = "test_azure_named"
 GCS_NAMED_CONN_NAME = "test_gcs_named"
 
 
-def _write_named_conn_repository(tmp_path, name, conn_type, conn_configs):
+def _write_named_conn_repository(tmp_path, name, conn_type, conn_configs, conn_mode):
     """Create a temporary repository with a single named-connection JSON."""
     repo_dir = os.path.join(str(tmp_path), "repository")
     connections_dir = os.path.join(repo_dir, CONNECTIONS_FOLDER)
     os.makedirs(connections_dir, exist_ok=True)
 
     cx_dict = {
+        "kind": "connectionDef",
+        "apiVersion": "1.0",
         "name": name,
-        "type": conn_type,
+        "conn_mode": conn_mode,
+        "conn_type": conn_type,
         "conn_configs": conn_configs,
     }
     connection_file = os.path.join(connections_dir, f"{name.lower()}.json")
@@ -84,7 +87,7 @@ def _write_named_conn_repository(tmp_path, name, conn_type, conn_configs):
     return repo_dir
 
 
-def _setup_named_conn_repository(tmp_path, mysql_config):
+def _setup_named_conn_repository(tmp_path, mysql_config, conn_mode):
     """Create a temporary repository with a MySQL named connection JSON."""
     return _write_named_conn_repository(
         tmp_path,
@@ -97,6 +100,7 @@ def _setup_named_conn_repository(tmp_path, mysql_config):
                 "password": mysql_config.password,
             },
         },
+        conn_mode,
     )
 
 
@@ -105,7 +109,7 @@ def _setup_named_conn_repository(tmp_path, mysql_config):
 @pytest.mark.slow
 @pytest.mark.tdfnrun
 def test_input_mysql_with_named_conn(mysql_config, tmp_path, monkeypatch):
-    repo_dir = _setup_named_conn_repository(tmp_path, mysql_config)
+    repo_dir = _setup_named_conn_repository(tmp_path, mysql_config, "src")
     monkeypatch.setenv(TD_URI_REPOSITORY, repo_dir)
 
     testing_function = input_named_conn_generator(conn_name=NAMED_CONN_NAME)
@@ -138,7 +142,7 @@ def test_input_mysql_with_named_conn(mysql_config, tmp_path, monkeypatch):
 @pytest.mark.slow
 @pytest.mark.tdfnrun
 def test_output_mysql_with_named_conn(mysql_config, tmp_path, monkeypatch):
-    repo_dir = _setup_named_conn_repository(tmp_path, mysql_config)
+    repo_dir = _setup_named_conn_repository(tmp_path, mysql_config, "dest")
     monkeypatch.setenv(TD_URI_REPOSITORY, repo_dir)
 
     destination_tables = [
@@ -199,6 +203,7 @@ def test_input_s3_with_named_conn(s3_config, tmp_path, monkeypatch):
                 "aws_secret_access_key": s3_config["SECRET_KEY"],
             },
         },
+        "src",
     )
     monkeypatch.setenv(TD_URI_REPOSITORY, repo_dir)
 
@@ -237,6 +242,7 @@ def test_output_s3_with_named_conn(s3_config, s3_client, tmp_path, monkeypatch):
                 "aws_secret_access_key": s3_config["SECRET_KEY"],
             },
         },
+        "dest",
     )
     monkeypatch.setenv(TD_URI_REPOSITORY, repo_dir)
 
@@ -293,6 +299,7 @@ def test_input_azure_with_named_conn(azure_config, tmp_path, monkeypatch):
                 "account_key": account_key,
             },
         },
+        "src",
     )
     monkeypatch.setenv(TD_URI_REPOSITORY, repo_dir)
 
@@ -334,6 +341,7 @@ def test_output_azure_with_named_conn(
                 "account_key": account_key,
             },
         },
+        "dest",
     )
     monkeypatch.setenv(TD_URI_REPOSITORY, repo_dir)
 
@@ -399,6 +407,7 @@ def test_input_gcs_with_named_conn(gcs_config, tmp_path, monkeypatch):
                 "service_account_key": service_account_key,
             },
         },
+        "src",
     )
     monkeypatch.setenv(TD_URI_REPOSITORY, repo_dir)
 
@@ -436,6 +445,7 @@ def test_output_gcs_with_named_conn(gcs_config, gcs_client, tmp_path, monkeypatc
                 "service_account_key": service_account_key,
             },
         },
+        "dest",
     )
     monkeypatch.setenv(TD_URI_REPOSITORY, repo_dir)
 

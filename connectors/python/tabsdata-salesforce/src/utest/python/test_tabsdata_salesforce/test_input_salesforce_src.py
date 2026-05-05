@@ -41,14 +41,17 @@ logger.setLevel(logging.DEBUG)
 SALESFORCE_NAMED_CONN_NAME = "test_salesforce_named"
 
 
-def _write_named_conn_repository(tmp_path, name, conn_type, conn_configs):
+def _write_named_conn_repository(tmp_path, name, conn_type, conn_configs, conn_mode):
     """Create a temporary repository with a single named-connection JSON."""
     repo_dir = os.path.join(str(tmp_path), "repository")
     connections_dir = os.path.join(repo_dir, CONNECTIONS_FOLDER)
     os.makedirs(connections_dir, exist_ok=True)
     cx_dict = {
+        "kind": "connectionDef",
+        "apiVersion": "1.0",
         "name": name,
-        "type": conn_type,
+        "conn_mode": conn_mode,
+        "conn_type": conn_type,
         "conn_configs": conn_configs,
     }
     connection_file = os.path.join(connections_dir, f"{name.lower()}.json")
@@ -304,6 +307,7 @@ def test_input_salesforcesrc_with_named_conn(
                 "security_token": os.environ.get(sf_config["SECURITY_TOKEN_ENV"]),
             }
         },
+        "src",
     )
     monkeypatch.setenv(TD_URI_REPOSITORY, repo_dir)
 

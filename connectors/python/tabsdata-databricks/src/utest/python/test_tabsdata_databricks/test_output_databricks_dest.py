@@ -53,14 +53,17 @@ logger.setLevel(logging.DEBUG)
 DATABRICKS_NAMED_CONN_NAME = "test_databricks_named"
 
 
-def _write_named_conn_repository(tmp_path, name, conn_type, conn_configs):
+def _write_named_conn_repository(tmp_path, name, conn_type, conn_configs, conn_mode):
     """Create a temporary repository with a single named-connection JSON."""
     repo_dir = os.path.join(str(tmp_path), "repository")
     connections_dir = os.path.join(repo_dir, CONNECTIONS_FOLDER)
     os.makedirs(connections_dir, exist_ok=True)
     cx_dict = {
+        "kind": "connectionDef",
+        "apiVersion": "1.0",
         "name": name,
-        "type": conn_type,
+        "conn_mode": conn_mode,
+        "conn_type": conn_type,
         "conn_configs": conn_configs,
     }
     connection_file = os.path.join(connections_dir, f"{name.lower()}.json")
@@ -448,6 +451,7 @@ def test_output_databricks_with_named_conn(
             "host_url": databricks_config["HOST"],
             "token": databricks_config["TOKEN"],
         },
+        "dest",
     )
     monkeypatch.setenv(TD_URI_REPOSITORY, repo_dir)
 
