@@ -13,11 +13,11 @@ avro==1.12.1
 base32hex==1.0.2
 boto3==1.42.73
 boto3-stubs==1.42.73
-botocore==1.42.93
+botocore==1.42.95
 botocore-stubs==1.42.41
-build==1.4.3
+build==1.4.4
 cachetools==6.2.6
-certifi==2026.2.25
+certifi==2026.4.22
 cffi==2.0.0
 charset-normalizer==3.4.7
 click==8.3.1
@@ -58,7 +58,7 @@ humanize==4.15.0
 hvac==2.4.0
 ibm-db==3.2.8
 ibm-db-sa==0.4.4
-idna==3.12
+idna==3.13
 ijson==3.5.0
 importlib-metadata==8.7.1
 isodate==0.7.2
@@ -126,7 +126,7 @@ rich==14.3.3
 rich-click==1.9.7
 rpds-py==0.30.0
 ruamel-yaml==0.19.1
-s3transfer==0.16.0
+s3transfer==0.16.1
 setuptools==82.0.1
 simple-salesforce==1.12.9
 six==1.17.0
@@ -150,7 +150,7 @@ uuid-v7==1.0.0
 uuid6==2025.0.1
 uv==0.10.12
 wcwidth==0.6.0
-wheel==0.46.3
+wheel==0.47.0
 zeep==4.3.2
 zipp==3.23.1
 zstandard==0.25.0
