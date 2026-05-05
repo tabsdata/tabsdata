@@ -9,10 +9,11 @@ This module handles sys.path reordering before any tabsdata imports occur.
 It must be the entry point when sys.path ordering is critical for correct
 namespace package resolution in editable installations.
 
-This code is intentionally duplicated in module test_tabsdata/bootest
-as it is trying to fix a wrong sys path order on Windows that interferes with
-correct import of namespace packages for editable installations.
-Just importing the other implementation wouldn't work as sys path is broken.
+This code is intentionally duplicated in modules test_tabsdata/bootest and
+test_tabsdatak/bootest as it is trying to fix a wrong sys path order on Windows
+that interferes with correct import of namespace packages for editable
+installations. Just importing the other implementation wouldn't work as sys
+path is broken.
 """
 
 from __future__ import annotations

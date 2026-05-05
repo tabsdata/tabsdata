@@ -103,6 +103,7 @@ markers = [
     "table_actions: mark tests for table action operations.",
     "tableframe: mark a test that validates the TableFrame API.",
     "tabsdata: requires tabsdata server to be started.",
+    "tabsdatak: mark tests that require the tabsdatak package.",
     "tabsserver: mark tests for the tabsserver component.",
     "tdfnjob: automatically add behaviours to 'tdfnjob' tests.",
     "tdfnrun: automatically add behaviours to 'tdfnrun' tests.",

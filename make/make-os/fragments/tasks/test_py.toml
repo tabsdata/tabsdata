@@ -587,6 +587,69 @@ script = [
     info "📊 Report generated at: 👉 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/reports/pytest/tabsdata/pytest.html\n"
     ''']
 
+[tasks.__os__test_py_tabsdatak]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+dependencies = ["__os__set_mode_test_py"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    verbose = get_env TD_VERBOSE
+
+    cd "${PROJECT_PY_TD_TABSDATA_FOLDER}"
+
+    td_temp = temp_dir
+    set_env COVERAGE_FILE ${td_temp}/.tabsdata/.coverage.${PYTEST_XDIST_WORKER}
+
+    report_folder = set "./target/reports/pytest/tabsdatak"
+    rm -r ${report_folder}
+    mkdir ${report_folder}
+    report_file = set ${report_folder}/pytest.html
+
+    td_tb = set ""
+    td_fail = set ""
+    arguments = split ${CARGO_MAKE_TASK_ARGS} ;
+    for argument in ${arguments}
+        is_tb = starts_with ${argument} "--tb="
+        if ${is_tb}
+            td_tb = set ${argument}
+            td_fail = set "--instafail"
+            info "🛟 Using fail option: ${td_tb}"
+            info "📝 Using traceback option: ${td_fail}"
+        end
+    end
+
+    if eq ${verbose} "false"
+        debug "🚀 pytest ${td_tb} ${td_fail} --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TD_TABSDATAK_FOLDER} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest ${td_tb} ${td_fail} --import-mode=importlib -n 16 --dist=loadfile ${TESTS_PY_TD_TABSDATAK_FOLDER} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m "${MARKERS}"
+    else
+        debug "🚀 pytest ${td_tb} ${td_fail} --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TD_TABSDATAK_FOLDER} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m \"${MARKERS}\""
+        exit_code = exec --get-exit-code pytest ${td_tb} ${td_fail} --import-mode=importlib -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile ${TESTS_PY_TD_TABSDATAK_FOLDER} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m "${MARKERS}"
+    end
+    is_zero = eq ${exit_code} "0"
+    is_five = eq ${exit_code} "5"
+    if ${is_zero} or ${is_five}
+        info "⌛️ Tests finished with zero-or-five exit code: '${exit_code}'"
+    else
+        info "⌛️ Tests finished with non-zero-or-five exit code: '${exit_code}'"
+        TD_FAIL_FAST_PY = get_env TD_FAIL_FAST_PY
+        if not ${TD_FAIL_FAST_PY}
+            info "⌛️ Setting TD_TESTS_CODE_PY to ${exit_code}..."
+            set_env TD_TESTS_CODE_PY ${exit_code}
+        else
+            info "⌛️ Failing fast..."
+            code = exit ${exit_code}
+        end
+    end
+
+    exec --fail-on-error python ${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/report_coverage.py ./.coverage/json/coverage.json .
+
+    info "📊 Report generated at: 👉 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/reports/pytest/tabsdatak/pytest.html\n"
+    ''']
+
 [tasks.__os__test_py_connectors]
 plugin = "td-task-tracker"
 category = "04 - Test"

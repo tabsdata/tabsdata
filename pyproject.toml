@@ -102,6 +102,7 @@ markers = [
     "table_actions: mark tests for table action operations.",
     "tableframe: mark a test that validates the TableFrame API.",
     "tabsdata: requires tabsdata server to be started.",
+    "tabsdatak: mark tests that require the tabsdatak package.",
     "tabsserver: mark tests for the tabsserver component.",
     "tdfnjob: automatically add behaviours to 'tdfnjob' tests.",
     "tdfnrun: automatically add behaviours to 'tdfnrun' tests.",
@@ -168,6 +169,7 @@ fixable = ["ALL"]
 [tool.ruff.lint.isort]
 known-first-party = [
     "tabsdata",
+    "tabsdatak",
     "test_tabsdata",
     "test_tabsdata_agent",
     "test_tabsdata_bigquery",
@@ -185,6 +187,7 @@ known-first-party = [
     "test_tabsdata_snowflake",
     "test_tabsdata_sql_common",
     "test_tabsdata_toolkit",
+    "test_tabsdatak",
     "test_ta_features",
     "test_ta_tableframe",
     "test_te_examples",

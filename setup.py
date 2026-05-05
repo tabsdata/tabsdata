@@ -77,13 +77,22 @@ python_version_abi = python_abi
 
 variant_assets_folder = get_variant_assets_folder(ROOT)
 variant_manifest_folder = get_variant_manifest_folder(ROOT)
-package_assets_folder = os.path.join(
+package_assets_folder_tabsdata = os.path.join(
     "client",
     "platform",
     "src",
     "main",
     "python",
     "tabsdata",
+    "assets",
+)
+package_assets_folder_tabsdatak = os.path.join(
+    "client",
+    "platform",
+    "src",
+    "main",
+    "python",
+    "tabsdatak",
     "assets",
 )
 package_resources_folder = os.path.join(
@@ -96,7 +105,7 @@ check_third_party(
 )
 copy_variant_assets(
     variant_assets_folder,
-    package_assets_folder,
+    package_assets_folder_tabsdata,
     configuration.skip_non_existing_assets,
 )
 
@@ -114,8 +123,8 @@ datafiles = create_datafiles(
     target_release_folder,
 )
 
-yaml_files = []
-yaml_root_folder = Path(
+yaml_files_tabsdata = []
+yaml_root_folder_tabsdata = Path(
     os.path.join(
         "client",
         "platform",
@@ -125,9 +134,24 @@ yaml_root_folder = Path(
         "tabsdata",
     )
 )
-for path in yaml_root_folder.rglob("*.yaml"):
-    relative_path = path.relative_to(yaml_root_folder)
-    yaml_files.append(str(relative_path))
+for path in yaml_root_folder_tabsdata.rglob("*.yaml"):
+    relative_path = path.relative_to(yaml_root_folder_tabsdata)
+    yaml_files_tabsdata.append(str(relative_path))
+
+yaml_files_tabsdatak = []
+yaml_root_folder_tabsdatak = Path(
+    os.path.join(
+        "client",
+        "platform",
+        "src",
+        "main",
+        "python",
+        "tabsdatak",
+    )
+)
+for path in yaml_root_folder_tabsdatak.rglob("*.yaml"):
+    relative_path = path.relative_to(yaml_root_folder_tabsdatak)
+    yaml_files_tabsdatak.append(str(relative_path))
 
 console_scripts: list[str] = [
     "td = tabsdata._cli.cli:cli",
@@ -148,7 +172,7 @@ create_editable_extra_pth_file(__file__, EDITABLE_EXTRA_PATHS)
 create_editable_binary_symlinks(datafiles)
 ensure_egg_folder()
 
-build_manifest_path = os.path.join(package_assets_folder, "manifest", "BUILD")
+build_manifest_path = os.path.join(package_assets_folder_tabsdata, "manifest", "BUILD")
 tdabout.write_build_manifest(Path(ROOT), build_manifest_path)
 
 tdlock.generate_requirements_lock(ROOT, package_resources_folder)
@@ -220,6 +244,10 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                     "tabsdata.assets*",
                     "tabsdata.resources",
                     "tabsdata.resources*",
+                    "tabsdatak.assets",
+                    "tabsdatak.assets*",
+                    "tabsdatak.resources",
+                    "tabsdatak.resources*",
                 ],
             ),
             *find_namespace_packages(
@@ -335,6 +363,14 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                 "main",
                 "python",
                 "tabsdata",
+            ),
+            "tabsdatak": os.path.join(
+                "client",
+                "platform",
+                "src",
+                "main",
+                "python",
+                "tabsdatak",
             ),
             "tabsdata.expansions": os.path.join(
                 "expansions",
@@ -495,7 +531,20 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                     "**",
                     "*",
                 ),
-                *yaml_files,
+                *yaml_files_tabsdata,
+            ],
+            "tabsdatak": [
+                os.path.join(
+                    "assets",
+                    "manifest",
+                    "*",
+                ),
+                os.path.join(
+                    "resources",
+                    "**",
+                    "*",
+                ),
+                *yaml_files_tabsdatak,
             ],
             "tabsdata.extensions._examples": [
                 os.path.join(

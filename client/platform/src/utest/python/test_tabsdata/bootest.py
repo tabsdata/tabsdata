@@ -472,7 +472,7 @@ def check_assets():
         / "variant"
         / "assets"
     )
-    client_assets_folder = str(
+    client_assets_folder_tabsdata = str(
         Path(__file__).absolute()
         .parent  # test_tabsdata/
         .parent  # python/
@@ -480,6 +480,16 @@ def check_assets():
         .parent  # src/
         .parent  # platform/
         / "tabsdata"
+        / "assets"
+    )
+    client_assets_folder_tabsdatak = str(
+        Path(__file__).absolute()
+        .parent  # test_tabsdata/
+        .parent  # python/
+        .parent  # utest/
+        .parent  # src/
+        .parent  # platform/
+        / "tabsdatak"
         / "assets"
     )
     # fmt: on
@@ -490,7 +500,9 @@ def check_assets():
         and require_third_party
     ):
         raise FileNotFoundError(
-            f"The THIRD-PARTY file is missing in {client_assets_folder}."
+            "The THIRD-PARTY file is missing in"
+            f" {client_assets_folder_tabsdata} and"
+            f" {client_assets_folder_tabsdatak}."
         )
 
 

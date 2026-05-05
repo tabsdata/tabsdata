@@ -332,6 +332,15 @@ script = [
         debug "✅ Successfully imported: tabsdata"
     end
 
+    debug "🔸🔸🔸 Checking import: tabsdatak"
+    result = exec python -c "import tabsdatak"
+    if not eq ${result.code} 0
+        warn "❌ Failed to import: tabsdatak"
+        warn "   Error: ${result.stderr}"
+    else
+        debug "✅ Successfully imported: tabsdatak"
+    end
+
     debug "🔸🔸🔸 Checking import: tabsdata.extensions"
     result = exec python -c "import tabsdata.extensions"
     if not eq ${result.code} 0

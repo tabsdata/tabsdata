@@ -77,7 +77,6 @@ os.environ["POLARS_VERBOSE"] = "0"
 os.environ["POLARS_FORCE_ASYNC"] = "1"
 
 
-
 def get_function_registration_path(fn: TabsdataFunction):
     return inspect.getfile(fn.original_function) + "::" + fn.original_function.__name__
 

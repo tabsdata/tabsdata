@@ -148,6 +148,8 @@ def clean_py(project_folder):
         "*.log",
         "client/platform/src/main/python/tabsdata/assets",
         "client/platform/src/main/python/tabsdata/resources",
+        "client/platform/src/main/python/tabsdatak/assets",
+        "client/platform/src/main/python/tabsdatak/resources",
         "coverage.xml",
         "docs/_build",
         "htmlcov",

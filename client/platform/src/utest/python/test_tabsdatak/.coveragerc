@@ -1,0 +1,22 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+[run]
+source = tabsdatak
+omit =
+    test*
+    test*/**
+    */td-temp/*
+    uitest
+    uitest*
+    uitest/**
+    uitest*/**
+branch = True
+parallel = True
+disable_warnings = no-data-collected, couldnt-parse
+relative_files = True
+
+[report]
+skip_empty = True
+show_missing = True

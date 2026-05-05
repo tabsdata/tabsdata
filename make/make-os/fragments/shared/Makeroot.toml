@@ -75,6 +75,7 @@ TESTS_PY_TO_FOUNDATION_FOLDER = { value = "src/utest/python/test_to_foundation/"
 TESTS_PY_TY_TABLEFRAME_FOLDER = { value = "src/utest/python/test_ty_tableframe/", normalize = true }
 TESTS_PY_TZ_TABLEFRAME_FOLDER = { value = "src/utest/python/test_tz_tableframe/", normalize = true }
 TESTS_PY_TD_TABSDATA_FOLDER = { value = "src/utest/python/test_tabsdata/", normalize = true }
+TESTS_PY_TD_TABSDATAK_FOLDER = { value = "src/utest/python/test_tabsdatak/", normalize = true }
 
 BOOK_DEVELOPER_GUIDE_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/books/dguide", normalize = true }
 

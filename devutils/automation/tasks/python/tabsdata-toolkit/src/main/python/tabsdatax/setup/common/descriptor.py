@@ -27,16 +27,33 @@ class PackageDescriptor:
         return tuple(self.package.split("-"))
 
     @property
-    def namespace(self) -> str:
+    def namespace_tabsdata(self) -> str:
         return ".".join(("tabsdata", "connector", *self.module))
 
     @property
-    def manifest_path(self) -> str:
+    def namespace_tabsdatak(self) -> str:
+        return ".".join(("tabsdatak", "connector", *self.module))
+
+    @property
+    def manifest_path_tabsdata(self) -> str:
         return os.path.join(
             "src",
             "main",
             "python",
             "tabsdata",
+            "connector",
+            *self.module,
+            "assets",
+            "manifest",
+        )
+
+    @property
+    def manifest_path_tabsdatak(self) -> str:
+        return os.path.join(
+            "src",
+            "main",
+            "python",
+            "tabsdatak",
             "connector",
             *self.module,
             "assets",
