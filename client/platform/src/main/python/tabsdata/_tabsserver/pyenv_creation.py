@@ -796,26 +796,28 @@ def inject_tabsdata_version(required_modules: list[str]) -> list[str]:  # noqa: 
 
     (tabsdata_provider, _, _) = retrieve_tabsdata_package()
 
-    def load_requirements_lock(lock_path: str) -> dict[str, str]:
-        lock_map = {}
+    def load_requirements_lock(
+        lock_path: str,
+    ) -> dict[str, tuple[Requirement, str]]:
+        lock_map: dict[str, tuple[Requirement, str]] = {}
         try:
             requirements_lock = td_resource(lock_path)
             with open(requirements_lock, "r", encoding="utf-8") as f:
                 for line in f:
-                    line = line.strip()
-                    if not line or line.startswith("#"):
+                    raw_line = line.strip()
+                    if not raw_line or raw_line.startswith("#"):
                         continue
-                    is_a_requirement = re.match(
-                        r"^\s*([A-Za-z0-9_.-]+)\s*==\s*(.+)", line
-                    )
-                    if is_a_requirement:
-                        module = is_a_requirement.group(1)
-                        requirement_version = is_a_requirement.group(2)
-                        requirement_canonical_module = canonicalize_name(module)
-                        lock_map[requirement_canonical_module] = requirement_version
-                    else:
+                    try:
+                        requirement = Requirement(raw_line)
+                        requirement_canonical = canonicalize_name(requirement.name)
+                        lock_map[requirement_canonical] = (
+                            requirement,
+                            raw_line,
+                        )
+                    except InvalidRequirement:
                         logger.warning(
-                            f"Unexpected requirement lock spec: {lock_path} - {line}"
+                            f"Unexpected requirement lock spec: "
+                            f"{lock_path} - {raw_line}"
                         )
         except Exception as error:
             logger.warning(
@@ -839,41 +841,50 @@ def inject_tabsdata_version(required_modules: list[str]) -> list[str]:  # noqa: 
         )
         requirements_lock_map.update(requirements_dev_lock_map)
 
-    required_modules_map = {}
+    required_modules_map: dict[str, tuple[Requirement, str]] = {}
     for required_module in required_modules:
-        is_requirement = re.match(
-            r"^\s*([A-Za-z0-9_.-]+)(?:\s*==\s*(.+))?",
-            required_module,
-        )
-        if is_requirement:
-            module = is_requirement.group(1)
-            version = is_requirement.group(2)
-            canonical_module = canonicalize_name(module)
-            required_modules_map[canonical_module] = version
-        else:
+        try:
+            requirement = Requirement(required_module)
+            canonical_module = canonicalize_name(requirement.name)
+            required_modules_map[canonical_module] = (
+                requirement,
+                required_module,
+            )
+        except InvalidRequirement:
             logger.warning(f"Unexpected required module spec: {required_module}")
 
-    for locked_module, locked_version in requirements_lock_map.items():
+    for locked_module, (
+        locked_requirement,
+        locked_raw,
+    ) in requirements_lock_map.items():
         if locked_module in required_modules_map:
-            current_version = required_modules_map[locked_module]
-            if current_version != locked_version:
+            current_requirement, current_raw = required_modules_map[locked_module]
+            if str(current_requirement.specifier) != str(locked_requirement.specifier):
                 logger.info(
                     f"Overriding version of '{locked_module}' "
-                    f"from '{current_version or 'unspecified'}' "
-                    f"to '{locked_version}'"
+                    f"from '{current_requirement.specifier or 'unspecified'}' "
+                    f"to '{locked_requirement.specifier}'"
                 )
-                required_modules_map[locked_module] = locked_version
+            if str(current_requirement.marker or "") != str(
+                locked_requirement.marker or ""
+            ):
+                logger.info(
+                    f"Overriding marker of '{locked_module}' "
+                    f"from '{current_requirement.marker or 'none'}' "
+                    f"to '{locked_requirement.marker or 'none'}'"
+                )
+            required_modules_map[locked_module] = (
+                locked_requirement,
+                locked_raw,
+            )
         else:
-            logger.info(f"Adding '{locked_module}=={locked_version}' from lock file")
-            required_modules_map[locked_module] = locked_version
+            logger.info(f"Adding '{locked_raw}' from lock file")
+            required_modules_map[locked_module] = (
+                locked_requirement,
+                locked_raw,
+            )
 
-    required_modules = []
-    for module, version in required_modules_map.items():
-        if version:
-            required_modules.append(f"{module}=={version}")
-        else:
-            required_modules.append(module)
-    required_modules = sorted(required_modules)
+    required_modules = sorted(raw for _, raw in required_modules_map.values())
 
     # noinspection PyListCreation
     packages_to_inject = []

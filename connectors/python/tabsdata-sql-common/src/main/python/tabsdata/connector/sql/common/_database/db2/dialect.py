@@ -8,17 +8,21 @@ import logging
 from datetime import tzinfo
 from typing import Any
 
-from ibm_db_sa import BLOB, CLOB
 from sqlalchemy import text
 from sqlalchemy.types import TypeEngine
 
 from tabsdata.connector.sql.common._generic.dialect import LARGE_COLUMN_TYPES, Dialect
 from tabsdata.connector.sql.common._utils import parse_server_timezone
 
-DB2_LARGE_COLUMN_TYPES = LARGE_COLUMN_TYPES + (
-    BLOB,
-    CLOB,
-)
+try:
+    from ibm_db_sa import BLOB, CLOB
+
+    DB2_LARGE_COLUMN_TYPES = LARGE_COLUMN_TYPES + (
+        BLOB,
+        CLOB,
+    )
+except ImportError:
+    DB2_LARGE_COLUMN_TYPES = LARGE_COLUMN_TYPES
 
 logger = logging.getLogger(__name__)
 

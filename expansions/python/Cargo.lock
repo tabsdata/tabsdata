@@ -4987,7 +4987,7 @@ dependencies = [
  "url",
  "utoipa",
  "uuid",
- "whoami 2.1.1",
+ "whoami 2.1.2",
  "windows 0.62.2",
  "windows-sys 0.61.2",
 ]
@@ -5810,9 +5810,9 @@ dependencies = [
 
 [[package]]
 name = "whoami"
-version = "2.1.1"
+version = "2.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6a5b12f9df4f978d2cfdb1bd3bac52433f44393342d7ee9c25f5a1c14c0f45d"
+checksum = "998767ef88740d1f5b0682a9c53c24431453923962269c2db68ee43788c5a40d"
 dependencies = [
  "libc",
  "libredox",

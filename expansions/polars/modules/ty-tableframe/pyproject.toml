@@ -110,6 +110,7 @@ using = "requirements:requirements.txt"
 python-source = "python/src/main/python"
 module-name = "tabsdata.expansions.tableframe._tableframe"
 compatibility = "linux"
+auditwheel = "skip"
 
 [tool.ruff]
 extend = "../../../../pyproject.toml"

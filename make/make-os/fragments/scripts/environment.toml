@@ -192,8 +192,21 @@ env_scripts = [
         debug "🔔 Configuring Rust in manual verbose mode"
     end
 
-    td_nextest_build_jobs = set "16"
-    td_nextest_test_threads = set "32"
+    td_nextest_build_jobs = get_env TD_NEXTEST_BUILD_JOBS
+    td_nextest_build_jobs_is_empty = is_empty ${td_nextest_build_jobs}
+    if ${td_nextest_build_jobs_is_empty}
+        td_nextest_build_jobs = set "16"
+    end
+    td_nextest_test_threads = get_env TD_NEXTEST_TEST_THREADS
+    td_nextest_test_threads_is_empty = is_empty ${td_nextest_test_threads}
+    if ${td_nextest_test_threads_is_empty}
+        td_nextest_test_threads = set "32"
+    end
+    td_cross_test_jobs = get_env TD_CROSS_TEST_JOBS
+    td_cross_test_jobs_is_empty = is_empty ${td_cross_test_jobs}
+    if ${td_cross_test_jobs_is_empty}
+        td_cross_test_jobs = set "16"
+    end
     os_family = os_family
     info "👾 Current os family: ${os_family}"
     is_mac = eq ${os_family} "mac"
@@ -215,8 +228,16 @@ env_scripts = [
             end
         end
     end
+    td_cargo_build_jobs = get_env TD_CARGO_BUILD_JOBS
+    td_cargo_build_jobs_is_empty = not is_empty ${td_cargo_build_jobs}
+    if ${td_cargo_build_jobs_is_empty}
+        set_env CARGO_BUILD_JOBS ${td_cargo_build_jobs}
+        info "🔧 Setting CARGO_BUILD_JOBS to ${td_cargo_build_jobs} from TD_CARGO_BUILD_JOBS."
+    end
+
     set_env td-nextest-build-jobs ${td_nextest_build_jobs}
     set_env td-nextest-test-threads ${td_nextest_test_threads}
+    set_env td-cross-test-jobs ${td_cross_test_jobs}
 
     enable_sccache = set false
     if ${on_ga_true}

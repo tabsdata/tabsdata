@@ -68,8 +68,14 @@ script = [
         array_push ${crates_array} "mdbook-mermaid"
         crates = array_join ${crates_array} " "
 
+        td_cargo_install_jobs = get_env TD_CARGO_INSTALL_JOBS
+        td_cargo_install_jobs_is_empty = is_empty ${td_cargo_install_jobs}
+        if ${td_cargo_install_jobs_is_empty}
+            td_cargo_install_jobs = set "8"
+        end
+
         exec --fail-on-error rustup component add %{components}
-        exec --fail-on-error cargo install --quiet --locked --jobs 8 %{crates}
+        exec --fail-on-error cargo install --quiet --locked --jobs ${td_cargo_install_jobs} %{crates}
 
         exec --fail-on-error cargo install --quiet --locked --git https://github.com/tabsdata/cargo-pants --branch main
     end
