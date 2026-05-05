@@ -1,0 +1,25 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+td_skipe_initialized = get_env TD_SKIPE_INITIALIZED
+if is_empty ${td_skipe_initialized}
+    set_env TD_SKIPE_INITIALIZED "true"
+    skipe_next = set false
+    arguments = split ${CARGO_MAKE_TASK_ARGS} ;
+    for argument in ${arguments}
+        argument = trim ${argument}
+        if ${skipe_next}
+            skipe_tasks = split ${argument} ,
+            for skipe_task in ${skipe_tasks}
+                skipe_task = trim ${skipe_task}
+                skipe_env = concat "skipe_" ${skipe_task}
+                set_env ${skipe_env} "true"
+                info "🛡️ Skipping errors configured for task: '${skipe_task}'"
+            end
+            skipe_next = set false
+        elseif eq ${argument} "--skipe"
+            skipe_next = set true
+        end
+    end
+end

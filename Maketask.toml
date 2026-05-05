@@ -624,6 +624,7 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/skipe.ds
 
     verbose = get_env TD_VERBOSE
 
@@ -687,13 +688,22 @@ script = [
         info "⌛️ Tests finished with zero-or-five exit code: '${exit_code}'"
     else
         info "⌛️ Tests finished with non-zero-or-five exit code: '${exit_code}'"
-        TD_FAIL_FAST_PY = get_env TD_FAIL_FAST_PY
-        if not ${TD_FAIL_FAST_PY}
-            info "⌛️ Setting TD_TESTS_CODE_PY to ${exit_code}..."
-            set_env TD_TESTS_CODE_PY ${exit_code}
+        skipe_test_py = get_env skipe_test_py
+        if not is_empty ${skipe_test_py}
+            echo ""
+            error "🧨🧨🧨🧨"
+            error "🧨 TASK 'test_parallel_py' FAILED with exit code '${exit_code}' — error skipped (--skipe)"
+            error "🧨🧨🧨🧨"
+            echo ""
         else
-            info "⌛️ Failing fast..."
-            code = exit ${exit_code}
+            TD_FAIL_FAST_PY = get_env TD_FAIL_FAST_PY
+            if not ${TD_FAIL_FAST_PY}
+                info "⌛️ Setting TD_TESTS_CODE_PY to ${exit_code}..."
+                set_env TD_TESTS_CODE_PY ${exit_code}
+            else
+                info "⌛️ Failing fast..."
+                code = exit ${exit_code}
+            end
         end
     end
 

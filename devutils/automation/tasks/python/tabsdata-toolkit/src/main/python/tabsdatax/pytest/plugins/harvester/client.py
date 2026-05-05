@@ -405,11 +405,16 @@ class HarvesterDashboard(App):
     .panel-pair {
         height: auto;
         margin-bottom: 1;
+        border-bottom: solid #3a4a70;
     }
 
     .panel-pair > TableSection {
         width: 1fr;
         margin-bottom: 0;
+    }
+
+    #outer-scroll > TableSection {
+        border-bottom: solid #3a4a70;
     }
 
     #bottom-spacer {
@@ -497,7 +502,7 @@ class HarvesterDashboard(App):
             yield TableSection(
                 title=f"Failed Tests [{Emoji.CIRCLE_RED_STYLE}]{Emoji.CIRCLE}[/]",
                 table_id="failed",
-                table_height=12,
+                table_height=17,
                 table_index=5,
             )
             yield Static("", id="bottom-spacer")
