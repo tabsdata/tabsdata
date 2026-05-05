@@ -46,6 +46,7 @@ from tabsdatax.pytest.plugins.harvester.internal.constants import (
 from tabsdatax.pytest.plugins.harvester.internal.dashboard import (
     SummaryHeader,
     TableSection,
+    component_state_circle,
     fixture_scope_icon,
     fixture_scope_text,
     fixture_sort_key,
@@ -62,6 +63,7 @@ from tabsdatax.pytest.plugins.harvester.internal.dashboard import (
     text_for,
 )
 from tabsdatax.pytest.plugins.harvester.internal.database import (
+    query_component_stats,
     query_fixture_stats,
     query_test_averages,
     query_test_durations,
@@ -456,6 +458,7 @@ class HarvesterDashboard(App):
         self._cached_skipped: int = 0
         self._cached_orphaned: int = 0
         self._cached_db_stats: list = []
+        self._cached_component_db_stats: list = []
         self._cached_test_averages: dict = {}
         self._cached_test_durations: list = []
         self._cached_tests_per_minute: list = []
@@ -481,6 +484,12 @@ class HarvesterDashboard(App):
                     table_index=3,
                 )
             with Horizontal(classes="panel-pair"):
+                yield TableSection(
+                    title="Components",
+                    table_id="components",
+                    table_height=28,
+                    table_index=6,
+                )
                 yield TableSection(
                     title="Markers",
                     table_id="markers",
@@ -510,6 +519,7 @@ class HarvesterDashboard(App):
 
     def on_mount(self) -> None:
         self._init_phases_table()
+        self._init_components_table()
         self._init_fixtures_table()
         self._init_markers_table()
         self._init_plugins_table()
@@ -546,6 +556,23 @@ class HarvesterDashboard(App):
                 t(""),
                 key=phase,
             )
+
+    def _init_components_table(self) -> None:
+        h = header_for(6)
+        dt = self.query_one("#components", DataTable)
+
+        def ac(label, key):
+            self._add_col(dt, h, label, key)
+
+        ac("Component", "component")
+        ac("State", "state_icon")
+        ac("Total", "total")
+        ac("Passed", "passed")
+        ac("Failed", "failed")
+        ac("Pending", "pending")
+        ac("Setup", "setup_count")
+        ac("Teardown", "teardown_count")
+        ac("Average", "avg_duration")
 
     def _init_fixtures_table(self) -> None:
         h = header_for(1)
@@ -656,6 +683,7 @@ class HarvesterDashboard(App):
             skipped,
             orphaned,
             db_stats,
+            component_db_stats,
             test_averages,
             test_durations,
             tests_per_minute,
@@ -671,6 +699,7 @@ class HarvesterDashboard(App):
         self._cached_skipped = skipped
         self._cached_orphaned = orphaned
         self._cached_db_stats = db_stats
+        self._cached_component_db_stats = component_db_stats
         self._cached_test_averages = test_averages
         self._cached_test_durations = test_durations
         self._cached_tests_per_minute = tests_per_minute
@@ -699,6 +728,7 @@ class HarvesterDashboard(App):
 
         # Query DB
         db_stats = query_fixture_stats(self._folder)
+        component_db_stats = query_component_stats(self._folder)
         test_averages = query_test_averages(self._folder)
         test_durations = query_test_durations(self._folder)
         tests_per_minute = query_tests_per_minute(self._folder, meta.session_start_ts)
@@ -711,6 +741,7 @@ class HarvesterDashboard(App):
             skipped,
             orphaned,
             db_stats,
+            component_db_stats,
             test_averages,
             test_durations,
             tests_per_minute,
@@ -720,6 +751,7 @@ class HarvesterDashboard(App):
         """Apply cached data to UI widgets. Called on main thread."""
         self._update_summary()
         self._update_phases()
+        self._update_components()
         self._update_fixtures()
         self._update_markers()
         self._update_plugins()
@@ -964,6 +996,56 @@ class HarvesterDashboard(App):
                     t(setup_count),
                     t(teardown_count),
                     t(avg_setup_str),
+                    key=name,
+                )
+
+    def _update_components(self) -> None:
+        t = text_for(6)
+        dt = self.query_one("#components", DataTable)
+        components = self._meta.components
+
+        # Build lookup from cached DB stats
+        db_stats = {}
+        for row in self._cached_component_db_stats:
+            db_stats[row["component"]] = row
+
+        def component_sort_key(item):
+            name = item[0]
+            is_tabsdata = 0 if name.startswith("tabsdata") else 1
+            return (is_tabsdata, name)
+
+        existing_keys = {rk.value for rk in dt.rows}
+        for name, state in sorted(components.items(), key=component_sort_key):
+            circle = component_state_circle(
+                state.total, state.passed, state.failed, state.skipped
+            )
+
+            stats = db_stats.get(name, {})
+            setup_count = stats.get("setup_count", 0)
+            teardown_count = stats.get("teardown_count", 0)
+            avg_duration = stats.get("avg_duration")
+            avg_str = format_duration(avg_duration) if avg_duration is not None else ""
+
+            if name in existing_keys:
+                dt.update_cell(name, "state_icon", circle)
+                dt.update_cell(name, "total", t(state.total))
+                dt.update_cell(name, "passed", t(state.passed))
+                dt.update_cell(name, "failed", t(state.failed))
+                dt.update_cell(name, "pending", t(state.pending))
+                dt.update_cell(name, "setup_count", t(setup_count))
+                dt.update_cell(name, "teardown_count", t(teardown_count))
+                dt.update_cell(name, "avg_duration", t(avg_str))
+            else:
+                dt.add_row(
+                    t(name),
+                    circle,
+                    t(state.total),
+                    t(state.passed),
+                    t(state.failed),
+                    t(state.pending),
+                    t(setup_count),
+                    t(teardown_count),
+                    t(avg_str),
                     key=name,
                 )
 

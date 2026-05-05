@@ -120,6 +120,7 @@ class Color:
     TABLE_PLUGINS = "#90c8f8"  # blue
     TABLE_RUNNING = "#80cc80"  # green (was Phases)
     TABLE_FAILED = "#f0a0a0"  # soft red
+    TABLE_COMPONENTS = "#80d8c8"  # soft teal
 
     # Per-table header colors — same hue but more saturated/vivid
     HDR_PHASES = "#8060c0"  # vivid saturated purple
@@ -128,6 +129,7 @@ class Color:
     HDR_PLUGINS = "#60a0e0"  # vivid saturated blue
     HDR_RUNNING = "#50b050"  # vivid green
     HDR_FAILED = "#ff8080"  # vivid saturated red
+    HDR_COMPONENTS = "#40b0a0"  # vivid teal
 
     # Progress bar colors — intensified version of corresponding table text
     BAR_TESTS = "#60e060"  # bright green (intensified Running/Tests)

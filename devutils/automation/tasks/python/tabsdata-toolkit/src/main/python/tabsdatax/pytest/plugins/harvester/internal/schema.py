@@ -127,6 +127,34 @@ class MarkerState:
 
 
 @dataclass
+class ComponentState:
+    total: int = 0
+    passed: int = 0
+    failed: int = 0
+    skipped: int = 0
+    pending: int = 0
+
+    def to_dict(self) -> dict:
+        return {
+            "total": self.total,
+            "passed": self.passed,
+            "failed": self.failed,
+            "skipped": self.skipped,
+            "pending": self.pending,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> ComponentState:
+        return cls(
+            total=data.get("total", 0),
+            passed=data.get("passed", 0),
+            failed=data.get("failed", 0),
+            skipped=data.get("skipped", 0),
+            pending=data.get("pending", 0),
+        )
+
+
+@dataclass
 class PluginState:
     plugin_type: str = "third-party"  # "builtin" | "conftest" | "third-party"
     active: bool = False
@@ -155,6 +183,7 @@ class MetaState:
     phases: dict[str, PhaseState] = field(default_factory=dict)
     fixtures: dict[str, FixtureState] = field(default_factory=dict)
     markers: dict[str, MarkerState] = field(default_factory=dict)
+    components: dict[str, ComponentState] = field(default_factory=dict)
     plugins: dict[str, PluginState] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
@@ -168,6 +197,7 @@ class MetaState:
             "phases": {k: v.to_dict() for k, v in self.phases.items()},
             "fixtures": {k: v.to_dict() for k, v in self.fixtures.items()},
             "markers": {k: v.to_dict() for k, v in self.markers.items()},
+            "components": {k: v.to_dict() for k, v in self.components.items()},
             "plugins": {k: v.to_dict() for k, v in self.plugins.items()},
         }
 
@@ -188,6 +218,10 @@ class MetaState:
             },
             markers={
                 k: MarkerState.from_dict(v) for k, v in data.get("markers", {}).items()
+            },
+            components={
+                k: ComponentState.from_dict(v)
+                for k, v in data.get("components", {}).items()
             },
             plugins={
                 k: PluginState.from_dict(v) for k, v in data.get("plugins", {}).items()

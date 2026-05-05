@@ -197,6 +197,7 @@ class MetaWriter:
         if msg.key not in section:
             # Auto-create from payload using the appropriate dataclass
             from tabsdatax.pytest.plugins.harvester.internal.schema import (
+                ComponentState,
                 FixtureState,
                 MarkerState,
                 PhaseState,
@@ -207,6 +208,7 @@ class MetaWriter:
                 "phase": PhaseState,
                 "fixture": FixtureState,
                 "marker": MarkerState,
+                "component": ComponentState,
                 "plugin": PluginState,
             }
             factory = factories.get(msg.kind)

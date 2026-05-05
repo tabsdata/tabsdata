@@ -61,6 +61,7 @@ import time
 
 import pytest
 
+from tabsdatax.pytest.plugins.harvester.internal.components import ComponentTracker
 from tabsdatax.pytest.plugins.harvester.internal.constants import (
     PHASE_DURATION_FIELD,
     PYTEST_OPTION_NUMPROCESSES,
@@ -118,6 +119,7 @@ _CFG_WRITER = "_tdx_meta_writer"
 _CFG_PHASE_TRACKER = "_tdx_phase_tracker"
 _CFG_FIXTURE_TRACKER = "_tdx_fixture_tracker"
 _CFG_MARKER_TRACKER = "_tdx_marker_tracker"
+_CFG_COMPONENT_TRACKER = "_tdx_component_tracker"
 _CFG_PLUGIN_TRACKER = "_tdx_plugin_tracker"
 
 
@@ -212,6 +214,9 @@ def pytest_configure(config: pytest.Config) -> None:
         marker_tracker = MarkerTracker(writer)
         setattr(config, _CFG_MARKER_TRACKER, marker_tracker)
 
+        component_tracker = ComponentTracker(writer)
+        setattr(config, _CFG_COMPONENT_TRACKER, component_tracker)
+
         plugin_tracker = PluginTracker(writer)
         plugin_tracker.snapshot(config.pluginmanager)
         setattr(config, _CFG_PLUGIN_TRACKER, plugin_tracker)
@@ -265,6 +270,10 @@ def pytest_collection_modifyitems(
     if marker_tracker:
         marker_tracker.register_all(items)
 
+    component_tracker: ComponentTracker | None = _get(config, _CFG_COMPONENT_TRACKER)
+    if component_tracker:
+        component_tracker.register_all(items)
+
 
 def pytest_deselected(items: list[pytest.Item]) -> None:
     """Adjust tracker counts when tests are excluded by filters (-m, -k)."""
@@ -280,6 +289,10 @@ def pytest_deselected(items: list[pytest.Item]) -> None:
     fixture_tracker: FixtureTracker | None = _get(g_config, _CFG_FIXTURE_TRACKER)
     if fixture_tracker:
         fixture_tracker.on_deselected(items)
+
+    component_tracker: ComponentTracker | None = _get(g_config, _CFG_COMPONENT_TRACKER)
+    if component_tracker:
+        component_tracker.on_deselected(items)
 
     g_collected = max(0, g_collected - len(items))
     writer: MetaWriter | None = _get(g_config, _CFG_WRITER)
@@ -484,6 +497,10 @@ def _notify_trackers_on_result(
     if fixture_tracker:
         fixture_tracker.on_test_complete(nodeid, outcome)
 
+    component_tracker: ComponentTracker | None = _get(config, _CFG_COMPONENT_TRACKER)
+    if component_tracker:
+        component_tracker.on_test_result(nodeid, outcome)
+
     # Record test completion in DB for averages and distribution.
     # Only on controller / non-xdist to avoid double-counting
     # (under xdist, workers also fire logreport).
@@ -494,12 +511,16 @@ def _notify_trackers_on_result(
         and outcome in ("passed", "failed", "skipped")
     ):
         try:
+            component = ""
+            if component_tracker:
+                component = component_tracker.get_component(nodeid)
             record_test_completion(
                 g_harvester_folder,
                 nodeid,
                 outcome,
                 report.duration,
                 "",  # controller doesn't have a worker id
+                component,
             )
         except Exception:
             pass

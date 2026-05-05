@@ -978,6 +978,22 @@ def fixture_sort_key(name: str, scope: str, lifecycle: str) -> tuple:
 # ---------------------------------------------------------------------------
 # Marker display helpers
 # ---------------------------------------------------------------------------
+def component_state_circle(
+    total: int, passed: int, failed: int, skipped: int
+) -> RichText:
+    """Return a colored circle for a component's execution state."""
+    executed = passed + failed + skipped
+    if executed == 0:
+        return _colored_circle(Emoji.CIRCLE_BLUE_STYLE)
+    if executed < total:
+        if failed > 0:
+            return _colored_circle(Emoji.CIRCLE_RED_STYLE)
+        return _colored_circle(Emoji.CIRCLE_ORANGE_STYLE)
+    if failed > 0:
+        return _colored_circle(Emoji.CIRCLE_RED_STYLE)
+    return _colored_circle(Emoji.CIRCLE_GREEN_STYLE)
+
+
 def marker_state_circle(total: int, passed: int, failed: int, skipped: int) -> RichText:
     """Return a colored ⬤ for a marker's execution state."""
     executed = passed + failed + skipped
@@ -1051,6 +1067,7 @@ _TABLE_COLORS = [
     Color.TABLE_PLUGINS,  # 3 — Plugins
     Color.TABLE_RUNNING,  # 4 — Running Tests
     Color.TABLE_FAILED,  # 5 — Failed Tests
+    Color.TABLE_COMPONENTS,  # 6 — Components
 ]
 
 # Table index → header color mapping (brighter version of text color)
@@ -1061,6 +1078,7 @@ _HEADER_COLORS = [
     Color.HDR_PLUGINS,  # 3
     Color.HDR_RUNNING,  # 4
     Color.HDR_FAILED,  # 5
+    Color.HDR_COMPONENTS,  # 6
 ]
 
 

@@ -93,11 +93,15 @@ def init_db(harvester_folder: str) -> None:
             outcome     TEXT    NOT NULL,   -- 'passed', 'failed', 'skipped'
             duration    REAL    NOT NULL,
             worker      TEXT    NOT NULL DEFAULT '',
+            component   TEXT    NOT NULL DEFAULT '',
             timestamp   REAL    NOT NULL
         );
 
         CREATE INDEX IF NOT EXISTS idx_test_completions_outcome
             ON test_completions (outcome);
+
+        CREATE INDEX IF NOT EXISTS idx_test_completions_component
+            ON test_completions (component);
     """)
     conn.commit()
 
@@ -176,13 +180,15 @@ def record_test_completion(
     outcome: str,
     duration: float,
     worker: str = "",
+    component: str = "",
 ) -> None:
     """Record a completed test with its duration and outcome."""
     conn = get_connection(harvester_folder)
     conn.execute(
-        "INSERT INTO test_completions (nodeid, outcome, duration, worker, timestamp)"
-        " VALUES (?, ?, ?, ?, ?)",
-        (nodeid, outcome, duration, worker, time.time()),
+        "INSERT INTO test_completions"
+        " (nodeid, outcome, duration, worker, component, timestamp)"
+        " VALUES (?, ?, ?, ?, ?, ?)",
+        (nodeid, outcome, duration, worker, component, time.time()),
     )
     conn.commit()
 
@@ -225,6 +231,35 @@ def query_fixture_stats(harvester_folder: str) -> list[dict]:
             FROM fixture_events
             GROUP BY fixture, scope
             ORDER BY fixture
+        """).fetchall()
+        return [dict(row) for row in rows]
+    except (sqlite3.OperationalError, sqlite3.DatabaseError):
+        return []
+
+
+def query_component_stats(harvester_folder: str) -> list[dict]:
+    """Return aggregated per-component test stats.
+
+    Returns a list of dicts with keys:
+        component, setup_count, teardown_count, avg_duration
+    """
+    path = db_path(harvester_folder)
+    if not os.path.exists(path):
+        return []
+    try:
+        conn = get_connection(harvester_folder)
+        rows = conn.execute("""
+            select
+                component,
+                count(*)                                     as setup_count,
+                sum(case when outcome in ('passed', 'failed')
+                    then 1 else 0 end)                       as teardown_count,
+                avg(case when outcome in ('passed', 'failed')
+                    then duration end)                       as avg_duration
+            from test_completions
+            where component != ''
+            group by component
+            order by component
         """).fetchall()
         return [dict(row) for row in rows]
     except (sqlite3.OperationalError, sqlite3.DatabaseError):
