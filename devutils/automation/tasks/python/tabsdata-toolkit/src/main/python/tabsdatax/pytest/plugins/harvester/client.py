@@ -696,9 +696,7 @@ class HarvesterDashboard(App):
         db_stats = query_fixture_stats(self._folder)
         test_averages = query_test_averages(self._folder)
         test_durations = query_test_durations(self._folder)
-        tests_per_minute = query_tests_per_minute(
-            self._folder, meta.session_start_ts
-        )
+        tests_per_minute = query_tests_per_minute(self._folder, meta.session_start_ts)
 
         return (
             meta,

@@ -12,7 +12,7 @@ from tabsdata.connector.salesforce._connector import (
     SalesforceCredentials,
     SalesforceTokenCredentials,
 )
-from tabsdata.exceptions import ErrorCode, ConnectionConfigurationError
+from tabsdata.exceptions import ConnectionConfigurationError, ErrorCode
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -29,7 +29,7 @@ class SalesforceConn(Conn):
         credentials: SalesforceCredentials,
         instance_url: str | None = None,
         category: str | None = None,
-        objects: str|list[str] | None = None,
+        objects: str | list[str] | None = None,
     ):
         """
         Initialize a SalesforceConn instance. The connection will support
@@ -79,7 +79,6 @@ class SalesforceConn(Conn):
     def category(self) -> str | None:
         return self._category
 
-
     @category.setter
     @_td_validate_call(ErrorCode.DECE101)
     def category(self, category: str | None):
@@ -89,13 +88,11 @@ class SalesforceConn(Conn):
             )
         self._category = category
 
-
     @property
     def objects(self) -> str | list[str] | None:
         if self._category is not None:
             return CATEGORIES[self._category]
         return self._objects
-
 
     @objects.setter
     @_td_validate_call(ErrorCode.DECE101)
@@ -125,6 +122,7 @@ class SalesforceConn(Conn):
             f"instance_url={self.instance_url!r})"
         )
 
+
 CATEGORIES = {
     "sales_crm": [
         "Account",
@@ -137,7 +135,7 @@ CATEGORIES = {
         "OpportunityFieldHistory",
         "Campaign",
         "CampaignMember",
-        "CampaignMemberStatus"
+        "CampaignMemberStatus",
     ],
     "quote_to_cash": [
         "Quote",
@@ -149,7 +147,7 @@ CATEGORIES = {
         "OrderItem",
         "Pricebook2",
         "PricebookEntry",
-        "Product2"
+        "Product2",
     ],
     "service": [
         "Case",
@@ -162,7 +160,7 @@ CATEGORIES = {
         "Entitlement",
         "ServiceContract",
         "ContractLineItem",
-        "Incident"
+        "Incident",
     ],
     "activity": [
         "Task",
@@ -181,7 +179,7 @@ CATEGORIES = {
         "TaskStatus",
         "TaskType",
         "OpenActivity",
-        "ActivityHistory"
+        "ActivityHistory",
     ],
     "user_org": [
         "User",
@@ -194,13 +192,13 @@ CATEGORIES = {
         "GroupMember",
         "Organization",
         "BusinessHours",
-        "Holiday"
+        "Holiday",
     ],
     "territory": [
         "Territory2",
         "Territory2Model",
         "UserTerritory2Association",
-        "AccountTerritoryAssignmentRule"
+        "AccountTerritoryAssignmentRule",
     ],
     "content": [
         "ContentDocument",
@@ -208,11 +206,7 @@ CATEGORIES = {
         "ContentDocumentLink",
         "Attachment",
         "Note",
-        "Document"
+        "Document",
     ],
-    "communication": [
-        "EmailMessage",
-        "EmailTemplate",
-        "EmailMessageRelation"
-    ]
+    "communication": ["EmailMessage", "EmailTemplate", "EmailMessageRelation"],
 }

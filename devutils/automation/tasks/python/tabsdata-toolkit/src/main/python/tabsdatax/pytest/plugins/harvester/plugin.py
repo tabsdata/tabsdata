@@ -488,7 +488,11 @@ def _notify_trackers_on_result(
     # Only on controller / non-xdist to avoid double-counting
     # (under xdist, workers also fire logreport).
     is_worker = bool(os.environ.get(PYTEST_XDIST_WORKER))
-    if g_harvester_folder and not is_worker and outcome in ("passed", "failed", "skipped"):
+    if (
+        g_harvester_folder
+        and not is_worker
+        and outcome in ("passed", "failed", "skipped")
+    ):
         try:
             record_test_completion(
                 g_harvester_folder,

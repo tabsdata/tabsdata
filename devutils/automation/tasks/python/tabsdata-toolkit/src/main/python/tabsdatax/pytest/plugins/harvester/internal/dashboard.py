@@ -507,7 +507,9 @@ class SummaryHeader(Vertical):
         # Update per-minute panel
         per_minute_widget = self.query_one("#per-minute-text", Static)
         pm_table = self._build_per_minute_table(
-            tests_per_minute or [], collected, session_start_ts,
+            tests_per_minute or [],
+            collected,
+            session_start_ts,
         )
         per_minute_widget.update(pm_table)
 
@@ -647,14 +649,19 @@ class SummaryHeader(Vertical):
             remaining = max(0, collected - cum_total)
             rem_pct = (remaining / collected * 100) if collected > 0 else 0
             computed.append((
-                row, cum_total, cum_passed, cum_failed, cum_skipped,
-                remaining, rem_pct,
+                row,
+                cum_total,
+                cum_passed,
+                cum_failed,
+                cum_skipped,
+                remaining,
+                rem_pct,
             ))
 
         # Display most recent first
-        for (
-            row, c_total, c_passed, c_failed, c_skipped, remaining, rem_pct
-        ) in reversed(computed):
+        for row, c_total, c_passed, c_failed, c_skipped, remaining, rem_pct in reversed(
+            computed
+        ):
             minute = int(row.get("minute", 0))
             total = int(row.get("total", 0))
             passed = int(row.get("passed", 0))
