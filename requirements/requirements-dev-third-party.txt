@@ -53,6 +53,7 @@ pytest-reporter-html1==0.9.5
 pytest-timeout==2.4.0
 pytest-xdist==3.8.0
 pytest==9.0.2
+python_on_whales==0.81.0
 python-dateutil==2.9.0.post0
 python_on_whales==0.81.0
 PyYAML==6.0.3
@@ -61,8 +62,8 @@ ruff==0.15.7
 setuptools==81.0.0
 supervisor==4.3.0
 tabulate==0.9.0
-textual==8.2.3
 textual-plotext==1.0.1
+textual==8.2.3
 tomlkit==0.14.0
 tqdm==4.67.3
 twine==6.2.0
