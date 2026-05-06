@@ -45,7 +45,7 @@ impl Default for ApiServerAddresses {
     fn default() -> Self {
         const DEFAULT_PORT: u16 = 2457;
         ApiServerAddresses(NonEmptyAddresses::new(nonempty![SocketAddr::new(
-            Ipv4Addr::LOCALHOST.into(),
+            Ipv4Addr::UNSPECIFIED.into(),
             DEFAULT_PORT
         )]))
     }
@@ -86,7 +86,7 @@ impl Default for InternalServerAddresses {
     fn default() -> Self {
         const DEFAULT_PORT: u16 = 2458;
         InternalServerAddresses(NonEmptyAddresses::new(nonempty![SocketAddr::new(
-            Ipv4Addr::LOCALHOST.into(),
+            Ipv4Addr::UNSPECIFIED.into(),
             DEFAULT_PORT
         )]))
     }

@@ -296,7 +296,7 @@ mod tests {
         assert_eq!(config.database.url(), None);
         assert_eq!(
             *config.addresses,
-            NonEmptyAddresses::new(nonempty![SocketAddr::from(([127, 0, 0, 1], 2457))])
+            NonEmptyAddresses::new(nonempty![SocketAddr::from(([0, 0, 0, 0], 2457))])
         );
         id::Id::try_from(config.jwt.secret.as_ref().unwrap()).unwrap();
         assert!(config.storage.is_some());
