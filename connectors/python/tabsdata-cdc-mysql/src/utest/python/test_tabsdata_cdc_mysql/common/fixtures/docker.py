@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_PYTEST_MYSQL_CDC_DOCKER_CONTAINER_NAME: str = f"{CDC_CONTAINER_PREFIX}mysql-cdc"
 
 MYSQL_CDC_FORWARDED_PORT: str = "3306/tcp"
-MYSQL_CDC_IMAGE: str = "mysql:9.1.0"
+MYSQL_CDC_IMAGE: str = "mysql:9.2.0"
 
 MYSQL_CDC_DATABASE: str = CDC_DATABASE
 MYSQL_CDC_ROOT_USER: str = "root"

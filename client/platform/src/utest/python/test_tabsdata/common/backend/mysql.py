@@ -166,10 +166,10 @@ def create_docker_mysql_database(
         wait_for_container_running(container)
         return get_container_port_binding(container, MYSQL_FORWARDED_PORT)
     else:
-        pull_docker_image("mysql:9.1.0")
+        pull_docker_image("mysql:9.2.0")
         try:
             container = client.containers.run(
-                "mysql:9.1.0",
+                "mysql:9.2.0",
                 name=name,
                 environment=[
                     "MYSQL_ROOT_PASSWORD=password",
