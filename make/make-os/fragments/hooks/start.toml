@@ -12,19 +12,11 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    make_banners = get_env TD_MAKE_BANNERS
-    make_banners_true = eq ${make_banners} "true"
-    if ${make_banners_true}
-        cm_run_task banner
-    end
-
     project_tabsdata_root_folder = get_env PROJECT_TABSDATA_ROOT_FOLDER
     ko = starts_with ${project_tabsdata_root_folder} "\${"
     if ${ko}
         exit 0
     end
-
-    info "🐢 Runnning task: ${CARGO_MAKE_TASK}"
 
     os = os_family
     debug "🏈 Current os: ${os}"
@@ -32,13 +24,13 @@ script = [
         temp = temp_dir
         marker = join_path ${temp} .td.make
         exists = is_path_exists ${marker}
-        info "🍐 The marker temp file is ${marker}"
+        debug "🍐 The marker temp file is ${marker}"
         if ${exists}
-            info "🍅 Marker for make exists. Skipping setup."
+            debug "🍅 Marker for make exists. Skipping setup."
             ok = rm ${marker}
             exit 0
         end
-        info "🍏 Marker for make does not exist. Resuming setup."
+        debug "🍏 Marker for make does not exist. Resuming setup."
         ok = touch ${marker}
     else
         pid = pid
@@ -53,13 +45,21 @@ script = [
         debug "🍋 The ppid temp file is ${ppid_marker}"
         exists = is_path_exists ${pid_marker}
         if ${exists}
-            info "🍅 Marker for pid exists. Skipping setup."
-            ok = rm ${marker}
+            debug "🍅 Marker for pid exists. Skipping setup."
+            ok = rm ${pid_marker}
             exit 0
         end
         debug "🍏 Marker for pid does not exist. Resuming setup."
         ok = touch ${ppid_marker}
     end
+
+    make_banners = get_env TD_MAKE_BANNERS
+    make_banners_true = eq ${make_banners} "true"
+    if ${make_banners_true}
+        cm_run_task banner
+    end
+
+    info "🐢 Runnning task: ${CARGO_MAKE_TASK}"
 
     echo ""
     user_home = get_env HOME
