@@ -15,7 +15,7 @@ boto3==1.42.73
 boto3-stubs==1.42.73
 botocore==1.42.97
 botocore-stubs==1.42.41
-build==1.4.4
+build==1.5.0
 cachetools==6.2.6
 certifi==2026.4.22
 cffi==2.0.0
@@ -37,9 +37,9 @@ et-xmlfile==2.0.0
 fastavro==1.12.1
 fastparquet==2026.3.0
 filelock==3.25.2
-fsspec==2026.3.0
+fsspec==2026.4.0
 google-api-core==2.30.3
-google-auth==2.49.2
+google-auth==2.50.0
 google-cloud-bigquery==3.40.1
 google-cloud-core==2.5.1
 google-cloud-storage==3.10.0
