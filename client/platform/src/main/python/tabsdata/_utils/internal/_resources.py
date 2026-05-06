@@ -9,7 +9,13 @@ from importlib.metadata import distribution
 from importlib.resources import as_file, files
 from pathlib import Path, PurePosixPath
 
-from tabsdata._utils.constants import TABSDATA_MODULE_NAME
+from tabsdata._utils.constants import (
+    TABSDATA_AGENT_MODULE_NAME as TABSDATA_AGENT_PACKAGE_NAME,
+    TABSDATA_MODULE_NAME as TABSDATA_PACKAGE_NAME,
+)
+
+TABSDATA_MODULE_NAME = "tabsdata"
+TABSDATA_AGENT_MODULE_NAME = "tabsdata.ag"
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -28,6 +34,13 @@ WHEEL_EXTENSION = ".whl"
 
 VARIANT = "variant"
 RESOURCES = "resources"
+
+SRC_MAIN = ("src", "main")
+
+RESOURCES_LOCATION: dict[str, tuple[str, tuple[str, ...]]] = {
+    TABSDATA_PACKAGE_NAME: (TABSDATA_MODULE_NAME, (VARIANT,)),
+    TABSDATA_AGENT_PACKAGE_NAME: (TABSDATA_AGENT_MODULE_NAME, SRC_MAIN),
+}
 
 
 # noinspection PyBroadException
@@ -58,22 +71,27 @@ def is_editable_package(package: str) -> tuple[bool, Path | None]:
 
 
 # noinspection PyBroadException
-def td_resource(resource: str) -> Path:
+def td_resource(
+    resource: str,
+    *,
+    package: str = TABSDATA_PACKAGE_NAME,
+) -> Path:
+    module, editable_root_parts = RESOURCES_LOCATION[package]
     normalized_resource = resource.replace(BACK_SLASH, SLASH)
     resource_parts = PurePosixPath(normalized_resource).parts
-    if normalized_resource.startswith(f"{RESOURCES}{SLASH}"):
-        editable, root = is_editable_package(TABSDATA_MODULE_NAME)
+    if resource_parts and resource_parts[0] == RESOURCES:
+        editable, root = is_editable_package(package)
         if editable and root:
             try:
-                variant_path = root.joinpath(VARIANT, *resource_parts)
+                variant_path = root.joinpath(*editable_root_parts, *resource_parts)
                 if variant_path.exists():
                     return variant_path
             except Exception:
                 pass
-    traversable = files(TABSDATA_MODULE_NAME).joinpath(*resource_parts)
+    traversable = files(module).joinpath(*resource_parts)
     with as_file(traversable) as path:
         if not path.exists():
             raise FileNotFoundError(
-                f"Resource '{resource}' not found in package '{TABSDATA_MODULE_NAME}'"
+                f"Resource '{resource}' not found in package '{package}'"
             )
         return path
