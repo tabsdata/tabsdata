@@ -57,6 +57,15 @@ def s3_config():
     bucket_name = uri.replace("s3://", "").split("/", 1)[0]
     config["BUCKET_NAME"] = bucket_name
 
+    # Bridge S30__S3_REGION → AWS_REGION so the td_transporter binary
+    # picks up the right region when an S3Source is constructed
+    # without an explicit ``region=`` (the common case in the input_s3
+    # tests). Without this, polars/object_store falls back to the
+    # developer's ~/.aws/config default, which may not match the test
+    # bucket's region and produces an opaque
+    # "Received redirect without LOCATION" failure.
+    os.environ["AWS_REGION"] = region
+
     catalog_definition = {
         "name": "default",
         "type": "glue",
