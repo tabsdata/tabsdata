@@ -179,9 +179,11 @@ env_scripts = [
     on_ga_true = eq ${on_ga} "true"
     if ${on_ga_true}
         set_env td-rust-quiet ""
+        set_env td-rust-cargo-quiet ""
         debug "🔈 Configuring Rust in automatic verbose mode"
     else
         set_env td-rust-quiet "--quiet"
+        set_env td-rust-cargo-quiet "--cargo-quiet"
         debug "🔇 Configuring Rust in automatic quiet mode: '${td-rust-quiet}'"
     end
 
