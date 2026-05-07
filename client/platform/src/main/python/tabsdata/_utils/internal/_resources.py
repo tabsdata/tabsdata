@@ -95,3 +95,16 @@ def td_resource(
                 f"Resource '{resource}' not found in package '{package}'"
             )
         return path
+
+
+def main() -> None:
+    import sys
+
+    if len(sys.argv) != 2:
+        print("Usage: td_resource <resource-path>", file=sys.stderr)
+        sys.exit(2)
+    try:
+        print(td_resource(sys.argv[1]))
+    except FileNotFoundError as error:
+        print(f"{error}", file=sys.stderr)
+        sys.exit(1)
