@@ -9,7 +9,7 @@ use td_build::version::TABSDATA_VERSION;
 use td_common::attach::attach;
 use td_common::env::{TABSDATA_HOME_DIR, get_home_dir};
 use td_common::logging;
-use td_common::logging::CONSOLE_PROFILE;
+use td_common::logging::{CONSOLE_PROFILE, LoggingOptions};
 use td_common::server::TD_DETACHED_SUBPROCESSES;
 use td_common::settings::TRUE;
 use td_supervisor::services::tdserver;
@@ -107,13 +107,12 @@ fn check_polars() {
 #[tokio::main]
 #[attach(signal = "tdserver")]
 async fn main() {
-    logging::start(
-        Some(Level::INFO),
-        Some(CONSOLE_PROFILE.to_string()),
-        false,
-        false,
-        None,
-    );
+    logging::start_with(LoggingOptions {
+        max_level: Some(Level::INFO),
+        profile: Some(CONSOLE_PROFILE.to_string()),
+        enable_bootstrap_notice: false,
+        ..Default::default()
+    });
     let accept_terms = extract_accept_terms();
     let previously_acknowledged = check_banner(accept_terms).unwrap_or(false);
     if !previously_acknowledged {

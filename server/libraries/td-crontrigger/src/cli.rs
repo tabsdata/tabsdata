@@ -9,6 +9,7 @@ use std::fs::File;
 use std::time::Duration;
 use td_common::env::get_current_dir;
 use td_common::logging;
+use td_common::logging::LoggingOptions;
 use td_common::server::{REQUEST_FILE, WORKER_PID_FILE};
 use td_common::server_runner::ServerRunner;
 use td_common::status::ExitStatus;
@@ -31,7 +32,10 @@ pub fn run() {
             let ArgumentParameters { request_folder, .. } = params;
 
             // Initialize logging
-            logging::start(Some(Level::INFO), None, false, true, None);
+            logging::start_with(LoggingOptions {
+                max_level: Some(Level::INFO),
+                ..Default::default()
+            });
 
             // parse request.yaml
             let request_file = request_folder.join(REQUEST_FILE);

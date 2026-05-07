@@ -12,6 +12,7 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 use td_common::env::get_current_dir;
 use td_common::logging;
+use td_common::logging::LoggingOptions;
 use td_common::status::ExitStatus;
 use td_process::launcher::cli::{Cli, NoConfig};
 use tracing::Level;
@@ -152,7 +153,10 @@ async fn run_impl(
     }
 
     // Initialize logging
-    logging::start(Some(Level::INFO), None, false, true, None);
+    logging::start_with(LoggingOptions {
+        max_level: Some(Level::INFO),
+        ..Default::default()
+    });
 
     let request = params.request.ok_or_else(|| {
         TransporterReport::ErrorV1(ErrorReport::new(

@@ -303,16 +303,44 @@ fn init<W: for<'a> MakeWriter<'a> + Send + Sync + 'static>(
     LoggerGuard { provider }
 }
 
-// Start the logger.
+#[derive(Debug, Clone)]
+pub struct LoggingOptions {
+    pub max_level: Option<Level>,
+    pub profile: Option<String>,
+    pub with_tokio_console: bool,
+    pub enable_bootstrap_notice: bool,
+    pub format: LogFormat,
+}
+
+impl Default for LoggingOptions {
+    fn default() -> Self {
+        Self {
+            max_level: None,
+            profile: None,
+            with_tokio_console: false,
+            enable_bootstrap_notice: true,
+            format: LogFormat::default(),
+        }
+    }
+}
+
+// Start the logger with default options.
+pub fn start() {
+    start_with(LoggingOptions::default());
+}
+
+// Start the logger with the given options.
 // Option 'with_tokio_console' enabled requires also binaries with feature 'tokio_console'.
 // Otherwise, flag will be ignored defaulting to standard behavior.
-pub fn start(
-    max_level: Option<Level>,
-    profile: Option<String>,
-    with_tokio_console: bool,
-    enable_bootstrap_notice: bool,
-    format: Option<LogFormat>,
-) {
+pub fn start_with(options: LoggingOptions) {
+    let LoggingOptions {
+        max_level,
+        profile,
+        with_tokio_console,
+        enable_bootstrap_notice,
+        format,
+    } = options;
+
     BOOTSTRAP_NOTICE_ENABLED.get_or_init(|| enable_bootstrap_notice);
 
     let log_config = load();
@@ -338,7 +366,7 @@ pub fn start(
             with_tokio_console,
             log_dir.clone(),
             active_profile.clone(),
-            format.unwrap_or_default(),
+            format,
         )
     });
 }

@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::time::Instant;
 use strum::IntoEnumIterator;
 use td_common::logging;
-use td_common::logging::CONSOLE_PROFILE;
+use td_common::logging::{CONSOLE_PROFILE, LoggingOptions};
 use td_database::config::DatabaseConfig;
 use td_execution::TransactionBy;
 use td_objects::Buildable;
@@ -77,13 +77,11 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize tracing
-    logging::start(
-        Some(Level::INFO),
-        Some(CONSOLE_PROFILE.to_string()),
-        false,
-        true,
-        None,
-    );
+    logging::start_with(LoggingOptions {
+        max_level: Some(Level::INFO),
+        profile: Some(CONSOLE_PROFILE.to_string()),
+        ..Default::default()
+    });
 
     // let args = Args::parse();
     let args = Args {

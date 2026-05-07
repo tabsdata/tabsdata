@@ -9,6 +9,7 @@ use std::ffi::OsString;
 use std::{env, process};
 use td_common::attach::attach;
 use td_common::env::check_flag_env;
+use td_common::logging::LoggingOptions;
 use td_common::server::{INSTANCE_PATH_ENV, INSTANCE_URI_ENV, TD_DETACHED_SUBPROCESSES};
 use td_common::{about, logging};
 use td_process::launcher::hooks;
@@ -56,7 +57,10 @@ pub fn main() {
         }
     }
 
-    logging::start(None, None, true, true, None);
+    logging::start_with(LoggingOptions {
+        with_tokio_console: true,
+        ..Default::default()
+    });
 
     let arguments: Vec<String> = env::args().collect();
     let command = arguments.join(" ");

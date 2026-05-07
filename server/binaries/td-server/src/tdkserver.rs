@@ -9,7 +9,7 @@ use td_build::version::TABSDATA_VERSION;
 use td_common::attach::attach;
 use td_common::env::{TABSDATA_HOME_DIR, get_home_dir};
 use td_common::logging;
-use td_common::logging::{CONSOLE_PROFILE, LogFormat};
+use td_common::logging::{CONSOLE_PROFILE, LogFormat, LoggingOptions};
 use td_common::server::TD_DETACHED_SUBPROCESSES;
 use td_common::settings::TRUE;
 use td_kubernetes::client::tdkserver;
@@ -114,13 +114,13 @@ async fn main() {
     unsafe {
         env::set_var(RUST_LOG, RUST_LOG_DIRECTIVES);
     }
-    logging::start(
-        Some(Level::INFO),
-        Some(CONSOLE_PROFILE.to_string()),
-        false,
-        false,
-        Some(LogFormat::CompactColored),
-    );
+    logging::start_with(LoggingOptions {
+        max_level: Some(Level::INFO),
+        profile: Some(CONSOLE_PROFILE.to_string()),
+        enable_bootstrap_notice: false,
+        format: LogFormat::CompactColored,
+        ..Default::default()
+    });
     unsafe {
         match previous_rust_log {
             Some(value) => env::set_var(RUST_LOG, value),
