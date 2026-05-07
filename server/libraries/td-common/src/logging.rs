@@ -6,6 +6,7 @@ use crate::constants::PYTEST_CONTEXT_ACTIVE;
 use crate::env::{get_current_dir, to_absolute};
 use crate::manifest::{Inf, WORKER_INF_FILE};
 use crate::settings::{LOG_WITH_ANSI, MANAGER, TRUE};
+use colored::Colorize;
 use once_cell::sync::OnceCell;
 use opentelemetry_sdk::logs::SdkLoggerProvider;
 use opentelemetry_stdout::LogExporter;
@@ -22,8 +23,8 @@ use tracing::field::Field;
 use tracing::level_filters::LevelFilter;
 use tracing::{Event, Level, Subscriber, debug, error, info, trace, warn};
 use tracing_subscriber::filter::Directive;
-use tracing_subscriber::fmt::MakeWriter;
 use tracing_subscriber::fmt::FmtContext;
+use tracing_subscriber::fmt::MakeWriter;
 use tracing_subscriber::fmt::format::{FormatEvent, FormatFields, Writer};
 use tracing_subscriber::fmt::writer::BoxMakeWriter;
 use tracing_subscriber::layer::{Context, SubscriberExt};
@@ -66,6 +67,7 @@ pub enum LogFormat {
     #[default]
     Full,
     Compact,
+    CompactColored,
 }
 
 struct CompactFormat;
@@ -94,6 +96,33 @@ where
     }
 }
 
+struct CompactColoredFormat;
+
+impl<S, N> FormatEvent<S, N> for CompactColoredFormat
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+    N: for<'a> FormatFields<'a> + 'static,
+{
+    fn format_event(
+        &self,
+        context: &FmtContext<'_, S, N>,
+        mut writer: Writer<'_>,
+        event: &Event<'_>,
+    ) -> std::fmt::Result {
+        let mut message = String::new();
+        let mut message_writer = Writer::new(&mut message);
+        context.format_fields(message_writer.by_ref(), event)?;
+        let colored = match *event.metadata().level() {
+            Level::ERROR => message.red(),
+            Level::WARN => message.yellow(),
+            Level::INFO => message.green(),
+            Level::DEBUG => message.blue(),
+            Level::TRACE => message.purple(),
+        };
+        writeln!(writer, "{colored}")
+    }
+}
+
 fn build_base_layer<S, W>(
     writer: W,
     log_with_ansi: bool,
@@ -116,6 +145,12 @@ where
             .with_writer(writer)
             .with_filter(base_filter)
             .boxed(),
+        LogFormat::CompactColored => tracing_subscriber::fmt::layer()
+            .event_format(CompactColoredFormat)
+            .with_ansi(true)
+            .with_writer(writer)
+            .with_filter(base_filter)
+            .boxed(),
     }
 }
 
@@ -135,6 +170,11 @@ where
         LogFormat::Compact => tracing_subscriber::fmt::layer()
             .event_format(CompactFormat)
             .with_ansi(log_with_ansi)
+            .with_writer(writer)
+            .boxed(),
+        LogFormat::CompactColored => tracing_subscriber::fmt::layer()
+            .event_format(CompactColoredFormat)
+            .with_ansi(true)
             .with_writer(writer)
             .boxed(),
     }
