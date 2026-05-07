@@ -64,6 +64,7 @@ td-python = { workspace = true }
 
 # External dependencies
 
+async-trait = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 clap_derive = { workspace = true }
 colored = { workspace = true }
@@ -72,8 +73,11 @@ getset = { workspace = true }
 indicatif = { workspace = true }
 k8s-openapi = { workspace = true, features = ["latest"] }
 kube = { workspace = true, default-features = false, features = ["client", "config", "rustls-tls"] }
+libc = { workspace = true }
 reedline = { workspace = true }
 rustls = { workspace = true, features = ["aws-lc-rs", "ring"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 shlex = { workspace = true }
 supports-color = { workspace = true }
 sysinfo = { workspace = true }
@@ -87,3 +91,6 @@ td-kubernetes = { workspace = true, features = ["td-test"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { workspace = true }
