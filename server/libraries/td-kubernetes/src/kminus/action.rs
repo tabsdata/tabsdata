@@ -4,4 +4,4 @@
 
 pub mod cluster;
 
-pub use cluster::{InstanceFolderGuard, KminusRunningGuard, create_cluster, start_cluster};
+pub use cluster::{InstanceFolderGuard, create_cluster, start_cluster, stop_cluster};

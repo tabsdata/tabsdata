@@ -2,9 +2,9 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-mod arguments;
-mod commands;
-mod common;
+pub mod arguments;
+pub mod commands;
+pub mod common;
 pub mod widgets;
 
 use clap::{CommandFactory, Parser};

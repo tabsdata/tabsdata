@@ -13,6 +13,7 @@ use tracing::error;
 
 use crate::constants::{PROGRAM_TD_RESOURCE, RESOURCE_KPROFILES};
 use crate::exit::{Outcome, abort};
+use crate::subprocess::apply_detached_flags;
 use crate::topology::{FABRIC_PREFIX_K, FabricPrefixes, Topology};
 
 pub fn resolve_kprofiles_path() -> Outcome<PathBuf> {
@@ -23,10 +24,10 @@ pub fn resolve_kprofiles_path() -> Outcome<PathBuf> {
             return abort(GeneralError);
         }
     };
-    let output = match SystemCommand::new(&resolver)
-        .arg(RESOURCE_KPROFILES)
-        .output()
-    {
+    let mut command = SystemCommand::new(&resolver);
+    command.arg(RESOURCE_KPROFILES);
+    apply_detached_flags(&mut command);
+    let output = match command.output() {
         Ok(output) => output,
         Err(error) => {
             error!(
