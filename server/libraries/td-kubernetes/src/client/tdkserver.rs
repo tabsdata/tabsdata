@@ -12,6 +12,7 @@ use clap::{CommandFactory, Parser};
 use crate::client::tdkserver::arguments::{Arguments, Commands};
 use crate::client::tdkserver::commands::create::command_create;
 use crate::client::tdkserver::commands::shell::command_shell;
+use crate::client::tdkserver::commands::start::command_start;
 use crate::exit::Outcome;
 use crate::kubernetes::client::install_crypto_provider;
 
@@ -28,6 +29,7 @@ impl TabsDataKubernetesClient {
             }
             Some(Commands::Shell) => command_shell().await,
             Some(Commands::Create(arguments)) => command_create(arguments).await,
+            Some(Commands::Start(arguments)) => command_start(arguments).await,
         }
     }
 }

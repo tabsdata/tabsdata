@@ -17,6 +17,7 @@ use td_common::env::TABSDATA_HOME_DIR;
 use tracing::error;
 
 use super::create::{CreateArguments, command_create};
+use super::start::{StartArguments, command_start};
 use crate::exit::Outcome;
 
 const TOOL_NAME: &str = "tdkserver";
@@ -27,6 +28,8 @@ const HISTORY_CAPACITY: usize = 10_000;
 enum ShellCommand {
     /// Create a Tabsdata instance
     Create(CreateArguments),
+    /// Start a Tabsdata instance
+    Start(StartArguments),
     /// Exit the shell
     Exit,
     /// Exit the shell
@@ -106,6 +109,9 @@ pub async fn command_shell() -> Outcome {
             Ok(input) => match input.command {
                 ShellCommand::Create(arguments) => {
                     let _ = command_create(arguments).await;
+                }
+                ShellCommand::Start(arguments) => {
+                    let _ = command_start(arguments).await;
                 }
                 ShellCommand::Exit | ShellCommand::Quit => break,
             },

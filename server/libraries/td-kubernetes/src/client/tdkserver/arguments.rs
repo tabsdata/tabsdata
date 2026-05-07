@@ -9,6 +9,7 @@ use clap_derive::{Args, Subcommand};
 use getset::Getters;
 
 use crate::client::tdkserver::commands::create::CreateArguments;
+use crate::client::tdkserver::commands::start::StartArguments;
 use crate::fabric::ClusterFabric;
 
 #[derive(Debug, Clone, Parser)]
@@ -38,6 +39,8 @@ pub enum Commands {
     Shell,
     #[command(about = "Create a Tabsdata instance")]
     Create(CreateArguments),
+    #[command(about = "Start a Tabsdata instance")]
+    Start(StartArguments),
 }
 
 #[derive(Debug, Clone, Getters, Args)]
