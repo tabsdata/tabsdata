@@ -5,10 +5,11 @@
 use std::path::PathBuf;
 
 use clap::Parser;
-use clap_derive::{Args, Subcommand, ValueEnum};
+use clap_derive::{Args, Subcommand};
 use getset::Getters;
 
 use crate::client::tdkserver::commands::create::CreateArguments;
+use crate::topology::ClusterFabric;
 
 #[derive(Debug, Clone, Parser)]
 #[command(
@@ -37,12 +38,6 @@ pub enum Commands {
     Shell,
     #[command(about = "Create a Tabsdata instance")]
     Create(CreateArguments),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
-pub enum ClusterFabric {
-    Kubernetes,
-    Kminus,
 }
 
 #[derive(Debug, Clone, Getters, Args)]

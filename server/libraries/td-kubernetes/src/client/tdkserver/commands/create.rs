@@ -13,7 +13,7 @@ use td_common::server::{DEFAULT_INSTANCE, INSTANCES_FOLDER};
 use td_common::status::ExitStatus::GeneralError;
 use tracing::{error, info};
 
-use crate::client::tdkserver::arguments::{ClusterArguments, ClusterFabric, InstanceArguments};
+use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::{prompt_yes_no, validate_instance_name};
 use crate::constants::{FABRIC_KMINUS, FABRIC_KUBERNETES, FOLDER_CLUSTER, PROFILE_PRODUCTION};
 use crate::exit::{Outcome, abort};
@@ -24,6 +24,7 @@ use crate::kubernetes::client::build_kube_client;
 use crate::kubernetes::toolkit::{
     build_kubeconfig, resolve_cluster_name, resolve_current_context, resolve_kubeconfig_path,
 };
+use crate::topology::ClusterFabric;
 
 #[derive(Debug, Clone, Getters, Args)]
 #[getset(get = "pub")]
