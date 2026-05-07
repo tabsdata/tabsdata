@@ -39,14 +39,14 @@ fastparquet==2026.3.0
 filelock==3.25.2
 fsspec==2026.4.0
 google-api-core==2.30.3
-google-auth==2.50.0
+google-auth==2.51.0
 google-cloud-bigquery==3.40.1
-google-cloud-core==2.5.1
+google-cloud-core==2.6.0
 google-cloud-storage==3.10.0
 google-cloud-storage-control==1.10.0
 google-crc32c==1.8.0
-google-resumable-media==2.8.2
-googleapis-common-protos==1.74.0
+google-resumable-media==2.9.0
+googleapis-common-protos==1.75.0
 grpc-google-iam-v1==0.14.4
 grpcio==1.80.0
 grpcio-status==1.80.0
@@ -92,7 +92,7 @@ platformdirs==4.9.4
 polars==1.39.3
 polars-runtime-32==1.39.3
 prompt-toolkit==3.0.52
-proto-plus==1.27.2
+proto-plus==1.28.0
 protobuf==6.33.6
 psycopg2-binary==2.9.11
 py-cpuinfo==9.0.0
