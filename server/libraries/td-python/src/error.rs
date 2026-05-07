@@ -49,4 +49,8 @@ pub enum PythonError {
     ScriptsFolderNotFound(PathBuf) = 5018,
     #[error("Python binary not found in scripts folder: {0}")]
     PythonBinaryNotFound(PathBuf) = 5019,
+    #[error("Unexpected error resolving the tabsdata package version: {0}")]
+    TabsdataVersionResolutionFailure(#[source] Error) = 5020,
+    #[error("Resolving the tabsdata package version finished with errors: {0}")]
+    TabsdataVersionResolutionError(ExitStatus) = 5021,
 }
