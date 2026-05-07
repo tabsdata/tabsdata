@@ -34,6 +34,7 @@ classifiers = [
 dynamic = ["version"]
 dependencies = [
     "colorama==0.4.6",
+    "distlib==0.4.0",
     "pytest==9.0.2",
     "rich==14.3.3",
     "rich-click==1.9.7",

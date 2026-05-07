@@ -39,11 +39,14 @@ from tabsdatax.setup.tabsdata.build import (
     create_main_custom_build_hook,
 )
 from tabsdatax.setup.tabsdata.clean import create_custom_clean_class
+from tabsdatax.setup.tabsdata.discovery import discover_tabsdata_commands
 from tabsdatax.setup.tabsdata.editable import (
     EDITABLE_EXTRA_PATHS,
     create_editable_binary_symlinks,
     create_editable_extra_pth_file,
+    create_editable_libexec_links,
 )
+from tabsdatax.setup.tabsdata.launcher import build_launchers
 from tabsdatax.setup.tabsdata.requirements import build_extras_require
 from tabsdatax.setup.tabsdata.scripts import load_console_scripts
 
@@ -118,6 +121,32 @@ datafiles = collect_group_datafiles(
     target_release_folder,
     require_server_binaries=configuration.require_server_binaries,
 )
+
+PYTHON_SOURCE_ROOT = os.path.join(
+    ROOT,
+    "client",
+    "platform",
+    "src",
+    "main",
+    "python",
+)
+LIBEXEC_COMMANDS_FOLDER = os.path.join(
+    PYTHON_SOURCE_ROOT,
+    "tabsdatak",
+    "_commands",
+)
+LIBEXEC_BUILD_FOLDER = os.path.join("build", "libexec", "tabsdata")
+LIBEXEC_INSTALL_FOLDER = os.path.join("libexec", "tabsdata")
+
+libexec_specs = discover_tabsdata_commands(
+    LIBEXEC_COMMANDS_FOLDER,
+    PYTHON_SOURCE_ROOT,
+)
+libexec_launchers = build_launchers(libexec_specs, LIBEXEC_BUILD_FOLDER)
+libexec_datafiles: list[tuple[str, list[str]]] = (
+    [(LIBEXEC_INSTALL_FOLDER, libexec_launchers)] if libexec_launchers else []
+)
+create_editable_libexec_links(LIBEXEC_INSTALL_FOLDER, libexec_launchers)
 
 yaml_files_tabsdata = []
 yaml_root_folder_tabsdata = Path(
@@ -560,7 +589,7 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
             "tabsdata.expansions.tableframe": [os.path.join("_*")],
             "tabsdata.expansions.extensions.tableframe": [os.path.join("_*")],
         },
-        data_files=datafiles,
+        data_files=[*datafiles, *libexec_datafiles],
         entry_points={"console_scripts": console_scripts},
         include_package_data=True,
         exclude_package_data={

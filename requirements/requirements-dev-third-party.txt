@@ -18,6 +18,7 @@ csvkit==2.2.0
 devpi-client==7.2.1
 devpi-server==6.19.0
 devpi-web==5.0.2
+distlib==0.4.0
 docker==7.1.0
 fastapi==0.135.2
 gita==0.16.8.2

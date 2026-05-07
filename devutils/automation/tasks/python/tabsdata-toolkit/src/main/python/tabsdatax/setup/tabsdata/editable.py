@@ -118,3 +118,49 @@ def create_editable_binary_symlinks(
                 )
             except OSError as e:
                 logger.warning(f"Failed to create symlink for {binary_name}: {e}")
+
+
+def create_editable_libexec_links(
+    install_subfolder: str,
+    paths: Sequence[str],
+) -> None:
+    if not is_editable_install():
+        return
+    if not paths:
+        return
+
+    try:
+        import site
+
+        site_packages_list = site.getsitepackages()
+        if not site_packages_list:
+            return
+        venv_root = Path(site_packages_list[0]).parent.parent.parent
+    except (AttributeError, IndexError):
+        return
+
+    target_dir = venv_root / install_subfolder
+    try:
+        target_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        logger.warning(f"Failed to create {target_dir}: {e}")
+        return
+
+    for source in paths:
+        source_path = Path(source)
+        if not source_path.exists():
+            continue
+
+        link_path = target_dir / source_path.name
+
+        if link_path.is_symlink() or link_path.exists():
+            try:
+                link_path.unlink()
+            except OSError:
+                continue
+
+        try:
+            link_path.symlink_to(source_path.resolve())
+            logger.info(f"Created symlink: {link_path} -> {source_path.resolve()}")
+        except OSError as e:
+            logger.warning(f"Failed to create symlink for {source_path.name}: {e}")
