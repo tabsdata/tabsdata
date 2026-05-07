@@ -11,12 +11,13 @@ use kube::Client;
 use kube::config::{Config, KubeConfigOptions, Kubeconfig};
 use td_common::status::ExitStatus::GeneralError;
 use td_python::python::resolve_python_binary;
-use tracing::{error, info, warn};
+use tracing::info;
 
 use crate::exit::{Outcome, abort};
 use crate::fabric::Commit;
 use crate::kminus::model::KminusInstance;
 use crate::subprocess::{apply_detached_flags, apply_subprocess_flags, terminate_process};
+use crate::{cerror, cwarn};
 
 const KM_BINARY: &str = "km";
 const KM_CREATE_SUBCOMMAND: &str = "create";
@@ -33,7 +34,7 @@ pub fn create_cluster(instance: &KminusInstance) -> Outcome {
     let km = match resolve_python_binary(KM_BINARY) {
         Ok(path) => path,
         Err(error) => {
-            error!("Failed to locate the '{KM_BINARY}' binary: {error}");
+            cerror!("Failed to locate the '{KM_BINARY}' binary: {error}");
             return abort(GeneralError);
         }
     };
@@ -49,7 +50,7 @@ pub fn create_cluster(instance: &KminusInstance) -> Outcome {
     let status = match command.status() {
         Ok(status) => status,
         Err(error) => {
-            error!(
+            cerror!(
                 "Failed to run '{} {KM_CREATE_SUBCOMMAND}': {error}",
                 km.display()
             );
@@ -57,7 +58,7 @@ pub fn create_cluster(instance: &KminusInstance) -> Outcome {
         }
     };
     if !status.success() {
-        error!(
+        cerror!(
             "'{} {KM_CREATE_SUBCOMMAND}' failed with status {status}.",
             km.display()
         );
@@ -96,7 +97,7 @@ pub async fn start_cluster(instance: &KminusInstance) -> Outcome {
     let km = match resolve_python_binary(KM_BINARY) {
         Ok(path) => path,
         Err(error) => {
-            error!("Failed to locate the '{KM_BINARY}' binary: {error}");
+            cerror!("Failed to locate the '{KM_BINARY}' binary: {error}");
             return abort(GeneralError);
         }
     };
@@ -110,7 +111,7 @@ pub async fn start_cluster(instance: &KminusInstance) -> Outcome {
         .stderr(Stdio::null());
     apply_subprocess_flags(&mut command);
     if let Err(error) = command.spawn() {
-        error!(
+        cerror!(
             "Failed to spawn '{} {KM_START_SUBCOMMAND}': {error}",
             km.display()
         );
@@ -124,7 +125,7 @@ pub async fn start_cluster(instance: &KminusInstance) -> Outcome {
             return Ok(());
         }
         if started.elapsed() > KM_READINESS_TIMEOUT {
-            error!(
+            cerror!(
                 "The kminus cluster did not become ready within {} seconds.",
                 KM_READINESS_TIMEOUT.as_secs()
             );
@@ -138,7 +139,7 @@ pub async fn stop_cluster(instance: &KminusInstance) -> Outcome {
     let pid = match read_km_pid(&instance.pids_path()) {
         Some(pid) => pid,
         None => {
-            warn!("No running kminus cluster found for instance.");
+            cwarn!("No running kminus cluster found for instance.");
             return Ok(());
         }
     };

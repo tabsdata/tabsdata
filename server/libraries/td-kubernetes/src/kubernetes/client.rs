@@ -6,9 +6,10 @@ use kube::Client;
 use kube::config::Config;
 use rustls::crypto::{aws_lc_rs, ring};
 use td_common::status::ExitStatus::GeneralError;
-use tracing::{debug, error};
+use tracing::debug;
 
-use crate::exit::{CommandError, Outcome};
+use crate::cerror;
+use crate::exit::{Outcome, abort};
 
 pub fn install_crypto_provider() {
     if let Err(error) = aws_lc_rs::default_provider().install_default() {
@@ -26,8 +27,11 @@ pub fn install_crypto_provider() {
 }
 
 pub fn build_kube_client(config: &Config) -> Outcome<Client> {
-    Client::try_from(config.clone()).map_err(|error| {
-        error!("Failed to build Kubernetes client: {error}");
-        CommandError::new(GeneralError)
-    })
+    match Client::try_from(config.clone()) {
+        Ok(client) => Ok(client),
+        Err(error) => {
+            cerror!("Failed to build Kubernetes client: {error}");
+            abort(GeneralError)
+        }
+    }
 }

@@ -9,8 +9,8 @@ use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use kube::api::{DeleteParams, PostParams};
 use kube::{Api, Client};
 use td_common::status::ExitStatus::GeneralError;
-use tracing::error;
 
+use crate::cerror;
 use crate::exit::{Outcome, abort};
 
 pub async fn configmap_exists(client: &Client, namespace: &str, name: &str) -> Outcome<bool> {
@@ -19,7 +19,7 @@ pub async fn configmap_exists(client: &Client, namespace: &str, name: &str) -> O
         Ok(Some(_)) => Ok(true),
         Ok(None) => Ok(false),
         Err(error) => {
-            error!("Failed to query ConfigMap '{name}' in namespace '{namespace}': {error}");
+            cerror!("Failed to query ConfigMap '{name}' in namespace '{namespace}': {error}");
             abort(GeneralError)
         }
     }
@@ -42,7 +42,7 @@ pub async fn create_configmap(
         ..Default::default()
     };
     if let Err(error) = api.create(&PostParams::default(), &configmap).await {
-        error!("Failed to create ConfigMap '{name}' in namespace '{namespace}': {error}");
+        cerror!("Failed to create ConfigMap '{name}' in namespace '{namespace}': {error}");
         return abort(GeneralError);
     }
     Ok(())
@@ -51,7 +51,7 @@ pub async fn create_configmap(
 pub async fn delete_configmap(client: &Client, namespace: &str, name: &str) -> Outcome {
     let api: Api<ConfigMap> = Api::namespaced(client.clone(), namespace);
     if let Err(error) = api.delete(name, &DeleteParams::default()).await {
-        error!("Failed to delete ConfigMap '{name}' in namespace '{namespace}': {error}");
+        cerror!("Failed to delete ConfigMap '{name}' in namespace '{namespace}': {error}");
         return abort(GeneralError);
     }
     Ok(())

@@ -7,12 +7,13 @@ use std::fs;
 use std::path::PathBuf;
 
 use async_trait::async_trait;
-use tracing::{error, info};
+use tracing::info;
 
 use td_common::env::TABSDATA_HOME_DIR;
 use td_common::server::{DEFAULT_INSTANCE, INSTANCES_FOLDER};
 use td_common::status::ExitStatus::GeneralError;
 
+use crate::cerror;
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::validate_instance_name;
 use crate::client::tdkserver::widgets::spinner;
@@ -41,13 +42,13 @@ impl KminusFabric {
             || *cluster.current()
             || cluster.namespace().is_some()
         {
-            error!(
+            cerror!(
                 "Arguments --context, --kubeconfig, --current, and --namespace are not valid for the '{FABRIC_KMINUS}' fabric."
             );
             return abort(GeneralError);
         }
         if instance.name().is_some() && instance.path().is_some() {
-            error!("Arguments --name and --path are mutually exclusive.");
+            cerror!("Arguments --name and --path are mutually exclusive.");
             return abort(GeneralError);
         }
 
@@ -79,13 +80,13 @@ impl KminusFabric {
                 (name, folder)
             }
             (Some(_), Some(_)) => {
-                error!("Arguments --name and --path are mutually exclusive.");
+                cerror!("Arguments --name and --path are mutually exclusive.");
                 return abort(GeneralError);
             }
         };
 
         if let Err(error) = validate_instance_name(&name) {
-            error!("{error}");
+            cerror!("{error}");
             return abort(GeneralError);
         }
 
@@ -119,7 +120,7 @@ impl KminusFabric {
         let entries = match fs::read_dir(&staged_folder) {
             Ok(entries) => entries,
             Err(error) => {
-                error!(
+                cerror!(
                     "Failed to read staged profile folder '{}': {error}",
                     staged_folder.display()
                 );
@@ -131,7 +132,7 @@ impl KminusFabric {
             let entry = match entry {
                 Ok(entry) => entry,
                 Err(error) => {
-                    error!(
+                    cerror!(
                         "Failed to read entry under '{}': {error}",
                         staged_folder.display()
                     );
@@ -148,7 +149,7 @@ impl KminusFabric {
             let contents = match fs::read_to_string(&path) {
                 Ok(contents) => contents,
                 Err(error) => {
-                    error!("Failed to read '{}': {error}", path.display());
+                    cerror!("Failed to read '{}': {error}", path.display());
                     return abort(GeneralError);
                 }
             };
@@ -170,7 +171,7 @@ impl Fabric for KminusFabric {
 
     async fn ensure_creatable(&self) -> Outcome {
         if self.folder.exists() {
-            error!("Folder {} already exists.", self.folder.display());
+            cerror!("Folder {} already exists.", self.folder.display());
             return abort(GeneralError);
         }
         Ok(())
@@ -188,7 +189,7 @@ impl Fabric for KminusFabric {
 
     async fn prepare_workspace(&self) -> Outcome<Box<dyn Commit>> {
         if let Err(error) = fs::create_dir_all(&self.folder) {
-            error!(
+            cerror!(
                 "Failed to create instance folder {}: {error}",
                 self.folder.display()
             );
@@ -203,7 +204,7 @@ impl Fabric for KminusFabric {
         let configmap_data = load_profile(profile, self.topology)?;
         let staging_profile = self.instance.staging_profile_path();
         if let Err(error) = fs::create_dir_all(&staging_profile) {
-            error!(
+            cerror!(
                 "Failed to create staging folder '{}': {error}",
                 staging_profile.display()
             );
@@ -212,7 +213,7 @@ impl Fabric for KminusFabric {
         for (name, contents) in &configmap_data {
             let path = staging_profile.join(name);
             if let Err(error) = fs::write(&path, contents) {
-                error!("Failed to write '{}': {error}", path.display());
+                cerror!("Failed to write '{}': {error}", path.display());
                 return abort(GeneralError);
             }
         }
@@ -233,7 +234,7 @@ impl Fabric for KminusFabric {
 
     async fn ensure_startable(&self) -> Outcome {
         if !self.folder.exists() {
-            error!(
+            cerror!(
                 "Instance folder '{}' does not exist. Run 'create' first.",
                 self.folder.display()
             );
@@ -263,7 +264,7 @@ impl Fabric for KminusFabric {
         };
         self.replace_configmap(data).await?;
         if let Err(error) = fs::remove_dir_all(self.instance.staging_path()) {
-            error!(
+            cerror!(
                 "Failed to remove staging folder '{}': {error}",
                 self.instance.staging_path().display()
             );
@@ -286,7 +287,7 @@ impl Fabric for KminusFabric {
 
     async fn ensure_stoppable(&self) -> Outcome {
         if !self.folder.exists() {
-            error!(
+            cerror!(
                 "Instance folder '{}' does not exist.",
                 self.folder.display()
             );

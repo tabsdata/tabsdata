@@ -3,6 +3,7 @@
 //
 
 use td_common::status::ExitStatus;
+use tracing::error;
 
 #[derive(Debug)]
 pub struct CommandError {
@@ -22,5 +23,7 @@ impl CommandError {
 pub type Outcome<T = ()> = Result<T, CommandError>;
 
 pub fn abort<T>(status: ExitStatus) -> Outcome<T> {
+    error!("Command aborted.");
+    error!("");
     Err(CommandError::new(status))
 }

@@ -25,8 +25,11 @@ pub struct StartArguments {
         name = "preview",
         required = false,
         default_value_t = false,
+        num_args = 0..=1,
+        default_missing_value = "true",
         long_help = "Show the summary of resolved values and prompt for confirmation \
-                     before starting. Without this flag, the start proceeds immediately."
+                     before starting. Defaults to 'false'. \
+                     Pass '--preview' or '--preview true' to opt in."
     )]
     preview: bool,
 
@@ -36,8 +39,8 @@ pub struct StartArguments {
         short = 'y',
         required = false,
         default_value_t = false,
-        long_help = "Skip the interactive confirmation prompt when --preview is set. \
-                     Has no effect without --preview."
+        long_help = "Skip the interactive confirmation prompt when --preview is 'true'. \
+                     Has no effect when --preview is 'false'."
     )]
     yes: bool,
 }

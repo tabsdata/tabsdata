@@ -22,12 +22,25 @@ pub struct StopArguments {
 
     #[arg(
         long,
+        name = "preview",
+        required = false,
+        default_value_t = true,
+        num_args = 0..=1,
+        default_missing_value = "true",
+        long_help = "Show the summary of resolved values and prompt for confirmation \
+                     before stopping the instance. Defaults to 'true'. \
+                     Pass '--preview false' to skip the summary and prompt."
+    )]
+    preview: bool,
+
+    #[arg(
+        long,
         name = "yes",
         short = 'y',
         required = false,
         default_value_t = false,
         long_help = "Skip the interactive confirmation prompt and proceed immediately. \
-                     The summary of resolved values is always shown beforehand."
+                     Has no effect when --preview is 'false'."
     )]
     yes: bool,
 }
@@ -36,16 +49,19 @@ pub async fn command_stop(arguments: StopArguments) -> Outcome {
     let StopArguments {
         cluster,
         instance,
+        preview,
         yes,
     } = arguments;
 
     let fabric = fabric_for(cluster, instance).await?;
     fabric.ensure_stoppable().await?;
-    fabric.preview_stop_summary();
 
-    if !yes && !prompt_yes_no("Proceed with the stop?") {
-        info!("Operation cancelled.");
-        return Ok(());
+    if preview {
+        fabric.preview_stop_summary();
+        if !yes && !prompt_yes_no("Proceed with the stop?") {
+            info!("Operation cancelled.");
+            return Ok(());
+        }
     }
 
     fabric.stop_runtime().await?;

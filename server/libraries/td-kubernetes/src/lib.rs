@@ -9,6 +9,7 @@ pub mod fabric;
 pub mod gateway;
 pub mod kminus;
 pub mod kubernetes;
+pub mod macros;
 pub mod profile;
 pub mod subprocess;
 pub mod topology;

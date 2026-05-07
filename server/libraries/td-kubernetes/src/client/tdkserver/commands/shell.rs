@@ -14,11 +14,11 @@ use reedline::{
     Reedline, Signal,
 };
 use td_common::env::TABSDATA_HOME_DIR;
-use tracing::error;
 
 use super::create::{CreateArguments, command_create};
 use super::start::{StartArguments, command_start};
 use super::stop::{StopArguments, command_stop};
+use crate::cerror;
 use crate::exit::Outcome;
 
 const TOOL_NAME: &str = "tdkserver";
@@ -65,7 +65,7 @@ pub async fn command_shell() -> Outcome {
         let signal = match tokio::task::block_in_place(|| line_editor.read_line(&prompt)) {
             Ok(signal) => signal,
             Err(error) => {
-                error!("Shell error: {error}");
+                cerror!("Shell error: {error}");
                 break;
             }
         };
@@ -103,7 +103,7 @@ pub async fn command_shell() -> Outcome {
         let tokens = match shlex::split(line) {
             Some(tokens) if !tokens.is_empty() => tokens,
             _ => {
-                error!("Invalid command line.");
+                cerror!("Invalid command line.");
                 continue;
             }
         };
@@ -136,7 +136,7 @@ fn run_shell_escape(command: &str) {
     let mut tokens = match shlex::split(command) {
         Some(tokens) if !tokens.is_empty() => tokens,
         _ => {
-            error!("Invalid shell command.");
+            cerror!("Invalid shell command.");
             return;
         }
     };
@@ -149,7 +149,7 @@ fn run_shell_escape(command: &str) {
                 .or_else(|| dirs::home_dir().map(|path| path.to_string_lossy().into_owned()))
                 .unwrap_or_else(|| ".".to_owned());
             if let Err(error) = std::env::set_current_dir(&target) {
-                error!("cd: {error}");
+                cerror!("cd: {error}");
             }
         }
         "set" | "export" => {
@@ -173,7 +173,7 @@ fn run_shell_escape(command: &str) {
             process.args(tokens);
             match process.status() {
                 Ok(_) => {}
-                Err(error) => error!("{other}: {error}"),
+                Err(error) => cerror!("{other}: {error}"),
             }
         }
     }

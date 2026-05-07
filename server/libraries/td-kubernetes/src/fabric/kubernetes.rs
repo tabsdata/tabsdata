@@ -8,8 +8,9 @@ use async_trait::async_trait;
 use kube::Config;
 use td_common::server::DEFAULT_INSTANCE;
 use td_common::status::ExitStatus::GeneralError;
-use tracing::{error, info};
+use tracing::info;
 
+use crate::cerror;
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::constants::{CONFIGMAP_TABSDATA, FABRIC_KMINUS, FABRIC_KUBERNETES};
 use crate::exit::{Outcome, abort};
@@ -44,19 +45,21 @@ impl KubernetesFabric {
         .filter(|flag| *flag)
         .count();
         if provided_clusters == 0 {
-            error!("Specify --kubeconfig, --context, or --current to identify the target cluster.");
+            cerror!(
+                "Specify --kubeconfig, --context, or --current to identify the target cluster."
+            );
             return abort(GeneralError);
         }
         if provided_clusters > 1 {
-            error!("Arguments --kubeconfig, --context, and --current are mutually exclusive.");
+            cerror!("Arguments --kubeconfig, --context, and --current are mutually exclusive.");
             return abort(GeneralError);
         }
         if instance.name().is_some() {
-            error!("Argument --name is not valid for the '{FABRIC_KUBERNETES}' fabric.");
+            cerror!("Argument --name is not valid for the '{FABRIC_KUBERNETES}' fabric.");
             return abort(GeneralError);
         }
         if instance.path().is_some() {
-            error!("Argument --path is not valid for the '{FABRIC_KUBERNETES}' fabric.");
+            cerror!("Argument --path is not valid for the '{FABRIC_KUBERNETES}' fabric.");
             return abort(GeneralError);
         }
 
@@ -66,7 +69,7 @@ impl KubernetesFabric {
 
         let kubeconfig_path = resolve_kubeconfig_path(kubeconfig_argument);
         if kubeconfig_path.is_none() {
-            error!(
+            cerror!(
                 "No kubeconfig found. Set the KUBECONFIG environment variable, create ~/.kube/config, or pass --kubeconfig."
             );
             return abort(GeneralError);
@@ -112,7 +115,7 @@ impl Fabric for KubernetesFabric {
         ensure_cluster_reachable(&client).await?;
         ensure_namespace_exists(&client, &self.config.default_namespace).await?;
         if configmap_exists(&client, &self.config.default_namespace, CONFIGMAP_TABSDATA).await? {
-            error!(
+            cerror!(
                 "A Tabsdata instance already exists in namespace '{}'.",
                 self.config.default_namespace
             );
