@@ -16,7 +16,8 @@ use reedline::{
 use td_common::env::TABSDATA_HOME_DIR;
 use tracing::error;
 
-use crate::client::tdkserver::create::{CreateArguments, command_create};
+use super::create::{CreateArguments, command_create};
+use crate::exit::Outcome;
 
 const TOOL_NAME: &str = "tdkserver";
 const HISTORY_FILE: &str = ".tdkserver.history";
@@ -39,7 +40,7 @@ struct ShellInput {
     command: ShellCommand,
 }
 
-pub async fn command_shell() {
+pub async fn command_shell() -> Outcome {
     show_quick_reference();
 
     let history_path = dirs::home_dir()
@@ -103,7 +104,9 @@ pub async fn command_shell() {
 
         match ShellInput::try_parse_from(tokens) {
             Ok(input) => match input.command {
-                ShellCommand::Create(arguments) => command_create(arguments).await,
+                ShellCommand::Create(arguments) => {
+                    let _ = command_create(arguments).await;
+                }
                 ShellCommand::Exit | ShellCommand::Quit => break,
             },
             Err(error) => {
@@ -111,6 +114,7 @@ pub async fn command_shell() {
             }
         }
     }
+    Ok(())
 }
 
 fn run_shell_escape(command: &str) {

@@ -8,7 +8,7 @@ use clap::Parser;
 use clap_derive::{Args, Subcommand, ValueEnum};
 use getset::Getters;
 
-use crate::client::tdkserver::create::CreateArguments;
+use crate::client::tdkserver::commands::create::CreateArguments;
 
 #[derive(Debug, Clone, Parser)]
 #[command(
@@ -114,7 +114,8 @@ pub struct InstanceArguments {
         name = "name",
         required = false,
         long_help = "Instance name. \
-                     For the 'kminus' fabric, the instance is created in ~/.tabsdata/instances/<name>. \
+                     Valid only for the 'kminus' fabric. \
+                     The instance is created in ~/.tabsdata/instances/<name>. \
                      Mutually exclusive with --path."
     )]
     name: Option<String>,

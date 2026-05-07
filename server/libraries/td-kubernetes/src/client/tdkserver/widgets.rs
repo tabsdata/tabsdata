@@ -2,8 +2,6 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-use std::io;
-
 use colored::Colorize;
 use terminal_size::{Width, terminal_size};
 use textwrap::{Options, WordSeparator, fill};
@@ -14,7 +12,7 @@ const BANNER: &str = include_str!(concat!(
     "/variant/assets/manifest/BANNER"
 ));
 
-pub fn show_box(text: &str, min: usize) -> Result<(), io::Error> {
+pub fn show_box(text: &str, min: usize) {
     #[cfg(not(windows))]
     let use_colors = supports_color::on(supports_color::Stream::Stdout).is_some();
     #[cfg(windows)]
@@ -65,9 +63,8 @@ pub fn show_box(text: &str, min: usize) -> Result<(), io::Error> {
         }
     }
     println!("{bottom_border}");
-    Ok(())
 }
 
 pub fn show_banner() {
-    show_box(BANNER, 80).unwrap()
+    show_box(BANNER, 80);
 }

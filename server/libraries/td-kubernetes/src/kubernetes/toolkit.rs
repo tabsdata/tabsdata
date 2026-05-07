@@ -3,13 +3,13 @@
 //
 
 use std::path::{Path, PathBuf};
-use std::process::exit;
 
 use kube::config::{Config, KubeConfigOptions, Kubeconfig, KubeconfigError};
 use td_common::status::ExitStatus::GeneralError;
 use tracing::error;
 
 use crate::constants::{ENV_KUBECONFIG, FILE_KUBECONFIG, FOLDER_KUBE};
+use crate::exit::{CommandError, Outcome};
 
 pub fn resolve_kubeconfig_path(kubeconfig_path: Option<&Path>) -> Option<PathBuf> {
     if let Some(path) = kubeconfig_path {
@@ -60,14 +60,14 @@ pub async fn build_kubeconfig(
     kubeconfig_path: Option<&Path>,
     context: Option<&str>,
     namespace_override: Option<&str>,
-) -> Config {
-    let kubeconfig = read_kubeconfig(kubeconfig_path).unwrap_or_else(|error| {
+) -> Outcome<Config> {
+    let kubeconfig = read_kubeconfig(kubeconfig_path).map_err(|error| {
         match kubeconfig_path {
             Some(path) => error!("Failed to read kubeconfig at {}: {error}", path.display()),
             None => error!("Failed to read kubeconfig: {error}"),
         }
-        exit(GeneralError.code());
-    });
+        CommandError::new(GeneralError)
+    })?;
     let options = KubeConfigOptions {
         context: context.map(str::to_owned),
         cluster: None,
@@ -75,12 +75,12 @@ pub async fn build_kubeconfig(
     };
     let mut config = Config::from_custom_kubeconfig(kubeconfig, &options)
         .await
-        .unwrap_or_else(|error| {
+        .map_err(|error| {
             error!("Failed to load Kubernetes configuration: {error}");
-            exit(GeneralError.code());
-        });
+            CommandError::new(GeneralError)
+        })?;
     if let Some(namespace) = namespace_override {
         config.default_namespace = namespace.to_owned();
     }
-    config
+    Ok(config)
 }
