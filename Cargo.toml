@@ -45,6 +45,7 @@ members = [
     "server/libraries/td-database",
     "server/libraries/td-error",
     "server/libraries/td-execution",
+    "server/libraries/td-kubernetes",
     "server/libraries/td-objects",
     "server/libraries/td-process",
     "server/libraries/td-python",
@@ -218,6 +219,9 @@ path = "server/libraries/td-error"
 
 [workspace.dependencies.td-execution]
 path = "server/libraries/td-execution"
+
+[workspace.dependencies.td-kubernetes]
+path = "server/libraries/td-kubernetes"
 
 [workspace.dependencies.te-services]
 path = "extensions/rust/te-services"

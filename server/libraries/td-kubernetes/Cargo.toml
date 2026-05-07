@@ -1,0 +1,65 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+[package]
+description = "Tabsdata Kubernetes"
+name = "td-kubernetes"
+build = "build.rs"
+
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+publish = { workspace = true }
+readme = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
+
+[lib]
+
+[features]
+api-docs = []
+enterprise = []
+td-test = [
+    "dummy",
+    "mock-env",
+    "test-utils",
+]
+dummy = []
+mock-env = []
+test_logging = []
+test-utils = []
+
+[package.metadata.cargo-machete]
+ignored = ["openssl", "td-build", "td-kubernetes", "tm-workspace"]
+
+# Build dependencies
+
+[build-dependencies]
+
+# Internal dependencies
+
+td-build = { workspace = true }
+
+[dependencies]
+
+# Internal dependencies
+
+## Macros
+
+td-build = { workspace = true }
+tm-workspace = { workspace = true }
+
+## Libraries
+
+## Extensions
+
+# External dependencies
+
+[dev-dependencies]
+td-kubernetes = { workspace = true, features = ["td-test"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+openssl = { workspace = true, features = ["vendored"] }
