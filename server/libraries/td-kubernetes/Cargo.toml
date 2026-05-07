@@ -19,6 +19,9 @@ version = { workspace = true }
 
 [lib]
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(td_k8s_development)'] }
+
 [features]
 api-docs = []
 enterprise = []

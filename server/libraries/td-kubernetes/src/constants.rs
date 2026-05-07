@@ -11,6 +11,8 @@ pub const FILE_KUBECONFIG: &str = "config";
 pub const FABRIC_KUBERNETES: &str = "kubernetes";
 pub const FABRIC_KMINUS: &str = "kminus";
 
+pub const PROFILE_PRODUCTION: &str = "production";
+
 pub const VALUE_Y: &str = "y";
 pub const VALUE_YES: &str = "yes";
 pub const VALUE_N: &str = "n";

@@ -15,7 +15,7 @@ use tracing::{error, info};
 
 use crate::client::tdkserver::arguments::{ClusterArguments, ClusterFabric, InstanceArguments};
 use crate::client::tdkserver::common::{prompt_yes_no, validate_instance_name};
-use crate::constants::{FABRIC_KMINUS, FABRIC_KUBERNETES, FOLDER_CLUSTER};
+use crate::constants::{FABRIC_KMINUS, FABRIC_KUBERNETES, FOLDER_CLUSTER, PROFILE_PRODUCTION};
 use crate::exit::{Outcome, abort};
 use crate::kminus::action::create_cluster;
 use crate::kminus::model::KminusInstance;
@@ -44,6 +44,30 @@ pub struct CreateArguments {
                      Without this flag, the instance is created without prompting."
     )]
     confirm: bool,
+
+    #[cfg(td_k8s_development)]
+    #[arg(
+        long,
+        name = "profile",
+        required = false,
+        long_help = "kprofile to use when generating Kubernetes manifests. \
+                     When unspecified, defaults to 'production'."
+    )]
+    profile: Option<String>,
+}
+
+#[cfg(td_k8s_development)]
+fn resolve_profile(arguments: &CreateArguments) -> String {
+    arguments
+        .profile()
+        .as_deref()
+        .unwrap_or(PROFILE_PRODUCTION)
+        .to_owned()
+}
+
+#[cfg(not(td_k8s_development))]
+fn resolve_profile(_arguments: &CreateArguments) -> String {
+    PROFILE_PRODUCTION.to_owned()
 }
 
 struct ResolvedCluster {
@@ -60,10 +84,12 @@ struct ResolvedInstance {
 }
 
 pub async fn command_create(arguments: CreateArguments) -> Outcome {
+    let profile = resolve_profile(&arguments);
     let CreateArguments {
         cluster,
         instance,
         confirm,
+        ..
     } = arguments;
 
     match cluster.fabric() {
@@ -86,7 +112,7 @@ pub async fn command_create(arguments: CreateArguments) -> Outcome {
         return abort(GeneralError);
     }
 
-    print_summary(&resolved_cluster, &resolved_instance);
+    print_summary(&profile, &resolved_cluster, &resolved_instance);
 
     if confirm && !prompt_yes_no("Proceed with the creation?") {
         info!("Operation cancelled.");
@@ -280,12 +306,15 @@ async fn resolve_cluster(cluster: &ClusterArguments) -> Outcome<ResolvedCluster>
     }
 }
 
-fn print_summary(cluster: &ResolvedCluster, instance: &ResolvedInstance) {
+fn print_summary(profile: &str, cluster: &ResolvedCluster, instance: &ResolvedInstance) {
     let fabric_name = match cluster.fabric {
         ClusterFabric::Kubernetes => FABRIC_KUBERNETES,
         ClusterFabric::Kminus => FABRIC_KMINUS,
     };
     info!("Tabsdata instance to be created:");
+    if cfg!(td_k8s_development) {
+        info!("  - profile......: {profile}");
+    }
     info!("  - fabric.......: {fabric_name}");
     info!("  - instance name: {}", instance.name);
     match cluster.fabric {
