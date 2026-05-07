@@ -110,6 +110,7 @@ pub fn _grok(batch: &[Series], kwargs: GrokKwargs) -> PolarsResult<Series> {
         Some(DEVELOPMENT_PROFILE.to_string()),
         false,
         true,
+        None,
     );
     debug!(
         "Executing grok expression function with parameters: {:?}",

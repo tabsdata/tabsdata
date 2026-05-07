@@ -8175,10 +8175,15 @@ dependencies = [
 name = "td-kubernetes"
 version = "1.10.0"
 dependencies = [
+ "colored",
  "openssl",
+ "supports-color",
  "td-build",
  "td-kubernetes",
+ "terminal_size",
+ "textwrap",
  "tm-workspace",
+ "tracing",
 ]
 
 [[package]]
@@ -8332,6 +8337,7 @@ dependencies = [
  "td-build",
  "td-common",
  "td-crontrigger",
+ "td-kubernetes",
  "td-process",
  "td-server",
  "td-shuttle",

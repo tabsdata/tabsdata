@@ -52,6 +52,7 @@ pub fn _identifier_generator(
         Some(DEVELOPMENT_PROFILE.to_string()),
         false,
         true,
+        None,
     );
     debug!(
         "Executing identifier generator expression function with parameters: {:?}",

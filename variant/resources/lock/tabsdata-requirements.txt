@@ -149,7 +149,7 @@ urllib3==2.6.3
 uuid-v7==1.0.0
 uuid6==2025.0.1
 uv==0.10.12
-wcwidth==0.6.0
+wcwidth==0.7.0
 wheel==0.47.0
 zeep==4.3.2
 zipp==3.23.1

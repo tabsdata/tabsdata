@@ -58,6 +58,12 @@ tm-workspace = { workspace = true }
 
 # External dependencies
 
+colored = { workspace = true }
+supports-color = { workspace = true }
+terminal_size = { workspace = true }
+textwrap = { workspace = true }
+tracing = { workspace = true }
+
 [dev-dependencies]
 td-kubernetes = { workspace = true, features = ["td-test"] }
 

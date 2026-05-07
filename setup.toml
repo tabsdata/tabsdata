@@ -28,6 +28,7 @@ names = [
     "td_crontrigger",
     "td_supervisor",
     "td_transporter",
+    "tdkserver",
     "tdserver",
 ]
 

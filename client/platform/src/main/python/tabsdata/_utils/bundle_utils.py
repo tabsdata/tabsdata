@@ -106,6 +106,7 @@ BINARY_GROUPS = [
             "td_crontrigger",
             "td_supervisor",
             "td_transporter",
+            "tdkserver",
             "tdserver",
         ],
     },

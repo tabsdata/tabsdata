@@ -82,6 +82,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(CONSOLE_PROFILE.to_string()),
         false,
         true,
+        None,
     );
 
     // let args = Args::parse();

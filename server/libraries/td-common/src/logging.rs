@@ -23,6 +23,8 @@ use tracing::level_filters::LevelFilter;
 use tracing::{Event, Level, Subscriber, debug, error, info, trace, warn};
 use tracing_subscriber::filter::Directive;
 use tracing_subscriber::fmt::MakeWriter;
+use tracing_subscriber::fmt::FmtContext;
+use tracing_subscriber::fmt::format::{FormatEvent, FormatFields, Writer};
 use tracing_subscriber::fmt::writer::BoxMakeWriter;
 use tracing_subscriber::layer::{Context, SubscriberExt};
 use tracing_subscriber::registry::LookupSpan;
@@ -58,6 +60,85 @@ pub const LOG_EXTENSION: &str = "log";
 pub const DEFAULT_LOG_LEVEL: Level = Level::DEBUG;
 
 pub const WORK_ENV: &str = "TD_URI_WORK";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LogFormat {
+    #[default]
+    Full,
+    Compact,
+}
+
+struct CompactFormat;
+
+impl<S, N> FormatEvent<S, N> for CompactFormat
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+    N: for<'a> FormatFields<'a> + 'static,
+{
+    fn format_event(
+        &self,
+        context: &FmtContext<'_, S, N>,
+        mut writer: Writer<'_>,
+        event: &Event<'_>,
+    ) -> std::fmt::Result {
+        let level = match *event.metadata().level() {
+            Level::ERROR => 'e',
+            Level::WARN => 'w',
+            Level::INFO => 'i',
+            Level::DEBUG => 'd',
+            Level::TRACE => 't',
+        };
+        write!(writer, "[{level}] ")?;
+        context.format_fields(writer.by_ref(), event)?;
+        writeln!(writer)
+    }
+}
+
+fn build_base_layer<S, W>(
+    writer: W,
+    log_with_ansi: bool,
+    base_filter: EnvFilter,
+    format: LogFormat,
+) -> BoxedLayer<S>
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+    W: for<'a> MakeWriter<'a> + Send + Sync + 'static,
+{
+    match format {
+        LogFormat::Full => tracing_subscriber::fmt::layer()
+            .with_ansi(log_with_ansi)
+            .with_writer(writer)
+            .with_filter(base_filter)
+            .boxed(),
+        LogFormat::Compact => tracing_subscriber::fmt::layer()
+            .event_format(CompactFormat)
+            .with_ansi(log_with_ansi)
+            .with_writer(writer)
+            .with_filter(base_filter)
+            .boxed(),
+    }
+}
+
+fn build_sink_layer<S>(
+    writer: BoxMakeWriter,
+    log_with_ansi: bool,
+    format: LogFormat,
+) -> BoxedLayer<S>
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+{
+    match format {
+        LogFormat::Full => tracing_subscriber::fmt::layer()
+            .with_ansi(log_with_ansi)
+            .with_writer(writer)
+            .boxed(),
+        LogFormat::Compact => tracing_subscriber::fmt::layer()
+            .event_format(CompactFormat)
+            .with_ansi(log_with_ansi)
+            .with_writer(writer)
+            .boxed(),
+    }
+}
 
 static BOOTSTRAP_NOTICE_ENABLED: OnceCell<bool> = OnceCell::new();
 
@@ -116,6 +197,7 @@ fn init<W: for<'a> MakeWriter<'a> + Send + Sync + 'static>(
     with_tokio_console: bool,
     log_dir: Option<PathBuf>,
     profile: Option<LogProfile>,
+    format: LogFormat,
 ) -> LoggerGuard {
     let log_with_ansi = MANAGER.get(LOG_WITH_ANSI).as_deref() == Some(TRUE);
 
@@ -124,10 +206,7 @@ fn init<W: for<'a> MakeWriter<'a> + Send + Sync + 'static>(
         None => build_default_filter(max_level, &directives),
     };
 
-    let tabsdata_layer = tracing_subscriber::fmt::layer()
-        .with_ansi(log_with_ansi)
-        .with_writer(writer)
-        .with_filter(base_filter);
+    let base_layer = build_base_layer(writer, log_with_ansi, base_filter, format);
 
     let (filter, sinks) = match profile {
         Some(profile) => (build_profile_filter(&profile), profile.sinks.clone()),
@@ -158,13 +237,9 @@ fn init<W: for<'a> MakeWriter<'a> + Send + Sync + 'static>(
             },
         };
         let filter = build_sink_filter(&sink.directives);
-        let layer = tracing_subscriber::fmt::layer()
-            .with_ansi(log_with_ansi)
-            .with_writer(writer)
-            .boxed();
+        let layer = build_sink_layer(writer, log_with_ansi, format);
         sink_layers.push(SinkLayer { layer, filter });
     }
-    let base_layer = tabsdata_layer.boxed();
     let tabsdata_layers = MultiWriterLayer::new(base_layer, sink_layers);
 
     let registry = tracing_subscriber::registry()
@@ -196,6 +271,7 @@ pub fn start(
     profile: Option<String>,
     with_tokio_console: bool,
     enable_bootstrap_notice: bool,
+    format: Option<LogFormat>,
 ) {
     BOOTSTRAP_NOTICE_ENABLED.get_or_init(|| enable_bootstrap_notice);
 
@@ -222,6 +298,7 @@ pub fn start(
             with_tokio_console,
             log_dir.clone(),
             active_profile.clone(),
+            format.unwrap_or_default(),
         )
     });
 }
@@ -1025,6 +1102,7 @@ mod tests {
             false,
             None,
             None,
+            LogFormat::Full,
         );
         Mutex::new((sender, receiver, logger_provider))
     });

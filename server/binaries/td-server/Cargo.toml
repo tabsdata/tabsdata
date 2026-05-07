@@ -118,6 +118,7 @@ tm-workspace = { workspace = true }
 td-apiserver = { workspace = true }
 td-common = { workspace = true }
 td-crontrigger = { workspace = true }
+td-kubernetes = { workspace = true }
 td-process = { workspace = true }
 td-shuttle = { workspace = true }
 td-supervisor = { workspace = true }

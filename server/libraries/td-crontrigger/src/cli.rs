@@ -31,7 +31,7 @@ pub fn run() {
             let ArgumentParameters { request_folder, .. } = params;
 
             // Initialize logging
-            logging::start(Some(Level::INFO), None, false, true);
+            logging::start(Some(Level::INFO), None, false, true, None);
 
             // parse request.yaml
             let request_file = request_folder.join(REQUEST_FILE);

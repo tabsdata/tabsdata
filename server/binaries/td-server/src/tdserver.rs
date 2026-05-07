@@ -63,11 +63,11 @@ fn extract_accept_terms() -> Option<bool> {
     None
 }
 
-fn check_banner(accept_terms: Option<bool>) -> std::io::Result<()> {
+fn check_banner(accept_terms: Option<bool>) -> std::io::Result<bool> {
     let ack = get_home_dir().join(TABSDATA_HOME_DIR).join(ACK);
     let ack_version = fs::read_to_string(&ack).unwrap_or_else(|_| "".to_string());
     if ack_version.trim() == TABSDATA_VERSION.trim() {
-        return Ok(());
+        return Ok(true);
     }
     show_banner();
     let license = TabsdataLicense;
@@ -79,7 +79,7 @@ fn check_banner(accept_terms: Option<bool>) -> std::io::Result<()> {
     }
     let mut file = fs::File::create(&ack)?;
     file.write_all(TABSDATA_VERSION.trim().as_bytes())?;
-    Ok(())
+    Ok(false)
 }
 
 fn check_polars() {
@@ -112,10 +112,13 @@ async fn main() {
         Some(CONSOLE_PROFILE.to_string()),
         false,
         false,
+        None,
     );
     let accept_terms = extract_accept_terms();
-    let _ = check_banner(accept_terms);
-    check_polars();
+    let previously_acknowledged = check_banner(accept_terms).unwrap_or(false);
+    if !previously_acknowledged {
+        check_polars();
+    }
     // Setting env vars is not thread-safe; use with care.
     unsafe {
         env::set_var(TD_DETACHED_SUBPROCESSES, TRUE);
