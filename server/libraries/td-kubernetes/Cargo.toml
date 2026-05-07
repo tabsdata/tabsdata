@@ -54,14 +54,27 @@ tm-workspace = { workspace = true }
 
 ## Libraries
 
+td-common = { workspace = true }
+td-python = { workspace = true }
+
 ## Extensions
 
 # External dependencies
 
+clap = { workspace = true, features = ["derive"] }
+clap_derive = { workspace = true }
 colored = { workspace = true }
+dirs = { workspace = true }
+getset = { workspace = true }
+k8s-openapi = { workspace = true, features = ["latest"] }
+kube = { workspace = true, default-features = false, features = ["client", "config", "rustls-tls"] }
+reedline = { workspace = true }
+rustls = { workspace = true, features = ["aws-lc-rs", "ring"] }
+shlex = { workspace = true }
 supports-color = { workspace = true }
 terminal_size = { workspace = true }
 textwrap = { workspace = true }
+tokio = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]

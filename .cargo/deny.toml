@@ -34,6 +34,7 @@ deny = [
     { crate = "log", reason = "We use 'tracing' crate instead, which has equivalent macros to the ones in 'log' crate", wrappers = [
         "bindgen",
         "globset",
+        "hyper-rustls",
         "iana-time-zone",
         "ignore",
         "jni",

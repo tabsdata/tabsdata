@@ -443,6 +443,15 @@ features = ["static"]
 version = "10.3.0"
 features = ["aws_lc_rs"]
 
+[workspace.dependencies.k8s-openapi]
+version = "0.24"
+features = ["latest"]
+
+[workspace.dependencies.kube]
+version = "0.99"
+default-features = false
+features = ["client", "config", "rustls-tls"]
+
 [workspace.dependencies.linemux]
 version = "0.3.0"
 
@@ -516,6 +525,9 @@ version = "0.10.0"
 [workspace.dependencies.ratatui]
 version = "0.30.0"
 
+[workspace.dependencies.reedline]
+version = "0.43.0"
+
 [workspace.dependencies.regex]
 version = "1.12.3"
 
@@ -545,6 +557,9 @@ version = "1.0.27"
 
 [workspace.dependencies.sha2]
 version = "0.10.9"
+
+[workspace.dependencies.shlex]
+version = "1.3.0"
 
 [workspace.dependencies.serde]
 version = "1.0.228"
