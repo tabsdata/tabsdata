@@ -174,6 +174,32 @@ libexec_datafiles: list[tuple[str, list[str]]] = (
 )
 create_editable_libexec_links(LIBEXEC_INSTALL_FOLDER, libexec_launchers)
 
+PYTHON_SOURCE_ROOT = os.path.join(
+    ROOT,
+    "client",
+    "platform",
+    "src",
+    "main",
+    "python",
+)
+LIBEXEC_COMMANDS_FOLDER = os.path.join(
+    PYTHON_SOURCE_ROOT,
+    "tabsdatak",
+    "_commands",
+)
+LIBEXEC_BUILD_FOLDER = os.path.join("build", "libexec", "tabsdata")
+LIBEXEC_INSTALL_FOLDER = os.path.join("libexec", "tabsdata")
+
+libexec_specs = discover_tabsdata_commands(
+    LIBEXEC_COMMANDS_FOLDER,
+    PYTHON_SOURCE_ROOT,
+)
+libexec_launchers = build_launchers(libexec_specs, LIBEXEC_BUILD_FOLDER)
+libexec_datafiles: list[tuple[str, list[str]]] = (
+    [(LIBEXEC_INSTALL_FOLDER, libexec_launchers)] if libexec_launchers else []
+)
+create_editable_libexec_links(LIBEXEC_INSTALL_FOLDER, libexec_launchers)
+
 yaml_files_tabsdata = []
 yaml_root_folder_tabsdata = Path(
     os.path.join(
