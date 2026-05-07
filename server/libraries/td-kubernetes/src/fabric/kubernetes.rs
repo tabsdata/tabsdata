@@ -23,10 +23,10 @@ use crate::kubernetes::toolkit::{
     build_kubeconfig, resolve_cluster_name, resolve_current_context, resolve_kubeconfig_path,
 };
 use crate::profile::load_profile;
+use crate::tdkcontext::TdkContext;
 use crate::topology::{Topology, topology_for};
 
 pub struct KubernetesFabric {
-    name: String,
     kubeconfig_path: Option<PathBuf>,
     context: Option<String>,
     cluster_name: Option<String>,
@@ -75,7 +75,7 @@ impl KubernetesFabric {
             return abort(GeneralError);
         }
 
-        let config =
+        let mut config =
             build_kubeconfig(kubeconfig_argument, context_argument, namespace_override).await?;
 
         let context = cluster
@@ -84,17 +84,13 @@ impl KubernetesFabric {
             .or_else(|| resolve_current_context(kubeconfig_argument));
         let cluster_name = resolve_cluster_name(kubeconfig_argument, context_argument);
 
-        let trimmed_namespace = config.default_namespace.trim();
-        let name = if trimmed_namespace.is_empty() {
-            DEFAULT_INSTANCE.to_string()
-        } else {
-            trimmed_namespace.to_owned()
-        };
+        if config.default_namespace.trim().is_empty() {
+            config.default_namespace = DEFAULT_INSTANCE.to_string();
+        }
 
         let topology = topology_for(crate::fabric::ClusterFabric::Kubernetes);
 
         Ok(Self {
-            name,
             kubeconfig_path,
             context,
             cluster_name,
@@ -110,13 +106,29 @@ impl Fabric for KubernetesFabric {
         FABRIC_KUBERNETES
     }
 
+    fn display_name(&self) -> String {
+        let context = self.context.as_deref().unwrap_or("?");
+        format!(
+            "{FABRIC_KUBERNETES}:{context}/{}",
+            self.config.default_namespace
+        )
+    }
+
+    fn to_tdkcontext(&self) -> TdkContext {
+        TdkContext::Kubernetes {
+            kubeconfig: self.kubeconfig_path.clone(),
+            context: self.context.clone(),
+            namespace: self.config.default_namespace.clone(),
+        }
+    }
+
     async fn ensure_creatable(&self) -> Outcome {
         let client = build_kube_client(&self.config)?;
         ensure_cluster_reachable(&client).await?;
         ensure_namespace_exists(&client, &self.config.default_namespace).await?;
         if configmap_exists(&client, &self.config.default_namespace, CONFIGMAP_TABSDATA).await? {
             cerror!(
-                "A Tabsdata instance already exists in namespace '{}'.",
+                "A tabsdata instance already exists in namespace '{}'.",
                 self.config.default_namespace
             );
             return abort(GeneralError);
@@ -125,12 +137,11 @@ impl Fabric for KubernetesFabric {
     }
 
     fn preview_create_summary(&self, profile: &str) {
-        info!("Tabsdata instance to be created:");
+        info!("About to create tabsdata instance:");
         if cfg!(td_k8s_development) {
             info!("  - profile......: {profile}");
         }
         info!("  - fabric.......: {FABRIC_KUBERNETES}");
-        info!("  - instance name: {}", self.name);
         match &self.kubeconfig_path {
             Some(path) => info!("  - kubeconfig...: {}", path.display()),
             None => info!("  - kubeconfig...: <not found>"),
@@ -169,8 +180,48 @@ impl Fabric for KubernetesFabric {
 
     fn report_created(&self) {
         info!(
-            "Created Tabsdata instance '{}' in namespace '{}'.",
-            self.name, self.config.default_namespace
+            "Created tabsdata instance in namespace '{}'.",
+            self.config.default_namespace
+        );
+    }
+
+    async fn ensure_usable(&self) -> Outcome {
+        let client = build_kube_client(&self.config)?;
+        ensure_cluster_reachable(&client).await?;
+        ensure_namespace_exists(&client, &self.config.default_namespace).await?;
+        if !configmap_exists(&client, &self.config.default_namespace, CONFIGMAP_TABSDATA).await? {
+            cerror!(
+                "No tabsdata instance found in namespace '{}'. Run 'tdkserver create ...' first.",
+                self.config.default_namespace
+            );
+            return abort(GeneralError);
+        }
+        Ok(())
+    }
+
+    fn preview_use_summary(&self) {
+        info!("About to use tabsdata instance:");
+        info!("  - fabric.......: {FABRIC_KUBERNETES}");
+        match &self.kubeconfig_path {
+            Some(path) => info!("  - kubeconfig...: {}", path.display()),
+            None => info!("  - kubeconfig...: <not found>"),
+        }
+        match &self.context {
+            Some(name) => info!("  - context......: {name}"),
+            None => info!("  - context......: <unable to resolve current-context>"),
+        }
+        info!("  - cluster url..: {}", self.config.cluster_url);
+        match &self.cluster_name {
+            Some(name) => info!("  - cluster name.: {name}"),
+            None => info!("  - cluster name.: <unable to resolve cluster name>"),
+        }
+        info!("  - namespace....: {}", self.config.default_namespace);
+    }
+
+    fn report_used(&self) {
+        info!(
+            "Now using tabsdata instance in namespace '{}'.",
+            self.config.default_namespace
         );
     }
 
@@ -179,9 +230,8 @@ impl Fabric for KubernetesFabric {
     }
 
     fn preview_start_summary(&self) {
-        info!("Tabsdata instance to be started:");
+        info!("About to start tabsdata instance:");
         info!("  - fabric.......: {FABRIC_KUBERNETES}");
-        info!("  - instance name: {}", self.name);
         if let Some(path) = &self.kubeconfig_path {
             info!("  - kubeconfig...: {}", path.display());
         }
@@ -210,9 +260,8 @@ impl Fabric for KubernetesFabric {
     }
 
     fn preview_stop_summary(&self) {
-        info!("Tabsdata instance to be stopped:");
+        info!("About to stop tabsdata instance:");
         info!("  - fabric.......: {FABRIC_KUBERNETES}");
-        info!("  - instance name: {}", self.name);
         if let Some(path) = &self.kubeconfig_path {
             info!("  - kubeconfig...: {}", path.display());
         }

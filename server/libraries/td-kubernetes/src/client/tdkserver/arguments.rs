@@ -11,14 +11,16 @@ use getset::Getters;
 use crate::client::tdkserver::commands::create::CreateArguments;
 use crate::client::tdkserver::commands::start::StartArguments;
 use crate::client::tdkserver::commands::stop::StopArguments;
+use crate::client::tdkserver::commands::unuse::UnuseArguments;
+use crate::client::tdkserver::commands::r#use::UseArguments;
 use crate::fabric::ClusterFabric;
 
 #[derive(Debug, Clone, Parser)]
 #[command(
     name = "Tabsdata Client for Tabsdata Server on Kubernetes",
     version = "1.10.0",
-    about = "Tabsdata Client for Tabsdata Server on Kubernetes",
-    long_about = "Manage Tabsdata instances on Kubernetes clusters."
+    about = "Client for the tabsdata server on kubernetes",
+    long_about = "Manage tabsdata instances on kubernetes clusters."
 )]
 pub struct Arguments {
     #[arg(
@@ -38,11 +40,15 @@ pub struct Arguments {
 pub enum Commands {
     #[command(about = "Open an interactive shell")]
     Shell,
-    #[command(about = "Create a Tabsdata instance")]
+    #[command(about = "Create a tabsdata instance")]
     Create(CreateArguments),
-    #[command(about = "Start a Tabsdata instance")]
+    #[command(about = "Use an existing tabsdata instance as the active context")]
+    Use(UseArguments),
+    #[command(about = "Clear the active context")]
+    Unuse(UnuseArguments),
+    #[command(about = "Start a tabsdata instance")]
     Start(StartArguments),
-    #[command(about = "Stop a Tabsdata instance")]
+    #[command(about = "Stop a tabsdata instance")]
     Stop(StopArguments),
 }
 
@@ -52,13 +58,15 @@ pub struct ClusterArguments {
     #[arg(
         long,
         name = "fabric",
-        required = true,
+        required = false,
         value_enum,
-        long_help = "Fabric of the Kubernetes cluster: \
-                     'kubernetes' for a standard Kubernetes cluster, \
-                     'kminus' for a development KMinus cluster."
+        long_help = "Fabric of the cluster: \
+                     'kubernetes' for a standard kubernetes cluster, \
+                     'kminus' for a development kminus cluster. \
+                     When unspecified, the value from the active context is taken; \
+                     when no active context is set, this argument is required."
     )]
-    fabric: ClusterFabric,
+    fabric: Option<ClusterFabric>,
 
     #[arg(
         long,
@@ -99,12 +107,30 @@ pub struct ClusterArguments {
         long,
         name = "namespace",
         required = false,
-        long_help = "Kubernetes namespace for the instance. \
+        long_help = "Namespace for the instance. \
                      Valid only for the 'kubernetes' fabric. \
                      Overrides the namespace defined in the kubeconfig context. \
-                     When neither is set, the Kubernetes default namespace is used."
+                     When neither is set, the kubernetes default namespace is used."
     )]
     namespace: Option<String>,
+}
+
+impl ClusterArguments {
+    pub fn new(
+        fabric: Option<ClusterFabric>,
+        context: Option<String>,
+        kubeconfig: Option<PathBuf>,
+        current: bool,
+        namespace: Option<String>,
+    ) -> Self {
+        Self {
+            fabric,
+            context,
+            kubeconfig,
+            current,
+            namespace,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Getters, Args)]
@@ -133,4 +159,10 @@ pub struct InstanceArguments {
                      Mutually exclusive with --name."
     )]
     path: Option<PathBuf>,
+}
+
+impl InstanceArguments {
+    pub fn new(name: Option<String>, path: Option<PathBuf>) -> Self {
+        Self { name, path }
+    }
 }

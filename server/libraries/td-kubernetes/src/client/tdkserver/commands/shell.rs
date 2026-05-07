@@ -14,12 +14,16 @@ use reedline::{
     Reedline, Signal,
 };
 use td_common::env::TABSDATA_HOME_DIR;
+use tracing::info;
 
 use super::create::{CreateArguments, command_create};
 use super::start::{StartArguments, command_start};
 use super::stop::{StopArguments, command_stop};
+use super::unuse::{UnuseArguments, command_unuse};
+use super::r#use::{UseArguments, command_use};
 use crate::cerror;
 use crate::exit::Outcome;
+use crate::tdkcontext::{TdkContext, tdkcontext_path};
 
 const TOOL_NAME: &str = "tdkserver";
 const HISTORY_FILE: &str = ".tdkserver.history";
@@ -29,6 +33,10 @@ const HISTORY_CAPACITY: usize = 10_000;
 enum ShellCommand {
     /// Create a Tabsdata instance
     Create(CreateArguments),
+    /// Use an existing Tabsdata instance as the active context
+    Use(UseArguments),
+    /// Clear the active context
+    Unuse(UnuseArguments),
     /// Start a Tabsdata instance
     Start(StartArguments),
     /// Stop a Tabsdata instance
@@ -48,6 +56,7 @@ struct ShellInput {
 
 pub async fn command_shell() -> Outcome {
     show_quick_reference();
+    show_initial_active_context();
 
     let history_path = dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
@@ -113,6 +122,12 @@ pub async fn command_shell() -> Outcome {
                 ShellCommand::Create(arguments) => {
                     let _ = command_create(arguments).await;
                 }
+                ShellCommand::Use(arguments) => {
+                    let _ = command_use(arguments).await;
+                }
+                ShellCommand::Unuse(arguments) => {
+                    let _ = command_unuse(arguments).await;
+                }
                 ShellCommand::Start(arguments) => {
                     let _ = command_start(arguments).await;
                 }
@@ -127,6 +142,22 @@ pub async fn command_shell() -> Outcome {
         }
     }
     Ok(())
+}
+
+fn show_initial_active_context() {
+    match TdkContext::load() {
+        Ok(Some(tdkcontext)) => {
+            info!(
+                "Active context: {} (from {}).",
+                tdkcontext.display_name(),
+                tdkcontext_path().display()
+            );
+        }
+        Ok(None) => {
+            info!("No active context is set.");
+        }
+        Err(_) => {}
+    }
 }
 
 fn run_shell_escape(command: &str) {
@@ -188,7 +219,7 @@ fn show_quick_reference() {
         ("!cd <path>", "Change working directory"),
         ("!set VAR=val", "Set an environment variable"),
         ("!unset VAR", "Remove an environment variable"),
-        ("?", "Show this quick reference"),
+        (":?", "Show this quick reference"),
         (
             ":help / :exit / :quit",
             "Built-in commands (also :h / :e / :q)",
@@ -199,25 +230,77 @@ fn show_quick_reference() {
         .iter()
         .map(|(key, _)| key.chars().count())
         .max()
-        .unwrap_or(20);
+        .unwrap_or(0);
+    let max_entry_visible = entries
+        .iter()
+        .map(|(_, description)| key_width + 2 + description.chars().count())
+        .max()
+        .unwrap_or(0);
+    let footer = "Use ESC or Ctrl+C to abort input prompts";
+    let inner_width = max_entry_visible.max(footer.chars().count());
+    let outer_width = inner_width + 4;
+
+    let border = |segment: &str| segment.truecolor(0x82, 0xC3, 0x69).to_string();
+
+    let title_len = title.chars().count();
+    let dash_run = outer_width
+        .saturating_sub(title_len)
+        .saturating_sub(6)
+        .max(1);
 
     println!();
-    println!("{}", title.bold().green());
-    println!();
+    println!(
+        "{}{}{}{}",
+        border("╭─ "),
+        title.bold().truecolor(0x82, 0xC3, 0x69),
+        border(&format!(" {}", "─".repeat(dash_run))),
+        border("─╮"),
+    );
+
+    let blank_line = format!(
+        "{} {} {}",
+        border("│"),
+        " ".repeat(inner_width),
+        border("│"),
+    );
+    println!("{blank_line}");
+
     for (key, description) in entries {
-        let padding = key_width - key.chars().count();
+        let key_pad = " ".repeat(key_width - key.chars().count());
+        let entry_visible = key_width + 2 + description.chars().count();
+        let trail_pad = " ".repeat(inner_width - entry_visible);
         println!(
-            "  {}{}  {}",
+            "{} {}{}  {}{} {}",
+            border("│"),
             key.bold().cyan(),
-            " ".repeat(padding),
-            description
+            key_pad,
+            description,
+            trail_pad,
+            border("│"),
         );
     }
-    println!();
+
+    println!("{blank_line}");
+
+    let footer_visible = footer.chars().count();
+    let footer_pad = " ".repeat(inner_width - footer_visible);
     println!(
-        "  Use {} or {} to abort input prompts",
+        "{} {}{}{}{}{}{} {}",
+        border("│"),
+        "Use ".dimmed(),
         "ESC".bold().cyan(),
-        "Ctrl+C".bold().cyan()
+        " or ".dimmed(),
+        "Ctrl+C".bold().cyan(),
+        " to abort input prompts".dimmed(),
+        footer_pad,
+        border("│"),
+    );
+
+    println!(
+        "{}{}{}",
+        border("╰"),
+        border(&"─".repeat(outer_width - 2)),
+        border("╯"),
     );
     println!();
 }
@@ -236,7 +319,14 @@ impl ShellPrompt {
 
 impl Prompt for ShellPrompt {
     fn render_prompt_left(&self) -> Cow<'_, str> {
-        Cow::Owned(format!("{} ❯ ", self.tool_name))
+        let tool = format!("{} ❯", self.tool_name).bold().green().to_string();
+        let label = match TdkContext::read() {
+            Some(tdkcontext) => format!("[{}]", tdkcontext.display_name())
+                .truecolor(0xCC, 0xB2, 0x33)
+                .to_string(),
+            None => "[no context]".dimmed().to_string(),
+        };
+        Cow::Owned(format!("{label} {tool} "))
     }
 
     fn render_prompt_right(&self) -> Cow<'_, str> {

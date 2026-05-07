@@ -79,7 +79,7 @@ pub async fn build_kubeconfig(
     let mut config = match Config::from_custom_kubeconfig(kubeconfig, &options).await {
         Ok(config) => config,
         Err(error) => {
-            cerror!("Failed to load Kubernetes configuration: {error}");
+            cerror!("Failed to load kubernetes configuration: {error}");
             return abort(GeneralError);
         }
     };

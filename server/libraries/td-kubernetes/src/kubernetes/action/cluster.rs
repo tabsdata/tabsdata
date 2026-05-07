@@ -10,7 +10,7 @@ use crate::exit::{Outcome, abort};
 
 pub async fn ensure_cluster_reachable(client: &Client) -> Outcome {
     if let Err(error) = client.apiserver_version().await {
-        cerror!("Kubernetes cluster is not reachable: {error}");
+        cerror!("The kubernetes cluster is not reachable: {error}");
         return abort(GeneralError);
     }
     Ok(())

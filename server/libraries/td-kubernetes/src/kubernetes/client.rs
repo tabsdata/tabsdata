@@ -30,7 +30,7 @@ pub fn build_kube_client(config: &Config) -> Outcome<Client> {
     match Client::try_from(config.clone()) {
         Ok(client) => Ok(client),
         Err(error) => {
-            cerror!("Failed to build Kubernetes client: {error}");
+            cerror!("Failed to build kubernetes client: {error}");
             abort(GeneralError)
         }
     }

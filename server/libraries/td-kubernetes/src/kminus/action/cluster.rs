@@ -152,7 +152,7 @@ pub async fn stop_cluster(instance: &KminusInstance) -> Outcome {
         }
         tokio::time::sleep(KM_STOP_POLL).await;
     }
-    info!("Kminus cluster has been signalled; apiserver still reachable after the timeout.");
+    info!("The kminus cluster has been signalled; apiserver still reachable after the timeout.");
     Ok(())
 }
 

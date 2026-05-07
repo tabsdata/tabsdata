@@ -26,6 +26,7 @@ use crate::kubernetes::action::{configmap_exists, create_configmap, delete_confi
 use crate::kubernetes::client::build_kube_client;
 use crate::kubernetes::toolkit::build_kubeconfig;
 use crate::profile::load_profile;
+use crate::tdkcontext::TdkContext;
 use crate::topology::{Topology, topology_for};
 
 pub struct KminusFabric {
@@ -169,6 +170,16 @@ impl Fabric for KminusFabric {
         FABRIC_KMINUS
     }
 
+    fn display_name(&self) -> String {
+        format!("{FABRIC_KMINUS}:{}", self.name)
+    }
+
+    fn to_tdkcontext(&self) -> TdkContext {
+        TdkContext::Kminus {
+            path: self.folder.clone(),
+        }
+    }
+
     async fn ensure_creatable(&self) -> Outcome {
         if self.folder.exists() {
             cerror!("Folder {} already exists.", self.folder.display());
@@ -178,7 +189,7 @@ impl Fabric for KminusFabric {
     }
 
     fn preview_create_summary(&self, profile: &str) {
-        info!("Tabsdata instance to be created:");
+        info!("About to create tabsdata instance:");
         if cfg!(td_k8s_development) {
             info!("  - profile......: {profile}");
         }
@@ -232,6 +243,40 @@ impl Fabric for KminusFabric {
         );
     }
 
+    async fn ensure_usable(&self) -> Outcome {
+        if !self.folder.exists() {
+            cerror!(
+                "Instance folder '{}' does not exist. Run 'tdkserver create ...' first.",
+                self.folder.display()
+            );
+            return abort(GeneralError);
+        }
+        if !self.instance.sysconfig_path().exists() {
+            cerror!(
+                "Folder '{}' is not a valid kminus instance (missing '{}').",
+                self.folder.display(),
+                self.instance.sysconfig_path().display()
+            );
+            return abort(GeneralError);
+        }
+        Ok(())
+    }
+
+    fn preview_use_summary(&self) {
+        info!("About to use tabsdata instance:");
+        info!("  - fabric.......: {FABRIC_KMINUS}");
+        info!("  - instance name: {}", self.name);
+        info!("  - instance path: {}", self.folder.display());
+    }
+
+    fn report_used(&self) {
+        info!(
+            "Now using tabsdata instance '{}' at {}.",
+            self.name,
+            self.folder.display()
+        );
+    }
+
     async fn ensure_startable(&self) -> Outcome {
         if !self.folder.exists() {
             cerror!(
@@ -244,7 +289,7 @@ impl Fabric for KminusFabric {
     }
 
     fn preview_start_summary(&self) {
-        info!("Tabsdata instance to be started:");
+        info!("About to start tabsdata instance:");
         info!("  - fabric.......: {FABRIC_KMINUS}");
         info!("  - instance name: {}", self.name);
         info!("  - instance path: {}", self.folder.display());
@@ -297,7 +342,7 @@ impl Fabric for KminusFabric {
     }
 
     fn preview_stop_summary(&self) {
-        info!("Tabsdata instance to be stopped:");
+        info!("About to stop tabsdata instance:");
         info!("  - fabric.......: {FABRIC_KMINUS}");
         info!("  - instance name: {}", self.name);
         info!("  - instance path: {}", self.folder.display());

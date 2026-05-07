@@ -26,7 +26,7 @@ pub struct CreateArguments {
         long,
         name = "profile",
         required = false,
-        long_help = "kprofile to use when generating Kubernetes manifests. \
+        long_help = "Profile to use when generating kubernetes manifests. \
                      When unspecified, defaults to 'production'."
     )]
     profile: Option<String>,

@@ -12,4 +12,5 @@ pub mod kubernetes;
 pub mod macros;
 pub mod profile;
 pub mod subprocess;
+pub mod tdkcontext;
 pub mod topology;

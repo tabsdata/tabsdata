@@ -9,7 +9,7 @@ use tracing::info;
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::prompt_yes_no;
 use crate::exit::Outcome;
-use crate::fabric::fabric_for;
+use crate::fabric::fabric_for_or_tdkcontext;
 
 #[derive(Debug, Clone, Getters, Args)]
 #[getset(get = "pub")]
@@ -53,7 +53,7 @@ pub async fn command_stop(arguments: StopArguments) -> Outcome {
         yes,
     } = arguments;
 
-    let fabric = fabric_for(cluster, instance).await?;
+    let fabric = fabric_for_or_tdkcontext(cluster, instance).await?;
     fabric.ensure_stoppable().await?;
 
     if preview {

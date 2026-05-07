@@ -60,7 +60,7 @@ pub fn resolve_kprofiles_path() -> Outcome<PathBuf> {
     let path = PathBuf::from(stdout.trim());
     if !path.is_dir() {
         cerror!(
-            "Resolved kprofiles path '{}' does not exist or is not a directory.",
+            "Resolved profiles path '{}' does not exist or is not a directory.",
             path.display()
         );
         return abort(GeneralError);
