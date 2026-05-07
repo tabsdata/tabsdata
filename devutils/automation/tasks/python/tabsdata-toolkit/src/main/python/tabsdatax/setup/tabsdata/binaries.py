@@ -51,14 +51,15 @@ def collect_group_datafiles(
     default_target_folder: str,
     require_server_binaries: bool = False,
 ) -> list[tuple[str, list[str]]]:
-    destination = get_python_binaries_folder()
-    aggregated: list[str] = []
+    default_destination = get_python_binaries_folder()
+    datafiles: list[tuple[str, list[str]]] = []
 
     for group in binary_groups:
         group_name = group.get("name", "")
         names = group.get("names", [])
         source = group.get("source")
         km_subpath = group.get("km_subpath")
+        install_dest = group.get("install_dest", default_destination)
 
         if km_subpath is not None:
             km_root = resolve_km_project_relative()
@@ -85,11 +86,13 @@ def collect_group_datafiles(
             folder,
             require_server_binaries,
         )
-        aggregated.extend(os.path.join(folder, binary) for binary in existing)
+        if not existing:
+            continue
+        files = [os.path.join(folder, binary) for binary in existing]
+        datafiles.append((install_dest, files))
 
-    if not aggregated:
+    if not datafiles:
         return []
 
-    datafiles = [(destination, aggregated)]
     logger.debug(f"Including tabsdata binaries: {datafiles}")
     return datafiles

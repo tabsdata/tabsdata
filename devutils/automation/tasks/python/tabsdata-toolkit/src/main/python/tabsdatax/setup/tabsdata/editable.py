@@ -89,21 +89,24 @@ def create_editable_binary_symlinks(
         if not site_packages_list:
             return
         site_packages = Path(site_packages_list[0])
-        venv_bin_dir = site_packages.parent.parent.parent / get_python_binaries_folder()
+        venv_root = site_packages.parent.parent.parent
     except (AttributeError, IndexError):
         return
 
-    if not venv_bin_dir.exists():
-        return
-
     for dest_dir, binary_paths in datafiles:
+        venv_dest_dir = venv_root / dest_dir
+        try:
+            venv_dest_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            logger.warning(f"Failed to create destination {venv_dest_dir}: {e}")
+            continue
         for binary_path in binary_paths:
             binary_path = Path(binary_path)
             if not binary_path.exists():
                 continue
 
             binary_name = binary_path.name
-            symlink_path = venv_bin_dir / binary_name
+            symlink_path = venv_dest_dir / binary_name
 
             if symlink_path.is_symlink() or symlink_path.exists():
                 try:

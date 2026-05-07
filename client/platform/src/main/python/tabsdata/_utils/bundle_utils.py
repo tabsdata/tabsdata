@@ -111,16 +111,23 @@ BINARY_GROUPS = [
         ],
     },
     {
-        "name": "kubernetes",
+        "name": "kubernetes-cli",
+        "km_subpath": "target/dist",
+        "bundle_dest": "target/dist",
+        "names": [
+            "km",
+            "kmc",
+        ],
+    },
+    {
+        "name": "kubernetes-srv",
         "km_subpath": "target/dist",
         "bundle_dest": "target/dist",
         "names": [
             "control-plane",
             "etcd",
-            "km",
             "kube-apiserver",
             "kube-controller-manager",
-            "kubectl",
             "pod-runner",
             "virtual-kubelet",
         ],

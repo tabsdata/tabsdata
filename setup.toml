@@ -18,6 +18,11 @@
 # falling back to `KM_PROJECT_ALTERNATE_NAME` from
 # tabsdatax.setup.common.platform). External groups are auto-detected: if
 # the folder is missing, the group is silently skipped.
+#
+# `install_dest` (optional) is the wheel install destination relative to
+# `<sys.prefix>`. When omitted, defaults to the Python scripts folder
+# (`bin` on POSIX, `Scripts` on Windows) — i.e., on PATH. Set explicitly
+# to place a group off PATH (e.g., `libexec/tabsdata` for internal helpers).
 
 [[binary_groups]]
 name = "tabsdata"
@@ -33,15 +38,22 @@ names = [
 ]
 
 [[binary_groups]]
-name = "kubernetes"
+name = "kubernetes-cli"
 km_subpath = "target/dist"
+names = [
+    "km",
+    "kmc",
+]
+
+[[binary_groups]]
+name = "kubernetes-srv"
+km_subpath = "target/dist"
+install_dest = "libexec/tabsdata"
 names = [
     "control-plane",
     "etcd",
-    "km",
     "kube-apiserver",
     "kube-controller-manager",
-    "kubectl",
     "pod-runner",
     "virtual-kubelet",
 ]

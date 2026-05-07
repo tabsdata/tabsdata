@@ -143,7 +143,7 @@ script = [
                     still_skipping = eq ${run_assembly} "false"
                     if ${still_skipping}
                         dist_folder = concat ${km_root} "/target/dist"
-                        expected_binaries = array control-plane virtual-kubelet pod-runner km kube-apiserver kube-controller-manager etcd kubectl
+                        expected_binaries = array control-plane etcd km kmc kube-apiserver kube-controller-manager pod-runner virtual-kubelet
                         for binary in ${expected_binaries}
                             binary_path = concat ${dist_folder} "/" ${binary}
                             binary_exists = is_file ${binary_path}
