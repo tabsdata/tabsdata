@@ -1,0 +1,11 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+name: apiserver-mounts-options-extractor
+get-states:
+  - state-type: blob
+    state-key: apiserver-configuration
+set-state:
+  state-type: map
+  state-key: apiserver-mounts-options

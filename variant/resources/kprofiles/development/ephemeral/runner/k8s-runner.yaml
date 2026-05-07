@@ -1,0 +1,45 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: td-runner-${TD_RUN_ID}
+  namespace: td-${TD_INSTANCE_NAME}
+  labels:
+    app.kubernetes.io/name: tabsdata
+    app.kubernetes.io/component: runner
+    tabsdata.com/instance: ${TD_INSTANCE_NAME}
+    tabsdata.com/worker-tier: ephemeral
+    tabsdata.com/run-id: ${TD_RUN_ID}
+spec:
+  parallelism: 1
+  completions: 1
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tabsdata
+        app.kubernetes.io/component: runner
+        tabsdata.com/instance: ${TD_INSTANCE_NAME}
+        tabsdata.com/worker-tier: ephemeral
+        tabsdata.com/run-id: ${TD_RUN_ID}
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: runner
+          image: busybox:1.37
+          command: ["sh", "-c"]
+          args:
+            - |
+              NAME="Dummy Ephemeral Worker"
+              TICKS=60
+              echo "[$NAME] starting"
+              tick=1
+              while [ "$tick" -le "$TICKS" ]; do
+                  sleep 1
+                  echo "[$NAME] tick $tick/$TICKS"
+                  tick=$((tick + 1))
+              done
+              echo "[$NAME] exiting"

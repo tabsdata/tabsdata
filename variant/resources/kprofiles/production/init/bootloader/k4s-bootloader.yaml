@@ -1,0 +1,31 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: td-bootloader
+  namespace: td-${TD_INSTANCE_NAME}
+  labels:
+    app.kubernetes.io/name: tabsdata
+    app.kubernetes.io/component: bootloader
+    tabsdata.com/instance: ${TD_INSTANCE_NAME}
+    tabsdata.com/worker-tier: init
+spec:
+  restartPolicy: Never
+  containers:
+    - name: bootloader
+      image: ${TD_NPT_BIN}/td_bootloader
+      command: ["td_bootloader"]
+      env:
+        - name: TD_PATH_INSTANCE
+          value: ${TD_PATH_INSTANCE}
+        - name: TD_PATH_WORKSPACE
+          value: ${TD_PATH_WORKSPACE}
+        - name: TD_PATH_CONFIG
+          value: ${TD_PATH_CONFIG}
+        - name: POD_NAME
+          value: td-bootloader
+        - name: POD_NAMESPACE
+          value: td-${TD_INSTANCE_NAME}

@@ -1,0 +1,21 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: td-runner-${TD_RUN_ID}
+  namespace: td-${TD_INSTANCE_NAME}
+  labels:
+    app.kubernetes.io/name: tabsdata
+    app.kubernetes.io/component: runner
+    tabsdata.com/instance: ${TD_INSTANCE_NAME}
+    tabsdata.com/worker-tier: ephemeral
+    tabsdata.com/run-id: ${TD_RUN_ID}
+spec:
+  restartPolicy: Never
+  containers:
+    - name: runner
+      image: ${TD_NPT_BIN}/tdk_ec
+      command: ["tdk_ec"]

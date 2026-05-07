@@ -1,0 +1,19 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+name: ${TD_INSTANCE_NAME}
+
+controllers:
+  init:
+    concurrency: 1
+    workers:
+      - initializer
+  regular:
+    concurrency: 0
+    workers:
+      - application
+  ephemeral:
+    concurrency: 0
+    workers:
+      - runner

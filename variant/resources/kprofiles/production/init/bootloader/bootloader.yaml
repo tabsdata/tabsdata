@@ -1,0 +1,10 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+name: bootloader
+inherit:
+  - instance
+  - repository
+  - workspace
+  - profile

@@ -1,0 +1,22 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+name: crontrigger
+concurrency: 0
+retries: 2
+arguments:
+  - work
+  - locks-folder
+  - logs-folder
+  - bin-folder
+  - request-folder
+  - response-folder
+  - input-folder
+  - output-folder
+  - current-instance
+markers:
+  - td-collection
+  - td-function
+  - td-worker
+  - td-attempt

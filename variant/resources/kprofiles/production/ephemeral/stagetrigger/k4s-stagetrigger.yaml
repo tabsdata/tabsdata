@@ -1,0 +1,38 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: td-stagetrigger-${TD_RUN_ID}
+  namespace: td-${TD_INSTANCE_NAME}
+  labels:
+    app.kubernetes.io/name: tabsdata
+    app.kubernetes.io/component: stagetrigger
+    tabsdata.com/instance: ${TD_INSTANCE_NAME}
+    tabsdata.com/worker-tier: ephemeral
+    tabsdata.com/run-id: ${TD_RUN_ID}
+    td-collection: ${TD_COLLECTION}
+    td-function: ${TD_FUNCTION}
+    td-worker: ${TD_WORKER}
+    td-attempt: ${TD_ATTEMPT}
+spec:
+  restartPolicy: Never
+  containers:
+    - name: stagetrigger
+      image: ${TD_NPT_BIN}/td_stagetrigger
+      command: ["td_stagetrigger"]
+      env:
+        - name: TD_PATH_INSTANCE
+          value: ${TD_PATH_INSTANCE}
+        - name: TD_PATH_WORKSPACE
+          value: ${TD_PATH_WORKSPACE}
+        - name: TD_PATH_CONFIG
+          value: ${TD_PATH_CONFIG}
+        - name: TD_RUN_ID
+          value: ${TD_RUN_ID}
+        - name: POD_NAME
+          value: td-stagetrigger-${TD_RUN_ID}
+        - name: POD_NAMESPACE
+          value: td-${TD_INSTANCE_NAME}

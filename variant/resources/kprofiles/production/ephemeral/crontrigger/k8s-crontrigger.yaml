@@ -1,0 +1,84 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: td-crontrigger-${TD_RUN_ID}
+  namespace: td-${TD_INSTANCE_NAME}
+  labels:
+    app.kubernetes.io/name: tabsdata
+    app.kubernetes.io/component: crontrigger
+    tabsdata.com/instance: ${TD_INSTANCE_NAME}
+    tabsdata.com/worker-tier: ephemeral
+    tabsdata.com/run-id: ${TD_RUN_ID}
+    td-collection: ${TD_COLLECTION}
+    td-function: ${TD_FUNCTION}
+    td-worker: ${TD_WORKER}
+    td-attempt: ${TD_ATTEMPT}
+spec:
+  parallelism: 1
+  completions: 1
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tabsdata
+        app.kubernetes.io/component: crontrigger
+        tabsdata.com/instance: ${TD_INSTANCE_NAME}
+        tabsdata.com/worker-tier: ephemeral
+        tabsdata.com/run-id: ${TD_RUN_ID}
+    spec:
+      serviceAccountName: td-worker
+      restartPolicy: Never
+      initContainers:
+        - name: bootstrap
+          image: ${TD_BOOTSTRAP_IMAGE}
+          command: ["td-bootstrap"]
+          args: ["--worker", "crontrigger", "--tier", "ephemeral", "--run-id", "${TD_RUN_ID}"]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/tabsdata/config
+            - name: workspace
+              mountPath: /tabsdata/workspace
+      containers:
+        - name: crontrigger
+          image: ${TD_WORKER_IMAGE}
+          command: ["td_crontrigger"]
+          env:
+            - name: TD_PATH_INSTANCE
+              value: /tabsdata
+            - name: TD_PATH_WORKSPACE
+              value: /tabsdata/workspace
+            - name: TD_PATH_CONFIG
+              value: /tabsdata/workspace/config
+            - name: TD_RUN_ID
+              value: ${TD_RUN_ID}
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          volumeMounts:
+            - name: workspace
+              mountPath: /tabsdata/workspace
+            - name: config
+              mountPath: /tabsdata/workspace/config
+          resources:
+            requests:
+              cpu: ${TRIGGER_CPU_REQUEST}
+              memory: ${TRIGGER_MEMORY_REQUEST}
+            limits:
+              cpu: ${TRIGGER_CPU_LIMIT}
+              memory: ${TRIGGER_MEMORY_LIMIT}
+      volumes:
+        - name: config
+          configMap:
+            name: td-crontrigger-config
+        - name: workspace
+          persistentVolumeClaim:
+            claimName: td-${TD_INSTANCE_NAME}-workspace

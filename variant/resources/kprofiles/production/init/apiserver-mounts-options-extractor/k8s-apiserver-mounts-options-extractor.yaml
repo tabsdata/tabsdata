@@ -1,0 +1,74 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: td-apiserver-mounts-options-extractor
+  namespace: td-${TD_INSTANCE_NAME}
+  labels:
+    app.kubernetes.io/name: tabsdata
+    app.kubernetes.io/component: apiserver-mounts-options-extractor
+    tabsdata.com/instance: ${TD_INSTANCE_NAME}
+    tabsdata.com/worker-tier: init
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tabsdata
+        app.kubernetes.io/component: apiserver-mounts-options-extractor
+        tabsdata.com/instance: ${TD_INSTANCE_NAME}
+        tabsdata.com/worker-tier: init
+    spec:
+      serviceAccountName: td-worker
+      restartPolicy: Never
+      initContainers:
+        - name: bootstrap
+          image: ${TD_BOOTSTRAP_IMAGE}
+          command: ["td-bootstrap"]
+          args: ["--worker", "apiserver-mounts-options-extractor", "--tier", "init"]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/tabsdata/config
+            - name: workspace
+              mountPath: /tabsdata/workspace
+      containers:
+        - name: apiserver-mounts-options-extractor
+          image: ${TD_WORKER_IMAGE}
+          command: ["td_mntext"]
+          env:
+            - name: TD_PATH_INSTANCE
+              value: /tabsdata
+            - name: TD_PATH_WORKSPACE
+              value: /tabsdata/workspace
+            - name: TD_PATH_CONFIG
+              value: /tabsdata/workspace/config
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          volumeMounts:
+            - name: workspace
+              mountPath: /tabsdata/workspace
+            - name: config
+              mountPath: /tabsdata/workspace/config
+          resources:
+            requests:
+              cpu: ${WORKER_CPU_REQUEST}
+              memory: ${WORKER_MEMORY_REQUEST}
+            limits:
+              cpu: ${WORKER_CPU_LIMIT}
+              memory: ${WORKER_MEMORY_LIMIT}
+      volumes:
+        - name: config
+          configMap:
+            name: td-apiserver-mounts-options-extractor-config
+        - name: workspace
+          persistentVolumeClaim:
+            claimName: td-${TD_INSTANCE_NAME}-workspace
