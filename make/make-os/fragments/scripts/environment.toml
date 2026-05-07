@@ -210,7 +210,7 @@ env_scripts = [
         td_cross_test_jobs = set "16"
     end
     os_family = os_family
-    info "👾 Current os family: ${os_family}"
+    debug "👾 Current os family: ${os_family}"
     is_mac = eq ${os_family} "mac"
     is_windows = eq ${os_family} "windows"
     if ${on_ga_true}
@@ -234,7 +234,7 @@ env_scripts = [
     td_cargo_build_jobs_is_empty = not is_empty ${td_cargo_build_jobs}
     if ${td_cargo_build_jobs_is_empty}
         set_env CARGO_BUILD_JOBS ${td_cargo_build_jobs}
-        info "🔧 Setting CARGO_BUILD_JOBS to ${td_cargo_build_jobs} from TD_CARGO_BUILD_JOBS."
+        debug "🔧 Setting CARGO_BUILD_JOBS to ${td_cargo_build_jobs} from TD_CARGO_BUILD_JOBS."
     end
 
     set_env td-nextest-build-jobs ${td_nextest_build_jobs}
@@ -393,7 +393,7 @@ env_scripts = [
     !include_files ./make/make-os/libraries/log.ds
 
     os = os_family
-    info "📺 Current os: ${os}"
+    debug "📺 Current os: ${os}"
 
     is_linux = eq ${os} "linux"
     is_mac = eq ${os} "mac"
@@ -407,7 +407,7 @@ env_scripts = [
 
     python_venv  = exec --fail-on-error python -c "import sys; print(sys.prefix)"
     python_venv = trim ${python_venv.stdout}
-    info "🐍 Using Python environment: '${python_venv}'"
+    debug "🐍 Using Python environment: '${python_venv}'"
 
     if ${is_windows}
         lib_path_var = set "PATH"

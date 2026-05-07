@@ -690,11 +690,15 @@ script = [
         info "⌛️ Pytest finished with non-zero-or-five exit code: '${exit_code}'"
         skipe_test_py = get_env skipe_test_py
         if not is_empty ${skipe_test_py}
-            echo ""
+            if is_error
+                echo ""
+            end
             error "🧨🧨🧨🧨"
             error "🧨 TASK 'test_py' FAILED with exit code '${exit_code}' — error skipped (--skipe)"
             error "🧨🧨🧨🧨"
-            echo ""
+            if is_error
+                echo ""
+            end
         else
             TD_FAIL_FAST_PY = get_env TD_FAIL_FAST_PY
             if not ${TD_FAIL_FAST_PY}

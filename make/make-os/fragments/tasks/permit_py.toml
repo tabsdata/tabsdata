@@ -14,7 +14,7 @@ script = [
     tabsdata_python_version = set 3.12.0
     set_env TABSDATA_PYTHON_VERSION ${tabsdata_python_version}
 
-    info "♻️ Checking if the required Python version is installed..."
+    debug "♻️ Checking if the required Python version is installed..."
 
     python = which python
     if equals ${python} ""
@@ -30,7 +30,7 @@ script = [
     end
 
     version = trim ${result.stdout}
-    info "❇️ Python version: ${version}"
+    debug "❇️ Python version: ${version}"
 
     result = exec python -c "import os, sys, subprocess; v = tuple(map(int, os.environ['TABSDATA_PYTHON_VERSION'].split('.'))); r = subprocess.check_output(['python', '--version']).decode().split()[1]; rv = tuple(map(int, r.split('.'))); sys.exit(0 if rv >= v else 1)"
     code = set ${result.code}
@@ -43,8 +43,8 @@ script = [
     python_root_folder = trim ${python_root_folder.stdout}
     python_scripts_folder = exec python -c "import sysconfig; print(sysconfig.get_path('scripts'))"
     python_scripts_folder = trim ${python_scripts_folder.stdout}
-    info "☘️ Python root folder ${python_root_folder}"
-    info "🌺 Python scripts folder ${python_scripts_folder}"
+    debug "☘️ Python root folder ${python_root_folder}"
+    debug "🌺 Python scripts folder ${python_scripts_folder}"
 
     on_ga = get_env TD_ON_GA
     on_ga_true = eq ${on_ga} "true"
@@ -74,17 +74,17 @@ script = [
 
     pyenv = which pyenv
     if not eq ${pyenv} ""
-        warn "✅ Component pyenv is available. Considering rehash."
+        debug "✅ Component pyenv is available. Considering rehash."
         os = os_family
-        info "🪴 Current os: ${os}"
+        debug "🪴 Current os: ${os}"
         is_windows = eq ${os} "windows"
         if ${is_windows}
-            warn "🦧️ Operating system is Windows. Skipping rehash."
+            debug "🦧️ Operating system is Windows. Skipping rehash."
         else
-            warn "🐙️ Component pyenv is available. Running rehash."
+            debug "🐙️ Component pyenv is available. Running rehash."
             exec --fail-on-error pyenv rehash
         end
     else
-        warn "⚠️ Component pyenv is not available. Skipping rehash."
+        debug "⚠️ Component pyenv is not available. Skipping rehash."
     end
     ''']

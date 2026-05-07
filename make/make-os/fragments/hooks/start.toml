@@ -74,21 +74,27 @@ script = [
     if ${no_user_home}
         error "🚷 Environment variable HOME is not defined. Please set it before running this script."
         error "🚷 The USERPROFILE Windows environment variable will not work. Use HOME instead."
-        echo ""
+        if is_error
+            echo ""
+        end
         exit 1
     end
 
     user_home_exists = is_path_exists ${user_home}
     if not ${user_home_exists}
         error "🚷 Environment variable HOME points to a non-existing path: ${user_home}"
-        echo ""
+        if is_error
+            echo ""
+        end
         exit 1
     end
 
     user_home_is_dir = is_dir ${user_home}
     if not ${user_home_is_dir}
         error "🚷 Environment variable HOME points to a non-folder path: ${user_home}"
-        echo ""
+        if is_error
+            echo ""
+        end
         exit 1
     end
 
@@ -112,12 +118,16 @@ script = [
         noop
     elseif ${no_permit}
         warn "✈️ Skipping permit (--no-permit)"
-        echo ""
+        if is_warn
+            echo ""
+        end
     else
         td_run_permit = get_env TD_RUN_PERMIT
         if eq ${td_run_permit} "false"
             warn "✈️ Skipping permit"
-            echo ""
+            if is_warn
+                echo ""
+            end
         else
             cm_run_task permit
         end

@@ -14,7 +14,7 @@ script = [
     tabsdata_rust_version = set 1.94.0
     set_env TABSDATA_RUST_VERSION ${tabsdata_rust_version}
 
-    info "♻️️ Checking if the required Rust version is installed..."
+    debug "♻️️ Checking if the required Rust version is installed..."
 
     rustc = which rustc
     if equals ${rustc} ""
@@ -30,7 +30,7 @@ script = [
     end
 
     version = trim ${result.stdout}
-    info "❇️ Rust version: ${version}"
+    debug "❇️ Rust version: ${version}"
 
     result = exec python -c "import os, sys, subprocess; v = tuple(map(int, os.environ['TABSDATA_RUST_VERSION'].split('.'))); r = subprocess.check_output(['rustc', '--version']).decode().split()[1]; rv = tuple(map(int, r.split('.'))); sys.exit(0 if rv >= v else 1)"
     code = set ${result.code}
