@@ -18,11 +18,25 @@ pub struct FabricPrefixes {
     pub drop: &'static [&'static str],
 }
 
+/// A `Topology` is the combination of three orthogonal axes:
+///
+/// * Fabric:   kubernetes, kminus
+/// * Hosting:  hosted, cloud, serverless
+/// * Provider: local, aws, gcs, azure, ...
+///
+/// Only Fabric currently drives differing behavior, so the implementations
+/// below are effectively zero-sized markers and [`topology_for`] dispatches
+/// on [`ClusterFabric`] alone. That makes the current shape look reducible
+/// to `impl Topology for ClusterFabric`, but the simplification is
+/// incidental to this transient state: Hosting and Provider will eventually
+/// contribute their own behavior, and keeping the trait plus per-topology
+/// types lets that growth land here without churning every call site.
 pub trait Topology: Send + Sync {
-    fn name(&self) -> &'static str;
     fn fabric_prefixes(&self) -> &'static FabricPrefixes;
 }
 
+/// Resolves the [`Topology`] for a given [`ClusterFabric`]. See the
+/// [`Topology`] trait docs for why dispatch is on Fabric alone today.
 pub fn topology_for(fabric: ClusterFabric) -> &'static dyn Topology {
     match fabric {
         ClusterFabric::Kubernetes => &KubernetesTopology,

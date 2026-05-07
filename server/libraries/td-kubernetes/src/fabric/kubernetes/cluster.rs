@@ -2,11 +2,10 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-use async_trait::async_trait;
 use kube::{Client, Config};
 
 use crate::fabric::Cluster;
-use crate::system::exit::Outcome;
+use crate::system::exit::Result;
 
 pub struct KubernetesCluster {
     config: Config,
@@ -18,17 +17,16 @@ impl KubernetesCluster {
     }
 }
 
-#[async_trait]
 impl Cluster for KubernetesCluster {
-    fn create(&self) -> Outcome {
+    fn create(&self) -> Result {
         Ok(())
     }
 
-    async fn start(&self) -> Outcome {
+    async fn start(&self) -> Result {
         Ok(())
     }
 
-    async fn stop(&self) -> Outcome<bool> {
+    async fn stop(&self) -> Result<bool> {
         Ok(false)
     }
 

@@ -7,9 +7,9 @@ use kube::{Api, Client};
 use td_common::status::ExitStatus::GeneralError;
 
 use crate::cerror;
-use crate::system::exit::{Outcome, abort};
+use crate::system::exit::{Result, abort};
 
-pub async fn ensure_namespace_exists(client: &Client, namespace: &str) -> Outcome {
+pub async fn ensure_namespace_exists(client: &Client, namespace: &str) -> Result {
     let api: Api<Namespace> = Api::all(client.clone());
     match api.get(namespace).await {
         Ok(_) => Ok(()),

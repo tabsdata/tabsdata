@@ -3,18 +3,16 @@
 //
 
 use clap_derive::Args;
-use getset::Getters;
 use tracing::info;
 
 use crate::client::tdkcontext::{TdkContext, tdkcontext_path};
 use crate::cwarn;
-use crate::system::exit::Outcome;
+use crate::system::exit::Result;
 
-#[derive(Debug, Clone, Getters, Args)]
-#[getset(get = "pub")]
+#[derive(Debug, Clone, Args)]
 pub struct UnuseArguments {}
 
-pub async fn command_unuse(_arguments: UnuseArguments) -> Outcome {
+pub async fn command_unuse(_arguments: UnuseArguments) -> Result {
     if TdkContext::delete()? {
         info!(
             "Cleared the active context at {}.",

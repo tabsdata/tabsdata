@@ -5,7 +5,9 @@
 pub mod kminus;
 pub mod kubernetes;
 
-use async_trait::async_trait;
+use std::future::Future;
+
+use ambassador::{Delegate, delegatable_trait};
 use clap_derive::ValueEnum;
 use td_common::status::ExitStatus::GeneralError;
 
@@ -14,7 +16,7 @@ use crate::client::tdkcontext::TdkContext;
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::fabric::kminus::KminusFabric;
 use crate::fabric::kubernetes::KubernetesFabric;
-use crate::system::exit::{Outcome, abort};
+use crate::system::exit::{Result, abort};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum ClusterFabric {
@@ -22,101 +24,112 @@ pub enum ClusterFabric {
     Kminus,
 }
 
-pub trait Commit: Send {
+pub trait Transaction: Send {
     fn commit(self: Box<Self>);
 }
 
-impl Commit for () {
+impl Transaction for () {
     fn commit(self: Box<Self>) {}
 }
 
-#[async_trait]
 pub trait Cluster: Send + Sync {
-    fn create(&self) -> Outcome;
-    async fn start(&self) -> Outcome;
-    async fn stop(&self) -> Outcome<bool>;
+    fn create(&self) -> Result;
+    fn start(&self) -> impl Future<Output = Result> + Send;
+    fn stop(&self) -> impl Future<Output = Result<bool>> + Send;
 
-    async fn is_alive(&self) -> bool;
-    async fn is_dead(&self) -> bool {
-        !self.is_alive().await
+    fn is_alive(&self) -> impl Future<Output = bool> + Send;
+    fn is_dead(&self) -> impl Future<Output = bool> + Send {
+        async move { !self.is_alive().await }
     }
-    async fn poll_alive(&self) -> bool {
-        self.is_alive().await
+    fn poll_alive(&self) -> impl Future<Output = bool> + Send {
+        async move { self.is_alive().await }
     }
-    async fn poll_dead(&self) -> bool {
-        self.is_dead().await
+    fn poll_dead(&self) -> impl Future<Output = bool> + Send {
+        async move { self.is_dead().await }
     }
 }
 
-#[async_trait]
 pub trait Instance: Send + Sync {
-    async fn start(&self) -> Outcome;
-    async fn stop(&self) -> Outcome<bool>;
+    fn start(&self) -> impl Future<Output = Result> + Send;
+    fn stop(&self) -> impl Future<Output = Result<bool>> + Send;
 
-    async fn is_alive(&self) -> bool;
-    async fn is_dead(&self) -> bool {
-        !self.is_alive().await
+    fn is_alive(&self) -> impl Future<Output = bool> + Send;
+    fn is_dead(&self) -> impl Future<Output = bool> + Send {
+        async move { !self.is_alive().await }
     }
-    async fn poll_alive(&self) -> bool {
-        self.is_alive().await
+    fn poll_alive(&self) -> impl Future<Output = bool> + Send {
+        async move { self.is_alive().await }
     }
-    async fn poll_dead(&self) -> bool {
-        self.is_dead().await
+    fn poll_dead(&self) -> impl Future<Output = bool> + Send {
+        async move { self.is_dead().await }
     }
 }
 
-#[async_trait]
+#[delegatable_trait]
 pub trait Fabric: Send + Sync {
     fn name(&self) -> &'static str;
     fn display_name(&self) -> String;
     fn to_tdkcontext(&self) -> TdkContext;
 
-    async fn ensure_creatable_runtime(&self) -> Outcome;
+    fn ensure_creatable_runtime(&self) -> impl Future<Output = Result> + Send;
     fn preview_create_runtime_summary(&self, profile: &str);
     fn report_created_runtime(&self);
 
-    async fn ensure_usable_runtime(&self) -> Outcome;
+    fn ensure_usable_runtime(&self) -> impl Future<Output = Result> + Send;
     fn preview_use_runtime_summary(&self);
     fn report_used_runtime(&self);
 
-    async fn ensure_startable_runtime(&self) -> Outcome;
+    fn ensure_startable_runtime(&self) -> impl Future<Output = Result> + Send;
     fn preview_start_runtime_summary(&self);
-    async fn start_runtime(&self) -> Outcome {
-        self.start_cluster().await?;
-        self.start_instance().await?;
-        Ok(())
+    fn start_runtime(&self) -> impl Future<Output = Result> + Send {
+        async move {
+            self.start_cluster().await?;
+            self.start_instance().await?;
+            Ok(())
+        }
     }
     fn report_started_runtime(&self);
 
-    async fn ensure_stoppable_runtime(&self) -> Outcome;
+    fn ensure_stoppable_runtime(&self) -> impl Future<Output = Result> + Send;
     fn preview_stop_runtime_summary(&self);
-    async fn stop_runtime(&self) -> Outcome<bool> {
-        let stopped_instance = self.stop_instance().await?;
-        let stopped_cluster = self.stop_cluster().await?;
-        Ok(stopped_instance || stopped_cluster)
+    fn stop_runtime(&self) -> impl Future<Output = Result<bool>> + Send {
+        async move {
+            let stopped_instance = self.stop_instance().await?;
+            let stopped_cluster = self.stop_cluster().await?;
+            Ok(stopped_instance || stopped_cluster)
+        }
     }
     fn report_stopped_runtime(&self);
 
-    async fn prepare_cluster(&self) -> Outcome<Box<dyn Commit>>;
-    async fn start_cluster(&self) -> Outcome;
-    async fn stop_cluster(&self) -> Outcome<bool>;
+    fn prepare_cluster(&self) -> impl Future<Output = Result<Box<dyn Transaction>>> + Send;
+    fn start_cluster(&self) -> impl Future<Output = Result> + Send;
+    fn stop_cluster(&self) -> impl Future<Output = Result<bool>> + Send;
 
-    async fn prepare_instance(&self, profile: &str) -> Outcome {
-        self.stage_configmap(profile).await?;
-        self.store_configmap(profile).await
+    fn prepare_instance(&self, profile: &str) -> impl Future<Output = Result> + Send {
+        async move {
+            self.stage_configmap(profile).await?;
+            self.store_configmap(profile).await
+        }
     }
-    async fn stage_configmap(&self, profile: &str) -> Outcome;
-    async fn store_configmap(&self, profile: &str) -> Outcome;
-    async fn start_instance(&self) -> Outcome;
-    async fn stop_instance(&self) -> Outcome<bool>;
+    fn stage_configmap(&self, profile: &str) -> impl Future<Output = Result> + Send;
+    fn store_configmap(&self, profile: &str) -> impl Future<Output = Result> + Send;
+    fn start_instance(&self) -> impl Future<Output = Result> + Send;
+    fn stop_instance(&self) -> impl Future<Output = Result<bool>> + Send;
+}
+
+#[derive(Delegate)]
+#[delegate(Fabric)]
+pub enum Fabrics {
+    Kubernetes(KubernetesFabric),
+    Kminus(KminusFabric),
 }
 
 pub async fn fabric_for(
     cluster: ClusterArguments,
     instance: InstanceArguments,
-) -> Outcome<Box<dyn Fabric>> {
-    let fabric = match cluster.fabric() {
-        Some(fabric) => *fabric,
+) -> Result<Fabrics> {
+    let fabric = match cluster.fabric {
+        Some(fabric) => fabric,
         None => {
             cerror!("Argument --fabric is required when no active context is set.");
             return abort(GeneralError);
@@ -125,11 +138,11 @@ pub async fn fabric_for(
     match fabric {
         ClusterFabric::Kubernetes => {
             let fabric = KubernetesFabric::build(cluster, instance).await?;
-            Ok(Box::new(fabric))
+            Ok(Fabrics::Kubernetes(fabric))
         }
         ClusterFabric::Kminus => {
             let fabric = KminusFabric::build(cluster, instance)?;
-            Ok(Box::new(fabric))
+            Ok(Fabrics::Kminus(fabric))
         }
     }
 }
@@ -137,8 +150,8 @@ pub async fn fabric_for(
 pub async fn fabric_for_or_tdkcontext(
     cluster: ClusterArguments,
     instance: InstanceArguments,
-) -> Outcome<Box<dyn Fabric>> {
-    if cluster.fabric().is_some() {
+) -> Result<Fabrics> {
+    if cluster.fabric.is_some() {
         return fabric_for(cluster, instance).await;
     }
     match TdkContext::load()? {

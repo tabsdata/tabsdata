@@ -3,22 +3,20 @@
 //
 
 use clap_derive::Args;
-use getset::Getters;
 use tracing::info;
 
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::prompt_yes_no;
-use crate::fabric::fabric_for;
-use crate::system::exit::Outcome;
+use crate::fabric::{Fabric, fabric_for};
+use crate::system::exit::Result;
 
-#[derive(Debug, Clone, Getters, Args)]
-#[getset(get = "pub")]
+#[derive(Debug, Clone, Args)]
 pub struct UseArguments {
     #[command(flatten)]
-    cluster: ClusterArguments,
+    pub cluster: ClusterArguments,
 
     #[command(flatten)]
-    instance: InstanceArguments,
+    pub instance: InstanceArguments,
 
     #[arg(
         long,
@@ -31,7 +29,7 @@ pub struct UseArguments {
                      before storing the active context. Defaults to 'true'. \
                      Pass '--preview false' to skip the summary and prompt."
     )]
-    preview: bool,
+    pub preview: bool,
 
     #[arg(
         long,
@@ -42,10 +40,10 @@ pub struct UseArguments {
         long_help = "Skip the interactive confirmation prompt and proceed immediately. \
                      Has no effect when --preview is 'false'."
     )]
-    yes: bool,
+    pub yes: bool,
 }
 
-pub async fn command_use(arguments: UseArguments) -> Outcome {
+pub async fn command_use(arguments: UseArguments) -> Result {
     let UseArguments {
         cluster,
         instance,

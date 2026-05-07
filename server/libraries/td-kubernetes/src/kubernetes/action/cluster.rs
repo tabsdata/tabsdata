@@ -6,9 +6,9 @@ use kube::Client;
 use td_common::status::ExitStatus::GeneralError;
 
 use crate::cerror;
-use crate::system::exit::{Outcome, abort};
+use crate::system::exit::{Result, abort};
 
-pub async fn ensure_cluster_reachable(client: &Client) -> Outcome {
+pub async fn ensure_cluster_reachable(client: &Client) -> Result {
     if let Err(error) = client.apiserver_version().await {
         cerror!("The kubernetes cluster is not reachable: {error}");
         return abort(GeneralError);

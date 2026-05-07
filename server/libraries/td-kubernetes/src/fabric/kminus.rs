@@ -8,7 +8,6 @@ pub mod instance;
 use std::fs;
 use std::path::PathBuf;
 
-use async_trait::async_trait;
 use td_common::env::TABSDATA_HOME_DIR;
 use td_common::server::{DEFAULT_INSTANCE, INSTANCES_FOLDER};
 use td_common::status::ExitStatus::GeneralError;
@@ -22,12 +21,12 @@ use crate::client::tdkserver::widgets::spinner;
 use crate::constants::{FABRIC_KMINUS, FOLDER_CLUSTER};
 use crate::fabric::kminus::cluster::{InstanceFolderGuard, KminusCluster};
 use crate::fabric::kminus::instance::KminusInstance;
-use crate::fabric::{Cluster, Commit, Fabric, Instance};
+use crate::fabric::{Cluster, Fabric, Instance, Transaction};
 use crate::instance::profile::load_profile;
 use crate::kubernetes::kubeconfig::{
     resolve_cluster_name, resolve_cluster_url, resolve_current_context, resolve_namespace,
 };
-use crate::system::exit::{Outcome, abort};
+use crate::system::exit::{Result, abort};
 use crate::topology::{Topology, topology_for};
 
 pub struct KminusFabric {
@@ -40,32 +39,32 @@ pub struct KminusFabric {
 }
 
 impl KminusFabric {
-    pub fn build(cluster: ClusterArguments, instance: InstanceArguments) -> Outcome<Self> {
-        if cluster.context().is_some()
-            || cluster.kubeconfig().is_some()
-            || *cluster.current()
-            || cluster.namespace().is_some()
+    pub fn build(cluster: ClusterArguments, instance: InstanceArguments) -> Result<Self> {
+        if cluster.context.is_some()
+            || cluster.kubeconfig.is_some()
+            || cluster.current
+            || cluster.namespace.is_some()
         {
             cerror!(
                 "Arguments --context, --kubeconfig, --current, and --namespace are not valid for the '{FABRIC_KMINUS}' fabric."
             );
             return abort(GeneralError);
         }
-        if instance.name().is_some() && instance.path().is_some() {
+        if instance.name.is_some() && instance.path.is_some() {
             cerror!("Arguments --name and --path are mutually exclusive.");
             return abort(GeneralError);
         }
 
         let inputs = KminusInputs {
-            name: instance.name().clone(),
-            path: instance.path().clone(),
+            name: instance.name.clone(),
+            path: instance.path.clone(),
         };
 
         let instances_root = dirs::home_dir()
             .unwrap_or_else(|| PathBuf::from("/"))
             .join(TABSDATA_HOME_DIR)
             .join(INSTANCES_FOLDER);
-        let (name, folder) = match (instance.name().as_deref(), instance.path().as_deref()) {
+        let (name, folder) = match (instance.name.as_deref(), instance.path.as_deref()) {
             (None, None) => {
                 let name = DEFAULT_INSTANCE.to_string();
                 let folder = instances_root.join(&name);
@@ -139,7 +138,6 @@ struct KubeSummary {
     namespace: String,
 }
 
-#[async_trait]
 impl Fabric for KminusFabric {
     fn name(&self) -> &'static str {
         FABRIC_KMINUS
@@ -161,7 +159,7 @@ impl Fabric for KminusFabric {
         }
     }
 
-    async fn ensure_creatable_runtime(&self) -> Outcome {
+    async fn ensure_creatable_runtime(&self) -> Result {
         if self.folder.exists() {
             cerror!("Folder {} already exists.", self.folder.display());
             return abort(GeneralError);
@@ -187,7 +185,7 @@ impl Fabric for KminusFabric {
         );
     }
 
-    async fn ensure_usable_runtime(&self) -> Outcome {
+    async fn ensure_usable_runtime(&self) -> Result {
         if !self.folder.exists() {
             cerror!(
                 "Instance folder '{}' does not exist. Run 'tdkserver create ...' first.",
@@ -232,7 +230,7 @@ impl Fabric for KminusFabric {
         info!("  - namespace....: {}", summary.namespace);
     }
 
-    async fn ensure_startable_runtime(&self) -> Outcome {
+    async fn ensure_startable_runtime(&self) -> Result {
         if !self.folder.exists() {
             cerror!(
                 "Instance folder '{}' does not exist. Run 'create' first.",
@@ -271,7 +269,7 @@ impl Fabric for KminusFabric {
         info!("  export KUBECONFIG={}", summary.kubefile.display());
     }
 
-    async fn ensure_stoppable_runtime(&self) -> Outcome {
+    async fn ensure_stoppable_runtime(&self) -> Result {
         if !self.folder.exists() {
             cerror!(
                 "Instance folder '{}' does not exist.",
@@ -308,7 +306,7 @@ impl Fabric for KminusFabric {
         info!("  - namespace....: {}", summary.namespace);
     }
 
-    async fn prepare_cluster(&self) -> Outcome<Box<dyn Commit>> {
+    async fn prepare_cluster(&self) -> Result<Box<dyn Transaction>> {
         if let Err(error) = fs::create_dir_all(&self.folder) {
             cerror!(
                 "Failed to create instance folder {}: {error}",
@@ -321,21 +319,21 @@ impl Fabric for KminusFabric {
         Ok(Box::new(guard))
     }
 
-    async fn start_cluster(&self) -> Outcome {
+    async fn start_cluster(&self) -> Result {
         let bar = spinner("Starting kminus cluster");
         let result = self.cluster.start().await;
         bar.finish_and_clear();
         result
     }
 
-    async fn stop_cluster(&self) -> Outcome<bool> {
+    async fn stop_cluster(&self) -> Result<bool> {
         let bar = spinner("Stopping kminus cluster");
         let result = self.cluster.stop().await;
         bar.finish_and_clear();
         result
     }
 
-    async fn stage_configmap(&self, profile: &str) -> Outcome {
+    async fn stage_configmap(&self, profile: &str) -> Result {
         let configmap_data = load_profile(profile, self.topology)?;
         let staging_profile = self.cluster.staging_profile_path();
         if let Err(error) = fs::create_dir_all(&staging_profile) {
@@ -355,15 +353,15 @@ impl Fabric for KminusFabric {
         Ok(())
     }
 
-    async fn store_configmap(&self, _profile: &str) -> Outcome {
+    async fn store_configmap(&self, _profile: &str) -> Result {
         Ok(())
     }
 
-    async fn start_instance(&self) -> Outcome {
+    async fn start_instance(&self) -> Result {
         self.instance.start().await
     }
 
-    async fn stop_instance(&self) -> Outcome<bool> {
+    async fn stop_instance(&self) -> Result<bool> {
         self.instance.stop().await
     }
 }

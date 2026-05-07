@@ -11,9 +11,9 @@ use kube::{Api, Client};
 use td_common::status::ExitStatus::GeneralError;
 
 use crate::cerror;
-use crate::system::exit::{Outcome, abort};
+use crate::system::exit::{Result, abort};
 
-pub async fn configmap_exists(client: &Client, namespace: &str, name: &str) -> Outcome<bool> {
+pub async fn configmap_exists(client: &Client, namespace: &str, name: &str) -> Result<bool> {
     let api: Api<ConfigMap> = Api::namespaced(client.clone(), namespace);
     match api.get_opt(name).await {
         Ok(Some(_)) => Ok(true),
@@ -30,7 +30,7 @@ pub async fn create_configmap(
     namespace: &str,
     name: &str,
     data: BTreeMap<String, String>,
-) -> Outcome {
+) -> Result {
     let api: Api<ConfigMap> = Api::namespaced(client.clone(), namespace);
     let configmap = ConfigMap {
         metadata: ObjectMeta {
@@ -48,7 +48,7 @@ pub async fn create_configmap(
     Ok(())
 }
 
-pub async fn delete_configmap(client: &Client, namespace: &str, name: &str) -> Outcome {
+pub async fn delete_configmap(client: &Client, namespace: &str, name: &str) -> Result {
     let api: Api<ConfigMap> = Api::namespaced(client.clone(), namespace);
     if let Err(error) = api.delete(name, &DeleteParams::default()).await {
         cerror!("Failed to delete ConfigMap '{name}' in namespace '{namespace}': {error}");

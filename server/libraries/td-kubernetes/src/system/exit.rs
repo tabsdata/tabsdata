@@ -20,9 +20,9 @@ impl CommandError {
     }
 }
 
-pub type Outcome<T = ()> = Result<T, CommandError>;
+pub type Result<T = ()> = std::result::Result<T, CommandError>;
 
-pub fn abort<T>(status: ExitStatus) -> Outcome<T> {
+pub fn abort<T>(status: ExitStatus) -> Result<T> {
     error!("Command aborted.");
     error!("");
     Err(CommandError::new(status))

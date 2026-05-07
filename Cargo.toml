@@ -285,6 +285,9 @@ path = "extensions/rust/te-execution"
 [workspace.dependencies.anyhow]
 version = "1.0.102"
 
+[workspace.dependencies.ambassador]
+version = "0.5.1"
+
 [workspace.dependencies.aquamarine]
 version = "0.6.0"
 

@@ -9,7 +9,7 @@ use td_common::status::ExitStatus::GeneralError;
 use tracing::debug;
 
 use crate::cerror;
-use crate::system::exit::{Outcome, abort};
+use crate::system::exit::{Result, abort};
 
 pub fn install_crypto_provider() {
     if let Err(error) = aws_lc_rs::default_provider().install_default() {
@@ -26,7 +26,7 @@ pub fn install_crypto_provider() {
     }
 }
 
-pub fn build_kube_client(config: &Config) -> Outcome<Client> {
+pub fn build_kube_client(config: &Config) -> Result<Client> {
     match Client::try_from(config.clone()) {
         Ok(client) => Ok(client),
         Err(error) => {

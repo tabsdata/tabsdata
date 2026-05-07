@@ -64,12 +64,11 @@ td-python = { workspace = true }
 
 # External dependencies
 
-async-trait = { workspace = true }
+ambassador = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 clap_derive = { workspace = true }
 colored = { workspace = true }
 dirs = { workspace = true }
-getset = { workspace = true }
 indicatif = { workspace = true }
 k8s-openapi = { workspace = true, features = ["latest"] }
 kube = { workspace = true, default-features = false, features = ["client", "config", "rustls-tls"] }
@@ -85,6 +84,7 @@ terminal_size = { workspace = true }
 textwrap = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+walkdir = { workspace = true }
 
 [dev-dependencies]
 td-kubernetes = { workspace = true, features = ["td-test"] }

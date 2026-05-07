@@ -4,16 +4,14 @@
 
 use clap_derive::Args;
 use colored::Colorize;
-use getset::Getters;
 
 use crate::client::tdkcontext::TdkContext;
-use crate::system::exit::Outcome;
+use crate::system::exit::Result;
 
-#[derive(Debug, Clone, Getters, Args)]
-#[getset(get = "pub")]
+#[derive(Debug, Clone, Args)]
 pub struct UsingArguments {}
 
-pub async fn command_using(_arguments: UsingArguments) -> Outcome {
+pub async fn command_using(_arguments: UsingArguments) -> Result {
     match TdkContext::load()? {
         Some(tdkcontext) => tdkcontext.report_using(),
         None => println!("{}", "No active context is set.".dimmed()),

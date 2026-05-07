@@ -7,7 +7,6 @@ pub mod instance;
 
 use std::path::PathBuf;
 
-use async_trait::async_trait;
 use kube::Config;
 use td_common::server::DEFAULT_INSTANCE;
 use td_common::status::ExitStatus::GeneralError;
@@ -19,7 +18,7 @@ use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::constants::{CONFIGMAP_TABSDATA, FABRIC_KUBERNETES};
 use crate::fabric::kubernetes::cluster::KubernetesCluster;
 use crate::fabric::kubernetes::instance::KubernetesInstance;
-use crate::fabric::{Cluster, Commit, Fabric, Instance};
+use crate::fabric::{Cluster, Fabric, Instance, Transaction};
 use crate::instance::profile::load_profile;
 use crate::kubernetes::action::{
     configmap_exists, create_configmap, ensure_cluster_reachable, ensure_namespace_exists,
@@ -28,7 +27,7 @@ use crate::kubernetes::client::build_kube_client;
 use crate::kubernetes::kubeconfig::{
     build_kubeconfig, resolve_cluster_name, resolve_current_context, resolve_kubefile,
 };
-use crate::system::exit::{Outcome, abort};
+use crate::system::exit::{Result, abort};
 use crate::topology::{Topology, topology_for};
 
 pub struct KubernetesFabric {
@@ -43,11 +42,11 @@ pub struct KubernetesFabric {
 }
 
 impl KubernetesFabric {
-    pub async fn build(cluster: ClusterArguments, instance: InstanceArguments) -> Outcome<Self> {
+    pub async fn build(cluster: ClusterArguments, instance: InstanceArguments) -> Result<Self> {
         let provided_clusters = [
-            cluster.kubeconfig().is_some(),
-            cluster.context().is_some(),
-            *cluster.current(),
+            cluster.kubeconfig.is_some(),
+            cluster.context.is_some(),
+            cluster.current,
         ]
         .into_iter()
         .filter(|flag| *flag)
@@ -62,25 +61,25 @@ impl KubernetesFabric {
             cerror!("Arguments --kubeconfig, --context, and --current are mutually exclusive.");
             return abort(GeneralError);
         }
-        if instance.name().is_some() {
+        if instance.name.is_some() {
             cerror!("Argument --name is not valid for the '{FABRIC_KUBERNETES}' fabric.");
             return abort(GeneralError);
         }
-        if instance.path().is_some() {
+        if instance.path.is_some() {
             cerror!("Argument --path is not valid for the '{FABRIC_KUBERNETES}' fabric.");
             return abort(GeneralError);
         }
 
         let inputs = KubernetesInputs {
-            kubeconfig: cluster.kubeconfig().clone(),
-            context: cluster.context().clone(),
-            current: *cluster.current(),
-            namespace: cluster.namespace().clone(),
+            kubeconfig: cluster.kubeconfig.clone(),
+            context: cluster.context.clone(),
+            current: cluster.current,
+            namespace: cluster.namespace.clone(),
         };
 
-        let kubefile_argument = cluster.kubeconfig().as_deref();
-        let context_argument = cluster.context().as_deref();
-        let namespace_override = cluster.namespace().as_deref();
+        let kubefile_argument = cluster.kubeconfig.as_deref();
+        let context_argument = cluster.context.as_deref();
+        let namespace_override = cluster.namespace.as_deref();
 
         let Some(kubefile) = resolve_kubefile(kubefile_argument) else {
             cerror!(
@@ -93,7 +92,7 @@ impl KubernetesFabric {
             build_kubeconfig(kubefile_argument, context_argument, namespace_override).await?;
 
         let Some(context) = cluster
-            .context()
+            .context
             .clone()
             .or_else(|| resolve_current_context(kubefile_argument))
         else {
@@ -130,7 +129,6 @@ impl KubernetesFabric {
     }
 }
 
-#[async_trait]
 impl Fabric for KubernetesFabric {
     fn name(&self) -> &'static str {
         FABRIC_KUBERNETES
@@ -153,7 +151,7 @@ impl Fabric for KubernetesFabric {
         }
     }
 
-    async fn ensure_creatable_runtime(&self) -> Outcome {
+    async fn ensure_creatable_runtime(&self) -> Result {
         let client = build_kube_client(&self.config)?;
         ensure_cluster_reachable(&client).await?;
         ensure_namespace_exists(&client, &self.config.default_namespace).await?;
@@ -187,7 +185,7 @@ impl Fabric for KubernetesFabric {
         );
     }
 
-    async fn ensure_usable_runtime(&self) -> Outcome {
+    async fn ensure_usable_runtime(&self) -> Result {
         let client = build_kube_client(&self.config)?;
         ensure_cluster_reachable(&client).await?;
         ensure_namespace_exists(&client, &self.config.default_namespace).await?;
@@ -218,7 +216,7 @@ impl Fabric for KubernetesFabric {
         );
     }
 
-    async fn ensure_startable_runtime(&self) -> Outcome {
+    async fn ensure_startable_runtime(&self) -> Result {
         Ok(())
     }
 
@@ -239,7 +237,7 @@ impl Fabric for KubernetesFabric {
         info!("  export KUBECONFIG={}", self.kubefile.display());
     }
 
-    async fn ensure_stoppable_runtime(&self) -> Outcome {
+    async fn ensure_stoppable_runtime(&self) -> Result {
         Ok(())
     }
 
@@ -253,24 +251,24 @@ impl Fabric for KubernetesFabric {
 
     fn report_stopped_runtime(&self) {}
 
-    async fn prepare_cluster(&self) -> Outcome<Box<dyn Commit>> {
+    async fn prepare_cluster(&self) -> Result<Box<dyn Transaction>> {
         self.cluster.create()?;
         Ok(Box::new(()))
     }
 
-    async fn start_cluster(&self) -> Outcome {
+    async fn start_cluster(&self) -> Result {
         self.cluster.start().await
     }
 
-    async fn stop_cluster(&self) -> Outcome<bool> {
+    async fn stop_cluster(&self) -> Result<bool> {
         self.cluster.stop().await
     }
 
-    async fn stage_configmap(&self, _profile: &str) -> Outcome {
+    async fn stage_configmap(&self, _profile: &str) -> Result {
         Ok(())
     }
 
-    async fn store_configmap(&self, profile: &str) -> Outcome {
+    async fn store_configmap(&self, profile: &str) -> Result {
         let configmap_data = load_profile(profile, self.topology)?;
         let client = build_kube_client(&self.config)?;
         create_configmap(
@@ -282,11 +280,11 @@ impl Fabric for KubernetesFabric {
         .await
     }
 
-    async fn start_instance(&self) -> Outcome {
+    async fn start_instance(&self) -> Result {
         self.instance.start().await
     }
 
-    async fn stop_instance(&self) -> Outcome<bool> {
+    async fn stop_instance(&self) -> Result<bool> {
         self.instance.stop().await
     }
 }

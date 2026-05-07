@@ -9,7 +9,7 @@ use td_common::status::ExitStatus::GeneralError;
 
 use crate::cerror;
 use crate::constants::{ENV_KUBECONFIG, FILE_KUBECONFIG, FOLDER_KUBE};
-use crate::system::exit::{Outcome, abort};
+use crate::system::exit::{Result, abort};
 
 pub fn resolve_kubefile(kubefile: Option<&Path>) -> Option<PathBuf> {
     if let Some(path) = kubefile {
@@ -95,7 +95,7 @@ pub async fn build_kubeconfig(
     kubefile: Option<&Path>,
     context: Option<&str>,
     namespace_override: Option<&str>,
-) -> Outcome<Config> {
+) -> Result<Config> {
     let kubeconfig = match kubefile {
         Some(path) => match Kubeconfig::read_from(path) {
             Ok(kubeconfig) => kubeconfig,

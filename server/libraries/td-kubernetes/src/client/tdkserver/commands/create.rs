@@ -3,23 +3,21 @@
 //
 
 use clap_derive::Args;
-use getset::Getters;
 use tracing::info;
 
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::prompt_yes_no;
 use crate::constants::PROFILE_PRODUCTION;
-use crate::fabric::fabric_for;
-use crate::system::exit::Outcome;
+use crate::fabric::{Fabric, fabric_for};
+use crate::system::exit::Result;
 
-#[derive(Debug, Clone, Getters, Args)]
-#[getset(get = "pub")]
+#[derive(Debug, Clone, Args)]
 pub struct CreateArguments {
     #[command(flatten)]
-    cluster: ClusterArguments,
+    pub cluster: ClusterArguments,
 
     #[command(flatten)]
-    instance: InstanceArguments,
+    pub instance: InstanceArguments,
 
     #[cfg(td_k8s_development)]
     #[arg(
@@ -29,7 +27,7 @@ pub struct CreateArguments {
         long_help = "Profile to use when generating kubernetes manifests. \
                      When unspecified, defaults to 'production'."
     )]
-    profile: Option<String>,
+    pub profile: Option<String>,
 
     #[arg(
         long,
@@ -42,7 +40,7 @@ pub struct CreateArguments {
                      before creating the instance. Defaults to 'true'. \
                      Pass '--preview false' to skip the summary and prompt."
     )]
-    preview: bool,
+    pub preview: bool,
 
     #[arg(
         long,
@@ -53,13 +51,13 @@ pub struct CreateArguments {
         long_help = "Skip the interactive confirmation prompt and proceed immediately. \
                      Has no effect when --preview is 'false'."
     )]
-    yes: bool,
+    pub yes: bool,
 }
 
 #[cfg(td_k8s_development)]
 fn resolve_profile(arguments: &CreateArguments) -> String {
     arguments
-        .profile()
+        .profile
         .as_deref()
         .unwrap_or(PROFILE_PRODUCTION)
         .to_owned()
@@ -70,7 +68,7 @@ fn resolve_profile(_arguments: &CreateArguments) -> String {
     PROFILE_PRODUCTION.to_owned()
 }
 
-pub async fn command_create(arguments: CreateArguments) -> Outcome {
+pub async fn command_create(arguments: CreateArguments) -> Result {
     let profile = resolve_profile(&arguments);
     let CreateArguments {
         cluster,

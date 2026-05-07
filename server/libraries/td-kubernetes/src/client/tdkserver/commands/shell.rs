@@ -24,7 +24,7 @@ use super::r#use::{UseArguments, command_use};
 use super::using::{UsingArguments, command_using};
 use crate::cerror;
 use crate::client::tdkcontext::{TdkContext, tdkcontext_path};
-use crate::system::exit::Outcome;
+use crate::system::exit::Result;
 
 const TOOL_NAME: &str = "tdkserver";
 const HISTORY_FILE: &str = ".tdkserver.history";
@@ -57,7 +57,7 @@ struct ShellInput {
     command: ShellCommand,
 }
 
-pub async fn command_shell() -> Outcome {
+pub async fn command_shell() -> Result {
     show_quick_reference();
     show_initial_active_context();
 

@@ -68,13 +68,15 @@ fn request_graceful_shutdown(pid: u32) {
 
 fn wait_for_exit(pid: u32, timeout: Duration) -> bool {
     let deadline = Instant::now() + timeout;
-    while Instant::now() < deadline {
+    loop {
         if !is_alive(pid) {
             return true;
         }
+        if Instant::now() >= deadline {
+            return false;
+        }
         std::thread::sleep(Duration::from_millis(100));
     }
-    !is_alive(pid)
 }
 
 fn force_kill_tree(pid: u32) {

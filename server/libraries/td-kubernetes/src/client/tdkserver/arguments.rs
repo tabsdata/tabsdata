@@ -6,7 +6,6 @@ use std::path::PathBuf;
 
 use clap::Parser;
 use clap_derive::{Args, Subcommand};
-use getset::Getters;
 
 use crate::client::tdkserver::commands::create::CreateArguments;
 use crate::client::tdkserver::commands::start::StartArguments;
@@ -55,8 +54,7 @@ pub enum Commands {
     Stop(StopArguments),
 }
 
-#[derive(Debug, Clone, Getters, Args)]
-#[getset(get = "pub")]
+#[derive(Debug, Clone, Args)]
 pub struct ClusterArguments {
     #[arg(
         long,
@@ -69,7 +67,7 @@ pub struct ClusterArguments {
                      When unspecified, the value from the active context is taken; \
                      when no active context is set, this argument is required."
     )]
-    fabric: Option<ClusterFabric>,
+    pub fabric: Option<ClusterFabric>,
 
     #[arg(
         long,
@@ -80,7 +78,7 @@ pub struct ClusterArguments {
                      Mutually exclusive with --current. \
                      Composes with --kubeconfig."
     )]
-    context: Option<String>,
+    pub context: Option<String>,
 
     #[arg(
         long,
@@ -92,7 +90,7 @@ pub struct ClusterArguments {
                      When unspecified, the file pointed to by the KUBECONFIG environment variable, or ~/.kube/config, is used. \
                      Composes with --context and --current."
     )]
-    kubeconfig: Option<PathBuf>,
+    pub kubeconfig: Option<PathBuf>,
 
     #[arg(
         long,
@@ -104,7 +102,7 @@ pub struct ClusterArguments {
                      Mutually exclusive with --context. \
                      Composes with --kubeconfig."
     )]
-    current: bool,
+    pub current: bool,
 
     #[arg(
         long,
@@ -115,7 +113,7 @@ pub struct ClusterArguments {
                      Overrides the namespace defined in the kubeconfig context. \
                      When neither is set, the kubernetes default namespace is used."
     )]
-    namespace: Option<String>,
+    pub namespace: Option<String>,
 }
 
 impl ClusterArguments {
@@ -136,8 +134,7 @@ impl ClusterArguments {
     }
 }
 
-#[derive(Debug, Clone, Getters, Args)]
-#[getset(get = "pub")]
+#[derive(Debug, Clone, Args)]
 pub struct InstanceArguments {
     #[arg(
         long,
@@ -148,7 +145,7 @@ pub struct InstanceArguments {
                      The instance is created in ~/.tabsdata/instances/<name>. \
                      Mutually exclusive with --path."
     )]
-    name: Option<String>,
+    pub name: Option<String>,
 
     #[arg(
         long,
@@ -161,7 +158,7 @@ pub struct InstanceArguments {
                      Absolute paths are used as-is. \
                      Mutually exclusive with --name."
     )]
-    path: Option<PathBuf>,
+    pub path: Option<PathBuf>,
 }
 
 impl InstanceArguments {

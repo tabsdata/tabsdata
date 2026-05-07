@@ -14,7 +14,7 @@ use crate::cerror;
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::constants::{FABRIC_KMINUS, FABRIC_KUBERNETES};
 use crate::fabric::ClusterFabric;
-use crate::system::exit::{Outcome, abort};
+use crate::system::exit::{Result, abort};
 
 const TDKCONTEXT_FILE: &str = "tdkcontext.json";
 
@@ -68,7 +68,7 @@ pub fn tdkcontext_path() -> PathBuf {
 }
 
 impl TdkContext {
-    pub fn load() -> Outcome<Option<Self>> {
+    pub fn load() -> Result<Option<Self>> {
         let path = tdkcontext_path();
         if !path.exists() {
             return Ok(None);
@@ -98,7 +98,7 @@ impl TdkContext {
         serde_json::from_str(&data).ok()
     }
 
-    pub fn save(&self) -> Outcome {
+    pub fn save(&self) -> Result {
         let path = tdkcontext_path();
         if let Some(parent) = path.parent()
             && let Err(error) = fs::create_dir_all(parent)
@@ -120,7 +120,7 @@ impl TdkContext {
         Ok(())
     }
 
-    pub fn delete() -> Outcome<bool> {
+    pub fn delete() -> Result<bool> {
         let path = tdkcontext_path();
         if !path.exists() {
             return Ok(false);

@@ -2,10 +2,8 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-use async_trait::async_trait;
-
 use crate::fabric::Instance;
-use crate::system::exit::Outcome;
+use crate::system::exit::Result;
 
 #[derive(Default)]
 pub struct KubernetesInstance;
@@ -16,13 +14,12 @@ impl KubernetesInstance {
     }
 }
 
-#[async_trait]
 impl Instance for KubernetesInstance {
-    async fn start(&self) -> Outcome {
+    async fn start(&self) -> Result {
         Ok(())
     }
 
-    async fn stop(&self) -> Outcome<bool> {
+    async fn stop(&self) -> Result<bool> {
         Ok(false)
     }
 

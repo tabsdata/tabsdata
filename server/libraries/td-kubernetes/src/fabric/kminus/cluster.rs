@@ -5,9 +5,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command as SystemCommand, Stdio};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-use async_trait::async_trait;
 use kube::Client;
 use kube::config::{Config, KubeConfigOptions, Kubeconfig};
 use td_common::status::ExitStatus::GeneralError;
@@ -15,8 +14,8 @@ use td_python::python::resolve_python_binary;
 
 use crate::cerror;
 use crate::constants::{FOLDER_PROFILE, FOLDER_STAGING};
-use crate::fabric::{Cluster, Commit};
-use crate::system::exit::{Outcome, abort};
+use crate::fabric::{Cluster, Transaction};
+use crate::system::exit::{Result, abort};
 use crate::system::stream::Silencer;
 use crate::system::subprocess::{
     apply_detached_flags, apply_subprocess_flags, is_alive as process_is_alive, terminate_process,
@@ -74,7 +73,7 @@ impl KminusCluster {
             .join(KM_PIDS_FOLDER)
     }
 
-    fn spawn_km(&self) -> Outcome {
+    fn spawn_km(&self) -> Result {
         let km = match resolve_python_binary(KM_BINARY) {
             Ok(path) => path,
             Err(error) => {
@@ -103,26 +102,25 @@ impl KminusCluster {
 
     async fn poll_ready(&self) -> bool {
         let kubefile = self.kubefile();
-        let started = Instant::now();
-        loop {
-            let ready = {
-                let _silencer = Silencer::new().ok();
-                try_connect(&kubefile).await
-            };
-            if ready {
-                return true;
+        tokio::time::timeout(KM_POLL_ALIVE_TIMEOUT, async {
+            loop {
+                let ready = {
+                    let _silencer = Silencer::new().ok();
+                    try_connect(&kubefile).await
+                };
+                if ready {
+                    return;
+                }
+                tokio::time::sleep(KM_POLL_INTERVAL).await;
             }
-            if started.elapsed() >= KM_POLL_ALIVE_TIMEOUT {
-                return false;
-            }
-            tokio::time::sleep(KM_POLL_INTERVAL).await;
-        }
+        })
+        .await
+        .is_ok()
     }
 }
 
-#[async_trait]
 impl Cluster for KminusCluster {
-    fn create(&self) -> Outcome {
+    fn create(&self) -> Result {
         let km = match resolve_python_binary(KM_BINARY) {
             Ok(path) => path,
             Err(error) => {
@@ -159,7 +157,7 @@ impl Cluster for KminusCluster {
         Ok(())
     }
 
-    async fn start(&self) -> Outcome {
+    async fn start(&self) -> Result {
         if self.is_alive().await {
             return Ok(());
         }
@@ -181,7 +179,7 @@ impl Cluster for KminusCluster {
         Ok(())
     }
 
-    async fn stop(&self) -> Outcome<bool> {
+    async fn stop(&self) -> Result<bool> {
         if self.is_dead().await {
             return Ok(false);
         }
@@ -207,25 +205,23 @@ impl Cluster for KminusCluster {
     }
 
     async fn poll_alive(&self) -> bool {
-        let started = Instant::now();
-        while !self.is_alive().await {
-            if started.elapsed() >= KM_POLL_ALIVE_TIMEOUT {
-                return false;
+        tokio::time::timeout(KM_POLL_ALIVE_TIMEOUT, async {
+            while !self.is_alive().await {
+                tokio::time::sleep(KM_POLL_INTERVAL).await;
             }
-            tokio::time::sleep(KM_POLL_INTERVAL).await;
-        }
-        true
+        })
+        .await
+        .is_ok()
     }
 
     async fn poll_dead(&self) -> bool {
-        let started = Instant::now();
-        while !self.is_dead().await {
-            if started.elapsed() >= KM_POLL_DEAD_TIMEOUT {
-                return false;
+        tokio::time::timeout(KM_POLL_DEAD_TIMEOUT, async {
+            while !self.is_dead().await {
+                tokio::time::sleep(KM_POLL_INTERVAL).await;
             }
-            tokio::time::sleep(KM_POLL_INTERVAL).await;
-        }
-        true
+        })
+        .await
+        .is_ok()
     }
 }
 
@@ -241,7 +237,7 @@ impl InstanceFolderGuard {
     }
 }
 
-impl Commit for InstanceFolderGuard {
+impl Transaction for InstanceFolderGuard {
     fn commit(mut self: Box<Self>) {
         self.folder = None;
     }

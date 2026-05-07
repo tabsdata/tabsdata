@@ -6,7 +6,6 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 
-use async_trait::async_trait;
 use td_common::status::ExitStatus::GeneralError;
 
 use crate::cerror;
@@ -15,7 +14,7 @@ use crate::fabric::Instance;
 use crate::kubernetes::action::{configmap_exists, create_configmap, delete_configmap};
 use crate::kubernetes::client::build_kube_client;
 use crate::kubernetes::kubeconfig::build_kubeconfig;
-use crate::system::exit::{Outcome, abort};
+use crate::system::exit::{Result, abort};
 
 pub struct KminusInstance {
     kubefile: PathBuf,
@@ -34,7 +33,7 @@ impl KminusInstance {
         self.staging_path.join(FOLDER_PROFILE)
     }
 
-    fn read_staged_profile(&self) -> Outcome<Option<BTreeMap<String, String>>> {
+    fn read_staged_profile(&self) -> Result<Option<BTreeMap<String, String>>> {
         let staged_folder = self.staging_profile_path();
         if !staged_folder.is_dir() {
             return Ok(None);
@@ -84,7 +83,7 @@ impl KminusInstance {
         }
     }
 
-    async fn replace_configmap(&self, data: BTreeMap<String, String>) -> Outcome {
+    async fn replace_configmap(&self, data: BTreeMap<String, String>) -> Result {
         let kminus_config = build_kubeconfig(Some(&self.kubefile), None, None).await?;
         let client = build_kube_client(&kminus_config)?;
         let namespace = &kminus_config.default_namespace;
@@ -95,9 +94,8 @@ impl KminusInstance {
     }
 }
 
-#[async_trait]
 impl Instance for KminusInstance {
-    async fn start(&self) -> Outcome {
+    async fn start(&self) -> Result {
         let staged = self.read_staged_profile()?;
         let Some(data) = staged else {
             return Ok(());
@@ -113,7 +111,7 @@ impl Instance for KminusInstance {
         Ok(())
     }
 
-    async fn stop(&self) -> Outcome<bool> {
+    async fn stop(&self) -> Result<bool> {
         Ok(false)
     }
 

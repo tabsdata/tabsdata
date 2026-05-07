@@ -18,12 +18,12 @@ use crate::client::tdkserver::commands::unuse::command_unuse;
 use crate::client::tdkserver::commands::r#use::command_use;
 use crate::client::tdkserver::commands::using::command_using;
 use crate::kubernetes::client::install_crypto_provider;
-use crate::system::exit::Outcome;
+use crate::system::exit::Result;
 
 pub struct TabsDataKubernetesClient;
 
 impl TabsDataKubernetesClient {
-    async fn run(&self) -> Outcome {
+    async fn run(&self) -> Result {
         let arguments = Arguments::parse();
         match arguments.command {
             None => {
