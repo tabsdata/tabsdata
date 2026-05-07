@@ -69,12 +69,14 @@ clap_derive = { workspace = true }
 colored = { workspace = true }
 dirs = { workspace = true }
 getset = { workspace = true }
+indicatif = { workspace = true }
 k8s-openapi = { workspace = true, features = ["latest"] }
 kube = { workspace = true, default-features = false, features = ["client", "config", "rustls-tls"] }
 reedline = { workspace = true }
 rustls = { workspace = true, features = ["aws-lc-rs", "ring"] }
 shlex = { workspace = true }
 supports-color = { workspace = true }
+sysinfo = { workspace = true }
 terminal_size = { workspace = true }
 textwrap = { workspace = true }
 tokio = { workspace = true }

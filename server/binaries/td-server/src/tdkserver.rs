@@ -23,6 +23,9 @@ use tracing::Level;
 
 const ACK: &str = ".ack";
 
+const RUST_LOG: &str = "RUST_LOG";
+const RUST_LOG_DIRECTIVES: &str = "info,kube_client::client::tls=error,td_common::os=error";
+
 const COMPATIBILITY_PY: &str = include_str!(concat!(
     workspace_root!(),
     "/client/platform/src/main/python/tabsdata/_utils/compatibility.py"
@@ -107,6 +110,10 @@ fn check_polars() {
 #[tokio::main]
 #[attach(signal = "tdkserver")]
 async fn main() {
+    let previous_rust_log = env::var_os(RUST_LOG);
+    unsafe {
+        env::set_var(RUST_LOG, RUST_LOG_DIRECTIVES);
+    }
     logging::start(
         Some(Level::INFO),
         Some(CONSOLE_PROFILE.to_string()),
@@ -114,6 +121,12 @@ async fn main() {
         false,
         Some(LogFormat::CompactColored),
     );
+    unsafe {
+        match previous_rust_log {
+            Some(value) => env::set_var(RUST_LOG, value),
+            None => env::remove_var(RUST_LOG),
+        }
+    }
     let accept_terms = extract_accept_terms();
     let previously_acknowledged = check_banner(accept_terms).unwrap_or(false);
     if !previously_acknowledged {

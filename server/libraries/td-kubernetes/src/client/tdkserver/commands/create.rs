@@ -4,6 +4,7 @@
 
 use std::fs;
 use std::path::PathBuf;
+use std::time::Instant;
 
 use clap_derive::Args;
 use getset::Getters;
@@ -15,16 +16,22 @@ use tracing::{error, info};
 
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::{prompt_yes_no, validate_instance_name};
-use crate::constants::{FABRIC_KMINUS, FABRIC_KUBERNETES, FOLDER_CLUSTER, PROFILE_PRODUCTION};
+use crate::client::tdkserver::widgets::spinner;
+use crate::constants::{
+    CONFIGMAP_TABSDATA, FABRIC_KMINUS, FABRIC_KUBERNETES, FOLDER_CLUSTER, PROFILE_PRODUCTION,
+};
 use crate::exit::{Outcome, abort};
-use crate::kminus::action::create_cluster;
+use crate::kminus::action::{InstanceFolderGuard, create_cluster, start_cluster};
 use crate::kminus::model::KminusInstance;
-use crate::kubernetes::action::{ensure_cluster_reachable, ensure_namespace_exists};
+use crate::kubernetes::action::{
+    configmap_exists, create_configmap, ensure_cluster_reachable, ensure_namespace_exists,
+};
 use crate::kubernetes::client::build_kube_client;
 use crate::kubernetes::toolkit::{
     build_kubeconfig, resolve_cluster_name, resolve_current_context, resolve_kubeconfig_path,
 };
-use crate::topology::ClusterFabric;
+use crate::profile::load_profile;
+use crate::topology::{ClusterFabric, topology_for};
 
 #[derive(Debug, Clone, Getters, Args)]
 #[getset(get = "pub")]
@@ -104,6 +111,13 @@ pub async fn command_create(arguments: CreateArguments) -> Outcome {
         let client = build_kube_client(config)?;
         ensure_cluster_reachable(&client).await?;
         ensure_namespace_exists(&client, &config.default_namespace).await?;
+        if configmap_exists(&client, &config.default_namespace, CONFIGMAP_TABSDATA).await? {
+            error!(
+                "A Tabsdata instance already exists in namespace '{}'.",
+                config.default_namespace
+            );
+            return abort(GeneralError);
+        }
     }
 
     let resolved_instance = resolve_instance(&resolved_cluster, &instance)?;
@@ -120,14 +134,25 @@ pub async fn command_create(arguments: CreateArguments) -> Outcome {
         return Ok(());
     }
 
+    let topology = topology_for(resolved_cluster.fabric);
+    let configmap_data = load_profile(&profile, topology)?;
+
     match resolved_cluster.fabric {
         ClusterFabric::Kubernetes => {
             let Some(config) = resolved_cluster.config else {
                 error!("Failed to resolve the Kubernetes configuration.");
                 return abort(GeneralError);
             };
+            let client = build_kube_client(&config)?;
+            create_configmap(
+                &client,
+                &config.default_namespace,
+                CONFIGMAP_TABSDATA,
+                configmap_data,
+            )
+            .await?;
             info!(
-                "Would create Tabsdata instance '{}' in namespace '{}' (placeholder).",
+                "Created Tabsdata instance '{}' in namespace '{}'.",
                 resolved_instance.name, config.default_namespace
             );
         }
@@ -147,8 +172,42 @@ pub async fn command_create(arguments: CreateArguments) -> Outcome {
                 );
                 return abort(GeneralError);
             }
+            let folder_guard = InstanceFolderGuard::new(folder.clone());
+
             let kminus_instance = KminusInstance::new(folder.join(FOLDER_CLUSTER));
             create_cluster(&kminus_instance)?;
+
+            let starting_spinner = spinner("Starting kminus cluster");
+            let started_at = Instant::now();
+            let cluster_guard = start_cluster(&kminus_instance).await?;
+            starting_spinner.finish_and_clear();
+            info!(
+                "Kminus cluster started in {:.1}s.",
+                started_at.elapsed().as_secs_f32()
+            );
+
+            let kminus_config =
+                build_kubeconfig(Some(&kminus_instance.kubeconfig_path()), None, None).await?;
+            let client = build_kube_client(&kminus_config)?;
+            create_configmap(
+                &client,
+                &kminus_config.default_namespace,
+                CONFIGMAP_TABSDATA,
+                configmap_data,
+            )
+            .await?;
+
+            let stopping_spinner = spinner("Stopping kminus cluster");
+            let stopped_at = Instant::now();
+            drop(cluster_guard);
+            stopping_spinner.finish_and_clear();
+            info!(
+                "Kminus cluster stopped in {:.1}s.",
+                stopped_at.elapsed().as_secs_f32()
+            );
+
+            folder_guard.commit();
+
             info!("Created tabsdata instance at {}.", folder.display());
             info!(
                 "Edit '{}' to customize ports or log settings of the instance's kminus cluster.",

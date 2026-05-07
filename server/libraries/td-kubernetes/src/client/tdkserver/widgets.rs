@@ -2,7 +2,10 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+use std::time::Duration;
+
 use colored::Colorize;
+use indicatif::{ProgressBar, ProgressStyle};
 use terminal_size::{Width, terminal_size};
 use textwrap::{Options, WordSeparator, fill};
 use tm_workspace::workspace_root;
@@ -67,4 +70,15 @@ pub fn show_box(text: &str, min: usize) {
 
 pub fn show_banner() {
     show_box(BANNER, 80);
+}
+
+pub fn spinner(message: &str) -> ProgressBar {
+    let bar = ProgressBar::new_spinner();
+    bar.set_style(
+        ProgressStyle::with_template("{spinner:.cyan} {msg} {elapsed:.dim}")
+            .unwrap_or_else(|_| ProgressStyle::default_spinner()),
+    );
+    bar.set_message(message.to_owned());
+    bar.enable_steady_tick(Duration::from_millis(120));
+    bar
 }

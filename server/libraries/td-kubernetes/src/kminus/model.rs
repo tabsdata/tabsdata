@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 const KM_CONFIG_FOLDER: &str = "config";
 const KM_SYSCONFIG_FILE: &str = "kmsysconfig.yaml";
+const KM_KUBECONFIG_FILE: &str = "kubeconfig.yaml";
 
 pub struct KminusInstance {
     path: PathBuf,
@@ -22,5 +23,9 @@ impl KminusInstance {
 
     pub fn sysconfig_path(&self) -> PathBuf {
         self.path.join(KM_CONFIG_FOLDER).join(KM_SYSCONFIG_FILE)
+    }
+
+    pub fn kubeconfig_path(&self) -> PathBuf {
+        self.path.join(KM_CONFIG_FOLDER).join(KM_KUBECONFIG_FILE)
     }
 }

@@ -3,12 +3,21 @@
 //
 
 use crate::constants::FABRIC_KMINUS;
-use crate::topology::Topology;
+use crate::topology::{FABRIC_PREFIX_K4S, FABRIC_PREFIX_K8S, FabricPrefixes, Topology};
 
 pub struct KminusTopology;
+
+const PREFIXES: FabricPrefixes = FabricPrefixes {
+    keep: FABRIC_PREFIX_K4S,
+    drop: &[FABRIC_PREFIX_K8S],
+};
 
 impl Topology for KminusTopology {
     fn name(&self) -> &'static str {
         FABRIC_KMINUS
+    }
+
+    fn fabric_prefixes(&self) -> &'static FabricPrefixes {
+        &PREFIXES
     }
 }
