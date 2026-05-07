@@ -18,18 +18,18 @@ use crate::client::tdkcontext::{KminusInputs, TdkContext};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::validate_instance_name;
 use crate::client::tdkserver::widgets::spinner;
-use crate::constants::{FABRIC_KMINUS, FOLDER_CLUSTER};
-use crate::fabric::kminus::cluster::{InstanceFolderGuard, KminusCluster};
-use crate::fabric::kminus::instance::KminusInstance;
-use crate::fabric::{Cluster, Fabric, Instance, Transaction};
+use crate::constants::{FOLDER_CLUSTER, PROVIDER_KMINUS};
 use crate::instance::profile::load_profile;
 use crate::kubernetes::kubeconfig::{
     resolve_cluster_name, resolve_cluster_url, resolve_current_context, resolve_namespace,
 };
+use crate::provider::kminus::cluster::{InstanceFolderGuard, KminusCluster};
+use crate::provider::kminus::instance::KminusInstance;
+use crate::provider::{Cluster, Instance, Provider, Transaction};
 use crate::system::exit::{Result, abort};
 use crate::topology::{Topology, topology_for};
 
-pub struct KminusFabric {
+pub struct KminusProvider {
     name: String,
     folder: PathBuf,
     cluster: KminusCluster,
@@ -38,7 +38,7 @@ pub struct KminusFabric {
     inputs: KminusInputs,
 }
 
-impl KminusFabric {
+impl KminusProvider {
     pub fn build(cluster: ClusterArguments, instance: InstanceArguments) -> Result<Self> {
         if cluster.context.is_some()
             || cluster.kubeconfig.is_some()
@@ -46,7 +46,7 @@ impl KminusFabric {
             || cluster.namespace.is_some()
         {
             cerror!(
-                "Arguments --context, --kubeconfig, --current, and --namespace are not valid for the '{FABRIC_KMINUS}' fabric."
+                "Arguments --context, --kubeconfig, --current, and --namespace are not valid for the '{PROVIDER_KMINUS}' provider."
             );
             return abort(GeneralError);
         }
@@ -101,7 +101,7 @@ impl KminusFabric {
         let kminus_cluster = KminusCluster::new(folder.join(FOLDER_CLUSTER));
         let kminus_instance =
             KminusInstance::new(kminus_cluster.kubefile(), kminus_cluster.staging_path());
-        let topology = topology_for(crate::fabric::ClusterFabric::Kminus);
+        let topology = topology_for(crate::provider::ClusterProvider::Kminus);
 
         Ok(Self {
             name,
@@ -138,13 +138,13 @@ struct KubeSummary {
     namespace: String,
 }
 
-impl Fabric for KminusFabric {
+impl Provider for KminusProvider {
     fn name(&self) -> &'static str {
-        FABRIC_KMINUS
+        PROVIDER_KMINUS
     }
 
     fn display_name(&self) -> String {
-        format!("{FABRIC_KMINUS}:{}", self.name)
+        format!("{PROVIDER_KMINUS}:{}", self.name)
     }
 
     fn to_tdkcontext(&self) -> TdkContext {
@@ -172,7 +172,7 @@ impl Fabric for KminusFabric {
         if cfg!(td_k8s_development) {
             info!("  - profile......: {profile}");
         }
-        info!("  - fabric.......: {FABRIC_KMINUS}");
+        info!("  - provider.....: {PROVIDER_KMINUS}");
         info!("  - instance name: {}", self.name);
         info!("  - instance path: {}", self.folder.display());
     }
@@ -207,7 +207,7 @@ impl Fabric for KminusFabric {
     fn preview_use_runtime_summary(&self) {
         let summary = self.kube_summary();
         info!("About to use tabsdata instance:");
-        info!("  - fabric.......: {FABRIC_KMINUS}");
+        info!("  - provider.....: {PROVIDER_KMINUS}");
         info!("  - instance name: {}", self.name);
         info!("  - instance path: {}", self.folder.display());
         info!("  - kubeconfig...: {}", summary.kubefile.display());
@@ -244,7 +244,7 @@ impl Fabric for KminusFabric {
     fn preview_start_runtime_summary(&self) {
         let summary = self.kube_summary();
         info!("About to start tabsdata instance:");
-        info!("  - fabric.......: {FABRIC_KMINUS}");
+        info!("  - provider.....: {PROVIDER_KMINUS}");
         info!("  - instance name: {}", self.name);
         info!("  - instance path: {}", self.folder.display());
         info!("  - kubeconfig...: {}", summary.kubefile.display());
@@ -283,7 +283,7 @@ impl Fabric for KminusFabric {
     fn preview_stop_runtime_summary(&self) {
         let summary = self.kube_summary();
         info!("About to stop tabsdata instance:");
-        info!("  - fabric.......: {FABRIC_KMINUS}");
+        info!("  - provider.....: {PROVIDER_KMINUS}");
         info!("  - instance name: {}", self.name);
         info!("  - instance path: {}", self.folder.display());
         info!("  - kubeconfig...: {}", summary.kubefile.display());

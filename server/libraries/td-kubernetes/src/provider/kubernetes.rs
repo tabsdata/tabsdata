@@ -15,10 +15,7 @@ use tracing::info;
 use crate::cerror;
 use crate::client::tdkcontext::{KubernetesInputs, TdkContext};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
-use crate::constants::{CONFIGMAP_TABSDATA, FABRIC_KUBERNETES};
-use crate::fabric::kubernetes::cluster::KubernetesCluster;
-use crate::fabric::kubernetes::instance::KubernetesInstance;
-use crate::fabric::{Cluster, Fabric, Instance, Transaction};
+use crate::constants::{CONFIGMAP_TABSDATA, PROVIDER_KUBERNETES};
 use crate::instance::profile::load_profile;
 use crate::kubernetes::action::{
     configmap_exists, create_configmap, ensure_cluster_reachable, ensure_namespace_exists,
@@ -27,10 +24,13 @@ use crate::kubernetes::client::build_kube_client;
 use crate::kubernetes::kubeconfig::{
     build_kubeconfig, resolve_cluster_name, resolve_current_context, resolve_kubefile,
 };
+use crate::provider::kubernetes::cluster::KubernetesCluster;
+use crate::provider::kubernetes::instance::KubernetesInstance;
+use crate::provider::{Cluster, Instance, Provider, Transaction};
 use crate::system::exit::{Result, abort};
 use crate::topology::{Topology, topology_for};
 
-pub struct KubernetesFabric {
+pub struct KubernetesProvider {
     kubefile: PathBuf,
     context: String,
     cluster_name: String,
@@ -41,7 +41,7 @@ pub struct KubernetesFabric {
     inputs: KubernetesInputs,
 }
 
-impl KubernetesFabric {
+impl KubernetesProvider {
     pub async fn build(cluster: ClusterArguments, instance: InstanceArguments) -> Result<Self> {
         let provided_clusters = [
             cluster.kubeconfig.is_some(),
@@ -62,11 +62,11 @@ impl KubernetesFabric {
             return abort(GeneralError);
         }
         if instance.name.is_some() {
-            cerror!("Argument --name is not valid for the '{FABRIC_KUBERNETES}' fabric.");
+            cerror!("Argument --name is not valid for the '{PROVIDER_KUBERNETES}' provider.");
             return abort(GeneralError);
         }
         if instance.path.is_some() {
-            cerror!("Argument --path is not valid for the '{FABRIC_KUBERNETES}' fabric.");
+            cerror!("Argument --path is not valid for the '{PROVIDER_KUBERNETES}' provider.");
             return abort(GeneralError);
         }
 
@@ -111,7 +111,7 @@ impl KubernetesFabric {
             config.default_namespace = DEFAULT_INSTANCE.to_string();
         }
 
-        let topology = topology_for(crate::fabric::ClusterFabric::Kubernetes);
+        let topology = topology_for(crate::provider::ClusterProvider::Kubernetes);
 
         let cluster = KubernetesCluster::new(config.clone());
         let instance = KubernetesInstance::new();
@@ -129,14 +129,14 @@ impl KubernetesFabric {
     }
 }
 
-impl Fabric for KubernetesFabric {
+impl Provider for KubernetesProvider {
     fn name(&self) -> &'static str {
-        FABRIC_KUBERNETES
+        PROVIDER_KUBERNETES
     }
 
     fn display_name(&self) -> String {
         format!(
-            "{FABRIC_KUBERNETES}:{}/{}",
+            "{PROVIDER_KUBERNETES}:{}/{}",
             self.context, self.config.default_namespace
         )
     }
@@ -170,7 +170,7 @@ impl Fabric for KubernetesFabric {
         if cfg!(td_k8s_development) {
             info!("  - profile......: {profile}");
         }
-        info!("  - fabric.......: {FABRIC_KUBERNETES}");
+        info!("  - provider.....: {PROVIDER_KUBERNETES}");
         info!("  - kubeconfig...: {}", self.kubefile.display());
         info!("  - context......: {}", self.context);
         info!("  - cluster url..: {}", self.config.cluster_url);
@@ -201,7 +201,7 @@ impl Fabric for KubernetesFabric {
 
     fn preview_use_runtime_summary(&self) {
         info!("About to use tabsdata instance:");
-        info!("  - fabric.......: {FABRIC_KUBERNETES}");
+        info!("  - provider.....: {PROVIDER_KUBERNETES}");
         info!("  - kubeconfig...: {}", self.kubefile.display());
         info!("  - context......: {}", self.context);
         info!("  - cluster url..: {}", self.config.cluster_url);
@@ -222,7 +222,7 @@ impl Fabric for KubernetesFabric {
 
     fn preview_start_runtime_summary(&self) {
         info!("About to start tabsdata instance:");
-        info!("  - fabric.......: {FABRIC_KUBERNETES}");
+        info!("  - provider.....: {PROVIDER_KUBERNETES}");
         info!("  - kubeconfig...: {}", self.kubefile.display());
         info!("  - context......: {}", self.context);
         info!("  - namespace....: {}", self.config.default_namespace);
@@ -243,7 +243,7 @@ impl Fabric for KubernetesFabric {
 
     fn preview_stop_runtime_summary(&self) {
         info!("About to stop tabsdata instance:");
-        info!("  - fabric.......: {FABRIC_KUBERNETES}");
+        info!("  - provider.....: {PROVIDER_KUBERNETES}");
         info!("  - kubeconfig...: {}", self.kubefile.display());
         info!("  - context......: {}", self.context);
         info!("  - namespace....: {}", self.config.default_namespace);

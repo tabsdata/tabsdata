@@ -14,7 +14,7 @@ use td_python::python::resolve_python_binary;
 
 use crate::cerror;
 use crate::constants::{FOLDER_PROFILE, FOLDER_STAGING};
-use crate::fabric::{Cluster, Transaction};
+use crate::provider::{Cluster, Transaction};
 use crate::system::exit::{Result, abort};
 use crate::system::stream::Silencer;
 use crate::system::subprocess::{

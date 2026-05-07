@@ -14,12 +14,12 @@ use td_common::status::ExitStatus::GeneralError;
 use crate::cerror;
 use crate::client::tdkcontext::TdkContext;
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
-use crate::fabric::kminus::KminusFabric;
-use crate::fabric::kubernetes::KubernetesFabric;
+use crate::provider::kminus::KminusProvider;
+use crate::provider::kubernetes::KubernetesProvider;
 use crate::system::exit::{Result, abort};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
-pub enum ClusterFabric {
+pub enum ClusterProvider {
     Kubernetes,
     Kminus,
 }
@@ -66,7 +66,7 @@ pub trait Instance: Send + Sync {
 }
 
 #[delegatable_trait]
-pub trait Fabric: Send + Sync {
+pub trait Provider: Send + Sync {
     fn name(&self) -> &'static str;
     fn display_name(&self) -> String;
     fn to_tdkcontext(&self) -> TdkContext;
@@ -118,46 +118,46 @@ pub trait Fabric: Send + Sync {
 }
 
 #[derive(Delegate)]
-#[delegate(Fabric)]
-pub enum Fabrics {
-    Kubernetes(KubernetesFabric),
-    Kminus(KminusFabric),
+#[delegate(Provider)]
+pub enum Providers {
+    Kubernetes(KubernetesProvider),
+    Kminus(KminusProvider),
 }
 
-pub async fn fabric_for(
+pub async fn provider_for(
     cluster: ClusterArguments,
     instance: InstanceArguments,
-) -> Result<Fabrics> {
-    let fabric = match cluster.fabric {
-        Some(fabric) => fabric,
+) -> Result<Providers> {
+    let provider = match cluster.provider {
+        Some(provider) => provider,
         None => {
-            cerror!("Argument --fabric is required when no active context is set.");
+            cerror!("Argument --provider is required when no active context is set.");
             return abort(GeneralError);
         }
     };
-    match fabric {
-        ClusterFabric::Kubernetes => {
-            let fabric = KubernetesFabric::build(cluster, instance).await?;
-            Ok(Fabrics::Kubernetes(fabric))
+    match provider {
+        ClusterProvider::Kubernetes => {
+            let provider = KubernetesProvider::build(cluster, instance).await?;
+            Ok(Providers::Kubernetes(provider))
         }
-        ClusterFabric::Kminus => {
-            let fabric = KminusFabric::build(cluster, instance)?;
-            Ok(Fabrics::Kminus(fabric))
+        ClusterProvider::Kminus => {
+            let provider = KminusProvider::build(cluster, instance)?;
+            Ok(Providers::Kminus(provider))
         }
     }
 }
 
-pub async fn fabric_for_or_tdkcontext(
+pub async fn provider_for_or_tdkcontext(
     cluster: ClusterArguments,
     instance: InstanceArguments,
-) -> Result<Fabrics> {
-    if cluster.fabric.is_some() {
-        return fabric_for(cluster, instance).await;
+) -> Result<Providers> {
+    if cluster.provider.is_some() {
+        return provider_for(cluster, instance).await;
     }
     match TdkContext::load()? {
         Some(tdkcontext) => {
             let (cluster, instance) = tdkcontext.to_args();
-            fabric_for(cluster, instance).await
+            provider_for(cluster, instance).await
         }
         None => {
             cerror!(

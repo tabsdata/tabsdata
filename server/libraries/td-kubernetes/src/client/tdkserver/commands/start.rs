@@ -7,7 +7,7 @@ use tracing::info;
 
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::prompt_yes_no;
-use crate::fabric::{Fabric, fabric_for_or_tdkcontext};
+use crate::provider::{Provider, provider_for_or_tdkcontext};
 use crate::system::exit::Result;
 
 #[derive(Debug, Clone, Args)]
@@ -51,19 +51,19 @@ pub async fn command_start(arguments: StartArguments) -> Result {
         yes,
     } = arguments;
 
-    let fabric = fabric_for_or_tdkcontext(cluster, instance).await?;
-    fabric.ensure_startable_runtime().await?;
+    let provider = provider_for_or_tdkcontext(cluster, instance).await?;
+    provider.ensure_startable_runtime().await?;
 
     if preview {
-        fabric.preview_start_runtime_summary();
+        provider.preview_start_runtime_summary();
         if !yes && !prompt_yes_no("Proceed with the start?") {
             info!("Operation cancelled.");
             return Ok(());
         }
     }
 
-    fabric.start_runtime().await?;
-    fabric.report_started_runtime();
+    provider.start_runtime().await?;
+    provider.report_started_runtime();
 
     Ok(())
 }

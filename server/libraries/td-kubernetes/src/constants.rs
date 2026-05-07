@@ -10,8 +10,8 @@ pub const FOLDER_PROFILE: &str = "profile";
 pub const FOLDER_KUBE: &str = ".kube";
 pub const FILE_KUBECONFIG: &str = "config";
 
-pub const FABRIC_KUBERNETES: &str = "kubernetes";
-pub const FABRIC_KMINUS: &str = "kminus";
+pub const PROVIDER_KUBERNETES: &str = "kubernetes";
+pub const PROVIDER_KMINUS: &str = "kminus";
 
 pub const PROFILE_PRODUCTION: &str = "production";
 

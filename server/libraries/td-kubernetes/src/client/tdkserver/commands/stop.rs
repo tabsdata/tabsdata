@@ -8,7 +8,7 @@ use tracing::info;
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::prompt_yes_no;
 use crate::cwarn;
-use crate::fabric::{Fabric, fabric_for_or_tdkcontext};
+use crate::provider::{Provider, provider_for_or_tdkcontext};
 use crate::system::exit::Result;
 
 #[derive(Debug, Clone, Args)]
@@ -52,19 +52,19 @@ pub async fn command_stop(arguments: StopArguments) -> Result {
         yes,
     } = arguments;
 
-    let fabric = fabric_for_or_tdkcontext(cluster, instance).await?;
-    fabric.ensure_stoppable_runtime().await?;
+    let provider = provider_for_or_tdkcontext(cluster, instance).await?;
+    provider.ensure_stoppable_runtime().await?;
 
     if preview {
-        fabric.preview_stop_runtime_summary();
+        provider.preview_stop_runtime_summary();
         if !yes && !prompt_yes_no("Proceed with the stop?") {
             info!("Operation cancelled.");
             return Ok(());
         }
     }
 
-    if fabric.stop_runtime().await? {
-        fabric.report_stopped_runtime();
+    if provider.stop_runtime().await? {
+        provider.report_stopped_runtime();
     } else {
         cwarn!("Nothing to stop.");
     }

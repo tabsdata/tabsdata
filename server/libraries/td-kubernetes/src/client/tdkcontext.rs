@@ -12,8 +12,8 @@ use tracing::info;
 
 use crate::cerror;
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
-use crate::constants::{FABRIC_KMINUS, FABRIC_KUBERNETES};
-use crate::fabric::ClusterFabric;
+use crate::constants::{PROVIDER_KMINUS, PROVIDER_KUBERNETES};
+use crate::provider::ClusterProvider;
 use crate::system::exit::{Result, abort};
 
 const TDKCONTEXT_FILE: &str = "tdkcontext.json";
@@ -39,7 +39,7 @@ pub struct KminusInputs {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "fabric", rename_all = "lowercase")]
+#[serde(tag = "provider", rename_all = "lowercase")]
 pub enum TdkContext {
     Kubernetes {
         kubeconfig: PathBuf,
@@ -132,10 +132,10 @@ impl TdkContext {
         Ok(true)
     }
 
-    pub fn fabric(&self) -> ClusterFabric {
+    pub fn provider(&self) -> ClusterProvider {
         match self {
-            TdkContext::Kubernetes { .. } => ClusterFabric::Kubernetes,
-            TdkContext::Kminus { .. } => ClusterFabric::Kminus,
+            TdkContext::Kubernetes { .. } => ClusterProvider::Kubernetes,
+            TdkContext::Kminus { .. } => ClusterProvider::Kminus,
         }
     }
 
@@ -161,7 +161,7 @@ impl TdkContext {
                 namespace,
                 ..
             } => {
-                info!("  - fabric.......: {FABRIC_KUBERNETES}");
+                info!("  - provider.....: {PROVIDER_KUBERNETES}");
                 info!("  - kubeconfig...: {}", kubeconfig.display());
                 info!("  - context......: {context}");
                 info!("  - cluster......: {cluster}");
@@ -179,7 +179,7 @@ impl TdkContext {
                     .file_name()
                     .and_then(|component| component.to_str())
                     .unwrap_or("?");
-                info!("  - fabric.......: {FABRIC_KMINUS}");
+                info!("  - provider.....: {PROVIDER_KMINUS}");
                 info!("  - instance name: {name}");
                 info!("  - instance path: {}", path.display());
                 info!("  - kubeconfig...: {}", kubeconfig.display());
@@ -199,7 +199,7 @@ impl TdkContext {
                 ..
             } => (
                 ClusterArguments::new(
-                    Some(ClusterFabric::Kubernetes),
+                    Some(ClusterProvider::Kubernetes),
                     Some(context.clone()),
                     Some(kubeconfig.clone()),
                     false,
@@ -208,7 +208,7 @@ impl TdkContext {
                 InstanceArguments::new(None, None),
             ),
             TdkContext::Kminus { path, .. } => (
-                ClusterArguments::new(Some(ClusterFabric::Kminus), None, None, false, None),
+                ClusterArguments::new(Some(ClusterProvider::Kminus), None, None, false, None),
                 InstanceArguments::new(None, Some(path.clone())),
             ),
         }

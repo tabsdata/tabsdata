@@ -5,7 +5,7 @@
 #
 # Shell emulator of td_fc (Dummy Finalizer Worker): 5 ticks at 1 s
 # intervals, then exits. Used by kprofile development manifests in the
-# kubernetes fabric where launching the rust binary inside a tiny image
+# kubernetes provider where launching the rust binary inside a tiny image
 # is more setup than just running this script under busybox.
 
 set -eu

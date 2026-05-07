@@ -2,7 +2,7 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-use crate::fabric::Instance;
+use crate::provider::Instance;
 use crate::system::exit::Result;
 
 #[derive(Default)]

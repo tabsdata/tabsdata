@@ -4,7 +4,7 @@
 
 use kube::{Client, Config};
 
-use crate::fabric::Cluster;
+use crate::provider::Cluster;
 use crate::system::exit::Result;
 
 pub struct KubernetesCluster {

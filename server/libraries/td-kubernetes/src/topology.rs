@@ -5,41 +5,41 @@
 pub mod kminus;
 pub mod kubernetes;
 
-use crate::fabric::ClusterFabric;
+use crate::provider::ClusterProvider;
 use crate::topology::kminus::KminusTopology;
 use crate::topology::kubernetes::KubernetesTopology;
 
-pub const FABRIC_PREFIX_K: &str = "k-";
-pub const FABRIC_PREFIX_K8S: &str = "k8s-";
-pub const FABRIC_PREFIX_K4S: &str = "k4s-";
+pub const PROVIDER_PREFIX_K: &str = "k-";
+pub const PROVIDER_PREFIX_K8S: &str = "k8s-";
+pub const PROVIDER_PREFIX_K4S: &str = "k4s-";
 
-pub struct FabricPrefixes {
+pub struct ProviderPrefixes {
     pub keep: &'static str,
     pub drop: &'static [&'static str],
 }
 
 /// A `Topology` is the combination of three orthogonal axes:
 ///
-/// * Fabric:   kubernetes, kminus
-/// * Hosting:  hosted, cloud, serverless
-/// * Provider: local, aws, gcs, azure, ...
+/// * Provider: kubernetes, kminus
+/// * Platform:  local, aws, gcs, azure, ...
+/// * Service: hosted, cloud, serverless
 ///
-/// Only Fabric currently drives differing behavior, so the implementations
+/// Only Provider currently drives differing behavior, so the implementations
 /// below are effectively zero-sized markers and [`topology_for`] dispatches
-/// on [`ClusterFabric`] alone. That makes the current shape look reducible
-/// to `impl Topology for ClusterFabric`, but the simplification is
-/// incidental to this transient state: Hosting and Provider will eventually
+/// on [`ClusterProvider`] alone. That makes the current shape look reducible
+/// to `impl Topology for ClusterProvider`, but the simplification is
+/// incidental to this transient state: Platform and Service will eventually
 /// contribute their own behavior, and keeping the trait plus per-topology
 /// types lets that growth land here without churning every call site.
 pub trait Topology: Send + Sync {
-    fn fabric_prefixes(&self) -> &'static FabricPrefixes;
+    fn provider_prefixes(&self) -> &'static ProviderPrefixes;
 }
 
-/// Resolves the [`Topology`] for a given [`ClusterFabric`]. See the
-/// [`Topology`] trait docs for why dispatch is on Fabric alone today.
-pub fn topology_for(fabric: ClusterFabric) -> &'static dyn Topology {
-    match fabric {
-        ClusterFabric::Kubernetes => &KubernetesTopology,
-        ClusterFabric::Kminus => &KminusTopology,
+/// Resolves the [`Topology`] for a given [`ClusterProvider`]. See the
+/// [`Topology`] trait docs for why dispatch is on Provider alone today.
+pub fn topology_for(provider: ClusterProvider) -> &'static dyn Topology {
+    match provider {
+        ClusterProvider::Kubernetes => &KubernetesTopology,
+        ClusterProvider::Kminus => &KminusTopology,
     }
 }

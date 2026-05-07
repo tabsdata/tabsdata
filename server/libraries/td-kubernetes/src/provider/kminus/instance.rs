@@ -10,10 +10,10 @@ use td_common::status::ExitStatus::GeneralError;
 
 use crate::cerror;
 use crate::constants::{CONFIGMAP_TABSDATA, FOLDER_PROFILE};
-use crate::fabric::Instance;
 use crate::kubernetes::action::{configmap_exists, create_configmap, delete_configmap};
 use crate::kubernetes::client::build_kube_client;
 use crate::kubernetes::kubeconfig::build_kubeconfig;
+use crate::provider::Instance;
 use crate::system::exit::{Result, abort};
 
 pub struct KminusInstance {

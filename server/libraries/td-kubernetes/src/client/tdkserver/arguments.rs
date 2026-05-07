@@ -13,7 +13,7 @@ use crate::client::tdkserver::commands::stop::StopArguments;
 use crate::client::tdkserver::commands::unuse::UnuseArguments;
 use crate::client::tdkserver::commands::r#use::UseArguments;
 use crate::client::tdkserver::commands::using::UsingArguments;
-use crate::fabric::ClusterFabric;
+use crate::provider::ClusterProvider;
 
 #[derive(Debug, Clone, Parser)]
 #[command(
@@ -58,23 +58,23 @@ pub enum Commands {
 pub struct ClusterArguments {
     #[arg(
         long,
-        name = "fabric",
+        name = "provider",
         required = false,
         value_enum,
-        long_help = "Fabric of the cluster: \
+        long_help = "Provider of the cluster: \
                      'kubernetes' for a standard kubernetes cluster, \
                      'kminus' for a development kminus cluster. \
                      When unspecified, the value from the active context is taken; \
                      when no active context is set, this argument is required."
     )]
-    pub fabric: Option<ClusterFabric>,
+    pub provider: Option<ClusterProvider>,
 
     #[arg(
         long,
         name = "context",
         required = false,
         long_help = "Name of the kubeconfig context to use. \
-                     Valid only for the 'kubernetes' fabric. \
+                     Valid only for the 'kubernetes' provider. \
                      Mutually exclusive with --current. \
                      Composes with --kubeconfig."
     )]
@@ -86,7 +86,7 @@ pub struct ClusterArguments {
         required = false,
         value_parser = clap::value_parser!(PathBuf),
         long_help = "Path to a kubeconfig file. \
-                     Valid only for the 'kubernetes' fabric. \
+                     Valid only for the 'kubernetes' provider. \
                      When unspecified, the file pointed to by the KUBECONFIG environment variable, or ~/.kube/config, is used. \
                      Composes with --context and --current."
     )]
@@ -98,7 +98,7 @@ pub struct ClusterArguments {
         required = false,
         default_value_t = false,
         long_help = "Use the current-context entry of the kubeconfig file. \
-                     Valid only for the 'kubernetes' fabric. \
+                     Valid only for the 'kubernetes' provider. \
                      Mutually exclusive with --context. \
                      Composes with --kubeconfig."
     )]
@@ -109,7 +109,7 @@ pub struct ClusterArguments {
         name = "namespace",
         required = false,
         long_help = "Namespace for the instance. \
-                     Valid only for the 'kubernetes' fabric. \
+                     Valid only for the 'kubernetes' provider. \
                      Overrides the namespace defined in the kubeconfig context. \
                      When neither is set, the kubernetes default namespace is used."
     )]
@@ -118,14 +118,14 @@ pub struct ClusterArguments {
 
 impl ClusterArguments {
     pub fn new(
-        fabric: Option<ClusterFabric>,
+        provider: Option<ClusterProvider>,
         context: Option<String>,
         kubeconfig: Option<PathBuf>,
         current: bool,
         namespace: Option<String>,
     ) -> Self {
         Self {
-            fabric,
+            provider,
             context,
             kubeconfig,
             current,
@@ -141,7 +141,7 @@ pub struct InstanceArguments {
         name = "name",
         required = false,
         long_help = "Instance name. \
-                     Valid only for the 'kminus' fabric. \
+                     Valid only for the 'kminus' provider. \
                      The instance is created in ~/.tabsdata/instances/<name>. \
                      Mutually exclusive with --path."
     )]
@@ -153,7 +153,7 @@ pub struct InstanceArguments {
         required = false,
         value_parser = clap::value_parser!(PathBuf),
         long_help = "Instance path. \
-                     Valid only for the 'kminus' fabric. \
+                     Valid only for the 'kminus' provider. \
                      Relative paths resolve under ~/.tabsdata/instances. \
                      Absolute paths are used as-is. \
                      Mutually exclusive with --name."

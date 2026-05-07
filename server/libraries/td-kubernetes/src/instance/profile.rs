@@ -17,7 +17,7 @@ use crate::cerror;
 use crate::constants::{PROGRAM_TD_RESOURCE, RESOURCE_KPROFILES};
 use crate::system::exit::{Result, abort};
 use crate::system::subprocess::apply_detached_flags;
-use crate::topology::{FABRIC_PREFIX_K, FabricPrefixes, Topology};
+use crate::topology::{PROVIDER_PREFIX_K, ProviderPrefixes, Topology};
 
 #[derive(Serialize, Deserialize)]
 pub struct ConfigMapEntry {
@@ -93,7 +93,7 @@ pub fn load_profile(profile: &str, topology: &dyn Topology) -> Result<BTreeMap<S
             return abort(GeneralError);
         }
     };
-    let prefixes = topology.fabric_prefixes();
+    let prefixes = topology.provider_prefixes();
     let mut data = BTreeMap::new();
     walk(&root, prefixes, profile, &version, &mut data)?;
     Ok(data)
@@ -101,7 +101,7 @@ pub fn load_profile(profile: &str, topology: &dyn Topology) -> Result<BTreeMap<S
 
 fn walk(
     profile_root: &Path,
-    prefixes: &FabricPrefixes,
+    prefixes: &ProviderPrefixes,
     profile: &str,
     version: &str,
     data: &mut BTreeMap<String, String>,
@@ -135,7 +135,7 @@ fn walk(
         let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
             continue;
         };
-        let Some(key) = filename_for_fabric(name, prefixes) else {
+        let Some(key) = filename_for_provider(name, prefixes) else {
             continue;
         };
         if !is_valid_configmap_key(&key) {
@@ -182,12 +182,12 @@ fn walk(
     Ok(())
 }
 
-fn filename_for_fabric(name: &str, prefixes: &FabricPrefixes) -> Option<String> {
+fn filename_for_provider(name: &str, prefixes: &ProviderPrefixes) -> Option<String> {
     if prefixes.drop.iter().any(|prefix| name.starts_with(prefix)) {
         return None;
     }
     if let Some(rest) = name.strip_prefix(prefixes.keep) {
-        return Some(format!("{FABRIC_PREFIX_K}{rest}"));
+        return Some(format!("{PROVIDER_PREFIX_K}{rest}"));
     }
     Some(name.to_owned())
 }

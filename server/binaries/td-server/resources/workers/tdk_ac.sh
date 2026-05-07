@@ -5,7 +5,7 @@
 #
 # Shell emulator of td_ac (Dummy Application Worker): runs forever,
 # ticks every 30 s. Used by kprofile development manifests in the
-# kubernetes fabric where launching the rust binary inside a tiny image
+# kubernetes provider where launching the rust binary inside a tiny image
 # is more setup than just running this script under busybox.
 
 set -eu
