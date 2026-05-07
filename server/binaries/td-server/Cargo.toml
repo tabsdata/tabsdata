@@ -22,6 +22,10 @@ name = "tdserver"
 path = "src/tdserver.rs"
 
 [[bin]]
+name = "tdkserver"
+path = "src/tdkserver.rs"
+
+[[bin]]
 name = "td_about"
 path = "src/tdabout.rs"
 
@@ -44,6 +48,24 @@ path = "src/supervisor.rs"
 [[bin]]
 name = "td_transporter"
 path = "src/transporter.rs"
+
+# tdk dummy workers (lifecycle simulators for K Pop -- internal testing only)
+
+[[bin]]
+name = "td_ic"
+path = "src/dummy/tdk_ic.rs"
+
+[[bin]]
+name = "td_ac"
+path = "src/dummy/tdk_ac.rs"
+
+[[bin]]
+name = "td_fc"
+path = "src/dummy/tdk_fc.rs"
+
+[[bin]]
+name = "td_ec"
+path = "src/dummy/tdk_ec.rs"
 
 [features]
 api-docs = []
