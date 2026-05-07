@@ -10,11 +10,11 @@ use clap_derive::ValueEnum;
 use td_common::status::ExitStatus::GeneralError;
 
 use crate::cerror;
+use crate::client::tdkcontext::TdkContext;
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
-use crate::exit::{Outcome, abort};
 use crate::fabric::kminus::KminusFabric;
 use crate::fabric::kubernetes::KubernetesFabric;
-use crate::tdkcontext::TdkContext;
+use crate::system::exit::{Outcome, abort};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum ClusterFabric {
@@ -31,32 +31,84 @@ impl Commit for () {
 }
 
 #[async_trait]
+pub trait Cluster: Send + Sync {
+    fn create(&self) -> Outcome;
+    async fn start(&self) -> Outcome;
+    async fn stop(&self) -> Outcome<bool>;
+
+    async fn is_alive(&self) -> bool;
+    async fn is_dead(&self) -> bool {
+        !self.is_alive().await
+    }
+    async fn poll_alive(&self) -> bool {
+        self.is_alive().await
+    }
+    async fn poll_dead(&self) -> bool {
+        self.is_dead().await
+    }
+}
+
+#[async_trait]
+pub trait Instance: Send + Sync {
+    async fn start(&self) -> Outcome;
+    async fn stop(&self) -> Outcome<bool>;
+
+    async fn is_alive(&self) -> bool;
+    async fn is_dead(&self) -> bool {
+        !self.is_alive().await
+    }
+    async fn poll_alive(&self) -> bool {
+        self.is_alive().await
+    }
+    async fn poll_dead(&self) -> bool {
+        self.is_dead().await
+    }
+}
+
+#[async_trait]
 pub trait Fabric: Send + Sync {
     fn name(&self) -> &'static str;
     fn display_name(&self) -> String;
     fn to_tdkcontext(&self) -> TdkContext;
 
-    async fn ensure_creatable(&self) -> Outcome;
-    fn preview_create_summary(&self, profile: &str);
-    async fn prepare_workspace(&self) -> Outcome<Box<dyn Commit>>;
+    async fn ensure_creatable_runtime(&self) -> Outcome;
+    fn preview_create_runtime_summary(&self, profile: &str);
+    fn report_created_runtime(&self);
+
+    async fn ensure_usable_runtime(&self) -> Outcome;
+    fn preview_use_runtime_summary(&self);
+    fn report_used_runtime(&self);
+
+    async fn ensure_startable_runtime(&self) -> Outcome;
+    fn preview_start_runtime_summary(&self);
+    async fn start_runtime(&self) -> Outcome {
+        self.start_cluster().await?;
+        self.start_instance().await?;
+        Ok(())
+    }
+    fn report_started_runtime(&self);
+
+    async fn ensure_stoppable_runtime(&self) -> Outcome;
+    fn preview_stop_runtime_summary(&self);
+    async fn stop_runtime(&self) -> Outcome<bool> {
+        let stopped_instance = self.stop_instance().await?;
+        let stopped_cluster = self.stop_cluster().await?;
+        Ok(stopped_instance || stopped_cluster)
+    }
+    fn report_stopped_runtime(&self);
+
+    async fn prepare_cluster(&self) -> Outcome<Box<dyn Commit>>;
+    async fn start_cluster(&self) -> Outcome;
+    async fn stop_cluster(&self) -> Outcome<bool>;
+
+    async fn prepare_instance(&self, profile: &str) -> Outcome {
+        self.stage_configmap(profile).await?;
+        self.store_configmap(profile).await
+    }
     async fn stage_configmap(&self, profile: &str) -> Outcome;
     async fn store_configmap(&self, profile: &str) -> Outcome;
-    fn report_created(&self);
-
-    async fn ensure_usable(&self) -> Outcome;
-    fn preview_use_summary(&self);
-    fn report_used(&self);
-
-    async fn ensure_startable(&self) -> Outcome;
-    fn preview_start_summary(&self);
-    async fn start_runtime(&self) -> Outcome;
-    async fn ingest_configmap(&self) -> Outcome;
-    fn report_started(&self);
-
-    async fn ensure_stoppable(&self) -> Outcome;
-    fn preview_stop_summary(&self);
-    async fn stop_runtime(&self) -> Outcome;
-    fn report_stopped(&self);
+    async fn start_instance(&self) -> Outcome;
+    async fn stop_instance(&self) -> Outcome<bool>;
 }
 
 pub async fn fabric_for(

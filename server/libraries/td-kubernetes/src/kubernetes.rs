@@ -4,4 +4,4 @@
 
 pub mod action;
 pub mod client;
-pub mod toolkit;
+pub mod kubeconfig;

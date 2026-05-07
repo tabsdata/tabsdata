@@ -2,6 +2,9 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+pub mod cluster;
+pub mod instance;
+
 use std::path::PathBuf;
 
 use async_trait::async_trait;
@@ -11,27 +14,32 @@ use td_common::status::ExitStatus::GeneralError;
 use tracing::info;
 
 use crate::cerror;
+use crate::client::tdkcontext::{KubernetesInputs, TdkContext};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
-use crate::constants::{CONFIGMAP_TABSDATA, FABRIC_KMINUS, FABRIC_KUBERNETES};
-use crate::exit::{Outcome, abort};
-use crate::fabric::{Commit, Fabric};
+use crate::constants::{CONFIGMAP_TABSDATA, FABRIC_KUBERNETES};
+use crate::fabric::kubernetes::cluster::KubernetesCluster;
+use crate::fabric::kubernetes::instance::KubernetesInstance;
+use crate::fabric::{Cluster, Commit, Fabric, Instance};
+use crate::instance::profile::load_profile;
 use crate::kubernetes::action::{
     configmap_exists, create_configmap, ensure_cluster_reachable, ensure_namespace_exists,
 };
 use crate::kubernetes::client::build_kube_client;
-use crate::kubernetes::toolkit::{
-    build_kubeconfig, resolve_cluster_name, resolve_current_context, resolve_kubeconfig_path,
+use crate::kubernetes::kubeconfig::{
+    build_kubeconfig, resolve_cluster_name, resolve_current_context, resolve_kubefile,
 };
-use crate::profile::load_profile;
-use crate::tdkcontext::TdkContext;
+use crate::system::exit::{Outcome, abort};
 use crate::topology::{Topology, topology_for};
 
 pub struct KubernetesFabric {
-    kubeconfig_path: Option<PathBuf>,
-    context: Option<String>,
-    cluster_name: Option<String>,
+    kubefile: PathBuf,
+    context: String,
+    cluster_name: String,
     config: Config,
+    cluster: KubernetesCluster,
+    instance: KubernetesInstance,
     topology: &'static dyn Topology,
+    inputs: KubernetesInputs,
 }
 
 impl KubernetesFabric {
@@ -63,26 +71,42 @@ impl KubernetesFabric {
             return abort(GeneralError);
         }
 
-        let kubeconfig_argument = cluster.kubeconfig().as_deref();
+        let inputs = KubernetesInputs {
+            kubeconfig: cluster.kubeconfig().clone(),
+            context: cluster.context().clone(),
+            current: *cluster.current(),
+            namespace: cluster.namespace().clone(),
+        };
+
+        let kubefile_argument = cluster.kubeconfig().as_deref();
         let context_argument = cluster.context().as_deref();
         let namespace_override = cluster.namespace().as_deref();
 
-        let kubeconfig_path = resolve_kubeconfig_path(kubeconfig_argument);
-        if kubeconfig_path.is_none() {
+        let Some(kubefile) = resolve_kubefile(kubefile_argument) else {
             cerror!(
                 "No kubeconfig found. Set the KUBECONFIG environment variable, create ~/.kube/config, or pass --kubeconfig."
             );
             return abort(GeneralError);
-        }
+        };
 
         let mut config =
-            build_kubeconfig(kubeconfig_argument, context_argument, namespace_override).await?;
+            build_kubeconfig(kubefile_argument, context_argument, namespace_override).await?;
 
-        let context = cluster
+        let Some(context) = cluster
             .context()
             .clone()
-            .or_else(|| resolve_current_context(kubeconfig_argument));
-        let cluster_name = resolve_cluster_name(kubeconfig_argument, context_argument);
+            .or_else(|| resolve_current_context(kubefile_argument))
+        else {
+            cerror!(
+                "Unable to resolve a kubeconfig context. Pass --context or set a current-context in the kubeconfig."
+            );
+            return abort(GeneralError);
+        };
+
+        let Some(cluster_name) = resolve_cluster_name(kubefile_argument, Some(&context)) else {
+            cerror!("Unable to resolve the cluster of context '{context}' in the kubeconfig.");
+            return abort(GeneralError);
+        };
 
         if config.default_namespace.trim().is_empty() {
             config.default_namespace = DEFAULT_INSTANCE.to_string();
@@ -90,12 +114,18 @@ impl KubernetesFabric {
 
         let topology = topology_for(crate::fabric::ClusterFabric::Kubernetes);
 
+        let cluster = KubernetesCluster::new(config.clone());
+        let instance = KubernetesInstance::new();
+
         Ok(Self {
-            kubeconfig_path,
+            kubefile,
             context,
             cluster_name,
             config,
+            cluster,
+            instance,
             topology,
+            inputs,
         })
     }
 }
@@ -107,22 +137,23 @@ impl Fabric for KubernetesFabric {
     }
 
     fn display_name(&self) -> String {
-        let context = self.context.as_deref().unwrap_or("?");
         format!(
-            "{FABRIC_KUBERNETES}:{context}/{}",
-            self.config.default_namespace
+            "{FABRIC_KUBERNETES}:{}/{}",
+            self.context, self.config.default_namespace
         )
     }
 
     fn to_tdkcontext(&self) -> TdkContext {
         TdkContext::Kubernetes {
-            kubeconfig: self.kubeconfig_path.clone(),
+            kubeconfig: self.kubefile.clone(),
             context: self.context.clone(),
+            cluster: self.cluster_name.clone(),
             namespace: self.config.default_namespace.clone(),
+            inputs: self.inputs.clone(),
         }
     }
 
-    async fn ensure_creatable(&self) -> Outcome {
+    async fn ensure_creatable_runtime(&self) -> Outcome {
         let client = build_kube_client(&self.config)?;
         ensure_cluster_reachable(&client).await?;
         ensure_namespace_exists(&client, &self.config.default_namespace).await?;
@@ -136,30 +167,103 @@ impl Fabric for KubernetesFabric {
         Ok(())
     }
 
-    fn preview_create_summary(&self, profile: &str) {
+    fn preview_create_runtime_summary(&self, profile: &str) {
         info!("About to create tabsdata instance:");
         if cfg!(td_k8s_development) {
             info!("  - profile......: {profile}");
         }
         info!("  - fabric.......: {FABRIC_KUBERNETES}");
-        match &self.kubeconfig_path {
-            Some(path) => info!("  - kubeconfig...: {}", path.display()),
-            None => info!("  - kubeconfig...: <not found>"),
-        }
-        match &self.context {
-            Some(name) => info!("  - context......: {name}"),
-            None => info!("  - context......: <unable to resolve current-context>"),
-        }
+        info!("  - kubeconfig...: {}", self.kubefile.display());
+        info!("  - context......: {}", self.context);
         info!("  - cluster url..: {}", self.config.cluster_url);
-        match &self.cluster_name {
-            Some(name) => info!("  - cluster name.: {name}"),
-            None => info!("  - cluster name.: <unable to resolve cluster name>"),
-        }
+        info!("  - cluster name.: {}", self.cluster_name);
         info!("  - namespace....: {}", self.config.default_namespace);
     }
 
-    async fn prepare_workspace(&self) -> Outcome<Box<dyn Commit>> {
+    fn report_created_runtime(&self) {
+        info!(
+            "Created tabsdata instance in namespace '{}'.",
+            self.config.default_namespace
+        );
+    }
+
+    async fn ensure_usable_runtime(&self) -> Outcome {
+        let client = build_kube_client(&self.config)?;
+        ensure_cluster_reachable(&client).await?;
+        ensure_namespace_exists(&client, &self.config.default_namespace).await?;
+        if !configmap_exists(&client, &self.config.default_namespace, CONFIGMAP_TABSDATA).await? {
+            cerror!(
+                "No tabsdata instance found in namespace '{}'. Run 'tdkserver create ...' first.",
+                self.config.default_namespace
+            );
+            return abort(GeneralError);
+        }
+        Ok(())
+    }
+
+    fn preview_use_runtime_summary(&self) {
+        info!("About to use tabsdata instance:");
+        info!("  - fabric.......: {FABRIC_KUBERNETES}");
+        info!("  - kubeconfig...: {}", self.kubefile.display());
+        info!("  - context......: {}", self.context);
+        info!("  - cluster url..: {}", self.config.cluster_url);
+        info!("  - cluster name.: {}", self.cluster_name);
+        info!("  - namespace....: {}", self.config.default_namespace);
+    }
+
+    fn report_used_runtime(&self) {
+        info!(
+            "Now using tabsdata instance in namespace '{}'.",
+            self.config.default_namespace
+        );
+    }
+
+    async fn ensure_startable_runtime(&self) -> Outcome {
+        Ok(())
+    }
+
+    fn preview_start_runtime_summary(&self) {
+        info!("About to start tabsdata instance:");
+        info!("  - fabric.......: {FABRIC_KUBERNETES}");
+        info!("  - kubeconfig...: {}", self.kubefile.display());
+        info!("  - context......: {}", self.context);
+        info!("  - namespace....: {}", self.config.default_namespace);
+    }
+
+    fn report_started_runtime(&self) {
+        info!(
+            "Started tabsdata instance in namespace '{}'.",
+            self.config.default_namespace
+        );
+        info!("To use kubectl against this cluster, run:");
+        info!("  export KUBECONFIG={}", self.kubefile.display());
+    }
+
+    async fn ensure_stoppable_runtime(&self) -> Outcome {
+        Ok(())
+    }
+
+    fn preview_stop_runtime_summary(&self) {
+        info!("About to stop tabsdata instance:");
+        info!("  - fabric.......: {FABRIC_KUBERNETES}");
+        info!("  - kubeconfig...: {}", self.kubefile.display());
+        info!("  - context......: {}", self.context);
+        info!("  - namespace....: {}", self.config.default_namespace);
+    }
+
+    fn report_stopped_runtime(&self) {}
+
+    async fn prepare_cluster(&self) -> Outcome<Box<dyn Commit>> {
+        self.cluster.create()?;
         Ok(Box::new(()))
+    }
+
+    async fn start_cluster(&self) -> Outcome {
+        self.cluster.start().await
+    }
+
+    async fn stop_cluster(&self) -> Outcome<bool> {
+        self.cluster.stop().await
     }
 
     async fn stage_configmap(&self, _profile: &str) -> Outcome {
@@ -178,106 +282,11 @@ impl Fabric for KubernetesFabric {
         .await
     }
 
-    fn report_created(&self) {
-        info!(
-            "Created tabsdata instance in namespace '{}'.",
-            self.config.default_namespace
-        );
+    async fn start_instance(&self) -> Outcome {
+        self.instance.start().await
     }
 
-    async fn ensure_usable(&self) -> Outcome {
-        let client = build_kube_client(&self.config)?;
-        ensure_cluster_reachable(&client).await?;
-        ensure_namespace_exists(&client, &self.config.default_namespace).await?;
-        if !configmap_exists(&client, &self.config.default_namespace, CONFIGMAP_TABSDATA).await? {
-            cerror!(
-                "No tabsdata instance found in namespace '{}'. Run 'tdkserver create ...' first.",
-                self.config.default_namespace
-            );
-            return abort(GeneralError);
-        }
-        Ok(())
+    async fn stop_instance(&self) -> Outcome<bool> {
+        self.instance.stop().await
     }
-
-    fn preview_use_summary(&self) {
-        info!("About to use tabsdata instance:");
-        info!("  - fabric.......: {FABRIC_KUBERNETES}");
-        match &self.kubeconfig_path {
-            Some(path) => info!("  - kubeconfig...: {}", path.display()),
-            None => info!("  - kubeconfig...: <not found>"),
-        }
-        match &self.context {
-            Some(name) => info!("  - context......: {name}"),
-            None => info!("  - context......: <unable to resolve current-context>"),
-        }
-        info!("  - cluster url..: {}", self.config.cluster_url);
-        match &self.cluster_name {
-            Some(name) => info!("  - cluster name.: {name}"),
-            None => info!("  - cluster name.: <unable to resolve cluster name>"),
-        }
-        info!("  - namespace....: {}", self.config.default_namespace);
-    }
-
-    fn report_used(&self) {
-        info!(
-            "Now using tabsdata instance in namespace '{}'.",
-            self.config.default_namespace
-        );
-    }
-
-    async fn ensure_startable(&self) -> Outcome {
-        Ok(())
-    }
-
-    fn preview_start_summary(&self) {
-        info!("About to start tabsdata instance:");
-        info!("  - fabric.......: {FABRIC_KUBERNETES}");
-        if let Some(path) = &self.kubeconfig_path {
-            info!("  - kubeconfig...: {}", path.display());
-        }
-        if let Some(name) = &self.context {
-            info!("  - context......: {name}");
-        }
-        info!("  - namespace....: {}", self.config.default_namespace);
-    }
-
-    async fn start_runtime(&self) -> Outcome {
-        info!("The 'start' command is not yet implemented for the '{FABRIC_KUBERNETES}' fabric.");
-        info!(
-            "Use the '{FABRIC_KMINUS}' fabric, or restart the underlying cluster through your own tooling."
-        );
-        Ok(())
-    }
-
-    async fn ingest_configmap(&self) -> Outcome {
-        Ok(())
-    }
-
-    fn report_started(&self) {}
-
-    async fn ensure_stoppable(&self) -> Outcome {
-        Ok(())
-    }
-
-    fn preview_stop_summary(&self) {
-        info!("About to stop tabsdata instance:");
-        info!("  - fabric.......: {FABRIC_KUBERNETES}");
-        if let Some(path) = &self.kubeconfig_path {
-            info!("  - kubeconfig...: {}", path.display());
-        }
-        if let Some(name) = &self.context {
-            info!("  - context......: {name}");
-        }
-        info!("  - namespace....: {}", self.config.default_namespace);
-    }
-
-    async fn stop_runtime(&self) -> Outcome {
-        info!("The 'stop' command is not yet implemented for the '{FABRIC_KUBERNETES}' fabric.");
-        info!(
-            "Use the '{FABRIC_KMINUS}' fabric, or stop the underlying cluster through your own tooling."
-        );
-        Ok(())
-    }
-
-    fn report_stopped(&self) {}
 }

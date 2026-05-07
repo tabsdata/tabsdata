@@ -9,8 +9,8 @@ use tracing::info;
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::prompt_yes_no;
 use crate::constants::PROFILE_PRODUCTION;
-use crate::exit::Outcome;
 use crate::fabric::fabric_for;
+use crate::system::exit::Outcome;
 
 #[derive(Debug, Clone, Getters, Args)]
 #[getset(get = "pub")]
@@ -81,21 +81,20 @@ pub async fn command_create(arguments: CreateArguments) -> Outcome {
     } = arguments;
 
     let fabric = fabric_for(cluster, instance).await?;
-    fabric.ensure_creatable().await?;
+    fabric.ensure_creatable_runtime().await?;
 
     if preview {
-        fabric.preview_create_summary(&profile);
+        fabric.preview_create_runtime_summary(&profile);
         if !yes && !prompt_yes_no("Proceed with the creation?") {
             info!("Operation cancelled.");
             return Ok(());
         }
     }
 
-    let cleanup = fabric.prepare_workspace().await?;
-    fabric.stage_configmap(&profile).await?;
-    fabric.store_configmap(&profile).await?;
-    cleanup.commit();
-    fabric.report_created();
+    let tx = fabric.prepare_cluster().await?;
+    fabric.prepare_instance(&profile).await?;
+    tx.commit();
+    fabric.report_created_runtime();
 
     Ok(())
 }

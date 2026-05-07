@@ -9,7 +9,7 @@ use td_common::status::ExitStatus::GeneralError;
 use tracing::debug;
 
 use crate::cerror;
-use crate::exit::{Outcome, abort};
+use crate::system::exit::{Outcome, abort};
 
 pub fn install_crypto_provider() {
     if let Err(error) = aws_lc_rs::default_provider().install_default() {

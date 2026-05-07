@@ -21,9 +21,10 @@ use super::start::{StartArguments, command_start};
 use super::stop::{StopArguments, command_stop};
 use super::unuse::{UnuseArguments, command_unuse};
 use super::r#use::{UseArguments, command_use};
+use super::using::{UsingArguments, command_using};
 use crate::cerror;
-use crate::exit::Outcome;
-use crate::tdkcontext::{TdkContext, tdkcontext_path};
+use crate::client::tdkcontext::{TdkContext, tdkcontext_path};
+use crate::system::exit::Outcome;
 
 const TOOL_NAME: &str = "tdkserver";
 const HISTORY_FILE: &str = ".tdkserver.history";
@@ -35,6 +36,8 @@ enum ShellCommand {
     Create(CreateArguments),
     /// Use an existing Tabsdata instance as the active context
     Use(UseArguments),
+    /// Show the active context
+    Using(UsingArguments),
     /// Clear the active context
     Unuse(UnuseArguments),
     /// Start a Tabsdata instance
@@ -124,6 +127,9 @@ pub async fn command_shell() -> Outcome {
                 }
                 ShellCommand::Use(arguments) => {
                     let _ = command_use(arguments).await;
+                }
+                ShellCommand::Using(arguments) => {
+                    let _ = command_using(arguments).await;
                 }
                 ShellCommand::Unuse(arguments) => {
                     let _ = command_unuse(arguments).await;

@@ -16,8 +16,9 @@ use crate::client::tdkserver::commands::start::command_start;
 use crate::client::tdkserver::commands::stop::command_stop;
 use crate::client::tdkserver::commands::unuse::command_unuse;
 use crate::client::tdkserver::commands::r#use::command_use;
-use crate::exit::Outcome;
+use crate::client::tdkserver::commands::using::command_using;
 use crate::kubernetes::client::install_crypto_provider;
+use crate::system::exit::Outcome;
 
 pub struct TabsDataKubernetesClient;
 
@@ -33,6 +34,7 @@ impl TabsDataKubernetesClient {
             Some(Commands::Shell) => command_shell().await,
             Some(Commands::Create(arguments)) => command_create(arguments).await,
             Some(Commands::Use(arguments)) => command_use(arguments).await,
+            Some(Commands::Using(arguments)) => command_using(arguments).await,
             Some(Commands::Unuse(arguments)) => command_unuse(arguments).await,
             Some(Commands::Start(arguments)) => command_start(arguments).await,
             Some(Commands::Stop(arguments)) => command_stop(arguments).await,

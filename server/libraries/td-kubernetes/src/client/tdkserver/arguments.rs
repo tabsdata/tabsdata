@@ -13,6 +13,7 @@ use crate::client::tdkserver::commands::start::StartArguments;
 use crate::client::tdkserver::commands::stop::StopArguments;
 use crate::client::tdkserver::commands::unuse::UnuseArguments;
 use crate::client::tdkserver::commands::r#use::UseArguments;
+use crate::client::tdkserver::commands::using::UsingArguments;
 use crate::fabric::ClusterFabric;
 
 #[derive(Debug, Clone, Parser)]
@@ -44,6 +45,8 @@ pub enum Commands {
     Create(CreateArguments),
     #[command(about = "Use an existing tabsdata instance as the active context")]
     Use(UseArguments),
+    #[command(about = "Show the active context")]
+    Using(UsingArguments),
     #[command(about = "Clear the active context")]
     Unuse(UnuseArguments),
     #[command(about = "Start a tabsdata instance")]

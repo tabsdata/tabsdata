@@ -8,8 +8,8 @@ use tracing::info;
 
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::prompt_yes_no;
-use crate::exit::Outcome;
 use crate::fabric::fabric_for;
+use crate::system::exit::Outcome;
 
 #[derive(Debug, Clone, Getters, Args)]
 #[getset(get = "pub")]
@@ -54,10 +54,10 @@ pub async fn command_use(arguments: UseArguments) -> Outcome {
     } = arguments;
 
     let fabric = fabric_for(cluster, instance).await?;
-    fabric.ensure_usable().await?;
+    fabric.ensure_usable_runtime().await?;
 
     if preview {
-        fabric.preview_use_summary();
+        fabric.preview_use_runtime_summary();
         if !yes && !prompt_yes_no("Set this as the active context?") {
             info!("Operation cancelled.");
             return Ok(());
@@ -65,7 +65,7 @@ pub async fn command_use(arguments: UseArguments) -> Outcome {
     }
 
     fabric.to_tdkcontext().save()?;
-    fabric.report_used();
+    fabric.report_used_runtime();
 
     Ok(())
 }

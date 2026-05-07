@@ -6,8 +6,9 @@ use clap_derive::Args;
 use getset::Getters;
 use tracing::info;
 
-use crate::exit::Outcome;
-use crate::tdkcontext::{TdkContext, tdkcontext_path};
+use crate::client::tdkcontext::{TdkContext, tdkcontext_path};
+use crate::cwarn;
+use crate::system::exit::Outcome;
 
 #[derive(Debug, Clone, Getters, Args)]
 #[getset(get = "pub")]
@@ -20,7 +21,7 @@ pub async fn command_unuse(_arguments: UnuseArguments) -> Outcome {
             tdkcontext_path().display()
         );
     } else {
-        info!("No active context is set.");
+        cwarn!("No active context is set.");
     }
     Ok(())
 }

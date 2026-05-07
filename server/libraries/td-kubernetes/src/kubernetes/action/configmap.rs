@@ -11,7 +11,7 @@ use kube::{Api, Client};
 use td_common::status::ExitStatus::GeneralError;
 
 use crate::cerror;
-use crate::exit::{Outcome, abort};
+use crate::system::exit::{Outcome, abort};
 
 pub async fn configmap_exists(client: &Client, namespace: &str, name: &str) -> Outcome<bool> {
     let api: Api<ConfigMap> = Api::namespaced(client.clone(), namespace);
