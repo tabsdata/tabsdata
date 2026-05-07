@@ -10,6 +10,7 @@ use getset::Getters;
 
 use crate::client::tdkserver::commands::create::CreateArguments;
 use crate::client::tdkserver::commands::start::StartArguments;
+use crate::client::tdkserver::commands::stop::StopArguments;
 use crate::fabric::ClusterFabric;
 
 #[derive(Debug, Clone, Parser)]
@@ -41,6 +42,8 @@ pub enum Commands {
     Create(CreateArguments),
     #[command(about = "Start a Tabsdata instance")]
     Start(StartArguments),
+    #[command(about = "Stop a Tabsdata instance")]
+    Stop(StopArguments),
 }
 
 #[derive(Debug, Clone, Getters, Args)]

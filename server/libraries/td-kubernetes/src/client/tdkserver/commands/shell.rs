@@ -18,6 +18,7 @@ use tracing::error;
 
 use super::create::{CreateArguments, command_create};
 use super::start::{StartArguments, command_start};
+use super::stop::{StopArguments, command_stop};
 use crate::exit::Outcome;
 
 const TOOL_NAME: &str = "tdkserver";
@@ -30,6 +31,8 @@ enum ShellCommand {
     Create(CreateArguments),
     /// Start a Tabsdata instance
     Start(StartArguments),
+    /// Stop a Tabsdata instance
+    Stop(StopArguments),
     /// Exit the shell
     Exit,
     /// Exit the shell
@@ -112,6 +115,9 @@ pub async fn command_shell() -> Outcome {
                 }
                 ShellCommand::Start(arguments) => {
                     let _ = command_start(arguments).await;
+                }
+                ShellCommand::Stop(arguments) => {
+                    let _ = command_stop(arguments).await;
                 }
                 ShellCommand::Exit | ShellCommand::Quit => break,
             },
