@@ -1,0 +1,33 @@
+//
+// Copyright 2026 Tabs Data Inc.
+//
+
+use std::process::exit;
+
+use kube::config::Config;
+use kube::Client;
+use rustls::crypto::{aws_lc_rs, ring};
+use td_common::status::ExitStatus::GeneralError;
+use tracing::{debug, error};
+
+pub fn install_crypto_provider() {
+    if let Err(error) = aws_lc_rs::default_provider().install_default() {
+        debug!(
+            "Failed to install the aws-lc-rs tls cryptographic provider: {error:?}. Falling back to the ring tls cryptographic provider."
+        );
+        if let Err(error) = ring::default_provider().install_default() {
+            debug!("Failed to install the ring tls cryptographic provider: {error:?}.");
+        } else {
+            debug!("Successfully installed the ring tls cryptographic provider.");
+        }
+    } else {
+        debug!("Successfully installed the aws-lc-rs tls cryptographic provider.");
+    }
+}
+
+pub fn build_kube_client(config: &Config) -> Client {
+    Client::try_from(config.clone()).unwrap_or_else(|error| {
+        error!("Failed to build Kubernetes client: {error}");
+        exit(GeneralError.code());
+    })
+}
