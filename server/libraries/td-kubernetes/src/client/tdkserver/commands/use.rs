@@ -7,7 +7,7 @@ use tracing::info;
 
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::prompt_yes_no;
-use crate::provider::{Provider, provider_for};
+use crate::provider::provider_for;
 use crate::system::exit::Result;
 
 #[derive(Debug, Clone, Args)]

@@ -7,7 +7,7 @@ pub mod kubernetes;
 
 use std::future::Future;
 
-use ambassador::{Delegate, delegatable_trait};
+use async_trait::async_trait;
 use clap_derive::ValueEnum;
 use td_common::status::ExitStatus::GeneralError;
 
@@ -65,69 +65,56 @@ pub trait Instance: Send + Sync {
     }
 }
 
-#[delegatable_trait]
+#[async_trait]
 pub trait Provider: Send + Sync {
     fn name(&self) -> &'static str;
     fn display_name(&self) -> String;
     fn to_tdkcontext(&self) -> TdkContext;
 
-    fn ensure_creatable_runtime(&self) -> impl Future<Output = Result> + Send;
+    async fn ensure_creatable_runtime(&self) -> Result;
     fn preview_create_runtime_summary(&self, profile: &str);
     fn report_created_runtime(&self);
 
-    fn ensure_usable_runtime(&self) -> impl Future<Output = Result> + Send;
+    async fn ensure_usable_runtime(&self) -> Result;
     fn preview_use_runtime_summary(&self);
     fn report_used_runtime(&self);
 
-    fn ensure_startable_runtime(&self) -> impl Future<Output = Result> + Send;
+    async fn ensure_startable_runtime(&self) -> Result;
     fn preview_start_runtime_summary(&self);
-    fn start_runtime(&self) -> impl Future<Output = Result> + Send {
-        async move {
-            self.start_cluster().await?;
-            self.start_instance().await?;
-            Ok(())
-        }
+    async fn start_runtime(&self) -> Result {
+        self.start_cluster().await?;
+        self.start_instance().await?;
+        Ok(())
     }
     fn report_started_runtime(&self);
 
-    fn ensure_stoppable_runtime(&self) -> impl Future<Output = Result> + Send;
+    async fn ensure_stoppable_runtime(&self) -> Result;
     fn preview_stop_runtime_summary(&self);
-    fn stop_runtime(&self) -> impl Future<Output = Result<bool>> + Send {
-        async move {
-            let stopped_instance = self.stop_instance().await?;
-            let stopped_cluster = self.stop_cluster().await?;
-            Ok(stopped_instance || stopped_cluster)
-        }
+    async fn stop_runtime(&self) -> Result<bool> {
+        let stopped_instance = self.stop_instance().await?;
+        let stopped_cluster = self.stop_cluster().await?;
+        Ok(stopped_instance || stopped_cluster)
     }
     fn report_stopped_runtime(&self);
 
-    fn prepare_cluster(&self) -> impl Future<Output = Result<Box<dyn Transaction>>> + Send;
-    fn start_cluster(&self) -> impl Future<Output = Result> + Send;
-    fn stop_cluster(&self) -> impl Future<Output = Result<bool>> + Send;
+    async fn prepare_cluster(&self) -> Result<Box<dyn Transaction>>;
+    async fn start_cluster(&self) -> Result;
+    async fn stop_cluster(&self) -> Result<bool>;
 
-    fn prepare_instance(&self, profile: &str) -> impl Future<Output = Result> + Send {
-        async move {
-            self.stage_configmap(profile).await?;
-            self.store_configmap(profile).await
-        }
+    async fn prepare_instance(&self, profile: &str) -> Result {
+        self.stage_configmap(profile).await?;
+        self.store_configmap(profile).await
     }
-    fn stage_configmap(&self, profile: &str) -> impl Future<Output = Result> + Send;
-    fn store_configmap(&self, profile: &str) -> impl Future<Output = Result> + Send;
-    fn start_instance(&self) -> impl Future<Output = Result> + Send;
-    fn stop_instance(&self) -> impl Future<Output = Result<bool>> + Send;
-}
-
-#[derive(Delegate)]
-#[delegate(Provider)]
-pub enum Providers {
-    Kubernetes(KubernetesProvider),
-    Kminus(KminusProvider),
+    async fn stage_configmap(&self, profile: &str) -> Result;
+    async fn store_configmap(&self, profile: &str) -> Result;
+    async fn start_instance(&self) -> Result;
+    async fn stop_instance(&self) -> Result<bool>;
 }
 
 pub async fn provider_for(
     cluster: ClusterArguments,
     instance: InstanceArguments,
-) -> Result<Providers> {
+) -> Result<Box<dyn Provider>> {
     let provider = match cluster.provider {
         Some(provider) => provider,
         None => {
@@ -138,11 +125,11 @@ pub async fn provider_for(
     match provider {
         ClusterProvider::Kubernetes => {
             let provider = KubernetesProvider::build(cluster, instance).await?;
-            Ok(Providers::Kubernetes(provider))
+            Ok(Box::new(provider))
         }
         ClusterProvider::Kminus => {
             let provider = KminusProvider::build(cluster, instance)?;
-            Ok(Providers::Kminus(provider))
+            Ok(Box::new(provider))
         }
     }
 }
@@ -150,7 +137,7 @@ pub async fn provider_for(
 pub async fn provider_for_or_tdkcontext(
     cluster: ClusterArguments,
     instance: InstanceArguments,
-) -> Result<Providers> {
+) -> Result<Box<dyn Provider>> {
     if cluster.provider.is_some() {
         return provider_for(cluster, instance).await;
     }

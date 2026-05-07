@@ -64,7 +64,7 @@ td-python = { workspace = true }
 
 # External dependencies
 
-ambassador = { workspace = true }
+async-trait = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 clap_derive = { workspace = true }
 colored = { workspace = true }

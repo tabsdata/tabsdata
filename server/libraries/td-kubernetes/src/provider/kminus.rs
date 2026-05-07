@@ -8,6 +8,7 @@ pub mod instance;
 use std::fs;
 use std::path::PathBuf;
 
+use async_trait::async_trait;
 use td_common::env::TABSDATA_HOME_DIR;
 use td_common::server::{DEFAULT_INSTANCE, INSTANCES_FOLDER};
 use td_common::status::ExitStatus::GeneralError;
@@ -138,6 +139,7 @@ struct KubeSummary {
     namespace: String,
 }
 
+#[async_trait]
 impl Provider for KminusProvider {
     fn name(&self) -> &'static str {
         PROVIDER_KMINUS

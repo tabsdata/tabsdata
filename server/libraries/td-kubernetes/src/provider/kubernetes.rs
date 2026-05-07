@@ -7,6 +7,7 @@ pub mod instance;
 
 use std::path::PathBuf;
 
+use async_trait::async_trait;
 use kube::Config;
 use td_common::server::DEFAULT_INSTANCE;
 use td_common::status::ExitStatus::GeneralError;
@@ -129,6 +130,7 @@ impl KubernetesProvider {
     }
 }
 
+#[async_trait]
 impl Provider for KubernetesProvider {
     fn name(&self) -> &'static str {
         PROVIDER_KUBERNETES
