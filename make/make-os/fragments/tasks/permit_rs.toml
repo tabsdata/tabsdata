@@ -104,7 +104,18 @@ script = [
         km_root = set "${PROJECT_TABSDATA_ROOT_FOLDER}../${km_alternate}"
         km_root_exists = is_directory ${km_root}
     end
+    make_task = get_env CARGO_MAKE_TASK
+    skip_km_assembly = eq ${make_task} "lock"
+    if not ${skip_km_assembly}
+        skip_km_assembly = eq ${make_task} "bump"
+    end
+    run_km_assembly_block = set "false"
     if ${km_root_exists}
+        if not ${skip_km_assembly}
+            run_km_assembly_block = set "true"
+        end
+    end
+    if ${run_km_assembly_block}
         if not ${on_ga_true}
             run_assembly = set "false"
             if ${is_always}

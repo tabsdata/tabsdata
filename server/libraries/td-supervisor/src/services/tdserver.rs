@@ -120,7 +120,7 @@ pub enum TabsCliError {
 #[derive(Debug, Clone, clap_derive::Parser)]
 #[command(
     name = "Tabsdata Server",
-    version = "1.10.0",
+    version = "2.0.0",
     about = "Tabsdata Server",
     long_about = "Any Tabsdata instance can be managed with the available commands of this tool. \
                   These commands rely on file 'pid' to control the state of any instance."

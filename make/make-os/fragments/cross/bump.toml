@@ -61,6 +61,32 @@ script = [
         exec --fail-on-error python ${BUMP_VERSION_SCRIPT} ${project} ${new_version}
     end
 
+    km_primary = get_env TD_KM_PROJECT_PRIMARY_NAME
+    km_alternate = get_env TD_KM_PROJECT_ALTERNATE_NAME
+    project = set ${PROJECT_TABSDATA_BASE_FOLDER}/../${km_primary}
+    project_exists = is_path_exists ${project}
+    if not ${project_exists}
+        project = set ${PROJECT_TABSDATA_BASE_FOLDER}/../${km_alternate}
+        project_exists = is_path_exists ${project}
+    end
+    if ${project_exists}
+        cd ${project}/mods/kcommon
+        info "🚀 cargo set-version ${new_version}"
+        exec --fail-on-error cargo set-version ${new_version}
+
+        cd ${project}/mods/kminus
+        info "🚀 cargo set-version ${new_version}"
+        exec --fail-on-error cargo set-version ${new_version}
+
+        cd ${project}/mods/pod-runner
+        info "🚀 cargo set-version ${new_version}"
+        exec --fail-on-error cargo set-version ${new_version}
+
+        cd ${project}/
+        info "🚀 python ${BUMP_VERSION_SCRIPT} ${project} ${new_version}"
+        exec --fail-on-error python ${BUMP_VERSION_SCRIPT} ${project} ${new_version}
+    end
+
     project = set ${PROJECT_TABSDATA_BASE_FOLDER}/../tabsdata-os
     project_exists = is_path_exists ${project}
     if ${project_exists}

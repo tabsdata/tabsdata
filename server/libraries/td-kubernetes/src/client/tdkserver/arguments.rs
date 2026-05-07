@@ -18,7 +18,7 @@ use crate::provider::ClusterProvider;
 #[derive(Debug, Clone, Parser)]
 #[command(
     name = "Tabsdata Client for Tabsdata Server on Kubernetes",
-    version = "1.10.0",
+    version = "2.0.0",
     about = "Client for the tabsdata server on kubernetes",
     long_about = "Manage tabsdata instances on kubernetes clusters."
 )]

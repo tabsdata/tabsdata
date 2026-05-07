@@ -8,7 +8,7 @@ anyio==4.13.0
 archspec==0.2.5
 asn1crypto==1.5.1
 attrs==26.1.0
-authlib==1.7.1
+authlib==1.7.2
 avro==1.12.1
 base32hex==1.0.2
 boto3==1.42.73
@@ -63,12 +63,12 @@ ijson==3.5.0
 importlib-metadata==8.7.1
 isodate==0.7.2
 jmespath==1.1.0
-joserfc==1.6.4
+joserfc==1.6.5
 jsonschema==4.26.0
 jsonschema-specifications==2025.9.1
 lxml==6.1.0
 lz4==4.4.5
-markdown-it-py==4.0.0
+markdown-it-py==4.1.0
 mdurl==0.1.2
 mmh3==5.2.1
 more-itertools==11.0.2

@@ -420,7 +420,7 @@ impl<'de> Deserialize<'de> for ControllersConfig {
 #[derive(Debug, Clone, clap_derive::Parser)]
 #[command(
     name = "Tabsdata Supervisor",
-    version = "1.10.0",
+    version = "2.0.0",
     about = "Tabsdata Supervisor",
     long_about = "Tabsdata supervisor that can manage workers using a configuration descriptor."
 )]

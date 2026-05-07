@@ -2366,9 +2366,9 @@ dependencies = [
 
 [[package]]
 name = "js-sys"
-version = "0.3.97"
+version = "0.3.98"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1840c94c045fbcf8ba2812c95db44499f7c64910a912551aaaa541decebcacf"
+checksum = "67df7112613f8bfd9150013a0314e196f4800d3201ae742489d999db2f979f08"
 dependencies = [
  "cfg-if",
  "futures-util",
@@ -3058,7 +3058,7 @@ dependencies = [
 
 [[package]]
 name = "td-apiforge"
-version = "1.10.0"
+version = "2.0.0"
 dependencies = [
  "darling 0.23.0",
  "openssl",
@@ -3070,7 +3070,7 @@ dependencies = [
 
 [[package]]
 name = "td-attach"
-version = "1.10.0"
+version = "2.0.0"
 dependencies = [
  "darling 0.23.0",
  "openssl",
@@ -3082,7 +3082,7 @@ dependencies = [
 
 [[package]]
 name = "td-build"
-version = "1.10.0"
+version = "2.0.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3101,7 +3101,7 @@ dependencies = [
 
 [[package]]
 name = "td-macros"
-version = "1.10.0"
+version = "2.0.0"
 dependencies = [
  "openssl",
  "td-build",
@@ -3109,7 +3109,7 @@ dependencies = [
 
 [[package]]
 name = "td-shared"
-version = "1.10.0"
+version = "2.0.0"
 dependencies = [
  "darling 0.23.0",
  "duct",
@@ -3202,7 +3202,7 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tm-error"
-version = "1.10.0"
+version = "2.0.0"
 dependencies = [
  "openssl",
  "quote",
@@ -3211,7 +3211,7 @@ dependencies = [
 
 [[package]]
 name = "tm-objects"
-version = "1.10.0"
+version = "2.0.0"
 dependencies = [
  "darling 0.23.0",
  "heck",
@@ -3224,7 +3224,7 @@ dependencies = [
 
 [[package]]
 name = "tm-pyo3"
-version = "1.10.0"
+version = "2.0.0"
 dependencies = [
  "openssl",
  "quote",
@@ -3233,7 +3233,7 @@ dependencies = [
 
 [[package]]
 name = "tm-services"
-version = "1.10.0"
+version = "2.0.0"
 dependencies = [
  "openssl",
  "quote",
@@ -3242,7 +3242,7 @@ dependencies = [
 
 [[package]]
 name = "tm-test"
-version = "1.10.0"
+version = "2.0.0"
 dependencies = [
  "darling 0.23.0",
  "openssl",
@@ -3254,7 +3254,7 @@ dependencies = [
 
 [[package]]
 name = "tm-tower"
-version = "1.10.0"
+version = "2.0.0"
 dependencies = [
  "openssl",
  "quote",
@@ -3263,7 +3263,7 @@ dependencies = [
 
 [[package]]
 name = "tm-workspace"
-version = "1.10.0"
+version = "2.0.0"
 dependencies = [
  "openssl",
  "quote",
@@ -3481,9 +3481,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen"
-version = "0.2.120"
+version = "0.2.121"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df52b6d9b87e0c74c9edfa1eb2d9bf85e5d63515474513aa50fa181b3c4f5db1"
+checksum = "49ace1d07c165b0864824eee619580c4689389afa9dc9ed3a4c75040d82e6790"
 dependencies = [
  "cfg-if",
  "once_cell",
@@ -3494,9 +3494,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro"
-version = "0.2.120"
+version = "0.2.121"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "78b1041f495fb322e64aca85f5756b2172e35cd459376e67f2a6c9dffcedb103"
+checksum = "8e68e6f4afd367a562002c05637acb8578ff2dea1943df76afb9e83d177c8578"
 dependencies = [
  "quote",
  "wasm-bindgen-macro-support",
@@ -3504,9 +3504,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro-support"
-version = "0.2.120"
+version = "0.2.121"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9dcd0ff20416988a18ac686d4d4d0f6aae9ebf08a389ff5d29012b05af2a1b41"
+checksum = "d95a9ec35c64b2a7cb35d3fead40c4238d0940c86d107136999567a4703259f2"
 dependencies = [
  "bumpalo",
  "proc-macro2",
@@ -3517,9 +3517,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-shared"
-version = "0.2.120"
+version = "0.2.121"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "49757b3c82ebf16c57d69365a142940b384176c24df52a087fb748e2085359ea"
+checksum = "c4e0100b01e9f0d03189a92b96772a1fb998639d981193d7dbab487302513441"
 dependencies = [
  "unicode-ident",
 ]

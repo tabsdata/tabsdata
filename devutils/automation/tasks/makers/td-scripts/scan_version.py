@@ -45,8 +45,10 @@ IGNORED_EXTENSIONS = {
 
 PROJECTS = [
     "tabsdata",
-    "tabsdata-os",
+    "kminus",
     "tabsdata-ee",
+    "tabsdata-os",
+    "tabsdata-km",
     "tabsdata-ag",
     "tabsdata-ui",
 ]

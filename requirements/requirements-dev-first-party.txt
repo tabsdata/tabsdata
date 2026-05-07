@@ -2,16 +2,16 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
-tabsdata-bigquery[deps]==1.10.0
-tabsdata-cdc-common[deps]==1.10.0
-tabsdata-cdc-db2[deps]==1.10.0
-tabsdata-cdc-mysql[deps]==1.10.0
-tabsdata-cdc-postgres[deps]==1.10.0
-tabsdata-databricks[deps]==1.10.0
-tabsdata-kafka[deps]==1.10.0
-tabsdata-mongodb[deps]==1.10.0
-tabsdata-mssql[deps]==1.10.0
-tabsdata-salesforce[deps]==1.10.0
-tabsdata-schema-evolution[deps]==1.10.0
-tabsdata-snowflake[deps]==1.10.0
-tabsdata-sql-common[deps]==1.10.0
+tabsdata-bigquery[deps]==2.0.0
+tabsdata-cdc-common[deps]==2.0.0
+tabsdata-cdc-db2[deps]==2.0.0
+tabsdata-cdc-mysql[deps]==2.0.0
+tabsdata-cdc-postgres[deps]==2.0.0
+tabsdata-databricks[deps]==2.0.0
+tabsdata-kafka[deps]==2.0.0
+tabsdata-mongodb[deps]==2.0.0
+tabsdata-mssql[deps]==2.0.0
+tabsdata-salesforce[deps]==2.0.0
+tabsdata-schema-evolution[deps]==2.0.0
+tabsdata-snowflake[deps]==2.0.0
+tabsdata-sql-common[deps]==2.0.0
