@@ -4,8 +4,8 @@
 
 use std::process::exit;
 
-use kube::config::Config;
 use kube::Client;
+use kube::config::Config;
 use rustls::crypto::{aws_lc_rs, ring};
 use td_common::status::ExitStatus::GeneralError;
 use tracing::{debug, error};

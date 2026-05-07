@@ -5,12 +5,14 @@
 mod arguments;
 mod common;
 mod create;
+mod shell;
 pub mod widgets;
 
 use clap::{CommandFactory, Parser};
 
 use crate::client::tdkserver::arguments::{Arguments, Commands};
 use crate::client::tdkserver::create::command_create;
+use crate::client::tdkserver::shell::command_shell;
 use crate::kubernetes::client::install_crypto_provider;
 
 pub struct TabsDataKubernetesClient;
@@ -23,6 +25,7 @@ impl TabsDataKubernetesClient {
                 Arguments::command().print_help().ok();
                 println!();
             }
+            Some(Commands::Shell) => command_shell().await,
             Some(Commands::Create(arguments)) => command_create(arguments).await,
         }
     }

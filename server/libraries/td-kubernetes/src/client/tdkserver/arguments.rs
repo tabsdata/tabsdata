@@ -33,6 +33,8 @@ pub struct Arguments {
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum Commands {
+    #[command(about = "Open an interactive shell")]
+    Shell,
     #[command(about = "Create a Tabsdata instance")]
     Create(CreateArguments),
 }
