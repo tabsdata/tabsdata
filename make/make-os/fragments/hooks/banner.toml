@@ -60,9 +60,10 @@ script = [
         TD_ROOT="$PROJECT_TABSDATA_ROOT_FOLDER"
     fi
 
-    if command -v viu &> /dev/null; then
+    if command -v imgcat &> /dev/null; then
         echo
-        viu --width 32 ${TD_ROOT}/make/make-os/resources/images/tabsdata.png
+        imgcat --width 32 ${TD_ROOT}/make/make-os/resources/images/tabsdata.png
+    else
         echo
     fi
     ''']

@@ -59,12 +59,16 @@ script = [
         cm_run_task banner
     end
 
-    info "🐢 Runnning task: ${CARGO_MAKE_TASK}"
+    info "🐢 Running task: ${CARGO_MAKE_TASK}"
+    if is_info
+        echo ""
+    end
 
-    echo ""
     user_home = get_env HOME
     info "🏠 User HOME: ${HOME}"
-    echo ""
+    if is_info
+        echo ""
+    end
 
     no_user_home = eq ${user_home} ""
     if ${no_user_home}

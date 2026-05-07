@@ -2,21 +2,45 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
-[setup]
-
 # Caution!!!
-# This list is replicated in project python file 'bundle_utils.py'
-# in folder 'client/platform/src/main/python/tabsdata/_utils',
+# The flattened union of all `names` below is replicated in project python file
+# 'bundle_utils.py' in folder 'client/platform/src/main/python/tabsdata/_utils',
 # to ensure that when testing with pytest, the binaries are distributed and
 # available from tabsdata as a local package.
-# Please, make sure you update this list in both places.
+# Please, make sure you update both places.
+#
+# Each group describes a set of binaries that ship together as part of a
+# tabsdata wheel. A group with neither `source` nor `km_subpath` resolves its
+# source folder dynamically via `get_target_release_folder()` (profile and
+# td_target aware). A group with an explicit `source` is interpreted relative
+# to the project root. A group with `km_subpath` is interpreted relative to
+# the resolved km sibling project (preferring `KM_PROJECT_PRIMARY_NAME`,
+# falling back to `KM_PROJECT_ALTERNATE_NAME` from
+# tabsdatax.setup.common.platform). External groups are auto-detected: if
+# the folder is missing, the group is silently skipped.
 
-binaries = [
-    "tdserver",
+[[binary_groups]]
+name = "tabsdata"
+names = [
     "td_about",
     "td_apiserver",
     "td_bootloader",
     "td_crontrigger",
     "td_supervisor",
     "td_transporter",
+    "tdserver",
+]
+
+[[binary_groups]]
+name = "kubernetes"
+km_subpath = "target/dist"
+names = [
+    "control-plane",
+    "etcd",
+    "km",
+    "kube-apiserver",
+    "kube-controller-manager",
+    "kubectl",
+    "pod-runner",
+    "virtual-kubelet",
 ]

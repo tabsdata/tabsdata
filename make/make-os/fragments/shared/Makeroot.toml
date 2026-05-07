@@ -33,6 +33,9 @@ PROFILE = "${profile:dev}"
 PROJECT_TABSDATA_ROOT_FOLDER = { value = "${PROJECT_TABSDATA_BASE_FOLDER}/", normalize = true }
 PROJECT_TABSDATA_TOOLKIT_ROOT_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/python/tabsdata-toolkit", normalize = true }
 
+TD_KM_PROJECT_PRIMARY_NAME = "tabsdata-km"
+TD_KM_PROJECT_ALTERNATE_NAME = "kminus"
+
 PROJECT_RS_TD_MACROS_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/macros/", normalize = true }
 PROJECT_RS_TD_TABSDATA_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/", normalize = true }
 PROJECT_RS_TO_EXPANSIONS_PYTHON_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/expansions/python/", normalize = true }

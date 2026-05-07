@@ -33,7 +33,7 @@ from tabsdatax.setup.common.platform import (
 )
 from tabsdatax.setup.common.requirements import read_requirements
 from tabsdatax.setup.tabsdata.assets import check_third_party
-from tabsdatax.setup.tabsdata.binaries import create_datafiles, detect_binaries
+from tabsdatax.setup.tabsdata.binaries import collect_group_datafiles
 from tabsdatax.setup.tabsdata.build import (
     create_custom_build_py_class,
     create_main_custom_build_hook,
@@ -112,15 +112,11 @@ copy_variant_assets(
 target_release_folder = get_target_release_folder()
 with open(os.path.join(ROOT, "setup.toml"), "rb") as setup_toml:
     setup_toml = tomllib.load(setup_toml)
-    base_binaries = setup_toml["setup"]["binaries"]
-existing_binaries, missing_binaries = detect_binaries(
-    base_binaries,
+    binary_groups = setup_toml["binary_groups"]
+datafiles = collect_group_datafiles(
+    binary_groups,
     target_release_folder,
-    configuration.require_server_binaries,
-)
-datafiles = create_datafiles(
-    existing_binaries,
-    target_release_folder,
+    require_server_binaries=configuration.require_server_binaries,
 )
 
 yaml_files_tabsdata = []

@@ -79,4 +79,132 @@ script = [
 
         exec --fail-on-error cargo install --quiet --locked --git https://github.com/tabsdata/cargo-pants --branch main
     end
+
+    kminus_tracking = get_env TD_KMINUS_TRACKING
+    kminus_tracking_empty = is_empty ${kminus_tracking}
+    if ${kminus_tracking_empty}
+        kminus_tracking = set "onchange"
+    end
+    is_never = eq ${kminus_tracking} "never"
+    is_always = eq ${kminus_tracking} "always"
+    is_onchange = eq ${kminus_tracking} "onchange"
+    if not ${is_never}
+        if not ${is_always}
+            if not ${is_onchange}
+                error "🚫 Invalid value for TD_KMINUS_TRACKING: '${kminus_tracking}'. Expected one of: never, always, onchange. Make aborted."
+                assert_fail
+            end
+        end
+    end
+    km_primary = get_env TD_KM_PROJECT_PRIMARY_NAME
+    km_alternate = get_env TD_KM_PROJECT_ALTERNATE_NAME
+    km_root = set "${PROJECT_TABSDATA_ROOT_FOLDER}../${km_primary}"
+    km_root_exists = is_directory ${km_root}
+    if not ${km_root_exists}
+        km_root = set "${PROJECT_TABSDATA_ROOT_FOLDER}../${km_alternate}"
+        km_root_exists = is_directory ${km_root}
+    end
+    if ${km_root_exists}
+        if not ${on_ga_true}
+            run_assembly = set "false"
+            if ${is_always}
+                run_assembly = set "true"
+            elseif ${is_onchange}
+                tdcommit_file = concat ${km_root} "/.tdcommit"
+                cwd_saved = pwd
+                cd ${km_root}
+                commit_result = exec --fail-on-error git rev-parse HEAD
+                status_result = exec --fail-on-error git status --porcelain
+                cd ${cwd_saved}
+                current_commit = trim ${commit_result.stdout}
+                status_text = trim ${status_result.stdout}
+                is_clean = is_empty ${status_text}
+                is_dirty = set "false"
+                if not ${is_clean}
+                    is_dirty = set "true"
+                end
+
+                if ${is_dirty}
+                    warn "‼️️ The km repository has uncommitted changes; forcing km assembly..."
+                    run_assembly = set "true"
+                else
+                    tdcommit_exists = is_file ${tdcommit_file}
+                    if not ${tdcommit_exists}
+                        run_assembly = set "true"
+                    else
+                        stored_commit_raw = readfile ${tdcommit_file}
+                        stored_commit = trim ${stored_commit_raw}
+                        commits_match = eq ${stored_commit} ${current_commit}
+                        if not ${commits_match}
+                            run_assembly = set "true"
+                        end
+                    end
+
+                    still_skipping = eq ${run_assembly} "false"
+                    if ${still_skipping}
+                        dist_folder = concat ${km_root} "/target/dist"
+                        expected_binaries = array control-plane virtual-kubelet pod-runner km kube-apiserver kube-controller-manager etcd kubectl
+                        for binary in ${expected_binaries}
+                            binary_path = concat ${dist_folder} "/" ${binary}
+                            binary_exists = is_file ${binary_path}
+                            if not ${binary_exists}
+                                run_assembly = set "true"
+                            end
+                        end
+                        release ${expected_binaries}
+                    end
+                end
+            end
+
+            should_run_assembly = eq ${run_assembly} "true"
+            if ${should_run_assembly}
+                info "🧱 Running km assembly..."
+                td_run_permit_saved = get_env TD_RUN_PERMIT
+                duckscript_log_level_saved = get_env DUCKSCRIPT_LOG_LEVEL
+                python_log_level_saved = get_env PYTHON_LOG_LEVEL
+                set_env TD_RUN_PERMIT "false"
+                set_env DUCKSCRIPT_LOG_LEVEL "error"
+                set_env PYTHON_LOG_LEVEL "ERROR"
+                cd ${km_root}
+                exec --fail-on-error cargo make --env profile=assembly assembly
+                status_after = exec --fail-on-error git status --porcelain
+                status_after_text = trim ${status_after.stdout}
+                is_clean_after = is_empty ${status_after_text}
+                is_dirty_after = set "false"
+                if not ${is_clean_after}
+                    is_dirty_after = set "true"
+                end
+                tdcommit_path = concat ${km_root} "/.tdcommit"
+                if ${is_dirty_after}
+                    writefile ${tdcommit_path} ""
+                else
+                    tdcommit_after = exec --fail-on-error git rev-parse HEAD
+                    tdcommit_after_id = trim ${tdcommit_after.stdout}
+                    writefile ${tdcommit_path} ${tdcommit_after_id}
+                end
+                td_run_permit_saved_empty = is_empty ${td_run_permit_saved}
+                if ${td_run_permit_saved_empty}
+                    unset_env TD_RUN_PERMIT
+                else
+                    set_env TD_RUN_PERMIT ${td_run_permit_saved}
+                end
+                duckscript_log_level_saved_empty = is_empty ${duckscript_log_level_saved}
+                if ${duckscript_log_level_saved_empty}
+                    unset_env DUCKSCRIPT_LOG_LEVEL
+                else
+                    set_env DUCKSCRIPT_LOG_LEVEL ${duckscript_log_level_saved}
+                end
+                python_log_level_saved_empty = is_empty ${python_log_level_saved}
+                if ${python_log_level_saved_empty}
+                    unset_env PYTHON_LOG_LEVEL
+                else
+                    set_env PYTHON_LOG_LEVEL ${python_log_level_saved}
+                end
+            else
+                if ${is_onchange}
+                    info "💯 Binaries of km are up to date; skipping assembly."
+                end
+            end
+        end
+    end
     ''']

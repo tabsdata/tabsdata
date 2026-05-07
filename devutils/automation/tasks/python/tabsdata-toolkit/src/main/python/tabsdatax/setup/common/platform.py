@@ -123,3 +123,15 @@ def get_target_release_folder() -> str:
         td_target = os.getenv("td-target", "")
 
     return os.path.join("target", td_target, profile)
+
+
+KM_PROJECT_PRIMARY_NAME = "tabsdata-km"
+KM_PROJECT_ALTERNATE_NAME = "kminus"
+
+
+def resolve_km_project_relative() -> str | None:
+    for name in (KM_PROJECT_PRIMARY_NAME, KM_PROJECT_ALTERNATE_NAME):
+        candidate = os.path.join("..", name)
+        if os.path.isdir(candidate):
+            return candidate
+    return None

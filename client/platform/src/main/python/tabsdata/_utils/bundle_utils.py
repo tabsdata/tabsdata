@@ -75,20 +75,68 @@ IGNORED_FOLDERS = (
 )
 
 # Caution!!!
-# This list is replicated in project python file 'setup.py',
-# to ensure that when testing with pytest, the binaries are distributed and
-# available from tabsdata as a local package.
-# Please, make sure you update this list in both places.
+# This structure replicates the `[[binary_groups]]` blocks of project file
+# 'setup.toml'. It drives pytest function bundling: each group declares the
+# source folder to scan for compiled binaries and the destination layout
+# inside the bundle.
+#
+# A group without `source` or `km_subpath` (the `tabsdata` group) is scanned
+# recursively under `<path_to_persist>/target/`, mirroring the source layout
+# in the bundle (preserves `target/<profile>/...` subfolders).
+#
+# A group with `km_subpath` (e.g. `kubernetes`) is scanned non-recursively at
+# `<resolved-km-root>/<km_subpath>`, where `<resolved-km-root>` is the first
+# of `KM_PROJECT_PRIMARY_NAME`/`KM_PROJECT_ALTERNATE_NAME` that exists as a
+# sibling of `<path_to_persist>`. Files are copied flat into the bundle at
+# `<bundle_dest>`. Missing source folders are silently skipped, matching
+# the behavior for a missing `target/` folder.
+#
+# Please, make sure you update both places.
 
-BASE_BINARIES = [
-    "tdserver",
-    "td_about",
-    "td_apiserver",
-    "td_bootloader",
-    "td_crontrigger",
-    "td_supervisor",
-    "td_transporter",
+KM_PROJECT_PRIMARY_NAME = "tabsdata-km"
+KM_PROJECT_ALTERNATE_NAME = "kminus"
+
+BINARY_GROUPS = [
+    {
+        "name": "tabsdata",
+        "names": [
+            "td_about",
+            "td_apiserver",
+            "td_bootloader",
+            "td_crontrigger",
+            "td_supervisor",
+            "td_transporter",
+            "tdserver",
+        ],
+    },
+    {
+        "name": "kubernetes",
+        "km_subpath": "target/dist",
+        "bundle_dest": "target/dist",
+        "names": [
+            "control-plane",
+            "etcd",
+            "km",
+            "kube-apiserver",
+            "kube-controller-manager",
+            "kubectl",
+            "pod-runner",
+            "virtual-kubelet",
+        ],
+    },
 ]
+
+BASE_BINARIES = [name for group in BINARY_GROUPS for name in group["names"]]
+
+
+def _resolve_km_root(base: str) -> str | None:
+    for name in (KM_PROJECT_PRIMARY_NAME, KM_PROJECT_ALTERNATE_NAME):
+        candidate = os.path.join(base, "..", name)
+        if os.path.isdir(candidate):
+            return candidate
+    return None
+
+
 LOCAL_PACKAGES_FOLDER = "local_packages"
 
 PLUGINS_FOLDER = "plugins"
@@ -290,6 +338,38 @@ def ignore_path(path):
     return ignore_files
 
 
+def _bundle_binary_group(group: dict, path_to_persist: str, save_location: str):
+    names = group["names"]
+    km_subpath = group.get("km_subpath")
+
+    if km_subpath is not None:
+        km_root = _resolve_km_root(path_to_persist)
+        if km_root is None:
+            return
+        scan_root = Path(km_root) / km_subpath
+        if not scan_root.is_dir():
+            return
+        bundle_dest = Path(group.get("bundle_dest", km_subpath))
+        for entry in scan_root.iterdir():
+            if entry.is_file() and entry.stem in names and entry.suffix in ("", ".exe"):
+                destination = Path(save_location) / bundle_dest / entry.name
+                os.makedirs(destination.parent, exist_ok=True)
+                shutil.copy2(entry, destination)
+    else:
+        scan_root = Path(path_to_persist) / "target"
+        if not scan_root.exists():
+            return
+        for root, _, files in os.walk(scan_root):
+            root_path = Path(root)
+            relative_root_path = root_path.relative_to(path_to_persist)
+            for file in files:
+                file_path = root_path / file
+                if file_path.stem in names and file_path.suffix in ("", ".exe"):
+                    destination = Path(save_location) / relative_root_path / file
+                    os.makedirs(destination.parent, exist_ok=True)
+                    shutil.copy2(file_path, destination)
+
+
 def store_folder_contents(path_to_persist: str, save_location: str):
     os.makedirs(save_location, exist_ok=True)
 
@@ -312,7 +392,7 @@ def store_folder_contents(path_to_persist: str, save_location: str):
             symlinks=False,
         )
 
-    # Step 2: Extra pass to find binaries under ignored folder "target".
+    # Step 2: Extra pass to find compiled binaries excluded from Step 1.
     # This is only allowed when running pytest tests, in order to simplify
     # the setup for test executions from terminal or PyCharm.
     if os.environ.get(PYTEST_CONTEXT_ACTIVE) is not None:
@@ -329,27 +409,8 @@ def store_folder_contents(path_to_persist: str, save_location: str):
         # folder in the PATH when running pytest test. Therefore, this capability
         # should not be necessary in normal circumstances.
         if local_packages_with_binaries:
-            target_folder = Path(os.path.join(path_to_persist, "target"))
-            if target_folder.exists():
-                for root, _, files in os.walk(target_folder):
-                    root_path = Path(root)
-                    relative_root_path = root_path.relative_to(path_to_persist)
-                    for file in files:
-                        file_path = root_path / file
-                        file_stem = file_path.stem
-                        if file_stem in BASE_BINARIES and file_path.suffix in (
-                            "",
-                            ".exe",
-                        ):
-                            destination_file_path = Path(
-                                os.path.join(
-                                    save_location,
-                                    relative_root_path,
-                                    file,
-                                )
-                            )
-                            os.makedirs(destination_file_path.parent, exist_ok=True)
-                            shutil.copy2(file_path, destination_file_path)
+            for group in BINARY_GROUPS:
+                _bundle_binary_group(group, path_to_persist, save_location)
 
 
 def store_function_codebase(path_to_persist: str, save_location: str):
