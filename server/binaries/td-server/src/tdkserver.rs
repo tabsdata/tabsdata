@@ -13,7 +13,7 @@ use td_common::logging::{CONSOLE_PROFILE, LogFormat};
 use td_common::server::TD_DETACHED_SUBPROCESSES;
 use td_common::settings::TRUE;
 use td_kubernetes::client::tdkserver;
-use td_kubernetes::client::tdkserver::show_banner;
+use td_kubernetes::client::tdkserver::widgets::show_banner;
 use te_system::license::{
     ACCEPT_TERMS_ARGUMENT, ACCEPT_TERMS_N, ACCEPT_TERMS_NO, ACCEPT_TERMS_Y, ACCEPT_TERMS_YES,
     LicenseAcceptance, TabsdataLicense,
@@ -112,7 +112,7 @@ async fn main() {
         Some(CONSOLE_PROFILE.to_string()),
         false,
         false,
-        Some(LogFormat::Compact),
+        Some(LogFormat::CompactColored),
     );
     let accept_terms = extract_accept_terms();
     let previously_acknowledged = check_banner(accept_terms).unwrap_or(false);
