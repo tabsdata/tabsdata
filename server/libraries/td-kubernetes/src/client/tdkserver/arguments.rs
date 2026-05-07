@@ -9,7 +9,7 @@ use clap_derive::{Args, Subcommand};
 use getset::Getters;
 
 use crate::client::tdkserver::commands::create::CreateArguments;
-use crate::topology::ClusterFabric;
+use crate::fabric::ClusterFabric;
 
 #[derive(Debug, Clone, Parser)]
 #[command(

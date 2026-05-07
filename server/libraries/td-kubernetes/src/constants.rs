@@ -5,6 +5,8 @@
 pub const ENV_KUBECONFIG: &str = "KUBECONFIG";
 
 pub const FOLDER_CLUSTER: &str = "cluster";
+pub const FOLDER_STAGING: &str = "staging";
+pub const FOLDER_PROFILE: &str = "profile";
 pub const FOLDER_KUBE: &str = ".kube";
 pub const FILE_KUBECONFIG: &str = "config";
 

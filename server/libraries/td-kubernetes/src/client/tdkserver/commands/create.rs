@@ -30,8 +30,8 @@ use crate::kubernetes::client::build_kube_client;
 use crate::kubernetes::toolkit::{
     build_kubeconfig, resolve_cluster_name, resolve_current_context, resolve_kubeconfig_path,
 };
+use crate::fabric::{ClusterFabric, topology_for};
 use crate::profile::load_profile;
-use crate::topology::{ClusterFabric, topology_for};
 
 #[derive(Debug, Clone, Getters, Args)]
 #[getset(get = "pub")]

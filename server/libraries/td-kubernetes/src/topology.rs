@@ -5,8 +5,7 @@
 pub mod kminus;
 pub mod kubernetes;
 
-use clap_derive::ValueEnum;
-
+use crate::fabric::ClusterFabric;
 use crate::topology::kminus::KminusTopology;
 use crate::topology::kubernetes::KubernetesTopology;
 
@@ -17,12 +16,6 @@ pub const FABRIC_PREFIX_K4S: &str = "k4s-";
 pub struct FabricPrefixes {
     pub keep: &'static str,
     pub drop: &'static [&'static str],
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
-pub enum ClusterFabric {
-    Kubernetes,
-    Kminus,
 }
 
 pub trait Topology: Send + Sync {

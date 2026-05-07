@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 
 use k8s_openapi::api::core::v1::ConfigMap;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
-use kube::api::PostParams;
+use kube::api::{DeleteParams, PostParams};
 use kube::{Api, Client};
 use td_common::status::ExitStatus::GeneralError;
 use tracing::error;
@@ -43,6 +43,15 @@ pub async fn create_configmap(
     };
     if let Err(error) = api.create(&PostParams::default(), &configmap).await {
         error!("Failed to create ConfigMap '{name}' in namespace '{namespace}': {error}");
+        return abort(GeneralError);
+    }
+    Ok(())
+}
+
+pub async fn delete_configmap(client: &Client, namespace: &str, name: &str) -> Outcome {
+    let api: Api<ConfigMap> = Api::namespaced(client.clone(), namespace);
+    if let Err(error) = api.delete(name, &DeleteParams::default()).await {
+        error!("Failed to delete ConfigMap '{name}' in namespace '{namespace}': {error}");
         return abort(GeneralError);
     }
     Ok(())

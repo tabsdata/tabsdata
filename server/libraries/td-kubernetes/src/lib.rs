@@ -5,8 +5,10 @@
 pub mod client;
 pub mod constants;
 pub mod exit;
+pub mod fabric;
 pub mod gateway;
 pub mod kminus;
 pub mod kubernetes;
 pub mod profile;
+pub mod subprocess;
 pub mod topology;
