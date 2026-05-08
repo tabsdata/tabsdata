@@ -694,7 +694,41 @@ script = [
                 echo ""
             end
             error "🧨🧨🧨🧨"
-            error "🧨 TASK 'test_py' FAILED with exit code '${exit_code}' — error skipped (--skipe)"
+
+            error ""
+
+            error "🧨 TASK 'test_parallel_py' FAILED with exit code '${exit_code}' — error skipped (--skipe)"
+
+            error ""
+
+            workspace_folder = canonicalize ${PROJECT_TABSDATA_BASE_FOLDER}/..
+            tmp_folder = canonicalize ${TMPDIR}
+            home_folder = canonicalize ${HOME}
+
+            error "🔎 The following files and folders may contain information to help diagnose the failure:"
+
+            error ""
+
+            error "📊 ${workspace_folder}/tabsdata-os/target/reports/pytest/tabsdata/pytest.html"
+            error "📊 ${workspace_folder}/tabsdata-ee/target/reports/pytest/tabsdata/pytest.html"
+            error "📊 ${workspace_folder}/tabsdata/target/reports/pytest/tabsdata/pytest.html"
+
+            error ""
+
+            error "💾 ${workspace_folder}/tabsdata-os/target/tdlocal"
+            error "💾 ${workspace_folder}/tabsdata-ee/target/tdlocal"
+            error "💾 ${workspace_folder}/tabsdata/target/tdlocal"
+
+            error ""
+
+            error "🗂️  ${tmp_folder}/td-temp"
+
+            error ""
+
+            error "🧺 ${home_folder}/.tabsdatax/pytest/harvester"
+
+            error ""
+
             error "🧨🧨🧨🧨"
             if is_error
                 echo ""
