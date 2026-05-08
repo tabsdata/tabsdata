@@ -6,6 +6,7 @@ use crate::transporter::api::{CopyReport, CopyRequest, FileCopyReport};
 use crate::transporter::common::create_store;
 use crate::transporter::compression::CompressionAlgorithm;
 use crate::transporter::error::TransporterError;
+use crate::transporter::retry::with_retry;
 use crate::transporter::taskrunner::{AsyncLambda, run_tasks};
 use crate::transporter::{copy_compression, copy_raw_parallel};
 use object_store::ObjectStoreExt;
@@ -28,7 +29,11 @@ async fn copy_tasks_generator(
     let mut copy_tasks = Vec::with_capacity(copy_pairs.len());
     for (idx, source, target) in copy_pairs {
         let (source_store, source_path) = create_store(source)?;
-        let source_meta = source_store.head(&source_path).await.map_err(|err| {
+        let source_meta = with_retry("copy_head", || async {
+            source_store.head(&source_path).await
+        })
+        .await
+        .map_err(|err| {
             TransporterError::CouldNotGetFileMetadata(source.url().to_string(), Box::new(err))
         })?;
         let (target_store, target_path) = create_store(target)?;

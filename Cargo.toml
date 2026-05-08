@@ -320,6 +320,9 @@ version = "0.12.5"
 [workspace.dependencies.axum-server]
 version = "0.8.0"
 
+[workspace.dependencies.backon]
+version = "1.5.3"
+
 [workspace.dependencies.base64]
 version = "0.22.1"
 

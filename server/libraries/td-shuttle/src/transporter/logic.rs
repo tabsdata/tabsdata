@@ -4,6 +4,7 @@
 
 use crate::transporter::args::{FileInfo, Format, ImporterOptions, ToFormat};
 use crate::transporter::cloud::create_sink_target;
+use crate::transporter::retry::with_retry;
 use chrono::{DateTime, Duration, Utc};
 use derive_builder::Builder;
 use getset::Getters;
@@ -62,11 +63,12 @@ async fn get_files_from_object_store(
     object_store: Box<dyn ObjectStore>,
     importer_options: &ImporterOptions,
 ) -> Result<impl Iterator<Item = ObjectMeta> + use<>, ImportError> {
-    Ok(object_store
-        .list_with_delimiter(Some(&Path::parse(importer_options.base_path()).unwrap()))
-        .await?
-        .objects
-        .into_iter())
+    let base_path = Path::parse(importer_options.base_path()).unwrap();
+    let listed = with_retry("logic_list", || async {
+        object_store.list_with_delimiter(Some(&base_path)).await
+    })
+    .await?;
+    Ok(listed.objects.into_iter())
 }
 
 /// [`ObjectMeta`] Iterator filter for files that match the importer options.

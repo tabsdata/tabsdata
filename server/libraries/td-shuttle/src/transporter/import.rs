@@ -9,6 +9,7 @@ use crate::transporter::api::{
 use crate::transporter::common::create_store;
 use crate::transporter::error::TransporterError;
 use crate::transporter::files_importer::{FilesImporter, Importer};
+use crate::transporter::retry::with_retry;
 use async_trait::async_trait;
 use object_store::Error::NotFound;
 use object_store::path::Path;
@@ -73,7 +74,7 @@ impl FileFinder for SingleFileFinder {
         let path = Path::parse(self.location.url().path()).map_err(|_| {
             TransporterError::InvalidImporterFileUrl(self.location.url().to_string())
         })?;
-        match store.head(&path).await {
+        match with_retry("import_head", || async { store.head(&path).await }).await {
             Ok(head) => Ok(vec![head]),
             Err(NotFound { .. }) => Ok(Vec::new()),
             Err(err) => Err(TransporterError::CouldListFilesToImport(
@@ -165,12 +166,13 @@ impl FileFinder for PatternFileFinder {
         })?;
         let file_matcher = WildMatch::new(&file_pattern);
 
-        let found = store
-            .list_with_delimiter(Some(&base_path))
-            .await
-            .map_err(|err| {
-                TransporterError::CouldListFilesToImport(self.location.url().to_string(), err)
-            })?;
+        let found = with_retry("import_list", || async {
+            store.list_with_delimiter(Some(&base_path)).await
+        })
+        .await
+        .map_err(|err| {
+            TransporterError::CouldListFilesToImport(self.location.url().to_string(), err)
+        })?;
 
         // filter files based on the file pattern
         let mut found: Vec<ObjectMeta> = found

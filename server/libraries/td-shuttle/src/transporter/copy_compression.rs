@@ -5,6 +5,7 @@
 use crate::transporter::api::{CopyType, FileCopyReport, Location};
 use crate::transporter::compression::{CompressionAlgorithm, async_reader, async_writer};
 use crate::transporter::error::TransporterError;
+use crate::transporter::retry::with_retry;
 use crate::transporter::taskrunner::AsyncLambda;
 use bytes::{BufMut, BytesMut};
 use futures::{Future, stream::TryStreamExt};
@@ -35,18 +36,21 @@ pub fn copy_lambda(
     let buffer_size = target.buffer_size();
 
     Box::pin(async move {
-        let copy_call = compression_copy(
-            &source_store,
-            &source_path,
-            source_compression,
-            &target_store,
-            &target_path,
-            target_compression,
-            buffer_size,
-        );
-
         let start = UniqueUtc::now_millis();
-        let written_bytes = copy_call.await.map_err(TransporterError::from)?;
+        let written_bytes = with_retry("copy_compression", || async {
+            compression_copy(
+                &source_store,
+                &source_path,
+                source_compression,
+                &target_store,
+                &target_path,
+                target_compression,
+                buffer_size,
+            )
+            .await
+        })
+        .await
+        .map_err(TransporterError::from)?;
         let end = UniqueUtc::now_millis();
         let report = FileCopyReport {
             copy_type: CopyType::Compression,

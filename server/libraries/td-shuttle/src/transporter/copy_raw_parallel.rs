@@ -4,6 +4,7 @@
 
 use crate::transporter::api::{CopyType, FileCopyReport, Location};
 use crate::transporter::error::{TransporterError, range_to_string};
+use crate::transporter::retry::with_retry;
 use crate::transporter::taskrunner::AsyncLambda;
 use bytes::Bytes;
 use futures_util::StreamExt;
@@ -31,21 +32,27 @@ pub fn copy_lambda(
     let buffer_size = target.buffer_size();
     let (read_ahead, write_parallel) = source.read_write_ratio(&target);
     Box::pin(async move {
-        let task = CopyTask::new(
-            idx,
-            source,
-            source_store,
-            source_path,
-            source_meta,
-            target,
-            target_store,
-            target_path,
-            buffer_size,
-            read_ahead,
-            write_parallel,
-        )
-        .await?;
-        task.copy().await
+        let task = Arc::new(
+            CopyTask::new(
+                idx,
+                source,
+                source_store,
+                source_path,
+                source_meta,
+                target,
+                target_store,
+                target_path,
+                buffer_size,
+                read_ahead,
+                write_parallel,
+            )
+            .await?,
+        );
+        with_retry("copy_raw_parallel", || {
+            let task = task.clone();
+            async move { task.copy().await }
+        })
+        .await
     })
 }
 

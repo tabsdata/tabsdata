@@ -4,6 +4,7 @@
 
 use crate::transporter::common::{parse_store, tweak_store};
 use crate::transporter::error::TransporterError;
+use crate::transporter::retry::with_retry;
 use bytes::Bytes;
 use object_store::path::{Path, Path as ObjectPath};
 use object_store::{ObjectStore, ObjectStoreExt, PutPayload};
@@ -44,8 +45,12 @@ impl ObjectStoreWriter {
 
         std::thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().unwrap();
-            let result =
-                rt.block_on(async move { store.put(&path, PutPayload::from_bytes(data)).await });
+            let result = rt.block_on(async move {
+                with_retry("cloud_put", || async {
+                    store.put(&path, PutPayload::from_bytes(data.clone())).await
+                })
+                .await
+            });
             let _ = tx.send(result);
         });
 

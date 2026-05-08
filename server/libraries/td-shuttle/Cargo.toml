@@ -75,6 +75,7 @@ td-test = { workspace = true }
 async-compression = { workspace = true, features = ["tokio", "all-algorithms"] }
 async-trait = { workspace = true }
 liblzma-sys = { workspace = true }
+backon = { workspace = true }
 base64 = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
