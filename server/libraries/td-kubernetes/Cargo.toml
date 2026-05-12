@@ -73,7 +73,7 @@ colored = { workspace = true }
 dirs = { workspace = true }
 indicatif = { workspace = true }
 k8s-openapi = { workspace = true, features = ["latest"] }
-kube = { workspace = true, default-features = false, features = ["client", "config", "rustls-tls"] }
+kube = { workspace = true, default-features = false, features = ["client", "config", "runtime", "rustls-tls"] }
 libc = { workspace = true }
 reedline = { workspace = true }
 rustls = { workspace = true, features = ["aws-lc-rs", "ring"] }

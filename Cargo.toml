@@ -456,7 +456,7 @@ features = ["latest"]
 [workspace.dependencies.kube]
 version = "0.99"
 default-features = false
-features = ["client", "config", "rustls-tls"]
+features = ["client", "config", "runtime", "rustls-tls"]
 
 [workspace.dependencies.linemux]
 version = "0.3.0"
