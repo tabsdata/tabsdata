@@ -23,6 +23,7 @@ use crate::client::tdkserver::widgets::spinner;
 use crate::constants::{FOLDER_CLUSTER, PROVIDER_KMINUS};
 use crate::instance::manifest::MANIFEST_FILE;
 use crate::instance::profile::load_profile;
+use crate::instance::verify_manifest_compatibility;
 use crate::kubernetes::kubeconfig::{
     resolve_cluster_name, resolve_cluster_url, resolve_current_context, resolve_namespace,
 };
@@ -238,6 +239,22 @@ impl Provider for KminusProvider {
                 self.folder.display()
             );
             return abort(GeneralError);
+        }
+        if cfg!(td_k8s_development) {
+            let manifest_path = self.cluster.staging_profile_path().join(MANIFEST_FILE);
+            if manifest_path.exists() {
+                let yaml = match fs::read_to_string(&manifest_path) {
+                    Ok(yaml) => yaml,
+                    Err(error) => {
+                        cerror!(
+                            "Failed to read staged manifest '{}': {error}",
+                            manifest_path.display()
+                        );
+                        return abort(GeneralError);
+                    }
+                };
+                verify_manifest_compatibility(&yaml)?;
+            }
         }
         Ok(())
     }

@@ -18,6 +18,9 @@ use crate::client::tdkcontext::{KubernetesInputs, TdkContext};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::constants::{CONFIGMAP_TABSDATA, PROVIDER_KUBERNETES};
 use crate::instance::profile::{encode_for_configmap, load_profile};
+use crate::instance::manifest::MANIFEST_FILE;
+use crate::instance::verify_manifest_compatibility;
+use crate::kubernetes::action::configmap::read_configmap;
 use crate::kubernetes::action::{
     configmap_exists, create_configmap, ensure_cluster_reachable, ensure_namespace_exists,
 };
@@ -216,6 +219,19 @@ impl Provider for KubernetesProvider {
     }
 
     async fn ensure_startable_runtime(&self) -> Result {
+        if cfg!(td_k8s_development) {
+            let client = build_kube_client(&self.config)?;
+            if let Some(data) = read_configmap(
+                &client,
+                &self.config.default_namespace,
+                CONFIGMAP_TABSDATA,
+            )
+            .await?
+                && let Some(yaml) = data.get(MANIFEST_FILE)
+            {
+                verify_manifest_compatibility(yaml)?;
+            }
+        }
         Ok(())
     }
 

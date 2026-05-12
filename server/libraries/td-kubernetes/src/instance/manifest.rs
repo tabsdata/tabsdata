@@ -9,6 +9,8 @@ use semver::Version;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::error::manifest::ManifestError;
+
 pub const MANIFEST_SCHEMA: u32 = 1;
 pub const MANIFEST_FILE: &str = "_manifest.yaml";
 
@@ -104,6 +106,10 @@ pub enum VersionMismatch {
 
 #[cfg(test)]
 mod tests;
+
+pub fn deserialize_manifest(yaml: &str) -> Result<Manifest, ManifestError> {
+    serde_yaml::from_str(yaml).map_err(|error| ManifestError::ParseFailed(error.to_string()))
+}
 
 pub fn check_versions(manifest: &Manifest, running: &str) -> Result<(), VersionMismatch> {
     let running_version = Version::parse(running).map_err(|source| VersionMismatch::Parse {

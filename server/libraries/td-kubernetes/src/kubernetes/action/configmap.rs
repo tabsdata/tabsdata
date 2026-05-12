@@ -48,6 +48,22 @@ pub async fn create_configmap(
     Ok(())
 }
 
+pub async fn read_configmap(
+    client: &Client,
+    namespace: &str,
+    name: &str,
+) -> Result<Option<BTreeMap<String, String>>> {
+    let api: Api<ConfigMap> = Api::namespaced(client.clone(), namespace);
+    match api.get_opt(name).await {
+        Ok(Some(configmap)) => Ok(Some(configmap.data.unwrap_or_default())),
+        Ok(None) => Ok(None),
+        Err(error) => {
+            cerror!("Failed to read ConfigMap '{name}' in namespace '{namespace}': {error}");
+            abort(GeneralError)
+        }
+    }
+}
+
 pub async fn delete_configmap(client: &Client, namespace: &str, name: &str) -> Result {
     let api: Api<ConfigMap> = Api::namespaced(client.clone(), namespace);
     if let Err(error) = api.delete(name, &DeleteParams::default()).await {
