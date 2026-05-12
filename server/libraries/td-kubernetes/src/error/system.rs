@@ -25,3 +25,6 @@ pub enum SystemError {
     #[error("Could not create directory '{0}': {1}")]
     CreateDirectoryFailed(String, String) = 5006,
 }
+
+#[cfg(test)]
+mod tests;

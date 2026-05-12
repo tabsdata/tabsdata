@@ -19,3 +19,6 @@ pub enum CliError {
     #[error("Could not change directory: {0}")]
     ChangeDirectoryFailed(String) = 5002,
 }
+
+#[cfg(test)]
+mod tests;

@@ -29,3 +29,6 @@ pub enum ConfigMapError {
         cause: String,
     } = 5002,
 }
+
+#[cfg(test)]
+mod tests;

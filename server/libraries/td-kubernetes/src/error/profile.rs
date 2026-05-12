@@ -29,3 +29,6 @@ pub enum ProfileError {
     #[error("Could not serialize ConfigMap entry for '{0}': {1}")]
     EntrySerializeFailed(String, String) = 5006,
 }
+
+#[cfg(test)]
+mod tests;

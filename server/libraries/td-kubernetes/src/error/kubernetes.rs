@@ -27,3 +27,6 @@ pub enum KubernetesError {
     #[error("Could not delete kubeconfig at '{0}': {1}")]
     KubeconfigDeleteFailed(String, String) = 5008,
 }
+
+#[cfg(test)]
+mod tests;

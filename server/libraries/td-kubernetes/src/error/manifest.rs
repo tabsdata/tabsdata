@@ -21,3 +21,6 @@ pub enum ManifestError {
     #[error("Could not serialize manifest: {0}")]
     SerializeFailed(String) = 5002,
 }
+
+#[cfg(test)]
+mod tests;

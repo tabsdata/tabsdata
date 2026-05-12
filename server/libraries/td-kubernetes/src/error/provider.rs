@@ -37,3 +37,6 @@ pub enum ProviderError {
     #[error("Could not read staged file '{0}': {1}")]
     StagingReadFailed(String, String) = 5005,
 }
+
+#[cfg(test)]
+mod tests;
