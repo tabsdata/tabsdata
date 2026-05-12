@@ -198,3 +198,6 @@ fn is_valid_configmap_key(name: &str) -> bool {
             character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.')
         })
 }
+
+#[cfg(test)]
+mod tests;
