@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use async_trait::async_trait;
 use kube::Config;
 use td_common::server::DEFAULT_INSTANCE;
-use td_common::status::ExitStatus::GeneralError;
+use td_common::status::ExitStatus::{GeneralError, NoAction};
 use tracing::info;
 
 use crate::cerror;
@@ -158,11 +158,11 @@ impl Provider for KubernetesProvider {
         ensure_cluster_reachable(&client).await?;
         ensure_namespace_exists(&client, &self.config.default_namespace).await?;
         if configmap_exists(&client, &self.config.default_namespace, CONFIGMAP_TABSDATA).await? {
-            cerror!(
+            info!(
                 "A tabsdata instance already exists in namespace '{}'.",
                 self.config.default_namespace
             );
-            return abort(GeneralError);
+            return abort(NoAction);
         }
         Ok(())
     }

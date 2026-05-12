@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use async_trait::async_trait;
 use td_common::env::TABSDATA_HOME_DIR;
 use td_common::server::{DEFAULT_INSTANCE, INSTANCES_FOLDER};
-use td_common::status::ExitStatus::GeneralError;
+use td_common::status::ExitStatus::{GeneralError, NoAction};
 use tracing::info;
 
 use crate::cerror;
@@ -163,8 +163,8 @@ impl Provider for KminusProvider {
 
     async fn ensure_creatable_runtime(&self) -> Result {
         if self.folder.exists() {
-            cerror!("Folder {} already exists.", self.folder.display());
-            return abort(GeneralError);
+            info!("Folder {} already exists.", self.folder.display());
+            return abort(NoAction);
         }
         Ok(())
     }

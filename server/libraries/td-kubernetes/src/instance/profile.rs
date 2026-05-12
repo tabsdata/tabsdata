@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command as SystemCommand;
 
 use serde::{Deserialize, Serialize};
-use td_common::status::ExitStatus::GeneralError;
+use td_common::status::ExitStatus::{GeneralError, TabsDataError};
 use td_python::python::resolve_python_binary;
 use td_python::tabsdata::tabsdata_version;
 use walkdir::WalkDir;
@@ -74,7 +74,7 @@ pub fn resolve_kprofiles_path() -> Result<PathBuf> {
             "Resolved profiles path '{}' does not exist or is not a directory.",
             path.display()
         );
-        return abort(GeneralError);
+        return abort(TabsDataError);
     }
     Ok(path)
 }
@@ -84,13 +84,13 @@ pub fn load_profile(profile: &str, topology: &dyn Topology) -> Result<BTreeMap<S
     let root = kprofiles.join(profile);
     if !root.is_dir() {
         cerror!("Profile '{profile}' not found at '{}'.", root.display());
-        return abort(GeneralError);
+        return abort(TabsDataError);
     }
     let version = match tabsdata_version() {
         Ok(version) => version,
         Err(error) => {
             cerror!("Failed to resolve the tabsdata package version: {error}");
-            return abort(GeneralError);
+            return abort(TabsDataError);
         }
     };
     let prefixes = topology.provider_prefixes();
@@ -143,11 +143,11 @@ fn walk(
                 "File name '{key}' contains characters not allowed in a ConfigMap key. \
                  Allowed characters are alphanumerics, '-', '_' and '.'."
             );
-            return abort(GeneralError);
+            return abort(TabsDataError);
         }
         if data.contains_key(&key) {
             cerror!("Duplicate file name '{key}' encountered while loading the profile.");
-            return abort(GeneralError);
+            return abort(TabsDataError);
         }
         let content = match fs::read_to_string(path) {
             Ok(content) => content,

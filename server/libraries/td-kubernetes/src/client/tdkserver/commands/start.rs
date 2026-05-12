@@ -3,12 +3,12 @@
 //
 
 use clap_derive::Args;
-use tracing::info;
+use td_common::status::ExitStatus::Cancelled;
 
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::prompt_yes_no;
 use crate::provider::provider_for_or_tdkcontext;
-use crate::system::exit::Result;
+use crate::system::exit::{Result, abort};
 
 #[derive(Debug, Clone, Args)]
 pub struct StartArguments {
@@ -57,8 +57,7 @@ pub async fn command_start(arguments: StartArguments) -> Result {
     if preview {
         provider.preview_start_runtime_summary();
         if !yes && !prompt_yes_no("Proceed with the start?") {
-            info!("Operation cancelled.");
-            return Ok(());
+            return abort(Cancelled);
         }
     }
 
