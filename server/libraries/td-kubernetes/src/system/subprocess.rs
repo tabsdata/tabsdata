@@ -98,3 +98,6 @@ fn force_kill_tree(pid: u32) {
             .status();
     }
 }
+
+#[cfg(test)]
+mod tests;

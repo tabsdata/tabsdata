@@ -65,3 +65,6 @@ where
     }
     Err(CommandError::with(status, td_error))
 }
+
+#[cfg(test)]
+mod tests;
