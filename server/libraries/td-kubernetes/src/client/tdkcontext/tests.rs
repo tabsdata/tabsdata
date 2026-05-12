@@ -1,0 +1,228 @@
+//
+// Copyright 2026 Tabs Data Inc.
+//
+
+use std::path::PathBuf;
+
+use super::*;
+
+fn sample_kubernetes() -> TdkContext {
+    TdkContext::Kubernetes {
+        kubeconfig: PathBuf::from("/home/user/.kube/config"),
+        context: "dev".to_owned(),
+        cluster: "dev-cluster".to_owned(),
+        namespace: "dev-ns".to_owned(),
+        inputs: KubernetesInputs {
+            kubeconfig: Some(PathBuf::from("/home/user/.kube/config")),
+            context: Some("dev".to_owned()),
+            current: false,
+            namespace: Some("dev-ns".to_owned()),
+        },
+    }
+}
+
+fn sample_kminus() -> TdkContext {
+    TdkContext::Kminus {
+        path: PathBuf::from("/home/user/.tabsdata/instances/tabsdata"),
+        kubeconfig: PathBuf::from("/home/user/.tabsdata/instances/tabsdata/cluster/kube/config"),
+        context: "kminus".to_owned(),
+        cluster: "kminus-cluster".to_owned(),
+        namespace: "default".to_owned(),
+        inputs: KminusInputs {
+            name: Some("tabsdata".to_owned()),
+            path: None,
+        },
+    }
+}
+
+#[test]
+fn tdkcontext_path_ends_with_tdkcontext_json() {
+    let path = tdkcontext_path();
+    assert_eq!(
+        path.file_name().and_then(|name| name.to_str()),
+        Some(TDKCONTEXT_FILE)
+    );
+}
+
+#[test]
+fn tdkcontext_path_lives_under_tabsdata_home_dir() {
+    let path = tdkcontext_path();
+    let parent = path.parent().expect("path has parent");
+    assert_eq!(
+        parent.file_name().and_then(|name| name.to_str()),
+        Some(TABSDATA_HOME_DIR)
+    );
+}
+
+#[test]
+fn kubernetes_serializes_with_lowercase_provider_tag() {
+    let context = sample_kubernetes();
+    let json = serde_json::to_string(&context).expect("serialize kubernetes");
+    assert!(
+        json.contains("\"provider\":\"kubernetes\""),
+        "missing lowercase provider tag in: {json}"
+    );
+}
+
+#[test]
+fn kminus_serializes_with_lowercase_provider_tag() {
+    let context = sample_kminus();
+    let json = serde_json::to_string(&context).expect("serialize kminus");
+    assert!(
+        json.contains("\"provider\":\"kminus\""),
+        "missing lowercase provider tag in: {json}"
+    );
+}
+
+#[test]
+fn kubernetes_round_trips_through_json() {
+    let original = sample_kubernetes();
+    let json = serde_json::to_string(&original).expect("serialize");
+    let parsed: TdkContext = serde_json::from_str(&json).expect("deserialize");
+    let TdkContext::Kubernetes {
+        kubeconfig,
+        context,
+        cluster,
+        namespace,
+        inputs,
+    } = parsed
+    else {
+        panic!("expected Kubernetes variant after round trip");
+    };
+    assert_eq!(kubeconfig, PathBuf::from("/home/user/.kube/config"));
+    assert_eq!(context, "dev");
+    assert_eq!(cluster, "dev-cluster");
+    assert_eq!(namespace, "dev-ns");
+    assert_eq!(inputs.context.as_deref(), Some("dev"));
+    assert_eq!(inputs.namespace.as_deref(), Some("dev-ns"));
+    assert!(!inputs.current);
+}
+
+#[test]
+fn kminus_round_trips_through_json() {
+    let original = sample_kminus();
+    let json = serde_json::to_string(&original).expect("serialize");
+    let parsed: TdkContext = serde_json::from_str(&json).expect("deserialize");
+    let TdkContext::Kminus {
+        path,
+        kubeconfig,
+        context,
+        cluster,
+        namespace,
+        inputs,
+    } = parsed
+    else {
+        panic!("expected Kminus variant after round trip");
+    };
+    assert_eq!(path, PathBuf::from("/home/user/.tabsdata/instances/tabsdata"));
+    assert_eq!(
+        kubeconfig,
+        PathBuf::from("/home/user/.tabsdata/instances/tabsdata/cluster/kube/config")
+    );
+    assert_eq!(context, "kminus");
+    assert_eq!(cluster, "kminus-cluster");
+    assert_eq!(namespace, "default");
+    assert_eq!(inputs.name.as_deref(), Some("tabsdata"));
+    assert!(inputs.path.is_none());
+}
+
+#[test]
+fn kubernetes_inputs_with_default_values_skips_optional_fields_in_json() {
+    let context = TdkContext::Kubernetes {
+        kubeconfig: PathBuf::from("/k"),
+        context: "c".to_owned(),
+        cluster: "cl".to_owned(),
+        namespace: "n".to_owned(),
+        inputs: KubernetesInputs::default(),
+    };
+    let json = serde_json::to_string(&context).expect("serialize");
+    // KubernetesInputs::default has every field at None / false; these are
+    // marked skip_serializing_if so the serialized inputs object is empty.
+    assert!(!json.contains("\"current\""), "current not skipped: {json}");
+    assert!(
+        !json.contains("\"context\":null"),
+        "context not skipped: {json}"
+    );
+}
+
+#[test]
+fn kubernetes_inputs_default_has_all_optional_fields_unset() {
+    let inputs = KubernetesInputs::default();
+    assert!(inputs.kubeconfig.is_none());
+    assert!(inputs.context.is_none());
+    assert!(!inputs.current);
+    assert!(inputs.namespace.is_none());
+}
+
+#[test]
+fn kminus_inputs_default_has_all_optional_fields_unset() {
+    let inputs = KminusInputs::default();
+    assert!(inputs.name.is_none());
+    assert!(inputs.path.is_none());
+}
+
+#[test]
+fn provider_returns_kubernetes_for_kubernetes_variant() {
+    assert!(matches!(
+        sample_kubernetes().provider(),
+        ClusterProvider::Kubernetes
+    ));
+}
+
+#[test]
+fn provider_returns_kminus_for_kminus_variant() {
+    assert!(matches!(sample_kminus().provider(), ClusterProvider::Kminus));
+}
+
+#[test]
+fn display_name_for_kubernetes_is_context_slash_namespace() {
+    assert_eq!(
+        sample_kubernetes().display_name(),
+        "kubernetes:dev/dev-ns"
+    );
+}
+
+#[test]
+fn display_name_for_kminus_uses_last_path_component() {
+    assert_eq!(sample_kminus().display_name(), "kminus:tabsdata");
+}
+
+#[test]
+fn display_name_for_kminus_falls_back_when_path_has_no_filename() {
+    let context = TdkContext::Kminus {
+        path: PathBuf::from("/"),
+        kubeconfig: PathBuf::from("/kube"),
+        context: "c".to_owned(),
+        cluster: "cl".to_owned(),
+        namespace: "n".to_owned(),
+        inputs: KminusInputs::default(),
+    };
+    assert_eq!(context.display_name(), "kminus:?");
+}
+
+#[test]
+fn to_args_for_kubernetes_preserves_cluster_arguments() {
+    let (cluster, instance) = sample_kubernetes().to_args();
+    assert!(matches!(cluster.provider, Some(ClusterProvider::Kubernetes)));
+    assert_eq!(cluster.context.as_deref(), Some("dev"));
+    assert_eq!(cluster.kubeconfig, Some(PathBuf::from("/home/user/.kube/config")));
+    assert!(!cluster.current);
+    assert_eq!(cluster.namespace.as_deref(), Some("dev-ns"));
+    assert!(instance.name.is_none());
+    assert!(instance.path.is_none());
+}
+
+#[test]
+fn to_args_for_kminus_passes_path_through_instance_arguments() {
+    let (cluster, instance) = sample_kminus().to_args();
+    assert!(matches!(cluster.provider, Some(ClusterProvider::Kminus)));
+    assert!(cluster.context.is_none());
+    assert!(cluster.kubeconfig.is_none());
+    assert!(!cluster.current);
+    assert!(cluster.namespace.is_none());
+    assert!(instance.name.is_none());
+    assert_eq!(
+        instance.path,
+        Some(PathBuf::from("/home/user/.tabsdata/instances/tabsdata"))
+    );
+}

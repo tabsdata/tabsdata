@@ -214,3 +214,6 @@ impl TdkContext {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;
