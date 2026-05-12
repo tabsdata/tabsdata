@@ -303,4 +303,12 @@ impl Provider for KubernetesProvider {
     async fn stop_instance(&self) -> Result<bool> {
         self.instance.stop().await
     }
+
+    fn topology(&self) -> &'static dyn Topology {
+        self.topology
+    }
+
+    async fn kube_config(&self) -> Result<kube::Config> {
+        Ok(self.config.clone())
+    }
 }

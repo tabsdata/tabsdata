@@ -5,9 +5,11 @@
 pub mod kminus;
 pub mod kubernetes;
 
+use k8s_openapi::api::batch::v1::Job;
 use k8s_openapi::api::core::v1::Pod;
 
 use crate::pod::ValidationError;
+use crate::system::exit::Result;
 use crate::provider::ClusterProvider;
 use crate::topology::kminus::KminusTopology;
 use crate::topology::kubernetes::KubernetesTopology;
@@ -37,6 +39,15 @@ pub struct ProviderPrefixes {
 pub trait Topology: Send + Sync {
     fn provider_prefixes(&self) -> &'static ProviderPrefixes;
     fn validate_pod(&self, pod: &Pod) -> Vec<ValidationError>;
+
+    fn enrich_init_job(&self, job: &mut Job) -> Result {
+        let _ = job;
+        Ok(())
+    }
+    fn validate_init_job(&self, job: &Job) -> Vec<ValidationError> {
+        let _ = job;
+        Vec::new()
+    }
 }
 
 /// Resolves the [`Topology`] for a given [`ClusterProvider`]. See the

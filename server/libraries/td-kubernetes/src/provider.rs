@@ -9,6 +9,7 @@ use std::future::Future;
 
 use async_trait::async_trait;
 use clap_derive::ValueEnum;
+use kube::Config;
 use td_common::status::ExitStatus::GeneralError;
 
 use crate::cerror;
@@ -17,6 +18,7 @@ use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::provider::kminus::KminusProvider;
 use crate::provider::kubernetes::KubernetesProvider;
 use crate::system::exit::{Result, abort};
+use crate::topology::Topology;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum ClusterProvider {
@@ -109,6 +111,9 @@ pub trait Provider: Send + Sync {
     async fn store_configmap(&self) -> Result;
     async fn start_instance(&self) -> Result;
     async fn stop_instance(&self) -> Result<bool>;
+
+    fn topology(&self) -> &'static dyn Topology;
+    async fn kube_config(&self) -> Result<Config>;
 }
 
 pub async fn provider_for(

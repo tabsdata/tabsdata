@@ -4,6 +4,7 @@
 
 pub mod manifest;
 pub mod profile;
+pub mod launcher;
 
 use td_common::status::ExitStatus::TabsDataError;
 use td_python::tabsdata::tabsdata_version;

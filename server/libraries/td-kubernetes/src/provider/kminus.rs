@@ -25,7 +25,8 @@ use crate::instance::manifest::MANIFEST_FILE;
 use crate::instance::profile::load_profile;
 use crate::instance::verify_manifest_compatibility;
 use crate::kubernetes::kubeconfig::{
-    resolve_cluster_name, resolve_cluster_url, resolve_current_context, resolve_namespace,
+    build_kubeconfig, resolve_cluster_name, resolve_cluster_url, resolve_current_context,
+    resolve_namespace,
 };
 use crate::provider::kminus::cluster::{InstanceFolderGuard, KminusCluster};
 use crate::provider::kminus::instance::KminusInstance;
@@ -430,5 +431,13 @@ impl Provider for KminusProvider {
 
     async fn stop_instance(&self) -> Result<bool> {
         self.instance.stop().await
+    }
+
+    fn topology(&self) -> &'static dyn Topology {
+        self.topology
+    }
+
+    async fn kube_config(&self) -> Result<kube::Config> {
+        build_kubeconfig(Some(&self.cluster.kubefile()), None, None).await
     }
 }
