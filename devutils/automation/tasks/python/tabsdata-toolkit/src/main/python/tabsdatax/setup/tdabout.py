@@ -67,7 +67,7 @@ def _run_git(arguments, timeout=5, cwd=None):
             return git_output.stdout.strip()
     except Exception:
         pass
-    return None
+    return "Undefined"
 
 
 def _capture_build_information():
@@ -94,12 +94,15 @@ def _capture_build_information():
 
 
 def _obtain_rust_version():
-    version = subprocess.run(
-        ["rustc", "--version", "--verbose"],
-        capture_output=True,
-        text=True,
-        timeout=5,
-    )
+    try:
+        version = subprocess.run(
+            ["rustc", "--version", "--verbose"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
     if version.returncode != 0:
         return None
     return version.stdout.strip()
@@ -137,7 +140,14 @@ def _extract_rust_version(line):
 def _capture_rust_information():
     rustc_output = _obtain_rust_version()
     if not rustc_output:
-        return {}
+        return {
+            "rust_version": "Undefined",
+            "rust_host_triple": "Undefined",
+            "rust_commit_hash": "Undefined",
+            "rust_commit_date": "Undefined",
+            "llvm_version": "Undefined",
+            "rust_channel": "Undefined",
+        }
     lines = rustc_output.splitlines()
     rust_info = _parse_rust_version(lines)
     version_line = lines[0] if lines else ""
@@ -153,19 +163,21 @@ def _capture_python_information():
 
 
 def _capture_node_information():
-    node_output = subprocess.run(
-        ["node", "--version"],
-        capture_output=True,
-        text=True,
-        timeout=5,
-    )
+    try:
+        node_output = subprocess.run(
+            ["node", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return {"node_version": "Undefined"}
 
-    node_info = {}
-    if node_output.returncode == 0:
-        version = node_output.stdout.strip().replace("v", "")
-        node_info["node_version"] = version
+    if node_output.returncode != 0:
+        return {"node_version": "Undefined"}
 
-    return node_info
+    version = node_output.stdout.strip().replace("v", "")
+    return {"node_version": version}
 
 
 # noinspection PyBroadException
@@ -256,12 +268,9 @@ def _capture_git_information(repository_path):
     if not git_dir.exists():
         return None
     return {
-        "tag": (
-            _run_git(
-                ["describe", "--tags", "--exact-match", "HEAD"],
-                cwd=repository_path_str,
-            )
-            or "-"
+        "tag": _run_git(
+            ["describe", "--tags", "--exact-match", "HEAD"],
+            cwd=repository_path_str,
         ),
         "branch": _run_git(
             ["rev-parse", "--abbrev-ref", "HEAD"],
@@ -303,15 +312,15 @@ def _capture_git_information(repository_path):
             ["describe", "--always", "--dirty", "--tags"],
             cwd=repository_path_str,
         ),
-        "dirty": (
-            "true"
-            if _run_git(
-                ["status", "--porcelain"],
-                cwd=repository_path_str,
-            )
-            else "false"
-        ),
+        "dirty": _capture_git_dirty(repository_path_str),
     }
+
+
+def _capture_git_dirty(repository_path_str):
+    status = _run_git(["status", "--porcelain"], cwd=repository_path_str)
+    if status == "Undefined":
+        return "Undefined"
+    return "true" if status else "false"
 
 
 def _render_build(root_path):
