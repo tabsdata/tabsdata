@@ -69,3 +69,28 @@ fn show_box_does_not_panic_on_zero_min_width() {
 fn show_banner_does_not_panic() {
     show_banner();
 }
+
+#[test]
+fn phase_spinner_creates_unfinished_header_with_message() {
+    let phase = phase_spinner("Applying init Jobs");
+    assert_eq!(phase.header.message(), "Applying init Jobs");
+    assert!(!phase.header.is_finished());
+    drop(phase);
+}
+
+#[test]
+fn phase_spinner_add_resource_returns_unfinished_bar_with_message() {
+    let phase = phase_spinner("phase");
+    let bar = phase.add_resource("init-bootstrap");
+    assert_eq!(bar.message(), "init-bootstrap");
+    assert!(!bar.is_finished());
+    drop(phase);
+}
+
+#[test]
+fn phase_spinner_drop_finishes_header() {
+    let phase = phase_spinner("phase");
+    let header = phase.header.clone();
+    drop(phase);
+    assert!(header.is_finished());
+}

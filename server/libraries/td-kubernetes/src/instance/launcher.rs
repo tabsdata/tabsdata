@@ -331,6 +331,9 @@ fn has_failed_phase(pod: &Pod) -> bool {
         == Some(POD_PHASE_FAILED)
 }
 
+#[cfg(test)]
+mod tests;
+
 async fn delete_workload(provider: &dyn Provider) -> Result {
     let config = provider.kube_config().await?;
     let client = build_kube_client(&config)?;
