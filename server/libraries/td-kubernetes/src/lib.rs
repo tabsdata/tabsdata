@@ -9,6 +9,7 @@ pub mod gateway;
 pub mod instance;
 pub mod kubernetes;
 pub mod macros;
+pub mod pod;
 pub mod provider;
 pub mod system;
 pub mod topology;

@@ -605,6 +605,9 @@ version = "0.3.6"
 [workspace.dependencies.tempfile]
 version = "3.27.0"
 
+[workspace.dependencies.tera]
+version = "1.20.0"
+
 [workspace.dependencies.textwrap]
 version = "0.16.2"
 

@@ -85,6 +85,7 @@ shlex = { workspace = true }
 strum = { workspace = true, features = ["derive"] }
 supports-color = { workspace = true }
 sysinfo = { workspace = true }
+tera = { workspace = true }
 terminal_size = { workspace = true }
 textwrap = { workspace = true }
 thiserror = { workspace = true }
