@@ -5,6 +5,9 @@
 pub mod kminus;
 pub mod kubernetes;
 
+use k8s_openapi::api::core::v1::Pod;
+
+use crate::pod::ValidationError;
 use crate::provider::ClusterProvider;
 use crate::topology::kminus::KminusTopology;
 use crate::topology::kubernetes::KubernetesTopology;
@@ -33,6 +36,7 @@ pub struct ProviderPrefixes {
 /// types lets that growth land here without churning every call site.
 pub trait Topology: Send + Sync {
     fn provider_prefixes(&self) -> &'static ProviderPrefixes;
+    fn validate_pod(&self, pod: &Pod) -> Vec<ValidationError>;
 }
 
 /// Resolves the [`Topology`] for a given [`ClusterProvider`]. See the

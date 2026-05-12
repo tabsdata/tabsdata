@@ -3,3 +3,20 @@
 //
 
 pub mod io;
+pub mod kminus;
+pub mod kubernetes;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ValidationError {
+    pub path: String,
+    pub message: String,
+}
+
+impl ValidationError {
+    pub fn new(path: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            path: path.into(),
+            message: message.into(),
+        }
+    }
+}
