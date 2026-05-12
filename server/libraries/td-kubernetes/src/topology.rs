@@ -43,3 +43,6 @@ pub fn topology_for(provider: ClusterProvider) -> &'static dyn Topology {
         ClusterProvider::Kminus => &KminusTopology,
     }
 }
+
+#[cfg(test)]
+mod tests;
