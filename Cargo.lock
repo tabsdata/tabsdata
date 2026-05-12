@@ -8503,6 +8503,7 @@ name = "td-kubernetes"
 version = "2.0.0"
 dependencies = [
  "async-trait",
+ "chrono",
  "clap",
  "clap_derive",
  "colored",
@@ -8514,8 +8515,10 @@ dependencies = [
  "openssl",
  "reedline",
  "rustls",
+ "semver",
  "serde",
  "serde_json",
+ "serde_yaml",
  "shlex",
  "strum 0.28.0",
  "supports-color",

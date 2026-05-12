@@ -66,6 +66,7 @@ td-python = { workspace = true }
 # External dependencies
 
 async-trait = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
 clap = { workspace = true, features = ["derive"] }
 clap_derive = { workspace = true }
 colored = { workspace = true }
@@ -76,8 +77,10 @@ kube = { workspace = true, default-features = false, features = ["client", "conf
 libc = { workspace = true }
 reedline = { workspace = true }
 rustls = { workspace = true, features = ["aws-lc-rs", "ring"] }
+semver = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+serde_yaml = { workspace = true }
 shlex = { workspace = true }
 strum = { workspace = true, features = ["derive"] }
 supports-color = { workspace = true }
