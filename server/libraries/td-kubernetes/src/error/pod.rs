@@ -15,3 +15,6 @@ pub enum PodError {
     #[error("Could not render pod template: {0}")]
     TemplateRenderFailed(String) = 5003,
 }
+
+#[cfg(test)]
+mod tests;

@@ -13,3 +13,6 @@ pub fn deserialize_pod_manifest(yaml: &str) -> Result<Pod, PodError> {
 pub fn serialize_pod_manifest(pod: &Pod) -> Result<String, PodError> {
     serde_yaml::to_string(pod).map_err(|error| PodError::SerializeFailed(error.to_string()))
 }
+
+#[cfg(test)]
+mod tests;
