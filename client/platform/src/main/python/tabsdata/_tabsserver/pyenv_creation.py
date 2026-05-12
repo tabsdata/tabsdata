@@ -303,7 +303,7 @@ def verify_single_package_installable_for_environment(
 ) -> bool:
     """Test if a single package can be installed."""
     logger.debug(f"Verifying if package {package} is installable with pip")
-    pip_install_dry_run = add_python_target_and_join_commands(
+    pip_install_dry_run = add_python_target_to_command(
         [
             UV_EXECUTABLE,
             "pip",
@@ -316,11 +316,10 @@ def verify_single_package_installable_for_environment(
         ],
         real_environment_name,
     )
-    logger.info(f"Running command: '{pip_install_dry_run}'")
+    logger.info(f"Running command: '{' '.join(pip_install_dry_run)}'")
     with time_block:
         result = subprocess.run(
             pip_install_dry_run,
-            shell=True,
             capture_output=True,
             text=True,
         )
@@ -346,7 +345,7 @@ def verify_batch_of_packages_installable_for_environment(
     logger.debug(f"Batch verifying {len(packages)} packages")
     if not packages:
         return True
-    pip_install_dry_run = add_python_target_and_join_commands(
+    pip_install_dry_run = add_python_target_to_command(
         [
             UV_EXECUTABLE,
             "pip",
@@ -359,11 +358,10 @@ def verify_batch_of_packages_installable_for_environment(
         + packages,
         real_environment_name,
     )
-    logger.info(f"Running batch command: '{pip_install_dry_run}'")
+    logger.info(f"Running batch command: '{' '.join(pip_install_dry_run)}'")
     with time_block:
         result = subprocess.run(
             pip_install_dry_run,
-            shell=True,
             capture_output=True,
             text=True,
         )
@@ -1322,10 +1320,7 @@ def atomic_environment_creation(
     ]
     logger.info(f"Running command: {' '.join(command)}")
     with time_block:
-        result = subprocess.run(
-            " ".join(command),
-            shell=True,
-        )
+        result = subprocess.run(command)
         logger.debug(f"Result: {result}")
     if result.returncode != 0:
         logger.error(
@@ -1346,7 +1341,7 @@ def atomic_environment_creation(
             f" successfully. Time taken: {time_block.time_taken():.2f}s"
         )
     # Install the required Python packages
-    pip_upgrade_command = add_python_target_and_join_commands(
+    pip_upgrade_command = add_python_target_to_command(
         [
             UV_EXECUTABLE,
             "pip",
@@ -1361,11 +1356,10 @@ def atomic_environment_creation(
     logger.info(
         f"Upgrading pip version for the virtual environment {logical_environment_name}"
     )
-    logger.info(f"Running command: '{pip_upgrade_command}'")
+    logger.info(f"Running command: '{' '.join(pip_upgrade_command)}'")
     with time_block:
         result = subprocess.run(
             pip_upgrade_command,
-            shell=True,
             capture_output=True,
             text=True,
         )
@@ -1523,18 +1517,14 @@ def get_path_to_environment_bin(python_environment):
     return path_to_environment_bin
 
 
-def add_python_target_and_join_commands(
+def add_python_target_to_command(
     command: list[str], environment_name: str
-) -> str:
-    """Given the command that we want to execute, return it as a string with the
-    python target option appended at the end of it"""
-    python_target_option = [
+) -> list[str]:
+    """Append the python target option to the given command argv list."""
+    return command + [
         "--python",
         get_path_to_environment_bin(environment_name),
     ]
-
-    joint_command = " ".join(command + python_target_option)
-    return joint_command
 
 
 def install_requirements(
@@ -1550,7 +1540,7 @@ def install_requirements(
         logger.warning("No requirements to install")
         return True
 
-    pip_install_requirements_command = add_python_target_and_join_commands(
+    pip_install_requirements_command = add_python_target_to_command(
         [
             UV_EXECUTABLE,
             "pip",
@@ -1563,18 +1553,17 @@ def install_requirements(
     )
     if not install_dependencies:
         logger.info("Installing the requirements without dependencies")
-        pip_install_requirements_command += " --no-deps"
+        pip_install_requirements_command.append("--no-deps")
     else:
         logger.info("Installing the requirements with dependencies")
     logger.info(
         f"Installing the requirements {requirements} for the virtual environment"
         f" {logical_environment_name}"
     )
-    logger.info(f"Running command: '{pip_install_requirements_command}'")
+    logger.info(f"Running command: '{' '.join(pip_install_requirements_command)}'")
     with time_block:
         result = subprocess.run(
             pip_install_requirements_command,
-            shell=True,
             capture_output=True,
             text=True,
         )
@@ -1829,7 +1818,7 @@ def install_host_package(  # noqa: C901
                 f"'{tabsdata_pkg_name}' in venv '{real_environment_name}' "
                 f"(--reinstall --no-cache --refresh-package {tabsdata_pkg_name})"
             )
-        pip_install_requirements_command = add_python_target_and_join_commands(
+        pip_install_requirements_command = add_python_target_to_command(
             install_command,
             real_environment_name,
         )
@@ -1839,7 +1828,7 @@ def install_host_package(  # noqa: C901
             f"and source {source} "
             f"for the virtual environment {logical_environment_name}"
         )
-        logger.info(f"Running command: '{pip_install_requirements_command}'")
+        logger.info(f"Running command: '{' '.join(pip_install_requirements_command)}'")
         logger.info(
             f"Build environment variables:\n"
             f"td-target='{os.environ.get(ENV_td_target, 'unset')}'\n"
@@ -1858,7 +1847,6 @@ def install_host_package(  # noqa: C901
             pip_environment[TD_SETUP_GENERATE_LOCKS] = "false"
         result = subprocess.run(
             pip_install_requirements_command,
-            shell=True,
             capture_output=True,
             text=True,
             env=pip_environment,
@@ -1977,20 +1965,17 @@ def is_python_version_available(python_version: str) -> bool:
 
 def install_python_version(python_version: str) -> None:
     logger.info(f"Installing Python version {python_version}")
-    command = " ".join(
-        [
-            UV_EXECUTABLE,
-            "python",
-            "install",
-            "-v",
-            "-n",
-            python_version,
-        ],
-    )
-    logger.info(f"Running command: {command}")
+    command = [
+        UV_EXECUTABLE,
+        "python",
+        "install",
+        "-v",
+        "-n",
+        python_version,
+    ]
+    logger.info(f"Running command: {' '.join(command)}")
     result = subprocess.run(
         command,
-        shell=True,
         capture_output=True,
         text=True,
     )
