@@ -72,7 +72,7 @@ pub trait Provider: Send + Sync {
     fn to_tdkcontext(&self) -> TdkContext;
 
     async fn ensure_creatable_runtime(&self) -> Result;
-    fn preview_create_runtime_summary(&self, profile: &str);
+    fn preview_create_runtime_summary(&self);
     fn report_created_runtime(&self);
 
     async fn ensure_usable_runtime(&self) -> Result;
@@ -101,12 +101,12 @@ pub trait Provider: Send + Sync {
     async fn start_cluster(&self) -> Result;
     async fn stop_cluster(&self) -> Result<bool>;
 
-    async fn prepare_instance(&self, profile: &str) -> Result {
-        self.stage_configmap(profile).await?;
-        self.store_configmap(profile).await
+    async fn prepare_instance(&self) -> Result {
+        self.stage_configmap().await?;
+        self.store_configmap().await
     }
-    async fn stage_configmap(&self, profile: &str) -> Result;
-    async fn store_configmap(&self, profile: &str) -> Result;
+    async fn stage_configmap(&self) -> Result;
+    async fn store_configmap(&self) -> Result;
     async fn start_instance(&self) -> Result;
     async fn stop_instance(&self) -> Result<bool>;
 }

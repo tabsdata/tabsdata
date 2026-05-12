@@ -17,7 +17,7 @@ use crate::cerror;
 use crate::client::tdkcontext::{KubernetesInputs, TdkContext};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::constants::{CONFIGMAP_TABSDATA, PROVIDER_KUBERNETES};
-use crate::instance::profile::load_profile;
+use crate::instance::profile::{encode_for_configmap, load_profile};
 use crate::kubernetes::action::{
     configmap_exists, create_configmap, ensure_cluster_reachable, ensure_namespace_exists,
 };
@@ -167,11 +167,8 @@ impl Provider for KubernetesProvider {
         Ok(())
     }
 
-    fn preview_create_runtime_summary(&self, profile: &str) {
+    fn preview_create_runtime_summary(&self) {
         info!("About to create tabsdata instance:");
-        if cfg!(td_k8s_development) {
-            info!("  - profile......: {profile}");
-        }
         info!("  - provider.....: {PROVIDER_KUBERNETES}");
         info!("  - kubeconfig...: {}", self.kubefile.display());
         info!("  - context......: {}", self.context);
@@ -266,12 +263,13 @@ impl Provider for KubernetesProvider {
         self.cluster.stop().await
     }
 
-    async fn stage_configmap(&self, _profile: &str) -> Result {
+    async fn stage_configmap(&self) -> Result {
         Ok(())
     }
 
-    async fn store_configmap(&self, profile: &str) -> Result {
-        let configmap_data = load_profile(profile, self.topology)?;
+    async fn store_configmap(&self) -> Result {
+        let loaded = load_profile(self.topology)?;
+        let configmap_data = encode_for_configmap(&loaded)?;
         let client = build_kube_client(&self.config)?;
         create_configmap(
             &client,

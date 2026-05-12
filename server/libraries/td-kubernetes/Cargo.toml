@@ -90,6 +90,7 @@ textwrap = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+vfs = { workspace = true }
 walkdir = { workspace = true }
 
 [dev-dependencies]

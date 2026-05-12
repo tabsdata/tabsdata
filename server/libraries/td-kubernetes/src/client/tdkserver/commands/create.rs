@@ -7,7 +7,6 @@ use td_common::status::ExitStatus::Cancelled;
 
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::prompt_yes_no;
-use crate::constants::PROFILE_PRODUCTION;
 use crate::provider::provider_for;
 use crate::system::exit::{Result, abort};
 
@@ -18,16 +17,6 @@ pub struct CreateArguments {
 
     #[command(flatten)]
     pub instance: InstanceArguments,
-
-    #[cfg(td_k8s_development)]
-    #[arg(
-        long,
-        name = "profile",
-        required = false,
-        long_help = "Profile to use when generating kubernetes manifests. \
-                     When unspecified, defaults to 'production'."
-    )]
-    pub profile: Option<String>,
 
     #[arg(
         long,
@@ -54,42 +43,26 @@ pub struct CreateArguments {
     pub yes: bool,
 }
 
-#[cfg(td_k8s_development)]
-fn resolve_profile(arguments: &CreateArguments) -> String {
-    arguments
-        .profile
-        .as_deref()
-        .unwrap_or(PROFILE_PRODUCTION)
-        .to_owned()
-}
-
-#[cfg(not(td_k8s_development))]
-fn resolve_profile(_arguments: &CreateArguments) -> String {
-    PROFILE_PRODUCTION.to_owned()
-}
-
 pub async fn command_create(arguments: CreateArguments) -> Result {
-    let profile = resolve_profile(&arguments);
     let CreateArguments {
         cluster,
         instance,
         preview,
         yes,
-        ..
     } = arguments;
 
     let provider = provider_for(cluster, instance).await?;
     provider.ensure_creatable_runtime().await?;
 
     if preview {
-        provider.preview_create_runtime_summary(&profile);
+        provider.preview_create_runtime_summary();
         if !yes && !prompt_yes_no("Proceed with the creation?") {
             return abort(Cancelled);
         }
     }
 
     let tx = provider.prepare_cluster().await?;
-    provider.prepare_instance(&profile).await?;
+    provider.prepare_instance().await?;
     tx.commit();
     provider.report_created_runtime();
 

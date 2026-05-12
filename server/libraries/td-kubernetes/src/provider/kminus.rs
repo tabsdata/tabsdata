@@ -6,6 +6,7 @@ pub mod cluster;
 pub mod instance;
 
 use std::fs;
+use std::io::Read;
 use std::path::PathBuf;
 
 use async_trait::async_trait;
@@ -20,6 +21,7 @@ use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::validate_instance_name;
 use crate::client::tdkserver::widgets::spinner;
 use crate::constants::{FOLDER_CLUSTER, PROVIDER_KMINUS};
+use crate::instance::manifest::MANIFEST_FILE;
 use crate::instance::profile::load_profile;
 use crate::kubernetes::kubeconfig::{
     resolve_cluster_name, resolve_cluster_url, resolve_current_context, resolve_namespace,
@@ -169,11 +171,8 @@ impl Provider for KminusProvider {
         Ok(())
     }
 
-    fn preview_create_runtime_summary(&self, profile: &str) {
+    fn preview_create_runtime_summary(&self) {
         info!("About to create tabsdata instance:");
-        if cfg!(td_k8s_development) {
-            info!("  - profile......: {profile}");
-        }
         info!("  - provider.....: {PROVIDER_KMINUS}");
         info!("  - instance name: {}", self.name);
         info!("  - instance path: {}", self.folder.display());
@@ -335,8 +334,8 @@ impl Provider for KminusProvider {
         result
     }
 
-    async fn stage_configmap(&self, profile: &str) -> Result {
-        let configmap_data = load_profile(profile, self.topology)?;
+    async fn stage_configmap(&self) -> Result {
+        let loaded = load_profile(self.topology)?;
         let staging_profile = self.cluster.staging_profile_path();
         if let Err(error) = fs::create_dir_all(&staging_profile) {
             cerror!(
@@ -345,17 +344,66 @@ impl Provider for KminusProvider {
             );
             return abort(GeneralError);
         }
-        for (name, contents) in &configmap_data {
-            let path = staging_profile.join(name);
-            if let Err(error) = fs::write(&path, contents) {
-                cerror!("Failed to write '{}': {error}", path.display());
+        for decoded_path in loaded.manifest.entries.keys() {
+            let virtual_target = match loaded.tree.join(decoded_path) {
+                Ok(target) => target,
+                Err(error) => {
+                    cerror!("Failed to resolve virtual path '{decoded_path}': {error}");
+                    return abort(GeneralError);
+                }
+            };
+            let mut reader = match virtual_target.open_file() {
+                Ok(reader) => reader,
+                Err(error) => {
+                    cerror!(
+                        "Failed to open virtual file '{}': {error}",
+                        virtual_target.as_str()
+                    );
+                    return abort(GeneralError);
+                }
+            };
+            let mut content = Vec::new();
+            if let Err(error) = reader.read_to_end(&mut content) {
+                cerror!(
+                    "Failed to read virtual file '{}': {error}",
+                    virtual_target.as_str()
+                );
                 return abort(GeneralError);
             }
+            let disk_path = staging_profile.join(decoded_path);
+            if let Some(parent) = disk_path.parent() {
+                if let Err(error) = fs::create_dir_all(parent) {
+                    cerror!(
+                        "Failed to create staging directory '{}': {error}",
+                        parent.display()
+                    );
+                    return abort(GeneralError);
+                }
+            }
+            if let Err(error) = fs::write(&disk_path, &content) {
+                cerror!("Failed to write '{}': {error}", disk_path.display());
+                return abort(GeneralError);
+            }
+        }
+        let manifest_yaml = match serde_yaml::to_string(&loaded.manifest) {
+            Ok(yaml) => yaml,
+            Err(error) => {
+                cerror!("Failed to serialize the profile manifest: {error}");
+                return abort(GeneralError);
+            }
+        };
+        let manifest_path = staging_profile.join(MANIFEST_FILE);
+        if let Err(error) = fs::write(&manifest_path, manifest_yaml) {
+            cerror!(
+                "Failed to write manifest '{}': {error}",
+                manifest_path.display()
+            );
+            return abort(GeneralError);
         }
         Ok(())
     }
 
-    async fn store_configmap(&self, _profile: &str) -> Result {
+    async fn store_configmap(&self) -> Result {
         Ok(())
     }
 

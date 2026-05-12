@@ -4,12 +4,15 @@
 
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use td_common::status::ExitStatus::GeneralError;
+use walkdir::WalkDir;
 
 use crate::cerror;
 use crate::constants::{CONFIGMAP_TABSDATA, FOLDER_PROFILE};
+use crate::instance::manifest::MANIFEST_FILE;
+use crate::instance::profile::encode_path;
 use crate::kubernetes::action::{configmap_exists, create_configmap, delete_configmap};
 use crate::kubernetes::client::build_kube_client;
 use crate::kubernetes::kubeconfig::build_kubeconfig;
@@ -38,43 +41,39 @@ impl KminusInstance {
         if !staged_folder.is_dir() {
             return Ok(None);
         }
-        let entries = match fs::read_dir(&staged_folder) {
-            Ok(entries) => entries,
-            Err(error) => {
-                cerror!(
-                    "Failed to read staged profile folder '{}': {error}",
-                    staged_folder.display()
-                );
-                return abort(GeneralError);
-            }
-        };
         let mut data = BTreeMap::new();
-        for entry in entries {
+        let walker = WalkDir::new(&staged_folder).follow_links(false).into_iter();
+        for entry in walker {
             let entry = match entry {
                 Ok(entry) => entry,
                 Err(error) => {
-                    cerror!(
-                        "Failed to read entry under '{}': {error}",
-                        staged_folder.display()
-                    );
+                    let path = error
+                        .path()
+                        .map(Path::to_path_buf)
+                        .unwrap_or_else(|| staged_folder.clone());
+                    cerror!("Failed to walk '{}': {error}", path.display());
                     return abort(GeneralError);
                 }
             };
-            let path = entry.path();
-            if !path.is_file() {
+            if !entry.file_type().is_file() {
                 continue;
             }
-            let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
-                continue;
-            };
-            let contents = match fs::read_to_string(&path) {
+            let path = entry.path();
+            let relative = path.strip_prefix(&staged_folder).unwrap_or(path);
+            let relative_string = relative.to_string_lossy().replace('\\', "/");
+            let contents = match fs::read_to_string(path) {
                 Ok(contents) => contents,
                 Err(error) => {
                     cerror!("Failed to read '{}': {error}", path.display());
                     return abort(GeneralError);
                 }
             };
-            data.insert(name.to_owned(), contents);
+            let key = if relative_string == MANIFEST_FILE {
+                MANIFEST_FILE.to_owned()
+            } else {
+                encode_path(&relative_string)
+            };
+            data.insert(key, contents);
         }
         if data.is_empty() {
             Ok(None)

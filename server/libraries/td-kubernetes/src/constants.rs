@@ -13,9 +13,7 @@ pub const FILE_KUBECONFIG: &str = "config";
 pub const PROVIDER_KUBERNETES: &str = "kubernetes";
 pub const PROVIDER_KMINUS: &str = "kminus";
 
-pub const PROFILE_PRODUCTION: &str = "production";
-
-pub const RESOURCE_KPROFILES: &str = "resources/kprofiles";
+pub const RESOURCE_KPROFILE: &str = "resources/kprofile";
 
 pub const PROGRAM_TD_RESOURCE: &str = "td_resource";
 

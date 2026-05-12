@@ -4,30 +4,32 @@
 
 use std::collections::BTreeMap;
 use std::fs;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command as SystemCommand;
 
-use serde::{Deserialize, Serialize};
+use chrono::Utc;
 use td_common::status::ExitStatus::{GeneralError, TabsDataError};
 use td_python::python::resolve_python_binary;
 use td_python::tabsdata::tabsdata_version;
+use vfs::{MemoryFS, VfsPath};
 use walkdir::WalkDir;
 
 use crate::cerror;
-use crate::constants::{PROGRAM_TD_RESOURCE, RESOURCE_KPROFILES};
+use crate::constants::{PROGRAM_TD_RESOURCE, RESOURCE_KPROFILE};
+use crate::instance::manifest::{MANIFEST_FILE, Manifest};
 use crate::system::exit::{Result, abort};
 use crate::system::subprocess::apply_detached_flags;
 use crate::topology::{PROVIDER_PREFIX_K, ProviderPrefixes, Topology};
 
-#[derive(Serialize, Deserialize)]
-pub struct ConfigMapEntry {
-    pub profile: String,
-    pub path: String,
-    pub version: String,
-    pub content: String,
+pub const PATH_SEPARATOR: &str = "__";
+
+pub struct Profile {
+    pub tree: VfsPath,
+    pub manifest: Manifest,
 }
 
-pub fn resolve_kprofiles_path() -> Result<PathBuf> {
+pub fn resolve_kprofile_path() -> Result<PathBuf> {
     let resolver = match resolve_python_binary(PROGRAM_TD_RESOURCE) {
         Ok(path) => path,
         Err(error) => {
@@ -36,13 +38,13 @@ pub fn resolve_kprofiles_path() -> Result<PathBuf> {
         }
     };
     let mut command = SystemCommand::new(&resolver);
-    command.arg(RESOURCE_KPROFILES);
+    command.arg(RESOURCE_KPROFILE);
     apply_detached_flags(&mut command);
     let output = match command.output() {
         Ok(output) => output,
         Err(error) => {
             cerror!(
-                "Failed to run '{} {RESOURCE_KPROFILES}': {error}",
+                "Failed to run '{} {RESOURCE_KPROFILE}': {error}",
                 resolver.display()
             );
             return abort(GeneralError);
@@ -51,7 +53,7 @@ pub fn resolve_kprofiles_path() -> Result<PathBuf> {
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         cerror!(
-            "'{} {RESOURCE_KPROFILES}' failed with status {}: {}",
+            "'{} {RESOURCE_KPROFILE}' failed with status {}: {}",
             resolver.display(),
             output.status,
             stderr.trim()
@@ -71,7 +73,7 @@ pub fn resolve_kprofiles_path() -> Result<PathBuf> {
     let path = PathBuf::from(stdout.trim());
     if !path.is_dir() {
         cerror!(
-            "Resolved profiles path '{}' does not exist or is not a directory.",
+            "Resolved profile path '{}' does not exist or is not a directory.",
             path.display()
         );
         return abort(TabsDataError);
@@ -79,14 +81,9 @@ pub fn resolve_kprofiles_path() -> Result<PathBuf> {
     Ok(path)
 }
 
-pub fn load_profile(profile: &str, topology: &dyn Topology) -> Result<BTreeMap<String, String>> {
-    let kprofiles = resolve_kprofiles_path()?;
-    let root = kprofiles.join(profile);
-    if !root.is_dir() {
-        cerror!("Profile '{profile}' not found at '{}'.", root.display());
-        return abort(TabsDataError);
-    }
-    let version = match tabsdata_version() {
+pub fn load_profile(topology: &dyn Topology) -> Result<Profile> {
+    let root = resolve_kprofile_path()?;
+    let tabsdata_version = match tabsdata_version() {
         Ok(version) => version,
         Err(error) => {
             cerror!("Failed to resolve the tabsdata package version: {error}");
@@ -94,19 +91,10 @@ pub fn load_profile(profile: &str, topology: &dyn Topology) -> Result<BTreeMap<S
         }
     };
     let prefixes = topology.provider_prefixes();
-    let mut data = BTreeMap::new();
-    walk(&root, prefixes, profile, &version, &mut data)?;
-    Ok(data)
-}
+    let memory: VfsPath = MemoryFS::new().into();
+    let mut paths: Vec<String> = Vec::new();
 
-fn walk(
-    profile_root: &Path,
-    prefixes: &ProviderPrefixes,
-    profile: &str,
-    version: &str,
-    data: &mut BTreeMap<String, String>,
-) -> Result {
-    let walker = WalkDir::new(profile_root)
+    let walker = WalkDir::new(&root)
         .follow_links(false)
         .into_iter()
         .filter_entry(|entry| {
@@ -116,6 +104,7 @@ fn walk(
                     .to_str()
                     .is_none_or(|name| !name.starts_with('.'))
         });
+
     for entry in walker {
         let entry = match entry {
             Ok(entry) => entry,
@@ -123,7 +112,7 @@ fn walk(
                 let path = error
                     .path()
                     .map(Path::to_path_buf)
-                    .unwrap_or_else(|| profile_root.to_path_buf());
+                    .unwrap_or_else(|| root.clone());
                 cerror!("Failed to walk '{}': {error}", path.display());
                 return abort(GeneralError);
             }
@@ -132,54 +121,125 @@ fn walk(
             continue;
         }
         let path = entry.path();
-        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+        let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
             continue;
         };
-        let Some(key) = filename_for_provider(name, prefixes) else {
+        let Some(filtered_name) = filename_for_provider(file_name, prefixes) else {
             continue;
         };
-        if !is_valid_configmap_key(&key) {
+        let relative = path.strip_prefix(&root).unwrap_or(path);
+        let parent = relative.parent().unwrap_or_else(|| Path::new(""));
+        let parent_string = parent.to_string_lossy().replace('\\', "/");
+        let manifest_path = if parent_string.is_empty() {
+            filtered_name.clone()
+        } else {
+            format!("{parent_string}/{filtered_name}")
+        };
+        if let Err(component) = validate_path_components(&manifest_path) {
             cerror!(
-                "File name '{key}' contains characters not allowed in a ConfigMap key. \
-                 Allowed characters are alphanumerics, '-', '_' and '.'."
+                "Path component '{component}' in '{manifest_path}' contains characters not \
+                 allowed in a profile path. Only ASCII alphanumerics, '-', and '.' are \
+                 permitted (no '_')."
             );
             return abort(TabsDataError);
         }
-        if data.contains_key(&key) {
-            cerror!("Duplicate file name '{key}' encountered while loading the profile.");
-            return abort(TabsDataError);
-        }
-        let content = match fs::read_to_string(path) {
-            Ok(content) => content,
+        let content = match fs::read(path) {
+            Ok(bytes) => bytes,
             Err(error) => {
                 cerror!("Failed to read '{}': {error}", path.display());
                 return abort(GeneralError);
             }
         };
-        let relative_path = path
-            .strip_prefix(profile_root)
-            .unwrap_or(path)
-            .to_string_lossy()
-            .replace('\\', "/");
-        let entry = ConfigMapEntry {
-            profile: profile.to_owned(),
-            path: relative_path,
-            version: version.to_owned(),
-            content,
+        let target = match memory.join(&manifest_path) {
+            Ok(target) => target,
+            Err(error) => {
+                cerror!("Failed to compose virtual path for '{manifest_path}': {error}");
+                return abort(GeneralError);
+            }
         };
-        let json = match serde_json::to_string_pretty(&entry) {
-            Ok(json) => json,
+        let parent = target.parent();
+        if let Err(error) = parent.create_dir_all() {
+            cerror!(
+                "Failed to create virtual directory '{}': {error}",
+                parent.as_str()
+            );
+            return abort(GeneralError);
+        }
+        let mut writer = match target.create_file() {
+            Ok(writer) => writer,
             Err(error) => {
                 cerror!(
-                    "Failed to serialize ConfigMap entry for '{}': {error}",
-                    path.display()
+                    "Failed to create virtual file '{}': {error}",
+                    target.as_str()
                 );
                 return abort(GeneralError);
             }
         };
-        data.insert(key, json);
+        if let Err(error) = writer.write_all(&content) {
+            cerror!(
+                "Failed to write virtual file '{}': {error}",
+                target.as_str()
+            );
+            return abort(GeneralError);
+        }
+        paths.push(manifest_path);
     }
-    Ok(())
+
+    let now = Utc::now();
+    let manifest = Manifest::initial_install(&tabsdata_version, now, paths);
+    Ok(Profile {
+        tree: memory,
+        manifest,
+    })
+}
+
+pub fn encode_for_configmap(loaded: &Profile) -> Result<BTreeMap<String, String>> {
+    let mut data = BTreeMap::new();
+    for (decoded_path, _) in &loaded.manifest.entries {
+        let target = match loaded.tree.join(decoded_path) {
+            Ok(target) => target,
+            Err(error) => {
+                cerror!("Failed to resolve virtual path '{decoded_path}': {error}");
+                return abort(GeneralError);
+            }
+        };
+        let mut reader = match target.open_file() {
+            Ok(reader) => reader,
+            Err(error) => {
+                cerror!(
+                    "Failed to open virtual file '{}': {error}",
+                    target.as_str()
+                );
+                return abort(GeneralError);
+            }
+        };
+        let mut content = String::new();
+        if let Err(error) = reader.read_to_string(&mut content) {
+            cerror!(
+                "Failed to read virtual file '{}' as UTF-8: {error}",
+                target.as_str()
+            );
+            return abort(GeneralError);
+        }
+        data.insert(encode_path(decoded_path), content);
+    }
+    let manifest_yaml = match serde_yaml::to_string(&loaded.manifest) {
+        Ok(yaml) => yaml,
+        Err(error) => {
+            cerror!("Failed to serialize the profile manifest: {error}");
+            return abort(GeneralError);
+        }
+    };
+    data.insert(MANIFEST_FILE.to_owned(), manifest_yaml);
+    Ok(data)
+}
+
+pub fn encode_path(decoded: &str) -> String {
+    decoded.replace('/', PATH_SEPARATOR)
+}
+
+pub fn decode_path(encoded: &str) -> String {
+    encoded.replace(PATH_SEPARATOR, "/")
 }
 
 fn filename_for_provider(name: &str, prefixes: &ProviderPrefixes) -> Option<String> {
@@ -192,11 +252,20 @@ fn filename_for_provider(name: &str, prefixes: &ProviderPrefixes) -> Option<Stri
     Some(name.to_owned())
 }
 
-fn is_valid_configmap_key(name: &str) -> bool {
+fn validate_path_components(path: &str) -> std::result::Result<(), String> {
+    for component in path.split('/') {
+        if !is_valid_path_component(component) {
+            return Err(component.to_owned());
+        }
+    }
+    Ok(())
+}
+
+fn is_valid_path_component(name: &str) -> bool {
     !name.is_empty()
-        && name.chars().all(|character| {
-            character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.')
-        })
+        && name
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '.'))
 }
 
 #[cfg(test)]

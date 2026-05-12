@@ -680,6 +680,9 @@ features = ["v7"]
 version = "9.1.0"
 features = ["build", "cargo", "emit_and_set", "rustc", "si"]
 
+[workspace.dependencies.vfs]
+version = "0.12.0"
+
 [workspace.dependencies.walkdir]
 version = "2.5.0"
 
