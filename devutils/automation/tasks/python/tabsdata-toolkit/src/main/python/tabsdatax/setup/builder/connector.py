@@ -56,16 +56,15 @@ def build(setup_file: str) -> None:
     python_version_abi = python_abi
 
     variant_manifest_folder = get_variant_manifest_folder(root)
-    copy_manifest_assets(
-        variant_manifest_folder,
-        descriptor.manifest_path_tabsdata,
-        configuration.skip_non_existing_assets,
-    )
-    copy_manifest_assets(
-        variant_manifest_folder,
-        descriptor.manifest_path_tabsdatak,
-        configuration.skip_non_existing_assets,
-    )
+    for ns_root in ("tabsdata", "tabsdatak"):
+        manifest_path = descriptor.manifest_path(ns_root)
+        if not os.path.isdir(manifest_path):
+            continue
+        copy_manifest_assets(
+            variant_manifest_folder,
+            manifest_path,
+            configuration.skip_non_existing_assets,
+        )
 
     datafiles = create_empty_datafiles()
     ensure_egg_folder()
@@ -83,12 +82,12 @@ def build(setup_file: str) -> None:
     with global_spinner(descriptor.spinner_message):
         setup(
             version=read_file(
-                descriptor.manifest_path_tabsdata,
+                descriptor.primary_manifest_path,
                 "VERSION",
                 base_path=".",
             ),
             long_description=read_file(
-                descriptor.manifest_path_tabsdata,
+                descriptor.primary_manifest_path,
                 "README-PyPi.md",
                 base_path=".",
             ),
@@ -96,7 +95,7 @@ def build(setup_file: str) -> None:
             license=tabsdata_license,
             license_files=(
                 os.path.join(
-                    descriptor.manifest_path_tabsdata,
+                    descriptor.primary_manifest_path,
                     "LICENSE",
                 ),
             ),
@@ -120,8 +119,8 @@ def build(setup_file: str) -> None:
                     "python",
                 ),
                 include=[
-                    f"{descriptor.namespace_tabsdata}*",
-                    f"{descriptor.namespace_tabsdatak}*",
+                    f"{descriptor.namespace('tabsdata')}*",
+                    f"{descriptor.namespace('tabsdatak')}*",
                 ],
             ),
             package_dir={
@@ -132,14 +131,14 @@ def build(setup_file: str) -> None:
                 )
             },
             package_data={
-                descriptor.namespace_tabsdata: [
+                descriptor.namespace("tabsdata"): [
                     os.path.join(
                         "assets",
                         "manifest",
                         "*",
                     )
                 ],
-                descriptor.namespace_tabsdatak: [
+                descriptor.namespace("tabsdatak"): [
                     os.path.join(
                         "assets",
                         "manifest",

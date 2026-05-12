@@ -26,39 +26,27 @@ class PackageDescriptor:
     def module(self) -> tuple[str, ...]:
         return tuple(self.package.split("-"))
 
-    @property
-    def namespace_tabsdata(self) -> str:
-        return ".".join(("tabsdata", "connector", *self.module))
+    def namespace(self, root: str) -> str:
+        if self.module == ("api",):
+            return root
+        infix = ("connector",) if root == "tabsdata" else ()
+        return ".".join((root, *infix, *self.module))
+
+    def manifest_path(self, root: str) -> str:
+        if self.module == ("api",):
+            parts = (root,)
+        else:
+            infix = ("connector",) if root == "tabsdata" else ()
+            parts = (root, *infix, *self.module)
+        return os.path.join("src", "main", "python", *parts, "assets", "manifest")
 
     @property
-    def namespace_tabsdatak(self) -> str:
-        return ".".join(("tabsdatak", "connector", *self.module))
-
-    @property
-    def manifest_path_tabsdata(self) -> str:
-        return os.path.join(
-            "src",
-            "main",
-            "python",
-            "tabsdata",
-            "connector",
-            *self.module,
-            "assets",
-            "manifest",
-        )
-
-    @property
-    def manifest_path_tabsdatak(self) -> str:
-        return os.path.join(
-            "src",
-            "main",
-            "python",
-            "tabsdatak",
-            "connector",
-            *self.module,
-            "assets",
-            "manifest",
-        )
+    def primary_manifest_path(self) -> str:
+        for root in ("tabsdata", "tabsdatak"):
+            candidate_path = self.manifest_path(root)
+            if os.path.isdir(candidate_path):
+                return candidate_path
+        return self.manifest_path("tabsdata")
 
     @property
     def spinner_message(self) -> str:

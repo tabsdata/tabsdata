@@ -63,6 +63,16 @@ def copy_assets():  # noqa: C901
         "tabsdata",
         "assets",
     )
+    tabsdatak_assets_folder = os.path.join(
+        project_tabsdata_root_folder,
+        "client",
+        "platform",
+        "src",
+        "main",
+        "python",
+        "tabsdatak",
+        "assets",
+    )
     tabsdata_agent_assets_folder = os.path.join(
         project_tabsdata_agent_root_folder,
         "src",
@@ -86,7 +96,7 @@ def copy_assets():  # noqa: C901
     )
 
     logger.debug(
-        f"✏️ 1 Copying contents of {tabsdata_variant_assets_folder} to"
+        f"✏️ 1a Copying contents of {tabsdata_variant_assets_folder} to"
         f" {tabsdata_assets_folder}"
     )
     if (
@@ -105,6 +115,18 @@ def copy_assets():  # noqa: C901
     shutil.copytree(
         tabsdata_variant_assets_folder,
         tabsdata_assets_folder,
+        dirs_exist_ok=True,
+        symlinks=False,
+        ignore=shutil.ignore_patterns(".gitignore"),
+    )
+
+    logger.debug(
+        f"✏️ 1b Copying contents of {tabsdata_variant_assets_folder} to"
+        f" {tabsdatak_assets_folder}"
+    )
+    shutil.copytree(
+        tabsdata_variant_assets_folder,
+        tabsdatak_assets_folder,
         dirs_exist_ok=True,
         symlinks=False,
         ignore=shutil.ignore_patterns(".gitignore"),
