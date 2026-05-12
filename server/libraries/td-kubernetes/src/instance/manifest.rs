@@ -102,6 +102,9 @@ pub enum VersionMismatch {
     },
 }
 
+#[cfg(test)]
+mod tests;
+
 pub fn check_versions(manifest: &Manifest, running: &str) -> Result<(), VersionMismatch> {
     let running_version = Version::parse(running).map_err(|source| VersionMismatch::Parse {
         value: running.to_owned(),
