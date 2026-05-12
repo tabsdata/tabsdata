@@ -5,7 +5,7 @@
 use std::time::Duration;
 
 use colored::Colorize;
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use terminal_size::{Width, terminal_size};
 use textwrap::{Options, WordSeparator, fill};
 use tm_workspace::workspace_root;
@@ -81,6 +81,43 @@ pub fn spinner(message: &str) -> ProgressBar {
     bar.set_message(message.to_owned());
     bar.enable_steady_tick(Duration::from_millis(120));
     bar
+}
+
+pub struct PhaseSpinner {
+    multi: MultiProgress,
+    header: ProgressBar,
+}
+
+pub fn phase_spinner(message: &str) -> PhaseSpinner {
+    let multi = MultiProgress::new();
+    let header = multi.add(ProgressBar::new_spinner());
+    header.set_style(
+        ProgressStyle::with_template("{spinner:.cyan} {msg} {elapsed:.dim}")
+            .unwrap_or_else(|_| ProgressStyle::default_spinner()),
+    );
+    header.set_message(message.to_owned());
+    header.enable_steady_tick(Duration::from_millis(120));
+    PhaseSpinner { multi, header }
+}
+
+impl PhaseSpinner {
+    pub fn add_resource(&self, name: &str) -> ProgressBar {
+        let bar = self.multi.add(ProgressBar::new_spinner());
+        bar.set_style(
+            ProgressStyle::with_template("  {spinner:.dim} {msg}")
+                .unwrap_or_else(|_| ProgressStyle::default_spinner()),
+        );
+        bar.set_message(name.to_owned());
+        bar.enable_steady_tick(Duration::from_millis(120));
+        bar
+    }
+}
+
+impl Drop for PhaseSpinner {
+    fn drop(&mut self) {
+        self.header.finish_and_clear();
+        let _ = self.multi.clear();
+    }
 }
 
 #[cfg(test)]

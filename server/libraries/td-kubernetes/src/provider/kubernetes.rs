@@ -48,22 +48,14 @@ pub struct KubernetesProvider {
 
 impl KubernetesProvider {
     pub async fn build(cluster: ClusterArguments, instance: InstanceArguments) -> Result<Self> {
-        let provided_clusters = [
-            cluster.kubeconfig.is_some(),
-            cluster.context.is_some(),
-            cluster.current,
-        ]
-        .into_iter()
-        .filter(|flag| *flag)
-        .count();
-        if provided_clusters == 0 {
+        if cluster.kubeconfig.is_none() && cluster.context.is_none() && !cluster.current {
             cerror!(
                 "Specify --kubeconfig, --context, or --current to identify the target cluster."
             );
             return abort(GeneralError);
         }
-        if provided_clusters > 1 {
-            cerror!("Arguments --kubeconfig, --context, and --current are mutually exclusive.");
+        if cluster.context.is_some() && cluster.current {
+            cerror!("Arguments --context and --current are mutually exclusive.");
             return abort(GeneralError);
         }
         if instance.name.is_some() {
