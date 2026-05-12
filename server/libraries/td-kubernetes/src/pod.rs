@@ -20,3 +20,6 @@ impl ValidationError {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;
