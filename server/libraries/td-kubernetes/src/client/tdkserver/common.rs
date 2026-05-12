@@ -73,3 +73,6 @@ pub fn prompt_yes_no(message: &str) -> bool {
     }
     matches!(parse_yes_no(line.trim()), Some(true))
 }
+
+#[cfg(test)]
+mod tests;
