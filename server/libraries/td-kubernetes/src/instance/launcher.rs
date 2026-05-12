@@ -7,7 +7,7 @@ use std::io::Read;
 use k8s_openapi::api::batch::v1::Job;
 use k8s_openapi::api::core::v1::Pod;
 use kube::Api;
-use kube::api::PostParams;
+use kube::api::{DeleteParams, ListParams, PostParams, PropagationPolicy};
 use kube::runtime::wait::{Condition, await_condition};
 use td_common::status::ExitStatus::{GeneralError, TabsDataError};
 
@@ -26,6 +26,23 @@ const JOB_CONDITION_STATUS_TRUE: &str = "True";
 const POD_CONDITION_READY: &str = "Ready";
 const POD_CONDITION_STATUS_TRUE: &str = "True";
 const POD_PHASE_FAILED: &str = "Failed";
+
+pub async fn start_workload(provider: &dyn Provider, profile: &Profile) -> Result {
+    delete_workload(provider).await?;
+    let init_jobs = apply_init_phase(provider, profile).await?;
+    wait_init_phase(provider, &init_jobs).await?;
+    let regular_pods = apply_regular_phase(provider, profile).await?;
+    wait_regular_phase(provider, &regular_pods).await?;
+    Ok(())
+}
+
+pub async fn stop_workload(provider: &dyn Provider) -> Result<bool> {
+    let existed = workload_exists(provider).await?;
+    if existed {
+        delete_workload(provider).await?;
+    }
+    Ok(existed)
+}
 
 pub async fn apply_init_phase(
     provider: &dyn Provider,
@@ -278,4 +295,72 @@ fn has_failed_phase(pod: &Pod) -> bool {
         .as_ref()
         .and_then(|status| status.phase.as_deref())
         == Some(POD_PHASE_FAILED)
+}
+
+async fn delete_workload(provider: &dyn Provider) -> Result {
+    let config = provider.kube_config().await?;
+    let client = build_kube_client(&config)?;
+    let pods_api: Api<Pod> = Api::namespaced(client.clone(), &config.default_namespace);
+    let jobs_api: Api<Job> = Api::namespaced(client, &config.default_namespace);
+    let list_params = ListParams::default();
+    let delete_params = DeleteParams {
+        propagation_policy: Some(PropagationPolicy::Background),
+        ..DeleteParams::default()
+    };
+    let namespace = config.default_namespace.clone();
+    let pods_namespace = namespace.clone();
+    let jobs_namespace = namespace;
+    let pods_delete = async {
+        if let Err(error) = pods_api
+            .delete_collection(&delete_params, &list_params)
+            .await
+        {
+            cerror!("Failed to delete Pods in namespace '{pods_namespace}': {error}");
+            return abort::<()>(GeneralError);
+        }
+        Ok(())
+    };
+    let jobs_delete = async {
+        if let Err(error) = jobs_api
+            .delete_collection(&delete_params, &list_params)
+            .await
+        {
+            cerror!("Failed to delete Jobs in namespace '{jobs_namespace}': {error}");
+            return abort::<()>(GeneralError);
+        }
+        Ok(())
+    };
+    futures::future::try_join(pods_delete, jobs_delete).await?;
+    Ok(())
+}
+
+async fn workload_exists(provider: &dyn Provider) -> Result<bool> {
+    let config = provider.kube_config().await?;
+    let client = build_kube_client(&config)?;
+    let pods_api: Api<Pod> = Api::namespaced(client.clone(), &config.default_namespace);
+    let jobs_api: Api<Job> = Api::namespaced(client, &config.default_namespace);
+    let list_params = ListParams::default();
+    let namespace = config.default_namespace.clone();
+    let pods_namespace = namespace.clone();
+    let jobs_namespace = namespace;
+    let pods_list = async {
+        match pods_api.list(&list_params).await {
+            Ok(list) => Ok(!list.items.is_empty()),
+            Err(error) => {
+                cerror!("Failed to list Pods in namespace '{pods_namespace}': {error}");
+                abort::<bool>(GeneralError)
+            }
+        }
+    };
+    let jobs_list = async {
+        match jobs_api.list(&list_params).await {
+            Ok(list) => Ok(!list.items.is_empty()),
+            Err(error) => {
+                cerror!("Failed to list Jobs in namespace '{jobs_namespace}': {error}");
+                abort::<bool>(GeneralError)
+            }
+        }
+    };
+    let (pods_exist, jobs_exist) = futures::future::try_join(pods_list, jobs_list).await?;
+    Ok(pods_exist || jobs_exist)
 }

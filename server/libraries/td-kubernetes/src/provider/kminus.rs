@@ -21,6 +21,7 @@ use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::validate_instance_name;
 use crate::client::tdkserver::widgets::spinner;
 use crate::constants::{FOLDER_CLUSTER, PROVIDER_KMINUS};
+use crate::instance::launcher::{start_workload, stop_workload};
 use crate::instance::manifest::MANIFEST_FILE;
 use crate::instance::profile::load_profile;
 use crate::instance::verify_manifest_compatibility;
@@ -426,11 +427,15 @@ impl Provider for KminusProvider {
     }
 
     async fn start_instance(&self) -> Result {
-        self.instance.start().await
+        self.instance.start().await?;
+        let profile = load_profile(self.topology)?;
+        start_workload(self, &profile).await
     }
 
     async fn stop_instance(&self) -> Result<bool> {
-        self.instance.stop().await
+        let stopped_workload = stop_workload(self).await?;
+        let stopped_instance = self.instance.stop().await?;
+        Ok(stopped_workload || stopped_instance)
     }
 
     fn topology(&self) -> &'static dyn Topology {

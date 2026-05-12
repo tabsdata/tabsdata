@@ -17,6 +17,7 @@ use crate::cerror;
 use crate::client::tdkcontext::{KubernetesInputs, TdkContext};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::constants::{CONFIGMAP_TABSDATA, PROVIDER_KUBERNETES};
+use crate::instance::launcher::{start_workload, stop_workload};
 use crate::instance::profile::{encode_for_configmap, load_profile};
 use crate::instance::manifest::MANIFEST_FILE;
 use crate::instance::verify_manifest_compatibility;
@@ -297,11 +298,15 @@ impl Provider for KubernetesProvider {
     }
 
     async fn start_instance(&self) -> Result {
-        self.instance.start().await
+        self.instance.start().await?;
+        let profile = load_profile(self.topology)?;
+        start_workload(self, &profile).await
     }
 
     async fn stop_instance(&self) -> Result<bool> {
-        self.instance.stop().await
+        let stopped_workload = stop_workload(self).await?;
+        let stopped_instance = self.instance.stop().await?;
+        Ok(stopped_workload || stopped_instance)
     }
 
     fn topology(&self) -> &'static dyn Topology {
