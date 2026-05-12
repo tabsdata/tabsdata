@@ -1,0 +1,126 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+FROM ubuntu:24.04
+
+SHELL ["/bin/bash", "-c"]
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV HOME=/root
+
+ENV BUILD_MODE="true"
+ENV PATH="/root/.td/bin:${PATH}"
+
+RUN rm -f /etc/apt/apt.conf.d/docker-clean && \
+    echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' \
+        > /etc/apt/apt.conf.d/keep-cache
+
+COPY --link scripts/setup-system.sh /root/.td/libexec/setup-system.sh
+RUN --mount=type=cache,id=tabsdata-apt-cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=tabsdata-apt-lib,target=/var/lib/apt,sharing=locked \
+    /root/.td/libexec/setup-system.sh
+
+ENV RUSTUP_HOME="/root/.rustup"
+ENV CARGO_HOME="/root/.cargo"
+ENV PATH="${CARGO_HOME}/bin:${PATH}"
+
+COPY --link scripts/setup-rust.sh /root/.td/libexec/setup-rust.sh
+RUN --mount=type=cache,id=tabsdata-cargo-registry,target=/root/.cargo/registry \
+    --mount=type=cache,id=tabsdata-cargo-git,target=/root/.cargo/git \
+    /root/.td/libexec/setup-rust.sh
+
+ENV RUSTC_WRAPPER="/root/.cargo/bin/sccache"
+ENV SCCACHE_CACHE_SIZE="32G"
+ENV SCCACHE_DIR="/root/.cache/sccache"
+
+ENV GOPATH="/root/go"
+ENV PATH="/usr/local/go/bin:${GOPATH}/bin:${PATH}"
+
+COPY --link scripts/setup-go.sh /root/.td/libexec/setup-go.sh
+RUN /root/.td/libexec/setup-go.sh
+
+COPY --link packages /tmp/packages
+
+COPY --link scripts/setup-nodejs.sh /root/.td/libexec/setup-nodejs.sh
+RUN --mount=type=cache,id=tabsdata-npm,target=/root/.npm \
+    /root/.td/libexec/setup-nodejs.sh
+
+ENV PATH="/root/.local/bin:${PATH}"
+
+COPY --link scripts/setup-python.sh /root/.td/libexec/setup-python.sh
+RUN --mount=type=cache,id=tabsdata-uv,target=/root/.uv/cache/0 \
+    UV_CACHE_DIR=/root/.uv/cache/0 /root/.td/libexec/setup-python.sh && \
+    mkdir -p /root/.uv/cache/1 && \
+    cp -a /root/.uv/cache/0/. /root/.uv/cache/1/
+
+ENV VIRTUAL_ENV="/root/.uv/envs/td"
+ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
+
+ENV VIRTUALENV_DISABLE_PROMPT=1
+ENV VIRTUAL_ENV_DISABLE_PROMPT=1
+ENV UV_CACHE_DIR="/root/.uv/cache/1"
+
+ENV TABSDATA_REPOSITORIES_HOME="/workspace"
+ENV TABSDATA_AG="/workspace/tabsdata-ag"
+ENV TABSDATA_CI="/workspace/tabsdata-ci"
+ENV TABSDATA_DX="/workspace/tabsdata-dx"
+ENV TABSDATA_EE="/workspace/tabsdata-ee"
+ENV TABSDATA_KM="/workspace/tabsdata-km"
+ENV TABSDATA_OS="/workspace/tabsdata-os"
+ENV TABSDATA_UI="/workspace/tabsdata-ui"
+ENV TABSDATA_XP="/workspace/tabsdata-xp"
+
+ENV RUST_BACKTRACE=1
+ENV RUST_LOG=error
+ENV RUSTDOC_LOG=error
+ENV TD_CARGO_INSTALL_JOBS=2
+ENV TD_CARGO_BUILD_JOBS=8
+ENV TD_NEXTEST_BUILD_JOBS=8
+ENV TD_NEXTEST_TEST_THREADS=8
+ENV TD_CROSS_TEST_JOBS=8
+
+ENV RUST_TEST_THREADS=${TD_NEXTEST_TEST_THREADS}
+ENV CARGO_BUILD_JOBS=${TD_CARGO_BUILD_JOBS}
+
+ENV TD_RUSTC_VERBOSE=false
+ENV ECHO_ENV_FILES=false
+ENV MARKERS=
+ENV LOG_CRATE_TM_WORKSPACE=false
+ENV LOG_CRATE_TD_BUILD=false
+ENV TABSDATA_ATTACH=false
+ENV TABSDATA_NOWAIT=false
+ENV TD_REMOTE_DEBUG=false
+
+ENV TD_CLI_SHOW=false
+ENV TD_SHOW_ENV=false
+
+ENV TD_UI_MODE=external
+ENV TD_DISABLE_OPENAPI_DOCS_ENDPOINT=false
+ENV SWAGGER_UI_OVERWRITE_FOLDER=server/binaries/td-server/common/swagger
+
+ENV PYTEST_MAXIMUM_RETRY_COUNT=36
+
+ENV TD_LOCAL_PACKAGES_WITH_BINARIES=false
+ENV PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES=false
+ENV TD_IGNORE_CONNECTOR_REQUIREMENTS=false
+ENV TD_INHERIT_TABSDATA_PACKAGES=true
+ENV TD_PYTHON_LINKED_TO_REPOSITORY=false
+ENV TD_SKIP_NON_EXISTING_ASSETS=false
+ENV REQUIRE_SERVER_BINARIES=true
+ENV REQUIRE_THIRD_PARTY=true
+ENV TD_SYMLINK_POLARS_LIBS=true
+ENV TD_OVERRIDE_BUILD_TIMESTAMP=true
+ENV TD_BUILD_TIMESTAMP=0
+
+ENV TD_DOCKER_DONT_KILL=false
+ENV TD_SETUP_GENERATE_LOCKS=false
+
+ENV TD_RUN_PERMIT=true
+ENV TD_MAKE_BANNERS=false
+ENV TD_RESPONSIVE_MAKE=false
+
+ENV TD_KMINUS_TRACKING=onchange
+ENV TD_K8S_DEVELOPMENT=true
+
+WORKDIR /workspace/tabsdata-ee

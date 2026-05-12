@@ -33,9 +33,15 @@ classifiers = [
 ]
 dynamic = ["version"]
 dependencies = [
+    "archspec==0.2.5",
     "colorama==0.4.6",
     "distlib==0.4.0",
+    "packaging==26.0",
+    "psutil==7.2.2",
+    "py-cpuinfo==9.0.0",
     "pytest==9.0.2",
+    "python_on_whales==0.81.0",
+    "pyyaml==6.0.3",
     "rich==14.3.3",
     "rich-click==1.9.7",
     "setuptools==81.0.0",
@@ -43,12 +49,14 @@ dependencies = [
     "textual==8.2.3",
     "textual-plotext==1.0.1",
     "tqdm==4.67.3",
+    "tzlocal==5.3.1",
 ]
 
 [project.entry-points.pytest11]
 tdx-harvester = "tabsdatax.pytest.plugins.harvester.plugin"
 
 [project.scripts]
+tdkdocker = "tabsdatax.docker.cli:main"
 tdx_gconnector = "tabsdatax.generator.connector:main"
 tdx_pyoutdated = "tabsdatax.cmake.pyoutdated:main"
 tdx-harvester-monitor = "tabsdatax.pytest.plugins.harvester.client:main"

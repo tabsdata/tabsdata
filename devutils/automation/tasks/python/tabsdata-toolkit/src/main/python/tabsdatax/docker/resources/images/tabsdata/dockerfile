@@ -1,0 +1,69 @@
+# check=skip=SecretsUsedInArgOrEnv
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+FROM ubuntu:24.04
+
+SHELL ["/bin/bash", "-c"]
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV HOME=/root
+
+ENV BUILD_MODE="true"
+ENV PATH="/root/.td/bin:${PATH}"
+
+RUN rm -f /etc/apt/apt.conf.d/docker-clean && \
+    echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' \
+        > /etc/apt/apt.conf.d/keep-cache
+
+COPY --link scripts/setup-system.sh /root/.td/libexec/setup-system.sh
+RUN --mount=type=cache,id=tabsdata-apt-cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=tabsdata-apt-lib,target=/var/lib/apt,sharing=locked \
+    /root/.td/libexec/setup-system.sh
+
+COPY --link scripts/setup-oracle.sh /root/.td/libexec/setup-oracle.sh
+RUN /root/.td/libexec/setup-oracle.sh
+
+ENV ORACLE_INSTANT_CLIENT_HOME="/opt/oracle/instantclient"
+ENV ORACLE_HOME="/opt/oracle/instantclient"
+ENV ORACLE_BASE="/opt/oracle/instantclient"
+ENV TNS_ADMIN="/opt/oracle/instantclient"
+ENV LD_LIBRARY_PATH="/opt/oracle/instantclient"
+ENV PATH="${PATH}:/opt/oracle/instantclient"
+
+ENV PATH="/root/.local/bin:${PATH}"
+
+COPY --link scripts/setup-python.sh /root/.td/libexec/setup-python.sh
+RUN --mount=type=cache,id=tabsdata-uv,target=/root/.cache/uv \
+    /root/.td/libexec/setup-python.sh
+
+ENV VIRTUAL_ENV="/root/.uv/envs/tabsdata"
+ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
+
+ENV VIRTUALENV_DISABLE_PROMPT=1
+ENV VIRTUAL_ENV_DISABLE_PROMPT=1
+ENV UV_CACHE_DIR="/root/.uv/cache/1"
+
+ENV TD_CLI_SHOW=false
+ENV TD_SHOW_ENV=false
+
+ENV TD_RESOURCES_MONITOR_CHECK_FREQUENCY=900
+
+ENV TD_LOCAL_PACKAGES_WITH_BINARIES=false
+ENV PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES=false
+ENV TD_IGNORE_CONNECTOR_REQUIREMENTS=false
+ENV TD_INHERIT_TABSDATA_PACKAGES=true
+ENV TD_PYTHON_LINKED_TO_REPOSITORY=false
+ENV TD_SKIP_NON_EXISTING_ASSETS=false
+ENV REQUIRE_SERVER_BINARIES=true
+ENV REQUIRE_THIRD_PARTY=true
+ENV TD_SYMLINK_POLARS_LIBS=true
+ENV TD_OVERRIDE_BUILD_TIMESTAMP=true
+ENV TD_BUILD_TIMESTAMP=0
+
+COPY --link scripts/entrypoint.sh /root/.td/libexec/entrypoint.sh
+RUN chmod +x /root/.td/libexec/entrypoint.sh
+ENTRYPOINT ["/root/.td/libexec/entrypoint.sh"]
+
+WORKDIR /workspace/tabsdata-ee

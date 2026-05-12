@@ -94,5 +94,7 @@ extend = [
     { path = "./make/make-os/fragments/tasks/uninstall_rs.toml", relative = "git" },
     { path = "./make/make-os/fragments/tasks/uninstall_py.toml", relative = "git" },
 
+    { path = "./make/make-os/fragments/tasks/docker.toml", relative = "git" },
+
     { path = "./make/make-os/fragments/tools/debug.toml", relative = "git" }
 ]
