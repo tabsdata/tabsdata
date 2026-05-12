@@ -129,3 +129,6 @@ pub async fn build_kubeconfig(
     }
     Ok(config)
 }
+
+#[cfg(test)]
+mod tests;
