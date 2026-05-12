@@ -82,3 +82,6 @@ pub fn spinner(message: &str) -> ProgressBar {
     bar.enable_steady_tick(Duration::from_millis(120));
     bar
 }
+
+#[cfg(test)]
+mod tests;
