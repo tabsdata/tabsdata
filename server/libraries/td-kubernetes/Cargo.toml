@@ -58,6 +58,7 @@ tm-workspace = { workspace = true }
 ## Libraries
 
 td-common = { workspace = true }
+td-error = { workspace = true }
 td-python = { workspace = true }
 
 ## Extensions
@@ -78,16 +79,19 @@ rustls = { workspace = true, features = ["aws-lc-rs", "ring"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 shlex = { workspace = true }
+strum = { workspace = true, features = ["derive"] }
 supports-color = { workspace = true }
 sysinfo = { workspace = true }
 terminal_size = { workspace = true }
 textwrap = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 walkdir = { workspace = true }
 
 [dev-dependencies]
 td-kubernetes = { workspace = true, features = ["td-test"] }
+tempfile = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

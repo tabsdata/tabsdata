@@ -370,9 +370,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.2.61"
+version = "1.2.62"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d16d90359e986641506914ba71350897565610e87ce0ad9e6f28569db3dd5c6d"
+checksum = "a1dce859f0832a7d088c4f1119888ab94ef4b5d6795d1ce05afb7fe159d79f98"
 dependencies = [
  "find-msvc-tools",
  "jobserver",
@@ -1169,9 +1169,9 @@ dependencies = [
 
 [[package]]
 name = "fstr"
-version = "0.2.18"
+version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0634b3c417af19554d4eba92c495ce4c2d5e10d5c21cfa20cba8b10c1d4a2694"
+checksum = "cb0f55714ffc8915cc5ec55b46b7af7f40d6140fa4d1af550b846952f5628435"
 
 [[package]]
 name = "futures"
@@ -5601,9 +5601,9 @@ dependencies = [
 
 [[package]]
 name = "reseeding_rng"
-version = "0.10.5"
+version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c23c69951a49f0c05b9341288eabcfa850770419f5500d32703e37ffb844439"
+checksum = "35d8fa137e1f0bbc1139893fcf4fff5f099d76658e6da2b10fadd04f0cadc2d4"
 dependencies = [
  "rand_core 0.10.1",
 ]
@@ -6879,9 +6879,9 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.52.2"
+version = "1.52.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "110a78583f19d5cdb2c5ccf321d1290344e71313c6c37d43520d386027d18386"
+checksum = "8fc7f01b389ac15039e4dc9531aa973a135d7a4135281b12d7c1bc79fd57fffe"
 dependencies = [
  "bytes",
  "libc",
