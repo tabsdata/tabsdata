@@ -71,6 +71,7 @@ clap = { workspace = true, features = ["derive"] }
 clap_derive = { workspace = true }
 colored = { workspace = true }
 dirs = { workspace = true }
+futures = { workspace = true }
 indicatif = { workspace = true }
 k8s-openapi = { workspace = true, features = ["latest"] }
 kube = { workspace = true, default-features = false, features = ["client", "config", "runtime", "rustls-tls"] }

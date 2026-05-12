@@ -40,6 +40,11 @@ pub trait Topology: Send + Sync {
     fn provider_prefixes(&self) -> &'static ProviderPrefixes;
     fn validate_pod(&self, pod: &Pod) -> Vec<ValidationError>;
 
+    fn enrich_pod(&self, pod: &mut Pod) -> Result {
+        let _ = pod;
+        Ok(())
+    }
+
     fn enrich_init_job(&self, job: &mut Job) -> Result {
         let _ = job;
         Ok(())

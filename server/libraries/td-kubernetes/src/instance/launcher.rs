@@ -5,6 +5,7 @@
 use std::io::Read;
 
 use k8s_openapi::api::batch::v1::Job;
+use k8s_openapi::api::core::v1::Pod;
 use kube::Api;
 use kube::api::PostParams;
 use kube::runtime::wait::{Condition, await_condition};
@@ -18,9 +19,13 @@ use crate::provider::Provider;
 use crate::system::exit::{Result, abort};
 
 const INIT_PHASE_PREFIX: &str = "pods/init/";
+const REGULAR_PHASE_PREFIX: &str = "pods/regular/";
 const JOB_CONDITION_COMPLETE: &str = "Complete";
 const JOB_CONDITION_FAILED: &str = "Failed";
 const JOB_CONDITION_STATUS_TRUE: &str = "True";
+const POD_CONDITION_READY: &str = "Ready";
+const POD_CONDITION_STATUS_TRUE: &str = "True";
+const POD_PHASE_FAILED: &str = "Failed";
 
 pub async fn apply_init_phase(
     provider: &dyn Provider,
@@ -164,4 +169,113 @@ fn deserialize_init_job(path: &str, yaml: &str) -> Result<Job> {
             abort(TabsDataError)
         }
     }
+}
+
+pub async fn apply_regular_phase(
+    provider: &dyn Provider,
+    profile: &Profile,
+) -> Result<Vec<String>> {
+    let topology = provider.topology();
+    let config = provider.kube_config().await?;
+    let client = build_kube_client(&config)?;
+    let api: Api<Pod> = Api::namespaced(client, &config.default_namespace);
+    let mut prepared: Vec<(String, Pod)> = Vec::new();
+    for path in profile.manifest.entries.keys() {
+        if !path.starts_with(REGULAR_PHASE_PREFIX) {
+            continue;
+        }
+        let yaml = read_pod_manifest(profile, path)?;
+        let yaml = resolve_pod_manifest(&yaml)?;
+        let mut pod = deserialize_regular_pod(path, &yaml)?;
+        topology.enrich_pod(&mut pod)?;
+        report_validation(path, topology.validate_pod(&pod))?;
+        prepared.push((path.clone(), pod));
+    }
+    let creates = prepared.into_iter().map(|(path, pod)| {
+        let api = api.clone();
+        let namespace = config.default_namespace.clone();
+        async move {
+            let created = match api.create(&PostParams::default(), &pod).await {
+                Ok(created) => created,
+                Err(error) => {
+                    cerror!(
+                        "Failed to apply regular Pod from '{path}' to namespace '{namespace}': {error}"
+                    );
+                    return abort::<String>(GeneralError);
+                }
+            };
+            match created.metadata.name {
+                Some(name) => Ok(name),
+                None => {
+                    cerror!("Regular Pod from '{path}' was created without a metadata.name.");
+                    abort::<String>(GeneralError)
+                }
+            }
+        }
+    });
+    futures::future::try_join_all(creates).await
+}
+
+pub async fn wait_regular_phase(provider: &dyn Provider, pods: &[String]) -> Result {
+    let config = provider.kube_config().await?;
+    let client = build_kube_client(&config)?;
+    let api: Api<Pod> = Api::namespaced(client, &config.default_namespace);
+    let waits = pods.iter().map(|name| {
+        let api = api.clone();
+        async move {
+            let settled = match await_condition(api, name, is_pod_settled()).await {
+                Ok(Some(pod)) => pod,
+                Ok(None) => {
+                    cerror!("Regular Pod '{name}' was deleted before becoming ready.");
+                    return abort::<()>(GeneralError);
+                }
+                Err(error) => {
+                    cerror!("Failed to await regular Pod '{name}': {error}");
+                    return abort::<()>(GeneralError);
+                }
+            };
+            if has_failed_phase(&settled) {
+                cerror!("Regular Pod '{name}' failed.");
+                return abort::<()>(TabsDataError);
+            }
+            Ok(())
+        }
+    });
+    futures::future::try_join_all(waits).await?;
+    Ok(())
+}
+
+fn deserialize_regular_pod(path: &str, yaml: &str) -> Result<Pod> {
+    match serde_yaml::from_str(yaml) {
+        Ok(pod) => Ok(pod),
+        Err(error) => {
+            cerror!("Failed to deserialize regular pod manifest at '{path}' as Pod: {error}");
+            abort(TabsDataError)
+        }
+    }
+}
+
+fn is_pod_settled() -> impl Condition<Pod> {
+    |pod: Option<&Pod>| {
+        let Some(status) = pod.and_then(|current| current.status.as_ref()) else {
+            return false;
+        };
+        if status.phase.as_deref() == Some(POD_PHASE_FAILED) {
+            return true;
+        }
+        let Some(conditions) = status.conditions.as_ref() else {
+            return false;
+        };
+        conditions.iter().any(|condition| {
+            condition.type_ == POD_CONDITION_READY
+                && condition.status == POD_CONDITION_STATUS_TRUE
+        })
+    }
+}
+
+fn has_failed_phase(pod: &Pod) -> bool {
+    pod.status
+        .as_ref()
+        .and_then(|status| status.phase.as_deref())
+        == Some(POD_PHASE_FAILED)
 }
