@@ -40,9 +40,26 @@ is sized to be a single PR.
 
 ---
 
-## Phase 0 — Project scaffolding
+## Progress
 
-### 0.1 — Pyproject / packaging entries
+* **Phase 0** — ✅ done (2026-05-07). Scope was narrowed mid-flight: no
+  `[project.scripts]` entries and no `fail_under = 100` coverage gate were
+  added; both deferred. `test_tabsdatak/conftest.py` was refactored to
+  drop all `tabsdata` / `test_tabsdata` imports.
+* **Phase 1** — in progress.
+  * ✅ 1.4 `errors.py` (2026-05-07) — 100% line + branch coverage.
+  * ⏳ 1.1, 1.2, 1.3, 1.5–1.12 pending.
+* **Phases 2–6** — not started.
+
+---
+
+## Phase 0 — Project scaffolding ✅
+
+### 0.1 — Pyproject / packaging entries ✅
+
+**Status:** Done (2026-05-07) — narrowed scope: `[project.scripts]`
+entries and `fail_under = 100` deferred per user direction; existing
+`test_tabsdatak/.coveragerc` and `test_tabsdatak/pytest.ini` accepted as-is.
 
 **Scope:** make every command a console-script entry point and configure
 dev tooling for tabsdatak.
@@ -68,7 +85,13 @@ and `fetch-request --help` both run after editable install. Lives in
 **Open Q to resolve here:** confirm whether tabsdatak has its own
 pyproject already, or shares the one with tabsdata.
 
-### 0.2 — Test scaffolding
+### 0.2 — Test scaffolding ✅
+
+**Status:** Done (2026-05-07). `test_tabsdatak/conftest.py` was refactored
+under option (c) to drop all `tabsdata` and `test_tabsdata` imports
+(778 → 45 lines); `test_tabsdatak/test_tdrunner/` tree created with
+`tmp_mount` and `make_request_yaml` fixtures. Existing
+`test_example/test_dummy.py` continues to pass.
 
 **Scope:** mirror the `test_tabsdata` layout for the new runner.
 
@@ -152,7 +175,13 @@ when explicitly enabled.
 
 **Depends on:** 0.2.
 
-### 1.4 — `errors.py` — exit-code-bearing exceptions
+### 1.4 — `errors.py` — exit-code-bearing exceptions ✅
+
+**Status:** Done (2026-05-07). 100% line + branch coverage (24 statements,
+4 branches). 16 tests passing. Constants live here (`EXIT_INVALID_OPTIONS`,
+`EXIT_UNDEFINED_ENV`, `COMMAND_SPECIFIC_MIN_EXIT_CODE`); cli.py (1.1) will
+import them. `CommandSpecificError` implemented as a class taking
+`exit_code` in `__init__` (rather than a class-factory).
 
 **Scope:** small exception hierarchy whose subclasses map to documented
 exit codes (1, 2, 10+).
