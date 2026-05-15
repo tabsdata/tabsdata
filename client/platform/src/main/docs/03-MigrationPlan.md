@@ -443,13 +443,21 @@ produce minimal output; wildcard handling.
 
 ### 1.11 — `transporter_proc.py` — subprocess wrapper for `td_transporter` ✅
 
-**Status:** Done (2026-05-07). 100% line+branch coverage (18 statements,
-2 branches). 11 tests passing. `run_transporter(request_yaml, liveness=None)`
+**Status:** Done (2026-05-07). 100% line+branch coverage (23 statements,
+4 branches). 15 tests passing. `run_transporter(request_yaml, liveness=None)`
 exec's `td_transporter --request <PATH>` with stdout/stderr inherited and
 returns the exit code (caller decides what to do with non-zero). When a
 liveness context manager is provided, it wraps the subprocess so the
 background touch is started/stopped — including on exception.
 `TransporterNotFoundError(FileNotFoundError)` for the missing-binary case.
+
+**Platform-aware binary name (2026-05-07 follow-up):** the constant
+`TRANSPORTER_BINARY` is now derived from a `_binary_name()` helper that
+returns `"td_transporter.exe"` on Windows (`sys.platform == "win32"`)
+and `"td_transporter"` elsewhere. Wrapping in a function (instead of an
+inline conditional at module level) is what lets us reach 100% branch
+coverage on a single platform via `monkeypatch.setattr(sys, "platform",
+...)`.
 
 **Scope:** per Q8 the binary is in PATH and a black box. This wrapper just
 exec's it.

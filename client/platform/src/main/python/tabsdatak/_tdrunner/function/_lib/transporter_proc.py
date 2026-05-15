@@ -16,10 +16,19 @@ chain) to actually copy parquet files.
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 from typing import ContextManager, Sequence
 
-TRANSPORTER_BINARY = "td_transporter"
+
+def _binary_name() -> str:
+    """Return the transporter binary name for the current platform."""
+    if sys.platform == "win32":
+        return "td_transporter.exe"
+    return "td_transporter"
+
+
+TRANSPORTER_BINARY = _binary_name()
 
 
 class TransporterNotFoundError(FileNotFoundError):

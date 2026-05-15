@@ -5,12 +5,14 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 
 import pytest
 
 from tabsdatak._tdrunner.function._lib.transporter_proc import (
     TRANSPORTER_BINARY,
     TransporterNotFoundError,
+    _binary_name,
     run_transporter,
 )
 
@@ -22,6 +24,29 @@ def _stub_completed(returncode: int):
         return subprocess.CompletedProcess(args=cmd, returncode=returncode)
 
     return fake_run
+
+
+# --- platform-aware binary name ---
+
+
+def test_binary_name_windows(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "win32")
+    assert _binary_name() == "td_transporter.exe"
+
+
+def test_binary_name_non_windows(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "darwin")
+    assert _binary_name() == "td_transporter"
+
+
+def test_binary_name_other_non_windows(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "linux")
+    assert _binary_name() == "td_transporter"
+
+
+def test_module_constant_matches_current_platform():
+    expected = "td_transporter.exe" if sys.platform == "win32" else "td_transporter"
+    assert TRANSPORTER_BINARY == expected
 
 
 # --- command shape ---
