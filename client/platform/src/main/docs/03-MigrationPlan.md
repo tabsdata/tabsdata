@@ -51,7 +51,8 @@ is sized to be a single PR.
   * ✅ 1.1 `cli.py` (2026-05-07) — 100% line + branch coverage.
   * ✅ 1.2 `liveness.py` (2026-05-07) — 100% line + branch coverage.
   * ✅ 1.3 `logging.py` (2026-05-07) — 100% line + branch coverage.
-  * ⏳ 1.5–1.12 pending.
+  * ✅ 1.5 `request.py` (2026-05-07) — 100% line + branch coverage.
+  * ⏳ 1.6, 1.7, 1.8, 1.9, 1.10, 1.11, 1.12 pending.
 * **Phases 2–6** — not started.
 
 ---
@@ -224,7 +225,40 @@ range check (raises for code < 10).
 
 **Depends on:** 0.2.
 
-### 1.5 — `request.py` — request.yaml model
+### 1.5 — `request.py` — request.yaml model ✅
+
+**Status:** Done (2026-05-07). 100% line + branch coverage (66 statements,
+18 branches). 32 tests passing. Implementation choices:
+
+* **Plain YAML, no custom tags.** The legacy tabsdata format uses
+  `!FunctionV2` / `!Table` / `!Location` tags constructed via custom
+  loaders. We own the new schema (resolved by the API Server), so we use
+  vanilla `yaml.safe_load` — forward-compatible with the JSON-ish
+  resolved output and simpler to test.
+* **Lean Request.** Only fields publisher commands directly read:
+  `collection`, `collection_id`, `execution_id`, `transaction_id`,
+  `function_run_id`, `function_bundle`, plus `input`/`output`/
+  `system_input`/`system_output`. Telemetry-only fields
+  (`function_defined_on`, `execution_name`, `triggered_on`) and
+  unconsumed optionals (`function_data`, `function_stage`,
+  `function_version_id`) are deliberately not exposed; they can be added
+  later if a command needs them.
+* **No plugin descriptors.** Source/destination plugin descriptors live
+  in the bundle, not the request — confirmed by reading
+  `_tabsserver/function/execution_context.py`. The migration plan's
+  earlier mention of "plugin descriptors" in `Request` was speculative;
+  implementation reflects what's actually needed.
+* **Frozen dataclasses + tuples** for value-like immutability of
+  `Request`, `Location`, `Table`.
+* **Errors:** `InvalidRequestError(ValueError)` for malformed YAML or
+  schema violations; `FileNotFoundError` propagates as-is. Neither is a
+  `CommandError` subclass — each consuming command picks its own
+  command-specific exit code (≥10) when wrapping.
+* **Eager validation** with dotted-path error messages (e.g.
+  `"info.function_bundle.uri"`, `"output[0].location"`).
+* **Test fixture** lives at
+  `test_lib/resources/minimal_publisher_request.yaml`; error-case YAMLs
+  are inline in the test file.
 
 **Scope:** cherry-pick the publisher-shaped subset of
 `_tabsserver/function/yaml_parsing.py::parse_request_yaml` and

@@ -1,0 +1,25 @@
+info:
+  collection: my_collection
+  collection_id: 19
+  execution_id: 24
+  transaction_id: 42
+  function_run_id: 60
+  function_bundle:
+    uri: s3://bucket/bundle.tar.gz
+    env_prefix: AWS_
+input: []
+output:
+  - name: customers
+    location:
+      uri: s3://bucket/out/customers.parquet
+      env_prefix: AWS_
+system_input:
+  - name: td-initial-values
+    location:
+      uri: s3://bucket/state/in.parquet
+      env_prefix: AWS_
+system_output:
+  - name: td-initial-values
+    location:
+      uri: s3://bucket/state/out.parquet
+      env_prefix: AWS_
