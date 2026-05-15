@@ -128,6 +128,25 @@ def gather_python_modules(root: str) -> list[tuple[str, str]]:
     return sorted(polars_modules)
 
 
+def gather_test_modules(root: str) -> set[str]:
+    test_modules: set[str] = set()
+    for utest_dir in Path(root).rglob("utest"):
+        utest_python = utest_dir / "python"
+        if not utest_python.is_dir():
+            continue
+        if is_under_templates(utest_python, root):
+            continue
+        if is_under_tabsdata_toolkit(utest_python, root):
+            continue
+        for entry in utest_python.iterdir():
+            if entry.is_dir() and entry.name.startswith("test_"):
+                test_modules.add(entry.name)
+                logger.debug(
+                    f"🧪 Found test module {entry.name} at {entry}"
+                )
+    return test_modules
+
+
 # noinspection DuplicatedCode
 def gather_polars_modules(root: str) -> list[tuple[str, str]]:
     polars_modules_folders = [
@@ -299,7 +318,7 @@ def lock_pyprojects(
     python_modules: list[tuple[str, str]],
     polars_modules: list[tuple[str, str]],
 ):
-    def lock_pyproject(module_folder: Path, connector_modules: set[str]):
+    def lock_pyproject(module_folder: Path, test_modules: set[str]):
         pyproject_file = Path(os.path.join(module_folder, "pyproject.toml"))
         if not pyproject_file.exists():
             raise ValueError("⛔️ File pyproject.toml does not exist")
@@ -322,13 +341,10 @@ def lock_pyprojects(
             entry for entry in known_first_party_entry if isinstance(entry, str)
         }
 
-        test_connector_modules = {
-            f"test_{name.replace('-', '_')}" for name in connector_modules
-        }
         merged = (
             known_first_party_entry_set
             | {"tabsdata", "tabsdatak"}
-            | test_connector_modules
+            | test_modules
         )
 
         tabsdata_packages = sorted(
@@ -367,9 +383,9 @@ def lock_pyprojects(
 
         logger.info(f"🔐️ File pyproject.toml @ {module_folder} locked!")
 
-    connector_names = {name for _, name in connectors}
+    test_modules = gather_test_modules(str(root))
 
-    lock_pyproject(root, connector_names)
+    lock_pyproject(root, test_modules)
 
     for base, name in connectors:
         connector_folder = Path(
@@ -380,7 +396,7 @@ def lock_pyprojects(
                 name,
             )
         )
-        lock_pyproject(connector_folder, connector_names)
+        lock_pyproject(connector_folder, test_modules)
 
     for base, name in python_modules:
         polars_module_folder = Path(
@@ -392,7 +408,7 @@ def lock_pyprojects(
                 name,
             )
         )
-        lock_pyproject(polars_module_folder, connector_names)
+        lock_pyproject(polars_module_folder, test_modules)
 
     for base, name in polars_modules:
         polars_module_folder = Path(
@@ -404,7 +420,7 @@ def lock_pyprojects(
                 name,
             )
         )
-        lock_pyproject(polars_module_folder, connector_names)
+        lock_pyproject(polars_module_folder, test_modules)
 
 
 def lock_connectors_constants(root: str, connectors: list[tuple[str, str]]) -> None:

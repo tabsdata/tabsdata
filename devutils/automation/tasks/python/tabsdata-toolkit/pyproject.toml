@@ -67,6 +67,8 @@ Documentation = "https://docs.tabsdata.com"
 Source = "https://github.com/tabsdata/tabsdata"
 
 [tool.pytest.ini_options]
+addopts = "--import-mode=importlib"
+consider_namespace_packages = true
 markers = [
     "agent: mark tests that require the tabsdata-agent package.",
     "ai_provider: mark tests that require an ai provider (accepted values: openai).",
