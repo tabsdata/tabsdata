@@ -105,7 +105,7 @@ class NamedConn(Conn):
                 f"NamedConn name '{self.name}'"
             )
 
-        subclasses = {sub.__name__: sub for sub in Conn.__subclasses__()}
+        subclasses = {sub.__name__: sub for sub in _all_subclasses(Conn)}
         conn_cls = subclasses.get(conn_def.conn_type)
         if conn_cls is None:
             raise ValueError(f"Unknown connection type: '{conn_def.conn_type}'")
@@ -113,6 +113,14 @@ class NamedConn(Conn):
         resolved = _resolve_env_vars(conn_def.conn_configs)
 
         return conn_cls._load_from_dict(resolved)
+
+
+def _all_subclasses(cls: type) -> list[type]:
+    result = []
+    for sub in cls.__subclasses__():
+        result.append(sub)
+        result.extend(_all_subclasses(sub))
+    return result
 
 
 def _resolve_env_vars(configs: dict) -> dict:

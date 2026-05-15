@@ -147,6 +147,26 @@ class MySQLCdcTrigger(CdcTrigger):
         return state
 
     @property
+    def conn(self) -> MySQLCdcConn | NamedConn:
+        """
+        The MySQL CDC connection configuration.
+        """
+        return self._conn
+
+    @conn.setter
+    @_td_validate_call(ErrorCode.CDCMYSQL2)
+    def conn(self, value: MySQLCdcConn | NamedConn) -> None:
+        """
+        Set the MySQL CDC connection configuration.
+
+        Args:
+            value: The new MySQL CDC connection configuration.
+        """
+        self._conn = value
+        if isinstance(self._conn, MySQLCdcConn) and hasattr(self, "_ingester"):
+            self._setup()
+
+    @property
     def start_from(self) -> MySQLCdcStartFromSpec | None:
         """
         Position to start reading changes from.

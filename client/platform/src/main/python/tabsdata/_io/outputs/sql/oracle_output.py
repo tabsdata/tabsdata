@@ -77,7 +77,7 @@ class OracleDest(DestinationPlugin):
 
     @conn.setter
     @_td_validate_call(ErrorCode.DECE108)
-    def conn(self, conn: OracleConn):
+    def conn(self, conn: OracleConn | NamedConn):
         """
         Set the Oracle connection configuration.
         """

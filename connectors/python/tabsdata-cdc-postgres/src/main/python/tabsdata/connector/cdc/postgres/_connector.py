@@ -165,6 +165,26 @@ class PostgresCdcTrigger(CdcTrigger):
         return state
 
     @property
+    def conn(self) -> PostgresCdcConn | NamedConn:
+        """
+        The PostgreSQL CDC connection configuration.
+        """
+        return self._conn
+
+    @conn.setter
+    @_td_validate_call(ErrorCode.CDCPOSTGRES2)
+    def conn(self, value: PostgresCdcConn | NamedConn) -> None:
+        """
+        Set the PostgreSQL CDC connection configuration.
+
+        Args:
+            value: The new PostgreSQL CDC connection configuration.
+        """
+        self._conn = value
+        if isinstance(self._conn, PostgresCdcConn) and hasattr(self, "_ingester"):
+            self._setup()
+
+    @property
     def start_from(self) -> PostgresCdcStartFromSpec | None:
         """
         Position to start reading changes from.

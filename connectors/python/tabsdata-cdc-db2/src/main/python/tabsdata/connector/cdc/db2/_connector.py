@@ -142,6 +142,26 @@ class Db2CdcTrigger(CdcTrigger):
         return state
 
     @property
+    def conn(self) -> Db2CdcConn | NamedConn:
+        """
+        The Db2 CDC connection configuration.
+        """
+        return self._conn
+
+    @conn.setter
+    @_td_validate_call(ErrorCode.CDCDB22)
+    def conn(self, value: Db2CdcConn | NamedConn) -> None:
+        """
+        Set the Db2 CDC connection configuration.
+
+        Args:
+            value: The new Db2 CDC connection configuration.
+        """
+        self._conn = value
+        if isinstance(self._conn, Db2CdcConn) and hasattr(self, "_ingester"):
+            self._setup()
+
+    @property
     def start_from(self) -> Db2CdcStartFromSpec | None:
         """
         Position to start reading changes from.

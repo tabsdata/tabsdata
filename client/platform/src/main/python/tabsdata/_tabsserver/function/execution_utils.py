@@ -90,6 +90,7 @@ def execute_stage_trigger(
     logger.info(pad_string("[Executing stage trigger]"))
     stage_trigger = execution_context.trigger_by
     logger.debug(f"Using stage trigger: {stage_trigger}")
+    resolve_named_conn_if_needed(stage_trigger)
     request: StageTriggerYaml = execution_context.request
     if not isinstance(stage_trigger, StageTrigger):
         raise ValueError(

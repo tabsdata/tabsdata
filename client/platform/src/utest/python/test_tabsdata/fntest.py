@@ -35,6 +35,9 @@ from tabsdata._io.stage_trigger import (
 )
 from tabsdata._tabsserver import invoker
 from tabsdata._tabsserver.function.checkpoint_store import CheckpointStore
+from tabsdata._tabsserver.function.named_connection_utils import (
+    resolve_named_conn_if_needed,
+)
 from tabsdata._tabsserver.function.execution_context import (
     ExecutionPaths,
     ExecutionContext
@@ -824,6 +827,10 @@ def _trigger(
     )
     context.trigger = lambda: True
     context.trigger_monitor = lambda: True
+
+    # Mirror execute_stage_trigger: resolve a NamedConn before driving the
+    # trigger so test runs exercise the same conn-swap behavior as production.
+    resolve_named_conn_if_needed(trigger)
 
     trigger.return_on_end = True
     try:
