@@ -6,6 +6,21 @@ files, and each container receives only the environment variables it needs.
 
 All commands follow `01-CommandBasics.md`.
 
+## Venv activation: pod-runner responsibility
+
+`prepare-py-env` (§2) is the only command that produces or reads
+`run-env.yaml`. The **pod-runner** (the orchestrator running the
+init-container chain — k8s, the local k- harness, etc.) consumes
+`run-env.yaml` after §2 and, for every subsequent container, invokes the
+command in a process that already has the virtual environment active
+(typically by setting `command:` to `/mount/td/venv/bin/python -m
+<command>` or by activating the venv before exec).
+
+The venv always has `tabsdatak` installed, plus the function's resolved
+dependencies. Therefore steps 3 onwards do **not** take `--run-env`, do
+**not** parse run-env.yaml, and do **not** spawn a subprocess of the venv
+themselves — they just run in whatever Python the pod-runner gave them.
+
 ## Shared Pod Volume
 
 An `emptyDir` is mounted at `$(ROOT)/mount/td` in every container. All path
@@ -54,7 +69,6 @@ Envs: none.
 ```
 localize-fn-bundle
   --request $(ROOT)/mount/td/request.yaml
-  --run-env $(ROOT)/mount/td/run-env.yaml
   --dir $(ROOT)/mount/td/bundle
   --liveness $(ROOT)/mount/td/liveness
 ```
@@ -91,7 +105,6 @@ Envs: Tabsdata storage credentials.
 ```
 run-source-plugin
   --request $(ROOT)/mount/td/request.yaml
-  --run-env $(ROOT)/mount/td/run-env.yaml
   --bundle $(ROOT)/mount/td/bundle
   --out-dir $(ROOT)/mount/td/input
   --liveness $(ROOT)/mount/td/liveness
@@ -105,7 +118,6 @@ the resolved request refers to.
 ```
 run-function
   --request $(ROOT)/mount/td/request.yaml
-  --run-env $(ROOT)/mount/td/run-env.yaml
   --bundle $(ROOT)/mount/td/bundle
   --in-dir $(ROOT)/mount/td/input
   --state-in $(ROOT)/mount/td/state/in
@@ -145,7 +157,6 @@ Envs: Tabsdata storage credentials.
 ```
 run-destination-plugin
   --request $(ROOT)/mount/td/request.yaml
-  --run-env $(ROOT)/mount/td/run-env.yaml
   --bundle $(ROOT)/mount/td/bundle
   --out-dir $(ROOT)/mount/td/output
   --liveness $(ROOT)/mount/td/liveness
@@ -242,8 +253,6 @@ spec:
           args:
             - --request
             - $(ROOT)/mount/td/request.yaml
-            - --run-env
-            - $(ROOT)/mount/td/run-env.yaml
             - --dir
             - $(ROOT)/mount/td/bundle
             - --liveness
