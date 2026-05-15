@@ -13,14 +13,30 @@
 `tabsdatak/_tdrunner/`. Existing `test_tabsdata/test_tabsserver` tests must
 keep passing.
 
-**Standalone rule:** `tabsdatak/` must never import from `tabsdata/`. When
-existing logic is needed, copy the minimal symbols into `tabsdatak/` (Q1
-answer: minimal cherry-picks). The same applies to test code: no imports
-from `test_tabsdata/` into `test_tabsdatak/`. No code in `tabsdata/` or
-`test_tabsdata/` is touched during this migration — including no deletions.
+**Standalone rule (revised 2026-05-08):** `tabsdatak/` must never import
+from `tabsdata/` *or* `tabsdataai/` — both are legacy and slated for
+deletion. `tabsdatak` is the *destination* of the migration, not just
+one piece of it: by the end, `tabsdatak` is the only code that survives
+and will be renamed to `tabsdata`. When logic from either legacy package
+is needed, **copy the source code into `tabsdatak`** and adapt — never
+import, never invoke as a subprocess, never call across the boundary.
+The same applies to test code: no imports from `test_tabsdata/` into
+`test_tabsdatak/`. No code in `tabsdata/`, `tabsdataai/`, or
+`test_tabsdata/` is touched during this migration — including no
+deletions.
 
 **Cutover model (Q2):** hard cutover at the end, handled by a separate
 team. No bridges or compatibility shims.
+
+**Pod-runner / venv split (2026-05-08):** `prepare-py-env` (§2 in
+`02-PublisherInitContainers.md`) is the *only* command that produces or
+reads `run-env.yaml`. The pod-runner consumes `run-env.yaml` after §2
+and, for every subsequent container, invokes the command in a process
+where the venv is **already active**. The venv always has `tabsdatak`
+installed plus the function's resolved deps. Therefore commands from §3
+onwards do not take `--run-env`, do not parse run-env.yaml, and do not
+spawn a subprocess of the venv themselves — they just run in whatever
+Python the pod-runner gave them.
 
 **Phasing (Q3, Q10):** publisher chain end-to-end first under the local k-
 harness, then transformer / subscriber / stream / cron variants.
@@ -58,8 +74,31 @@ is sized to be a single PR.
   * ✅ 1.9 `run_env.py` (2026-05-07) — 100% line + branch coverage.
   * ✅ 1.10 `transporter_request.py` (2026-05-07) — 100% line + branch coverage.
   * ✅ 1.11 `transporter_proc.py` (2026-05-07) — 100% line + branch coverage.
-  * ✅ 1.12 `plugin_loader.py` + `plugin_protocol.py` (2026-05-07) — 100% line + branch coverage.
-* **Phases 2–6** — not started.
+  * ⚠️ 1.12 `plugin_loader.py` + `plugin_protocol.py` (2026-05-07) — 100%
+    coverage, but **superseded** by the new framework copy in Phase 1B
+    (cloudpickle plugin discovery is replaced by JSON-based definition
+    deserialisation + class registry; `_run` becomes `read_in`/`write_out`).
+    Files still present, will be replaced when 1B.6 lands.
+* **Phase 1B** — new phase added 2026-05-08 (SDK framework copy from
+  `tabsdataai`/`tabsdata` into `tabsdatak`). Not started.
+* **Phase 2** — ✅ done (six of seven; 2.2 deferred until 1.8 lands).
+  * ✅ 2.1 `fetch-request` (2026-05-07) — TD-1766.
+  * ⏳ 2.2 `prepare-py-env` — depends on 1.8.
+  * ✅ 2.3 `localize-fn-bundle` (2026-05-07) — TD-1767. **Amended
+    2026-05-08 (TD-1777)** to drop `--run-env` per the pod-runner split.
+  * ✅ 2.4 `prep-localize-state` (2026-05-07) — TD-1768.
+  * ✅ 2.5 `prep-upload-state` (2026-05-07) — TD-1769.
+  * ✅ 2.6 `run-transporter` (2026-05-07) — TD-1770.
+  * ✅ 2.7 `report-completion` (2026-05-07) — TD-1771.
+* **Doc & infrastructure follow-ups (2026-05-08):**
+  * ✅ TD-1772 — platform-aware `td_transporter` binary name.
+  * ✅ TD-1776 — drop `--run-env` from `02-PublisherInitContainers.md` for
+    every step except §2.
+  * ✅ TD-1777 — drop `--run-env` from `localize-fn-bundle` (2.3
+    amendment).
+* **Phase 3** — redesigned 2026-05-08 (in-process, no subprocess, no
+  `--run-env`). Gated by Phase 1B + 1.8.
+* **Phases 4–6** — not started.
 
 ---
 
@@ -231,7 +270,17 @@ range check (raises for code < 10).
 
 **Depends on:** 0.2.
 
-### 1.5 — `request.py` — request.yaml model ✅
+### 1.5 — `request.py` — request.yaml model ✅ ⚠ amendment pending
+
+**Pending amendment (2026-05-08):** the `Request` schema needs to grow a
+`function_def` field carrying the JSON envelope of the
+`PublisherInfo` / `TransformerInfo` / `SubscriberInfo` produced by the
+new tabsdataai-style serialisation (replacing cloudpickle). Schedule
+this after Phase 1B.4 (info classes) so the field can be typed against
+the copied-into-tabsdatak versions of those classes. New ticket; the
+existing implementation note below remains valid up to that point.
+
+
 
 **Status:** Done (2026-05-07). 100% line + branch coverage (66 statements,
 18 branches). 32 tests passing. Implementation choices:
@@ -473,7 +522,17 @@ exit propagated; missing binary raises a typed error.
 
 **Depends on:** 1.2.
 
-### 1.12 — `plugin_loader.py` — load source/destination plugins ✅
+### 1.12 — `plugin_loader.py` — load source/destination plugins ✅ ⚠ superseded
+
+**Superseded (2026-05-08):** The cloudpickle `<bundle>/plugins/source.pickle`
+model is gone in tabsdataai. Plugins are now class references discovered
+via a registry (Phase 1B.6), and the protocol shape is
+`read_in` / `write_out` (Phase 1B.3), not `_run`. The shipped
+`plugin_loader.py` and `plugin_protocol.py` modules will be replaced by
+new modules from Phase 1B that wrap the new mechanism. Files remain in
+place until Phase 1B.6 ships its replacement (e.g. `plugin_resolver.py`).
+
+
 
 **Status:** Done (2026-05-07). 100% line+branch coverage (27 statements,
 4 branches, across `plugin_loader.py` + `plugin_protocol.py`). 11 tests
@@ -514,6 +573,127 @@ plugin → typed error; protocol mismatch → typed error.
 
 **Note:** highest risk of accidental tabsdata imports — explicit care
 needed.
+
+---
+
+## Phase 1B — SDK framework copy (added 2026-05-08)
+
+`tabsdataai` defines the new framework shape (decorators, plugin
+protocols, JSON envelope, registry). Per the standalone rule, we can't
+import any of it; we copy the minimum subset needed for an end-to-end
+publisher prototype, then iterate.
+
+**Cherry-pick scope for this iteration:** the publisher path. Transformer,
+subscriber, auto-publisher, and per-vendor connectors get later
+iterations.
+
+**TableFrame decision (2026-05-08):** Phase 3.2 uses `polars.LazyFrame`
+as the stub for TableFrame. Migrating to a real TableFrame copy comes
+in a later iteration of Phase 1B (call it **1B.8**) once the publisher
+prototype works end-to-end with the stub.
+
+**Bundle layout decision (2026-05-08):** the bundle is a **package tree
+plus JSON manifest**:
+
+```
+<bundle>/
+├── manifest.json            # the JSON envelope (PublisherInfo /
+│                            # TransformerInfo / SubscriberInfo)
+└── <user package tree>/     # importable Python source the user wrote
+    ├── __init__.py
+    └── ...
+```
+
+The `manifest.json` is what `info.func` (a `module:qualname` string)
+resolves against — the package tree must be importable from the venv's
+Python (the pod-runner adds `<bundle>/` to `sys.path`, or installs the
+tree as part of `prepare-py-env`'s venv setup).
+
+Each item below is one PR.
+
+### 1B.1 — `_lib/serde.py` — JSON envelope + migration chain
+
+**Scope:** copy the `{kind, apiVersion, type, spec}` envelope shape and
+the schema-migration chain machinery from
+`tabsdataai/_api.py:547-790`. Generic `to_json` / `from_json` that walks
+`__migrations__` on version mismatch. No other 1B deps.
+
+**Tests:** roundtrip of a synthetic dataclass, `__migrations__` walk
+across two versions, missing/extra fields error paths.
+
+### 1B.2 — `_lib/conn.py` — Conn / NamedConn types
+
+**Scope:** copy `Conn` abstract base and `NamedConn` reference type from
+`tabsdataai/_types.py:234-344`. Just enough surface for `Src` / `Dest`
+to type their `conn` field.
+
+**Tests:** `NamedConn(name=str)` validation, abstract `Conn` cannot be
+instantiated, JSON roundtrip via 1B.1.
+
+### 1B.3 — `_lib/spi.py` — plugin protocols + contexts + Src/Dest
+
+**Scope:** copy `SrcPlugin[C, S]`, `DestPlugin[C, D]`, `SrcContext`,
+`DestContext`, `Src`, `Dest`, `SrcDef`, `DestDef` from
+`tabsdataai/spi.py`. `read_in` / `write_out` signatures preserved
+verbatim.
+
+**Tests:** abstract bases reject direct instantiation; concrete `Src`
+subclass with `conn` field is acceptable; `read_in` / `write_out` exist
+as abstract methods.
+
+### 1B.4 — `_lib/info.py` — PublisherInfo
+
+**Scope:** copy `PublisherInfo` dataclass from
+`tabsdataai/_info.py:86-241` (fields: `func`, `source`, `output_tables`,
+`trigger_by`, `on_tables`). Includes `func` ↔ `"module:qualname"`
+serialisation (rejects closures at dump time). `TransformerInfo` /
+`SubscriberInfo` / `AutoPublisherInfo` deferred.
+
+**Tests:** roundtrip a publisher info via 1B.1, function-as-string
+serialisation, closure rejection.
+
+### 1B.5 — `_lib/decorators.py` — @publisher
+
+**Scope:** copy `@publisher` decorator from `tabsdataai/api.py:237-419`.
+Returns a `PublisherInfo`. `@transformer` / `@subscriber` /
+`@auto_publisher` deferred.
+
+**Tests:** decoration produces `PublisherInfo`, slot count / return-type
+validation per `ApiErrorCode.API_4`.
+
+### 1B.6 — `_lib/registry.py` + replacement for 1.12
+
+**Scope:** copy the connector registry mechanism from
+`tabsdataai/connectors.py`. Initially populated explicitly by
+`_lib/builtins/__init__.py`; entry-point auto-discovery deferred. Add a
+`plugin_resolver.py` that takes a deserialised `PublisherInfo` and
+returns an instantiated `SrcPlugin` looked up by `type(info.source)`.
+**This task replaces 1.12.**
+
+**Tests:** explicit registration → lookup; missing type → typed error;
+plugin instantiation works.
+
+### 1B.7 — `_lib/builtins/local_file.py` — reference connector
+
+**Scope:** one concrete connector — `LocalFileSrc` + `LocalFileSrcPlugin`
+— registered into 1B.6 (chosen 2026-05-08 over a fake stub: real
+CSV-to-parquet path exercises the I/O contract end-to-end and stays
+useful as production code, not just test scaffolding). Copy/adapt from
+`tabsdataai-conn-localfile/_plugin.py`. No cloud creds, no external
+dependencies beyond `polars` for the parquet write.
+
+**Tests:** plugin's `read_in` produces a parquet file from a known CSV
+fixture; integration with 1B.6 registry lookup.
+
+### 1B-amend.1.5 — `request.py` schema extension
+
+**Scope:** extend `Request` to include a `function_def: dict` (or, after
+1B.4, a typed union of the `*Info` classes) carrying the JSON envelope
+the API server will produce. Pure schema growth — no breakages of
+existing tests beyond updating fixtures. Schedule **after 1B.4**.
+
+**Tests:** loader accepts a request.yaml with `function_def`; existing
+fields unchanged.
 
 ---
 
@@ -572,14 +752,18 @@ happen first.**
 
 ### 2.3 — `localize-fn-bundle` ✅
 
-**Status:** Done (2026-05-07). 100% line+branch coverage. 11 tests
-passing. Bundle fetch via `td_transporter` (option a from the
-stop-and-ask). Added a `build_bundle_fetch_request` builder to
-`transporter_request.py` mirroring the existing localize/upload
-builders. Command-specific exit codes: 10 = bad request.yaml, 11 = bad
-run-env.yaml, 12 = transporter failed, 13 = extract failed. Reads
-run-env.yaml as a sanity check (doesn't currently use it for the fetch
-itself; downstream venv-invoking commands will).
+**Status:** Done (2026-05-07; amended 2026-05-08).
+
+* **Original (TD-1767):** 100% line+branch coverage, 11 tests. Bundle
+  fetch via `td_transporter` (option a from the stop-and-ask). Added a
+  `build_bundle_fetch_request` builder to `transporter_request.py`
+  mirroring the existing localize/upload builders.
+* **Amendment (TD-1777, 2026-05-08):** dropped `--run-env`, the
+  `_load_run_env` helper, the `EXIT_BAD_RUN_ENV` exit code, and the
+  matching tests. Per the pod-runner / venv split, the venv is already
+  active by the time this command runs. Command-specific exit codes
+  are now: 10 = bad request.yaml, 12 = transporter failed, 13 = extract
+  failed. 9 tests, still 100% coverage.
 
 **Scope:** read bundle URI from `--request`, download via storage
 credentials in env, extract to `--dir`.
@@ -682,71 +866,110 @@ on POST failure.
 
 ---
 
-## Phase 3 — User-code-loading commands
+## Phase 3 — User-code-loading commands (redesigned 2026-05-08)
 
-These three actually invoke the user's bundled code, crossing from "Python
-runtime that came with the container" into "Python runtime built by
-prepare-py-env".
+These three commands invoke the user's bundled code. **In-process, no
+subprocess.** The pod-runner has already activated the venv before these
+commands run, so the command's interpreter already has `tabsdatak` plus
+the function's resolved dependencies. The command just *does the work*
+in one process.
+
+The plugin contract is the new `tabsdataai`-style one (copied into
+`tabsdatak` in Phase 1B): `SrcPlugin.read_in(ctx, src) -> list[list[TableFileSpec]]`,
+`DestPlugin.write_out(ctx, dest, tables) -> None`. Plugins are looked up
+in the registry (1B.6) by `type(info.source)` / `type(info.destination)`
+— **not** loaded from cloudpickle files. Functions are resolved by
+`module:qualname` import, **not** unpickled.
+
+**Common shape for all three commands:**
+
+1. Parse args (cli, liveness).
+2. Load `request.yaml` (1.5; eventually with `function_def`).
+3. Deserialise the JSON envelope into `PublisherInfo` /
+   `SubscriberInfo` / etc. (1B.4 + 1B.1).
+4. Look up the plugin class via the registry (1B.6) and instantiate.
+5. Build a concrete `SrcContext` / `DestContext` (work_dir = `--out-dir`
+   / similar).
+6. Resolve any `NamedConn` references (assumed pre-resolved by the API
+   server per 00-FunctionRunner.md; otherwise local fallback).
+7. Call the plugin (or invoke the user function for 3.2).
+8. Persist outputs to disk.
+
+**No** `--run-env`, **no** subprocess, **no** bootstrap script.
 
 ### 3.1 — `run-source-plugin`
 
-**Scope:** activate the run-env (locate the venv's Python from
-`--run-env`), spawn a subprocess of that Python that loads the source
-plugin from the bundle and calls `_run(...)`. Output parquet lands in
+**Scope:** invoke the source plugin in-process; outputs Parquet files in
 `--out-dir`.
 
 **Code:**
 `tabsdatak/_tdrunner/function/commands/run_source_plugin/__init__.py`
 
-* Args: `--request`, `--run-env`, `--bundle`, `--out-dir`, `--liveness`.
-* Helper: `tabsdatak/_tdrunner/function/_lib/subproc_pyenv.py` for
-  invoking the venv Python (promote to Phase 1 if more than one Phase-3
-  task uses it; otherwise inline).
+* Args: `--request`, `--bundle`, `--out-dir`, `--liveness`.
+* Flow: load Request → deserialise `PublisherInfo` from
+  `request.function_def` → registry lookup `SrcDef` for
+  `type(info.source)` → instantiate `SrcPlugin` → build `SrcContext`
+  (`work_dir = --out-dir`) → call `plugin.read_in(ctx, info.source)`.
 
-**Tests:** end-to-end with a fake cloudpickled source plugin that writes
-known parquet; verify out-dir contents; failure inside plugin propagates
-as command-specific exit code.
+**Tests:** end-to-end with the reference `LocalFileSrc` (1B.7) and a
+tiny CSV fixture; verify `--out-dir` contents; failure inside `read_in`
+propagates as a command-specific exit code; `NamedConn` not resolved →
+typed error.
 
-**Depends on:** 1.1–1.5, 1.7, 1.9, 1.12.
+**Depends on:** 1.1–1.5, 1.7, **Phase 1B (1B.1 → 1B.7)**.
 
 ### 3.2 — `run-function`
 
-**Scope:** load the user's decorated function from the bundle, invoke it
-with input parquet from `--in-dir` and state from `--state-in`, write
-outputs to `--out-dir` and state to `--state-out`. Heaviest single
-command — most of `_tabsserver/function/execute_function_from_bundle_path.py`
-and `execution_utils.py` is the source material.
+**Scope:** load the user's decorated function via `module:qualname`,
+materialise inputs as TableFrames, invoke, persist outputs and state.
+Heaviest single command. The `module:qualname` import works because the
+pod-runner has placed the bundle's code on `sys.path` (or installed it as
+a wheel) and we're already in the venv where `tabsdatak` and the user's
+deps both exist.
 
 **Code:** `tabsdatak/_tdrunner/function/commands/run_function/__init__.py`
 
-* Args: `--request`, `--run-env`, `--bundle`, `--in-dir`, `--state-in`,
-  `--out-dir`, `--state-out`, `--liveness`.
+* Args: `--request`, `--bundle`, `--in-dir`, `--state-in`, `--out-dir`,
+  `--state-out`, `--liveness`.
+* Flow: load Request → deserialise `PublisherInfo` /
+  `TransformerInfo` / `SubscriberInfo` → import `info.func` via
+  `module:qualname` → materialise inputs as TableFrames from `--in-dir`
+  parquets → invoke function → persist returned TableFrames to
+  `--out-dir` → persist state to `--state-out`.
+* TableFrame is stubbed via `polars.LazyFrame` for this iteration
+  (decision 2026-05-08). Promoting a real TableFrame copy from
+  `tabsdataai` / `tabsdata` to Phase 1B (as 1B.8) is the planned
+  follow-up once the publisher prototype works end-to-end.
 
-**Tests:** integration with a tiny fixture-built bundle containing an
-identity transformer that echoes inputs to outputs and writes a state
-file; assert all artefacts; user-function exception path; missing input
-dir.
+**Tests:** integration with a tiny fixture bundle containing an
+identity transformer; assert artefacts; user-function exception path.
 
-This task is large enough to want sub-tasks. Plan to split into 3.2a / b /
-c (parameter binding, function invocation, results write-back) when
-reaching it rather than land it as one PR.
+This task is large enough to want sub-tasks; split into 3.2a / b / c
+(parameter binding, function invocation, results write-back) when
+reaching it.
 
-**Depends on:** 1.1–1.9, 1.12.
+**Depends on:** 1.1–1.7, **Phase 1B** (using the `polars.LazyFrame`
+TableFrame stub).
 
 ### 3.3 — `run-destination-plugin`
 
-**Scope:** mirror of 3.1 but for the destination plugin — reads
-`--out-dir`, calls `dest_plugin._run(results)`.
+**Scope:** mirror of 3.1 but for the destination plugin —
+`DestPlugin.write_out(ctx, dest, tables)` reads the parquets in
+`--out-dir` and writes them to the destination described by `info.destination`.
 
 **Code:**
 `tabsdatak/_tdrunner/function/commands/run_destination_plugin/__init__.py`
 
-* Args: `--request`, `--run-env`, `--bundle`, `--out-dir`, `--liveness`.
+* Args: `--request`, `--bundle`, `--out-dir`, `--liveness`.
+* Flow: load Request → deserialise `SubscriberInfo` → registry lookup
+  `DestDef` for `type(info.destination)` → instantiate `DestPlugin` →
+  build `DestContext` → enumerate parquets in `--out-dir` → call
+  `plugin.write_out(ctx, info.destination, tables)`.
 
-**Tests:** end-to-end with a fake destination plugin that records calls;
+**Tests:** end-to-end with a fake `DestPlugin` that records calls;
 verify call signature; plugin exception path.
 
-**Depends on:** 1.1–1.5, 1.7, 1.9, 1.12.
+**Depends on:** 1.1–1.7, **Phase 1B**.
 
 ---
 
@@ -848,12 +1071,12 @@ function trigger. Probably fits under a new `trigger_function/` command.
 ### 6.1 — `tabsdatak` standalone gate
 
 **Scope:** verify nothing under `tabsdatak/_tdrunner/` imports from
-`tabsdata`. CI-enforced.
+`tabsdata` *or* `tabsdataai`. CI-enforced.
 
 **Code:**
-`test_tabsdatak/test_tdrunner/test_no_tabsdata_imports.py` — walks
+`test_tabsdatak/test_tdrunner/test_no_legacy_imports.py` — walks
 `_tdrunner/` and asserts every `import` and `from` line resolves outside
-`tabsdata`.
+both `tabsdata` and `tabsdataai`.
 
 **Depends on:** all earlier phases done.
 
@@ -917,6 +1140,35 @@ Phase 3: 3.1 and 3.3 in parallel; 3.2 split into sub-PRs.
 ```
 
 ---
+
+## Architectural decisions logged 2026-05-08
+
+* **`tabsdataai` is also legacy and slated for deletion.** The standalone
+  rule covers it; copy needed types into `tabsdatak`.
+* **Pod-runner activates the venv between steps.** `prepare-py-env` is
+  the only command that touches `run-env.yaml`; downstream commands run
+  in-process in the already-active venv, with no `--run-env` arg, no
+  subprocess, no bootstrap script.
+* **Plugin contract is `read_in` / `write_out`** (not legacy `_run`).
+* **Functions and definitions serialise as JSON envelopes** (not
+  cloudpickle). `func` fields encode as `module:qualname` strings.
+* **Plugins are class references** discovered via a registry, not
+  cloudpickled blobs at known paths in the bundle.
+* **`NamedConn` resolution** — assumed pre-resolved by the API server
+  before producing `request.yaml`. Local fallback in `tabsdatak` is a
+  later possibility if needed.
+* **Bundle layout** — package tree under `<bundle>/` plus a sibling
+  `<bundle>/manifest.json` carrying the JSON envelope. Pod-runner
+  arranges for the package tree to be importable from the venv (added
+  to `sys.path` by `prepare-py-env`'s setup, or installed as part of
+  the venv build).
+* **TableFrame** — Phase 3.2 stubs TableFrame via `polars.LazyFrame`.
+  A real TableFrame copy (Phase 1B.8, deferred) replaces the stub once
+  the publisher prototype is end-to-end green.
+* **Reference connector for tests** — `LocalFileSrc` (real
+  CSV → parquet path), copied from `tabsdataai-conn-localfile`. Chosen
+  over a deliberately-fake stub because it exercises the I/O contract
+  and stays useful as production code, not just test scaffolding.
 
 ## Stop-and-ask checkpoints
 
