@@ -1,0 +1,80 @@
+from __future__ import annotations
+
+from typing import Annotated, Literal, TypeAlias, Union
+
+# noinspection PyProtectedMember
+import tabsdatak._api as _api
+
+# noinspection PyProtectedMember
+from tabsdatak.api import Conn, Dest, Env, NamedConn, Secret
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.types import CfgSpec, UserPassword
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.snowflake import _validation
+from tabsdatak.conn.snowflake.error import SnowflakeErrorCode
+
+# --- Type aliases ----------------------------------------------------
+
+
+CredentialsSpec: TypeAlias = UserPassword
+
+AccountSpec: TypeAlias = Union[
+    Annotated[Secret, _api.SecretValueConstraints(pattern=_validation.ACCOUNT_PATTERN)],
+    Annotated[Env, _api.EnvValueConstraints(pattern=_validation.ACCOUNT_PATTERN)],
+]
+
+
+# Snowflake identifier shape (unquoted or double-quoted), shared by
+# both the dedicated identifier field (``stage``) and the Name fields
+# (``role`` / ``database`` / ``schema`` / ``warehouse``) -- all four
+# follow the same identifier rules.
+
+IdentifierSpec: TypeAlias = Union[
+    Annotated[
+        Secret, _api.SecretValueConstraints(pattern=_validation.IDENTIFIER_PATTERN)
+    ],
+    Annotated[Env, _api.EnvValueConstraints(pattern=_validation.IDENTIFIER_PATTERN)],
+]
+
+NameSpec: TypeAlias = IdentifierSpec
+SnowflakeTableNameSpec: TypeAlias = Annotated[str, _validation.TABLE_FQN_VALIDATOR]
+SnowflakeTableNamesSpec: TypeAlias = list[SnowflakeTableNameSpec]
+IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
+
+
+# --- Connection ------------------------------------------------------
+
+
+@_api.dataclass(SnowflakeErrorCode.SNOWFLAKE_1, kw_only=True)
+class SnowflakeConn(Conn):
+    account: AccountSpec
+    credentials: CredentialsSpec
+    role: NameSpec | None = None
+    database: NameSpec | None = None
+    schema: NameSpec | None = None
+    warehouse: NameSpec | None = None
+    stage: IdentifierSpec | None = None
+    conn_cfg: CfgSpec | None = None
+
+    def validate(self) -> None:
+        if self.schema is not None and self.database is None:
+            # noinspection PyProtectedMember
+            raise SnowflakeErrorCode.SNOWFLAKE_2.exception(schema=self.schema)
+
+
+ConnSpec: TypeAlias = Union[NamedConn, SnowflakeConn]
+
+
+# --- Destination -----------------------------------------------------
+
+
+@_api.dataclass(SnowflakeErrorCode.SNOWFLAKE_3, kw_only=True)
+class SnowflakeDest(Dest):
+    conn: ConnSpec
+    tables: SnowflakeTableNamesSpec
+    if_table_exists: IfTableExistsSpec = "append"
+    # TODO: document valid keys for this cfg in the docstring above
+    # (see MySQLSrc src_cfg for the pattern).
+    dest_cfg: CfgSpec | None = None

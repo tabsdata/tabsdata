@@ -1,0 +1,10 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+# Databricks SQLAlchemy dialect (transitively pulls in
+# `databricks-sql-connector`). Test-only -- pinned exactly so
+# `databricks_live` and the mocked plugin tests resolve the same
+# dialect, without forcing the end-user install of
+# `tabsdata-conn-databricks` to depend on it.
+databricks-sqlalchemy==2.0.9
