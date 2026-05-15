@@ -1,0 +1,190 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+import pytest
+import yaml
+
+from tabsdatak._tdrunner.function.commands.prep_localize_state import (
+    EXIT_BAD_REQUEST,
+    EXIT_UNSUPPORTED_SCHEME,
+    EXIT_WRITE_FAILED,
+    main,
+)
+
+pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
+
+
+def _set_argv(monkeypatch, request_path, in_dir, state_dir, out, liveness):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "prep-localize-state",
+            "--request",
+            str(request_path),
+            "--in-dir",
+            str(in_dir),
+            "--state-dir",
+            str(state_dir),
+            "--out",
+            str(out),
+            "--liveness",
+            str(liveness),
+        ],
+    )
+
+
+def _write_request(
+    path: Path,
+    *,
+    system_input: list | None = None,
+    inputs: list | None = None,
+    bundle_uri: str = "file:///bundle.tgz",
+) -> Path:
+    body = {
+        "info": {
+            "collection": "c",
+            "collection_id": 1,
+            "execution_id": 2,
+            "transaction_id": 3,
+            "function_run_id": 4,
+            "function_bundle": {"uri": bundle_uri},
+        },
+        "system_input": system_input or [],
+        "input": inputs or [],
+    }
+    path.write_text(yaml.safe_dump(body))
+    return path
+
+
+# --- happy path ---
+
+
+def test_main_writes_transporter_yaml(monkeypatch, tmp_path):
+    request_yaml = _write_request(
+        tmp_path / "request.yaml",
+        system_input=[
+            {
+                "name": "td-initial-values",
+                "location": {"uri": "s3://bucket/state.parquet"},
+            },
+        ],
+    )
+    out = tmp_path / "transporter.yaml"
+    rc = main_with_args(
+        monkeypatch,
+        request_yaml,
+        tmp_path / "in",
+        tmp_path / "state",
+        out,
+        tmp_path / "live",
+    )
+    assert rc == 0
+    text = out.read_text()
+    assert text.startswith("!CopyV1")
+    assert "!S3" in text
+    assert "s3://bucket/state.parquet" in text
+    assert (tmp_path / "live").exists()
+
+
+def test_main_handles_empty_system_input(monkeypatch, tmp_path):
+    """A request with no system_input still produces a valid (empty) request."""
+    request_yaml = _write_request(tmp_path / "request.yaml")
+    out = tmp_path / "transporter.yaml"
+    rc = main_with_args(
+        monkeypatch,
+        request_yaml,
+        tmp_path / "in",
+        tmp_path / "state",
+        out,
+        tmp_path / "live",
+    )
+    assert rc == 0
+    assert "source_target_pairs: []" in out.read_text()
+
+
+def main_with_args(monkeypatch, request_path, in_dir, state_dir, out, liveness):
+    _set_argv(monkeypatch, request_path, in_dir, state_dir, out, liveness)
+    return main()
+
+
+# --- error paths ---
+
+
+def test_main_missing_request_returns_bad_request(monkeypatch, tmp_path):
+    rc = main_with_args(
+        monkeypatch,
+        tmp_path / "no-request.yaml",
+        tmp_path / "in",
+        tmp_path / "state",
+        tmp_path / "out.yaml",
+        tmp_path / "live",
+    )
+    assert rc == EXIT_BAD_REQUEST
+
+
+def test_main_malformed_request_returns_bad_request(monkeypatch, tmp_path):
+    bad = tmp_path / "request.yaml"
+    bad.write_text("info: { unclosed")
+    rc = main_with_args(
+        monkeypatch,
+        bad,
+        tmp_path / "in",
+        tmp_path / "state",
+        tmp_path / "out.yaml",
+        tmp_path / "live",
+    )
+    assert rc == EXIT_BAD_REQUEST
+
+
+def test_main_unsupported_scheme_returns_unsupported_scheme(monkeypatch, tmp_path):
+    request_yaml = _write_request(
+        tmp_path / "request.yaml",
+        system_input=[
+            {
+                "name": "x",
+                "location": {"uri": "ftp://server/x.parquet"},
+            },
+        ],
+    )
+    rc = main_with_args(
+        monkeypatch,
+        request_yaml,
+        tmp_path / "in",
+        tmp_path / "state",
+        tmp_path / "out.yaml",
+        tmp_path / "live",
+    )
+    assert rc == EXIT_UNSUPPORTED_SCHEME
+
+
+def test_main_write_error_returns_write_failed(monkeypatch, tmp_path):
+    request_yaml = _write_request(tmp_path / "request.yaml")
+    rc = main_with_args(
+        monkeypatch,
+        request_yaml,
+        tmp_path / "in",
+        tmp_path / "state",
+        tmp_path / "no" / "such" / "out.yaml",
+        tmp_path / "live",
+    )
+    assert rc == EXIT_WRITE_FAILED
+
+
+def test_main_invalid_options_returns_1(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["prep-localize-state", "--request", "x"])
+    assert main() == 1
+
+
+# --- decorator metadata ---
+
+
+def test_main_carries_tabsdata_command_metadata():
+    assert getattr(main, "tabsdata_command", False) is True
+    assert getattr(main, "tabsdata_command_name", None) == "td_prep_localize_state"

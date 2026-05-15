@@ -593,7 +593,12 @@ verify dest contents.
 
 **Depends on:** 1.1–1.4, 1.7, 1.9 plus the open Q above.
 
-### 2.4 — `prep-localize-state`
+### 2.4 — `prep-localize-state` ✅
+
+**Status:** Done (2026-05-07). 100% line+branch coverage. 8 tests
+passing. Composes `load_request` + `build_localize_state_request` +
+`write_transporter_request`. Command-specific exit codes: 10 = bad
+request.yaml, 11 = unsupported URI scheme, 12 = write failed.
 
 **Scope:** build the transporter request YAML for state-in localisation.
 
