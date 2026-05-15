@@ -1,0 +1,283 @@
+"""Integration tests that invoke the real ``td_transporter`` binary.
+
+These tests are skipped unless ``TD_TRANSPORTER_BIN`` is set in the
+environment and points at an existing executable. Set it once before
+running pytest::
+
+    export TD_TRANSPORTER_BIN=/path/to/td_transporter
+    pytest packages/tabsdata-conn-common-file/src/utest/python -k integration
+
+Everything else in the conn-common-file test suite mocks the
+subprocess, so this file is the only end-to-end coverage of the
+binary handshake (request YAML round-trip + report parsing).
+"""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import polars as pl
+import pytest
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.file import _input as _input_module
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.file import _output as _output_module
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.file import _plugin
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.file import _transporter
+from tabsdatak.conn.common.file.error import FileCommonErrorCode
+from tabsdatak.conn.common.file.typing_ import (
+    DestFileFormat,
+    SrcFileFormat,
+)
+from tabsdatak.spi import DestContext, ParquetFile, SrcContext
+
+
+# ---------------------------------------------------------------------------
+# Gate: skip the whole module if the binary isn't available
+# ---------------------------------------------------------------------------
+
+
+_TRANSPORTER_BIN = os.environ.get("TD_TRANSPORTER_BIN")
+
+pytestmark = pytest.mark.skipif(
+    not _TRANSPORTER_BIN or not Path(_TRANSPORTER_BIN).is_file(),
+    reason=(
+        "TD_TRANSPORTER_BIN env var is unset or doesn't point at an "
+        "existing file; integration tests skipped"
+    ),
+)
+
+
+# ---------------------------------------------------------------------------
+# Test contexts
+# ---------------------------------------------------------------------------
+
+
+class _SrcCtx(SrcContext):
+
+    def __init__(self, work_dir: Path) -> None:
+        self._work_dir = work_dir
+
+    def work_dir(self) -> Path:
+        return self._work_dir
+
+    @property
+    def exec_plan_id(self) -> str:
+        return "integ-exec-plan"
+
+    @property
+    def trx_id(self) -> str:
+        return "integ-trx"
+
+    @property
+    def exec_plan_ts(self) -> str:
+        return "2026-01-01T00:00:00.000000+00:00"
+
+
+class _DestCtx(DestContext):
+
+    def __init__(self, work_dir: Path) -> None:
+        self._work_dir = work_dir
+
+    def work_dir(self) -> Path:
+        return self._work_dir
+
+    @property
+    def exec_plan_id(self) -> str:
+        return "integ-exec-plan"
+
+    @property
+    def trx_id(self) -> str:
+        return "integ-trx"
+
+    @property
+    def exec_plan_ts(self) -> str:
+        return "2026-01-01T00:00:00.000000+00:00"
+
+
+# ---------------------------------------------------------------------------
+# _input.import_one
+# ---------------------------------------------------------------------------
+
+
+def _write_input_parquet(path: Path, rows: list[dict]) -> Path:
+    pl.DataFrame(rows).write_parquet(path, use_pyarrow=True)
+    return path
+
+
+def _input_dir(tmp_path: Path) -> Path:
+    d = tmp_path / "src"
+    d.mkdir()
+    return d
+
+
+def _output_dir(tmp_path: Path) -> Path:
+    d = tmp_path / "out"
+    d.mkdir()
+    return d
+
+
+def test_import_one_local_parquet_round_trip(tmp_path: Path):
+    src_dir = _input_dir(tmp_path)
+    out_dir = _output_dir(tmp_path)
+
+    _write_input_parquet(
+        src_dir / "users.parquet",
+        [
+            {"id": 1, "name": "alice"},
+            {"id": 2, "name": "bob"},
+        ],
+    )
+
+    report = _input_module.import_one(
+        source=_transporter.TransporterLocalFile(
+            _transporter.path_to_file_uri(src_dir / "users.parquet"),
+        ),
+        target_dir=out_dir,
+        format=_transporter.TransporterParquetFormat(),
+    )
+
+    assert isinstance(report, _transporter.TransporterReport)
+    assert report.files, "transporter report must reference at least one file"
+    target_path = report.files[0].get("to")
+    assert target_path, f"no 'to' field in report.files entry: {report.files[0]!r}"
+
+    # The binary stamps tabsdata-internal ``$td.opt.*`` columns into
+    # the read output; project away to compare just the user schema.
+    df = pl.read_parquet(target_path).select("id", "name").sort("id")
+    assert df.to_dicts() == [
+        {"id": 1, "name": "alice"},
+        {"id": 2, "name": "bob"},
+    ]
+
+
+def test_import_one_glob_pattern_in_basename(tmp_path: Path):
+    src_dir = _input_dir(tmp_path)
+    out_dir = _output_dir(tmp_path)
+
+    _write_input_parquet(src_dir / "a.parquet", [{"id": 1}])
+    _write_input_parquet(src_dir / "b.parquet", [{"id": 2}])
+
+    report = _input_module.import_one(
+        source=_transporter.TransporterLocalFile(
+            _transporter.path_to_file_uri(src_dir) + "*.parquet",
+        ),
+        target_dir=out_dir,
+        format=_transporter.TransporterParquetFormat(),
+    )
+
+    targets = [f["to"] for f in report.files if isinstance(f, dict) and f.get("to")]
+    assert len(targets) >= 2
+
+
+# ---------------------------------------------------------------------------
+# _output.copy_one
+# ---------------------------------------------------------------------------
+
+
+def test_copy_one_local_to_local(tmp_path: Path):
+    src_dir = _input_dir(tmp_path)
+    out_dir = _output_dir(tmp_path)
+
+    _write_input_parquet(
+        src_dir / "in.parquet",
+        [{"id": 100, "name": "carol"}],
+    )
+
+    src_loc = _transporter.TransporterLocalFile(
+        _transporter.path_to_file_uri(src_dir / "in.parquet"),
+    )
+    tgt_loc = _transporter.TransporterLocalFile(
+        _transporter.path_to_file_uri(out_dir / "out.parquet"),
+    )
+
+    report = _output_module.copy_one(
+        source_target_pairs=[(src_loc, tgt_loc)],
+        work_dir=tmp_path,
+        format=_transporter.TransporterParquetFormat(),
+    )
+
+    assert isinstance(report, _transporter.TransporterReport)
+    assert (out_dir / "out.parquet").exists()
+    df = pl.read_parquet(out_dir / "out.parquet")
+    assert df.to_dicts() == [{"id": 100, "name": "carol"}]
+
+
+# ---------------------------------------------------------------------------
+# _plugin.run_read_in / run_write_out (orchestrator end-to-end)
+# ---------------------------------------------------------------------------
+
+
+_INTEG_ERRORS = _plugin.FilePluginErrors(
+    binary_not_found=FileCommonErrorCode.FILE_COMMON_1,
+    read_failed=FileCommonErrorCode.FILE_COMMON_3,
+    write_failed=FileCommonErrorCode.FILE_COMMON_8,
+    report_invalid=FileCommonErrorCode.FILE_COMMON_4,
+)
+
+
+def _local_location(_conn, entry: str) -> _transporter.TransporterLocalFile:
+    return _transporter.TransporterLocalFile(_transporter.path_to_file_uri(entry))
+
+
+def test_run_read_in_end_to_end_against_real_binary(tmp_path: Path):
+    src_dir = _input_dir(tmp_path)
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+
+    _write_input_parquet(
+        src_dir / "users.parquet",
+        [{"id": 1, "name": "x"}, {"id": 2, "name": "y"}],
+    )
+
+    cfg = _plugin.ReaderConf(
+        conn=object(),
+        paths=[str(src_dir / "users.parquet")],
+        format=_transporter.TransporterParquetFormat(),
+    )
+    out = _plugin.import_files(
+        ctx=_SrcCtx(work_dir),
+        cfg=cfg,
+        build_location=_local_location,
+        errors=_INTEG_ERRORS,
+    )
+
+    assert len(out) == 1
+    assert len(out[0]) >= 1
+    parquet = out[0][0]
+    assert isinstance(parquet, ParquetFile)
+    df = pl.read_parquet(parquet).select("id", "name").sort("id")
+    assert df.to_dicts() == [{"id": 1, "name": "x"}, {"id": 2, "name": "y"}]
+
+
+def test_run_write_out_end_to_end_against_real_binary(tmp_path: Path):
+    src_dir = _input_dir(tmp_path)
+    out_dir = _output_dir(tmp_path)
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+
+    _write_input_parquet(
+        src_dir / "data.parquet",
+        [{"id": 7, "name": "z"}],
+    )
+
+    cfg = _plugin.WriterConf(
+        conn=object(),
+        paths=[str(out_dir / "data.parquet")],
+        format=_transporter.TransporterParquetFormat(),
+    )
+    _plugin.copy_out(
+        ctx=_DestCtx(work_dir),
+        cfg=cfg,
+        tables=[ParquetFile(src_dir / "data.parquet")],
+        build_location=_local_location,
+        errors=_INTEG_ERRORS,
+    )
+
+    assert (out_dir / "data.parquet").exists()
+    df = pl.read_parquet(out_dir / "data.parquet")
+    assert df.to_dicts() == [{"id": 7, "name": "z"}]

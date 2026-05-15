@@ -1,0 +1,193 @@
+from __future__ import annotations
+
+from pathlib import Path
+from unittest.mock import MagicMock
+
+import pytest
+
+from tabsdatak.api import Secret
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.file import _plugin as _file_plugin
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.file import _transporter
+from tabsdatak.conn.common.types import AzureAccountKey
+from tabsdatak.conn.azureblob import AzureBlobConn, AzureBlobDest, AzureBlobSrc
+# noinspection PyProtectedMember
+import tabsdatak.conn.azureblob._plugin as plugin
+from tabsdatak.spi import ParquetFile
+
+
+pytestmark = pytest.mark.azureblob
+
+
+def _az_creds() -> AzureAccountKey:
+    return AzureAccountKey(
+        account_name=Secret.lit("acctname"),
+        account_key=Secret.lit("acctkey"),
+    )
+
+
+def _conn(**overrides) -> AzureBlobConn:
+    kw = dict(
+        container="my-container",
+        credentials=_az_creds(),
+    )
+    kw.update(overrides)
+    return AzureBlobConn(**kw)
+
+
+# ---------------------------------------------------------------------------
+# _build_location
+# ---------------------------------------------------------------------------
+
+
+def test_build_location_emits_transporter_azure_with_env_credentials():
+    loc = plugin.build_location(_conn(), "raw/users.parquet")
+    assert isinstance(loc, _transporter.TransporterAzure)
+    assert loc.url == "az://my-container/raw/users.parquet"
+    assert loc.account_name == _transporter.TransporterEnv(
+        _transporter.SERVER_SIDE_AZURE_ACCOUNT_NAME,
+    )
+    assert loc.account_key == _transporter.TransporterEnv(
+        _transporter.SERVER_SIDE_AZURE_ACCOUNT_KEY,
+    )
+
+
+def test_build_location_strips_leading_slash_on_path_entry():
+    loc = plugin.build_location(_conn(), "/raw/users.parquet")
+    assert loc.url == "az://my-container/raw/users.parquet"
+
+
+def test_build_location_preserves_explicit_az_uri():
+    loc = plugin.build_location(_conn(), "az://other-container/x/y.parquet")
+    assert loc.url == "az://other-container/x/y.parquet"
+
+
+def test_build_location_preserves_explicit_abfss_uri():
+    loc = plugin.build_location(
+        _conn(), "abfss://other@acct.dfs.core.windows.net/x/y.parquet",
+    )
+    assert loc.url == "abfss://other@acct.dfs.core.windows.net/x/y.parquet"
+
+
+# ---------------------------------------------------------------------------
+# _run_env / _credentials
+# ---------------------------------------------------------------------------
+
+
+def test_run_env_resolves_credentials_to_server_side_env_var_names():
+    env = plugin.run_env(_conn())
+    assert env == {
+        _transporter.SERVER_SIDE_AZURE_ACCOUNT_NAME: "acctname",
+        _transporter.SERVER_SIDE_AZURE_ACCOUNT_KEY: "acctkey",
+    }
+
+
+def test_credentials_rejects_non_account_key():
+    class _OtherCreds:
+        pass
+
+    conn = MagicMock(spec=AzureBlobConn)
+    conn.credentials = _OtherCreds()
+    with pytest.raises(TypeError, match="must be AzureAccountKey"):
+        plugin.credentials(conn)
+
+
+# ---------------------------------------------------------------------------
+# Plugin classes: delegate to _file_plugin orchestrators with the right wiring
+# ---------------------------------------------------------------------------
+
+
+def _src_ctx(work: Path):
+    ctx = MagicMock()
+    ctx.work_dir.return_value = work
+    return ctx
+
+
+def _dest_ctx(work: Path):
+    ctx = MagicMock()
+    ctx.work_dir.return_value = work
+    return ctx
+
+
+def test_src_plugin_passes_build_location_run_env_and_errors(monkeypatch, tmp_path):
+    captured: dict = {}
+
+    def fake(*, ctx, cfg, build_location, run_env, errors):
+        captured.update(
+            ctx=ctx, cfg=cfg, build_location=build_location,
+            run_env=run_env, errors=errors,
+        )
+        return [[ParquetFile(tmp_path / "ok.parquet")]]
+
+    monkeypatch.setattr(_file_plugin, "import_files", fake)
+
+    src = AzureBlobSrc(conn=_conn(), path=["a/b.parquet"])
+    out = plugin.AzureBlobSrcPlugin().read_in(_src_ctx(tmp_path), src)
+
+    assert out == [[ParquetFile(tmp_path / "ok.parquet")]]
+    assert captured["build_location"] is plugin.build_location
+    assert captured["run_env"] is plugin.run_env
+    assert captured["errors"] is plugin.ERRORS
+    assert captured["cfg"].paths == ["a/b.parquet"]
+
+
+def test_dest_plugin_passes_build_location_run_env_and_errors(monkeypatch, tmp_path):
+    captured: dict = {}
+
+    def fake(*, ctx, cfg, tables, build_location, run_env, errors):
+        captured.update(
+            ctx=ctx, cfg=cfg, tables=tables, build_location=build_location,
+            run_env=run_env, errors=errors,
+        )
+
+    monkeypatch.setattr(_file_plugin, "copy_out", fake)
+
+    dest = AzureBlobDest(conn=_conn(), path=["out/x.parquet"])
+    parquet = ParquetFile(tmp_path / "in.parquet")
+    plugin.AzureBlobDestPlugin().write_out(_dest_ctx(tmp_path), dest, [parquet])
+
+    assert captured["tables"] == [parquet]
+    assert captured["build_location"] is plugin.build_location
+    assert captured["run_env"] is plugin.run_env
+    assert captured["errors"] is plugin.ERRORS
+    assert captured["cfg"].paths == ["out/x.parquet"]
+
+
+# ---------------------------------------------------------------------------
+# Explorer stubs
+# ---------------------------------------------------------------------------
+
+
+def test_explorer_methods_are_stubs():
+    exp = plugin.AzureBlobExplorer()
+    assert exp.metadata(_conn()) is None
+    assert exp.data(_conn(), "SELECT 1") is None
+
+
+# ---------------------------------------------------------------------------
+# SrcDef / DestDef wiring
+# ---------------------------------------------------------------------------
+
+
+def test_azureblob_src_def_wires_plugin_and_explorer():
+    assert plugin.AZURE_BLOB_SRC.conn is AzureBlobConn
+    assert plugin.AZURE_BLOB_SRC.src is AzureBlobSrc
+    assert plugin.AZURE_BLOB_SRC.plugin is plugin.AzureBlobSrcPlugin
+    assert plugin.AZURE_BLOB_SRC.explorer is plugin.AzureBlobExplorer
+    assert plugin.AZURE_BLOB_SRC.src_type == "azureBlob"
+
+
+def test_azureblob_dest_def_wires_plugin_and_explorer():
+    assert plugin.AZURE_BLOB_DEST.conn is AzureBlobConn
+    assert plugin.AZURE_BLOB_DEST.dest is AzureBlobDest
+    assert plugin.AZURE_BLOB_DEST.plugin is plugin.AzureBlobDestPlugin
+    assert plugin.AZURE_BLOB_DEST.explorer is plugin.AzureBlobExplorer
+    assert plugin.AZURE_BLOB_DEST.dest_type == "azureBlob"
+
+
+def test_azureblob_cardinality_uses_path_length():
+    src = AzureBlobSrc(conn=_conn(), path=["a", "b", "c"])
+    assert plugin.AZURE_BLOB_SRC.cardinality(src) == 3
+    dest = AzureBlobDest(conn=_conn(), path=["a", "b"])
+    assert plugin.AZURE_BLOB_DEST.cardinality(dest) == 2

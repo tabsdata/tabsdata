@@ -1,0 +1,26 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+[run]
+source = tabsdatak.conn.common.file
+omit =
+    test*
+    test*/**
+    */td-temp/*
+    utest
+    utest*
+    utest/**
+    utest*/**
+    itest
+    itest*
+    itest/**
+    itest*/**
+branch = True
+parallel = True
+disable_warnings = no-data-collected, couldnt-parse
+relative_files = True
+
+[report]
+skip_empty = True
+show_missing = True
