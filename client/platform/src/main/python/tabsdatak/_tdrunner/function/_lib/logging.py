@@ -19,6 +19,21 @@ TRACE: int = 5
 logging.addLevelName(TRACE, "TRACE")
 
 
+def _trace(self, msg, *args, **kwargs):
+    """Log ``msg % args`` at TRACE level. Mirrors :meth:`Logger.debug` /
+    :meth:`Logger.info` so callers can write ``logger.trace(...)``
+    instead of the asymmetric ``logger.log(TRACE, ...)``.
+    """
+    if self.isEnabledFor(TRACE):
+        self._log(TRACE, msg, args, **kwargs)
+
+
+# Expose `logger.trace(...)` on every Logger in the process so module-level
+# loggers (created at import time, before any setup_logging call) also pick
+# it up.
+logging.Logger.trace = _trace
+
+
 class _StdoutFilter(logging.Filter):
     """Filter that lets through records strictly below WARNING."""
 

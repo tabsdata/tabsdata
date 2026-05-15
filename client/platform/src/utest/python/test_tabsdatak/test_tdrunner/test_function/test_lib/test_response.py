@@ -139,43 +139,46 @@ def test_load_malformed_yaml(tmp_path):
 
 def test_load_top_level_not_a_mapping(tmp_path):
     p = _write(tmp_path, "- a\n- b\n")
-    with pytest.raises(InvalidResponseError, match="must be a mapping"):
+    with pytest.raises(InvalidResponseError):
         load_response(p)
 
 
 def test_load_missing_output(tmp_path):
     p = _write(tmp_path, "other: 1\n")
-    with pytest.raises(InvalidResponseError, match="'output'"):
+    with pytest.raises(InvalidResponseError, match="output"):
         load_response(p)
 
 
 def test_load_output_not_a_list(tmp_path):
     p = _write(tmp_path, "output: not-a-list\n")
-    with pytest.raises(InvalidResponseError, match="'output' must be a list"):
+    with pytest.raises(InvalidResponseError, match="output"):
         load_response(p)
 
 
 def test_load_entry_not_a_mapping(tmp_path):
     p = _write(tmp_path, "output:\n  - just-a-string\n")
-    with pytest.raises(InvalidResponseError, match=r"output\[0\]"):
+    with pytest.raises(InvalidResponseError, match="output"):
         load_response(p)
 
 
 def test_load_entry_missing_table(tmp_path):
-    p = _write(tmp_path, "output:\n  - info: {column_count: 1, row_count: 1, schema_hash: h}\n")
-    with pytest.raises(InvalidResponseError, match=r"output\[0\].table"):
+    p = _write(
+        tmp_path,
+        "output:\n  - info: {column_count: 1, row_count: 1, schema_hash: h}\n",
+    )
+    with pytest.raises(InvalidResponseError, match="table"):
         load_response(p)
 
 
 def test_load_table_wrong_type(tmp_path):
-    p = _write(tmp_path, "output:\n  - table: 42\n")
-    with pytest.raises(InvalidResponseError, match=r"output\[0\].table"):
+    p = _write(tmp_path, "output:\n  - table: [1, 2, 3]\n")
+    with pytest.raises(InvalidResponseError, match="table"):
         load_response(p)
 
 
 def test_load_info_wrong_type(tmp_path):
     p = _write(tmp_path, "output:\n  - table: t\n    info: not-a-mapping\n")
-    with pytest.raises(InvalidResponseError, match=r"output\[0\].info"):
+    with pytest.raises(InvalidResponseError, match="info"):
         load_response(p)
 
 
@@ -219,13 +222,37 @@ def test_load_info_row_count_wrong_type(tmp_path):
 def test_load_info_schema_hash_wrong_type(tmp_path):
     p = _write(
         tmp_path,
-        "output:\n  - table: t\n    info:\n      column_count: 1\n      row_count: 1\n      schema_hash: 42\n",
+        "output:\n  - table: t\n    info:\n      column_count: 1\n      row_count: 1\n      schema_hash: [1, 2]\n",
     )
     with pytest.raises(InvalidResponseError, match="schema_hash"):
         load_response(p)
 
 
-# --- dataclass shape ---
+# --- extra="forbid": unknown fields are rejected ---
+
+
+def test_load_extra_field_at_top_level_is_forbidden(tmp_path):
+    p = _write(tmp_path, "output: []\nunknown_top_level: hi\n")
+    with pytest.raises(InvalidResponseError, match="unknown_top_level"):
+        load_response(p)
+
+
+def test_load_extra_field_in_entry_is_forbidden(tmp_path):
+    p = _write(tmp_path, "output:\n  - table: t\n    surprise: 1\n")
+    with pytest.raises(InvalidResponseError, match="surprise"):
+        load_response(p)
+
+
+def test_load_extra_field_in_info_is_forbidden(tmp_path):
+    p = _write(
+        tmp_path,
+        "output:\n  - table: t\n    info:\n      column_count: 1\n      row_count: 1\n      schema_hash: h\n      surprise: 1\n",
+    )
+    with pytest.raises(InvalidResponseError, match="surprise"):
+        load_response(p)
+
+
+# --- frozen ---
 
 
 def test_response_is_frozen():

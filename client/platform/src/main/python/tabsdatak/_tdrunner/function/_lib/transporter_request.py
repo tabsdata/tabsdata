@@ -8,101 +8,47 @@ The publisher's prep-localize-state and prep-upload-state commands
 generate a YAML request that the `td_transporter` binary consumes to
 copy parquet files between cloud storage and local disk.
 
-The transporter expects YAML with custom tags (`!CopyV1`, `!S3`,
-`!Azure`, `!GCS`, `!LocalFile`, `!Env`, `!Literal`) — these are the
-binary's contract, not ours, so we mirror them here.
-
-Credentials are referenced via env vars. When `Location.env_prefix` is
-set on a request location, each credential's env-var name is
-`<env_prefix>_<CRED>`; otherwise the canonical name is used:
-
-    AWS:    AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
-    Azure:  AZURE_ACCOUNT_NAME, AZURE_ACCOUNT_KEY
-    GCS:    GCP_SERVICE_ACCOUNT_KEY
+Endpoint types and URI→endpoint resolution live in `endpoint.py` (a
+cloud-storage concern). This module owns the transporter binary's
+on-wire YAML format: the `!CopyV1` envelope, the per-endpoint tags
+(`!S3`, `!Azure`, `!GCS`, `!LocalFile`), and the credential tags
+(`!Env`, `!Literal`).
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Union
 
 import yaml
+from pydantic import BaseModel, ConfigDict
 
-from tabsdatak._tdrunner.function._lib.request import Location, Request
-
-# ---- credential references ------------------------------------------------
-
-
-@dataclass(frozen=True)
-class EnvRef:
-    """A credential read from a named environment variable."""
-
-    name: str
-
-
-@dataclass(frozen=True)
-class LiteralRef:
-    """A credential supplied as a literal string."""
-
-    value: str
-
-
-CredRef = Union[EnvRef, LiteralRef]
-
-
-# ---- endpoints ------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class S3Endpoint:
-    url: str
-    access_key: CredRef | None = None
-    secret_key: CredRef | None = None
-    region: CredRef | None = None
-    extra_configs: dict[str, str] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class AzureEndpoint:
-    url: str
-    account_name: CredRef | None = None
-    account_key: CredRef | None = None
-    extra_configs: dict[str, str] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class GcsEndpoint:
-    url: str
-    service_account_key: CredRef | None = None
-    extra_configs: dict[str, str] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class LocalFileEndpoint:
-    url: str
-
-
-Endpoint = Union[S3Endpoint, AzureEndpoint, GcsEndpoint, LocalFileEndpoint]
-
+from tabsdatak._tdrunner.function._lib.endpoint import (
+    AzureEndpoint,
+    Endpoint,
+    EnvRef,
+    GcsEndpoint,
+    LiteralRef,
+    LocalFileEndpoint,
+    S3Endpoint,
+    endpoint_from_location,
+)
+from tabsdatak._tdrunner.function._lib.request import Request
 
 # ---- copy request ---------------------------------------------------------
 
 
-@dataclass(frozen=True)
-class CopyPair:
+class CopyPair(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
     source: Endpoint
     target: Endpoint
 
 
-@dataclass(frozen=True)
-class TransporterCopyRequest:
+class TransporterCopyRequest(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
     pairs: tuple[CopyPair, ...]
     parallelism: int | None = None
-
-
-class UnsupportedSchemeError(ValueError):
-    """The URI scheme is not one the transporter knows how to copy."""
 
 
 # ---- builders -------------------------------------------------------------
@@ -121,7 +67,7 @@ def build_localize_state_request(
             continue
         pairs.append(
             CopyPair(
-                source=_endpoint_from_location(table.location),
+                source=endpoint_from_location(table.location),
                 target=LocalFileEndpoint(
                     url=_local_uri(in_dir / f"{table.name}.parquet")
                 ),
@@ -132,7 +78,7 @@ def build_localize_state_request(
             continue
         pairs.append(
             CopyPair(
-                source=_endpoint_from_location(table.location),
+                source=endpoint_from_location(table.location),
                 target=LocalFileEndpoint(
                     url=_local_uri(state_dir / f"{table.name}.parquet")
                 ),
@@ -153,7 +99,7 @@ def build_bundle_fetch_request(
     return TransporterCopyRequest(
         pairs=(
             CopyPair(
-                source=_endpoint_from_location(request.function_bundle),
+                source=endpoint_from_location(request.info.function_bundle),
                 target=LocalFileEndpoint(url=_local_uri(target_path)),
             ),
         )
@@ -176,43 +122,10 @@ def build_upload_state_request(
                 source=LocalFileEndpoint(
                     url=_local_uri(state_dir / f"{table.name}.parquet")
                 ),
-                target=_endpoint_from_location(table.location),
+                target=endpoint_from_location(table.location),
             )
         )
     return TransporterCopyRequest(pairs=tuple(pairs))
-
-
-def _endpoint_from_location(location: Location) -> Endpoint:
-    """Map a request `Location` to a transporter `Endpoint` by URI scheme."""
-    uri = location.uri
-    prefix = location.env_prefix
-    if uri.startswith("s3://"):
-        return S3Endpoint(
-            url=uri,
-            access_key=_env(prefix, "AWS_ACCESS_KEY_ID"),
-            secret_key=_env(prefix, "AWS_SECRET_ACCESS_KEY"),
-            region=_env(prefix, "AWS_REGION"),
-        )
-    if uri.startswith(("az://", "abfs://", "abfss://")):
-        return AzureEndpoint(
-            url=uri,
-            account_name=_env(prefix, "AZURE_ACCOUNT_NAME"),
-            account_key=_env(prefix, "AZURE_ACCOUNT_KEY"),
-        )
-    if uri.startswith("gs://"):
-        return GcsEndpoint(
-            url=uri,
-            service_account_key=_env(prefix, "GCP_SERVICE_ACCOUNT_KEY"),
-        )
-    if uri.startswith("file://"):
-        return LocalFileEndpoint(url=uri)
-    raise UnsupportedSchemeError(f"unsupported URI scheme: {uri!r}")
-
-
-def _env(prefix: str | None, name: str) -> EnvRef:
-    if prefix:
-        return EnvRef(name=f"{prefix}_{name}")
-    return EnvRef(name=name)
 
 
 def _local_uri(path: Path) -> str:
@@ -267,10 +180,10 @@ def _s3_repr(dumper: yaml.SafeDumper, ep: S3Endpoint) -> yaml.nodes.MappingNode:
         {
             "url": ep.url,
             "configs": {
-                "access_key": ep.access_key,
-                "secret_key": ep.secret_key,
-                "region": ep.region,
-                "extra_configs": dict(ep.extra_configs),
+                "access_key": ep.configs.access_key,
+                "secret_key": ep.configs.secret_key,
+                "region": ep.configs.region,
+                "extra_configs": dict(ep.configs.extra_configs),
             },
         },
     )
@@ -282,9 +195,9 @@ def _azure_repr(dumper: yaml.SafeDumper, ep: AzureEndpoint) -> yaml.nodes.Mappin
         {
             "url": ep.url,
             "configs": {
-                "account_name": ep.account_name,
-                "account_key": ep.account_key,
-                "extra_configs": dict(ep.extra_configs),
+                "account_name": ep.configs.account_name,
+                "account_key": ep.configs.account_key,
+                "extra_configs": dict(ep.configs.extra_configs),
             },
         },
     )
@@ -296,8 +209,8 @@ def _gcs_repr(dumper: yaml.SafeDumper, ep: GcsEndpoint) -> yaml.nodes.MappingNod
         {
             "url": ep.url,
             "configs": {
-                "service_account_key": ep.service_account_key,
-                "extra_configs": dict(ep.extra_configs),
+                "service_account_key": ep.configs.service_account_key,
+                "extra_configs": dict(ep.configs.extra_configs),
             },
         },
     )

@@ -15,6 +15,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from tabsdatak._tdrunner.function._lib.cli import build_parser, run_command
+from tabsdatak._tdrunner.function._lib.endpoint import UnsupportedSchemeError
 from tabsdatak._tdrunner.function._lib.errors import CommandSpecificError
 from tabsdatak._tdrunner.function._lib.liveness import Liveness
 from tabsdatak._tdrunner.function._lib.request import (
@@ -22,7 +23,6 @@ from tabsdatak._tdrunner.function._lib.request import (
     load_request,
 )
 from tabsdatak._tdrunner.function._lib.transporter_request import (
-    UnsupportedSchemeError,
     build_upload_state_request,
     write_transporter_request,
 )

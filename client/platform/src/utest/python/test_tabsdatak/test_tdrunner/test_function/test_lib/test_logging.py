@@ -53,6 +53,30 @@ def test_trace_goes_to_stdout_when_enabled(capsys):
     assert "hello trace" not in captured.err
 
 
+def test_logger_trace_method_emits_at_trace_level(capsys):
+    """logger.trace(...) is the ergonomic equivalent of logger.log(TRACE, ...)."""
+    logger = setup_logging("test.tdrunner.trace_method", level=TRACE)
+    logger.trace("hello via .trace()")
+    captured = capsys.readouterr()
+    assert "hello via .trace()" in captured.out
+    assert "hello via .trace()" not in captured.err
+
+
+def test_logger_trace_method_respects_logger_level(capsys):
+    """When the logger is at INFO, .trace() is filtered."""
+    logger = setup_logging("test.tdrunner.trace_filtered")
+    logger.trace("should not appear")
+    captured = capsys.readouterr()
+    assert "should not appear" not in captured.out
+    assert "should not appear" not in captured.err
+
+
+def test_logger_trace_method_available_on_module_loggers():
+    """The patch applies to every Logger, not just ones from setup_logging."""
+    fresh = logging.getLogger("test.tdrunner.fresh_logger")
+    assert callable(fresh.trace)
+
+
 def test_warning_goes_to_stderr(capsys):
     logger = setup_logging("test.tdrunner.warning")
     logger.warning("hello warning")

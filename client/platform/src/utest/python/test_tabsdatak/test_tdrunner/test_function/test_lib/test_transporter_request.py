@@ -9,17 +9,27 @@ from pathlib import Path
 import pytest
 import yaml
 
-from tabsdatak._tdrunner.function._lib.request import Location, Request, Table
-from tabsdatak._tdrunner.function._lib.transporter_request import (
+from tabsdatak._tdrunner.function._lib.endpoint import (
+    AzureConfigs,
     AzureEndpoint,
-    CopyPair,
     EnvRef,
+    GcsConfigs,
     GcsEndpoint,
     LiteralRef,
     LocalFileEndpoint,
+    S3Configs,
     S3Endpoint,
-    TransporterCopyRequest,
     UnsupportedSchemeError,
+)
+from tabsdatak._tdrunner.function._lib.request import (
+    Info,
+    Location,
+    Request,
+    Table,
+)
+from tabsdatak._tdrunner.function._lib.transporter_request import (
+    CopyPair,
+    TransporterCopyRequest,
     build_bundle_fetch_request,
     build_localize_state_request,
     build_upload_state_request,
@@ -38,12 +48,14 @@ def _request(
     system_output: tuple[Table, ...] = (),
 ) -> Request:
     return Request(
-        collection="c",
-        collection_id=1,
-        execution_id=2,
-        transaction_id=3,
-        function_run_id=4,
-        function_bundle=Location(uri="file:///bundle.tgz"),
+        info=Info(
+            collection="c",
+            collection_id=1,
+            execution_id=2,
+            transaction_id=3,
+            function_run_id=4,
+            function_bundle=Location(uri="file:///bundle.tgz"),
+        ),
         input=inputs,
         output=outputs,
         system_input=system_input,
@@ -122,9 +134,9 @@ def test_s3_endpoint(uri, tmp_path):
     src = out.pairs[0].source
     assert isinstance(src, S3Endpoint)
     assert src.url == uri
-    assert src.access_key == EnvRef("AWS_ACCESS_KEY_ID")
-    assert src.secret_key == EnvRef("AWS_SECRET_ACCESS_KEY")
-    assert src.region == EnvRef("AWS_REGION")
+    assert src.configs.access_key == EnvRef(name="AWS_ACCESS_KEY_ID")
+    assert src.configs.secret_key == EnvRef(name="AWS_SECRET_ACCESS_KEY")
+    assert src.configs.region == EnvRef(name="AWS_REGION")
 
 
 @pytest.mark.parametrize(
@@ -137,8 +149,8 @@ def test_azure_endpoint(uri, tmp_path):
     src = out.pairs[0].source
     assert isinstance(src, AzureEndpoint)
     assert src.url == uri
-    assert src.account_name == EnvRef("AZURE_ACCOUNT_NAME")
-    assert src.account_key == EnvRef("AZURE_ACCOUNT_KEY")
+    assert src.configs.account_name == EnvRef(name="AZURE_ACCOUNT_NAME")
+    assert src.configs.account_key == EnvRef(name="AZURE_ACCOUNT_KEY")
 
 
 def test_gcs_endpoint(tmp_path):
@@ -148,7 +160,7 @@ def test_gcs_endpoint(tmp_path):
     out = build_localize_state_request(r, tmp_path / "in", tmp_path / "state")
     src = out.pairs[0].source
     assert isinstance(src, GcsEndpoint)
-    assert src.service_account_key == EnvRef("GCP_SERVICE_ACCOUNT_KEY")
+    assert src.configs.service_account_key == EnvRef(name="GCP_SERVICE_ACCOUNT_KEY")
 
 
 def test_local_file_endpoint(tmp_path):
@@ -183,7 +195,7 @@ def test_env_prefix_canonical_when_none(tmp_path):
     )
     out = build_localize_state_request(r, tmp_path / "in", tmp_path / "state")
     src = out.pairs[0].source
-    assert src.access_key == EnvRef("AWS_ACCESS_KEY_ID")
+    assert src.configs.access_key == EnvRef(name="AWS_ACCESS_KEY_ID")
 
 
 def test_env_prefix_prepended(tmp_path):
@@ -197,9 +209,9 @@ def test_env_prefix_prepended(tmp_path):
     )
     out = build_localize_state_request(r, tmp_path / "in", tmp_path / "state")
     src = out.pairs[0].source
-    assert src.access_key == EnvRef("STAGE_AWS_ACCESS_KEY_ID")
-    assert src.secret_key == EnvRef("STAGE_AWS_SECRET_ACCESS_KEY")
-    assert src.region == EnvRef("STAGE_AWS_REGION")
+    assert src.configs.access_key == EnvRef(name="STAGE_AWS_ACCESS_KEY_ID")
+    assert src.configs.secret_key == EnvRef(name="STAGE_AWS_SECRET_ACCESS_KEY")
+    assert src.configs.region == EnvRef(name="STAGE_AWS_REGION")
 
 
 # --- bundle fetch ---
@@ -219,12 +231,14 @@ def test_build_bundle_fetch_request_local(tmp_path):
 
 def test_build_bundle_fetch_request_s3(tmp_path):
     r = Request(
-        collection="c",
-        collection_id=1,
-        execution_id=2,
-        transaction_id=3,
-        function_run_id=4,
-        function_bundle=Location(uri="s3://b/bundle.tgz", env_prefix="STAGE"),
+        info=Info(
+            collection="c",
+            collection_id=1,
+            execution_id=2,
+            transaction_id=3,
+            function_run_id=4,
+            function_bundle=Location(uri="s3://b/bundle.tgz", env_prefix="STAGE"),
+        ),
         input=(),
         output=(),
         system_input=(),
@@ -235,7 +249,7 @@ def test_build_bundle_fetch_request_s3(tmp_path):
     src = out.pairs[0].source
     assert isinstance(src, S3Endpoint)
     assert src.url == "s3://b/bundle.tgz"
-    assert src.access_key == EnvRef("STAGE_AWS_ACCESS_KEY_ID")
+    assert src.configs.access_key == EnvRef(name="STAGE_AWS_ACCESS_KEY_ID")
 
 
 # --- upload semantics ---
@@ -281,9 +295,11 @@ def test_yaml_round_loadable_with_safe_load_unknown_tags_disabled(tmp_path):
             CopyPair(
                 source=S3Endpoint(
                     url="s3://b/x.parquet",
-                    access_key=EnvRef("AWS_ACCESS_KEY_ID"),
-                    secret_key=EnvRef("AWS_SECRET_ACCESS_KEY"),
-                    region=EnvRef("AWS_REGION"),
+                    configs=S3Configs(
+                        access_key=EnvRef(name="AWS_ACCESS_KEY_ID"),
+                        secret_key=EnvRef(name="AWS_SECRET_ACCESS_KEY"),
+                        region=EnvRef(name="AWS_REGION"),
+                    ),
                 ),
                 target=LocalFileEndpoint(url="file:///tmp/x.parquet"),
             ),
@@ -307,9 +323,11 @@ def test_yaml_single_pair_golden(tmp_path):
             CopyPair(
                 source=S3Endpoint(
                     url="s3://b/x.parquet",
-                    access_key=EnvRef("AWS_ACCESS_KEY_ID"),
-                    secret_key=EnvRef("AWS_SECRET_ACCESS_KEY"),
-                    region=EnvRef("AWS_REGION"),
+                    configs=S3Configs(
+                        access_key=EnvRef(name="AWS_ACCESS_KEY_ID"),
+                        secret_key=EnvRef(name="AWS_SECRET_ACCESS_KEY"),
+                        region=EnvRef(name="AWS_REGION"),
+                    ),
                 ),
                 target=LocalFileEndpoint(url="file:///tmp/x.parquet"),
             ),
@@ -339,9 +357,11 @@ def test_yaml_emits_literal_ref_tag():
             CopyPair(
                 source=S3Endpoint(
                     url="s3://b/x",
-                    access_key=LiteralRef("AKIA..."),
-                    secret_key=LiteralRef("..."),
-                    region=LiteralRef("us-east-1"),
+                    configs=S3Configs(
+                        access_key=LiteralRef(value="AKIA..."),
+                        secret_key=LiteralRef(value="..."),
+                        region=LiteralRef(value="us-east-1"),
+                    ),
                 ),
                 target=LocalFileEndpoint(url="file:///tmp/x"),
             ),
@@ -358,15 +378,19 @@ def test_yaml_emits_azure_and_gcs_tags():
             CopyPair(
                 source=AzureEndpoint(
                     url="az://c/x",
-                    account_name=EnvRef("AZURE_ACCOUNT_NAME"),
-                    account_key=EnvRef("AZURE_ACCOUNT_KEY"),
+                    configs=AzureConfigs(
+                        account_name=EnvRef(name="AZURE_ACCOUNT_NAME"),
+                        account_key=EnvRef(name="AZURE_ACCOUNT_KEY"),
+                    ),
                 ),
                 target=LocalFileEndpoint(url="file:///t"),
             ),
             CopyPair(
                 source=GcsEndpoint(
                     url="gs://b/x",
-                    service_account_key=EnvRef("GCP_SERVICE_ACCOUNT_KEY"),
+                    configs=GcsConfigs(
+                        service_account_key=EnvRef(name="GCP_SERVICE_ACCOUNT_KEY"),
+                    ),
                 ),
                 target=LocalFileEndpoint(url="file:///t2"),
             ),
@@ -406,3 +430,9 @@ def test_endpoint_is_frozen():
     ep = S3Endpoint(url="s3://b/x")
     with pytest.raises(Exception):
         ep.url = "s3://other"  # type: ignore[misc]
+
+
+def test_configs_is_frozen():
+    cfg = S3Configs(access_key=EnvRef(name="X"))
+    with pytest.raises(Exception):
+        cfg.access_key = EnvRef(name="Y")  # type: ignore[misc]
