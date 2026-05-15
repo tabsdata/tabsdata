@@ -57,7 +57,8 @@ is sized to be a single PR.
   * ⏳ 1.8 (handed off — someone else is taking it).
   * ✅ 1.9 `run_env.py` (2026-05-07) — 100% line + branch coverage.
   * ✅ 1.10 `transporter_request.py` (2026-05-07) — 100% line + branch coverage.
-  * ⏳ 1.11, 1.12 pending.
+  * ✅ 1.11 `transporter_proc.py` (2026-05-07) — 100% line + branch coverage.
+  * ⏳ 1.12 pending.
 * **Phases 2–6** — not started.
 
 ---
@@ -440,7 +441,15 @@ produce minimal output; wildcard handling.
 
 **Depends on:** 1.5.
 
-### 1.11 — `transporter_proc.py` — subprocess wrapper for `td_transporter`
+### 1.11 — `transporter_proc.py` — subprocess wrapper for `td_transporter` ✅
+
+**Status:** Done (2026-05-07). 100% line+branch coverage (18 statements,
+2 branches). 11 tests passing. `run_transporter(request_yaml, liveness=None)`
+exec's `td_transporter --request <PATH>` with stdout/stderr inherited and
+returns the exit code (caller decides what to do with non-zero). When a
+liveness context manager is provided, it wraps the subprocess so the
+background touch is started/stopped — including on exception.
+`TransporterNotFoundError(FileNotFoundError)` for the missing-binary case.
 
 **Scope:** per Q8 the binary is in PATH and a black box. This wrapper just
 exec's it.
