@@ -52,7 +52,8 @@ is sized to be a single PR.
   * ✅ 1.2 `liveness.py` (2026-05-07) — 100% line + branch coverage.
   * ✅ 1.3 `logging.py` (2026-05-07) — 100% line + branch coverage.
   * ✅ 1.5 `request.py` (2026-05-07) — 100% line + branch coverage.
-  * ⏳ 1.6, 1.7, 1.8, 1.9, 1.10, 1.11, 1.12 pending.
+  * ✅ 1.6 `response.py` (2026-05-07) — 100% line + branch coverage.
+  * ⏳ 1.7, 1.8, 1.9, 1.10, 1.11, 1.12 pending.
 * **Phases 2–6** — not started.
 
 ---
@@ -277,7 +278,21 @@ under `test_tabsdatak/test_tdrunner/test_function/test_lib/resources/`.
 
 **Depends on:** 1.4.
 
-### 1.6 — `response.py` — response.yaml writer
+### 1.6 — `response.py` — response.yaml writer ✅
+
+**Status:** Done (2026-05-07). 100% line + branch coverage (68 statements,
+20 branches). 26 tests passing. Implementation choices:
+
+* **Plain YAML, no custom tags** — same precedent as 1.5. The legacy
+  format uses `!FunctionV2` / `!Data` / `!NoData` tags; we drop them.
+* **Single `TableEntry` dataclass with `info: TableInfo | None`** rather
+  than separate `Data` / `NoData` types. Presence/absence of `info`
+  discriminates.
+* **`load_response` added** alongside `write_response` even though the
+  plan only listed the writer — the loader is needed for clean roundtrip
+  tests and for symmetry with `request.py`.
+* **`InvalidResponseError(ValueError)`** mirrors `InvalidRequestError`.
+* **Frozen dataclasses + tuples** for immutability.
 
 **Scope:** cherry-pick from `_tabsserver/function/response_utils.py`.
 

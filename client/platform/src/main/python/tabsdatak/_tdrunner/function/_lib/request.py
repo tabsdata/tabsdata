@@ -72,9 +72,7 @@ def load_request(path: Path) -> Request:
         raise InvalidRequestError("request must be a mapping")
     info = _require(raw, "info", dict, dotted_path="info")
     return Request(
-        collection=_require(
-            info, "collection", str, dotted_path="info.collection"
-        ),
+        collection=_require(info, "collection", str, dotted_path="info.collection"),
         collection_id=_require(
             info, "collection_id", str, int, dotted_path="info.collection_id"
         ),
@@ -88,9 +86,7 @@ def load_request(path: Path) -> Request:
             info, "function_run_id", str, int, dotted_path="info.function_run_id"
         ),
         function_bundle=_parse_location(
-            _require(
-                info, "function_bundle", dict, dotted_path="info.function_bundle"
-            ),
+            _require(info, "function_bundle", dict, dotted_path="info.function_bundle"),
             "info.function_bundle",
         ),
         input=_parse_tables(raw.get("input", []), "input"),
@@ -107,8 +103,7 @@ def _require(parent: dict, key: str, *types: type, dotted_path: str) -> Any:
     if not isinstance(val, types):
         names = " or ".join(t.__name__ for t in types)
         raise InvalidRequestError(
-            f"field {dotted_path!r} must be {names}, "
-            f"got {type(val).__name__}"
+            f"field {dotted_path!r} must be {names}, got {type(val).__name__}"
         )
     return val
 
@@ -132,8 +127,7 @@ def _parse_tables(raw: object, dotted_path: str) -> tuple[Table, ...]:
             f"{dotted_path!r} must be a list, got {type(raw).__name__}"
         )
     return tuple(
-        _parse_table(item, f"{dotted_path}[{idx}]")
-        for idx, item in enumerate(raw)
+        _parse_table(item, f"{dotted_path}[{idx}]") for idx, item in enumerate(raw)
     )
 
 
