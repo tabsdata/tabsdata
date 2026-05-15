@@ -1,0 +1,81 @@
+from __future__ import annotations
+
+from tabsdatak.conn.common.error import (
+    ConnException,
+    ConnInitException,
+)
+from tabsdatak.error import (
+    ErrorCode,
+    ErrorDef,
+)
+
+
+class MongoDBValidateException(ConnException):
+    """Cross-field validation failure for the MongoDB connector."""
+
+
+class MongodbErrorCode(ErrorCode):
+    MONGODB_1 = ErrorDef(
+        ConnInitException,
+        "MongoDBConn validation failed",
+    )  # MongoDBConn
+    MONGODB_2 = ErrorDef(
+        ConnInitException,
+        "MongoDBDest validation failed",
+    )  # MongoDBDest
+    MONGODB_3 = ErrorDef(
+        ConnInitException,
+        "MongoDB database name must be non-empty",
+    )  # _validate_database_name: empty
+    MONGODB_4 = ErrorDef(
+        ConnInitException,
+        "MongoDB collection name must be non-empty",
+    )  # _validate_collection_name: empty
+    MONGODB_5 = ErrorDef(
+        ConnInitException,
+        "MongoDB field name must be non-empty",
+    )  # _validate_field_name: empty
+    MONGODB_6 = ErrorDef(
+        ConnInitException,
+        "MongoDB URI must start with mongodb:// or mongodb+srv://: {value!r}",
+    )  # _validate_uri
+    MONGODB_7 = ErrorDef(
+        ConnInitException,
+        "MongoDB database name exceeds {max} bytes: {value!r}",
+    )  # _validate_database_name: too long
+    MONGODB_8 = ErrorDef(
+        ConnInitException,
+        "MongoDB database name may not contain null: {value!r}",
+    )  # _validate_database_name: null byte
+    MONGODB_9 = ErrorDef(
+        ConnInitException,
+        "MongoDB database name contains forbidden chars {bad!r}: {value!r}",
+    )  # _validate_database_name: forbidden char
+    MONGODB_10 = ErrorDef(
+        ConnInitException,
+        "MongoDB collection name exceeds {max} bytes: {value!r}",
+    )  # _validate_collection_name: too long
+    MONGODB_11 = ErrorDef(
+        ConnInitException,
+        "MongoDB collection name may not contain null: {value!r}",
+    )  # _validate_collection_name: null byte
+    MONGODB_12 = ErrorDef(
+        ConnInitException,
+        "MongoDB collection name may not contain '$': {value!r}",
+    )  # _validate_collection_name: dollar
+    MONGODB_13 = ErrorDef(
+        ConnInitException,
+        "MongoDB collection name may not start with 'system.': {value!r}",
+    )  # _validate_collection_name: system. prefix
+    MONGODB_14 = ErrorDef(
+        ConnInitException,
+        "MongoDB field name may not contain null: {value!r}",
+    )  # _validate_field_name: null byte
+    MONGODB_15 = ErrorDef(
+        ConnInitException,
+        "MongoDB field name may not contain '.': {value!r}",
+    )  # _validate_field_name: dot
+    MONGODB_16 = ErrorDef(
+        ConnInitException,
+        "MongoDB field name may not start with '$': {value!r}",
+    )  # _validate_field_name: dollar prefix
