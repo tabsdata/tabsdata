@@ -647,7 +647,16 @@ propagated; binary missing → mapped exit code.
 
 **Depends on:** 1.1–1.4, 1.11.
 
-### 2.7 — `report-completion`
+### 2.7 — `report-completion` ✅
+
+**Status:** Done (2026-05-07). 100% line+branch coverage. 9 tests
+passing. Per-table parquet metadata (`column_count`, `row_count`,
+`schema_hash`) extracted via `pyarrow.parquet`. Tables present in the
+request but absent on disk get an info-less entry (`!NoData` semantics).
+`--out` is written **before** the POST so it survives network failures.
+Command-specific exit codes: 10 = bad request.yaml, 11 = HTTP/network
+error, 12 = write failed. Tests use a real stdlib `http.server` in a
+thread.
 
 **Scope:** read `--request`, scan `--out-dir` and `--state-dir`, build
 response, POST to `--url` with bearer token, write a copy to `--out`.
