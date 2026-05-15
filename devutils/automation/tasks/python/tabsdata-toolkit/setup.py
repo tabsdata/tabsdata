@@ -17,4 +17,9 @@ def read_version() -> str:
     return "0.0.1   "
 
 
+target_folder = Path(__file__).parent / "target"
+target_folder.mkdir(exist_ok=True)
+(target_folder / "build").mkdir(exist_ok=True)
+(target_folder / "egg").mkdir(exist_ok=True)
+
 setup(version=read_version())

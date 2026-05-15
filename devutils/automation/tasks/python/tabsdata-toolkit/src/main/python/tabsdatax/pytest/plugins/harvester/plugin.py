@@ -525,6 +525,41 @@ def _notify_trackers_on_result(
         except Exception:
             pass
 
+        _STATUS_FROM_OUTCOME = {
+            "passed": TestStatus.PASSED,
+            "failed": TestStatus.FAILED_EXECUTION,
+            "skipped": TestStatus.SKIPPED,
+        }
+        _PREFIX_FROM_OUTCOME = {
+            "passed": TestFilePrefix.PASSED,
+            "failed": TestFilePrefix.ERROR_CALL,
+            "skipped": TestFilePrefix.SKIPPED,
+        }
+        if g_is_xdist_controller and not find_current_path(
+            g_harvester_folder,
+            nodeid,
+        ):
+            try:
+                synthesized = {
+                    TestField.NODEID: nodeid,
+                    TestField.STATUS: _STATUS_FROM_OUTCOME[outcome],
+                    TestField.START: time.time() - (report.duration or 0.0),
+                    TestField.STOP: time.time(),
+                    PHASE_DURATION_FIELD[TestPhase.CALL]: report.duration or 0.0,
+                }
+                if outcome == "skipped" and getattr(report, "longrepr", None):
+                    synthesized[TestField.SKIP_REASON] = str(report.longrepr)
+                write(
+                    filepath(
+                        g_harvester_folder,
+                        _PREFIX_FROM_OUTCOME[outcome],
+                        nodeid,
+                    ),
+                    synthesized,
+                )
+            except Exception:
+                pass
+
 
 def pytest_runtest_logreport(report: pytest.TestReport) -> None:
     """Called on every process when a test report is available.

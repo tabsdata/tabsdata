@@ -25,6 +25,7 @@ from test_tabsdata_cdc_common.common.shared import (
     build_publisher,
     fork_trigger,
     poll_until_captured,
+    poll_until_distinct_schemas,
     stop_trigger,
 )
 from test_tabsdata_cdc_common.common.evolution import N_SCHEMA_ITERATIONS
@@ -36,6 +37,11 @@ Q_SCHEMA_INSERTS_BEFORE = 256
 Q_SCHEMA_INSERTS_AFTER = 256
 Q_SCHEMA_UPDATES_AFTER = 64
 Q_SCHEMA_DELETES_AFTER = 16
+
+# Each ALTER iteration adds one schema on top of the pre-change baseline,
+# so the persisted parquet output must show ``iteration + PRE_CHANGE_SCHEMAS``
+# distinct schema hashes before the next ALTER is allowed to fire.
+PRE_CHANGE_SCHEMAS = 1
 
 
 @dataclass
@@ -233,6 +239,9 @@ def run_schema_evolution_test(
             f"(cumulative {cumulative}) ---"
         )
         poll_until_captured(staging, trigger, cumulative)
+        poll_until_distinct_schemas(
+            staging, iteration + 1 + PRE_CHANGE_SCHEMAS,
+        )
 
     stop_trigger(trigger, fork)
 

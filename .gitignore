@@ -61,6 +61,7 @@ CLAUDE.md
 .claude/
 MANIFEST
 !server/libraries/td-kubernetes/src/instance/manifest/
+!server/libraries/td-kubernetes/src/error/manifest/
 !assets/manifest
 !connectors/python/**/assets/manifest/
 !templates/connector/**/assets/manifest/

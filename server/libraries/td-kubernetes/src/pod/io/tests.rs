@@ -37,10 +37,7 @@ fn deserialize_pod_manifest_extracts_container_image_and_command() {
         container.command.as_deref(),
         Some(&["tdserver".to_owned()][..])
     );
-    assert_eq!(
-        container.args.as_deref(),
-        Some(&["start".to_owned()][..])
-    );
+    assert_eq!(container.args.as_deref(), Some(&["start".to_owned()][..]));
 }
 
 #[test]
@@ -75,8 +72,5 @@ fn parse_then_serialize_preserves_essential_fields() {
     let restored = reparsed.spec.unwrap();
     assert_eq!(original.containers.len(), restored.containers.len());
     assert_eq!(original.containers[0].name, restored.containers[0].name);
-    assert_eq!(
-        original.containers[0].image,
-        restored.containers[0].image
-    );
+    assert_eq!(original.containers[0].image, restored.containers[0].image);
 }

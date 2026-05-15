@@ -22,7 +22,10 @@ fn every_variant_reports_system_error_as_domain() {
             "/tmp/x".to_owned(),
             "io".to_owned(),
         )),
-        Box::new(SystemError::ReadFailed("/tmp/x".to_owned(), "io".to_owned())),
+        Box::new(SystemError::ReadFailed(
+            "/tmp/x".to_owned(),
+            "io".to_owned(),
+        )),
         Box::new(SystemError::CreateDirectoryFailed(
             "/tmp/x".to_owned(),
             "io".to_owned(),

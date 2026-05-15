@@ -10,10 +10,7 @@ fn validation_error_new_stores_path_and_message() {
         "spec.containers[0].securityContext.privileged",
         "privileged containers are not allowed",
     );
-    assert_eq!(
-        error.path,
-        "spec.containers[0].securityContext.privileged"
-    );
+    assert_eq!(error.path, "spec.containers[0].securityContext.privileged");
     assert_eq!(error.message, "privileged containers are not allowed");
 }
 

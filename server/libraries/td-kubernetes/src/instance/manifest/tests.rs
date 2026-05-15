@@ -108,21 +108,13 @@ fn check_versions_passes_when_major_minor_match() {
 
 #[test]
 fn check_versions_ignores_micro_difference() {
-    let manifest = manifest_with_entries(&[(
-        "pods/init/foo.yaml",
-        "1.4.5",
-        EntryState::Active,
-    )]);
+    let manifest = manifest_with_entries(&[("pods/init/foo.yaml", "1.4.5", EntryState::Active)]);
     assert!(check_versions(&manifest, "1.4.0").is_ok());
 }
 
 #[test]
 fn check_versions_fails_on_minor_mismatch() {
-    let manifest = manifest_with_entries(&[(
-        "pods/init/foo.yaml",
-        "1.4.0",
-        EntryState::Active,
-    )]);
+    let manifest = manifest_with_entries(&[("pods/init/foo.yaml", "1.4.0", EntryState::Active)]);
     let outcome = check_versions(&manifest, "1.5.0");
     let Err(VersionMismatch::Mismatch { running, entries }) = outcome else {
         panic!("expected mismatch, got {outcome:?}");
@@ -134,11 +126,7 @@ fn check_versions_fails_on_minor_mismatch() {
 
 #[test]
 fn check_versions_fails_on_major_mismatch() {
-    let manifest = manifest_with_entries(&[(
-        "pods/init/foo.yaml",
-        "1.4.0",
-        EntryState::Active,
-    )]);
+    let manifest = manifest_with_entries(&[("pods/init/foo.yaml", "1.4.0", EntryState::Active)]);
     let outcome = check_versions(&manifest, "2.4.0");
     assert!(matches!(outcome, Err(VersionMismatch::Mismatch { .. })));
 }
@@ -168,22 +156,14 @@ fn check_versions_reports_every_active_mismatch() {
 
 #[test]
 fn check_versions_returns_parse_error_for_bad_running_version() {
-    let manifest = manifest_with_entries(&[(
-        "pods/init/foo.yaml",
-        "1.4.0",
-        EntryState::Active,
-    )]);
+    let manifest = manifest_with_entries(&[("pods/init/foo.yaml", "1.4.0", EntryState::Active)]);
     let outcome = check_versions(&manifest, "not-a-version");
     assert!(matches!(outcome, Err(VersionMismatch::Parse { .. })));
 }
 
 #[test]
 fn check_versions_returns_parse_error_for_bad_entry_version() {
-    let manifest = manifest_with_entries(&[(
-        "pods/init/foo.yaml",
-        "garbage",
-        EntryState::Active,
-    )]);
+    let manifest = manifest_with_entries(&[("pods/init/foo.yaml", "garbage", EntryState::Active)]);
     let outcome = check_versions(&manifest, "1.4.0");
     assert!(matches!(outcome, Err(VersionMismatch::Parse { .. })));
 }

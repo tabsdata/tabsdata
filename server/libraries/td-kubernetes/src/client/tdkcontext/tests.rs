@@ -114,7 +114,10 @@ fn kminus_round_trips_through_json() {
     else {
         panic!("expected Kminus variant after round trip");
     };
-    assert_eq!(path, PathBuf::from("/home/user/.tabsdata/instances/tabsdata"));
+    assert_eq!(
+        path,
+        PathBuf::from("/home/user/.tabsdata/instances/tabsdata")
+    );
     assert_eq!(
         kubeconfig,
         PathBuf::from("/home/user/.tabsdata/instances/tabsdata/cluster/kube/config")
@@ -171,15 +174,15 @@ fn provider_returns_kubernetes_for_kubernetes_variant() {
 
 #[test]
 fn provider_returns_kminus_for_kminus_variant() {
-    assert!(matches!(sample_kminus().provider(), ClusterProvider::Kminus));
+    assert!(matches!(
+        sample_kminus().provider(),
+        ClusterProvider::Kminus
+    ));
 }
 
 #[test]
 fn display_name_for_kubernetes_is_context_slash_namespace() {
-    assert_eq!(
-        sample_kubernetes().display_name(),
-        "kubernetes:dev/dev-ns"
-    );
+    assert_eq!(sample_kubernetes().display_name(), "kubernetes:dev/dev-ns");
 }
 
 #[test]
@@ -203,9 +206,15 @@ fn display_name_for_kminus_falls_back_when_path_has_no_filename() {
 #[test]
 fn to_args_for_kubernetes_preserves_cluster_arguments() {
     let (cluster, instance) = sample_kubernetes().to_args();
-    assert!(matches!(cluster.provider, Some(ClusterProvider::Kubernetes)));
+    assert!(matches!(
+        cluster.provider,
+        Some(ClusterProvider::Kubernetes)
+    ));
     assert_eq!(cluster.context.as_deref(), Some("dev"));
-    assert_eq!(cluster.kubeconfig, Some(PathBuf::from("/home/user/.kube/config")));
+    assert_eq!(
+        cluster.kubeconfig,
+        Some(PathBuf::from("/home/user/.kube/config"))
+    );
     assert!(!cluster.current);
     assert_eq!(cluster.namespace.as_deref(), Some("dev-ns"));
     assert!(instance.name.is_none());

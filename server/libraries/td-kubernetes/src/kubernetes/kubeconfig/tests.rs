@@ -151,10 +151,7 @@ fn resolve_namespace_falls_back_to_current_context() {
 #[test]
 fn resolve_namespace_returns_none_for_unknown_context() {
     let file = write_kubeconfig(FULL_KUBECONFIG);
-    assert_eq!(
-        resolve_namespace(Some(file.path()), Some("missing")),
-        None
-    );
+    assert_eq!(resolve_namespace(Some(file.path()), Some("missing")), None);
 }
 
 #[test]

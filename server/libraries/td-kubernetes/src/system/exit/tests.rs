@@ -49,8 +49,10 @@ fn abort_supports_each_status_variant() {
 
 #[test]
 fn abort_with_returns_err_carrying_typed_source() {
-    let result: Result<()> =
-        abort_with(ExitStatus::TabsDataError, ProfileError::NotFound("dev".to_owned()));
+    let result: Result<()> = abort_with(
+        ExitStatus::TabsDataError,
+        ProfileError::NotFound("dev".to_owned()),
+    );
     let error = result.expect_err("abort_with returns Err");
     assert!(matches!(error.status(), ExitStatus::TabsDataError));
     let source = error.source().expect("source preserved");

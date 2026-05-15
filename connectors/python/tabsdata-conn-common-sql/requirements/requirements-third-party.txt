@@ -2,8 +2,8 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
-sqlalchemy>=2.0
-polars>=1.0
-pyarrow>=14
-pandas>=2.0
-tenacity>=8
+sqlalchemy==2.0.48
+polars==1.39.3
+pyarrow==23.0.1
+pandas==2.3.3
+tenacity==9.1.4

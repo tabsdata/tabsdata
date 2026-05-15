@@ -251,6 +251,44 @@ def _container_port(container) -> int | None:
         return None
 
 
+def _tune_db2_for_concurrency(container_name: str, db: str) -> None:
+    if _dont_kill():
+        return
+    try:
+        import docker
+        from docker.errors import APIError, NotFound
+    except ImportError:
+        return
+    try:
+        client = docker.from_env()
+        container = client.containers.get(container_name)
+    except (NotFound, APIError, Exception):  # noqa: BLE001
+        return
+    # MAX_CONNECTIONS / MAX_COORDAGENTS / MAXAPPLS are configurable online;
+    # no db2stop/db2start needed. The restart used to put TESTDB into
+    # BACKUP PENDING state on the IBM community image (SQL1116N).
+    tune_script = (
+        "su - db2inst1 -c '"
+        "db2 update dbm cfg using MAX_CONNECTIONS 128 MAX_COORDAGENTS 128"
+        f" && db2 connect to {db}"
+        " && db2 update db cfg using MAXAPPLS 128"
+        " && db2 connect reset"
+        " && db2 terminate"
+        "'"
+    )
+    try:
+        exit_code, output = container.exec_run(
+            ["bash", "-lc", tune_script], demux=False,
+        )
+        if exit_code != 0:
+            logger.warning(
+                "Db2 concurrency tuning returned non-zero (%s): %s",
+                exit_code, output.decode(errors="replace") if output else "",
+            )
+    except APIError as exc:
+        logger.warning("Db2 concurrency tuning skipped (docker error): %s", exc)
+
+
 def _wait_for_db(host: str, port: int, user: str, password: str, db: str) -> None:
     from sqlalchemy import create_engine, text
     from sqlalchemy.exc import OperationalError
@@ -424,6 +462,8 @@ def _build_config(
         password=_DB_PASSWORD,
         database=_DB_NAME,
     )
+    _wait_for_db(cfg.host, cfg.port, cfg.user, cfg.password, cfg.database)
+    _tune_db2_for_concurrency(name, cfg.database)
     _wait_for_db(cfg.host, cfg.port, cfg.user, cfg.password, cfg.database)
     _seed_schema(cfg)
     return cfg

@@ -46,10 +46,7 @@ fn display_messages_carry_constructor_args() {
     assert!(display.contains("config.yaml"));
     assert!(display.contains("Duplicate"));
 
-    let error = ProfileError::ReadFailed(
-        "/tmp/x".to_owned(),
-        "permission denied".to_owned(),
-    );
+    let error = ProfileError::ReadFailed("/tmp/x".to_owned(), "permission denied".to_owned());
     let display = error.to_string();
     assert!(display.contains("/tmp/x"));
     assert!(display.contains("permission denied"));

@@ -266,6 +266,24 @@ def query_component_stats(harvester_folder: str) -> list[dict]:
         return []
 
 
+def query_outcome_counts(harvester_folder: str) -> dict:
+    path = db_path(harvester_folder)
+    if not os.path.exists(path):
+        return {"passed": 0, "failed": 0, "skipped": 0}
+    try:
+        conn = get_connection(harvester_folder)
+        rows = conn.execute(
+            "select outcome, count(*) from test_completions group by outcome"
+        ).fetchall()
+        counts = {"passed": 0, "failed": 0, "skipped": 0}
+        for outcome, count in rows:
+            if outcome in counts:
+                counts[outcome] = int(count)
+        return counts
+    except (sqlite3.OperationalError, sqlite3.DatabaseError):
+        return {"passed": 0, "failed": 0, "skipped": 0}
+
+
 def query_test_averages(harvester_folder: str) -> dict:
     """Return average durations by outcome.
 

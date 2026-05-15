@@ -137,7 +137,7 @@ LIBEXEC_COMMANDS_FOLDER = os.path.join(
     "function",
     "commands",
 )
-LIBEXEC_BUILD_FOLDER = os.path.join("build", "libexec", "tabsdata")
+LIBEXEC_BUILD_FOLDER = os.path.join("target", "python", "libexec", "tabsdata")
 LIBEXEC_INSTALL_FOLDER = os.path.join("libexec", "tabsdata")
 
 libexec_specs = discover_tabsdata_commands(

@@ -48,8 +48,8 @@ fn validate_instance_name_rejects_over_max_length() {
 fn validate_instance_name_rejects_each_forbidden_character() {
     for forbidden in FORBIDDEN_CHARACTERS {
         let name = format!("inst{forbidden}name");
-        let err = validate_instance_name(&name)
-            .expect_err("expected error for forbidden character");
+        let err =
+            validate_instance_name(&name).expect_err("expected error for forbidden character");
         assert!(
             err.contains("reserved character"),
             "missing 'reserved character' in error for '{forbidden}': {err}"

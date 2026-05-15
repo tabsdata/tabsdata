@@ -18,9 +18,7 @@ fn every_variant_reports_provider_error_as_domain() {
             second: "path".to_owned(),
         }),
         Box::new(ProviderError::InstanceFolderExists("/tmp/td".to_owned())),
-        Box::new(ProviderError::InstanceFolderNotFound(
-            "/tmp/td".to_owned(),
-        )),
+        Box::new(ProviderError::InstanceFolderNotFound("/tmp/td".to_owned())),
         Box::new(ProviderError::KminusStartFailed("boom".to_owned())),
         Box::new(ProviderError::StagingWriteFailed(
             "/tmp/x".to_owned(),
@@ -58,10 +56,8 @@ fn tuple_variant_display_carries_positional_args() {
     assert!(display.contains("km"));
     assert!(display.contains("not in PATH"));
 
-    let error = ProviderError::StagingFolderRemoveFailed(
-        "/tmp/x".to_owned(),
-        "permission".to_owned(),
-    );
+    let error =
+        ProviderError::StagingFolderRemoveFailed("/tmp/x".to_owned(), "permission".to_owned());
     let display = error.to_string();
     assert!(display.contains("/tmp/x"));
     assert!(display.contains("permission"));

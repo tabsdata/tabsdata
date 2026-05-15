@@ -65,6 +65,7 @@ from tabsdatax.pytest.plugins.harvester.internal.dashboard import (
 from tabsdatax.pytest.plugins.harvester.internal.database import (
     query_component_stats,
     query_fixture_stats,
+    query_outcome_counts,
     query_test_averages,
     query_test_durations,
     query_tests_per_minute,
@@ -856,6 +857,20 @@ class HarvesterDashboard(App):
             for ps in self._meta.phases.values():
                 if ps.end and (session_end_ts is None or ps.end > session_end_ts):
                     session_end_ts = ps.end
+
+        if (
+            self._meta.pid
+            and not pid_alive_val
+            and collected
+            and (passed + failed_count + skipped + orphaned + running_count) < collected
+        ):
+            db_counts = query_outcome_counts(self._folder)
+            if (
+                db_counts["passed"] + db_counts["failed"] + db_counts["skipped"]
+                > passed + failed_count + skipped
+            ):
+                passed = max(passed, db_counts["passed"])
+                skipped = max(skipped, db_counts["skipped"])
 
         header = self.query_one(SummaryHeader)
         header.update_summary(

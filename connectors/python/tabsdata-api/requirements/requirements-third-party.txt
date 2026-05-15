@@ -2,5 +2,5 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
-pydantic
-croniter
+pydantic==2.12.5
+croniter==6.2.2

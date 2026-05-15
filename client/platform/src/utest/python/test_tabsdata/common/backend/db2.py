@@ -263,6 +263,30 @@ def resize_db2_buffer_pool(container):
     logger.info(f"DB2 buffer pool resized to 256 MB: {output_text}")
 
 
+def tune_db2_for_concurrency(container):
+    logger.info("Raising DB2 concurrency ceilings (connections / agents / appls)")
+    # MAX_CONNECTIONS / MAX_COORDAGENTS / MAXAPPLS are configurable online;
+    # no db2stop/db2start needed. The restart used to put TESTDB into
+    # BACKUP PENDING state on the IBM community image (SQL1116N).
+    tune_script = (
+        "db2 update dbm cfg using MAX_CONNECTIONS 128 MAX_COORDAGENTS 128"
+        f" && db2 connect to {DB2_DB_NAME}"
+        " && db2 update db cfg using MAXAPPLS 128"
+        " && db2 connect reset"
+        " && db2 terminate"
+    )
+    exit_code, output = container.exec_run(
+        ["bash", "-l", "-c", tune_script],
+        user="db2inst1",
+    )
+    output_text = output.decode("utf-8", errors="replace")
+    if exit_code != 0:
+        raise RuntimeError(
+            f"DB2 concurrency tuning failed with code {exit_code}: {output_text}"
+        )
+    logger.info(f"DB2 concurrency ceilings raised: {output_text}")
+
+
 def create_docker_db2_database(
     name: str = DEFAULT_PYTEST_DB2_DOCKER_CONTAINER_NAME,
 ):
@@ -304,6 +328,8 @@ def create_docker_db2_database(
         container.reload()
         wait_for_db2_setup_complete(container)
         port = get_container_port_binding(container, DB2_FORWARDED_PORT)
+        wait_for_db2_ready(port)
+        tune_db2_for_concurrency(container)
         wait_for_db2_ready(port)
         mydb = db.connect(
             f"DATABASE={DB2_DB_NAME};"

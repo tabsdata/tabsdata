@@ -195,7 +195,7 @@ pub fn load_profile(topology: &dyn Topology) -> Result<Profile> {
 
 pub fn encode_for_configmap(loaded: &Profile) -> Result<BTreeMap<String, String>> {
     let mut data = BTreeMap::new();
-    for (decoded_path, _) in &loaded.manifest.entries {
+    for decoded_path in loaded.manifest.entries.keys() {
         let target = match loaded.tree.join(decoded_path) {
             Ok(target) => target,
             Err(error) => {
@@ -206,10 +206,7 @@ pub fn encode_for_configmap(loaded: &Profile) -> Result<BTreeMap<String, String>
         let mut reader = match target.open_file() {
             Ok(reader) => reader,
             Err(error) => {
-                cerror!(
-                    "Failed to open virtual file '{}': {error}",
-                    target.as_str()
-                );
+                cerror!("Failed to open virtual file '{}': {error}", target.as_str());
                 return abort(GeneralError);
             }
         };

@@ -59,11 +59,7 @@ fn profile_with_file(path: &str, contents: &str) -> Profile {
         .write_all(contents.as_bytes())
         .expect("write contents");
     drop(writer);
-    let manifest = Manifest::initial_install(
-        "1.0.0",
-        Utc::now(),
-        std::iter::once(path.to_owned()),
-    );
+    let manifest = Manifest::initial_install("1.0.0", Utc::now(), std::iter::once(path.to_owned()));
     Profile { tree, manifest }
 }
 
@@ -210,8 +206,7 @@ spec:
     - name: apiserver
       image: tabsdata/apiserver
 ";
-    let pod =
-        deserialize_regular_pod("pods/regular/apiserver.yaml", yaml).expect("valid Pod");
+    let pod = deserialize_regular_pod("pods/regular/apiserver.yaml", yaml).expect("valid Pod");
     assert_eq!(pod.metadata.name.as_deref(), Some("apiserver"));
 }
 

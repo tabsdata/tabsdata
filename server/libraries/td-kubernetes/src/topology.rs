@@ -9,8 +9,8 @@ use k8s_openapi::api::batch::v1::Job;
 use k8s_openapi::api::core::v1::Pod;
 
 use crate::pod::ValidationError;
-use crate::system::exit::Result;
 use crate::provider::ClusterProvider;
+use crate::system::exit::Result;
 use crate::topology::kminus::KminusTopology;
 use crate::topology::kubernetes::KubernetesTopology;
 

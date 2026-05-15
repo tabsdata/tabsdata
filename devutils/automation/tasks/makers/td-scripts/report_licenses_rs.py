@@ -59,6 +59,7 @@ normalized_licenses = {
     "3-CLAUSE BSD LICENSE": "BSD Revised License (BSD-3-Clause)",                                                                                                                              # noqa: E231,E241,E501
     "APACHE 2": "Apache License Version 2.0",                                                                                                                                                  # noqa: E231,E241,E501
     "APACHE 2.0": "Apache License Version 2.0",                                                                                                                                                # noqa: E231,E241,E501
+    "APACHE 2.0 LICENSE": "Apache License Version 2.0",                                                                                                                                        # noqa: E231,E241,E501
     "APACHE LICENSE 2.0": "Apache License Version 2.0",                                                                                                                                        # noqa: E231,E241,E501
     "APACHE LICENSE_ VERSION 2.0": "Apache License Version 2.0",                                                                                                                               # noqa: E231,E241,E501
     "APACHE SOFTWARE LICENSE V2": "Apache License Version 2.0",                                                                                                                                # noqa: E231,E241,E501

@@ -24,6 +24,7 @@ from tabsdata.connector.cdc.common.constants import (
     CDC_META_FLAT,
     CDC_META_FMT,
     CDC_META_OP,
+    CDC_META_SCH,
     CDC_META_SQ,
     CDC_META_TX,
     CdcOperation,
@@ -70,13 +71,29 @@ def fuzzy_eq(actual: list, expected: list, column: str, float_columns: list[str]
 def count_staged_rows(staging: Path) -> int:
     working = staging.parent
     total = 0
-    for pf in working.glob("*.parquet"):
+    for parquet_file in working.glob("*.parquet"):
         # noinspection PyBroadException
         try:
-            total += pl.read_parquet(pf).height
+            total += pl.read_parquet(parquet_file).height
         except Exception:
             pass
     return total
+
+
+def count_staged_distinct_schemas(staging: Path) -> int:
+    working = staging.parent
+    schemas: set[str] = set()
+    for parquet_file in working.glob("*.parquet"):
+        # noinspection PyBroadException
+        try:
+            schemas.update(
+                pl.read_parquet(parquet_file, columns=[CDC_META_SCH])[CDC_META_SCH]
+                .unique()
+                .to_list()
+            )
+        except Exception:
+            pass
+    return len(schemas)
 
 
 @dataclass
@@ -129,6 +146,41 @@ def fork_trigger(
 
     fork.context = captured['context']
     return fork
+
+
+def poll_until_distinct_schemas(
+    staging: Path,
+    expected_schemas: int,
+    poll_timeout_seconds: int = POLL_TIMEOUT_SECONDS,
+    poll_interval_seconds: int = POLL_INTERVAL_SECONDS,
+) -> int:
+    """Block until ``expected_schemas`` distinct schema hashes are persisted.
+
+    Without this gate, two ALTERs that land within the same buffer-flush
+    window can be coalesced into a single parquet, hiding a schema
+    transition from the validator. Polling is bounded by the same
+    ``POLL_TIMEOUT_SECONDS`` budget used for row-count polling — if the
+    expected count never appears, the downstream validator assertion
+    still surfaces the actual count and hash list.
+    """
+    logger.debug(
+        f"--- Waiting for {expected_schemas} distinct schemas "
+        f"(timeout {poll_timeout_seconds}s) ---"
+    )
+    poll_deadline = time.monotonic() + poll_timeout_seconds
+    actual = 0
+    while time.monotonic() < poll_deadline:
+        actual = count_staged_distinct_schemas(staging)
+        logger.debug(f"Distinct schemas captured: {actual}/{expected_schemas}")
+        if actual >= expected_schemas:
+            logger.debug("Expected schema count reached.")
+            break
+        time.sleep(poll_interval_seconds)
+    else:
+        logger.debug(
+            f"Schema poll timeout reached at {actual}/{expected_schemas}."
+        )
+    return actual
 
 
 def poll_until_captured(

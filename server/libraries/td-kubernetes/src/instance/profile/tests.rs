@@ -137,7 +137,9 @@ fn is_valid_path_component_accepts_alphanumerics_dash_dot() {
     assert!(is_valid_path_component("foo-bar"));
     assert!(is_valid_path_component("foo.yaml"));
     assert!(is_valid_path_component("k8s-initializer"));
-    assert!(is_valid_path_component("apiserver-mounts-options-extractor"));
+    assert!(is_valid_path_component(
+        "apiserver-mounts-options-extractor"
+    ));
     assert!(is_valid_path_component("123"));
     assert!(is_valid_path_component("a.b.c.d"));
 }
@@ -166,9 +168,7 @@ fn is_valid_path_component_rejects_special_characters() {
 fn validate_path_components_accepts_full_valid_path() {
     assert!(validate_path_components("pods/init/foo.yaml").is_ok());
     assert!(validate_path_components("config.yaml").is_ok());
-    assert!(
-        validate_path_components("pods/regular/application/k8s-application.yaml").is_ok()
-    );
+    assert!(validate_path_components("pods/regular/application/k8s-application.yaml").is_ok());
 }
 
 #[test]

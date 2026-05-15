@@ -46,11 +46,7 @@ pub struct VersionStamp {
 }
 
 impl Manifest {
-    pub fn initial_install<I>(
-        tabsdata_version: &str,
-        now: DateTime<Utc>,
-        entry_paths: I,
-    ) -> Self
+    pub fn initial_install<I>(tabsdata_version: &str, now: DateTime<Utc>, entry_paths: I) -> Self
     where
         I: IntoIterator<Item = String>,
     {

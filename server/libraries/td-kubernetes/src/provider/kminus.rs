@@ -390,14 +390,14 @@ impl Provider for KminusProvider {
                 return abort(GeneralError);
             }
             let disk_path = staging_profile.join(decoded_path);
-            if let Some(parent) = disk_path.parent() {
-                if let Err(error) = fs::create_dir_all(parent) {
-                    cerror!(
-                        "Failed to create staging directory '{}': {error}",
-                        parent.display()
-                    );
-                    return abort(GeneralError);
-                }
+            if let Some(parent) = disk_path.parent()
+                && let Err(error) = fs::create_dir_all(parent)
+            {
+                cerror!(
+                    "Failed to create staging directory '{}': {error}",
+                    parent.display()
+                );
+                return abort(GeneralError);
             }
             if let Err(error) = fs::write(&disk_path, &content) {
                 cerror!("Failed to write '{}': {error}", disk_path.display());

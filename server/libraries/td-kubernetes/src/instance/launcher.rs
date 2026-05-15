@@ -45,10 +45,7 @@ pub async fn stop_workload(provider: &dyn Provider) -> Result<bool> {
     Ok(existed)
 }
 
-pub async fn apply_init_phase(
-    provider: &dyn Provider,
-    profile: &Profile,
-) -> Result<Vec<String>> {
+pub async fn apply_init_phase(provider: &dyn Provider, profile: &Profile) -> Result<Vec<String>> {
     let topology = provider.topology();
     let config = provider.kube_config().await?;
     let client = build_kube_client(&config)?;
@@ -131,8 +128,7 @@ fn is_job_settled() -> impl Condition<Job> {
             return false;
         };
         conditions.iter().any(|condition| {
-            (condition.type_ == JOB_CONDITION_COMPLETE
-                || condition.type_ == JOB_CONDITION_FAILED)
+            (condition.type_ == JOB_CONDITION_COMPLETE || condition.type_ == JOB_CONDITION_FAILED)
                 && condition.status == JOB_CONDITION_STATUS_TRUE
         })
     }
@@ -146,8 +142,7 @@ fn has_failed_condition(job: &Job) -> bool {
         return false;
     };
     conditions.iter().any(|condition| {
-        condition.type_ == JOB_CONDITION_FAILED
-            && condition.status == JOB_CONDITION_STATUS_TRUE
+        condition.type_ == JOB_CONDITION_FAILED && condition.status == JOB_CONDITION_STATUS_TRUE
     })
 }
 
@@ -177,10 +172,7 @@ fn read_pod_manifest(profile: &Profile, path: &str) -> Result<String> {
     let mut reader = match target.open_file() {
         Ok(reader) => reader,
         Err(error) => {
-            cerror!(
-                "Failed to open virtual file '{}': {error}",
-                target.as_str()
-            );
+            cerror!("Failed to open virtual file '{}': {error}", target.as_str());
             return abort(GeneralError);
         }
     };
@@ -318,8 +310,7 @@ fn is_pod_settled() -> impl Condition<Pod> {
             return false;
         };
         conditions.iter().any(|condition| {
-            condition.type_ == POD_CONDITION_READY
-                && condition.status == POD_CONDITION_STATUS_TRUE
+            condition.type_ == POD_CONDITION_READY && condition.status == POD_CONDITION_STATUS_TRUE
         })
     }
 }
