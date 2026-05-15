@@ -6,10 +6,14 @@
 omit =
     test*
     test*/**
-    uitest
-    uitest*
-    uitest/**
-    uitest*/**
+    utest
+    utest*
+    utest/**
+    utest*/**
+    itest
+    itest*
+    itest/**
+    itest*/**
     */td-temp/*
 branch = True
 parallel = True
