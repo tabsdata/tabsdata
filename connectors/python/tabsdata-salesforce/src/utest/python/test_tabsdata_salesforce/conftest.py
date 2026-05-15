@@ -35,8 +35,6 @@ from test_tabsdata.conftest import (
     setup_temp_folder_node,
 )
 
-pytest_plugins = ["test_tabsdata.fntest"]
-
 
 def _create_fake_credentials():
     """Create fake credentials with lazy import"""

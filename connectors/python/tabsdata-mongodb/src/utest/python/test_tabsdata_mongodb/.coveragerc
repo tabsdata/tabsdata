@@ -8,10 +8,14 @@ omit =
     test*
     test*/**
     */td-temp/*
-    uitest
-    uitest*
-    uitest/**
-    uitest*/**
+    utest
+    utest*
+    utest/**
+    utest*/**
+    itest
+    itest*
+    itest/**
+    itest*/**
 branch = True
 parallel = True
 disable_warnings = no-data-collected, couldnt-parse

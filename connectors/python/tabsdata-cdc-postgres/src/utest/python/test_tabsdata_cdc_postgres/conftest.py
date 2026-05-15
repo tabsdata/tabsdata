@@ -43,8 +43,6 @@ from test_tabsdata_cdc_postgres.common.fixtures.schema import postgres_collect_t
 from test_tabsdata_cdc_postgres.common.fixtures.docker import postgres_cdc_config  # noqa: F401
 from test_tabsdata_cdc_postgres.common.fixtures.docker import postgres_cdc_slot  # noqa: F401
 
-pytest_plugins = ["test_tabsdata.fntest"]
-
 
 def pytest_configure(config: pytest.Config):
     setup_tests_logging()
