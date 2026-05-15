@@ -11,6 +11,11 @@ into ``--dir``. See `docs/02-PublisherInitContainers.md`.
 Bundle-fetch protocol per Q-2.3 (option a): we shell out to
 `td_transporter` rather than doing HTTP/cloud-SDK fetches in Python — the
 binary already understands every URI scheme our Locations use.
+
+The pod-runner activates the venv before invoking us (per
+`02-PublisherInitContainers.md` "Venv activation: pod-runner
+responsibility"), so this command does not take `--run-env`, does not
+parse run-env.yaml, and does not spawn any subprocess of the venv itself.
 """
 
 from __future__ import annotations
@@ -27,10 +32,6 @@ from tabsdatak._tdrunner.function._lib.request import (
     InvalidRequestError,
     load_request,
 )
-from tabsdatak._tdrunner.function._lib.run_env import (
-    InvalidRunEnvError,
-    load_run_env,
-)
 from tabsdatak._tdrunner.function._lib.transporter_proc import (
     TransporterNotFoundError,
     run_transporter,
@@ -46,8 +47,7 @@ INFO = (
     "localize-fn-bundle — fetch the function bundle via td_transporter and extract it"
 )
 MAN = (
-    "localize-fn-bundle --request <PATH> --run-env <PATH> --dir <PATH> "
-    "--liveness <PATH>\n\n"
+    "localize-fn-bundle --request <PATH> --dir <PATH> --liveness <PATH>\n\n"
     "Reads the bundle URI from --request, downloads the tarball via "
     "td_transporter, and extracts it to --dir. Step 3 of the publisher "
     "init-container chain."
@@ -55,7 +55,6 @@ MAN = (
 
 # Command-specific exit codes (>= 10 per docs/01-CommandBasics.md).
 EXIT_BAD_REQUEST = 10
-EXIT_BAD_RUN_ENV = 11
 EXIT_TRANSPORTER_FAILED = 12
 EXIT_EXTRACT_FAILED = 13
 
@@ -69,12 +68,6 @@ def _build_parser():
         man=MAN,
     )
     parser.add_argument("--request", required=True, help="Path to request.yaml")
-    parser.add_argument(
-        "--run-env",
-        required=True,
-        dest="run_env",
-        help="Path to run-env.yaml",
-    )
     parser.add_argument("--dir", required=True, help="Destination dir for extraction")
     return parser
 
@@ -85,15 +78,6 @@ def _load_request(path: Path):
     except (FileNotFoundError, InvalidRequestError) as exc:
         raise CommandSpecificError(
             EXIT_BAD_REQUEST, f"unreadable request.yaml: {exc}"
-        ) from exc
-
-
-def _load_run_env(path: Path) -> None:
-    try:
-        load_run_env(path)
-    except (FileNotFoundError, InvalidRunEnvError) as exc:
-        raise CommandSpecificError(
-            EXIT_BAD_RUN_ENV, f"unreadable run-env.yaml: {exc}"
         ) from exc
 
 
@@ -125,13 +109,11 @@ def _extract(archive: Path, dest_dir: Path) -> None:
 def _run() -> int:
     args = _build_parser().parse_args()
     request_path = Path(args.request)
-    run_env_path = Path(args.run_env)
     dest_dir = Path(args.dir)
     liveness_path = Path(args.liveness)
 
     with Liveness(liveness_path):
         request = _load_request(request_path)
-        _load_run_env(run_env_path)
         with tempfile.TemporaryDirectory() as tmp:
             tmp_dir = Path(tmp)
             bundle_local = tmp_dir / "bundle.tar.gz"

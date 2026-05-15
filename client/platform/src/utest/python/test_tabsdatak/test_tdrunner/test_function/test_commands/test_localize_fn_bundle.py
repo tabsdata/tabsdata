@@ -17,7 +17,6 @@ from tabsdatak._tdrunner.function._lib.transporter_proc import (
 )
 from tabsdatak._tdrunner.function.commands.localize_fn_bundle import (
     EXIT_BAD_REQUEST,
-    EXIT_BAD_RUN_ENV,
     EXIT_EXTRACT_FAILED,
     EXIT_TRANSPORTER_FAILED,
     main,
@@ -29,7 +28,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 _MOD = "tabsdatak._tdrunner.function.commands.localize_fn_bundle"
 
 
-def _set_argv(monkeypatch, request_path, run_env_path, dest_dir, liveness):
+def _set_argv(monkeypatch, request_path, dest_dir, liveness):
     monkeypatch.setattr(
         sys,
         "argv",
@@ -37,8 +36,6 @@ def _set_argv(monkeypatch, request_path, run_env_path, dest_dir, liveness):
             "localize-fn-bundle",
             "--request",
             str(request_path),
-            "--run-env",
-            str(run_env_path),
             "--dir",
             str(dest_dir),
             "--liveness",
@@ -58,17 +55,6 @@ def _write_request(path: Path, bundle_uri: str = "file:///bundle.tgz") -> Path:
                 "function_run_id": 4,
                 "function_bundle": {"uri": bundle_uri},
             },
-        })
-    )
-    return path
-
-
-def _write_run_env(path: Path) -> Path:
-    path.write_text(
-        yaml.safe_dump({
-            "python_bin": "/v/bin/python",
-            "venv_dir": "/v",
-            "requirements_digest": "sha256:abc",
         })
     )
     return path
@@ -113,13 +99,12 @@ def _stub_transporter_returns(monkeypatch, tar_target_files=None, returncode=0):
 
 def test_main_happy_path(monkeypatch, tmp_path):
     request_yaml = _write_request(tmp_path / "request.yaml")
-    run_env_yaml = _write_run_env(tmp_path / "run-env.yaml")
     dest = tmp_path / "bundle"
     liveness = tmp_path / "live"
 
     _stub_transporter_returns(monkeypatch, tar_target_files={"a.py": b"print('hi')"})
 
-    _set_argv(monkeypatch, request_yaml, run_env_yaml, dest, liveness)
+    _set_argv(monkeypatch, request_yaml, dest, liveness)
     rc = main()
     assert rc == 0
     assert (dest / "a.py").read_bytes() == b"print('hi')"
@@ -130,11 +115,9 @@ def test_main_happy_path(monkeypatch, tmp_path):
 
 
 def test_main_missing_request_returns_bad_request(monkeypatch, tmp_path):
-    run_env_yaml = _write_run_env(tmp_path / "run-env.yaml")
     _set_argv(
         monkeypatch,
         tmp_path / "no-such-request.yaml",
-        run_env_yaml,
         tmp_path / "bundle",
         tmp_path / "live",
     )
@@ -144,66 +127,30 @@ def test_main_missing_request_returns_bad_request(monkeypatch, tmp_path):
 def test_main_malformed_request_returns_bad_request(monkeypatch, tmp_path):
     bad = tmp_path / "request.yaml"
     bad.write_text("info: { unclosed")
-    run_env_yaml = _write_run_env(tmp_path / "run-env.yaml")
-    _set_argv(monkeypatch, bad, run_env_yaml, tmp_path / "bundle", tmp_path / "live")
+    _set_argv(monkeypatch, bad, tmp_path / "bundle", tmp_path / "live")
     assert main() == EXIT_BAD_REQUEST
-
-
-def test_main_missing_run_env_returns_bad_run_env(monkeypatch, tmp_path):
-    request_yaml = _write_request(tmp_path / "request.yaml")
-    _set_argv(
-        monkeypatch,
-        request_yaml,
-        tmp_path / "no-run-env.yaml",
-        tmp_path / "bundle",
-        tmp_path / "live",
-    )
-    assert main() == EXIT_BAD_RUN_ENV
-
-
-def test_main_malformed_run_env_returns_bad_run_env(monkeypatch, tmp_path):
-    request_yaml = _write_request(tmp_path / "request.yaml")
-    bad = tmp_path / "run-env.yaml"
-    bad.write_text("python_bin: { unclosed")
-    _set_argv(monkeypatch, request_yaml, bad, tmp_path / "bundle", tmp_path / "live")
-    assert main() == EXIT_BAD_RUN_ENV
 
 
 def test_main_transporter_not_found_returns_transporter_failed(monkeypatch, tmp_path):
     request_yaml = _write_request(tmp_path / "request.yaml")
-    run_env_yaml = _write_run_env(tmp_path / "run-env.yaml")
 
     def fake(yaml_path, liveness=None):
         raise TransporterNotFoundError("no binary")
 
     monkeypatch.setattr(f"{_MOD}.run_transporter", fake)
-    _set_argv(
-        monkeypatch,
-        request_yaml,
-        run_env_yaml,
-        tmp_path / "bundle",
-        tmp_path / "live",
-    )
+    _set_argv(monkeypatch, request_yaml, tmp_path / "bundle", tmp_path / "live")
     assert main() == EXIT_TRANSPORTER_FAILED
 
 
 def test_main_transporter_nonzero_returns_transporter_failed(monkeypatch, tmp_path):
     request_yaml = _write_request(tmp_path / "request.yaml")
-    run_env_yaml = _write_run_env(tmp_path / "run-env.yaml")
     monkeypatch.setattr(f"{_MOD}.run_transporter", lambda yaml_path, liveness=None: 7)
-    _set_argv(
-        monkeypatch,
-        request_yaml,
-        run_env_yaml,
-        tmp_path / "bundle",
-        tmp_path / "live",
-    )
+    _set_argv(monkeypatch, request_yaml, tmp_path / "bundle", tmp_path / "live")
     assert main() == EXIT_TRANSPORTER_FAILED
 
 
 def test_main_corrupt_bundle_returns_extract_failed(monkeypatch, tmp_path):
     request_yaml = _write_request(tmp_path / "request.yaml")
-    run_env_yaml = _write_run_env(tmp_path / "run-env.yaml")
 
     def fake(transporter_yaml, liveness=None):
         # Find the target path and write garbage instead of a real tar.
@@ -217,13 +164,7 @@ def test_main_corrupt_bundle_returns_extract_failed(monkeypatch, tmp_path):
         return 0
 
     monkeypatch.setattr(f"{_MOD}.run_transporter", fake)
-    _set_argv(
-        monkeypatch,
-        request_yaml,
-        run_env_yaml,
-        tmp_path / "bundle",
-        tmp_path / "live",
-    )
+    _set_argv(monkeypatch, request_yaml, tmp_path / "bundle", tmp_path / "live")
     assert main() == EXIT_EXTRACT_FAILED
 
 
@@ -232,15 +173,8 @@ def test_main_missing_bundle_after_transporter_returns_extract_failed(
 ):
     """Transporter says success but doesn't actually create the file."""
     request_yaml = _write_request(tmp_path / "request.yaml")
-    run_env_yaml = _write_run_env(tmp_path / "run-env.yaml")
     monkeypatch.setattr(f"{_MOD}.run_transporter", lambda yaml_path, liveness=None: 0)
-    _set_argv(
-        monkeypatch,
-        request_yaml,
-        run_env_yaml,
-        tmp_path / "bundle",
-        tmp_path / "live",
-    )
+    _set_argv(monkeypatch, request_yaml, tmp_path / "bundle", tmp_path / "live")
     assert main() == EXIT_EXTRACT_FAILED
 
 
