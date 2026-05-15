@@ -55,7 +55,8 @@ is sized to be a single PR.
   * ✅ 1.6 `response.py` (2026-05-07) — 100% line + branch coverage.
   * ✅ 1.7 `bundle.py` (2026-05-07) — 100% line + branch coverage.
   * ⏳ 1.8 (handed off — someone else is taking it).
-  * ⏳ 1.9, 1.10, 1.11, 1.12 pending.
+  * ✅ 1.9 `run_env.py` (2026-05-07) — 100% line + branch coverage.
+  * ⏳ 1.10, 1.11, 1.12 pending.
 * **Phases 2–6** — not started.
 
 ---
@@ -356,7 +357,15 @@ branches (success, install failure, bad requirements).
 **Depends on:** 1.4. **Heaviest task in Phase 1 — establishes subprocess
 mocking patterns reused later.**
 
-### 1.9 — `run_env.py` — run-env.yaml model
+### 1.9 — `run_env.py` — run-env.yaml model ✅
+
+**Status:** Done (2026-05-07). 100% line+branch coverage (51 statements,
+18 branches). 22 tests passing. Schema confirmed by user:
+`python_bin`, `venv_dir`, `requirements_digest` (required, must start
+with `"sha256:"`), `extra_env` (optional `dict[str, str]`, defaults to
+empty when omitted or null). Plain YAML, no custom tags. Matching
+`InvalidRunEnvError(ValueError)` and validation patterns from
+`request.py` / `response.py`.
 
 **Scope:** define the schema for the run-env artifact (Q7).
 
