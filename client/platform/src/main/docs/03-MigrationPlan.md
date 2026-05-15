@@ -56,7 +56,8 @@ is sized to be a single PR.
   * ✅ 1.7 `bundle.py` (2026-05-07) — 100% line + branch coverage.
   * ⏳ 1.8 (handed off — someone else is taking it).
   * ✅ 1.9 `run_env.py` (2026-05-07) — 100% line + branch coverage.
-  * ⏳ 1.10, 1.11, 1.12 pending.
+  * ✅ 1.10 `transporter_request.py` (2026-05-07) — 100% line + branch coverage.
+  * ⏳ 1.11, 1.12 pending.
 * **Phases 2–6** — not started.
 
 ---
@@ -390,7 +391,39 @@ to `{}` when absent.
 **Stop-and-ask before starting:** confirm the schema with the user — easy
 to extend later but consumers (1.10, 3.x) want a stable shape.
 
-### 1.10 — `transporter_request.py` — transporter request YAML builder
+### 1.10 — `transporter_request.py` — transporter request YAML builder ✅
+
+**Status:** Done (2026-05-07). 100% line+branch coverage (110 statements,
+22 branches). 26 tests passing. Implementation choices:
+
+* **Custom YAML tags preserved.** Unlike request.py / response.py /
+  run_env.py (where we own the schema), the transporter binary's request
+  format is *its* contract — it expects `!CopyV1`, `!S3`, `!Azure`,
+  `!GCS`, `!LocalFile`, `!Env`, `!Literal`. Mirrored exactly via
+  PyYAML `add_representer`.
+* **Endpoint dataclasses:** `S3Endpoint`, `AzureEndpoint`, `GcsEndpoint`,
+  `LocalFileEndpoint` — frozen, fields match the legacy
+  `TransporterS3` / etc. shape (`url` + `configs.{access_key, secret_key,
+  region, extra_configs}` etc).
+* **Credentials always env-driven** — `EnvRef` for the publisher path
+  per Q8 (storage creds come from k8s secret env injection). `LiteralRef`
+  is supported in the dumper for forward use but not produced by the
+  builders today.
+* **Env-prefix convention:** when `Location.env_prefix` is set on a
+  request location, the env var name for each credential is
+  `<env_prefix>_<CRED>` (uppercase underscore separator); otherwise the
+  canonical name (`AWS_ACCESS_KEY_ID`, `AZURE_ACCOUNT_NAME`,
+  `GCP_SERVICE_ACCOUNT_KEY`, etc.).
+* **Two builders** (per plan): `build_localize_state_request(req, in_dir,
+  state_dir)` walks `request.input` then `request.system_input` and pairs
+  each with a `LocalFileEndpoint` under the appropriate dir;
+  `build_upload_state_request(req, state_dir)` walks `request.system_output`
+  and pairs each local source with the cloud target.
+* **Skipped from scope** (not needed by the publisher path; can be added
+  later for transformer/subscriber): `V1WildCardCopyFormat`,
+  `V1ImportFormat`, the format classes (`TransporterCSVFormat`, etc.).
+* **`UnsupportedSchemeError`** for URI schemes outside `s3://`, `az://`,
+  `abfs://`, `abfss://`, `gs://`, `file://`.
 
 **Scope:** cherry-pick the V1CopyFormat / V1ImportFormat /
 V1WildCardCopyFormat dataclasses + builder logic from
