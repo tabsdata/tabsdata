@@ -522,7 +522,16 @@ Every command:
   `_lib.cli.run_command`,
 * logs via `_lib.logging`.
 
-### 2.1 — `fetch-request`
+### 2.1 — `fetch-request` ✅
+
+**Status:** Done (2026-05-07). 100% line+branch coverage. 10 tests
+passing. Stdlib `urllib.request` for the HTTP GET; bearer auth via
+`Authorization` header. Command-specific exit codes: 10 = HTTP/network
+error, 11 = output write error. Fixed the broken stub import (was
+`from tabsdatak._commands import tabsdata_command` → now imports from
+`tabsdatak._tdrunner.function.commands` where the decorator actually
+lives). Decorator metadata (`tabsdata_command_name = "td_fetch_request"`)
+preserved.
 
 **Scope:** HTTP GET `--url` with `Authorization: Bearer <token>`, write
 body to `--out`.
