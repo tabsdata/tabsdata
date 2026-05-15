@@ -3,11 +3,32 @@
 #
 
 -r requirements-third-party.txt
+-r ../connectors/python/tabsdata-api/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-bigquery/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-cdc-common/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-cdc-db2/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-cdc-mysql/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-cdc-postgres/requirements/requirements-third-party.txt
+-r ../connectors/python/tabsdata-conn-azureblob/requirements/requirements-third-party.txt
+-r ../connectors/python/tabsdata-conn-bigquery/requirements/requirements-third-party.txt
+-r ../connectors/python/tabsdata-conn-clickhouse/requirements/requirements-third-party.txt
+-r ../connectors/python/tabsdata-conn-common/requirements/requirements-third-party.txt
+-r ../connectors/python/tabsdata-conn-common-file/requirements/requirements-third-party.txt
+-r ../connectors/python/tabsdata-conn-common-sql/requirements/requirements-third-party.txt
+-r ../connectors/python/tabsdata-conn-databricks/requirements/requirements-third-party.txt
+-r ../connectors/python/tabsdata-conn-db2/requirements/requirements-third-party.txt
+-r ../connectors/python/tabsdata-conn-druid/requirements/requirements-third-party.txt
+-r ../connectors/python/tabsdata-conn-gcs/requirements/requirements-third-party.txt
+-r ../connectors/python/tabsdata-conn-localfile/requirements/requirements-third-party.txt
+-r ../connectors/python/tabsdata-conn-mongodb/requirements/requirements-third-party.txt
+-r ../connectors/python/tabsdata-conn-mssql/requirements/requirements-third-party.txt
+-r ../connectors/python/tabsdata-conn-mysql/requirements/requirements-third-party.txt
+-r ../connectors/python/tabsdata-conn-oracle/requirements/requirements-third-party.txt
+-r ../connectors/python/tabsdata-conn-postgres/requirements/requirements-third-party.txt
+-r ../connectors/python/tabsdata-conn-s3/requirements/requirements-third-party.txt
+-r ../connectors/python/tabsdata-conn-salesforce/requirements/requirements-third-party.txt
+-r ../connectors/python/tabsdata-conn-snowflake/requirements/requirements-third-party.txt
+-r ../connectors/python/tabsdata-conn-starrocks/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-databricks/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-kafka/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-mongodb/requirements/requirements-third-party.txt

@@ -2,11 +2,32 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
+tabsdata-api[deps]==2.0.0
 tabsdata-bigquery[deps]==2.0.0
 tabsdata-cdc-common[deps]==2.0.0
 tabsdata-cdc-db2[deps]==2.0.0
 tabsdata-cdc-mysql[deps]==2.0.0
 tabsdata-cdc-postgres[deps]==2.0.0
+tabsdata-conn-azureblob[deps]==2.0.0
+tabsdata-conn-bigquery[deps]==2.0.0
+tabsdata-conn-clickhouse[deps]==2.0.0
+tabsdata-conn-common[deps]==2.0.0
+tabsdata-conn-common-file[deps]==2.0.0
+tabsdata-conn-common-sql[deps]==2.0.0
+tabsdata-conn-databricks[deps]==2.0.0
+tabsdata-conn-db2[deps]==2.0.0
+tabsdata-conn-druid[deps]==2.0.0
+tabsdata-conn-gcs[deps]==2.0.0
+tabsdata-conn-localfile[deps]==2.0.0
+tabsdata-conn-mongodb[deps]==2.0.0
+tabsdata-conn-mssql[deps]==2.0.0
+tabsdata-conn-mysql[deps]==2.0.0
+tabsdata-conn-oracle[deps]==2.0.0
+tabsdata-conn-postgres[deps]==2.0.0
+tabsdata-conn-s3[deps]==2.0.0
+tabsdata-conn-salesforce[deps]==2.0.0
+tabsdata-conn-snowflake[deps]==2.0.0
+tabsdata-conn-starrocks[deps]==2.0.0
 tabsdata-databricks[deps]==2.0.0
 tabsdata-kafka[deps]==2.0.0
 tabsdata-mongodb[deps]==2.0.0

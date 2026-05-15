@@ -45,6 +45,8 @@ Documentation = "https://docs.tabsdata.com"
 Source = "https://github.com/tabsdata/tabsdata"
 
 [tool.pytest.ini_options]
+addopts = "--import-mode=importlib"
+consider_namespace_packages = true
 filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::PendingDeprecationWarning",

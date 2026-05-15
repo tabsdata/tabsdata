@@ -59,7 +59,7 @@ humanize==4.15.0
 hvac==2.4.0
 ibm-db==3.2.8 ; platform_machine != 'aarch64'
 ibm-db-sa==0.4.4 ; platform_machine != 'aarch64'
-idna==3.14
+idna==3.15
 ijson==3.5.0
 importlib-metadata==8.7.1
 isodate==0.7.2
