@@ -611,7 +611,10 @@ YAML matches golden file.
 
 **Depends on:** 1.1–1.5, 1.10.
 
-### 2.5 — `prep-upload-state`
+### 2.5 — `prep-upload-state` ✅
+
+**Status:** Done (2026-05-07). 100% line+branch coverage. 8 tests
+passing. Mirror of 2.4 for the upload direction. Same exit-code scheme.
 
 **Scope:** build the transporter request YAML for state-out upload.
 
