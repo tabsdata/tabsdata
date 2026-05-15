@@ -1,0 +1,11 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+# Docker-driven end-to-end tests for the MSSQL connector. `pyodbc` itself
+# is pip-installable, but it requires `unixodbc` and the Microsoft ODBC
+# Driver for SQL Server (`msodbcsql18`) to be installed at the system
+# level (e.g. `brew install unixodbc msodbcsql18` on macOS). A missing
+# driver surfaces as a clear `pyodbc.InterfaceError` at engine build time.
+docker
+pyodbc

@@ -1,0 +1,10 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+# Docker-driven end-to-end tests for the Db2 connector. `ibm-db` ships
+# prebuilt wheels with the IBM Data Server Driver bundled (no separate
+# native install on macOS/Linux). `ibm-db-sa` is the SQLAlchemy dialect.
+docker
+ibm-db
+ibm-db-sa

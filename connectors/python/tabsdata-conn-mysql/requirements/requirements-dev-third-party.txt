@@ -1,0 +1,11 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+# Docker-driven end-to-end tests for the MySQL/MariaDB connector. `docker`
+# is the official Python SDK; `pymysql[rsa]` is the MIT-licensed DBAPI
+# used by both the seed step and SQLAlchemy when the test URI is
+# qualified `mysql+pymysql://`. The `[rsa]` extra pulls in `cryptography`
+# so pymysql can do MySQL 9.x's default caching_sha2_password auth.
+docker
+pymysql[rsa]

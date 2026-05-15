@@ -1,0 +1,8 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+# Docker-driven end-to-end tests for the Postgres connector. `psycopg2-binary`
+# ships pre-built wheels so no compiler is needed at install time.
+docker
+psycopg2-binary
