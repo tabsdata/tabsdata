@@ -627,7 +627,13 @@ correct copy entries.
 
 **Depends on:** 1.1–1.5, 1.10.
 
-### 2.6 — `run-transporter`
+### 2.6 — `run-transporter` ✅
+
+**Status:** Done (2026-05-07). 100% line+branch coverage. 8 tests
+passing. Thin wrapper around `_lib.transporter_proc.run_transporter`,
+forwards the exit code (so non-zero from the transporter binary becomes
+the command's exit code). Command-specific exit code 10 = binary not
+found.
 
 **Scope:** pure wrapper — exec `td_transporter --request <PATH>` and
 propagate exit code, while running a Liveness.
