@@ -1,0 +1,2 @@
+class TableFrame:
+    pass

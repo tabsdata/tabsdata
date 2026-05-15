@@ -1,0 +1,1473 @@
+from abc import ABC
+
+import pytest
+
+from tabsdatak import _api
+from tabsdatak.error import ApiErrorCode, ApiException, ApiInternalException
+from tabsdatak import api as m, tableframe
+from tabsdatak import _connectors as _connectors
+from tabsdatak import spi
+from tabsdatak import _info
+import json
+from typing import Annotated
+
+from tabsdatak.api import (
+    Conn,
+    Env,
+    Secret,
+    Src,
+    LiteralEnv,
+    LiteralSecret,
+)
+
+
+# Test-only SPI plugins. SrcDef / DestDef require a concrete
+# `plugin` class; the framework never instantiates these in tests, they
+# exist only to satisfy the field contract.
+class _TestSrcPlugin(spi.SrcPlugin):
+    ...
+
+
+class _TestDestPlugin(spi.DestPlugin):
+    ...
+
+
+# Concrete fixtures. Each source / destination kind is registered via
+# the connector registry (the same path entry-points use) so the
+# framework's flow descriptors can resolve them at validate time.
+@_api.dataclass(ApiErrorCode.API_14)
+class _Src(m.Src):
+    pass
+
+
+_connectors.register_src(spi.SrcDef(
+        conn=m.Conn,
+    src_type="fs",
+    src_version="v1",
+    src=_Src,
+    table_mode=spi.TableMode.SINGLE,
+    cardinality=lambda src: 1,
+    plugin=_TestSrcPlugin,
+    explorer=None,
+))
+
+
+@_api.dataclass(ApiErrorCode.API_14)
+class _Dest(m.Dest):
+    pass
+
+
+_connectors.register_dest(spi.DestDef(
+        conn=m.Conn,
+    dest_type="fs",
+    dest_version="v1",
+    dest=_Dest,
+    cardinality=lambda dest: 1,
+    plugin=_TestDestPlugin,
+    explorer=None,
+))
+
+
+# Auto-source fixture: same shape as _Src above but on the AutoSrc /
+# AutoSrcDef / AutoSrcPlugin rails so we can exercise
+# `auto_publisher` and `AutoPublisherInfo`.
+class _TestAutoSrcPlugin(spi.AutoSrcPlugin):
+    ...
+
+
+@_api.dataclass(ApiErrorCode.API_14)
+class _AutoSrc(m.AutoSrc):
+    pass
+
+
+_AUTO_SRC_DEFX = spi.AutoSrcDef(
+        conn=m.Conn,
+    src_type="watch",
+    src_version="v1",
+    src=_AutoSrc,
+    table_mode=spi.TableMode.SINGLE,
+    cardinality=lambda src: 1,
+    uses_manifest=False,
+    plugin=_TestAutoSrcPlugin,
+    explorer=None,
+)
+_connectors.register_auto_src(_AUTO_SRC_DEFX)
+
+
+class _OnTab(m.OnTablesAction):
+    pass
+
+
+# Helper function whose flat-signature shape matches the default fixtures
+# (SINGLE-mode src/dest table_count=1, one element in
+# output_tables / input_tables). One positional input parameter typed as
+# `TableFrame` (auto-nullable) and a `tuple[TableFrame]` return.
+def _good_1in_1out(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
+    return (t1,)
+
+
+# ---------------------------------------------------------------------------
+# Triggers
+# ---------------------------------------------------------------------------
+
+def test_trigger_is_abc_subclass():
+    assert issubclass(m.Trigger, ABC)
+
+
+def test_cron_trigger_constructs_with_mask():
+    t = m.CronTrigger(mask="0 0 * * *")
+    assert t.mask == "0 0 * * *"
+    assert isinstance(t, m.Trigger)
+
+
+def test_cron_trigger_missing_mask_raises_api_2():
+    with pytest.raises(ApiException) as excinfo:
+        m.CronTrigger()
+    assert excinfo.value.api_error is ApiErrorCode.API_2
+
+
+def test_tables_trigger_constructs_with_names():
+    t = m.TablesTrigger(tables=["users", "orders"])
+    assert t.tables == ["users", "orders"]
+    assert isinstance(t, m.Trigger)
+
+
+def test_tables_trigger_accepts_collection_qualified_names():
+    # Looser CollTableNamesSpec shape, so transformer / subscriber
+    # call sites can use the same trigger type.
+    t = m.TablesTrigger(tables=["users", "src/orders"])
+    assert t.tables == ["users", "src/orders"]
+
+
+def test_tables_trigger_rejects_empty_list_with_api_11():
+    with pytest.raises(ApiException) as excinfo:
+        m.TablesTrigger(tables=[])
+    assert excinfo.value.api_error is ApiErrorCode.API_3
+
+
+def test_tables_trigger_rejects_invalid_name_with_api_11():
+    with pytest.raises(ApiException) as excinfo:
+        m.TablesTrigger(tables=["1bad"])
+    assert excinfo.value.api_error is ApiErrorCode.API_3
+
+
+def test_all_tables_trigger_constructs_with_no_args():
+    t = m.AllTablesTrigger()
+    assert isinstance(t, m.Trigger)
+
+
+# ---------------------------------------------------------------------------
+# PublisherInfo _api.dataclass
+# ---------------------------------------------------------------------------
+
+def _src() -> _Src:
+    return _Src()
+
+
+def _dest() -> _Dest:
+    return _Dest()
+
+
+def _auto_src() -> _AutoSrc:
+    return _AutoSrc()
+
+
+def test_publisher_dataclass_constructs_ok():
+    src = _src()
+    p = _info.PublisherInfo(_good_1in_1out, src, ["t1"], None, None)
+    assert p.source is src
+    assert p.output_tables == ["t1"]
+    assert p.trigger_by is None
+    assert p.on_tables is None
+
+
+def test_publisher_dataclass_empty_tables_raises_api_4():
+    # Field-level failure on TableNamesSpec min_length short-circuits before the
+    # model_validator that checks `func` signature, so any callable is fine.
+    with pytest.raises(ApiException) as excinfo:
+        _info.PublisherInfo(_good_1in_1out, _src(), [], None, None)
+    assert excinfo.value.api_error is ApiErrorCode.API_17
+
+
+# ---------------------------------------------------------------------------
+# @publisher decorator factory
+# ---------------------------------------------------------------------------
+
+def test_publisher_decorator_returns_publisher_instance():
+    @m.publisher(source=_src(), output_tables=["t1"])
+    def my_pub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
+        return (t1,)
+
+    assert isinstance(my_pub, _info.PublisherInfo)
+    assert callable(my_pub)
+
+
+def test_publisher_descriptor_call_raises_typeerror_pointing_at_func():
+    @m.publisher(source=_src(), output_tables=["t1"])
+    def my_pub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
+        return (t1,)
+
+    # The decorated name is a PublisherInfo descriptor, not a callable.
+    # Calling it from user code would be a bug; the friendly error
+    # points at .func.
+    with pytest.raises(TypeError, match=r"\.func"):
+        my_pub(None)
+    # The underlying function is still reachable on .func.
+    assert my_pub.func(None) == (None,)
+
+
+def test_signature_error_includes_expected_signature_block():
+    # On a wrong-arity input, the error should suggest the correct
+    # spelled-out signature, so an LLM iterating against the error
+    # knows what to write.
+    with pytest.raises(ApiException) as excinfo:
+        @m.publisher(source=_src(), output_tables=["t1"])
+        def _bad() -> tuple[tableframe.TableFrame | None]:  # zero params, expects 1
+            return (None,)
+    msg = str(excinfo.value)
+    assert "Expected signature" in msg
+    assert "TableFrame" in msg
+
+
+def test_publisher_decorator_rejects_empty_tables_with_api_4():
+    with pytest.raises(ApiException) as excinfo:
+        @m.publisher(source=_src(), output_tables=[])
+        def _f(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
+            return (t1,)
+    assert excinfo.value.api_error is ApiErrorCode.API_17
+
+
+def test_publisher_decorator_accepts_cron_trigger():
+    cron = m.CronTrigger(mask="*/5 * * * *")
+
+    @m.publisher(source=_src(), output_tables=["t1"], trigger_by=cron)
+    def my_pub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
+        return (t1,)
+
+    assert my_pub.trigger_by is cron
+
+
+def test_publisher_decorator_accepts_tables_trigger():
+    # Typed wrapper around the bare-list shortcut.
+    trig = m.TablesTrigger(tables=["users", "orders"])
+
+    @m.publisher(source=_src(), output_tables=["t1"], trigger_by=trig)
+    def my_pub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
+        return (t1,)
+
+    assert my_pub.trigger_by is trig
+
+
+def test_publisher_decorator_rejects_bare_table_list():
+    # Bare-list shortcut was removed; only typed Trigger subclasses
+    # are accepted (TablesTrigger / CronTrigger). The framework
+    # tags the type-mismatch as API_17 (publisher validation).
+    with pytest.raises(ApiException) as excinfo:
+        @m.publisher(source=_src(), output_tables=["t1"],
+                     trigger_by=["users", "orders"])
+        def _f(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
+            return (t1,)
+    assert excinfo.value.api_error is ApiErrorCode.API_17
+
+
+# ---------------------------------------------------------------------------
+# @transformer decorator factory
+# ---------------------------------------------------------------------------
+
+def test_transformer_decorator_wraps_with_all_tables_trigger():
+    trig = m.AllTablesTrigger()
+
+    @m.transformer(
+        input_tables=["in1"],
+        output_tables=["out1"],
+        trigger_by=trig,
+        on_tables=[_OnTab()],
+    )
+    def my_xf(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
+        return (t1,)
+
+    assert isinstance(my_xf, _info.TransformerInfo)
+    assert my_xf.trigger_by is trig
+
+
+def test_transformer_decorator_rejects_bare_wildcard():
+    # The bare-"*" shortcut was removed; AllTablesTrigger() is now
+    # the only way to express "fire on any upstream table change".
+    with pytest.raises(ApiException) as excinfo:
+        @m.transformer(
+            input_tables=["in1"], output_tables=["out1"], trigger_by="*",
+        )
+        def _f(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
+            return (t1,)
+    assert excinfo.value.api_error is ApiErrorCode.API_19
+
+
+def test_transformer_decorator_rejects_empty_input_tables_with_api_5():
+    with pytest.raises(ApiException) as excinfo:
+        @m.transformer(input_tables=[], output_tables=["out"])
+        def _f(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
+            return (t1,)
+    assert excinfo.value.api_error is ApiErrorCode.API_19
+
+
+def test_transformer_decorator_allows_default_none_trigger_and_on_tables():
+    @m.transformer(input_tables=["in1"], output_tables=["out1"])
+    def my_xf(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
+        return (t1,)
+
+    assert isinstance(my_xf, _info.TransformerInfo)
+    assert my_xf.trigger_by is None
+    assert my_xf.on_tables is None
+
+
+def test_transformer_decorator_accepts_all_tables_trigger():
+    # Typed wrapper around the bare-"*" shortcut.
+    trig = m.AllTablesTrigger()
+
+    @m.transformer(
+        input_tables=["a"], output_tables=["b"], trigger_by=trig,
+    )
+    def my_xf(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
+        return (t1,)
+
+    assert my_xf.trigger_by is trig
+
+
+def test_transformer_decorator_accepts_tables_trigger():
+    trig = m.TablesTrigger(tables=["src/orders"])
+
+    @m.transformer(
+        input_tables=["a"], output_tables=["b"], trigger_by=trig,
+    )
+    def my_xf(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
+        return (t1,)
+
+    assert my_xf.trigger_by is trig
+
+
+# ---------------------------------------------------------------------------
+# @subscriber decorator factory
+# ---------------------------------------------------------------------------
+
+def test_subscriber_decorator_wraps_with_all_tables_trigger():
+    dest = _dest()
+    trig = m.AllTablesTrigger()
+
+    @m.subscriber(destination=dest, input_tables=["in1"], trigger_by=trig)
+    def my_sub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
+        return (t1,)
+
+    assert isinstance(my_sub, _info.SubscriberInfo)
+    assert my_sub.destination is dest
+    assert my_sub.trigger_by is trig
+
+
+def test_subscriber_decorator_rejects_empty_input_tables_with_api_6():
+    with pytest.raises(ApiException) as excinfo:
+        @m.subscriber(destination=_dest(), input_tables=[])
+        def _f(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
+            return (t1,)
+    assert excinfo.value.api_error is ApiErrorCode.API_20
+
+
+def test_subscriber_decorator_allows_default_none_trigger():
+    @m.subscriber(destination=_dest(), input_tables=["in1"])
+    def my_sub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
+        return (t1,)
+
+    assert isinstance(my_sub, _info.SubscriberInfo)
+    assert my_sub.trigger_by is None
+
+
+def test_subscriber_decorator_accepts_all_tables_trigger():
+    trig = m.AllTablesTrigger()
+
+    @m.subscriber(
+        destination=_dest(), input_tables=["in1"], trigger_by=trig,
+    )
+    def my_sub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
+        return (t1,)
+
+    assert my_sub.trigger_by is trig
+
+
+def test_subscriber_decorator_accepts_tables_trigger():
+    trig = m.TablesTrigger(tables=["src/orders", "src/users"])
+
+    @m.subscriber(
+        destination=_dest(), input_tables=["in1"], trigger_by=trig,
+    )
+    def my_sub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
+        return (t1,)
+
+    assert my_sub.trigger_by is trig
+
+
+# ---------------------------------------------------------------------------
+# ApiError + ApiException shape
+# ---------------------------------------------------------------------------
+
+def test_api_validation_error_carries_tag_and_cause():
+    try:
+        m.CronTrigger()
+    except ApiException as e:
+        assert e.api_error is ApiErrorCode.API_2
+        assert e.cause is not None
+        assert "CronTrigger" in str(e)
+    else:
+        pytest.fail("expected ApiException")
+
+
+# ---------------------------------------------------------------------------
+# Pattern constraints: TableNameSpec, CollTableNameSpec, CronMaskSpec
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    "name", ["t1", "foo_bar", "A", "a_1_b", "X" * 64],
+)
+def test_table_name_accepts_valid_identifier(name):
+    src = _src()
+    m.publisher(source=src, output_tables=[name])  # no error
+
+
+@pytest.mark.parametrize(
+    "name", ["", "1foo", "foo bar", "foo-bar", "X" * 65, "_foo"],
+)
+def test_table_name_rejects_invalid(name):
+    src = _src()
+    with pytest.raises(ApiException) as excinfo:
+        @m.publisher(source=src, output_tables=[name])
+        def _f(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
+            return (t1,)
+    assert excinfo.value.api_error is ApiErrorCode.API_17
+
+
+@pytest.mark.parametrize(
+    "name", ["foo", "foo_bar", "ns/table", "ns_1/table_2"],
+)
+def test_coll_table_name_accepts_valid(name):
+    m.transformer(input_tables=[name], output_tables=["out"])
+
+
+@pytest.mark.parametrize(
+    "name", ["foo/bar/baz", "ns / table", "/table", "ns/", "1foo/bar"],
+)
+def test_coll_table_name_rejects_invalid(name):
+    with pytest.raises(ApiException) as excinfo:
+        @m.transformer(input_tables=[name], output_tables=["out"])
+        def _f(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
+            return (t1,)
+    assert excinfo.value.api_error is ApiErrorCode.API_19
+
+
+# ---------------------------------------------------------------------------
+# Signature validation -- publisher / transformer / subscriber
+# Runs in each class's @model_validator(mode="after") using the spec bound
+# by @src / @dest and the output_tables / input_tables length.
+# ---------------------------------------------------------------------------
+
+@_api.dataclass(ApiErrorCode.API_14)
+class _Src2(m.Src):
+    pass
+
+
+_connectors.register_src(spi.SrcDef(
+        conn=m.Conn,
+    src_type="fs2",
+    src_version="v1",
+    src=_Src2,
+    table_mode=spi.TableMode.SINGLE,
+    cardinality=lambda src: 2,
+    plugin=_TestSrcPlugin,
+    explorer=None,
+))
+
+
+@_api.dataclass(ApiErrorCode.API_14)
+class _Dest3(m.Dest):
+    pass
+
+
+_connectors.register_dest(spi.DestDef(
+        conn=m.Conn,
+    dest_type="fs3",
+    dest_version="v1",
+    dest=_Dest3,
+    cardinality=lambda dest: 3,
+    plugin=_TestDestPlugin,
+    explorer=None,
+))
+
+
+def _src2() -> _Src2:
+    return _Src2()
+
+
+def _dest3() -> _Dest3:
+    return _Dest3()
+
+
+def test_publisher_signature_ok_for_2in_2out():
+    src = _src2()
+
+    @m.publisher(source=src, output_tables=["a", "b"])
+    def my_pub(
+        t1: tableframe.TableFrame | None, t2: tableframe.TableFrame | None,
+    ) -> tuple[tableframe.TableFrame | None, tableframe.TableFrame | None]:
+        return (t1, t2)
+
+    assert isinstance(my_pub, _info.PublisherInfo)
+
+
+def test_publisher_signature_rejects_wrong_input_arity():
+    src = _src2()  # expects 2 input slots
+
+    with pytest.raises(ApiException) as excinfo:
+        @m.publisher(source=src, output_tables=["a", "b"])
+        def my_pub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None, tableframe.TableFrame | None]:  # only 1
+            return (t1, t1)
+    assert excinfo.value.api_error is ApiErrorCode.API_17
+    assert "at least 2 parameter" in str(excinfo.value)
+
+
+def test_publisher_signature_rejects_wrong_output_arity():
+    src = _src()  # table_count=1
+
+    with pytest.raises(ApiException) as excinfo:
+        @m.publisher(source=src, output_tables=["a", "b"])  # expects 2
+        def my_pub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:  # returns 1
+            return (t1,)
+    assert excinfo.value.api_error is ApiErrorCode.API_17
+
+
+def test_publisher_signature_rejects_missing_return_annotation():
+    src = _src()
+
+    with pytest.raises(ApiException) as excinfo:
+        @m.publisher(source=src, output_tables=["a"])
+        def my_pub(t1: tableframe.TableFrame | None):
+            return (t1,)
+    assert excinfo.value.api_error is ApiErrorCode.API_17
+    assert "return type must be annotated" in str(excinfo.value)
+
+
+def test_publisher_signature_rejects_variable_length_tuple():
+    src = _src()
+
+    with pytest.raises(ApiException) as excinfo:
+        @m.publisher(source=src, output_tables=["a"])
+        def my_pub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None, ...]:  # variable-length
+            return (t1,)
+    assert excinfo.value.api_error is ApiErrorCode.API_17
+
+
+def test_transformer_signature_ok_with_matching_input_and_output():
+    @m.transformer(
+        input_tables=["a", "b"],
+        output_tables=["x", "y", "z"],
+    )
+    def my_xf(
+        t1: tableframe.TableFrame | None, t2: tableframe.TableFrame | None,
+    ) -> tuple[tableframe.TableFrame | None, tableframe.TableFrame | None, tableframe.TableFrame | None]:
+        return (t1, t2, t1)
+
+    assert isinstance(my_xf, _info.TransformerInfo)
+
+
+def test_transformer_signature_rejects_mismatched_output_arity():
+    with pytest.raises(ApiException) as excinfo:
+        @m.transformer(input_tables=["a"], output_tables=["x", "y"])
+        def my_xf(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:  # only 1, expected 2
+            return (t1,)
+    assert excinfo.value.api_error is ApiErrorCode.API_19
+
+
+def test_subscriber_signature_uses_destination_table_count_for_output():
+    dest = _dest3()  # table_count=3
+
+    @m.subscriber(destination=dest, input_tables=["a"])
+    def my_sub(
+        t1: tableframe.TableFrame | None,
+    ) -> tuple[tableframe.TableFrame | None, tableframe.TableFrame | None, tableframe.TableFrame | None]:
+        return (t1, t1, t1)
+
+    assert isinstance(my_sub, _info.SubscriberInfo)
+
+
+def test_subscriber_signature_rejects_mismatched_output_arity():
+    dest = _dest3()
+
+    with pytest.raises(ApiException) as excinfo:
+        @m.subscriber(destination=dest, input_tables=["a"])
+        def my_sub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:  # only 1, dest wants 3
+            return (t1,)
+    assert excinfo.value.api_error is ApiErrorCode.API_20
+
+
+# ---------------------------------------------------------------------------
+# Element-type checking: publisher input honours src.table_mode.
+# SINGLE -> TableFrame (or TableFrame | None) per slot.
+# ARRAY  -> list[TableFrame] (or list[TableFrame | None]) per slot.
+# Transformer / subscriber inputs are mode "any" -- both forms accepted.
+# ---------------------------------------------------------------------------
+
+@_api.dataclass(ApiErrorCode.API_14)
+class _SrcArray(m.Src):
+    pass
+
+
+_connectors.register_src(spi.SrcDef(
+        conn=m.Conn,
+    src_type="fs_array",
+    src_version="v1",
+    src=_SrcArray,
+    table_mode=spi.TableMode.ARRAY,
+    cardinality=lambda src: 2,
+    plugin=_TestSrcPlugin,
+    explorer=None,
+))
+
+
+def _src_array() -> _SrcArray:
+    return _SrcArray()
+
+
+def test_publisher_input_accepts_list_elements_when_mode_is_array():
+    src = _src_array()  # ARRAY, 2 slots
+
+    @m.publisher(source=src, output_tables=["a"])
+    def my_pub(
+        t1: list[tableframe.TableFrame | None] | None, t2: list[tableframe.TableFrame | None] | None,
+    ) -> tuple[tableframe.TableFrame | None]:
+        return (None,)
+
+    assert isinstance(my_pub, _info.PublisherInfo)
+
+
+def test_publisher_input_rejects_single_element_when_mode_is_array():
+    src = _src_array()  # ARRAY, 2 slots
+
+    with pytest.raises(ApiException) as excinfo:
+        @m.publisher(source=src, output_tables=["a"])
+        def my_pub(
+            # wrong: TableFrame where list[TableFrame] expected
+            t1: tableframe.TableFrame | None, t2: tableframe.TableFrame | None,
+        ) -> tuple[tableframe.TableFrame | None]:
+            return (None,)
+    assert excinfo.value.api_error is ApiErrorCode.API_17
+    assert "array-mode slot" in str(excinfo.value)
+
+
+def test_publisher_input_rejects_list_element_when_mode_is_single():
+    src = _src()  # SINGLE, 1 slot
+
+    with pytest.raises(ApiException) as excinfo:
+        @m.publisher(source=src, output_tables=["a"])
+        def my_pub(
+            # wrong: list where TableFrame expected
+            t1: list[tableframe.TableFrame | None] | None,
+        ) -> tuple[tableframe.TableFrame | None]:
+            return (None,)
+    assert excinfo.value.api_error is ApiErrorCode.API_17
+    assert "single-mode slot" in str(excinfo.value)
+
+
+def test_publisher_output_rejects_list_element_regardless_of_mode():
+    # Output is always single-TableFrame, even when the source is ARRAY.
+    src = _src_array()
+
+    with pytest.raises(ApiException) as excinfo:
+        @m.publisher(source=src, output_tables=["a"])
+        def my_pub(
+            t1: list[tableframe.TableFrame | None] | None, t2: list[tableframe.TableFrame | None] | None,
+        ) -> tuple[list[tableframe.TableFrame | None] | None]:  # wrong output
+            return ([],)
+    assert excinfo.value.api_error is ApiErrorCode.API_17
+    assert "return tuple element" in str(excinfo.value)
+
+
+def test_publisher_signature_allows_extra_params_after_input_slots():
+    src = _src()  # table_count=1
+
+    @m.publisher(source=src, output_tables=["t"])
+    def my_pub(
+        t1: tableframe.TableFrame | None,
+        config: dict[str, str],
+        logger: object,
+    ) -> tuple[tableframe.TableFrame | None]:
+        return (t1,)
+
+    assert isinstance(my_pub, _info.PublisherInfo)
+
+
+def test_publisher_signature_accepts_explicit_table_frame_or_none():
+    src = _src()
+
+    @m.publisher(source=src, output_tables=["t"])
+    def my_pub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
+        return (t1,)
+
+    assert isinstance(my_pub, _info.PublisherInfo)
+
+
+@pytest.mark.parametrize(
+    "mask",
+    [
+        "0 0 * * *",
+        "*/5 * * * *",
+        "0 8,12,17 * * *",
+        "0 0-23/2 * * *",
+        "* * * * *",
+        "0 0 * * MON",         # named DOW
+        "0 0 * JAN *",         # named month
+        "0 0 * * MON-FRI",     # DOW range
+        # --- K8s descriptors ---
+        "@yearly",
+        "@annually",
+        "@monthly",
+        "@weekly",
+        "@daily",
+        "@midnight",
+        "@hourly",
+    ],
+)
+def test_cron_mask_accepts_valid(mask):
+    m.CronTrigger(mask=mask)
+
+
+@pytest.mark.parametrize(
+    "mask",
+    [
+        "",
+        "0 0 * *",              # 4 fields
+        "0 0 * * * *",          # 6 fields (seconds precision -- not K8s)
+        "garbage",
+        "60 0 * * *",           # minute out of range (semantic)
+        "0 24 * * *",           # hour out of range
+        "0 0 32 * *",           # dom out of range
+        "0 0 * 13 *",           # month out of range
+        "0 0 * * 8",            # dow out of range (>7)
+        # --- descriptors NOT supported by K8s ---
+        "@reboot",
+        "@every 5m",
+        "@EVERY 1h",
+        "@YEARLY",              # case-sensitive (docs are lowercase)
+        # --- Quartz / Jenkins extensions -- not K8s ---
+        "L * * * *",            # Quartz L (last)
+        "? * * * *",            # Quartz ? (no-care)
+        "15W * * * *",          # Quartz W (nearest weekday)
+        "0 0 * * 5#3",          # Quartz # (nth DOW)
+        "H * * * *",            # Jenkins H (hash)
+        "LW * * * *",
+    ],
+)
+def test_cron_mask_rejects_invalid(mask):
+    with pytest.raises(ApiException) as excinfo:
+        m.CronTrigger(mask=mask)
+    assert excinfo.value.api_error is ApiErrorCode.API_2
+
+
+# ---------------------------------------------------------------------------
+# AutoPublisherInfo _api.dataclass + @auto_publisher decorator
+# ---------------------------------------------------------------------------
+
+
+def test_auto_publisher_dataclass_constructs_ok():
+    src = _auto_src()
+    p = _info.AutoPublisherInfo(
+        _good_1in_1out, src, False, 5, ["t1"], None,
+    )
+    assert p.source is src
+    assert p.use_existing_data is False
+    assert p.fallback_rollover_mins == 5
+    assert p.output_tables == ["t1"]
+    assert p.on_tables is None
+
+
+def test_auto_publisher_dataclass_rollover_below_one_raises_api_10():
+    # Field-level Field(ge=1) on FallbackRolloverMinsSpec triggers
+    # AutoPublisherInfo's @_api.dataclass tag.
+    with pytest.raises(ApiException) as excinfo:
+        _info.AutoPublisherInfo(
+            _good_1in_1out, _auto_src(), False, 0, ["t1"], None,
+        )
+    assert excinfo.value.api_error is ApiErrorCode.API_18
+
+
+def test_auto_publisher_dataclass_negative_rollover_raises_api_10():
+    with pytest.raises(ApiException) as excinfo:
+        _info.AutoPublisherInfo(
+            _good_1in_1out, _auto_src(), True, -1, ["t1"], None,
+        )
+    assert excinfo.value.api_error is ApiErrorCode.API_18
+
+
+def test_auto_publisher_dataclass_empty_output_tables_raises_api_10():
+    # TableNamesSpec min_length=1 invariant inherited from regular publishers.
+    with pytest.raises(ApiException) as excinfo:
+        _info.AutoPublisherInfo(
+            _good_1in_1out, _auto_src(), False, 1, [], None,
+        )
+    assert excinfo.value.api_error is ApiErrorCode.API_18
+
+
+def test_auto_publisher_dataclass_signature_mismatch_raises_api_10():
+    # output_tables has 1 entry, but the function returns a 2-element
+    # tuple -- the after-validator catches this. Tag is still API_18.
+    def bad_outputs(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None, tableframe.TableFrame | None]:
+        return (t1, t1)
+
+    with pytest.raises(ApiException) as excinfo:
+        _info.AutoPublisherInfo(
+            bad_outputs, _auto_src(), False, 1, ["t1"], None,
+        )
+    assert excinfo.value.api_error is ApiErrorCode.API_18
+
+
+def test_auto_publisher_decorator_returns_auto_publisher_instance():
+    @m.auto_publisher(
+        source=_auto_src(),
+        use_existing_data=True,
+        fallback_rollover_mins=10,
+        output_tables=["t1"],
+    )
+    def my_pub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
+        return (t1,)
+
+    assert isinstance(my_pub, _info.AutoPublisherInfo)
+    assert my_pub.use_existing_data is True
+    assert my_pub.fallback_rollover_mins == 10
+
+
+def test_auto_publisher_decorator_rejects_rollover_below_one_with_api_10():
+    # Field-level Field(ge=1) failure surfaces as API_18 when the
+    # AutoPublisherInfo _api.dataclass is constructed (i.e. when the
+    # factory's returned decorator is applied to a function).
+    with pytest.raises(ApiException) as excinfo:
+        @m.auto_publisher(
+            source=_auto_src(),
+            use_existing_data=False,
+            fallback_rollover_mins=0,
+            output_tables=["t1"],
+        )
+        def _f(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
+            return (t1,)
+    assert excinfo.value.api_error is ApiErrorCode.API_18
+
+
+def test_auto_publisher_decorator_accepts_on_tables_hooks():
+    @m.auto_publisher(
+        source=_auto_src(),
+        use_existing_data=False,
+        fallback_rollover_mins=15,
+        output_tables=["t1"],
+        on_tables=[_OnTab()],
+    )
+    def my_pub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
+        return (t1,)
+
+    assert my_pub.on_tables is not None
+    assert len(my_pub.on_tables) == 1
+
+
+def test_auto_publisher_decorator_default_none_on_tables():
+    @m.auto_publisher(
+        source=_auto_src(),
+        use_existing_data=False,
+        fallback_rollover_mins=1,
+        output_tables=["t1"],
+    )
+    def my_pub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
+        return (t1,)
+
+    assert my_pub.on_tables is None
+
+
+# ---------------------------------------------------------------------------
+# AutoSrc / AutoSrcDef
+# ---------------------------------------------------------------------------
+
+
+def test_auto_src_defx_resolves_via_registry():
+    from tabsdatak import _connectors
+    defx = _connectors.get_auto_src(_AutoSrc)
+    assert isinstance(defx, spi.AutoSrcDef)
+    assert defx.src is _AutoSrc
+    assert defx.src_type == "watch"
+    assert defx.uses_manifest is False
+
+
+def test_auto_src_def_rejects_missing_conn_field():
+    # A class that does not subclass AutoSrc skips the inherited
+    # `conn: Conn` annotation, so AutoSrcDef's conn-field check
+    # fails with API_15.
+    @_api.dataclass(ApiErrorCode.API_14)
+    class _BadAutoSrcBase(ABC):
+        pass
+
+    with pytest.raises(ApiException) as excinfo:
+        spi.AutoSrcDef(
+        conn=m.Conn,
+            src_type="bad",
+            src_version="v1",
+            src=_BadAutoSrcBase,
+            table_mode=spi.TableMode.SINGLE,
+            cardinality=lambda src: 1,
+            uses_manifest=False,
+            plugin=_TestAutoSrcPlugin,
+            explorer=None,
+        )
+
+    assert excinfo.value.api_error is ApiErrorCode.API_15
+
+# ===========================================================================
+# Env / LiteralEnv (was test_api_env.py)
+# ===========================================================================
+
+def test_env_attributes(monkeypatch):
+    monkeypatch.setenv("FOO", "foo")
+    e = Env("FOO")
+    assert isinstance(e, Env)
+    assert e.s == "FOO"
+    assert e._name() == "FOO"
+    assert e._value() == "foo"
+    assert e._value_pattern is None
+    assert e._validate("foo") == "foo"
+
+    e = Env.lit("foo")
+    assert isinstance(e, Env)
+    assert e.s == "foo"
+    assert e._name() == "<literal>"
+    assert e._value() == "foo"
+    assert e._value_pattern is None
+    assert e._validate("foo") == "foo"
+
+@_api.dataclass(ApiErrorCode.API_14)
+class _SrcWithEnv(Src):
+    e: Annotated[Env, _api.EnvValueConstraints(pattern=r".+")]
+
+
+def test_env_direct_construction():
+    e = Env("DB_PASSWORD")
+    assert isinstance(e, Env)
+    assert e.s == "DB_PASSWORD"
+
+
+def test_env_rejects_invalid_name():
+    with pytest.raises(ApiException) as excinfo:
+        Env("1abc")
+    assert excinfo.value.api_error is ApiErrorCode.API_7
+
+
+def test_env_value_resolves_environment_variable(monkeypatch):
+    monkeypatch.setenv("TABSDATA_TEST_ENV", "resolved-value")
+    e = Env("TABSDATA_TEST_ENV")
+    assert e.value() == "resolved-value"
+
+
+def test_env_value_raises_when_unset(monkeypatch):
+    monkeypatch.delenv("TABSDATA_TEST_MISSING", raising=False)
+    e = Env("TABSDATA_TEST_MISSING")
+    with pytest.raises(ApiException) as excinfo:
+        e.value()
+    assert excinfo.value.api_error is ApiErrorCode.API_8
+
+
+def test_env_round_trips_through_json():
+    e = Env("HOME")
+    back = Env.from_json(e.to_json())
+    assert isinstance(back, Env)
+    assert back.s == "HOME"
+
+
+def test_env_envelope_kind_and_type_tag():
+    e = Env("HOME")
+    d = e.to_dict()
+    assert d["kind"] == "envRef"
+    assert d["type"].endswith(":Env")
+    assert d["spec"] == {"s": "HOME", "_value_pattern": None}
+
+
+def test_env_field_coerces_bare_string_to_literal_env():
+    s = _SrcWithEnv(Env.lit("literal-value"))
+    assert isinstance(s.e, LiteralEnv)
+    assert isinstance(s.e, Env)
+    assert s.e.value() == "literal-value"
+    assert s.e.s == "literal-value"
+
+
+def test_env_field_injects_pattern_into_literal():
+    s = _SrcWithEnv(Env.lit("literal-value"))
+    # Field's pattern is carried on the literal so it travels through
+    # serialization and is enforced at value() time.
+    assert s.e._value_pattern == r".+"
+
+
+def test_env_field_accepts_explicit_env_instance_and_injects_pattern():
+    s = _SrcWithEnv(Env("HOME"))
+    assert isinstance(s.e, Env)
+    assert s.e.s == "HOME"
+    # Field's pattern is reconstructed onto the ref so it survives
+    # serialization and gates the resolved value at value() time.
+    assert s.e._value_pattern == r".+"
+
+
+def test_literal_env_value_returns_literal():
+    lit = LiteralEnv("hello")
+    assert lit.value() == "hello"
+
+
+def test_literal_env_round_trips_through_json():
+    lit = LiteralEnv("literal-secret")
+    back = LiteralEnv.from_json(lit.to_json())
+    assert isinstance(back, LiteralEnv)
+    assert back.s == "literal-secret"
+
+
+def test_literal_env_envelope_kind_and_type_tag():
+    lit = LiteralEnv("x")
+    d = lit.to_dict()
+    assert d["kind"] == "literalEnv"
+    assert d["type"].endswith(":LiteralEnv")
+    assert d["spec"]["s"] == "x"
+
+
+def test_env_field_serializes_literal_env_subclass_completely():
+    s = _SrcWithEnv(Env.lit("from-literal"))
+    d = s.to_dict()
+    inner = d["spec"]["e"]
+    assert inner["kind"] == "literalEnv"
+    assert inner["spec"]["s"] == "from-literal"
+
+
+def test_env_field_round_trips_literal_env_subclass():
+    s = _SrcWithEnv(Env.lit("from-literal"))
+    back = _SrcWithEnv.from_json(s.to_json())
+    assert isinstance(back.e, LiteralEnv)
+    assert back.e.s == "from-literal"
+
+
+def test_env_field_round_trips_explicit_env():
+    s = _SrcWithEnv(Env("HOME"))
+    back = _SrcWithEnv.from_json(s.to_json())
+    assert isinstance(back.e, Env)
+    assert back.e.s == "HOME"
+
+
+def test_env_value_no_pattern_accepts_anything(monkeypatch):
+    monkeypatch.setenv("TABSDATA_TEST_FREE", "anything-goes!@#")
+    e = Env("TABSDATA_TEST_FREE")
+    assert e.value() == "anything-goes!@#"
+
+
+def test_literal_env_value_pattern_accepts_matching_literal():
+    lit = LiteralEnv(s="42", _value_pattern=r"\d+")
+    assert lit.value() == "42"
+
+
+def test_literal_env_value_pattern_rejects_non_matching_literal_at_construction():
+    # Eager check: a literal whose value does not match its
+    # ``_value_pattern`` is rejected at construction. The pattern code
+    # (API_6) surfaces directly -- the eager model_validator raises
+    # an ApiException that pydantic propagates unwrapped.
+    with pytest.raises(ApiException) as excinfo:
+        LiteralEnv("abc", _value_pattern=r"\d+")
+    assert excinfo.value.api_error is ApiErrorCode.API_6
+
+
+def test_literal_env_value_pattern_requires_full_match_at_construction():
+    with pytest.raises(ApiException) as excinfo:
+        LiteralEnv("42x", _value_pattern=r"\d+")
+    assert excinfo.value.api_error is ApiErrorCode.API_6
+
+
+def test_literal_env_no_pattern_accepts_any_literal():
+    lit = LiteralEnv("anything-goes!@#")
+    assert lit.value() == "anything-goes!@#"
+
+
+def test_literal_env_value_pattern_round_trips_through_json():
+    lit = LiteralEnv("42", _value_pattern=r"\d+")
+    back = LiteralEnv.from_json(lit.to_json())
+    assert back._value_pattern == r"\d+"
+    assert back.value() == "42"
+
+
+def test_literal_env_inconsistent_payload_rejected_on_deserialize():
+    # An inconsistent payload (value does not match the carried
+    # ``_value_pattern``) is rejected at load time -- the literal's
+    # eager validator runs after the envelope dispatcher rebuilds the
+    # instance, raising the API_6 pattern violation directly.
+    bad = {
+        "kind": "literalEnv",
+        "apiVersion": "1.0",
+        "type": "tabsdatak.api:LiteralEnv",
+        "spec": {"s": "abc", "_value_pattern": r"\d+"},
+    }
+    with pytest.raises(ApiException) as excinfo:
+        LiteralEnv.from_dict(bad)
+    assert excinfo.value.api_error is ApiErrorCode.API_6
+
+
+# ---------------------------------------------------------------------------
+# ``valOrRefPattern`` annotation marker
+# ---------------------------------------------------------------------------
+
+
+@_api.dataclass(ApiErrorCode.API_14)
+class _SrcWithDigitsField(Src):
+    e: Annotated[Env, _api.EnvValueConstraints(pattern=r"\d+")]
+
+
+def test_env_pattern_annotation_str_shortcut_validates_eagerly():
+    # The literal that the shortcut builds carries the field's regex;
+    # the eager literal validator runs at construction.
+    with pytest.raises(ApiException):
+        _SrcWithDigitsField(Env.lit("abc"))
+
+
+def test_env_pattern_annotation_str_shortcut_accepts_matching_value():
+    s = _SrcWithDigitsField(Env.lit("42"))
+    assert isinstance(s.e, LiteralEnv)
+    assert s.e.s == "42"
+    assert s.e._value_pattern == r"\d+"
+
+
+def test_env_pattern_annotation_injects_into_ref():
+    s = _SrcWithDigitsField(Env("DIGITS"))
+    # Refs do not run the literal validator -- the pattern is just
+    # injected so it travels with the instance and gates value().
+    assert isinstance(s.e, Env)
+    assert s.e._value_pattern == r"\d+"
+
+
+def test_env_pattern_annotation_round_trips_pattern():
+    s = _SrcWithDigitsField(Env("DIGITS"))
+    back = _SrcWithDigitsField.from_json(s.to_json())
+    assert back.e._value_pattern == r"\d+"
+
+
+def test_pattern_annotation_ref_pattern_fires_on_value(monkeypatch):
+    # With a ``valOrRefPattern`` injected, the resolved env-var value
+    # is validated against the regex at ``value()`` time.
+    monkeypatch.setenv("TEST_PATTERN_REF", "abc")
+    s = _SrcWithDigitsField(Env("TEST_PATTERN_REF"))
+    with pytest.raises(ApiException) as excinfo:
+        s.e.value()
+    assert excinfo.value.api_error is ApiErrorCode.API_6
+
+    monkeypatch.setenv("TEST_PATTERN_REF", "42")
+    assert s.e.value() == "42"
+
+
+@_api.dataclass(ApiErrorCode.API_7)
+class _MyData(Conn):
+    digits: Annotated[Env, _api.EnvValueConstraints(pattern=r"\d+")]
+
+
+def test_env_pattern_in_conn_round_trips_through_json(monkeypatch):
+    # A pattern-bearing Env field nested in a Conn round-trips with the
+    # pattern intact. A resolved env-var that violates the pattern still
+    # raises API_6 on the reconstructed instance.
+    monkeypatch.setenv("VAL", "42x")
+    data = _MyData(digits=Env("VAL"))
+    back = _MyData.from_json(data.to_json())
+
+    assert isinstance(back.digits, Env)
+    assert back.digits.s == "VAL"
+    assert back.digits._value_pattern == r"\d+"
+
+    with pytest.raises(ApiException) as excinfo:
+        back.digits.value()
+    assert excinfo.value.api_error is ApiErrorCode.API_6
+
+    monkeypatch.setenv("VAL", "42")
+    assert back.digits.value() == "42"
+
+
+def test_env_ref_to_literal_substitution_in_json_round_trip():
+    # Realistic flow: a producer serializes a Conn carrying an Env
+    # *ref*; an intermediary resolves the env-var and replaces the
+    # inner envelope with a ``literalEnv`` carrying the resolved value;
+    # the consumer deserializes through the same field and gets the
+    # value back without needing the env var to exist at load time.
+    holder = _MyData(digits=Env("VAL"))
+    payload = json.loads(holder.to_json())
+
+    # Confirm starting shape: the field carries an ``envRef`` envelope.
+    assert payload["spec"]["digits"]["kind"] == "envRef"
+
+    # Substitute the ref with a literal carrying the resolved value.
+    # Pattern is preserved so the receiver still validates the literal.
+    pattern = payload["spec"]["digits"]["spec"]["_value_pattern"]
+    payload["spec"]["digits"] = {
+        "kind": "literalEnv",
+        "apiVersion": "1.0",
+        "type": "tabsdatak.api:LiteralEnv",
+        "spec": {"s": "42", "_value_pattern": pattern},
+    }
+
+    back = _MyData.from_json(json.dumps(payload))
+    assert isinstance(back.digits, LiteralEnv)
+    assert back.digits.value() == "42"
+    assert back.digits._value_pattern == r"\d+"
+
+# ===========================================================================
+# Secret / LiteralSecret (was test_api_secret.py)
+# ===========================================================================
+
+def test_secret_attributes(monkeypatch):
+    e = Secret("foo#BAR")
+    assert isinstance(e, Secret)
+    assert e.s == "foo#BAR"
+    assert e._name() == "foo#BAR"
+    with pytest.raises(ApiInternalException):
+        e._value()
+    assert e._value_pattern is None
+    assert e._validate("foo") == "foo"
+
+    e = Secret.lit("foo")
+    assert isinstance(e, LiteralSecret)
+    assert e.s == "foo"
+    assert e._name() == "<literal>"
+    assert e._value() == "foo"
+    assert e._value_pattern is None
+    assert e._validate("foo") == "foo"
+
+@_api.dataclass(ApiErrorCode.API_14)
+class _SrcWithSecret(Src):
+    s: Annotated[Secret, _api.SecretValueConstraints(pattern=r".+")]
+
+
+def test_secret_direct_construction():
+    s = Secret("db-password#DB_PASSWORD")
+    assert isinstance(s, Secret)
+    assert s.s == "db-password#DB_PASSWORD"
+
+
+def test_secret_rejects_invalid_ref():
+    # Secret ref shape is ``<secret>#<key>``; a bare identifier is rejected.
+    with pytest.raises(ApiException) as excinfo:
+        Secret("not-a-secret-ref")
+    assert excinfo.value.api_error is ApiErrorCode.API_10
+
+
+def test_secret_value_raises_without_resolver():
+    # Refs do not resolve in-process: there is no secret-store
+    # integration in the API package, so ``value()`` always raises API_11.
+    s = Secret("vault#DB_PASSWORD")
+    with pytest.raises(ApiException) as excinfo:
+        s.value()
+    assert excinfo.value.api_error is ApiErrorCode.API_11
+
+
+def test_secret_round_trips_through_json():
+    s = Secret("db-password#DB_PASSWORD")
+    back = Secret.from_json(s.to_json())
+    assert isinstance(back, Secret)
+    assert back.s == "db-password#DB_PASSWORD"
+
+
+def test_secret_envelope_kind_and_type_tag():
+    s = Secret("db-password#DB_PASSWORD")
+    d = s.to_dict()
+    assert d["kind"] == "secretRef"
+    assert d["type"].endswith(":Secret")
+    assert d["spec"] == {"s": "db-password#DB_PASSWORD", "_value_pattern": None}
+
+
+def test_secret_field_coerces_bare_string_to_literal_secret():
+    s = _SrcWithSecret(Secret.lit("hunter2"))
+    assert isinstance(s.s, LiteralSecret)
+    assert isinstance(s.s, Secret)
+    assert s.s.value() == "hunter2"
+    assert s.s.s == "hunter2"
+
+
+def test_secret_field_injects_pattern_into_literal():
+    s = _SrcWithSecret(Secret.lit("hunter2"))
+    # Field's pattern is carried on the literal so it travels through
+    # serialization and is enforced at value() time.
+    assert s.s._value_pattern == r".+"
+
+
+def test_secret_field_accepts_explicit_secret_instance_and_injects_pattern():
+    s = _SrcWithSecret(Secret("vault#PW"))
+    assert isinstance(s.s, Secret)
+    assert s.s.s == "vault#PW"
+    # Field's pattern is reconstructed onto the ref so it survives
+    # serialization and gates the resolved value at value() time.
+    assert s.s._value_pattern == r".+"
+
+
+def test_literal_secret_value_returns_literal():
+    lit = LiteralSecret("hunter2")
+    assert lit.value() == "hunter2"
+
+
+def test_literal_secret_round_trips_through_json():
+    lit = LiteralSecret("hunter2")
+    back = LiteralSecret.from_json(lit.to_json())
+    assert isinstance(back, LiteralSecret)
+    assert back.s == "hunter2"
+
+
+def test_literal_secret_envelope_kind_and_type_tag():
+    lit = LiteralSecret("x")
+    d = lit.to_dict()
+    assert d["kind"] == "literalSecret"
+    assert d["type"].endswith(":LiteralSecret")
+    assert d["spec"]["s"] == "x"
+
+
+def test_secret_field_serializes_literal_secret_subclass_completely():
+    s = _SrcWithSecret(Secret.lit("from-literal"))
+    d = s.to_dict()
+    inner = d["spec"]["s"]
+    assert inner["kind"] == "literalSecret"
+    assert inner["spec"]["s"] == "from-literal"
+
+
+def test_secret_field_round_trips_literal_secret_subclass():
+    s = _SrcWithSecret(Secret.lit("from-literal"))
+    back = _SrcWithSecret.from_json(s.to_json())
+    assert isinstance(back.s, LiteralSecret)
+    assert back.s.s == "from-literal"
+
+
+def test_secret_field_round_trips_explicit_secret():
+    s = _SrcWithSecret(Secret("vault#PW"))
+    back = _SrcWithSecret.from_json(s.to_json())
+    assert isinstance(back.s, Secret)
+    assert back.s.s == "vault#PW"
+
+
+def test_literal_secret_value_pattern_accepts_matching_literal():
+    lit = LiteralSecret(s="deadBEEF", _value_pattern=r"[0-9a-fA-F]+")
+    assert lit.value() == "deadBEEF"
+
+
+def test_literal_secret_value_pattern_rejects_non_matching_literal_at_construction():
+    # Eager check: a literal whose value does not match its
+    # ``_value_pattern`` is rejected at construction. The pattern code
+    # (API_6) surfaces directly -- the eager model_validator raises
+    # an ApiException that pydantic propagates unwrapped.
+    with pytest.raises(ApiException) as excinfo:
+        LiteralSecret("not-hex!", _value_pattern=r"[0-9a-fA-F]+")
+    assert excinfo.value.api_error is ApiErrorCode.API_6
+
+
+def test_literal_secret_value_pattern_requires_full_match_at_construction():
+    with pytest.raises(ApiException) as excinfo:
+        LiteralSecret("abc-not-hex", _value_pattern=r"[0-9a-fA-F]+")
+    assert excinfo.value.api_error is ApiErrorCode.API_6
+
+
+def test_literal_secret_no_pattern_accepts_any_literal():
+    lit = LiteralSecret("anything-goes!@#")
+    assert lit.value() == "anything-goes!@#"
+
+
+def test_literal_secret_value_pattern_round_trips_through_json():
+    lit = LiteralSecret("cafe", _value_pattern=r"[0-9a-fA-F]+")
+    back = LiteralSecret.from_json(lit.to_json())
+    assert back._value_pattern == r"[0-9a-fA-F]+"
+    assert back.value() == "cafe"
+
+
+def test_literal_secret_inconsistent_payload_rejected_on_deserialize():
+    # An inconsistent payload (value does not match the carried
+    # ``_value_pattern``) is rejected at load time -- the literal's
+    # eager validator runs after the envelope dispatcher rebuilds the
+    # instance, raising the API_6 pattern violation directly.
+    bad = {
+        "kind": "literalSecret",
+        "apiVersion": "1.0",
+        "type": "tabsdatak.api:LiteralSecret",
+        "spec": {"s": "not-hex!", "_value_pattern": r"[0-9a-fA-F]+"},
+    }
+    with pytest.raises(ApiException) as excinfo:
+        LiteralSecret.from_dict(bad)
+    assert excinfo.value.api_error is ApiErrorCode.API_6
+
+
+# ---------------------------------------------------------------------------
+# ``SecretValuePattern`` annotation marker
+# ---------------------------------------------------------------------------
+
+
+@_api.dataclass(ApiErrorCode.API_14)
+class _SrcWithHexField(Src):
+    s: Annotated[Secret, _api.SecretValueConstraints(pattern=r"[0-9a-fA-F]+")]
+
+
+def test_secret_pattern_annotation_str_shortcut_validates_eagerly():
+    # The literal that the shortcut builds carries the field's regex;
+    # the eager literal validator runs at construction.
+    with pytest.raises(ApiException):
+        _SrcWithHexField(Secret.lit("not-hex!"))
+
+
+def test_secret_pattern_annotation_str_shortcut_accepts_matching_value():
+    s = _SrcWithHexField(Secret.lit("cafe"))
+    assert isinstance(s.s, LiteralSecret)
+    assert s.s.s == "cafe"
+    assert s.s._value_pattern == r"[0-9a-fA-F]+"
+
+
+def test_secret_pattern_annotation_injects_into_ref():
+    s = _SrcWithHexField(Secret("vault#TOKEN"))
+    # Refs do not run the literal validator -- the pattern is just
+    # injected so it travels with the instance and gates value().
+    assert isinstance(s.s, Secret)
+    assert s.s._value_pattern == r"[0-9a-fA-F]+"
+
+
+def test_secret_pattern_annotation_round_trips_pattern():
+    s = _SrcWithHexField(Secret("vault#TOKEN"))
+    back = _SrcWithHexField.from_json(s.to_json())
+    assert back.s._value_pattern == r"[0-9a-fA-F]+"
+
+
+@_api.dataclass(ApiErrorCode.API_10)
+class _HexHolder(Conn):
+    token: Annotated[Secret, _api.SecretValueConstraints(pattern=r"[0-9a-fA-F]+")]
+
+
+def test_secret_pattern_in_conn_round_trips_through_json():
+    # A pattern-bearing Secret field nested in a Conn round-trips with
+    # both the class identity and the pattern intact.
+    holder = _HexHolder(token=Secret("vault#TOKEN"))
+    back = _HexHolder.from_json(holder.to_json())
+
+    assert isinstance(back.token, Secret)
+    assert back.token.s == "vault#TOKEN"
+    assert back.token._value_pattern == r"[0-9a-fA-F]+"
+
+
+def test_secret_ref_to_literal_substitution_in_json_round_trip():
+    # Realistic flow: a producer serializes a Conn carrying a Secret
+    # *ref*; an intermediary (e.g. a secret-store integration)
+    # resolves the ref and replaces the inner envelope with a
+    # ``literalSecret`` carrying the resolved value; the consumer
+    # deserializes through the same field and gets the value back.
+    holder = _HexHolder(token=Secret("vault#TOKEN"))
+    payload = json.loads(holder.to_json())
+
+    # Confirm starting shape: the field carries a ``secretRef`` envelope.
+    assert payload["spec"]["token"]["kind"] == "secretRef"
+
+    # Substitute the ref with a literal carrying the resolved value.
+    # Pattern is preserved so the receiver still validates the literal.
+    pattern = payload["spec"]["token"]["spec"]["_value_pattern"]
+    payload["spec"]["token"] = {
+        "kind": "literalSecret",
+        "apiVersion": "1.0",
+        "type": "tabsdatak.api:LiteralSecret",
+        "spec": {"s": "cafe", "_value_pattern": pattern},
+    }
+
+    back = _HexHolder.from_json(json.dumps(payload))
+    assert isinstance(back.token, LiteralSecret)
+    assert back.token.value() == "cafe"
+    assert back.token._value_pattern == r"[0-9a-fA-F]+"
