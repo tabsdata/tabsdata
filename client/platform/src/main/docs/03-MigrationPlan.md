@@ -48,7 +48,8 @@ is sized to be a single PR.
   drop all `tabsdata` / `test_tabsdata` imports.
 * **Phase 1** — in progress.
   * ✅ 1.4 `errors.py` (2026-05-07) — 100% line + branch coverage.
-  * ⏳ 1.1, 1.2, 1.3, 1.5–1.12 pending.
+  * ✅ 1.1 `cli.py` (2026-05-07) — 100% line + branch coverage.
+  * ⏳ 1.2, 1.3, 1.5–1.12 pending.
 * **Phases 2–6** — not started.
 
 ---
@@ -116,7 +117,20 @@ All modules below live under `tabsdatak/_tdrunner/function/_lib/` with
 mirrored tests under `test_tabsdatak/test_tdrunner/test_function/test_lib/`.
 Copies from `_tabsserver` are minimal cherry-picks per Q1.
 
-### 1.1 — `cli.py` — `--<opt> <V> | env:<VAR> | val:<V>` parser
+### 1.1 — `cli.py` — `--<opt> <V> | env:<VAR> | val:<V>` parser ✅
+
+**Status:** Done (2026-05-07). 100% line + branch coverage (55 statements,
+10 branches). 47 tests passing. Implementation choices:
+
+* `_Parser` subclasses `argparse.ArgumentParser` overriding `error()` to
+  raise `InvalidOptionsError` (so argparse's default `sys.exit(2)`
+  becomes our exit 1).
+* `--man/-m`, `--version/-v`, `--info/-i` use a custom print-and-exit
+  argparse Action factory; `--help/-h` is left to argparse's default;
+  `--liveness/-l PATH` is a required argument.
+* `version`, `info`, `man` text passed as keyword args to `build_parser`.
+* `run_command` lets `SystemExit` (from `--help` etc.) propagate while
+  catching `CommandError` to return the exit code.
 
 **Scope:** the spec heart of `01-CommandBasics.md`. Wraps argparse and
 resolves arguments uniformly.
