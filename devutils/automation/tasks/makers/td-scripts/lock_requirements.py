@@ -141,9 +141,7 @@ def gather_test_modules(root: str) -> set[str]:
         for entry in utest_python.iterdir():
             if entry.is_dir() and entry.name.startswith("test_"):
                 test_modules.add(entry.name)
-                logger.debug(
-                    f"🧪 Found test module {entry.name} at {entry}"
-                )
+                logger.debug(f"🧪 Found test module {entry.name} at {entry}")
     return test_modules
 
 
@@ -341,11 +339,7 @@ def lock_pyprojects(
             entry for entry in known_first_party_entry if isinstance(entry, str)
         }
 
-        merged = (
-            known_first_party_entry_set
-            | {"tabsdata", "tabsdatak"}
-            | test_modules
-        )
+        merged = known_first_party_entry_set | {"tabsdata", "tabsdatak"} | test_modules
 
         tabsdata_packages = sorted(
             name for name in merged if name.startswith("tabsdata")

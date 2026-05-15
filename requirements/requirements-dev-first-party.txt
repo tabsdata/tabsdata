@@ -8,6 +8,7 @@ tabsdata-cdc-common[deps]==2.0.0
 tabsdata-cdc-db2[deps]==2.0.0
 tabsdata-cdc-mysql[deps]==2.0.0
 tabsdata-cdc-postgres[deps]==2.0.0
+tabsdata-common[deps]==2.0.0
 tabsdata-conn-azureblob[deps]==2.0.0
 tabsdata-conn-bigquery[deps]==2.0.0
 tabsdata-conn-clickhouse[deps]==2.0.0

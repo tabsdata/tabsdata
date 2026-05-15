@@ -17,7 +17,6 @@ omit =
     itest/**
     itest*/**
     tabsdatak/conn/**
-    tabsdatak/scratchpad/**
     tabsdatak/connector/**
 branch = True
 parallel = True

@@ -17,6 +17,7 @@ TABSDATA_CONNECTORS_NAMES = [
     "cdc-db2",
     "cdc-mysql",
     "cdc-postgres",
+    "common",
     "conn-azureblob",
     "conn-bigquery",
     "conn-clickhouse",

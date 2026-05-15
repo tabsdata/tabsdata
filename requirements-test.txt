@@ -11,6 +11,7 @@
 -r connectors/python/tabsdata-cdc-db2/requirements.txt
 -r connectors/python/tabsdata-cdc-mysql/requirements.txt
 -r connectors/python/tabsdata-cdc-postgres/requirements.txt
+-r connectors/python/tabsdata-common/requirements.txt
 -r connectors/python/tabsdata-conn-azureblob/requirements.txt
 -r connectors/python/tabsdata-conn-bigquery/requirements.txt
 -r connectors/python/tabsdata-conn-clickhouse/requirements.txt

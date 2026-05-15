@@ -9,6 +9,7 @@
 -r ../connectors/python/tabsdata-cdc-db2/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-cdc-mysql/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-cdc-postgres/requirements/requirements-third-party.txt
+-r ../connectors/python/tabsdata-common/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-conn-azureblob/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-conn-bigquery/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-conn-clickhouse/requirements/requirements-third-party.txt

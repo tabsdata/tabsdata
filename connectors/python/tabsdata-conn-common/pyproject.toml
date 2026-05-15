@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tabsdata-conn-common"
-description = "Tabsdatak connector shared utilities."
+description = "Tabsdata connector shared utilities."
 authors = [{name = "Tabs Data Inc."}]
 keywords = [
     "tabsdata",
@@ -71,6 +71,7 @@ markers = [
     "chipset: test that might give false positives or negatives due to chipset behaviour (specially on numbers precision).",
     "cli: mark tests for the CLI layer.",
     "clickhouse: mark tests that require a ClickHouse docker container.",
+    "common: mark tests that require the tabsdata-common package.",
     "config_resolver: tests for the config_resolver tool in tabsserver.",
     "crontrigger: mark tests for the CronTrigger class.",
     "databricks: mark tests that require the tabsdata-databricks package.",
@@ -143,4 +144,4 @@ extend = "../../../pyproject.toml"
 
 [tool.tabsdata]
 name = "tabsdata-conn-common"
-display = "Tabsdatak Connector Common"
+display = "Tabsdata Connector Common"

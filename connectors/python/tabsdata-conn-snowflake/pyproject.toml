@@ -75,6 +75,7 @@ markers = [
     "chipset: test that might give false positives or negatives due to chipset behaviour (specially on numbers precision).",
     "cli: mark tests for the CLI layer.",
     "clickhouse: mark tests that require a ClickHouse docker container.",
+    "common: mark tests that require the tabsdata-common package.",
     "config_resolver: tests for the config_resolver tool in tabsserver.",
     "crontrigger: mark tests for the CronTrigger class.",
     "databricks: mark tests that require the tabsdata-databricks package.",
