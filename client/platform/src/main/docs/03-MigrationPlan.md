@@ -53,7 +53,9 @@ is sized to be a single PR.
   * ✅ 1.3 `logging.py` (2026-05-07) — 100% line + branch coverage.
   * ✅ 1.5 `request.py` (2026-05-07) — 100% line + branch coverage.
   * ✅ 1.6 `response.py` (2026-05-07) — 100% line + branch coverage.
-  * ⏳ 1.7, 1.8, 1.9, 1.10, 1.11, 1.12 pending.
+  * ✅ 1.7 `bundle.py` (2026-05-07) — 100% line + branch coverage.
+  * ⏳ 1.8 (handed off — someone else is taking it).
+  * ⏳ 1.9, 1.10, 1.11, 1.12 pending.
 * **Phases 2–6** — not started.
 
 ---
@@ -306,7 +308,21 @@ raises.
 
 **Depends on:** 1.4.
 
-### 1.7 — `bundle.py` — tar extraction
+### 1.7 — `bundle.py` — tar extraction ✅
+
+**Status:** Done (2026-05-07). 100% line+branch coverage (7 statements, 0
+branches). 8 tests passing. Implementation choices:
+
+* Single `extract_bundle(archive, dest_dir)` function — much simpler than
+  the legacy `extract_bundle_folder` because paths arrive as args (per
+  the runner's "paths are parameters, never deduced" rule). No temp-dir
+  orchestration.
+* Uses `tarfile.open(archive, "r:gz")` with `filter="data"` (Python 3.12+
+  strict filter). Drops the legacy `TD_SYMLINK_POLARS_LIBS_PYTEST`
+  fallback to the looser `tar` filter — that was a tabsdata-test-internal
+  knob.
+* `dest_dir.mkdir(parents=True, exist_ok=True)` so callers don't need to
+  pre-create.
 
 **Scope:** cherry-pick `extract_bundle_folder` from
 `_tabsserver/utils.py`. Pure stdlib.
