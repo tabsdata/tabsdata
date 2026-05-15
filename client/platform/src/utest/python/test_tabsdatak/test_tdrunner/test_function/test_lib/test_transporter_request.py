@@ -20,6 +20,7 @@ from tabsdatak._tdrunner.function._lib.transporter_request import (
     S3Endpoint,
     TransporterCopyRequest,
     UnsupportedSchemeError,
+    build_bundle_fetch_request,
     build_localize_state_request,
     build_upload_state_request,
     dump_transporter_request,
@@ -199,6 +200,42 @@ def test_env_prefix_prepended(tmp_path):
     assert src.access_key == EnvRef("STAGE_AWS_ACCESS_KEY_ID")
     assert src.secret_key == EnvRef("STAGE_AWS_SECRET_ACCESS_KEY")
     assert src.region == EnvRef("STAGE_AWS_REGION")
+
+
+# --- bundle fetch ---
+
+
+def test_build_bundle_fetch_request_local(tmp_path):
+    """Default _request() helper uses a file:// bundle URI."""
+    r = _request()
+    target = tmp_path / "bundle.tar.gz"
+    out = build_bundle_fetch_request(r, target)
+    assert len(out.pairs) == 1
+    assert isinstance(out.pairs[0].source, LocalFileEndpoint)
+    assert out.pairs[0].source.url == "file:///bundle.tgz"
+    assert isinstance(out.pairs[0].target, LocalFileEndpoint)
+    assert "bundle.tar.gz" in out.pairs[0].target.url
+
+
+def test_build_bundle_fetch_request_s3(tmp_path):
+    r = Request(
+        collection="c",
+        collection_id=1,
+        execution_id=2,
+        transaction_id=3,
+        function_run_id=4,
+        function_bundle=Location(uri="s3://b/bundle.tgz", env_prefix="STAGE"),
+        input=(),
+        output=(),
+        system_input=(),
+        system_output=(),
+    )
+    target = tmp_path / "bundle.tar.gz"
+    out = build_bundle_fetch_request(r, target)
+    src = out.pairs[0].source
+    assert isinstance(src, S3Endpoint)
+    assert src.url == "s3://b/bundle.tgz"
+    assert src.access_key == EnvRef("STAGE_AWS_ACCESS_KEY_ID")
 
 
 # --- upload semantics ---

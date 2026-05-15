@@ -31,7 +31,6 @@ import yaml
 
 from tabsdatak._tdrunner.function._lib.request import Location, Request
 
-
 # ---- credential references ------------------------------------------------
 
 
@@ -140,6 +139,25 @@ def build_localize_state_request(
             )
         )
     return TransporterCopyRequest(pairs=tuple(pairs))
+
+
+def build_bundle_fetch_request(
+    request: Request, target_path: Path
+) -> TransporterCopyRequest:
+    """Build a single-pair copy request that pulls the function bundle to
+    `target_path`.
+
+    Used by the `localize-fn-bundle` command to download the bundle
+    tarball via `td_transporter` before extracting it.
+    """
+    return TransporterCopyRequest(
+        pairs=(
+            CopyPair(
+                source=_endpoint_from_location(request.function_bundle),
+                target=LocalFileEndpoint(url=_local_uri(target_path)),
+            ),
+        )
+    )
 
 
 def build_upload_state_request(

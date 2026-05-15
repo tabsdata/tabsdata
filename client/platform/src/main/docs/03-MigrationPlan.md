@@ -562,7 +562,16 @@ pure-python dep, or empty); failure path when pyenv creation fails.
 **Depends on:** 1.1–1.5, 1.8, 1.9. **Schema confirmation (1.9) must
 happen first.**
 
-### 2.3 — `localize-fn-bundle`
+### 2.3 — `localize-fn-bundle` ✅
+
+**Status:** Done (2026-05-07). 100% line+branch coverage. 11 tests
+passing. Bundle fetch via `td_transporter` (option a from the
+stop-and-ask). Added a `build_bundle_fetch_request` builder to
+`transporter_request.py` mirroring the existing localize/upload
+builders. Command-specific exit codes: 10 = bad request.yaml, 11 = bad
+run-env.yaml, 12 = transporter failed, 13 = extract failed. Reads
+run-env.yaml as a sanity check (doesn't currently use it for the fetch
+itself; downstream venv-invoking commands will).
 
 **Scope:** read bundle URI from `--request`, download via storage
 credentials in env, extract to `--dir`.
