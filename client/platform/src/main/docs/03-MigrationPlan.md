@@ -58,7 +58,7 @@ is sized to be a single PR.
   * ✅ 1.9 `run_env.py` (2026-05-07) — 100% line + branch coverage.
   * ✅ 1.10 `transporter_request.py` (2026-05-07) — 100% line + branch coverage.
   * ✅ 1.11 `transporter_proc.py` (2026-05-07) — 100% line + branch coverage.
-  * ⏳ 1.12 pending.
+  * ✅ 1.12 `plugin_loader.py` + `plugin_protocol.py` (2026-05-07) — 100% line + branch coverage.
 * **Phases 2–6** — not started.
 
 ---
@@ -465,7 +465,30 @@ exit propagated; missing binary raises a typed error.
 
 **Depends on:** 1.2.
 
-### 1.12 — `plugin_loader.py` — load source/destination plugins
+### 1.12 — `plugin_loader.py` — load source/destination plugins ✅
+
+**Status:** Done (2026-05-07). 100% line+branch coverage (27 statements,
+4 branches, across `plugin_loader.py` + `plugin_protocol.py`). 11 tests
+passing. Implementation choices:
+
+* **Fixed-name convention** for plugin file paths — `<bundle>/plugins/source.pickle`
+  and `<bundle>/plugins/destination.pickle`. The legacy
+  `_tabsserver/function/execution_context.py` reads the filename from a
+  `function_config.input/output[<IDENTIFIER>]` mapping; our `Request`
+  doesn't carry plugin metadata and we don't import tabsdata config, so
+  fixed names are the simplest contract. Bundle producer is responsible
+  for placing files at these paths.
+* **`runtime_checkable Protocol`** for `SourcePlugin` and
+  `DestinationPlugin` — both require a callable `_run`. Lets
+  `isinstance(loaded, SourcePlugin)` enforce the contract without
+  importing tabsdata's actual plugin classes.
+* **Two error types:** `PluginNotFoundError(FileNotFoundError)` for
+  missing pickle files, `PluginProtocolError(TypeError)` for
+  cloudpickle-loaded objects that don't have `_run`. Both inherit from
+  the matching stdlib exceptions so callers can catch broadly if they
+  prefer.
+* **`cloudpickle`** is the only third-party dep — already on PATH from
+  the venv.
 
 **Scope:** cherry-pick the cloudpickle-load logic from
 `_tabsserver/function/execution_context.py` (the `source` and
