@@ -49,7 +49,9 @@ is sized to be a single PR.
 * **Phase 1** — in progress.
   * ✅ 1.4 `errors.py` (2026-05-07) — 100% line + branch coverage.
   * ✅ 1.1 `cli.py` (2026-05-07) — 100% line + branch coverage.
-  * ⏳ 1.2, 1.3, 1.5–1.12 pending.
+  * ✅ 1.2 `liveness.py` (2026-05-07) — 100% line + branch coverage.
+  * ✅ 1.3 `logging.py` (2026-05-07) — 100% line + branch coverage.
+  * ⏳ 1.5–1.12 pending.
 * **Phases 2–6** — not started.
 
 ---
@@ -156,7 +158,12 @@ fails parse, `run_command` exit-code mapping.
 **Depends on:** 0.1, 0.2, 1.4. **Every Phase-1 and Phase-2 task depends on
 this.**
 
-### 1.2 — `liveness.py` — periodic file touch
+### 1.2 — `liveness.py` — periodic file touch ✅
+
+**Status:** Done (2026-05-07). 100% line + branch coverage (32 statements,
+6 branches). 13 tests passing. Both `start()` and `stop()` are idempotent;
+the daemon thread uses `Event.wait(interval)` so `stop()` exits the loop
+promptly without sleeping the full interval.
 
 **Scope:** context manager / background-thread helper that updates the
 liveness file's mtime at least once per minute while a step runs.
@@ -173,7 +180,13 @@ parent dir raises; exception inside `with` still calls `stop`.
 
 **Depends on:** 0.2.
 
-### 1.3 — `logging.py` — stdout/stderr split
+### 1.3 — `logging.py` — stdout/stderr split ✅
+
+**Status:** Done (2026-05-07). 100% line + branch coverage (22 statements,
+2 branches). 11 tests passing. `TRACE = 5` is registered at module import
+time via `logging.addLevelName` (idempotent). `setup_logging` clears
+existing handlers on the same logger name so it's safe to call twice;
+`propagate = False` to keep the root logger from duplicating output.
 
 **Scope:** per `01-CommandBasics.md`: INFO/DEBUG/TRACE → stdout;
 WARN/ERROR → stderr.
