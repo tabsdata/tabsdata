@@ -1,14 +1,3 @@
-"""End-to-end Azure Blob integration tests: invoke ``td_transporter``
-against a real container. Skipped unless ALL of these are set:
-
-  - ``TD_TRANSPORTER_BIN``    -- path to a built transporter binary
-  - ``AZ0__AZ_URI``           -- ``az://container[/path/prefix]``
-  - ``AZ0__AZ_ACCOUNT_NAME``  -- storage account name
-  - ``AZ0__AZ_ACCOUNT_KEY``   -- storage account key
-
-The URI's path component is used as ``AzureBlobConn.base_path`` so each
-run writes under ``<container>/<uri_path>/td-integ/<uuid>/``.
-"""
 
 from __future__ import annotations
 
@@ -84,7 +73,6 @@ class _DestCtx(_SrcCtx):
 
 
 def _parse_uri(uri: str) -> tuple[str, str]:
-    """Split an ``az://container/path`` URI into ``(container, path)``."""
     parsed = urlparse(uri)
     container = parsed.netloc
     path = parsed.path.lstrip("/")
@@ -120,7 +108,7 @@ def _upload_parquet(
 ) -> None:
     local = tmp_path / name
     pl.DataFrame(rows).write_parquet(local, use_pyarrow=True)
-    dest = AzureBlobDest(conn=conn, path=[f"{run_prefix}/{name}"])
+    dest = AzureBlobDest(conn=conn, paths=[f"{run_prefix}/{name}"])
     plugin.AzureBlobDestPlugin().write_out(
         _DestCtx(work_dest), dest, [ParquetFile(local)],
     )
@@ -135,7 +123,7 @@ def test_dest_then_src_round_trip(conn, run_prefix, tmp_path):
         tmp_path, work_dest,
     )
 
-    src = AzureBlobSrc(conn=conn, path=[f"{run_prefix}/users.parquet"])
+    src = AzureBlobSrc(conn=conn, paths=[f"{run_prefix}/users.parquet"])
     work_src = tmp_path / "work_src"
     work_src.mkdir()
     out = plugin.AzureBlobSrcPlugin().read_in(_SrcCtx(work_src), src)
@@ -159,7 +147,7 @@ def test_src_wildcard_in_basename_matches_multiple_objects(
             conn, run_prefix, name, [{"name": name}], tmp_path, work_dest,
         )
 
-    src = AzureBlobSrc(conn=conn, path=[f"{run_prefix}/*.parquet"])
+    src = AzureBlobSrc(conn=conn, paths=[f"{run_prefix}/*.parquet"])
     work_src = tmp_path / "work_src"
     work_src.mkdir()
     out = plugin.AzureBlobSrcPlugin().read_in(_SrcCtx(work_src), src)
@@ -191,7 +179,7 @@ def test_src_initial_last_modified_filters_out_older_objects(
 
     src = AzureBlobSrc(
         conn=conn,
-        path=[f"{run_prefix}/*.parquet"],
+        paths=[f"{run_prefix}/*.parquet"],
         initial_last_modified=cutoff,
     )
     work_src = tmp_path / "work_src"

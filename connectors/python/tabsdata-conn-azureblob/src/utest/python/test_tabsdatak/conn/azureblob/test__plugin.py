@@ -122,7 +122,7 @@ def test_src_plugin_passes_build_location_run_env_and_errors(monkeypatch, tmp_pa
 
     monkeypatch.setattr(_file_plugin, "import_files", fake)
 
-    src = AzureBlobSrc(conn=_conn(), path=["a/b.parquet"])
+    src = AzureBlobSrc(conn=_conn(), paths=["a/b.parquet"])
     out = plugin.AzureBlobSrcPlugin().read_in(_src_ctx(tmp_path), src)
 
     assert out == [[ParquetFile(tmp_path / "ok.parquet")]]
@@ -143,7 +143,7 @@ def test_dest_plugin_passes_build_location_run_env_and_errors(monkeypatch, tmp_p
 
     monkeypatch.setattr(_file_plugin, "copy_out", fake)
 
-    dest = AzureBlobDest(conn=_conn(), path=["out/x.parquet"])
+    dest = AzureBlobDest(conn=_conn(), paths=["out/x.parquet"])
     parquet = ParquetFile(tmp_path / "in.parquet")
     plugin.AzureBlobDestPlugin().write_out(_dest_ctx(tmp_path), dest, [parquet])
 
@@ -186,8 +186,8 @@ def test_azureblob_dest_def_wires_plugin_and_explorer():
     assert plugin.AZURE_BLOB_DEST.dest_type == "azureBlob"
 
 
-def test_azureblob_cardinality_uses_path_length():
-    src = AzureBlobSrc(conn=_conn(), path=["a", "b", "c"])
+def test_azureblob_cardinality_uses_paths_length():
+    src = AzureBlobSrc(conn=_conn(), paths=["a", "b", "c"])
     assert plugin.AZURE_BLOB_SRC.cardinality(src) == 3
-    dest = AzureBlobDest(conn=_conn(), path=["a", "b"])
+    dest = AzureBlobDest(conn=_conn(), paths=["a", "b"])
     assert plugin.AZURE_BLOB_DEST.cardinality(dest) == 2

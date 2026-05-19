@@ -53,7 +53,7 @@ class ReaderConf:
     def from_src(cls, src: Any) -> "ReaderConf":
         return cls(
             conn=src.conn,
-            paths=list(src.path),
+            paths=list(src.paths),
             format=_transporter.src_format_to_transporter(
                 src.format,
                 src.format_cfg.get(src.format) if src.format_cfg else None,
@@ -73,7 +73,7 @@ class WriterConf:
     def from_dest(cls, dest: Any) -> "WriterConf":
         return cls(
             conn=dest.conn,
-            paths=list(dest.path),
+            paths=list(dest.paths),
             format=_transporter.dest_format_to_transporter(
                 dest.format,
                 dest.format_cfg.get(dest.format) if dest.format_cfg else None,

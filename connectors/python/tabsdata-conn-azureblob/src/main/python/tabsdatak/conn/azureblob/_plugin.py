@@ -87,7 +87,7 @@ class AzureBlobSrcPlugin(SrcPlugin[AzureBlobSrc]):
     def read_in(self, ctx: SrcContext, src: AzureBlobSrc) -> list[list[TableFileSpec]]:
         return _plugin.import_files(
             ctx=ctx,
-            cfg=src.to_reader_conf(),
+            cfg=_plugin.ReaderConf.from_src(src),
             build_location=build_location,
             run_env=run_env,
             errors=ERRORS,
@@ -103,7 +103,7 @@ class AzureBlobDestPlugin(DestPlugin[AzureBlobDest]):
     ) -> None:
         _plugin.copy_out(
             ctx=ctx,
-            cfg=dest.to_writer_conf(),
+            cfg=_plugin.WriterConf.from_dest(dest),
             tables=tables,
             build_location=build_location,
             run_env=run_env,
@@ -133,7 +133,7 @@ AZURE_BLOB_SRC = SrcDef(
     src_version="v1",
     src=AzureBlobSrc,
     table_mode=TableMode.ARRAY,
-    cardinality=lambda src: len(src.path),
+    cardinality=lambda src: len(src.paths),
     plugin=AzureBlobSrcPlugin,
     explorer=AzureBlobExplorer,
 )
@@ -143,7 +143,7 @@ AZURE_BLOB_DEST = DestDef(
     dest_type="azureBlob",
     dest_version="v1",
     dest=AzureBlobDest,
-    cardinality=lambda dest: len(dest.path),
+    cardinality=lambda dest: len(dest.paths),
     plugin=AzureBlobDestPlugin,
     explorer=AzureBlobExplorer,
 )
