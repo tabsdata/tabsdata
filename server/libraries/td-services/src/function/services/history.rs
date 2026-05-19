@@ -44,7 +44,7 @@ fn service() {
         // find function ID at time (as name could change in time)
         from_fn(With::<FunctionAtIdName>::extract::<FunctionIdName>),
         from_fn(
-            By::<And![CollectionId, FunctionIdName]>::fetch_one_version::<
+            By::<And![CollectionId, FunctionIdName]>::historic_fetch_one::<
                 { FunctionDBWithNames::Available },
                 FunctionDBWithNames,
             >
@@ -55,7 +55,7 @@ fn service() {
         from_fn(With::<ListRequest<FunctionAtIdName>>::extract::<ListParams>),
         from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<Function>, _>),
         from_fn(
-            By::<FunctionId>::list_history_at::<
+            By::<FunctionId>::historic_list_full::<
                 NoFilter,
                 { FunctionDBWithNames::Available },
                 Function,
@@ -80,7 +80,7 @@ mod tests {
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionName, RoleId, UserId,
     };
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -109,7 +109,7 @@ mod tests {
                 // find function ID at time (as name could change in time)
                 type_of_val(&With::<FunctionAtIdName>::extract::<FunctionIdName>),
                 type_of_val(
-                    &By::<And![CollectionId, FunctionIdName]>::fetch_one_version::<
+                    &By::<And![CollectionId, FunctionIdName]>::historic_fetch_one::<
                         { FunctionDBWithNames::Available },
                         FunctionDBWithNames,
                     >,
@@ -120,7 +120,7 @@ mod tests {
                 type_of_val(&With::<ListRequest<FunctionAtIdName>>::extract::<ListParams>),
                 type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<Function>, _>),
                 type_of_val(
-                    &By::<FunctionId>::list_history_at::<
+                    &By::<FunctionId>::historic_list_full::<
                         NoFilter,
                         { FunctionDBWithNames::Available },
                         Function,
@@ -133,7 +133,8 @@ mod tests {
     #[tokio::test]
     async fn test_function_history(db: TdPool) -> Result<(), TdError> {
         let collection = db
-            .seed_collection(&CollectionName::try_from("collection")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
 
         let t0 = AtTime::now();
@@ -151,7 +152,7 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let _ = db.seed_function(&collection, &create).await?;
+        let _ = db.seed().function(&collection, &create).await?;
 
         let t1 = AtTime::now();
 
@@ -204,7 +205,7 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let _ = db.seed_function(&collection, &create).await?;
+        let _ = db.seed().function(&collection, &create).await?;
 
         let t4 = AtTime::now();
 

@@ -55,7 +55,7 @@ fn service() {
         // Get function. Extract function version id.
         from_fn(With::<RequestContext>::extract::<AtTime>),
         from_fn(
-            By::<And![CollectionIdName, FunctionIdName]>::fetch_one_version::<
+            By::<And![CollectionIdName, FunctionIdName]>::historic_fetch_one::<
                 { FunctionDBWithNames::Available },
                 FunctionDBWithNames,
             >
@@ -71,10 +71,10 @@ fn service() {
         // Register associations
         // Find previous versions.
         from_fn(With::<FunctionVersionId>::some),
-        from_fn(By::<FunctionId>::fetch_all_versions::<{ TableDB::Active }, TableDB>),
-        from_fn(By::<FunctionId>::fetch_all_versions::<{ DependencyDB::Active }, DependencyDB>),
+        from_fn(By::<FunctionId>::historic_fetch_all::<{ TableDB::Active }, TableDB>),
+        from_fn(By::<FunctionId>::historic_fetch_all::<{ DependencyDB::Active }, DependencyDB>),
         from_fn(
-            By::<FunctionId>::fetch_all_versions::<
+            By::<FunctionId>::historic_fetch_all::<
                 { TriggerDBWithNames::Available },
                 TriggerDBWithNames,
             >
@@ -114,8 +114,8 @@ mod tests {
         AccessTokenId, BundleId, Decorator, FunctionRuntimeValues, RoleId, UserId,
         WorkerMessageStatus, WorkerStatus, WorkerType,
     };
-    use td_queries::BasicQueries;
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::LiveEntry;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -154,7 +154,7 @@ mod tests {
                 // Get function. Extract function version id.
                 type_of_val(&With::<RequestContext>::extract::<AtTime>),
                 type_of_val(
-                    &By::<And![CollectionIdName, FunctionIdName]>::fetch_one_version::<
+                    &By::<And![CollectionIdName, FunctionIdName]>::historic_fetch_one::<
                         { FunctionDBWithNames::Available },
                         FunctionDBWithNames,
                     >,
@@ -170,12 +170,12 @@ mod tests {
                 // Register associations
                 // Find previous versions.
                 type_of_val(&With::<FunctionVersionId>::some),
-                type_of_val(&By::<FunctionId>::fetch_all_versions::<{ TableDB::Active }, TableDB>),
+                type_of_val(&By::<FunctionId>::historic_fetch_all::<{ TableDB::Active }, TableDB>),
                 type_of_val(
-                    &By::<FunctionId>::fetch_all_versions::<{ DependencyDB::Active }, DependencyDB>,
+                    &By::<FunctionId>::historic_fetch_all::<{ DependencyDB::Active }, DependencyDB>,
                 ),
                 type_of_val(
-                    &By::<FunctionId>::fetch_all_versions::<
+                    &By::<FunctionId>::historic_fetch_all::<
                         { TriggerDBWithNames::Available },
                         TriggerDBWithNames,
                     >,
@@ -222,7 +222,8 @@ mod tests {
     async fn test_delete_function(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .seed_collection(&collection_name, &UserId::admin())
+            .seed()
+            .collection(&collection_name, &UserId::admin())
             .await?;
 
         let create = FunctionRegister::builder()
@@ -238,7 +239,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let created_function = db.seed_function(&collection, &create).await?;
+        let created_function = db.seed().function(&collection, &create).await?;
 
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).delete(
@@ -266,7 +267,8 @@ mod tests {
     async fn test_delete_function_with_tables(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .seed_collection(&collection_name, &UserId::admin())
+            .seed()
+            .collection(&collection_name, &UserId::admin())
             .await?;
 
         let create = FunctionRegister::builder()
@@ -285,7 +287,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let created_function = db.seed_function(&collection, &create).await?;
+        let created_function = db.seed().function(&collection, &create).await?;
 
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).delete(
@@ -313,7 +315,8 @@ mod tests {
     async fn test_delete_function_with_dependencies(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .seed_collection(&collection_name, &UserId::admin())
+            .seed()
+            .collection(&collection_name, &UserId::admin())
             .await?;
 
         let trigger_create = FunctionRegister::builder()
@@ -329,7 +332,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _ = db.seed_function(&collection, &trigger_create).await?;
+        let _ = db.seed().function(&collection, &trigger_create).await?;
 
         let create = FunctionRegister::builder()
             .try_name("joaquin_workout")?
@@ -344,7 +347,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let created_function = db.seed_function(&collection, &create).await?;
+        let created_function = db.seed().function(&collection, &create).await?;
 
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).delete(
@@ -372,7 +375,8 @@ mod tests {
     async fn test_delete_function_with_triggers(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .seed_collection(&collection_name, &UserId::admin())
+            .seed()
+            .collection(&collection_name, &UserId::admin())
             .await?;
 
         let trigger_create = FunctionRegister::builder()
@@ -388,7 +392,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _ = db.seed_function(&collection, &trigger_create).await?;
+        let _ = db.seed().function(&collection, &trigger_create).await?;
 
         let create = FunctionRegister::builder()
             .try_name("joaquin_workout")?
@@ -403,7 +407,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let created_function = db.seed_function(&collection, &create).await?;
+        let created_function = db.seed().function(&collection, &create).await?;
 
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).delete(
@@ -431,7 +435,8 @@ mod tests {
     async fn test_delete_function_unique(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .seed_collection(&collection_name, &UserId::admin())
+            .seed()
+            .collection(&collection_name, &UserId::admin())
             .await?;
 
         let trigger_create = FunctionRegister::builder()
@@ -447,7 +452,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _ = db.seed_function(&collection, &trigger_create).await?;
+        let _ = db.seed().function(&collection, &trigger_create).await?;
 
         let create_1 = FunctionRegister::builder()
             .try_name("joaquin_workout_1")?
@@ -487,7 +492,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let created_function_2 = db.seed_function(&collection, &create_2).await?;
+        let created_function_2 = db.seed().function(&collection, &create_2).await?;
 
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).delete(
@@ -502,6 +507,7 @@ mod tests {
 
         // Assert that the first function is as if it just got registered
         let function_version: FunctionDBWithNames = db
+            .live()
             .fetch_one::<FunctionDBWithNames>(&(&created_function_version_1.id))
             .await?;
         let function_version = FunctionBuilder::try_from(&function_version)?.build()?;
@@ -530,7 +536,8 @@ mod tests {
     async fn test_delete_workers(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .seed_collection(&collection_name, &UserId::admin())
+            .seed()
+            .collection(&collection_name, &UserId::admin())
             .await?;
 
         // register a function
@@ -572,7 +579,7 @@ mod tests {
         service.raw_oneshot(request).await?;
 
         // check its workers also got stopped
-        let workers: Vec<WorkerDB> = db.fetch_all::<WorkerDB>(()).await.unwrap();
+        let workers: Vec<WorkerDB> = db.live().fetch_all::<WorkerDB>(()).await.unwrap();
         assert_eq!(workers.len(), 1);
         let worker = &workers[0];
         assert_eq!(worker.collection_id, collection.id);

@@ -55,7 +55,7 @@ mod tests {
         AccessTokenId, BundleId, CollectionName, Decorator, Description, FunctionName, RoleId,
         RoleName, UserEnabled, UserId, UserName,
     };
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -92,7 +92,8 @@ mod tests {
     #[tokio::test]
     async fn test_list_current_functions(db: TdPool) -> Result<(), TdError> {
         let collection = db
-            .seed_collection(&CollectionName::try_from("collection")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
 
         // Create function_1
@@ -108,7 +109,7 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let _ = db.seed_function(&collection, &create).await?;
+        let _ = db.seed().function(&collection, &create).await?;
 
         // Create function_2
         let create = FunctionRegister::builder()
@@ -123,7 +124,7 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let _ = db.seed_function(&collection, &create).await?;
+        let _ = db.seed().function(&collection, &create).await?;
 
         // List current functions
         let request =
@@ -146,19 +147,22 @@ mod tests {
     async fn test_list_function_versions_without_permissions(db: TdPool) -> Result<(), TdError> {
         // Create new role without permissions
         let user = db
-            .seed_user(&UserName::try_from("joaquin")?, &UserEnabled::from(true))
+            .seed()
+            .user(&UserName::try_from("joaquin")?, &UserEnabled::from(true))
             .await?;
         let role = db
-            .seed_role(
+            .seed()
+            .role(
                 RoleName::try_from("unauthorized_role")?,
                 Description::try_from("any user")?,
             )
             .await?;
-        let _user_role = db.seed_user_role(&user.id, &role.id).await?;
+        let _user_role = db.seed().user_role(&user.id, &role.id).await?;
 
         // Create collection
         let collection = db
-            .seed_collection(&CollectionName::try_from("collection")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
 
         // Create function_1 and function_2
@@ -174,7 +178,7 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let _ = db.seed_function(&collection, &create).await?;
+        let _ = db.seed().function(&collection, &create).await?;
 
         // Create function_2
         let create = FunctionRegister::builder()
@@ -189,7 +193,7 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let _ = db.seed_function(&collection, &create).await?;
+        let _ = db.seed().function(&collection, &create).await?;
 
         // All functions should be listed for authorized user
         let request = RequestContext::with(

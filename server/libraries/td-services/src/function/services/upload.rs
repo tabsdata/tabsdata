@@ -81,8 +81,8 @@ mod tests {
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::types::basic::{AccessTokenId, CollectionName, DataLocation, RoleId, UserId};
-    use td_queries::BasicQueries;
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::LiveEntry;
+    use td_queries::test_utils::SeedEntry;
     use td_storage::location::StorageLocation;
     use td_tower::ctx_service::RawOneshot;
 
@@ -144,7 +144,8 @@ mod tests {
     async fn test_upload(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .seed_collection(&collection_name, &UserId::admin())
+            .seed()
+            .collection(&collection_name, &UserId::admin())
             .await?;
 
         let payload = "TEXT";
@@ -167,7 +168,7 @@ mod tests {
         let response = response?;
 
         // Assert db
-        let bundle_db: Vec<BundleDB> = db.fetch_all::<BundleDB>(()).await?;
+        let bundle_db: Vec<BundleDB> = db.live().fetch_all::<BundleDB>(()).await?;
 
         assert_eq!(bundle_db.len(), 1);
         let bundle = &bundle_db[0];

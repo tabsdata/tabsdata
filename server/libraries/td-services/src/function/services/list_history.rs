@@ -37,7 +37,7 @@ fn service() {
         from_fn(With::<ListRequest<AtTimeParam>>::extract::<ListParams>),
         from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<Function>, _>),
         from_fn(
-            By::<()>::list_versions_at::<
+            By::<()>::historic_list_versions::<
                 VisibleFunctionsCollections,
                 { FunctionDBWithNames::Available },
                 Function,
@@ -63,7 +63,7 @@ mod tests {
         AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, FunctionIdName,
         FunctionName, RoleId, UserId,
     };
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -89,7 +89,7 @@ mod tests {
                 type_of_val(&With::<ListRequest<AtTimeParam>>::extract::<ListParams>),
                 type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<Function>, _>),
                 type_of_val(
-                    &By::<()>::list_versions_at::<
+                    &By::<()>::historic_list_versions::<
                         VisibleFunctionsCollections,
                         { FunctionDBWithNames::Available },
                         Function,
@@ -102,7 +102,8 @@ mod tests {
     #[tokio::test]
     async fn test_list_function_versions_history(db: TdPool) -> Result<(), TdError> {
         let collection = db
-            .seed_collection(&CollectionName::try_from("collection")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
 
         let t0 = AtTime::now();
@@ -120,7 +121,7 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let _ = db.seed_function(&collection, &create).await?;
+        let _ = db.seed().function(&collection, &create).await?;
 
         let t1 = AtTime::now();
 
@@ -137,7 +138,7 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let _ = db.seed_function(&collection, &create).await?;
+        let _ = db.seed().function(&collection, &create).await?;
 
         let t2 = AtTime::now();
 
@@ -189,7 +190,7 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let _ = db.seed_function(&collection, &create).await?;
+        let _ = db.seed().function(&collection, &create).await?;
 
         let t5 = AtTime::now();
 

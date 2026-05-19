@@ -146,8 +146,8 @@ mod tests {
         AccessTokenId, Decorator, FunctionRuntimeValues, RoleId, ToCollectionId, UserId,
         WorkerMessageStatus, WorkerStatus, WorkerType,
     };
-    use td_queries::BasicQueries;
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::LiveEntry;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -303,7 +303,8 @@ mod tests {
     async fn test_register_empty(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .seed_collection(&collection_name, &UserId::admin())
+            .seed()
+            .collection(&collection_name, &UserId::admin())
             .await?;
 
         let dependencies = None;
@@ -344,7 +345,8 @@ mod tests {
     async fn test_register_empty_vec(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .seed_collection(&collection_name, &UserId::admin())
+            .seed()
+            .collection(&collection_name, &UserId::admin())
             .await?;
 
         let dependencies = Some(vec![]);
@@ -385,7 +387,8 @@ mod tests {
     async fn test_register_table_output(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .seed_collection(&collection_name, &UserId::admin())
+            .seed()
+            .collection(&collection_name, &UserId::admin())
             .await?;
 
         let dependencies = None;
@@ -428,7 +431,8 @@ mod tests {
     ) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let _collection = db
-            .seed_collection(&collection_name, &UserId::admin())
+            .seed()
+            .collection(&collection_name, &UserId::admin())
             .await?;
 
         let dependencies = None;
@@ -481,7 +485,8 @@ mod tests {
     async fn test_register_table_dependency(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .seed_collection(&collection_name, &UserId::admin())
+            .seed()
+            .collection(&collection_name, &UserId::admin())
             .await?;
 
         let dependencies = Some(vec![TableDependencyDto::try_from("table_foo")?]);
@@ -546,7 +551,8 @@ mod tests {
     ) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .seed_collection(&collection_name, &UserId::admin())
+            .seed()
+            .collection(&collection_name, &UserId::admin())
             .await?;
 
         let dependencies = None;
@@ -625,7 +631,8 @@ mod tests {
     async fn test_register_tables_dependencies_triggers(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .seed_collection(&collection_name, &UserId::admin())
+            .seed()
+            .collection(&collection_name, &UserId::admin())
             .await?;
 
         let dependencies = None;
@@ -747,19 +754,22 @@ mod tests {
     ) -> Result<(), TdError> {
         let collection_name_1 = CollectionName::try_from("collection_1")?;
         let collection_1 = db
-            .seed_collection(&collection_name_1, &UserId::admin())
+            .seed()
+            .collection(&collection_name_1, &UserId::admin())
             .await?;
         let collection_name_2 = CollectionName::try_from("collection_2")?;
         let collection_2 = db
-            .seed_collection(&collection_name_2, &UserId::admin())
+            .seed()
+            .collection(&collection_name_2, &UserId::admin())
             .await?;
 
         if with_permission {
-            db.seed_inter_collection_permission(
-                &collection_1.id,
-                &ToCollectionId::try_from(collection_2.id)?,
-            )
-            .await?;
+            db.seed()
+                .inter_collection_permission(
+                    &collection_1.id,
+                    &ToCollectionId::try_from(collection_2.id)?,
+                )
+                .await?;
         }
 
         let dependencies = None;
@@ -896,7 +906,8 @@ mod tests {
     async fn test_register_same_name(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let _ = db
-            .seed_collection(&collection_name, &UserId::admin())
+            .seed()
+            .collection(&collection_name, &UserId::admin())
             .await?;
 
         let dependencies = None;
@@ -967,18 +978,21 @@ mod tests {
     ) -> Result<(), TdError> {
         let collection_name_1 = CollectionName::try_from("collection_1")?;
         let collection_1 = db
-            .seed_collection(&collection_name_1, &UserId::admin())
+            .seed()
+            .collection(&collection_name_1, &UserId::admin())
             .await?;
         let collection_name_2 = CollectionName::try_from("collection_2")?;
         let collection_2 = db
-            .seed_collection(&collection_name_2, &UserId::admin())
+            .seed()
+            .collection(&collection_name_2, &UserId::admin())
             .await?;
 
-        db.seed_inter_collection_permission(
-            &collection_1.id,
-            &ToCollectionId::try_from(collection_2.id)?,
-        )
-        .await?;
+        db.seed()
+            .inter_collection_permission(
+                &collection_1.id,
+                &ToCollectionId::try_from(collection_2.id)?,
+            )
+            .await?;
 
         for collection in [&collection_1, &collection_2] {
             let dependencies = None;
@@ -1001,7 +1015,7 @@ mod tests {
                 .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
                 .reuse_frozen_tables(false)
                 .build()?;
-            db.seed_function(collection, &create).await?;
+            db.seed().function(collection, &create).await?;
         }
 
         // Actual test
@@ -1065,7 +1079,8 @@ mod tests {
     #[tokio::test]
     async fn test_private_table_flag(db: TdPool) -> Result<(), TdError> {
         let collection_name_1 = CollectionName::try_from("collection_1")?;
-        db.seed_collection(&collection_name_1, &UserId::admin())
+        db.seed()
+            .collection(&collection_name_1, &UserId::admin())
             .await?;
 
         let tables = Some(vec![
@@ -1099,7 +1114,7 @@ mod tests {
         let res = service.raw_oneshot(request).await;
         assert!(res.is_ok());
 
-        let tables: Vec<TableDB> = db.fetch_all::<TableDB>(&(res.unwrap().id)).await?;
+        let tables: Vec<TableDB> = db.live().fetch_all::<TableDB>(&(res.unwrap().id)).await?;
         let map: HashMap<String, TableDB> = tables
             .into_iter()
             .map(|table| (table.name.to_string(), table))
@@ -1113,7 +1128,8 @@ mod tests {
     #[tokio::test]
     async fn test_dependency_fixed_validation(db: TdPool) -> Result<(), TdError> {
         let collection_name_1 = CollectionName::try_from("collection_1")?;
-        db.seed_collection(&collection_name_1, &UserId::admin())
+        db.seed()
+            .collection(&collection_name_1, &UserId::admin())
             .await?;
 
         let bundle_id = BundleId::default();
@@ -1191,7 +1207,8 @@ mod tests {
     #[tokio::test]
     async fn test_dependency_range_validation(db: TdPool) -> Result<(), TdError> {
         let collection_name_1 = CollectionName::try_from("collection_1")?;
-        db.seed_collection(&collection_name_1, &UserId::admin())
+        db.seed()
+            .collection(&collection_name_1, &UserId::admin())
             .await?;
 
         let bundle_id = BundleId::default();
@@ -1233,7 +1250,8 @@ mod tests {
     async fn test_workers_created(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("collection")?;
         let collection = db
-            .seed_collection(&collection_name, &UserId::admin())
+            .seed()
+            .collection(&collection_name, &UserId::admin())
             .await?;
 
         let create = FunctionRegister::builder()
@@ -1262,7 +1280,7 @@ mod tests {
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await?;
 
-        let workers: Vec<WorkerDB> = db.fetch_all::<WorkerDB>(&res.id).await.unwrap();
+        let workers: Vec<WorkerDB> = db.live().fetch_all::<WorkerDB>(&res.id).await.unwrap();
         assert_eq!(workers.len(), 1);
         let worker = &workers[0];
         assert_eq!(worker.collection_id, collection.id);
@@ -1283,7 +1301,8 @@ mod tests {
     #[tokio::test]
     async fn test_multiple_workers_error(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("collection")?;
-        db.seed_collection(&collection_name, &UserId::admin())
+        db.seed()
+            .collection(&collection_name, &UserId::admin())
             .await?;
 
         let create = FunctionRegister::builder()

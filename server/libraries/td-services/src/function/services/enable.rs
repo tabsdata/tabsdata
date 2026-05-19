@@ -108,9 +108,8 @@ mod tests {
         AccessTokenId, Decorator, Enabled, FunctionRuntimeValues, RoleId, TableNameDto, UserId,
     };
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
-    use td_queries::BasicQueries;
-    use td_queries::CurrentQueries;
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::test_utils::SeedEntry;
+    use td_queries::{CurrentEntry, LiveEntry};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -267,7 +266,8 @@ mod tests {
     ) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .seed_collection(&collection_name, &UserId::admin())
+            .seed()
+            .collection(&collection_name, &UserId::admin())
             .await?;
 
         // dummy to allow for triggers and dependencies to exist
@@ -287,7 +287,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _dummy_function = db.seed_function(&collection, &dummy).await?;
+        let _dummy_function = db.seed().function(&collection, &dummy).await?;
 
         let create = FunctionRegister::builder()
             .try_name("foo")?
@@ -304,7 +304,7 @@ mod tests {
             .enabled(enabled)
             .build()?;
 
-        let created_function = db.seed_function(&collection, &create).await?;
+        let created_function = db.seed().function(&collection, &create).await?;
 
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
@@ -343,18 +343,21 @@ mod tests {
 
         // And assert that the current versions are related to the new one
         let current_function: Vec<FunctionDB> = db
-            .fetch_all_current::<{ FunctionDB::All }, FunctionDB>(&response.function_id)
+            .current()
+            .fetch_all::<FunctionDB>(&response.function_id)
             .await?;
         assert_eq!(current_function.len(), 1);
         let current_function = current_function.first().unwrap();
         assert_eq!(current_function.id, response.id);
         assert_eq!(current_function.enabled, enabled_update);
 
-        let current_tables: Vec<TableDB> = db.fetch_all::<TableDB>(&current_function.id).await?;
+        let current_tables: Vec<TableDB> =
+            db.live().fetch_all::<TableDB>(&current_function.id).await?;
         assert_eq!(current_tables.len(), tables.unwrap_or_default().len());
 
         let current_dependencies: Vec<DependencyDB> = db
-            .fetch_all_current::<{ DependencyDB::All }, DependencyDB>(&current_function.function_id)
+            .current()
+            .fetch_all::<DependencyDB>(&current_function.function_id)
             .await?;
         assert_eq!(
             current_dependencies.len(),
@@ -362,11 +365,15 @@ mod tests {
         );
 
         let current_triggers: Vec<TriggerDB> = db
-            .fetch_all_current::<{ TriggerDB::All }, TriggerDB>(&current_function.function_id)
+            .current()
+            .fetch_all::<TriggerDB>(&current_function.function_id)
             .await?;
         assert_eq!(current_triggers.len(), triggers.unwrap_or_default().len());
 
-        let current_workers: Vec<WorkerDB> = db.fetch_all::<WorkerDB>(&current_function.id).await?;
+        let current_workers: Vec<WorkerDB> = db
+            .live()
+            .fetch_all::<WorkerDB>(&current_function.id)
+            .await?;
         assert_eq!(current_workers.len(), workers.unwrap_or_default().len());
 
         Ok(())

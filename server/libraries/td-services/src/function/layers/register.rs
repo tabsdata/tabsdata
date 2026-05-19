@@ -27,7 +27,7 @@ use td_objects::types::composed::{
     TableDependency, TableDependencyDto, TableTrigger, TableTriggerDto,
 };
 use td_objects::{Buildable, and, or};
-use td_queries::{BasicQueries, ChunkedQueries};
+use td_queries::{ChunkedQueries, HistoricEntry, LiveEntry};
 use td_tower::ctx_service::ReqCtx;
 use td_tower::extractors::{MutRef, Ref};
 use tracing::{debug, error};
@@ -95,10 +95,9 @@ pub async fn validate_tables_do_not_exist(
             .map(|t| and!(collection_id.deref(), t))
             .collect();
         let tables_found = conn
-            .fetch_all_at_chunked::<{ TableDBWithNames::Available }, TableDBWithNames, _>(
-                &new_table_lookups,
-                &at_time,
-            )
+            .historic(at_time.deref())
+            .state(TableDBWithNames::available())
+            .fetch_all_chunked::<_>(&new_table_lookups)
             .await?;
 
         if !tables_found.is_empty() {
@@ -247,7 +246,8 @@ pub async fn build_tables_trigger_versions(
         .map(|t| t.table_id)
         .collect::<Vec<_>>();
     let existing_triggers = conn
-        .fetch_all_at_chunked::<{ TriggerDB::All }, TriggerDB, _>(&table_ids, &at_time)
+        .historic(at_time.deref())
+        .fetch_all_chunked::<TriggerDB, _>(&table_ids)
         .await?;
 
     // Freeze triggers if the table is frozen, or reactivate them if the table is active again.
@@ -368,10 +368,9 @@ pub async fn build_dependency_versions(
         })
         .collect();
     let tables_found = conn
-        .fetch_all_at_chunked::<{ TableDBWithNames::Available }, TableDBWithNames, _>(
-            &dep_lookups,
-            &at_time,
-        )
+        .historic(at_time.deref())
+        .state(TableDBWithNames::available())
+        .fetch_all_chunked::<_>(&dep_lookups)
         .await?;
 
     let tables_found: HashMap<_, _> = tables_found
@@ -537,10 +536,9 @@ pub async fn build_trigger_versions(
         })
         .collect();
     let tables_found = conn
-        .fetch_all_at_chunked::<{ TableDBWithNames::Available }, TableDBWithNames, _>(
-            &trigger_lookups,
-            &at_time,
-        )
+        .historic(at_time.deref())
+        .state(TableDBWithNames::available())
+        .fetch_all_chunked::<_>(&trigger_lookups)
         .await?;
 
     let tables_found: HashMap<_, _> = tables_found
@@ -635,13 +633,13 @@ pub async fn stop_current_workers(
             function_version_id,
             or!(WorkerType::CronTrigger, WorkerType::StageTrigger),
         );
-        let workers = conn.fetch_all::<WorkerDB>(to_stop).await?;
+        let workers = conn.live().fetch_all::<WorkerDB>(to_stop).await?;
 
         // only if the status is allowed to be updated
         let mut to_stop = vec![];
         for worker in workers {
             match worker.status {
-                WorkerStatus::Scheduled | WorkerStatus::RunRequested | WorkerStatus::Running => {
+                WorkerStatus::Scheduled | WorkerStatus::Requested | WorkerStatus::Running => {
                     debug!(
                         "Stopping worker {} with status {}",
                         worker.id, worker.status
@@ -717,7 +715,7 @@ pub async fn build_workers(
             function_version_id,
             or!(WorkerType::CronTrigger, WorkerType::StageTrigger),
         );
-        let current_workers = conn.fetch_all::<WorkerDB>(to_recreate).await?;
+        let current_workers = conn.live().fetch_all::<WorkerDB>(to_recreate).await?;
         for worker in current_workers {
             let worker_db = builder
                 .deref()

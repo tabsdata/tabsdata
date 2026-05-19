@@ -10,7 +10,7 @@ use td_objects::dxo::function::{FunctionDBBuilder, FunctionDBWithNames, Function
 use td_objects::types::basic::{
     CollectionId, CollectionName, FunctionName, FunctionStatus, FunctionVersionId,
 };
-use td_queries::CurrentQueries;
+use td_queries::CurrentEntry;
 use td_tower::extractors::{MutRef, Ref};
 
 #[td_error]
@@ -30,9 +30,9 @@ pub async fn assert_function_name_not_exists(
         && *name != function.name
     {
         let found = conn
-            .fetch_optional_current::<{ FunctionDBWithNames::Available }, FunctionDBWithNames>(
-                and!(*collection_id, name),
-            )
+            .current()
+            .state(FunctionDBWithNames::available())
+            .fetch_optional(and!(*collection_id, name))
             .await?;
 
         if found.is_some() {

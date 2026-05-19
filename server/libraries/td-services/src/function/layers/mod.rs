@@ -26,8 +26,10 @@ use td_tower::{layer, layers};
 
 pub mod delete;
 pub mod enable;
+pub mod patch;
 pub mod read;
 pub mod register;
+pub mod topology;
 pub mod update;
 pub mod upload;
 
