@@ -63,14 +63,14 @@ mod tests {
         AccessTokenId, AtTime, BundleId, CollectionName, Decorator, FunctionRuntimeValues, RoleId,
         UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
     };
-    use td_queries::BasicQueries;
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::LiveEntry;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(sqlx)]
     #[tokio::test]
-    async fn test_tower_metadata_callback(db: TdPool) {
+    async fn test_tower_metadata_worker_callback(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
         WorkerCallbackService::with_defaults(db)
@@ -107,7 +107,8 @@ mod tests {
     #[tokio::test]
     async fn test_worker_callback(db: TdPool) -> Result<(), TdError> {
         let collection = db
-            .seed_collection(&CollectionName::try_from("collection")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
         let create = FunctionRegister::builder()
             .try_name("joaquin_workout")?
@@ -121,13 +122,14 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
-        let function = db.seed_function(&collection, &create).await?;
+        let function = db.seed().function(&collection, &create).await?;
         let worker = db
-            .seed_worker(
+            .seed()
+            .worker(
                 &collection,
                 &function,
                 &WorkerType::CronTrigger,
-                &WorkerStatus::RunRequested,
+                &WorkerStatus::Requested,
                 &WorkerMessageStatus::Unlocked,
             )
             .await?;
@@ -163,7 +165,8 @@ mod tests {
         let service = WorkerCallbackService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
 
-        let worker: WorkerDBWithNames = db.fetch_one::<WorkerDBWithNames>(&worker.id).await?;
+        let worker: WorkerDBWithNames =
+            db.live().fetch_one::<WorkerDBWithNames>(&worker.id).await?;
         assert_eq!(worker.worker_type, WorkerType::CronTrigger);
         assert_eq!(worker.status, WorkerStatus::Running);
         assert_eq!(worker.started_on, Some(started_on));
@@ -200,7 +203,8 @@ mod tests {
         let service = WorkerCallbackService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
 
-        let worker: WorkerDBWithNames = db.fetch_one::<WorkerDBWithNames>(&worker.id).await?;
+        let worker: WorkerDBWithNames =
+            db.live().fetch_one::<WorkerDBWithNames>(&worker.id).await?;
         assert_eq!(worker.worker_type, WorkerType::CronTrigger);
         assert_eq!(worker.status, WorkerStatus::Done);
         assert_eq!(worker.started_on, Some(started_on));

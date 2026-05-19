@@ -42,7 +42,7 @@ mod tests {
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, RoleId, UserId,
     };
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -66,7 +66,8 @@ mod tests {
     #[tokio::test]
     async fn test_list_execution(db: TdPool) -> Result<(), TdError> {
         let collection = db
-            .seed_collection(&CollectionName::try_from("collection")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
 
         let dependencies = None;
@@ -85,13 +86,13 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let function_version = db.seed_function(&collection, &create).await?;
+        let function_version = db.seed().function(&collection, &create).await?;
         let executions = [
-            db.seed_execution(&function_version).await?,
-            db.seed_execution(&function_version).await?,
-            db.seed_execution(&function_version).await?,
-            db.seed_execution(&function_version).await?,
-            db.seed_execution(&function_version).await?,
+            db.seed().execution(&function_version).await?,
+            db.seed().execution(&function_version).await?,
+            db.seed().execution(&function_version).await?,
+            db.seed().execution(&function_version).await?,
+            db.seed().execution(&function_version).await?,
         ];
 
         let service = ExecutionListService::with_defaults(db.clone()).service();

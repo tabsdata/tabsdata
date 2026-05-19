@@ -10,7 +10,7 @@ use td_authz::{Authz, AuthzContext};
 use td_execution::SchedulerNotify;
 use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
 use td_objects::dxo::execution::ExecutionDB;
-use td_objects::dxo::function_run::{FunctionRunDB, UpdateFunctionRunDB};
+use td_objects::dxo::logical::{LogicalFunctionRunDB, UpdateLogicalFunctionRunDB};
 use td_objects::rest_urls::ExecutionParam;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{CollectionId, ExecutionId, ExecutionIdName};
@@ -32,7 +32,7 @@ fn service() {
         // Extract from request.
         from_fn(With::<UpdateRequest<ExecutionParam, ()>>::extract::<RequestContext>),
         from_fn(With::<UpdateRequest<ExecutionParam, ()>>::extract_name::<ExecutionParam>),
-        // Extract function_run_id. We assume it's correct as the callback is constructed by the server.
+        // Extract physical_function_run_id. We assume it's correct as the callback is constructed by the server.
         from_fn(With::<ExecutionParam>::extract::<ExecutionIdName>),
         // Find function run.
         from_fn(By::<ExecutionIdName>::fetch_one::<ExecutionDB>),
@@ -41,9 +41,9 @@ fn service() {
         from_fn(AuthzOn::<CollectionId>::set),
         from_fn(Authz::<CollAdmin, CollExec>::check),
         from_fn(With::<ExecutionDB>::extract::<ExecutionId>),
-        from_fn(By::<ExecutionId>::fetch_all::<FunctionRunDB>),
-        // Set cancel status
-        from_fn(UpdateFunctionRunDB::cancel),
+        from_fn(By::<ExecutionId>::fetch_all::<LogicalFunctionRunDB>),
+        // Set cancel status (on the LFR — FR has no status).
+        from_fn(UpdateLogicalFunctionRunDB::cancel),
         // Update function requirements status
         from_fn(update_function_run_status),
         // Notify scheduler of status change.
@@ -85,7 +85,7 @@ mod tests {
                 type_of_val(
                     &With::<UpdateRequest<ExecutionParam, ()>>::extract_name::<ExecutionParam>,
                 ),
-                // Extract function_run_id. We assume it's correct as the callback is constructed by the server.
+                // Extract physical_function_run_id. We assume it's correct as the callback is constructed by the server.
                 type_of_val(&With::<ExecutionParam>::extract::<ExecutionIdName>),
                 // Find function run.
                 type_of_val(&By::<ExecutionIdName>::fetch_one::<ExecutionDB>),
@@ -94,9 +94,9 @@ mod tests {
                 type_of_val(&AuthzOn::<CollectionId>::set),
                 type_of_val(&Authz::<CollAdmin, CollExec>::check),
                 type_of_val(&With::<ExecutionDB>::extract::<ExecutionId>),
-                type_of_val(&By::<ExecutionId>::fetch_all::<FunctionRunDB>),
-                // Set cancel status
-                type_of_val(&UpdateFunctionRunDB::cancel),
+                type_of_val(&By::<ExecutionId>::fetch_all::<LogicalFunctionRunDB>),
+                // Set cancel status (on the LFR).
+                type_of_val(&UpdateLogicalFunctionRunDB::cancel),
                 // Update function requirements status
                 type_of_val(&update_function_run_status),
                 // Notify scheduler of status change.
@@ -147,7 +147,7 @@ mod tests {
                         name: FunctionName::try_from("f_0")?,
                         dependencies: vec![],
                         tables: vec![TableNameDto::try_from("t_0")?],
-                        initial_status: FunctionRunStatus::RunRequested,
+                        initial_status: FunctionRunStatus::Requested,
                         expected_status: FunctionRunStatus::Canceled,
                     }],
                 }],
@@ -384,7 +384,7 @@ mod tests {
                 .is_ok()
         );
         assert!(
-            cancel_transition_for(FunctionRunStatus::RunRequested)
+            cancel_transition_for(FunctionRunStatus::Requested)
                 .await
                 .is_ok()
         );

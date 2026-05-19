@@ -63,7 +63,7 @@ mod tests {
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRunStatus, RoleId,
         TransactionKey, UserId, WorkerMessageStatus,
     };
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -101,7 +101,8 @@ mod tests {
     #[tokio::test]
     async fn test_read_workers_logs(db: TdPool) -> Result<(), TdError> {
         let collection = db
-            .seed_collection(&CollectionName::try_from("collection")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
 
         let dependencies = None;
@@ -120,13 +121,14 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let function_version = db.seed_function(&collection, &create).await?;
-        let execution = db.seed_execution(&function_version).await?;
+        let function_version = db.seed().function(&collection, &create).await?;
+        let execution = db.seed().execution(&function_version).await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
-        let transaction = db.seed_transaction(&execution, &transaction_key).await?;
+        let transaction = db.seed().transaction(&execution, &transaction_key).await?;
 
-        let function_run = db
-            .seed_function_run(
+        let physical_function_run = db
+            .seed()
+            .physical_function_run(
                 &collection,
                 &function_version,
                 &execution,
@@ -136,20 +138,22 @@ mod tests {
             .await?;
 
         let workers = [
-            db.seed_function_runner_worker(
-                &execution,
-                &transaction,
-                &function_run,
-                &WorkerMessageStatus::Locked,
-            )
-            .await?,
-            db.seed_function_runner_worker(
-                &execution,
-                &transaction,
-                &function_run,
-                &WorkerMessageStatus::Locked,
-            )
-            .await?,
+            db.seed()
+                .function_runner_worker(
+                    &execution,
+                    &transaction,
+                    &physical_function_run,
+                    &WorkerMessageStatus::Locked,
+                )
+                .await?,
+            db.seed()
+                .function_runner_worker(
+                    &execution,
+                    &transaction,
+                    &physical_function_run,
+                    &WorkerMessageStatus::Locked,
+                )
+                .await?,
         ];
 
         let test_dir = td_common::tdtestdir!();

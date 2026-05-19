@@ -9,7 +9,7 @@ use td_authz::tower::{AuthzOn, CollAdmin, CollExec};
 use td_authz::{Authz, AuthzContext};
 use td_execution::SchedulerNotify;
 use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
-use td_objects::dxo::function_run::{FunctionRunDB, UpdateFunctionRunDB};
+use td_objects::dxo::logical::{LogicalFunctionRunDB, UpdateLogicalFunctionRunDB};
 use td_objects::dxo::transaction::TransactionDB;
 use td_objects::rest_urls::TransactionParam;
 use td_objects::tower_service::with::With;
@@ -32,7 +32,7 @@ fn service() {
         // Extract from request.
         from_fn(With::<UpdateRequest<TransactionParam, ()>>::extract::<RequestContext>),
         from_fn(With::<UpdateRequest<TransactionParam, ()>>::extract_name::<TransactionParam>),
-        // Extract function_run_id. We assume it's correct as the callback is constructed by the server.
+        // Extract physical_function_run_id. We assume it's correct as the callback is constructed by the server.
         from_fn(With::<TransactionParam>::extract::<TransactionIdName>),
         // Find function run.
         from_fn(By::<TransactionIdName>::fetch_one::<TransactionDB>),
@@ -41,9 +41,9 @@ fn service() {
         from_fn(AuthzOn::<CollectionId>::set),
         from_fn(Authz::<CollAdmin, CollExec>::check),
         from_fn(With::<TransactionDB>::extract::<TransactionId>),
-        from_fn(By::<TransactionId>::fetch_all::<FunctionRunDB>),
+        from_fn(By::<TransactionId>::fetch_all::<LogicalFunctionRunDB>),
         // Set cancel status
-        from_fn(UpdateFunctionRunDB::cancel),
+        from_fn(UpdateLogicalFunctionRunDB::cancel),
         // Update function requirements status
         from_fn(update_function_run_status),
         // Notify scheduler of status change.
@@ -87,7 +87,7 @@ mod tests {
                 type_of_val(
                     &With::<UpdateRequest<TransactionParam, ()>>::extract_name::<TransactionParam>,
                 ),
-                // Extract function_run_id. We assume it's correct as the callback is constructed by the server.
+                // Extract physical_function_run_id. We assume it's correct as the callback is constructed by the server.
                 type_of_val(&With::<TransactionParam>::extract::<TransactionIdName>),
                 // Find function run.
                 type_of_val(&By::<TransactionIdName>::fetch_one::<TransactionDB>),
@@ -96,9 +96,9 @@ mod tests {
                 type_of_val(&AuthzOn::<CollectionId>::set),
                 type_of_val(&Authz::<CollAdmin, CollExec>::check),
                 type_of_val(&With::<TransactionDB>::extract::<TransactionId>),
-                type_of_val(&By::<TransactionId>::fetch_all::<FunctionRunDB>),
+                type_of_val(&By::<TransactionId>::fetch_all::<LogicalFunctionRunDB>),
                 // Set cancel status
-                type_of_val(&UpdateFunctionRunDB::cancel),
+                type_of_val(&UpdateLogicalFunctionRunDB::cancel),
                 // Update function requirements status
                 type_of_val(&update_function_run_status),
                 // Notify scheduler of status change.
@@ -154,7 +154,7 @@ mod tests {
                         name: FunctionName::try_from("f_0")?,
                         dependencies: vec![],
                         tables: vec![TableNameDto::try_from("t_0")?],
-                        initial_status: FunctionRunStatus::RunRequested,
+                        initial_status: FunctionRunStatus::Requested,
                         expected_status: FunctionRunStatus::Canceled,
                     }],
                 }],
@@ -391,7 +391,7 @@ mod tests {
                 .is_ok()
         );
         assert!(
-            cancel_transition_for(FunctionRunStatus::RunRequested)
+            cancel_transition_for(FunctionRunStatus::Requested)
                 .await
                 .is_ok()
         );

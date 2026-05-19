@@ -8,7 +8,7 @@ use td_objects::dxo::execution::{
     Execution, ExecutionBuilder, ExecutionDBWithStatus, ExecutionDetails, ExecutionDetailsBuilder,
 };
 use td_objects::dxo::function::{Function, FunctionBuilder, FunctionDBWithNames};
-use td_objects::dxo::function_run::FunctionRunDB;
+use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::rest_urls::ExecutionParam;
 use td_objects::tower_service::with::{With, builder};
 use td_objects::types::basic::{ExecutionId, ExecutionIdName, FunctionVersionId};
@@ -36,10 +36,11 @@ fn service() {
         from_fn(With::<ExecutionDBWithStatus>::try_convert_to::<ExecutionBuilder, _>),
         from_fn(With::<ExecutionBuilder>::build::<Execution>),
         from_fn(With::<Execution>::set::<ExecutionDetailsBuilder>),
-        // Find all function runs.
-        from_fn(By::<ExecutionId>::fetch_all::<FunctionRunDB>),
-        // Find all functions.
-        from_fn(With::<Vec<FunctionRunDB>>::extract::<Vec<FunctionVersionId>>),
+        // Find all LFRs (concrete FRs are minted at dispatch; LFRs are the
+        // plan-build identity rows).
+        from_fn(By::<ExecutionId>::fetch_all::<LogicalFunctionRunDB>),
+        // Find all functions via the LFR's function_version_id.
+        from_fn(With::<Vec<LogicalFunctionRunDB>>::extract::<Vec<FunctionVersionId>>),
         from_fn(By::<Vec<FunctionVersionId>>::fetch_all_chunked::<FunctionDBWithNames>),
         from_fn(With::<FunctionDBWithNames>::vec_convert_to::<FunctionBuilder, _>),
         from_fn(With::<Vec<FunctionBuilder>>::build::<Vec<Function>>),
@@ -85,10 +86,9 @@ mod tests {
                 type_of_val(&With::<ExecutionDBWithStatus>::try_convert_to::<ExecutionBuilder, _>),
                 type_of_val(&With::<ExecutionBuilder>::build::<Execution>),
                 type_of_val(&With::<Execution>::set::<ExecutionDetailsBuilder>),
-                // Find all function runs.
-                type_of_val(&By::<ExecutionId>::fetch_all::<FunctionRunDB>),
-                // Find all functions.
-                type_of_val(&With::<Vec<FunctionRunDB>>::extract::<Vec<FunctionVersionId>>),
+                // Find all LFRs.
+                type_of_val(&By::<ExecutionId>::fetch_all::<LogicalFunctionRunDB>),
+                type_of_val(&With::<Vec<LogicalFunctionRunDB>>::extract::<Vec<FunctionVersionId>>),
                 type_of_val(
                     &By::<Vec<FunctionVersionId>>::fetch_all_chunked::<FunctionDBWithNames>,
                 ),

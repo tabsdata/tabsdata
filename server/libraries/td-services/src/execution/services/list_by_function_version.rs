@@ -27,7 +27,7 @@ fn service() {
             With::<ListRequest<FunctionVersionIdParam>>::extract_name::<FunctionVersionIdParam>
         ),
         from_fn(With::<FunctionVersionIdParam>::extract::<FunctionVersionId>),
-        // List executions with pagination (single JOIN query).
+        // List executions
         from_fn(With::<ListRequest<FunctionVersionIdParam>>::extract::<ListParams>),
         from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<Execution>, _>),
         from_fn(list_executions_by_fv),
@@ -49,8 +49,8 @@ mod tests {
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRunStatus, RoleId,
         TableNameDto, TransactionKey, UserId, VersionPos,
     };
-    use td_queries::BasicQueries;
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::LiveEntry;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -81,7 +81,8 @@ mod tests {
     #[tokio::test]
     async fn test_list_executions_by_function_version(db: TdPool) -> Result<(), TdError> {
         let collection = db
-            .seed_collection(&CollectionName::try_from("collection")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
 
         let tables = vec![TableNameDto::try_from("output_table")?];
@@ -97,14 +98,18 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let function_version_a = db.seed_function(&collection, &create).await?;
+        let function_version_a = db.seed().function(&collection, &create).await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
 
         // Create an execution with a function run for function_version_a.
-        let execution_1 = db.seed_execution(&function_version_a).await?;
-        let transaction_1 = db.seed_transaction(&execution_1, &transaction_key).await?;
+        let execution_1 = db.seed().execution(&function_version_a).await?;
+        let transaction_1 = db
+            .seed()
+            .transaction(&execution_1, &transaction_key)
+            .await?;
         let function_run_1 = db
-            .seed_function_run(
+            .seed()
+            .physical_function_run(
                 &collection,
                 &function_version_a,
                 &execution_1,
@@ -114,6 +119,7 @@ mod tests {
             .await?;
 
         let table: TableDB = db
+            .live()
             .fetch_one(and!(
                 &collection.id,
                 &td_objects::types::basic::TableName::try_from(tables[0].clone())?
@@ -121,7 +127,8 @@ mod tests {
             .await?;
 
         let tdv = db
-            .seed_table_data_version(
+            .seed()
+            .physical_table_data_version(
                 &collection,
                 &execution_1,
                 &transaction_1,
@@ -131,18 +138,19 @@ mod tests {
             .await?;
 
         // Seed a function requirement for function_run_1 (belongs to function_version_a).
-        db.seed_function_requirement(
-            &collection,
-            &execution_1,
-            &transaction_1,
-            &function_run_1,
-            &table,
-            Some(&function_run_1),
-            Some(&tdv),
-            None,
-            &VersionPos::try_from(0)?,
-        )
-        .await?;
+        db.seed()
+            .logical_input(
+                &collection,
+                &execution_1,
+                &transaction_1,
+                &function_run_1,
+                &table,
+                Some(&function_run_1),
+                Some(&tdv),
+                None,
+                &VersionPos::try_from(0)?,
+            )
+            .await?;
 
         // Create a second function and execution that does NOT use function_version_a.
         let create_b = FunctionRegister::builder()
@@ -157,12 +165,16 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let function_version_b = db.seed_function(&collection, &create_b).await?;
+        let function_version_b = db.seed().function(&collection, &create_b).await?;
 
-        let execution_2 = db.seed_execution(&function_version_b).await?;
-        let transaction_2 = db.seed_transaction(&execution_2, &transaction_key).await?;
+        let execution_2 = db.seed().execution(&function_version_b).await?;
+        let transaction_2 = db
+            .seed()
+            .transaction(&execution_2, &transaction_key)
+            .await?;
         let function_run_2 = db
-            .seed_function_run(
+            .seed()
+            .physical_function_run(
                 &collection,
                 &function_version_b,
                 &execution_2,
@@ -171,18 +183,19 @@ mod tests {
             )
             .await?;
 
-        db.seed_function_requirement(
-            &collection,
-            &execution_2,
-            &transaction_2,
-            &function_run_2,
-            &table,
-            Some(&function_run_1),
-            Some(&tdv),
-            None,
-            &VersionPos::try_from(0)?,
-        )
-        .await?;
+        db.seed()
+            .logical_input(
+                &collection,
+                &execution_2,
+                &transaction_2,
+                &function_run_2,
+                &table,
+                Some(&function_run_1),
+                Some(&tdv),
+                None,
+                &VersionPos::try_from(0)?,
+            )
+            .await?;
 
         // Query by function_version_a — should return only execution_1.
         let service = ExecutionListByFunctionVersionService::with_defaults(db.clone()).service();
@@ -205,7 +218,8 @@ mod tests {
     #[tokio::test]
     async fn test_list_executions_by_function_version_empty(db: TdPool) -> Result<(), TdError> {
         let collection = db
-            .seed_collection(&CollectionName::try_from("collection")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
 
         let create = FunctionRegister::builder()
@@ -220,7 +234,7 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let function_version = db.seed_function(&collection, &create).await?;
+        let function_version = db.seed().function(&collection, &create).await?;
 
         // No function requirements exist for this function version.
         let service = ExecutionListByFunctionVersionService::with_defaults(db.clone()).service();

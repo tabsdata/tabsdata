@@ -57,7 +57,7 @@ fn service() {
         // Ensure the trigger function is the current active version (never allow older versions to execute)
         from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
         from_fn(
-            By::<FunctionId>::fetch_one_version::<{ FunctionDBWithNames::All }, FunctionDBWithNames>
+            By::<FunctionId>::historic_fetch_one::<{ FunctionDBWithNames::All }, FunctionDBWithNames>
         ),
         from_fn(assert_function_version),
         // Extract Trigger type
@@ -103,8 +103,8 @@ mod tests {
         FunctionIdName, FunctionName, FunctionRunStatus, FunctionRuntimeValues, RoleId,
         TableNameDto, TransactionKey, UserId,
     };
-    use td_queries::BasicQueries;
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::LiveEntry;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -113,9 +113,10 @@ mod tests {
     async fn test_tower_metadata_execute_version(db: TdPool) {
         use crate::execution::layers::GraphOpts;
         use crate::execution::layers::execution::{
-            assert_function_status, build_execution_plan, build_function_requirements,
-            build_function_runs, build_response, build_table_data_versions, build_transaction_map,
-            build_transactions, resolve_execution_plan_versions,
+            assert_function_status, build_execution_plan, build_initial_mint_lfr_pointers,
+            build_initial_mint_ltdv_pointers, build_logical_function_run_inputs,
+            build_logical_function_runs, build_logical_table_data_versions, build_response,
+            build_transaction_map, build_transactions, resolve_execution_plan_versions,
             update_initial_function_run_status, validate_execution_plan, with_recursion_options,
         };
         use crate::graph::layers::FunctionOrTable;
@@ -129,12 +130,13 @@ mod tests {
             ExecutionDB, ExecutionDBBuilder, ExecutionRequestInternal,
         };
         use td_objects::dxo::function::FunctionDBWithNames;
-        use td_objects::dxo::function_requirement::FunctionRequirementDB;
-        use td_objects::dxo::function_run::{FunctionRunDB, FunctionRunDBBuilder};
         use td_objects::dxo::inter_collection_access::{
             InterCollectionAccess, InterCollectionAccessBuilder,
         };
-        use td_objects::dxo::table_data_version::TableDataVersionDB;
+        use td_objects::dxo::logical::{
+            LogicalFunctionRunDB, LogicalFunctionRunInputDB, LogicalFunctionRunPointerDB,
+            LogicalTableDataVersionDB, LogicalTableDataVersionPointerDB,
+        };
         use td_objects::dxo::transaction::{TransactionDB, TransactionDBBuilder};
         use td_objects::dxo::trigger::TriggerDBWithNames;
         use td_objects::tower_service::with::With;
@@ -172,7 +174,7 @@ mod tests {
                 // Ensure the trigger function is the current active version (never allow older versions to execute)
                 type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
                 type_of_val(&
-                    By::<FunctionId>::fetch_one_version::<{ FunctionDBWithNames::All }, FunctionDBWithNames>
+                    By::<FunctionId>::historic_fetch_one::<{ FunctionDBWithNames::All }, FunctionDBWithNames>
                 ),
                 type_of_val(&assert_function_version),
                 type_of_val(&With::<ExecutionRequestInternal>::extract::<TriggerType>),
@@ -207,7 +209,7 @@ mod tests {
                 type_of_val(&with_recursion_options),
                 // Find td graph
                 // Find triggers
-                type_of_val(&GraphBuilder::<GraphOpts, _, _, _, _>::find_recursive_trigger_graph),
+                type_of_val(&GraphBuilder::<GraphOpts>::find_recursive_trigger_graph),
                 // inter collection authz check
                 type_of_val(
                     &With::<TriggerDBWithNames>::vec_convert_to::<InterCollectionAccessBuilder, _>,
@@ -219,10 +221,10 @@ mod tests {
                 // Find dependencies. For clarity, we always show the function, even if
                 // generating a table centered graph, the same way we show the tables of
                 // a function centered graph.
-                type_of_val(&GraphBuilder::<GraphOpts, _, _, _, _>::main_function_id),
-                type_of_val(&GraphBuilder::<GraphOpts, _, _, _, _>::unique_triggered_function_ids),
+                type_of_val(&GraphBuilder::<GraphOpts>::main_function_id),
+                type_of_val(&GraphBuilder::<GraphOpts>::unique_triggered_function_ids),
                 type_of_val(
-                    &GraphBuilder::<GraphOpts, _, _, _, _>::find_triggered_functions_dependency_graph,
+                    &GraphBuilder::<GraphOpts>::find_triggered_functions_dependency_graph,
                 ),
                 // inter collection authz check
                 type_of_val(
@@ -233,12 +235,12 @@ mod tests {
                 ),
                 type_of_val(&Authz::<InterColl>::check_inter_collection),
                 // Find output tables
-                type_of_val(&GraphBuilder::<GraphOpts, _, _, _, _>::find_functions_output_tables),
+                type_of_val(&GraphBuilder::<GraphOpts>::find_functions_output_tables),
                 // Find all tables and functions
-                type_of_val(&GraphBuilder::<GraphOpts, _, _, _, _>::find_all_tables_map),
-                type_of_val(&GraphBuilder::<GraphOpts, _, _, _, _>::find_all_functions_map),
+                type_of_val(&GraphBuilder::<GraphOpts>::find_all_tables_map),
+                type_of_val(&GraphBuilder::<GraphOpts>::find_all_functions_map),
                 // Create td graph and validate it
-                type_of_val(&GraphBuilder::<GraphOpts, _, _, _, _>::build_td_graph),
+                type_of_val(&GraphBuilder::<GraphOpts>::build_td_graph),
                 // Build execution plan
                 type_of_val(&build_execution_plan),
                 type_of_val(&validate_execution_plan),
@@ -255,19 +257,22 @@ mod tests {
                 type_of_val(&With::<ExecutionDB>::try_convert_to::<TransactionDBBuilder, _>),
                 type_of_val(&build_transactions),
                 type_of_val(&insert_vec::<TransactionDB>),
-                // Build new function runs
-                type_of_val(&With::<ExecutionDB>::try_convert_to::<FunctionRunDBBuilder, _>),
-                type_of_val(&build_function_runs),
-                type_of_val(&insert_vec::<FunctionRunDB>),
-                // Build new table data versions
-                type_of_val(&build_table_data_versions),
-                type_of_val(&insert_vec::<TableDataVersionDB>),
-                // Create execution plan
+                // Logical LFRs — identity rows + InitialMint pointer events.
+                type_of_val(&build_logical_function_runs),
+                type_of_val(&insert_vec::<LogicalFunctionRunDB>),
+                type_of_val(&build_initial_mint_lfr_pointers),
+                type_of_val(&insert_vec::<LogicalFunctionRunPointerDB>),
+                // Logical LTDVs — identity rows + InitialMint pointer events.
+                type_of_val(&build_logical_table_data_versions),
+                type_of_val(&insert_vec::<LogicalTableDataVersionDB>),
+                type_of_val(&build_initial_mint_ltdv_pointers),
+                type_of_val(&insert_vec::<LogicalTableDataVersionPointerDB>),
+                // Resolve plan-build response.
                 type_of_val(&resolve_execution_plan_versions),
-                // Create steps
-                type_of_val(&build_function_requirements),
-                type_of_val(&insert_vec::<FunctionRequirementDB>),
-                // Update function run initial status if needed
+                // Logical dependency-binding rows.
+                type_of_val(&build_logical_function_run_inputs),
+                type_of_val(&insert_vec::<LogicalFunctionRunInputDB>),
+                // Initial-OnHold via logical chain.
                 type_of_val(&update_initial_function_run_status),
                 // Execution plan response
                 type_of_val(&build_response),
@@ -339,7 +344,11 @@ mod tests {
             panic!("Expected already running response")
         };
         // There should be only one, the previous one.
-        let executions: Vec<ExecutionDB> = db.fetch_all::<ExecutionDB>(&function.id).await.unwrap();
+        let executions: Vec<ExecutionDB> = db
+            .live()
+            .fetch_all::<ExecutionDB>(&function.id)
+            .await
+            .unwrap();
         assert_eq!(executions.len(), 1);
         assert_eq!(executions[0].id, response);
         Ok(())
@@ -438,7 +447,8 @@ mod tests {
         skip_if_running: SkipIfRunning,
     ) -> Result<(FunctionDB, ExecutionResponseInternal), TdError> {
         let collection_0 = db
-            .seed_collection(&CollectionName::try_from("collection_0")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("collection_0")?, &UserId::admin())
             .await?;
         let function_0 = FunctionName::try_from("function_0")?;
 
@@ -455,19 +465,20 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
-        let function = db.seed_function(&collection_0, &create).await?;
+        let function = db.seed().function(&collection_0, &create).await?;
 
         if let Some(previous_run) = previous_run {
             let execution = match previous_run.trigger_type {
-                TriggerType::Manual => db.seed_execution(&function).await?,
-                TriggerType::CronTrigger => db.seed_cron_execution(&function).await?,
+                TriggerType::Manual => db.seed().execution(&function).await?,
+                TriggerType::CronTrigger => db.seed().cron_execution(&function).await?,
                 _ => panic!("Unexpected trigger type"),
             };
             let transaction_key = TransactionKey::try_from("ANY")?;
-            let transaction = db.seed_transaction(&execution, &transaction_key).await?;
+            let transaction = db.seed().transaction(&execution, &transaction_key).await?;
 
             let _function_run = db
-                .seed_function_run(
+                .seed()
+                .physical_function_run(
                     &collection_0,
                     &function,
                     &execution,
@@ -499,7 +510,8 @@ mod tests {
     #[tokio::test]
     async fn test_execute_version_previous_version_err(db: TdPool) -> Result<(), TdError> {
         let collection_0 = db
-            .seed_collection(&CollectionName::try_from("collection_0")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("collection_0")?, &UserId::admin())
             .await?;
         let function_0 = FunctionName::try_from("function_0")?;
 
@@ -516,7 +528,7 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
-        let function = db.seed_function(&collection_0, &create).await?;
+        let function = db.seed().function(&collection_0, &create).await?;
 
         // Dummy update to create new version
         let update = FunctionUpdate::builder().name(function_0).build()?;
