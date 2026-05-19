@@ -4,7 +4,7 @@
 
 //! Incremental schema deltas for upgrading between versions.
 //!
-//! Each delta module (e.g., `v5_to_v6`) implements the [`SchemaDelta`] trait
+//! Each delta module (e.g., `v1_to_v2`) implements the [`SchemaDelta`] trait
 //! on a `Migration` marker type:
 //!
 //! ```ignore
@@ -18,25 +18,27 @@
 //! }
 //! ```
 //!
+//! Tabsdata 2.0 resets the ladder: `current/` is the v1 baseline of the 2.x
+//! line and there are no deltas yet. The first upgrade
+//! (`current::Schema::VERSION` bumped to 2) creates `v1_to_v2.rs` here — see
+//! the workflow below.
+//!
 //! ## Adding a new delta
 //!
-//! 1. Create `vN_to_v{N+1}.rs` with `pub struct Migration;` and `impl SchemaDelta`
-//!    (include `FINGERPRINTS` — leave empty initially, fill after running tests).
+//! 1. Create `vN_to_v{N+1}.rs` with `pub struct Migration;` and
+//!    `impl SchemaDelta` (include `FINGERPRINTS` — leave empty initially,
+//!    fill after running tests).
 //! 2. Add `pub(crate) mod vN_to_v{N+1};` to this file.
-//! 3. Add a match arm to `get()`: `{N+1} => vN_to_v{N+1}::Migration::up(backend),`.
-//! 4. Add a match arm to `fingerprints()`: `{N+1} => vN_to_v{N+1}::Migration::FINGERPRINTS,`.
+//! 3. Add a match arm to `get()`:
+//!    `{N+1} => vN_to_v{N+1}::Migration::up(backend),`.
+//! 4. Add a match arm to `fingerprints()`:
+//!    `{N+1} => vN_to_v{N+1}::Migration::FINGERPRINTS,`.
 //!
-//! The last statement in every delta **must** update `db_version` using
-//! the helper: `b.update_db_version(Self::TO_VERSION)`.
+//! The last statement in every delta **must** update `db_version` using the
+//! helper: `b.update_db_version(Self::TO_VERSION)`.
 //!
 //! See the project README for a full guide and example.
 
-pub(crate) mod v5_to_v6;
-pub(crate) mod v6_to_v7;
-pub(crate) mod v7_to_v8;
-pub(crate) mod v8_to_v9;
-
-use crate::schema::SchemaDelta;
 use crate::schema::backend::Backend;
 
 /// Returns the SQL statements to upgrade from version `target_version - 1` to
@@ -44,29 +46,18 @@ use crate::schema::backend::Backend;
 ///
 /// # Panics
 ///
-/// Panics if no delta exists for the given target version.
-pub fn get(target_version: usize, backend: impl Into<Backend>) -> Vec<String> {
-    let backend = backend.into();
-    match target_version {
-        6 => v5_to_v6::Migration::up(backend),
-        7 => v6_to_v7::Migration::up(backend),
-        8 => v7_to_v8::Migration::up(backend),
-        9 => v8_to_v9::Migration::up(backend),
-        _ => panic!("No delta migration for version {target_version}"),
-    }
+/// Panics if no delta exists for the given target version. Until the first
+/// 2.x upgrade lands, every call panics.
+pub fn get(target_version: usize, _backend: impl Into<Backend>) -> Vec<String> {
+    panic!("No delta migration for version {target_version}");
 }
 
 /// Return the stored fingerprints for a delta targeting the given version.
 ///
 /// # Panics
 ///
-/// Panics if no delta exists for the given target version.
+/// Panics if no delta exists for the given target version. Until the first
+/// 2.x upgrade lands, every call panics.
 pub fn fingerprints(target_version: usize) -> [&'static str; 3] {
-    match target_version {
-        6 => v5_to_v6::Migration::FINGERPRINTS,
-        7 => v6_to_v7::Migration::FINGERPRINTS,
-        8 => v7_to_v8::Migration::FINGERPRINTS,
-        9 => v8_to_v9::Migration::FINGERPRINTS,
-        _ => panic!("No delta migration for version {target_version}"),
-    }
+    panic!("No delta migration for version {target_version}");
 }

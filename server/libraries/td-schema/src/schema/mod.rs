@@ -57,6 +57,27 @@ pub trait SchemaVersion {
     fn build(backend: impl Into<Backend>) -> Vec<String>;
 }
 
+/// An incremental schema migration between two consecutive versions.
+///
+/// The last statement returned by [`up()`](SchemaDelta::up) **must** call
+/// `backend.update_db_version(TO_VERSION)`.
+pub trait SchemaDelta {
+    /// The version being migrated from.
+    const FROM_VERSION: usize;
+    /// The version being migrated to.
+    const TO_VERSION: usize;
+
+    /// SHA-256 fingerprints of the SQL output, one per backend
+    /// (indexed by [`Backend::index()`](backend::Backend::index):
+    /// Sqlite=0, Postgres=1, MySql=2). Frozen once the delta lands.
+    const FINGERPRINTS: [&'static str; backend::BACKEND_COUNT];
+
+    /// SQL statements to upgrade from `FROM_VERSION` to `TO_VERSION`. The
+    /// last statement **must** update `db_version` to
+    /// [`TO_VERSION`](SchemaDelta::TO_VERSION).
+    fn up(backend: Backend) -> Vec<String>;
+}
+
 /// A test fixture that creates tables and inserts test data.
 ///
 /// Unlike [`SchemaVersion`], fixtures create lightweight, isolated test
