@@ -78,6 +78,4 @@ class DruidDest(Dest):
     max_rows_per_segment: int = 5_000_000
     max_rows_in_memory: int = 1_000_000
     http_timeout_sec: int = 300
-    # TODO: document valid keys for this cfg in the docstring above
-    # (see MySQLSrc src_cfg for the pattern).
     dest_cfg: CfgSpec | None = None
