@@ -2,6 +2,8 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+#![allow(dead_code)]
+
 //! Archived full schema snapshots for previous versions.
 //!
 //! Each archive (e.g., `v1/`) is a frozen copy of the `current/` directory as
@@ -24,8 +26,6 @@
 //! 3. Add `pub(crate) mod vN;` to this file.
 //! 4. Add a match arm to `build()`: `N => vN::Schema::build(backend),`.
 //! 5. Add a match arm to `fingerprints()`: `N => vN::Schema::FINGERPRINTS,`.
-//! 6. Set `MIN_ARCHIVE` to N (or keep the existing value if earlier archives
-//!    exist).
 //!
 //! See the project README for a full guide and example.
 
@@ -35,25 +35,23 @@ use crate::schema::backend::Backend;
 ///
 /// # Panics
 ///
-/// Panics if no archive exists for the given version. Until the first 2.x
-/// upgrade lands, every call panics.
-pub fn build(version: usize, _backend: impl Into<Backend>) -> Vec<String> {
-    panic!("No archived schema for version {version}");
+/// Panics if no archive exists for the given version.
+#[allow(clippy::match_single_binding)]
+pub fn build(version: usize, backend: impl Into<Backend>) -> Vec<String> {
+    let _backend = backend.into();
+    match version {
+        _ => panic!("No archived schema for version {version}"),
+    }
 }
 
 /// Return the stored fingerprints for an archived version.
 ///
 /// # Panics
 ///
-/// Panics if no archive exists for the given version. Until the first 2.x
-/// upgrade lands, every call panics.
+/// Panics if no archive exists for the given version.
+#[allow(clippy::match_single_binding)]
 pub fn fingerprints(version: usize) -> [&'static str; 3] {
-    panic!("No archived schema for version {version}");
+    match version {
+        _ => panic!("No archived schema for version {version}"),
+    }
 }
-
-/// The minimum archived version. Archives exist for versions
-/// `MIN_ARCHIVE..CURRENT_VERSION` (exclusive of current since current is live).
-///
-/// Set to `CURRENT_VERSION + 1` (effectively empty range) until the first
-/// archive is created.
-pub const MIN_ARCHIVE: usize = 2;

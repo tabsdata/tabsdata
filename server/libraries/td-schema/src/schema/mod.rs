@@ -9,14 +9,24 @@ pub mod deltas;
 
 use backend::Backend;
 
-/// A complete schema snapshot for a specific database version.
+/// A complete schema snapshot.
 ///
-/// Implemented by `current::Schema` and each `archive::vN::Schema`.
-/// The [`build()`](SchemaVersion::build) method must return the full set of SQL
-/// statements (tables, views, indices, seed data) that create the schema from
-/// scratch for the given backend.
+/// Implemented by `current::Schema`. The [`build()`](SchemaVersion::build)
+/// method must return the full set of SQL statements (tables, views, indices,
+/// seed data) that create the schema from scratch for the given backend.
 ///
-/// ## Changing the schema
+/// ## Major-version policy
+///
+/// As of Tabsdata 2.0, the schema is no longer upgraded in place across major
+/// product versions. A 2.0 binary creates a fresh database and refuses to open
+/// any database created by 1.x. The `tabsdata_version` row in
+/// `tabsdata_system` is the gate that enforces this — see
+/// [`td_schema::CURRENT_TABSDATA_VERSION`](crate::CURRENT_TABSDATA_VERSION).
+///
+/// `Schema::VERSION` is the schema counter *within* the current major; it
+/// resets to 1 at each major bump.
+///
+/// ## Changing the schema (within a major)
 ///
 /// Follow these steps **every time** you modify tables, views, indices, or seed
 /// data in `current/`. The `test_schema_fingerprint` test will fail if you skip
@@ -30,10 +40,10 @@ use backend::Backend;
 ///    (both `build()`/`get()` and `fingerprints()` match arms).
 /// 4. Add `validate_schema_version` / `validate_delta` tests in each new module.
 /// 5. Make your schema changes in `current/`.
-/// 6. Bump [`VERSION`](SchemaVersion::VERSION) in `current::Schema`.
-///    Run `cargo test -p td-schema` — copy the new fingerprints from the error
-///    and update [`FINGERPRINTS`](SchemaVersion::FINGERPRINTS) in `current::Schema`
-///    and in the new delta.
+/// 6. Bump [`VERSION`](SchemaVersion::VERSION) in `current::Schema`. Run
+///    `cargo test -p td-schema` — copy the new fingerprints from the error
+///    and update [`FINGERPRINTS`](SchemaVersion::FINGERPRINTS) in
+///    `current::Schema` and in the new delta.
 /// 7. Verify: `cargo test -p td-schema && cargo test -p td-database --features sqlite`.
 ///
 /// See `README.md` for the full guide with code examples.
@@ -46,8 +56,7 @@ pub trait SchemaVersion {
     /// Sqlite=0, Postgres=1, MySql=2).
     ///
     /// The `test_schema_fingerprint` test recomputes these values and fails if
-    /// any don't match, preventing in-place schema changes that bypass the
-    /// migration process.
+    /// any don't match, preventing silent edits to the baseline schema.
     const FINGERPRINTS: [&'static str; backend::BACKEND_COUNT];
 
     /// Build the complete schema as a list of SQL statements for the given backend.
@@ -87,32 +96,6 @@ pub trait Fixture {
     /// Build the fixture as a list of SQL statements (CREATE TABLE + INSERTs)
     /// for the given backend.
     fn build(backend: Backend) -> Vec<String>;
-}
-
-/// An incremental migration from one database version to the next.
-///
-/// Implemented by each `deltas::vN_to_vM::Migration`.
-/// The last statement returned by [`up()`](SchemaDelta::up) **must** call
-/// `backend.update_db_version(TO_VERSION)`.
-pub trait SchemaDelta {
-    /// The version being migrated from.
-    const FROM_VERSION: usize;
-    /// The version being migrated to.
-    const TO_VERSION: usize;
-
-    /// SHA-256 fingerprints of the SQL output, one per backend
-    /// (indexed by [`Backend::index()`](backend::Backend::index):
-    /// Sqlite=0, Postgres=1, MySql=2).
-    ///
-    /// The `test_schema_fingerprint` test recomputes these values and fails if
-    /// any don't match, preventing accidental edits to frozen deltas.
-    const FINGERPRINTS: [&'static str; backend::BACKEND_COUNT];
-
-    /// Return the SQL statements to upgrade from `FROM_VERSION` to `TO_VERSION`.
-    ///
-    /// The last statement **must** update `db_version` to
-    /// [`TO_VERSION`](SchemaDelta::TO_VERSION).
-    fn up(backend: Backend) -> Vec<String>;
 }
 
 #[cfg(test)]

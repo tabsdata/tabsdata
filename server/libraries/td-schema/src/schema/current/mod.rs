@@ -3,8 +3,9 @@
 //
 
 mod collections;
-mod functions;
+pub(crate) mod functions;
 mod indices;
+mod logical;
 mod permissions;
 mod roles;
 mod sessions;
@@ -19,12 +20,15 @@ use tracing::{debug, info};
 pub struct Schema;
 
 impl SchemaVersion for Schema {
-    const VERSION: usize = 9;
+    const VERSION: usize = 1;
 
+    // Refresh via `cargo test -p td-schema --lib --features sqlite,postgres,mysql
+    // print_schema_fingerprints -- --ignored --nocapture` after any
+    // intentional change to current/.
     const FINGERPRINTS: [&'static str; 3] = [
-        "edd8ba147057a35fe36749d6bdd8f1526269ab9e9ef3aaf517d450ece31f6204", // Sqlite
-        "9a7b98f3f76b032cc7ca19f469f8de52912a436851221d295612f7f30ecf476e", // Postgres
-        "c78afbc8c266d7d7ef437ae79f3e44e4c4132e51dd750b9667cfe993854b06c9", // MySql
+        "87e7e9f042d19a8f15a7e8f53f6377da73384259d79f9818ceee998cc6ae31c2", // Sqlite
+        "0650409bb2cab4a8011a15d675823c79bde24e374af7cf1bd391029d1636fb3e", // Postgres
+        "a61b1157964ef4c83fa35b0b8d927aa9c32f844a17da0a00ab035d714a021f2d", // MySql
     ];
 
     fn build(backend: impl Into<Backend>) -> Vec<String> {
@@ -42,6 +46,7 @@ impl SchemaVersion for Schema {
             .chain(functions::tables())
             .chain(sessions::tables())
             .chain(permissions::tables())
+            .chain(logical::tables())
         {
             stmts.push(backend.build_schema(table));
         }
@@ -50,6 +55,7 @@ impl SchemaVersion for Schema {
         // 2. Triggers (after tables, before views — views may read _current tables)
         let before = stmts.len();
         stmts.extend(functions::triggers(&backend));
+        stmts.extend(logical::triggers(&backend));
         debug!(count = stmts.len() - before, "Triggers created");
 
         // 3. Views (order respects view dependencies)

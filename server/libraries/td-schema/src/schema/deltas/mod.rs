@@ -2,6 +2,8 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+#![allow(dead_code)]
+
 //! Incremental schema deltas for upgrading between versions.
 //!
 //! Each delta module (e.g., `v1_to_v2`) implements the [`SchemaDelta`] trait
@@ -46,18 +48,23 @@ use crate::schema::backend::Backend;
 ///
 /// # Panics
 ///
-/// Panics if no delta exists for the given target version. Until the first
-/// 2.x upgrade lands, every call panics.
-pub fn get(target_version: usize, _backend: impl Into<Backend>) -> Vec<String> {
-    panic!("No delta migration for version {target_version}");
+/// Panics if no delta exists for the given target version.
+#[allow(clippy::match_single_binding)]
+pub fn get(target_version: usize, backend: impl Into<Backend>) -> Vec<String> {
+    let _backend = backend.into();
+    match target_version {
+        _ => panic!("No delta migration for version {target_version}"),
+    }
 }
 
 /// Return the stored fingerprints for a delta targeting the given version.
 ///
 /// # Panics
 ///
-/// Panics if no delta exists for the given target version. Until the first
-/// 2.x upgrade lands, every call panics.
+/// Panics if no delta exists for the given target version.
+#[allow(clippy::match_single_binding)]
 pub fn fingerprints(target_version: usize) -> [&'static str; 3] {
-    panic!("No delta migration for version {target_version}");
+    match target_version {
+        _ => panic!("No delta migration for version {target_version}"),
+    }
 }

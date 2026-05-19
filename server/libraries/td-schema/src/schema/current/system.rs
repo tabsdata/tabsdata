@@ -5,9 +5,9 @@
 use sea_query::{ColumnDef, InsertStatement, Query, Table, TableCreateStatement};
 
 use super::Schema;
-use crate::TabsdataSystem;
 use crate::schema::SchemaVersion;
 use crate::schema::backend::{Backend, ViewDef};
+use crate::{CURRENT_TABSDATA_VERSION, TABSDATA_VERSION_NAME, TabsdataSystem};
 
 pub fn tables() -> Vec<TableCreateStatement> {
     vec![
@@ -30,7 +30,18 @@ pub fn views(_b: &Backend) -> Vec<ViewDef> {
 
 pub fn seed() -> Vec<InsertStatement> {
     vec![
-        // Initial db_version set to the current version for fresh installs.
+        // Major-version marker. Gate-checked at startup before db_version so
+        // 1.x databases (which lack this row) are refused loudly instead of
+        // misinterpreted under the reset db_version counter.
+        Query::insert()
+            .into_table(TabsdataSystem::Table)
+            .columns([TabsdataSystem::Name, TabsdataSystem::Value])
+            .values_panic([
+                TABSDATA_VERSION_NAME.into(),
+                CURRENT_TABSDATA_VERSION.to_string().into(),
+            ])
+            .to_owned(),
+        // Schema counter within the current major. Resets per major bump.
         Query::insert()
             .into_table(TabsdataSystem::Table)
             .columns([TabsdataSystem::Name, TabsdataSystem::Value])
