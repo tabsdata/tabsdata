@@ -5,12 +5,12 @@
 pub(crate) mod auth;
 pub(crate) mod collections;
 pub(crate) mod executions;
+pub(crate) mod function_runs;
 pub(crate) mod functions;
 pub(crate) mod inter_collection_permissions;
 pub(crate) mod internal;
 pub(crate) mod logical_versions;
 pub(crate) mod permissions;
-pub(crate) mod function_runs;
 pub(crate) mod roles;
 pub(crate) mod server_status;
 pub(crate) mod tables;

@@ -77,10 +77,7 @@ impl Entity for Defs {
             Query::select()
                 .expr(Expr::col((InterCollectionPermissions::Table, Asterisk)))
                 .expr_as(
-                    b.name_or_id(
-                        (Users::Table, Users::Name),
-                        (InterCollectionPermissions::Table, InterCollectionPermissions::GrantedById),
-                    ),
+                    b.name_or_id((Users::Table, Users::Name), (InterCollectionPermissions::Table, InterCollectionPermissions::GrantedById)),
                     Alias::new("granted_by"),
                 )
                 .expr_as(Expr::col((from_collection.clone(), Collections::Name)), Alias::new("from_collection"))

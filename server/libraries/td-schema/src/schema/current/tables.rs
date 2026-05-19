@@ -3,8 +3,8 @@
 //
 
 use sea_query::{
-    Alias, Asterisk, ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement, IntoIden, JoinType, Query,
-    Table, TableCreateStatement,
+    Alias, Asterisk, ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement, IntoIden, JoinType,
+    Query, Table, TableCreateStatement,
 };
 
 use super::collections::Collections;
@@ -102,10 +102,7 @@ impl Entity for Defs {
             Query::select()
                 .expr(Expr::col((Tables::Table, Asterisk)))
                 .expr_as(Expr::col((Tables::Table, Tables::FunctionParamPos)).lt(0), Alias::new("system"))
-                .expr_as(
-                    b.name_or_id((Users::Table, Users::Name), (Tables::Table, Tables::DefinedById)),
-                    Alias::new("defined_by"),
-                )
+                .expr_as(b.name_or_id((Users::Table, Users::Name), (Tables::Table, Tables::DefinedById)), Alias::new("defined_by"))
                 .expr_as(Expr::col((Collections::Table, Collections::Name)), Alias::new("collection"))
                 .expr_as(Expr::col((Functions::Table, Functions::Name)), Alias::new("function"))
                 .from(Tables::Table)

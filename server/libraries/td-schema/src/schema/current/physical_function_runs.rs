@@ -143,10 +143,7 @@ impl Entity for Defs {
                 .expr_as(Expr::col((Functions::Table, Functions::Name)), Alias::new("name"))
                 .expr_as(Expr::col((Collections::Table, Collections::Name)), Alias::new("collection"))
                 .expr_as(Expr::col((Executions::Table, Executions::Name)), Alias::new("execution"))
-                .expr_as(
-                    Expr::col((Executions::Table, Executions::FunctionVersionId)),
-                    Alias::new("execution_function_version_id"),
-                )
+                .expr_as(Expr::col((Executions::Table, Executions::FunctionVersionId)), Alias::new("execution_function_version_id"))
                 .expr_as(
                     b.name_or_id((Users::Table, Users::Name), (PhysicalFunctionRuns::Table, PhysicalFunctionRuns::TriggeredById)),
                     Alias::new("triggered_by"),

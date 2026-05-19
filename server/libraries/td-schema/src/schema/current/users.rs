@@ -69,10 +69,7 @@ impl Entity for Defs {
             UsersWithNames,
             Query::select()
                 .expr(Expr::col((Users::Table, Asterisk)))
-                .expr_as(
-                    b.name_or_id((created_by_user.clone(), Users::Name), (Users::Table, Users::CreatedById)),
-                    Alias::new("created_by"),
-                )
+                .expr_as(b.name_or_id((created_by_user.clone(), Users::Name), (Users::Table, Users::CreatedById)), Alias::new("created_by"))
                 .expr_as(
                     b.name_or_id((modified_by_user.clone(), Users::Name), (Users::Table, Users::ModifiedById)),
                     Alias::new("modified_by"),

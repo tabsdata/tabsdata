@@ -81,17 +81,11 @@ where
             .expr(Expr::col((src_view, Asterisk)))
             .expr_as(Expr::col((pfr_agg.clone(), Alias::new("started_on"))), Alias::new("started_on"))
             .expr_as(
-                Expr::case(
-                    Expr::col((status_view, Alias::new("finished"))),
-                    Expr::col((pfr_agg.clone(), Alias::new("ended_on"))),
-                ),
+                Expr::case(Expr::col((status_view, Alias::new("finished"))), Expr::col((pfr_agg.clone(), Alias::new("ended_on")))),
                 Alias::new("ended_on"),
             )
             .expr_as(Expr::col((status_view, Alias::new("status"))), Alias::new("status"))
-            .expr_as(
-                Expr::col((status_view, Alias::new("function_run_status_count"))),
-                Alias::new("function_run_status_count"),
-            )
+            .expr_as(Expr::col((status_view, Alias::new("function_run_status_count"))), Alias::new("function_run_status_count"))
             .from(src_view)
             .join_subquery(
                 JoinType::LeftJoin,

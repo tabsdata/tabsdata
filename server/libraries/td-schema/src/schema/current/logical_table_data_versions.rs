@@ -10,8 +10,8 @@
 //! LTDV pointer event log).
 
 use sea_query::{
-    Alias, Asterisk, ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement, IntoIden, JoinType, Query,
-    SubQueryStatement, Table, TableCreateStatement,
+    Alias, Asterisk, ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement, IntoIden, JoinType,
+    Query, SubQueryStatement, Table, TableCreateStatement,
 };
 
 use super::collections::Collections;
@@ -155,10 +155,7 @@ impl Entity for Defs {
                 .expr_as(Expr::col((Collections::Table, Collections::Name)), Alias::new("collection"))
                 .expr_as(Expr::col((Executions::Table, Executions::Name)), Alias::new("execution"))
                 .expr_as(
-                    b.name_or_id(
-                        (Users::Table, Users::Name),
-                        (LogicalTableDataVersions::Table, LogicalTableDataVersions::TriggeredById),
-                    ),
+                    b.name_or_id((Users::Table, Users::Name), (LogicalTableDataVersions::Table, LogicalTableDataVersions::TriggeredById)),
                     Alias::new("triggered_by"),
                 )
                 // PTDV-derived columns (bound pointer → PTDV).
@@ -184,15 +181,9 @@ impl Entity for Defs {
                     Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::SchemaChanged)),
                     Alias::new("schema_changed"),
                 )
-                .expr_as(
-                    Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::ColumnCount)),
-                    Alias::new("column_count"),
-                )
+                .expr_as(Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::ColumnCount)), Alias::new("column_count"))
                 .expr_as(Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::RowCount)), Alias::new("row_count"))
-                .expr_as(
-                    Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::SchemaHash)),
-                    Alias::new("schema_hash"),
-                )
+                .expr_as(Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::SchemaHash)), Alias::new("schema_hash"))
                 .expr_as(
                     Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::WithDataTableDataVersionId)),
                     Alias::new("with_data_table_data_version_id"),
@@ -202,19 +193,13 @@ impl Entity for Defs {
                     Alias::new("physical_function_run_id"),
                 )
                 // PFR-side audit reached through the PTDV's producer.
-                .expr_as(
-                    Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::StartedOn)),
-                    Alias::new("started_on"),
-                )
+                .expr_as(Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::StartedOn)), Alias::new("started_on"))
                 .expr_as(Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::EndedOn)), Alias::new("ended_on"))
                 // Canonical LFR-side status of the LTDV's producer LFR
                 // (sticky-Committed). Use this for committed-only filters.
                 .expr_as(Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::Status)), Alias::new("status"))
                 // PFR-side per-attempt status (Running, Done, Error, …).
-                .expr_as(
-                    Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::Status)),
-                    Alias::new("physical_status"),
-                )
+                .expr_as(Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::Status)), Alias::new("physical_status"))
                 .expr_as(Expr::col((Functions::Table, Functions::Name)), Alias::new("function"))
                 .expr_as(Expr::col((Functions::Table, Functions::DataLocation)), Alias::new("data_location"))
                 .expr_as(Expr::col((Functions::Table, Functions::StorageVersion)), Alias::new("storage_version"))

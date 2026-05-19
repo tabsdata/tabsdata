@@ -74,15 +74,9 @@ impl Entity for Defs {
             Query::select()
                 .expr(Expr::col((UsersRoles::Table, UsersRoles::Id)))
                 .expr(Expr::col((UsersRoles::Table, UsersRoles::UserId)))
-                .expr_as(
-                    b.name_or_id((Users::Table, Users::Name), (UsersRoles::Table, UsersRoles::UserId)),
-                    Alias::new("user"),
-                )
+                .expr_as(b.name_or_id((Users::Table, Users::Name), (UsersRoles::Table, UsersRoles::UserId)), Alias::new("user"))
                 .expr(Expr::col((UsersRoles::Table, UsersRoles::RoleId)))
-                .expr_as(
-                    b.name_or_id((Roles::Table, Roles::Name), (UsersRoles::Table, UsersRoles::RoleId)),
-                    Alias::new("role"),
-                )
+                .expr_as(b.name_or_id((Roles::Table, Roles::Name), (UsersRoles::Table, UsersRoles::RoleId)), Alias::new("role"))
                 .expr(Expr::col((UsersRoles::Table, UsersRoles::AddedOn)))
                 .expr(Expr::col((UsersRoles::Table, UsersRoles::AddedById)))
                 .expr_as(

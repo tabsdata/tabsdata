@@ -622,10 +622,7 @@ pub async fn update_initial_function_run_status(
     execution: Ref<ExecutionDB>,
     at_time: Ref<AtTime>,
 ) -> Result<(), TdError> {
-    let lfr_ids = conn
-        .lfr()
-        .blocked_ids(&execution.id, &at_time)
-        .await?;
+    let lfr_ids = conn.lfr().blocked_ids(&execution.id, &at_time).await?;
 
     debug!(
         execution_id = %execution.id,

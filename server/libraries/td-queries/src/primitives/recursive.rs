@@ -410,8 +410,8 @@ where
         )
         .finally(Expr::col((Rcv, recurse_down)))
         .into(),
-        (true, false) => Expr::col((Rcv, recurse_up)).into(),
-        (false, true) => Expr::col((Rcv, recurse_down)).into(),
+        (true, false) => Expr::col((Rcv, recurse_up)),
+        (false, true) => Expr::col((Rcv, recurse_down)),
         (false, false) => unreachable!(),
     };
 

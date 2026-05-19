@@ -35,10 +35,7 @@ impl LatestBoundPointer {
         Query::select()
             .column((self.pointer_table.clone(), self.concrete_id_col))
             .from(self.pointer_table.clone())
-            .and_where(
-                Expr::col((self.pointer_table.clone(), self.logical_id_col))
-                    .equals((self.outer_table, self.outer_id_col)),
-            )
+            .and_where(Expr::col((self.pointer_table.clone(), self.logical_id_col)).equals((self.outer_table, self.outer_id_col)))
             .and_where(Expr::col((self.pointer_table.clone(), Alias::new("status"))).eq(POINTER_STATUS_BOUND))
             .order_by((self.pointer_table.clone(), Alias::new("set_on")), Order::Desc)
             .order_by((self.pointer_table, Alias::new("id")), Order::Desc)
@@ -81,12 +78,7 @@ mod tests {
     #[test]
     fn into_subquery_correlates_with_outer_and_filters_by_bound_status() {
         let sql = Backend::Sqlite.build_query(sample().into_subquery());
-        assert!(
-            sql.contains(
-                "\"logical_function_run_pointers\".\"logical_function_run_id\" = \"logical_function_runs\".\"id\""
-            ),
-            "{sql}"
-        );
+        assert!(sql.contains("\"logical_function_run_pointers\".\"logical_function_run_id\" = \"logical_function_runs\".\"id\""), "{sql}");
         assert!(sql.contains("\"logical_function_run_pointers\".\"status\" = 'B'"), "{sql}");
     }
 

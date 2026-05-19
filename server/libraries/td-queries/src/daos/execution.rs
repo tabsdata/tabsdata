@@ -90,7 +90,6 @@ where
             .map(|dao| Execution::from_dao(dao).map_err(SqlError::DtoConversionError))
             .collect()
     }
-
 }
 
 /// List executions consuming a specific TDV as input. Uses an EXISTS

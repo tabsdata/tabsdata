@@ -74,8 +74,7 @@ where
                 Expr::col(PhysicalTableDataVersionDBIden::TableId).eq(table_id.as_sea_value()),
             )
             .and_where(
-                Expr::col(PhysicalTableDataVersionDBIden::HasData)
-                    .eq(HasData::TRUE.as_sea_value()),
+                Expr::col(PhysicalTableDataVersionDBIden::HasData).eq(HasData::TRUE.as_sea_value()),
             )
             .and_where(
                 Expr::col(PhysicalTableDataVersionDBIden::TriggeredOn)

@@ -175,10 +175,7 @@ mod tests {
     #[cfg(sqlite)]
     #[tokio::test]
     async fn test_tabsdata_db_schema_creation() {
-        let db_file = tdtestdir!().join("test.db");
-        let db_url = Url::from_file_path(db_file).unwrap();
-        let config = DatabaseConfig::new(db_url).unwrap();
-        let db = crate::db(&config).await.unwrap();
+        let db = crate::test_utils::sqlite::pool().await;
         assert!(db.upgrade().await.is_ok());
         assert!(db.check().await.is_ok());
     }

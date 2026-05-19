@@ -13,11 +13,9 @@
 //! Consumer build.rs:
 //!
 //! ```no_run
-//! fn main() {
-//!     td_build::customizer::{Customization, Customizer};
-//!     td_build::customizer::Customization::customize();
-//!     td_build::backend_cfg::propagate();
-//! }
+//!  td_build::customizer::{Customization, Customizer};
+//!  td_build::customizer::Customization::customize();
+//!  td_build::backend_cfg::propagate();
 //! ```
 //!
 //! Requires the consumer to depend on `td-database` directly — that's how

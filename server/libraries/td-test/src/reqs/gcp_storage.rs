@@ -13,9 +13,7 @@ crate::define_requires! {
 #[cfg(test)]
 mod tests {
     use crate::__private::{TestSetup, TestSetupExecution};
-    use crate::reqs::{
-        GcpStorageWithServiceAccountKeyReqs, ReqsTestSetup, TestRequirementsInEnv,
-    };
+    use crate::reqs::{GcpStorageWithServiceAccountKeyReqs, ReqsTestSetup, TestRequirementsInEnv};
     use std::collections::HashMap;
 
     #[tokio::test]

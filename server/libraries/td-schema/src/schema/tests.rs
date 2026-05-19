@@ -225,10 +225,7 @@ fn test_entities_are_fk_topologically_sorted() {
                 if entity_tables.contains(&fk) {
                     continue; // self-reference within the same entity
                 }
-                assert!(
-                    declared.contains(&fk),
-                    "ENTITIES[{i}]: table {table:?} references {fk:?} which is not yet declared in ENTITIES",
-                );
+                assert!(declared.contains(&fk), "ENTITIES[{i}]: table {table:?} references {fk:?} which is not yet declared in ENTITIES",);
             }
             entity_tables.push(table.clone());
             declared.insert(table);
@@ -327,8 +324,7 @@ fn test_current_peers_are_paired() {
     }
     for (i, name) in tables_in_order.iter().enumerate() {
         if let Some(base) = name.strip_suffix("_current") {
-            let base_idx =
-                tables_in_order.iter().position(|n| n == base).unwrap_or_else(|| panic!("{name} has no source table {base}"));
+            let base_idx = tables_in_order.iter().position(|n| n == base).unwrap_or_else(|| panic!("{name} has no source table {base}"));
             assert!(base_idx < i, "{name} declared at index {i} but its source {base} is at {base_idx}");
         }
     }
@@ -529,13 +525,8 @@ static COLS_BY_TABLE: LazyLock<HashMap<String, Vec<String>>> = LazyLock::new(|| 
 fn test_fk_target_columns_resolve() {
     for sql in cached_build(Backend::Sqlite) {
         for (t, c) in fk_target_table_columns(sql) {
-            let cols = COLS_BY_TABLE
-                .get(&t)
-                .unwrap_or_else(|| panic!("FK in {sql} references unknown table {t:?}"));
-            assert!(
-                cols.iter().any(|x| x == &c),
-                "FK target {t}({c}) does not appear in {t}'s declared columns {cols:?}",
-            );
+            let cols = COLS_BY_TABLE.get(&t).unwrap_or_else(|| panic!("FK in {sql} references unknown table {t:?}"));
+            assert!(cols.iter().any(|x| x == &c), "FK target {t}({c}) does not appear in {t}'s declared columns {cols:?}",);
         }
     }
 }
@@ -549,33 +540,19 @@ fn test_maintain_current_trigger_columns_match_tables() {
     for e in current::ENTITIES {
         for spec in e.create_db_triggers() {
             let (source, target, cols): (String, String, Vec<String>) = match &spec {
-                TriggerSpec::MaintainCurrent(d) => (
-                    d.source_table.to_string(),
-                    d.target_table.to_string(),
-                    d.columns.iter().map(|c| c.to_string()).collect(),
-                ),
-                TriggerSpec::VersionedCurrent(d) => (
-                    d.source_table.to_string(),
-                    d.target_table.to_string(),
-                    d.columns.iter().map(|c| c.to_string()).collect(),
-                ),
+                TriggerSpec::MaintainCurrent(d) => {
+                    (d.source_table.to_string(), d.target_table.to_string(), d.columns.iter().map(|c| c.to_string()).collect())
+                }
+                TriggerSpec::VersionedCurrent(d) => {
+                    (d.source_table.to_string(), d.target_table.to_string(), d.columns.iter().map(|c| c.to_string()).collect())
+                }
                 _ => continue,
             };
-            let source_cols = COLS_BY_TABLE
-                .get(&source)
-                .unwrap_or_else(|| panic!("trigger source table {source:?} not declared"));
-            let target_cols = COLS_BY_TABLE
-                .get(&target)
-                .unwrap_or_else(|| panic!("trigger target table {target:?} not declared"));
+            let source_cols = COLS_BY_TABLE.get(&source).unwrap_or_else(|| panic!("trigger source table {source:?} not declared"));
+            let target_cols = COLS_BY_TABLE.get(&target).unwrap_or_else(|| panic!("trigger target table {target:?} not declared"));
             for c in &cols {
-                assert!(
-                    source_cols.iter().any(|sc| sc == c),
-                    "{source}: maintain_current column {c:?} not present (have {source_cols:?})",
-                );
-                assert!(
-                    target_cols.iter().any(|tc| tc == c),
-                    "{target}: maintain_current column {c:?} not present (have {target_cols:?})",
-                );
+                assert!(source_cols.iter().any(|sc| sc == c), "{source}: maintain_current column {c:?} not present (have {source_cols:?})",);
+                assert!(target_cols.iter().any(|tc| tc == c), "{target}: maintain_current column {c:?} not present (have {target_cols:?})",);
             }
         }
     }

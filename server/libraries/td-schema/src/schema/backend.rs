@@ -69,11 +69,7 @@ impl Backend {
     /// pattern used across views, returned as a [`Expr`] for use in select lists.
     /// Both arguments are `(table, column)` [`Iden`] tuples so call sites name
     /// the columns via the same enums used elsewhere in the schema.
-    pub(crate) fn name_or_id<T1: Iden, C1: Iden, T2: Iden, C2: Iden>(
-        &self,
-        name_col: (T1, C1),
-        id_col: (T2, C2),
-    ) -> Expr {
+    pub(crate) fn name_or_id<T1: Iden, C1: Iden, T2: Iden, C2: Iden>(&self, name_col: (T1, C1), id_col: (T2, C2)) -> Expr {
         let name = format!("{}.{}", name_col.0.to_string(), name_col.1.to_string());
         let id = format!("{}.{}", id_col.0.to_string(), id_col.1.to_string());
         Expr::cust(format!("COALESCE({}, {})", name, self.concat(&["'['", &id, "']'"])))

@@ -65,10 +65,7 @@ impl Entity for Defs {
                 .expr(Expr::col((Roles::Table, Roles::Description)))
                 .expr(Expr::col((Roles::Table, Roles::CreatedOn)))
                 .expr(Expr::col((Roles::Table, Roles::CreatedById)))
-                .expr_as(
-                    b.name_or_id((created_by_user.clone(), Users::Name), (Roles::Table, Roles::CreatedById)),
-                    Alias::new("created_by"),
-                )
+                .expr_as(b.name_or_id((created_by_user.clone(), Users::Name), (Roles::Table, Roles::CreatedById)), Alias::new("created_by"))
                 .expr(Expr::col((Roles::Table, Roles::ModifiedOn)))
                 .expr(Expr::col((Roles::Table, Roles::ModifiedById)))
                 .expr_as(

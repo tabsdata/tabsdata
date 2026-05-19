@@ -2370,7 +2370,7 @@ mod tests {
         ));
         let scope = Arc::new(scope);
         assert_ok(
-            &db,
+            db,
             &authz_context,
             &request_context,
             &scope,
@@ -2391,7 +2391,7 @@ mod tests {
         ));
         let scope = Arc::new(scope);
         assert_error(
-            &db,
+            db,
             &authz_context,
             &request_context,
             &scope,
@@ -2422,7 +2422,6 @@ mod tests {
         let mut authz_context = AuthzContextForTest::default();
         authz_context = authz_context.add_inter_collection_permission(&source, &target);
         let authz_context = Arc::new(authz_context);
-
 
         let list = Arc::new(vec![]);
 
@@ -2474,7 +2473,6 @@ mod tests {
         let mut authz_context = AuthzContextForTest::default();
         authz_context = authz_context.add_inter_collection_permission(&source, &target);
         let authz_context = Arc::new(authz_context);
-
 
         let list = Arc::new(vec![
             InterCollectionAccess::builder()
@@ -2594,7 +2592,9 @@ mod tests {
     }
 
     #[td_test::test(db)]
-    async fn test_visible_collections_no_admin_dev_collection_permission_inter_collection(db: TdPool) {
+    async fn test_visible_collections_no_admin_dev_collection_permission_inter_collection(
+        db: TdPool,
+    ) {
         let mut conn = db.acquire().await.unwrap();
 
         let role = RoleId::default();

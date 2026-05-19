@@ -21,9 +21,7 @@ use td_objects::types::basic::{
     SchemaChanged, WorkerId,
 };
 use td_objects::{Buildable, and};
-use td_queries::{
-    ChunkedQueries, LfrEntry, LiveEntry, LtdvEntry,
-};
+use td_queries::{ChunkedQueries, LfrEntry, LiveEntry, LtdvEntry};
 use td_tower::ctx_service::ReqCtx;
 use td_tower::extractors::{MutRef, Ref};
 use tracing::{debug, instrument};
@@ -295,10 +293,8 @@ async fn bfs_downstream_lfrs(
 
     while !frontier.is_empty() {
         let exclude: Vec<LogicalFunctionRunId> = visited.iter().cloned().collect();
-        let next: Vec<LogicalFunctionRunId> = conn
-            .lfr()
-            .downstream_one_hop(&frontier, &exclude)
-            .await?;
+        let next: Vec<LogicalFunctionRunId> =
+            conn.lfr().downstream_one_hop(&frontier, &exclude).await?;
         let mut new_frontier = Vec::new();
         for id in next {
             if visited.insert(id.clone()) {

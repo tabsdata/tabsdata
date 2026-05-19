@@ -45,7 +45,11 @@ impl Fixture for RecursiveVersions {
                     .col(ColumnDef::new(TestTable::Status).text().not_null())
                     .col(ColumnDef::new(TestTable::Current).text().not_null())
                     .col(ColumnDef::new(TestTable::Downstream).text().not_null())
-                    .col(ColumnDef::new(TestTable::DefinedOn).timestamp_with_time_zone().not_null())
+                    .col(
+                        ColumnDef::new(TestTable::DefinedOn)
+                            .timestamp_with_time_zone()
+                            .not_null(),
+                    )
                     .to_owned(),
             ),
         );

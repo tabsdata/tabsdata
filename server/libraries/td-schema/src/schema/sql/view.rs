@@ -25,7 +25,7 @@ impl ViewDef {
 
     /// Render this view to a `CREATE VIEW name AS …` statement for `b`.
     pub(crate) fn render(&self, b: &Backend) -> String {
-        format!("CREATE VIEW {} AS {}", self.name.to_string(), b.build_query(self.select.clone()))
+        format!("CREATE VIEW {} AS {}", self.name, b.build_query(self.select.clone()))
     }
 }
 

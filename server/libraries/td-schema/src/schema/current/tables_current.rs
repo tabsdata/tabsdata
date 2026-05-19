@@ -2,7 +2,9 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-use sea_query::{Alias, Asterisk, ColumnDef, Expr, ExprTrait, Iden, Index, IndexCreateStatement, JoinType, Query, Table, TableCreateStatement};
+use sea_query::{
+    Alias, Asterisk, ColumnDef, Expr, ExprTrait, Iden, Index, IndexCreateStatement, JoinType, Query, Table, TableCreateStatement,
+};
 
 use super::collections::Collections;
 use super::functions::Functions;

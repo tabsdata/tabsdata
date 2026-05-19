@@ -26,4 +26,3 @@ pub mod __private {
         fn setup(&self) -> impl Future<Output = TestSetupExecution<T>> + Send;
     }
 }
-

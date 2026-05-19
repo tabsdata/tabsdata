@@ -54,8 +54,7 @@ use td_objects::types::basic::{
     WorkerId, WorkerMessageStatus, WorkerStatus, WorkerType,
 };
 use td_queries::{
-    ChunkedQueries, DependenciesEntry, LfrEntry, LtdvEntry, PfrEntry,
-    VersionedEntry,
+    ChunkedQueries, DependenciesEntry, LfrEntry, LtdvEntry, PfrEntry, VersionedEntry,
 };
 use td_storage::location::StorageLocation;
 use td_storage::{SPath, Storage};
@@ -626,9 +625,7 @@ pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessag
                                 // at that time would actually see.
                                 let r = conn
                                     .ltdv()
-                                    .latest_bound_tdv_with_data_for_table(
-                                        &key.0, &key.1, false,
-                                    )
+                                    .latest_bound_tdv_with_data_for_table(&key.0, &key.1, false)
                                     .await?;
                                 latest_with_data_cache.insert(key, r.clone());
                                 r

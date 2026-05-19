@@ -84,7 +84,7 @@ mod tests {
         assert_eq!(transaction.collection_id, execution.collection_id);
         assert_eq!(transaction.execution_id, execution.id);
         assert_eq!(transaction.transaction_key, transaction_key);
-        assert_eq!(transaction.triggered_on, transaction.triggered_on);
+        assert_eq!(transaction.triggered_on, execution.triggered_on);
         assert_eq!(transaction.triggered_by_id, execution.triggered_by_id);
     }
 }

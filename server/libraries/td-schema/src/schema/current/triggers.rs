@@ -8,8 +8,8 @@
 //! produces via `create_db_triggers` to maintain its `_current` snapshot.
 
 use sea_query::{
-    Alias, Asterisk, ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement, IntoIden, JoinType, Query,
-    Table, TableCreateStatement,
+    Alias, Asterisk, ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement, IntoIden, JoinType,
+    Query, Table, TableCreateStatement,
 };
 
 use super::collections::Collections;
@@ -145,11 +145,7 @@ fn triggers_with_names() -> ViewDef {
                 Collections::Table,
                 Expr::col((Triggers::Table, Triggers::CollectionId)).equals((Collections::Table, Collections::Id)),
             )
-            .join(
-                JoinType::LeftJoin,
-                Users::Table,
-                Expr::col((Triggers::Table, Triggers::DefinedById)).equals((Users::Table, Users::Id)),
-            )
+            .join(JoinType::LeftJoin, Users::Table, Expr::col((Triggers::Table, Triggers::DefinedById)).equals((Users::Table, Users::Id)))
             .join_as(
                 JoinType::LeftJoin,
                 Collections::Table,

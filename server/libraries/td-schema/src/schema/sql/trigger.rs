@@ -19,7 +19,7 @@ fn join_idens(idens: &[DynIden], sep: &str) -> String {
 }
 
 fn join_new_idens(idens: &[DynIden], sep: &str) -> String {
-    idens.iter().map(|i| format!("NEW.{}", i.to_string())).collect::<Vec<_>>().join(sep)
+    idens.iter().map(|i| format!("NEW.{}", i)).collect::<Vec<_>>().join(sep)
 }
 
 fn join_excluded_update(idens: &[DynIden], skip_partition: &str) -> String {

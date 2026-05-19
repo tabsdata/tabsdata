@@ -47,10 +47,7 @@ impl SeedCurrent {
         let ranked_sql = b.build_query(ranked.take());
 
         let cols_csv = self.columns.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(", ");
-        format!(
-            "INSERT INTO {target} ({cols_csv}) SELECT {cols_csv} FROM ({ranked_sql}) WHERE rn = 1",
-            target = self.target.to_string(),
-        )
+        format!("INSERT INTO {target} ({cols_csv}) SELECT {cols_csv} FROM ({ranked_sql}) WHERE rn = 1", target = self.target,)
     }
 }
 

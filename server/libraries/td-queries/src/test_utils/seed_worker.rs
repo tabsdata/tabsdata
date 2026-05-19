@@ -146,7 +146,10 @@ mod tests {
         assert_eq!(worker.collection_id, collection.id);
         assert_eq!(worker.execution_id, Some(execution.id));
         assert_eq!(worker.transaction_id, Some(transaction.id));
-        assert_eq!(worker.physical_function_run_id, Some(physical_function_run.id));
+        assert_eq!(
+            worker.physical_function_run_id,
+            Some(physical_function_run.id)
+        );
         assert_eq!(
             worker.function_version_id,
             physical_function_run.function_version_id
