@@ -28,10 +28,8 @@
 //!   [`RecursiveQuery`](crate::RecursiveQuery): non-versioned recursion.
 //! - Per-DAO surfaces: [`DependenciesEntry`](crate::DependenciesEntry),
 //!   [`ExecutionsEntry`](crate::ExecutionsEntry),
-//!   [`LogicalCascadeEntry`](crate::LogicalCascadeEntry),
-//!   [`LogicalPointersEntry`](crate::LogicalPointersEntry),
-//!   [`LogicalRunsEntry`](crate::LogicalRunsEntry),
-//!   [`PhysicalRunsEntry`](crate::PhysicalRunsEntry),
+//!   [`LfrEntry`](crate::LfrEntry), [`LtdvEntry`](crate::LtdvEntry),
+//!   [`PfrEntry`](crate::PfrEntry),
 //!   [`SessionsEntry`](crate::SessionsEntry).
 //!
 //! Standard caller import:

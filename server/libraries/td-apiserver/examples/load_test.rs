@@ -19,7 +19,7 @@ use td_objects::dxo::graph::FunctionNode;
 use td_objects::dxo::table::{TableDB, TableDBWithNames};
 use td_objects::transaction::map::TransactionMapper;
 use td_objects::types::basic::{
-    BundleId, CollectionName, Decorator, FunctionName, FunctionRunStatus, TableNameDto,
+    BundleId, CollectionName, Decorator, FunctionName, LogicalFunctionRunStatus, TableNameDto,
     UserEnabled, UserName,
 };
 use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
@@ -277,7 +277,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     function,
                     &execution,
                     &transaction,
-                    &FunctionRunStatus::Committed,
+                    &LogicalFunctionRunStatus::Committed,
                 )
                 .await?;
 

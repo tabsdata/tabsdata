@@ -19,7 +19,7 @@ use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::worker::{UpdateWorkerMessageStatusDB, WorkerDB};
 use td_objects::dxo::yaml::function_runner::v2::FunctionInput;
 use td_objects::types::basic::{
-    FunctionRunStatus, LogicalFunctionRunId, PhysicalFunctionRunId, WorkerId,
+    LogicalFunctionRunId, LogicalFunctionRunStatus, PhysicalFunctionRunId, WorkerId,
 };
 use td_queries::LiveEntry;
 use td_tower::extractors::{MutRef, Ref};
@@ -178,12 +178,12 @@ pub async fn unlock_function_runner_worker<T: WorkerMessageQueue>(
         .await?;
 
     let branch = match &lfr.status {
-        FunctionRunStatus::Requested => DispatchBranch::Initial,
-        FunctionRunStatus::Committed
-        | FunctionRunStatus::Canceled
-        | FunctionRunStatus::Yanked
-        | FunctionRunStatus::Done
-        | FunctionRunStatus::Failed => DispatchBranch::Replay,
+        LogicalFunctionRunStatus::Requested => DispatchBranch::Initial,
+        LogicalFunctionRunStatus::Committed
+        | LogicalFunctionRunStatus::Canceled
+        | LogicalFunctionRunStatus::Yanked
+        | LogicalFunctionRunStatus::Done
+        | LogicalFunctionRunStatus::Failed => DispatchBranch::Replay,
         _ => {
             warn!(
                 worker_id = %worker_id,

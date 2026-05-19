@@ -78,7 +78,7 @@ pub async fn _seed_physical_table_data_version(
         .has_data(has_data.cloned())
         .execution_id(&execution.id)
         .transaction_id(&transaction.id)
-        .function_run_id(&physical_function_run.id)
+        .physical_function_run_id(&physical_function_run.id)
         .function_param_pos(TableFunctionParamPos::try_from(0)?)
         .triggered_on(physical_function_run.triggered_on)
         .build()?;
@@ -132,7 +132,7 @@ mod tests {
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::table::TableDB;
     use td_objects::types::basic::{
-        BundleId, CollectionName, Decorator, FunctionRunStatus, TableName, TableNameDto,
+        BundleId, CollectionName, Decorator, LogicalFunctionRunStatus, TableName, TableNameDto,
         TransactionKey, UserId,
     };
     use td_security::ENCODED_ID_SYSTEM;
@@ -191,7 +191,7 @@ mod tests {
                 &function_version,
                 &execution,
                 &transaction,
-                &FunctionRunStatus::Scheduled,
+                &LogicalFunctionRunStatus::Scheduled,
             )
             .await
             .unwrap();
@@ -230,7 +230,7 @@ mod tests {
         assert_eq!(physical_table_data_version.execution_id, execution.id);
         assert_eq!(physical_table_data_version.transaction_id, transaction.id);
         assert_eq!(
-            physical_table_data_version.function_run_id,
+            physical_table_data_version.physical_function_run_id,
             physical_function_run.id
         );
     }

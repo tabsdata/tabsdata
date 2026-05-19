@@ -119,7 +119,7 @@ mod tests {
     use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDBIden;
     use td_objects::dxo::table::TableDB;
     use td_objects::dxo::transaction::TransactionDBIden;
-    use td_objects::types::basic::FunctionRunStatus;
+    use td_objects::types::basic::LogicalFunctionRunStatus;
     use td_objects::types::basic::TableName;
     use td_objects::types::basic::TransactionKey;
     use td_objects::types::basic::{
@@ -191,7 +191,7 @@ mod tests {
                 &function,
                 &execution,
                 &transaction,
-                &FunctionRunStatus::Scheduled,
+                &LogicalFunctionRunStatus::Scheduled,
             )
             .await?;
 

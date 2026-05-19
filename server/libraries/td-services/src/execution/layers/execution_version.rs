@@ -8,12 +8,12 @@ use td_error::{ApiError, TdError, api_error};
 use td_objects::and;
 use td_objects::dxo::execution::{ExecutionDB, ExecutionResponse, ExecutionResponseInternal};
 use td_objects::dxo::function::FunctionDBWithNames;
-use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunPointerDB};
+use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::types::basic::{
     AtTime, FunctionVersionId, PhysicalFunctionRunStatus, SkipIfRunning,
 };
-use td_queries::{LiveEntry, LogicalPointersEntry};
+use td_queries::{LfrEntry, LiveEntry};
 use td_tower::default_services::Condition;
 use td_tower::extractors::{MutRef, Ref};
 use tracing::{debug, instrument};
@@ -59,9 +59,7 @@ pub async fn skip_if_running(
                 .fetch_optional(and!(&latest_execution.id, function_version_id.deref()))
                 .await?;
             let bound_fr_id = if let Some(lfr) = lfr {
-                conn.logical_pointers()
-                    .concrete_at::<LogicalFunctionRunPointerDB>(&lfr.id, &at)
-                    .await?
+                conn.lfr().pointers().concrete_at(&lfr.id, &at).await?
             } else {
                 None
             };

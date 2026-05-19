@@ -75,7 +75,7 @@ pub(crate) mod tests {
     use td_objects::dxo::transaction::TransactionDBWithStatus;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, Depth, Enabled, ExecutionName,
-        ExecutionStatus, FunctionName, FunctionRunStatus, FunctionRuntimeValues,
+        ExecutionStatus, FunctionName, FunctionRuntimeValues, LogicalFunctionRunStatus,
         OverrideDisabledTrigger, RoleId, TableName, TableNameDto, ToCollectionId, TransactionKey,
         TransactionStatus, TriggeredOn, UserId,
     };
@@ -591,7 +591,7 @@ pub(crate) mod tests {
             assert_eq!(lfrs.len(), 1);
             assert_eq!(lfrs[0].collection_id, collection_0.id);
             assert_eq!(lfrs[0].execution_id, response.id);
-            assert_eq!(lfrs[0].status, FunctionRunStatus::Scheduled);
+            assert_eq!(lfrs[0].status, LogicalFunctionRunStatus::Scheduled);
 
             let function: FunctionDBWithNames = db
                 .live()
@@ -603,7 +603,7 @@ pub(crate) mod tests {
                 .await?;
             for lfr in lfrs {
                 assert_eq!(&lfr.execution_id, &response.id);
-                assert_eq!(lfr.status, FunctionRunStatus::Scheduled);
+                assert_eq!(lfr.status, LogicalFunctionRunStatus::Scheduled);
             }
 
             // LTDVs (concrete TDVs are minted at dispatch).
@@ -629,8 +629,8 @@ pub(crate) mod tests {
     async fn test_execute_initial_status_upstream_scheduled(db: TdPool) -> Result<(), TdError> {
         test_execute_upstream_initial_status(
             db,
-            FunctionRunStatus::Scheduled,
-            FunctionRunStatus::Scheduled,
+            LogicalFunctionRunStatus::Scheduled,
+            LogicalFunctionRunStatus::Scheduled,
         )
         .await
     }
@@ -640,8 +640,8 @@ pub(crate) mod tests {
     async fn test_execute_initial_status_upstream_on_hold(db: TdPool) -> Result<(), TdError> {
         test_execute_upstream_initial_status(
             db,
-            FunctionRunStatus::OnHold,
-            FunctionRunStatus::OnHold,
+            LogicalFunctionRunStatus::OnHold,
+            LogicalFunctionRunStatus::OnHold,
         )
         .await
     }
@@ -651,16 +651,16 @@ pub(crate) mod tests {
     async fn test_execute_initial_status_upstream_failed(db: TdPool) -> Result<(), TdError> {
         test_execute_upstream_initial_status(
             db,
-            FunctionRunStatus::Failed,
-            FunctionRunStatus::OnHold,
+            LogicalFunctionRunStatus::Failed,
+            LogicalFunctionRunStatus::OnHold,
         )
         .await
     }
 
     async fn test_execute_upstream_initial_status(
         db: TdPool,
-        upstream_status: FunctionRunStatus,
-        expected_initial_status: FunctionRunStatus,
+        upstream_status: LogicalFunctionRunStatus,
+        expected_initial_status: LogicalFunctionRunStatus,
     ) -> Result<(), TdError> {
         let collection = db
             .seed()
@@ -759,7 +759,7 @@ pub(crate) mod tests {
                 &function_1,
                 &execution,
                 &transaction,
-                &FunctionRunStatus::Done,
+                &LogicalFunctionRunStatus::Done,
             )
             .await?;
         let table_name = TableName::try_from("table_1")?;

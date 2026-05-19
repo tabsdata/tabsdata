@@ -24,64 +24,61 @@
 //! from inside any tower chain.
 //!
 //! The async view [`LogicalPointers::concrete_at`] is reached via the
-//! [`LogicalPointersEntry::logical_pointers`] handle, matching the
-//! per-DAO handle pattern used by [`crate::PhysicalFunctionRuns`],
-//! [`crate::Sessions`], etc.
+//! entity handles' `.pointers()` constructor — see
+//! [`crate::Lfr::pointers`] and [`crate::Ltdv::pointers`].
 
-use crate::daos::logical::chain::{ProducerLfr, producer_status_in_or_lazy};
 use crate::primitives::chunked::MAX_QUERY_CONDITIONS;
-use crate::{ChunkedQueries, LiveEntry, QueryExecutor, VersionedEntry};
-use futures_util::future::BoxFuture;
+use crate::primitives::versioned::Cte;
+use crate::{LiveEntry, QueryExecutor, VersionedEntry};
 use sea_query::{
-    Alias, Asterisk, CommonTableExpression, Expr, ExprTrait, Func, Order, OverStatement, Query,
-    WindowStatement, WithClause,
+    Asterisk, CommonTableExpression, Expr, ExprTrait, Func, Iden, Order, OverStatement, Query,
+    SimpleExpr, WindowStatement, WithClause,
 };
 use std::collections::HashMap;
 use std::hash::Hash;
+use std::marker::PhantomData;
 use ta_objects::errors::SqlError;
 use td_database::sea_query::builder::SeaQueryExt;
 use td_error::{ApiError, TdError, api_error};
 use td_objects::SeaValue;
-use td_objects::and;
 use td_objects::dxo::logical::{
-    LogicalPointerDao, LogicalTableDataVersionDB, LogicalTableDataVersionPointerDB,
+    LogicalFunctionRunDBIden, LogicalPointerDao, LogicalTableDataVersionDBIden,
+    LogicalTableDataVersionPointerDBIden,
 };
-use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDBWithNames;
-use td_objects::lte;
+use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDBIden;
 use td_objects::types::basic::{
-    AtTime, HasData, LogicalPointerReason, LogicalPointerStatus, PhysicalFunctionRunStatus,
-    PhysicalTableDataVersionId, TableId, TriggeredOn, UserId,
+    AtTime, LogicalFunctionRunStatus, LogicalPointerReason, LogicalPointerStatus, UserId,
 };
 
-query_handle! {
-    /// Entry trait providing
-    /// [`logical_pointers`](LogicalPointersEntry::logical_pointers) on every
-    /// [`QueryExecutor`](crate::QueryExecutor). Returns a [`LogicalPointers`]
-    /// handle.
-    pub trait LogicalPointersEntry {
-        fn logical_pointers(self) -> LogicalPointers<Self> {
-            LogicalPointers { executor: self }
-        }
-    }
-}
-
-/// Async view operations on logical pointer event logs (LFR or
-/// LTDV). Reach via [`LogicalPointersEntry::logical_pointers`]:
+/// Async view operations on a logical pointer event log, type-pinned
+/// to a specific [`LogicalPointerDao`] `P`. Reached from the entity
+/// handle via `.pointers()`:
 ///
 /// ```ignore
-/// conn.logical_pointers()
-///     .concrete_at::<LogicalFunctionRunPointerDB>(&lfr_id, &at).await?;
+/// conn.lfr().pointers().concrete_at(&lfr_id, &at).await?;
+/// conn.ltdv().pointers().concrete_at(&ltdv_id, &at).await?;
 /// ```
 ///
 /// Sync builders for redirect/void events are at module scope —
 /// see [`redirect_event`] / [`void_event`].
-pub struct LogicalPointers<E> {
-    pub(crate) executor: E,
+pub struct LogicalPointers<E, P: LogicalPointerDao> {
+    executor: E,
+    _phantom: PhantomData<P>,
 }
 
-impl<E> LogicalPointers<E>
+impl<E, P: LogicalPointerDao> LogicalPointers<E, P> {
+    pub(crate) fn new(executor: E) -> Self {
+        Self {
+            executor,
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<E, P> LogicalPointers<E, P>
 where
     E: QueryExecutor,
+    P: LogicalPointerDao,
 {
     /// Concrete id this logical pointer was *bound to* on or before
     /// `at`. `Ok(None)` when pre-mint, currently Pending, or Voided.
@@ -90,7 +87,7 @@ where
     /// belt-and-braces today, but it pins the semantic to the
     /// docstring so a future state with a non-NULL concrete on a
     /// non-Bound event can't silently mislead callers.
-    pub async fn concrete_at<P: LogicalPointerDao>(
+    pub async fn concrete_at(
         self,
         logical_id: &P::LogicalId,
         at: &AtTime,
@@ -118,7 +115,7 @@ where
     /// (a replay attempt is in flight — the worker callback's
     /// redirect-at-finish layer is the only path that flips
     /// `Requested → Bound`).
-    pub async fn bind_with_known_state<P: LogicalPointerDao>(
+    pub async fn bind_with_known_state(
         self,
         logical_id: &P::LogicalId,
         new_concrete_id: &P::ConcreteId,
@@ -165,13 +162,12 @@ where
     /// Latest pointer event row per partition, batched. Each
     /// `logical_id` in `ids` maps to its latest event row at `at`;
     /// partitions with no events at all are absent from the map.
-    pub async fn latest_pointers_chunked<P>(
+    pub async fn latest_pointers_chunked(
         self,
         ids: &[P::LogicalId],
         at: &AtTime,
     ) -> Result<HashMap<P::LogicalId, P>, SqlError>
     where
-        P: LogicalPointerDao,
         P::LogicalId: Hash + Eq,
     {
         let rows: Vec<P> = self
@@ -186,91 +182,13 @@ where
         Ok(out)
     }
 
-    /// Method form of [`latest_bound_tdv_with_data_for_table`] (free
-    /// function below). Returns a boxed future so the multi-step
-    /// `self.reuse()` + await + `self.reuse()` body doesn't trip the
-    /// HRTB inference failure in `SeaExecutor::Reused<'a>` when called
-    /// from tower layer fns (the layer macro synthesizes a `for<'a>`
-    /// bound that opaque `async fn` returns can't satisfy with this
-    /// pattern; `BoxFuture` erases the lifetime).
-    pub fn latest_bound_tdv_with_data_for_table<'a>(
-        self,
-        table_id: &'a TableId,
-        triggered_on: &'a TriggeredOn,
-        at: &'a AtTime,
-        committed_only: bool,
-    ) -> BoxFuture<'a, Result<Option<PhysicalTableDataVersionDBWithNames>, SqlError>>
-    where
-        Self: 'a + Send,
-    {
-        Box::pin(async move {
-            let mut executor = self.executor;
-            let ltdvs: Vec<LogicalTableDataVersionDB> = executor
-                .reuse()
-                .live()
-                .fetch_all(and!(table_id, lte!(triggered_on)))
-                .await?;
-            if ltdvs.is_empty() {
-                return Ok(None);
-            }
-
-            let ltdv_ids: Vec<_> = ltdvs.iter().map(|l| l.id.clone()).collect();
-            let pointers = executor
-                .reuse()
-                .logical_pointers()
-                .latest_pointers_chunked::<LogicalTableDataVersionPointerDB>(&ltdv_ids, at)
-                .await?;
-
-            let bound_tdv_ids: Vec<PhysicalTableDataVersionId> = ltdvs
-                .iter()
-                .filter_map(|ltdv| {
-                    pointers
-                        .get(&ltdv.id)
-                        .filter(|p| matches!(p.status, LogicalPointerStatus::Bound))
-                        .and_then(|p| p.physical_table_data_version_id.clone())
-                })
-                .collect();
-            if bound_tdv_ids.is_empty() {
-                return Ok(None);
-            }
-
-            let tdvs: Vec<PhysicalTableDataVersionDBWithNames> = executor
-                .reuse()
-                .fetch_all_chunked::<PhysicalTableDataVersionDBWithNames, _>(&bound_tdv_ids)
-                .await?;
-            let tdvs_by_id: HashMap<
-                PhysicalTableDataVersionId,
-                PhysicalTableDataVersionDBWithNames,
-            > = tdvs.into_iter().map(|t| (t.id.clone(), t)).collect();
-
-            Ok(ltdvs.into_iter().find_map(|ltdv| {
-                let pointer = pointers.get(&ltdv.id)?;
-                if !matches!(pointer.status, LogicalPointerStatus::Bound) {
-                    return None;
-                }
-                let tdv_id = pointer.physical_table_data_version_id.as_ref()?;
-                let tdv = tdvs_by_id.get(tdv_id)?;
-                if !matches!(tdv.has_data, Some(HasData::TRUE)) {
-                    return None;
-                }
-                if committed_only && tdv.status != PhysicalFunctionRunStatus::Done {
-                    return None;
-                }
-                Some(tdv.clone())
-            }))
-        })
-    }
-
     /// Concrete id of the second-most-recent `Bound` event for
     /// `logical_id`. `Ok(None)` when the partition has fewer than
     /// two `Bound` events — i.e. no prior binding to roll back to.
-    pub async fn previous_bound<P>(
+    pub async fn previous_bound(
         self,
         logical_id: &P::LogicalId,
-    ) -> Result<Option<P::ConcreteId>, SqlError>
-    where
-        P: LogicalPointerDao,
-    {
+    ) -> Result<Option<P::ConcreteId>, SqlError> {
         let row: Option<P> = previous_bound_query::<P>(logical_id)
             .build_query_as()
             .fetch_optional(self.executor)
@@ -283,12 +201,11 @@ where
     /// Each `logical_id` in `ids` maps to `Some(concrete)` if a prior
     /// binding exists, or is absent from the map otherwise. Issues one
     /// query per chunk of [`MAX_QUERY_CONDITIONS`] ids.
-    pub async fn previous_bound_chunked<P>(
+    pub async fn previous_bound_chunked(
         mut self,
         ids: &[P::LogicalId],
     ) -> Result<HashMap<P::LogicalId, P::ConcreteId>, SqlError>
     where
-        P: LogicalPointerDao,
         P::LogicalId: Hash + Eq,
     {
         let mut out: HashMap<P::LogicalId, P::ConcreteId> = HashMap::new();
@@ -308,36 +225,53 @@ where
     }
 }
 
+/// Joined-with-AS alias for the producer LFR (canonical status source
+/// for an LTDV). LEFT JOIN — NULL when the LTDV is a lazy-mint over a
+/// pre-2.0 concrete TDV (no logical-layer producer row exists).
+#[derive(Iden, Clone, Copy)]
+pub(crate) struct ProducerLfr;
+
+/// Joined-with-AS alias for the latest LTDV pointer event row.
+#[derive(Iden, Clone, Copy)]
+pub(crate) struct Lp;
+
+/// True when the producer LFR's status is one of `statuses`, or when the
+/// producer is NULL (lazy-mint over a pre-2.0 concrete TDV is treated as
+/// terminal for status purposes). Requires that the caller has joined
+/// the producer LFR aliased as [`ProducerLfr`].
+pub(crate) fn producer_status_in_or_lazy(statuses: &[LogicalFunctionRunStatus]) -> SimpleExpr {
+    let values: Vec<_> = statuses.iter().map(|s| s.as_sea_value()).collect();
+    Expr::col((ProducerLfr, LogicalFunctionRunDBIden::Id))
+        .is_null()
+        .or(Expr::col((ProducerLfr, LogicalFunctionRunDBIden::Status)).is_in(values))
+}
+
 /// `PTDV.id IN (…)` filter expression matching every PTDV canonically
 /// bound under a sticky-`Committed` LTDV. Walks
 /// `LTDV(status=Committed) → latest Bound LTDV-pointer event →
 /// physical_table_data_version_id`. Drop into any predicate Expr that
 /// wants the "committed-only" projection of physical table data
-/// versions — e.g. the listing endpoint's `uncommitted=false` filter.
+/// versions.
 ///
 /// PFR.status is per-attempt audit on a different entity and never
 /// participates here.
 pub fn ptdv_is_canonical_committed() -> sea_query::SimpleExpr {
-    use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDBIden;
-    Expr::col(PhysicalTableDataVersionDBIden::Id)
-        .in_subquery(canonical_committed_ptdv_ids_subquery())
+    Expr::col(PhysicalTableDataVersionDBIden::Id).in_subquery(bound_ptdv_ids_subquery(true))
 }
 
-/// Internal SQL builder for [`ptdv_is_canonical_committed`]. Kept
-/// non-pub so callers reach for the high-level filter rather than
-/// reassembling the subquery themselves.
-fn canonical_committed_ptdv_ids_subquery() -> sea_query::SelectStatement {
-    use sea_query::Alias;
-    use td_objects::dxo::logical::{
-        LogicalFunctionRunDBIden, LogicalTableDataVersionDBIden,
-        LogicalTableDataVersionPointerDBIden,
-    };
-    use td_objects::types::basic::FunctionRunStatus;
+/// `PTDV.id IN (…)` filter expression matching every PTDV currently
+/// `Bound` under its LTDV pointer — no LFR-status restriction. Sibling
+/// of [`ptdv_is_canonical_committed`] for callers that also want
+/// in-flight (non-`Committed`) bindings (e.g. sample/schema/download
+/// with `uncommitted=true`).
+pub fn ptdv_is_bound() -> sea_query::SimpleExpr {
+    Expr::col(PhysicalTableDataVersionDBIden::Id).in_subquery(bound_ptdv_ids_subquery(false))
+}
 
-    let ltdvp = Alias::new("ltdvp");
-
-    // Inner: the latest pointer-event id per LTDV (correlated to the
-    // outer JOIN's LTDV identity row).
+/// Internal SQL builder for [`ptdv_is_canonical_committed`] /
+/// [`ptdv_is_bound`]. Kept non-pub so callers reach for the high-level
+/// filters rather than reassembling the subquery themselves.
+fn bound_ptdv_ids_subquery(committed_only: bool) -> sea_query::SelectStatement {
     let latest_event_per_ltdv = Query::select()
         .column(LogicalTableDataVersionPointerDBIden::Id)
         .from(LogicalTableDataVersionPointerDBIden::Table)
@@ -352,23 +286,24 @@ fn canonical_committed_ptdv_ids_subquery() -> sea_query::SelectStatement {
         .limit(1)
         .to_owned();
 
-    Query::select()
-        .expr(Expr::col((
-            ltdvp.clone(),
-            LogicalTableDataVersionPointerDBIden::PhysicalTableDataVersionId,
-        )))
-        .from(LogicalTableDataVersionDBIden::Table)
-        .join_as(
-            sea_query::JoinType::InnerJoin,
-            LogicalTableDataVersionPointerDBIden::Table,
-            ltdvp.clone(),
-            Expr::col((ltdvp.clone(), LogicalTableDataVersionPointerDBIden::Id))
-                .in_subquery(latest_event_per_ltdv),
-        )
+    let mut q = Query::select();
+    q.expr(Expr::col((
+        Lp,
+        LogicalTableDataVersionPointerDBIden::PhysicalTableDataVersionId,
+    )))
+    .from(LogicalTableDataVersionDBIden::Table)
+    .join_as(
+        sea_query::JoinType::InnerJoin,
+        LogicalTableDataVersionPointerDBIden::Table,
+        Lp,
+        Expr::col((Lp, LogicalTableDataVersionPointerDBIden::Id))
+            .in_subquery(latest_event_per_ltdv),
+    );
+    if committed_only {
         // Producer LFR is the canonical status source. LEFT JOIN so
         // lazy-mints (NULL producer) still qualify as "committed" —
         // their underlying PTDVs are pre-2.0 already-committed data.
-        .join_as(
+        q.join_as(
             sea_query::JoinType::LeftJoin,
             LogicalFunctionRunDBIden::Table,
             ProducerLfr,
@@ -378,12 +313,15 @@ fn canonical_committed_ptdv_ids_subquery() -> sea_query::SelectStatement {
             ))
             .equals((ProducerLfr, LogicalFunctionRunDBIden::Id)),
         )
-        .and_where(producer_status_in_or_lazy(&[FunctionRunStatus::Committed]))
-        .and_where(
-            Expr::col((ltdvp, LogicalTableDataVersionPointerDBIden::Status))
-                .eq(LogicalPointerStatus::Bound.as_sea_value()),
-        )
-        .to_owned()
+        .and_where(producer_status_in_or_lazy(&[
+            LogicalFunctionRunStatus::Committed,
+        ]));
+    }
+    q.and_where(
+        Expr::col((Lp, LogicalTableDataVersionPointerDBIden::Status))
+            .eq(LogicalPointerStatus::Bound.as_sea_value()),
+    )
+    .to_owned()
 }
 
 fn previous_bound_query<P: LogicalPointerDao>(
@@ -409,8 +347,6 @@ fn previous_bound_chunked_query<P: LogicalPointerDao>(
     chunk: &[P::LogicalId],
 ) -> sea_query::WithQuery {
     let id_values: Vec<_> = chunk.iter().map(|id| id.as_sea_value()).collect();
-    let cte_name = Alias::new("ranked");
-    let rn_col = Alias::new("rn");
 
     let window = WindowStatement::new()
         .partition_by(P::logical_id_col())
@@ -424,9 +360,9 @@ fn previous_bound_chunked_query<P: LogicalPointerDao>(
         .and_where(Expr::col(P::logical_id_col()).is_in(id_values))
         .and_where(Expr::col(P::status_col()).eq(LogicalPointerStatus::Bound.as_sea_value()))
         .expr_window_as(
-            Func::cust(Alias::new("ROW_NUMBER")).args(Vec::<Expr>::new()),
+            Func::cust(sea_query::Alias::new("ROW_NUMBER")).args(Vec::<Expr>::new()),
             window,
-            rn_col.clone(),
+            Cte::Rn,
         )
         .take();
 
@@ -434,15 +370,15 @@ fn previous_bound_chunked_query<P: LogicalPointerDao>(
         .cte(
             CommonTableExpression::new()
                 .query(ranked)
-                .table_name(cte_name.clone())
+                .table_name(Cte::Ranked)
                 .to_owned(),
         )
         .to_owned();
 
     Query::select()
         .column(Asterisk)
-        .from(cte_name)
-        .and_where(Expr::col(rn_col).eq(2))
+        .from(Cte::Ranked)
+        .and_where(Expr::col(Cte::Rn).eq(2))
         .take()
         .with(with)
 }
@@ -681,7 +617,7 @@ mod tests {
 
     mod concrete_at {
         use crate::test_utils::SeedEntry;
-        use crate::{LiveEntry, LogicalPointersEntry};
+        use crate::{LfrEntry, LiveEntry, LtdvEntry};
         use td_database::pool::TdPool;
         use td_objects::Buildable;
         use td_objects::dxo::function::FunctionRegister;
@@ -749,14 +685,13 @@ mod tests {
 
             let tx = db.begin().await.unwrap();
             let mut conn = tx.into_connection();
-            (&mut conn)
-                .live()
+            let conn = &mut conn;
+            conn.live()
                 .insert::<LogicalFunctionRunDB>(&lfr)
                 .await
                 .unwrap();
             let mint = LogicalFunctionRunPointerDB::initial_mint_for(&lfr).unwrap();
-            (&mut conn)
-                .live()
+            conn.live()
                 .insert::<LogicalFunctionRunPointerDB>(&mint)
                 .await
                 .unwrap();
@@ -772,37 +707,40 @@ mod tests {
                 LogicalPointerReason::InitialDispatch,
             )
             .unwrap();
-            (&mut conn)
-                .live()
+            conn.live()
                 .insert::<LogicalFunctionRunPointerDB>(&bind_event)
                 .await
                 .unwrap();
 
-            let pre_mint = (&mut conn)
-                .logical_pointers()
-                .concrete_at::<LogicalFunctionRunPointerDB>(&lfr.id, &before_mint)
+            let pre_mint = conn
+                .lfr()
+                .pointers()
+                .concrete_at(&lfr.id, &before_mint)
                 .await
                 .unwrap();
             assert!(pre_mint.is_none());
 
-            let at_mint = (&mut conn)
-                .logical_pointers()
-                .concrete_at::<LogicalFunctionRunPointerDB>(&lfr.id, &mint_at)
+            let at_mint = conn
+                .lfr()
+                .pointers()
+                .concrete_at(&lfr.id, &mint_at)
                 .await
                 .unwrap();
             assert!(at_mint.is_none());
 
-            let after_bind = (&mut conn)
-                .logical_pointers()
-                .concrete_at::<LogicalFunctionRunPointerDB>(&lfr.id, &bind_at)
+            let after_bind = conn
+                .lfr()
+                .pointers()
+                .concrete_at(&lfr.id, &bind_at)
                 .await
                 .unwrap();
             assert_eq!(after_bind, Some(fr_id.clone()));
 
             let later = AtTime::now();
-            let after_later = (&mut conn)
-                .logical_pointers()
-                .concrete_at::<LogicalFunctionRunPointerDB>(&lfr.id, &later)
+            let after_later = conn
+                .lfr()
+                .pointers()
+                .concrete_at(&lfr.id, &later)
                 .await
                 .unwrap();
             assert_eq!(after_later, Some(fr_id));
@@ -860,14 +798,13 @@ mod tests {
 
             let tx = db.begin().await.unwrap();
             let mut conn = tx.into_connection();
-            (&mut conn)
-                .live()
+            let conn = &mut conn;
+            conn.live()
                 .insert::<LogicalTableDataVersionDB>(&ltdv)
                 .await
                 .unwrap();
             let mint = LogicalTableDataVersionPointerDB::initial_mint_for(&ltdv).unwrap();
-            (&mut conn)
-                .live()
+            conn.live()
                 .insert::<LogicalTableDataVersionPointerDB>(&mint)
                 .await
                 .unwrap();
@@ -883,37 +820,40 @@ mod tests {
                 LogicalPointerReason::InitialDispatch,
             )
             .unwrap();
-            (&mut conn)
-                .live()
+            conn.live()
                 .insert::<LogicalTableDataVersionPointerDB>(&bind_event)
                 .await
                 .unwrap();
 
-            let pre_mint = (&mut conn)
-                .logical_pointers()
-                .concrete_at::<LogicalTableDataVersionPointerDB>(&ltdv.id, &before_mint)
+            let pre_mint = conn
+                .ltdv()
+                .pointers()
+                .concrete_at(&ltdv.id, &before_mint)
                 .await
                 .unwrap();
             assert!(pre_mint.is_none());
 
-            let at_mint = (&mut conn)
-                .logical_pointers()
-                .concrete_at::<LogicalTableDataVersionPointerDB>(&ltdv.id, &mint_at)
+            let at_mint = conn
+                .ltdv()
+                .pointers()
+                .concrete_at(&ltdv.id, &mint_at)
                 .await
                 .unwrap();
             assert!(at_mint.is_none());
 
-            let after_bind = (&mut conn)
-                .logical_pointers()
-                .concrete_at::<LogicalTableDataVersionPointerDB>(&ltdv.id, &bind_at)
+            let after_bind = conn
+                .ltdv()
+                .pointers()
+                .concrete_at(&ltdv.id, &bind_at)
                 .await
                 .unwrap();
             assert_eq!(after_bind, Some(tdv_id.clone()));
 
             let later = AtTime::now();
-            let after_later = (&mut conn)
-                .logical_pointers()
-                .concrete_at::<LogicalTableDataVersionPointerDB>(&ltdv.id, &later)
+            let after_later = conn
+                .ltdv()
+                .pointers()
+                .concrete_at(&ltdv.id, &later)
                 .await
                 .unwrap();
             assert_eq!(after_later, Some(tdv_id));

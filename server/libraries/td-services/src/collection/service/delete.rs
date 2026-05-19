@@ -107,9 +107,9 @@ mod tests {
     use td_objects::rest_urls::CollectionParam;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, DependencyStatus, FunctionName,
-        FunctionRunStatus, FunctionRuntimeValues, FunctionStatus, RoleId, TableName, TableNameDto,
-        TableStatus, TransactionKey, TriggerStatus, UserId, WorkerMessageStatus, WorkerStatus,
-        WorkerType,
+        FunctionRuntimeValues, FunctionStatus, LogicalFunctionRunStatus, RoleId, TableName,
+        TableNameDto, TableStatus, TransactionKey, TriggerStatus, UserId, WorkerMessageStatus,
+        WorkerStatus, WorkerType,
     };
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
     use td_queries::test_utils::SeedEntry;
@@ -261,7 +261,7 @@ mod tests {
                 &function,
                 &execution,
                 &transaction,
-                &FunctionRunStatus::Scheduled,
+                &LogicalFunctionRunStatus::Scheduled,
             )
             .await?;
         let _function_worker = db

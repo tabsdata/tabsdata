@@ -485,7 +485,6 @@ pub struct PhysicalFunctionRunParam {
 
 pub const FUNCTION_RUN_GET: &str = url!(FUNCTION_RUN);
 pub const FUNCTION_RUN_LIST: &str = url!("/function_runs");
-pub const LOGICAL_FUNCTION_RUN_LIST: &str = url!("/logical_function_runs");
 
 // Table lineage graph
 pub const TABLE_FLOW_GRAPH: &str = url!(TABLE, "/flow");

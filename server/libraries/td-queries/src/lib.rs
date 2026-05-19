@@ -17,12 +17,12 @@ mod tower;
 // module via the `query_handle!` macro.
 pub use daos::dependency::{Dependencies, DependenciesEntry};
 pub use daos::execution::{Executions, ExecutionsEntry};
-pub use daos::logical::{
-    LogicalCascade, LogicalCascadeEntry, LogicalPointers, LogicalPointersEntry, LogicalRuns,
-    LogicalRunsEntry, ptdv_is_canonical_committed, redirect_event, void_event,
+pub use daos::function_runs::{Lfr, LfrEntry, Pfr, PfrEntry};
+pub use daos::pointers::{
+    LogicalPointers, ptdv_is_canonical_committed, redirect_event, void_event,
 };
-pub use daos::physical::{PhysicalRuns, PhysicalRunsEntry};
 pub use daos::session::{Sessions, SessionsEntry};
+pub use daos::table_data_versions::{Ltdv, LtdvEntry};
 
 // Generic surfaces — independent of any specific DAO.
 pub use executor::QueryExecutor;
@@ -43,9 +43,9 @@ pub use tower::by::{By, insert, insert_vec};
 /// plus the `QueryExecutor` marker.
 pub mod prelude {
     pub use super::{
-        ChunkedQueries, CurrentEntry, DependenciesEntry, ExecutionsEntry, HistoricEntry, LiveEntry,
-        LogicalCascadeEntry, LogicalPointersEntry, LogicalRunsEntry, QueryExecutor, RecursiveEntry,
-        SessionsEntry, VersionedEntry,
+        ChunkedQueries, CurrentEntry, DependenciesEntry, ExecutionsEntry, HistoricEntry, LfrEntry,
+        LiveEntry, LtdvEntry, PfrEntry, QueryExecutor, RecursiveEntry, SessionsEntry,
+        VersionedEntry,
     };
 }
 

@@ -8,10 +8,12 @@ use crate::function::layers::{
     check_private_tables, register_dependencies, register_tables, register_triggers,
     register_workers,
 };
+use crate::scheduler::layers::request::notify_scheduler;
 use std::collections::HashMap;
 use ta_services::factory::service_factory;
 use td_authz::tower::{AuthzOn, CollAdmin, CollDev};
 use td_authz::{Authz, AuthzContext};
+use td_execution::SchedulerNotify;
 use td_objects::And;
 use td_objects::dxo::bundle::BundleDB;
 use td_objects::dxo::collection::CollectionDB;
@@ -42,6 +44,7 @@ use td_tower::layers;
     response = Function,
     connection = TransactionProvider,
     context = AuthzContext,
+    context = SchedulerNotify,
 )]
 fn service() {
     layers!(
@@ -124,6 +127,9 @@ fn service() {
         from_fn(By::<FunctionVersionId>::fetch_one::<FunctionDBWithNames>),
         from_fn(With::<FunctionDBWithNames>::try_convert_to::<FunctionBuilder, _>),
         from_fn(With::<FunctionBuilder>::build::<Function>),
+        // Wake the scheduler so newly registered cron/stage workers
+        // start immediately instead of at the next polling tick.
+        from_fn(notify_scheduler),
     )
 }
 
@@ -295,6 +301,7 @@ mod tests {
                 type_of_val(&By::<FunctionVersionId>::fetch_one::<FunctionDBWithNames>),
                 type_of_val(&With::<FunctionDBWithNames>::try_convert_to::<FunctionBuilder, _>),
                 type_of_val(&With::<FunctionBuilder>::build::<Function>),
+                type_of_val(&notify_scheduler),
             ]);
     }
 
@@ -1286,7 +1293,7 @@ mod tests {
         assert_eq!(worker.collection_id, collection.id);
         assert_eq!(worker.execution_id, None);
         assert_eq!(worker.transaction_id, None);
-        assert_eq!(worker.function_run_id, None);
+        assert_eq!(worker.physical_function_run_id, None);
         assert_eq!(worker.function_version_id, res.id);
         assert_eq!(worker.message_status, WorkerMessageStatus::None);
         assert_eq!(worker.started_on, None);

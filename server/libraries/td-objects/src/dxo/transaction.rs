@@ -6,7 +6,7 @@
 mod definitions {
     use crate::dxo::execution::ExecutionDB;
     use crate::types::basic::{
-        AtTime, CollectionId, CollectionName, ExecutionId, ExecutionName, FunctionRunStatus,
+        AtTime, CollectionId, CollectionName, ExecutionId, ExecutionName, LogicalFunctionRunStatus,
         StatusCount, TransactionByStr, TransactionId, TransactionKey, TransactionStatus,
         TriggeredOn, UserId, UserName,
     };
@@ -55,7 +55,7 @@ mod definitions {
         pub execution: Option<ExecutionName>,
         pub triggered_by: UserName,
 
-        pub function_run_status_count: Json<HashMap<FunctionRunStatus, StatusCount>>,
+        pub function_run_status_count: Json<HashMap<LogicalFunctionRunStatus, StatusCount>>,
     }
 
     #[ta_objects::Dto]

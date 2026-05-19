@@ -70,9 +70,9 @@ pub(crate) mod tests {
     use td_objects::dxo::table::TableDB;
     use td_objects::rest_urls::{AtTimeParam, TableParam, UncommittedParam};
     use td_objects::types::basic::{
-        AccessTokenId, AtTime, BundleId, CollectionName, Decorator, FunctionRunStatus, RoleId,
-        StorageVersion, TableIdName, TableName, TableNameDto, TransactionKey, UncommittedStatus,
-        UserId,
+        AccessTokenId, AtTime, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus,
+        RoleId, StorageVersion, TableIdName, TableName, TableNameDto, TransactionKey,
+        UncommittedStatus, UserId,
     };
     use td_objects::{Buildable, and};
     use td_queries::LiveEntry;
@@ -247,7 +247,7 @@ pub(crate) mod tests {
                     function,
                     &execution,
                     &transaction,
-                    &FunctionRunStatus::Committed,
+                    &LogicalFunctionRunStatus::Committed,
                 )
                 .await?;
 

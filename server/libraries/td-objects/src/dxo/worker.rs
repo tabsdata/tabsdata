@@ -33,7 +33,7 @@ mod definitions {
         #[builder(default)]
         pub transaction_id: Option<TransactionId>,
         #[builder(default)]
-        pub function_run_id: Option<PhysicalFunctionRunId>,
+        pub physical_function_run_id: Option<PhysicalFunctionRunId>,
         #[dxo(builder(include, field = "id"))]
         pub function_version_id: FunctionVersionId,
         #[builder(default = "WorkerMessageStatus::None")]
@@ -85,7 +85,7 @@ mod definitions {
         #[dto(list(filter, filter_like, order_by))]
         pub transaction_id: Option<TransactionId>,
         #[dto(list(filter, order_by))]
-        pub function_run_id: Option<PhysicalFunctionRunId>,
+        pub physical_function_run_id: Option<PhysicalFunctionRunId>,
         #[dto(list(filter, filter_like, order_by))]
         pub function_version_id: FunctionVersionId,
         #[dto(list(filter, order_by))]

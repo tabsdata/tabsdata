@@ -64,8 +64,8 @@ mod tests {
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::types::basic::{
-        AccessTokenId, CollectionName, ExecutionStatus, FunctionName, FunctionRunStatus, RoleId,
-        TableNameDto, TransactionStatus, UserId,
+        AccessTokenId, CollectionName, ExecutionStatus, FunctionName, LogicalFunctionRunStatus,
+        RoleId, TableNameDto, TransactionStatus, UserId,
     };
     use td_objects::types::composed::TableDependencyDto;
     use td_tower::ctx_service::RawOneshot;
@@ -147,8 +147,8 @@ mod tests {
                         name: FunctionName::try_from("f_0")?,
                         dependencies: vec![],
                         tables: vec![TableNameDto::try_from("t_0")?],
-                        initial_status: FunctionRunStatus::Failed,
-                        expected_status: FunctionRunStatus::ReScheduled,
+                        initial_status: LogicalFunctionRunStatus::Failed,
+                        expected_status: LogicalFunctionRunStatus::ReScheduled,
                     }],
                 }],
             }],
@@ -172,16 +172,16 @@ mod tests {
                             name: FunctionName::try_from("f_0")?,
                             dependencies: vec![],
                             tables: vec![TableNameDto::try_from("t_0")?],
-                            initial_status: FunctionRunStatus::Failed,
-                            expected_status: FunctionRunStatus::ReScheduled,
+                            initial_status: LogicalFunctionRunStatus::Failed,
+                            expected_status: LogicalFunctionRunStatus::ReScheduled,
                         },
                         TestFunction {
                             collection: CollectionName::try_from("c_0")?,
                             name: FunctionName::try_from("f_1")?,
                             dependencies: vec![],
                             tables: vec![TableNameDto::try_from("t_1")?],
-                            initial_status: FunctionRunStatus::OnHold,
-                            expected_status: FunctionRunStatus::ReScheduled,
+                            initial_status: LogicalFunctionRunStatus::OnHold,
+                            expected_status: LogicalFunctionRunStatus::ReScheduled,
                         },
                     ],
                 }],
@@ -206,8 +206,8 @@ mod tests {
                             name: FunctionName::try_from("f_0")?,
                             dependencies: vec![],
                             tables: vec![TableNameDto::try_from("t_0")?],
-                            initial_status: FunctionRunStatus::Failed,
-                            expected_status: FunctionRunStatus::ReScheduled,
+                            initial_status: LogicalFunctionRunStatus::Failed,
+                            expected_status: LogicalFunctionRunStatus::ReScheduled,
                         }],
                     },
                     TestTransaction {
@@ -217,8 +217,8 @@ mod tests {
                             name: FunctionName::try_from("f_1")?,
                             dependencies: vec![],
                             tables: vec![TableNameDto::try_from("t_1")?],
-                            initial_status: FunctionRunStatus::Failed,
-                            expected_status: FunctionRunStatus::ReScheduled,
+                            initial_status: LogicalFunctionRunStatus::Failed,
+                            expected_status: LogicalFunctionRunStatus::ReScheduled,
                         }],
                     },
                 ],
@@ -243,8 +243,8 @@ mod tests {
                             name: FunctionName::try_from("f_0")?,
                             dependencies: vec![],
                             tables: vec![TableNameDto::try_from("t_0")?],
-                            initial_status: FunctionRunStatus::Failed,
-                            expected_status: FunctionRunStatus::ReScheduled,
+                            initial_status: LogicalFunctionRunStatus::Failed,
+                            expected_status: LogicalFunctionRunStatus::ReScheduled,
                         }],
                     }],
                 },
@@ -257,8 +257,8 @@ mod tests {
                             name: FunctionName::try_from("f_1")?,
                             dependencies: vec![],
                             tables: vec![TableNameDto::try_from("t_1")?],
-                            initial_status: FunctionRunStatus::Failed,
-                            expected_status: FunctionRunStatus::Failed,
+                            initial_status: LogicalFunctionRunStatus::Failed,
+                            expected_status: LogicalFunctionRunStatus::Failed,
                         }],
                     }],
                 },
@@ -283,8 +283,8 @@ mod tests {
                             name: FunctionName::try_from("f_0")?,
                             dependencies: vec![],
                             tables: vec![TableNameDto::try_from("t_0")?],
-                            initial_status: FunctionRunStatus::Failed,
-                            expected_status: FunctionRunStatus::ReScheduled,
+                            initial_status: LogicalFunctionRunStatus::Failed,
+                            expected_status: LogicalFunctionRunStatus::ReScheduled,
                         }],
                     }],
                 },
@@ -297,8 +297,8 @@ mod tests {
                             name: FunctionName::try_from("f_1")?,
                             dependencies: vec![TableDependencyDto::try_from("t_0")?],
                             tables: vec![TableNameDto::try_from("t_1")?],
-                            initial_status: FunctionRunStatus::OnHold,
-                            expected_status: FunctionRunStatus::ReScheduled,
+                            initial_status: LogicalFunctionRunStatus::OnHold,
+                            expected_status: LogicalFunctionRunStatus::ReScheduled,
                         }],
                     }],
                 },
@@ -323,16 +323,16 @@ mod tests {
                             name: FunctionName::try_from("f_0")?,
                             dependencies: vec![],
                             tables: vec![TableNameDto::try_from("t_0")?],
-                            initial_status: FunctionRunStatus::OnHold,
-                            expected_status: FunctionRunStatus::ReScheduled,
+                            initial_status: LogicalFunctionRunStatus::OnHold,
+                            expected_status: LogicalFunctionRunStatus::ReScheduled,
                         },
                         TestFunction {
                             collection: CollectionName::try_from("c_1")?,
                             name: FunctionName::try_from("f_1")?,
                             dependencies: vec![],
                             tables: vec![TableNameDto::try_from("t_1")?],
-                            initial_status: FunctionRunStatus::OnHold,
-                            expected_status: FunctionRunStatus::ReScheduled,
+                            initial_status: LogicalFunctionRunStatus::OnHold,
+                            expected_status: LogicalFunctionRunStatus::ReScheduled,
                         },
                     ],
                 }],
@@ -346,7 +346,7 @@ mod tests {
     #[tokio::test]
     async fn test_recover_execution_status_transitions(db: TdPool) -> Result<(), TdError> {
         let recover_transition_for =
-            async move |initial: FunctionRunStatus| -> Result<(), TdError> {
+            async move |initial: LogicalFunctionRunStatus| -> Result<(), TdError> {
                 let db = db.clone();
                 test_recover_execution(
                     db,
@@ -360,8 +360,8 @@ mod tests {
                                     name: FunctionName::try_from("f_0")?,
                                     dependencies: vec![],
                                     tables: vec![TableNameDto::try_from("t_0")?],
-                                    initial_status: FunctionRunStatus::Failed,
-                                    expected_status: FunctionRunStatus::ReScheduled,
+                                    initial_status: LogicalFunctionRunStatus::Failed,
+                                    expected_status: LogicalFunctionRunStatus::ReScheduled,
                                 },
                                 TestFunction {
                                     collection: CollectionName::try_from("c_0")?,
@@ -369,7 +369,7 @@ mod tests {
                                     dependencies: vec![],
                                     tables: vec![TableNameDto::try_from("t_1")?],
                                     initial_status: initial,
-                                    expected_status: FunctionRunStatus::ReScheduled,
+                                    expected_status: LogicalFunctionRunStatus::ReScheduled,
                                 },
                             ],
                         }],
@@ -380,27 +380,27 @@ mod tests {
             };
 
         assert!(
-            recover_transition_for(FunctionRunStatus::Failed)
+            recover_transition_for(LogicalFunctionRunStatus::Failed)
                 .await
                 .is_ok()
         );
         assert!(
-            recover_transition_for(FunctionRunStatus::OnHold)
+            recover_transition_for(LogicalFunctionRunStatus::OnHold)
                 .await
                 .is_ok()
         );
         assert!(
-            recover_transition_for(FunctionRunStatus::Canceled)
+            recover_transition_for(LogicalFunctionRunStatus::Canceled)
                 .await
                 .is_err()
         );
         assert!(
-            recover_transition_for(FunctionRunStatus::Committed)
+            recover_transition_for(LogicalFunctionRunStatus::Committed)
                 .await
                 .is_err()
         );
         assert!(
-            recover_transition_for(FunctionRunStatus::Yanked)
+            recover_transition_for(LogicalFunctionRunStatus::Yanked)
                 .await
                 .is_err()
         );
@@ -412,7 +412,7 @@ mod tests {
     #[tokio::test]
     async fn test_recover_execution_status_transitions_no_op(db: TdPool) -> Result<(), TdError> {
         let recover_transition_for =
-            async move |initial: FunctionRunStatus| -> Result<(), TdError> {
+            async move |initial: LogicalFunctionRunStatus| -> Result<(), TdError> {
                 let db = db.clone();
                 test_recover_execution(
                     db,
@@ -426,8 +426,8 @@ mod tests {
                                     name: FunctionName::try_from("f_0")?,
                                     dependencies: vec![],
                                     tables: vec![TableNameDto::try_from("t_0")?],
-                                    initial_status: FunctionRunStatus::Failed,
-                                    expected_status: FunctionRunStatus::ReScheduled,
+                                    initial_status: LogicalFunctionRunStatus::Failed,
+                                    expected_status: LogicalFunctionRunStatus::ReScheduled,
                                 },
                                 TestFunction {
                                     collection: CollectionName::try_from("c_0")?,
@@ -446,32 +446,32 @@ mod tests {
             };
 
         assert!(
-            recover_transition_for(FunctionRunStatus::Scheduled)
+            recover_transition_for(LogicalFunctionRunStatus::Scheduled)
                 .await
                 .is_ok()
         );
         assert!(
-            recover_transition_for(FunctionRunStatus::Requested)
+            recover_transition_for(LogicalFunctionRunStatus::Requested)
                 .await
                 .is_ok()
         );
         assert!(
-            recover_transition_for(FunctionRunStatus::ReScheduled)
+            recover_transition_for(LogicalFunctionRunStatus::ReScheduled)
                 .await
                 .is_ok()
         );
         assert!(
-            recover_transition_for(FunctionRunStatus::Running)
+            recover_transition_for(LogicalFunctionRunStatus::Running)
                 .await
                 .is_ok()
         );
         assert!(
-            recover_transition_for(FunctionRunStatus::Done)
+            recover_transition_for(LogicalFunctionRunStatus::Done)
                 .await
                 .is_ok()
         );
         assert!(
-            recover_transition_for(FunctionRunStatus::Error)
+            recover_transition_for(LogicalFunctionRunStatus::Error)
                 .await
                 .is_ok()
         );

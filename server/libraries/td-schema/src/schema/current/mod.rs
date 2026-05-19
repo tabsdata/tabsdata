@@ -26,9 +26,9 @@ impl SchemaVersion for Schema {
     // print_schema_fingerprints -- --ignored --nocapture` after any
     // intentional change to current/.
     const FINGERPRINTS: [&'static str; 3] = [
-        "87e7e9f042d19a8f15a7e8f53f6377da73384259d79f9818ceee998cc6ae31c2", // Sqlite
-        "0650409bb2cab4a8011a15d675823c79bde24e374af7cf1bd391029d1636fb3e", // Postgres
-        "a61b1157964ef4c83fa35b0b8d927aa9c32f844a17da0a00ab035d714a021f2d", // MySql
+        "31faf07fa170d05d2d938c84adbd57516915519dfb1239ea3e123f50145f2123", // Sqlite
+        "90fd241c60e0fa1cb0d96f2b7a02581c51f9688853e87bfeee97aa4da5f63687", // Postgres
+        "0cbb729f6723ef787215cebb89722f09772589e458f32aeb4785da8904df70e1", // MySql
     ];
 
     fn build(backend: impl Into<Backend>) -> Vec<String> {

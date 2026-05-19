@@ -16,7 +16,7 @@ use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::table::TableDB;
 use td_objects::dxo::transaction::TransactionDB;
 use td_objects::types::basic::{
-    AtTime, FunctionRunStatus, LogicalPointerReason, LogicalPointerStatus,
+    AtTime, LogicalFunctionRunStatus, LogicalPointerReason, LogicalPointerStatus,
     PhysicalFunctionRunStatus, Trigger,
 };
 
@@ -26,7 +26,7 @@ pub(crate) async fn seed_physical_function_run(
     function_version: &FunctionDB,
     execution: &ExecutionDB,
     transaction: &TransactionDB,
-    status: &FunctionRunStatus,
+    status: &LogicalFunctionRunStatus,
 ) -> Result<PhysicalFunctionRunDB, TdError> {
     // LFR identity is unique per (execution_id, function_id). For a
     // repeat call with the same pair (e.g. seeding a 2nd or 3rd attempt
@@ -144,7 +144,8 @@ mod tests {
     use td_database::pool::TdPool;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
-        BundleId, CollectionName, Decorator, FunctionRunStatus, TransactionKey, Trigger, UserId,
+        BundleId, CollectionName, Decorator, LogicalFunctionRunStatus, TransactionKey, Trigger,
+        UserId,
     };
     use td_security::ENCODED_ID_SYSTEM;
 
@@ -200,7 +201,7 @@ mod tests {
                 &function_version,
                 &execution,
                 &transaction,
-                &FunctionRunStatus::Scheduled,
+                &LogicalFunctionRunStatus::Scheduled,
             )
             .await
             .unwrap();
@@ -215,6 +216,6 @@ mod tests {
         assert_eq!(physical_function_run.triggered_on, transaction.triggered_on);
         assert_eq!(physical_function_run.trigger, Trigger::Manual);
         // Status lives on the LFR; PhysicalFunctionRunDB no longer has it.
-        let _ = FunctionRunStatus::Scheduled;
+        let _ = LogicalFunctionRunStatus::Scheduled;
     }
 }

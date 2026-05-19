@@ -60,7 +60,7 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, FunctionRunStatus, RoleId,
+        AccessTokenId, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus, RoleId,
         TransactionKey, UserId, WorkerMessageStatus,
     };
     use td_queries::test_utils::SeedEntry;
@@ -133,7 +133,7 @@ mod tests {
                 &function_version,
                 &execution,
                 &transaction,
-                &FunctionRunStatus::Scheduled,
+                &LogicalFunctionRunStatus::Scheduled,
             )
             .await?;
 

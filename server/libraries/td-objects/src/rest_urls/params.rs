@@ -75,26 +75,25 @@ impl TableAtIdName {
     }
 }
 
+// `/data-versions` filters committed/uncommitted via the standard
+// `?filter=status:...` mechanism (TableDataVersion exposes the bound
+// PFR's status), so no special `uncommitted` flag here.
 #[ta_objects::Dlo]
-pub struct PhysicalTableDataVersionAtIdName {
+pub struct TableDataVersionAtIdName {
     #[dxo(extractor)]
     collection: CollectionIdName,
     #[dxo(extractor)]
     table: TableIdName,
     #[dxo(extractor)]
     at: AtTime,
-    #[builder(default)]
-    #[dxo(extractor)]
-    uncommitted: UncommittedStatus,
 }
 
-impl PhysicalTableDataVersionAtIdName {
-    pub fn new(table: TableAtIdName) -> Self {
+impl TableDataVersionAtIdName {
+    pub fn new(table: TableParam, at: AtTimeParam) -> Self {
         Self {
             collection: table.collection,
             table: table.table,
-            at: table.at,
-            uncommitted: table.uncommitted,
+            at: at.at,
         }
     }
 }

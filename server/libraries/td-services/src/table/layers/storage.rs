@@ -6,8 +6,8 @@ use polars::prelude::PolarsError;
 use td_database::dynamic::DynamicConnection;
 use td_error::{TdError, td_error};
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDBWithNames;
-use td_objects::types::basic::{AtTime, TableId, TriggeredOn, UncommittedStatus};
-use td_queries::LogicalPointersEntry;
+use td_objects::types::basic::{TableId, TriggeredOn, UncommittedStatus};
+use td_queries::LtdvEntry;
 use td_storage::SPath;
 use td_storage::location::StorageLocation;
 use td_tower::extractors::{MutRef, Ref};
@@ -29,13 +29,11 @@ pub async fn resolve_table_location(
     uncommitted: Ref<UncommittedStatus>,
 ) -> Result<Option<SPath>, TdError> {
     let committed_only = !**uncommitted;
-    let at = AtTime::now();
     let data_version = conn
-        .logical_pointers()
+        .ltdv()
         .latest_bound_tdv_with_data_for_table(
             table_id.as_ref(),
             triggered_on.as_ref(),
-            &at,
             committed_only,
         )
         .await?;
@@ -76,7 +74,7 @@ mod tests {
     use td_objects::rest_urls::FunctionParam;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, FunctionIdName,
-        FunctionRunStatus, RoleId, TableName, TableNameDto, TransactionKey, UserId,
+        LogicalFunctionRunStatus, RoleId, TableName, TableNameDto, TransactionKey, UserId,
     };
     use td_objects::{Buildable, and};
     use td_queries::LiveEntry;
@@ -305,7 +303,7 @@ mod tests {
                 &function,
                 &execution,
                 &transaction,
-                &FunctionRunStatus::Scheduled,
+                &LogicalFunctionRunStatus::Scheduled,
             )
             .await?;
 
@@ -356,7 +354,7 @@ mod tests {
                 &function,
                 &execution,
                 &transaction,
-                &FunctionRunStatus::Scheduled,
+                &LogicalFunctionRunStatus::Scheduled,
             )
             .await?;
 
@@ -452,7 +450,7 @@ mod tests {
                 &function,
                 &execution,
                 &transaction,
-                &FunctionRunStatus::Committed,
+                &LogicalFunctionRunStatus::Committed,
             )
             .await?;
 

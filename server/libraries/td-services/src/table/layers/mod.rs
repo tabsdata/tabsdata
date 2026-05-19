@@ -17,7 +17,6 @@ pub mod delete;
 pub mod download;
 pub mod download_state;
 pub mod flow;
-pub mod list_data_versions;
 pub mod sample;
 pub mod schema;
 pub mod storage;

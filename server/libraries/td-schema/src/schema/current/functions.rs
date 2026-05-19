@@ -4,12 +4,15 @@
 
 use sea_query::{
     Alias, Asterisk, ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Func, Iden,
-    InsertStatement, JoinType, Order, OverStatement, Query, Table, TableCreateStatement,
-    WindowStatement,
+    InsertStatement, JoinType, Order, OverStatement, Query, SubQueryStatement, Table,
+    TableCreateStatement, WindowStatement,
 };
 
 use super::collections::Collections;
-use super::logical::LogicalFunctionRuns;
+use super::logical::{
+    LogicalFunctionRunPointers, LogicalFunctionRuns, LogicalTableDataVersionPointers,
+    LogicalTableDataVersions, latest_bound_pointer_subquery,
+};
 use super::users::Users;
 use crate::schema::backend::{
     Backend, ImmutableTriggerDef, TriggerDef, VersionedTriggerDef, ViewDef,
@@ -281,7 +284,7 @@ pub enum PhysicalTableDataVersions {
     SchemaHash,
     ExecutionId,
     TransactionId,
-    FunctionRunId,
+    PhysicalFunctionRunId,
     FunctionParamPos,
     WithDataTableDataVersionId,
     TriggeredOn,
@@ -308,7 +311,7 @@ pub enum Workers {
     ExecutionId,
     TransactionId,
     FunctionVersionId,
-    FunctionRunId,
+    PhysicalFunctionRunId,
     MessageStatus,
     StartedOn,
     EndedOn,
@@ -829,6 +832,132 @@ pub fn tables() -> Vec<TableCreateStatement> {
                     .on_update(ForeignKeyAction::Restrict),
             )
             .to_owned(),
+        // function_patches — code-only overrides of a parent fvid.
+        // Must be declared before any table whose FK targets it
+        // (e.g. `physical_function_runs.function_version_patch_id`).
+        // Postgres validates FK targets at CREATE TABLE time within the
+        // same transaction; SQLite is more permissive.
+        Table::create()
+            .table(FunctionPatches::Table)
+            .col(
+                ColumnDef::new(FunctionPatches::Id)
+                    .text()
+                    .not_null()
+                    .primary_key(),
+            )
+            .col(
+                ColumnDef::new(FunctionPatches::ParentFunctionVersionId)
+                    .text()
+                    .not_null(),
+            )
+            .col(
+                ColumnDef::new(FunctionPatches::FunctionId)
+                    .text()
+                    .not_null(),
+            )
+            .col(
+                ColumnDef::new(FunctionPatches::CollectionId)
+                    .text()
+                    .not_null(),
+            )
+            .col(ColumnDef::new(FunctionPatches::Snippet).text().not_null())
+            .col(ColumnDef::new(FunctionPatches::BundleId).text().not_null())
+            .col(
+                ColumnDef::new(FunctionPatches::RuntimeValues)
+                    .text()
+                    .not_null(),
+            )
+            .col(
+                ColumnDef::new(FunctionPatches::Description)
+                    .text()
+                    .not_null(),
+            )
+            .col(
+                ColumnDef::new(FunctionPatches::DefinedOn)
+                    .timestamp_with_time_zone()
+                    .not_null(),
+            )
+            .col(
+                ColumnDef::new(FunctionPatches::DefinedById)
+                    .text()
+                    .not_null(),
+            )
+            .col(ColumnDef::new(FunctionPatches::Status).text().not_null())
+            .foreign_key(
+                ForeignKey::create()
+                    .from(
+                        FunctionPatches::Table,
+                        FunctionPatches::ParentFunctionVersionId,
+                    )
+                    .to(Functions::Table, Functions::Id)
+                    .on_delete(ForeignKeyAction::Restrict)
+                    .on_update(ForeignKeyAction::Restrict),
+            )
+            .to_owned(),
+        // function_patches_current — holds the latest patch per
+        // parent_function_version_id. Maintained by an AFTER INSERT
+        // trigger on function_patches. Mint reads this via the versioned
+        // current view to resolve "current patch of head X at time T".
+        Table::create()
+            .table(FunctionPatchesCurrent::Table)
+            .col(
+                ColumnDef::new(FunctionPatchesCurrent::Id)
+                    .text()
+                    .not_null()
+                    .primary_key(),
+            )
+            .col(
+                ColumnDef::new(FunctionPatchesCurrent::ParentFunctionVersionId)
+                    .text()
+                    .not_null()
+                    .unique_key(),
+            )
+            .col(
+                ColumnDef::new(FunctionPatchesCurrent::FunctionId)
+                    .text()
+                    .not_null(),
+            )
+            .col(
+                ColumnDef::new(FunctionPatchesCurrent::CollectionId)
+                    .text()
+                    .not_null(),
+            )
+            .col(
+                ColumnDef::new(FunctionPatchesCurrent::Snippet)
+                    .text()
+                    .not_null(),
+            )
+            .col(
+                ColumnDef::new(FunctionPatchesCurrent::BundleId)
+                    .text()
+                    .not_null(),
+            )
+            .col(
+                ColumnDef::new(FunctionPatchesCurrent::RuntimeValues)
+                    .text()
+                    .not_null(),
+            )
+            .col(
+                ColumnDef::new(FunctionPatchesCurrent::Description)
+                    .text()
+                    .not_null(),
+            )
+            .col(
+                ColumnDef::new(FunctionPatchesCurrent::DefinedOn)
+                    .timestamp_with_time_zone()
+                    .not_null(),
+            )
+            .col(
+                ColumnDef::new(FunctionPatchesCurrent::DefinedById)
+                    .text()
+                    .not_null(),
+            )
+            .col(
+                ColumnDef::new(FunctionPatchesCurrent::Status)
+                    .text()
+                    .not_null(),
+            )
+            .to_owned(),
         // physical_function_runs
         Table::create()
             .table(PhysicalFunctionRuns::Table)
@@ -1029,7 +1158,7 @@ pub fn tables() -> Vec<TableCreateStatement> {
                     .not_null(),
             )
             .col(
-                ColumnDef::new(PhysicalTableDataVersions::FunctionRunId)
+                ColumnDef::new(PhysicalTableDataVersions::PhysicalFunctionRunId)
                     .text()
                     .not_null(),
             )
@@ -1092,7 +1221,7 @@ pub fn tables() -> Vec<TableCreateStatement> {
                 ForeignKey::create()
                     .from(
                         PhysicalTableDataVersions::Table,
-                        PhysicalTableDataVersions::FunctionRunId,
+                        PhysicalTableDataVersions::PhysicalFunctionRunId,
                     )
                     .to(PhysicalFunctionRuns::Table, PhysicalFunctionRuns::Id)
                     .on_delete(ForeignKeyAction::Restrict)
@@ -1168,136 +1297,18 @@ pub fn tables() -> Vec<TableCreateStatement> {
             .col(ColumnDef::new(Workers::ExecutionId).text().null())
             .col(ColumnDef::new(Workers::TransactionId).text().null())
             .col(ColumnDef::new(Workers::FunctionVersionId).text().not_null())
-            .col(ColumnDef::new(Workers::FunctionRunId).text().null())
+            .col(ColumnDef::new(Workers::PhysicalFunctionRunId).text().null())
             .col(ColumnDef::new(Workers::MessageStatus).text().not_null())
-            .col(ColumnDef::new(Workers::StartedOn).timestamp().null())
-            .col(ColumnDef::new(Workers::EndedOn).timestamp().null())
+            .col(ColumnDef::new(Workers::StartedOn).timestamp_with_time_zone().null())
+            .col(ColumnDef::new(Workers::EndedOn).timestamp_with_time_zone().null())
             .col(ColumnDef::new(Workers::Status).text().not_null())
             .col(ColumnDef::new(Workers::WorkerType).text().not_null())
             .col(ColumnDef::new(Workers::WorkerEnabled).boolean().not_null())
-            .col(ColumnDef::new(Workers::WorkerConfig).blob().null())
-            .to_owned(),
-        // function_patches — code-only overrides of a parent fvid.
-        Table::create()
-            .table(FunctionPatches::Table)
-            .col(
-                ColumnDef::new(FunctionPatches::Id)
-                    .text()
-                    .not_null()
-                    .primary_key(),
-            )
-            .col(
-                ColumnDef::new(FunctionPatches::ParentFunctionVersionId)
-                    .text()
-                    .not_null(),
-            )
-            .col(
-                ColumnDef::new(FunctionPatches::FunctionId)
-                    .text()
-                    .not_null(),
-            )
-            .col(
-                ColumnDef::new(FunctionPatches::CollectionId)
-                    .text()
-                    .not_null(),
-            )
-            .col(ColumnDef::new(FunctionPatches::Snippet).text().not_null())
-            .col(ColumnDef::new(FunctionPatches::BundleId).text().not_null())
-            .col(
-                ColumnDef::new(FunctionPatches::RuntimeValues)
-                    .text()
-                    .not_null(),
-            )
-            .col(
-                ColumnDef::new(FunctionPatches::Description)
-                    .text()
-                    .not_null(),
-            )
-            .col(
-                ColumnDef::new(FunctionPatches::DefinedOn)
-                    .timestamp()
-                    .not_null(),
-            )
-            .col(
-                ColumnDef::new(FunctionPatches::DefinedById)
-                    .text()
-                    .not_null(),
-            )
-            .col(ColumnDef::new(FunctionPatches::Status).text().not_null())
-            .foreign_key(
-                ForeignKey::create()
-                    .from(
-                        FunctionPatches::Table,
-                        FunctionPatches::ParentFunctionVersionId,
-                    )
-                    .to(Functions::Table, Functions::Id)
-                    .on_delete(ForeignKeyAction::Restrict)
-                    .on_update(ForeignKeyAction::Restrict),
-            )
-            .to_owned(),
-        // function_patches_current — holds the latest patch per
-        // parent_function_version_id. Maintained by an AFTER INSERT
-        // trigger on function_patches. Mint reads this via the versioned
-        // current view to resolve "current patch of head X at time T".
-        Table::create()
-            .table(FunctionPatchesCurrent::Table)
-            .col(
-                ColumnDef::new(FunctionPatchesCurrent::Id)
-                    .text()
-                    .not_null()
-                    .primary_key(),
-            )
-            .col(
-                ColumnDef::new(FunctionPatchesCurrent::ParentFunctionVersionId)
-                    .text()
-                    .not_null()
-                    .unique_key(),
-            )
-            .col(
-                ColumnDef::new(FunctionPatchesCurrent::FunctionId)
-                    .text()
-                    .not_null(),
-            )
-            .col(
-                ColumnDef::new(FunctionPatchesCurrent::CollectionId)
-                    .text()
-                    .not_null(),
-            )
-            .col(
-                ColumnDef::new(FunctionPatchesCurrent::Snippet)
-                    .text()
-                    .not_null(),
-            )
-            .col(
-                ColumnDef::new(FunctionPatchesCurrent::BundleId)
-                    .text()
-                    .not_null(),
-            )
-            .col(
-                ColumnDef::new(FunctionPatchesCurrent::RuntimeValues)
-                    .text()
-                    .not_null(),
-            )
-            .col(
-                ColumnDef::new(FunctionPatchesCurrent::Description)
-                    .text()
-                    .not_null(),
-            )
-            .col(
-                ColumnDef::new(FunctionPatchesCurrent::DefinedOn)
-                    .timestamp()
-                    .not_null(),
-            )
-            .col(
-                ColumnDef::new(FunctionPatchesCurrent::DefinedById)
-                    .text()
-                    .not_null(),
-            )
-            .col(
-                ColumnDef::new(FunctionPatchesCurrent::Status)
-                    .text()
-                    .not_null(),
-            )
+            // `WorkerConfig` is a string-typed Rust value (serialized JSON
+            // text), so the column is TEXT. Was BLOB historically, but PG
+            // rejects text→BYTEA on INSERT ("column is of type bytea but
+            // expression is of type text").
+            .col(ColumnDef::new(Workers::WorkerConfig).text().null())
             .to_owned(),
     ]
 }
@@ -1609,62 +1620,346 @@ pub fn views(b: &Backend) -> Vec<ViewDef> {
         // endpoint that powers the execution-plan graph — `status` here
         // is the canonical (sticky-Committed) flow-control status, not
         // the per-attempt audit on the PFR.
-        ViewDef::new(
-            "logical_function_runs__with_names",
-            Query::select()
-                .expr(Expr::col((LogicalFunctionRuns::Table, Asterisk)))
-                .expr_as(
-                    Expr::col((Functions::Table, Functions::Name)),
-                    Alias::new("name"),
-                )
-                .expr_as(
-                    Expr::col((Collections::Table, Collections::Name)),
-                    Alias::new("collection"),
-                )
-                .expr_as(
-                    Expr::col((Executions::Table, Executions::Name)),
-                    Alias::new("execution"),
-                )
-                .expr_as(
-                    b.name_or_id("users.name", "logical_function_runs.triggered_by_id"),
-                    Alias::new("triggered_by"),
-                )
-                .from(LogicalFunctionRuns::Table)
-                .join(
-                    JoinType::LeftJoin,
-                    Collections::Table,
-                    Expr::col((
-                        LogicalFunctionRuns::Table,
-                        LogicalFunctionRuns::CollectionId,
-                    ))
-                    .equals((Collections::Table, Collections::Id)),
-                )
-                .join(
-                    JoinType::LeftJoin,
-                    Functions::Table,
-                    Expr::col((
-                        LogicalFunctionRuns::Table,
-                        LogicalFunctionRuns::FunctionVersionId,
-                    ))
-                    .equals((Functions::Table, Functions::Id)),
-                )
-                .join(
-                    JoinType::LeftJoin,
-                    Executions::Table,
-                    Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::ExecutionId))
+        //
+        // `current_physical_function_run_id` resolves the LFR→PFR binding
+        // via the pointer event log: the most recent `Bound` pointer's
+        // target. NULL when no PFR is currently bound (Pending/Voided).
+        // Consumers that need to drill into per-attempt artifacts (workers,
+        // logs) use this to translate an LFR id to a PFR id without
+        // round-tripping the pointer table themselves.
+        {
+            let current_pfr_subquery = latest_bound_pointer_subquery(
+                (LogicalFunctionRuns::Table, LogicalFunctionRuns::Id),
+                LogicalFunctionRunPointers::Table,
+                LogicalFunctionRunPointers::PhysicalFunctionRunId,
+                LogicalFunctionRunPointers::LogicalFunctionRunId,
+                LogicalFunctionRunPointers::Status,
+                LogicalFunctionRunPointers::SetOn,
+                LogicalFunctionRunPointers::Id,
+            );
+            ViewDef::new(
+                "function_runs__with_names",
+                Query::select()
+                    .expr(Expr::col((LogicalFunctionRuns::Table, Asterisk)))
+                    .expr_as(
+                        Expr::col((Functions::Table, Functions::Name)),
+                        Alias::new("name"),
+                    )
+                    .expr_as(
+                        Expr::col((Collections::Table, Collections::Name)),
+                        Alias::new("collection"),
+                    )
+                    .expr_as(
+                        Expr::col((Executions::Table, Executions::Name)),
+                        Alias::new("execution"),
+                    )
+                    .expr_as(
+                        b.name_or_id("users.name", "logical_function_runs.triggered_by_id"),
+                        Alias::new("triggered_by"),
+                    )
+                    .expr_as(
+                        Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::Id)),
+                        Alias::new("physical_function_run_id"),
+                    )
+                    .expr_as(
+                        Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::StartedOn)),
+                        Alias::new("started_on"),
+                    )
+                    .expr_as(
+                        Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::EndedOn)),
+                        Alias::new("ended_on"),
+                    )
+                    .expr_as(
+                        Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::Status)),
+                        Alias::new("physical_status"),
+                    )
+                    .expr_as(
+                        Expr::col((
+                            PhysicalFunctionRuns::Table,
+                            PhysicalFunctionRuns::FunctionVersionPatchId,
+                        )),
+                        Alias::new("function_version_patch_id"),
+                    )
+                    .from(LogicalFunctionRuns::Table)
+                    .join(
+                        JoinType::LeftJoin,
+                        Collections::Table,
+                        Expr::col((
+                            LogicalFunctionRuns::Table,
+                            LogicalFunctionRuns::CollectionId,
+                        ))
+                        .equals((Collections::Table, Collections::Id)),
+                    )
+                    .join(
+                        JoinType::LeftJoin,
+                        Functions::Table,
+                        Expr::col((
+                            LogicalFunctionRuns::Table,
+                            LogicalFunctionRuns::FunctionVersionId,
+                        ))
+                        .equals((Functions::Table, Functions::Id)),
+                    )
+                    .join(
+                        JoinType::LeftJoin,
+                        Executions::Table,
+                        Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::ExecutionId))
+                            .equals((Executions::Table, Executions::Id)),
+                    )
+                    .join(
+                        JoinType::LeftJoin,
+                        Users::Table,
+                        Expr::col((
+                            LogicalFunctionRuns::Table,
+                            LogicalFunctionRuns::TriggeredById,
+                        ))
+                        .equals((Users::Table, Users::Id)),
+                    )
+                    .join(
+                        JoinType::LeftJoin,
+                        PhysicalFunctionRuns::Table,
+                        Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::Id)).eq(
+                            Expr::SubQuery(
+                                None,
+                                Box::new(SubQueryStatement::SelectStatement(
+                                    current_pfr_subquery,
+                                )),
+                            ),
+                        ),
+                    )
+                    .to_owned(),
+            )
+        },
+        // table_data_versions__with_names
+        //
+        // The single table-data-version listing view: LTDV identity rows
+        // merged with the currently-bound PTDV's per-attempt fields,
+        // resolved via the LTDV pointer-event log (`status = 'B'`, latest
+        // by `(set_on DESC, id DESC)`). PTDV-derived fields (and the
+        // PFR-side audit / function name / location reached through PTDV)
+        // are NULL when no PTDV is currently bound (Pending/Voided).
+        {
+            let bound_ptdv_subquery = latest_bound_pointer_subquery(
+                (LogicalTableDataVersions::Table, LogicalTableDataVersions::Id),
+                LogicalTableDataVersionPointers::Table,
+                LogicalTableDataVersionPointers::PhysicalTableDataVersionId,
+                LogicalTableDataVersionPointers::LogicalTableDataVersionId,
+                LogicalTableDataVersionPointers::Status,
+                LogicalTableDataVersionPointers::SetOn,
+                LogicalTableDataVersionPointers::Id,
+            );
+            ViewDef::new(
+                "table_data_versions__with_names",
+                Query::select()
+                    .expr(Expr::col((LogicalTableDataVersions::Table, Asterisk)))
+                    .expr_as(
+                        Expr::col((Collections::Table, Collections::Name)),
+                        Alias::new("collection"),
+                    )
+                    .expr_as(
+                        Expr::col((Executions::Table, Executions::Name)),
+                        Alias::new("execution"),
+                    )
+                    .expr_as(
+                        b.name_or_id(
+                            "users.name",
+                            "logical_table_data_versions.triggered_by_id",
+                        ),
+                        Alias::new("triggered_by"),
+                    )
+                    // PTDV-derived columns (bound pointer → PTDV).
+                    .expr_as(
+                        Expr::col((
+                            PhysicalTableDataVersions::Table,
+                            PhysicalTableDataVersions::Id,
+                        )),
+                        Alias::new("physical_table_data_version_id"),
+                    )
+                    .expr_as(
+                        Expr::col((
+                            PhysicalTableDataVersions::Table,
+                            PhysicalTableDataVersions::Name,
+                        )),
+                        Alias::new("name"),
+                    )
+                    .expr_as(
+                        Expr::col((
+                            PhysicalTableDataVersions::Table,
+                            PhysicalTableDataVersions::TableVersionId,
+                        )),
+                        Alias::new("table_version_id"),
+                    )
+                    .expr_as(
+                        Expr::col((
+                            PhysicalTableDataVersions::Table,
+                            PhysicalTableDataVersions::FunctionVersionId,
+                        )),
+                        Alias::new("function_version_id"),
+                    )
+                    .expr_as(
+                        Expr::col((
+                            PhysicalTableDataVersions::Table,
+                            PhysicalTableDataVersions::FunctionVersionPatchId,
+                        )),
+                        Alias::new("function_version_patch_id"),
+                    )
+                    .expr_as(
+                        Expr::col((
+                            PhysicalTableDataVersions::Table,
+                            PhysicalTableDataVersions::HasData,
+                        )),
+                        Alias::new("has_data"),
+                    )
+                    .expr_as(
+                        Expr::col((
+                            PhysicalTableDataVersions::Table,
+                            PhysicalTableDataVersions::SchemaChanged,
+                        )),
+                        Alias::new("schema_changed"),
+                    )
+                    .expr_as(
+                        Expr::col((
+                            PhysicalTableDataVersions::Table,
+                            PhysicalTableDataVersions::ColumnCount,
+                        )),
+                        Alias::new("column_count"),
+                    )
+                    .expr_as(
+                        Expr::col((
+                            PhysicalTableDataVersions::Table,
+                            PhysicalTableDataVersions::RowCount,
+                        )),
+                        Alias::new("row_count"),
+                    )
+                    .expr_as(
+                        Expr::col((
+                            PhysicalTableDataVersions::Table,
+                            PhysicalTableDataVersions::SchemaHash,
+                        )),
+                        Alias::new("schema_hash"),
+                    )
+                    .expr_as(
+                        Expr::col((
+                            PhysicalTableDataVersions::Table,
+                            PhysicalTableDataVersions::WithDataTableDataVersionId,
+                        )),
+                        Alias::new("with_data_table_data_version_id"),
+                    )
+                    .expr_as(
+                        Expr::col((
+                            PhysicalTableDataVersions::Table,
+                            PhysicalTableDataVersions::PhysicalFunctionRunId,
+                        )),
+                        Alias::new("physical_function_run_id"),
+                    )
+                    // PFR-side audit reached through the PTDV's producer.
+                    .expr_as(
+                        Expr::col((
+                            PhysicalFunctionRuns::Table,
+                            PhysicalFunctionRuns::StartedOn,
+                        )),
+                        Alias::new("started_on"),
+                    )
+                    .expr_as(
+                        Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::EndedOn)),
+                        Alias::new("ended_on"),
+                    )
+                    // Canonical LFR-side status of the LTDV's producer LFR
+                    // (sticky-Committed). Use this for committed-only filters.
+                    .expr_as(
+                        Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::Status)),
+                        Alias::new("status"),
+                    )
+                    // PFR-side per-attempt status (Running, Done, Error, …).
+                    .expr_as(
+                        Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::Status)),
+                        Alias::new("physical_status"),
+                    )
+                    .expr_as(
+                        Expr::col((Functions::Table, Functions::Name)),
+                        Alias::new("function"),
+                    )
+                    .expr_as(
+                        Expr::col((Functions::Table, Functions::DataLocation)),
+                        Alias::new("data_location"),
+                    )
+                    .expr_as(
+                        Expr::col((Functions::Table, Functions::StorageVersion)),
+                        Alias::new("storage_version"),
+                    )
+                    .from(LogicalTableDataVersions::Table)
+                    .join(
+                        JoinType::LeftJoin,
+                        Collections::Table,
+                        Expr::col((
+                            LogicalTableDataVersions::Table,
+                            LogicalTableDataVersions::CollectionId,
+                        ))
+                        .equals((Collections::Table, Collections::Id)),
+                    )
+                    .join(
+                        JoinType::LeftJoin,
+                        Executions::Table,
+                        Expr::col((
+                            LogicalTableDataVersions::Table,
+                            LogicalTableDataVersions::ExecutionId,
+                        ))
                         .equals((Executions::Table, Executions::Id)),
-                )
-                .join(
-                    JoinType::LeftJoin,
-                    Users::Table,
-                    Expr::col((
+                    )
+                    .join(
+                        JoinType::LeftJoin,
+                        Users::Table,
+                        Expr::col((
+                            LogicalTableDataVersions::Table,
+                            LogicalTableDataVersions::TriggeredById,
+                        ))
+                        .equals((Users::Table, Users::Id)),
+                    )
+                    .join(
+                        JoinType::LeftJoin,
+                        PhysicalTableDataVersions::Table,
+                        Expr::col((
+                            PhysicalTableDataVersions::Table,
+                            PhysicalTableDataVersions::Id,
+                        ))
+                        .eq(Expr::SubQuery(
+                            None,
+                            Box::new(SubQueryStatement::SelectStatement(bound_ptdv_subquery)),
+                        )),
+                    )
+                    .join(
+                        JoinType::LeftJoin,
+                        PhysicalFunctionRuns::Table,
+                        Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::Id)).equals(
+                            (
+                                PhysicalTableDataVersions::Table,
+                                PhysicalTableDataVersions::PhysicalFunctionRunId,
+                            ),
+                        ),
+                    )
+                    // Producer LFR — the LTDV-level canonical status comes
+                    // from here (sticky-Committed); separate from the
+                    // PFR's per-attempt status reached via PTDV above.
+                    .join(
+                        JoinType::LeftJoin,
                         LogicalFunctionRuns::Table,
-                        LogicalFunctionRuns::TriggeredById,
-                    ))
-                    .equals((Users::Table, Users::Id)),
-                )
-                .to_owned(),
-        ),
+                        Expr::col((
+                            LogicalTableDataVersions::Table,
+                            LogicalTableDataVersions::ProducerLogicalFunctionRunId,
+                        ))
+                        .equals((LogicalFunctionRuns::Table, LogicalFunctionRuns::Id)),
+                    )
+                    .join(
+                        JoinType::LeftJoin,
+                        Functions::Table,
+                        Expr::col((
+                            PhysicalTableDataVersions::Table,
+                            PhysicalTableDataVersions::FunctionVersionId,
+                        ))
+                        .equals((Functions::Table, Functions::Id)),
+                    )
+                    .to_owned(),
+            )
+        },
         // physical_table_data_versions__with_function
         //
         // Per-attempt audit view: which concrete FR (and function
@@ -1718,15 +2013,15 @@ pub fn views(b: &Backend) -> Vec<ViewDef> {
                     PhysicalFunctionRuns::Table,
                     Expr::col((
                         PhysicalTableDataVersions::Table,
-                        PhysicalTableDataVersions::FunctionRunId,
+                        PhysicalTableDataVersions::PhysicalFunctionRunId,
                     ))
                     .equals((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::Id)),
                 )
                 .to_owned(),
         ),
-        // table_data_versions__active
+        // physical_table_data_versions__active
         ViewDef::new(
-            "table_data_versions__active",
+            "physical_table_data_versions__active",
             Query::select()
                 .expr(Expr::col(Asterisk))
                 .from(Alias::new("physical_table_data_versions__with_function"))
@@ -1735,11 +2030,11 @@ pub fn views(b: &Backend) -> Vec<ViewDef> {
         ),
     ];
 
-    // table_data_versions__with_names
+    // physical_table_data_versions__with_names
     {
         let tdv_view = Alias::new("physical_table_data_versions__with_function");
         v.push(ViewDef::new(
-            "table_data_versions__with_names",
+            "physical_table_data_versions__with_names",
             Query::select()
                 .expr(Expr::col((tdv_view.clone(), Asterisk)))
                 .expr_as(

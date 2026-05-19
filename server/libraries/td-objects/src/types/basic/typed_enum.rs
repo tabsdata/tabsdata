@@ -155,7 +155,7 @@ pub enum ExecutionStatus {
 /// ```
 #[ta_objects::typed_enum]
 #[derive(Eq, PartialEq, Hash)]
-pub enum FunctionRunStatus {
+pub enum LogicalFunctionRunStatus {
     #[typed_enum(rename = "S")]
     Scheduled,
     #[typed_enum(rename = "RR")]
@@ -180,15 +180,15 @@ pub enum FunctionRunStatus {
     Yanked,
 }
 
-impl TryFrom<WorkerCallbackStatus> for FunctionRunStatus {
+impl TryFrom<WorkerCallbackStatus> for LogicalFunctionRunStatus {
     type Error = TdError;
 
     fn try_from(value: WorkerCallbackStatus) -> Result<Self, TdError> {
         let status = match value {
-            WorkerCallbackStatus::Running => FunctionRunStatus::Running,
-            WorkerCallbackStatus::Done => FunctionRunStatus::Done,
-            WorkerCallbackStatus::Error => FunctionRunStatus::Error,
-            WorkerCallbackStatus::Failed => FunctionRunStatus::Failed,
+            WorkerCallbackStatus::Running => LogicalFunctionRunStatus::Running,
+            WorkerCallbackStatus::Done => LogicalFunctionRunStatus::Done,
+            WorkerCallbackStatus::Error => LogicalFunctionRunStatus::Error,
+            WorkerCallbackStatus::Failed => LogicalFunctionRunStatus::Failed,
             WorkerCallbackStatus::Stopped => Err(api_error!(
                 ApiError::InputError,
                 "Cannot stop a function run worker via worker callback."
@@ -199,7 +199,7 @@ impl TryFrom<WorkerCallbackStatus> for FunctionRunStatus {
 }
 
 /// Per-attempt status on `physical_function_runs`. Independent of
-/// [`FunctionRunStatus`] (LFR/LTDV-canonical, sticky-Committed).
+/// [`LogicalFunctionRunStatus`] (LFR/LTDV-canonical, sticky-Committed).
 ///
 /// ```text
 ///   Requested ─► Dispatched ─► Running ─► Done | Error | Failed
@@ -250,27 +250,27 @@ impl TryFrom<WorkerCallbackStatus> for PhysicalFunctionRunStatus {
 /// terminals collapse to the PFR terminal that implied the underlying
 /// attempt outcome (Committed/Yanked → Done, Canceled → Failed); LFR
 /// pre-flight states map to Requested.
-impl From<FunctionRunStatus> for PhysicalFunctionRunStatus {
-    fn from(s: FunctionRunStatus) -> Self {
+impl From<LogicalFunctionRunStatus> for PhysicalFunctionRunStatus {
+    fn from(s: LogicalFunctionRunStatus) -> Self {
         match s {
-            FunctionRunStatus::Running => PhysicalFunctionRunStatus::Running,
-            FunctionRunStatus::Done | FunctionRunStatus::Committed | FunctionRunStatus::Yanked => {
-                PhysicalFunctionRunStatus::Done
-            }
-            FunctionRunStatus::Error => PhysicalFunctionRunStatus::Error,
-            FunctionRunStatus::Failed | FunctionRunStatus::Canceled => {
+            LogicalFunctionRunStatus::Running => PhysicalFunctionRunStatus::Running,
+            LogicalFunctionRunStatus::Done
+            | LogicalFunctionRunStatus::Committed
+            | LogicalFunctionRunStatus::Yanked => PhysicalFunctionRunStatus::Done,
+            LogicalFunctionRunStatus::Error => PhysicalFunctionRunStatus::Error,
+            LogicalFunctionRunStatus::Failed | LogicalFunctionRunStatus::Canceled => {
                 PhysicalFunctionRunStatus::Failed
             }
-            FunctionRunStatus::Scheduled
-            | FunctionRunStatus::Requested
-            | FunctionRunStatus::ReScheduled
-            | FunctionRunStatus::OnHold => PhysicalFunctionRunStatus::Requested,
+            LogicalFunctionRunStatus::Scheduled
+            | LogicalFunctionRunStatus::Requested
+            | LogicalFunctionRunStatus::ReScheduled
+            | LogicalFunctionRunStatus::OnHold => PhysicalFunctionRunStatus::Requested,
         }
     }
 }
 
-impl From<&FunctionRunStatus> for PhysicalFunctionRunStatus {
-    fn from(s: &FunctionRunStatus) -> Self {
+impl From<&LogicalFunctionRunStatus> for PhysicalFunctionRunStatus {
+    fn from(s: &LogicalFunctionRunStatus) -> Self {
         s.clone().into()
     }
 }
@@ -532,8 +532,8 @@ mod tests {
     /// that catches a divergent rename.
     #[test]
     fn test_sticky_terminal_codes_pinned() {
-        assert_eq!(FunctionRunStatus::Committed.to_string(), "C");
-        assert_eq!(FunctionRunStatus::Canceled.to_string(), "X");
-        assert_eq!(FunctionRunStatus::Yanked.to_string(), "Y");
+        assert_eq!(LogicalFunctionRunStatus::Committed.to_string(), "C");
+        assert_eq!(LogicalFunctionRunStatus::Canceled.to_string(), "X");
+        assert_eq!(LogicalFunctionRunStatus::Yanked.to_string(), "Y");
     }
 }

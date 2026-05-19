@@ -349,30 +349,30 @@ fn function_run_indices() -> Vec<IndexCreateStatement> {
 fn table_data_version_indices() -> Vec<IndexCreateStatement> {
     vec![
         Index::create()
-            .name("table_data_versions___collection_id___idx")
+            .name("physical_table_data_versions___collection_id___idx")
             .table(PhysicalTableDataVersions::Table)
             .col(PhysicalTableDataVersions::CollectionId)
             .to_owned(),
         Index::create()
-            .name("table_data_versions___execution_id___idx")
+            .name("physical_table_data_versions___execution_id___idx")
             .table(PhysicalTableDataVersions::Table)
             .col(PhysicalTableDataVersions::ExecutionId)
             .to_owned(),
         Index::create()
-            .name("table_data_versions___function_run_id___idx")
+            .name("physical_table_data_versions___physical_function_run_id___idx")
             .table(PhysicalTableDataVersions::Table)
-            .col(PhysicalTableDataVersions::FunctionRunId)
+            .col(PhysicalTableDataVersions::PhysicalFunctionRunId)
             .to_owned(),
         // Note: single table_id index removed — it's a prefix of these composites
         Index::create()
-            .name("table_data_versions___table_id___has_data___idx")
+            .name("physical_table_data_versions___table_id___has_data___idx")
             .table(PhysicalTableDataVersions::Table)
             .col(PhysicalTableDataVersions::TableId)
             .col(PhysicalTableDataVersions::HasData)
             .to_owned(),
         // Composite index for versioned queries: PARTITION BY table_id ORDER BY triggered_on DESC, id DESC
         Index::create()
-            .name("table_data_versions___table_id__triggered_on__id___idx")
+            .name("physical_table_data_versions___table_id__triggered_on__id___idx")
             .table(PhysicalTableDataVersions::Table)
             .col(PhysicalTableDataVersions::TableId)
             .col(PhysicalTableDataVersions::TriggeredOn)

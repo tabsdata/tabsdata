@@ -121,9 +121,8 @@ where
 
 The same pattern applies to `BasicQueries`, `ChunkedQueries`, and
 `RecursiveEntry`. Per-DAO surfaces (sessions, dependencies, executions,
-physical runs, logical runs, logical pointers) are reached
-through their own entry traits — see [Per-DAO Surfaces](#per-dao-surfaces)
-below.
+LFRs, PFRs, LTDVs, and their pointer event logs) are reached through
+their own entry traits — see [Per-DAO Surfaces](#per-dao-surfaces) below.
 
 The point-in-time / current / historic surfaces are reached via the
 `QueryEntry` trait constructors (`db.current()`, `db.versioned(&at)`,
@@ -355,17 +354,32 @@ DAO/verb prefixes — the wrapper is the namespace.
 db.sessions().purge().await?;
 db.dependencies().active_for_function_at(&fid, &at).await?;
 db.executions().list_by_table_data_version(&tdv, &params).await?;
-db.logical_runs().previous_for_function_at(&fid, &before).await?;
-db.logical_runs().to_commit(&execution_ids).await?;
-db.logical_runs().to_execute(&at).await?;
-db.logical_runs().for_dispatch(&fr_ids).await?;
-db.logical_pointers::<P>().bind(&id, &concrete, &at, &set_on, &by).await?;
-db.logical_pointers::<P>().concrete_at(&id, &at).await?;
+
+// LFR identity + chain queries
+db.lfr().previous_for_function_at(&fid, &before).await?;
+db.lfr().to_commit(&execution_ids).await?;
+db.lfr().to_execute(&at).await?;
+db.lfr().for_dispatch(&fr_ids).await?;
+db.lfr().blocked_ids(&execution_id, &at).await?;
+
+// PFR identity queries (replay dispatch / in-flight checks)
+db.pfr().to_dispatch().await?;
+db.pfr().in_flight_for(&execution_id, &function_id).await?;
+
+// LTDV queries + pointer-walking PTDV reads
+db.ltdv().latest_bound_tdv_with_data_for_table(&table_id, &triggered_on, true).await?;
+
+// Pointer event logs reached via the entity handle's `.pointers()`.
+// The type parameter is bound by which entity you came from — no
+// turbofish at the call site.
+db.lfr().pointers().concrete_at(&lfr_id, &at).await?;
+db.lfr().pointers().bind_with_known_state(&lfr_id, &fr_id, &latest, &set_on, &by).await?;
+db.ltdv().pointers().concrete_at(&ltdv_id, &at).await?;
 ```
 
 Each module owns its own entry trait (`SessionsEntry`, `DependenciesEntry`,
-…). Adding a new per-DAO surface is one `dao_handle!` invocation plus the
-inherent `impl` for the wrapper.
+`LfrEntry`, `PfrEntry`, `LtdvEntry`, …). Adding a new per-DAO surface is
+one `query_handle!` invocation plus the inherent `impl` for the wrapper.
 
 ## Transaction Handling
 

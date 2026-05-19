@@ -31,13 +31,14 @@ use td_objects::dxo::transaction::{TransactionDB, TransactionDBBuilder};
 use td_objects::graph::{MapGraph, TdGraph};
 use td_objects::transaction::map::{TransactionMap, TransactionMapper};
 use td_objects::types::basic::{
-    AtTime, Depth, Dot, FunctionId, FunctionOnly, FunctionRunStatus, FunctionStatus, InputIdx,
-    LogicalPointerReason, LogicalPointerStatus, LogicalTableDataVersionId, OverrideDisabledTrigger,
-    PhysicalTableDataVersionId, TableId, Trigger, TriggerType, VersionPos,
+    AtTime, Depth, Dot, FunctionId, FunctionOnly, FunctionStatus, InputIdx,
+    LogicalFunctionRunStatus, LogicalPointerReason, LogicalPointerStatus,
+    LogicalTableDataVersionId, OverrideDisabledTrigger, PhysicalTableDataVersionId, TableId,
+    Trigger, TriggerType, VersionPos,
 };
 use td_objects::types::recursion::RecursionOptions;
 use td_objects::types::table_ref::Versions;
-use td_queries::{ChunkedQueries, LogicalCascadeEntry, VersionedEntry};
+use td_queries::{ChunkedQueries, LfrEntry, VersionedEntry};
 use td_tower::api_message;
 use td_tower::ctx_service::ReqCtx;
 use td_tower::extractors::{MutRef, Ref};
@@ -622,7 +623,7 @@ pub async fn update_initial_function_run_status(
     at_time: Ref<AtTime>,
 ) -> Result<(), TdError> {
     let lfr_ids = conn
-        .logical_cascade()
+        .lfr()
         .blocked_ids(&execution.id, &at_time)
         .await?;
 
@@ -635,7 +636,7 @@ pub async fn update_initial_function_run_status(
 
     if !lfr_ids.is_empty() {
         let update = UpdateLogicalFunctionRunDB::builder()
-            .status(FunctionRunStatus::OnHold)
+            .status(LogicalFunctionRunStatus::OnHold)
             .build()?;
         let _ = conn
             .update_chunked::<_, LogicalFunctionRunDB, _>(&update, &lfr_ids)

@@ -1,10 +1,10 @@
 //
-// Copyright 2025 Tabs Data Inc.
+// Copyright 2026 Tabs Data Inc.
 //
 
 use td_apiforge::router_ext;
 
-#[router_ext(PhysicalFunctionRunsRouter)]
+#[router_ext(FunctionRunsRouter)]
 mod routes {
     use axum::Extension;
     use axum::extract::{Path, State};
@@ -15,23 +15,24 @@ mod routes {
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
-    use td_objects::dxo::logical::LogicalFunctionRun;
+    use td_objects::dxo::logical::FunctionRun;
     use td_objects::dxo::physical_function_run::PhysicalFunctionRun;
-    use td_objects::rest_urls::{
-        FUNCTION_RUN_GET, FUNCTION_RUN_LIST, LOGICAL_FUNCTION_RUN_LIST, PhysicalFunctionRunParam,
-    };
-    use td_services::function_run::services::PhysicalFunctionRunServices;
+    use td_objects::rest_urls::{FUNCTION_RUN_GET, FUNCTION_RUN_LIST, PhysicalFunctionRunParam};
+    use td_services::function_run::services::FunctionRunServices;
     use tower::ServiceExt;
 
     const FUNCTION_RUNS_TAG: &str = "Function Runs";
 
+    // Single listing endpoint. Returns LFR identity rows merged with the
+    // currently-bound PFR's per-attempt fields (`physical_function_run_id`,
+    // `started_on`, `ended_on`, …). No separate logical-only endpoint.
     #[apiserver_path(method = get, path = FUNCTION_RUN_LIST, tag = FUNCTION_RUNS_TAG)]
-    #[doc = "List function runs (per-attempt audit)"]
+    #[doc = "List function runs (logical identity + currently-bound physical)"]
     pub async fn list(
-        State(physical_function_runs): State<Arc<PhysicalFunctionRunServices>>,
+        State(physical_function_runs): State<Arc<FunctionRunServices>>,
         Extension(context): Extension<RequestContext>,
         Query(query_params): Query<ListParams>,
-    ) -> Result<ListStatus<PhysicalFunctionRun>, ErrorStatus> {
+    ) -> Result<ListStatus<FunctionRun>, ErrorStatus> {
         let request = context.list((), query_params);
         let response = physical_function_runs
             .list
@@ -41,26 +42,10 @@ mod routes {
         Ok(ListStatus::OK(response))
     }
 
-    #[apiserver_path(method = get, path = LOGICAL_FUNCTION_RUN_LIST, tag = FUNCTION_RUNS_TAG)]
-    #[doc = "List logical function runs (canonical flow-control status)"]
-    pub async fn list_logical(
-        State(physical_function_runs): State<Arc<PhysicalFunctionRunServices>>,
-        Extension(context): Extension<RequestContext>,
-        Query(query_params): Query<ListParams>,
-    ) -> Result<ListStatus<LogicalFunctionRun>, ErrorStatus> {
-        let request = context.list((), query_params);
-        let response = physical_function_runs
-            .list_logical
-            .service()
-            .oneshot(request)
-            .await?;
-        Ok(ListStatus::OK(response))
-    }
-
     #[apiserver_path(method = get, path = FUNCTION_RUN_GET, tag = FUNCTION_RUNS_TAG)]
     #[doc = "Read function run"]
     pub async fn read_run(
-        State(state): State<Arc<PhysicalFunctionRunServices>>,
+        State(state): State<Arc<FunctionRunServices>>,
         Extension(context): Extension<RequestContext>,
         Path(param): Path<PhysicalFunctionRunParam>,
     ) -> Result<GetStatus<PhysicalFunctionRun>, ErrorStatus> {

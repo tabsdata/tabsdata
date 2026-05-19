@@ -25,7 +25,7 @@ use td_objects::types::basic::{
     AtTime, ExecutionId, LogicalFunctionRunId, LogicalPointerReason, LogicalPointerStatus,
     LogicalTableDataVersionId, PhysicalFunctionRunId, TriggeredOn,
 };
-use td_queries::{ChunkedQueries, LiveEntry, LogicalPointersEntry, redirect_event};
+use td_queries::{ChunkedQueries, LfrEntry, LiveEntry, LtdvEntry, redirect_event};
 use td_tower::extractors::{MutRef, Ref};
 use tracing::{debug, instrument};
 
@@ -74,8 +74,9 @@ pub async fn redirect_pointers_at_finish(
         .collect();
 
     let latest_lfr_by_id: HashMap<LogicalFunctionRunId, LogicalFunctionRunPointerDB> = conn
-        .logical_pointers()
-        .latest_pointers_chunked::<LogicalFunctionRunPointerDB>(&lfr_ids, at.deref())
+        .lfr()
+        .pointers()
+        .latest_pointers_chunked(&lfr_ids, at.deref())
         .await?;
 
     // Early out: if no reporting PFR is a replay attempt (i.e. its
@@ -105,7 +106,7 @@ pub async fn redirect_pointers_at_finish(
         .await?;
     let tdvs_by_fr: HashMap<PhysicalFunctionRunId, Vec<PhysicalTableDataVersionDB>> = all_tdvs
         .into_iter()
-        .into_group_map_by(|t| t.function_run_id.clone());
+        .into_group_map_by(|t| t.physical_function_run_id.clone());
 
     // LTDVs produced by any LFR in this batch, grouped by producer LFR.
     let producer_filters: Vec<Option<LogicalFunctionRunId>> =
@@ -131,8 +132,9 @@ pub async fn redirect_pointers_at_finish(
         .map(|f| f.id.clone())
         .collect();
     let latest_ltdv_by_id: HashMap<LogicalTableDataVersionId, LogicalTableDataVersionPointerDB> =
-        conn.logical_pointers()
-            .latest_pointers_chunked::<LogicalTableDataVersionPointerDB>(&ltdv_ids, at.deref())
+        conn.ltdv()
+            .pointers()
+            .latest_pointers_chunked(&ltdv_ids, at.deref())
             .await?;
 
     for fr in physical_function_runs.iter() {

@@ -25,7 +25,7 @@ pub(crate) async fn seed_worker(
         .collection_id(collection.id)
         .execution_id(None)
         .transaction_id(None)
-        .function_run_id(None)
+        .physical_function_run_id(None)
         .function_version_id(&function.id)
         .message_status(message_status)
         .started_on(None)
@@ -51,7 +51,7 @@ pub(crate) async fn seed_function_runner_worker(
         .collection_id(execution.collection_id)
         .execution_id(Some(execution.id.clone()))
         .transaction_id(Some(transaction.id.clone()))
-        .function_run_id(Some(physical_function_run.id.clone()))
+        .physical_function_run_id(Some(physical_function_run.id.clone()))
         .function_version_id(&physical_function_run.function_version_id)
         .message_status(status)
         .started_on(None)
@@ -73,7 +73,7 @@ mod tests {
     use td_database::pool::TdPool;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
-        BundleId, CollectionName, Decorator, FunctionRunStatus, TransactionKey, UserId,
+        BundleId, CollectionName, Decorator, LogicalFunctionRunStatus, TransactionKey, UserId,
     };
 
     #[td_test::test(sqlx)]
@@ -128,7 +128,7 @@ mod tests {
                 &function_version,
                 &execution,
                 &transaction,
-                &FunctionRunStatus::Scheduled,
+                &LogicalFunctionRunStatus::Scheduled,
             )
             .await
             .unwrap();
@@ -147,7 +147,7 @@ mod tests {
         assert_eq!(worker.collection_id, collection.id);
         assert_eq!(worker.execution_id, Some(execution.id));
         assert_eq!(worker.transaction_id, Some(transaction.id));
-        assert_eq!(worker.function_run_id, Some(physical_function_run.id));
+        assert_eq!(worker.physical_function_run_id, Some(physical_function_run.id));
         assert_eq!(
             worker.function_version_id,
             physical_function_run.function_version_id

@@ -10,10 +10,10 @@ mod definitions {
     use crate::dxo::physical_table_data_version::ExecutionTableDataVersionRead;
     use crate::types::basic::{
         AtTime, CollectionId, CollectionName, Dot, Enabled, ExecutionId, ExecutionName,
-        ExecutionStatus, FunctionId, FunctionName, FunctionOnly, FunctionRunStatus,
-        FunctionVersionId, OverrideDisabledTrigger, PhysicalTableDataVersionId, SkipIfRunning,
-        StatusCount, System, TableName, TableVersionId, TransactionId, TriggerType, TriggeredOn,
-        UserId, UserName,
+        ExecutionStatus, FunctionId, FunctionName, FunctionOnly, FunctionVersionId,
+        LogicalFunctionRunStatus, OverrideDisabledTrigger, PhysicalTableDataVersionId,
+        SkipIfRunning, StatusCount, System, TableName, TableVersionId, TransactionId, TriggerType,
+        TriggeredOn, UserId, UserName,
     };
     use crate::types::composed::TableVersions;
     use crate::types::json::Json;
@@ -127,7 +127,7 @@ mod definitions {
         pub started_on: Option<AtTime>,
         pub ended_on: Option<AtTime>,
         pub status: ExecutionStatus,
-        pub function_run_status_count: Json<HashMap<FunctionRunStatus, StatusCount>>,
+        pub function_run_status_count: Json<HashMap<LogicalFunctionRunStatus, StatusCount>>,
     }
 
     #[ta_objects::Dto]

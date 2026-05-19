@@ -81,8 +81,9 @@ mod tests {
         AtTimeParam, FileFormatParam, SampleOffsetLenParam, SqlParam, TableParam, UncommittedParam,
     };
     use td_objects::types::basic::{
-        AccessTokenId, AtTime, BundleId, CollectionName, Decorator, FunctionRunStatus, RoleId,
-        StorageVersion, TableIdName, TableNameDto, TransactionKey, UncommittedStatus, UserId,
+        AccessTokenId, AtTime, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus,
+        RoleId, StorageVersion, TableIdName, TableNameDto, TransactionKey, UncommittedStatus,
+        UserId,
     };
     use td_objects::{Buildable, and};
     use td_queries::LiveEntry;
@@ -216,7 +217,7 @@ mod tests {
                     &function_version,
                     &execution,
                     &transaction,
-                    &FunctionRunStatus::Committed,
+                    &LogicalFunctionRunStatus::Committed,
                 )
                 .await?;
 

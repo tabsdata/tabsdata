@@ -17,12 +17,12 @@ use td_objects::dxo::worker::{CallbackRequest, UpdateWorkerDB, WorkerDB};
 use td_objects::dxo::yaml::WorkerOutput;
 use td_objects::dxo::yaml::function_runner::v2::WrittenTable;
 use td_objects::types::basic::{
-    AtTime, ExecutionId, FunctionRunStatus, HasData, LogicalFunctionRunId, PhysicalFunctionRunId,
+    ExecutionId, HasData, LogicalFunctionRunId, LogicalFunctionRunStatus, PhysicalFunctionRunId,
     SchemaChanged, WorkerId,
 };
 use td_objects::{Buildable, and};
 use td_queries::{
-    ChunkedQueries, LiveEntry, LogicalCascadeEntry, LogicalPointersEntry, LogicalRunsEntry,
+    ChunkedQueries, LfrEntry, LiveEntry, LtdvEntry,
 };
 use td_tower::ctx_service::ReqCtx;
 use td_tower::extractors::{MutRef, Ref};
@@ -31,17 +31,17 @@ use tracing::{debug, instrument};
 #[td_error]
 enum UpdateStatusRunError {
     #[error("Cannot change final '{1:?}' status for LFR [{0}]")]
-    StickyFinalStatus(LogicalFunctionRunId, FunctionRunStatus) = 0,
+    StickyFinalStatus(LogicalFunctionRunId, LogicalFunctionRunStatus) = 0,
     #[error("Unexpected LFR status transition for LFR [{0}]: {1:?} -> {2:?}")]
     UnexpectedFunctionRunStatusTransition(
         LogicalFunctionRunId,
-        FunctionRunStatus,
-        FunctionRunStatus,
+        LogicalFunctionRunStatus,
+        LogicalFunctionRunStatus,
     ) = 3,
     #[error("No LFR status update was performed")]
     NoOpStatusUpdate = 4,
     #[error("Absorbed replay-attempt callback for terminal LFR [{0}] (status {1:?})")]
-    ReplayCallbackAbsorbed(LogicalFunctionRunId, FunctionRunStatus) = 5,
+    ReplayCallbackAbsorbed(LogicalFunctionRunId, LogicalFunctionRunStatus) = 5,
 }
 
 #[instrument(
@@ -95,11 +95,11 @@ pub async fn update_function_run_status(
                 // Same-state transitions also absorb (idempotent). Any
                 // other target is an operator action and gets refused.
                 (
-                    s @ (FunctionRunStatus::Committed | FunctionRunStatus::Canceled),
-                    FunctionRunStatus::Running
-                    | FunctionRunStatus::Done
-                    | FunctionRunStatus::Error
-                    | FunctionRunStatus::Failed,
+                    s @ (LogicalFunctionRunStatus::Committed | LogicalFunctionRunStatus::Canceled),
+                    LogicalFunctionRunStatus::Running
+                    | LogicalFunctionRunStatus::Done
+                    | LogicalFunctionRunStatus::Error
+                    | LogicalFunctionRunStatus::Failed,
                 ) => {
                     ctx.warning(UpdateStatusRunError::StickyFinalStatus(
                         current.id.clone(),
@@ -107,10 +107,10 @@ pub async fn update_function_run_status(
                     ));
                     None
                 }
-                (s @ FunctionRunStatus::Yanked, FunctionRunStatus::Yanked)
+                (s @ LogicalFunctionRunStatus::Yanked, LogicalFunctionRunStatus::Yanked)
                 | (
-                    s @ (FunctionRunStatus::Committed | FunctionRunStatus::Canceled),
-                    FunctionRunStatus::Committed | FunctionRunStatus::Canceled,
+                    s @ (LogicalFunctionRunStatus::Committed | LogicalFunctionRunStatus::Canceled),
+                    LogicalFunctionRunStatus::Committed | LogicalFunctionRunStatus::Canceled,
                 ) if s == &update.status => {
                     ctx.warning(UpdateStatusRunError::StickyFinalStatus(
                         current.id.clone(),
@@ -119,9 +119,9 @@ pub async fn update_function_run_status(
                     None
                 }
                 (
-                    s @ (FunctionRunStatus::Committed
-                    | FunctionRunStatus::Canceled
-                    | FunctionRunStatus::Yanked),
+                    s @ (LogicalFunctionRunStatus::Committed
+                    | LogicalFunctionRunStatus::Canceled
+                    | LogicalFunctionRunStatus::Yanked),
                     _,
                 ) => Some(Err(UpdateStatusRunError::StickyFinalStatus(
                     current.id.clone(),
@@ -134,53 +134,53 @@ pub async fn update_function_run_status(
                 // user-visible "replay healed a failed run" promotion;
                 // `Done → Done` is the idempotent self-transition.
                 (
-                    FunctionRunStatus::Failed | FunctionRunStatus::Done,
-                    FunctionRunStatus::Running
-                    | FunctionRunStatus::Error
-                    | FunctionRunStatus::Failed,
+                    LogicalFunctionRunStatus::Failed | LogicalFunctionRunStatus::Done,
+                    LogicalFunctionRunStatus::Running
+                    | LogicalFunctionRunStatus::Error
+                    | LogicalFunctionRunStatus::Failed,
                 )
-                | (FunctionRunStatus::Done, FunctionRunStatus::Done) => {
+                | (LogicalFunctionRunStatus::Done, LogicalFunctionRunStatus::Done) => {
                     ctx.warning(UpdateStatusRunError::ReplayCallbackAbsorbed(
                         current.id.clone(),
                         current.status.clone(),
                     ));
                     None
                 }
-                (FunctionRunStatus::Failed, FunctionRunStatus::Done) => {
+                (LogicalFunctionRunStatus::Failed, LogicalFunctionRunStatus::Done) => {
                     Some(Ok(current.id.clone()))
                 }
 
                 // Mutable status
-                (FunctionRunStatus::Scheduled, FunctionRunStatus::Requested) => {
+                (LogicalFunctionRunStatus::Scheduled, LogicalFunctionRunStatus::Requested) => {
                     Some(Ok(current.id.clone()))
                 }
-                (FunctionRunStatus::ReScheduled, FunctionRunStatus::Requested) => {
+                (LogicalFunctionRunStatus::ReScheduled, LogicalFunctionRunStatus::Requested) => {
                     Some(Ok(current.id.clone()))
                 }
-                (FunctionRunStatus::Requested, FunctionRunStatus::Running) => {
+                (LogicalFunctionRunStatus::Requested, LogicalFunctionRunStatus::Running) => {
                     Some(Ok(current.id.clone()))
                 }
-                (FunctionRunStatus::Running, FunctionRunStatus::Done) => {
+                (LogicalFunctionRunStatus::Running, LogicalFunctionRunStatus::Done) => {
                     Some(Ok(current.id.clone()))
                 }
                 (
-                    FunctionRunStatus::Requested | FunctionRunStatus::Running,
-                    FunctionRunStatus::Error,
+                    LogicalFunctionRunStatus::Requested | LogicalFunctionRunStatus::Running,
+                    LogicalFunctionRunStatus::Error,
                 ) => Some(Ok(current.id.clone())),
                 (
-                    FunctionRunStatus::Requested | FunctionRunStatus::Running,
-                    FunctionRunStatus::Failed,
+                    LogicalFunctionRunStatus::Requested | LogicalFunctionRunStatus::Running,
+                    LogicalFunctionRunStatus::Failed,
                 ) => Some(Ok(current.id.clone())),
 
                 // Recover status, only for failed function runs, otherwise just no-op.
                 (
-                    FunctionRunStatus::Failed | FunctionRunStatus::OnHold,
-                    FunctionRunStatus::ReScheduled,
+                    LogicalFunctionRunStatus::Failed | LogicalFunctionRunStatus::OnHold,
+                    LogicalFunctionRunStatus::ReScheduled,
                 ) => Some(Ok(current.id.clone())),
-                (_, FunctionRunStatus::ReScheduled) => None,
+                (_, LogicalFunctionRunStatus::ReScheduled) => None,
 
                 // Cancel status.
-                (_, FunctionRunStatus::Canceled) => Some(Ok(current.id.clone())),
+                (_, LogicalFunctionRunStatus::Canceled) => Some(Ok(current.id.clone())),
 
                 // No-op for transitions between the same states
                 (current, new) if current == new => None,
@@ -218,7 +218,7 @@ pub async fn update_function_run_status(
     );
 
     // Publish LFRs if needed, including downstream publishing.
-    if update.status == FunctionRunStatus::Done {
+    if update.status == LogicalFunctionRunStatus::Done {
         let updated_set: HashSet<&LogicalFunctionRunId> = lfr_ids.iter().collect();
         let execution_ids: Vec<ExecutionId> = logical_function_runs
             .iter()
@@ -227,7 +227,7 @@ pub async fn update_function_run_status(
             .unique()
             .collect();
         let to_commit_ffrs: Vec<LogicalFunctionRunId> =
-            conn.logical_runs().to_commit(&execution_ids).await?;
+            conn.lfr().to_commit(&execution_ids).await?;
         debug!(
             commit_count = to_commit_ffrs.len(),
             "execution.commit: LFR(s) eligible to commit"
@@ -246,10 +246,10 @@ pub async fn update_function_run_status(
     }
 
     let downstream_status = match update.status {
-        FunctionRunStatus::Canceled => Some(FunctionRunStatus::Canceled),
-        FunctionRunStatus::Yanked => Some(FunctionRunStatus::Yanked),
-        FunctionRunStatus::ReScheduled => Some(FunctionRunStatus::ReScheduled),
-        FunctionRunStatus::Failed => Some(FunctionRunStatus::OnHold),
+        LogicalFunctionRunStatus::Canceled => Some(LogicalFunctionRunStatus::Canceled),
+        LogicalFunctionRunStatus::Yanked => Some(LogicalFunctionRunStatus::Yanked),
+        LogicalFunctionRunStatus::ReScheduled => Some(LogicalFunctionRunStatus::ReScheduled),
+        LogicalFunctionRunStatus::Failed => Some(LogicalFunctionRunStatus::OnHold),
         _ => None,
     };
 
@@ -296,7 +296,7 @@ async fn bfs_downstream_lfrs(
     while !frontier.is_empty() {
         let exclude: Vec<LogicalFunctionRunId> = visited.iter().cloned().collect();
         let next: Vec<LogicalFunctionRunId> = conn
-            .logical_cascade()
+            .lfr()
             .downstream_one_hop(&frontier, &exclude)
             .await?;
         let mut new_frontier = Vec::new();
@@ -344,13 +344,11 @@ pub async fn update_table_data_version_status(
             // TDV's triggered_on to find the previous canonically-bound
             // with-data TDV. Pointer-walk rather than a raw physical scan
             // so in-flight replays don't poison the schema-change check.
-            let at = AtTime::try_from(&data_version.triggered_on)?;
             let latest_version_with_data = conn
-                .logical_pointers()
+                .ltdv()
                 .latest_bound_tdv_with_data_for_table(
                     &data_version.table_id,
                     &data_version.triggered_on,
-                    &at,
                     false,
                 )
                 .await?;
@@ -422,8 +420,8 @@ pub(crate) mod tests {
     use td_objects::dxo::worker::WorkerDB;
     use td_objects::types::basic::{
         BundleId, CollectionName, Decorator, DependencyPos, ExecutionStatus, FunctionName,
-        FunctionRunStatus, FunctionRuntimeValues, TableName, TableNameDto, TransactionStatus,
-        UserId, VersionPos, WorkerMessageStatus,
+        FunctionRuntimeValues, LogicalFunctionRunStatus, TableName, TableNameDto,
+        TransactionStatus, UserId, VersionPos, WorkerMessageStatus,
     };
     use td_objects::types::composed::TableDependencyDto;
     use td_queries::LiveEntry;
@@ -447,8 +445,8 @@ pub(crate) mod tests {
         pub(crate) name: FunctionName,
         pub(crate) dependencies: Vec<TableDependencyDto>,
         pub(crate) tables: Vec<TableNameDto>,
-        pub(crate) initial_status: FunctionRunStatus,
-        pub(crate) expected_status: FunctionRunStatus,
+        pub(crate) initial_status: LogicalFunctionRunStatus,
+        pub(crate) expected_status: LogicalFunctionRunStatus,
     }
 
     // Creates proper setup for status update tests. It creates entities in test_executions. If names

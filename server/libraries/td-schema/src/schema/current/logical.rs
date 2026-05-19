@@ -22,11 +22,52 @@
 //! `(set_on DESC, id DESC)`. There is no separate "current" cache to keep
 //! in sync — the event log is the source of truth.
 
-use sea_query::{ColumnDef, ForeignKey, ForeignKeyAction, Iden, Table, TableCreateStatement};
+use sea_query::{
+    ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, IntoIden, Order, Query,
+    SelectStatement, Table, TableCreateStatement,
+};
 
 use super::collections::Collections;
 use super::functions::{Executions, Transactions};
 use crate::schema::backend::{Backend, ImmutableTriggerDef, StickyTerminalsTriggerDef};
+
+// Discriminant of `LogicalPointerStatus::Bound` (defined in td-objects).
+// Hoisted here as a `&str` because td-schema sits below td-objects in the
+// dep graph — keeps view definitions free of bare `"B"` literals.
+pub const POINTER_STATUS_BOUND: &str = "B";
+
+/// Correlated subquery that picks the concrete id of the latest `Bound`
+/// pointer-event for a logical identity. Used by the merged
+/// `function_runs__with_names` / `table_data_versions__with_names` views.
+///
+/// `outer_id_col` is the LFR/LTDV identity column the subquery should
+/// correlate against (e.g. `(LogicalFunctionRuns::Table, LogicalFunctionRuns::Id)`).
+/// The remaining args are the pointer-event table's idents.
+pub fn latest_bound_pointer_subquery<C, T, I>(
+    outer_id_col: C,
+    pointer_table: T,
+    concrete_id_col: I,
+    logical_id_col: I,
+    status_col: I,
+    set_on_col: I,
+    id_col: I,
+) -> SelectStatement
+where
+    C: sea_query::IntoColumnRef,
+    T: IntoIden,
+    I: IntoIden,
+{
+    let t = pointer_table.into_iden();
+    Query::select()
+        .column((t.clone(), concrete_id_col.into_iden()))
+        .from(t.clone())
+        .and_where(Expr::col((t.clone(), logical_id_col.into_iden())).equals(outer_id_col))
+        .and_where(Expr::col((t.clone(), status_col.into_iden())).eq(POINTER_STATUS_BOUND))
+        .order_by((t.clone(), set_on_col.into_iden()), Order::Desc)
+        .order_by((t, id_col.into_iden()), Order::Desc)
+        .limit(1)
+        .to_owned()
+}
 
 // ---------------------------------------------------------------------------
 // Iden enums

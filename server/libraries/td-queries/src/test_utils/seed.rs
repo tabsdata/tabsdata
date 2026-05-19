@@ -48,7 +48,7 @@ use td_objects::dxo::user_role::UserRoleDB;
 use td_objects::dxo::worker::WorkerDB;
 use td_objects::types::basic::{
     CollectionId, CollectionName, DependencyPos, Description, EntityId, EntityName,
-    FunctionRunStatus, PermissionType, RoleId, RoleName, ToCollectionId, TransactionKey,
+    LogicalFunctionRunStatus, PermissionType, RoleId, RoleName, ToCollectionId, TransactionKey,
     UserEnabled, UserId, UserName, VersionPos, WorkerMessageStatus, WorkerStatus, WorkerType,
 };
 
@@ -131,7 +131,7 @@ where
         function_version: &FunctionDB,
         execution: &ExecutionDB,
         transaction: &TransactionDB,
-        status: &FunctionRunStatus,
+        status: &LogicalFunctionRunStatus,
     ) -> Result<PhysicalFunctionRunDB, TdError> {
         seed_physical_function_run(
             self.executor,

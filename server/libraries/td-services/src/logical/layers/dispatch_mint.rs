@@ -24,7 +24,7 @@ use td_objects::dxo::table::TableDB;
 use td_objects::types::basic::{
     AtTime, FunctionVersionId, LogicalFunctionRunId, LogicalTableDataVersionId, UserId,
 };
-use td_queries::{ChunkedQueries, LogicalPointersEntry, VersionedEntry};
+use td_queries::{ChunkedQueries, LfrEntry, LtdvEntry, VersionedEntry};
 use td_tower::extractors::{MutRef, Ref};
 use tracing::{debug, instrument};
 
@@ -191,14 +191,9 @@ pub async fn mint_function_runs_on_dispatch(
                 lfr.id
             )
         })?;
-        conn.logical_pointers()
-            .bind_with_known_state::<LogicalFunctionRunPointerDB>(
-                &lfr.id,
-                &fr.id,
-                latest_lfr,
-                at.deref(),
-                &by,
-            )
+        conn.lfr()
+            .pointers()
+            .bind_with_known_state(&lfr.id, &fr.id, latest_lfr, at.deref(), &by)
             .await?;
 
         for tdv in &tdvs {
@@ -223,14 +218,9 @@ pub async fn mint_function_runs_on_dispatch(
                     ltdv.id
                 )
             })?;
-            conn.logical_pointers()
-                .bind_with_known_state::<LogicalTableDataVersionPointerDB>(
-                    &ltdv.id,
-                    &tdv.id,
-                    latest_ltdv,
-                    at.deref(),
-                    &by,
-                )
+            conn.ltdv()
+                .pointers()
+                .bind_with_known_state(&ltdv.id, &tdv.id, latest_ltdv, at.deref(), &by)
                 .await?;
         }
 

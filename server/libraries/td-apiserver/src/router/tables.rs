@@ -16,10 +16,10 @@ mod routes {
     use td_apiforge::apiserver_path;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::file::{CsvFile, ParquetFile};
-    use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersion;
+    use td_objects::dxo::logical::TableDataVersion;
     use td_objects::dxo::table::{Table, TableFlowGraphResponse};
     use td_objects::rest_urls::params::{
-        PhysicalTableDataVersionAtIdName, TableAtIdName, TableSampleAtName, TableSchema,
+        TableAtIdName, TableDataVersionAtIdName, TableSampleAtName, TableSchema,
     };
     use td_objects::rest_urls::{
         AtTimeParam, CollectionParam, DOWNLOAD_TABLE, FileFormatParam, LIST_TABLE_DATA_VERSIONS,
@@ -84,18 +84,21 @@ mod routes {
         Ok(ListStatus::OK(response))
     }
 
+    // Single listing endpoint. Returns LTDV identity rows merged with the
+    // currently-bound PTDV's per-attempt audit (row_count, schema, status,
+    // storage location, the PTDV id itself). `?at=` is the listing's
+    // historical point in time for the LTDV row filter. Committed-only
+    // filtering is via the standard `?filter=status:…` mechanism.
     #[apiserver_path(method = get, path = LIST_TABLE_DATA_VERSIONS, tag = TABLES_TAG)]
-    #[doc = "List data versions for a table"]
+    #[doc = "List data versions for a table (logical identity + currently-bound physical)"]
     pub async fn list_data_versions(
         State(state): State<Arc<TableServices>>,
         Extension(context): Extension<RequestContext>,
         Path(table_param): Path<TableParam>,
         Query(query_params): Query<ListParams>,
         Query(at_param): Query<AtTimeParam>,
-        Query(uncommitted_status): Query<UncommittedParam>,
-    ) -> Result<ListStatus<PhysicalTableDataVersion>, ErrorStatus> {
-        let name = TableAtIdName::new(table_param, at_param, uncommitted_status);
-        let name = PhysicalTableDataVersionAtIdName::new(name);
+    ) -> Result<ListStatus<TableDataVersion>, ErrorStatus> {
+        let name = TableDataVersionAtIdName::new(table_param, at_param);
         let request = context.list(name, query_params);
         let response = state.list_data_versions.service().oneshot(request).await?;
         Ok(ListStatus::OK(response))

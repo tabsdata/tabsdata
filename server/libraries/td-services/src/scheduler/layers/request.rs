@@ -54,7 +54,7 @@ use td_objects::types::basic::{
     WorkerId, WorkerMessageStatus, WorkerStatus, WorkerType,
 };
 use td_queries::{
-    ChunkedQueries, DependenciesEntry, LogicalPointersEntry, LogicalRunsEntry, PhysicalRunsEntry,
+    ChunkedQueries, DependenciesEntry, LfrEntry, LtdvEntry, PfrEntry,
     VersionedEntry,
 };
 use td_storage::location::StorageLocation;
@@ -129,7 +129,7 @@ pub async fn fetch_lfr_to_dispatch(
     mut conn: MutRef<DynamicConnection<'static>>,
     at: Ref<AtTime>,
 ) -> Result<Vec<LogicalFunctionRunDB>, TdError> {
-    let result = conn.logical_runs().to_execute(&at).await?;
+    let result = conn.lfr().to_execute(&at).await?;
     if result.is_empty() {
         debug!("scheduler.dispatch_tick: 0 LFRs ready");
     } else {
@@ -155,7 +155,7 @@ pub async fn fetch_lfr_to_dispatch(
 pub async fn fetch_pfrs_to_dispatch(
     mut conn: MutRef<DynamicConnection<'static>>,
 ) -> Result<Vec<PhysicalFunctionRunDB>, TdError> {
-    let result = conn.physical_runs().to_dispatch().await?;
+    let result = conn.pfr().to_dispatch().await?;
     if result.is_empty() {
         debug!("scheduler.dispatch_tick: 0 replay PFRs ready");
     } else {
@@ -207,7 +207,7 @@ pub async fn materialize_replay_dispatch(
         HashMap::new();
     for t in tdvs {
         tdvs_by_fr
-            .entry(t.function_run_id.clone())
+            .entry(t.physical_function_run_id.clone())
             .or_default()
             .push(t);
     }
@@ -264,7 +264,7 @@ pub async fn enrich_minted_dispatch(
         return Ok(Vec::new());
     }
     let fr_ids: Vec<PhysicalFunctionRunId> = minted.iter().map(|m| m.fr.id.clone()).collect();
-    let result = conn.logical_runs().for_dispatch(&fr_ids).await?;
+    let result = conn.lfr().for_dispatch(&fr_ids).await?;
     Ok(result)
 }
 
@@ -345,7 +345,7 @@ pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessag
         Vec<PhysicalTableDataVersionDBWithNames>,
     > = all_output_tables
         .into_iter()
-        .into_group_map_by(|t| t.function_run_id.clone());
+        .into_group_map_by(|t| t.physical_function_run_id.clone());
 
     let all_lfr_inputs: Vec<LogicalFunctionRunInputDB> = if lfr_ids.is_empty() {
         Vec::new()
@@ -624,11 +624,10 @@ pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessag
                                 // returning the latest canonically-bound TDV
                                 // with data — the same row a downstream reader
                                 // at that time would actually see.
-                                let at = AtTime::try_from(&key.1)?;
                                 let r = conn
-                                    .logical_pointers()
+                                    .ltdv()
                                     .latest_bound_tdv_with_data_for_table(
-                                        &key.0, &key.1, &at, false,
+                                        &key.0, &key.1, false,
                                     )
                                     .await?;
                                 latest_with_data_cache.insert(key, r.clone());
@@ -671,7 +670,7 @@ pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessag
                 .function_run_id(
                     found_data_version
                         .as_ref()
-                        .map(|v| v.function_run_id.clone()),
+                        .map(|v| v.physical_function_run_id.clone()),
                 )
                 .triggered_on(
                     found_data_version
@@ -776,7 +775,7 @@ pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessag
             collection_id: f.collection_id,
             execution_id: Some(f.execution_id.clone()),
             transaction_id: Some(f.transaction_id.clone()),
-            function_run_id: Some(f.id.clone()),
+            physical_function_run_id: Some(f.id.clone()),
             function_version_id: f.function_version_id.clone(),
             message_status: WorkerMessageStatus::Locked,
             started_on: None,

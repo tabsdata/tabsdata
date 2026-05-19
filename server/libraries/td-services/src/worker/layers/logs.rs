@@ -304,7 +304,7 @@ mod tests {
             collection_id: Default::default(),
             execution_id: None,
             transaction_id: None,
-            function_run_id: None,
+            physical_function_run_id: None,
             function_version_id: FunctionVersionId::new(),
             message_status: WorkerMessageStatus::Unlocked,
             started_on: None,

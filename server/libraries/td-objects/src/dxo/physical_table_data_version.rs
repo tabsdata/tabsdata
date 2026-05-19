@@ -39,7 +39,7 @@ mod definitions {
         pub function_version_patch_id: Option<FunctionVersionId>,
         pub execution_id: ExecutionId,
         pub transaction_id: TransactionId,
-        pub function_run_id: PhysicalFunctionRunId,
+        pub physical_function_run_id: PhysicalFunctionRunId,
         pub function_param_pos: TableFunctionParamPos,
         pub triggered_on: TriggeredOn,
 
@@ -91,7 +91,7 @@ mod definitions {
     }
 
     #[ta_objects::Dao]
-    #[dao(sql_table = "table_data_versions__active")]
+    #[dao(sql_table = "physical_table_data_versions__active")]
     #[inherits(PhysicalTableDataVersionDBWithFunction)]
     pub struct ActiveTableDataVersionDB {}
 
@@ -102,7 +102,7 @@ mod definitions {
     pub struct ExecutionTableDataVersionRead {}
 
     #[ta_objects::Dao]
-    #[dao(sql_table = "table_data_versions__with_names")]
+    #[dao(sql_table = "physical_table_data_versions__with_names")]
     #[inherits(PhysicalTableDataVersionDBWithFunction)]
     pub struct PhysicalTableDataVersionDBWithNames {
         pub collection: CollectionName,
@@ -136,7 +136,7 @@ mod definitions {
         #[dto(list(filter, filter_like, order_by))]
         pub transaction_id: TransactionId,
         #[dto(list(filter, order_by))]
-        pub function_run_id: PhysicalFunctionRunId,
+        pub physical_function_run_id: PhysicalFunctionRunId,
         #[dto(list(filter, order_by))]
         pub function_param_pos: Option<TableFunctionParamPos>,
 

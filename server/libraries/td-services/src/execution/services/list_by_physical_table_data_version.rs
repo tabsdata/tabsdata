@@ -50,7 +50,7 @@ mod tests {
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::table::TableDB;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, FunctionRunStatus, RoleId,
+        AccessTokenId, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus, RoleId,
         TableNameDto, TransactionKey, UserId, VersionPos,
     };
     use td_queries::LiveEntry;
@@ -121,7 +121,7 @@ mod tests {
                 &function_version,
                 &execution_1,
                 &transaction_1,
-                &FunctionRunStatus::Committed,
+                &LogicalFunctionRunStatus::Committed,
             )
             .await?;
 
@@ -172,7 +172,7 @@ mod tests {
                 &consumer_function_version,
                 &execution_2,
                 &transaction_2,
-                &FunctionRunStatus::Scheduled,
+                &LogicalFunctionRunStatus::Scheduled,
             )
             .await?;
 
@@ -247,7 +247,7 @@ mod tests {
                 &function_version,
                 &execution,
                 &transaction,
-                &FunctionRunStatus::Committed,
+                &LogicalFunctionRunStatus::Committed,
             )
             .await?;
 

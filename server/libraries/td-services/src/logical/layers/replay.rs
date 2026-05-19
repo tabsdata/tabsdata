@@ -5,7 +5,7 @@
 //! Replay-endpoint layer fns. The endpoint mints PFR + PTDV
 //! placeholders for the new attempt; the pointer log is untouched
 //! until the worker callback. Dispatch readiness lives on the
-//! physical side ([`td_queries::PhysicalRuns::to_dispatch`]).
+//! physical side ([`td_queries::Pfr::to_dispatch`]).
 
 use crate::function::layers::topology::{RunnableVersion, latest_patch_or_head};
 use crate::logical::layers::mint::{mint_function_run, mint_output_table_data_versions};
@@ -18,10 +18,10 @@ use td_objects::dxo::logical::{
 };
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::types::basic::{
-    AtTime, CollectionId, FunctionRunStatus, LogicalFunctionRunId, LogicalPointerStatus,
+    AtTime, CollectionId, LogicalFunctionRunId, LogicalFunctionRunStatus, LogicalPointerStatus,
     PhysicalFunctionRunId, PhysicalFunctionRunStatus,
 };
-use td_queries::{PhysicalRunsEntry, VersionedEntry};
+use td_queries::{PfrEntry, VersionedEntry};
 use td_tower::extractors::{MutRef, Ref};
 use tracing::{debug, instrument};
 
@@ -30,7 +30,7 @@ pub enum ReplayError {
     #[error("LFR [{0}] is not Bound to a finished function run; nothing to replay")]
     NotBound(LogicalFunctionRunId) = 0,
     #[error("LFR [{0}] status [{1:?}] is not terminal; cannot replay an in-flight run")]
-    NotTerminal(LogicalFunctionRunId, FunctionRunStatus) = 1,
+    NotTerminal(LogicalFunctionRunId, LogicalFunctionRunStatus) = 1,
     #[error("LFR [{0}] pointer is Bound but the bound FR id is missing")]
     BoundWithoutId(LogicalFunctionRunId) = 2,
     #[error(
@@ -91,7 +91,7 @@ pub async fn assert_no_concurrent_replay(
     bound: Ref<PhysicalFunctionRunId>,
 ) -> Result<(), TdError> {
     let in_flight: Option<PhysicalFunctionRunDB> = conn
-        .physical_runs()
+        .pfr()
         .in_flight_for(&lfr.execution_id, &lfr.function_id)
         .await?;
     if let Some(pfr) = in_flight
@@ -120,11 +120,11 @@ pub async fn assert_no_concurrent_replay(
 #[instrument(name = "replay.assert_terminal", skip_all, level = "debug", err(Debug))]
 pub async fn assert_lfr_terminal(lfr: Ref<LogicalFunctionRunDB>) -> Result<(), TdError> {
     match lfr.status {
-        FunctionRunStatus::Done
-        | FunctionRunStatus::Committed
-        | FunctionRunStatus::Failed
-        | FunctionRunStatus::Canceled
-        | FunctionRunStatus::Yanked => Ok(()),
+        LogicalFunctionRunStatus::Done
+        | LogicalFunctionRunStatus::Committed
+        | LogicalFunctionRunStatus::Failed
+        | LogicalFunctionRunStatus::Canceled
+        | LogicalFunctionRunStatus::Yanked => Ok(()),
         _ => Err(ReplayError::NotTerminal(lfr.id.clone(), lfr.status.clone()))?,
     }
 }

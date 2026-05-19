@@ -100,7 +100,7 @@ mod tests {
     use td_objects::rest_urls::FunctionParam;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, ExecutionName,
-        FunctionIdName, FunctionName, FunctionRunStatus, FunctionRuntimeValues, RoleId,
+        FunctionIdName, FunctionName, FunctionRuntimeValues, LogicalFunctionRunStatus, RoleId,
         TableNameDto, TransactionKey, UserId,
     };
     use td_queries::LiveEntry;
@@ -313,7 +313,7 @@ mod tests {
         let (function, response) = test_execute_version(
             db,
             Some(PreviousRun {
-                status: FunctionRunStatus::Running,
+                status: LogicalFunctionRunStatus::Running,
                 trigger_type: TriggerType::CronTrigger,
             }),
             SkipIfRunning::FALSE,
@@ -334,7 +334,7 @@ mod tests {
         let (function, response) = test_execute_version(
             db.clone(),
             Some(PreviousRun {
-                status: FunctionRunStatus::Running,
+                status: LogicalFunctionRunStatus::Running,
                 trigger_type: TriggerType::CronTrigger,
             }),
             SkipIfRunning::TRUE,
@@ -360,7 +360,7 @@ mod tests {
         let (function, response) = test_execute_version(
             db,
             Some(PreviousRun {
-                status: FunctionRunStatus::Committed,
+                status: LogicalFunctionRunStatus::Committed,
                 trigger_type: TriggerType::CronTrigger,
             }),
             SkipIfRunning::FALSE,
@@ -381,7 +381,7 @@ mod tests {
         let (function, response) = test_execute_version(
             db,
             Some(PreviousRun {
-                status: FunctionRunStatus::Committed,
+                status: LogicalFunctionRunStatus::Committed,
                 trigger_type: TriggerType::CronTrigger,
             }),
             SkipIfRunning::TRUE,
@@ -402,7 +402,7 @@ mod tests {
         let (function, response) = test_execute_version(
             db,
             Some(PreviousRun {
-                status: FunctionRunStatus::Running,
+                status: LogicalFunctionRunStatus::Running,
                 trigger_type: TriggerType::Manual,
             }),
             SkipIfRunning::FALSE,
@@ -423,7 +423,7 @@ mod tests {
         let (function, response) = test_execute_version(
             db,
             Some(PreviousRun {
-                status: FunctionRunStatus::Running,
+                status: LogicalFunctionRunStatus::Running,
                 trigger_type: TriggerType::Manual,
             }),
             SkipIfRunning::TRUE,
@@ -437,7 +437,7 @@ mod tests {
     }
 
     struct PreviousRun {
-        status: FunctionRunStatus,
+        status: LogicalFunctionRunStatus,
         trigger_type: TriggerType,
     }
 

@@ -4,10 +4,12 @@
 
 use crate::function::layers::enable::{update_function_db_builder, update_table_db_builder};
 use crate::function::layers::register_workers;
+use crate::scheduler::layers::request::notify_scheduler;
 use std::collections::HashMap;
 use ta_services::factory::service_factory;
 use td_authz::tower::{AuthzOn, CollAdmin, CollDev};
 use td_authz::{Authz, AuthzContext};
+use td_execution::SchedulerNotify;
 use td_objects::And;
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
@@ -32,6 +34,7 @@ use td_tower::layers;
     response = Function,
     connection = TransactionProvider,
     context = AuthzContext,
+    context = SchedulerNotify,
 )]
 fn service() {
     layers!(
@@ -86,6 +89,9 @@ fn service() {
         from_fn(By::<FunctionVersionId>::fetch_one::<FunctionDBWithNames>),
         from_fn(With::<FunctionDBWithNames>::try_convert_to::<FunctionBuilder, _>),
         from_fn(With::<FunctionBuilder>::build::<Function>),
+        // Wake the scheduler so worker state changes (cron Stop/Start)
+        // are picked up immediately instead of at the next polling tick.
+        from_fn(notify_scheduler),
     )
 }
 
@@ -182,6 +188,7 @@ mod tests {
                 type_of_val(&By::<FunctionVersionId>::fetch_one::<FunctionDBWithNames>),
                 type_of_val(&With::<FunctionDBWithNames>::try_convert_to::<FunctionBuilder, _>),
                 type_of_val(&With::<FunctionBuilder>::build::<Function>),
+                type_of_val(&notify_scheduler),
             ],
         );
     }

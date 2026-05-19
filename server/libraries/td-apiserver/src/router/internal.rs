@@ -28,7 +28,7 @@ mod routes {
     };
     use td_objects::rest_urls::{ExecutionParam, FunctionVersionIdParam};
     use td_services::execution::services::ExecutionServices;
-    use td_services::function_run::services::PhysicalFunctionRunServices;
+    use td_services::function_run::services::FunctionRunServices;
     use td_services::table::services::TableServices;
     use td_services::worker::services::WorkerServices;
     use td_tower::ctx_service::RawOneshot;
@@ -78,7 +78,7 @@ mod routes {
     #[apiserver_path(method = get, path = FUNCTION_VERSION_EXECUTION_STATUS, tag = INTERNAL_TAG)]
     #[doc = "Execution status for a given function version and execution plan"]
     pub async fn function_version_execution_status(
-        State(state): State<Arc<PhysicalFunctionRunServices>>,
+        State(state): State<Arc<FunctionRunServices>>,
         Extension(context): Extension<RequestContext>,
         Path(param): Path<FunctionVersionIdParam>,
         Json(request): Json<ExecutionParam>,

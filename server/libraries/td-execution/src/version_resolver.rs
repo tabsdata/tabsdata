@@ -67,7 +67,7 @@ use td_error::{TdError, td_error};
 use td_objects::dxo::logical::LogicalTableDataVersionDB;
 use td_objects::types::basic::{FunctionId, LogicalTableDataVersionId, TableId, TriggeredOn};
 use td_objects::types::table_ref::{Version, Versions};
-use td_queries::{ChunkedQueries, LiveEntry, LogicalRunsEntry, VersionedEntry};
+use td_queries::{ChunkedQueries, LfrEntry, LiveEntry, VersionedEntry};
 
 #[td_error]
 pub enum VersionResolverError {
@@ -393,7 +393,7 @@ impl<'a> VersionResolver<'a> {
         let triggered_on = self.triggered_on;
 
         let last_lfr = conn
-            .logical_runs()
+            .lfr()
             .previous_for_function_at(self.function_id, triggered_on)
             .await?;
 
@@ -459,7 +459,7 @@ mod tests {
     use td_objects::dxo::logical::LogicalFunctionRunDB;
     use td_objects::dxo::logical::LogicalTableDataVersionPointerDB;
     use td_objects::dxo::table::TableDB;
-    use td_objects::types::basic::FunctionRunStatus;
+    use td_objects::types::basic::LogicalFunctionRunStatus;
     use td_objects::types::basic::Trigger;
     use td_objects::types::basic::{
         AtTime, BundleId, CollectionName, Decorator, ExecutionId, LogicalPointerReason,
@@ -882,7 +882,7 @@ mod tests {
             .trigger(Trigger::Dependency)
             .triggered_on(ltdvs[0].triggered_on)
             .triggered_by_id(UserId::admin())
-            .status(FunctionRunStatus::Committed)
+            .status(LogicalFunctionRunStatus::Committed)
             .build()?;
         db.live().insert::<LogicalFunctionRunDB>(&lfr_run1).await?;
 
@@ -997,7 +997,7 @@ mod tests {
     async fn test_resolve_logical_voided_visible(db: TdPool) -> Result<(), TdError> {
         use td_objects::dxo::logical::LogicalPointerDao;
         use td_objects::types::basic::{LogicalPointerReason, LogicalPointerStatus};
-        use td_queries::LogicalPointersEntry;
+        use td_queries::LtdvEntry;
 
         let (_collection, _function, table_id, ltdvs) = seed_ftdv_timeline(&db, 2).await;
 
@@ -1034,8 +1034,9 @@ mod tests {
         // Confirm the latest pointer event for this LTDV is Voided (no
         // concrete TDV id reachable via the temporal view).
         let latest = conn
-            .logical_pointers()
-            .concrete_at::<LogicalTableDataVersionPointerDB>(&ltdv.id, &AtTime::now())
+            .ltdv()
+            .pointers()
+            .concrete_at(&ltdv.id, &AtTime::now())
             .await?;
         assert!(latest.is_none());
         Ok(())

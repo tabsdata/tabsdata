@@ -86,7 +86,7 @@ pub fn build_output_table_data_versions(
             .function_version_patch_id(runnable.function_version_patch_id.clone())
             .execution_id(&lfr.execution_id)
             .transaction_id(&lfr.transaction_id)
-            .function_run_id(&fr.id)
+            .physical_function_run_id(&fr.id)
             .function_param_pos(function_param_pos)
             .triggered_on(fr.triggered_on)
             .build()?;
@@ -122,9 +122,9 @@ mod tests {
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
     use td_objects::dxo::table::TableDBBuilder;
     use td_objects::types::basic::{
-        AccessTokenId, AtTime, BundleId, CollectionName, Decorator, FunctionRunStatus,
-        FunctionRuntimeValues, FunctionVersionId, Private, RoleId, TableFunctionParamPos, TableId,
-        TableName, TableNameDto, TableStatus, TransactionKey, UserId,
+        AccessTokenId, AtTime, BundleId, CollectionName, Decorator, FunctionRuntimeValues,
+        FunctionVersionId, LogicalFunctionRunStatus, Private, RoleId, TableFunctionParamPos,
+        TableId, TableName, TableNameDto, TableStatus, TransactionKey, UserId,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
@@ -202,7 +202,13 @@ mod tests {
             .await?;
         let pfr = db
             .seed()
-            .physical_function_run(&coll, &func, &exec, &txn, &FunctionRunStatus::Scheduled)
+            .physical_function_run(
+                &coll,
+                &func,
+                &exec,
+                &txn,
+                &LogicalFunctionRunStatus::Scheduled,
+            )
             .await?;
         let lfr = db
             .live()

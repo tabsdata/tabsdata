@@ -7,7 +7,7 @@ use crate::collection::service::CollectionServices;
 use crate::execution::services::ExecutionServices;
 use crate::execution::services::runtime_info::RuntimeContext;
 use crate::function::services::FunctionServices;
-use crate::function_run::services::PhysicalFunctionRunServices;
+use crate::function_run::services::FunctionRunServices;
 use crate::inter_coll_permission::services::InterCollectionPermissionServices;
 use crate::logical::services::LogicalServices;
 use crate::permission::services::PermissionServices;
@@ -59,7 +59,7 @@ pub struct Services {
     execution: Arc<ExecutionServices>,
     logical: Arc<LogicalServices>,
     function: Arc<FunctionServices>,
-    physical_function_run: Arc<PhysicalFunctionRunServices>,
+    function_run: Arc<FunctionRunServices>,
     inter_coll_permission: Arc<InterCollectionPermissionServices>,
     permission: Arc<PermissionServices>,
     role: Arc<RoleServices>,

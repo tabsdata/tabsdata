@@ -8369,6 +8369,7 @@ dependencies = [
  "serde_json",
  "sqlx",
  "strum 0.28.0",
+ "td-build",
  "td-common",
  "td-database",
  "td-error",
@@ -8651,6 +8652,7 @@ name = "td-database"
 version = "2.0.0"
 dependencies = [
  "async-stream",
+ "chrono",
  "futures-util",
  "openssl",
  "sea-query",
@@ -8857,6 +8859,7 @@ dependencies = [
  "sqlx",
  "strum 0.28.0",
  "ta-objects",
+ "td-build",
  "td-common",
  "td-database",
  "td-error",

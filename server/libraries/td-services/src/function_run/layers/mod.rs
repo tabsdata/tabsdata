@@ -6,10 +6,10 @@ use std::ops::Deref;
 use td_database::dynamic::DynamicConnection;
 use td_error::{ApiError, TdError, api_error};
 use td_objects::and;
-use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunPointerDB};
+use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDBWithNames;
 use td_objects::types::basic::{AtTime, ExecutionId, FunctionVersionId};
-use td_queries::{LiveEntry, LogicalPointersEntry};
+use td_queries::{LfrEntry, LiveEntry};
 use td_tower::extractors::{MutRef, Ref};
 use tracing::instrument;
 
@@ -35,8 +35,9 @@ pub async fn resolve_bound_function_run(
         .fetch_one(and!(execution_id.deref(), function_version_id.deref()))
         .await?;
     let bound_fr_id = conn
-        .logical_pointers()
-        .concrete_at::<LogicalFunctionRunPointerDB>(&lfr.id, &at)
+        .lfr()
+        .pointers()
+        .concrete_at(&lfr.id, &at)
         .await?
         .ok_or_else(|| {
             api_error!(

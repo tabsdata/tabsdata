@@ -104,7 +104,7 @@ where
             >,
         ),
         // Flip PFR.status Requested → Dispatched so the replay-side
-        // readiness query (`PhysicalRuns::to_dispatch`) excludes these
+        // readiness query (`Pfr::to_dispatch`) excludes these
         // PFRs from the next tick.
         from_fn(pfr_ids_from_minted_dispatch),
         from_fn(UpdatePhysicalFunctionRunDB::dispatched),
@@ -594,7 +594,7 @@ mod tests {
         assert_eq!(message.collection_id, collection.id);
         assert_eq!(message.execution_id, Some(execution.id));
         assert_eq!(
-            message.function_run_id,
+            message.physical_function_run_id,
             Some(physical_function_run.id.clone())
         );
         assert_eq!(
@@ -620,7 +620,8 @@ mod tests {
         use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunPointerDB};
         use td_objects::rest_urls::LogicalFunctionRunParam;
         use td_objects::types::basic::{
-            FunctionRunStatus, LogicalPointerStatus, PhysicalFunctionRunStatus, TransactionKey,
+            LogicalFunctionRunStatus, LogicalPointerStatus, PhysicalFunctionRunStatus,
+            TransactionKey,
         };
 
         // Seed a Committed function run by hand (mirrors a previously-
@@ -656,7 +657,7 @@ mod tests {
                 &function,
                 &execution,
                 &txn,
-                &FunctionRunStatus::Committed,
+                &LogicalFunctionRunStatus::Committed,
             )
             .await?;
         let lfr: LogicalFunctionRunDB = db
@@ -724,13 +725,13 @@ mod tests {
             .await?;
         assert_eq!(worker.message_status, WorkerMessageStatus::Locked);
         assert_eq!(
-            worker.function_run_id,
+            worker.physical_function_run_id,
             Some(replay_response.new_function_run_id.clone())
         );
 
         // LFR.status untouched.
         let lfr_after = db.live().fetch_one::<LogicalFunctionRunDB>(&lfr_id).await?;
-        assert_eq!(lfr_after.status, FunctionRunStatus::Committed);
+        assert_eq!(lfr_after.status, LogicalFunctionRunStatus::Committed);
 
         // Pointer log untouched by the replay endpoint — the only
         // events under this LFR are the seed's InitialMint + Bound,

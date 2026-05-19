@@ -107,7 +107,7 @@ mod tests {
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::table::TableDB;
     use td_objects::types::basic::{
-        BundleId, CollectionName, Decorator, DependencyPos, FunctionRunStatus, TableNameDto,
+        BundleId, CollectionName, Decorator, DependencyPos, LogicalFunctionRunStatus, TableNameDto,
         TransactionKey, UserId, VersionPos,
     };
     use td_security::ENCODED_ID_SYSTEM;
@@ -158,7 +158,7 @@ mod tests {
                 &function,
                 &execution,
                 &transaction,
-                &FunctionRunStatus::Scheduled,
+                &LogicalFunctionRunStatus::Scheduled,
             )
             .await
             .unwrap();
@@ -216,7 +216,7 @@ mod tests {
                 &function,
                 &execution,
                 &transaction,
-                &FunctionRunStatus::Scheduled,
+                &LogicalFunctionRunStatus::Scheduled,
             )
             .await
             .unwrap();

@@ -56,7 +56,7 @@ fn service() {
         from_fn(resolve_replay_function_version_id),
         // Mint FR_new + TDV_new placeholders. The pointer log is
         // untouched until the worker callback. Dispatch readiness keys
-        // off `PhysicalRuns::to_dispatch` (status=RR + no WorkerDB).
+        // off `Pfr::to_dispatch` (status=RR + no WorkerDB).
         from_fn(mint_replay_function_run),
         from_fn(mint_replay_table_data_versions),
         from_fn(build_replay_response),
@@ -85,7 +85,7 @@ mod tests {
     use td_objects::dxo::table::TableDB;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, Description,
-        FunctionRunStatus, FunctionRuntimeValues, FunctionStatus, FunctionVersionId,
+        FunctionRuntimeValues, FunctionStatus, FunctionVersionId, LogicalFunctionRunStatus,
         LogicalPointerReason, LogicalPointerStatus, PhysicalFunctionRunStatus, RoleId, Snippet,
         TableNameDto, TransactionKey, UserId,
     };
@@ -154,7 +154,7 @@ mod tests {
         db: &TdPool,
         coll_name: &str,
         fn_name: &str,
-        status: FunctionRunStatus,
+        status: LogicalFunctionRunStatus,
     ) -> (
         LogicalFunctionRunDB,
         PhysicalFunctionRunDB,
@@ -233,7 +233,7 @@ mod tests {
     #[tokio::test]
     async fn test_replay_committed_mints_new_fr(db: TdPool) -> Result<(), TdError> {
         let (lfr, fr_old, _head) =
-            seed_runnable(&db, "c0", "f0", FunctionRunStatus::Committed).await;
+            seed_runnable(&db, "c0", "f0", LogicalFunctionRunStatus::Committed).await;
 
         let coll_name = CollectionName::try_from("c0")?;
         let service = ReplayLogicalFunctionRunService::with_defaults(db.clone()).service();
@@ -254,11 +254,11 @@ mod tests {
 
         // LFR.status unchanged — replay doesn't demote sticky-Committed.
         let lfr_after = db.live().fetch_one::<LogicalFunctionRunDB>(&lfr.id).await?;
-        assert_eq!(lfr_after.status, FunctionRunStatus::Committed);
+        assert_eq!(lfr_after.status, LogicalFunctionRunStatus::Committed);
 
         // Pointer log untouched — replay endpoint doesn't append any
         // event. The latest pointer is still `Bound(FR_old)`. The
-        // scheduler picks the new PFR up via `PhysicalRuns::to_dispatch`
+        // scheduler picks the new PFR up via `Pfr::to_dispatch`
         // (PFR.status=Requested + no WorkerDB).
         let latest = db
             .versioned(&td_objects::types::basic::AtTime::now())
@@ -286,7 +286,8 @@ mod tests {
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_replay_done_mints_new_fr(db: TdPool) -> Result<(), TdError> {
-        let (lfr, fr_old, _head) = seed_runnable(&db, "c0", "f0", FunctionRunStatus::Done).await;
+        let (lfr, fr_old, _head) =
+            seed_runnable(&db, "c0", "f0", LogicalFunctionRunStatus::Done).await;
 
         let coll_name = CollectionName::try_from("c0")?;
         let response = ReplayLogicalFunctionRunService::with_defaults(db.clone())
@@ -296,7 +297,7 @@ mod tests {
 
         assert_ne!(response.new_function_run_id, fr_old.id);
         let lfr_after = db.live().fetch_one::<LogicalFunctionRunDB>(&lfr.id).await?;
-        assert_eq!(lfr_after.status, FunctionRunStatus::Done);
+        assert_eq!(lfr_after.status, LogicalFunctionRunStatus::Done);
         Ok(())
     }
 
@@ -304,7 +305,8 @@ mod tests {
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_replay_in_flight_refused(db: TdPool) -> Result<(), TdError> {
-        let (lfr, _fr, _head) = seed_runnable(&db, "c0", "f0", FunctionRunStatus::Running).await;
+        let (lfr, _fr, _head) =
+            seed_runnable(&db, "c0", "f0", LogicalFunctionRunStatus::Running).await;
 
         let coll_name = CollectionName::try_from("c0")?;
         let result = ReplayLogicalFunctionRunService::with_defaults(db.clone())
@@ -349,7 +351,13 @@ mod tests {
             .await?;
         let fr_old = db
             .seed()
-            .physical_function_run(&coll, &head, &exec, &txn, &FunctionRunStatus::Committed)
+            .physical_function_run(
+                &coll,
+                &head,
+                &exec,
+                &txn,
+                &LogicalFunctionRunStatus::Committed,
+            )
             .await?;
         let lfr_old: LogicalFunctionRunDB = db
             .live()
@@ -433,7 +441,7 @@ mod tests {
             .trigger(td_objects::types::basic::Trigger::Manual)
             .triggered_on(txn.triggered_on)
             .triggered_by_id(txn.triggered_by_id)
-            .status(FunctionRunStatus::Committed)
+            .status(LogicalFunctionRunStatus::Committed)
             .build()?;
         db.live().insert::<LogicalFunctionRunDB>(&lfr).await?;
         let pending = LogicalFunctionRunPointerDB::build_event(
