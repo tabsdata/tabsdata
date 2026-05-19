@@ -4,7 +4,7 @@ import typing
 
 import pytest
 
-from tabsdatak.api import NamedConn, Secret
+from tabsdatak.api import Env, NamedConn, Secret
 from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
     CfgSpec,
@@ -27,6 +27,7 @@ from tabsdatak.conn.clickhouse import (
     PortSpec,
     S3Location,
     SchemaEvolutionSpec,
+    SecureSpec,
 )
 from tabsdatak.conn.clickhouse.error import ClickHouseErrorCode
 
@@ -107,7 +108,7 @@ def test_clickhouse_conn_fields_wire_expected_specs():
     assert _hint(ClickHouseConn, "port") == PortSpec
     assert _hint(ClickHouseConn, "database") == DatabaseSpec
     assert _hint(ClickHouseConn, "credentials") == CredentialsSpec
-    assert _hint(ClickHouseConn, "secure") is bool
+    assert _hint(ClickHouseConn, "secure") == SecureSpec
     assert _hint(ClickHouseConn, "conn_cfg") == CfgSpec | None
 
 
@@ -117,6 +118,83 @@ def test_clickhouse_dest_fields_wire_expected_specs():
     assert _hint(ClickHouseDest, "if_table_exists") == IfTableExistsSpec
     assert _hint(ClickHouseDest, "schema_evolution") == SchemaEvolutionSpec
     assert _hint(ClickHouseDest, "dest_cfg") == DestCfgSpec | None
+
+
+# ---------------------------------------------------------------------------
+# ClickHouseConn._port() / _secure() casting helpers
+# ---------------------------------------------------------------------------
+
+
+def _bare_conn(*, port, secure=False):
+    return ClickHouseConn(
+        host="ch.example.com",
+        staging=_staging(),
+        port=port,
+        secure=secure,
+        credentials=UserPassword(
+            user=Secret.lit("u"), password=Secret.lit("p"),
+        ),
+    )
+
+
+def test_port_method_returns_int_when_int():
+    assert _bare_conn(port=8443)._port() == 8443
+
+
+def test_port_method_resolves_env(monkeypatch):
+    monkeypatch.setenv("CH_PORT", "9001")
+    assert _bare_conn(port=Env("CH_PORT"))._port() == 9001
+
+
+def test_port_method_resolves_secret_literal():
+    assert _bare_conn(port=Secret.lit("9002"))._port() == 9002
+
+
+def test_port_env_non_numeric_rejected_at_value(monkeypatch):
+    monkeypatch.setenv("CH_PORT_BAD", "notanumber")
+    conn = _bare_conn(port=Env("CH_PORT_BAD"))
+    with pytest.raises(Exception):
+        conn._port()
+
+
+def test_port_secret_literal_non_numeric_rejected_at_construction():
+    # The literal's eager pattern check fires at construction time.
+    with pytest.raises(Exception):
+        _bare_conn(port=Secret.lit("notanumber"))
+
+
+def test_secure_method_returns_bool_when_bool():
+    assert _bare_conn(port=1, secure=True)._secure() is True
+    assert _bare_conn(port=1, secure=False)._secure() is False
+
+
+def test_secure_method_resolves_env_true(monkeypatch):
+    monkeypatch.setenv("CH_SECURE", "true")
+    assert _bare_conn(port=1, secure=Env("CH_SECURE"))._secure() is True
+
+
+@pytest.mark.parametrize("val,expected", [
+    ("true", True),
+    ("True", True),
+    ("1", True),
+    ("yes", True),
+    ("false", False),
+    ("0", False),
+    ("no", False),
+])
+def test_secure_method_resolves_env_variants(monkeypatch, val, expected):
+    monkeypatch.setenv("CH_SECURE_X", val)
+    assert _bare_conn(port=1, secure=Env("CH_SECURE_X"))._secure() is expected
+
+
+def test_secure_method_resolves_secret_literal():
+    assert _bare_conn(port=1, secure=Secret.lit("true"))._secure() is True
+    assert _bare_conn(port=1, secure=Secret.lit("false"))._secure() is False
+
+
+def test_secure_secret_literal_invalid_token_rejected_at_construction():
+    with pytest.raises(Exception):
+        _bare_conn(port=1, secure=Secret.lit("maybe"))
 
 
 # ---------------------------------------------------------------------------

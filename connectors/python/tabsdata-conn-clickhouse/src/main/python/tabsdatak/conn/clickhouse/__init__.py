@@ -51,7 +51,27 @@ HostSpec: TypeAlias = Union[
     Annotated[Secret, _api.SecretValueConstraints(pattern=r".+")],
     Annotated[Env, _api.EnvValueConstraints(pattern=r".+")],
 ]
-PortSpec: TypeAlias = int
+
+# Port: plain int, or an Env / Secret whose resolved value parses as an
+# unsigned integer. The Env / Secret arms carry a digit-only pattern so
+# the value is validated at ``value()`` time. ``ClickHouseConn._port()``
+# does the final cast.
+_PORT_PATTERN = r"[0-9]+"
+PortSpec: TypeAlias = Union[
+    int,
+    Annotated[Env, _api.EnvValueConstraints(pattern=_PORT_PATTERN)],
+    Annotated[Secret, _api.SecretValueConstraints(pattern=_PORT_PATTERN)],
+]
+
+# Secure: plain bool, or an Env / Secret whose resolved value is one of
+# the accepted truthy / falsy tokens. ``ClickHouseConn._secure()`` does
+# the final cast.
+_BOOL_PATTERN = r"(?i)(?:true|false|1|0|yes|no)"
+SecureSpec: TypeAlias = Union[
+    bool,
+    Annotated[Env, _api.EnvValueConstraints(pattern=_BOOL_PATTERN)],
+    Annotated[Secret, _api.SecretValueConstraints(pattern=_BOOL_PATTERN)],
+]
 
 
 # Database: ClickHouse identifier shape (alphanumeric + underscore).
@@ -163,13 +183,23 @@ class GCSLocation(CloudLocation):
 @_api.dataclass(ClickHouseErrorCode.CLICKHOUSE_1, kw_only=True)
 class ClickHouseConn(Conn):
     host: HostSpec
-    staging: CloudLocation
     port: PortSpec = 8123
-    database: DatabaseSpec = "default"
     credentials: CredentialsSpec
-    secure: bool = False
+    staging: CloudLocation
+    database: DatabaseSpec = "default"
+    secure: SecureSpec = False
     entity_whitelist: EntityWhitelistSpec | None = None
     conn_cfg: CfgSpec | None = None
+
+    def _port(self) -> int:
+        if isinstance(self.port, int):
+            return self.port
+        return int(self.port.value())
+
+    def _secure(self) -> bool:
+        if isinstance(self.secure, bool):
+            return self.secure
+        return self.secure.value().strip().lower() in ("true", "1", "yes")
 
 
 ConnSpec: TypeAlias = Union[NamedConn, ClickHouseConn]

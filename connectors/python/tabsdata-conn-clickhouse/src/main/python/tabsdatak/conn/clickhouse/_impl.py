@@ -43,11 +43,11 @@ def _build_clickhouse_config(conn: ClickHouseConn):
 
     return ClickHouseConfig(
         host=host,
-        port=conn.port,
+        port=conn._port(),
         database=database,
         username=user,
         password=password,
-        secure=conn.secure,
+        secure=conn._secure(),
     )
 
 
