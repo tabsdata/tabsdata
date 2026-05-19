@@ -20,7 +20,7 @@ def test_validate_api_name_accepts_valid(value):
 def test_validate_api_name_rejects_bad_length(value):
     with pytest.raises(ConnInitException) as ei:
         _validation._validate_api_name(value)
-    assert ei.value.api_error is SalesforceErrorCode.SALESFORCE_6
+    assert ei.value.api_error is SalesforceErrorCode.SALESFORCE_5
 
 
 @pytest.mark.parametrize(
@@ -36,7 +36,7 @@ def test_validate_api_name_rejects_bad_length(value):
 def test_validate_api_name_rejects_bad_shape(value):
     with pytest.raises(ConnInitException) as ei:
         _validation._validate_api_name(value)
-    assert ei.value.api_error is SalesforceErrorCode.SALESFORCE_9
+    assert ei.value.api_error is SalesforceErrorCode.SALESFORCE_8
 
 
 @pytest.mark.parametrize(
@@ -64,7 +64,7 @@ def test_validate_instance_url_accepts_valid(value):
 def test_validate_instance_url_rejects_invalid(value):
     with pytest.raises(ConnInitException) as ei:
         _validation._validate_instance_url(value)
-    assert ei.value.api_error is SalesforceErrorCode.SALESFORCE_7
+    assert ei.value.api_error is SalesforceErrorCode.SALESFORCE_6
 
 
 @pytest.mark.parametrize("value", ["60.0", "1.0", "999.99"])
@@ -76,4 +76,4 @@ def test_validate_api_version_accepts_valid(value):
 def test_validate_api_version_rejects_invalid(value):
     with pytest.raises(ConnInitException) as ei:
         _validation._validate_api_version(value)
-    assert ei.value.api_error is SalesforceErrorCode.SALESFORCE_8
+    assert ei.value.api_error is SalesforceErrorCode.SALESFORCE_7

@@ -104,6 +104,7 @@ class SalesforceConn(Conn):
     instance_url: InstanceUrlSpec | None = None
     category: str | None = None
     objects: ObjectsNameSpec | None = None
+    entity_whitelist: EntityWhitelistSpec | None = None
     conn_cfg: CfgSpec | None = None
 
 
@@ -120,7 +121,6 @@ class SalesforceSrc(Src):
     include_deleted: bool = False
     initial_last_modified: datetime | None = None
     api_version: ApiVersionSpec | None = None
-    entity_whitelist: EntityWhitelistSpec | None = None
     src_cfg: SrcCfgSpec | None = None
 
 
@@ -137,9 +137,6 @@ class SalesforceReportSrc(Src):
     filter_logic: str | None = None
     last_modified_column: str | None = None
     initial_last_modified: datetime | None = None
-    entity_whitelist: EntityWhitelistSpec | None = None
-    # TODO: document valid keys for this cfg in the docstring above
-    # (see MySQLSrc src_cfg for the pattern).
     src_cfg: SrcCfgSpec | None = None
 
     def validate(self) -> None:

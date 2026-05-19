@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import pytest
 
 from tabsdatak.api import NamedConn, Secret
+from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.salesforce.error import SalesforceValidateException
 from tabsdatak.conn.salesforce import (
     SalesforceConn,
@@ -30,6 +31,7 @@ def _conn():
         credentials=_credentials(),
         instance_url="https://example.my.salesforce.com",
         objects=["Account", "Contact"],
+        entity_whitelist=["Account"],
         conn_cfg={"salesforce.timeout": 30},
     )
 
@@ -41,8 +43,7 @@ def test_salesforce_src_full_round_trip():
         include_deleted=True,
         initial_last_modified=datetime(2026, 1, 1, tzinfo=timezone.utc),
         api_version="60.0",
-        entity_whitelist=["Account"],
-        src_cfg={"chunkSize": 1024},
+        src_cfg={"salesforce.logging_level": 20},
     )
     loaded = SalesforceSrc.from_json(src.to_json())
     assert loaded == src
@@ -50,8 +51,8 @@ def test_salesforce_src_full_round_trip():
     assert loaded.include_deleted is True
     assert loaded.initial_last_modified == datetime(2026, 1, 1, tzinfo=timezone.utc)
     assert loaded.api_version == "60.0"
-    assert loaded.entity_whitelist == ["Account"]
-    assert loaded.src_cfg == {"chunkSize": 1024}
+    assert loaded.conn.entity_whitelist == ["Account"]
+    assert loaded.src_cfg == {"salesforce.logging_level": 20}
 
 
 def test_salesforce_report_src_full_round_trip():
@@ -64,8 +65,7 @@ def test_salesforce_report_src_full_round_trip():
         filter_logic="1",
         last_modified_column="LastModifiedDate",
         initial_last_modified=datetime(2026, 1, 1, tzinfo=timezone.utc),
-        entity_whitelist=["report:00O000000000001"],
-        src_cfg={"chunkSize": 2048},
+        src_cfg={"salesforce.logging_level": 20},
     )
     loaded = SalesforceReportSrc.from_json(src.to_json())
     assert loaded == src
@@ -75,7 +75,7 @@ def test_salesforce_report_src_full_round_trip():
     assert loaded.filter == [("Type", "equals", "Customer")]
     assert loaded.filter_logic == "1"
     assert loaded.last_modified_column == "LastModifiedDate"
-    assert loaded.src_cfg == {"chunkSize": 2048}
+    assert loaded.src_cfg == {"salesforce.logging_level": 20}
 
 
 def test_salesforce_src_round_trip_with_named_conn():
@@ -100,11 +100,68 @@ def test_salesforce_report_src_round_trip_with_named_conn():
     assert loaded.conn.name == "prod_salesforce"
 
 
-def test_salesforce_conn_validate_rejects_category_with_objects():
+def test_salesforce_report_src_validate_rejects_lmc_without_initial():
     with pytest.raises(SalesforceValidateException) as ei:
-        SalesforceConn(
-            credentials=_credentials(),
-            category="standard",
-            objects=["Account"],
+        SalesforceReportSrc(
+            conn=_conn(),
+            reports=["00O000000000001"],
+            last_modified_column="LastModifiedDate",
         )
-    assert ei.value.api_error is SalesforceErrorCode.SALESFORCE_3
+    assert ei.value.api_error is SalesforceErrorCode.SALESFORCE_17
+
+
+def test_salesforce_report_src_validate_rejects_initial_without_lmc():
+    from datetime import datetime, timezone
+
+    with pytest.raises(SalesforceValidateException) as ei:
+        SalesforceReportSrc(
+            conn=_conn(),
+            reports=["00O000000000001"],
+            initial_last_modified=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+    assert ei.value.api_error is SalesforceErrorCode.SALESFORCE_17
+
+
+# ---------------------------------------------------------------------------
+# src_cfg literal-key validation
+# ---------------------------------------------------------------------------
+
+
+def test_salesforce_src_rejects_unknown_src_cfg_key():
+    with pytest.raises(ConnInitException) as ei:
+        SalesforceSrc(
+            conn=_conn(),
+            queries=["SELECT Id FROM Account"],
+            src_cfg={"bogus.key": 1},
+        )
+    assert ei.value.api_error is SalesforceErrorCode.SALESFORCE_4
+
+
+def test_salesforce_src_accepts_known_src_cfg_keys():
+    src = SalesforceSrc(
+        conn=_conn(),
+        queries=["SELECT Id FROM Account"],
+        src_cfg={"salesforce.logging_level": 20},
+    )
+    loaded = SalesforceSrc.from_json(src.to_json())
+    assert loaded == src
+
+
+def test_salesforce_report_src_rejects_unknown_src_cfg_key():
+    with pytest.raises(ConnInitException) as ei:
+        SalesforceReportSrc(
+            conn=_conn(),
+            reports=["00O000000000001"],
+            src_cfg={"bogus.key": 1},
+        )
+    assert ei.value.api_error is SalesforceErrorCode.SALESFORCE_5
+
+
+def test_salesforce_report_src_accepts_known_src_cfg_keys():
+    src = SalesforceReportSrc(
+        conn=_conn(),
+        reports=["00O000000000001"],
+        src_cfg={"salesforce.logging_level": 20},
+    )
+    loaded = SalesforceReportSrc.from_json(src.to_json())
+    assert loaded == src

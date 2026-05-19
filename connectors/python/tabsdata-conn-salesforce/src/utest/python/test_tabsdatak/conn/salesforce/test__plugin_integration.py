@@ -1,0 +1,119 @@
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import polars as pl
+import pytest
+
+from tabsdatak.api import Secret
+from tabsdatak.conn.salesforce import (
+    SalesforceConn,
+    SalesforceSrc,
+    SalesforceTokenCredentials,
+)
+
+# noinspection PyProtectedMember
+import tabsdatak.conn.salesforce._plugin as plugin
+from tabsdatak.spi import SrcContext
+
+
+pytestmark = pytest.mark.salesforce
+
+
+_USERNAME = os.environ.get("SF0__USERNAME")
+_PASSWORD = os.environ.get("SF0__PASSWORD")
+_SECURITY_TOKEN = os.environ.get("SF0__SECURITY_TOKEN")
+_INSTANCE_URL = os.environ.get("SF0__INSTANCE_URL")
+_OBJECT = os.environ.get("SF0__OBJECT", "Account")
+
+
+_skip_reason = (
+    "Salesforce integration tests require SF0__USERNAME + SF0__PASSWORD"
+    " + SF0__SECURITY_TOKEN (and optionally SF0__INSTANCE_URL +"
+    " SF0__OBJECT)"
+)
+
+
+def _gates_ok() -> bool:
+    return all([_USERNAME, _PASSWORD, _SECURITY_TOKEN])
+
+
+pytestmark = [pytestmark, pytest.mark.skipif(not _gates_ok(), reason=_skip_reason)]
+
+
+# ---------------------------------------------------------------------------
+# Test context shim -- concrete subclass of the SPI's abstract SrcContext
+# so the integration tests exercise the real SrcContext protocol rather
+# than a duck-typed surrogate.
+# ---------------------------------------------------------------------------
+
+
+class _SrcCtx(SrcContext):
+    def __init__(self, work_dir: Path) -> None:
+        self._work_dir = work_dir
+
+    def work_dir(self) -> Path:
+        return self._work_dir
+
+    @property
+    def exec_plan_id(self) -> str:
+        return "salesforce-integ-exec-plan"
+
+    @property
+    def trx_id(self) -> str:
+        return "salesforce-integ-trx"
+
+    @property
+    def exec_plan_ts(self) -> str:
+        return "2026-01-01T00:00:00.000000+00:00"
+
+
+@pytest.fixture
+def work_dir(tmp_path: Path) -> Path:
+    out = tmp_path / "work"
+    out.mkdir()
+    return out
+
+
+@pytest.fixture
+def conn() -> SalesforceConn:
+    return SalesforceConn(
+        credentials=SalesforceTokenCredentials(
+            username=Secret.lit(_USERNAME),
+            password=Secret.lit(_PASSWORD),
+            security_token=Secret.lit(_SECURITY_TOKEN),
+        ),
+        instance_url=Secret.lit(_INSTANCE_URL) if _INSTANCE_URL else None,
+    )
+
+
+# ---------------------------------------------------------------------------
+# SOQL src -- happy path against the live org
+# ---------------------------------------------------------------------------
+
+
+def test_src_plugin_read_in_returns_parquet_files(conn, work_dir):
+    src = SalesforceSrc(
+        conn=conn,
+        queries=[f"SELECT Id FROM {_OBJECT} LIMIT 1"],
+    )
+    out = plugin._SalesforceSrcPlugin().read_in(_SrcCtx(work_dir), src)
+    assert len(out) == 1
+    assert len(out[0]) == 1
+    df = pl.read_parquet(out[0][0])
+    # We can't assert row counts (the org's data is out of our
+    # control) -- but the schema must include the Id column.
+    assert "Id" in df.columns
+
+
+def test_src_plugin_includes_deleted_flag_runs(conn, work_dir):
+    src = SalesforceSrc(
+        conn=conn,
+        queries=[f"SELECT Id FROM {_OBJECT} LIMIT 1"],
+        include_deleted=True,
+    )
+    out = plugin._SalesforceSrcPlugin().read_in(_SrcCtx(work_dir), src)
+    assert len(out) == 1
+    assert out[0][0].exists()
