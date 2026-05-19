@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::ops::Deref;
 use td_objects::types::basic::{
-    BundleId, CollectionId, DataLocation, FunctionId, FunctionVersionId, Partition, StorageVersion,
-    TableDataVersionId, TableId, TableVersionId, TransactionId,
+    BundleId, CollectionId, DataLocation, FunctionId, FunctionVersionId, Partition,
+    PhysicalTableDataVersionId, StorageVersion, TableId, TableVersionId, TransactionId,
 };
 
 /// The [`StorageLocation`] creates storage URIS for the different types of data tabsdata stores.
@@ -31,7 +31,7 @@ pub enum StorageLocation {
     ///
     /// * /LOCATION
     /// * /LOCATION/c/COLLECTION
-    /// * /LOCATION/c/COLLECTION/x/TRANSACTION/f/FUNCTION_VERSION (function_run contents)
+    /// * /LOCATION/c/COLLECTION/x/TRANSACTION/f/FUNCTION_VERSION (physical_function_run contents)
     /// * /LOCATION/c/COLLECTION/d/DATA_VERSION/t/TABLE/TABLE_VERSION.t
     /// * /LOCATION/c/COLLECTION/d/DATA_VERSION/t/TABLE/TABLE_VERSION/p/PARTITION.p
     /// * /bundles/c/COLLECTION/f/BUNDLE.tgz
@@ -150,7 +150,7 @@ pub struct DataBuilder {
 
 impl DataBuilder {
     /// Set the version for the data location.
-    pub fn data(&mut self, data_version: &TableDataVersionId) -> &mut Self {
+    pub fn data(&mut self, data_version: &PhysicalTableDataVersionId) -> &mut Self {
         self.info.data_version = Some(data_version.to_string());
         self
     }
@@ -323,7 +323,7 @@ impl CollectionBuilder {
     }
 
     /// Return a [`DataBuilder`] based on the [`CollectionBuilder`]
-    pub fn data(self, data_version: &TableDataVersionId) -> DataBuilder {
+    pub fn data(self, data_version: &PhysicalTableDataVersionId) -> DataBuilder {
         let mut builder = DataBuilder {
             info: self.info,
             version_builder: self.version_builder,
@@ -567,8 +567,8 @@ mod tests {
     use super::*;
     use td_error::TdError;
     use td_objects::types::basic::{
-        BundleId, CollectionId, DataLocation, FunctionVersionId, Partition, TableDataVersionId,
-        TableId, TableVersionId, TransactionId,
+        BundleId, CollectionId, DataLocation, FunctionVersionId, Partition,
+        PhysicalTableDataVersionId, TableId, TableVersionId, TransactionId,
     };
 
     #[test]
@@ -680,25 +680,27 @@ mod tests {
     fn test_data_builder_v2() -> Result<(), TdError> {
         let data_location = DataLocation::try_from("/L")?;
         let collection = CollectionId::default();
-        let table_data_version = TableDataVersionId::new();
+        let physical_table_data_version = PhysicalTableDataVersionId::new();
         let mut builder = StorageLocation::V2
             .builder(&data_location)
             .collection(&collection)
-            .data(&table_data_version);
+            .data(&physical_table_data_version);
 
         assert_eq!(
             builder.build().0,
-            SPath::parse(format!("/L/c/{collection}/d/{table_data_version}"))?
+            SPath::parse(format!("/L/c/{collection}/d/{physical_table_data_version}"))?
         );
         assert_eq!(
             builder.build_meta("foo").0,
-            SPath::parse(format!("/L/c/{collection}/d/{table_data_version}-foo.meta"))?
+            SPath::parse(format!(
+                "/L/c/{collection}/d/{physical_table_data_version}-foo.meta"
+            ))?
         );
-        let table_data_version = TableDataVersionId::new();
-        builder.data(&table_data_version);
+        let physical_table_data_version = PhysicalTableDataVersionId::new();
+        builder.data(&physical_table_data_version);
         assert_eq!(
             builder.build().0,
-            SPath::parse(format!("/L/c/{collection}/d/{table_data_version}"))?
+            SPath::parse(format!("/L/c/{collection}/d/{physical_table_data_version}"))?
         );
         Ok(())
     }
@@ -707,25 +709,25 @@ mod tests {
     fn test_table_builder_v2() -> Result<(), TdError> {
         let data_location = DataLocation::try_from("/L")?;
         let collection = CollectionId::default();
-        let table_data_version = TableDataVersionId::new();
+        let physical_table_data_version = PhysicalTableDataVersionId::new();
         let table = TableId::default();
         let table_version = TableVersionId::default();
         let mut builder = StorageLocation::V2
             .builder(&data_location)
             .collection(&collection)
-            .data(&table_data_version)
+            .data(&physical_table_data_version)
             .table(&table, &table_version);
 
         assert_eq!(
             builder.build().0,
             SPath::parse(format!(
-                "/L/c/{collection}/d/{table_data_version}/t/{table}/{table_version}.t"
+                "/L/c/{collection}/d/{physical_table_data_version}/t/{table}/{table_version}.t"
             ))?
         );
         assert_eq!(
             builder.build_meta("foo").0,
             SPath::parse(format!(
-                "/L/c/{collection}/d/{table_data_version}/t/{table}/{table_version}.t-foo.meta"
+                "/L/c/{collection}/d/{physical_table_data_version}/t/{table}/{table_version}.t-foo.meta"
             ))?
         );
 
@@ -735,7 +737,7 @@ mod tests {
         assert_eq!(
             builder.build().0,
             SPath::parse(format!(
-                "/L/c/{collection}/d/{table_data_version}/t/{table}/{table_version}.t"
+                "/L/c/{collection}/d/{physical_table_data_version}/t/{table}/{table_version}.t"
             ))?
         );
 
@@ -744,13 +746,13 @@ mod tests {
         assert_eq!(
             builder.build().0,
             SPath::parse(format!(
-                "/L/c/{collection}/d/{table_data_version}/t/{table}/{table_version}/p/{partition}.p"
+                "/L/c/{collection}/d/{physical_table_data_version}/t/{table}/{table_version}/p/{partition}.p"
             ))?
         );
         assert_eq!(
             builder.build_meta("foo").0,
             SPath::parse(format!(
-                "/L/c/{collection}/d/{table_data_version}/t/{table}/{table_version}/p/{partition}.p-foo.meta"
+                "/L/c/{collection}/d/{physical_table_data_version}/t/{table}/{table_version}/p/{partition}.p-foo.meta"
             ))?
         );
 
@@ -761,7 +763,7 @@ mod tests {
         assert_eq!(
             builder.build().0,
             SPath::parse(format!(
-                "/L/c/{collection}/d/{table_data_version}/t/{table}/{table_version}/p/{partition}.p"
+                "/L/c/{collection}/d/{physical_table_data_version}/t/{table}/{table_version}/p/{partition}.p"
             ))?
         );
         Ok(())
