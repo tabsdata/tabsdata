@@ -56,8 +56,8 @@ mod tests {
         WorkerMessageStatus,
     };
     use td_objects::types::composed::TableDependencyDto;
-    use td_queries::BasicQueries;
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::LiveEntry;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
     use tower::ServiceExt;
 
@@ -81,7 +81,8 @@ mod tests {
     async fn test_schedule_commit(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .seed_collection(&collection_name, &UserId::admin())
+            .seed()
+            .collection(&collection_name, &UserId::admin())
             .await?;
 
         // Setup
@@ -101,7 +102,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _ = db.seed_function(&collection, &create).await?;
+        let _ = db.seed().function(&collection, &create).await?;
 
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
@@ -160,6 +161,7 @@ mod tests {
 
         // And assert db
         let message: WorkerDB = db
+            .live()
             .fetch_one::<WorkerDB>(&WorkerId::try_from(created_message.id.as_str())?)
             .await?;
         assert_eq!(message.message_status, WorkerMessageStatus::Unlocked);

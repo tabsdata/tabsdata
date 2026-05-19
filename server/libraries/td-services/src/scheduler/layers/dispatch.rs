@@ -13,11 +13,15 @@ use td_common::server::{
 use td_database::dynamic::DynamicConnection;
 use td_error::{ApiError, TdError, api_error};
 use td_execution::SchedulerNotify;
-use td_objects::dxo::function_run::{FunctionRunDB, UpdateFunctionRunDB};
+use td_objects::and;
+use td_objects::dxo::logical::{LogicalFunctionRunDB, UpdateLogicalFunctionRunDB};
+use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::worker::{UpdateWorkerMessageStatusDB, WorkerDB};
 use td_objects::dxo::yaml::function_runner::v2::FunctionInput;
-use td_objects::types::basic::{FunctionRunId, FunctionRunStatus, WorkerId};
-use td_queries::BasicQueries;
+use td_objects::types::basic::{
+    FunctionRunStatus, LogicalFunctionRunId, PhysicalFunctionRunId, WorkerId,
+};
+use td_queries::LiveEntry;
 use td_tower::extractors::{MutRef, Ref};
 use tracing::{debug, error, instrument, warn};
 
@@ -140,115 +144,172 @@ pub async fn unlock_function_runner_worker<T: WorkerMessageQueue>(
     worker_id: WorkerId,
     payload: &RequestMessagePayload,
 ) -> Result<(), TdError> {
-    match &payload.action {
-        MessageAction::Start => {
-            if let Some(context) = &payload.context {
-                match serde_yaml::from_value::<FunctionInput>(context.clone()) {
-                    Ok(context) => {
-                        // Look for the function run
-                        let function_run: FunctionRunDB = conn
-                            .fetch_one::<FunctionRunDB>(&context.info.function_run_id)
-                            .await?;
-
-                        // Discard if unexpected status found
-                        if !matches!(function_run.status, FunctionRunStatus::RunRequested) {
-                            warn!(
-                                worker_id = %worker_id,
-                                function_run_id = %function_run.id,
-                                status = %function_run.status,
-                                "dispatch: function_run not in RunRequested state; rolling back"
-                            );
-                            rollback_function_run_db(conn, &worker_id, &function_run.id).await?;
-                            Err(api_error!(
-                                ApiError::InternalError,
-                                "Start function locked message [{}] for function run [{}] is not in RR state: {}",
-                                worker_id,
-                                function_run.id,
-                                function_run.status
-                            ))?
-                        }
-
-                        // Unlock
-                        let update = UpdateWorkerMessageStatusDB::unlocked().await?;
-                        match conn.update::<_, WorkerDB>(&update, &worker_id).await {
-                            Ok(_) => match message_queue.commit(&worker_id.to_string()).await {
-                                Ok(_) => {
-                                    debug!(
-                                        worker_id = %worker_id,
-                                        function_run_id = %function_run.id,
-                                        "dispatch: function_runner dispatched"
-                                    );
-                                    Ok(())
-                                }
-                                Err(e) => {
-                                    rollback_function_run_db(conn, &worker_id, &function_run.id)
-                                        .await?;
-                                    Err(api_error!(
-                                        ApiError::InternalError,
-                                        "Start function locked message [{}] for function run [{}] dispatch failed: {}",
-                                        worker_id,
-                                        function_run.id,
-                                        e
-                                    ))?
-                                }
-                            },
-                            Err(e) => {
-                                rollback_function_run_db(conn, &worker_id, &function_run.id)
-                                    .await?;
-                                Err(api_error!(
-                                    ApiError::InternalError,
-                                    "Start function locked message [{}] for function run [{}] dispatch failed: {}",
-                                    worker_id,
-                                    function_run.id,
-                                    e
-                                ))?
-                            }
-                        }
-                    }
-                    Err(e) => Err(api_error!(
-                        ApiError::InternalError,
-                        "Start function locked message [{worker_id}] has invalid context [{context:?}]: {e:?}",
-                    ))?,
-                }
-            } else {
-                Err(api_error!(
-                    ApiError::InternalError,
-                    "Start function locked message [{worker_id}] has no context: {payload:?}"
-                ))?
-            }
-        }
-        action => Err(api_error!(
+    let MessageAction::Start = &payload.action else {
+        return Err(api_error!(
             ApiError::InternalError,
-            "Function runner [{action}] action for locked message [{worker_id}] is not supported: {payload:?}"
-        )),
+            "Function runner [{}] action for locked message [{worker_id}] is not supported: {payload:?}",
+            &payload.action,
+        ));
+    };
+    let Some(context) = &payload.context else {
+        return Err(api_error!(
+            ApiError::InternalError,
+            "Start function locked message [{worker_id}] has no context: {payload:?}"
+        ));
+    };
+    let context: FunctionInput = serde_yaml::from_value(context.clone()).map_err(|e| {
+        api_error!(
+            ApiError::InternalError,
+            "Start function locked message [{worker_id}] has invalid context [{context:?}]: {e:?}",
+        )
+    })?;
+
+    // Resolve the FR and its LFR. The branch (initial vs replay) is
+    // determined entirely by LFR.status — Requested = initial dispatch
+    // in flight; sticky-terminal = replay dispatch (LFR is canonical
+    // and doesn't move during a replay).
+    let pfr: PhysicalFunctionRunDB = conn
+        .live()
+        .fetch_one::<PhysicalFunctionRunDB>(&context.info.function_run_id)
+        .await?;
+    let lfr: LogicalFunctionRunDB = conn
+        .live()
+        .fetch_one::<LogicalFunctionRunDB>(and!(&pfr.execution_id, &pfr.function_id))
+        .await?;
+
+    let branch = match &lfr.status {
+        FunctionRunStatus::Requested => DispatchBranch::Initial,
+        FunctionRunStatus::Committed
+        | FunctionRunStatus::Canceled
+        | FunctionRunStatus::Yanked
+        | FunctionRunStatus::Done
+        | FunctionRunStatus::Failed => DispatchBranch::Replay,
+        _ => {
+            warn!(
+                worker_id = %worker_id,
+                physical_function_run_id = %pfr.id,
+                lfr_id = %lfr.id,
+                lfr_status = %lfr.status,
+                "dispatch: LFR in unexpected state for dispatch; rolling back"
+            );
+            rollback_initial_function_run(conn, &worker_id, &lfr.id).await;
+            return Err(api_error!(
+                ApiError::InternalError,
+                "Start function locked message [{}] for LFR [{}] in unexpected state: {}",
+                worker_id,
+                lfr.id,
+                lfr.status,
+            ));
+        }
+    };
+
+    commit_unlock(conn, message_queue, &worker_id, &lfr.id, &pfr.id, branch).await
+}
+
+/// Which dispatch path this worker is on. Decides rollback semantics on
+/// unlock failure (initial flips LFR.status back; replay is a no-op
+/// at the data layer — the message-queue retry path drives recovery).
+#[derive(Clone, Copy)]
+enum DispatchBranch {
+    Initial,
+    Replay,
+}
+
+impl DispatchBranch {
+    fn name(&self) -> &'static str {
+        match self {
+            DispatchBranch::Initial => "initial",
+            DispatchBranch::Replay => "replay",
+        }
     }
 }
 
-async fn rollback_function_run_db(
+async fn commit_unlock<T: WorkerMessageQueue>(
+    conn: &mut DynamicConnection<'_>,
+    message_queue: &T,
+    worker_id: &WorkerId,
+    lfr_id: &LogicalFunctionRunId,
+    pfr_id: &PhysicalFunctionRunId,
+    branch: DispatchBranch,
+) -> Result<(), TdError> {
+    let update = UpdateWorkerMessageStatusDB::unlocked().await?;
+    let outcome: Result<(), String> = async {
+        conn.live()
+            .update::<_, WorkerDB>(&update, worker_id)
+            .await
+            .map_err(|e| e.to_string())?;
+        message_queue
+            .commit(&worker_id.to_string())
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+    .await;
+    match outcome {
+        Ok(()) => {
+            debug!(
+                worker_id = %worker_id,
+                physical_function_run_id = %pfr_id,
+                branch = branch.name(),
+                "dispatch: function_runner dispatched"
+            );
+            Ok(())
+        }
+        Err(e) => {
+            if matches!(branch, DispatchBranch::Initial) {
+                rollback_initial_function_run(conn, worker_id, lfr_id).await;
+            }
+            // Replay path: queue-only retry; no PFR or pointer mutation
+            // here. The PFR stays at `Dispatched`; operator recover
+            // (PFR.status Failed→Requested) is the only path that
+            // re-enters `to_dispatch`.
+            Err(api_error!(
+                ApiError::InternalError,
+                "Start function locked message [{}] for LFR [{}] dispatch failed: {}",
+                worker_id,
+                lfr_id,
+                e
+            ))
+        }
+    }
+}
+
+async fn rollback_initial_function_run(
     conn: &mut DynamicConnection<'_>,
     message_id: &WorkerId,
-    function_run_id: &FunctionRunId,
-) -> Result<(), TdError> {
-    let update = UpdateFunctionRunDB::scheduled()?;
+    lfr_id: &LogicalFunctionRunId,
+) {
+    // Initial path: LFR status lives on the LFR row. Rollback flips
+    // it back to Scheduled so the next tick picks it up again.
+    let update = match UpdateLogicalFunctionRunDB::scheduled().await {
+        Ok(u) => u,
+        Err(e) => {
+            error!(
+                worker_id = %message_id,
+                lfr_id = %lfr_id,
+                "Failed to build rollback update: {e:#?}"
+            );
+            return;
+        }
+    };
     match conn
-        .update::<_, FunctionRunDB>(&update, function_run_id)
+        .live()
+        .update::<_, LogicalFunctionRunDB>(&update, lfr_id)
         .await
     {
         Ok(_) => {
             error!(
-                "Rolled back status to scheduled for locked message [{message_id}] for function run [{function_run_id}] in DB"
+                "Rolled back LFR status to Scheduled for locked message [{message_id}] for LFR [{lfr_id}] in DB"
             );
         }
         Err(e) => {
             error!(
                 worker_id = %message_id,
-                function_run_id = %function_run_id,
-                "Failed to rollback status to scheduled: {e:#?}"
+                lfr_id = %lfr_id,
+                "Failed to rollback LFR status to Scheduled: {e:#?}"
             );
         }
     }
-
-    Ok(())
 }
 
 #[instrument(
@@ -264,28 +325,14 @@ pub async fn unlock_cron_trigger_workers<T: WorkerMessageQueue>(
     worker_id: WorkerId,
     _payload: &RequestMessagePayload,
 ) -> Result<(), TdError> {
-    // TODO add validation
-    let update = UpdateWorkerMessageStatusDB::unlocked().await?;
-    match conn.update::<_, WorkerDB>(&update, &worker_id).await {
-        Ok(_) => match message_queue.commit(&worker_id.to_string()).await {
-            Ok(_) => {
-                debug!(worker_id = %worker_id, "dispatch: cron_trigger dispatched");
-                Ok(())
-            }
-            Err(e) => Err(api_error!(
-                ApiError::InternalError,
-                "CronTrigger locked message [{}] dispatch failed: {}",
-                worker_id,
-                e
-            ))?,
-        },
-        Err(e) => Err(api_error!(
-            ApiError::InternalError,
-            "CronTrigger locked message [{}] dispatch failed: {}",
-            worker_id,
-            e
-        ))?,
-    }
+    unlock_simple_worker(
+        conn,
+        message_queue,
+        worker_id,
+        "CronTrigger",
+        "cron_trigger",
+    )
+    .await
 }
 
 #[instrument(
@@ -301,26 +348,42 @@ pub async fn unlock_stage_trigger_workers<T: WorkerMessageQueue>(
     worker_id: WorkerId,
     _payload: &RequestMessagePayload,
 ) -> Result<(), TdError> {
-    // TODO add validation
+    unlock_simple_worker(
+        conn,
+        message_queue,
+        worker_id,
+        "StageTrigger",
+        "stage_trigger",
+    )
+    .await
+}
+
+async fn unlock_simple_worker<T: WorkerMessageQueue>(
+    conn: &mut DynamicConnection<'_>,
+    message_queue: &T,
+    worker_id: WorkerId,
+    error_label: &str,
+    log_kind: &str,
+) -> Result<(), TdError> {
     let update = UpdateWorkerMessageStatusDB::unlocked().await?;
-    match conn.update::<_, WorkerDB>(&update, &worker_id).await {
-        Ok(_) => match message_queue.commit(&worker_id.to_string()).await {
-            Ok(_) => {
-                debug!(worker_id = %worker_id, "dispatch: stage_trigger dispatched");
-                Ok(())
-            }
-            Err(e) => Err(api_error!(
+    conn.live()
+        .update::<_, WorkerDB>(&update, &worker_id)
+        .await
+        .map_err(|e| {
+            api_error!(
                 ApiError::InternalError,
-                "StageTrigger locked message [{}] dispatch failed: {}",
-                worker_id,
-                e
-            ))?,
-        },
-        Err(e) => Err(api_error!(
-            ApiError::InternalError,
-            "StageTrigger locked message [{}] dispatch failed: {}",
-            worker_id,
-            e
-        ))?,
-    }
+                "{error_label} locked message [{worker_id}] dispatch failed: {e}"
+            )
+        })?;
+    message_queue
+        .commit(&worker_id.to_string())
+        .await
+        .map_err(|e| {
+            api_error!(
+                ApiError::InternalError,
+                "{error_label} locked message [{worker_id}] dispatch failed: {e}"
+            )
+        })?;
+    debug!(worker_id = %worker_id, "dispatch: {log_kind} dispatched");
+    Ok(())
 }
