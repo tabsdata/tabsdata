@@ -1,15 +1,3 @@
-"""End-to-end S3 integration tests: invoke ``td_transporter`` against
-a real S3 bucket. Skipped unless ALL of these are set:
-
-  - ``TD_TRANSPORTER_BIN``    -- path to a built transporter binary
-  - ``S30__S3_URI``           -- ``s3://bucket[/path/prefix]``
-  - ``S30__S3_REGION``        -- bucket region (e.g. ``us-east-1``)
-  - ``S30__S3_ACCESS_KEY``    -- access key
-  - ``S30__S3_SECRET_KEY``    -- secret key
-
-The URI's path component is used as ``S3Conn.base_path`` so each run
-writes under ``<bucket>/<uri_path>/td-integ/<uuid>/``.
-"""
 
 from __future__ import annotations
 
@@ -86,7 +74,6 @@ class _DestCtx(_SrcCtx):
 
 
 def _parse_uri(uri: str) -> tuple[str, str]:
-    """Split an ``s3://bucket/path`` URI into ``(bucket, path)``."""
     parsed = urlparse(uri)
     bucket = parsed.netloc
     path = parsed.path.lstrip("/")
@@ -123,7 +110,7 @@ def _upload_parquet(
 ) -> None:
     local = tmp_path / name
     pl.DataFrame(rows).write_parquet(local, use_pyarrow=True)
-    dest = S3Dest(conn=conn, path=[f"{run_prefix}/{name}"])
+    dest = S3Dest(conn=conn, paths=[f"{run_prefix}/{name}"])
     plugin.S3DestPlugin().write_out(
         _DestCtx(work_dest), dest, [ParquetFile(local)],
     )
@@ -138,7 +125,7 @@ def test_dest_then_src_round_trip(conn, run_prefix, tmp_path):
         tmp_path, work_dest,
     )
 
-    src = S3Src(conn=conn, path=[f"{run_prefix}/users.parquet"])
+    src = S3Src(conn=conn, paths=[f"{run_prefix}/users.parquet"])
     work_src = tmp_path / "work_src"
     work_src.mkdir()
     out = plugin.S3SrcPlugin().read_in(_SrcCtx(work_src), src)
@@ -164,7 +151,7 @@ def test_src_wildcard_in_basename_matches_multiple_objects(
             tmp_path, work_dest,
         )
 
-    src = S3Src(conn=conn, path=[f"{run_prefix}/*.parquet"])
+    src = S3Src(conn=conn, paths=[f"{run_prefix}/*.parquet"])
     work_src = tmp_path / "work_src"
     work_src.mkdir()
     out = plugin.S3SrcPlugin().read_in(_SrcCtx(work_src), src)
@@ -199,7 +186,7 @@ def test_src_initial_last_modified_filters_out_older_objects(
 
     src = S3Src(
         conn=conn,
-        path=[f"{run_prefix}/*.parquet"],
+        paths=[f"{run_prefix}/*.parquet"],
         initial_last_modified=cutoff,
     )
     work_src = tmp_path / "work_src"

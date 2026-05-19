@@ -28,8 +28,6 @@ def _s3_uri(bucket: str, path_entry: str) -> str:
 
 
 def _resolve(value) -> str:
-    """``S3Conn`` fields accept ``str | Secret | Env``; ``str`` values
-    are stored verbatim, Secret/Env resolve through ``.value()``."""
     return value if isinstance(value, str) else value.value()
 
 
@@ -80,7 +78,7 @@ class S3SrcPlugin(SrcPlugin[S3Src]):
     ) -> list[list[TableFileSpec]]:
         return _plugin.import_files(
             ctx=ctx,
-            cfg=src.to_reader_conf(),
+            cfg=_plugin.ReaderConf.from_src(src),
             build_location=build_location,
             run_env=run_env,
             errors=ERRORS,
@@ -96,7 +94,7 @@ class S3DestPlugin(DestPlugin[S3Dest]):
     ) -> None:
         _plugin.copy_out(
             ctx=ctx,
-            cfg=dest.to_writer_conf(),
+            cfg=_plugin.WriterConf.from_dest(dest),
             tables=tables,
             build_location=build_location,
             run_env=run_env,
@@ -126,7 +124,7 @@ S3_SRC = SrcDef(
     src_version="v1",
     src=S3Src,
     table_mode=TableMode.ARRAY,
-    cardinality=lambda src: len(src.path),
+    cardinality=lambda src: len(src.paths),
     plugin=S3SrcPlugin,
     explorer=S3Explorer,
 )
@@ -137,7 +135,7 @@ S3_DEST = DestDef(
     dest_type="s3",
     dest_version="v1",
     dest=S3Dest,
-    cardinality=lambda dest: len(dest.path),
+    cardinality=lambda dest: len(dest.paths),
     plugin=S3DestPlugin,
     explorer=S3Explorer,
 )

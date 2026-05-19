@@ -110,14 +110,14 @@ def test_src_plugin_passes_build_location_run_env_and_errors(monkeypatch, tmp_pa
 
     monkeypatch.setattr(_file_plugin, "import_files", fake)
 
-    src = S3Src(conn=_conn(), path=["a/b.parquet"])
+    src = S3Src(conn=_conn(), paths=["a/b.parquet"])
     out = plugin.S3SrcPlugin().read_in(_src_ctx(tmp_path), src)
 
     assert out == [[ParquetFile(tmp_path / "ok.parquet")]]
     assert captured["build_location"] is plugin.build_location
     assert captured["run_env"] is plugin.run_env
     assert captured["errors"] is plugin.ERRORS
-    # cfg was assembled from src._to_reader_conf()
+    # cfg was assembled from _file_plugin.ReaderConf.from_src(src)
     assert captured["cfg"].paths == ["a/b.parquet"]
 
 
@@ -132,7 +132,7 @@ def test_dest_plugin_passes_build_location_run_env_and_errors(monkeypatch, tmp_p
 
     monkeypatch.setattr(_file_plugin, "copy_out", fake)
 
-    dest = S3Dest(conn=_conn(), path=["out/x.parquet"])
+    dest = S3Dest(conn=_conn(), paths=["out/x.parquet"])
     parquet = ParquetFile(tmp_path / "in.parquet")
     plugin.S3DestPlugin().write_out(_dest_ctx(tmp_path), dest, [parquet])
 
@@ -175,8 +175,8 @@ def test_s3_dest_def_wires_plugin_and_explorer():
     assert plugin.S3_DEST.dest_type == "s3"
 
 
-def test_s3_cardinality_uses_path_length():
-    src = S3Src(conn=_conn(), path=["a", "b", "c"])
+def test_s3_cardinality_uses_paths_length():
+    src = S3Src(conn=_conn(), paths=["a", "b", "c"])
     assert plugin.S3_SRC.cardinality(src) == 3
-    dest = S3Dest(conn=_conn(), path=["a", "b"])
+    dest = S3Dest(conn=_conn(), paths=["a", "b"])
     assert plugin.S3_DEST.cardinality(dest) == 2
