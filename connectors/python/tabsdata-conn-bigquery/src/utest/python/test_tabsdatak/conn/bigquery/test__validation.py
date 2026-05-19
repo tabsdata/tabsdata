@@ -1,72 +1,126 @@
+from __future__ import annotations
+
+import re
 
 import pytest
 
-from tabsdatak.conn.common.error import ConnInitException
+# noinspection PyProtectedMember
 from tabsdatak.conn.bigquery import _validation
-from tabsdatak.conn.bigquery.error import BigqueryErrorCode
 
 
 pytestmark = pytest.mark.bigquery
 
 
-@pytest.mark.parametrize("value", ["my-project", "ab-cd-ef", "p-" + "a" * 27 + "9"])
-def test_validate_project_id_accepts_valid(value):
-    assert _validation._validate_project_id(value) == value
-
-
-@pytest.mark.parametrize(
-    "value", ["", "Abc-def", "abc", "1abc-def-ghi", "abc-def-", "abcd"]
-)
-def test_validate_project_id_rejects_invalid(value):
-    with pytest.raises(ConnInitException) as ei:
-        _validation._validate_project_id(value)
-    assert ei.value.api_error is BigqueryErrorCode.BIGQUERY_4
-
-
-@pytest.mark.parametrize("value", ["analytics", "data_v1", "X1Y2"])
-def test_validate_dataset_id_accepts_valid(value):
-    assert _validation._validate_dataset_id(value) == value
-
-
-@pytest.mark.parametrize("value", ["", "bad-name", "bad.name", "a" * 1025])
-def test_validate_dataset_id_rejects_invalid(value):
-    with pytest.raises(ConnInitException) as ei:
-        _validation._validate_dataset_id(value)
-    assert ei.value.api_error is BigqueryErrorCode.BIGQUERY_5
-
-
-@pytest.mark.parametrize("value", ["users", "my_table", "X1"])
-def test_validate_table_id_accepts_valid(value):
-    assert _validation._validate_table_id(value) == value
-
-
-@pytest.mark.parametrize("value", ["", "bad-name", "a" * 1025])
-def test_validate_table_id_rejects_invalid(value):
-    with pytest.raises(ConnInitException) as ei:
-        _validation._validate_table_id(value)
-    assert ei.value.api_error is BigqueryErrorCode.BIGQUERY_6
+# ---------------------------------------------------------------------------
+# Project / dataset patterns (kept inline as regex value_patterns)
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
     "value",
     [
-        "users",
-        "analytics.users",
-        "my-project.analytics.users",
-        "`my-project`.`analytics`.`users`",
+        "my-project",
+        "ab-cd-ef",
+        "p-" + "a" * 27 + "9",
     ],
 )
-def test_validate_table_fqn_accepts_valid(value):
-    assert _validation._validate_table_fqn(value) == value
+def test_project_pattern_accepts_valid(value):
+    assert re.fullmatch(_validation.PROJECT_PATTERN, value) is not None
 
 
-def test_validate_table_fqn_rejects_bad_arity():
-    with pytest.raises(ConnInitException) as ei:
-        _validation._validate_table_fqn("a.b.c.d")
-    assert ei.value.api_error is BigqueryErrorCode.BIGQUERY_8
+@pytest.mark.parametrize(
+    "value",
+    [
+        "",
+        "Abc-def",
+        "abc",
+        "1abc-def-ghi",
+        "abc-def-",
+        "abcd",
+    ],
+)
+def test_project_pattern_rejects_invalid(value):
+    assert re.fullmatch(_validation.PROJECT_PATTERN, value) is None
 
 
-def test_validate_table_fqn_propagates_part_validators():
-    with pytest.raises(ConnInitException) as ei:
-        _validation._validate_table_fqn("bad-name")
-    assert ei.value.api_error is BigqueryErrorCode.BIGQUERY_6
+@pytest.mark.parametrize(
+    "value",
+    [
+        "analytics",
+        "data_v1",
+        "X1Y2",
+        "a",
+    ],
+)
+def test_dataset_pattern_accepts_valid(value):
+    assert re.fullmatch(_validation.DATASET_PATTERN, value) is not None
+
+
+def test_dataset_pattern_accepts_max_length():
+    assert re.fullmatch(_validation.DATASET_PATTERN, "a" * 1024) is not None
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "",
+        "bad-name",
+        "bad.name",
+    ],
+)
+def test_dataset_pattern_rejects_invalid(value):
+    assert re.fullmatch(_validation.DATASET_PATTERN, value) is None
+
+
+def test_dataset_pattern_rejects_above_max_length():
+    assert re.fullmatch(_validation.DATASET_PATTERN, "a" * 1025) is None
+
+
+# ---------------------------------------------------------------------------
+# Table FQN (outer-only backtick wrapping, backslash escape)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "`proj.ds.tbl`",
+        "`my-project.analytics.users`",
+        "`analytics.users`",
+        "`users`",
+        "`proj.ds.weird\\`name`",
+    ],
+)
+def test_bigquery_table_fqn_validator_accepts_valid(value):
+    assert _validation.BIGQUERY_TABLE_FQN_VALIDATOR.func(value) == value
+
+
+def test_bigquery_table_fqn_validator_rejects_unwrapped_value():
+    # ``outer_only=True`` mode requires the FQN be wrapped in a single
+    # pair of backticks; a bare ``proj.ds.tbl`` (legal in some
+    # downstream SQL dialects but not what we validate against) is
+    # rejected.
+    with pytest.raises(ValueError, match="outer_only FQN must be wrapped"):
+        _validation.BIGQUERY_TABLE_FQN_VALIDATOR.func("proj.ds.tbl")
+
+
+def test_bigquery_table_fqn_validator_rejects_too_many_parts():
+    with pytest.raises(ValueError, match="exceeds max_parts=3"):
+        _validation.BIGQUERY_TABLE_FQN_VALIDATOR.func("`a.b.c.d`")
+
+
+def test_bigquery_table_fqn_validator_rejects_unterminated_quote():
+    with pytest.raises(ValueError, match="outer_only FQN must be wrapped"):
+        _validation.BIGQUERY_TABLE_FQN_VALIDATOR.func("`unterminated")
+
+
+def test_bigquery_table_fqn_validator_rejects_empty_string():
+    with pytest.raises(ValueError, match="value must be non-empty"):
+        _validation.BIGQUERY_TABLE_FQN_VALIDATOR.func("")
+
+
+def test_bigquery_fqn_def_uses_outer_only_backtick_with_backslash_escape():
+    assert _validation._BIGQUERY_FQN_DEF.separator == "."
+    assert _validation._BIGQUERY_FQN_DEF.quote == "`"
+    assert _validation._BIGQUERY_FQN_DEF.escape == "\\"
+    assert _validation._BIGQUERY_FQN_DEF.outer_only is True
