@@ -13,7 +13,7 @@ from tabsdatak.conn.common.sql._engine.reader import SqlReadCfg
 from tabsdatak.conn.common.sql._engine.writer import SqlWriteCfg
 from tabsdatak.conn.mysql import MySQLConn
 # noinspection PyProtectedMember
-from tabsdatak.conn.mysql import _adapter as adapter
+from tabsdatak.conn.mysql import _impl as impl
 
 
 pytestmark = pytest.mark.mysql
@@ -23,7 +23,7 @@ pytestmark = pytest.mark.mysql
 # build_mysql_engine -- driver injection + credential set
 #
 # The mysql DBAPI may not be installed in the test env, so we intercept
-# ``create_engine`` and verify the URL that the adapter built.
+# ``create_engine`` and verify the URL that the impl built.
 # ---------------------------------------------------------------------------
 
 
@@ -55,7 +55,7 @@ def _conn() -> MySQLConn:
 
 @pytest.fixture
 def captured(monkeypatch):
-    """Monkey-patch ``adapter.create_engine`` to capture call args."""
+    """Monkey-patch ``impl.create_engine`` to capture call args."""
     box: dict = {}
 
     def fake_create_engine(url, *, connect_args):
@@ -63,12 +63,12 @@ def captured(monkeypatch):
         box["connect_args"] = connect_args
         return _CapturedURL(url, connect_args)
 
-    monkeypatch.setattr(adapter, "create_engine", fake_create_engine)
+    monkeypatch.setattr(impl, "create_engine", fake_create_engine)
     return box
 
 
 def test_build_mysql_engine_injects_mysqlconnector_driver_when_missing(captured):
-    adapter.build_mysql_engine(
+    impl.build_mysql_engine(
         "mysql://host:3306/db",
         _credentials(),
         connect_args=None,
@@ -82,7 +82,7 @@ def test_build_mysql_engine_injects_mysqlconnector_driver_when_missing(captured)
 
 
 def test_build_mysql_engine_preserves_explicit_driver(captured):
-    adapter.build_mysql_engine(
+    impl.build_mysql_engine(
         "mysql+pymysql://host:3306/db",
         _credentials(),
         connect_args=None,
@@ -92,7 +92,7 @@ def test_build_mysql_engine_preserves_explicit_driver(captured):
 
 def test_build_mysql_engine_accepts_mariadb_scheme(captured):
     # No mariadb default driver -> stays as-is.
-    adapter.build_mysql_engine(
+    impl.build_mysql_engine(
         "mariadb://host/db",
         _credentials(),
         connect_args=None,
@@ -101,7 +101,7 @@ def test_build_mysql_engine_accepts_mariadb_scheme(captured):
 
 
 def test_build_mysql_engine_accepts_secret_uri(captured):
-    adapter.build_mysql_engine(
+    impl.build_mysql_engine(
         Secret.lit("mysql://host:3306/db"),
         _credentials(),
         connect_args=None,
@@ -110,7 +110,7 @@ def test_build_mysql_engine_accepts_secret_uri(captured):
 
 
 def test_build_mysql_engine_passes_connect_args(captured):
-    adapter.build_mysql_engine(
+    impl.build_mysql_engine(
         "mysql://host/db",
         _credentials(),
         connect_args={"charset": "utf8mb4"},
@@ -119,7 +119,7 @@ def test_build_mysql_engine_passes_connect_args(captured):
 
 
 def test_build_mysql_engine_with_no_connect_args_passes_empty_dict(captured):
-    adapter.build_mysql_engine(
+    impl.build_mysql_engine(
         "mysql://host/db",
         _credentials(),
         connect_args=None,
@@ -133,11 +133,11 @@ def test_build_mysql_engine_with_no_connect_args_passes_empty_dict(captured):
 
 
 def test_mysql_read_cfg_subclasses_sql_read_cfg():
-    assert issubclass(adapter.MySQLReadCfg, SqlReadCfg)
+    assert issubclass(impl.MySQLReadCfg, SqlReadCfg)
 
 
 def test_mysql_read_cfg_creates_engine_from_conn(captured):
-    cfg = adapter.MySQLReadCfg(
+    cfg = impl.MySQLReadCfg(
         conn=_conn(),
         queries=["SELECT 1"],
         transactional=True,
@@ -152,11 +152,11 @@ def test_mysql_read_cfg_creates_engine_from_conn(captured):
 
 
 def test_mysql_write_cfg_subclasses_sql_write_cfg():
-    assert issubclass(adapter.MySQLWriteCfg, SqlWriteCfg)
+    assert issubclass(impl.MySQLWriteCfg, SqlWriteCfg)
 
 
 def test_mysql_write_cfg_creates_engine_from_conn(captured):
-    cfg = adapter.MySQLWriteCfg(
+    cfg = impl.MySQLWriteCfg(
         conn=_conn(),
         target_tables=["t"],
         if_table_exists="append",
@@ -173,7 +173,7 @@ def test_mysql_read_cfg_no_conn_cfg_forwards_empty_connect_args(captured):
         uri="mysql://host/db",
         credentials=_credentials(),
     )
-    cfg = adapter.MySQLReadCfg(
+    cfg = impl.MySQLReadCfg(
         conn=conn,
         queries=["SELECT 1"],
         transactional=True,
@@ -191,14 +191,14 @@ def test_mysql_read_cfg_no_conn_cfg_forwards_empty_connect_args(captured):
 
 
 def test_read_defaults_pick_polars_with_pandas_allowed():
-    d = adapter.MYSQL_READ_DEFAULTS
+    d = impl.MYSQL_READ_DEFAULTS
     assert d[const.READ_ENGINE_KEY] == const.POLARS_SQL_ALCHEMY_READ_ENGINE
     assert const.POLARS_SQL_ALCHEMY_READ_ENGINE in d[const.AVAIL_READ_ENGINES_KEY]
     assert const.PANDAS_SQL_ALCHEMY_READ_ENGINE in d[const.AVAIL_READ_ENGINES_KEY]
 
 
 def test_write_defaults_pick_polars_only():
-    d = adapter.MYSQL_WRITE_DEFAULTS
+    d = impl.MYSQL_WRITE_DEFAULTS
     assert d[const.WRITE_ENGINE_KEY] == const.POLARS_SQL_ALCHEMY_WRITE_ENGINE
     assert d[const.AVAIL_WRITE_ENGINES_KEY] == [
         const.POLARS_SQL_ALCHEMY_WRITE_ENGINE,

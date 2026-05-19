@@ -147,10 +147,10 @@ class MySQLSrcPlugin(SrcPlugin[MySQLSrc]):
             transactional=src.transactional,
             schema_overrides=src.schema_overrides,
             query_params=src.query_params or None,
-            cfg=src.src_cfg,
+            cfg=cast(dict, src.src_cfg),
         )
         engine = factory.get_read_engine(
-            src.src_cfg,
+            cast(dict, src.src_cfg),
             MYSQL_READ_DEFAULTS,
         )
 
@@ -207,11 +207,11 @@ class MySQLDestPlugin(DestPlugin[MySQLDest]):
             target_tables=list(dest.tables),
             if_table_exists=dest.if_table_exists,
             transactional=dest.transactional,
-            cfg=dest.dest_cfg,
+            cfg=cast(dict, dest.dest_cfg),
         )
 
         engine = _engine_factory.get_write_engine(
-            dest.dest_cfg,
+            cast(dict, dest.dest_cfg),
             _mysql_sql.MYSQL_WRITE_DEFAULTS,
         )
         try:

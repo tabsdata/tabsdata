@@ -1,12 +1,27 @@
 from __future__ import annotations
 
+import typing
+
 import pytest
 
 from tabsdatak.api import NamedConn, Secret
 from tabsdatak.error import TabsdataException
 from tabsdatak.conn.common.error import ConnInitException
-from tabsdatak.conn.common.types import UserPassword
-from tabsdatak.conn.mysql import MySQLConn, MySQLDest, MySQLSrc
+from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
+from tabsdatak.conn.common.types import CfgSpec, EntityWhitelistSpec, UserPassword
+from tabsdatak.conn.mysql import (
+    ConnSpec,
+    CredentialsSpec,
+    DestCfgSpec,
+    IfTableExistsSpec,
+    MySQLConn,
+    MySQLDest,
+    MySQLSrc,
+    MySQLTableNamesSpec,
+    QueriesSpec,
+    SrcCfgSpec,
+    UriSpec,
+)
 # noinspection PyProtectedMember
 from tabsdatak.conn.mysql.error import (
     MySQLValidateException,
@@ -68,7 +83,7 @@ def test_mysql_src_full_round_trip():
         transactional=False,
         schema_overrides=[None, None],
         query_params={"x": 1},
-        src_cfg={"chunkSize": 1024},
+        src_cfg={"mysql.logging_level": 20},
     )
     loaded = MySQLSrc.from_json(src.to_json())
     assert loaded == src
@@ -76,7 +91,7 @@ def test_mysql_src_full_round_trip():
     assert loaded.transactional is False
     assert loaded.schema_overrides == [None, None]
     assert loaded.query_params == {"x": 1}
-    assert loaded.src_cfg == {"chunkSize": 1024}
+    assert loaded.src_cfg == {"mysql.logging_level": 20}
 
 
 def test_mysql_src_round_trip_with_named_conn():
@@ -117,14 +132,14 @@ def test_mysql_dest_full_round_trip():
         tables=["analytics.users", "analytics.orders"],
         if_table_exists="replace",
         transactional=False,
-        dest_cfg={"chunkSize": 2048},
+        dest_cfg={"mysql.logging_level": 20},
     )
     loaded = MySQLDest.from_json(dest.to_json())
     assert loaded == dest
     assert loaded.tables == ["analytics.users", "analytics.orders"]
     assert loaded.if_table_exists == "replace"
     assert loaded.transactional is False
-    assert loaded.dest_cfg == {"chunkSize": 2048}
+    assert loaded.dest_cfg == {"mysql.logging_level": 20}
 
 
 def test_mysql_dest_round_trip_with_named_conn():
@@ -135,17 +150,107 @@ def test_mysql_dest_round_trip_with_named_conn():
     assert loaded.conn.name == "prod_mysql"
 
 
-def test_mysql_dest_rejects_bad_table_name():
-    with pytest.raises(ConnInitException) as ei:
-        MySQLDest(
-            conn=_conn(),
-            tables=["bad-name"],
-        )
-    assert ei.value.api_error in {MysqlErrorCode.MYSQL_4, MysqlErrorCode.MYSQL_15}
-
-
 def test_mysql_dest_defaults_if_table_exists_to_append():
     dest = MySQLDest(conn=_conn(), tables=["analytics.users"])
     assert dest.if_table_exists == "append"
     assert dest.transactional is True
     assert dest.dest_cfg is None
+
+
+# ---------------------------------------------------------------------------
+# Field-spec wiring -- assert each dataclass field carries the expected
+# type alias. The aliases themselves (UriSpec, MySQLTableNamesSpec, ...)
+# are exercised in test__validation.py and the conn-common test suite; here
+# we only check the wiring, so the dataclasses can't silently drift away
+# from their declared constraints.
+# ---------------------------------------------------------------------------
+
+
+def _hint(cls: type, field: str) -> object:
+    return typing.get_type_hints(cls, include_extras=True)[field]
+
+
+def test_mysql_conn_fields_wire_expected_specs():
+    assert _hint(MySQLConn, "uri") == UriSpec
+    assert _hint(MySQLConn, "credentials") == CredentialsSpec
+    assert _hint(MySQLConn, "entity_whitelist") == EntityWhitelistSpec | None
+    assert _hint(MySQLConn, "conn_cfg") == CfgSpec | None
+
+
+def test_mysql_src_fields_wire_expected_specs():
+    assert _hint(MySQLSrc, "conn") == ConnSpec
+    assert _hint(MySQLSrc, "queries") == QueriesSpec
+    assert _hint(MySQLSrc, "transactional") is bool
+    assert _hint(MySQLSrc, "schema_overrides") == SchemaOverrideSpec | None
+    assert _hint(MySQLSrc, "src_cfg") == SrcCfgSpec | None
+
+
+def test_mysql_dest_fields_wire_expected_specs():
+    assert _hint(MySQLDest, "conn") == ConnSpec
+    assert _hint(MySQLDest, "tables") == MySQLTableNamesSpec
+    assert _hint(MySQLDest, "if_table_exists") == IfTableExistsSpec
+    assert _hint(MySQLDest, "transactional") is bool
+    assert _hint(MySQLDest, "dest_cfg") == DestCfgSpec | None
+
+
+# ---------------------------------------------------------------------------
+# src_cfg / dest_cfg literal-key validation
+# ---------------------------------------------------------------------------
+
+
+def test_mysql_src_rejects_unknown_src_cfg_key():
+    with pytest.raises(ConnInitException) as ei:
+        MySQLSrc(
+            conn=_conn(),
+            queries=["SELECT 1"],
+            src_cfg={"bogus.key": 1},
+        )
+    assert ei.value.api_error is MysqlErrorCode.MYSQL_2
+
+
+def test_mysql_src_accepts_known_src_cfg_keys():
+    src = MySQLSrc(
+        conn=_conn(),
+        queries=["SELECT 1"],
+        src_cfg={
+            "mysql.logging_level": 20,
+            "tabsdata.sql.sql.readEngine": "polarsSqlAlchemyRead",
+            "tabsdata.sql.chunkSize": 100,
+        },
+    )
+    loaded = MySQLSrc.from_json(src.to_json())
+    assert loaded == src
+    assert loaded.src_cfg == {
+        "mysql.logging_level": 20,
+        "tabsdata.sql.sql.readEngine": "polarsSqlAlchemyRead",
+        "tabsdata.sql.chunkSize": 100,
+    }
+
+
+def test_mysql_dest_rejects_unknown_dest_cfg_key():
+    with pytest.raises(ConnInitException) as ei:
+        MySQLDest(
+            conn=_conn(),
+            tables=["analytics.users"],
+            dest_cfg={"bogus.key": 1},
+        )
+    assert ei.value.api_error is MysqlErrorCode.MYSQL_4
+
+
+def test_mysql_dest_accepts_known_dest_cfg_keys():
+    dest = MySQLDest(
+        conn=_conn(),
+        tables=["analytics.users"],
+        dest_cfg={
+            "mysql.logging_level": 20,
+            "tabsdata.sql.sql.writeEngine": "polarsSqlAlchemyWrite",
+            "tabsdata.sql.chunkSize": 100,
+        },
+    )
+    loaded = MySQLDest.from_json(dest.to_json())
+    assert loaded == dest
+    assert loaded.dest_cfg == {
+        "mysql.logging_level": 20,
+        "tabsdata.sql.sql.writeEngine": "polarsSqlAlchemyWrite",
+        "tabsdata.sql.chunkSize": 100,
+    }
