@@ -24,6 +24,7 @@ use td_queries::{
 };
 use td_tower::ctx_service::ReqCtx;
 use td_tower::extractors::{MutRef, Ref};
+use tracing::{debug, instrument};
 
 #[td_error]
 enum UpdateStatusRunError {
@@ -39,6 +40,13 @@ enum UpdateStatusRunError {
     NoOpStatusUpdate = 4,
 }
 
+#[instrument(
+    name = "worker.callback",
+    skip_all,
+    fields(worker_id = %*worker_id),
+    level = "debug",
+    err(Debug)
+)]
 pub async fn update_worker_status(
     mut conn: MutRef<DynamicConnection<'static>>,
     update: Ref<UpdateWorkerDB>,
@@ -53,12 +61,20 @@ pub async fn update_worker_status(
     Ok(())
 }
 
+#[instrument(
+    name = "execution.update_status",
+    skip_all,
+    fields(target_status = %update.status, input_count = function_runs.len()),
+    level = "debug",
+    err(Debug)
+)]
 pub async fn update_function_run_status(
     mut ctx: MutRef<ReqCtx>,
     mut conn: MutRef<DynamicConnection<'static>>,
     function_runs: Ref<Vec<FunctionRunDB>>,
     update: Ref<UpdateFunctionRunDB>,
 ) -> Result<(), TdError> {
+    let input_count = function_runs.len();
     // Validate status transitions and filter out no-op transitions.
     let function_run_ids = function_runs
         .iter()
@@ -139,9 +155,16 @@ pub async fn update_function_run_status(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
+    debug!(
+        input_count = input_count,
+        actionable_count = function_run_ids.len(),
+        "execution.update_status: filtered transitions"
+    );
+
     // Early return if no function runs are to be updated.
     // This is a no-op update, so we just return.
     if function_run_ids.is_empty() {
+        debug!("execution.update_status: no-op (all filtered)");
         ctx.warning(UpdateStatusRunError::NoOpStatusUpdate);
         return Ok(());
     }
@@ -149,6 +172,10 @@ pub async fn update_function_run_status(
     let _ = conn
         .update_chunked::<_, FunctionRunDB, _>(update.deref(), &function_run_ids)
         .await?;
+    debug!(
+        updated_count = function_run_ids.len(),
+        "execution.update_status: updated function_run(s)"
+    );
 
     // Publish function runs if needed, including downstream publishing.
     if update.status == FunctionRunStatus::Done {
@@ -163,11 +190,19 @@ pub async fn update_function_run_status(
             .into_iter()
             .collect();
         let to_commit = conn.fetch_function_runs_to_commit(&execution_ids).await?;
+        debug!(
+            commit_count = to_commit.len(),
+            "execution.commit: function_run(s) eligible to commit"
+        );
 
         let update = CommitFunctionRunDB::default();
         let _ = conn
             .update_chunked::<_, FunctionRunDB, _>(&update, &to_commit)
             .await?;
+        debug!(
+            committed_count = to_commit.len(),
+            "execution.commit: committed function_run(s)"
+        );
     }
 
     // Downstream updates.
@@ -204,11 +239,18 @@ pub async fn update_function_run_status(
     }
 
     for (status, function_run_ids) in downstream_function_run_updates {
-        let update = UpdateFunctionRunDB::builder().status(status).build()?;
+        let update = UpdateFunctionRunDB::builder()
+            .status(status.clone())
+            .build()?;
         let function_run_ids: Vec<_> = function_run_ids.iter().collect();
         let _ = conn
             .update_chunked::<_, FunctionRunDB, _>(&update, &function_run_ids)
             .await?;
+        debug!(
+            downstream_status = %status,
+            downstream_count = function_run_ids.len(),
+            "execution.on_hold_cascade: propagated to downstream run(s)"
+        );
     }
 
     Ok(())

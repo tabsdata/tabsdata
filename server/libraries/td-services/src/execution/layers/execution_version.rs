@@ -13,7 +13,7 @@ use td_objects::types::basic::{FunctionRunStatus, FunctionVersionId, SkipIfRunni
 use td_queries::BasicQueries;
 use td_tower::default_services::Condition;
 use td_tower::extractors::{MutRef, Ref};
-use tracing::debug;
+use tracing::{debug, instrument};
 
 pub async fn assert_function_version(
     function_version_id: Ref<FunctionVersionId>,
@@ -31,6 +31,13 @@ pub async fn assert_function_version(
     Ok(())
 }
 
+#[instrument(
+    name = "execution.version_skip_check",
+    skip_all,
+    fields(function_version_id = %*function_version_id),
+    level = "debug",
+    err(Debug)
+)]
 pub async fn skip_if_running(
     mut conn: MutRef<DynamicConnection<'static>>,
     function_version_id: Ref<FunctionVersionId>,
@@ -48,15 +55,17 @@ pub async fn skip_if_running(
                 | FunctionRunStatus::Canceled
                 | FunctionRunStatus::Yanked => {
                     debug!(
-                        "Latest function run {} is not running, with status {}",
-                        function_run.id, function_run.status
+                        function_run_id = %function_run.id,
+                        status = %function_run.status,
+                        "Latest function run not running"
                     );
                     false
                 }
                 _ => {
                     debug!(
-                        "Latest function run {} is running, with status {}",
-                        function_run.id, function_run.status
+                        function_run_id = %function_run.id,
+                        status = %function_run.status,
+                        "Latest function run running"
                     );
                     true
                 }

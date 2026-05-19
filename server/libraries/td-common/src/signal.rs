@@ -21,28 +21,28 @@ pub async fn terminate() -> Option<Signal> {
         select! {
             result = signal_interrupt_handle.recv() => {
                 if result.is_some() {
-                    info!("Received SIGINT (Ctrl+C). Initiating graceful stop...");
+                    info!(signal = "SIGINT", "process.signal.received: initiating graceful stop");
                     Some(Signal::Interrupt)
                 } else {
-                    info!("SIGINT (Ctrl+C) monitor ended.");
+                    info!(signal = "SIGINT", "process.signal.monitor.ended");
                     None
                 }
             },
             result = signal_terminate_handle.recv() => {
                 if result.is_some() {
-                    info!("Received SIGTERM. Initiating graceful stop...");
+                    info!(signal = "SIGTERM", "process.signal.received: initiating graceful stop");
                     Some(Signal::Term)
                 } else {
-                    info!("SIGTERM monitor finished.");
+                    info!(signal = "SIGTERM", "process.signal.monitor.ended");
                     None
                 }
             },
             result = signal_quit_handle.recv() => {
                 if result.is_some() {
-                    info!("Received SIGQUIT. Initiating forceful stop...");
+                    info!(signal = "SIGQUIT", "process.signal.received: initiating forceful stop");
                     Some(Signal::Kill)
                 } else {
-                    info!("SIGQUIT monitor finished.");
+                    info!(signal = "SIGQUIT", "process.signal.monitor.ended");
                     None
                 }
             },
@@ -63,46 +63,46 @@ pub async fn terminate() -> Option<Signal> {
         select! {
             result = signal_c_handle.recv() => {
                 if result.is_some() {
-                    info!("Received Ctrl+C. Initiating graceful stop...");
+                    info!(signal = "Ctrl+C", "process.signal.received: initiating graceful stop");
                     Some(Signal::Kill)
                 } else {
-                    info!("Ctrl+C monitor ended.");
+                    info!(signal = "Ctrl+C", "process.signal.monitor.ended");
                     None
                 }
             },
             result = signal_break_handle.recv() => {
                 if result.is_some() {
-                    info!("Received Ctrl+Break. Initiating graceful stop...");
+                    info!(signal = "Ctrl+Break", "process.signal.received: initiating graceful stop");
                     Some(Signal::Kill)
                 } else {
-                    info!("Ctrl+Break monitor ended.");
+                    info!(signal = "Ctrl+Break", "process.signal.monitor.ended");
                     None
                 }
             },
             result = signal_close_handle.recv() => {
                 if result.is_some() {
-                    info!("Received Ctrl+Close. Initiating graceful stop...");
+                    info!(signal = "Ctrl+Close", "process.signal.received: initiating graceful stop");
                     Some(Signal::Kill)
                 } else {
-                    info!("Ctrl+Close monitor ended.");
+                    info!(signal = "Ctrl+Close", "process.signal.monitor.ended");
                     None
                 }
             },
             result = signal_logoff_handle.recv() => {
                 if result.is_some() {
-                    info!("Received Ctrl+Logoff. Initiating graceful stop...");
+                    info!(signal = "Ctrl+Logoff", "process.signal.received: initiating graceful stop");
                     Some(Signal::Kill)
                 } else {
-                    info!("Ctrl+Logoff monitor ended.");
+                    info!(signal = "Ctrl+Logoff", "process.signal.monitor.ended");
                     None
                 }
             },
             result = signal_shutdown_handle.recv() => {
                 if result.is_some() {
-                    info!("Received Ctrl+Shutdown. Initiating graceful stop...");
+                    info!(signal = "Ctrl+Shutdown", "process.signal.received: initiating graceful stop");
                     Some(Signal::Kill)
                 } else {
-                    info!("Ctrl+Shutdown monitor ended.");
+                    info!(signal = "Ctrl+Shutdown", "process.signal.monitor.ended");
                     None
                 }
             },

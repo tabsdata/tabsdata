@@ -43,7 +43,7 @@ use td_queries::{BasicQueries, FunctionRunQueries};
 use td_storage::Storage;
 use td_storage::location::StorageLocation;
 use td_tower::extractors::{MutRef, Ref};
-use tracing::debug;
+use tracing::{debug, instrument};
 use url::Url;
 
 #[td_error]
@@ -52,24 +52,35 @@ pub enum WorkerRequestError {
     UrlParse(#[from] url::ParseError) = 5000,
 }
 
+#[instrument(name = "scheduler.notify_scheduler", skip_all, level = "debug")]
 pub async fn notify_scheduler(notify: Ref<SchedulerNotify>) -> Result<(), TdError> {
     notify.notify_scheduler();
     Ok(())
 }
 
+#[instrument(name = "scheduler.request_tick", skip_all, level = "debug", err(Debug))]
 pub async fn fetch_function_runs_to_execute(
     mut conn: MutRef<DynamicConnection<'static>>,
 ) -> Result<Vec<FunctionRunToExecute>, TdError> {
     let result = conn.fetch_function_runs_to_execute().await?;
-    if !result.is_empty() {
+    if result.is_empty() {
+        debug!("scheduler.request_tick: 0 ready");
+    } else {
         debug!(
-            "Request scheduler: {} function run(s) ready to execute",
+            ready_count = result.len(),
+            "scheduler.request_tick: {} function run(s) ready to execute",
             result.len()
         );
     }
     Ok(result)
 }
 
+#[instrument(
+    name = "scheduler.create_function_runner_workers",
+    skip_all,
+    level = "debug",
+    err(Debug)
+)]
 pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessageQueue>(
     message_queue: Ref<T>,
     storage: Ref<Storage>,
@@ -362,9 +373,22 @@ pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessag
         results.push(message);
     }
 
+    if !results.is_empty() {
+        debug!(
+            dispatched_count = results.len(),
+            "scheduler.request_tick: dispatched {} worker(s)",
+            results.len()
+        );
+    }
     Ok(results)
 }
 
+#[instrument(
+    name = "scheduler.create_cron_trigger_workers_start",
+    skip_all,
+    level = "debug",
+    err(Debug)
+)]
 pub async fn create_locked_cron_trigger_workers_start_request<T: WorkerMessageQueue>(
     message_queue: Ref<T>,
     server_addresses: Ref<InternalServerAddresses>,
@@ -451,6 +475,12 @@ pub async fn create_locked_cron_trigger_workers_start_request<T: WorkerMessageQu
     Ok(())
 }
 
+#[instrument(
+    name = "scheduler.create_cron_trigger_workers_stop",
+    skip_all,
+    level = "debug",
+    err(Debug)
+)]
 pub async fn create_locked_cron_trigger_workers_stop_request<T: WorkerMessageQueue>(
     message_queue: Ref<T>,
     server_addresses: Ref<InternalServerAddresses>,
@@ -506,6 +536,12 @@ pub async fn create_locked_cron_trigger_workers_stop_request<T: WorkerMessageQue
     Ok(())
 }
 
+#[instrument(
+    name = "scheduler.create_stage_trigger_workers_start",
+    skip_all,
+    level = "debug",
+    err(Debug)
+)]
 pub async fn create_locked_stage_trigger_workers_start_request<T: WorkerMessageQueue>(
     message_queue: Ref<T>,
     storage: Ref<Storage>,
@@ -660,6 +696,12 @@ pub async fn create_locked_stage_trigger_workers_start_request<T: WorkerMessageQ
     Ok(())
 }
 
+#[instrument(
+    name = "scheduler.create_stage_trigger_workers_stop",
+    skip_all,
+    level = "debug",
+    err(Debug)
+)]
 pub async fn create_locked_stage_trigger_workers_stop_request<T: WorkerMessageQueue>(
     message_queue: Ref<T>,
     server_addresses: Ref<InternalServerAddresses>,

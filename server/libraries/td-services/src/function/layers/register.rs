@@ -698,7 +698,7 @@ pub async fn build_workers(
                         .worker_config(Some(worker_config.clone()))
                         .build()?;
                     new_workers.push(worker_db);
-                    debug!("New worker of type {worker_type} created.");
+                    debug!(worker_type = %worker_type, "function.register: new worker created");
                 }
             }
             _ => {

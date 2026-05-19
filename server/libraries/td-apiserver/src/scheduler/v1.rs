@@ -67,7 +67,7 @@ impl ServerRunnable for FunctionRequesterV1 {
             }
             match self.request().await {
                 Ok(_) => trace!("Execution plan scheduler executed successfully"),
-                Err(e) => error!("Error executing execution plan request scheduler: {e}"),
+                Err(e) => error!("Error executing execution plan request scheduler: {e:#?}"),
             }
         }
         Ok(())
@@ -118,7 +118,7 @@ impl ServerRunnable for FunctionDispatcherV1 {
             }
             match self.commit().await {
                 Ok(_) => trace!("Execution plan commit scheduler executed successfully"),
-                Err(e) => error!("Error executing execution plan commit scheduler: {e}"),
+                Err(e) => error!("Error executing execution plan commit scheduler: {e:#?}"),
             }
         }
         Ok(())

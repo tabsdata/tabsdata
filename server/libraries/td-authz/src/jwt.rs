@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use td_common::id;
 use td_common::id::Id;
 use td_error::td_error;
+use tracing::debug;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct JwtConfig {
@@ -80,12 +81,14 @@ pub enum JwtError {
 }
 
 pub fn encode_token(jwt_settings: &JwtConfig, token: &TokenClaims) -> Result<String, JwtError> {
-    encode(
+    let encoded = encode(
         &jsonwebtoken::Header::default(),
         token,
         jwt_settings.encoding_key(),
     )
-    .map_err(JwtError::JwtEncodingError)
+    .map_err(JwtError::JwtEncodingError)?;
+    debug!(jti = %token.jti, exp = token.exp, "auth.token.issued");
+    Ok(encoded)
 }
 
 pub fn decode_token(jwt_settings: &JwtConfig, token: &str) -> Result<TokenClaims, JwtError> {

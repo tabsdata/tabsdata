@@ -38,6 +38,7 @@ use td_queries::{ChunkedQueries, FunctionRequirementQueries};
 use td_tower::api_message;
 use td_tower::ctx_service::ReqCtx;
 use td_tower::extractors::{MutRef, Ref};
+use tracing::{debug, instrument};
 
 pub async fn trigger_type_manual() -> Result<TriggerType, TdError> {
     Ok(TriggerType::Manual)
@@ -368,6 +369,13 @@ pub async fn build_function_requirements(
 }
 
 // similar to `update_function_run_status`
+#[instrument(
+    name = "execution.initial_on_hold",
+    skip_all,
+    fields(execution_id = %execution.id),
+    level = "debug",
+    err(Debug)
+)]
 pub async fn update_initial_function_run_status(
     mut conn: MutRef<DynamicConnection<'static>>,
     execution: Ref<ExecutionDB>,
@@ -375,6 +383,13 @@ pub async fn update_initial_function_run_status(
     // Direct join: function_requirements → function_runs via requirement_function_run_id.
     // Returns only the distinct function_run_ids whose upstream is Failed/OnHold.
     let on_hold_ids = conn.fetch_blocked_function_run_ids(&execution.id).await?;
+
+    debug!(
+        execution_id = %execution.id,
+        on_hold_count = on_hold_ids.len(),
+        "execution.initial_on_hold: {} function_run(s) start OnHold",
+        on_hold_ids.len()
+    );
 
     if !on_hold_ids.is_empty() {
         let update = UpdateFunctionRunDB::builder()

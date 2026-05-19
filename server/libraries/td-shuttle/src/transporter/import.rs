@@ -31,7 +31,13 @@ pub trait FileFinder {
         let mut base_url = self.import_url();
         base_url
             .path_segments_mut()
-            .map_err(|_| TransporterError::InvalidImporterFileUrl(self.import_url().to_string()))?
+            .map_err(|_| {
+                tracing::debug!(
+                    url = %self.import_url(),
+                    "shuttle.import: path_segments_mut failed (non-hierarchical URL)"
+                );
+                TransporterError::InvalidImporterFileUrl(self.import_url().to_string())
+            })?
             .pop();
 
         let to_url = |path: &Path| -> Url {
@@ -71,7 +77,11 @@ impl FileFinder for SingleFileFinder {
 
     async fn find(&mut self) -> Result<Vec<ObjectMeta>, TransporterError> {
         let (store, _) = create_store(&self.location)?;
-        let path = Path::parse(self.location.url().path()).map_err(|_| {
+        let path = Path::parse(self.location.url().path()).map_err(|e| {
+            tracing::debug!(
+                url = %self.location.url(),
+                "shuttle.import: Path::parse failed: {e:?}"
+            );
             TransporterError::InvalidImporterFileUrl(self.location.url().to_string())
         })?;
         match with_retry("import_head", || async { store.head(&path).await }).await {
@@ -157,7 +167,11 @@ impl FileFinder for PatternFileFinder {
         let (store, _) = create_store(&self.location)?;
 
         let base_path = self.location.url().base_path();
-        let base_path = Path::parse(base_path).map_err(|_| {
+        let base_path = Path::parse(base_path).map_err(|e| {
+            tracing::debug!(
+                url = %self.location.url(),
+                "shuttle.import: base Path::parse failed: {e:?}"
+            );
             TransporterError::InvalidImporterFileUrl(self.location.url().to_string())
         })?;
 

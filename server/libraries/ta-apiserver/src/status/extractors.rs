@@ -56,7 +56,7 @@ where
 impl IntoResponse for JsonError {
     fn into_response(self) -> Response {
         let error: TdError = self.into();
-        error!("Response error: {}", error);
+        error!("Response error: {error:#?}");
         ErrorStatus::from(error).into_response()
     }
 }

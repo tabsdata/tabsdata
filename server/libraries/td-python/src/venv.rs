@@ -14,12 +14,13 @@ use std::collections::HashMap;
 use std::env;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, exit};
+use std::time::Instant;
 use td_common::env::check_flag_env;
 use td_common::os::name_program;
 use td_common::server::TD_DETACHED_SUBPROCESSES;
 use td_common::status::ExitStatus::GeneralError;
 use td_error::TdError;
-use tracing::{debug, error};
+use tracing::{debug, error, info, instrument};
 
 pub const PYTHON_PROGRAM: &str = "python";
 pub const PYTHON_ARGUMENT_C: &str = "-c";
@@ -54,6 +55,11 @@ pub fn set(
     requirements: Option<&PathBuf>,
     dump_std: bool,
 ) -> Result<PathBuf, TdError> {
+    debug!(
+        instance = %instance.display(),
+        requirements = ?requirements,
+        "python.venv.set: begin"
+    );
     let environment = create(instance, requirements, dump_std)?;
     activate(&environment)?;
     Ok(environment)
@@ -64,6 +70,11 @@ pub fn get(
     requirements: Option<&PathBuf>,
     dump_std: bool,
 ) -> Result<(PathBuf, HashMap<String, Option<String>>), TdError> {
+    debug!(
+        instance = %instance.display(),
+        requirements = ?requirements,
+        "python.venv.get: begin"
+    );
     let environment = create(instance, requirements, dump_std)?;
     let variables = match propagate(&environment) {
         Ok(variables) => variables,
@@ -73,6 +84,7 @@ pub fn get(
 }
 
 //noinspection DuplicatedCode
+#[instrument(name = "python.venv.check", skip_all, level = "debug", err(Debug))]
 pub fn check(dump_std: bool) -> Result<PathBuf, TdError> {
     let python = name_program(&PathBuf::from(PYTHON_PROGRAM));
     let mut command = Command::new(python);
@@ -113,11 +125,24 @@ pub fn check(dump_std: bool) -> Result<PathBuf, TdError> {
 }
 
 //noinspection DuplicatedCode
+#[instrument(
+    name = "python.venv.create",
+    skip_all,
+    fields(instance = %instance.display()),
+    level = "debug",
+    err(Debug)
+)]
 pub fn create(
     instance: &PathBuf,
     requirements: Option<&PathBuf>,
     dump_std: bool,
 ) -> Result<PathBuf, TdError> {
+    let start = Instant::now();
+    debug!(
+        instance = %instance.display(),
+        requirements = ?requirements,
+        "python.venv.create: begin"
+    );
     let tdvenv = resolve_python_binary(TDVENV_PROGRAM)?;
     let mut command = Command::new(&tdvenv);
     if check_flag_env(TD_DETACHED_SUBPROCESSES) {
@@ -153,13 +178,21 @@ pub fn create(
         Ok(output) => {
             let environment = extract(&output, ENVIRONMENT_START, ENVIRONMENT_END)
                 .ok_or(VenvCreationParseError(output))?;
-            Ok(PathBuf::from(environment))
+            let path = PathBuf::from(environment);
+            info!(
+                path = %path.display(),
+                duration_ms = start.elapsed().as_millis() as u64,
+                "python.venv.create: created venv at {}",
+                path.display()
+            );
+            Ok(path)
         }
         Err(e) => Err(OutputEncodingError(e))?,
     }
 }
 
 pub fn propagate(venv: &Path) -> Result<HashMap<String, Option<String>>, TdError> {
+    debug!(venv = %venv.display(), "python.venv.propagate: building env");
     let instance = venv
         .file_name()
         .ok_or_else(|| InstanceExtractionError(venv.to_path_buf()))?
@@ -192,6 +225,7 @@ pub fn propagate(venv: &Path) -> Result<HashMap<String, Option<String>>, TdError
 }
 
 pub fn activate(venv: &Path) -> Result<(), TdError> {
+    debug!(venv = %venv.display(), "python.venv.activate: setting env vars");
     let envs = propagate(venv)?;
     // Setting env vars is not thread-safe; use with care.
     unsafe {
@@ -206,6 +240,7 @@ pub fn activate(venv: &Path) -> Result<(), TdError> {
 }
 
 pub fn supress(venv: &PathBuf) -> Result<HashMap<String, Option<String>>, TdError> {
+    debug!(venv = %venv.display(), "python.venv.suppress: removing env vars");
     let path = remove_from_path(
         Path::new(venv).join(PYTHON_BIN_FOLDER).to_str().unwrap(),
         None,
@@ -226,6 +261,7 @@ pub fn supress(venv: &PathBuf) -> Result<HashMap<String, Option<String>>, TdErro
 }
 
 pub fn deactivate(venv: &PathBuf) -> Result<(), TdError> {
+    debug!(venv = %venv.display(), "python.venv.deactivate");
     let envs = supress(venv)?;
     // Setting env vars is not thread-safe; use with care.
     unsafe {
@@ -258,7 +294,7 @@ pub fn prepare(instance: &PathBuf, dump_std: bool) {
             )
         }
         Err(e) => {
-            error!("Failed to create the Python base environment: {}", e);
+            error!("Failed to create the Python base environment: {e:#?}");
             exit(GeneralError.code());
         }
     }

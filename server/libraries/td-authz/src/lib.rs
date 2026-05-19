@@ -11,6 +11,7 @@ use td_database::dynamic::DynamicConnection;
 use td_error::TdError;
 use td_objects::types::basic::{CollectionId, RoleId, ToCollectionId};
 use td_tower::extractors::{MutRef, Ref};
+use tracing::instrument;
 
 pub mod authz_provider;
 pub mod jwt;
@@ -22,12 +23,12 @@ pub type AuthzContext = AuthzContextImplWithCache;
 
 /// Layer to refresh the authz context. It must be called every time
 /// permissions and inter_collection_permissions change.
+#[instrument(name = "authz.refresh", skip_all, level = "debug", err(Debug))]
 pub async fn refresh_authz_context(
     context: Ref<AuthzContext>,
     mut conn: MutRef<DynamicConnection<'static>>,
 ) -> Result<(), TdError> {
-    context.refresh(&mut conn).await?;
-    Ok(())
+    context.refresh(&mut conn).await
 }
 
 #[derive(Debug)]

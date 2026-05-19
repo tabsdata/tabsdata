@@ -43,7 +43,7 @@ impl Server for PlainServer {
                     })
                     .await
                     .map_err(|e| {
-                        error!("Failed to run Server listener: {}", e);
+                        error!("Failed to run Server listener: {e:#?}");
                         ServerError::Server(dbg_listener, e)
                     })?;
                 Ok(())

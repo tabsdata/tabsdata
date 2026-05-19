@@ -40,12 +40,12 @@ pub fn run() {
             // parse request.yaml
             let request_file = request_folder.join(REQUEST_FILE);
             let file = File::open(&request_file).map_err(|e| {
-                error!("Failed to open request_file: {e}");
+                error!("Failed to open request_file: {e:#?}");
                 ExitStatus::GeneralError
             })?;
 
             let request = serde_yaml::from_reader::<_, WorkerInput>(file).map_err(|e| {
-                error!("Failed to parse worker input YAML: {e}");
+                error!("Failed to parse worker input YAML: {e:#?}");
                 ExitStatus::GeneralError
             })?;
 
@@ -62,7 +62,7 @@ pub fn run() {
             let cron_trigger_config =
                 deserialize_json_string::<CronTriggerConfig>(cron_trigger.info.config.as_str())
                     .map_err(|e| {
-                        error!("Error deserializing cron trigger config: {e}");
+                        error!("Error deserializing cron trigger config: {e:#?}");
                         ExitStatus::GeneralError
                     })?;
 
@@ -70,7 +70,7 @@ pub fn run() {
                 .mask
                 .into_cron()
                 .map_err(|e| {
-                    error!("Error parsing cron mask: {e}");
+                    error!("Error parsing cron mask: {e:#?}");
                     ExitStatus::GeneralError
                 })?
                 .to_string();
@@ -96,7 +96,7 @@ pub fn run() {
 
             // task that periodically executes the trigger based on the cron mask
             let cron_task = CronTask::new(&mask, trigger_task).map_err(|e| {
-                error!("Error creating cron scheduler: {e}");
+                error!("Error creating cron scheduler: {e:#?}");
                 ExitStatus::GeneralError
             })?;
 

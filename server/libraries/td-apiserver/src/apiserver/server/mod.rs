@@ -67,7 +67,7 @@ impl ServerRunnable for dyn Server {
             futures.push(tokio::spawn(async move {
                 tokio::select! {
                     res = &mut handle => res.map_err(|e| {
-                        error!("Failed to join server handle: {}", e);
+                        error!("Failed to join server handle: {e:#?}");
                         ServerError::JoinHandle(e)
                     })?,
                     _ = shutdown.changed() => {
@@ -85,7 +85,7 @@ impl ServerRunnable for dyn Server {
             match res {
                 Ok(Ok(())) => {} // handle finished successfully
                 Ok(Err(e)) => {
-                    error!("Server handle error: {}", e);
+                    error!("Server handle error: {e:#?}");
                     run_result = Err(e); // store the last error, continue
                 }
                 Err(join_err) => {

@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use td_common::os::name_program;
 use td_error::TdError;
+use tracing::debug;
 
 const PYTHON: &str = "python";
 const PYTHON_SCRIPTS_QUERY: &str = "import sysconfig; print(sysconfig.get_path('scripts'))";
@@ -39,6 +40,13 @@ pub fn resolve_python_binary(program_name: &str) -> Result<PathBuf, TdError> {
     let program = name_program(&PathBuf::from(program_name));
     let program_path = scripts_folder.join(&program);
     if program_path.exists() {
+        debug!(
+            program = %program_name,
+            path = %program_path.display(),
+            "python.resolve: {} -> {}",
+            program_name,
+            program_path.display()
+        );
         Ok(program_path)
     } else {
         Err(TdError::new(PythonBinaryNotFound(program_path)))

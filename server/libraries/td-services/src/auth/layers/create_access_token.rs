@@ -7,6 +7,7 @@ use td_error::TdError;
 use td_objects::Buildable;
 use td_objects::dxo::auth::{SessionDB, TokenResponseX};
 use td_tower::extractors::Ref;
+use tracing::info;
 
 pub async fn create_access_token(
     jwt_settings: Ref<JwtConfig>,
@@ -25,5 +26,11 @@ pub async fn create_access_token(
         .try_refresh_token(encode_token(&jwt_settings, &refresh_token)?)?
         .try_expires_in(jwt_settings.access_token_expiration)?
         .build()?;
+    info!(
+        user_id = %session.user_id,
+        role_id = %session.role_id,
+        access_token_id = %session.access_token_id,
+        "auth.login: success"
+    );
     Ok(token)
 }

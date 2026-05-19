@@ -657,7 +657,7 @@ impl Supervisor {
         info!("Supervisor is performing cleanup...");
         match self.stop_workers(Kill).await {
             Ok(_) => info!("Supervisor cleanup completed successfully."),
-            Err(e) => error!("Supervisor cleanup failed: {}", e),
+            Err(e) => error!("Supervisor cleanup failed: {e:#?}"),
         }
     }
 
@@ -752,7 +752,14 @@ impl Supervisor {
             let id = captures.get(1).map(|m| m.as_str()).unwrap();
             let run = captures.get(2).map(|m| m.as_str()).unwrap();
             let ext = captures.get(3).map(|m| m.as_str()).unwrap();
-            if let Ok(retry) = run.parse::<u16>() {
+            let parsed = run.parse::<u16>();
+            if let Err(ref e) = parsed {
+                debug!(
+                    value = %run,
+                    "supervisor.retry: failed to parse run number from filename: {e:?}"
+                );
+            }
+            if let Ok(retry) = parsed {
                 let payload = match &message.payload {
                     SupervisorRequestMessagePayload(payload) => payload,
                     SupervisorResponseMessagePayload(_) | SupervisorExceptionMessagePayload(_) => {
@@ -775,8 +782,8 @@ impl Supervisor {
                     return if let Err(e) =
                         SupervisorMessageQueue::planned_from_error(message.clone(), name)
                     {
-                        let error = format!("Error retrying message '{message:?}': {e}");
-                        error!("{}", error);
+                        let error = format!("Error retrying message '{message:?}': {e:#?}");
+                        error!("{error}");
                         Err(RuntimeError::new(error))
                     } else {
                         info!("Sent retry message to planned queue: {:?}", message);
@@ -786,8 +793,8 @@ impl Supervisor {
             }
         }
         if let Err(e) = SupervisorMessageQueue::fail(message.clone()) {
-            let error = format!("Error failing message '{message:?}': {e}");
-            error!("{}", error);
+            let error = format!("Error failing message '{message:?}': {e:#?}");
+            error!("{error}");
             return Err(RuntimeError::new(error));
         } else {
             info!("Sent error message to fail vault: {:?}", message);
@@ -832,14 +839,14 @@ impl Supervisor {
 
         for message in start_messages {
             if let Err(e) = SupervisorMessageQueue::queued(message.clone()) {
-                let error = format!("Error queuing message '{message:?}': {e}");
-                error!("{}", error);
+                let error = format!("Error queuing message '{message:?}': {e:#?}");
+                error!("{error}");
                 return Err(RuntimeError::new(error));
             }
 
             if let Err(e) = sender.send(message.clone()).await {
-                let error = format!("Error dispatching message '{message:?}': {e}");
-                error!("{}", error);
+                let error = format!("Error dispatching message '{message:?}': {e:#?}");
+                error!("{error}");
                 return Err(RuntimeError::new(error));
             }
 
@@ -972,6 +979,7 @@ impl Supervisor {
             Receiver<SupervisorMessage>,
         ) = mpsc::channel(DISPATCH_EPHEMERAL_CHANNEL_SIZE);
 
+        info!("supervisor: spawning controllers task");
         let mut controllers_handle = tokio::spawn({
             let self_arc = Arc::new(self.clone());
             async move {
@@ -1044,6 +1052,7 @@ impl Supervisor {
         let self_arc = Arc::new(self.clone());
 
         let init_self_arc = self_arc.clone();
+        debug!("supervisor.spawn: init controller");
         let init_controller_handle = tokio::spawn(async move {
             init_self_arc
                 .clone()
@@ -1062,6 +1071,7 @@ impl Supervisor {
         }
 
         let regular_self_arc = self_arc.clone();
+        debug!("supervisor.spawn: regular controller");
         let regular_controller_handle = tokio::spawn(async move {
             regular_self_arc
                 .clone()
@@ -1080,6 +1090,7 @@ impl Supervisor {
         }
 
         let ephemeral_self_arc = self_arc.clone();
+        debug!("supervisor.spawn: ephemeral controller");
         let ephemeral_controller_handle = tokio::spawn(async move {
             ephemeral_self_arc
                 .clone()
@@ -2147,7 +2158,7 @@ impl Supervisor {
                                 pid
                             );
                             if let Err(e) = terminate_process(pid as i32, Signal::Kill) {
-                                error!("Failed to kill worker process {}: {}", pid, e);
+                                error!("Failed to kill worker process {pid}: {e:#?}");
                             }
                         }
                         return (Some(td_worker), Err(error));
@@ -2163,8 +2174,18 @@ impl Supervisor {
                         class.as_ref().to_string(),
                         worker.name()
                     );
+                    let mut elapsed_s: u32 = 0;
                     loop {
                         sleep(Duration::from_secs(5)).await;
+                        elapsed_s += 5;
+                        if elapsed_s.is_multiple_of(60) {
+                            debug!(
+                                worker = %worker.name(),
+                                class = %class.as_ref(),
+                                elapsed_s = elapsed_s,
+                                "supervisor.monitor: nowait hold heartbeat"
+                            );
+                        }
                     }
                 } else {
                     match child.wait().await {
@@ -2545,7 +2566,7 @@ impl Supervisor {
                             markers.push(marker_key.produce(&message, payload).unwrap());
                         }
                         Err(e) => {
-                            error!("Unrecognized marker '{}': {}", key, e);
+                            error!("Unrecognized marker '{key}': {e:#?}");
                         }
                     }
                 }
@@ -2788,7 +2809,7 @@ impl Supervisor {
                     }
                 }
                 Err(e) => {
-                    error!("Unrecognized inherited argument: {}", e);
+                    error!("Unrecognized inherited argument: {e:#?}");
                 }
             }
         }
@@ -2817,7 +2838,7 @@ impl Supervisor {
                     );
                 }
                 Err(e) => {
-                    error!("Unrecognized argument '{}': {}", key, e);
+                    error!("Unrecognized argument '{key}': {e:#?}");
                 }
             }
         }
@@ -2953,7 +2974,7 @@ fn setup(arguments: Arguments) -> (Option<PathBuf>, PathBuf) {
 
     if config.is_none() {
         let profile_folder = tempdir().unwrap_or_else(|e| {
-            error!("Failed to create temporary profile config folder: {}", e);
+            error!("Failed to create temporary profile config folder: {e:#?}");
             exit(GeneralError.code());
         });
         let persistent_profile_folder = profile_folder.keep();
@@ -2966,7 +2987,7 @@ fn setup(arguments: Arguments) -> (Option<PathBuf>, PathBuf) {
                 }
             },
             Err(e) => {
-                error!("Failed to extract profile config yaml file: {}", e);
+                error!("Failed to extract profile config yaml file: {e:#?}");
                 exit(GeneralError.code());
             }
         };
@@ -3130,7 +3151,7 @@ pub fn start() {
         |config, params| async move {
             let result = Supervisor::new(config, params).run().await;
             if let Err(e) = result {
-                error!("Supervisor worker failed: {}", e);
+                error!("Supervisor worker failed: {e:#?}");
                 error!("Leaving with exit code: {}", TabsDataError.code());
                 return TabsDataError;
             }

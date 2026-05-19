@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::LazyLock;
 use td_common::absolute_path::AbsolutePath;
-use tracing::debug;
+use tracing::{debug, info, instrument};
 use url::Url;
 
 /// Definition of a mount.
@@ -255,8 +255,10 @@ impl Mount {
     }
 
     /// Create a [`Mount`] with the given definition.
+    #[instrument(name = "storage.mount.create", skip_all, level = "info", err(Debug))]
     pub fn new(def: MountDef) -> Result<Self> {
         let mut uri = Url::parse(&def.uri).unwrap();
+        let backend_kind = uri.scheme().to_string();
         let store = Self::create_store(&uri, def.options())?;
 
         let mount_path = SPath::parse(&def.path)?;
@@ -267,6 +269,13 @@ impl Mount {
         let path_mapper_to_uri = PathMapperToUri::new(&uri_path);
         let path_mapper_from_uri = PathMapperFromUri::new(uri_path.parts().count());
 
+        info!(
+            backend = %backend_kind,
+            mount = %def.path,
+            "storage.mount.create: backend={} mount={}",
+            backend_kind,
+            &def.path
+        );
         debug!("Mount, mount: {} uri: {}", &def.path, &def.uri);
 
         uri.set_path("");

@@ -42,7 +42,7 @@ use std::str::FromStr;
 use strum::{AsRefStr, Display, EnumString};
 use td_error::td_error;
 use tokio::{fs, io};
-use tracing::{error, warn};
+use tracing::{debug, error, trace, warn};
 use url::Url;
 use utoipa::ToSchema;
 
@@ -481,6 +481,14 @@ where
                             format!("Error deserializing request message {message:?}: {e}"),
                         )
                     })?;
+                debug!(
+                    variant = "Request",
+                    class = ?request_payload.class,
+                    worker = %request_payload.worker,
+                    run_id = %request_payload.run_id,
+                    action = %request_payload.action,
+                    "queue.get"
+                );
                 SupervisorRequestMessagePayload(request_payload)
             }
             PayloadType::Response => {
@@ -503,6 +511,7 @@ where
                     context: Some(response_context),
                     ..Default::default()
                 };
+                debug!(variant = "Response", "queue.get");
                 SupervisorResponseMessagePayload(response_payload)
             }
             PayloadType::Exception => {
@@ -513,6 +522,11 @@ where
                             format!("Error deserializing exception message {message:?}: {e}"),
                         )
                     })?;
+                debug!(
+                    variant = "Exception",
+                    exit_status = exception_payload.exit_status,
+                    "queue.get"
+                );
                 SupervisorExceptionMessagePayload(exception_payload)
             }
         };
@@ -661,6 +675,16 @@ impl WorkerMessageQueue for FileWorkerMessageQueue {
         let mut message_file = File::create(message_path.clone())?;
         let message_yaml = serde_yaml::to_string(&payload)?;
         message_file.write_all(message_yaml.as_bytes())?;
+        debug!(
+            id = %id,
+            class = ?payload.class,
+            worker = %payload.worker,
+            run_id = %payload.run_id,
+            action = %payload.action,
+            payload_bytes = message_yaml.len(),
+            "queue.put"
+        );
+        trace!(id = %id, body = %message_yaml, "queue.put: body");
         let message = SupervisorMessage::new(
             id,
             work,

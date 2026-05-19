@@ -36,6 +36,7 @@ impl SchedulerNotify {
     /// recover, worker callback). If the scheduler produces new `Locked`
     /// messages, it wakes the dispatcher itself.
     pub fn notify_scheduler(&self) {
+        tracing::trace!("scheduler_notify: notify_scheduler()");
         self.scheduler.notify_one();
     }
 
@@ -43,6 +44,7 @@ impl SchedulerNotify {
     /// `Locked` messages so the dispatcher picks them up without waiting for
     /// the failover timer.
     pub fn notify_dispatcher(&self) {
+        tracing::trace!("scheduler_notify: notify_dispatcher()");
         self.dispatcher.notify_one();
     }
 

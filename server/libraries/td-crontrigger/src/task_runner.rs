@@ -209,11 +209,11 @@ where
         let main_task = self.task.run(runner_shutdown_rx.clone());
         let heartbeat_task = run_heartbeat(self.heartbeat, runner_shutdown_rx.clone());
 
-        info!("Starting.");
+        info!(start = ?self.start, end = ?self.end, "crontrigger.task_runner: starting");
         tokio::select! {
            res = main_task => {
                if let Err(e) = res {
-                   error!("Task failed: {}", e);
+                   error!("Task failed: {:#?}", e);
                    return Err(Box::new(TaskRunnerError::TaskFailure(Box::new(e))))
                }
            },

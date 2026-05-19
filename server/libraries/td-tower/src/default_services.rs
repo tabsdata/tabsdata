@@ -125,7 +125,7 @@ where
                     Ok(handler)
                 }
                 Err(e) => {
-                    error!("{e}");
+                    error!("{e:#?}");
                     Err(e)
                 }
             }?;

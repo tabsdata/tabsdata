@@ -111,6 +111,7 @@ impl<T: Task + 'static> CronTask<T> {
 
         let task = self.task.clone();
         let self_to_string = self.to_string();
+        let mask = self.mask.clone();
 
         scheduler
             .add(
@@ -118,18 +119,23 @@ impl<T: Task + 'static> CronTask<T> {
                     Box::pin({
                         let task = task.clone();
                         let self_to_string = self_to_string.clone();
+                        let mask = mask.clone();
 
                         let runner_shutdown_rx = runner_shutdown_rx.clone();
                         let task_error_tx = task_error_tx.clone();
 
                         async move {
-                            info!("Ticking, {self_to_string}.");
+                            debug!(
+                                cron_mask = %mask,
+                                uuid = %uuid,
+                                "cron.fire: tick, {self_to_string}"
+                            );
                             match task.run(runner_shutdown_rx).await {
                                 Ok(_) => {
                                     debug!("Executed successfully, {self_to_string}, cron job {uuid}.")
                                 }
                                 Err(err) => {
-                                    error!("Error executing, {self_to_string}, cron job {uuid}: {err}.");
+                                    error!("Error executing, {self_to_string}, cron job {uuid}: {err:#?}.");
                                     if task_error_tx.send(Box::new(err)).await.is_err() {
                                         error!("Could not send error upstream, {self_to_string}, cron job {uuid}. Receiver likely dropped.");
                                     }
@@ -142,7 +148,11 @@ impl<T: Task + 'static> CronTask<T> {
                                     debug!("Next tick, {self_to_string}, cron job:{uuid}, at: {ts}.");
                                 }
                                 _ => {
-                                    error!("Could not get next cron tick, {self_to_string}, cron job {uuid}");
+                                    error!(
+                                        cron_mask = %mask,
+                                        uuid = %uuid,
+                                        "crontrigger: next tick unresolvable, {self_to_string}"
+                                    );
                                     if task_error_tx
                                         .send(Box::new(CronTaskError::CouldNotGetNextTick))
                                         .await
@@ -190,7 +200,7 @@ impl<T: Task + 'static> Task for CronTask<T> {
                 info!("Received shutdown signal, {self}.");
 
                 if let Err(e) = scheduler.shutdown().await {
-                    warn!("Error shutting down, {self}. Error: {e}");
+                    warn!("Error shutting down, {self}. Error: {e:#?}");
                 } else {
                     debug!("Shutdown complete, {self}.");
                 }
@@ -198,10 +208,10 @@ impl<T: Task + 'static> Task for CronTask<T> {
             }
             Some(err) = task_err_rx.recv() => {
                 // If the task fails while executing during a cron tick, we stop the crontrigger scheduler and fail.
-                error!("Shutting down because critical error, {self}. Error: {err}");
+                error!("Shutting down because critical error, {self}. Error: {err:#?}");
 
                 if let Err(e) = scheduler.shutdown().await {
-                    warn!("Error shutting down because of critical error, {self}. Error: {e}");
+                    warn!("Error shutting down because of critical error, {self}. Error: {e:#?}");
                 }
 
                 Err(CronTaskError::TaskFailure(err))

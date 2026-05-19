@@ -14,7 +14,7 @@ use std::fmt::Display;
 use td_schema::schema::SchemaVersion;
 use td_schema::{CURRENT_VERSION, DB_EDITION_NAME, DB_VERSION_NAME, TabsdataSystem};
 use te_system::edition::{Compatible, Edition, TabsdataEdition};
-use tracing::{debug, info, warn};
+use tracing::{debug, info, instrument, warn};
 
 #[derive(Debug, Clone)]
 pub struct TdPool {
@@ -33,7 +33,9 @@ impl TdPool {
     /// Connects to a database using the given configuration.
     ///
     /// The schema is assumed to be up to date.
+    #[instrument(name = "db.pool.connect", skip_all, level = "info", err(Debug))]
     pub async fn connect(config: &DatabaseConfig) -> Result<Self, DbError> {
+        info!("db.pool.connect: opening pool");
         let pool = config.connect().await?;
         debug!("Connected to database pool: {pool:#?}");
         Ok(Self { pool })
@@ -42,15 +44,19 @@ impl TdPool {
     /// Creates a database using the given configuration.
     ///
     /// Creates the schema.
+    #[instrument(name = "db.pool.create", skip_all, level = "info", err(Debug))]
     pub async fn create(config: &DatabaseConfig) -> Result<Self, DbError> {
         let this = Self::connect(config).await?;
         this.upgrade().await?;
         Ok(this)
     }
 
+    #[instrument(name = "db.pool.check", skip_all, level = "debug", err(Debug))]
     pub async fn check(&self) -> Result<(), DbError> {
         self.check_db_version().await?;
+        debug!("db.pool.check: db version OK");
         self.check_tabsdata_edition().await?;
+        debug!("db.pool.check: edition OK");
         Ok(())
     }
 
@@ -335,12 +341,24 @@ impl TdPool {
 
     /// Delegates to the read-only pool's [`Pool::acquire`] method.
     pub async fn acquire<'c>(&self) -> Result<DynamicConnection<'c>, Error> {
-        self.pool.acquire().await
+        let start = std::time::Instant::now();
+        let result = self.pool.acquire().await;
+        let elapsed_ms = start.elapsed().as_millis() as u64;
+        if elapsed_ms > 100 {
+            warn!(elapsed_ms, "db.pool.acquire: slow acquisition");
+        }
+        result
     }
 
     /// Delegates to the read-write pool's [`Pool::begin`] method.
     pub async fn begin<'c>(&self) -> Result<DynamicTransaction<'c>, Error> {
-        self.pool.begin().await
+        let start = std::time::Instant::now();
+        let result = self.pool.begin().await;
+        let elapsed_ms = start.elapsed().as_millis() as u64;
+        if elapsed_ms > 100 {
+            warn!(elapsed_ms, "db.pool.begin: slow transaction start");
+        }
+        result
     }
 
     /// Returns if the pool is closed.

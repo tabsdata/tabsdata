@@ -266,7 +266,16 @@ impl Writer {
                 )
             })?;
         let mut blocks_writing = FuturesOrdered::new();
+        let mut cap_warned = false;
         loop {
+            if blocks_writing.len() >= self.write_parallel && !cap_warned {
+                tracing::warn!(
+                    cap = self.write_parallel,
+                    "shuttle.copy_raw_parallel: concurrency cap reached ({})",
+                    self.write_parallel
+                );
+                cap_warned = true;
+            }
             while blocks_writing.len() >= self.write_parallel {
                 // Limit concurrent writes locking if passed parallelism
                 let _ = blocks_writing.next().await.unwrap();

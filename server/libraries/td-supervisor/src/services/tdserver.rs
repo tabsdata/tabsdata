@@ -1246,7 +1246,7 @@ fn command_start(arguments: StartArguments) {
                     }
                 }
                 Err(e) => {
-                    error!("Failed to run the Tabsdata instance: {}", e);
+                    error!("Failed to run the Tabsdata instance: {e:#?}");
                     exit(GeneralError.code())
                 }
             };
@@ -1627,14 +1627,14 @@ fn needs_upgrade(instance: PathBuf) -> bool {
     let source = match get_source_version(&instance) {
         Ok(version) => version,
         Err(err) => {
-            error!("Failed to get source version: {}", err);
+            error!("Failed to get source version: {err:#?}");
             exit(GeneralError.code());
         }
     };
     let target = match get_target_version() {
         Ok(version) => version,
         Err(err) => {
-            error!("Failed to get target version: {}", err);
+            error!("Failed to get target version: {err:#?}");
             exit(GeneralError.code());
         }
     };
@@ -2037,7 +2037,7 @@ fn command_worker_restart(arguments: WorkerRestartArguments) {
     let config: Configuration = match serde_yaml::from_str(&config_content) {
         Ok(config) => config,
         Err(e) => {
-            error!("Failed to parse configuration: {}", e);
+            error!("Failed to parse configuration: {e:#?}");
             exit(GeneralError.code());
         }
     };
@@ -2072,15 +2072,14 @@ fn command_worker_restart(arguments: WorkerRestartArguments) {
         Ok(yaml) => {
             if let Err(e) = fs::write(&ctl_path, yaml) {
                 error!(
-                    "Failed to write control file '{}': {}",
-                    ctl_path.display(),
-                    e
+                    "Failed to write control file '{}': {e:#?}",
+                    ctl_path.display()
                 );
                 exit(GeneralError.code());
             }
         }
         Err(e) => {
-            error!("Failed to serialize control file: {}", e);
+            error!("Failed to serialize control file: {e:#?}");
             exit(GeneralError.code());
         }
     }
@@ -2412,7 +2411,7 @@ pub fn show_std_out_and_err(output: &Output) {
             }
         }
         Err(e) => {
-            error!("Error processing system standard output: {}", e);
+            error!("Error processing system standard output: {e:#?}");
         }
     };
     match String::from_utf8(output.clone().stderr) {
@@ -2422,7 +2421,7 @@ pub fn show_std_out_and_err(output: &Output) {
             }
         }
         Err(e) => {
-            error!("Error processing system standard error: {}", e);
+            error!("Error processing system standard error: {e:#?}");
         }
     };
 }

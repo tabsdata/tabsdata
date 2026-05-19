@@ -73,7 +73,7 @@ impl ServerRunner {
                 }
                 Ok((server_name, Err(e))) => {
                     any_error = true;
-                    error!("Server '{server_name}' failed with error: {e}");
+                    error!("Server '{server_name}' failed with error: {e:#?}");
                     cancel_remaining(
                         &mut tasks_set,
                         &shutdown_tx,
@@ -114,7 +114,7 @@ fn shutdown_signal() -> (watch::Sender<()>, watch::Receiver<()>) {
     let tx_clone = tx.clone();
     tokio::spawn(async move {
         terminate().await;
-        info!("Terminate signal received, sending shutdown...");
+        info!("process.shutdown.broadcast: sending shutdown to subscribers");
         let _ = tx_clone.send(());
     });
     (tx, rx)
@@ -143,9 +143,11 @@ async fn cancel_remaining(
                         debug!("Server '{server_name}' exited gracefully after cancellation")
                     }
                     Ok((server_name, Err(e))) => {
-                        error!("Server '{server_name}' exited after cancellation with error: {e}")
+                        error!(
+                            "Server '{server_name}' exited after cancellation with error: {e:#?}"
+                        )
                     }
-                    Err(e) => error!("Server failed during shutdown: {e}"),
+                    Err(e) => error!("Server failed during shutdown: {e:#?}"),
                 }
             }
         })
@@ -164,11 +166,11 @@ async fn cancel_remaining(
                         }
                         Ok((server_name, Err(e))) => {
                             error!(
-                                "Server '{server_name}' failed after force-abort with error: {e}"
+                                "Server '{server_name}' failed after force-abort with error: {e:#?}"
                             )
                         }
                         Err(e) => {
-                            error!("Server failed after force-abort: {e}")
+                            error!("Server failed after force-abort: {e:#?}")
                         }
                     }
                 }
@@ -180,9 +182,9 @@ async fn cancel_remaining(
                 match result {
                     Ok((server_name, Ok(_))) => info!("Server '{server_name}' exited gracefully"),
                     Ok((server_name, Err(e))) => {
-                        error!("Server '{server_name}' exited with error: {e}")
+                        error!("Server '{server_name}' exited with error: {e:#?}")
                     }
-                    Err(e) => error!("Server failed during shutdown: {e}",),
+                    Err(e) => error!("Server failed during shutdown: {e:#?}",),
                 }
             }
             debug!("All remaining tasks exited gracefully");

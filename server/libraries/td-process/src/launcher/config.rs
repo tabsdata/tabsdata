@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::io::Read;
 use std::path::PathBuf;
 use td_common::env::{TABSDATA_HOME_DIR, get_current_dir, get_home_dir, get_user_name};
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 /// Marker trait to define a configuration.
 pub trait Config: Sized + Default + Serialize + for<'a> Deserialize<'a> {
@@ -51,6 +51,7 @@ const EXTENSION: &str = "yaml";
 /// For environment variables lookups, names are fully uppercased and hyphens '-' are
 /// replaced with underscores '_'.
 pub fn load_config<T: Config>(config_name: &str, config_folder: Option<PathBuf>, stdin: bool) -> T {
+    info!(config = %config_name, stdin = stdin, "process.launcher: loading config");
     let current_folder = obtain_current_dir();
     let _ = (match config_folder {
         None => move_to_dir(obtain_config_dir()),
@@ -125,6 +126,7 @@ pub fn load_config<T: Config>(config_name: &str, config_folder: Option<PathBuf>,
         }
     }
 
+    debug!(config = %config_name, "process.launcher: config loaded");
     config
 }
 

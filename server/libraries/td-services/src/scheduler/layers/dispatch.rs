@@ -19,13 +19,20 @@ use td_objects::dxo::yaml::function_runner::v2::FunctionInput;
 use td_objects::types::basic::{FunctionRunId, FunctionRunStatus, WorkerId};
 use td_queries::BasicQueries;
 use td_tower::extractors::{MutRef, Ref};
-use tracing::{debug, error, warn};
+use tracing::{debug, error, instrument, warn};
 
+#[instrument(name = "scheduler.notify_dispatcher", skip_all, level = "debug")]
 pub async fn notify_dispatcher(notify: Ref<SchedulerNotify>) -> Result<(), TdError> {
     notify.notify_dispatcher();
     Ok(())
 }
 
+#[instrument(
+    name = "scheduler.dispatch_tick",
+    skip_all,
+    level = "debug",
+    err(Debug)
+)]
 pub async fn unlock_workers_request<T: WorkerMessageQueue>(
     message_queue: Ref<T>,
     mut conn: MutRef<DynamicConnection<'static>>,
@@ -39,6 +46,15 @@ async fn unlock_workers_request_infallible<T: WorkerMessageQueue>(
     conn: &mut DynamicConnection<'_>,
 ) {
     let messages = message_queue.locked_messages::<serde_yaml::Value>().await;
+
+    let message_count = messages.len();
+    if message_count > 0 {
+        debug!(
+            locked_count = message_count,
+            "scheduler.dispatch_tick: {} locked message(s) to process", message_count
+        );
+    }
+    let mut rollback_count: usize = 0;
 
     for message in messages {
         if let Ok(worker_id) = WorkerId::try_from(&message.id)
@@ -80,11 +96,19 @@ async fn unlock_workers_request_infallible<T: WorkerMessageQueue>(
                 )),
             };
 
-            if res.is_err() {
+            if let Err(ref e) = res {
+                warn!(
+                    worker_id = %worker_id,
+                    reason = ?e,
+                    "dispatch: rolling back worker"
+                );
+                rollback_count += 1;
                 message_queue
                     .rollback(&worker_id.to_string())
                     .await
-                    .unwrap_or_else(|e| error!("Failed to rollback worker [{worker_id}]: {e}"))
+                    .unwrap_or_else(
+                        |e| error!(worker_id = %worker_id, "dispatch: rollback failed: {e:#?}"),
+                    )
             }
         } else {
             warn!(
@@ -93,8 +117,23 @@ async fn unlock_workers_request_infallible<T: WorkerMessageQueue>(
             );
         };
     }
+
+    if message_count > 0 {
+        debug!(
+            locked_count = message_count,
+            rollback_count = rollback_count,
+            "scheduler.dispatch_tick: end"
+        );
+    }
 }
 
+#[instrument(
+    name = "scheduler.unlock_worker",
+    skip_all,
+    fields(worker_id = %worker_id, kind = "function_runner"),
+    level = "debug",
+    err(Debug)
+)]
 pub async fn unlock_function_runner_worker<T: WorkerMessageQueue>(
     conn: &mut DynamicConnection<'_>,
     message_queue: &T,
@@ -113,6 +152,12 @@ pub async fn unlock_function_runner_worker<T: WorkerMessageQueue>(
 
                         // Discard if unexpected status found
                         if !matches!(function_run.status, FunctionRunStatus::RunRequested) {
+                            warn!(
+                                worker_id = %worker_id,
+                                function_run_id = %function_run.id,
+                                status = %function_run.status,
+                                "dispatch: function_run not in RunRequested state; rolling back"
+                            );
                             rollback_function_run_db(conn, &worker_id, &function_run.id).await?;
                             Err(api_error!(
                                 ApiError::InternalError,
@@ -129,8 +174,9 @@ pub async fn unlock_function_runner_worker<T: WorkerMessageQueue>(
                             Ok(_) => match message_queue.commit(&worker_id.to_string()).await {
                                 Ok(_) => {
                                     debug!(
-                                        "Dispatched function runner: worker [{worker_id}] function_run [{}] -> Unlocked",
-                                        function_run.id
+                                        worker_id = %worker_id,
+                                        function_run_id = %function_run.id,
+                                        "dispatch: function_runner dispatched"
                                     );
                                     Ok(())
                                 }
@@ -195,7 +241,9 @@ async fn rollback_function_run_db(
         }
         Err(e) => {
             error!(
-                "Failed to rollback status to scheduled for locked message [{message_id}] for function run [{function_run_id}]: {e}"
+                worker_id = %message_id,
+                function_run_id = %function_run_id,
+                "Failed to rollback status to scheduled: {e:#?}"
             );
         }
     }
@@ -203,6 +251,13 @@ async fn rollback_function_run_db(
     Ok(())
 }
 
+#[instrument(
+    name = "scheduler.unlock_worker",
+    skip_all,
+    fields(worker_id = %worker_id, kind = "cron_trigger"),
+    level = "debug",
+    err(Debug)
+)]
 pub async fn unlock_cron_trigger_workers<T: WorkerMessageQueue>(
     conn: &mut DynamicConnection<'_>,
     message_queue: &T,
@@ -214,7 +269,7 @@ pub async fn unlock_cron_trigger_workers<T: WorkerMessageQueue>(
     match conn.update::<_, WorkerDB>(&update, &worker_id).await {
         Ok(_) => match message_queue.commit(&worker_id.to_string()).await {
             Ok(_) => {
-                debug!("Dispatched cron trigger: worker [{worker_id}] -> Unlocked");
+                debug!(worker_id = %worker_id, "dispatch: cron_trigger dispatched");
                 Ok(())
             }
             Err(e) => Err(api_error!(
@@ -233,6 +288,13 @@ pub async fn unlock_cron_trigger_workers<T: WorkerMessageQueue>(
     }
 }
 
+#[instrument(
+    name = "scheduler.unlock_worker",
+    skip_all,
+    fields(worker_id = %worker_id, kind = "stage_trigger"),
+    level = "debug",
+    err(Debug)
+)]
 pub async fn unlock_stage_trigger_workers<T: WorkerMessageQueue>(
     conn: &mut DynamicConnection<'_>,
     message_queue: &T,
@@ -244,7 +306,7 @@ pub async fn unlock_stage_trigger_workers<T: WorkerMessageQueue>(
     match conn.update::<_, WorkerDB>(&update, &worker_id).await {
         Ok(_) => match message_queue.commit(&worker_id.to_string()).await {
             Ok(_) => {
-                debug!("Dispatched stage trigger: worker [{worker_id}] -> Unlocked");
+                debug!(worker_id = %worker_id, "dispatch: stage_trigger dispatched");
                 Ok(())
             }
             Err(e) => Err(api_error!(

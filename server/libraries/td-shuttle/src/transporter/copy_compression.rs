@@ -235,11 +235,13 @@ impl AsyncWrite for MultipartWriter {
                     // If we have buffered data, flush it
                     if !self.buffer.is_empty() {
                         self.flush_buffer()?;
+                        tracing::trace!("shuttle.copy_compression: Writing -> FlushingLastPart");
                         self.shutdown_state = ShutdownState::FlushingLastPart;
                         continue;
                     }
 
                     // No buffered data, move to completing
+                    tracing::trace!("shuttle.copy_compression: Writing -> Completing");
                     self.shutdown_state = ShutdownState::Completing;
                     continue;
                 }
@@ -249,6 +251,9 @@ impl AsyncWrite for MultipartWriter {
                         match Pin::new(&mut writing).poll(cx) {
                             Poll::Ready(Ok(_)) => {
                                 // Last part complete, move to completing
+                                tracing::trace!(
+                                    "shuttle.copy_compression: FlushingLastPart -> Completing"
+                                );
                                 self.shutdown_state = ShutdownState::Completing;
                                 continue;
                             }
@@ -266,6 +271,9 @@ impl AsyncWrite for MultipartWriter {
                     }
 
                     // No write in progress, move to completing
+                    tracing::trace!(
+                        "shuttle.copy_compression: FlushingLastPart -> Completing (no write)"
+                    );
                     self.shutdown_state = ShutdownState::Completing;
                     continue;
                 }
@@ -287,6 +295,7 @@ impl AsyncWrite for MultipartWriter {
                     if let Some(fut) = self.complete_fut.as_mut() {
                         match fut.as_mut().poll(cx) {
                             Poll::Ready(Ok(_)) => {
+                                tracing::trace!("shuttle.copy_compression: Completing -> Done");
                                 self.shutdown_state = ShutdownState::Done;
                                 return Poll::Ready(Ok(()));
                             }

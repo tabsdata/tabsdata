@@ -21,7 +21,7 @@ where
 {
     match error.api_error() {
         ApiError::InternalError | ApiError::Unexpected | ApiError::NotImplemented => {
-            error!("{}", error);
+            error!("{error:#?}");
         }
         _ => {
             debug!("{}", error);

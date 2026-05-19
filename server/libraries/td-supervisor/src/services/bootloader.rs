@@ -222,7 +222,7 @@ impl Bootloader {
         match self.init_instance(&config, &params) {
             Ok(_) => Ok(Success),
             Err(e) => {
-                error!("Tabsdata bootloader initialization failed: {}", e);
+                error!("Tabsdata bootloader initialization failed: {e:#?}");
                 error!("Leaving with exit code: {}", TabsDataError.code());
                 Ok(TabsDataError)
             }
@@ -260,7 +260,7 @@ pub fn start() {
         |config, params| async move {
             let result = Bootloader::new().run(config, params).await;
             if let Err(e) = result {
-                error!("Tabsdata bootloader execution failed: {}", e);
+                error!("Tabsdata bootloader execution failed: {e:#?}");
                 error!("Leaving with exit code: {}", TabsDataError.code());
                 return TabsDataError;
             }

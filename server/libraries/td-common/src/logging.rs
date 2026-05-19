@@ -2,6 +2,66 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
+//! Backend logging module.
+//!
+//! # Level policy
+//!
+//! - `error!` — unrecoverable / actionable failures. Format error chains with `{e:#?}`.
+//! - `warn!`  — recoverable anomalies: silent drops, rollbacks, slow pool acquisition,
+//!              unexpected-but-handled states.
+//! - `info!`  — rare lifecycle only (one-time-per-process class): subsystem init, DB
+//!              migration applied, controller spawn. **Strict rule**: in
+//!              `td-services::{scheduler,execution}` and `td-execution`, reserve `info!`
+//!              for loop start/stop only. Everything else is `debug!`.
+//! - `debug!` — per-tick, per-entity, per-status-change, per-query operational detail.
+//!              Default for most scheduler/execution/dispatch/query events.
+//! - `trace!` — tight loops, per-row, per-chunk, per-byte. Opt-in only.
+//!
+//! Use `#[tracing::instrument(name = "subsystem.operation", skip_all, level = "debug",
+//! err(Debug))]` on functions worth a span. Always `skip_all`; re-add scalar IDs via
+//! `fields(execution_id = %x, ...)`. Never capture `&conn`, `&pool`, payloads.
+//!
+//! # Common env-filter recipes
+//!
+//! ```text
+//! # scheduler/execution diagnostics
+//! RUST_LOG=info,td_services::scheduler=debug,td_services::execution=debug,td_execution=debug
+//!
+//! # I/O diagnostics (DB + storage mounts)
+//! RUST_LOG=info,td_database=debug,td_storage=debug
+//!
+//! # authorization troubleshooting
+//! RUST_LOG=warn,td_authz=debug
+//!
+//! # subprocess/python lifecycle
+//! RUST_LOG=info,td_python=debug,td_shuttle=debug,td_supervisor=debug
+//! ```
+//!
+//! # Sensitive data
+//!
+//! Never log plaintext passwords, tokens, bearer headers, or DSN strings containing
+//! credentials. Sanitize URLs (strip userinfo and query) before logging. The
+//! `SensitiveFilterLayer` (this module) drops any message containing the
+//! `@@SENSITIVE@@` marker.
+//!
+//! # Panic capture
+//!
+//! [`start`] installs a [`tracing_panic::panic_hook`] so panics on background tokio
+//! tasks (and the main runtime) emit structured `ERROR` events through this pipeline
+//! rather than going to stderr only. This preserves file sinks, JSON formatting, the
+//! sensitive filter, and any OTEL export.
+//!
+//! # Regression guard
+//!
+//! The script `devutils/automation/tasks/makers/td-scripts/logging_lint.sh` greps the
+//! Rust tree for two policy violations and exits non-zero if either is present:
+//!
+//! - `info!` inside `td-services::{scheduler,execution}` or `td-execution`.
+//! - `error!` that formats the error without `{e:#?}` (losing the chain).
+//!
+//! Run it locally before landing logging changes; it is intended for CI. If you
+//! change policy, update both this doc and the script.
+
 use crate::constants::PYTEST_CONTEXT_ACTIVE;
 use crate::env::{get_current_dir, to_absolute};
 use crate::manifest::{Inf, WORKER_INF_FILE};
@@ -369,6 +429,11 @@ pub fn start_with(options: LoggingOptions) {
             format,
         )
     });
+
+    // Route panics through tracing so they hit the same sinks / filters as the rest
+    // of the log pipeline (file, JSON, sensitive filter, OTEL). Without this, panics
+    // on background tokio tasks go to stderr only.
+    std::panic::set_hook(Box::new(tracing_panic::panic_hook));
 }
 
 fn select_primary_writer(profile: Option<&LogProfile>, log_dir: Option<&Path>) -> BoxMakeWriter {

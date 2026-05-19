@@ -51,7 +51,13 @@ impl ObjectStoreWriter {
                 })
                 .await
             });
-            let _ = tx.send(result);
+            if let Err(e) = tx.send(result) {
+                tracing::warn!(
+                    channel = "cloud.put_result",
+                    "shuttle: send dropped ({:?})",
+                    e
+                );
+            }
         });
 
         rx.recv()

@@ -17,7 +17,7 @@ use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::types::basic::{AccessToken, AccessTokenId};
 use td_services::auth::AuthError;
-use tracing::{Instrument, Level, Span, error, span};
+use tracing::{Instrument, Level, Span, error, span, warn};
 
 pub async fn authorization_layer(
     State(db): State<TdPool>,
@@ -31,49 +31,41 @@ pub async fn authorization_layer(
         .headers()
         .get(http::header::AUTHORIZATION)
         .ok_or(TdError::from(AuthError::MissingAuthorizationHeader))?;
-    // .log_debug(|res| "Request does not have authorization header".to_string())
-    // .log_ok_trace(|ok| "Request does not have authorization header".to_string())
-    // .log_err_warn(|err| "Request does not have authorization header".to_string())?;
 
     // Check if the Authorization header is valid
     let auth_header = auth_header.to_str().map_err(|e| {
-        error!("Invalid authorization header: {}", e);
+        warn!("Invalid authorization header: {e:#?}");
         TdError::from(AuthError::InvalidAuthorizationHeaderValue(
             "It must be a string".to_string(),
         ))
     })?;
-    //        .log_warn_err(|_| format!("Invalid authorization header: {:?}", auth_header))?;
     // Check if the Authorization header is a Bearer token
     let auth_header: Vec<_> = auth_header.split_whitespace().collect();
     if auth_header.len() != 2 {
-        error!(
+        warn!(
             "Invalid authorization header, not 2 words: {:?}",
             auth_header
         );
         Err(TdError::from(AuthError::InvalidAuthorizationHeaderValue(
             "It should be 2 words: Bearer <ACCESS_TOKEN>".to_string(),
         )))?;
-        //        .log_err_warn(|e| e.to_string())?;
     }
     if auth_header[0] != "Bearer" {
-        error!(
+        warn!(
             "Invalid authorization header, not a Bearer token: {:?}",
             auth_header
         );
         Err(TdError::from(AuthError::InvalidAuthorizationHeaderValue(
             "Not a Bearer token".to_string(),
         )))?;
-        //        .log_err_warn(|e| e.to_string())?;
     }
     let access_token = AccessToken::try_from(auth_header[1])?;
 
     // Check if the token is valid
-    let token = decode_token(&jwt_config, access_token.as_str())
-        //        .log_err_warn(|e| e.to_string())
-        .map_err(|e| {
-            error!("Could not decode token: {}", e);
-            TdError::from(AuthError::AuthenticationFailed)
-        })?;
+    let token = decode_token(&jwt_config, access_token.as_str()).map_err(|e| {
+        error!("Could not decode token: {e:#?}");
+        TdError::from(AuthError::AuthenticationFailed)
+    })?;
     let access_token_id: AccessTokenId = token.jti.into();
 
     // Get user_id/role_id from session
@@ -81,14 +73,14 @@ pub async fn authorization_layer(
         .get(&db)
         .await
         .map_err(|e| {
-            error!("Could not get session: {}", e);
+            error!("Could not get session: {e:#?}");
             TdError::from(AuthError::AuthenticationFailed)
         })?
         .get(&access_token_id)
         .cloned()
         .ok_or_else(|| TdError::from(SessionError::NotFound(access_token_id)))
         .map_err(|e| {
-            error!("Could not get session: {}", e);
+            error!("Could not get session: {e:#?}");
             TdError::from(AuthError::AuthenticationFailed)
         })?;
 
@@ -110,6 +102,8 @@ fn log_span(session: &Session) -> Span {
     span!(
         Level::INFO,
         "authorized",
+        user_id = %session.user_id,
+        role_id = %session.role_id,
         user_name = %session.user_name,
         role_name = %session.role_name,
         access_token_id = %session.access_token_id.log(),
@@ -166,11 +160,13 @@ mod tests {
         let role_name = RoleName::sys_admin();
         let user_name = UserName::admin();
         let access_token_id = AccessTokenId::default();
+        let user_id = UserId::admin();
+        let role_id = RoleId::sys_admin();
         let session = Session::builder()
             .access_token_id(access_token_id)
             .refresh_token_id(RefreshTokenId::default())
-            .user_id(UserId::admin())
-            .role_id(RoleId::sys_admin())
+            .user_id(user_id)
+            .role_id(role_id)
             .created_on(AtTime::default())
             .expires_on(AtTime::default())
             .status_change_on(AtTime::default())
@@ -192,7 +188,7 @@ mod tests {
         let log_output = String::from_utf8_lossy(&logs);
         let trace_auth_id = access_token_id.log();
         assert!(log_output.contains(&format!(
-            "authorized{{user_name={user_name} role_name={role_name} access_token_id={trace_auth_id}}}"
+            "authorized{{user_id={user_id} role_id={role_id} user_name={user_name} role_name={role_name} access_token_id={trace_auth_id}}}"
         )));
     }
 }

@@ -8543,6 +8543,7 @@ dependencies = [
  "td-tower",
  "thiserror 2.0.18",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -8608,6 +8609,7 @@ dependencies = [
  "tokio",
  "toml",
  "tracing",
+ "tracing-panic",
  "tracing-subscriber",
  "url",
  "utoipa",
@@ -8707,6 +8709,7 @@ dependencies = [
  "te-execution",
  "thiserror 2.0.18",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
