@@ -56,7 +56,7 @@ pub fn tables() -> Vec<TableCreateStatement> {
             .col(ColumnDef::new(Permissions::GrantedById).text().not_null())
             .col(
                 ColumnDef::new(Permissions::GrantedOn)
-                    .timestamp()
+                    .timestamp_with_time_zone()
                     .not_null(),
             )
             .col(ColumnDef::new(Permissions::Fixed).boolean().not_null())
@@ -88,7 +88,7 @@ pub fn tables() -> Vec<TableCreateStatement> {
             )
             .col(
                 ColumnDef::new(InterCollectionPermissions::GrantedOn)
-                    .timestamp()
+                    .timestamp_with_time_zone()
                     .not_null(),
             )
             .col(
@@ -122,11 +122,23 @@ pub fn tables() -> Vec<TableCreateStatement> {
 
 pub fn views(b: &Backend) -> Vec<ViewDef> {
     vec![
-        // permissions__with_names (all unique tables)
+        // permissions__with_names (all unique tables).
+        //
+        // We list the source columns explicitly instead of `permissions.*`
+        // because the view re-projects `entity_id` through a CASE expression
+        // (masking the system-collection sentinel). With `permissions.*` the
+        // original `entity_id` column would also appear, and Postgres rejects
+        // views with duplicate column names (SQLite accepts them).
         ViewDef::new(
             "permissions__with_names",
             Query::select()
-                .expr(Expr::col((Permissions::Table, Asterisk)))
+                .expr(Expr::col((Permissions::Table, Permissions::Id)))
+                .expr(Expr::col((Permissions::Table, Permissions::RoleId)))
+                .expr(Expr::col((Permissions::Table, Permissions::PermissionType)))
+                .expr(Expr::col((Permissions::Table, Permissions::EntityType)))
+                .expr(Expr::col((Permissions::Table, Permissions::GrantedById)))
+                .expr(Expr::col((Permissions::Table, Permissions::GrantedOn)))
+                .expr(Expr::col((Permissions::Table, Permissions::Fixed)))
                 .expr_as(
                     b.name_or_id("users.name", "permissions.granted_by_id"),
                     Alias::new("granted_by"),

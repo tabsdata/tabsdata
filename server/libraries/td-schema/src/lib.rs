@@ -2,9 +2,6 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-#[cfg(not(any(feature = "sqlite", feature = "postgres", feature = "mysql")))]
-compile_error!("You must enable at least one database feature: `sqlite`, `postgres` or `mysql`.");
-
 use sea_query::Iden;
 
 pub mod schema;

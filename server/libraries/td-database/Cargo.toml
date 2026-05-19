@@ -6,6 +6,11 @@
 description = "Tabsdata Database Features"
 name = "td-database"
 build = "build.rs"
+# Required so `cargo::metadata=<key>=…` from build.rs is exposed to direct
+# dependents as `DEP_TD_DATABASE_FEATURES_<KEY>` env vars. Their build scripts
+# read these to set `#[cfg(sqlite|postgres|mysql)]` flags driven by *this*
+# crate's feature state — single source of truth for backend selection.
+links = "td_database_features"
 
 authors = { workspace = true }
 edition = { workspace = true }
@@ -20,7 +25,7 @@ version = { workspace = true }
 [lib]
 
 [features]
-default = ["sqlite"]
+default = ["sqlite", "postgres", "mysql"]
 
 enterprise = []
 td-test = [
@@ -39,10 +44,12 @@ test_logging = []
 test_tower_metadata = []
 test-utils = []
 
-# Backend support features
-sqlite = ["sqlx/sqlite", "sea-query-sqlx/sqlx-sqlite", "td-schema/sqlite"]
-postgres = ["sqlx/postgres", "sea-query-sqlx/sqlx-postgres", "td-schema/postgres"]
-mysql = ["sqlx/mysql", "sea-query-sqlx/sqlx-mysql", "td-schema/mysql"]
+# Backend support features. td-database is the single source of truth — these
+# features pull in the sqlx/sea-query-sqlx pieces per backend and drive the
+# build script's metadata/cfg emission for the rest of the workspace.
+sqlite = ["sqlx/sqlite", "sea-query-sqlx/sqlx-sqlite"]
+postgres = ["sqlx/postgres", "sea-query-sqlx/sqlx-postgres"]
+mysql = ["sqlx/mysql", "sea-query-sqlx/sqlx-mysql"]
 
 [package.metadata.cargo-machete]
 ignored = ["openssl", "strum", "td-build", "td-database", "thiserror", "toml"]
@@ -87,6 +94,7 @@ tracing = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 
 [dev-dependencies]
+chrono = { workspace = true }
 serde_yaml = { workspace = true }
 td-database = { workspace = true, features = ["td-test"] }
 

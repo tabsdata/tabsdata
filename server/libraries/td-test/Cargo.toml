@@ -33,10 +33,6 @@ mock-env = []
 test_logging = []
 test_tower_metadata = []
 test-utils = []
-# database features
-sqlite = ["td-database/sqlite"]
-postgres = ["td-database/postgres"]
-mysql = ["td-database/mysql"]
 
 [package.metadata.cargo-machete]
 ignored = ["openssl", "td-build", "td-test", "toml"]

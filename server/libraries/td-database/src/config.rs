@@ -10,22 +10,25 @@ use serde_with::serde_as;
 use sqlx::any::AnyConnectOptions;
 use sqlx::pool::PoolOptions;
 use sqlx::{ConnectOptions, Database};
+#[cfg(sqlite)]
 use std::fs;
 use std::ops::Deref;
 use std::time::Duration;
 use tracing::log::LevelFilter;
-use tracing::{debug, warn};
+use tracing::debug;
+#[cfg(sqlite)]
+use tracing::warn;
 use url::Url;
 
 const SLOW_QUERIES_THRESHOLD: u64 = 5000;
 
 // ── DB-specific config structs ──────────────────────────────────────────
 
-#[cfg(feature = "sqlite")]
+#[cfg(sqlite)]
 #[derive(Debug, Clone, Serialize)]
 pub struct SqliteUrl(Url);
 
-#[cfg(feature = "sqlite")]
+#[cfg(sqlite)]
 impl Deref for SqliteUrl {
     type Target = Url;
     fn deref(&self) -> &Self::Target {
@@ -33,7 +36,7 @@ impl Deref for SqliteUrl {
     }
 }
 
-#[cfg(feature = "sqlite")]
+#[cfg(sqlite)]
 impl TryFrom<Url> for SqliteUrl {
     type Error = String;
 
@@ -47,7 +50,7 @@ impl TryFrom<Url> for SqliteUrl {
     }
 }
 
-#[cfg(feature = "sqlite")]
+#[cfg(sqlite)]
 impl<'de> Deserialize<'de> for SqliteUrl {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -59,17 +62,17 @@ impl<'de> Deserialize<'de> for SqliteUrl {
     }
 }
 
-#[cfg(feature = "sqlite")]
+#[cfg(sqlite)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SqliteConfig {
     url: SqliteUrl,
 }
 
-#[cfg(feature = "postgres")]
+#[cfg(postgres)]
 #[derive(Debug, Clone, Serialize)]
 pub struct PostgresUrl(Url);
 
-#[cfg(feature = "postgres")]
+#[cfg(postgres)]
 impl Deref for PostgresUrl {
     type Target = Url;
     fn deref(&self) -> &Self::Target {
@@ -77,7 +80,7 @@ impl Deref for PostgresUrl {
     }
 }
 
-#[cfg(feature = "postgres")]
+#[cfg(postgres)]
 impl TryFrom<Url> for PostgresUrl {
     type Error = String;
 
@@ -91,7 +94,7 @@ impl TryFrom<Url> for PostgresUrl {
     }
 }
 
-#[cfg(feature = "postgres")]
+#[cfg(postgres)]
 impl<'de> Deserialize<'de> for PostgresUrl {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -103,17 +106,17 @@ impl<'de> Deserialize<'de> for PostgresUrl {
     }
 }
 
-#[cfg(feature = "postgres")]
+#[cfg(postgres)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PostgresConfig {
     url: PostgresUrl,
 }
 
-#[cfg(feature = "mysql")]
+#[cfg(mysql)]
 #[derive(Debug, Clone, Serialize)]
 pub struct MySqlUrl(Url);
 
-#[cfg(feature = "mysql")]
+#[cfg(mysql)]
 impl Deref for MySqlUrl {
     type Target = Url;
     fn deref(&self) -> &Self::Target {
@@ -121,7 +124,7 @@ impl Deref for MySqlUrl {
     }
 }
 
-#[cfg(feature = "mysql")]
+#[cfg(mysql)]
 impl TryFrom<Url> for MySqlUrl {
     type Error = String;
 
@@ -135,7 +138,7 @@ impl TryFrom<Url> for MySqlUrl {
     }
 }
 
-#[cfg(feature = "mysql")]
+#[cfg(mysql)]
 impl<'de> Deserialize<'de> for MySqlUrl {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -146,7 +149,7 @@ impl<'de> Deserialize<'de> for MySqlUrl {
             .map_err(serde::de::Error::custom)
     }
 }
-#[cfg(feature = "mysql")]
+#[cfg(mysql)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MySqlConfig {
     url: MySqlUrl,
@@ -169,11 +172,11 @@ pub struct MySqlConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum BackendConfig {
-    #[cfg(feature = "sqlite")]
+    #[cfg(sqlite)]
     Sqlite(SqliteConfig),
-    #[cfg(feature = "postgres")]
+    #[cfg(postgres)]
     Postgres(PostgresConfig),
-    #[cfg(feature = "mysql")]
+    #[cfg(mysql)]
     MySql(MySqlConfig),
 }
 
@@ -181,26 +184,26 @@ impl BackendConfig {
     /// Returns the connection URL regardless of variant.
     pub fn url(&self) -> &Url {
         match self {
-            #[cfg(feature = "sqlite")]
+            #[cfg(sqlite)]
             Self::Sqlite(c) => &c.url,
-            #[cfg(feature = "postgres")]
+            #[cfg(postgres)]
             Self::Postgres(c) => &c.url,
-            #[cfg(feature = "mysql")]
+            #[cfg(mysql)]
             Self::MySql(c) => &c.url,
         }
     }
 
     /// Infer the backend variant from the URL scheme.
     pub fn from_url(url: Url) -> Result<Self, DbError> {
-        #[cfg(feature = "sqlite")]
+        #[cfg(sqlite)]
         if let Ok(sqlite_url) = SqliteUrl::try_from(url.clone()) {
             return Ok(BackendConfig::Sqlite(SqliteConfig { url: sqlite_url }));
         }
-        #[cfg(feature = "postgres")]
+        #[cfg(postgres)]
         if let Ok(pg_url) = PostgresUrl::try_from(url.clone()) {
             return Ok(BackendConfig::Postgres(PostgresConfig { url: pg_url }));
         }
-        #[cfg(feature = "mysql")]
+        #[cfg(mysql)]
         if let Ok(my_url) = MySqlUrl::try_from(url.clone()) {
             return Ok(BackendConfig::MySql(MySqlConfig { url: my_url }));
         }
@@ -212,19 +215,19 @@ impl BackendConfig {
     pub fn with_url(self, url: Url) -> Result<Self, DbError> {
         let new = Self::from_url(url)?;
         Ok(match (self, new) {
-            #[cfg(feature = "sqlite")]
+            #[cfg(sqlite)]
             (Self::Sqlite(_old), Self::Sqlite(new)) => {
                 debug!("URL changed, preserving sqlite backend");
                 let new = SqliteConfig { url: new.url };
                 Self::Sqlite(new)
             }
-            #[cfg(feature = "postgres")]
+            #[cfg(postgres)]
             (Self::Postgres(_old), Self::Postgres(new)) => {
                 debug!("URL changed, preserving postgres backend");
                 let new = PostgresConfig { url: new.url };
                 Self::Postgres(new)
             }
-            #[cfg(feature = "mysql")]
+            #[cfg(mysql)]
             (Self::MySql(_old), Self::MySql(new)) => {
                 debug!("URL changed, preserving mysql backend");
                 let new = MySqlConfig { url: new.url };
@@ -393,7 +396,7 @@ impl DatabaseConfig {
         let conn_options = self.conn_options(url)?;
 
         match conn_config {
-            #[cfg(feature = "sqlite")]
+            #[cfg(sqlite)]
             BackendConfig::Sqlite(c) => {
                 Self::try_create_missing_dir(&c.url);
                 let (rw, ro) = (
@@ -403,7 +406,7 @@ impl DatabaseConfig {
                 );
                 Ok(DynamicPool::Sqlite { ro, rw })
             }
-            #[cfg(feature = "postgres")]
+            #[cfg(postgres)]
             BackendConfig::Postgres { .. } => {
                 let (rw, ro) = (
                     self.connect_postgres(&conn_options, false).await?,
@@ -411,7 +414,7 @@ impl DatabaseConfig {
                 );
                 Ok(DynamicPool::Postgres { ro, rw })
             }
-            #[cfg(feature = "mysql")]
+            #[cfg(mysql)]
             BackendConfig::MySql { .. } => {
                 let (rw, ro) = (
                     self.connect_mysql(&conn_options, false).await?,
@@ -451,7 +454,7 @@ impl DatabaseConfig {
             .test_before_acquire(self.pool.test_before_acquire)
     }
 
-    #[cfg(feature = "sqlite")]
+    #[cfg(sqlite)]
     fn try_create_missing_dir(url: &Url) {
         if let Ok(path) = url.to_file_path()
             && let Some(parent) = path.parent()
@@ -465,7 +468,7 @@ impl DatabaseConfig {
         }
     }
 
-    #[cfg(feature = "sqlite")]
+    #[cfg(sqlite)]
     async fn connect_sqlite(
         &self,
         conn_options: &AnyConnectOptions,
@@ -485,7 +488,7 @@ impl DatabaseConfig {
         Ok(pool)
     }
 
-    #[cfg(feature = "postgres")]
+    #[cfg(postgres)]
     async fn connect_postgres(
         &self,
         conn_options: &AnyConnectOptions,
@@ -513,7 +516,7 @@ impl DatabaseConfig {
         Ok(pool)
     }
 
-    #[cfg(feature = "mysql")]
+    #[cfg(mysql)]
     async fn connect_mysql(
         &self,
         conn_options: &AnyConnectOptions,
@@ -565,7 +568,7 @@ mod tests {
         assert_eq!(conn.url(), conn2.url());
     }
 
-    #[cfg(feature = "postgres")]
+    #[cfg(postgres)]
     #[test]
     fn conn_postgres_round_trip() {
         let conn =
@@ -577,7 +580,7 @@ mod tests {
         assert_eq!(conn.url(), conn2.url());
     }
 
-    #[cfg(feature = "mysql")]
+    #[cfg(mysql)]
     #[test]
     fn conn_mysql_round_trip() {
         let conn = BackendConfig::from_url(Url::parse("mysql://user:pass@localhost/mydb").unwrap())
@@ -596,7 +599,7 @@ mod tests {
         assert_eq!(conn.url().as_str(), "file:///tmp/inferred.db");
     }
 
-    #[cfg(feature = "postgres")]
+    #[cfg(postgres)]
     #[test]
     fn conn_infer_postgres_from_url() {
         let yaml = "url: postgres://user:pass@localhost/mydb";
@@ -604,7 +607,7 @@ mod tests {
         assert!(matches!(conn, BackendConfig::Postgres(_)));
     }
 
-    #[cfg(feature = "mysql")]
+    #[cfg(mysql)]
     #[test]
     fn conn_infer_mysql_from_url() {
         let yaml = "url: mysql://user:pass@localhost/mydb";

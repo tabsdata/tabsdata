@@ -42,13 +42,13 @@ pub fn tables() -> Vec<TableCreateStatement> {
             .col(ColumnDef::new(Collections::Description).text().not_null())
             .col(
                 ColumnDef::new(Collections::CreatedOn)
-                    .timestamp()
+                    .timestamp_with_time_zone()
                     .not_null(),
             )
             .col(ColumnDef::new(Collections::CreatedById).text().not_null())
             .col(
                 ColumnDef::new(Collections::ModifiedOn)
-                    .timestamp()
+                    .timestamp_with_time_zone()
                     .not_null(),
             )
             .col(ColumnDef::new(Collections::ModifiedById).text().not_null())

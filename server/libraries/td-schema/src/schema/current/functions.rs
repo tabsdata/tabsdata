@@ -343,7 +343,7 @@ pub fn tables() -> Vec<TableCreateStatement> {
             .col(ColumnDef::new(Functions::StorageVersion).text().not_null())
             .col(ColumnDef::new(Functions::BundleId).text().not_null())
             .col(ColumnDef::new(Functions::Snippet).text().not_null())
-            .col(ColumnDef::new(Functions::DefinedOn).timestamp().not_null())
+            .col(ColumnDef::new(Functions::DefinedOn).timestamp_with_time_zone().not_null())
             .col(ColumnDef::new(Functions::DefinedById).text().not_null())
             .col(ColumnDef::new(Functions::Status).text().not_null())
             .col(ColumnDef::new(Functions::Connector).text().null())
@@ -368,7 +368,7 @@ pub fn tables() -> Vec<TableCreateStatement> {
             .col(ColumnDef::new(Tables::FunctionParamPos).integer().null())
             .col(ColumnDef::new(Tables::Private).boolean().not_null())
             .col(ColumnDef::new(Tables::Partitioned).boolean().null())
-            .col(ColumnDef::new(Tables::DefinedOn).timestamp().not_null())
+            .col(ColumnDef::new(Tables::DefinedOn).timestamp_with_time_zone().not_null())
             .col(ColumnDef::new(Tables::DefinedById).text().not_null())
             .col(ColumnDef::new(Tables::Status).text().not_null())
             .col(
@@ -443,7 +443,7 @@ pub fn tables() -> Vec<TableCreateStatement> {
             .col(ColumnDef::new(FunctionsCurrent::Snippet).text().not_null())
             .col(
                 ColumnDef::new(FunctionsCurrent::DefinedOn)
-                    .timestamp()
+                    .timestamp_with_time_zone()
                     .not_null(),
             )
             .col(
@@ -496,7 +496,7 @@ pub fn tables() -> Vec<TableCreateStatement> {
             .col(ColumnDef::new(TablesCurrent::Partitioned).boolean().null())
             .col(
                 ColumnDef::new(TablesCurrent::DefinedOn)
-                    .timestamp()
+                    .timestamp_with_time_zone()
                     .not_null(),
             )
             .col(ColumnDef::new(TablesCurrent::DefinedById).text().not_null())
@@ -566,7 +566,7 @@ pub fn tables() -> Vec<TableCreateStatement> {
             )
             .col(
                 ColumnDef::new(DependenciesCurrent::DefinedOn)
-                    .timestamp()
+                    .timestamp_with_time_zone()
                     .not_null(),
             )
             .col(
@@ -624,7 +624,7 @@ pub fn tables() -> Vec<TableCreateStatement> {
             .col(ColumnDef::new(TriggersCurrent::Status).text().not_null())
             .col(
                 ColumnDef::new(TriggersCurrent::DefinedOn)
-                    .timestamp()
+                    .timestamp_with_time_zone()
                     .not_null(),
             )
             .col(
@@ -640,7 +640,7 @@ pub fn tables() -> Vec<TableCreateStatement> {
             .col(ColumnDef::new(Bundles::Id).text().not_null().primary_key())
             .col(ColumnDef::new(Bundles::CollectionId).text().not_null())
             .col(ColumnDef::new(Bundles::Hash).text().not_null())
-            .col(ColumnDef::new(Bundles::CreatedOn).timestamp().not_null())
+            .col(ColumnDef::new(Bundles::CreatedOn).timestamp_with_time_zone().not_null())
             .col(ColumnDef::new(Bundles::CreatedById).text().not_null())
             .foreign_key(
                 ForeignKey::create()
@@ -682,7 +682,7 @@ pub fn tables() -> Vec<TableCreateStatement> {
             .col(ColumnDef::new(Dependencies::Status).text().not_null())
             .col(
                 ColumnDef::new(Dependencies::DefinedOn)
-                    .timestamp()
+                    .timestamp_with_time_zone()
                     .not_null(),
             )
             .col(ColumnDef::new(Dependencies::DefinedById).text().not_null())
@@ -714,7 +714,7 @@ pub fn tables() -> Vec<TableCreateStatement> {
             )
             .col(ColumnDef::new(Triggers::TriggerByTableId).text().not_null())
             .col(ColumnDef::new(Triggers::Status).text().not_null())
-            .col(ColumnDef::new(Triggers::DefinedOn).timestamp().not_null())
+            .col(ColumnDef::new(Triggers::DefinedOn).timestamp_with_time_zone().not_null())
             .col(ColumnDef::new(Triggers::DefinedById).text().not_null())
             .col(ColumnDef::new(Triggers::System).boolean().not_null())
             .foreign_key(
@@ -743,11 +743,19 @@ pub fn tables() -> Vec<TableCreateStatement> {
             )
             .col(
                 ColumnDef::new(Executions::TriggeredOn)
-                    .timestamp()
+                    .timestamp_with_time_zone()
                     .not_null(),
             )
             .col(ColumnDef::new(Executions::TriggeredById).text().not_null())
-            .col(ColumnDef::new(Executions::RecursionOptions).text().null())
+            // `Option<Json<RecursionOptions>>` in the DAO; sqlx encodes
+            // `Json<T>` as JSONB in Postgres, so the column must be JSONB
+            // (MySQL JSON, SQLite TEXT) — not plain TEXT, which PG rejects at
+            // decode time with a "mismatched types" error.
+            .col(
+                ColumnDef::new(Executions::RecursionOptions)
+                    .json_binary()
+                    .null(),
+            )
             .col(
                 ColumnDef::new(Executions::FunctionId)
                     .text()
@@ -798,7 +806,7 @@ pub fn tables() -> Vec<TableCreateStatement> {
             )
             .col(
                 ColumnDef::new(Transactions::TriggeredOn)
-                    .timestamp()
+                    .timestamp_with_time_zone()
                     .not_null(),
             )
             .col(
@@ -862,7 +870,7 @@ pub fn tables() -> Vec<TableCreateStatement> {
             )
             .col(
                 ColumnDef::new(PhysicalFunctionRuns::TriggeredOn)
-                    .timestamp()
+                    .timestamp_with_time_zone()
                     .not_null(),
             )
             .col(
@@ -877,12 +885,12 @@ pub fn tables() -> Vec<TableCreateStatement> {
             )
             .col(
                 ColumnDef::new(PhysicalFunctionRuns::StartedOn)
-                    .timestamp()
+                    .timestamp_with_time_zone()
                     .null(),
             )
             .col(
                 ColumnDef::new(PhysicalFunctionRuns::EndedOn)
-                    .timestamp()
+                    .timestamp_with_time_zone()
                     .null(),
             )
             .col(
@@ -992,14 +1000,17 @@ pub fn tables() -> Vec<TableCreateStatement> {
                     .boolean()
                     .null(),
             )
+            // i64 Rust types (`ColumnCount`, `RowCount`); sqlx encodes as BIGINT,
+            // PG rejects decode against INT4. Use `big_integer()` for 8-byte
+            // width consistency across all backends.
             .col(
                 ColumnDef::new(PhysicalTableDataVersions::ColumnCount)
-                    .integer()
+                    .big_integer()
                     .null(),
             )
             .col(
                 ColumnDef::new(PhysicalTableDataVersions::RowCount)
-                    .integer()
+                    .big_integer()
                     .null(),
             )
             .col(
@@ -1034,7 +1045,7 @@ pub fn tables() -> Vec<TableCreateStatement> {
             )
             .col(
                 ColumnDef::new(PhysicalTableDataVersions::TriggeredOn)
-                    .timestamp()
+                    .timestamp_with_time_zone()
                     .not_null(),
             )
             .foreign_key(
@@ -1779,28 +1790,58 @@ pub fn views(b: &Backend) -> Vec<ViewDef> {
     // Status summary views (dialect-specific JSON aggregation)
     v.extend(status_summary_views(b));
 
-    // executions__with_status (depends on execution_status_summary)
+    // executions__with_status (depends on execution_status_summary).
+    //
+    // The PFR aggregation lives in a subquery rather than a flat
+    // GROUP BY on the outer SELECT. Postgres requires every non-aggregated
+    // column in the SELECT list to appear in GROUP BY (and the
+    // primary-key-functional-dependency relaxation only applies to base
+    // tables, not views like `executions__with_names`); SQLite is lax.
+    // Pushing the aggregate down means the outer query stays plain joins.
     {
         let exec_view = Alias::new("executions__with_names");
         let ess_view = Alias::new("execution_status_summary");
+        let pfr_agg = Alias::new("pfr_agg");
+        let pfr_agg_subquery = Query::select()
+            .expr_as(
+                Expr::col((
+                    PhysicalFunctionRuns::Table,
+                    PhysicalFunctionRuns::ExecutionId,
+                )),
+                Alias::new("execution_id"),
+            )
+            .expr_as(
+                Func::min(Expr::col((
+                    PhysicalFunctionRuns::Table,
+                    PhysicalFunctionRuns::StartedOn,
+                ))),
+                Alias::new("started_on"),
+            )
+            .expr_as(
+                Func::max(Expr::col((
+                    PhysicalFunctionRuns::Table,
+                    PhysicalFunctionRuns::EndedOn,
+                ))),
+                Alias::new("ended_on"),
+            )
+            .from(PhysicalFunctionRuns::Table)
+            .group_by_col((
+                PhysicalFunctionRuns::Table,
+                PhysicalFunctionRuns::ExecutionId,
+            ))
+            .to_owned();
         v.push(ViewDef::new(
             "executions__with_status",
             Query::select()
                 .expr(Expr::col((exec_view.clone(), Asterisk)))
                 .expr_as(
-                    Func::min(Expr::col((
-                        PhysicalFunctionRuns::Table,
-                        PhysicalFunctionRuns::StartedOn,
-                    ))),
+                    Expr::col((pfr_agg.clone(), Alias::new("started_on"))),
                     Alias::new("started_on"),
                 )
                 .expr_as(
                     Expr::case(
                         Expr::col((ess_view.clone(), Alias::new("finished"))),
-                        Func::max(Expr::col((
-                            PhysicalFunctionRuns::Table,
-                            PhysicalFunctionRuns::EndedOn,
-                        ))),
+                        Expr::col((pfr_agg.clone(), Alias::new("ended_on"))),
                     ),
                     Alias::new("ended_on"),
                 )
@@ -1813,49 +1854,70 @@ pub fn views(b: &Backend) -> Vec<ViewDef> {
                     Alias::new("function_run_status_count"),
                 )
                 .from(exec_view.clone())
-                .join(
+                .join_subquery(
                     JoinType::LeftJoin,
-                    PhysicalFunctionRuns::Table,
-                    Expr::col((
-                        PhysicalFunctionRuns::Table,
-                        PhysicalFunctionRuns::ExecutionId,
-                    ))
-                    .equals((exec_view.clone(), Alias::new("id"))),
+                    pfr_agg_subquery,
+                    pfr_agg.clone(),
+                    Expr::col((pfr_agg, Alias::new("execution_id")))
+                        .equals((exec_view.clone(), Alias::new("id"))),
                 )
                 .join_as(
                     JoinType::LeftJoin,
                     ess_view.clone(),
                     ess_view.clone(),
                     Expr::col((ess_view, Alias::new("execution_id")))
-                        .equals((exec_view.clone(), Alias::new("id"))),
+                        .equals((exec_view, Alias::new("id"))),
                 )
-                .group_by_col((exec_view, Alias::new("id")))
                 .to_owned(),
         ));
     }
 
-    // transactions__with_status (depends on transaction_status_summary)
+    // transactions__with_status (depends on transaction_status_summary).
+    // Same subquery-aggregation pattern as `executions__with_status`.
     {
         let txn_view = Alias::new("transactions__with_names");
         let tss_view = Alias::new("transaction_status_summary");
+        let pfr_agg = Alias::new("pfr_agg");
+        let pfr_agg_subquery = Query::select()
+            .expr_as(
+                Expr::col((
+                    PhysicalFunctionRuns::Table,
+                    PhysicalFunctionRuns::TransactionId,
+                )),
+                Alias::new("transaction_id"),
+            )
+            .expr_as(
+                Func::min(Expr::col((
+                    PhysicalFunctionRuns::Table,
+                    PhysicalFunctionRuns::StartedOn,
+                ))),
+                Alias::new("started_on"),
+            )
+            .expr_as(
+                Func::max(Expr::col((
+                    PhysicalFunctionRuns::Table,
+                    PhysicalFunctionRuns::EndedOn,
+                ))),
+                Alias::new("ended_on"),
+            )
+            .from(PhysicalFunctionRuns::Table)
+            .group_by_col((
+                PhysicalFunctionRuns::Table,
+                PhysicalFunctionRuns::TransactionId,
+            ))
+            .to_owned();
         v.push(ViewDef::new(
             "transactions__with_status",
             Query::select()
                 .expr(Expr::col((txn_view.clone(), Asterisk)))
                 .expr_as(
-                    Func::min(Expr::col((
-                        PhysicalFunctionRuns::Table,
-                        PhysicalFunctionRuns::StartedOn,
-                    ))),
+                    Expr::col((pfr_agg.clone(), Alias::new("started_on"))),
                     Alias::new("started_on"),
                 )
                 .expr_as(
                     Expr::case(
                         Expr::col((tss_view.clone(), Alias::new("finished"))),
-                        Func::max(Expr::col((
-                            PhysicalFunctionRuns::Table,
-                            PhysicalFunctionRuns::EndedOn,
-                        ))),
+                        Expr::col((pfr_agg.clone(), Alias::new("ended_on"))),
                     ),
                     Alias::new("ended_on"),
                 )
@@ -1868,23 +1930,20 @@ pub fn views(b: &Backend) -> Vec<ViewDef> {
                     Alias::new("function_run_status_count"),
                 )
                 .from(txn_view.clone())
-                .join(
+                .join_subquery(
                     JoinType::LeftJoin,
-                    PhysicalFunctionRuns::Table,
-                    Expr::col((
-                        PhysicalFunctionRuns::Table,
-                        PhysicalFunctionRuns::TransactionId,
-                    ))
-                    .equals((txn_view.clone(), Alias::new("id"))),
+                    pfr_agg_subquery,
+                    pfr_agg.clone(),
+                    Expr::col((pfr_agg, Alias::new("transaction_id")))
+                        .equals((txn_view.clone(), Alias::new("id"))),
                 )
                 .join_as(
                     JoinType::LeftJoin,
                     tss_view.clone(),
                     tss_view.clone(),
                     Expr::col((tss_view, Alias::new("transaction_id")))
-                        .equals((txn_view.clone(), Alias::new("id"))),
+                        .equals((txn_view, Alias::new("id"))),
                 )
-                .group_by_col((txn_view, Alias::new("id")))
                 .to_owned(),
         ));
     }
@@ -2130,114 +2189,113 @@ fn status_summary_views(b: &Backend) -> Vec<ViewDef> {
 // ---------------------------------------------------------------------------
 
 pub fn triggers(b: &Backend) -> Vec<String> {
-    let mut out: Vec<String> = vec![
-        b.create_trigger(&TriggerDef {
-            name: "functions__maintain_current",
-            source_table: "functions",
-            target_table: "functions_current",
-            partition_col: "function_id",
-            columns: vec![
-                "id",
-                "collection_id",
-                "name",
-                "description",
-                "decorator",
-                "runtime_values",
-                "function_id",
-                "data_location",
-                "storage_version",
-                "bundle_id",
-                "snippet",
-                "defined_on",
-                "defined_by_id",
-                "status",
-                "connector",
-                "enabled",
-            ],
-        }),
-        b.create_versioned_current_trigger(&VersionedTriggerDef {
-            name: "function_patches__maintain_current",
-            source_table: "function_patches",
-            target_table: "function_patches_current",
-            partition_col: "parent_function_version_id",
-            version_col: "defined_on",
-            tie_break_col: "id",
-            columns: vec![
-                "id",
-                "parent_function_version_id",
-                "function_id",
-                "collection_id",
-                "snippet",
-                "bundle_id",
-                "runtime_values",
-                "description",
-                "defined_on",
-                "defined_by_id",
-                "status",
-            ],
-        }),
-        b.create_trigger(&TriggerDef {
-            name: "tables__maintain_current",
-            source_table: "tables",
-            target_table: "tables_current",
-            partition_col: "table_id",
-            columns: vec![
-                "id",
-                "collection_id",
-                "table_id",
-                "name",
-                "function_id",
-                "function_version_id",
-                "function_param_pos",
-                "private",
-                "partitioned",
-                "defined_on",
-                "defined_by_id",
-                "status",
-                "table_type",
-            ],
-        }),
-        b.create_trigger(&TriggerDef {
-            name: "dependencies__maintain_current",
-            source_table: "dependencies",
-            target_table: "dependencies_current",
-            partition_col: "dependency_id",
-            columns: vec![
-                "id",
-                "collection_id",
-                "dependency_id",
-                "function_id",
-                "table_collection_id",
-                "table_function_id",
-                "table_id",
-                "table_versions",
-                "dep_pos",
-                "status",
-                "defined_on",
-                "defined_by_id",
-                "system",
-            ],
-        }),
-        b.create_trigger(&TriggerDef {
-            name: "triggers__maintain_current",
-            source_table: "triggers",
-            target_table: "triggers_current",
-            partition_col: "trigger_id",
-            columns: vec![
-                "id",
-                "collection_id",
-                "trigger_id",
-                "function_id",
-                "trigger_by_collection_id",
-                "trigger_by_function_id",
-                "trigger_by_table_id",
-                "status",
-                "defined_on",
-                "defined_by_id",
-                "system",
-            ],
-        }),
-    ];
+    let mut out: Vec<String> = Vec::new();
+    out.extend(b.create_trigger(&TriggerDef {
+        name: "functions__maintain_current",
+        source_table: "functions",
+        target_table: "functions_current",
+        partition_col: "function_id",
+        columns: vec![
+            "id",
+            "collection_id",
+            "name",
+            "description",
+            "decorator",
+            "runtime_values",
+            "function_id",
+            "data_location",
+            "storage_version",
+            "bundle_id",
+            "snippet",
+            "defined_on",
+            "defined_by_id",
+            "status",
+            "connector",
+            "enabled",
+        ],
+    }));
+    out.extend(b.create_versioned_current_trigger(&VersionedTriggerDef {
+        name: "function_patches__maintain_current",
+        source_table: "function_patches",
+        target_table: "function_patches_current",
+        partition_col: "parent_function_version_id",
+        version_col: "defined_on",
+        tie_break_col: "id",
+        columns: vec![
+            "id",
+            "parent_function_version_id",
+            "function_id",
+            "collection_id",
+            "snippet",
+            "bundle_id",
+            "runtime_values",
+            "description",
+            "defined_on",
+            "defined_by_id",
+            "status",
+        ],
+    }));
+    out.extend(b.create_trigger(&TriggerDef {
+        name: "tables__maintain_current",
+        source_table: "tables",
+        target_table: "tables_current",
+        partition_col: "table_id",
+        columns: vec![
+            "id",
+            "collection_id",
+            "table_id",
+            "name",
+            "function_id",
+            "function_version_id",
+            "function_param_pos",
+            "private",
+            "partitioned",
+            "defined_on",
+            "defined_by_id",
+            "status",
+            "table_type",
+        ],
+    }));
+    out.extend(b.create_trigger(&TriggerDef {
+        name: "dependencies__maintain_current",
+        source_table: "dependencies",
+        target_table: "dependencies_current",
+        partition_col: "dependency_id",
+        columns: vec![
+            "id",
+            "collection_id",
+            "dependency_id",
+            "function_id",
+            "table_collection_id",
+            "table_function_id",
+            "table_id",
+            "table_versions",
+            "dep_pos",
+            "status",
+            "defined_on",
+            "defined_by_id",
+            "system",
+        ],
+    }));
+    out.extend(b.create_trigger(&TriggerDef {
+        name: "triggers__maintain_current",
+        source_table: "triggers",
+        target_table: "triggers_current",
+        partition_col: "trigger_id",
+        columns: vec![
+            "id",
+            "collection_id",
+            "trigger_id",
+            "function_id",
+            "trigger_by_collection_id",
+            "trigger_by_function_id",
+            "trigger_by_table_id",
+            "status",
+            "defined_on",
+            "defined_by_id",
+            "system",
+        ],
+    }));
     // Patches are an event log of code amendments — never updated or deleted.
     out.extend(b.create_immutable_triggers(&ImmutableTriggerDef {
         name: "function_patches__immutable",

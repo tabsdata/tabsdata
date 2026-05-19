@@ -83,7 +83,10 @@ impl TdPool {
                 .to_string(),
             ),
             Error::Database(database_err) => {
-                if database_err.message().contains("no such table") {
+                if is_undefined_table_error(
+                    database_err.code().as_deref(),
+                    database_err.message(),
+                ) {
                     DbError::DatabaseSchemaDoesNotExist
                 } else {
                     DbError::SqlError(err)
@@ -353,6 +356,26 @@ impl TdPool {
     }
 }
 
+/// True if a database error reports a missing `tabsdata_system` table for any
+/// backend enabled at compile time. Each arm is gated on its backend feature so
+/// the check stays tight to what's actually linked in.
+fn is_undefined_table_error(code: Option<&str>, message: &str) -> bool {
+    #[cfg(postgres)]
+    if matches!(code, Some("42P01")) {
+        return true;
+    }
+    #[cfg(mysql)]
+    if matches!(code, Some("42S02")) {
+        return true;
+    }
+    #[cfg(sqlite)]
+    if message.contains("no such table") {
+        return true;
+    }
+    let _ = (code, message);
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -360,6 +383,27 @@ mod tests {
     use td_common::tdtestdir;
     use te_system::edition::{Edition, TabsdataEdition};
     use url::Url;
+
+    #[cfg(postgres)]
+    #[test]
+    fn undefined_table_error_pg_sqlstate() {
+        assert!(is_undefined_table_error(Some("42P01"), ""));
+        assert!(!is_undefined_table_error(Some("23505"), ""));
+    }
+
+    #[cfg(mysql)]
+    #[test]
+    fn undefined_table_error_mysql_sqlstate() {
+        assert!(is_undefined_table_error(Some("42S02"), ""));
+        assert!(!is_undefined_table_error(Some("HY000"), ""));
+    }
+
+    #[cfg(sqlite)]
+    #[test]
+    fn undefined_table_error_sqlite_message() {
+        assert!(is_undefined_table_error(None, "no such table: foo"));
+        assert!(!is_undefined_table_error(None, "syntax error near 'x'"));
+    }
 
     #[tokio::test]
     async fn creates_database_and_schema() {

@@ -90,7 +90,6 @@ controllers:
         program: td_apiserver
         parameters:
           - stdin-config: true
-          - database-url: file://${TD_URI_REPOSITORY}/database/tabsdata.db
           - ssl-folder: ${TD_PATH_INSTANCE}/workspace/config/ssl
         get-states:
           - state-type: blob

@@ -135,7 +135,7 @@ where
     D: DataVersionDao,
 {
     match versions {
-        Versions::None => Ok(Condition::all().add(Expr::col(Cte::Rn).eq(1))),
+        Versions::None => Ok(Condition::all().add(Expr::col(Cte::Rn).eq(1_i64))),
         Versions::Single(version) => Ok(Condition::all().add(single_version_expr::<D>(version)?)),
         Versions::List(versions) => {
             if versions.is_empty() {

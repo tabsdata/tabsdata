@@ -41,9 +41,9 @@ pub fn tables() -> Vec<TableCreateStatement> {
             .col(ColumnDef::new(Roles::Id).text().not_null().primary_key())
             .col(ColumnDef::new(Roles::Name).text().not_null().unique_key())
             .col(ColumnDef::new(Roles::Description).text().not_null())
-            .col(ColumnDef::new(Roles::CreatedOn).timestamp().not_null())
+            .col(ColumnDef::new(Roles::CreatedOn).timestamp_with_time_zone().not_null())
             .col(ColumnDef::new(Roles::CreatedById).text().not_null())
-            .col(ColumnDef::new(Roles::ModifiedOn).timestamp().not_null())
+            .col(ColumnDef::new(Roles::ModifiedOn).timestamp_with_time_zone().not_null())
             .col(ColumnDef::new(Roles::ModifiedById).text().not_null())
             .col(ColumnDef::new(Roles::Fixed).boolean().not_null())
             .to_owned(),
@@ -57,7 +57,7 @@ pub fn tables() -> Vec<TableCreateStatement> {
             )
             .col(ColumnDef::new(UsersRoles::UserId).text().not_null())
             .col(ColumnDef::new(UsersRoles::RoleId).text().not_null())
-            .col(ColumnDef::new(UsersRoles::AddedOn).timestamp().not_null())
+            .col(ColumnDef::new(UsersRoles::AddedOn).timestamp_with_time_zone().not_null())
             .col(ColumnDef::new(UsersRoles::AddedById).text().not_null())
             .col(ColumnDef::new(UsersRoles::Fixed).boolean().not_null())
             .foreign_key(

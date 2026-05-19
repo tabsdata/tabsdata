@@ -12,35 +12,25 @@ use super::backend::Backend;
 use super::{SchemaDelta, SchemaVersion, archive, current, deltas};
 
 const ALL_BACKENDS: &[Backend] = &[
-    #[cfg(feature = "sqlite")]
     Backend::Sqlite,
-    #[cfg(feature = "postgres")]
     Backend::Postgres,
-    #[cfg(feature = "mysql")]
     Backend::MySql,
 ];
 
-/// Validate that a [`SchemaVersion`] implementation produces consistent,
-/// non-empty output across all backends.
+/// Validate that a [`SchemaVersion`] implementation produces non-empty output
+/// for every enabled backend.
+///
+/// Per-backend statement counts are not asserted equal: Postgres emits a
+/// supporting `CREATE FUNCTION` alongside each trigger because sqlx-postgres
+/// rejects multi-statement strings, so the backends legitimately diverge in
+/// total statement count even when the schema is logically identical.
 pub(crate) fn validate_schema_version<S: SchemaVersion>() {
-    let mut counts: Vec<(Backend, usize)> = Vec::new();
     for &b in ALL_BACKENDS {
         let stmts = S::build(b);
         assert!(
             !stmts.is_empty(),
             "SchemaVersion v{} produced empty output on {b:?}",
             S::VERSION
-        );
-        counts.push((b, stmts.len()));
-    }
-    let first = counts[0].1;
-    for (b, count) in &counts[1..] {
-        assert_eq!(
-            first,
-            *count,
-            "SchemaVersion v{}: {:?} produced {first} stmts but {b:?} produced {count}",
-            S::VERSION,
-            counts[0].0
         );
     }
 }
@@ -67,7 +57,6 @@ pub(crate) fn validate_delta<D: SchemaDelta>() {
         D::TO_VERSION,
     );
 
-    let mut counts: Vec<(Backend, usize)> = Vec::new();
     for &b in ALL_BACKENDS {
         let stmts = D::up(b);
         assert!(
@@ -82,17 +71,6 @@ pub(crate) fn validate_delta<D: SchemaDelta>() {
             "Last statement of delta v{}->v{} must update db_version to {}. Got: {last}",
             D::FROM_VERSION,
             D::TO_VERSION,
-            D::TO_VERSION,
-        );
-        counts.push((b, stmts.len()));
-    }
-    let (first_b, first) = counts[0];
-    for (b, count) in &counts[1..] {
-        assert_eq!(
-            first,
-            *count,
-            "SchemaDelta v{}->v{}: {first_b:?} produced {first} stmts but {b:?} produced {count}",
-            D::FROM_VERSION,
             D::TO_VERSION,
         );
     }

@@ -136,9 +136,16 @@ pub enum DbSchema {
 
 #[derive(Debug, Clone, Args)]
 pub struct Params {
-    #[clap(long, alias = "db")]
-    /// Database URL
+    #[clap(long, alias = "db", env = "TD_DATABASE_URL")]
+    /// Database URL. Defaults to a local SQLite file under
+    /// `$TD_URI_REPOSITORY/database/tabsdata.db` when neither this flag,
+    /// the `TD_DATABASE_URL` env var, nor `database.url` in the YAML is set.
     database_url: Option<Url>,
+    #[clap(long, env = "TD_URI_REPOSITORY", hide = true)]
+    /// Repository URI, populated from `TD_URI_REPOSITORY` for the SQLite
+    /// fallback. Hidden — only used as a CLI hook so the env read flows
+    /// through clap like every other config knob.
+    repository_uri: Option<String>,
     #[clap(long)]
     /// Database log level
     database_log_level: Option<LevelFilter>,
@@ -230,6 +237,18 @@ impl Params {
                         None => BackendConfig::from_url(url.clone())?,
                     });
                 }
+                // If nothing has supplied a database URL (YAML, CLI, or env
+                // via `TD_DATABASE_URL`), default to the local SQLite file
+                // under the instance's repository. The repository URI rides
+                // in through clap via `--repository-uri` / `TD_URI_REPOSITORY`,
+                // which the supervisor exports for every spawned worker.
+                if config.conn.is_none()
+                    && let Some(repo) = self.repository_uri.as_deref()
+                {
+                    let url = Url::parse(&format!("file://{repo}/database/tabsdata.db"))
+                        .map_err(|e| ConfigError::DefaultDatabaseUrl(e.to_string()))?;
+                    config.conn = Some(BackendConfig::from_url(url)?);
+                }
                 if let Some(log_level) = self.database_log_level {
                     config.pool.log_level = log_level;
                 }
@@ -278,6 +297,8 @@ pub enum ConfigError {
     MissingStorageConfig = 6,
     #[error("The url specified in storage.url is wrong: {0}")]
     InvalidMountDefinition(#[source] StorageError) = 7,
+    #[error("Failed to build default database URL: {0}")]
+    DefaultDatabaseUrl(String) = 8,
 }
 
 #[cfg(test)]

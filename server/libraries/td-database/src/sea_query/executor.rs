@@ -148,27 +148,27 @@ fn map_rows<R: Into<DynamicRow>>(rows: Vec<R>) -> Vec<DynamicRow> {
 macro_rules! resolve_executor {
     (pool; $pool:expr, $field:ident, $exec:ident => $body:expr) => {
         match $pool.as_ref() {
-            #[cfg(feature = "sqlite")]
+            #[cfg(sqlite)]
             DynamicPool::Sqlite { $field: $exec, .. } => $body,
-            #[cfg(feature = "postgres")]
+            #[cfg(postgres)]
             DynamicPool::Postgres { $field: $exec, .. } => $body,
-            #[cfg(feature = "mysql")]
+            #[cfg(mysql)]
             DynamicPool::MySql { $field: $exec, .. } => $body,
         }
     };
     (conn; $conn:expr, $exec:ident => $body:expr) => {
         match $conn {
-            #[cfg(feature = "sqlite")]
+            #[cfg(sqlite)]
             DynamicConnection::Sqlite($exec) => {
                 let $exec = &mut **$exec;
                 $body
             }
-            #[cfg(feature = "postgres")]
+            #[cfg(postgres)]
             DynamicConnection::Postgres($exec) => {
                 let $exec = &mut **$exec;
                 $body
             }
-            #[cfg(feature = "mysql")]
+            #[cfg(mysql)]
             DynamicConnection::MySql($exec) => {
                 let $exec = &mut **$exec;
                 $body

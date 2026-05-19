@@ -18,6 +18,7 @@ use ta_objects::SeaValue;
 use ta_objects::errors::SqlError;
 use ta_objects::{CurrentDao, Dao, DaoCore, Recursive, VersionedDao};
 use td_database::sea_query::builder::SeaQueryExt;
+use td_database::sea_query::kind::DatabaseBackend;
 use td_objects::types::basic::Depth;
 use td_objects::types::recursion::RecursionOptions;
 
@@ -192,7 +193,7 @@ pub(crate) fn versioned_ranked_cte<T: VersionedDao>(
         .from_subquery(ranked, Alias::new("_sub"))
         .cond_where(
             Condition::all()
-                .add(Expr::col(Cte::Rn).eq(1))
+                .add(Expr::col(Cte::Rn).eq(1_i64))
                 .add(state_cond),
         )
         .take();
@@ -632,11 +633,18 @@ where
     R: Dao,
     E: QueryExecutor,
 {
+    #[allow(
+        clippy::match_same_arms,
+        clippy::match_single_binding,
+        clippy::single_match
+    )]
     let str_search_fn = match executor.kind() {
-        #[cfg(feature = "postgres")]
-        td_database::sea_query::kind::DatabaseBackend::Postgres => "STRPOS",
-        #[allow(unreachable_patterns)]
-        _ => "INSTR",
+        #[cfg(sqlite)]
+        DatabaseBackend::Sqlite => "INSTR",
+        #[cfg(postgres)]
+        DatabaseBackend::Postgres => "STRPOS",
+        #[cfg(mysql)]
+        DatabaseBackend::MySql => "INSTR",
     };
 
     if up_enabled {

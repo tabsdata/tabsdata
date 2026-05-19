@@ -67,7 +67,7 @@ where
         let mut query = Query::select()
             .columns(DependencyDB::columns())
             .from(Cte::Ranked)
-            .and_where(Expr::col(Cte::Rn).eq(1))
+            .and_where(Expr::col(Cte::Rn).eq(1_i64))
             .cond_where(state_cond)
             .order_by_columns(DependencyDB::order_by())
             .take()

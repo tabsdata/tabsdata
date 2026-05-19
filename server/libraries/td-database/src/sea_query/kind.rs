@@ -8,22 +8,22 @@ use td_schema::schema::backend::Backend;
 
 #[derive(Debug)]
 pub enum DatabaseBackend {
-    #[cfg(feature = "sqlite")]
+    #[cfg(sqlite)]
     Sqlite,
-    #[cfg(feature = "postgres")]
+    #[cfg(postgres)]
     Postgres,
-    #[cfg(feature = "mysql")]
+    #[cfg(mysql)]
     MySql,
 }
 
 impl From<DatabaseBackend> for Backend {
     fn from(backend: DatabaseBackend) -> Self {
         match backend {
-            #[cfg(feature = "sqlite")]
+            #[cfg(sqlite)]
             DatabaseBackend::Sqlite => Backend::Sqlite,
-            #[cfg(feature = "postgres")]
+            #[cfg(postgres)]
             DatabaseBackend::Postgres => Backend::Postgres,
-            #[cfg(feature = "mysql")]
+            #[cfg(mysql)]
             DatabaseBackend::MySql => Backend::MySql,
         }
     }
@@ -54,11 +54,11 @@ impl DatabaseKind for TdPool {
 impl DatabaseKind for DynamicPool {
     fn kind(&self) -> DatabaseBackend {
         match self {
-            #[cfg(feature = "sqlite")]
+            #[cfg(sqlite)]
             DynamicPool::Sqlite { .. } => DatabaseBackend::Sqlite,
-            #[cfg(feature = "postgres")]
+            #[cfg(postgres)]
             DynamicPool::Postgres { .. } => DatabaseBackend::Postgres,
-            #[cfg(feature = "mysql")]
+            #[cfg(mysql)]
             DynamicPool::MySql { .. } => DatabaseBackend::MySql,
         }
     }
@@ -67,11 +67,11 @@ impl DatabaseKind for DynamicPool {
 impl DatabaseKind for DynamicConnection<'_> {
     fn kind(&self) -> DatabaseBackend {
         match self {
-            #[cfg(feature = "sqlite")]
+            #[cfg(sqlite)]
             DynamicConnection::Sqlite { .. } => DatabaseBackend::Sqlite,
-            #[cfg(feature = "postgres")]
+            #[cfg(postgres)]
             DynamicConnection::Postgres { .. } => DatabaseBackend::Postgres,
-            #[cfg(feature = "mysql")]
+            #[cfg(mysql)]
             DynamicConnection::MySql { .. } => DatabaseBackend::MySql,
         }
     }

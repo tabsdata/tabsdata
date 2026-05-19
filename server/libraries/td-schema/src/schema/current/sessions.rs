@@ -42,11 +42,11 @@ pub fn tables() -> Vec<TableCreateStatement> {
             )
             .col(ColumnDef::new(Sessions::UserId).text().not_null())
             .col(ColumnDef::new(Sessions::RoleId).text().not_null())
-            .col(ColumnDef::new(Sessions::CreatedOn).timestamp().not_null())
-            .col(ColumnDef::new(Sessions::ExpiresOn).timestamp().not_null())
+            .col(ColumnDef::new(Sessions::CreatedOn).timestamp_with_time_zone().not_null())
+            .col(ColumnDef::new(Sessions::ExpiresOn).timestamp_with_time_zone().not_null())
             .col(
                 ColumnDef::new(Sessions::StatusChangeOn)
-                    .timestamp()
+                    .timestamp_with_time_zone()
                     .not_null(),
             )
             .col(ColumnDef::new(Sessions::Status).text().not_null())

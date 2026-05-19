@@ -67,11 +67,11 @@ struct DbErrorInfo {
 fn parse_db_error_info(db_err: &dyn sqlx::error::DatabaseError) -> DbErrorInfo {
     // table() is on the base DatabaseError trait (populated by PostgreSQL).
     let table = db_err.table().map(|s| s.to_string());
-    #[allow(unused_mut)] // mutated inside #[cfg(feature = "postgres")] block
+    #[allow(unused_mut)] // mutated inside #[cfg(postgres)] block
     let mut detail: Option<String> = None;
 
     // Strategy 1: PostgreSQL — downcast for column() and detail().
-    #[cfg(feature = "postgres")]
+    #[cfg(postgres)]
     {
         if let Some(pg) = db_err.try_downcast_ref::<sqlx::postgres::PgDatabaseError>() {
             detail = pg.detail().map(|s| s.to_string());
@@ -104,7 +104,7 @@ fn parse_db_error_info(db_err: &dyn sqlx::error::DatabaseError) -> DbErrorInfo {
 
     // Strategy 3: SQLite message parsing
     // e.g. "UNIQUE constraint failed: table.col1, table.col2"
-    #[cfg(feature = "sqlite")]
+    #[cfg(sqlite)]
     {
         let msg = db_err.message();
         if let Some(after) = msg
@@ -127,7 +127,7 @@ fn parse_db_error_info(db_err: &dyn sqlx::error::DatabaseError) -> DbErrorInfo {
 
     // Strategy 4: MySQL message parsing
     // NOT NULL: "Column 'name' cannot be null"
-    #[cfg(feature = "mysql")]
+    #[cfg(mysql)]
     {
         let msg = db_err.message();
         if let Some(rest) = msg.strip_prefix("Column '")

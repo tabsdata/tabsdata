@@ -107,7 +107,7 @@ pub(crate) fn fetch_all_at_chunk_query<D: VersionedDao, V: SqlCondition>(
     let mut q = Query::select()
         .columns(D::columns())
         .from(Cte::Ranked)
-        .and_where(Expr::col(Cte::Rn).eq(1))
+        .and_where(Expr::col(Cte::Rn).eq(1_i64))
         .cond_where(resolve_or::<D>(chunk)?)
         .order_by_columns(D::order_by())
         .take();

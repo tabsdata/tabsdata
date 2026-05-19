@@ -5,17 +5,17 @@
 use crate::sea_query::kind::DatabaseBackend;
 use sqlx::pool::PoolConnection;
 use sqlx::{Connection, Decode, Error, FromRow, Transaction, Type};
-#[cfg(feature = "mysql")]
+#[cfg(mysql)]
 use sqlx::{
     MySql, MySqlPool,
     mysql::{MySqlQueryResult, MySqlRow},
 };
-#[cfg(feature = "postgres")]
+#[cfg(postgres)]
 use sqlx::{
     PgPool, Postgres,
     postgres::{PgQueryResult, PgRow},
 };
-#[cfg(feature = "sqlite")]
+#[cfg(sqlite)]
 use sqlx::{
     Sqlite, SqlitePool,
     sqlite::{SqliteQueryResult, SqliteRow},
@@ -27,11 +27,11 @@ use tracing::debug;
 
 #[derive(Debug, Clone)]
 pub enum DynamicPool {
-    #[cfg(feature = "sqlite")]
+    #[cfg(sqlite)]
     Sqlite { ro: SqlitePool, rw: SqlitePool },
-    #[cfg(feature = "postgres")]
+    #[cfg(postgres)]
     Postgres { ro: PgPool, rw: PgPool },
-    #[cfg(feature = "mysql")]
+    #[cfg(mysql)]
     MySql { ro: MySqlPool, rw: MySqlPool },
 }
 
@@ -45,17 +45,17 @@ impl DynamicPool {
     /// Acquire a connection from the read-only pool
     pub async fn acquire<'c>(&self) -> Result<DynamicConnection<'c>, Error> {
         match self {
-            #[cfg(feature = "sqlite")]
+            #[cfg(sqlite)]
             DynamicPool::Sqlite { ro, .. } => {
                 let conn = ro.acquire().await?;
                 Ok(DynamicConnection::Sqlite(ConnectionHolder::Owned(conn)))
             }
-            #[cfg(feature = "postgres")]
+            #[cfg(postgres)]
             DynamicPool::Postgres { ro, .. } => {
                 let conn = ro.acquire().await?;
                 Ok(DynamicConnection::Postgres(ConnectionHolder::Owned(conn)))
             }
-            #[cfg(feature = "mysql")]
+            #[cfg(mysql)]
             DynamicPool::MySql { ro, .. } => {
                 let conn = ro.acquire().await?;
                 Ok(DynamicConnection::MySql(ConnectionHolder::Owned(conn)))
@@ -66,17 +66,17 @@ impl DynamicPool {
     /// Begin a transaction on the read-write pool
     pub async fn begin<'c>(&self) -> Result<DynamicTransaction<'c>, Error> {
         match self {
-            #[cfg(feature = "sqlite")]
+            #[cfg(sqlite)]
             DynamicPool::Sqlite { rw, .. } => {
                 let tx = rw.begin().await?;
                 Ok(DynamicTransaction::Sqlite(tx))
             }
-            #[cfg(feature = "postgres")]
+            #[cfg(postgres)]
             DynamicPool::Postgres { rw, .. } => {
                 let tx = rw.begin().await?;
                 Ok(DynamicTransaction::Postgres(tx))
             }
-            #[cfg(feature = "mysql")]
+            #[cfg(mysql)]
             DynamicPool::MySql { rw, .. } => {
                 let tx = rw.begin().await?;
                 Ok(DynamicTransaction::MySql(tx))
@@ -87,11 +87,11 @@ impl DynamicPool {
     /// Returns if the pool is closed.
     pub fn is_closed(&self) -> bool {
         match self {
-            #[cfg(feature = "sqlite")]
+            #[cfg(sqlite)]
             DynamicPool::Sqlite { ro, rw } => ro.is_closed() && rw.is_closed(),
-            #[cfg(feature = "postgres")]
+            #[cfg(postgres)]
             DynamicPool::Postgres { ro, rw } => ro.is_closed() && rw.is_closed(),
-            #[cfg(feature = "mysql")]
+            #[cfg(mysql)]
             DynamicPool::MySql { ro, rw } => ro.is_closed() && rw.is_closed(),
         }
     }
@@ -99,17 +99,17 @@ impl DynamicPool {
     /// Close both pools, waiting for all connections to be returned and closed.
     pub async fn close(&self) {
         match self {
-            #[cfg(feature = "sqlite")]
+            #[cfg(sqlite)]
             DynamicPool::Sqlite { ro, rw } => {
                 ro.close().await;
                 rw.close().await;
             }
-            #[cfg(feature = "postgres")]
+            #[cfg(postgres)]
             DynamicPool::Postgres { ro, rw } => {
                 ro.close().await;
                 rw.close().await;
             }
-            #[cfg(feature = "mysql")]
+            #[cfg(mysql)]
             DynamicPool::MySql { ro, rw } => {
                 ro.close().await;
                 rw.close().await;
@@ -161,35 +161,35 @@ where
 
 #[derive(Debug)]
 pub enum DynamicConnection<'c> {
-    #[cfg(feature = "sqlite")]
+    #[cfg(sqlite)]
     Sqlite(ConnectionHolder<'c, Sqlite, PoolConnection<Sqlite>>),
-    #[cfg(feature = "postgres")]
+    #[cfg(postgres)]
     Postgres(ConnectionHolder<'c, Postgres, PoolConnection<Postgres>>),
-    #[cfg(feature = "mysql")]
+    #[cfg(mysql)]
     MySql(ConnectionHolder<'c, MySql, PoolConnection<MySql>>),
 }
 
 impl<'c> DynamicConnection<'c> {
     pub async fn ping(&mut self) -> Result<(), Error> {
         match self {
-            #[cfg(feature = "sqlite")]
+            #[cfg(sqlite)]
             Self::Sqlite(h) => h.ping().await,
-            #[cfg(feature = "postgres")]
+            #[cfg(postgres)]
             Self::Postgres(h) => h.ping().await,
-            #[cfg(feature = "mysql")]
+            #[cfg(mysql)]
             Self::MySql(h) => h.ping().await,
         }
     }
 
     pub fn as_borrowed(&mut self) -> DynamicConnection<'_> {
         match self {
-            #[cfg(feature = "sqlite")]
+            #[cfg(sqlite)]
             Self::Sqlite(h) => DynamicConnection::Sqlite(ConnectionHolder::Borrowed(h.deref_mut())),
-            #[cfg(feature = "postgres")]
+            #[cfg(postgres)]
             Self::Postgres(h) => {
                 DynamicConnection::Postgres(ConnectionHolder::Borrowed(h.deref_mut()))
             }
-            #[cfg(feature = "mysql")]
+            #[cfg(mysql)]
             Self::MySql(h) => DynamicConnection::MySql(ConnectionHolder::Borrowed(h.deref_mut())),
         }
     }
@@ -205,15 +205,15 @@ impl<'c> DynamicConnection<'c> {
                 "Executing batch statement"
             );
             match self {
-                #[cfg(feature = "sqlite")]
+                #[cfg(sqlite)]
                 Self::Sqlite(h) => {
                     sqlx::query(stmt).execute(&mut **h).await?;
                 }
-                #[cfg(feature = "postgres")]
+                #[cfg(postgres)]
                 Self::Postgres(h) => {
                     sqlx::query(stmt).execute(&mut **h).await?;
                 }
-                #[cfg(feature = "mysql")]
+                #[cfg(mysql)]
                 Self::MySql(h) => {
                     sqlx::query(stmt).execute(&mut **h).await?;
                 }
@@ -227,15 +227,15 @@ impl<'c> DynamicConnection<'c> {
     /// `DynamicTransaction::into_connection()`, otherwise returns `None`.
     pub fn into_transaction(self) -> Option<DynamicTransaction<'c>> {
         match self {
-            #[cfg(feature = "sqlite")]
+            #[cfg(sqlite)]
             Self::Sqlite(ConnectionHolder::OwnedTransaction(tx)) => {
                 Some(DynamicTransaction::Sqlite(tx))
             }
-            #[cfg(feature = "postgres")]
+            #[cfg(postgres)]
             Self::Postgres(ConnectionHolder::OwnedTransaction(tx)) => {
                 Some(DynamicTransaction::Postgres(tx))
             }
-            #[cfg(feature = "mysql")]
+            #[cfg(mysql)]
             Self::MySql(ConnectionHolder::OwnedTransaction(tx)) => {
                 Some(DynamicTransaction::MySql(tx))
             }
@@ -248,11 +248,11 @@ impl<'c> DynamicConnection<'c> {
 
 #[derive(Debug)]
 pub enum DynamicTransaction<'c> {
-    #[cfg(feature = "sqlite")]
+    #[cfg(sqlite)]
     Sqlite(Transaction<'c, Sqlite>),
-    #[cfg(feature = "postgres")]
+    #[cfg(postgres)]
     Postgres(Transaction<'c, Postgres>),
-    #[cfg(feature = "mysql")]
+    #[cfg(mysql)]
     MySql(Transaction<'c, MySql>),
 }
 
@@ -260,11 +260,11 @@ impl<'c> DynamicTransaction<'c> {
     /// Commit the transaction
     pub async fn commit(self) -> Result<(), Error> {
         match self {
-            #[cfg(feature = "sqlite")]
+            #[cfg(sqlite)]
             DynamicTransaction::Sqlite(tx) => tx.commit().await,
-            #[cfg(feature = "postgres")]
+            #[cfg(postgres)]
             DynamicTransaction::Postgres(tx) => tx.commit().await,
-            #[cfg(feature = "mysql")]
+            #[cfg(mysql)]
             DynamicTransaction::MySql(tx) => tx.commit().await,
         }
     }
@@ -272,24 +272,24 @@ impl<'c> DynamicTransaction<'c> {
     /// Rollback the transaction
     pub async fn rollback(self) -> Result<(), Error> {
         match self {
-            #[cfg(feature = "sqlite")]
+            #[cfg(sqlite)]
             DynamicTransaction::Sqlite(tx) => tx.rollback().await,
-            #[cfg(feature = "postgres")]
+            #[cfg(postgres)]
             DynamicTransaction::Postgres(tx) => tx.rollback().await,
-            #[cfg(feature = "mysql")]
+            #[cfg(mysql)]
             DynamicTransaction::MySql(tx) => tx.rollback().await,
         }
     }
 
     pub fn as_mut_conn(&mut self) -> DynamicConnection<'_> {
         match self {
-            #[cfg(feature = "sqlite")]
+            #[cfg(sqlite)]
             Self::Sqlite(tx) => DynamicConnection::Sqlite(ConnectionHolder::Borrowed(tx.as_mut())),
-            #[cfg(feature = "postgres")]
+            #[cfg(postgres)]
             Self::Postgres(tx) => {
                 DynamicConnection::Postgres(ConnectionHolder::Borrowed(tx.as_mut()))
             }
-            #[cfg(feature = "mysql")]
+            #[cfg(mysql)]
             Self::MySql(tx) => DynamicConnection::MySql(ConnectionHolder::Borrowed(tx.as_mut())),
         }
     }
@@ -298,13 +298,13 @@ impl<'c> DynamicTransaction<'c> {
     /// transaction inside the `OwnedTransaction` variant of `ConnectionHolder`.
     pub fn into_connection(self) -> DynamicConnection<'c> {
         match self {
-            #[cfg(feature = "sqlite")]
+            #[cfg(sqlite)]
             Self::Sqlite(tx) => DynamicConnection::Sqlite(ConnectionHolder::OwnedTransaction(tx)),
-            #[cfg(feature = "postgres")]
+            #[cfg(postgres)]
             Self::Postgres(tx) => {
                 DynamicConnection::Postgres(ConnectionHolder::OwnedTransaction(tx))
             }
-            #[cfg(feature = "mysql")]
+            #[cfg(mysql)]
             Self::MySql(tx) => DynamicConnection::MySql(ConnectionHolder::OwnedTransaction(tx)),
         }
     }
@@ -314,29 +314,29 @@ impl<'c> DynamicTransaction<'c> {
 
 #[derive(Debug)]
 pub enum DynamicQueryResult {
-    #[cfg(feature = "sqlite")]
+    #[cfg(sqlite)]
     Sqlite(SqliteQueryResult),
-    #[cfg(feature = "postgres")]
+    #[cfg(postgres)]
     Postgres(PgQueryResult),
-    #[cfg(feature = "mysql")]
+    #[cfg(mysql)]
     MySql(MySqlQueryResult),
 }
 
-#[cfg(feature = "sqlite")]
+#[cfg(sqlite)]
 impl From<SqliteQueryResult> for DynamicQueryResult {
     fn from(value: SqliteQueryResult) -> Self {
         DynamicQueryResult::Sqlite(value)
     }
 }
 
-#[cfg(feature = "postgres")]
+#[cfg(postgres)]
 impl From<PgQueryResult> for DynamicQueryResult {
     fn from(value: PgQueryResult) -> Self {
         DynamicQueryResult::Postgres(value)
     }
 }
 
-#[cfg(feature = "mysql")]
+#[cfg(mysql)]
 impl From<MySqlQueryResult> for DynamicQueryResult {
     fn from(value: MySqlQueryResult) -> Self {
         DynamicQueryResult::MySql(value)
@@ -347,22 +347,22 @@ impl DynamicQueryResult {
     /// Create a zero-rows-affected result for the given database backend.
     pub fn empty(backend: &DatabaseBackend) -> Self {
         match backend {
-            #[cfg(feature = "sqlite")]
+            #[cfg(sqlite)]
             DatabaseBackend::Sqlite => DynamicQueryResult::Sqlite(SqliteQueryResult::default()),
-            #[cfg(feature = "postgres")]
+            #[cfg(postgres)]
             DatabaseBackend::Postgres => DynamicQueryResult::Postgres(PgQueryResult::default()),
-            #[cfg(feature = "mysql")]
+            #[cfg(mysql)]
             DatabaseBackend::MySql => DynamicQueryResult::MySql(MySqlQueryResult::default()),
         }
     }
 
     pub fn rows_affected(&self) -> u64 {
         match self {
-            #[cfg(feature = "sqlite")]
+            #[cfg(sqlite)]
             DynamicQueryResult::Sqlite(res) => res.rows_affected(),
-            #[cfg(feature = "postgres")]
+            #[cfg(postgres)]
             DynamicQueryResult::Postgres(res) => res.rows_affected(),
-            #[cfg(feature = "mysql")]
+            #[cfg(mysql)]
             DynamicQueryResult::MySql(res) => res.rows_affected(),
         }
     }
@@ -373,15 +373,15 @@ impl Extend<DynamicQueryResult> for DynamicQueryResult {
         #[allow(unreachable_patterns)]
         for elem in iter {
             match (&mut *self, elem) {
-                #[cfg(feature = "sqlite")]
+                #[cfg(sqlite)]
                 (DynamicQueryResult::Sqlite(a), DynamicQueryResult::Sqlite(b)) => {
                     a.extend(std::iter::once(b));
                 }
-                #[cfg(feature = "postgres")]
+                #[cfg(postgres)]
                 (DynamicQueryResult::Postgres(a), DynamicQueryResult::Postgres(b)) => {
                     a.extend(std::iter::once(b));
                 }
-                #[cfg(feature = "mysql")]
+                #[cfg(mysql)]
                 (DynamicQueryResult::MySql(a), DynamicQueryResult::MySql(b)) => {
                     a.extend(std::iter::once(b));
                 }
@@ -394,29 +394,29 @@ impl Extend<DynamicQueryResult> for DynamicQueryResult {
 // Row
 
 pub enum DynamicRow {
-    #[cfg(feature = "sqlite")]
+    #[cfg(sqlite)]
     Sqlite(SqliteRow),
-    #[cfg(feature = "postgres")]
+    #[cfg(postgres)]
     Postgres(PgRow),
-    #[cfg(feature = "mysql")]
+    #[cfg(mysql)]
     MySql(MySqlRow),
 }
 
-#[cfg(feature = "sqlite")]
+#[cfg(sqlite)]
 impl From<SqliteRow> for DynamicRow {
     fn from(value: SqliteRow) -> Self {
         DynamicRow::Sqlite(value)
     }
 }
 
-#[cfg(feature = "postgres")]
+#[cfg(postgres)]
 impl From<PgRow> for DynamicRow {
     fn from(value: PgRow) -> Self {
         DynamicRow::Postgres(value)
     }
 }
 
-#[cfg(feature = "mysql")]
+#[cfg(mysql)]
 impl From<MySqlRow> for DynamicRow {
     fn from(value: MySqlRow) -> Self {
         DynamicRow::MySql(value)
@@ -425,34 +425,34 @@ impl From<MySqlRow> for DynamicRow {
 
 // FromRow
 
-#[cfg(feature = "sqlite")]
+#[cfg(sqlite)]
 pub trait FromSqliteRow: for<'r> FromRow<'r, SqliteRow> {}
 #[cfg(not(feature = "sqlite"))]
 pub trait FromSqliteRow {}
 
-#[cfg(feature = "postgres")]
+#[cfg(postgres)]
 pub trait FromPgRow: for<'r> FromRow<'r, PgRow> {}
 #[cfg(not(feature = "postgres"))]
 pub trait FromPgRow {}
 
-#[cfg(feature = "mysql")]
+#[cfg(mysql)]
 pub trait FromMySqlRow: for<'r> FromRow<'r, MySqlRow> {}
 #[cfg(not(feature = "mysql"))]
 pub trait FromMySqlRow {}
 
 pub trait DynamicFromRow: FromSqliteRow + FromPgRow + FromMySqlRow {}
 
-#[cfg(feature = "sqlite")]
+#[cfg(sqlite)]
 impl<T: for<'r> FromRow<'r, SqliteRow>> FromSqliteRow for T {}
 #[cfg(not(feature = "sqlite"))]
 impl<T> FromSqliteRow for T {}
 
-#[cfg(feature = "postgres")]
+#[cfg(postgres)]
 impl<T: for<'r> FromRow<'r, PgRow>> FromPgRow for T {}
 #[cfg(not(feature = "postgres"))]
 impl<T> FromPgRow for T {}
 
-#[cfg(feature = "mysql")]
+#[cfg(mysql)]
 impl<T: for<'r> FromRow<'r, MySqlRow>> FromMySqlRow for T {}
 #[cfg(not(feature = "mysql"))]
 impl<T> FromMySqlRow for T {}
@@ -461,34 +461,34 @@ impl<T> DynamicFromRow for T where T: FromSqliteRow + FromPgRow + FromMySqlRow {
 
 // Decode
 
-#[cfg(feature = "sqlite")]
+#[cfg(sqlite)]
 pub trait DecodeSqlite: for<'r> Decode<'r, Sqlite> {}
 #[cfg(not(feature = "sqlite"))]
 pub trait DecodeSqlite {}
 
-#[cfg(feature = "postgres")]
+#[cfg(postgres)]
 pub trait DecodePostgres: for<'r> Decode<'r, Postgres> {}
 #[cfg(not(feature = "postgres"))]
 pub trait DecodePostgres {}
 
-#[cfg(feature = "mysql")]
+#[cfg(mysql)]
 pub trait DecodeMySql: for<'r> Decode<'r, MySql> {}
 #[cfg(not(feature = "mysql"))]
 pub trait DecodeMySql {}
 
 pub trait DynamicDecode: DecodeSqlite + DecodePostgres + DecodeMySql {}
 
-#[cfg(feature = "sqlite")]
+#[cfg(sqlite)]
 impl<T: for<'r> Decode<'r, Sqlite>> DecodeSqlite for T {}
 #[cfg(not(feature = "sqlite"))]
 impl<T> DecodeSqlite for T {}
 
-#[cfg(feature = "postgres")]
+#[cfg(postgres)]
 impl<T: for<'r> Decode<'r, Postgres>> DecodePostgres for T {}
 #[cfg(not(feature = "postgres"))]
 impl<T> DecodePostgres for T {}
 
-#[cfg(feature = "mysql")]
+#[cfg(mysql)]
 impl<T: for<'r> Decode<'r, MySql>> DecodeMySql for T {}
 #[cfg(not(feature = "mysql"))]
 impl<T> DecodeMySql for T {}
@@ -497,34 +497,34 @@ impl<T> DynamicDecode for T where T: DecodeSqlite + DecodePostgres + DecodeMySql
 
 // Type
 
-#[cfg(feature = "sqlite")]
+#[cfg(sqlite)]
 pub trait TypeSqlite: Type<Sqlite> {}
 #[cfg(not(feature = "sqlite"))]
 pub trait TypeSqlite {}
 
-#[cfg(feature = "postgres")]
+#[cfg(postgres)]
 pub trait TypePostgres: Type<Postgres> {}
 #[cfg(not(feature = "postgres"))]
 pub trait TypePostgres {}
 
-#[cfg(feature = "mysql")]
+#[cfg(mysql)]
 pub trait TypeMySql: Type<MySql> {}
 #[cfg(not(feature = "mysql"))]
 pub trait TypeMySql {}
 
 pub trait DynamicType: TypeSqlite + TypePostgres + TypeMySql {}
 
-#[cfg(feature = "sqlite")]
+#[cfg(sqlite)]
 impl<T: Type<Sqlite>> TypeSqlite for T {}
 #[cfg(not(feature = "sqlite"))]
 impl<T> TypeSqlite for T {}
 
-#[cfg(feature = "postgres")]
+#[cfg(postgres)]
 impl<T: Type<Postgres>> TypePostgres for T {}
 #[cfg(not(feature = "postgres"))]
 impl<T> TypePostgres for T {}
 
-#[cfg(feature = "mysql")]
+#[cfg(mysql)]
 impl<T: Type<MySql>> TypeMySql for T {}
 #[cfg(not(feature = "mysql"))]
 impl<T> TypeMySql for T {}

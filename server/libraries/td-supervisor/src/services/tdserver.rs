@@ -20,6 +20,7 @@ use crate::services::bootloader::{
 use crate::services::supervisor::WorkerLocation::Relative;
 use crate::services::supervisor::{
     Configuration, TD_ARGUMENT_KEY, WORKER_CONTROL_FILE, WorkerControlAction, WorkerControlFile,
+    prepend_slash,
 };
 use clap::{CommandFactory, Parser};
 use clap_derive::{Args, Subcommand};
@@ -51,9 +52,9 @@ use td_common::logging::set_log_level;
 use td_common::os::{name_program, terminate_process};
 use td_common::server::WorkerClass::Regular;
 use td_common::server::{
-    AVAILABLE_ENVIRONMENTS_FOLDER, CONFIG_FILE, CONFIG_FOLDER, DATABASE_FILE, DATABASE_FOLDER,
-    ENVIRONMENTS_FOLDER, ETC_FOLDER, INSTANCES_FOLDER, MSG_FOLDER, PROC_FOLDER, REGULAR_FOLDER,
-    STORAGE_FOLDER, TD_DETACHED_SUBPROCESSES, WORK_FOLDER,
+    AVAILABLE_ENVIRONMENTS_FOLDER, CONFIG_FILE, CONFIG_FOLDER, ENVIRONMENTS_FOLDER, ETC_FOLDER,
+    INSTANCES_FOLDER, MSG_FOLDER, PROC_FOLDER, REGULAR_FOLDER, REPOSITORY_URI_ENV, STORAGE_FOLDER,
+    TD_DETACHED_SUBPROCESSES, WORK_FOLDER,
 };
 use td_common::status::ExitStatus::{GeneralError, NoAction, Success};
 use td_process::launcher::arg::InheritedArgumentKey;
@@ -79,7 +80,11 @@ pub const SUPERVISOR_NAME: &str = "supervisor";
 pub const SUPERVISOR_PROGRAM: &str = "td_supervisor";
 
 pub const APISERVER: &str = "td_apiserver";
-pub const APISERVER_ARGUMENT_DATABASE_URL: &str = "--database-url";
+// The supervisor intentionally does not pass `--database-url` to apiserver
+// invocations: the apiserver picks its database URL from its YAML (set by
+// the user for postgres; defaulted to a local sqlite file by the apiserver
+// itself when no URL is set anywhere). This keeps the supervisor backend-
+// agnostic — it only deals with on-disk instance layout.
 pub const APISERVER_ARGUMENT_STORAGE_URL: &str = "--storage-url";
 pub const APISERVER_ARGUMENT_DB_SCHEMA: &str = "--db-schema";
 
@@ -889,14 +894,6 @@ fn create_database(instance: &Option<PathBuf>) {
         get_repository_path_for_instance(&Some(supervisor_instance_absolute.clone()));
     let supervisor_repository_absolute = to_absolute(&supervisor_repository.clone()).unwrap();
 
-    let supervisor_database = supervisor_repository_absolute
-        .clone()
-        .join(DATABASE_FOLDER)
-        .join(DATABASE_FILE);
-    let supervisor_database_absolute = to_absolute(&supervisor_database.clone()).unwrap();
-    let supervisor_database_url = Url::from_file_path(supervisor_database_absolute.clone())
-        .expect("Failed to convert database file path to file:// URL");
-
     let supervisor_storage = supervisor_repository_absolute.clone().join(STORAGE_FOLDER);
     let supervisor_storage_absolute = to_absolute(&supervisor_storage.clone()).unwrap();
     let supervisor_storage_url = Url::from_file_path(supervisor_storage_absolute.clone())
@@ -914,8 +911,15 @@ fn create_database(instance: &Option<PathBuf>) {
         }
     }
     let command = binary
-        .arg(APISERVER_ARGUMENT_DATABASE_URL)
-        .arg(supervisor_database_url.clone().to_string())
+        // The apiserver resolves its database URL from env: `TD_DATABASE_URL`
+        // if set, otherwise `file://$TD_URI_REPOSITORY/database/tabsdata.db`.
+        // Both env vars are inherited by the spawned child; we only need to
+        // ensure `TD_URI_REPOSITORY` is set here because the regular worker
+        // path sets it later in the lifecycle and the one-shot runs first.
+        .env(
+            REPOSITORY_URI_ENV,
+            prepend_slash(supervisor_repository_absolute.clone()),
+        )
         .arg(APISERVER_ARGUMENT_STORAGE_URL)
         .arg(supervisor_storage_url.clone().to_string())
         .arg(APISERVER_ARGUMENT_DB_SCHEMA)
@@ -926,21 +930,21 @@ fn create_database(instance: &Option<PathBuf>) {
             if !output.status.success() {
                 show_std_out_and_err(&output);
                 error!(
-                    "Bad exit code creating database '{}': {}",
-                    supervisor_database_absolute.clone().display(),
+                    "Bad exit code creating database for instance '{}': {}",
+                    supervisor_instance_absolute.clone().display(),
                     output.status
                 );
                 exit(GeneralError.code())
             };
             info!(
-                "Database '{}' successfully created!",
-                supervisor_database_absolute.clone().display()
+                "Database for instance '{}' successfully created!",
+                supervisor_instance_absolute.clone().display()
             );
         }
         Err(error) => {
             error!(
-                "Error creating database '{}' structure: {}",
-                supervisor_database_absolute.clone().display(),
+                "Error creating database for instance '{}': {}",
+                supervisor_instance_absolute.clone().display(),
                 error
             );
             exit(GeneralError.code())
@@ -956,14 +960,6 @@ fn command_upgrade(arguments: UpgradeArguments) {
     let supervisor_repository =
         get_repository_path_for_instance(&Some(supervisor_instance_absolute.clone()));
     let supervisor_repository_absolute = to_absolute(&supervisor_repository.clone()).unwrap();
-
-    let supervisor_database = supervisor_repository_absolute
-        .clone()
-        .join(DATABASE_FOLDER)
-        .join(DATABASE_FILE);
-    let supervisor_database_absolute = to_absolute(&supervisor_database.clone()).unwrap();
-    let supervisor_database_url = Url::from_file_path(supervisor_database_absolute.clone())
-        .expect("Failed to convert database file path to file:// URL");
 
     let supervisor_storage = supervisor_repository_absolute.clone().join(STORAGE_FOLDER);
     let supervisor_storage_absolute = to_absolute(&supervisor_storage.clone()).unwrap();
@@ -1023,8 +1019,10 @@ fn command_upgrade(arguments: UpgradeArguments) {
             }
             set_log_level(Level::ERROR);
             let command = binary
-                .arg(APISERVER_ARGUMENT_DATABASE_URL)
-                .arg(supervisor_database_url.clone().to_string())
+                .env(
+                    REPOSITORY_URI_ENV,
+                    prepend_slash(supervisor_repository_absolute.clone()),
+                )
                 .arg(APISERVER_ARGUMENT_STORAGE_URL)
                 .arg(supervisor_storage_url.clone().to_string())
                 .arg(APISERVER_ARGUMENT_DB_SCHEMA)
@@ -1038,30 +1036,30 @@ fn command_upgrade(arguments: UpgradeArguments) {
                         {
                             set_log_level(Level::INFO);
                             info!(
-                                "The database '{}' is already up to date. No need to upgrade.",
-                                supervisor_database_absolute.clone().display()
+                                "The database for instance '{}' is already up to date. No need to upgrade.",
+                                supervisor_instance_absolute.clone().display()
                             );
                             exit(Success.code())
                         }
                         set_log_level(Level::INFO);
                         show_std_out_and_err(&output);
                         error!(
-                            "Bad exit code upgrading database '{}': {}",
-                            supervisor_database_absolute.clone().display(),
+                            "Bad exit code upgrading database for instance '{}': {}",
+                            supervisor_instance_absolute.clone().display(),
                             output.status
                         );
                         exit(GeneralError.code())
                     };
                     set_log_level(Level::INFO);
                     info!(
-                        "Database '{}' successfully upgraded!",
-                        supervisor_database_absolute.clone().display()
+                        "Database for instance '{}' successfully upgraded!",
+                        supervisor_instance_absolute.clone().display()
                     );
                 }
                 Err(error) => {
                     error!(
-                        "Error upgrading database '{}' structure: {}",
-                        supervisor_database_absolute.clone().display(),
+                        "Error upgrading database for instance '{}': {}",
+                        supervisor_instance_absolute.clone().display(),
                         error
                     );
                     exit(GeneralError.code())

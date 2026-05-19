@@ -49,11 +49,6 @@ test_logging = []
 test_tower_metadata = []
 test-utils = []
 
-# Backend support features
-sqlite = ["td-services/sqlite", "td-authz/sqlite", "td-database/sqlite", "td-queries/sqlite"]
-postgres = ["td-services/postgres", "td-authz/postgres", "td-database/postgres", "td-queries/postgres"]
-mysql = ["td-services/mysql", "td-authz/mysql", "td-database/mysql", "td-queries/mysql"]
-
 [package.metadata.cargo-machete]
 ignored = ["openssl", "td-apiserver"]
 

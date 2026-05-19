@@ -5,6 +5,7 @@
 [package]
 description = "Tabsdata Queries"
 name = "td-queries"
+build = "build.rs"
 
 authors = { workspace = true }
 edition = { workspace = true }
@@ -38,11 +39,6 @@ test_logging = []
 test_tower_metadata = []
 test-utils = ["td-schema/test-utils"]
 
-# Backend support features
-sqlite = ["ta-objects/sqlite", "td-database/sqlite"]
-postgres = ["ta-objects/postgres", "td-database/postgres"]
-mysql = ["ta-objects/mysql", "td-database/mysql"]
-
 [package.metadata.cargo-machete]
 ignored = ["td-queries", "derive_builder", "openssl", "regex", "serde", "sqlx", "strum", "td-build", "thiserror", "toml", "utoipa"]
 
@@ -51,6 +47,8 @@ ignored = ["td-queries", "derive_builder", "openssl", "regex", "serde", "sqlx", 
 [build-dependencies]
 
 # Internal dependencies
+
+td-build = { workspace = true }
 
 # External dependencies
 

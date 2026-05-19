@@ -13,11 +13,8 @@ use sea_query::{Expr, QueryStatementWriter, SchemaStatementBuilder, SelectStatem
 /// in `td-database`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Backend {
-    #[cfg(feature = "sqlite")]
     Sqlite,
-    #[cfg(feature = "postgres")]
     Postgres,
-    #[cfg(feature = "mysql")]
     MySql,
 }
 
@@ -53,11 +50,8 @@ impl Backend {
     /// Return a stable index for this backend (Sqlite=0, Postgres=1, MySql=2).
     pub const fn index(self) -> usize {
         match self {
-            #[cfg(feature = "sqlite")]
             Self::Sqlite => 0,
-            #[cfg(feature = "postgres")]
             Self::Postgres => 1,
-            #[cfg(feature = "mysql")]
             Self::MySql => 2,
         }
     }
@@ -65,11 +59,8 @@ impl Backend {
     /// Render a schema statement (CREATE TABLE, ALTER TABLE, CREATE INDEX, etc.) to SQL.
     pub fn build_schema(&self, stmt: impl SchemaStatementBuilder) -> String {
         match self {
-            #[cfg(feature = "sqlite")]
             Self::Sqlite => stmt.to_string(sea_query::SqliteQueryBuilder),
-            #[cfg(feature = "postgres")]
             Self::Postgres => stmt.to_string(sea_query::PostgresQueryBuilder),
-            #[cfg(feature = "mysql")]
             Self::MySql => stmt.to_string(sea_query::MysqlQueryBuilder),
         }
     }
@@ -78,11 +69,8 @@ impl Backend {
     /// inlined (not parameterized).
     pub fn build_query(&self, stmt: impl QueryStatementWriter) -> String {
         match self {
-            #[cfg(feature = "sqlite")]
             Self::Sqlite => stmt.to_string(sea_query::SqliteQueryBuilder),
-            #[cfg(feature = "postgres")]
             Self::Postgres => stmt.to_string(sea_query::PostgresQueryBuilder),
-            #[cfg(feature = "mysql")]
             Self::MySql => stmt.to_string(sea_query::MysqlQueryBuilder),
         }
     }
@@ -114,7 +102,6 @@ impl Backend {
     /// String concatenation: `||` on SQLite/Postgres, `CONCAT()` on MySQL.
     pub(crate) fn concat(&self, parts: &[&str]) -> String {
         match self {
-            #[cfg(feature = "mysql")]
             Self::MySql => format!("CONCAT({})", parts.join(", ")),
             _ => parts.join(" || "),
         }
@@ -138,11 +125,8 @@ impl Backend {
     /// JSON object aggregation from key/value pairs.
     pub(crate) fn json_object_agg(&self, key: &str, val: &str) -> String {
         match self {
-            #[cfg(feature = "sqlite")]
             Self::Sqlite => format!("json_group_object({key}, {val})"),
-            #[cfg(feature = "postgres")]
             Self::Postgres => format!("jsonb_object_agg({key}, {val})"),
-            #[cfg(feature = "mysql")]
             Self::MySql => format!("JSON_OBJECTAGG({key}, {val})"),
         }
     }
@@ -150,16 +134,13 @@ impl Backend {
     /// Check if the database exists query for the `tabsdata_system` table.
     pub(crate) fn table_exists_query(&self, table_name: &str) -> String {
         match self {
-            #[cfg(feature = "sqlite")]
             Self::Sqlite => {
                 format!("SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}'")
             }
-            #[cfg(feature = "postgres")]
             Self::Postgres => format!(
                 "SELECT table_name FROM information_schema.tables \
                  WHERE table_schema = 'public' AND table_name = '{table_name}'"
             ),
-            #[cfg(feature = "mysql")]
             Self::MySql => format!(
                 "SELECT table_name FROM information_schema.tables \
                  WHERE table_name = '{table_name}'"
@@ -173,27 +154,29 @@ impl Backend {
     ///
     /// The DML body varies per backend; the CREATE TRIGGER wrapper is raw SQL
     /// because sea_query does not support trigger creation.
-    pub(crate) fn create_trigger(&self, trigger: &TriggerDef) -> String {
+    ///
+    /// Returned as `Vec<String>` so Postgres can emit its supporting function
+    /// (`CREATE OR REPLACE FUNCTION …`) and the trigger itself (`CREATE TRIGGER
+    /// … EXECUTE FUNCTION …`) as separate statements — sqlx-postgres uses the
+    /// extended query protocol and rejects multi-statement strings. SQLite and
+    /// MySQL each return a single-element vec.
+    pub(crate) fn create_trigger(&self, trigger: &TriggerDef) -> Vec<String> {
         let cols = trigger.columns.join(", ");
         let new_cols: Vec<String> = trigger.columns.iter().map(|c| format!("NEW.{c}")).collect();
         let new_vals = new_cols.join(", ");
 
         match self {
-            #[cfg(feature = "sqlite")]
-            Self::Sqlite => {
-                format!(
-                    "CREATE TRIGGER {name} AFTER INSERT ON {source}\n\
-                     FOR EACH ROW BEGIN\n  \
-                       DELETE FROM {target} WHERE {partition} = NEW.{partition};\n  \
-                       INSERT INTO {target} ({cols}) VALUES ({new_vals});\n\
-                     END",
-                    name = trigger.name,
-                    source = trigger.source_table,
-                    target = trigger.target_table,
-                    partition = trigger.partition_col,
-                )
-            }
-            #[cfg(feature = "postgres")]
+            Self::Sqlite => vec![format!(
+                "CREATE TRIGGER {name} AFTER INSERT ON {source}\n\
+                 FOR EACH ROW BEGIN\n  \
+                   DELETE FROM {target} WHERE {partition} = NEW.{partition};\n  \
+                   INSERT INTO {target} ({cols}) VALUES ({new_vals});\n\
+                 END",
+                name = trigger.name,
+                source = trigger.source_table,
+                target = trigger.target_table,
+                partition = trigger.partition_col,
+            )],
             Self::Postgres => {
                 let updates: Vec<String> = trigger
                     .columns
@@ -203,23 +186,27 @@ impl Backend {
                     .collect();
                 let update_set = updates.join(", ");
 
-                format!(
-                    "CREATE OR REPLACE FUNCTION {name}_fn() RETURNS TRIGGER AS $$\n\
-                     BEGIN\n  \
-                       INSERT INTO {target} ({cols}) VALUES ({new_vals})\n  \
-                       ON CONFLICT ({partition}) DO UPDATE SET {update_set};\n  \
-                       RETURN NEW;\n\
-                     END;\n\
-                     $$ LANGUAGE plpgsql;\n\
-                     CREATE TRIGGER {name} AFTER INSERT ON {source}\n\
-                     FOR EACH ROW EXECUTE FUNCTION {name}_fn()",
-                    name = trigger.name,
-                    source = trigger.source_table,
-                    target = trigger.target_table,
-                    partition = trigger.partition_col,
-                )
+                vec![
+                    format!(
+                        "CREATE OR REPLACE FUNCTION {name}_fn() RETURNS TRIGGER AS $$\n\
+                         BEGIN\n  \
+                           INSERT INTO {target} ({cols}) VALUES ({new_vals})\n  \
+                           ON CONFLICT ({partition}) DO UPDATE SET {update_set};\n  \
+                           RETURN NEW;\n\
+                         END;\n\
+                         $$ LANGUAGE plpgsql",
+                        name = trigger.name,
+                        target = trigger.target_table,
+                        partition = trigger.partition_col,
+                    ),
+                    format!(
+                        "CREATE TRIGGER {name} AFTER INSERT ON {source}\n\
+                         FOR EACH ROW EXECUTE FUNCTION {name}_fn()",
+                        name = trigger.name,
+                        source = trigger.source_table,
+                    ),
+                ]
             }
-            #[cfg(feature = "mysql")]
             Self::MySql => {
                 let updates: Vec<String> = trigger
                     .columns
@@ -229,7 +216,7 @@ impl Backend {
                     .collect();
                 let update_set = updates.join(", ");
 
-                format!(
+                vec![format!(
                     "CREATE TRIGGER {name} AFTER INSERT ON {source}\n\
                      FOR EACH ROW BEGIN\n  \
                        INSERT INTO {target} ({cols}) VALUES ({new_vals})\n  \
@@ -238,25 +225,25 @@ impl Backend {
                     name = trigger.name,
                     source = trigger.source_table,
                     target = trigger.target_table,
-                )
+                )]
             }
         }
     }
 
-    /// Render a `DROP TRIGGER IF EXISTS` statement (plus function drop for Postgres).
-    pub(crate) fn drop_trigger(&self, trigger: &TriggerDef) -> String {
+    /// Render `DROP TRIGGER IF EXISTS` (plus function drop for Postgres). Same
+    /// single-statement-per-entry rule as [`create_trigger`].
+    pub(crate) fn drop_trigger(&self, trigger: &TriggerDef) -> Vec<String> {
         match self {
-            #[cfg(feature = "sqlite")]
-            Self::Sqlite => format!("DROP TRIGGER IF EXISTS {}", trigger.name),
-            #[cfg(feature = "postgres")]
-            Self::Postgres => format!(
-                "DROP TRIGGER IF EXISTS {name} ON {source};\n\
-                 DROP FUNCTION IF EXISTS {name}_fn()",
-                name = trigger.name,
-                source = trigger.source_table,
-            ),
-            #[cfg(feature = "mysql")]
-            Self::MySql => format!("DROP TRIGGER IF EXISTS {}", trigger.name),
+            Self::Sqlite => vec![format!("DROP TRIGGER IF EXISTS {}", trigger.name)],
+            Self::Postgres => vec![
+                format!(
+                    "DROP TRIGGER IF EXISTS {name} ON {source}",
+                    name = trigger.name,
+                    source = trigger.source_table,
+                ),
+                format!("DROP FUNCTION IF EXISTS {name}_fn()", name = trigger.name),
+            ],
+            Self::MySql => vec![format!("DROP TRIGGER IF EXISTS {}", trigger.name)],
         }
     }
 
@@ -266,7 +253,7 @@ impl Backend {
     pub(crate) fn create_sticky_terminals_trigger(
         &self,
         trigger: &StickyTerminalsTriggerDef,
-    ) -> String {
+    ) -> Vec<String> {
         let values = trigger
             .terminal_values
             .iter()
@@ -274,8 +261,7 @@ impl Backend {
             .collect::<Vec<_>>()
             .join(", ");
         match self {
-            #[cfg(feature = "sqlite")]
-            Self::Sqlite => format!(
+            Self::Sqlite => vec![format!(
                 "CREATE TRIGGER {name} BEFORE UPDATE OF {col} ON {table}\n\
                  FOR EACH ROW WHEN OLD.{col} IN ({values}) AND NEW.{col} != OLD.{col}\n\
                  BEGIN\n  \
@@ -284,25 +270,30 @@ impl Backend {
                 name = trigger.name,
                 table = trigger.source_table,
                 col = trigger.status_col,
-            ),
-            #[cfg(feature = "postgres")]
-            Self::Postgres => format!(
-                "CREATE OR REPLACE FUNCTION {name}_fn() RETURNS TRIGGER AS $$\n\
-                 BEGIN\n  \
-                   IF OLD.{col} IN ({values}) AND NEW.{col} != OLD.{col} THEN\n    \
-                     RAISE EXCEPTION '{table}.{col} is sticky in terminal state';\n  \
-                   END IF;\n  \
-                   RETURN NEW;\n\
-                 END;\n\
-                 $$ LANGUAGE plpgsql;\n\
-                 CREATE TRIGGER {name} BEFORE UPDATE OF {col} ON {table}\n\
-                 FOR EACH ROW EXECUTE FUNCTION {name}_fn()",
-                name = trigger.name,
-                table = trigger.source_table,
-                col = trigger.status_col,
-            ),
-            #[cfg(feature = "mysql")]
-            Self::MySql => format!(
+            )],
+            Self::Postgres => vec![
+                format!(
+                    "CREATE OR REPLACE FUNCTION {name}_fn() RETURNS TRIGGER AS $$\n\
+                     BEGIN\n  \
+                       IF OLD.{col} IN ({values}) AND NEW.{col} != OLD.{col} THEN\n    \
+                         RAISE EXCEPTION '{table}.{col} is sticky in terminal state';\n  \
+                       END IF;\n  \
+                       RETURN NEW;\n\
+                     END;\n\
+                     $$ LANGUAGE plpgsql",
+                    name = trigger.name,
+                    table = trigger.source_table,
+                    col = trigger.status_col,
+                ),
+                format!(
+                    "CREATE TRIGGER {name} BEFORE UPDATE OF {col} ON {table}\n\
+                     FOR EACH ROW EXECUTE FUNCTION {name}_fn()",
+                    name = trigger.name,
+                    table = trigger.source_table,
+                    col = trigger.status_col,
+                ),
+            ],
+            Self::MySql => vec![format!(
                 "CREATE TRIGGER {name} BEFORE UPDATE ON {table}\n\
                  FOR EACH ROW\n\
                  BEGIN\n  \
@@ -313,7 +304,7 @@ impl Backend {
                 name = trigger.name,
                 table = trigger.source_table,
                 col = trigger.status_col,
-            ),
+            )],
         }
     }
 
@@ -327,13 +318,15 @@ impl Backend {
     ///    equal versions.
     /// 2. Out-of-order inserts (e.g. a back-dated patch) leave the current
     ///    view untouched.
-    pub(crate) fn create_versioned_current_trigger(&self, trigger: &VersionedTriggerDef) -> String {
+    pub(crate) fn create_versioned_current_trigger(
+        &self,
+        trigger: &VersionedTriggerDef,
+    ) -> Vec<String> {
         let cols = trigger.columns.join(", ");
         let new_cols: Vec<String> = trigger.columns.iter().map(|c| format!("NEW.{c}")).collect();
         let new_vals = new_cols.join(", ");
         match self {
-            #[cfg(feature = "sqlite")]
-            Self::Sqlite => format!(
+            Self::Sqlite => vec![format!(
                 "CREATE TRIGGER {name} AFTER INSERT ON {source}\n\
                  FOR EACH ROW WHEN NOT EXISTS (\n  \
                    SELECT 1 FROM {target}\n  \
@@ -351,8 +344,7 @@ impl Backend {
                 partition = trigger.partition_col,
                 version = trigger.version_col,
                 tie_break = trigger.tie_break_col,
-            ),
-            #[cfg(feature = "postgres")]
+            )],
             Self::Postgres => {
                 let updates: Vec<String> = trigger
                     .columns
@@ -361,28 +353,32 @@ impl Backend {
                     .map(|c| format!("{c} = EXCLUDED.{c}"))
                     .collect();
                 let update_set = updates.join(", ");
-                format!(
-                    "CREATE OR REPLACE FUNCTION {name}_fn() RETURNS TRIGGER AS $$\n\
-                     BEGIN\n  \
-                       INSERT INTO {target} ({cols}) VALUES ({new_vals})\n  \
-                       ON CONFLICT ({partition}) DO UPDATE SET {update_set}\n  \
-                       WHERE EXCLUDED.{version} > {target}.{version}\n     \
-                          OR (EXCLUDED.{version} = {target}.{version}\n         \
-                              AND EXCLUDED.{tie_break} > {target}.{tie_break});\n  \
-                       RETURN NEW;\n\
-                     END;\n\
-                     $$ LANGUAGE plpgsql;\n\
-                     CREATE TRIGGER {name} AFTER INSERT ON {source}\n\
-                     FOR EACH ROW EXECUTE FUNCTION {name}_fn()",
-                    name = trigger.name,
-                    source = trigger.source_table,
-                    target = trigger.target_table,
-                    partition = trigger.partition_col,
-                    version = trigger.version_col,
-                    tie_break = trigger.tie_break_col,
-                )
+                vec![
+                    format!(
+                        "CREATE OR REPLACE FUNCTION {name}_fn() RETURNS TRIGGER AS $$\n\
+                         BEGIN\n  \
+                           INSERT INTO {target} ({cols}) VALUES ({new_vals})\n  \
+                           ON CONFLICT ({partition}) DO UPDATE SET {update_set}\n  \
+                           WHERE EXCLUDED.{version} > {target}.{version}\n     \
+                              OR (EXCLUDED.{version} = {target}.{version}\n         \
+                                  AND EXCLUDED.{tie_break} > {target}.{tie_break});\n  \
+                           RETURN NEW;\n\
+                         END;\n\
+                         $$ LANGUAGE plpgsql",
+                        name = trigger.name,
+                        target = trigger.target_table,
+                        partition = trigger.partition_col,
+                        version = trigger.version_col,
+                        tie_break = trigger.tie_break_col,
+                    ),
+                    format!(
+                        "CREATE TRIGGER {name} AFTER INSERT ON {source}\n\
+                         FOR EACH ROW EXECUTE FUNCTION {name}_fn()",
+                        name = trigger.name,
+                        source = trigger.source_table,
+                    ),
+                ]
             }
-            #[cfg(feature = "mysql")]
             Self::MySql => {
                 // MySQL trigger bodies can't run `IF` over a SELECT FROM the
                 // target table inside the trigger that fired the INSERT.
@@ -403,7 +399,7 @@ impl Backend {
                     })
                     .collect();
                 let update_set = updates.join(", ");
-                format!(
+                vec![format!(
                     "CREATE TRIGGER {name} AFTER INSERT ON {source}\n\
                      FOR EACH ROW BEGIN\n  \
                        INSERT INTO {target} ({cols}) VALUES ({new_vals})\n  \
@@ -412,7 +408,7 @@ impl Backend {
                     name = trigger.name,
                     source = trigger.source_table,
                     target = trigger.target_table,
-                )
+                )]
             }
         }
     }
@@ -424,7 +420,6 @@ impl Backend {
         let upd_name = format!("{}_no_update", trigger.name);
         let del_name = format!("{}_no_delete", trigger.name);
         match self {
-            #[cfg(feature = "sqlite")]
             Self::Sqlite => vec![
                 format!(
                     "CREATE TRIGGER {upd_name} BEFORE UPDATE ON {table}\n\
@@ -441,15 +436,18 @@ impl Backend {
                     table = trigger.source_table,
                 ),
             ],
-            #[cfg(feature = "postgres")]
             Self::Postgres => vec![
                 format!(
                     "CREATE OR REPLACE FUNCTION {name}_fn() RETURNS TRIGGER AS $$\n\
                      BEGIN\n  \
                        RAISE EXCEPTION '{table} is insert-only';\n\
                      END;\n\
-                     $$ LANGUAGE plpgsql;\n\
-                     CREATE TRIGGER {upd_name} BEFORE UPDATE ON {table}\n\
+                     $$ LANGUAGE plpgsql",
+                    name = trigger.name,
+                    table = trigger.source_table,
+                ),
+                format!(
+                    "CREATE TRIGGER {upd_name} BEFORE UPDATE ON {table}\n\
                      FOR EACH ROW EXECUTE FUNCTION {name}_fn()",
                     name = trigger.name,
                     table = trigger.source_table,
@@ -461,7 +459,6 @@ impl Backend {
                     table = trigger.source_table,
                 ),
             ],
-            #[cfg(feature = "mysql")]
             Self::MySql => vec![
                 format!(
                     "CREATE TRIGGER {upd_name} BEFORE UPDATE ON {table}\n\

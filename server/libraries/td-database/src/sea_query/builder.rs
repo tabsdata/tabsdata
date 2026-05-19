@@ -24,11 +24,11 @@ where
 {
     fn build_sea_query(self, db: impl DatabaseKind) -> (String, SqlxValues) {
         let (sql, values) = match db.kind() {
-            #[cfg(feature = "sqlite")]
+            #[cfg(sqlite)]
             DatabaseBackend::Sqlite => self.build(sea_query::SqliteQueryBuilder),
-            #[cfg(feature = "postgres")]
+            #[cfg(postgres)]
             DatabaseBackend::Postgres => self.build(sea_query::PostgresQueryBuilder),
-            #[cfg(feature = "mysql")]
+            #[cfg(mysql)]
             DatabaseBackend::MySql => self.build(sea_query::MysqlQueryBuilder),
         };
         (sql, SqlxValues(values))

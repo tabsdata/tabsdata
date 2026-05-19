@@ -215,7 +215,7 @@ where
     let mut q = Query::select()
         .columns(D::columns())
         .from(Cte::Ranked)
-        .and_where(Expr::col(Cte::Rn).eq(1))
+        .and_where(Expr::col(Cte::Rn).eq(1_i64))
         .cond_where(resolve_condition::<D>(condition)?)
         .take();
     if let Some(s) = state_cond {
@@ -236,7 +236,7 @@ where
     let mut q = Query::select()
         .columns(D::columns())
         .from(Cte::Ranked)
-        .and_where(Expr::col(Cte::Rn).eq(1))
+        .and_where(Expr::col(Cte::Rn).eq(1_i64))
         .take();
     if let Some(s) = state_cond {
         q.cond_where(s.clone());

@@ -43,11 +43,6 @@ test_logging = []
 test_tower_metadata = ["ta-services/test_tower_metadata", "td-objects/test_tower_metadata", "td-tower/test_tower_metadata"]
 test-utils = []
 
-# Backend support features
-sqlite = ["td-queries/sqlite", "td-authz/sqlite", "td-database/sqlite"]
-postgres = ["td-queries/postgres", "td-authz/postgres", "td-database/postgres"]
-mysql = ["td-queries/mysql", "td-authz/mysql", "td-database/mysql"]
-
 [package.metadata.cargo-machete]
 ignored = ["openssl", "td-services", "thiserror"]
 

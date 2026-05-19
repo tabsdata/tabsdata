@@ -93,11 +93,6 @@ api-docs = []
 # It should be normally used only for cross-crates tests.
 enterprise = []
 
-# Backend support
-sqlite = ["td-apiserver/sqlite"]
-postgres = ["td-apiserver/postgres"]
-mysql = ["td-apiserver/mysql"]
-
 td-test = ["dummy", "mock-env", "test-utils"]
 dummy = []
 mock-env = []
@@ -331,7 +326,7 @@ version = "1.11.1"
 
 [workspace.dependencies.clap]
 version = "4.6.0"
-features = ["derive"]
+features = ["derive", "env"]
 
 [workspace.dependencies.clap_derive]
 version = "4.6.0"

@@ -18,7 +18,10 @@ jwt:
   access_token_expiration: 3600
 request_timeout: 60
 database:
-  #  url: null # by default is given as parameter by supervisor
+  # If omitted, the apiserver defaults to SQLite at
+  # ${TD_URI_REPOSITORY}/database/tabsdata.db. To use a different backend,
+  # uncomment and set `url`, e.g. `postgres://user:pass@host/db`.
+  # url: postgres://user:pass@host:5432/tabsdata
   min_connections: 1
   max_connections: 10
   acquire_timeout: 30

@@ -149,7 +149,7 @@ pub fn tables() -> Vec<TableCreateStatement> {
             )
             .col(
                 ColumnDef::new(LogicalFunctionRuns::TriggeredOn)
-                    .timestamp()
+                    .timestamp_with_time_zone()
                     .not_null(),
             )
             .col(
@@ -217,7 +217,7 @@ pub fn tables() -> Vec<TableCreateStatement> {
             )
             .col(
                 ColumnDef::new(LogicalFunctionRunPointers::SetOn)
-                    .timestamp()
+                    .timestamp_with_time_zone()
                     .not_null(),
             )
             .col(
@@ -286,7 +286,7 @@ pub fn tables() -> Vec<TableCreateStatement> {
             )
             .col(
                 ColumnDef::new(LogicalTableDataVersions::TriggeredOn)
-                    .timestamp()
+                    .timestamp_with_time_zone()
                     .not_null(),
             )
             .col(
@@ -365,7 +365,7 @@ pub fn tables() -> Vec<TableCreateStatement> {
             )
             .col(
                 ColumnDef::new(LogicalTableDataVersionPointers::SetOn)
-                    .timestamp()
+                    .timestamp_with_time_zone()
                     .not_null(),
             )
             .col(
@@ -513,14 +513,12 @@ pub fn tables() -> Vec<TableCreateStatement> {
 /// - insert-only event-log enforcement on both pointer tables.
 pub fn triggers(b: &Backend) -> Vec<String> {
     let mut out = Vec::new();
-    out.push(
-        b.create_sticky_terminals_trigger(&StickyTerminalsTriggerDef {
-            name: "logical_function_runs__sticky_terminals",
-            source_table: "logical_function_runs",
-            status_col: "status",
-            terminal_values: &["C", "X", "Y"],
-        }),
-    );
+    out.extend(b.create_sticky_terminals_trigger(&StickyTerminalsTriggerDef {
+        name: "logical_function_runs__sticky_terminals",
+        source_table: "logical_function_runs",
+        status_col: "status",
+        terminal_values: &["C", "X", "Y"],
+    }));
     out.extend(b.create_immutable_triggers(&ImmutableTriggerDef {
         name: "logical_function_run_pointers__immutable",
         source_table: "logical_function_run_pointers",
