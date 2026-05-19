@@ -13,7 +13,7 @@ from tabsdatak.conn.common.sql._engine.reader import SqlReadCfg
 from tabsdatak.conn.common.sql._engine.writer import SqlWriteCfg
 from tabsdatak.conn.mssql import MSSQLConn
 # noinspection PyProtectedMember
-from tabsdatak.conn.mssql import _adapter as adapter
+from tabsdatak.conn.mssql import _impl as impl
 
 
 pytestmark = pytest.mark.mssql
@@ -23,12 +23,11 @@ pytestmark = pytest.mark.mssql
 # build_mssql_engine -- driver injection + credential set
 #
 # The mssql DBAPI may not be installed in the test env, so we intercept
-# ``create_engine`` and verify the URL that the adapter built.
+# ``create_engine`` and verify the URL that the impl built.
 # ---------------------------------------------------------------------------
 
 
 class _CapturedURL:
-    """Stand-in for a sqlalchemy Engine with the URL we captured."""
 
     def __init__(self, url, connect_args):
         self.url = url
@@ -55,7 +54,6 @@ def _conn() -> MSSQLConn:
 
 @pytest.fixture
 def captured(monkeypatch):
-    """Monkey-patch ``adapter.create_engine`` to capture call args."""
     box: dict = {}
 
     def fake_create_engine(url, *, connect_args):
@@ -63,12 +61,12 @@ def captured(monkeypatch):
         box["connect_args"] = connect_args
         return _CapturedURL(url, connect_args)
 
-    monkeypatch.setattr(adapter, "create_engine", fake_create_engine)
+    monkeypatch.setattr(impl, "create_engine", fake_create_engine)
     return box
 
 
 def test_build_mssql_engine_injects_pyodbc_driver_when_missing(captured):
-    adapter.build_mssql_engine(
+    impl.build_mssql_engine(
         "mssql://host:1433/db",
         _credentials(),
         connect_args=None,
@@ -82,7 +80,7 @@ def test_build_mssql_engine_injects_pyodbc_driver_when_missing(captured):
 
 
 def test_build_mssql_engine_preserves_explicit_driver(captured):
-    adapter.build_mssql_engine(
+    impl.build_mssql_engine(
         "mssql+pymssql://host:1433/db",
         _credentials(),
         connect_args=None,
@@ -91,7 +89,7 @@ def test_build_mssql_engine_preserves_explicit_driver(captured):
 
 
 def test_build_mssql_engine_accepts_secret_uri(captured):
-    adapter.build_mssql_engine(
+    impl.build_mssql_engine(
         Secret.lit("mssql://host:1433/db"),
         _credentials(),
         connect_args=None,
@@ -100,7 +98,7 @@ def test_build_mssql_engine_accepts_secret_uri(captured):
 
 
 def test_build_mssql_engine_passes_connect_args(captured):
-    adapter.build_mssql_engine(
+    impl.build_mssql_engine(
         "mssql://host/db",
         _credentials(),
         connect_args={"timeout": 10},
@@ -109,7 +107,7 @@ def test_build_mssql_engine_passes_connect_args(captured):
 
 
 def test_build_mssql_engine_with_no_connect_args_passes_empty_dict(captured):
-    adapter.build_mssql_engine(
+    impl.build_mssql_engine(
         "mssql://host/db",
         _credentials(),
         connect_args=None,
@@ -138,13 +136,13 @@ _ODBC_URI = (
 
 
 def test_is_odbc_connection_string_distinguishes_url_from_odbc():
-    assert adapter._is_odbc_connection_string(_ODBC_URI) is True
-    assert adapter._is_odbc_connection_string("mssql://host/db") is False
-    assert adapter._is_odbc_connection_string("mssql+pyodbc://host/db") is False
+    assert impl._is_odbc_connection_string(_ODBC_URI) is True
+    assert impl._is_odbc_connection_string("mssql://host/db") is False
+    assert impl._is_odbc_connection_string("mssql+pyodbc://host/db") is False
 
 
 def test_build_mssql_engine_wraps_odbc_string_via_odbc_connect(captured):
-    adapter.build_mssql_engine(
+    impl.build_mssql_engine(
         _ODBC_URI,
         _credentials(),
         connect_args=None,
@@ -162,7 +160,7 @@ def test_build_mssql_engine_wraps_odbc_string_via_odbc_connect(captured):
 
 
 def test_build_mssql_engine_odbc_injects_uid_pwd_into_connect_args(captured):
-    adapter.build_mssql_engine(
+    impl.build_mssql_engine(
         _ODBC_URI,
         _credentials(),
         connect_args=None,
@@ -172,9 +170,9 @@ def test_build_mssql_engine_odbc_injects_uid_pwd_into_connect_args(captured):
 
 
 def test_build_mssql_engine_odbc_caller_uid_pwd_take_precedence(captured):
-    # The adapter uses ``setdefault`` for UID / PWD, so explicit
+    # The impl uses ``setdefault`` for UID / PWD, so explicit
     # ``connect_args`` win over the credentials-derived defaults.
-    adapter.build_mssql_engine(
+    impl.build_mssql_engine(
         _ODBC_URI,
         _credentials(),
         connect_args={"UID": "override-user", "PWD": "override-pass"},
@@ -184,7 +182,7 @@ def test_build_mssql_engine_odbc_caller_uid_pwd_take_precedence(captured):
 
 
 def test_build_mssql_engine_odbc_accepts_secret_uri(captured):
-    adapter.build_mssql_engine(
+    impl.build_mssql_engine(
         Secret.lit(_ODBC_URI),
         _credentials(),
         connect_args=None,
@@ -200,11 +198,11 @@ def test_build_mssql_engine_odbc_accepts_secret_uri(captured):
 
 
 def test_mssql_read_cfg_subclasses_sql_read_cfg():
-    assert issubclass(adapter.MSSQLReadCfg, SqlReadCfg)
+    assert issubclass(impl.MSSQLReadCfg, SqlReadCfg)
 
 
 def test_mssql_read_cfg_creates_engine_from_conn(captured):
-    cfg = adapter.MSSQLReadCfg(
+    cfg = impl.MSSQLReadCfg(
         conn=_conn(),
         queries=["SELECT 1"],
         transactional=True,
@@ -219,11 +217,11 @@ def test_mssql_read_cfg_creates_engine_from_conn(captured):
 
 
 def test_mssql_write_cfg_subclasses_sql_write_cfg():
-    assert issubclass(adapter.MSSQLWriteCfg, SqlWriteCfg)
+    assert issubclass(impl.MSSQLWriteCfg, SqlWriteCfg)
 
 
 def test_mssql_write_cfg_creates_engine_from_conn(captured):
-    cfg = adapter.MSSQLWriteCfg(
+    cfg = impl.MSSQLWriteCfg(
         conn=_conn(),
         target_tables=["t"],
         if_table_exists="append",
@@ -240,7 +238,7 @@ def test_mssql_read_cfg_no_conn_cfg_forwards_empty_connect_args(captured):
         uri="mssql://host/db",
         credentials=_credentials(),
     )
-    cfg = adapter.MSSQLReadCfg(
+    cfg = impl.MSSQLReadCfg(
         conn=conn,
         queries=["SELECT 1"],
         transactional=True,
@@ -258,14 +256,14 @@ def test_mssql_read_cfg_no_conn_cfg_forwards_empty_connect_args(captured):
 
 
 def test_read_defaults_pick_polars_with_pandas_allowed():
-    d = adapter.MSSQL_READ_DEFAULTS
+    d = impl.MSSQL_READ_DEFAULTS
     assert d[const.READ_ENGINE_KEY] == const.POLARS_SQL_ALCHEMY_READ_ENGINE
     assert const.POLARS_SQL_ALCHEMY_READ_ENGINE in d[const.AVAIL_READ_ENGINES_KEY]
     assert const.PANDAS_SQL_ALCHEMY_READ_ENGINE in d[const.AVAIL_READ_ENGINES_KEY]
 
 
 def test_write_defaults_pick_polars_only():
-    d = adapter.MSSQL_WRITE_DEFAULTS
+    d = impl.MSSQL_WRITE_DEFAULTS
     assert d[const.WRITE_ENGINE_KEY] == const.POLARS_SQL_ALCHEMY_WRITE_ENGINE
     assert d[const.AVAIL_WRITE_ENGINES_KEY] == [
         const.POLARS_SQL_ALCHEMY_WRITE_ENGINE,

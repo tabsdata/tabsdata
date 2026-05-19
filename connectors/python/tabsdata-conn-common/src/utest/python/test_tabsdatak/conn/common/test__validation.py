@@ -41,6 +41,29 @@ def test_fqn_def_is_frozen():
         spec.separator = ","  # type: ignore[misc]
 
 
+def test_fqn_def_accepts_asymmetric_brackets():
+    spec = FqnDef(separator=".", quote="[", close_quote="]")
+    assert spec.quote == "["
+    assert spec.close_quote == "]"
+
+
+def test_fqn_def_accepts_asymmetric_brackets_with_doubled_close_escape():
+    spec = FqnDef(separator=".", quote="[", close_quote="]", escape="]")
+    assert spec.quote == "["
+    assert spec.close_quote == "]"
+    assert spec.escape == "]"
+
+
+def test_fqn_def_rejects_close_quote_without_quote():
+    with pytest.raises(ConnInitException, match=r"close_quote requires"):
+        FqnDef(separator=".", close_quote="]")
+
+
+def test_fqn_def_rejects_empty_close_quote():
+    with pytest.raises(ConnInitException, match="quote, when set, must be non-empty"):
+        FqnDef(separator=".", quote="[", close_quote="")
+
+
 # ---------------------------------------------------------------------------
 # _validation.fqn -- per-part quoting
 # ---------------------------------------------------------------------------
@@ -125,6 +148,50 @@ def test_fqn_outer_only_rejects_quote_in_element_without_escape():
     spec = FqnDef(separator=".", quote="`", outer_only=True)
     with pytest.raises(ValueError, match="quote .* no escape defined"):
         fqn(["a`b", "c"], spec)
+
+
+# ---------------------------------------------------------------------------
+# _validation.fqn -- asymmetric (open / close) quoting
+# ---------------------------------------------------------------------------
+
+
+def test_fqn_asymmetric_brackets_per_part():
+    spec = FqnDef(separator=".", quote="[", close_quote="]")
+    assert fqn(["a", "b", "c"], spec) == "[a].[b].[c]"
+
+
+def test_fqn_asymmetric_brackets_with_doubled_close_escape():
+    spec = FqnDef(separator=".", quote="[", close_quote="]", escape="]")
+    assert fqn(["a]b", "c"], spec) == "[a]]b].[c]"
+
+
+def test_fqn_asymmetric_brackets_open_inside_part_is_literal():
+    # ``[`` is the open delimiter only; literal ``[`` inside the body
+    # passes through untouched -- the parser stops on ``]``.
+    spec = FqnDef(separator=".", quote="[", close_quote="]", escape="]")
+    assert fqn(["a[b", "c"], spec) == "[a[b].[c]"
+
+
+def test_fqn_asymmetric_brackets_passthrough_already_wrapped():
+    spec = FqnDef(separator=".", quote="[", close_quote="]", escape="]")
+    assert fqn(["[a]", "[b]"], spec) == "[a].[b]"
+
+
+def test_fqn_asymmetric_brackets_rejects_close_without_escape():
+    spec = FqnDef(separator=".", quote="[", close_quote="]")
+    with pytest.raises(ValueError, match=r"contains quote"):
+        fqn(["a]b", "c"], spec)
+
+
+def test_fqn_asymmetric_brackets_outer_only():
+    spec = FqnDef(
+        separator=".",
+        quote="[",
+        close_quote="]",
+        escape="]",
+        outer_only=True,
+    )
+    assert fqn(["proj", "ds", "tbl"], spec) == "[proj.ds.tbl]"
 
 
 def test_fqn_rejects_empty_parts_list():
@@ -321,6 +388,64 @@ def test_unfqn_outer_only_rejects_too_short():
 
 
 # ---------------------------------------------------------------------------
+# _validation.unfqn -- asymmetric (open / close) quoting
+# ---------------------------------------------------------------------------
+
+
+def test_unfqn_asymmetric_brackets_all_quoted():
+    spec = FqnDef(separator=".", quote="[", close_quote="]")
+    assert unfqn("[a].[b].[c]", spec) == ["a", "b", "c"]
+
+
+def test_unfqn_asymmetric_brackets_mixed_bare_and_quoted():
+    spec = FqnDef(separator=".", quote="[", close_quote="]")
+    assert unfqn("[a-1].b.[c]", spec) == ["a-1", "b", "c"]
+
+
+def test_unfqn_asymmetric_brackets_separator_inside_quoted():
+    spec = FqnDef(separator=".", quote="[", close_quote="]")
+    assert unfqn("[a.b].c", spec) == ["a.b", "c"]
+
+
+def test_unfqn_asymmetric_brackets_doubled_close_escape_unescapes():
+    spec = FqnDef(separator=".", quote="[", close_quote="]", escape="]")
+    assert unfqn("[a]]b].[c]", spec) == ["a]b", "c"]
+
+
+def test_unfqn_asymmetric_brackets_open_inside_quoted_is_literal():
+    spec = FqnDef(separator=".", quote="[", close_quote="]", escape="]")
+    assert unfqn("[a[b].[c]", spec) == ["a[b", "c"]
+
+
+def test_unfqn_asymmetric_brackets_rejects_unterminated():
+    spec = FqnDef(separator=".", quote="[", close_quote="]")
+    with pytest.raises(ValueError, match="unterminated quoted identifier"):
+        unfqn("[malformed", spec)
+
+
+def test_unfqn_asymmetric_brackets_outer_only():
+    spec = FqnDef(
+        separator=".",
+        quote="[",
+        close_quote="]",
+        escape="]",
+        outer_only=True,
+    )
+    assert unfqn("[proj.ds.tbl]", spec) == ["proj", "ds", "tbl"]
+
+
+def test_unfqn_asymmetric_brackets_outer_only_rejects_missing_close():
+    spec = FqnDef(
+        separator=".",
+        quote="[",
+        close_quote="]",
+        outer_only=True,
+    )
+    with pytest.raises(ValueError, match="must be wrapped"):
+        unfqn("[proj.ds.tbl", spec)
+
+
+# ---------------------------------------------------------------------------
 # _validation.unfqn -- total_parts left-padding
 # ---------------------------------------------------------------------------
 
@@ -391,6 +516,22 @@ def test_unfqn_total_parts_rejects_negative():
         (FqnDef(separator=".", quote='"', escape='"'), ['weird"name', "x"]),
         (FqnDef(separator=".", quote="`", outer_only=True), ["proj", "ds", "tbl"]),
         (FqnDef(separator=":", quote="'", escape="\\"), ["a:b", "c'd", "e"]),
+        (
+            FqnDef(separator=".", quote="[", close_quote="]", escape="]"),
+            ["db", "schema", "table"],
+        ),
+        (
+            FqnDef(separator=".", quote="[", close_quote="]", escape="]"),
+            ["my db", "my schema", "my table"],
+        ),
+        (
+            FqnDef(separator=".", quote="[", close_quote="]", escape="]"),
+            ["a]b", "c"],
+        ),
+        (
+            FqnDef(separator=".", quote="[", close_quote="]", escape="]", outer_only=True),
+            ["proj", "ds", "tbl"],
+        ),
     ],
 )
 def test_fqn_unfqn_round_trip(spec, parts):
@@ -494,6 +635,18 @@ def test_name_validate_each_call_returns_fresh_validator():
     v1 = name_validate(FqnDef(separator=".", quote="`"), max_parts=3)
     v2 = name_validate(FqnDef(separator=".", quote="`"), max_parts=3)
     assert v1 is not v2
+
+
+def test_name_validate_works_with_asymmetric_bracket_spec():
+    from tabsdatak.conn.common._validation import name_validate
+    spec = FqnDef(separator=".", quote="[", close_quote="]", escape="]")
+    v = name_validate(spec, max_parts=3)
+    assert v.func("[db].[schema].[table]") == "[db].[schema].[table]"
+    assert v.func("db.schema.table") == "db.schema.table"
+    with pytest.raises(ValueError, match="exceeds max_parts=3"):
+        v.func("a.b.c.d")
+    with pytest.raises(ValueError, match="unterminated quoted identifier"):
+        v.func("[unterminated")
 
 
 # ---------------------------------------------------------------------------

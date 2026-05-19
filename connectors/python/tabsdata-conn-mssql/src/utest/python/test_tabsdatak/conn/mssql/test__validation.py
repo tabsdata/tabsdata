@@ -1,82 +1,18 @@
 from __future__ import annotations
 
+import re
+
 import pytest
 
-from tabsdatak.conn.common.error import ConnInitException
 # noinspection PyProtectedMember
 from tabsdatak.conn.mssql import _validation
-from tabsdatak.conn.mssql.error import MssqlErrorCode
 
 
 pytestmark = pytest.mark.mssql
 
 
 # ---------------------------------------------------------------------------
-# Identifier
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "value",
-    [
-        "users",
-        "_t",
-        "@var",
-        "#temp",
-        "[weird name]",
-        '"weird name"',
-    ],
-)
-def test_validate_identifier_accepts_valid(value):
-    assert _validation.validate_identifier(value) == value
-
-
-def test_validate_identifier_rejects_empty():
-    with pytest.raises(ConnInitException) as ei:
-        _validation.validate_identifier("")
-    assert ei.value.api_error is MssqlErrorCode.MSSQL_5
-
-
-def test_validate_identifier_rejects_too_long():
-    with pytest.raises(ConnInitException) as ei:
-        _validation.validate_identifier("a" * 129)
-    assert ei.value.api_error is MssqlErrorCode.MSSQL_11
-
-
-def test_validate_identifier_rejects_bracket_with_unescaped_close():
-    with pytest.raises(ConnInitException) as ei:
-        _validation.validate_identifier("[bad]name]")
-    assert ei.value.api_error is MssqlErrorCode.MSSQL_12
-
-
-def test_validate_identifier_rejects_bracket_empty():
-    with pytest.raises(ConnInitException) as ei:
-        _validation.validate_identifier("[]")
-    assert ei.value.api_error is MssqlErrorCode.MSSQL_13
-
-
-def test_validate_identifier_rejects_double_quoted_with_unescaped_quote():
-    # Body with an unescaped " mid-string (escape pattern is "").
-    with pytest.raises(ConnInitException) as ei:
-        _validation.validate_identifier('"a"b"')
-    assert ei.value.api_error is MssqlErrorCode.MSSQL_14
-
-
-def test_validate_identifier_rejects_double_quoted_empty():
-    with pytest.raises(ConnInitException) as ei:
-        _validation.validate_identifier('""')
-    assert ei.value.api_error is MssqlErrorCode.MSSQL_15
-
-
-@pytest.mark.parametrize("value", ["1users", "user-name", "user.name", "with space"])
-def test_validate_identifier_rejects_regular_bad_shape(value):
-    with pytest.raises(ConnInitException) as ei:
-        _validation.validate_identifier(value)
-    assert ei.value.api_error is MssqlErrorCode.MSSQL_16
-
-
-# ---------------------------------------------------------------------------
-# URI
+# URI pattern
 # ---------------------------------------------------------------------------
 
 
@@ -86,20 +22,6 @@ def test_validate_identifier_rejects_regular_bad_shape(value):
         "mssql://host:1433/db",
         "mssql+pyodbc://host/db",
         "MSSQL://host/db",
-    ],
-)
-def test_validate_uri_accepts_valid(value):
-    assert _validation.validate_uri(value) == value
-
-
-# ODBC key=value connection strings: the validator only checks that
-# the input starts with a ``<KEY>=`` (alphanumeric / space key), since
-# pyodbc parses the full string itself. These shapes are what
-# ``_adapter.build_mssql_engine`` routes through the
-# ``mssql+pyodbc:///?odbc_connect=<encoded>`` branch.
-@pytest.mark.parametrize(
-    "value",
-    [
         "DRIVER=ODBC Driver 18 for SQL Server;"
         "SERVER=db.example.com,1433;"
         "Database=analytics;"
@@ -109,8 +31,8 @@ def test_validate_uri_accepts_valid(value):
         "Driver=ODBC Driver 18 for SQL Server;Server=host\\instance;Database=db",
     ],
 )
-def test_validate_uri_accepts_odbc_connection_string(value):
-    assert _validation.validate_uri(value) == value
+def test_mssql_uri_pattern_accepts_valid(value):
+    assert re.fullmatch(_validation.MSSQL_URI_PATTERN, value) is not None
 
 
 @pytest.mark.parametrize(
@@ -123,10 +45,8 @@ def test_validate_uri_accepts_odbc_connection_string(value):
         "://host/db",
     ],
 )
-def test_validate_uri_rejects_invalid(value):
-    with pytest.raises(ConnInitException) as ei:
-        _validation.validate_uri(value)
-    assert ei.value.api_error is MssqlErrorCode.MSSQL_17
+def test_mssql_uri_pattern_rejects_invalid(value):
+    assert re.fullmatch(_validation.MSSQL_URI_PATTERN, value) is None
 
 
 # ---------------------------------------------------------------------------
@@ -141,26 +61,35 @@ def test_validate_uri_rejects_invalid(value):
         "dbo.users",
         "mydb.dbo.users",
         "[my db].[my schema].[my table]",
+        "[bad]]name]",
     ],
 )
-def test_validate_table_fqn_accepts_valid(value):
-    assert _validation.validate_table_fqn(value) == value
+def test_mssql_table_fqn_validator_accepts_valid(value):
+    assert _validation.MSSQL_TABLE_FQN_VALIDATOR.func(value) == value
 
 
-def test_validate_table_fqn_rejects_bad_arity():
-    with pytest.raises(ConnInitException) as ei:
-        _validation.validate_table_fqn("a.b.c.d")
-    assert ei.value.api_error is MssqlErrorCode.MSSQL_19
+def test_mssql_table_fqn_validator_rejects_too_many_parts():
+    with pytest.raises(ValueError, match="exceeds max_parts=3"):
+        _validation.MSSQL_TABLE_FQN_VALIDATOR.func("a.b.c.d")
 
 
-def test_validate_table_fqn_rejects_unterminated_bracket():
-    # split_fqn_brackets raises ValueError when a bracket is left open.
-    with pytest.raises(ConnInitException) as ei:
-        _validation.validate_table_fqn("[db.users")
-    assert ei.value.api_error is MssqlErrorCode.MSSQL_18
+def test_mssql_table_fqn_validator_rejects_unterminated_bracket():
+    with pytest.raises(ValueError, match="unterminated quoted identifier"):
+        _validation.MSSQL_TABLE_FQN_VALIDATOR.func("[db.users")
 
 
-def test_validate_table_fqn_propagates_part_validators():
-    with pytest.raises(ConnInitException) as ei:
-        _validation.validate_table_fqn("1bad.users")
-    assert ei.value.api_error is MssqlErrorCode.MSSQL_16
+def test_mssql_table_fqn_validator_double_quoted_form_no_longer_unwrapped():
+    # MSSQL's bracket convention is canonical for this connector; the
+    # legacy double-quoted form (``"name"``) is no longer treated as a
+    # quoted identifier. The dots inside still drive splitting, so a
+    # 4-segment value like ``"a.b.c.d"`` overflows max_parts=3.
+    with pytest.raises(ValueError, match="exceeds max_parts=3"):
+        _validation.MSSQL_TABLE_FQN_VALIDATOR.func('"a.b.c.d"')
+
+
+def test_mssql_fqn_def_uses_brackets_with_doubled_close_escape():
+    assert _validation._MSSQL_FQN_DEF.separator == "."
+    assert _validation._MSSQL_FQN_DEF.quote == "["
+    assert _validation._MSSQL_FQN_DEF.close_quote == "]"
+    assert _validation._MSSQL_FQN_DEF.escape == "]"
+    assert _validation._MSSQL_FQN_DEF.outer_only is False
