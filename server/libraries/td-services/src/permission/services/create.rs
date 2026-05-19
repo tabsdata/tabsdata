@@ -84,8 +84,8 @@ mod tests {
         AccessTokenId, CollectionName, Description, EntityName, PermissionType, RoleId, RoleName,
         UserId,
     };
-    use td_queries::BasicQueries;
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::LiveEntry;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -158,7 +158,7 @@ mod tests {
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
-        let found = db.fetch_one::<PermissionDB>(&response.id).await?;
+        let found = db.live().fetch_one::<PermissionDB>(&response.id).await?;
         assert_eq!(response.id, found.id);
         assert_eq!(response.role_id, found.role_id);
         assert_eq!(response.permission_type, found.permission_type);
@@ -179,19 +179,22 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let coll0 = db
-            .seed_collection(&CollectionName::try_from("c0")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
         let role = db
-            .seed_role(RoleName::try_from("r0")?, Description::try_from("d")?)
+            .seed()
+            .role(RoleName::try_from("r0")?, Description::try_from("d")?)
             .await?;
         let entity_id: EntityId = coll0.id.try_into()?;
-        db.seed_permission(
-            PermissionType::CollectionAdmin,
-            Some(EntityName::try_from("c0")?),
-            Some(entity_id),
-            &role,
-        )
-        .await?;
+        db.seed()
+            .permission(
+                PermissionType::CollectionAdmin,
+                Some(EntityName::try_from("c0")?),
+                Some(entity_id),
+                &role,
+            )
+            .await?;
 
         let create = PermissionCreate::builder()
             .permission_type(PermissionType::CollectionRead)
@@ -211,7 +214,7 @@ mod tests {
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
-        let found = db.fetch_one::<PermissionDB>(&response.id).await?;
+        let found = db.live().fetch_one::<PermissionDB>(&response.id).await?;
         assert_eq!(response.id, found.id);
         assert_eq!(response.role_id, found.role_id);
         assert_eq!(response.permission_type, found.permission_type);
@@ -232,22 +235,26 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let coll0 = db
-            .seed_collection(&CollectionName::try_from("c0")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
         let _ = db
-            .seed_collection(&CollectionName::try_from("c1")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("c1")?, &UserId::admin())
             .await?;
         let role = db
-            .seed_role(RoleName::try_from("r0")?, Description::try_from("d")?)
+            .seed()
+            .role(RoleName::try_from("r0")?, Description::try_from("d")?)
             .await?;
         let entity_id: EntityId = coll0.id.try_into()?;
-        db.seed_permission(
-            PermissionType::CollectionAdmin,
-            Some(EntityName::try_from("c0")?),
-            Some(entity_id),
-            &role,
-        )
-        .await?;
+        db.seed()
+            .permission(
+                PermissionType::CollectionAdmin,
+                Some(EntityName::try_from("c0")?),
+                Some(entity_id),
+                &role,
+            )
+            .await?;
 
         let create = PermissionCreate::builder()
             .permission_type(PermissionType::CollectionRead)

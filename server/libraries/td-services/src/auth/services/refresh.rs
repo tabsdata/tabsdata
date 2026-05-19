@@ -79,7 +79,7 @@ mod tests {
     use td_objects::Buildable;
     use td_objects::dxo::auth::Login;
     use td_objects::types::basic::{Password, RoleName, SessionStatus, UserName};
-    use td_queries::BasicQueries;
+    use td_queries::LiveEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -159,6 +159,7 @@ mod tests {
         assert_session(&db, &Some(access_token_id)).await;
 
         let session = db
+            .live()
             .fetch_optional::<SessionDB>(original_access_token_id)
             .await?;
         match session {

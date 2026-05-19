@@ -55,8 +55,8 @@ mod tests {
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::types::basic::{AccessTokenId, Description, RoleName, UserEnabled, UserName};
-    use td_queries::BasicQueries;
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::LiveEntry;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -89,18 +89,20 @@ mod tests {
     #[tokio::test]
     async fn test_delete_user_role(db: TdPool) -> Result<(), TdError> {
         let user = db
-            .seed_user(
+            .seed()
+            .user(
                 &UserName::try_from("joaquin").unwrap(),
                 &UserEnabled::from(true),
             )
             .await?;
         let role = db
-            .seed_role(
+            .seed()
+            .role(
                 RoleName::try_from("king")?,
                 Description::try_from("super user")?,
             )
             .await?;
-        let user_role = db.seed_user_role(&user.id, &role.id).await?;
+        let user_role = db.seed().user_role(&user.id, &role.id).await?;
 
         let request = RequestContext::with(
             AccessTokenId::default(),
@@ -117,7 +119,7 @@ mod tests {
         let service = DeleteUserRoleService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
 
-        let not_found = db.fetch_one::<UserRoleDB>(&user_role.id).await;
+        let not_found = db.live().fetch_one::<UserRoleDB>(&user_role.id).await;
         assert!(not_found.is_err());
         Ok(())
     }

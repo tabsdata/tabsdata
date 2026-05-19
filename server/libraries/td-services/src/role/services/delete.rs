@@ -61,8 +61,8 @@ mod tests {
     use td_objects::types::basic::{
         AccessTokenId, Description, PermissionType, RoleName, UserEnabled, UserId, UserName,
     };
-    use td_queries::BasicQueries;
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::LiveEntry;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -111,7 +111,8 @@ mod tests {
     async fn setup_roles(db: &TdPool) -> (RoleDB, RoleDB) {
         // Users
         let user = db
-            .seed_user(
+            .seed()
+            .user(
                 &UserName::try_from("joaquin").unwrap(),
                 &UserEnabled::from(true),
             )
@@ -120,14 +121,16 @@ mod tests {
 
         // Roles
         let hero_role = db
-            .seed_role(
+            .seed()
+            .role(
                 RoleName::try_from("hero").unwrap(),
                 Description::try_from("Hero Role").unwrap(),
             )
             .await
             .unwrap();
         let villain_role = db
-            .seed_role(
+            .seed()
+            .role(
                 RoleName::try_from("villain").unwrap(),
                 Description::try_from("Villain Role").unwrap(),
             )
@@ -135,12 +138,17 @@ mod tests {
             .unwrap();
 
         // User Roles
-        let _user_hero_role = db.seed_user_role(&user.id, &hero_role.id).await.unwrap();
-        let _user_hero_role = db.seed_user_role(&user.id, &villain_role.id).await.unwrap();
+        let _user_hero_role = db.seed().user_role(&user.id, &hero_role.id).await.unwrap();
+        let _user_hero_role = db
+            .seed()
+            .user_role(&user.id, &villain_role.id)
+            .await
+            .unwrap();
 
         // Permissions
         let _hero_permissions = db
-            .seed_permission(
+            .seed()
+            .permission(
                 PermissionType::try_from("cr").unwrap(),
                 None,
                 None,
@@ -149,7 +157,8 @@ mod tests {
             .await
             .unwrap();
         let _villain_permissions = db
-            .seed_permission(
+            .seed()
+            .permission(
                 PermissionType::try_from("cr").unwrap(),
                 None,
                 None,
@@ -172,21 +181,27 @@ mod tests {
         service.raw_oneshot(request).await?;
 
         // Assert just one of the roles in the db got deleted
-        let found = db.fetch_all::<RoleDB>(&role_id_name).await?;
+        let found = db.live().fetch_all::<RoleDB>(&role_id_name).await?;
         assert!(found.is_empty());
-        let found = db.fetch_all::<RoleDB>(()).await?;
+        let found = db.live().fetch_all::<RoleDB>(()).await?;
         assert!(!found.is_empty());
 
         // Assert that associated user roles got deleted, but not others
-        let found = db.fetch_all::<UserRoleDBWithNames>(&role_id_name).await?;
+        let found = db
+            .live()
+            .fetch_all::<UserRoleDBWithNames>(&role_id_name)
+            .await?;
         assert!(found.is_empty());
-        let found = db.fetch_all::<UserRoleDBWithNames>(()).await?;
+        let found = db.live().fetch_all::<UserRoleDBWithNames>(()).await?;
         assert!(!found.is_empty());
 
         // Assert that associated role permissions got deleted, but not others
-        let found = db.fetch_all::<PermissionDBWithNames>(&role_id_name).await?;
+        let found = db
+            .live()
+            .fetch_all::<PermissionDBWithNames>(&role_id_name)
+            .await?;
         assert!(found.is_empty());
-        let found = db.fetch_all::<PermissionDBWithNames>(()).await?;
+        let found = db.live().fetch_all::<PermissionDBWithNames>(()).await?;
         assert!(!found.is_empty());
 
         Ok(())

@@ -54,8 +54,8 @@ mod tests {
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::types::basic::{AccessTokenId, Description, RoleName, UserId};
-    use td_queries::BasicQueries;
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::LiveEntry;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -96,7 +96,8 @@ mod tests {
     #[tokio::test]
     async fn test_update_role(db: TdPool) -> Result<(), TdError> {
         let _role = db
-            .seed_role(
+            .seed()
+            .role(
                 RoleName::try_from("joaquin")?,
                 Description::try_from("super user")?,
             )
@@ -124,11 +125,13 @@ mod tests {
         let response = response?;
 
         let not_found = db
+            .live()
             .fetch_one::<RoleDB>(&RoleName::try_from("joaquin")?)
             .await;
         assert!(not_found.is_err());
 
         let found = db
+            .live()
             .fetch_one::<RoleDB>(&RoleName::try_from("not_joaquin_anymore")?)
             .await?;
         assert_eq!(response.id, found.id);

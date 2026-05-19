@@ -62,8 +62,8 @@ mod tests {
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::types::basic::{AccessTokenId, Description, RoleName, UserEnabled};
-    use td_queries::BasicQueries;
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::LiveEntry;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -111,10 +111,12 @@ mod tests {
     #[tokio::test]
     async fn test_create_user_role(db: TdPool) -> Result<(), TdError> {
         let _user = db
-            .seed_user(&UserName::try_from("joaquin")?, &UserEnabled::from(false))
+            .seed()
+            .user(&UserName::try_from("joaquin")?, &UserEnabled::from(false))
             .await;
         let _role = db
-            .seed_role(
+            .seed()
+            .role(
                 RoleName::try_from("king")?,
                 Description::try_from("super user")?,
             )
@@ -140,7 +142,7 @@ mod tests {
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
-        let found = db.fetch_one::<UserRoleDB>(&response.id).await?;
+        let found = db.live().fetch_one::<UserRoleDB>(&response.id).await?;
         assert_eq!(response.id, found.id);
         assert_eq!(response.user_id, found.user_id);
         assert_eq!(response.role_id, found.role_id);

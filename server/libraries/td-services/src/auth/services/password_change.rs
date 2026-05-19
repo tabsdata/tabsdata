@@ -95,7 +95,7 @@ mod tests {
     use td_objects::dxo::auth::{Login, PasswordChange};
     use td_objects::types::basic::AccessTokenId;
     use td_objects::types::basic::{Password, RoleName, SessionStatus};
-    use td_queries::BasicQueries;
+    use td_queries::LiveEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -178,7 +178,10 @@ mod tests {
         let res = service.raw_oneshot(request).await;
         assert!(res.is_ok());
 
-        let session = db.fetch_optional::<SessionDB>(access_token_id).await?;
+        let session = db
+            .live()
+            .fetch_optional::<SessionDB>(access_token_id)
+            .await?;
         match session {
             Some(session) => {
                 assert_eq!(session.status, SessionStatus::InvalidPasswordChange);

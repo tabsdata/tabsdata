@@ -67,7 +67,7 @@ mod tests {
     use td_database::pool::TdPool;
     use td_objects::Buildable;
     use td_objects::types::basic::{AccessTokenId, Email, FullName, RoleId, UserEnabled, UserName};
-    use td_queries::BasicQueries;
+    use td_queries::LiveEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -159,7 +159,11 @@ mod tests {
         assert_eq!(created.modified_by, UserName::admin());
         assert_eq!(*created.enabled, expected_enabled);
 
-        let res: Option<UserRoleDB> = db.fetch_optional::<UserRoleDB>(&created.id).await.unwrap();
+        let res: Option<UserRoleDB> = db
+            .live()
+            .fetch_optional::<UserRoleDB>(&created.id)
+            .await
+            .unwrap();
         assert!(res.is_some());
         assert_eq!(RoleId::user(), res.unwrap().role_id)
     }

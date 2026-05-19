@@ -57,7 +57,7 @@ mod tests {
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::rest_urls::CollectionParam;
     use td_objects::types::basic::{AccessTokenId, CollectionName, RoleId, UserId};
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -95,12 +95,15 @@ mod tests {
         let service = ListInterCollectionPermissionService::with_defaults(db.clone()).service();
 
         let c0 = db
-            .seed_collection(&CollectionName::try_from("c0")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
         let c1 = db
-            .seed_collection(&CollectionName::try_from("c1")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("c1")?, &UserId::admin())
             .await?;
-        db.seed_inter_collection_permission(&c0.id, &(*c1.id).into())
+        db.seed()
+            .inter_collection_permission(&c0.id, &(*c1.id).into())
             .await?;
 
         let request = RequestContext::with(
@@ -127,9 +130,11 @@ mod tests {
     async fn test_list_permission_authz_err(db: TdPool) -> Result<(), TdError> {
         let service = ListInterCollectionPermissionService::with_defaults(db.clone()).service();
 
-        db.seed_collection(&CollectionName::try_from("c0")?, &UserId::admin())
+        db.seed()
+            .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
-        db.seed_collection(&CollectionName::try_from("c1")?, &UserId::admin())
+        db.seed()
+            .collection(&CollectionName::try_from("c1")?, &UserId::admin())
             .await?;
 
         let request =

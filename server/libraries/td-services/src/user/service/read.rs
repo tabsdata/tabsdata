@@ -46,7 +46,7 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::rest_urls::UserParam;
     use td_objects::types::basic::{AccessTokenId, RoleId, UserEnabled, UserName};
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -76,7 +76,8 @@ mod tests {
     async fn test_read_user(db: TdPool) {
         let user_name = UserName::try_from("u0").unwrap();
         let user = db
-            .seed_user(&user_name, &UserEnabled::from(true))
+            .seed()
+            .user(&user_name, &UserEnabled::from(true))
             .await
             .unwrap();
 

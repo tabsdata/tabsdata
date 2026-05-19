@@ -84,8 +84,8 @@ mod tests {
         AccessTokenId, CollectionName, Description, EntityName, PermissionType, RoleId, RoleName,
         UserId,
     };
-    use td_queries::BasicQueries;
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::LiveEntry;
+    use td_queries::test_utils::SeedEntry;
     use td_security::{
         ENCODED_ID_CA_ALL_SEC_ADMIN, ENCODED_ID_SA_SYS_ADMIN, ENCODED_ID_SS_SEC_ADMIN,
     };
@@ -128,13 +128,15 @@ mod tests {
     #[tokio::test]
     async fn test_delete_permission(db: TdPool) -> Result<(), TdError> {
         let role = db
-            .seed_role(
+            .seed()
+            .role(
                 RoleName::try_from("king")?,
                 Description::try_from("super user")?,
             )
             .await?;
         let seeded = db
-            .seed_permission(PermissionType::SysAdmin, None, None, &role)
+            .seed()
+            .permission(PermissionType::SysAdmin, None, None, &role)
             .await?;
 
         let request = RequestContext::with(
@@ -152,7 +154,7 @@ mod tests {
         let service = DeletePermissionService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
 
-        let not_found = db.fetch_one::<PermissionDB>(&seeded.id).await;
+        let not_found = db.live().fetch_one::<PermissionDB>(&seeded.id).await;
         assert!(not_found.is_err());
         Ok(())
     }
@@ -163,22 +165,26 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let coll0 = db
-            .seed_collection(&CollectionName::try_from("c0")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
         let coll_admin_role = db
-            .seed_role(RoleName::try_from("r0")?, Description::try_from("d")?)
+            .seed()
+            .role(RoleName::try_from("r0")?, Description::try_from("d")?)
             .await?;
         let entity_id: EntityId = coll0.id.try_into()?;
-        db.seed_permission(
-            PermissionType::CollectionAdmin,
-            Some(EntityName::try_from("c0")?),
-            Some(entity_id),
-            &coll_admin_role,
-        )
-        .await?;
+        db.seed()
+            .permission(
+                PermissionType::CollectionAdmin,
+                Some(EntityName::try_from("c0")?),
+                Some(entity_id),
+                &coll_admin_role,
+            )
+            .await?;
 
         let role = db
-            .seed_role(RoleName::try_from("r1")?, Description::try_from("d")?)
+            .seed()
+            .role(RoleName::try_from("r1")?, Description::try_from("d")?)
             .await?;
 
         let request = RequestContext::with(
@@ -205,25 +211,30 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let coll0 = db
-            .seed_collection(&CollectionName::try_from("c0")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
         let coll_admin_role = db
-            .seed_role(RoleName::try_from("r0")?, Description::try_from("d")?)
+            .seed()
+            .role(RoleName::try_from("r0")?, Description::try_from("d")?)
             .await?;
         let entity_id: EntityId = coll0.id.try_into()?;
-        db.seed_permission(
-            PermissionType::CollectionAdmin,
-            Some(EntityName::try_from("c0")?),
-            Some(entity_id),
-            &coll_admin_role,
-        )
-        .await?;
+        db.seed()
+            .permission(
+                PermissionType::CollectionAdmin,
+                Some(EntityName::try_from("c0")?),
+                Some(entity_id),
+                &coll_admin_role,
+            )
+            .await?;
 
         let role = db
-            .seed_role(RoleName::try_from("r1")?, Description::try_from("d")?)
+            .seed()
+            .role(RoleName::try_from("r1")?, Description::try_from("d")?)
             .await?;
         let _ = db
-            .seed_collection(&CollectionName::try_from("c1")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("c1")?, &UserId::admin())
             .await?;
 
         let request = RequestContext::with(
@@ -254,21 +265,25 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let coll0 = db
-            .seed_collection(&CollectionName::try_from("c0")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
         let coll_admin_role = db
-            .seed_role(RoleName::try_from("r0")?, Description::try_from("d")?)
+            .seed()
+            .role(RoleName::try_from("r0")?, Description::try_from("d")?)
             .await?;
         let entity_id: EntityId = coll0.id.try_into()?;
-        db.seed_permission(
-            PermissionType::CollectionAdmin,
-            Some(EntityName::try_from("c0")?),
-            Some(entity_id),
-            &coll_admin_role,
-        )
-        .await?;
+        db.seed()
+            .permission(
+                PermissionType::CollectionAdmin,
+                Some(EntityName::try_from("c0")?),
+                Some(entity_id),
+                &coll_admin_role,
+            )
+            .await?;
         let _ = db
-            .seed_collection(&CollectionName::try_from("c1")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("c1")?, &UserId::admin())
             .await?;
 
         let request = RequestContext::with(
@@ -301,21 +316,25 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let coll0 = db
-            .seed_collection(&CollectionName::try_from("c0")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
         let role = db
-            .seed_role(RoleName::try_from("r0")?, Description::try_from("d")?)
+            .seed()
+            .role(RoleName::try_from("r0")?, Description::try_from("d")?)
             .await?;
         let entity_id: EntityId = coll0.id.try_into()?;
-        db.seed_permission(
-            PermissionType::CollectionAdmin,
-            Some(EntityName::try_from("c0")?),
-            Some(entity_id),
-            &role,
-        )
-        .await?;
+        db.seed()
+            .permission(
+                PermissionType::CollectionAdmin,
+                Some(EntityName::try_from("c0")?),
+                Some(entity_id),
+                &role,
+            )
+            .await?;
         let coll_dev_perm = db
-            .seed_permission(
+            .seed()
+            .permission(
                 PermissionType::CollectionDev,
                 Some(EntityName::try_from("c0")?),
                 Some(entity_id),
@@ -334,7 +353,7 @@ mod tests {
         let service = DeletePermissionService::with_defaults(db.clone()).service();
         assert!(service.raw_oneshot(request).await.is_ok());
 
-        let not_found = db.fetch_one::<PermissionDB>(coll_dev_perm.id).await;
+        let not_found = db.live().fetch_one::<PermissionDB>(coll_dev_perm.id).await;
         assert!(not_found.is_err());
         Ok(())
     }
@@ -343,21 +362,25 @@ mod tests {
     #[tokio::test]
     async fn test_delete_permission_incorrect_role_err(db: TdPool) -> Result<(), TdError> {
         let coll0 = db
-            .seed_collection(&CollectionName::try_from("c0")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
         let role = db
-            .seed_role(RoleName::try_from("r0")?, Description::try_from("d")?)
+            .seed()
+            .role(RoleName::try_from("r0")?, Description::try_from("d")?)
             .await?;
         let entity_id: EntityId = coll0.id.try_into()?;
-        db.seed_permission(
-            PermissionType::CollectionAdmin,
-            Some(EntityName::try_from("c0")?),
-            Some(entity_id),
-            &role,
-        )
-        .await?;
+        db.seed()
+            .permission(
+                PermissionType::CollectionAdmin,
+                Some(EntityName::try_from("c0")?),
+                Some(entity_id),
+                &role,
+            )
+            .await?;
         let coll_dev_perm = db
-            .seed_permission(
+            .seed()
+            .permission(
                 PermissionType::CollectionDev,
                 Some(EntityName::try_from("c0")?),
                 Some(entity_id),
@@ -389,26 +412,32 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let coll0 = db
-            .seed_collection(&CollectionName::try_from("c0")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
         let coll1 = db
-            .seed_collection(&CollectionName::try_from("c1")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("c1")?, &UserId::admin())
             .await?;
         let role0 = db
-            .seed_role(RoleName::try_from("r0")?, Description::try_from("d")?)
+            .seed()
+            .role(RoleName::try_from("r0")?, Description::try_from("d")?)
             .await?;
         let role1 = db
-            .seed_role(RoleName::try_from("r1")?, Description::try_from("d")?)
+            .seed()
+            .role(RoleName::try_from("r1")?, Description::try_from("d")?)
             .await?;
-        db.seed_permission(
-            PermissionType::CollectionDev,
-            Some(EntityName::try_from("c0")?),
-            Some(coll0.id.try_into()?),
-            &role0,
-        )
-        .await?;
+        db.seed()
+            .permission(
+                PermissionType::CollectionDev,
+                Some(EntityName::try_from("c0")?),
+                Some(coll0.id.try_into()?),
+                &role0,
+            )
+            .await?;
         let perm1 = db
-            .seed_permission(
+            .seed()
+            .permission(
                 PermissionType::CollectionDev,
                 Some(EntityName::try_from("c1")?),
                 Some(coll1.id.try_into()?),
@@ -440,13 +469,16 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let _ = db
-            .seed_collection(&CollectionName::try_from("c0")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
         let role = db
-            .seed_role(RoleName::try_from("r0")?, Description::try_from("d")?)
+            .seed()
+            .role(RoleName::try_from("r0")?, Description::try_from("d")?)
             .await?;
         let coll_dev_perm = db
-            .seed_permission(
+            .seed()
+            .permission(
                 PermissionType::CollectionDev,
                 Some(EntityName::try_from("c0")?),
                 None,
@@ -481,7 +513,7 @@ mod tests {
             ENCODED_ID_CA_ALL_SEC_ADMIN,
         ]);
 
-        let permissions = db.fetch_all::<PermissionDB>(()).await?;
+        let permissions = db.live().fetch_all::<PermissionDB>(()).await?;
 
         for permission in permissions {
             let service = DeletePermissionService::with_defaults(db.clone()).service();

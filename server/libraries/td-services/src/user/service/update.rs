@@ -69,8 +69,8 @@ mod tests {
     use td_objects::types::basic::{
         AccessTokenId, Email, FullName, Password, RoleId, UserEnabled, UserName,
     };
-    use td_queries::BasicQueries;
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::LiveEntry;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -117,7 +117,8 @@ mod tests {
     #[tokio::test]
     async fn test_update_user_admin(db: TdPool) {
         let _ = db
-            .seed_user(&UserName::try_from("u0").unwrap(), &UserEnabled::from(true))
+            .seed()
+            .user(&UserName::try_from("u0").unwrap(), &UserEnabled::from(true))
             .await;
 
         let service = UpdateUserService::with_defaults(db.clone()).service();
@@ -165,7 +166,7 @@ mod tests {
         assert!(!*updated.enabled);
         assert!(*updated.password_must_change);
 
-        let user: UserDB = db.fetch_one::<UserDB>(()).await.unwrap();
+        let user: UserDB = db.live().fetch_one::<UserDB>(()).await.unwrap();
         assert!(*user.password_must_change)
     }
 
@@ -173,7 +174,8 @@ mod tests {
     #[tokio::test]
     async fn test_update_user_self(db: TdPool) {
         let user = db
-            .seed_user(&UserName::try_from("u0").unwrap(), &UserEnabled::from(true))
+            .seed()
+            .user(&UserName::try_from("u0").unwrap(), &UserEnabled::from(true))
             .await
             .unwrap();
 

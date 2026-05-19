@@ -13,13 +13,14 @@ use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::user::UserUpdate;
 use td_objects::rest_urls::UserParam;
 use td_objects::types::basic::{AccessTokenId, RoleId, UserEnabled, UserId, UserIdName, UserName};
-use td_queries::test_utils::SeedQueries;
+use td_queries::test_utils::SeedEntry;
 
 #[td_test::test(sqlx)]
 #[tokio::test]
 async fn test_update_request_has_nothing_to_update(db: TdPool) {
     let _ = db
-        .seed_user(
+        .seed()
+        .user(
             &UserName::try_from("u0").unwrap(),
             &UserEnabled::from(false),
         )

@@ -51,8 +51,8 @@ mod tests {
     use td_objects::dxo::user::UserDB;
     use td_objects::rest_urls::UserParam;
     use td_objects::types::basic::{AccessTokenId, RoleId, UserEnabled, UserName};
-    use td_queries::BasicQueries;
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::LiveEntry;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -83,7 +83,8 @@ mod tests {
     #[tokio::test]
     async fn test_delete_user(db: TdPool) {
         let user = db
-            .seed_user(&UserName::try_from("u0").unwrap(), &UserEnabled::from(true))
+            .seed()
+            .user(&UserName::try_from("u0").unwrap(), &UserEnabled::from(true))
             .await
             .unwrap();
 
@@ -104,12 +105,17 @@ mod tests {
         assert!(response.is_ok());
 
         let res: Option<UserDB> = db
+            .live()
             .fetch_optional::<UserDB>(&(&UserName::try_from("u0").unwrap()))
             .await
             .unwrap();
         assert!(res.is_none());
 
-        let res: Option<UserRoleDB> = db.fetch_optional::<UserRoleDB>(&user.id).await.unwrap();
+        let res: Option<UserRoleDB> = db
+            .live()
+            .fetch_optional::<UserRoleDB>(&user.id)
+            .await
+            .unwrap();
         assert!(res.is_none());
     }
 }

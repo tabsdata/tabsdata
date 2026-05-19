@@ -46,8 +46,8 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::role::RoleDB;
     use td_objects::types::basic::{AccessTokenId, Description, RoleId, RoleName, UserId};
-    use td_queries::BasicQueries;
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::LiveEntry;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -75,7 +75,8 @@ mod tests {
     #[tokio::test]
     async fn test_read_role_with_id(db: TdPool) -> Result<(), TdError> {
         let role = db
-            .seed_role(
+            .seed()
+            .role(
                 RoleName::try_from("joaquin")?,
                 Description::try_from("super user")?,
             )
@@ -96,6 +97,7 @@ mod tests {
         let response = service.raw_oneshot(request).await;
         let response = response?;
         let found = db
+            .live()
             .fetch_one::<RoleDB>(&RoleName::try_from("joaquin").unwrap())
             .await?;
         assert_eq!(response.id, found.id);
@@ -113,7 +115,8 @@ mod tests {
     #[tokio::test]
     async fn test_read_role_with_name(db: TdPool) -> Result<(), TdError> {
         let _role = db
-            .seed_role(
+            .seed()
+            .role(
                 RoleName::try_from("joaquin")?,
                 Description::try_from("super user")?,
             )
@@ -134,6 +137,7 @@ mod tests {
         let response = service.raw_oneshot(request).await;
         let response = response?;
         let found = db
+            .live()
             .fetch_one::<RoleDB>(&RoleName::try_from("joaquin").unwrap())
             .await?;
         assert_eq!(response.id, found.id);

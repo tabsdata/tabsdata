@@ -12,7 +12,7 @@ use td_objects::dxo::permission::{
 };
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{CollectionName, EntityId, PermissionEntityType, RoleIdName};
-use td_queries::BasicQueries;
+use td_queries::LiveEntry;
 use td_tower::default_services::Condition;
 use td_tower::extractors::{MutRef, Ref};
 
@@ -36,7 +36,10 @@ impl PermissionBuildService for With<PermissionDBBuilder> {
 
         let entity_id = if let Some(entity_name) = entity_name {
             let collection_name = CollectionName::try_from(entity_name.to_string())?;
-            let collection = conn.fetch_one::<CollectionDB>(&collection_name).await?;
+            let collection = conn
+                .live()
+                .fetch_one::<CollectionDB>(&collection_name)
+                .await?;
 
             EntityId::try_from(collection.id)?
         } else {

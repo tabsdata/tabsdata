@@ -52,7 +52,7 @@ mod tests {
     use td_objects::types::basic::{
         AccessTokenId, Description, EntityId, PermissionType, RoleName, UserId,
     };
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -82,13 +82,15 @@ mod tests {
     #[tokio::test]
     async fn test_list_permissions(db: TdPool) -> Result<(), TdError> {
         let role = db
-            .seed_role(
+            .seed()
+            .role(
                 RoleName::try_from("king")?,
                 Description::try_from("super user")?,
             )
             .await?;
         let seeded = db
-            .seed_permission(PermissionType::SysAdmin, None, None, &role)
+            .seed()
+            .permission(PermissionType::SysAdmin, None, None, &role)
             .await?;
 
         let request = RequestContext::with(

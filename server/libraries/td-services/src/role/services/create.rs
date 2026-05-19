@@ -50,7 +50,7 @@ mod tests {
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::types::basic::{AccessTokenId, RoleName, UserId};
-    use td_queries::BasicQueries;
+    use td_queries::LiveEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -98,7 +98,10 @@ mod tests {
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
-        let found = db.fetch_one::<RoleDB>(&RoleName::try_from("test")?).await?;
+        let found = db
+            .live()
+            .fetch_one::<RoleDB>(&RoleName::try_from("test")?)
+            .await?;
         assert_eq!(response.id, found.id);
         assert_eq!(response.name, found.name);
         assert_eq!(response.description, found.description);

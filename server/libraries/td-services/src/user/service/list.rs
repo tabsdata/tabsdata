@@ -41,7 +41,7 @@ mod tests {
     use td_database::pool::TdPool;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::types::basic::{AccessTokenId, RoleId, UserEnabled, UserName};
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -67,10 +67,12 @@ mod tests {
     #[tokio::test]
     async fn test_list_users(db: TdPool) {
         let _ = db
-            .seed_user(&UserName::try_from("u0").unwrap(), &UserEnabled::from(true))
+            .seed()
+            .user(&UserName::try_from("u0").unwrap(), &UserEnabled::from(true))
             .await;
         let user1 = db
-            .seed_user(&UserName::try_from("u1").unwrap(), &UserEnabled::from(true))
+            .seed()
+            .user(&UserName::try_from("u1").unwrap(), &UserEnabled::from(true))
             .await
             .unwrap();
 

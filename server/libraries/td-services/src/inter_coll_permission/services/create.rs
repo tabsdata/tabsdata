@@ -107,8 +107,8 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::rest_urls::CollectionParam;
     use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
-    use td_queries::BasicQueries;
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::LiveEntry;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -177,10 +177,12 @@ mod tests {
         let service = CreateInterCollectionPermissionService::with_defaults(db.clone()).service();
 
         let c0 = db
-            .seed_collection(&CollectionName::try_from("c0")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
         let c1 = db
-            .seed_collection(&CollectionName::try_from("c1")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("c1")?, &UserId::admin())
             .await?;
 
         let create = InterCollectionPermissionCreate::builder()
@@ -202,7 +204,10 @@ mod tests {
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
 
-        let found = db.fetch_all::<InterCollectionPermissionDB>(&c0.id).await?;
+        let found = db
+            .live()
+            .fetch_all::<InterCollectionPermissionDB>(&c0.id)
+            .await?;
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].from_collection_id, c0.id);
         assert_eq!(found[0].to_collection_id, ToCollectionId::try_from(c1.id)?);
@@ -214,7 +219,8 @@ mod tests {
     async fn test_create_permission_same_collection_err(db: TdPool) -> Result<(), TdError> {
         let service = CreateInterCollectionPermissionService::with_defaults(db.clone()).service();
 
-        db.seed_collection(&CollectionName::try_from("c0")?, &UserId::admin())
+        db.seed()
+            .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
 
         let create = InterCollectionPermissionCreate::builder()
@@ -246,9 +252,11 @@ mod tests {
     async fn test_create_permission_authz_err(db: TdPool) -> Result<(), TdError> {
         let service = CreateInterCollectionPermissionService::with_defaults(db.clone()).service();
 
-        db.seed_collection(&CollectionName::try_from("c0")?, &UserId::admin())
+        db.seed()
+            .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
-        db.seed_collection(&CollectionName::try_from("c1")?, &UserId::admin())
+        db.seed()
+            .collection(&CollectionName::try_from("c1")?, &UserId::admin())
             .await?;
 
         let create = InterCollectionPermissionCreate::builder()

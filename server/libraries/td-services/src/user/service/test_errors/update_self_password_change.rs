@@ -15,13 +15,14 @@ use td_objects::rest_urls::UserParam;
 use td_objects::types::basic::{
     AccessTokenId, Email, FullName, Password, RoleId, UserEnabled, UserIdName, UserName,
 };
-use td_queries::test_utils::SeedQueries;
+use td_queries::test_utils::SeedEntry;
 
 #[td_test::test(sqlx)]
 #[tokio::test]
 async fn test_update_user_self(db: TdPool) {
     let user = db
-        .seed_user(&UserName::try_from("u0").unwrap(), &UserEnabled::from(true))
+        .seed()
+        .user(&UserName::try_from("u0").unwrap(), &UserEnabled::from(true))
         .await
         .unwrap();
 

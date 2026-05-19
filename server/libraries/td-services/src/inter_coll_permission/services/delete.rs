@@ -72,8 +72,8 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::rest_urls::InterCollectionPermissionParam;
     use td_objects::types::basic::{AccessTokenId, CollectionName, RoleId, UserId};
-    use td_queries::BasicQueries;
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::LiveEntry;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -141,13 +141,16 @@ mod tests {
         let service = DeleteInterCollectionPermissionService::with_defaults(db.clone()).service();
 
         let c0 = db
-            .seed_collection(&CollectionName::try_from("c0")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
         let c1 = db
-            .seed_collection(&CollectionName::try_from("c1")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("c1")?, &UserId::admin())
             .await?;
         let p = db
-            .seed_inter_collection_permission(&c0.id, &(*c1.id).into())
+            .seed()
+            .inter_collection_permission(&c0.id, &(*c1.id).into())
             .await?;
 
         let request = RequestContext::with(
@@ -165,7 +168,10 @@ mod tests {
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
 
-        let permissions = db.fetch_all::<InterCollectionPermissionDB>(&c0.id).await?;
+        let permissions = db
+            .live()
+            .fetch_all::<InterCollectionPermissionDB>(&c0.id)
+            .await?;
         assert_eq!(permissions.len(), 0);
         Ok(())
     }
@@ -176,13 +182,16 @@ mod tests {
         let service = DeleteInterCollectionPermissionService::with_defaults(db.clone()).service();
 
         let c0 = db
-            .seed_collection(&CollectionName::try_from("c0")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
         let c1 = db
-            .seed_collection(&CollectionName::try_from("c1")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("c1")?, &UserId::admin())
             .await?;
         let p = db
-            .seed_inter_collection_permission(&c0.id, &(*c1.id).into())
+            .seed()
+            .inter_collection_permission(&c0.id, &(*c1.id).into())
             .await?;
 
         let request =
