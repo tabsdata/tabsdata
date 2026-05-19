@@ -1,15 +1,3 @@
-"""End-to-end GCS integration tests: invoke ``td_transporter`` against
-a real GCS bucket. Skipped unless ALL of these are set:
-
-  - ``TD_TRANSPORTER_BIN``               -- path to a built transporter
-  - ``GCP0__GCP_STORAGE_URI``            -- ``gs://bucket[/path/prefix]``
-  - ``GCP0__GCP_SERVICE_ACCOUNT_KEY``    -- JSON-encoded service-account
-                                            credentials (the whole blob,
-                                            not a file path)
-
-The URI's path component is used as ``GCSConn.base_path`` so each run
-writes under ``<bucket>/<uri_path>/td-integ/<uuid>/``.
-"""
 
 from __future__ import annotations
 
@@ -84,7 +72,6 @@ class _DestCtx(_SrcCtx):
 
 
 def _parse_uri(uri: str) -> tuple[str, str]:
-    """Split a ``gs://bucket/path`` URI into ``(bucket, path)``."""
     parsed = urlparse(uri)
     bucket = parsed.netloc
     path = parsed.path.lstrip("/")
@@ -117,7 +104,7 @@ def _upload_parquet(
 ) -> None:
     local = tmp_path / name
     pl.DataFrame(rows).write_parquet(local, use_pyarrow=True)
-    dest = GCSDest(conn=conn, path=[f"{run_prefix}/{name}"])
+    dest = GCSDest(conn=conn, paths=[f"{run_prefix}/{name}"])
     plugin.GCSDestPlugin().write_out(
         _DestCtx(work_dest), dest, [ParquetFile(local)],
     )
@@ -132,7 +119,7 @@ def test_dest_then_src_round_trip(conn, run_prefix, tmp_path):
         tmp_path, work_dest,
     )
 
-    src = GCSSrc(conn=conn, path=[f"{run_prefix}/users.parquet"])
+    src = GCSSrc(conn=conn, paths=[f"{run_prefix}/users.parquet"])
     work_src = tmp_path / "work_src"
     work_src.mkdir()
     out = plugin.GCSSrcPlugin().read_in(_SrcCtx(work_src), src)
@@ -156,7 +143,7 @@ def test_src_wildcard_in_basename_matches_multiple_objects(
             conn, run_prefix, name, [{"name": name}], tmp_path, work_dest,
         )
 
-    src = GCSSrc(conn=conn, path=[f"{run_prefix}/*.parquet"])
+    src = GCSSrc(conn=conn, paths=[f"{run_prefix}/*.parquet"])
     work_src = tmp_path / "work_src"
     work_src.mkdir()
     out = plugin.GCSSrcPlugin().read_in(_SrcCtx(work_src), src)
@@ -188,7 +175,7 @@ def test_src_initial_last_modified_filters_out_older_objects(
 
     src = GCSSrc(
         conn=conn,
-        path=[f"{run_prefix}/*.parquet"],
+        paths=[f"{run_prefix}/*.parquet"],
         initial_last_modified=cutoff,
     )
     work_src = tmp_path / "work_src"

@@ -80,7 +80,7 @@ class GCSSrcPlugin(SrcPlugin[GCSSrc]):
     ) -> list[list[TableFileSpec]]:
         return _plugin.import_files(
             ctx=ctx,
-            cfg=src.to_reader_conf(),
+            cfg=_plugin.ReaderConf.from_src(src),
             build_location=build_location,
             run_env=run_env,
             errors=ERRORS,
@@ -96,7 +96,7 @@ class GCSDestPlugin(DestPlugin[GCSDest]):
     ) -> None:
         _plugin.copy_out(
             ctx=ctx,
-            cfg=dest.to_writer_conf(),
+            cfg=_plugin.WriterConf.from_dest(dest),
             tables=tables,
             build_location=build_location,
             run_env=run_env,
@@ -126,7 +126,7 @@ GCS_SRC = SrcDef(
     src_version="v1",
     src=GCSSrc,
     table_mode=TableMode.ARRAY,
-    cardinality=lambda src: len(src.path),
+    cardinality=lambda src: len(src.paths),
     plugin=GCSSrcPlugin,
     explorer=GCSExplorer,
 )
@@ -137,7 +137,7 @@ GCS_DEST = DestDef(
     dest_type="gcs",
     dest_version="v1",
     dest=GCSDest,
-    cardinality=lambda dest: len(dest.path),
+    cardinality=lambda dest: len(dest.paths),
     plugin=GCSDestPlugin,
     explorer=GCSExplorer,
 )

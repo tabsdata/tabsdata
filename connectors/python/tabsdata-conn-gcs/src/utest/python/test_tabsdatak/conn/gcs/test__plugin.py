@@ -108,7 +108,7 @@ def test_src_plugin_passes_build_location_run_env_and_errors(monkeypatch, tmp_pa
 
     monkeypatch.setattr(_file_plugin, "import_files", fake)
 
-    src = GCSSrc(conn=_conn(), path=["a/b.parquet"])
+    src = GCSSrc(conn=_conn(), paths=["a/b.parquet"])
     out = plugin.GCSSrcPlugin().read_in(_src_ctx(tmp_path), src)
 
     assert out == [[ParquetFile(tmp_path / "ok.parquet")]]
@@ -129,7 +129,7 @@ def test_dest_plugin_passes_build_location_run_env_and_errors(monkeypatch, tmp_p
 
     monkeypatch.setattr(_file_plugin, "copy_out", fake)
 
-    dest = GCSDest(conn=_conn(), path=["out/x.parquet"])
+    dest = GCSDest(conn=_conn(), paths=["out/x.parquet"])
     parquet = ParquetFile(tmp_path / "in.parquet")
     plugin.GCSDestPlugin().write_out(_dest_ctx(tmp_path), dest, [parquet])
 
@@ -172,8 +172,8 @@ def test_gcs_dest_def_wires_plugin_and_explorer():
     assert plugin.GCS_DEST.dest_type == "gcs"
 
 
-def test_gcs_cardinality_uses_path_length():
-    src = GCSSrc(conn=_conn(), path=["a", "b", "c"])
+def test_gcs_cardinality_uses_paths_length():
+    src = GCSSrc(conn=_conn(), paths=["a", "b", "c"])
     assert plugin.GCS_SRC.cardinality(src) == 3
-    dest = GCSDest(conn=_conn(), path=["a", "b"])
+    dest = GCSDest(conn=_conn(), paths=["a", "b"])
     assert plugin.GCS_DEST.cardinality(dest) == 2
