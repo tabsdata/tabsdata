@@ -5,11 +5,13 @@ import typing
 import pytest
 
 from tabsdatak.api import NamedConn, Secret
+from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.common.types import CfgSpec, UserPassword
 from tabsdatak.conn.snowflake import (
     AccountSpec,
     ConnSpec,
     CredentialsSpec,
+    DestCfgSpec,
     IdentifierSpec,
     IfTableExistsSpec,
     NameSpec,
@@ -52,7 +54,7 @@ def test_snowflake_dest_full_round_trip():
         conn=_conn(),
         tables=["ANALYTICS.PUBLIC.USERS", "ANALYTICS.PUBLIC.ORDERS"],
         if_table_exists="replace",
-        dest_cfg={"chunkSize": 2048},
+        dest_cfg={"snowflake.logging_level": 20},
     )
     loaded = SnowflakeDest.from_json(dest.to_json())
     assert loaded == dest
@@ -65,7 +67,7 @@ def test_snowflake_dest_full_round_trip():
     assert loaded.conn.conn_cfg == {"snowflake.timeout": 30}
     assert loaded.tables == ["ANALYTICS.PUBLIC.USERS", "ANALYTICS.PUBLIC.ORDERS"]
     assert loaded.if_table_exists == "replace"
-    assert loaded.dest_cfg == {"chunkSize": 2048}
+    assert loaded.dest_cfg == {"snowflake.logging_level": 20}
 
 
 def test_snowflake_dest_round_trip_with_named_conn():
@@ -116,4 +118,29 @@ def test_snowflake_dest_fields_wire_expected_specs():
     assert _hint(SnowflakeDest, "conn") == ConnSpec
     assert _hint(SnowflakeDest, "tables") == SnowflakeTableNamesSpec
     assert _hint(SnowflakeDest, "if_table_exists") == IfTableExistsSpec
-    assert _hint(SnowflakeDest, "dest_cfg") == CfgSpec | None
+    assert _hint(SnowflakeDest, "dest_cfg") == DestCfgSpec | None
+
+
+# ---------------------------------------------------------------------------
+# dest_cfg literal-key validation
+# ---------------------------------------------------------------------------
+
+
+def test_snowflake_dest_rejects_unknown_dest_cfg_key():
+    with pytest.raises(ConnInitException) as ei:
+        SnowflakeDest(
+            conn=_conn(),
+            tables=["analytics.users"],
+            dest_cfg={"bogus.key": 1},
+        )
+    assert ei.value.api_error is SnowflakeErrorCode.SNOWFLAKE_3
+
+
+def test_snowflake_dest_accepts_known_dest_cfg_keys():
+    dest = SnowflakeDest(
+        conn=_conn(),
+        tables=["analytics.users"],
+        dest_cfg={"snowflake.logging_level": 20},
+    )
+    loaded = SnowflakeDest.from_json(dest.to_json())
+    assert loaded == dest

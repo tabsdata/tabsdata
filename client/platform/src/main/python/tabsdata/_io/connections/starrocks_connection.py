@@ -55,7 +55,6 @@ class StarRocksConn(Conn):
         self,
         host: str,
         staging: StagingConfig,
-        port: int = 9030,
         database: str = "default",
         credentials: UserPasswordCredentials | None = None,
         enforce_connection_params: bool = True,
