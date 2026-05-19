@@ -18,17 +18,17 @@ mod routes {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::execution::{ExecutionRequestInternal, ExecutionResponseInternal};
     use td_objects::dxo::file::ParquetFile;
-    use td_objects::dxo::function_run::FunctionRun;
+    use td_objects::dxo::physical_function_run::PhysicalFunctionRun;
     use td_objects::dxo::worker::CallbackRequest;
     use td_objects::rest_urls::AtTimeParam;
     use td_objects::rest_urls::internal::{
         DOWNLOAD_FUNCTION_STATE, FUNCTION_VERSION_EXECUTE, FUNCTION_VERSION_EXECUTION_STATUS,
-        FunctionRunWorkerIdParam, FunctionVersionAtId, FunctionVersionExecution,
+        FunctionVersionAtId, FunctionVersionExecution, PhysicalFunctionRunWorkerIdParam,
         UPDATE_FUNCTION_RUN_WORKER, UPDATE_WORKER, WorkerIdParam,
     };
     use td_objects::rest_urls::{ExecutionParam, FunctionVersionIdParam};
     use td_services::execution::services::ExecutionServices;
-    use td_services::function_run::services::FunctionRunServices;
+    use td_services::function_run::services::PhysicalFunctionRunServices;
     use td_services::table::services::TableServices;
     use td_services::worker::services::WorkerServices;
     use td_tower::ctx_service::RawOneshot;
@@ -41,7 +41,7 @@ mod routes {
     pub async fn function_run_callback(
         State(state): State<Arc<ExecutionServices>>,
         Extension(context): Extension<RequestContext>,
-        Path(param): Path<FunctionRunWorkerIdParam>,
+        Path(param): Path<PhysicalFunctionRunWorkerIdParam>,
         Json(request): Json<CallbackRequest>,
     ) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
         let request = context.update(param, request);
@@ -78,11 +78,11 @@ mod routes {
     #[apiserver_path(method = get, path = FUNCTION_VERSION_EXECUTION_STATUS, tag = INTERNAL_TAG)]
     #[doc = "Execution status for a given function version and execution plan"]
     pub async fn function_version_execution_status(
-        State(state): State<Arc<FunctionRunServices>>,
+        State(state): State<Arc<PhysicalFunctionRunServices>>,
         Extension(context): Extension<RequestContext>,
         Path(param): Path<FunctionVersionIdParam>,
         Json(request): Json<ExecutionParam>,
-    ) -> Result<GetStatus<FunctionRun>, ErrorStatus> {
+    ) -> Result<GetStatus<PhysicalFunctionRun>, ErrorStatus> {
         let request = FunctionVersionExecution {
             function_version_id: param.function_version_id,
             execution: request.execution,

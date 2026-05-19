@@ -16,10 +16,10 @@ mod routes {
     use td_apiforge::apiserver_path;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::file::{CsvFile, ParquetFile};
+    use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersion;
     use td_objects::dxo::table::{Table, TableFlowGraphResponse};
-    use td_objects::dxo::table_data_version::TableDataVersion;
     use td_objects::rest_urls::params::{
-        TableAtIdName, TableDataVersionAtIdName, TableSampleAtName, TableSchema,
+        PhysicalTableDataVersionAtIdName, TableAtIdName, TableSampleAtName, TableSchema,
     };
     use td_objects::rest_urls::{
         AtTimeParam, CollectionParam, DOWNLOAD_TABLE, FileFormatParam, LIST_TABLE_DATA_VERSIONS,
@@ -93,9 +93,9 @@ mod routes {
         Query(query_params): Query<ListParams>,
         Query(at_param): Query<AtTimeParam>,
         Query(uncommitted_status): Query<UncommittedParam>,
-    ) -> Result<ListStatus<TableDataVersion>, ErrorStatus> {
+    ) -> Result<ListStatus<PhysicalTableDataVersion>, ErrorStatus> {
         let name = TableAtIdName::new(table_param, at_param, uncommitted_status);
-        let name = TableDataVersionAtIdName::new(name);
+        let name = PhysicalTableDataVersionAtIdName::new(name);
         let request = context.list(name, query_params);
         let response = state.list_data_versions.service().oneshot(request).await?;
         Ok(ListStatus::OK(response))

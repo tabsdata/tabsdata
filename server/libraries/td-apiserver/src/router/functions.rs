@@ -20,14 +20,15 @@ mod routes {
     use td_objects::dxo::bundle::Bundle;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::function::{
-        Function, FunctionEnable, FunctionRegister, FunctionUpdate, FunctionWithTables,
+        Function, FunctionEnable, FunctionPatch, FunctionPatchRecord, FunctionRegister,
+        FunctionUpdate, FunctionWithTables,
     };
     use td_objects::dxo::function_upload::FunctionUpload;
     use td_objects::rest_urls::params::FunctionAtIdName;
     use td_objects::rest_urls::{
         AtTimeParam, CollectionParam, FUNCTION_CREATE, FUNCTION_DELETE, FUNCTION_ENABLE,
-        FUNCTION_GET, FUNCTION_HISTORY, FUNCTION_LIST, FUNCTION_LIST_BY_COLL, FUNCTION_UPDATE,
-        FUNCTION_UPLOAD, FunctionParam,
+        FUNCTION_GET, FUNCTION_HISTORY, FUNCTION_LIST, FUNCTION_LIST_BY_COLL, FUNCTION_PATCH,
+        FUNCTION_PATCHES, FUNCTION_UPDATE, FUNCTION_UPLOAD, FunctionParam,
     };
     use td_services::function::services::FunctionServices;
     use tower::ServiceExt;
@@ -133,6 +134,32 @@ mod routes {
         let request = context.update(function_param, request);
         let response = state.enable.service().oneshot(request).await?;
         Ok(UpdateStatus::OK(response))
+    }
+
+    #[apiserver_path(method = post, path = FUNCTION_PATCH, tag = FUNCTIONS_TAG)]
+    #[doc = "Create a code-only patch of a function version"]
+    pub async fn patch(
+        State(state): State<Arc<FunctionServices>>,
+        Extension(context): Extension<RequestContext>,
+        Path(function_param): Path<FunctionParam>,
+        Json(request): Json<FunctionPatch>,
+    ) -> Result<CreateStatus<FunctionPatchRecord>, ErrorStatus> {
+        let request = context.create(function_param, request);
+        let response = state.patch.service().oneshot(request).await?;
+        Ok(CreateStatus::CREATED(response))
+    }
+
+    #[apiserver_path(method = get, path = FUNCTION_PATCHES, tag = FUNCTIONS_TAG)]
+    #[doc = "List patch function versions for a function (latest first)"]
+    pub async fn list_patches(
+        State(state): State<Arc<FunctionServices>>,
+        Extension(context): Extension<RequestContext>,
+        Path(function_param): Path<FunctionParam>,
+        Query(query_params): Query<ListParams>,
+    ) -> Result<ListStatus<FunctionPatchRecord>, ErrorStatus> {
+        let request = context.list(function_param, query_params);
+        let response = state.list_patches.service().oneshot(request).await?;
+        Ok(ListStatus::OK(response))
     }
 
     /// This struct is just used to document FileUpload in the OpenAPI schema.

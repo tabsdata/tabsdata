@@ -25,7 +25,7 @@ mod routes {
         AllowDisabledParam, EXECUTION_CANCEL, EXECUTION_DETAILS, EXECUTION_LIST,
         EXECUTION_LIST_BY_FUNCTION_VERSION, EXECUTION_LIST_BY_TABLE_DATA_VERSION, EXECUTION_READ,
         EXECUTION_RECOVER, ExecutionParam, FUNCTION_EXECUTE, FunctionParam, FunctionVersionIdParam,
-        TableDataVersionParam,
+        PhysicalTableDataVersionParam,
     };
     use td_services::execution::services::ExecutionServices;
     use tower::ServiceExt;
@@ -100,15 +100,15 @@ mod routes {
 
     #[apiserver_path(method = get, path = EXECUTION_LIST_BY_TABLE_DATA_VERSION, tag = EXECUTION_TAG)]
     #[doc = "List executions by table data version"]
-    pub async fn list_by_table_data_version(
+    pub async fn list_by_physical_table_data_version(
         State(executions): State<Arc<ExecutionServices>>,
         Extension(context): Extension<RequestContext>,
-        Path(param): Path<TableDataVersionParam>,
+        Path(param): Path<PhysicalTableDataVersionParam>,
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<Execution>, ErrorStatus> {
         let request = context.list(param, query_params);
         let response = executions
-            .list_by_table_data_version
+            .list_by_physical_table_data_version
             .service()
             .oneshot(request)
             .await?;
