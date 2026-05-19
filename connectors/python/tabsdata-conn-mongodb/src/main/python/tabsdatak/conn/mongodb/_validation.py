@@ -86,11 +86,11 @@ FIELD_NAME_VALIDATOR = AfterValidator(_validate_field_name)
 # --- URI -------------------------------------------------------------
 
 
-_URI_RE = re.compile(r"^mongodb(?:\+srv)?://", re.IGNORECASE)
+_URI_RE = re.compile(r"mongodb(?:\+srv)?://.*", re.IGNORECASE)
 
 
 def _validate_uri(value: str) -> str:
-    if not _URI_RE.match(value):
+    if not _URI_RE.fullmatch(value):
         # noinspection PyProtectedMember
         raise MongodbErrorCode.MONGODB_6.exception(value=value)
     return value

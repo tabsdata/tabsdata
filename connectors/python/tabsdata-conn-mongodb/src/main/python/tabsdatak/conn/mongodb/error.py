@@ -14,6 +14,10 @@ class MongoDBValidateException(ConnException):
     """Cross-field validation failure for the MongoDB connector."""
 
 
+class MongoDBRuntimeException(ConnException):
+    """Runtime failure (plugin / I/O) for the MongoDB connector."""
+
+
 class MongodbErrorCode(ErrorCode):
     MONGODB_1 = ErrorDef(
         ConnInitException,
@@ -79,3 +83,30 @@ class MongodbErrorCode(ErrorCode):
         ConnInitException,
         "MongoDB field name may not start with '$': {value!r}",
     )  # _validate_field_name: dollar prefix
+    MONGODB_17 = ErrorDef(
+        MongoDBValidateException,
+        "MongoDBDest.docs_per_trx must be > 0, got {docs_per_trx}",
+    )  # MongoDBDest.validate(): docs_per_trx must be positive
+    MONGODB_18 = ErrorDef(
+        MongoDBRuntimeException,
+        "MongoDBDest collections/slot count mismatch "
+        "(collections={collections}, slots={slots})",
+    )  # _MongoDBDestPlugin.write_out: defensive recheck
+    MONGODB_19 = ErrorDef(
+        MongoDBRuntimeException,
+        "MongoDB destination connection failed",
+    )  # _MongoDBDestPlugin.write_out: client connect / ping failure
+    MONGODB_20 = ErrorDef(
+        MongoDBRuntimeException,
+        "MongoDB write failed (collection={collection!r})",
+    )  # _MongoDBDestPlugin.write_out: bulk_write failure
+    MONGODB_21 = ErrorDef(
+        MongoDBRuntimeException,
+        "MongoDBDest id_field {id_field!r} is missing from a document"
+        " in collection {collection!r}",
+    )  # _MongoDBDestPlugin.write_out: id_field absent on a document
+    MONGODB_22 = ErrorDef(
+        MongoDBRuntimeException,
+        "MongoDBDest collection name {value!r} must be a fully-qualified"
+        " <database>.<collection> when used as a write target",
+    )  # _MongoDBDestPlugin.write_out: collection name not FQN-shaped
