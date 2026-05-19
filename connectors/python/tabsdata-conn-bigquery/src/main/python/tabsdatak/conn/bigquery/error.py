@@ -27,27 +27,3 @@ class BigqueryErrorCode(ErrorCode):
         ConnInitException,
         "BigQueryDest validation failed",
     )  # BigQueryDest
-    BIGQUERY_4 = ErrorDef(
-        ConnInitException,
-        "BigQuery project id must be 6-30 chars, lowercase letters / digits"
-        " / hyphens, start with a letter, end alphanumeric: {value!r}",
-    )  # _validate_project_id
-    BIGQUERY_5 = ErrorDef(
-        ConnInitException,
-        "BigQuery dataset id must be 1-1024 chars, letters / digits"
-        " / underscores: {value!r}",
-    )  # _validate_dataset_id
-    BIGQUERY_6 = ErrorDef(
-        ConnInitException,
-        "BigQuery table id must be 1-1024 chars, letters / digits"
-        " / underscores: {value!r}",
-    )  # _validate_table_id
-    BIGQUERY_7 = ErrorDef(
-        ConnInitException,
-        "BigQuery table name parse failed: {value!r}",
-    )  # _validate_table_fqn: split_fqn raised
-    BIGQUERY_8 = ErrorDef(
-        ConnInitException,
-        "BigQuery table name must be 'table', 'dataset.table' or"
-        " 'project.dataset.table': {value!r}",
-    )  # _validate_table_fqn: bad arity
