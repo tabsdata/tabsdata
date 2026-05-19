@@ -3,7 +3,7 @@
 //
 
 use crate::parse::{parse_table_ref, parse_versioned_table_ref, parse_versions};
-use crate::types::basic::{CollectionName, TableDataVersionId};
+use crate::types::basic::{CollectionName, LogicalTableDataVersionId};
 use derive_new::new;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
@@ -11,10 +11,18 @@ use ta_objects::ComposedString;
 use td_error::TdError;
 
 /// It represents a version.
+///
+/// `Fixed` references identify a *logic* table data version (LTDV) —
+/// the stable plan-time identity, not the concrete `physical_table_data_versions`
+/// row currently bound to it. The concrete TDV reachable from an LTDV
+/// can change via operator redirect; references that pinned the concrete
+/// id directly would silently mis-resolve after a redirect. Pinning the
+/// LTDV id keeps "the same version reference" anchored on the same
+/// logical version regardless of subsequent rebinds.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Version {
-    /// A fixed version.
-    Fixed(TableDataVersionId),
+    /// A fixed version, identified by its logical identity.
+    Fixed(LogicalTableDataVersionId),
     /// A head relative version, it is always zero or negative.
     Head(isize),
     /// An initial relative version, it is always zero or positive.

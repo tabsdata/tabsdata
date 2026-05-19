@@ -5,6 +5,84 @@
 use td_common::execution_status::WorkerCallbackStatus;
 use td_error::{ApiError, TdError, api_error};
 
+/// Status of a logical pointer (LFR or LTDV) at any moment.
+///
+/// `Pending`: the logical row exists but no concrete is bound yet.
+/// `Bound`:   bound to a concrete row.
+/// `Voided`:  not bound; only re-bindable via an explicit operator redirect.
+#[ta_objects::typed_enum]
+#[derive(Eq, PartialEq, Hash)]
+pub enum LogicalPointerStatus {
+    #[typed_enum(rename = "P")]
+    Pending,
+    #[typed_enum(rename = "B")]
+    Bound,
+    #[typed_enum(rename = "V")]
+    Voided,
+}
+
+/// Reason recorded on every pointer-changing event in the logical history.
+///
+/// `InitialMint` rows describe the creation of a logical row at plan-build
+/// time (status begins `Pending`). `InitialDispatch` is the auto-bind at
+/// dispatch (`Pending → Bound`). `InitialMaterialization` is reserved for
+/// retroactive lazy-mint of a V1-born concrete TDV (LTDV created already
+/// `Bound`, no dispatch event). `TransactionCancelManual` /
+/// `UpstreamCancellationManual` describe the void paths.
+///
+/// `OperatorRedirect` is the explicit operator-driven repointing — the
+/// only way `Voided → Bound`, `Bound → Bound(different concrete)`, or any
+/// rebind that the auto path refuses, can occur. Always carries the
+/// operator's actual user id in `set_by_id`, never `UserId::admin`.
+#[ta_objects::typed_enum]
+#[derive(Eq, PartialEq, Hash)]
+pub enum LogicalPointerReason {
+    #[typed_enum(rename = "IM")]
+    InitialMint,
+    #[typed_enum(rename = "ID")]
+    InitialDispatch,
+    #[typed_enum(rename = "IT")]
+    InitialMaterialization,
+    #[typed_enum(rename = "TC")]
+    TransactionCancelManual,
+    #[typed_enum(rename = "UC")]
+    UpstreamCancellationManual,
+    #[typed_enum(rename = "OR")]
+    OperatorRedirect,
+    /// Explicit operator force-void of a `Bound` (or `Pending`) logical
+    /// row. Distinct from `TransactionCancelManual` (which the cancel
+    /// pipeline uses to void only `Pending` rows) — `OperatorForceVoid`
+    /// records that the operator deliberately abandoned a binding without
+    /// choosing a replacement, including bindings that were already Bound
+    /// to a concrete attempt.
+    #[typed_enum(rename = "OV")]
+    OperatorForceVoid,
+    /// Worker-finish redirect on a replay attempt's success. The LFR
+    /// pointer was `Bound(PFR_old)` while the replay PFR ran; on its
+    /// `Done` callback `redirect_at_finish` appends `Bound(PFR_new)`
+    /// with this reason. Paired with `Bound` status.
+    #[typed_enum(rename = "RR")]
+    ReplayRedirect,
+}
+
+/// Kind of replay-audit row written by the replay / delete-replay
+/// endpoints to `logical_function_run_replays`.
+#[ta_objects::typed_enum]
+#[derive(Eq, PartialEq, Hash)]
+pub enum ReplayKind {
+    /// Operator created a fresh `PhysicalFunctionRunDB` and redirected the LFR
+    /// pointer to it.
+    #[typed_enum(rename = "R")]
+    Replay,
+    /// Operator undid the most-recent replay; LFR rebound to the prior
+    /// concrete FR.
+    #[typed_enum(rename = "B")]
+    Rollback,
+    /// Operator undid the LFR's only binding; LFR transitioned to Voided.
+    #[typed_enum(rename = "V")]
+    Void,
+}
+
 #[ta_objects::typed_enum]
 #[derive(Eq, PartialEq)]
 pub enum Decorator {
@@ -56,9 +134,9 @@ pub enum ExecutionStatus {
 ///     Canceled --> [*]
 ///     Yanked --> [*]
 ///
-///     Scheduled --> RunRequested
-///     RunRequested --> Scheduled
-///     RunRequested --> Running
+///     Scheduled --> Requested
+///     Requested --> Scheduled
+///     Requested --> Running
 ///     Scheduled --> OnHold
 ///     Scheduled --> Canceled
 ///     Running --> Done
@@ -81,7 +159,7 @@ pub enum FunctionRunStatus {
     #[typed_enum(rename = "S")]
     Scheduled,
     #[typed_enum(rename = "RR")]
-    RunRequested,
+    Requested,
     #[typed_enum(rename = "RS")]
     ReScheduled,
     #[typed_enum(rename = "R")]
@@ -117,6 +195,83 @@ impl TryFrom<WorkerCallbackStatus> for FunctionRunStatus {
             ))?,
         };
         Ok(status)
+    }
+}
+
+/// Per-attempt status on `physical_function_runs`. Independent of
+/// [`FunctionRunStatus`] (LFR/LTDV-canonical, sticky-Committed).
+///
+/// ```text
+///   Requested ─► Dispatched ─► Running ─► Done | Error | Failed
+///   Failed    ─► Requested                       (operator recover)
+/// ```
+#[ta_objects::typed_enum]
+#[derive(Eq, PartialEq, Hash)]
+pub enum PhysicalFunctionRunStatus {
+    #[typed_enum(rename = "RR")]
+    Requested,
+    #[typed_enum(rename = "DP")]
+    Dispatched,
+    #[typed_enum(rename = "R")]
+    Running,
+    #[typed_enum(rename = "D")]
+    Done,
+    #[typed_enum(rename = "E")]
+    Error,
+    #[typed_enum(rename = "F")]
+    Failed,
+}
+
+impl TryFrom<WorkerCallbackStatus> for PhysicalFunctionRunStatus {
+    type Error = TdError;
+
+    fn try_from(value: WorkerCallbackStatus) -> Result<Self, TdError> {
+        let status = match value {
+            WorkerCallbackStatus::Running => PhysicalFunctionRunStatus::Running,
+            WorkerCallbackStatus::Done => PhysicalFunctionRunStatus::Done,
+            WorkerCallbackStatus::Error => PhysicalFunctionRunStatus::Error,
+            WorkerCallbackStatus::Failed => PhysicalFunctionRunStatus::Failed,
+            WorkerCallbackStatus::Stopped => Err(api_error!(
+                ApiError::InputError,
+                "Cannot stop a function run worker via worker callback."
+            ))?,
+        };
+        Ok(status)
+    }
+}
+
+/// Project an LFR-side status onto a "natural" PFR-side status. Used by
+/// test seeds and any read-side view that surfaces a unified status
+/// field. Production code sets the two statuses independently — LFR
+/// transitions via the canonical state machine, PFR via worker
+/// callbacks + the dispatch transition.
+///
+/// Mapping rationale: shared variants pass through; LFR-only sticky
+/// terminals collapse to the PFR terminal that implied the underlying
+/// attempt outcome (Committed/Yanked → Done, Canceled → Failed); LFR
+/// pre-flight states map to Requested.
+impl From<FunctionRunStatus> for PhysicalFunctionRunStatus {
+    fn from(s: FunctionRunStatus) -> Self {
+        match s {
+            FunctionRunStatus::Running => PhysicalFunctionRunStatus::Running,
+            FunctionRunStatus::Done | FunctionRunStatus::Committed | FunctionRunStatus::Yanked => {
+                PhysicalFunctionRunStatus::Done
+            }
+            FunctionRunStatus::Error => PhysicalFunctionRunStatus::Error,
+            FunctionRunStatus::Failed | FunctionRunStatus::Canceled => {
+                PhysicalFunctionRunStatus::Failed
+            }
+            FunctionRunStatus::Scheduled
+            | FunctionRunStatus::Requested
+            | FunctionRunStatus::ReScheduled
+            | FunctionRunStatus::OnHold => PhysicalFunctionRunStatus::Requested,
+        }
+    }
+}
+
+impl From<&FunctionRunStatus> for PhysicalFunctionRunStatus {
+    fn from(s: &FunctionRunStatus) -> Self {
+        s.clone().into()
     }
 }
 
@@ -306,7 +461,7 @@ pub enum WorkerStatus {
     #[typed_enum(rename = "S")]
     Scheduled,
     #[typed_enum(rename = "RR")]
-    RunRequested,
+    Requested,
     #[typed_enum(rename = "R")]
     Running,
     #[typed_enum(rename = "D")]
@@ -363,5 +518,22 @@ impl From<WorkerTypeDto> for WorkerType {
             WorkerTypeDto::CronTrigger => WorkerType::CronTrigger,
             WorkerTypeDto::StageTrigger => WorkerType::StageTrigger,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Pin the persisted codes of the sticky-terminal `FunctionRunStatus`
+    /// variants. The td-schema `logical_function_runs__sticky_terminals`
+    /// trigger hardcodes `&["C", "X", "Y"]`; td-schema can't import this
+    /// enum (foundational crate ordering), so this test is the canary
+    /// that catches a divergent rename.
+    #[test]
+    fn test_sticky_terminal_codes_pinned() {
+        assert_eq!(FunctionRunStatus::Committed.to_string(), "C");
+        assert_eq!(FunctionRunStatus::Canceled.to_string(), "X");
+        assert_eq!(FunctionRunStatus::Yanked.to_string(), "Y");
     }
 }

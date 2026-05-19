@@ -63,17 +63,35 @@ pub struct FromCollectionId;
 #[ta_objects::typed(id)]
 pub struct FunctionId;
 
-#[ta_objects::typed(id)]
-pub struct FunctionRunId;
-
 #[ta_objects::typed(idlogic(key = FV))]
 pub struct FunctionVersionId;
 
 #[ta_objects::typed(id)]
 pub struct InterCollectionPermissionId;
 
+#[ta_objects::typed(idlogic(key = LFR))]
+pub struct LogicalFunctionRunId;
+
+#[ta_objects::typed(id)]
+pub struct LogicalFunctionRunInputId;
+
+#[ta_objects::typed(id)]
+pub struct LogicalFunctionRunPointerId;
+
+#[ta_objects::typed(idlogic(key = LDV))]
+pub struct LogicalTableDataVersionId;
+
+#[ta_objects::typed(id)]
+pub struct LogicalTableDataVersionPointerId;
+
 #[ta_objects::typed(id)]
 pub struct PermissionId;
+
+#[ta_objects::typed(idlogic(key = PFR))]
+pub struct PhysicalFunctionRunId;
+
+#[ta_objects::typed(idlogic(key = PDV))]
+pub struct PhysicalTableDataVersionId;
 
 #[ta_objects::typed(id)]
 pub struct RefreshTokenId;
@@ -97,12 +115,6 @@ impl RoleId {
         Self(Id::_new(ID_ROLE_USER))
     }
 }
-
-#[ta_objects::typed(id)]
-pub struct TableDataId;
-
-#[ta_objects::typed(idlogic(key = DV))]
-pub struct TableDataVersionId;
 
 #[ta_objects::typed(id)]
 pub struct TableId;
