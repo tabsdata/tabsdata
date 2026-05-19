@@ -12,13 +12,13 @@ use td_objects::Buildable;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::rest_urls::CollectionParam;
 use td_objects::types::basic::{AccessTokenId, CollectionIdName, CollectionName, RoleId, UserId};
-use td_queries::test_utils::SeedQueries;
+use td_queries::test_utils::SeedEntry;
 
 #[td_test::test(sqlx)]
 #[tokio::test]
 async fn test_not_allowed_to_delete_collection(db: TdPool) {
     let name = CollectionName::try_from("ds0").unwrap();
-    let _ = db.seed_collection(&name, &UserId::admin()).await;
+    let _ = db.seed().collection(&name, &UserId::admin()).await;
 
     let service = DeleteCollectionService::with_defaults(db.clone()).service();
 

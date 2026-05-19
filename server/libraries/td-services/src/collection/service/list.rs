@@ -44,7 +44,7 @@ mod tests {
     use td_objects::types::basic::{
         AccessTokenId, CollectionName, Description, RoleId, RoleName, UserEnabled, UserId, UserName,
     };
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -71,7 +71,7 @@ mod tests {
     #[tokio::test]
     async fn test_list_collection(db: TdPool) {
         let name = CollectionName::try_from("ds0").unwrap();
-        let _ = db.seed_collection(&name, &UserId::admin()).await.unwrap();
+        let _ = db.seed().collection(&name, &UserId::admin()).await.unwrap();
 
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
@@ -90,19 +90,21 @@ mod tests {
     async fn test_list_collection_unauthorized(db: TdPool) -> Result<(), TdError> {
         // Create new role without permissions
         let user = db
-            .seed_user(&UserName::try_from("joaquin")?, &UserEnabled::from(true))
+            .seed()
+            .user(&UserName::try_from("joaquin")?, &UserEnabled::from(true))
             .await?;
         let role = db
-            .seed_role(
+            .seed()
+            .role(
                 RoleName::try_from("unauthorized_role")?,
                 Description::try_from("any user")?,
             )
             .await?;
-        let _user_role = db.seed_user_role(&user.id, &role.id).await?;
+        let _user_role = db.seed().user_role(&user.id, &role.id).await?;
 
         // Create a collection
         let name = CollectionName::try_from("ds0")?;
-        let _ = db.seed_collection(&name, &UserId::admin()).await?;
+        let _ = db.seed().collection(&name, &UserId::admin()).await?;
 
         // All collections are visible to authorized users
         let request =

@@ -8,7 +8,6 @@ use std::collections::HashMap;
 use std::ops::Deref;
 use td_database::dynamic::DynamicConnection;
 use td_error::TdError;
-use td_objects::States;
 use td_objects::dxo::dependency::DependencyDBWithNames;
 use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames};
 use td_objects::dxo::table::{TableDB, TableDBWithNames};
@@ -16,73 +15,65 @@ use td_objects::dxo::trigger::TriggerDBWithNames;
 use td_objects::graph::{TdGraph, TdGraphBuilder};
 use td_objects::types::basic::{AtTime, FunctionId, TableId};
 use td_objects::types::recursion::RecursionOptions;
-use td_queries::{ChunkedQueries, OptionsBuilder, RecursiveQueries, VersionedQueries};
+use td_queries::{CurrentEntry, HistoricEntry};
 use td_tower::extractors::{MutRef, Ref};
 
-pub struct GraphBuilder<
-    C: GraphConfig<TRIGGER_STATE, DEPENDENCY_STATE, FUNCTION_STATE, TABLE_STATE>,
-    const TRIGGER_STATE: u8,
-    const DEPENDENCY_STATE: u8,
-    const FUNCTION_STATE: u8,
-    const TABLE_STATE: u8,
-> {
-    config: std::marker::PhantomData<C>,
+/// Pick `current()` or `historic(at)` once at the call site, then run
+/// the same chain body. The body is expanded twice (one per arm) so it
+/// is type-checked under each wrapper independently — `Current<E>` and
+/// `Historic<'_, AtTime, E>` expose parallel method surfaces, so any
+/// chain that compiles under one compiles under the other.
+macro_rules! read_chain {
+    ($historic:expr, $conn:expr, $at:expr, |$entry:ident| $body:block) => {{
+        if $historic {
+            let $entry = $conn.historic(&*$at);
+            $body
+        } else {
+            let $entry = $conn.current();
+            $body
+        }
+    }};
 }
 
-impl<
-    C: GraphConfig<TRIGGER_STATE, DEPENDENCY_STATE, FUNCTION_STATE, TABLE_STATE>,
-    const TRIGGER_STATE: u8,
-    const DEPENDENCY_STATE: u8,
-    const FUNCTION_STATE: u8,
-    const TABLE_STATE: u8,
-> GraphBuilder<C, TRIGGER_STATE, DEPENDENCY_STATE, FUNCTION_STATE, TABLE_STATE>
-where
-    TriggerDBWithNames: States<TRIGGER_STATE>,
-    DependencyDBWithNames: States<DEPENDENCY_STATE>,
-    FunctionDB: States<FUNCTION_STATE>,
-    TableDB: States<TABLE_STATE>,
-{
+pub struct GraphBuilder<C: GraphConfig> {
+    _phantom: std::marker::PhantomData<C>,
+}
+
+impl<C: GraphConfig> GraphBuilder<C> {
     pub async fn find_recursive_trigger_graph(
         mut conn: MutRef<DynamicConnection<'static>>,
         at_time: Ref<AtTime>,
         function_or_table: Ref<FunctionOrTable>,
         recursion_options: Ref<RecursionOptions>,
     ) -> Result<Vec<TriggerDBWithNames>, TdError> {
-        let trigger_graph = match function_or_table.deref() {
+        let trigger_graph: Vec<TriggerDBWithNames> = match function_or_table.deref() {
             FunctionOrTable::Function(function_id) => {
-                conn
-                    .fetch_all_versions_recursive::<TRIGGER_STATE, TriggerDBWithNames, FUNCTION_STATE, FunctionDB>(
-                        {
-                            let mut opts = OptionsBuilder::default()
-                                .recursion(*recursion_options)
-                                .direct_reference(function_id)
-                                .build()?
-                                .versioned()
-                                .d_defined_on(&*at_time)
-                                .r_defined_on(&*at_time);
-                            if recursion_options.override_disabled_trigger() {
-                                opts = opts.override_direct_reference_state(
-                                    // move from Executable to Active
-                                    Some(<FunctionDB as States<{ FunctionDB::Active }>>::state())
-                                )?;
-                            }
-                            opts.build()?
-                        },
-                    )
-                    .await?
+                read_chain!(C::historic(), conn, at_time, |entry| {
+                    entry
+                        .recursive::<TriggerDBWithNames, FunctionDB>(*recursion_options)
+                        .direct_reference(function_id)
+                        .d_state(C::trigger_state())
+                        .r_state(C::function_state())
+                        .direct_reference_state(
+                            // move from Executable to Active for the entry point only
+                            recursion_options
+                                .override_disabled_trigger()
+                                .then(FunctionDB::active),
+                        )
+                        .fetch_all()
+                        .await?
+                })
             }
             FunctionOrTable::Table(table_id) => {
-                conn.fetch_all_versions_recursive::<TRIGGER_STATE, TriggerDBWithNames, TABLE_STATE, TableDB>(
-                    OptionsBuilder::default()
-                        .recursion(*recursion_options)
+                read_chain!(C::historic(), conn, at_time, |entry| {
+                    entry
+                        .recursive::<TriggerDBWithNames, TableDB>(*recursion_options)
                         .direct_reference(table_id)
-                        .build()?
-                        .versioned()
-                        .d_defined_on(&*at_time)
-                        .r_defined_on(&*at_time)
-                        .build()?,
-                )
-                .await?
+                        .d_state(C::trigger_state())
+                        .r_state(C::table_state())
+                        .fetch_all()
+                        .await?
+                })
             }
         };
 
@@ -95,34 +86,28 @@ where
         function_or_table: Ref<FunctionOrTable>,
         recursion_options: Ref<RecursionOptions>,
     ) -> Result<Vec<DependencyDBWithNames>, TdError> {
-        let dep_graph = match function_or_table.deref() {
-            FunctionOrTable::Function(function_id) =>{
-                conn
-                    .fetch_all_versions_recursive::<DEPENDENCY_STATE, DependencyDBWithNames, FUNCTION_STATE, FunctionDB>(
-                        OptionsBuilder::default()
-                            .recursion(*recursion_options)
-                            .direct_reference(function_id)
-                            .build()?
-                            .versioned()
-                            .d_defined_on(&*at_time)
-                            .r_defined_on(&*at_time)
-                            .build()?,
-                    )
-                    .await?
+        let dep_graph: Vec<DependencyDBWithNames> = match function_or_table.deref() {
+            FunctionOrTable::Function(function_id) => {
+                read_chain!(C::historic(), conn, at_time, |entry| {
+                    entry
+                        .recursive::<DependencyDBWithNames, FunctionDB>(*recursion_options)
+                        .direct_reference(function_id)
+                        .d_state(C::dependency_state())
+                        .r_state(C::function_state())
+                        .fetch_all()
+                        .await?
+                })
             }
-            FunctionOrTable::Table(table_id)=> {
-                conn
-                    .fetch_all_versions_recursive::<DEPENDENCY_STATE, DependencyDBWithNames, TABLE_STATE, TableDB>(
-                        OptionsBuilder::default()
-                            .recursion(*recursion_options)
-                            .direct_reference(table_id)
-                            .build()?
-                            .versioned()
-                            .d_defined_on(&*at_time)
-                            .r_defined_on(&*at_time)
-                            .build()?,
-                    )
-                    .await?
+            FunctionOrTable::Table(table_id) => {
+                read_chain!(C::historic(), conn, at_time, |entry| {
+                    entry
+                        .recursive::<DependencyDBWithNames, TableDB>(*recursion_options)
+                        .direct_reference(table_id)
+                        .d_state(C::dependency_state())
+                        .r_state(C::table_state())
+                        .fetch_all()
+                        .await?
+                })
             }
         };
 
@@ -131,15 +116,15 @@ where
 
     pub async fn main_function_id(
         mut conn: MutRef<DynamicConnection<'static>>,
-        function_or_table: Ref<FunctionOrTable>,
         at_time: Ref<AtTime>,
+        function_or_table: Ref<FunctionOrTable>,
     ) -> Result<FunctionId, TdError> {
         let function_id = match function_or_table.deref() {
             FunctionOrTable::Function(function_id) => *function_id,
             FunctionOrTable::Table(table_id) => {
-                let table = conn
-                    .fetch_one_at::<TABLE_STATE, TableDB>(table_id, &at_time)
-                    .await?;
+                let table: TableDB = read_chain!(C::historic(), conn, at_time, |entry| {
+                    entry.state(C::table_state()).fetch_one(table_id).await?
+                });
                 table.function_id
             }
         };
@@ -188,12 +173,13 @@ where
         at_time: Ref<AtTime>,
         triggered_functions: Ref<Vec<FunctionId>>,
     ) -> Result<Vec<DependencyDBWithNames>, TdError> {
-        let dep_graph = conn
-            .fetch_all_at_chunked::<DEPENDENCY_STATE, DependencyDBWithNames, _>(
-                triggered_functions.deref(),
-                &at_time,
-            )
-            .await?;
+        let dep_graph: Vec<DependencyDBWithNames> =
+            read_chain!(C::historic(), conn, at_time, |entry| {
+                entry
+                    .state(C::dependency_state())
+                    .fetch_all_chunked::<_>(triggered_functions.deref())
+                    .await?
+            });
 
         Ok(dep_graph)
     }
@@ -204,12 +190,13 @@ where
         functions: Ref<Vec<FunctionId>>,
     ) -> Result<Vec<TableDBWithNames>, TdError> {
         // Find output tables for each triggered_function
-        let output_tables = conn
-            .fetch_all_at_chunked::<{ TableDBWithNames::Active }, TableDBWithNames, _>(
-                functions.deref(),
-                &at_time,
-            )
-            .await?;
+        let output_tables: Vec<TableDBWithNames> =
+            read_chain!(C::historic(), conn, at_time, |entry| {
+                entry
+                    .state(TableDBWithNames::active())
+                    .fetch_all_chunked::<_>(functions.deref())
+                    .await?
+            });
 
         Ok(output_tables)
     }
@@ -231,12 +218,12 @@ where
             .unique()
             .collect::<Vec<_>>();
 
-        let all_tables = conn
-            .fetch_all_at_chunked::<{ TableDBWithNames::All }, TableDBWithNames, _>(
-                &all_table_ids,
-                &at_time,
-            )
-            .await?;
+        let all_tables: Vec<TableDBWithNames> =
+            read_chain!(C::historic(), conn, at_time, |entry| {
+                entry
+                    .fetch_all_chunked::<TableDBWithNames, _>(&all_table_ids)
+                    .await?
+            });
 
         let all_tables = all_tables
             .into_iter()
@@ -267,12 +254,12 @@ where
             .unique()
             .collect::<Vec<_>>();
 
-        let all_functions = conn
-            .fetch_all_at_chunked::<{ FunctionDBWithNames::All }, FunctionDBWithNames, _>(
-                &all_function_ids,
-                &at_time,
-            )
-            .await?;
+        let all_functions: Vec<FunctionDBWithNames> =
+            read_chain!(C::historic(), conn, at_time, |entry| {
+                entry
+                    .fetch_all_chunked::<FunctionDBWithNames, _>(&all_function_ids)
+                    .await?
+            });
 
         let all_functions = all_functions
             .into_iter()

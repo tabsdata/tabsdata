@@ -4,7 +4,7 @@
 
 use crate::do_authz::{DoAuthz, inter_collection_authz};
 use crate::graph::layers::build::GraphBuilder;
-use td_objects::States;
+use td_objects::StateFilter;
 use td_objects::dxo::dependency::DependencyDBWithNames;
 use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::table::TableDB;
@@ -15,16 +15,35 @@ use td_tower::{layer, layers};
 
 pub mod build;
 
-pub trait GraphConfig<
-    const TRIGGER_STATE: u8,
-    const DEPENDENCY_STATE: u8,
-    const FUNCTION_STATE: u8,
-    const TABLE_STATE: u8,
->
-{
+/// Knobs for [`GraphBuilder`] / [`generate_td_graph`]. State filters
+/// are typed values; defaults cover the values both current callers
+/// share. Implementations specify what differs (`function_state`,
+/// `include_dependency_functions`) plus their auth strategy.
+///
+/// `historic()` picks the read mode: `false` (default) reads live
+/// state from `_current` views — used by execution and live
+/// inspection. `true` rebuilds graph state at the request's `AtTime`
+/// via ranked CTEs — used only by plan-reading services that need the
+/// graph as it existed when the plan was dispatched.
+pub trait GraphConfig: Send + Sync + 'static {
     type Authz: DoAuthz;
 
-    fn include_dependency_functions(&self) -> bool;
+    fn trigger_state() -> StateFilter<TriggerDBWithNames> {
+        TriggerDBWithNames::active()
+    }
+    fn dependency_state() -> StateFilter<DependencyDBWithNames> {
+        DependencyDBWithNames::active()
+    }
+    fn table_state() -> StateFilter<TableDB> {
+        TableDB::available()
+    }
+
+    fn function_state() -> StateFilter<FunctionDB>;
+    fn include_dependency_functions() -> bool;
+
+    fn historic() -> bool {
+        false
+    }
 }
 
 #[derive(Debug)]
@@ -49,27 +68,15 @@ impl From<&TableId> for FunctionOrTable {
 // - Connection (read only is enough)
 // - FunctionOrTable: entrypoint for the trigger/dependency graph finder
 // - Recursion options: recursion options to find the graphs
-// Generics: define graph options and states.
+//
+// `_config` is a marker argument that pins the `C: GraphConfig` choice
+// at the call site without an explicit turbofish; it is otherwise
+// unused (the trait's methods are static).
 #[layer]
-pub fn generate_td_graph<
-    C,
-    const TRIGGER_STATE: u8,
-    const DEPENDENCY_STATE: u8,
-    const FUNCTION_STATE: u8,
-    const TABLE_STATE: u8,
->(
-    config: C,
-) where
-    for<'a> C: GraphConfig<TRIGGER_STATE, DEPENDENCY_STATE, FUNCTION_STATE, TABLE_STATE> + 'a,
-    TriggerDBWithNames: States<TRIGGER_STATE>,
-    DependencyDBWithNames: States<DEPENDENCY_STATE>,
-    FunctionDB: States<FUNCTION_STATE>,
-    TableDB: States<TABLE_STATE>,
-{
-    // Macro helper to reduce type name.
+pub fn generate_td_graph<C: GraphConfig>(_config: C) {
     macro_rules! gb {
         ($func: ident) => {
-            GraphBuilder::<C, TRIGGER_STATE, DEPENDENCY_STATE, FUNCTION_STATE, TABLE_STATE>::$func
+            GraphBuilder::<C>::$func
         };
     }
 
@@ -81,7 +88,7 @@ pub fn generate_td_graph<
         // generating a table centered graph, the same way we show the tables of
         // a function centered graph.
         from_fn(gb!(main_function_id)),
-        if config.include_dependency_functions() {
+        if C::include_dependency_functions() {
             layers!(
                 from_fn(gb!(find_recursive_dependency_graph)),
                 from_fn(gb!(unique_function_ids)),

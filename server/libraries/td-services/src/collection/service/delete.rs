@@ -112,8 +112,8 @@ mod tests {
         WorkerType,
     };
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
-    use td_queries::test_utils::SeedQueries;
-    use td_queries::{BasicQueries, CurrentQueries};
+    use td_queries::test_utils::SeedEntry;
+    use td_queries::{CurrentEntry, LiveEntry};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -202,7 +202,7 @@ mod tests {
     async fn test_delete_collection(db: TdPool) -> Result<(), TdError> {
         // Create 3 functions and 3 tables in the same collection
         let name = CollectionName::try_from("c")?;
-        let collection = db.seed_collection(&name, &UserId::admin()).await?;
+        let collection = db.seed().collection(&name, &UserId::admin()).await?;
 
         for i in 0..3 {
             let create = FunctionRegister::builder()
@@ -217,7 +217,7 @@ mod tests {
                 .runtime_values(FunctionRuntimeValues::default())
                 .reuse_frozen_tables(false)
                 .build()?;
-            let _ = db.seed_function(&collection, &create).await?;
+            let _ = db.seed().function(&collection, &create).await?;
         }
 
         // Create another one with triggers and dependencies
@@ -236,11 +236,12 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::default())
             .reuse_frozen_tables(false)
             .build()?;
-        let function = db.seed_function(&collection, &create).await?;
+        let function = db.seed().function(&collection, &create).await?;
 
         // Create workers for function_3
         let _cron_worker = db
-            .seed_worker(
+            .seed()
+            .worker(
                 &collection,
                 &function,
                 &WorkerType::CronTrigger,
@@ -250,11 +251,12 @@ mod tests {
             .await?;
 
         // Create function runner worker
-        let execution = db.seed_execution(&function).await?;
+        let execution = db.seed().execution(&function).await?;
         let transaction_key = TransactionKey::try_from("ANY").unwrap();
-        let transaction = db.seed_transaction(&execution, &transaction_key).await?;
-        let function_run = db
-            .seed_function_run(
+        let transaction = db.seed().transaction(&execution, &transaction_key).await?;
+        let physical_function_run = db
+            .seed()
+            .physical_function_run(
                 &collection,
                 &function,
                 &execution,
@@ -263,10 +265,11 @@ mod tests {
             )
             .await?;
         let _function_worker = db
-            .seed_function_runner_worker(
+            .seed()
+            .function_runner_worker(
                 &execution,
                 &transaction,
-                &function_run,
+                &physical_function_run,
                 &WorkerMessageStatus::Unlocked,
             )
             .await?;
@@ -289,55 +292,50 @@ mod tests {
             .await?;
 
         // Assert collection is deleted
-        let found = db.fetch_all::<CollectionDB>(()).await?;
+        let found = db.live().fetch_all::<CollectionDB>(()).await?;
         assert_eq!(found.len(), 0);
 
-        let res = db.fetch_one::<CollectionCreateDB>(&collection.id).await?;
+        let res = db
+            .live()
+            .fetch_one::<CollectionCreateDB>(&collection.id)
+            .await?;
         assert_eq!(res.name_when_deleted, Some(collection.name));
 
         // Assert functions are deleted
-        let found = db
-            .fetch_all_current::<{ FunctionDBWithNames::All }, FunctionDBWithNames>(())
-            .await?;
+        let found = db.current().fetch_all::<FunctionDBWithNames>(()).await?;
         assert_eq!(found.len(), 4);
         for function in found {
             assert!(matches!(function.status, FunctionStatus::Deleted));
         }
 
         // Assert tables are deleted
-        let found = db
-            .fetch_all_current::<{ TableDBWithNames::All }, TableDBWithNames>(&())
-            .await?;
+        let found = db.current().fetch_all::<TableDBWithNames>(&()).await?;
         assert_eq!(found.len(), 4);
         for table in found {
             assert!(matches!(table.status, TableStatus::Deleted));
         }
 
         // Assert triggers are deleted
-        let found = db
-            .fetch_all_current::<{ TriggerDBWithNames::All }, TriggerDBWithNames>(())
-            .await?;
+        let found = db.current().fetch_all::<TriggerDBWithNames>(()).await?;
         assert_eq!(found.len(), 2);
         for trigger in found {
             assert!(matches!(trigger.status, TriggerStatus::Deleted));
         }
 
         // Assert dependencies are deleted
-        let found = db
-            .fetch_all_current::<{ DependencyDBWithNames::All }, DependencyDBWithNames>(())
-            .await?;
+        let found = db.current().fetch_all::<DependencyDBWithNames>(()).await?;
         assert_eq!(found.len(), 1);
         for dep in found {
             assert!(matches!(dep.status, DependencyStatus::Deleted));
         }
 
         // Assert non function runner workers are stopped
-        let found = db.fetch_all::<WorkerDB>(()).await?;
+        let found = db.live().fetch_all::<WorkerDB>(()).await?;
         assert_eq!(found.len(), 2);
         for worker in found {
             if matches!(worker.worker_type, WorkerType::FunctionRunner) {
                 // unchanged status from seed method
-                assert!(matches!(worker.status, WorkerStatus::RunRequested));
+                assert!(matches!(worker.status, WorkerStatus::Requested));
             } else {
                 assert!(matches!(worker.status, WorkerStatus::StopScheduled));
             }
@@ -349,7 +347,7 @@ mod tests {
     #[tokio::test]
     async fn test_delete_collection_downstream_frozen(db: TdPool) -> Result<(), TdError> {
         let name_c_0 = CollectionName::try_from("c_0")?;
-        let collection_0 = db.seed_collection(&name_c_0, &UserId::admin()).await?;
+        let collection_0 = db.seed().collection(&name_c_0, &UserId::admin()).await?;
         let create = FunctionRegister::builder()
             .try_name("function_0")?
             .try_description("description")?
@@ -362,10 +360,10 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::default())
             .reuse_frozen_tables(false)
             .build()?;
-        let _ = db.seed_function(&collection_0, &create).await?;
+        let _ = db.seed().function(&collection_0, &create).await?;
 
         let name_c_1 = CollectionName::try_from("c_1")?;
-        let collection_1 = db.seed_collection(&name_c_1, &UserId::admin()).await?;
+        let collection_1 = db.seed().collection(&name_c_1, &UserId::admin()).await?;
         let create = FunctionRegister::builder()
             .try_name("function_1")?
             .try_description("description")?
@@ -381,7 +379,7 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::default())
             .reuse_frozen_tables(false)
             .build()?;
-        let _ = db.seed_function(&collection_1, &create).await?;
+        let _ = db.seed().function(&collection_1, &create).await?;
 
         let request = RequestContext::with(
             AccessTokenId::default(),
@@ -400,23 +398,23 @@ mod tests {
             .await?;
 
         // Assert only c_1 is active
-        let found = db.fetch_all::<CollectionDB>(()).await?;
+        let found = db.live().fetch_all::<CollectionDB>(()).await?;
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].name, name_c_1);
 
         // Assert function_1 is frozen
         let found = db
-            .fetch_all_current::<{ FunctionDBWithNames::Available }, FunctionDBWithNames>(
-                FunctionName::try_from("function_1")?,
-            )
+            .current()
+            .state(FunctionDBWithNames::available())
+            .fetch_all(FunctionName::try_from("function_1")?)
             .await?;
         assert_eq!(found.len(), 1);
 
         // Assert table_1 is active still
         let found = db
-            .fetch_all_current::<{ TableDBWithNames::Available }, TableDBWithNames>(
-                TableName::try_from("table_1")?,
-            )
+            .current()
+            .state(TableDBWithNames::available())
+            .fetch_all(TableName::try_from("table_1")?)
             .await?;
         assert_eq!(found.len(), 1);
 

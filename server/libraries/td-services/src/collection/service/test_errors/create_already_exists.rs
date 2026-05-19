@@ -11,13 +11,13 @@ use td_objects::dxo::collection::CollectionCreate;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::errors::SqlError;
 use td_objects::types::basic::{AccessTokenId, CollectionName, Description, RoleId, UserId};
-use td_queries::test_utils::SeedQueries;
+use td_queries::test_utils::SeedEntry;
 
 #[td_test::test(sqlx)]
 #[tokio::test]
 async fn test_create_already_existing(db: TdPool) {
     let name = CollectionName::try_from("ds0").unwrap();
-    let _ = db.seed_collection(&name, &UserId::admin()).await;
+    let _ = db.seed().collection(&name, &UserId::admin()).await;
 
     let service = CreateCollectionService::with_defaults(db.clone()).service();
 

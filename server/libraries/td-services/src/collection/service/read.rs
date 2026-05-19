@@ -47,7 +47,7 @@ mod tests {
     use td_objects::types::basic::{
         AccessTokenId, AtTime, CollectionName, Description, RoleId, UserId, UserName,
     };
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -78,7 +78,7 @@ mod tests {
     async fn test_read_collection(db: TdPool) {
         let before = AtTime::now();
         let name = CollectionName::try_from("ds0").unwrap();
-        let _ = db.seed_collection(&name, &UserId::admin()).await;
+        let _ = db.seed().collection(&name, &UserId::admin()).await;
 
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).read(

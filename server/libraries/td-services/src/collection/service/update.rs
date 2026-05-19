@@ -70,7 +70,7 @@ mod tests {
     use td_objects::types::basic::{
         AccessTokenId, AtTime, CollectionName, Description, RoleId, UserId, UserName,
     };
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -121,7 +121,7 @@ mod tests {
     #[tokio::test]
     async fn test_update_collection(db: TdPool) {
         let create_name = CollectionName::try_from("ds0").unwrap();
-        let _ = db.seed_collection(&create_name, &UserId::admin()).await;
+        let _ = db.seed().collection(&create_name, &UserId::admin()).await;
 
         let before_update = AtTime::now();
 

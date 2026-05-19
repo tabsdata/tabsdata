@@ -52,7 +52,7 @@ mod tests {
     use td_objects::types::basic::{
         AccessTokenId, AtTime, CollectionName, Description, RoleId, UserId, UserName,
     };
-    use td_queries::BasicQueries;
+    use td_queries::LiveEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -122,8 +122,11 @@ mod tests {
         assert_eq!(created.modified_by_id, UserId::admin());
         assert_eq!(created.modified_by, UserName::admin());
 
-        let found: Vec<CollectionCreateDB> =
-            db.fetch_all::<CollectionCreateDB>(&(&name)).await.unwrap();
+        let found: Vec<CollectionCreateDB> = db
+            .live()
+            .fetch_all::<CollectionCreateDB>(&(&name))
+            .await
+            .unwrap();
         assert_eq!(found.len(), 1);
     }
 }

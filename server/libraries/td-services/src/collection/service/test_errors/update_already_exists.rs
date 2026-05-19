@@ -13,15 +13,15 @@ use td_objects::dxo::crudl::RequestContext;
 use td_objects::errors::SqlError;
 use td_objects::rest_urls::CollectionParam;
 use td_objects::types::basic::{AccessTokenId, CollectionIdName, CollectionName, RoleId, UserId};
-use td_queries::test_utils::SeedQueries;
+use td_queries::test_utils::SeedEntry;
 
 #[td_test::test(sqlx)]
 #[tokio::test]
 async fn test_update_already_existing(db: TdPool) {
     let name0 = CollectionName::try_from("ds0").unwrap();
-    let _ = db.seed_collection(&name0, &UserId::admin()).await;
+    let _ = db.seed().collection(&name0, &UserId::admin()).await;
     let name1 = CollectionName::try_from("ds1").unwrap();
-    let _ = db.seed_collection(&name1, &UserId::admin()).await;
+    let _ = db.seed().collection(&name1, &UserId::admin()).await;
 
     let service = UpdateCollectionService::with_defaults(db).service();
 

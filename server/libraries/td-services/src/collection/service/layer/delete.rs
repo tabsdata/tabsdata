@@ -13,7 +13,7 @@ use td_objects::types::basic::{
     CollectionId, FunctionStatus, FunctionVersionId, TableStatus, TableVersionId, WorkerType,
 };
 use td_objects::{Buildable, TryUpdater, and, or};
-use td_queries::BasicQueries;
+use td_queries::LiveEntry;
 use td_tower::extractors::{MutRef, Ref};
 use tracing::debug;
 
@@ -60,6 +60,7 @@ pub async fn update_deleted_workers(
     let update = UpdateWorkerDB::stop_scheduled().await?;
 
     let res = conn
+        .live()
         .update::<_, WorkerDB>(
             &update,
             and!(
