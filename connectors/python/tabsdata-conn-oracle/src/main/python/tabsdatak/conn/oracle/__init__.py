@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Annotated, Any, Literal, TypeAlias, Union
 
 from pydantic import StringConstraints
@@ -16,8 +17,11 @@ from tabsdatak.api import (
     Secret,
     Src,
 )
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common import _validation as _common_validation
 from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
-from tabsdatak.conn.common.types import CfgSpec, UserPassword
+from tabsdatak.conn.common.types import CfgSpec, EntityWhitelistSpec, UserPassword
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.oracle import _validation
@@ -33,11 +37,36 @@ UriSpec: TypeAlias = Union[
     Annotated[Secret, _api.SecretValueConstraints(pattern=_validation.URI_PATTERN)],
     Annotated[Env, _api.EnvValueConstraints(pattern=_validation.URI_PATTERN)],
 ]
-IdentifierSpec: TypeAlias = Annotated[str, _validation.IDENTIFIER_VALIDATOR]
 QueriesSpec: TypeAlias = list[str]
-OracleTableNameSpec: TypeAlias = Annotated[str, _validation.TABLE_FQN_VALIDATOR]
+OracleTableNameSpec: TypeAlias = Annotated[
+    str, _validation.ORACLE_TABLE_FQN_VALIDATOR,
+]
 OracleTableNamesSpec: TypeAlias = list[OracleTableNameSpec]
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
+
+
+# --- OracleSrc.src_cfg keys -----------------------------------------
+SrcCfgKey: TypeAlias = Literal[
+    "oracle.logging_level",
+    "tabsdata.sql.sql.readEngine",
+    "tabsdata.sql.chunkSize",
+]
+
+SrcCfgSpec: TypeAlias = Annotated[
+    Mapping[SrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+]
+
+
+# --- OracleDest.dest_cfg keys ---------------------------------------
+DestCfgKey: TypeAlias = Literal[
+    "oracle.logging_level",
+    "tabsdata.sql.sql.writeEngine",
+    "tabsdata.sql.chunkSize",
+]
+
+DestCfgSpec: TypeAlias = Annotated[
+    Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+]
 
 
 # --- Connection ------------------------------------------------------
@@ -47,6 +76,7 @@ IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
 class OracleConn(Conn):
     uri: UriSpec
     credentials: CredentialsSpec
+    entity_whitelist: EntityWhitelistSpec | None = None
     conn_cfg: CfgSpec | None = None
 
 
@@ -63,7 +93,7 @@ class OracleSrc(Src):
     transactional: bool = True
     schema_overrides: SchemaOverrideSpec | None = None
     query_params: dict[str, Any] | None = None
-    src_cfg: CfgSpec | None = None
+    src_cfg: SrcCfgSpec | None = None
 
     def validate(self) -> None:
         if self.schema_overrides is not None and len(self.schema_overrides) != len(
@@ -84,4 +114,4 @@ class OracleDest(Dest):
     tables: OracleTableNamesSpec
     if_table_exists: IfTableExistsSpec = "append"
     transactional: bool = True
-    dest_cfg: CfgSpec | None = None
+    dest_cfg: DestCfgSpec | None = None
