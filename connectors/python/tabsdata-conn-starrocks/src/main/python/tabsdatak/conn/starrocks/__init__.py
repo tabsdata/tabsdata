@@ -13,7 +13,12 @@ from tabsdatak.api import (
     NamedConn,
     Secret,
 )
-from tabsdatak.conn.common.types import CfgSpec, CloudLocation, UserPassword
+from tabsdatak.conn.common.types import (
+    CfgSpec,
+    CloudLocation,
+    EntityWhitelistSpec,
+    UserPassword,
+)
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.starrocks import _validation
@@ -30,7 +35,6 @@ HostSpec: TypeAlias = Union[
     Annotated[Env, _api.EnvValueConstraints(pattern=r".+")],
 ]
 PortSpec: TypeAlias = int
-IdentifierSpec: TypeAlias = Annotated[str, _validation.IDENTIFIER_VALIDATOR]
 
 
 _IDENTIFIER_PATTERN = r"[A-Za-z_][A-Za-z0-9_]*"
@@ -39,7 +43,9 @@ DatabaseSpec: TypeAlias = Union[
     Annotated[Secret, _api.SecretValueConstraints(pattern=_IDENTIFIER_PATTERN)],
     Annotated[Env, _api.EnvValueConstraints(pattern=_IDENTIFIER_PATTERN)],
 ]
-StarRocksTableNameSpec: TypeAlias = Annotated[str, _validation.TABLE_FQN_VALIDATOR]
+StarRocksTableNameSpec: TypeAlias = Annotated[
+    str, _validation.STARROCKS_TABLE_FQN_VALIDATOR,
+]
 StarRocksTableNamesSpec: TypeAlias = list[StarRocksTableNameSpec]
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
 SchemaEvolutionSpec: TypeAlias = Literal["strict", "iceberg"]
@@ -55,6 +61,7 @@ class StarRocksConn(Conn):
     port: PortSpec = 9030
     database: DatabaseSpec = "default"
     credentials: CredentialsSpec
+    entity_whitelist: EntityWhitelistSpec | None = None
     conn_cfg: CfgSpec | None = None
 
 
@@ -70,6 +77,4 @@ class StarRocksDest(Dest):
     tables: StarRocksTableNamesSpec
     if_table_exists: IfTableExistsSpec = "append"
     schema_evolution: SchemaEvolutionSpec = "strict"
-    # TODO: document valid keys for this cfg in the docstring above
-    # (see MySQLSrc src_cfg for the pattern).
     dest_cfg: CfgSpec | None = None
