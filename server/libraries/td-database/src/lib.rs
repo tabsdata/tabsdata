@@ -26,13 +26,11 @@ pub async fn db(config: &DatabaseConfig) -> Result<TdPool, DbError> {
 #[cfg(test)]
 mod tests {
     use crate::config::DatabaseConfig;
+    use crate::error::DbError;
     use crate::pool::TdPool;
     use crate::raw_query;
     use crate::sea_query::builder::SeaQueryExt;
-    use crate::sea_query::kind::DatabaseKind;
-    use std::collections::BTreeMap;
     use td_common::tdtestdir;
-    use td_schema::schema::SchemaVersion;
     use td_security::{
         ENCODED_ID_CA_ALL_SEC_ADMIN, ENCODED_ID_CA_ALL_SYS_ADMIN, ENCODED_ID_CD_ALL_SYS_ADMIN,
         ENCODED_ID_CD_ALL_USER, ENCODED_ID_CR_ALL_SYS_ADMIN, ENCODED_ID_CR_ALL_USER,
@@ -96,52 +94,6 @@ mod tests {
         .fetch_one(db)
         .await
         .unwrap()
-    }
-
-    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, sqlx::FromRow)]
-    struct ColumnInfo {
-        name: String,
-        #[sqlx(rename = "type")]
-        col_type: String,
-        notnull: bool,
-        pk: bool,
-    }
-
-    async fn schema_table_columns(db: &TdPool, table: &str) -> Vec<ColumnInfo> {
-        let sql = format!(
-            "SELECT \"name\", \"type\", \"notnull\", \"pk\" FROM pragma_table_info('{table}')"
-        );
-        let query = crate::sea_query::raw::RawSeaQuery(sea_query::raw_sql::seaql::query(&sql));
-        let mut cols: Vec<ColumnInfo> = query.build_query_as().fetch_all(db).await.unwrap();
-        cols.sort();
-        cols
-    }
-
-    #[derive(Debug, PartialEq, Eq)]
-    struct SchemaFingerprint {
-        tables: Vec<String>,
-        views: Vec<String>,
-        indices: Vec<String>,
-        columns: BTreeMap<String, Vec<ColumnInfo>>,
-        db_version: String,
-    }
-
-    async fn capture_schema_fingerprint(db: &TdPool) -> SchemaFingerprint {
-        let tables = schema_table_names(db).await;
-        let views = schema_view_names(db).await;
-        let indices = schema_index_names(db).await;
-        let mut columns = BTreeMap::new();
-        for table in &tables {
-            columns.insert(table.clone(), schema_table_columns(db, table).await);
-        }
-        let db_version = schema_db_version(db).await;
-        SchemaFingerprint {
-            tables,
-            views,
-            indices,
-            columns,
-            db_version,
-        }
     }
 
     #[tokio::test]
@@ -456,15 +408,21 @@ mod tests {
             "dependencies",
             "dependencies_current",
             "executions",
-            "function_requirements",
-            "function_runs",
+            "function_patches",
+            "function_patches_current",
             "functions",
             "functions_current",
             "inter_collection_permissions",
+            "logical_function_run_inputs",
+            "logical_function_run_pointers",
+            "logical_function_runs",
+            "logical_table_data_version_pointers",
+            "logical_table_data_versions",
             "permissions",
+            "physical_function_runs",
+            "physical_table_data_versions",
             "roles",
             "sessions",
-            "table_data_versions",
             "table_partitions",
             "tables",
             "tables_current",
@@ -492,17 +450,17 @@ mod tests {
             "execution_status_summary",
             "executions__with_names",
             "executions__with_status",
-            "function_requirements__with_names",
-            "function_runs__with_names",
             "functions__with_names",
             "functions_current__with_names",
             "global_status_summary",
             "inter_collection_permissions__with_names",
+            "logical_function_runs__with_names",
             "permissions__with_names",
+            "physical_function_runs__with_names",
+            "physical_table_data_versions__with_function",
             "roles__with_names",
             "sessions__with_names",
             "table_data_versions__active",
-            "table_data_versions__with_function",
             "table_data_versions__with_names",
             "tables__with_names",
             "tables_current__with_names",
@@ -536,11 +494,7 @@ mod tests {
             "executions___function_version_id___idx",
             "executions___triggered_by_id___idx",
             "executions___triggered_on___idx",
-            "function_requirements___execution_id___idx",
-            "function_requirements___function_run_id___idx",
-            "function_requirements___function_version_id___idx",
-            "function_requirements___requirement_function_run_id___idx",
-            "function_requirements___requirement_table_data_version_id___idx",
+            "function_patches___function_id__defined_on___idx",
             "function_runs___collection_id___idx",
             "function_runs___execution_id__status___idx",
             "function_runs___function_version_id___idx",
@@ -551,6 +505,22 @@ mod tests {
             "functions_current___collection_id___idx",
             "functions_current___status___idx",
             "inter_collection_permissions___from_collection_id__to_collection_id__idx",
+            "logical_function_run_inputs___execution_id___idx",
+            "logical_function_run_inputs___logical_function_run_id___idx",
+            "logical_function_run_pointers___function_run_id___idx",
+            "logical_function_run_pointers___logical_function_run_id__set_on__id___idx",
+            "logical_function_runs___execution_id___idx",
+            "logical_function_runs___execution_id__function_id___idx",
+            "logical_function_runs___execution_id__status___idx",
+            "logical_function_runs___status___idx",
+            "logical_function_runs___transaction_id___idx",
+            "logical_function_runs___transaction_id__status___idx",
+            "logical_table_data_version_pointers___logical_table_data_version_id__set_on__id___idx",
+            "logical_table_data_version_pointers___table_data_version_id___idx",
+            "logical_table_data_versions___execution_id___idx",
+            "logical_table_data_versions___producer_logical_function_run_id___idx",
+            "logical_table_data_versions___table_id__triggered_on___idx",
+            "logical_table_data_versions___transaction_id___idx",
             "permissions___role_id__permission_type__entity___idx",
             "roles___name___idx",
             "roles___user_id__role_id___idx",
@@ -593,208 +563,26 @@ mod tests {
         );
     }
 
-    /// Migration invariant: for each archived version N,
-    /// archive(N) + deltas(N+1..=CURRENT) must produce a schema identical to
-    /// a fresh installation via TdPool::create().
-    ///
-    /// Both paths go through DynamicConnection::execute_batch().
+    /// A 1.x database lacks the `tabsdata_version` row and must be rejected
+    /// by the major-version gate before any db_version comparison runs.
     #[tokio::test]
-    async fn test_migration_invariant() {
-        use td_schema::schema::{archive, current, deltas};
-
-        // Fresh-install fingerprint via production path.
-        let fresh_db = crate::test_utils::db().await.unwrap();
-        let fresh_fp = capture_schema_fingerprint(&fresh_db).await;
-
-        for archive_version in archive::MIN_ARCHIVE..current::Schema::VERSION {
-            // Build migrated DB: archive + deltas.
-            let config = crate::test_utils::test_config();
-            let migrated_db = TdPool::connect(&config).await.unwrap();
-
-            let mut tx = migrated_db.pool.begin().await.unwrap();
-            let archive_stmts = archive::build(archive_version, migrated_db.kind());
-            tx.as_mut_conn()
-                .execute_batch(&archive_stmts)
-                .await
-                .unwrap();
-
-            for delta_target in (archive_version + 1)..=current::Schema::VERSION {
-                let delta_stmts = deltas::get(delta_target, migrated_db.kind());
-                tx.as_mut_conn().execute_batch(&delta_stmts).await.unwrap();
-            }
-            tx.commit().await.unwrap();
-
-            let migrated_fp = capture_schema_fingerprint(&migrated_db).await;
-
-            assert_eq!(
-                fresh_fp.tables, migrated_fp.tables,
-                "Table set mismatch: archive v{archive_version} + deltas vs fresh"
-            );
-            assert_eq!(
-                fresh_fp.views, migrated_fp.views,
-                "View set mismatch: archive v{archive_version} + deltas vs fresh"
-            );
-            assert_eq!(
-                fresh_fp.indices, migrated_fp.indices,
-                "Index set mismatch: archive v{archive_version} + deltas vs fresh"
-            );
-            assert_eq!(
-                fresh_fp.columns, migrated_fp.columns,
-                "Column definitions mismatch: archive v{archive_version} + deltas vs fresh"
-            );
-            assert_eq!(
-                fresh_fp.db_version, migrated_fp.db_version,
-                "db_version mismatch: archive v{archive_version} + deltas vs fresh"
-            );
-        }
-    }
-
-    /// Historic migration invariant: applying the initial v0 schema, then
-    /// historic migrations (→v5) with normalization, then programmatic deltas
-    /// (→CURRENT) must produce a schema **identical** to a fresh install —
-    /// same tables, views, indices, column definitions, and db_version.
-    #[tokio::test]
-    async fn test_historic_migration_invariant() {
-        use td_schema::schema::archive::historic;
-        use td_schema::schema::current;
-        use td_schema::schema::deltas;
-
-        // Fresh-install fingerprint via production path.
-        let fresh_db = crate::test_utils::db().await.unwrap();
-        let fresh_fp = capture_schema_fingerprint(&fresh_db).await;
-
-        // Build a v0 database, apply historic migrations + normalize + deltas.
-        let config_historic = crate::test_utils::test_config();
-        let db_historic = TdPool::connect(&config_historic).await.unwrap();
-
-        let mut tx = db_historic.pool.begin().await.unwrap();
-
-        let v0_stmts = historic::initial_v0_schema();
-        tx.as_mut_conn().execute_batch(&v0_stmts).await.unwrap();
-
-        for v in 1..=historic::MAX_VERSION {
-            let stmts = historic::get(v);
-            tx.as_mut_conn().execute_batch(&stmts).await.unwrap();
-        }
-
-        // Normalize schema to match the v5 archive exactly.
-        let stmts = historic::normalize();
-        tx.as_mut_conn().execute_batch(&stmts).await.unwrap();
-
-        for v in (historic::MAX_VERSION + 1)..=current::Schema::VERSION {
-            let stmts = deltas::get(v, db_historic.kind());
-            tx.as_mut_conn().execute_batch(&stmts).await.unwrap();
-        }
-        tx.commit().await.unwrap();
-
-        let historic_fp = capture_schema_fingerprint(&db_historic).await;
-
-        assert_eq!(
-            fresh_fp.tables, historic_fp.tables,
-            "Table set mismatch: historic v0→CURRENT vs fresh"
-        );
-        assert_eq!(
-            fresh_fp.views, historic_fp.views,
-            "View set mismatch: historic v0→CURRENT vs fresh"
-        );
-        assert_eq!(
-            fresh_fp.indices, historic_fp.indices,
-            "Index set mismatch: historic v0→CURRENT vs fresh"
-        );
-        assert_eq!(
-            fresh_fp.columns, historic_fp.columns,
-            "Column definitions mismatch: historic v0→CURRENT vs fresh"
-        );
-        assert_eq!(
-            fresh_fp.db_version, historic_fp.db_version,
-            "db_version mismatch: historic v0→CURRENT vs fresh"
-        );
-    }
-
-    /// End-to-end test: upgrade a v0 database all the way to CURRENT_VERSION
-    /// using the production `upgrade_db_version()` path.
-    #[tokio::test]
-    async fn test_historic_upgrade_end_to_end() {
-        use td_schema::schema::archive::historic;
-
-        // Create a v0 database manually.
+    async fn test_pre_2_0_database_rejected() {
         let config = crate::test_utils::test_config();
-        let db = TdPool::connect(&config).await.unwrap();
-        let mut tx = db.pool.begin().await.unwrap();
-        let v0_stmts = historic::initial_v0_schema();
-        tx.as_mut_conn().execute_batch(&v0_stmts).await.unwrap();
+        let db = TdPool::create(&config).await.unwrap();
 
-        // Also create the _sqlx_migrations table to simulate a real old database.
-        tx.as_mut_conn()
-            .execute_batch(
-                &["CREATE TABLE _sqlx_migrations (version TEXT PRIMARY KEY)".to_string()],
-            )
-            .await
-            .unwrap();
-        tx.commit().await.unwrap();
-
-        // Run the production upgrade path.
-        db.upgrade_db_version().await.unwrap();
-
-        // Verify we reached CURRENT_VERSION.
-        let version = schema_db_version(&db).await;
-        assert_eq!(
-            version,
-            td_schema::CURRENT_VERSION.to_string(),
-            "db_version should be CURRENT_VERSION after historic upgrade"
-        );
-
-        // Verify _sqlx_migrations was cleaned up.
-        let res: Vec<crate::dynamic::DynamicRow> = raw_query!(
-            db,
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = '_sqlx_migrations'"
-        )
-        .build_query()
-        .fetch_all(&db)
-        .await
-        .unwrap();
-        assert!(
-            res.is_empty(),
-            "_sqlx_migrations table should have been dropped"
-        );
-    }
-
-    /// Verify that a failed upgrade rolls back — the database stays at its
-    /// original version.
-    #[tokio::test]
-    async fn test_upgrade_rollback_on_failure() {
-        // Create a fresh database at CURRENT_VERSION.
-        let config = crate::test_utils::test_config();
-        let db = TdPool::connect(&config).await.unwrap();
-        db.upgrade().await.unwrap();
-
-        // Manually set version to an intermediate value that would trigger
-        // deltas, but corrupt a table the delta depends on so it fails.
         raw_query!(
             db,
-            "UPDATE tabsdata_system SET value = '5' WHERE name = 'db_version'"
+            "DELETE FROM tabsdata_system WHERE name = 'tabsdata_version'"
         )
         .build_query()
         .execute(&db)
         .await
         .unwrap();
 
-        // Drop a table that v6_to_v7 delta needs, causing the upgrade to fail.
-        raw_query!(db, "DROP TABLE functions")
-            .build_query()
-            .execute(&db)
-            .await
-            .unwrap();
-
-        // The upgrade should fail.
-        let result = db.upgrade_db_version().await;
-        assert!(result.is_err(), "Upgrade should fail on corrupted schema");
-
-        // db_version should still read '5' because the transaction rolled back.
-        let version = schema_db_version(&db).await;
-        assert_eq!(
-            version, "5",
-            "db_version should remain at 5 after failed upgrade (rollback)"
+        let res = db.check().await;
+        assert!(
+            matches!(res, Err(DbError::IncompatibleMajorVersion(1, _))),
+            "expected IncompatibleMajorVersion(1, _), got {res:?}"
         );
     }
 }

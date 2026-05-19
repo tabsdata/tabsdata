@@ -19,6 +19,11 @@ pub enum DbError {
     #[error("Tabsdata database must be upgraded: {0}")]
     DatabaseNeedsUpgrade(String) = 5001,
     #[error(
+        "Tabsdata database belongs to major version '{0}' and cannot be opened by major version '{1}'. \
+         Cross-major upgrade is not supported; a fresh database is required."
+    )]
+    IncompatibleMajorVersion(usize, usize) = 5017,
+    #[error(
         "Tabsdata database version is '{0}', binary database version is '{1}'. Binary must be upgraded"
     )]
     DatabaseIsNewer(String, usize) = 5002,

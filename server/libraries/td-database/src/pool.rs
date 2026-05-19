@@ -12,7 +12,10 @@ use sqlx::Error;
 use std::cmp::Ordering;
 use std::fmt::Display;
 use td_schema::schema::SchemaVersion;
-use td_schema::{CURRENT_VERSION, DB_EDITION_NAME, DB_VERSION_NAME, TabsdataSystem};
+use td_schema::{
+    CURRENT_TABSDATA_VERSION, CURRENT_VERSION, DB_EDITION_NAME, DB_VERSION_NAME,
+    TABSDATA_VERSION_NAME, TabsdataSystem,
+};
 use te_system::edition::{Compatible, Edition, TabsdataEdition};
 use tracing::{debug, info, instrument, warn};
 
@@ -53,6 +56,8 @@ impl TdPool {
 
     #[instrument(name = "db.pool.check", skip_all, level = "debug", err(Debug))]
     pub async fn check(&self) -> Result<(), DbError> {
+        self.check_tabsdata_version().await?;
+        debug!("db.pool.check: tabsdata version OK");
         self.check_db_version().await?;
         debug!("db.pool.check: db version OK");
         self.check_tabsdata_edition().await?;
@@ -88,20 +93,33 @@ impl TdPool {
         }
     }
 
-    /// Read the current `db_version` from the database.
-    async fn try_read_db_version(&self) -> Result<usize, DbError> {
-        let res: String = Query::select()
+    /// Read a single `value` from `tabsdata_system` keyed by `name`. Missing
+    /// rows return `Ok(None)`; only the read itself can fail.
+    async fn read_system_value(&self, name: &str) -> Result<Option<String>, DbError> {
+        Query::select()
             .column(TabsdataSystem::Value)
             .from(TabsdataSystem::Table)
-            .and_where(Expr::col(TabsdataSystem::Name).eq(DB_VERSION_NAME))
+            .and_where(Expr::col(TabsdataSystem::Name).eq(name))
             .build_query_scalar()
-            .fetch_one(&self.pool)
+            .fetch_optional(&self.pool)
             .await
-            .map_err(|e| Self::map_system_db_error(e, DB_VERSION_NAME))?;
+            .map_err(|e| Self::map_system_db_error(e, name))
+    }
+
+    /// Read the current `db_version` from the database.
+    async fn try_read_db_version(&self) -> Result<usize, DbError> {
+        let res = self
+            .read_system_value(DB_VERSION_NAME)
+            .await?
+            .ok_or_else(|| {
+                DbError::DatabaseCorrupted(format!(
+                    "Missing '{DB_VERSION_NAME}' row in '{}'",
+                    TabsdataSystem::Table.to_string()
+                ))
+            })?;
         res.parse::<usize>().map_err(|_| {
             DbError::DatabaseCorrupted(format!(
-                "'{}' value '{}' must be an integer",
-                DB_VERSION_NAME, res
+                "'{DB_VERSION_NAME}' value '{res}' must be an integer"
             ))
         })
     }
@@ -121,94 +139,64 @@ impl TdPool {
         }
     }
 
+    /// Read the major Tabsdata version recorded in `tabsdata_system`.
+    ///
+    /// Pre-2.0 databases lack this row; we map a missing row to `1` so the
+    /// startup gate can refuse them with a clear cross-major message.
+    async fn try_read_tabsdata_version(&self) -> Result<usize, DbError> {
+        match self.read_system_value(TABSDATA_VERSION_NAME).await? {
+            None => Ok(1),
+            Some(raw) => raw.parse::<usize>().map_err(|_| {
+                DbError::DatabaseCorrupted(format!(
+                    "'{TABSDATA_VERSION_NAME}' value '{raw}' must be an integer"
+                ))
+            }),
+        }
+    }
+
+    async fn check_tabsdata_version(&self) -> Result<(), DbError> {
+        let version = self.try_read_tabsdata_version().await?;
+        if version == CURRENT_TABSDATA_VERSION {
+            Ok(())
+        } else {
+            Err(DbError::IncompatibleMajorVersion(
+                version,
+                CURRENT_TABSDATA_VERSION,
+            ))
+        }
+    }
+
+    /// Schema-counter check for the current major version.
+    ///
+    /// Cross-major upgrade is not supported (see [`check_tabsdata_version`]).
+    /// In-major upgrades walk the delta ladder
+    /// (`td_schema::schema::deltas::get`) from the stored `db_version` up to
+    /// `CURRENT_VERSION`; each delta applies in its own transaction. A
+    /// missing delta in the range panics with the upstream
+    /// `"No delta migration for version N"` error.
     pub async fn upgrade_db_version(&self) -> Result<(), DbError> {
         match self.try_read_db_version().await {
             Ok(version) if version == CURRENT_VERSION => {
                 debug!(version, "Schema version is up to date");
             }
             Ok(version) if version < CURRENT_VERSION => {
-                info!(
-                    from = version,
-                    to = CURRENT_VERSION,
-                    "Upgrading schema version"
-                );
-
-                let mut tx = self
-                    .pool
-                    .begin()
-                    .await
-                    .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
-
-                let mut current = version;
-
-                // Legacy upgrade: apply historic SQLite migrations for databases
-                // from before the programmatic migration system (versions 0–5).
-                // We use <= so that v5 databases created by the old sqlx system
-                // also get normalized (correct type spellings and indices).
-                if current <= td_schema::schema::archive::MIN_ARCHIVE {
-                    #[allow(unreachable_patterns)]
-                    match &self.pool {
-                        #[cfg(feature = "sqlite")]
-                        DynamicPool::Sqlite { .. } => {
-                            info!(
-                                from = current,
-                                to = td_schema::schema::archive::MIN_ARCHIVE,
-                                "Applying legacy SQLite migrations"
-                            );
-                            for v in (current + 1)..=td_schema::schema::archive::MIN_ARCHIVE {
-                                info!(delta = v, "Applying historic SQLite migration");
-                                let stmts = td_schema::schema::archive::historic::get(v);
-                                tx.as_mut_conn()
-                                    .execute_batch(&stmts)
-                                    .await
-                                    .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
-                                info!(delta = v, "Historic migration applied");
-                            }
-
-                            // Normalize schema types and indices to match the
-                            // programmatic v5 archive.
-                            info!("Normalizing schema to match v5 archive");
-                            let stmts = td_schema::schema::archive::historic::normalize();
-                            tx.as_mut_conn()
-                                .execute_batch(&stmts)
-                                .await
-                                .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
-
-                            // Clean up the legacy sqlx migrations tracking table.
-                            tx.as_mut_conn()
-                                .execute_batch(&[
-                                    "DROP TABLE IF EXISTS _sqlx_migrations".to_string()
-                                ])
-                                .await
-                                .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
-                            current = td_schema::schema::archive::MIN_ARCHIVE;
-                            info!(version = current, "Legacy SQLite migrations complete");
-                        }
-                        _ => {
-                            return Err(DbError::DatabaseCorrupted(format!(
-                                "Database version {} predates multi-backend support \
-                                 and can only be upgraded on SQLite",
-                                current
-                            )));
-                        }
-                    }
-                }
-
-                // Programmatic deltas for versions >= MIN_ARCHIVE.
-                for v in (current + 1)..=CURRENT_VERSION {
-                    info!(delta = v, "Applying schema delta");
-                    let stmts = td_schema::schema::deltas::get(v, self.kind());
+                info!(from = version, to = CURRENT_VERSION, "Upgrading schema");
+                for target in (version + 1)..=CURRENT_VERSION {
+                    let stmts = td_schema::schema::deltas::get(target, self.kind());
+                    let mut tx = self
+                        .pool
+                        .begin()
+                        .await
+                        .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
                     tx.as_mut_conn()
                         .execute_batch(&stmts)
                         .await
                         .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
-                    info!(delta = v, "Schema delta applied");
+                    tx.commit()
+                        .await
+                        .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
+                    info!(target, "Schema delta applied");
                 }
-
-                tx.commit()
-                    .await
-                    .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
-                info!(version = CURRENT_VERSION, "Schema upgrade complete");
             }
             Ok(version) => {
                 warn!(
@@ -247,14 +235,7 @@ impl TdPool {
     }
 
     async fn parse_tabsdata_edition(&self) -> Result<Option<String>, DbError> {
-        Query::select()
-            .column(TabsdataSystem::Value)
-            .from(TabsdataSystem::Table)
-            .and_where(Expr::col(TabsdataSystem::Name).eq(DB_EDITION_NAME))
-            .build_query_scalar()
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|e| Self::map_system_db_error(e, DB_EDITION_NAME))
+        self.read_system_value(DB_EDITION_NAME).await
     }
 
     async fn check_tabsdata_edition(&self) -> Result<(), DbError> {
