@@ -279,12 +279,15 @@ class _ValuePattern:
 
         # Late import: api.py imports from _api at module load, and these
         # classes are defined there.
-        from tabsdatak.api import Env, LiteralEnv, LiteralSecret, Secret
+        # noinspection PyProtectedMember
+        from tabsdatak.api import Env, Secret, _LiteralEnv, _LiteralSecret
 
         if issubclass(source_type, Env):
-            literal_cls: type = LiteralEnv
+            literal_cls: type = _LiteralEnv
+            field_name = "s"
         elif issubclass(source_type, Secret):
-            literal_cls: type = LiteralSecret
+            literal_cls: type = _LiteralSecret
+            field_name = "_s"
         else:
             raise TypeError()
 
@@ -296,7 +299,7 @@ class _ValuePattern:
             # injected. The literal's own model_validator enforces the
             # pattern against the value at construction.
             if isinstance(value, str):
-                return literal_cls(s=value, _value_pattern=regex)
+                return literal_cls(**{field_name: value, "_value_pattern": regex})
 
             instance = h(value)
             # Skip reconstruction when the instance already carries the
@@ -313,7 +316,9 @@ class _ValuePattern:
 
             # Reconstruct so the field's pattern wins, and the literal
             # model_validator runs against the field's pattern.
-            return type(instance)(s=instance.s, _value_pattern=regex)
+            return type(instance)(
+                **{field_name: getattr(instance, field_name), "_value_pattern": regex}
+            )
 
         return core_schema.no_info_wrap_validator_function(wrap, base)
 

@@ -12,7 +12,6 @@ from tabsdatak.api import (
     Env,
     Secret,
     Src,
-    LiteralEnv,
 )
 from tabsdatak.error import (
     ApiErrorCode,
@@ -99,15 +98,15 @@ class _SrcWithEnvField(Src):
 
 
 def test_subclass_instance_at_parent_field_dumps_subclass_envelope():
-    # ``e: Env`` slot, but populated with a ``LiteralEnv`` (a subclass).
-    # The wrap-serializer must re-route through the subclass schema so
-    # the dump carries ``kind="literalEnv"`` (not the parent's
-    # ``"envRef"``) and the subclass-only field ``s`` is present.
-    s = _SrcWithEnvField(e=LiteralEnv(s="my-literal"))
+    # ``e: Env`` slot, but populated with a ``_LiteralEnv`` (a subclass
+    # built via ``Env.lit``). The wrap-serializer must re-route through
+    # the subclass schema so the dump carries ``kind="envLiteral"`` (not
+    # the parent's ``"envRef"``) and the subclass field ``s`` is present.
+    s = _SrcWithEnvField(e=Env.lit("my-literal"))
     d = s.to_dict()
     inner = d["spec"]["e"]
-    assert inner["kind"] == "literalEnv"
-    assert inner["type"].endswith(":LiteralEnv")
+    assert inner["kind"] == "envLiteral"
+    assert inner["type"].endswith(":_LiteralEnv")
     assert inner["spec"]["s"] == "my-literal"
 
 
@@ -129,7 +128,7 @@ def test_already_instance_via_pydantic_validator(monkeypatch):
     # The same identity is preserved when the instance flows through
     # pydantic dispatch (not just direct construction).
     monkeypatch.setenv(DEBUG_FRAMES_ENV_VAR, "0")
-    inner = Secret(s="vault#PWD")
+    inner = Secret()
     # Round-trip: building a Src that holds the secret, then accessing
     # ``.e`` on a nested Env-typed field is the standard path; here we
     # just confirm the instance path through the schema's wrap-validator.
@@ -631,50 +630,9 @@ def test_env_rejects_invalid_env_var_names(name):
 
 
 # ---------------------------------------------------------------------------
-# Secret reference validator (`<secret>#<key>`)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("ref", [
-    "db-password#DB_PASSWORD",   # canonical example
-    "x#y",                        # minimal
-    "ns.subdomain#KEY",           # multi-label DNS subdomain
-    "abc123#key.with.dots",
-    "abc#key-with-hyphens",
-    "abc#key_with_underscores",
-])
-def test_secret_key_accepts_valid_refs(ref):
-    s = m.Secret(ref)
-    assert s.s == ref
-
-
-@pytest.mark.parametrize("ref,reason", [
-    ("no_separator",               "missing #"),
-    ("UPPERCASE_SECRET#KEY",       "uppercase in secret name"),
-    ("-leading-hyphen#KEY",        "secret label starts with hyphen"),
-    ("trailing-hyphen-#KEY",       "secret label ends with hyphen"),
-    ("secret#key with space",      "space in key"),
-    ("secret#",                    "empty key"),
-    ("#KEY",                       "empty secret name"),
-])
-def test_secret_key_rejects_invalid_refs(ref, reason):
-    with pytest.raises(ApiException) as excinfo:
-        m.Secret(ref)
-    assert excinfo.value.api_error is ApiErrorCode.API_10
-
-
-def test_secret_key_rejects_secret_name_over_253_chars():
-    long_secret = "a" * 254
-    with pytest.raises(ApiException):
-        m.Secret(f"{long_secret}#KEY")
-
-
-# ---------------------------------------------------------------------------
 # Polymorphic dispatch through the value-ref family: loading via a
 # concrete class round-trips, loading an unrelated envelope fails the
-# issubclass check. (The shared abstract base ``ValOrRef`` lives in
-# :mod:`tabsdatak._types` and is framework-internal; tests here use the
-# public ``Env`` / ``Secret`` entry points instead.)
+# issubclass check.
 # ---------------------------------------------------------------------------
 
 
@@ -686,10 +644,10 @@ def test_env_polymorphic_dispatch_round_trips():
 
 
 def test_secret_polymorphic_dispatch_round_trips():
-    s = m.Secret("db-password#DB_PASSWORD")
+    s = m.Secret()
     back = m.Secret.from_json(s.to_json())
     assert isinstance(back, m.Secret)
-    assert back.s == "db-password#DB_PASSWORD"
+    assert back._name() == "<secret>"
 
 
 def test_env_rejects_unrelated_envelope():

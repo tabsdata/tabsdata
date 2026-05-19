@@ -20,10 +20,10 @@ pytestmark = pytest.mark.azureblob
 
 def _conn():
     return AzureBlobConn(
-        container=Secret("az-container#NAME"),
+        container=Secret(),
         credentials=AzureAccountKey(
-            account_name=Secret("az-acct#NAME"),
-            account_key=Secret("az-acct#KEY"),
+            account_name=Secret(),
+            account_key=Secret(),
         ),
         conn_cfg={"azure.timeout": 30},
     )
@@ -122,10 +122,10 @@ def test_azureblob_validate_rejects_cross_side_format_cfg_keys():
 
 def _conn_with_base(base_path):
     return AzureBlobConn(
-        container=Secret("az-container#NAME"),
+        container=Secret(),
         credentials=AzureAccountKey(
-            account_name=Secret("az-acct#NAME"),
-            account_key=Secret("az-acct#KEY"),
+            account_name=Secret(),
+            account_key=Secret(),
         ),
         base_path=base_path,
     )

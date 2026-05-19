@@ -32,7 +32,7 @@ pytestmark = pytest.mark.bigquery
 def _staging():
     return GCSLocation(
         bucket="staging-bucket",
-        credentials=GCPJson(json=Secret("gcp-sa#KEY")),
+        credentials=GCPJson(json=Secret()),
         base_path="staging/",
     )
 
@@ -40,7 +40,7 @@ def _staging():
 def _conn():
     return BigQueryConn(
         staging=_staging(),
-        credentials=GCPJson(json=Secret("gcp-sa#KEY")),
+        credentials=GCPJson(json=Secret()),
         project="my-project",
         dataset="analytics",
         conn_cfg={"bigquery.timeout": 30},
@@ -81,7 +81,7 @@ def test_bigquery_conn_validate_rejects_dataset_without_project():
     with pytest.raises(BigQueryValidateException) as ei:
         BigQueryConn(
             staging=_staging(),
-            credentials=GCPJson(json=Secret("gcp-sa#KEY")),
+            credentials=GCPJson(json=Secret()),
             dataset="analytics",
         )
     assert ei.value.api_error is BigqueryErrorCode.BIGQUERY_2

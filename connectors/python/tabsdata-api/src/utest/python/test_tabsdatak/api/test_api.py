@@ -16,8 +16,8 @@ from tabsdatak.api import (
     Env,
     Secret,
     Src,
-    LiteralEnv,
-    LiteralSecret,
+    _LiteralEnv,
+    _LiteralSecret,
 )
 
 
@@ -921,7 +921,7 @@ def test_auto_src_def_rejects_missing_conn_field():
     assert excinfo.value.api_error is ApiErrorCode.API_15
 
 # ===========================================================================
-# Env / LiteralEnv (was test_api_env.py)
+# Env / _LiteralEnv (was test_api_env.py)
 # ===========================================================================
 
 def test_env_attributes(monkeypatch):
@@ -990,7 +990,7 @@ def test_env_envelope_kind_and_type_tag():
 
 def test_env_field_coerces_bare_string_to_literal_env():
     s = _SrcWithEnv(Env.lit("literal-value"))
-    assert isinstance(s.e, LiteralEnv)
+    assert isinstance(s.e, _LiteralEnv)
     assert isinstance(s.e, Env)
     assert s.e.value() == "literal-value"
     assert s.e.s == "literal-value"
@@ -1013,22 +1013,22 @@ def test_env_field_accepts_explicit_env_instance_and_injects_pattern():
 
 
 def test_literal_env_value_returns_literal():
-    lit = LiteralEnv("hello")
+    lit = _LiteralEnv("hello")
     assert lit.value() == "hello"
 
 
 def test_literal_env_round_trips_through_json():
-    lit = LiteralEnv("literal-secret")
-    back = LiteralEnv.from_json(lit.to_json())
-    assert isinstance(back, LiteralEnv)
+    lit = _LiteralEnv("literal-secret")
+    back = _LiteralEnv.from_json(lit.to_json())
+    assert isinstance(back, _LiteralEnv)
     assert back.s == "literal-secret"
 
 
 def test_literal_env_envelope_kind_and_type_tag():
-    lit = LiteralEnv("x")
+    lit = _LiteralEnv("x")
     d = lit.to_dict()
-    assert d["kind"] == "literalEnv"
-    assert d["type"].endswith(":LiteralEnv")
+    assert d["kind"] == "envLiteral"
+    assert d["type"].endswith(":_LiteralEnv")
     assert d["spec"]["s"] == "x"
 
 
@@ -1036,14 +1036,14 @@ def test_env_field_serializes_literal_env_subclass_completely():
     s = _SrcWithEnv(Env.lit("from-literal"))
     d = s.to_dict()
     inner = d["spec"]["e"]
-    assert inner["kind"] == "literalEnv"
+    assert inner["kind"] == "envLiteral"
     assert inner["spec"]["s"] == "from-literal"
 
 
 def test_env_field_round_trips_literal_env_subclass():
     s = _SrcWithEnv(Env.lit("from-literal"))
     back = _SrcWithEnv.from_json(s.to_json())
-    assert isinstance(back.e, LiteralEnv)
+    assert isinstance(back.e, _LiteralEnv)
     assert back.e.s == "from-literal"
 
 
@@ -1061,7 +1061,7 @@ def test_env_value_no_pattern_accepts_anything(monkeypatch):
 
 
 def test_literal_env_value_pattern_accepts_matching_literal():
-    lit = LiteralEnv(s="42", _value_pattern=r"\d+")
+    lit = _LiteralEnv(s="42", _value_pattern=r"\d+")
     assert lit.value() == "42"
 
 
@@ -1071,24 +1071,24 @@ def test_literal_env_value_pattern_rejects_non_matching_literal_at_construction(
     # (API_6) surfaces directly -- the eager model_validator raises
     # an ApiException that pydantic propagates unwrapped.
     with pytest.raises(ApiException) as excinfo:
-        LiteralEnv("abc", _value_pattern=r"\d+")
+        _LiteralEnv("abc", _value_pattern=r"\d+")
     assert excinfo.value.api_error is ApiErrorCode.API_6
 
 
 def test_literal_env_value_pattern_requires_full_match_at_construction():
     with pytest.raises(ApiException) as excinfo:
-        LiteralEnv("42x", _value_pattern=r"\d+")
+        _LiteralEnv("42x", _value_pattern=r"\d+")
     assert excinfo.value.api_error is ApiErrorCode.API_6
 
 
 def test_literal_env_no_pattern_accepts_any_literal():
-    lit = LiteralEnv("anything-goes!@#")
+    lit = _LiteralEnv("anything-goes!@#")
     assert lit.value() == "anything-goes!@#"
 
 
 def test_literal_env_value_pattern_round_trips_through_json():
-    lit = LiteralEnv("42", _value_pattern=r"\d+")
-    back = LiteralEnv.from_json(lit.to_json())
+    lit = _LiteralEnv("42", _value_pattern=r"\d+")
+    back = _LiteralEnv.from_json(lit.to_json())
     assert back._value_pattern == r"\d+"
     assert back.value() == "42"
 
@@ -1099,13 +1099,13 @@ def test_literal_env_inconsistent_payload_rejected_on_deserialize():
     # eager validator runs after the envelope dispatcher rebuilds the
     # instance, raising the API_6 pattern violation directly.
     bad = {
-        "kind": "literalEnv",
+        "kind": "envLiteral",
         "apiVersion": "1.0",
-        "type": "tabsdatak.api:LiteralEnv",
+        "type": "tabsdatak.api:_LiteralEnv",
         "spec": {"s": "abc", "_value_pattern": r"\d+"},
     }
     with pytest.raises(ApiException) as excinfo:
-        LiteralEnv.from_dict(bad)
+        _LiteralEnv.from_dict(bad)
     assert excinfo.value.api_error is ApiErrorCode.API_6
 
 
@@ -1128,7 +1128,7 @@ def test_env_pattern_annotation_str_shortcut_validates_eagerly():
 
 def test_env_pattern_annotation_str_shortcut_accepts_matching_value():
     s = _SrcWithDigitsField(Env.lit("42"))
-    assert isinstance(s.e, LiteralEnv)
+    assert isinstance(s.e, _LiteralEnv)
     assert s.e.s == "42"
     assert s.e._value_pattern == r"\d+"
 
@@ -1201,34 +1201,41 @@ def test_env_ref_to_literal_substitution_in_json_round_trip():
     # Pattern is preserved so the receiver still validates the literal.
     pattern = payload["spec"]["digits"]["spec"]["_value_pattern"]
     payload["spec"]["digits"] = {
-        "kind": "literalEnv",
+        "kind": "envLiteral",
         "apiVersion": "1.0",
-        "type": "tabsdatak.api:LiteralEnv",
+        "type": "tabsdatak.api:_LiteralEnv",
         "spec": {"s": "42", "_value_pattern": pattern},
     }
 
     back = _MyData.from_json(json.dumps(payload))
-    assert isinstance(back.digits, LiteralEnv)
+    assert isinstance(back.digits, _LiteralEnv)
     assert back.digits.value() == "42"
     assert back.digits._value_pattern == r"\d+"
 
 # ===========================================================================
-# Secret / LiteralSecret (was test_api_secret.py)
+# Secret / _LiteralSecret (was test_api_secret.py)
 # ===========================================================================
 
-def test_secret_attributes(monkeypatch):
-    e = Secret("foo#BAR")
+def test_secret_attributes():
+    # ``Secret()`` builds an anonymous *ref* with the placeholder
+    # ``_s`` -- there is no public way to attach a key/name; the
+    # secret-store integration produces the real ref out-of-band.
+    e = Secret()
     assert isinstance(e, Secret)
-    assert e.s == "foo#BAR"
-    assert e._name() == "foo#BAR"
+    assert e._s == "<secret>"
+    assert e._name() == "<secret>"
+    # ``_value()`` is the unresolved-ref hook; without a resolver wired
+    # up it raises API_11 (``ApiInternalException``).
     with pytest.raises(ApiInternalException):
         e._value()
     assert e._value_pattern is None
     assert e._validate("foo") == "foo"
 
+    # ``Secret.lit(value)`` is the literal factory -- returns a
+    # ``_LiteralSecret`` whose ``_s`` is the literal value.
     e = Secret.lit("foo")
-    assert isinstance(e, LiteralSecret)
-    assert e.s == "foo"
+    assert isinstance(e, _LiteralSecret)
+    assert e._s == "foo"
     assert e._name() == "<literal>"
     assert e._value() == "foo"
     assert e._value_pattern is None
@@ -1240,48 +1247,44 @@ class _SrcWithSecret(Src):
 
 
 def test_secret_direct_construction():
-    s = Secret("db-password#DB_PASSWORD")
+    s = Secret()
     assert isinstance(s, Secret)
-    assert s.s == "db-password#DB_PASSWORD"
-
-
-def test_secret_rejects_invalid_ref():
-    # Secret ref shape is ``<secret>#<key>``; a bare identifier is rejected.
-    with pytest.raises(ApiException) as excinfo:
-        Secret("not-a-secret-ref")
-    assert excinfo.value.api_error is ApiErrorCode.API_10
+    # Refs are anonymous by default; ``Secret()`` always builds the
+    # same placeholder shape (the secret-store integration is what
+    # eventually swaps it for a resolved literal).
+    assert s._s == "<secret>"
 
 
 def test_secret_value_raises_without_resolver():
     # Refs do not resolve in-process: there is no secret-store
     # integration in the API package, so ``value()`` always raises API_11.
-    s = Secret("vault#DB_PASSWORD")
+    s = Secret()
     with pytest.raises(ApiException) as excinfo:
         s.value()
     assert excinfo.value.api_error is ApiErrorCode.API_11
 
 
 def test_secret_round_trips_through_json():
-    s = Secret("db-password#DB_PASSWORD")
+    s = Secret()
     back = Secret.from_json(s.to_json())
     assert isinstance(back, Secret)
-    assert back.s == "db-password#DB_PASSWORD"
+    assert back._s == "<secret>"
 
 
 def test_secret_envelope_kind_and_type_tag():
-    s = Secret("db-password#DB_PASSWORD")
+    s = Secret()
     d = s.to_dict()
     assert d["kind"] == "secretRef"
     assert d["type"].endswith(":Secret")
-    assert d["spec"] == {"s": "db-password#DB_PASSWORD", "_value_pattern": None}
+    assert d["spec"] == {"_s": "<secret>", "_value_pattern": None}
 
 
 def test_secret_field_coerces_bare_string_to_literal_secret():
     s = _SrcWithSecret(Secret.lit("hunter2"))
-    assert isinstance(s.s, LiteralSecret)
+    assert isinstance(s.s, _LiteralSecret)
     assert isinstance(s.s, Secret)
     assert s.s.value() == "hunter2"
-    assert s.s.s == "hunter2"
+    assert s.s._s == "hunter2"
 
 
 def test_secret_field_injects_pattern_into_literal():
@@ -1292,58 +1295,58 @@ def test_secret_field_injects_pattern_into_literal():
 
 
 def test_secret_field_accepts_explicit_secret_instance_and_injects_pattern():
-    s = _SrcWithSecret(Secret("vault#PW"))
+    s = _SrcWithSecret(Secret())
     assert isinstance(s.s, Secret)
-    assert s.s.s == "vault#PW"
+    assert s.s._s == "<secret>"
     # Field's pattern is reconstructed onto the ref so it survives
     # serialization and gates the resolved value at value() time.
     assert s.s._value_pattern == r".+"
 
 
 def test_literal_secret_value_returns_literal():
-    lit = LiteralSecret("hunter2")
+    lit = _LiteralSecret("hunter2")
     assert lit.value() == "hunter2"
 
 
 def test_literal_secret_round_trips_through_json():
-    lit = LiteralSecret("hunter2")
-    back = LiteralSecret.from_json(lit.to_json())
-    assert isinstance(back, LiteralSecret)
-    assert back.s == "hunter2"
+    lit = _LiteralSecret("hunter2")
+    back = _LiteralSecret.from_json(lit.to_json())
+    assert isinstance(back, _LiteralSecret)
+    assert back._s == "hunter2"
 
 
 def test_literal_secret_envelope_kind_and_type_tag():
-    lit = LiteralSecret("x")
+    lit = _LiteralSecret("x")
     d = lit.to_dict()
-    assert d["kind"] == "literalSecret"
-    assert d["type"].endswith(":LiteralSecret")
-    assert d["spec"]["s"] == "x"
+    assert d["kind"] == "secretLiteral"
+    assert d["type"].endswith(":_LiteralSecret")
+    assert d["spec"]["_s"] == "x"
 
 
 def test_secret_field_serializes_literal_secret_subclass_completely():
     s = _SrcWithSecret(Secret.lit("from-literal"))
     d = s.to_dict()
     inner = d["spec"]["s"]
-    assert inner["kind"] == "literalSecret"
-    assert inner["spec"]["s"] == "from-literal"
+    assert inner["kind"] == "secretLiteral"
+    assert inner["spec"]["_s"] == "from-literal"
 
 
 def test_secret_field_round_trips_literal_secret_subclass():
     s = _SrcWithSecret(Secret.lit("from-literal"))
     back = _SrcWithSecret.from_json(s.to_json())
-    assert isinstance(back.s, LiteralSecret)
-    assert back.s.s == "from-literal"
+    assert isinstance(back.s, _LiteralSecret)
+    assert back.s._s == "from-literal"
 
 
 def test_secret_field_round_trips_explicit_secret():
-    s = _SrcWithSecret(Secret("vault#PW"))
+    s = _SrcWithSecret(Secret())
     back = _SrcWithSecret.from_json(s.to_json())
     assert isinstance(back.s, Secret)
-    assert back.s.s == "vault#PW"
+    assert back.s._s == "<secret>"
 
 
 def test_literal_secret_value_pattern_accepts_matching_literal():
-    lit = LiteralSecret(s="deadBEEF", _value_pattern=r"[0-9a-fA-F]+")
+    lit = _LiteralSecret(_s="deadBEEF", _value_pattern=r"[0-9a-fA-F]+")
     assert lit.value() == "deadBEEF"
 
 
@@ -1353,24 +1356,24 @@ def test_literal_secret_value_pattern_rejects_non_matching_literal_at_constructi
     # (API_6) surfaces directly -- the eager model_validator raises
     # an ApiException that pydantic propagates unwrapped.
     with pytest.raises(ApiException) as excinfo:
-        LiteralSecret("not-hex!", _value_pattern=r"[0-9a-fA-F]+")
+        _LiteralSecret("not-hex!", _value_pattern=r"[0-9a-fA-F]+")
     assert excinfo.value.api_error is ApiErrorCode.API_6
 
 
 def test_literal_secret_value_pattern_requires_full_match_at_construction():
     with pytest.raises(ApiException) as excinfo:
-        LiteralSecret("abc-not-hex", _value_pattern=r"[0-9a-fA-F]+")
+        _LiteralSecret("abc-not-hex", _value_pattern=r"[0-9a-fA-F]+")
     assert excinfo.value.api_error is ApiErrorCode.API_6
 
 
 def test_literal_secret_no_pattern_accepts_any_literal():
-    lit = LiteralSecret("anything-goes!@#")
+    lit = _LiteralSecret("anything-goes!@#")
     assert lit.value() == "anything-goes!@#"
 
 
 def test_literal_secret_value_pattern_round_trips_through_json():
-    lit = LiteralSecret("cafe", _value_pattern=r"[0-9a-fA-F]+")
-    back = LiteralSecret.from_json(lit.to_json())
+    lit = _LiteralSecret("cafe", _value_pattern=r"[0-9a-fA-F]+")
+    back = _LiteralSecret.from_json(lit.to_json())
     assert back._value_pattern == r"[0-9a-fA-F]+"
     assert back.value() == "cafe"
 
@@ -1381,13 +1384,13 @@ def test_literal_secret_inconsistent_payload_rejected_on_deserialize():
     # eager validator runs after the envelope dispatcher rebuilds the
     # instance, raising the API_6 pattern violation directly.
     bad = {
-        "kind": "literalSecret",
+        "kind": "secretLiteral",
         "apiVersion": "1.0",
-        "type": "tabsdatak.api:LiteralSecret",
-        "spec": {"s": "not-hex!", "_value_pattern": r"[0-9a-fA-F]+"},
+        "type": "tabsdatak.api:_LiteralSecret",
+        "spec": {"_s": "not-hex!", "_value_pattern": r"[0-9a-fA-F]+"},
     }
     with pytest.raises(ApiException) as excinfo:
-        LiteralSecret.from_dict(bad)
+        _LiteralSecret.from_dict(bad)
     assert excinfo.value.api_error is ApiErrorCode.API_6
 
 
@@ -1410,13 +1413,13 @@ def test_secret_pattern_annotation_str_shortcut_validates_eagerly():
 
 def test_secret_pattern_annotation_str_shortcut_accepts_matching_value():
     s = _SrcWithHexField(Secret.lit("cafe"))
-    assert isinstance(s.s, LiteralSecret)
-    assert s.s.s == "cafe"
+    assert isinstance(s.s, _LiteralSecret)
+    assert s.s._s == "cafe"
     assert s.s._value_pattern == r"[0-9a-fA-F]+"
 
 
 def test_secret_pattern_annotation_injects_into_ref():
-    s = _SrcWithHexField(Secret("vault#TOKEN"))
+    s = _SrcWithHexField(Secret())
     # Refs do not run the literal validator -- the pattern is just
     # injected so it travels with the instance and gates value().
     assert isinstance(s.s, Secret)
@@ -1424,7 +1427,7 @@ def test_secret_pattern_annotation_injects_into_ref():
 
 
 def test_secret_pattern_annotation_round_trips_pattern():
-    s = _SrcWithHexField(Secret("vault#TOKEN"))
+    s = _SrcWithHexField(Secret())
     back = _SrcWithHexField.from_json(s.to_json())
     assert back.s._value_pattern == r"[0-9a-fA-F]+"
 
@@ -1437,11 +1440,11 @@ class _HexHolder(Conn):
 def test_secret_pattern_in_conn_round_trips_through_json():
     # A pattern-bearing Secret field nested in a Conn round-trips with
     # both the class identity and the pattern intact.
-    holder = _HexHolder(token=Secret("vault#TOKEN"))
+    holder = _HexHolder(token=Secret())
     back = _HexHolder.from_json(holder.to_json())
 
     assert isinstance(back.token, Secret)
-    assert back.token.s == "vault#TOKEN"
+    assert back.token._s == "<secret>"
     assert back.token._value_pattern == r"[0-9a-fA-F]+"
 
 
@@ -1451,7 +1454,7 @@ def test_secret_ref_to_literal_substitution_in_json_round_trip():
     # resolves the ref and replaces the inner envelope with a
     # ``literalSecret`` carrying the resolved value; the consumer
     # deserializes through the same field and gets the value back.
-    holder = _HexHolder(token=Secret("vault#TOKEN"))
+    holder = _HexHolder(token=Secret())
     payload = json.loads(holder.to_json())
 
     # Confirm starting shape: the field carries a ``secretRef`` envelope.
@@ -1461,13 +1464,198 @@ def test_secret_ref_to_literal_substitution_in_json_round_trip():
     # Pattern is preserved so the receiver still validates the literal.
     pattern = payload["spec"]["token"]["spec"]["_value_pattern"]
     payload["spec"]["token"] = {
-        "kind": "literalSecret",
+        "kind": "secretLiteral",
         "apiVersion": "1.0",
-        "type": "tabsdatak.api:LiteralSecret",
-        "spec": {"s": "cafe", "_value_pattern": pattern},
+        "type": "tabsdatak.api:_LiteralSecret",
+        "spec": {"_s": "cafe", "_value_pattern": pattern},
     }
 
     back = _HexHolder.from_json(json.dumps(payload))
-    assert isinstance(back.token, LiteralSecret)
+    assert isinstance(back.token, _LiteralSecret)
     assert back.token.value() == "cafe"
     assert back.token._value_pattern == r"[0-9a-fA-F]+"
+
+
+# ---------------------------------------------------------------------------
+# ``Secret._secret_key`` classmethod
+# ---------------------------------------------------------------------------
+
+
+def test_secret_secret_key_builds_named_ref():
+    # The default ``Secret()`` is anonymous (``_s == "<secret>"``).
+    # ``_secret_key`` is the (private) factory secret-store integrations
+    # use to attach a real key/name to a ref.
+    s = Secret._secret_key("vault#TOKEN")
+    assert isinstance(s, Secret)
+    assert not isinstance(s, _LiteralSecret)
+    assert s._s == "vault#TOKEN"
+    assert s._name() == "vault#TOKEN"
+
+
+def test_secret_secret_key_still_has_no_resolver():
+    # Naming the ref does not wire up a resolver -- ``value()`` still
+    # raises API_11.
+    s = Secret._secret_key("vault#TOKEN")
+    with pytest.raises(ApiException) as excinfo:
+        s.value()
+    assert excinfo.value.api_error is ApiErrorCode.API_11
+
+
+def test_secret_secret_key_round_trips_through_json():
+    s = Secret._secret_key("vault#TOKEN")
+    back = Secret.from_json(s.to_json())
+    assert isinstance(back, Secret)
+    assert back._s == "vault#TOKEN"
+
+
+# ---------------------------------------------------------------------------
+# ``SecretOrEnvSpec`` Union alias
+# ---------------------------------------------------------------------------
+
+
+from tabsdatak.api import SecretOrEnvSpec  # noqa: E402
+
+
+@_api.dataclass(ApiErrorCode.API_14)
+class _SrcWithSecretOrEnv(Src):
+    v: SecretOrEnvSpec
+
+
+def test_secret_or_env_accepts_env_ref():
+    s = _SrcWithSecretOrEnv(Env("HOME"))
+    assert isinstance(s.v, Env)
+    assert not isinstance(s.v, Secret)
+    assert s.v.s == "HOME"
+
+
+def test_secret_or_env_accepts_secret_ref():
+    s = _SrcWithSecretOrEnv(Secret())
+    assert isinstance(s.v, Secret)
+    assert not isinstance(s.v, Env)
+    assert s.v._s == "<secret>"
+
+
+def test_secret_or_env_accepts_literal_env():
+    s = _SrcWithSecretOrEnv(Env.lit("hello"))
+    assert isinstance(s.v, _LiteralEnv)
+    assert s.v.value() == "hello"
+
+
+def test_secret_or_env_accepts_literal_secret():
+    s = _SrcWithSecretOrEnv(Secret.lit("hunter2"))
+    assert isinstance(s.v, _LiteralSecret)
+    assert s.v.value() == "hunter2"
+
+
+def test_secret_or_env_round_trips_env_branch():
+    s = _SrcWithSecretOrEnv(Env("HOME"))
+    back = _SrcWithSecretOrEnv.from_json(s.to_json())
+    assert isinstance(back.v, Env)
+    assert not isinstance(back.v, Secret)
+    assert back.v.s == "HOME"
+
+
+def test_secret_or_env_round_trips_secret_branch():
+    s = _SrcWithSecretOrEnv(Secret())
+    back = _SrcWithSecretOrEnv.from_json(s.to_json())
+    assert isinstance(back.v, Secret)
+    assert not isinstance(back.v, Env)
+    assert back.v._s == "<secret>"
+
+
+def test_secret_or_env_round_trips_literal_env_branch():
+    s = _SrcWithSecretOrEnv(Env.lit("hello"))
+    back = _SrcWithSecretOrEnv.from_json(s.to_json())
+    assert isinstance(back.v, _LiteralEnv)
+    assert back.v.s == "hello"
+
+
+def test_secret_or_env_round_trips_literal_secret_branch():
+    s = _SrcWithSecretOrEnv(Secret.lit("hunter2"))
+    back = _SrcWithSecretOrEnv.from_json(s.to_json())
+    assert isinstance(back.v, _LiteralSecret)
+    assert back.v._s == "hunter2"
+
+
+# ---------------------------------------------------------------------------
+# Wrap-validator: pattern reconstruction vs. fast-path skip
+#
+# When an instance arrives at a field annotated with a pattern, the
+# wrap-validator either:
+#   - returns it unchanged (fast path) when its ``_value_pattern``
+#     already equals the field's regex, or
+#   - reconstructs it with the field's regex installed -- which
+#     re-runs the literal's eager ``model_validator``, so a literal
+#     whose value violates the new pattern is rejected at the call site.
+# ---------------------------------------------------------------------------
+
+
+def test_env_pattern_skips_reconstruction_when_pattern_already_matches():
+    # Fast path: literal already carries the field's regex -- return as-is.
+    incoming = _LiteralEnv(s="42", _value_pattern=r"\d+")
+    s = _SrcWithDigitsField(incoming)
+    assert s.e is incoming
+
+
+def test_env_pattern_reconstructs_literal_when_incoming_pattern_differs():
+    # Reconstruction: incoming literal carries ``r".+"`` but the field
+    # imposes ``r"\d+"``. Value "42" still matches the new pattern, so
+    # the rebuilt literal succeeds and carries the field's regex.
+    incoming = _LiteralEnv(s="42", _value_pattern=r".+")
+    s = _SrcWithDigitsField(incoming)
+    assert isinstance(s.e, _LiteralEnv)
+    assert s.e._value_pattern == r"\d+"
+    assert s.e.s == "42"
+    # Reconstruction produces a new instance, not the same identity.
+    assert s.e is not incoming
+
+
+def test_env_pattern_reconstructs_and_rejects_literal_failing_new_pattern():
+    # Reconstruction triggers the literal's eager validator against
+    # the field's regex. "abc" matched the old ``r".+"`` but not
+    # ``r"\d+"`` -- the rebuilt literal raises API_6.
+    incoming = _LiteralEnv(s="abc", _value_pattern=r".+")
+    with pytest.raises(ApiException) as excinfo:
+        _SrcWithDigitsField(incoming)
+    assert excinfo.value.api_error is ApiErrorCode.API_6
+
+
+def test_env_pattern_reconstructs_ref_when_incoming_pattern_differs():
+    # Refs don't run the literal validator, but the field's regex
+    # still replaces the incoming one so it travels with the instance
+    # and gates ``value()`` later.
+    incoming = Env(s="HOME", _value_pattern=r".+")
+    s = _SrcWithDigitsField(incoming)
+    assert isinstance(s.e, Env)
+    assert not isinstance(s.e, _LiteralEnv)
+    assert s.e._value_pattern == r"\d+"
+
+
+def test_secret_pattern_skips_reconstruction_when_pattern_already_matches():
+    incoming = _LiteralSecret(_s="cafe", _value_pattern=r"[0-9a-fA-F]+")
+    s = _SrcWithHexField(incoming)
+    assert s.s is incoming
+
+
+def test_secret_pattern_reconstructs_literal_when_incoming_pattern_differs():
+    incoming = _LiteralSecret(_s="cafe", _value_pattern=r".+")
+    s = _SrcWithHexField(incoming)
+    assert isinstance(s.s, _LiteralSecret)
+    assert s.s._value_pattern == r"[0-9a-fA-F]+"
+    assert s.s._s == "cafe"
+    assert s.s is not incoming
+
+
+def test_secret_pattern_reconstructs_and_rejects_literal_failing_new_pattern():
+    incoming = _LiteralSecret(_s="not-hex!", _value_pattern=r".+")
+    with pytest.raises(ApiException) as excinfo:
+        _SrcWithHexField(incoming)
+    assert excinfo.value.api_error is ApiErrorCode.API_6
+
+
+def test_secret_pattern_reconstructs_ref_when_incoming_pattern_differs():
+    incoming = Secret(_s="vault#TOKEN", _value_pattern=r".+")
+    s = _SrcWithHexField(incoming)
+    assert isinstance(s.s, Secret)
+    assert not isinstance(s.s, _LiteralSecret)
+    assert s.s._value_pattern == r"[0-9a-fA-F]+"

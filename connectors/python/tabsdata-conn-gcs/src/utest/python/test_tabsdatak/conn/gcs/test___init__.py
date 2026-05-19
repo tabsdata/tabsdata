@@ -21,7 +21,7 @@ pytestmark = pytest.mark.gcs
 def _conn():
     return GCSConn(
         bucket="my-bucket",
-        credentials=GCPJson(json=Secret("gcp-sa#KEY")),
+        credentials=GCPJson(json=Secret()),
         project="my-project",
         conn_cfg={"gcs.timeout": 30},
     )
@@ -124,7 +124,7 @@ def test_gcs_validate_rejects_cross_side_format_cfg_keys():
 def _conn_with_base(base_path):
     return GCSConn(
         bucket="my-bucket",
-        credentials=GCPJson(json=Secret("gcp-sa#KEY")),
+        credentials=GCPJson(json=Secret()),
         base_path=base_path,
     )
 

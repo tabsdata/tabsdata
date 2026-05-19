@@ -26,7 +26,7 @@ def test_user_password_round_trip_with_inline_strings():
 
 
 def test_user_password_round_trip_with_env_refs():
-    c = UserPassword(user=Env("DB_USER"), password=Secret("db-creds#PW"))
+    c = UserPassword(user=Env("DB_USER"), password=Secret())
     back = UserPassword.from_json(c.to_json())
     assert isinstance(back.user, Env)
     assert isinstance(back.password, Secret)
@@ -35,14 +35,14 @@ def test_user_password_round_trip_with_env_refs():
 def test_aws_access_secret_key_round_trips():
     c = AwsAccessSecretKey(
         access_key_id=Env("AWS_ACCESS_KEY_ID"),
-        secret_access_key=Secret("aws-creds#SECRET"),
+        secret_access_key=Secret(),
     )
     back = AwsAccessSecretKey.from_json(c.to_json())
     assert back == c
 
 
 def test_gcp_json_round_trips():
-    c = GCPJson(json=Secret("gcp-sa#KEY"))
+    c = GCPJson(json=Secret())
     back = GCPJson.from_json(c.to_json())
     assert back == c
 
@@ -50,7 +50,7 @@ def test_gcp_json_round_trips():
 def test_azure_account_key_round_trips():
     c = AzureAccountKey(
         account_name=Secret.lit("myacct"),
-        account_key=Secret("azure-acct#KEY"),
+        account_key=Secret(),
     )
     back = AzureAccountKey.from_json(c.to_json())
     assert back == c
@@ -61,7 +61,7 @@ def test_polymorphic_load_via_credentials_base():
     back = Credentials.from_json(c.to_json())
     assert isinstance(back, UserPassword)
     # Credential fields are typed `SecretOrEnvSpec`; bare strings coerce
-    # to a `LiteralSecret`. The literal payload is reachable via `value()`.
+    # to a `_LiteralSecret`. The literal payload is reachable via `value()`.
     assert back.user.value() == "u"
 
 

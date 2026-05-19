@@ -1,7 +1,7 @@
 import importlib
 import os
 import re
-from abc import ABC, abstractmethod
+from abc import ABC
 from typing import Annotated, Callable, TypeAlias, Union
 
 from pydantic import Field, model_validator
@@ -84,23 +84,87 @@ SubscriberTriggerBySpec: TypeAlias = Union[
 FallbackRolloverMinsSpec: TypeAlias = Annotated[int, Field(ge=1)]
 
 
-@_api.dataclass(ApiErrorCode.API_5)
-class _ValOrRef(_api.JsonSerde, ABC):
-    s: str
-    __kind__ = "valOrRef"
+EnvVarNameSpec: TypeAlias = Annotated[str, _api.ENV_NAME_CONSTRAINTS]
+
+
+@_api.dataclass(ApiErrorCode.API_7)
+class Env(_api.JsonSerde):
+    s: EnvVarNameSpec
+    __kind__ = "envRef"
     _value_pattern: str | None = None
 
-    @abstractmethod
-    def _name(self) -> str: ...
+    def _name(self) -> str:
+        return self.s
 
-    @abstractmethod
-    def _value(self) -> str: ...
-
-    def _pattern(self) -> str | None:
-        return self._value_pattern
+    def _value(self) -> str:
+        val = os.environ.get(self.s)
+        if val is None:
+            raise ApiErrorCode.API_8.exception(name=self.s)
+        return val
 
     def _validate(self, val: str) -> str:
-        pattern = self._pattern()
+        pattern = self._value_pattern
+        if pattern is not None:
+            if re.fullmatch(pattern, val) is None:
+                raise ApiErrorCode.API_6.exception(
+                    name=self._name(),
+                    pattern=pattern,
+                    value=val,
+                )
+        return val
+
+    @classmethod
+    def lit(cls, value: str) -> "Env":
+        return _LiteralEnv(s=value, _value_pattern=cls._value_pattern)
+
+    def value(self) -> str:
+        val = self._value()
+        val = self._validate(val)
+        return val
+
+
+@_api.dataclass(ApiErrorCode.API_9)
+class _LiteralEnv(Env):
+    s: str
+    __kind__ = "envLiteral"
+
+    def _name(self) -> str:
+        return "<literal>"
+
+    def _value(self) -> str:
+        # Literal: ``s`` is the value verbatim, not an env-var name.
+        return self.s
+
+    @model_validator(mode="after")
+    def _check_literal_pattern(self):
+        self._validate(self.s)
+        return self
+
+
+@_api.dataclass(ApiErrorCode.API_10)
+class Secret(_api.JsonSerde):
+    _s: str = "<secret>"
+    __kind__ = "secretRef"
+    _value_pattern: str | None = None
+
+    def _name(self) -> str:
+        return self._s
+
+    def _value(self) -> str:
+        # No resolver wired up by default: refs only resolve under a
+        # secret-store integration that is not part of the API package.
+        raise ApiErrorCode.API_11.exception(name=self._s)
+
+    @classmethod
+    def _secret_key(cls, name: str) -> "Secret":
+        return cls(_s=name)
+
+    @classmethod
+    def lit(cls, value: str) -> "Secret":
+        return _LiteralSecret(_s=value, _value_pattern=cls._value_pattern)
+
+    def _validate(self, val: str) -> str:
+        pattern = self._value_pattern
         if pattern is not None:
             if re.fullmatch(pattern, val) is None:
                 raise ApiErrorCode.API_6.exception(
@@ -116,82 +180,21 @@ class _ValOrRef(_api.JsonSerde, ABC):
         return val
 
 
-EnvVarNameSpec: TypeAlias = Annotated[str, _api.ENV_NAME_CONSTRAINTS]
-
-
-@_api.dataclass(ApiErrorCode.API_7)
-class Env(_ValOrRef):
-    s: EnvVarNameSpec
-    __kind__ = "envRef"
-
-    def _name(self) -> str:
-        return self.s
-
-    def _value(self) -> str:
-        val = os.environ.get(self.s)
-        if val is None:
-            raise ApiErrorCode.API_8.exception(name=self.s)
-        return val
-
-    @classmethod
-    def lit(cls, value: str) -> "Env":
-        return LiteralEnv(s=value, _value_pattern=cls._value_pattern)
-
-
-@_api.dataclass(ApiErrorCode.API_9)
-class LiteralEnv(Env):
-    s: str
-    __kind__ = "literalEnv"
-
-    def _name(self) -> str:
-        return "<literal>"
-
-    def _value(self) -> str:
-        # Literal: ``s`` is the value verbatim, not an env-var name.
-        return self.s
-
-    @model_validator(mode="after")
-    def _check_literal_pattern(self):
-        self._validate(self.s)
-        return self
-
-
-SecretNameSpec: TypeAlias = Annotated[str, _api.SECRET_NAME_CONSTRAINTS]
-
-
-@_api.dataclass(ApiErrorCode.API_10)
-class Secret(_ValOrRef):
-    s: SecretNameSpec
-    __kind__ = "secretRef"
-
-    def _name(self) -> str:
-        return self.s
-
-    def _value(self) -> str:
-        # No resolver wired up by default: refs only resolve under a
-        # secret-store integration that is not part of the API package.
-        raise ApiErrorCode.API_11.exception(name=self.s)
-
-    @classmethod
-    def lit(cls, value: str) -> "Secret":
-        return LiteralSecret(s=value, _value_pattern=cls._value_pattern)
-
-
 @_api.dataclass(ApiErrorCode.API_12)
-class LiteralSecret(Secret):
-    s: str
-    __kind__ = "literalSecret"
+class _LiteralSecret(Secret):
+    _s: str
+    __kind__ = "secretLiteral"
 
     def _name(self) -> str:
         return "<literal>"
 
     def _value(self) -> str:
         # Literal: ``s`` is the value verbatim, not a secret ref.
-        return self.s
+        return self._s
 
     @model_validator(mode="after")
     def _check_literal_pattern(self):
-        self._validate(self.s)
+        self._validate(self._s)
         return self
 
 
