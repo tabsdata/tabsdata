@@ -51,7 +51,7 @@ fn service() {
         // Get table. Extract table id, table version id
         from_fn(With::<RequestContext>::extract::<AtTime>),
         from_fn(
-            By::<And![CollectionIdName, TableIdName]>::fetch_one_version::<
+            By::<And![CollectionIdName, TableIdName]>::historic_fetch_one::<
                 { TableDBWithNames::Frozen },
                 TableDBWithNames,
             >
@@ -61,17 +61,17 @@ fn service() {
         // Insert into function_versions(sql) entries with status=Frozen,
         // for all functions with status=Active that have the table as dependency
         // at the current time.
-        from_fn(By::<TableId>::fetch_all_versions::<{ DependencyDB::Active }, DependencyDB>),
+        from_fn(By::<TableId>::historic_fetch_all::<{ DependencyDB::Active }, DependencyDB>),
         from_fn(With::<Vec<DependencyDB>>::extract::<Vec<FunctionId>>),
         from_fn(
-            By::<Vec<FunctionId>>::fetch_all_versions_chunked::<{ FunctionDB::Active }, FunctionDB>
+            By::<Vec<FunctionId>>::historic_fetch_all_chunked::<{ FunctionDB::Active }, FunctionDB>
         ),
         from_fn(build_frozen_functions),
         from_fn(insert_vec::<FunctionDB>),
         // Insert into trigger_versions(sql) entries with status=Deleted,
         // for all triggers that have the table as dependency
         // at the current time.
-        from_fn(By::<TableId>::fetch_all_versions::<{ TriggerDB::Available }, TriggerDB>),
+        from_fn(By::<TableId>::historic_fetch_all::<{ TriggerDB::Available }, TriggerDB>),
         from_fn(build_deleted_triggers),
         from_fn(insert_vec::<TriggerDB>),
         // Insert into table_versions(sql) status=Deleted.
@@ -101,7 +101,7 @@ mod tests {
         TableName, TableNameDto, UserId,
     };
     use td_objects::types::composed::TableDependencyDto;
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -129,7 +129,7 @@ mod tests {
                 // Get table. Extract table id, table version id
                 type_of_val(&With::<RequestContext>::extract::<AtTime>),
                 type_of_val(
-                    &By::<And![CollectionIdName, TableIdName]>::fetch_one_version::<
+                    &By::<And![CollectionIdName, TableIdName]>::historic_fetch_one::<
                         { TableDBWithNames::Frozen },
                         TableDBWithNames,
                     >,
@@ -140,11 +140,11 @@ mod tests {
                 // for all functions with status=Active that have the table as dependency
                 // at the current time.
                 type_of_val(
-                    &By::<TableId>::fetch_all_versions::<{ DependencyDB::Active }, DependencyDB>,
+                    &By::<TableId>::historic_fetch_all::<{ DependencyDB::Active }, DependencyDB>,
                 ),
                 type_of_val(&With::<Vec<DependencyDB>>::extract::<Vec<FunctionId>>),
                 type_of_val(
-                    &By::<Vec<FunctionId>>::fetch_all_versions_chunked::<
+                    &By::<Vec<FunctionId>>::historic_fetch_all_chunked::<
                         { FunctionDB::Active },
                         FunctionDB,
                     >,
@@ -155,7 +155,7 @@ mod tests {
                 // for all triggers that have the table as dependency
                 // at the current time.
                 type_of_val(
-                    &By::<TableId>::fetch_all_versions::<{ TriggerDB::Available }, TriggerDB>,
+                    &By::<TableId>::historic_fetch_all::<{ TriggerDB::Available }, TriggerDB>,
                 ),
                 type_of_val(&build_deleted_triggers),
                 type_of_val(&insert_vec::<TriggerDB>),
@@ -173,7 +173,8 @@ mod tests {
     async fn test_delete_table(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .seed_collection(&collection_name, &UserId::admin())
+            .seed()
+            .collection(&collection_name, &UserId::admin())
             .await?;
 
         // Create a function with some tables.
@@ -193,7 +194,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _ = db.seed_function(&collection, &create).await?;
+        let _ = db.seed().function(&collection, &create).await?;
 
         // Update the function to remove the tables (set it to frozen).
         let update = FunctionUpdate::builder()
@@ -252,7 +253,8 @@ mod tests {
     async fn test_delete_function_with_dependency(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .seed_collection(&collection_name, &UserId::admin())
+            .seed()
+            .collection(&collection_name, &UserId::admin())
             .await?;
 
         // Create a function with some tables.
@@ -272,7 +274,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _ = db.seed_function(&collection, &create).await?;
+        let _ = db.seed().function(&collection, &create).await?;
 
         // Create a function depending on it.
         let create = FunctionRegister::builder()
@@ -288,7 +290,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _ = db.seed_function(&collection, &create).await?;
+        let _ = db.seed().function(&collection, &create).await?;
 
         // Update the function to remove the tables (set it to frozen).
         let update = FunctionUpdate::builder()

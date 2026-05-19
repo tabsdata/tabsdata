@@ -56,7 +56,7 @@ mod tests {
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, RoleId, TableName, TableNameDto, UserId,
     };
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -97,7 +97,8 @@ mod tests {
     #[tokio::test]
     async fn test_list_current_tables_by_collection(db: TdPool) -> Result<(), TdError> {
         let collection = db
-            .seed_collection(&CollectionName::try_from("collection")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
 
         // Create function with table_1 and table_2 tables
@@ -117,7 +118,7 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let _ = db.seed_function(&collection, &create).await?;
+        let _ = db.seed().function(&collection, &create).await?;
 
         // List current tables by collection
         let request =

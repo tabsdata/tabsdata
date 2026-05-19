@@ -51,9 +51,7 @@ pub(crate) mod tests {
     use td_objects::dxo::function::FunctionDB;
     use td_objects::dxo::table::TableDB;
     use td_objects::types::basic::{FunctionStatus, TableName, TableStatus, UserId};
-    use td_queries::BasicQueries;
-    use td_queries::CurrentQueries;
-
+    use td_queries::{CurrentEntry, LiveEntry};
     pub async fn assert_delete(
         db: &TdPool,
         user_id: &UserId,
@@ -61,9 +59,7 @@ pub(crate) mod tests {
         table_name: &TableName,
     ) -> Result<(), TdError> {
         // Assert current table version is deleted
-        let table_versions: Vec<TableDB> = db
-            .fetch_all_current::<{ TableDB::All }, TableDB>(&table_name)
-            .await?;
+        let table_versions: Vec<TableDB> = db.current().fetch_all::<TableDB>(&table_name).await?;
         assert_eq!(table_versions.len(), 1);
         assert_eq!(table_versions[0].name, *table_name);
         assert_eq!(table_versions[0].collection_id, collection.id);
@@ -73,7 +69,7 @@ pub(crate) mod tests {
         let deleted_table = &table_versions[0];
 
         // Assert previous table versions exists (first active, then frozen, then deleted)
-        let table_versions: Vec<TableDB> = db.fetch_all(&table_name).await?;
+        let table_versions: Vec<TableDB> = db.live().fetch_all(&table_name).await?;
         assert_eq!(table_versions.len(), 3);
         for table_version in &table_versions {
             assert_eq!(table_version.name, *table_name);
@@ -90,26 +86,27 @@ pub(crate) mod tests {
 
         // And that the function version is still active
         let function: FunctionDB = db
-            .fetch_one_current::<{ FunctionDB::All }, FunctionDB>(&deleted_table.function_id)
+            .current()
+            .fetch_one::<FunctionDB>(&deleted_table.function_id)
             .await?;
         assert_eq!(function.status, FunctionStatus::Active);
 
         // And assert that all dependant function versions are also frozen
         let dependency_versions: Vec<DependencyDB> = db
-            .fetch_all_current::<{ DependencyDB::All }, DependencyDB>(&table_versions[0].table_id)
+            .current()
+            .fetch_all::<DependencyDB>(&table_versions[0].table_id)
             .await?;
 
         for dependency_version in &dependency_versions {
             let function: FunctionDB = db
-                .fetch_one_current::<{ FunctionDB::All }, FunctionDB>(
-                    &dependency_version.function_id,
-                )
+                .current()
+                .fetch_one::<FunctionDB>(&dependency_version.function_id)
                 .await?;
             assert_eq!(function.status, FunctionStatus::Frozen);
 
             // Note that the function version in the dependency still points to the active function version
             // thus being active itself.
-            let function_version: FunctionDB = db.fetch_one(&function.id).await?;
+            let function_version: FunctionDB = db.live().fetch_one(&function.id).await?;
             assert_eq!(function_version.status, FunctionStatus::Frozen);
         }
 
@@ -124,13 +121,11 @@ pub(crate) mod tests {
         table_name: &TableName,
     ) -> Result<(), TdError> {
         // Assert table does exist
-        let table: Option<TableDB> = db
-            .fetch_optional_current::<{ TableDB::All }, TableDB>(&table_name)
-            .await?;
+        let table: Option<TableDB> = db.current().fetch_optional::<TableDB>(&table_name).await?;
         assert!(table.is_some());
 
         // Assert previous table versions exists, always active
-        let table_versions: Vec<TableDB> = db.fetch_all(&table_name).await?;
+        let table_versions: Vec<TableDB> = db.live().fetch_all(&table_name).await?;
         for table_version in &table_versions {
             assert_eq!(table_version.name, *table_name);
             assert_eq!(table_version.collection_id, collection.id);

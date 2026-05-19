@@ -75,8 +75,8 @@ pub(crate) mod tests {
         UserId,
     };
     use td_objects::{Buildable, and};
-    use td_queries::BasicQueries;
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::LiveEntry;
+    use td_queries::test_utils::SeedEntry;
     use td_storage::location::StorageLocation;
     use td_tower::ctx_service::RawOneshot;
 
@@ -114,7 +114,7 @@ pub(crate) mod tests {
                 // Only active or frozen tables
                 // Find Table ID, looking at the version at the time
                 type_of_val(
-                    &By::<And![CollectionIdName, TableIdName]>::fetch_one_version::<
+                    &By::<And![CollectionIdName, TableIdName]>::historic_fetch_one::<
                         { TableDBWithNames::Available },
                         TableDBWithNames,
                     >,
@@ -137,7 +137,8 @@ pub(crate) mod tests {
 
         let collection = context
             .db
-            .seed_collection(&CollectionName::try_from("collection")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
 
         let created_tables = vec![TableNameDto::try_from("t0")?];
@@ -156,7 +157,7 @@ pub(crate) mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let function = context.db.seed_function(&collection, &create).await?;
+        let function = context.db.seed().function(&collection, &create).await?;
 
         let (collection_name, collection_id) = (collection.name.clone(), collection.id);
         let get_download = async move |context: &Context,
@@ -229,17 +230,19 @@ pub(crate) mod tests {
         // 3 function runs, 2 with data and 1 without, per table
         let mut at_times = vec![AtTime::now()];
         for i in 0..3 {
-            let execution = context.db.seed_execution(function).await?;
+            let execution = context.db.seed().execution(function).await?;
             let transaction_key = TransactionKey::try_from("ANY")?;
             let transaction = context
                 .db
-                .seed_transaction(&execution, &transaction_key)
+                .seed()
+                .transaction(&execution, &transaction_key)
                 .await?;
 
             at_times.push(AtTime::now());
-            let function_run = context
+            let physical_function_run = context
                 .db
-                .seed_function_run(
+                .seed()
+                .physical_function_run(
                     collection,
                     function,
                     &execution,
@@ -251,17 +254,19 @@ pub(crate) mod tests {
             for table in tables {
                 let table_version = context
                     .db
+                    .live()
                     .fetch_one::<TableDB>(and!(collection.id, table))
                     .await?;
 
                 if i % 2 == 0 {
-                    let table_data_version = context
+                    let physical_table_data_version = context
                         .db
-                        .seed_table_data_version_with_data(
+                        .seed()
+                        .physical_table_data_version_with_data(
                             collection,
                             &execution,
                             &transaction,
-                            &function_run,
+                            &physical_function_run,
                             &table_version,
                         )
                         .await?;
@@ -269,11 +274,11 @@ pub(crate) mod tests {
                     let (path, _) = StorageLocation::try_from(&storage_location)
                         .unwrap()
                         .builder(&function.data_location)
-                        .collection(&table_data_version.collection_id)
-                        .data(&table_data_version.id)
+                        .collection(&physical_table_data_version.collection_id)
+                        .data(&physical_table_data_version.id)
                         .table(
-                            &table_data_version.table_id,
-                            &table_data_version.table_version_id,
+                            &physical_table_data_version.table_id,
+                            &physical_table_data_version.table_version_id,
                         )
                         .build();
 
@@ -315,11 +320,12 @@ pub(crate) mod tests {
                 } else {
                     context
                         .db
-                        .seed_table_data_version(
+                        .seed()
+                        .physical_table_data_version(
                             collection,
                             &execution,
                             &transaction,
-                            &function_run,
+                            &physical_function_run,
                             &table_version,
                         )
                         .await?;

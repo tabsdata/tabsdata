@@ -10,9 +10,11 @@ use td_objects::And;
 use td_objects::NoFilter;
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
+use td_objects::dxo::physical_table_data_version::{
+    PhysicalTableDataVersion, PhysicalTableDataVersionDBWithNames,
+};
 use td_objects::dxo::table::TableDBWithNames;
-use td_objects::dxo::table_data_version::{TableDataVersion, TableDataVersionDBWithNames};
-use td_objects::rest_urls::params::TableDataVersionAtIdName;
+use td_objects::rest_urls::params::PhysicalTableDataVersionAtIdName;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
     AtTime, CollectionId, CollectionIdName, TableId, TableIdName, TriggeredOn, UncommittedStatus,
@@ -24,29 +26,31 @@ use td_tower::layers;
 
 #[service_factory(
     name = TableListDataVersionsService,
-    request = ListRequest<TableDataVersionAtIdName>,
-    response = ListResponse<TableDataVersion>,
+    request = ListRequest<PhysicalTableDataVersionAtIdName>,
+    response = ListResponse<PhysicalTableDataVersion>,
     connection = ConnectionProvider,
     context = AuthzContext,
 )]
 fn service() {
     layers!(
-        from_fn(With::<ListRequest<TableDataVersionAtIdName>>::extract::<RequestContext>),
+        from_fn(With::<ListRequest<PhysicalTableDataVersionAtIdName>>::extract::<RequestContext>),
         from_fn(
-            With::<ListRequest<TableDataVersionAtIdName>>::extract_name::<TableDataVersionAtIdName>
+            With::<ListRequest<PhysicalTableDataVersionAtIdName>>::extract_name::<
+                PhysicalTableDataVersionAtIdName,
+            >
         ),
         // find collection ID
-        from_fn(With::<TableDataVersionAtIdName>::extract::<CollectionIdName>),
+        from_fn(With::<PhysicalTableDataVersionAtIdName>::extract::<CollectionIdName>),
         from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
         // check requester has collection permissions
         from_fn(AuthzOn::<CollectionId>::set),
         from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check),
         // extract at time (triggered on)
-        from_fn(With::<TableDataVersionAtIdName>::extract::<AtTime>),
+        from_fn(With::<PhysicalTableDataVersionAtIdName>::extract::<AtTime>),
         from_fn(With::<AtTime>::try_convert_to::<TriggeredOn, _>),
         // find table ID
-        from_fn(With::<TableDataVersionAtIdName>::extract::<TableIdName>),
+        from_fn(With::<PhysicalTableDataVersionAtIdName>::extract::<TableIdName>),
         from_fn(
             By::<And![CollectionIdName, TableIdName]>::fetch_one_current::<
                 { TableDBWithNames::Available },
@@ -55,14 +59,14 @@ fn service() {
         ),
         from_fn(With::<TableDBWithNames>::extract::<TableId>),
         // list (set default filters if needed)
-        from_fn(With::<ListRequest<TableDataVersionAtIdName>>::extract::<ListParams>),
-        from_fn(With::<TableDataVersionAtIdName>::extract::<UncommittedStatus>),
+        from_fn(With::<ListRequest<PhysicalTableDataVersionAtIdName>>::extract::<ListParams>),
+        from_fn(With::<PhysicalTableDataVersionAtIdName>::extract::<UncommittedStatus>),
         from_fn(build_query_params),
         from_fn(
-            By::<TableId>::list_history_at::<
+            By::<TableId>::historic_list_full::<
                 NoFilter,
-                { TableDataVersionDBWithNames::All },
-                TableDataVersion,
+                { PhysicalTableDataVersionDBWithNames::All },
+                PhysicalTableDataVersion,
             >
         ),
     )
@@ -83,8 +87,8 @@ mod tests {
         TableNameDto, TransactionKey, UserId,
     };
     use td_objects::{Buildable, and};
-    use td_queries::BasicQueries;
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::LiveEntry;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -96,27 +100,27 @@ mod tests {
         TableListDataVersionsService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<ListRequest<TableDataVersionAtIdName>, ListResponse<TableDataVersion>>(&[
+            .assert_service::<ListRequest<PhysicalTableDataVersionAtIdName>, ListResponse<PhysicalTableDataVersion>>(&[
                 type_of_val(
-                    &With::<ListRequest<TableDataVersionAtIdName>>::extract::<RequestContext>,
+                    &With::<ListRequest<PhysicalTableDataVersionAtIdName>>::extract::<RequestContext>,
                 ),
                 type_of_val(
-                    &With::<ListRequest<TableDataVersionAtIdName>>::extract_name::<
-                        TableDataVersionAtIdName,
+                    &With::<ListRequest<PhysicalTableDataVersionAtIdName>>::extract_name::<
+                        PhysicalTableDataVersionAtIdName,
                     >,
                 ),
                 // find collection ID
-                type_of_val(&With::<TableDataVersionAtIdName>::extract::<CollectionIdName>),
+                type_of_val(&With::<PhysicalTableDataVersionAtIdName>::extract::<CollectionIdName>),
                 type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
                 type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
                 // check requester has collection permissions
                 type_of_val(&AuthzOn::<CollectionId>::set),
                 type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check),
                 // extract at time (triggered on)
-                type_of_val(&With::<TableDataVersionAtIdName>::extract::<AtTime>),
+                type_of_val(&With::<PhysicalTableDataVersionAtIdName>::extract::<AtTime>),
                 type_of_val(&With::<AtTime>::try_convert_to::<TriggeredOn, _>),
                 // find table ID
-                type_of_val(&With::<TableDataVersionAtIdName>::extract::<TableIdName>),
+                type_of_val(&With::<PhysicalTableDataVersionAtIdName>::extract::<TableIdName>),
                 type_of_val(
                     &By::<And![CollectionIdName, TableIdName]>::fetch_one_current::<
                         { TableDBWithNames::Available },
@@ -125,14 +129,14 @@ mod tests {
                 ),
                 type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
                 // list (set default filters if needed)
-                type_of_val(&With::<ListRequest<TableDataVersionAtIdName>>::extract::<ListParams>),
-                type_of_val(&With::<TableDataVersionAtIdName>::extract::<UncommittedStatus>),
+                type_of_val(&With::<ListRequest<PhysicalTableDataVersionAtIdName>>::extract::<ListParams>),
+                type_of_val(&With::<PhysicalTableDataVersionAtIdName>::extract::<UncommittedStatus>),
                 type_of_val(&build_query_params),
                 type_of_val(
-                    &By::<TableId>::list_history_at::<
+                    &By::<TableId>::historic_list_full::<
                         NoFilter,
-                        { TableDataVersionDBWithNames::All },
-                        TableDataVersion,
+                        { PhysicalTableDataVersionDBWithNames::All },
+                        PhysicalTableDataVersion,
                     >,
                 ),
             ]);
@@ -142,7 +146,8 @@ mod tests {
     #[tokio::test]
     async fn test_list_table_data_versions(db: TdPool) -> Result<(), TdError> {
         let collection = db
-            .seed_collection(&CollectionName::try_from("collection")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
 
         let dependencies = None;
@@ -160,16 +165,17 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let function_version = db.seed_function(&collection, &create).await?;
+        let function_version = db.seed().function(&collection, &create).await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
 
         // First data_version
         let t0 = AtTime::now();
 
-        let execution = db.seed_execution(&function_version).await?;
-        let transaction = db.seed_transaction(&execution, &transaction_key).await?;
-        let function_run = db
-            .seed_function_run(
+        let execution = db.seed().execution(&function_version).await?;
+        let transaction = db.seed().transaction(&execution, &transaction_key).await?;
+        let physical_function_run = db
+            .seed()
+            .physical_function_run(
                 &collection,
                 &function_version,
                 &execution,
@@ -181,6 +187,7 @@ mod tests {
         let t1 = AtTime::now();
 
         let table_version: TableDB = db
+            .live()
             .fetch_one(and!(
                 &collection.id,
                 &TableName::try_from(tables[0].clone())?
@@ -188,20 +195,22 @@ mod tests {
             .await?;
 
         let v1 = db
-            .seed_table_data_version(
+            .seed()
+            .physical_table_data_version(
                 &collection,
                 &execution,
                 &transaction,
-                &function_run,
+                &physical_function_run,
                 &table_version,
             )
             .await?;
 
         // Second data_version
-        let execution = db.seed_execution(&function_version).await?;
-        let transaction = db.seed_transaction(&execution, &transaction_key).await?;
-        let function_run = db
-            .seed_function_run(
+        let execution = db.seed().execution(&function_version).await?;
+        let transaction = db.seed().transaction(&execution, &transaction_key).await?;
+        let physical_function_run = db
+            .seed()
+            .physical_function_run(
                 &collection,
                 &function_version,
                 &execution,
@@ -211,11 +220,12 @@ mod tests {
             .await?;
 
         let v2 = db
-            .seed_table_data_version(
+            .seed()
+            .physical_table_data_version(
                 &collection,
                 &execution,
                 &transaction,
-                &function_run,
+                &physical_function_run,
                 &table_version,
             )
             .await?;
@@ -223,10 +233,11 @@ mod tests {
         let t2 = AtTime::now();
 
         // Third uncommitted data_version
-        let execution = db.seed_execution(&function_version).await?;
-        let transaction = db.seed_transaction(&execution, &transaction_key).await?;
-        let function_run = db
-            .seed_function_run(
+        let execution = db.seed().execution(&function_version).await?;
+        let transaction = db.seed().transaction(&execution, &transaction_key).await?;
+        let physical_function_run = db
+            .seed()
+            .physical_function_run(
                 &collection,
                 &function_version,
                 &execution,
@@ -236,11 +247,12 @@ mod tests {
             .await?;
 
         let v3 = db
-            .seed_table_data_version(
+            .seed()
+            .physical_table_data_version(
                 &collection,
                 &execution,
                 &transaction,
-                &function_run,
+                &physical_function_run,
                 &table_version,
             )
             .await?;
@@ -251,7 +263,7 @@ mod tests {
         // t0 -> no versions
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
-                TableDataVersionAtIdName::builder()
+                PhysicalTableDataVersionAtIdName::builder()
                     .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
                     .table(TableIdName::from_str(&format!("{}", table_version.name))?)
                     .at(t0)
@@ -269,7 +281,7 @@ mod tests {
         // t1 -> version v1
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
-                TableDataVersionAtIdName::builder()
+                PhysicalTableDataVersionAtIdName::builder()
                     .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
                     .table(TableIdName::from_str(&format!("{}", table_version.name))?)
                     .at(t1)
@@ -288,7 +300,7 @@ mod tests {
         // t2 -> versions v1 and v2
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
-                TableDataVersionAtIdName::builder()
+                PhysicalTableDataVersionAtIdName::builder()
                     .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
                     .table(TableIdName::from_str(&format!("{}", table_version.name))?)
                     .at(t2)
@@ -308,7 +320,7 @@ mod tests {
         // t3 -> versions v1 and v2 if uncommitted excluded
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
-                TableDataVersionAtIdName::builder()
+                PhysicalTableDataVersionAtIdName::builder()
                     .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
                     .table(TableIdName::from_str(&format!("{}", table_version.name))?)
                     .at(t3)
@@ -329,7 +341,7 @@ mod tests {
         // t3 -> version v3, v2 and v1 if uncommitted included
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
-                TableDataVersionAtIdName::builder()
+                PhysicalTableDataVersionAtIdName::builder()
                     .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
                     .table(TableIdName::from_str(&format!("{}", table_version.name))?)
                     .at(t3)

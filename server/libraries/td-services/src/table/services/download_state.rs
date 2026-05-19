@@ -35,14 +35,14 @@ fn service() {
         // get function
         from_fn(With::<FunctionVersionAtId>::extract::<FunctionVersionId>),
         from_fn(
-            By::<FunctionVersionId>::fetch_one_version::<
+            By::<FunctionVersionId>::historic_fetch_one::<
                 { FunctionDBWithNames::Available },
                 FunctionDBWithNames,
             >
         ),
         // find system tables
         from_fn(
-            By::<FunctionVersionId>::fetch_all_versions::<
+            By::<FunctionVersionId>::historic_fetch_all::<
                 { TableDBWithNames::System },
                 TableDBWithNames,
             >
@@ -73,7 +73,7 @@ mod tests {
     use td_objects::types::basic::{
         AtTime, BundleId, CollectionName, Decorator, TableNameDto, UserId,
     };
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -102,14 +102,14 @@ mod tests {
                 // get function
                 type_of_val(&With::<FunctionVersionAtId>::extract::<FunctionVersionId>),
                 type_of_val(
-                    &By::<FunctionVersionId>::fetch_one_version::<
+                    &By::<FunctionVersionId>::historic_fetch_one::<
                         { FunctionDBWithNames::Available },
                         FunctionDBWithNames,
                     >,
                 ),
                 // find system table
                 type_of_val(
-                    &By::<FunctionVersionId>::fetch_all_versions::<
+                    &By::<FunctionVersionId>::historic_fetch_all::<
                         { TableDBWithNames::System },
                         TableDBWithNames,
                     >,
@@ -123,7 +123,7 @@ mod tests {
                 type_of_val(&With::<TableAtIdName>::extract::<UncommittedStatus>),
                 // Find Table ID, looking at the version at the time
                 type_of_val(
-                    &By::<And![CollectionIdName, TableIdName]>::fetch_one_version::<
+                    &By::<And![CollectionIdName, TableIdName]>::historic_fetch_one::<
                         { TableDBWithNames::Available },
                         TableDBWithNames,
                     >,
@@ -146,7 +146,8 @@ mod tests {
 
         let collection = context
             .db
-            .seed_collection(&CollectionName::try_from("collection")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
 
         let created_tables = vec![TableNameDto::try_from("t0")?];
@@ -165,8 +166,8 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let function = context.db.seed_function(&collection, &create).await?;
-        let system_tables = context.db.seed_system_tables(&function).await?;
+        let function = context.db.seed().function(&collection, &create).await?;
+        let system_tables = context.db.seed().system_tables(&function).await?;
         let td_fn_state_table = system_tables
             .iter()
             .find(|t| t.name.starts_with(TD_FN_STATE_PREFIX))

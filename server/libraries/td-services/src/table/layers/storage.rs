@@ -5,10 +5,9 @@
 use polars::prelude::PolarsError;
 use td_database::dynamic::DynamicConnection;
 use td_error::{TdError, td_error};
-use td_objects::dxo::table_data_version::TableDataVersionDBWithNames;
-use td_objects::types::basic::{TableId, TriggeredOn, UncommittedStatus};
-use td_objects::{and, lte};
-use td_queries::BasicQueries;
+use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDBWithNames;
+use td_objects::types::basic::{AtTime, TableId, TriggeredOn, UncommittedStatus};
+use td_queries::LogicalPointersEntry;
 use td_storage::SPath;
 use td_storage::location::StorageLocation;
 use td_tower::extractors::{MutRef, Ref};
@@ -29,20 +28,17 @@ pub async fn resolve_table_location(
     table_id: Ref<TableId>,
     uncommitted: Ref<UncommittedStatus>,
 ) -> Result<Option<SPath>, TdError> {
-    let condition = and!(table_id.as_ref(), lte!(triggered_on.as_ref()));
-    let data_version = if **uncommitted {
-        conn.fetch_latest_before::<{ TableDataVersionDBWithNames::WithData }, TableDataVersionDBWithNames>(
-            condition,
-            0,
+    let committed_only = !**uncommitted;
+    let at = AtTime::now();
+    let data_version = conn
+        .logical_pointers()
+        .latest_bound_tdv_with_data_for_table(
+            table_id.as_ref(),
+            triggered_on.as_ref(),
+            &at,
+            committed_only,
         )
-        .await?
-    } else {
-        conn.fetch_latest_before::<{ TableDataVersionDBWithNames::CommittedWithData }, TableDataVersionDBWithNames>(
-            condition,
-            0,
-        )
-        .await?
-    };
+        .await?;
 
     if let Some(data_version) = data_version {
         let (path, _) = get_spath(&data_version);
@@ -52,7 +48,7 @@ pub async fn resolve_table_location(
     }
 }
 
-fn get_spath(data_version: &TableDataVersionDBWithNames) -> (SPath, StorageLocation) {
+fn get_spath(data_version: &PhysicalTableDataVersionDBWithNames) -> (SPath, StorageLocation) {
     StorageLocation::try_from(&data_version.storage_version)
         .unwrap()
         .builder(&data_version.data_location)
@@ -73,9 +69,9 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::execution::ExecutionDB;
     use td_objects::dxo::function::{FunctionDB, FunctionRegister, FunctionUpdate};
-    use td_objects::dxo::function_run::FunctionRunDB;
+    use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
+    use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
     use td_objects::dxo::table::TableDB;
-    use td_objects::dxo::table_data_version::TableDataVersionDB;
     use td_objects::dxo::transaction::TransactionDB;
     use td_objects::rest_urls::FunctionParam;
     use td_objects::types::basic::{
@@ -83,8 +79,8 @@ mod tests {
         FunctionRunStatus, RoleId, TableName, TableNameDto, TransactionKey, UserId,
     };
     use td_objects::{Buildable, and};
-    use td_queries::BasicQueries;
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::LiveEntry;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[td_test::test(sqlx)]
@@ -96,15 +92,16 @@ mod tests {
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_resolve_table_location_existing_with_data(db: TdPool) -> Result<(), TdError> {
-        let (collection, execution, transaction, function_run, table) =
+        let (collection, execution, transaction, physical_function_run, table) =
             _setup_table(db.clone()).await?;
 
         let dv = db
-            .seed_table_data_version_with_data(
+            .seed()
+            .physical_table_data_version_with_data(
                 &collection,
                 &execution,
                 &transaction,
-                &function_run,
+                &physical_function_run,
                 &table,
             )
             .await?;
@@ -114,11 +111,18 @@ mod tests {
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_resolve_table_location_existing_without_data(db: TdPool) -> Result<(), TdError> {
-        let (collection, execution, transaction, function_run, table) =
+        let (collection, execution, transaction, physical_function_run, table) =
             _setup_table(db.clone()).await?;
 
         let dv = db
-            .seed_table_data_version(&collection, &execution, &transaction, &function_run, &table)
+            .seed()
+            .physical_table_data_version(
+                &collection,
+                &execution,
+                &transaction,
+                &physical_function_run,
+                &table,
+            )
             .await?;
         _run_test(db, Some(dv), None).await
     }
@@ -128,20 +132,28 @@ mod tests {
     async fn test_resolve_table_location_existing_previous_with_data(
         db: TdPool,
     ) -> Result<(), TdError> {
-        let (collection, execution, transaction, function_run, table) =
+        let (collection, execution, transaction, physical_function_run, table) =
             _setup_table(db.clone()).await?;
 
         let previous_with_data = db
-            .seed_table_data_version_with_data(
+            .seed()
+            .physical_table_data_version_with_data(
                 &collection,
                 &execution,
                 &transaction,
-                &function_run,
+                &physical_function_run,
                 &table,
             )
             .await?;
         let current_without_data = db
-            .seed_table_data_version(&collection, &execution, &transaction, &function_run, &table)
+            .seed()
+            .physical_table_data_version(
+                &collection,
+                &execution,
+                &transaction,
+                &physical_function_run,
+                &table,
+            )
             .await?;
         _run_test(db, Some(current_without_data), Some(previous_with_data)).await
     }
@@ -151,22 +163,30 @@ mod tests {
     async fn test_resolve_table_location_existing_previous_with_data_different_table_version(
         db: TdPool,
     ) -> Result<(), TdError> {
-        let (collection, execution, transaction, function_run, table) =
+        let (collection, execution, transaction, physical_function_run, table) =
             _setup_table(db.clone()).await?;
 
         let previous_with_data = db
-            .seed_table_data_version_with_data(
+            .seed()
+            .physical_table_data_version_with_data(
                 &collection,
                 &execution,
                 &transaction,
-                &function_run,
+                &physical_function_run,
                 &table,
             )
             .await?;
-        let (execution, transaction, function_run, table) =
+        let (execution, transaction, physical_function_run, table) =
             _update_table_version(db.clone(), &collection).await?;
         let current_without_data = db
-            .seed_table_data_version(&collection, &execution, &transaction, &function_run, &table)
+            .seed()
+            .physical_table_data_version(
+                &collection,
+                &execution,
+                &transaction,
+                &physical_function_run,
+                &table,
+            )
             .await?;
         assert_ne!(
             previous_with_data.table_version_id,
@@ -180,14 +200,28 @@ mod tests {
     async fn test_resolve_table_location_existing_previous_without_data(
         db: TdPool,
     ) -> Result<(), TdError> {
-        let (collection, execution, transaction, function_run, table) =
+        let (collection, execution, transaction, physical_function_run, table) =
             _setup_table(db.clone()).await?;
 
         let _previous_with_data = db
-            .seed_table_data_version(&collection, &execution, &transaction, &function_run, &table)
+            .seed()
+            .physical_table_data_version(
+                &collection,
+                &execution,
+                &transaction,
+                &physical_function_run,
+                &table,
+            )
             .await;
         let current_without_data = db
-            .seed_table_data_version(&collection, &execution, &transaction, &function_run, &table)
+            .seed()
+            .physical_table_data_version(
+                &collection,
+                &execution,
+                &transaction,
+                &physical_function_run,
+                &table,
+            )
             .await?;
         _run_test(db, Some(current_without_data), None).await
     }
@@ -197,16 +231,30 @@ mod tests {
     async fn test_resolve_table_location_existing_previous_without_data_different_table_version(
         db: TdPool,
     ) -> Result<(), TdError> {
-        let (collection, execution, transaction, function_run, table) =
+        let (collection, execution, transaction, physical_function_run, table) =
             _setup_table(db.clone()).await?;
 
         let previous_with_data = db
-            .seed_table_data_version(&collection, &execution, &transaction, &function_run, &table)
+            .seed()
+            .physical_table_data_version(
+                &collection,
+                &execution,
+                &transaction,
+                &physical_function_run,
+                &table,
+            )
             .await?;
-        let (execution, transaction, function_run, table) =
+        let (execution, transaction, physical_function_run, table) =
             _update_table_version(db.clone(), &collection).await?;
         let current_without_data = db
-            .seed_table_data_version(&collection, &execution, &transaction, &function_run, &table)
+            .seed()
+            .physical_table_data_version(
+                &collection,
+                &execution,
+                &transaction,
+                &physical_function_run,
+                &table,
+            )
             .await?;
         assert_ne!(
             previous_with_data.table_version_id,
@@ -222,13 +270,14 @@ mod tests {
             CollectionDB,
             ExecutionDB,
             TransactionDB,
-            FunctionRunDB,
+            PhysicalFunctionRunDB,
             TableDB,
         ),
         TdError,
     > {
         let collection = db
-            .seed_collection(&CollectionName::try_from("collection")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
 
         let create = FunctionRegister::builder()
@@ -244,13 +293,14 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let function = db.seed_function(&collection, &create).await?;
-        let execution = db.seed_execution(&function).await?;
+        let function = db.seed().function(&collection, &create).await?;
+        let execution = db.seed().execution(&function).await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
-        let transaction = db.seed_transaction(&execution, &transaction_key).await?;
+        let transaction = db.seed().transaction(&execution, &transaction_key).await?;
 
-        let function_run = db
-            .seed_function_run(
+        let physical_function_run = db
+            .seed()
+            .physical_function_run(
                 &collection,
                 &function,
                 &execution,
@@ -259,14 +309,20 @@ mod tests {
             )
             .await?;
 
-        let table: TableDB = db.fetch_one(&function.id).await?;
-        Ok((collection, execution, transaction, function_run, table))
+        let table: TableDB = db.live().fetch_one(&function.id).await?;
+        Ok((
+            collection,
+            execution,
+            transaction,
+            physical_function_run,
+            table,
+        ))
     }
 
     async fn _update_table_version(
         db: TdPool,
         collection: &CollectionDB,
-    ) -> Result<(ExecutionDB, TransactionDB, FunctionRunDB, TableDB), TdError> {
+    ) -> Result<(ExecutionDB, TransactionDB, PhysicalFunctionRunDB, TableDB), TdError> {
         // Update the function to change the table version (TODO make this a seed function)
         let update = FunctionUpdate::builder()
             .name(Some("joaquin_2".try_into()?))
@@ -288,13 +344,14 @@ mod tests {
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
-        let function: FunctionDB = db.fetch_one(&(response.id)).await?;
-        let execution = db.seed_execution(&function).await?;
+        let function: FunctionDB = db.live().fetch_one(&(response.id)).await?;
+        let execution = db.seed().execution(&function).await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
-        let transaction = db.seed_transaction(&execution, &transaction_key).await?;
+        let transaction = db.seed().transaction(&execution, &transaction_key).await?;
 
-        let function_run = db
-            .seed_function_run(
+        let physical_function_run = db
+            .seed()
+            .physical_function_run(
                 collection,
                 &function,
                 &execution,
@@ -304,10 +361,11 @@ mod tests {
             .await?;
 
         let table = db
+            .live()
             .fetch_one(and!(function.id, &TableName::try_from("table_1")?))
             .await?;
 
-        Ok((execution, transaction, function_run, table))
+        Ok((execution, transaction, physical_function_run, table))
     }
 
     async fn _resolve(
@@ -331,8 +389,8 @@ mod tests {
 
     async fn _run_test(
         db: TdPool,
-        lookup_data_version: Option<TableDataVersionDB>,
-        expected_data_version: Option<TableDataVersionDB>,
+        lookup_data_version: Option<PhysicalTableDataVersionDB>,
+        expected_data_version: Option<PhysicalTableDataVersionDB>,
     ) -> Result<(), TdError> {
         let found = if let Some(lookup_data_version) = lookup_data_version {
             _resolve(&db, lookup_data_version.table_id, true).await?
@@ -341,8 +399,8 @@ mod tests {
         };
 
         let expected = if let Some(expected_data_version) = expected_data_version {
-            let expected_data_version: TableDataVersionDBWithNames =
-                db.fetch_one(&expected_data_version.id).await?;
+            let expected_data_version: PhysicalTableDataVersionDBWithNames =
+                db.live().fetch_one(&expected_data_version.id).await?;
             let (expected, _) = get_spath(&expected_data_version);
             Some(expected)
         } else {
@@ -359,13 +417,14 @@ mod tests {
             CollectionDB,
             ExecutionDB,
             TransactionDB,
-            FunctionRunDB,
+            PhysicalFunctionRunDB,
             TableDB,
         ),
         TdError,
     > {
         let collection = db
-            .seed_collection(&CollectionName::try_from("collection")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
 
         let create = FunctionRegister::builder()
@@ -381,13 +440,14 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let function = db.seed_function(&collection, &create).await?;
-        let execution = db.seed_execution(&function).await?;
+        let function = db.seed().function(&collection, &create).await?;
+        let execution = db.seed().execution(&function).await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
-        let transaction = db.seed_transaction(&execution, &transaction_key).await?;
+        let transaction = db.seed().transaction(&execution, &transaction_key).await?;
 
-        let function_run = db
-            .seed_function_run(
+        let physical_function_run = db
+            .seed()
+            .physical_function_run(
                 &collection,
                 &function,
                 &execution,
@@ -396,8 +456,14 @@ mod tests {
             )
             .await?;
 
-        let table: TableDB = db.fetch_one(&function.id).await?;
-        Ok((collection, execution, transaction, function_run, table))
+        let table: TableDB = db.live().fetch_one(&function.id).await?;
+        Ok((
+            collection,
+            execution,
+            transaction,
+            physical_function_run,
+            table,
+        ))
     }
 
     // Tests for committed vs uncommitted behavior
@@ -408,15 +474,16 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         // Committed data version with data should be found when uncommitted=true
-        let (collection, execution, transaction, function_run, table) =
+        let (collection, execution, transaction, physical_function_run, table) =
             _setup_committed_table(db.clone()).await?;
 
         let dv = db
-            .seed_table_data_version_with_data(
+            .seed()
+            .physical_table_data_version_with_data(
                 &collection,
                 &execution,
                 &transaction,
-                &function_run,
+                &physical_function_run,
                 &table,
             )
             .await?;
@@ -432,15 +499,16 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         // Committed data version with data should be found when uncommitted=false
-        let (collection, execution, transaction, function_run, table) =
+        let (collection, execution, transaction, physical_function_run, table) =
             _setup_committed_table(db.clone()).await?;
 
         let dv = db
-            .seed_table_data_version_with_data(
+            .seed()
+            .physical_table_data_version_with_data(
                 &collection,
                 &execution,
                 &transaction,
-                &function_run,
+                &physical_function_run,
                 &table,
             )
             .await?;
@@ -456,15 +524,16 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         // Non-committed data version with data should be found when uncommitted=true
-        let (collection, execution, transaction, function_run, table) =
+        let (collection, execution, transaction, physical_function_run, table) =
             _setup_table(db.clone()).await?;
 
         let dv = db
-            .seed_table_data_version_with_data(
+            .seed()
+            .physical_table_data_version_with_data(
                 &collection,
                 &execution,
                 &transaction,
-                &function_run,
+                &physical_function_run,
                 &table,
             )
             .await?;
@@ -480,15 +549,16 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         // Non-committed data version with data should NOT be found when uncommitted=false
-        let (collection, execution, transaction, function_run, table) =
+        let (collection, execution, transaction, physical_function_run, table) =
             _setup_table(db.clone()).await?;
 
         let dv = db
-            .seed_table_data_version_with_data(
+            .seed()
+            .physical_table_data_version_with_data(
                 &collection,
                 &execution,
                 &transaction,
-                &function_run,
+                &physical_function_run,
                 &table,
             )
             .await?;

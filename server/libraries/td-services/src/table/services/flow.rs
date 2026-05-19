@@ -7,11 +7,10 @@ use crate::graph::layers::{FunctionOrTable, GraphConfig, generate_td_graph};
 use crate::table::layers::flow::{build_response, with_recursion_options};
 use ta_services::factory::service_factory;
 use td_objects::And;
+use td_objects::StateFilter;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
-use td_objects::dxo::dependency::DependencyDBWithNames;
 use td_objects::dxo::function::FunctionDB;
-use td_objects::dxo::table::{TableDB, TableDBWithNames, TableFlowGraphResponse};
-use td_objects::dxo::trigger::TriggerDBWithNames;
+use td_objects::dxo::table::{TableDBWithNames, TableFlowGraphResponse};
 use td_objects::rest_urls::TableParam;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{AtTime, CollectionIdName, TableId, TableIdName};
@@ -21,17 +20,14 @@ use td_tower::from_fn::from_fn;
 use td_tower::layers;
 
 pub struct GraphOpts;
-impl
-    GraphConfig<
-        { TriggerDBWithNames::Active },
-        { DependencyDBWithNames::Active },
-        { FunctionDB::Available },
-        { TableDB::Available },
-    > for GraphOpts
-{
+impl GraphConfig for GraphOpts {
     type Authz = SKIP_AUTHZ;
 
-    fn include_dependency_functions(&self) -> bool {
+    fn function_state() -> StateFilter<FunctionDB> {
+        FunctionDB::available()
+    }
+
+    fn include_dependency_functions() -> bool {
         true
     }
 }
@@ -52,7 +48,7 @@ fn service() {
         from_fn(With::<TableParam>::extract::<TableIdName>),
         // Find main table
         from_fn(
-            By::<And![CollectionIdName, TableIdName]>::fetch_one_version::<
+            By::<And![CollectionIdName, TableIdName]>::historic_fetch_one::<
                 { TableDBWithNames::Available },
                 TableDBWithNames,
             >
@@ -86,8 +82,8 @@ mod tests {
     };
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
     use td_objects::{Buildable, and};
-    use td_queries::CurrentQueries;
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::CurrentEntry;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -109,7 +105,7 @@ mod tests {
                 type_of_val(&With::<TableParam>::extract::<TableIdName>),
                 // Find main table
                 type_of_val(
-                    &By::<And![CollectionIdName, TableIdName]>::fetch_one_version::<
+                    &By::<And![CollectionIdName, TableIdName]>::historic_fetch_one::<
                         { TableDBWithNames::Available },
                         TableDBWithNames,
                     >,
@@ -120,22 +116,20 @@ mod tests {
                 type_of_val(&with_recursion_options),
                 // Find td graph
                 // Find triggers
-                type_of_val(&GraphBuilder::<GraphOpts, _, _, _, _>::find_recursive_trigger_graph),
+                type_of_val(&GraphBuilder::<GraphOpts>::find_recursive_trigger_graph),
                 // Find dependencies. For clarity, we always show the function, even if
                 // generating a table centered graph, the same way we show the tables of
                 // a function centered graph.
-                type_of_val(&GraphBuilder::<GraphOpts, _, _, _, _>::main_function_id),
-                type_of_val(
-                    &GraphBuilder::<GraphOpts, _, _, _, _>::find_recursive_dependency_graph,
-                ),
-                type_of_val(&GraphBuilder::<GraphOpts, _, _, _, _>::unique_function_ids),
+                type_of_val(&GraphBuilder::<GraphOpts>::main_function_id),
+                type_of_val(&GraphBuilder::<GraphOpts>::find_recursive_dependency_graph),
+                type_of_val(&GraphBuilder::<GraphOpts>::unique_function_ids),
                 // Find output tables
-                type_of_val(&GraphBuilder::<GraphOpts, _, _, _, _>::find_functions_output_tables),
+                type_of_val(&GraphBuilder::<GraphOpts>::find_functions_output_tables),
                 // Find all tables and functions
-                type_of_val(&GraphBuilder::<GraphOpts, _, _, _, _>::find_all_tables_map),
-                type_of_val(&GraphBuilder::<GraphOpts, _, _, _, _>::find_all_functions_map),
+                type_of_val(&GraphBuilder::<GraphOpts>::find_all_tables_map),
+                type_of_val(&GraphBuilder::<GraphOpts>::find_all_functions_map),
                 // Create td graph and validate it
-                type_of_val(&GraphBuilder::<GraphOpts, _, _, _, _>::build_td_graph),
+                type_of_val(&GraphBuilder::<GraphOpts>::build_td_graph),
                 // Build response
                 type_of_val(&build_response),
             ]);
@@ -155,7 +149,8 @@ mod tests {
     async fn test_table_graph_no_deps(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("collection_0")?;
         let collection_0 = db
-            .seed_collection(&collection_name, &UserId::admin())
+            .seed()
+            .collection(&collection_name, &UserId::admin())
             .await?;
 
         let create = FunctionRegister::builder()
@@ -174,7 +169,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let function_0 = db.seed_function(&collection_0, &create).await?;
+        let function_0 = db.seed().function(&collection_0, &create).await?;
 
         // Actual test
         let service = TableFlowGraphService::with_defaults(db.clone()).service();
@@ -190,10 +185,8 @@ mod tests {
 
         // Assertions
         let central_table = db
-            .fetch_one_current::<{ TableDBWithNames::All }, TableDBWithNames>(and!(
-                &function_0.id,
-                TableName::try_from("table_0")?
-            ))
+            .current()
+            .fetch_one::<TableDBWithNames>(and!(&function_0.id, TableName::try_from("table_0")?))
             .await?;
         assert_eq!(response.table, central_table.id);
 
@@ -245,7 +238,8 @@ mod tests {
     async fn test_table_graph_downstream(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("collection_0")?;
         let collection_0 = db
-            .seed_collection(&collection_name, &UserId::admin())
+            .seed()
+            .collection(&collection_name, &UserId::admin())
             .await?;
 
         let create = FunctionRegister::builder()
@@ -261,7 +255,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let function_0 = db.seed_function(&collection_0, &create).await?;
+        let function_0 = db.seed().function(&collection_0, &create).await?;
 
         let create = FunctionRegister::builder()
             .name(FUNCTION_NAMES[1].clone())
@@ -279,7 +273,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let function_1 = db.seed_function(&collection_0, &create).await?;
+        let function_1 = db.seed().function(&collection_0, &create).await?;
 
         let create = FunctionRegister::builder()
             .name(FUNCTION_NAMES[2].clone())
@@ -294,7 +288,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let function_2 = db.seed_function(&collection_0, &create).await?;
+        let function_2 = db.seed().function(&collection_0, &create).await?;
 
         // Actual test
         let service = TableFlowGraphService::with_defaults(db.clone()).service();
@@ -310,10 +304,8 @@ mod tests {
 
         // Assertions
         let central_table: TableDBWithNames = db
-            .fetch_one_current::<{ TableDBWithNames::All }, TableDBWithNames>(and!(
-                &function_0.id,
-                TableName::try_from("table_0")?
-            ))
+            .current()
+            .fetch_one::<TableDBWithNames>(and!(&function_0.id, TableName::try_from("table_0")?))
             .await?;
         assert_eq!(response.table, central_table.id);
 
@@ -388,7 +380,8 @@ mod tests {
     async fn test_table_graph_upstream(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("collection_0")?;
         let collection_0 = db
-            .seed_collection(&collection_name, &UserId::admin())
+            .seed()
+            .collection(&collection_name, &UserId::admin())
             .await?;
 
         let create = FunctionRegister::builder()
@@ -404,7 +397,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let function_0 = db.seed_function(&collection_0, &create).await?;
+        let function_0 = db.seed().function(&collection_0, &create).await?;
 
         let create = FunctionRegister::builder()
             .name(FUNCTION_NAMES[1].clone())
@@ -422,7 +415,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _function_1 = db.seed_function(&collection_0, &create).await?;
+        let _function_1 = db.seed().function(&collection_0, &create).await?;
 
         let create = FunctionRegister::builder()
             .name(FUNCTION_NAMES[2].clone())
@@ -437,7 +430,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let function_2 = db.seed_function(&collection_0, &create).await?;
+        let function_2 = db.seed().function(&collection_0, &create).await?;
 
         // Actual test
         let service = TableFlowGraphService::with_defaults(db.clone()).service();
@@ -453,10 +446,8 @@ mod tests {
 
         // Assertions
         let central_table = db
-            .fetch_one_current::<{ TableDBWithNames::All }, TableDBWithNames>(and!(
-                &function_2.id,
-                TableName::try_from("table_3")?
-            ))
+            .current()
+            .fetch_one::<TableDBWithNames>(and!(&function_2.id, TableName::try_from("table_3")?))
             .await?;
         assert_eq!(response.table, central_table.id);
 

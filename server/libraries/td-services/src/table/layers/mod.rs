@@ -22,7 +22,7 @@ pub mod sample;
 pub mod schema;
 pub mod storage;
 
-// TableAtIdName -> TableDataVersionDBRead, SPath
+// TableAtIdName -> PhysicalTableDataVersionDBRead, SPath
 // Only looks for existing tables at the given time of committed transactions
 #[layer]
 pub fn find_data_version_location_at<E>()
@@ -43,7 +43,7 @@ where
         from_fn(With::<E>::extract::<UncommittedStatus>),
         // Find Table ID, looking at the version at the time
         from_fn(
-            By::<And![CollectionIdName, TableIdName]>::fetch_one_version::<
+            By::<And![CollectionIdName, TableIdName]>::historic_fetch_one::<
                 { TableDBWithNames::Available },
                 TableDBWithNames,
             >

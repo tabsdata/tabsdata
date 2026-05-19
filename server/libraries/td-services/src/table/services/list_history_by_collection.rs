@@ -42,7 +42,7 @@ fn service() {
         from_fn(With::<ListRequest<CollectionAtName>>::extract::<ListParams>),
         from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<Table>, _>),
         from_fn(
-            By::<CollectionId>::list_versions_at::<NoFilter, { TableDBWithNames::User }, Table>
+            By::<CollectionId>::historic_list_versions::<NoFilter, { TableDBWithNames::User }, Table>
         ),
     )
 }
@@ -64,7 +64,7 @@ mod tests {
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionIdName, RoleId, TableIdName,
         TableName, TableNameDto, UserId,
     };
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -94,7 +94,7 @@ mod tests {
                 type_of_val(&With::<ListRequest<CollectionAtName>>::extract::<ListParams>),
                 type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<Table>, _>),
                 type_of_val(
-                    &By::<CollectionId>::list_versions_at::<
+                    &By::<CollectionId>::historic_list_versions::<
                         NoFilter,
                         { TableDBWithNames::User },
                         Table,
@@ -107,7 +107,8 @@ mod tests {
     #[tokio::test]
     async fn test_list_table_versions_history_by_collection(db: TdPool) -> Result<(), TdError> {
         let collection = db
-            .seed_collection(&CollectionName::try_from("collection")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
 
         let t0 = AtTime::now();
@@ -129,7 +130,7 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let _ = db.seed_function(&collection, &create).await?;
+        let _ = db.seed().function(&collection, &create).await?;
 
         let t1 = AtTime::now();
 

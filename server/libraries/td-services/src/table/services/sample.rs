@@ -85,8 +85,8 @@ mod tests {
         StorageVersion, TableIdName, TableNameDto, TransactionKey, UncommittedStatus, UserId,
     };
     use td_objects::{Buildable, and};
-    use td_queries::BasicQueries;
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::LiveEntry;
+    use td_queries::test_utils::SeedEntry;
     use td_storage::location::StorageLocation;
     use td_storage::{MountDef, Storage};
     use td_tower::ctx_service::RawOneshot;
@@ -143,7 +143,7 @@ mod tests {
                 // Only active or frozen tables
                 // Find Table ID, looking at the version at the time
                 type_of_val(
-                    &By::<And![CollectionIdName, TableIdName]>::fetch_one_version::<
+                    &By::<And![CollectionIdName, TableIdName]>::historic_fetch_one::<
                         { TableDBWithNames::Available },
                         TableDBWithNames,
                     >,
@@ -177,7 +177,8 @@ mod tests {
         let storage = Arc::new(storage);
 
         let collection = db
-            .seed_collection(&CollectionName::try_from("collection")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
 
         let created_tables = vec![TableNameDto::try_from("t0")?];
@@ -196,20 +197,21 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let function_version = db.seed_function(&collection, &create).await?;
+        let function_version = db.seed().function(&collection, &create).await?;
 
         let storage_location = StorageVersion::default();
 
         // 3 function runs, 2 with data and 1 without, per table
         let mut at_times = vec![AtTime::now()];
         for i in 0..3 {
-            let execution = db.seed_execution(&function_version).await?;
+            let execution = db.seed().execution(&function_version).await?;
             let transaction_key = TransactionKey::try_from("ANY")?;
-            let transaction = db.seed_transaction(&execution, &transaction_key).await?;
+            let transaction = db.seed().transaction(&execution, &transaction_key).await?;
 
             at_times.push(AtTime::now());
-            let function_run = db
-                .seed_function_run(
+            let physical_function_run = db
+                .seed()
+                .physical_function_run(
                     &collection,
                     &function_version,
                     &execution,
@@ -220,15 +222,17 @@ mod tests {
 
             for table in &created_tables {
                 let table = TableName::try_from(table)?;
-                let table_version: TableDB = db.fetch_one(and!(&collection.id, &table)).await?;
+                let table_version: TableDB =
+                    db.live().fetch_one(and!(&collection.id, &table)).await?;
 
                 if i % 2 == 0 {
-                    let table_data_version = db
-                        .seed_table_data_version_with_data(
+                    let physical_table_data_version = db
+                        .seed()
+                        .physical_table_data_version_with_data(
                             &collection,
                             &execution,
                             &transaction,
-                            &function_run,
+                            &physical_function_run,
                             &table_version,
                         )
                         .await?;
@@ -236,11 +240,11 @@ mod tests {
                     let (path, _) = StorageLocation::try_from(&storage_location)
                         .unwrap()
                         .builder(&function_version.data_location)
-                        .collection(&table_data_version.collection_id)
-                        .data(&table_data_version.id)
+                        .collection(&physical_table_data_version.collection_id)
+                        .data(&physical_table_data_version.id)
                         .table(
-                            &table_data_version.table_id,
-                            &table_data_version.table_version_id,
+                            &physical_table_data_version.table_id,
+                            &physical_table_data_version.table_version_id,
                         )
                         .build();
 
@@ -280,14 +284,15 @@ mod tests {
                     .collect()
                     .unwrap();
                 } else {
-                    db.seed_table_data_version(
-                        &collection,
-                        &execution,
-                        &transaction,
-                        &function_run,
-                        &table_version,
-                    )
-                    .await?;
+                    db.seed()
+                        .physical_table_data_version(
+                            &collection,
+                            &execution,
+                            &transaction,
+                            &physical_function_run,
+                            &table_version,
+                        )
+                        .await?;
                 };
             }
         }
