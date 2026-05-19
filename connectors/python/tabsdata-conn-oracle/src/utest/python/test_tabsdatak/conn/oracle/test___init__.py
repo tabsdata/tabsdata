@@ -1,12 +1,27 @@
 from __future__ import annotations
 
+import typing
+
 import pytest
 
 from tabsdatak.api import NamedConn, Secret
 from tabsdatak.error import TabsdataException
 from tabsdatak.conn.common.error import ConnInitException
-from tabsdatak.conn.common.types import UserPassword
-from tabsdatak.conn.oracle import OracleConn, OracleDest, OracleSrc
+from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
+from tabsdatak.conn.common.types import CfgSpec, UserPassword
+from tabsdatak.conn.oracle import (
+    ConnSpec,
+    CredentialsSpec,
+    DestCfgSpec,
+    IfTableExistsSpec,
+    OracleConn,
+    OracleDest,
+    OracleSrc,
+    OracleTableNamesSpec,
+    QueriesSpec,
+    SrcCfgSpec,
+    UriSpec,
+)
 # noinspection PyProtectedMember
 from tabsdatak.conn.oracle.error import (
     OracleValidateException,
@@ -68,7 +83,7 @@ def test_oracle_src_full_round_trip():
         transactional=False,
         schema_overrides=[None, None],
         query_params={"x": 1},
-        src_cfg={"chunkSize": 1024},
+        src_cfg={"oracle.logging_level": 20},
     )
     loaded = OracleSrc.from_json(src.to_json())
     assert loaded == src
@@ -76,7 +91,7 @@ def test_oracle_src_full_round_trip():
     assert loaded.transactional is False
     assert loaded.schema_overrides == [None, None]
     assert loaded.query_params == {"x": 1}
-    assert loaded.src_cfg == {"chunkSize": 1024}
+    assert loaded.src_cfg == {"oracle.logging_level": 20}
 
 
 def test_oracle_src_round_trip_with_named_conn():
@@ -117,14 +132,14 @@ def test_oracle_dest_full_round_trip():
         tables=["analytics.users", "analytics.orders"],
         if_table_exists="replace",
         transactional=False,
-        dest_cfg={"chunkSize": 2048},
+        dest_cfg={"oracle.logging_level": 20},
     )
     loaded = OracleDest.from_json(dest.to_json())
     assert loaded == dest
     assert loaded.tables == ["analytics.users", "analytics.orders"]
     assert loaded.if_table_exists == "replace"
     assert loaded.transactional is False
-    assert loaded.dest_cfg == {"chunkSize": 2048}
+    assert loaded.dest_cfg == {"oracle.logging_level": 20}
 
 
 def test_oracle_dest_round_trip_with_named_conn():
@@ -135,17 +150,92 @@ def test_oracle_dest_round_trip_with_named_conn():
     assert loaded.conn.name == "prod_oracle"
 
 
-def test_oracle_dest_rejects_bad_table_name():
-    with pytest.raises(ConnInitException) as ei:
-        OracleDest(
-            conn=_conn(),
-            tables=["bad-name"],
-        )
-    assert ei.value.api_error in {OracleErrorCode.ORACLE_4, OracleErrorCode.ORACLE_15}
-
-
 def test_oracle_dest_defaults_if_table_exists_to_append():
     dest = OracleDest(conn=_conn(), tables=["analytics.users"])
     assert dest.if_table_exists == "append"
     assert dest.transactional is True
     assert dest.dest_cfg is None
+
+
+# ---------------------------------------------------------------------------
+# Field-spec wiring
+# ---------------------------------------------------------------------------
+
+
+def _hint(cls: type, field: str) -> object:
+    return typing.get_type_hints(cls, include_extras=True)[field]
+
+
+def test_oracle_conn_fields_wire_expected_specs():
+    assert _hint(OracleConn, "uri") == UriSpec
+    assert _hint(OracleConn, "credentials") == CredentialsSpec
+    assert _hint(OracleConn, "conn_cfg") == CfgSpec | None
+
+
+def test_oracle_src_fields_wire_expected_specs():
+    assert _hint(OracleSrc, "conn") == ConnSpec
+    assert _hint(OracleSrc, "queries") == QueriesSpec
+    assert _hint(OracleSrc, "transactional") is bool
+    assert _hint(OracleSrc, "schema_overrides") == SchemaOverrideSpec | None
+    assert _hint(OracleSrc, "src_cfg") == SrcCfgSpec | None
+
+
+def test_oracle_dest_fields_wire_expected_specs():
+    assert _hint(OracleDest, "conn") == ConnSpec
+    assert _hint(OracleDest, "tables") == OracleTableNamesSpec
+    assert _hint(OracleDest, "if_table_exists") == IfTableExistsSpec
+    assert _hint(OracleDest, "transactional") is bool
+    assert _hint(OracleDest, "dest_cfg") == DestCfgSpec | None
+
+
+# ---------------------------------------------------------------------------
+# src_cfg / dest_cfg literal-key validation
+# ---------------------------------------------------------------------------
+
+
+def test_oracle_src_rejects_unknown_src_cfg_key():
+    with pytest.raises(ConnInitException) as ei:
+        OracleSrc(
+            conn=_conn(),
+            queries=["SELECT 1"],
+            src_cfg={"bogus.key": 1},
+        )
+    assert ei.value.api_error is OracleErrorCode.ORACLE_2
+
+
+def test_oracle_src_accepts_known_src_cfg_keys():
+    src = OracleSrc(
+        conn=_conn(),
+        queries=["SELECT 1"],
+        src_cfg={
+            "oracle.logging_level": 20,
+            "tabsdata.sql.sql.readEngine": "polarsSqlAlchemyRead",
+            "tabsdata.sql.chunkSize": 100,
+        },
+    )
+    loaded = OracleSrc.from_json(src.to_json())
+    assert loaded == src
+
+
+def test_oracle_dest_rejects_unknown_dest_cfg_key():
+    with pytest.raises(ConnInitException) as ei:
+        OracleDest(
+            conn=_conn(),
+            tables=["analytics.users"],
+            dest_cfg={"bogus.key": 1},
+        )
+    assert ei.value.api_error is OracleErrorCode.ORACLE_4
+
+
+def test_oracle_dest_accepts_known_dest_cfg_keys():
+    dest = OracleDest(
+        conn=_conn(),
+        tables=["analytics.users"],
+        dest_cfg={
+            "oracle.logging_level": 20,
+            "tabsdata.sql.sql.writeEngine": "polarsSqlAlchemyWrite",
+            "tabsdata.sql.chunkSize": 100,
+        },
+    )
+    loaded = OracleDest.from_json(dest.to_json())
+    assert loaded == dest

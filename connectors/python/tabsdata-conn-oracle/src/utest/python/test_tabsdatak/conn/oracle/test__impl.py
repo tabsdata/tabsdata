@@ -13,7 +13,7 @@ from tabsdatak.conn.common.sql._engine.reader import SqlReadCfg
 from tabsdatak.conn.common.sql._engine.writer import SqlWriteCfg
 from tabsdatak.conn.oracle import OracleConn
 # noinspection PyProtectedMember
-from tabsdatak.conn.oracle import _adapter as adapter
+from tabsdatak.conn.oracle import _impl as impl
 
 
 pytestmark = pytest.mark.oracle
@@ -23,7 +23,7 @@ pytestmark = pytest.mark.oracle
 # build_oracle_engine -- driver injection + credential set
 #
 # The oracle DBAPI may not be installed in the test env, so we intercept
-# ``create_engine`` and verify the URL that the adapter built.
+# ``create_engine`` and verify the URL that the impl built.
 # ---------------------------------------------------------------------------
 
 
@@ -55,7 +55,7 @@ def _conn() -> OracleConn:
 
 @pytest.fixture
 def captured(monkeypatch):
-    """Monkey-patch ``adapter.create_engine`` to capture call args."""
+    """Monkey-patch ``impl.create_engine`` to capture call args."""
     box: dict = {}
 
     def fake_create_engine(url, *, connect_args):
@@ -63,12 +63,12 @@ def captured(monkeypatch):
         box["connect_args"] = connect_args
         return _CapturedURL(url, connect_args)
 
-    monkeypatch.setattr(adapter, "create_engine", fake_create_engine)
+    monkeypatch.setattr(impl, "create_engine", fake_create_engine)
     return box
 
 
 def test_build_oracle_engine_injects_oracledb_driver_when_missing(captured):
-    adapter.build_oracle_engine(
+    impl.build_oracle_engine(
         "oracle://host:1521/orcl",
         _credentials(),
         connect_args=None,
@@ -82,7 +82,7 @@ def test_build_oracle_engine_injects_oracledb_driver_when_missing(captured):
 
 
 def test_build_oracle_engine_preserves_explicit_driver(captured):
-    adapter.build_oracle_engine(
+    impl.build_oracle_engine(
         "oracle+oracledb://host:1521/orcl",
         _credentials(),
         connect_args=None,
@@ -91,7 +91,7 @@ def test_build_oracle_engine_preserves_explicit_driver(captured):
 
 
 def test_build_oracle_engine_accepts_secret_uri(captured):
-    adapter.build_oracle_engine(
+    impl.build_oracle_engine(
         Secret.lit("oracle://host:1521/orcl"),
         _credentials(),
         connect_args=None,
@@ -100,7 +100,7 @@ def test_build_oracle_engine_accepts_secret_uri(captured):
 
 
 def test_build_oracle_engine_passes_connect_args(captured):
-    adapter.build_oracle_engine(
+    impl.build_oracle_engine(
         "oracle://host/orcl",
         _credentials(),
         connect_args={"events": True},
@@ -109,7 +109,7 @@ def test_build_oracle_engine_passes_connect_args(captured):
 
 
 def test_build_oracle_engine_with_no_connect_args_passes_empty_dict(captured):
-    adapter.build_oracle_engine(
+    impl.build_oracle_engine(
         "oracle://host/orcl",
         _credentials(),
         connect_args=None,
@@ -123,11 +123,11 @@ def test_build_oracle_engine_with_no_connect_args_passes_empty_dict(captured):
 
 
 def test_oracle_read_cfg_subclasses_sql_read_cfg():
-    assert issubclass(adapter.OracleReadCfg, SqlReadCfg)
+    assert issubclass(impl.OracleReadCfg, SqlReadCfg)
 
 
 def test_oracle_read_cfg_creates_engine_from_conn(captured):
-    cfg = adapter.OracleReadCfg(
+    cfg = impl.OracleReadCfg(
         conn=_conn(),
         queries=["SELECT 1 FROM DUAL"],
         transactional=True,
@@ -142,11 +142,11 @@ def test_oracle_read_cfg_creates_engine_from_conn(captured):
 
 
 def test_oracle_write_cfg_subclasses_sql_write_cfg():
-    assert issubclass(adapter.OracleWriteCfg, SqlWriteCfg)
+    assert issubclass(impl.OracleWriteCfg, SqlWriteCfg)
 
 
 def test_oracle_write_cfg_creates_engine_from_conn(captured):
-    cfg = adapter.OracleWriteCfg(
+    cfg = impl.OracleWriteCfg(
         conn=_conn(),
         target_tables=["t"],
         if_table_exists="append",
@@ -163,7 +163,7 @@ def test_oracle_read_cfg_no_conn_cfg_forwards_empty_connect_args(captured):
         uri="oracle://host/orcl",
         credentials=_credentials(),
     )
-    cfg = adapter.OracleReadCfg(
+    cfg = impl.OracleReadCfg(
         conn=conn,
         queries=["SELECT 1 FROM DUAL"],
         transactional=True,
@@ -181,14 +181,14 @@ def test_oracle_read_cfg_no_conn_cfg_forwards_empty_connect_args(captured):
 
 
 def test_read_defaults_pick_polars_with_pandas_allowed():
-    d = adapter.ORACLE_READ_DEFAULTS
+    d = impl.ORACLE_READ_DEFAULTS
     assert d[const.READ_ENGINE_KEY] == const.POLARS_SQL_ALCHEMY_READ_ENGINE
     assert const.POLARS_SQL_ALCHEMY_READ_ENGINE in d[const.AVAIL_READ_ENGINES_KEY]
     assert const.PANDAS_SQL_ALCHEMY_READ_ENGINE in d[const.AVAIL_READ_ENGINES_KEY]
 
 
 def test_write_defaults_pick_polars_only():
-    d = adapter.ORACLE_WRITE_DEFAULTS
+    d = impl.ORACLE_WRITE_DEFAULTS
     assert d[const.WRITE_ENGINE_KEY] == const.POLARS_SQL_ALCHEMY_WRITE_ENGINE
     assert d[const.AVAIL_WRITE_ENGINES_KEY] == [
         const.POLARS_SQL_ALCHEMY_WRITE_ENGINE,
