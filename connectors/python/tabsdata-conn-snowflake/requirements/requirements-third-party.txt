@@ -1,3 +1,5 @@
 #
 # Copyright 2026 Tabs Data Inc.
 #
+
+snowflake-connector-python==4.4.0

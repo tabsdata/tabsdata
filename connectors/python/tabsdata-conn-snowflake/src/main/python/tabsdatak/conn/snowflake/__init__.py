@@ -1,12 +1,16 @@
 from __future__ import annotations
 
-from typing import Annotated, Literal, TypeAlias, Union
+from collections.abc import Mapping
+from typing import Annotated, Any, Literal, TypeAlias, Union
 
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
 from tabsdatak.api import Conn, Dest, Env, NamedConn, Secret
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common import _validation as _common_validation
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import CfgSpec, UserPassword
@@ -46,6 +50,16 @@ SnowflakeTableNamesSpec: TypeAlias = list[SnowflakeTableNameSpec]
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
 
 
+# --- SnowflakeDest.dest_cfg keys ------------------------------------
+DestCfgKey: TypeAlias = Literal[
+    "snowflake.logging_level",
+]
+
+DestCfgSpec: TypeAlias = Annotated[
+    Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+]
+
+
 # --- Connection ------------------------------------------------------
 
 
@@ -77,4 +91,4 @@ class SnowflakeDest(Dest):
     conn: ConnSpec
     tables: SnowflakeTableNamesSpec
     if_table_exists: IfTableExistsSpec = "append"
-    dest_cfg: CfgSpec | None = None
+    dest_cfg: DestCfgSpec | None = None

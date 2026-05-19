@@ -4,4 +4,3 @@
 
 tabsdata-api==2.0.0
 tabsdata-conn-common==2.0.0
-tabsdata-conn-common-sql==2.0.0
