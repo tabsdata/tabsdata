@@ -58,7 +58,7 @@ class LocalFileSrcPlugin(SrcPlugin[LocalFileSrc]):
     ) -> list[list[TableFileSpec]]:
         return _file_plugin.import_files(
             ctx=ctx,
-            cfg=src.to_reader_conf(),
+            cfg=_file_plugin.ReaderConf.from_src(src),
             build_location=build_location,
             errors=ERRORS,
         )
@@ -73,7 +73,7 @@ class LocalFileDestPlugin(DestPlugin[LocalFileDest]):
     ) -> None:
         _file_plugin.copy_out(
             ctx=ctx,
-            cfg=dest.to_writer_conf(),
+            cfg=_file_plugin.WriterConf.from_dest(dest),
             tables=tables,
             build_location=build_location,
             errors=ERRORS,
@@ -102,7 +102,7 @@ LOCALFILE_SRC = SrcDef(
     src_version="v1",
     src=LocalFileSrc,
     table_mode=TableMode.ARRAY,
-    cardinality=lambda src: len(src.path),
+    cardinality=lambda src: len(src.paths),
     plugin=LocalFileSrcPlugin,
     explorer=LocalFileExplorer,
 )
@@ -113,7 +113,7 @@ LOCALFILE_DEST = DestDef(
     dest_type="localfile",
     dest_version="v1",
     dest=LocalFileDest,
-    cardinality=lambda dest: len(dest.path),
+    cardinality=lambda dest: len(dest.paths),
     plugin=LocalFileDestPlugin,
     explorer=LocalFileExplorer,
 )

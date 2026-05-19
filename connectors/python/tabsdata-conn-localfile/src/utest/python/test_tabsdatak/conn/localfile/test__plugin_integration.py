@@ -1,12 +1,3 @@
-"""End-to-end LocalFile integration tests: invoke ``td_transporter``
-against real filesystem paths. Skipped unless ``TD_TRANSPORTER_BIN``
-is set and points at an existing executable.
-
-Unlike the cloud variants, no credentials are required. Set the
-binary path once::
-
-    export TD_TRANSPORTER_BIN=/path/to/td_transporter
-"""
 
 from __future__ import annotations
 
@@ -107,7 +98,7 @@ def test_dest_then_src_round_trip(tmp_path: Path):
     conn = LocalFileConn(base_path=str(base))
 
     # 1. Write
-    dest = LocalFileDest(conn=conn, path=["users.parquet"])
+    dest = LocalFileDest(conn=conn, paths=["users.parquet"])
     plugin.LocalFileDestPlugin().write_out(
         _DestCtx(work_dest),
         dest,
@@ -116,7 +107,7 @@ def test_dest_then_src_round_trip(tmp_path: Path):
     assert (base / "users.parquet").exists()
 
     # 2. Read back
-    src = LocalFileSrc(conn=conn, path=["users.parquet"])
+    src = LocalFileSrc(conn=conn, paths=["users.parquet"])
     out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work_src), src)
 
     assert len(out) == 1
@@ -136,7 +127,7 @@ def test_src_treats_absolute_path_as_relative_to_base_path(tmp_path: Path):
 
     conn = LocalFileConn(base_path=str(base))
     # Note the leading slash on the entry -- the plugin strips it.
-    src = LocalFileSrc(conn=conn, path=["/data.parquet"])
+    src = LocalFileSrc(conn=conn, paths=["/data.parquet"])
 
     work = tmp_path / "work"
     work.mkdir()
@@ -163,7 +154,7 @@ def test_src_wildcard_in_basename_matches_multiple_files(tmp_path: Path):
     )
 
     conn = LocalFileConn(base_path=str(base))
-    src = LocalFileSrc(conn=conn, path=["*.parquet"])
+    src = LocalFileSrc(conn=conn, paths=["*.parquet"])
 
     work = tmp_path / "work"
     work.mkdir()
@@ -186,7 +177,7 @@ def test_src_wildcard_with_no_matches_returns_empty_slot(tmp_path: Path):
     )
 
     conn = LocalFileConn(base_path=str(base))
-    src = LocalFileSrc(conn=conn, path=["*.parquet"])
+    src = LocalFileSrc(conn=conn, paths=["*.parquet"])
 
     work = tmp_path / "work"
     work.mkdir()
@@ -203,7 +194,6 @@ def test_src_wildcard_with_no_matches_returns_empty_slot(tmp_path: Path):
 
 
 def _set_mtime(path: Path, when: datetime) -> None:
-    """Set both atime and mtime to ``when`` (UTC) on ``path``."""
     ts = when.astimezone(timezone.utc).timestamp()
     os.utime(path, (ts, ts))
 
@@ -228,7 +218,7 @@ def test_src_initial_last_modified_filters_out_older_files(tmp_path: Path):
     conn = LocalFileConn(base_path=str(base))
     src = LocalFileSrc(
         conn=conn,
-        path=["*.parquet"],
+        paths=["*.parquet"],
         initial_last_modified=cutoff,
     )
 
@@ -257,7 +247,7 @@ def test_src_initial_last_modified_at_or_before_oldest_returns_all(
     conn = LocalFileConn(base_path=str(base))
     src = LocalFileSrc(
         conn=conn,
-        path=["*.parquet"],
+        paths=["*.parquet"],
         initial_last_modified=floor,
     )
 
@@ -291,7 +281,7 @@ def test_src_format_csv_reads_with_default_options(tmp_path: Path):
     conn = LocalFileConn(base_path=str(base))
     src = LocalFileSrc(
         conn=conn,
-        path=["users.csv"],
+        paths=["users.csv"],
         format=SrcFileFormat.CSV,
     )
     work = tmp_path / "work"
@@ -322,7 +312,7 @@ def test_src_format_csv_honours_separator_option(tmp_path: Path):
     conn = LocalFileConn(base_path=str(base))
     src = LocalFileSrc(
         conn=conn,
-        path=["users.csv"],
+        paths=["users.csv"],
         format=SrcFileFormat.CSV,
         format_cfg={SrcFileFormat.CSV: {"separator": ";"}},
     )
@@ -348,7 +338,7 @@ def test_src_format_json_reads_records(tmp_path: Path):
     conn = LocalFileConn(base_path=str(base))
     src = LocalFileSrc(
         conn=conn,
-        path=["users.json"],
+        paths=["users.json"],
         format=SrcFileFormat.JSON,
     )
     work = tmp_path / "work"
@@ -383,7 +373,7 @@ def test_src_format_avro_reads_records(tmp_path: Path):
     conn = LocalFileConn(base_path=str(base))
     src = LocalFileSrc(
         conn=conn,
-        path=["users.avro"],
+        paths=["users.avro"],
         format=SrcFileFormat.AVRO,
     )
     work = tmp_path / "work"
@@ -406,7 +396,7 @@ def test_src_format_auto_infers_parquet_from_extension(tmp_path: Path):
     conn = LocalFileConn(base_path=str(base))
     src = LocalFileSrc(
         conn=conn,
-        path=["users.parquet"],
+        paths=["users.parquet"],
         # AUTO is the default; spell it out for clarity.
         format=SrcFileFormat.AUTO,
     )
@@ -450,7 +440,7 @@ def test_dest_format_csv_writes_csv_file(tmp_path: Path):
     conn = LocalFileConn(base_path=str(base))
     dest = LocalFileDest(
         conn=conn,
-        path=["users.csv"],
+        paths=["users.csv"],
         format=DestFileFormat.CSV,
     )
     work = tmp_path / "work"
@@ -478,7 +468,7 @@ def test_dest_format_csv_honours_separator_option(tmp_path: Path):
     conn = LocalFileConn(base_path=str(base))
     dest = LocalFileDest(
         conn=conn,
-        path=["users.csv"],
+        paths=["users.csv"],
         format=DestFileFormat.CSV,
         format_cfg={DestFileFormat.CSV: {"separator": ";"}},
     )
@@ -504,7 +494,7 @@ def test_dest_format_json_writes_json_file(tmp_path: Path):
     conn = LocalFileConn(base_path=str(base))
     dest = LocalFileDest(
         conn=conn,
-        path=["users.json"],
+        paths=["users.json"],
         format=DestFileFormat.JSON,
     )
     work = tmp_path / "work"
@@ -534,7 +524,7 @@ def test_dest_format_avro_writes_avro_file(tmp_path: Path):
     conn = LocalFileConn(base_path=str(base))
     dest = LocalFileDest(
         conn=conn,
-        path=["users.avro"],
+        paths=["users.avro"],
         format=DestFileFormat.AVRO,
     )
     work = tmp_path / "work"
@@ -562,7 +552,7 @@ def test_dest_format_auto_defaults_to_parquet(tmp_path: Path):
     conn = LocalFileConn(base_path=str(base))
     dest = LocalFileDest(
         conn=conn,
-        path=["users.parquet"],
+        paths=["users.parquet"],
         format=DestFileFormat.AUTO,
     )
     work = tmp_path / "work"
@@ -600,7 +590,7 @@ def _read_csv_with_cfg(
 
     src = LocalFileSrc(
         conn=LocalFileConn(base_path=str(base)),
-        path=["in.csv"],
+        paths=["in.csv"],
         format=SrcFileFormat.CSV,
         format_cfg={SrcFileFormat.CSV: cfg},
     )
@@ -860,7 +850,7 @@ def test_csv_src_encoding_utf8(tmp_path: Path):
     )
     src = LocalFileSrc(
         conn=LocalFileConn(base_path=str(base)),
-        path=["in.csv"],
+        paths=["in.csv"],
         format=SrcFileFormat.CSV,
         format_cfg={SrcFileFormat.CSV: {"encoding": "utf8"}},
     )

@@ -75,7 +75,7 @@ def test_src_plugin_passes_build_location_and_errors(monkeypatch, tmp_path):
 
     monkeypatch.setattr(_file_plugin, "import_files", fake)
 
-    src = LocalFileSrc(conn=LocalFileConn(), path=["a/b.csv"])
+    src = LocalFileSrc(conn=LocalFileConn(), paths=["a/b.csv"])
     out = plugin.LocalFileSrcPlugin().read_in(_src_ctx(tmp_path), src)
 
     assert out == [[ParquetFile(tmp_path / "ok.parquet")]]
@@ -97,7 +97,7 @@ def test_dest_plugin_passes_build_location_and_errors(monkeypatch, tmp_path):
 
     monkeypatch.setattr(_file_plugin, "copy_out", fake)
 
-    dest = LocalFileDest(conn=LocalFileConn(), path=["out/x.csv"])
+    dest = LocalFileDest(conn=LocalFileConn(), paths=["out/x.csv"])
     parquet = ParquetFile(tmp_path / "in.parquet")
     plugin.LocalFileDestPlugin().write_out(_dest_ctx(tmp_path), dest, [parquet])
 
@@ -141,8 +141,8 @@ def test_localfile_dest_def_wires_plugin_and_explorer():
     assert plugin.LOCALFILE_DEST.dest_type == "localfile"
 
 
-def test_localfile_cardinality_uses_path_length():
-    src = LocalFileSrc(conn=LocalFileConn(), path=["a", "b", "c"])
+def test_localfile_cardinality_uses_paths_length():
+    src = LocalFileSrc(conn=LocalFileConn(), paths=["a", "b", "c"])
     assert plugin.LOCALFILE_SRC.cardinality(src) == 3
-    dest = LocalFileDest(conn=LocalFileConn(), path=["a", "b"])
+    dest = LocalFileDest(conn=LocalFileConn(), paths=["a", "b"])
     assert plugin.LOCALFILE_DEST.cardinality(dest) == 2
