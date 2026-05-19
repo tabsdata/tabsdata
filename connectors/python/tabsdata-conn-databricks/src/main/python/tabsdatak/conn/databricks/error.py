@@ -14,6 +14,10 @@ class DatabricksValidateException(ConnException):
     """Cross-field validation failure for the Databricks connector."""
 
 
+class DatabricksRuntimeException(ConnException):
+    """Runtime failure (plugin / I/O) for the Databricks connector."""
+
+
 class DatabricksErrorCode(ErrorCode):
     DATABRICKS_1 = ErrorDef(
         ConnInitException,
@@ -32,48 +36,34 @@ class DatabricksErrorCode(ErrorCode):
         "DatabricksDest validation failed",
     )  # DatabricksDest
     DATABRICKS_5 = ErrorDef(
-        ConnInitException,
-        "Databricks identifier must be non-empty",
-    )  # _validate_identifier: empty
+        DatabricksRuntimeException,
+        "Databricks source connection failed (host={host})",
+    )  # _DatabricksSrcPlugin.read_in: workspace client / connect failure
     DATABRICKS_6 = ErrorDef(
-        ConnInitException,
-        "Databricks qualified name has unterminated backtick-quoted segment: {value!r}",
-    )  # _split_qualified: unterminated backtick
+        DatabricksRuntimeException,
+        "Databricks query failed (query_index={query_index})",
+    )  # _DatabricksSrcPlugin.read_in: query / download failure
     DATABRICKS_7 = ErrorDef(
-        ConnInitException,
-        "Databricks warehouse name must be 1-{max} chars (got {length}): {value!r}",
-    )  # _validate_warehouse_name: bad length
+        DatabricksRuntimeException,
+        "DatabricksDest tables/slot count mismatch"
+        " (tables={tables}, slots={slots})",
+    )  # _DatabricksDestPlugin.write_out: defensive recheck
     DATABRICKS_8 = ErrorDef(
-        ConnInitException,
-        "Databricks warehouse id must be a 16-char lowercase hex string: {value!r}",
-    )  # _validate_warehouse_id
+        DatabricksRuntimeException,
+        "Databricks destination connection failed (host={host})",
+    )  # _DatabricksDestPlugin.write_out: workspace / sql connect failure
     DATABRICKS_9 = ErrorDef(
-        ConnInitException,
-        "Databricks identifier exceeds {max} chars: {value!r}",
-    )  # _validate_identifier: too long
+        DatabricksRuntimeException,
+        "Databricks upload to volume failed"
+        " (table={table}, volume={volume})",
+    )  # _DatabricksDestPlugin.write_out: volume upload failure
     DATABRICKS_10 = ErrorDef(
-        ConnInitException,
-        "backtick-quoted Databricks identifier may not contain backtick,"
-        " period, slash, control chars, or leading/trailing whitespace: {value!r}",
-    )  # _validate_identifier: backtick bad
+        DatabricksRuntimeException,
+        "Databricks COPY INTO failed (table={table})",
+    )  # _DatabricksDestPlugin.write_out: COPY INTO failure
     DATABRICKS_11 = ErrorDef(
-        ConnInitException,
-        "unquoted Databricks identifier must match [A-Za-z_][A-Za-z0-9_]*: {value!r}",
-    )  # _validate_identifier: unquoted bad shape
-    DATABRICKS_12 = ErrorDef(
-        ConnInitException,
-        "Databricks qualified name must be non-empty",
-    )  # _validate_qualified_name: empty
-    DATABRICKS_13 = ErrorDef(
-        ConnInitException,
-        "Databricks qualified name must be 1-3 dot-separated parts"
-        " ([[<catalog>.]<schema>.]<name>): {value!r}",
-    )  # _validate_qualified_name: bad arity
-    DATABRICKS_14 = ErrorDef(
-        ConnInitException,
-        "Databricks warehouse name has leading/trailing whitespace: {value!r}",
-    )  # _validate_warehouse_name: whitespace
-    DATABRICKS_15 = ErrorDef(
-        ConnInitException,
-        "Databricks warehouse name contains control char: {value!r}",
-    )  # _validate_warehouse_name: control char
+        DatabricksValidateException,
+        "Databricks table name {value!r} must resolve to a fully-"
+        "qualified 'catalog.schema.table' (set conn.catalog and/or"
+        " conn.schema, or use a 3-part name)",
+    )  # _writer._fully_qualify_table

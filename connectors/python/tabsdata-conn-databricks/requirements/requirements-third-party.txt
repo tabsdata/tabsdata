@@ -1,3 +1,13 @@
 #
 # Copyright 2026 Tabs Data Inc.
 #
+
+# Driver libraries the adapter lazy-imports. Matches the legacy
+# tabsdata-databricks dep set: the SDK for workspace + statement
+# execution + Files API, and the SQL connector for COPY INTO / DDL.
+databricks-sdk
+databricks-sql-connector
+
+# Pulled in by ``_adapter._download_chunk`` for streaming the
+# external-link Arrow IPC payloads.
+requests

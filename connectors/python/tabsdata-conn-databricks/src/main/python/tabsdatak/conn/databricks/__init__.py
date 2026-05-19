@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Annotated, Literal, TypeAlias, Union
+from collections.abc import Mapping
+from typing import Annotated, Any, Literal, TypeAlias, Union
 
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
@@ -17,6 +18,9 @@ from tabsdatak.api import (
 )
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common import _validation as _common_validation
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.common.types import CfgSpec, EntityWhitelistSpec
 
 # noinspection PyProtectedMember
@@ -29,7 +33,6 @@ from tabsdatak.conn.databricks.error import DatabricksErrorCode
 HostUrlSpec: TypeAlias = SecretOrEnvSpec
 DatabricksTokenSpec: TypeAlias = SecretOrEnvSpec
 CredentialsSpec: TypeAlias = DatabricksTokenSpec
-QualifiedNameSpec: TypeAlias = Annotated[str, _validation.QUALIFIED_NAME_VALIDATOR]
 
 
 IdentifierSpec: TypeAlias = Union[
@@ -64,10 +67,32 @@ VolumeSpec: TypeAlias = Union[
     ],
 ]
 QueriesSpec: TypeAlias = list[str]
-DatabricksTableNameSpec: TypeAlias = QualifiedNameSpec
+DatabricksTableNameSpec: TypeAlias = Annotated[
+    str, _validation.DATABRICKS_TABLE_FQN_VALIDATOR,
+]
 DatabricksTableNamesSpec: TypeAlias = list[DatabricksTableNameSpec]
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
 SchemaEvolutionSpec: TypeAlias = Literal["update", "strict"]
+
+
+# --- DatabricksSrc.src_cfg keys -------------------------------------
+SrcCfgKey: TypeAlias = Literal[
+    "databricks.logging_level",
+]
+
+SrcCfgSpec: TypeAlias = Annotated[
+    Mapping[SrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+]
+
+
+# --- DatabricksDest.dest_cfg keys -----------------------------------
+DestCfgKey: TypeAlias = Literal[
+    "databricks.logging_level",
+]
+
+DestCfgSpec: TypeAlias = Annotated[
+    Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+]
 
 
 # --- Connection ------------------------------------------------------
@@ -112,9 +137,7 @@ class DatabricksSrc(Src):
     queries: QueriesSpec
     initial_values: dict | None = None
     entity_whitelist: EntityWhitelistSpec | None = None
-    # TODO: document valid keys for this cfg in the docstring above
-    # (see MySQLSrc src_cfg for the pattern).
-    src_cfg: CfgSpec | None = None
+    src_cfg: SrcCfgSpec | None = None
 
 
 # --- Destination -----------------------------------------------------
@@ -126,6 +149,4 @@ class DatabricksDest(Dest):
     tables: DatabricksTableNamesSpec
     if_table_exists: IfTableExistsSpec = "append"
     schema_evolution: SchemaEvolutionSpec = "update"
-    # TODO: document valid keys for this cfg in the docstring above
-    # (see MySQLSrc src_cfg for the pattern).
-    dest_cfg: CfgSpec | None = None
+    dest_cfg: DestCfgSpec | None = None
