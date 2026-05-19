@@ -1,10 +1,34 @@
+from __future__ import annotations
+
+import typing
 
 import pytest
 
 from tabsdatak.api import NamedConn, Secret
-from tabsdatak.conn.databricks.error import DatabricksValidateException
-from tabsdatak.conn.databricks import DatabricksConn, DatabricksDest, DatabricksSrc
-from tabsdatak.conn.databricks.error import DatabricksErrorCode
+from tabsdatak.conn.common.error import ConnInitException
+from tabsdatak.conn.common.types import CfgSpec, EntityWhitelistSpec
+from tabsdatak.conn.databricks import (
+    ConnSpec,
+    CredentialsSpec,
+    DatabricksConn,
+    DatabricksDest,
+    DatabricksSrc,
+    DatabricksTableNamesSpec,
+    DestCfgSpec,
+    HostUrlSpec,
+    IdentifierSpec,
+    IfTableExistsSpec,
+    QueriesSpec,
+    SchemaEvolutionSpec,
+    SrcCfgSpec,
+    VolumeSpec,
+    WarehouseIdSpec,
+    WarehouseSpec,
+)
+from tabsdatak.conn.databricks.error import (
+    DatabricksErrorCode,
+    DatabricksValidateException,
+)
 
 
 pytestmark = pytest.mark.databricks
@@ -18,6 +42,7 @@ def _conn():
         warehouse="MY_WAREHOUSE",
         catalog="main",
         schema="analytics",
+        entity_whitelist=["main.analytics.users", "main.analytics.orders"],
         conn_cfg={"databricks.timeout": 30},
     )
 
@@ -27,22 +52,21 @@ def test_databricks_src_full_round_trip():
         conn=_conn(),
         queries=["SELECT * FROM main.analytics.users", "SELECT * FROM main.analytics.orders"],
         initial_values={"x": 1},
-        entity_whitelist=["main.analytics.users", "main.analytics.orders"],
-        src_cfg={"chunkSize": 1024},
+        src_cfg={"databricks.logging_level": 20},
     )
     loaded = DatabricksSrc.from_json(src.to_json())
     assert loaded == src
     assert loaded.conn.warehouse.value() == "MY_WAREHOUSE"
     assert loaded.conn.catalog.value() == "main"
     assert loaded.conn.schema.value() == "analytics"
+    assert loaded.conn.entity_whitelist == ["main.analytics.users", "main.analytics.orders"]
     assert loaded.conn.conn_cfg == {"databricks.timeout": 30}
     assert loaded.queries == [
         "SELECT * FROM main.analytics.users",
         "SELECT * FROM main.analytics.orders",
     ]
     assert loaded.initial_values == {"x": 1}
-    assert loaded.entity_whitelist == ["main.analytics.users", "main.analytics.orders"]
-    assert loaded.src_cfg == {"chunkSize": 1024}
+    assert loaded.src_cfg == {"databricks.logging_level": 20}
 
 
 def test_databricks_dest_full_round_trip():
@@ -51,14 +75,14 @@ def test_databricks_dest_full_round_trip():
         tables=["main.analytics.users", "main.analytics.orders"],
         if_table_exists="replace",
         schema_evolution="strict",
-        dest_cfg={"chunkSize": 2048},
+        dest_cfg={"databricks.logging_level": 20},
     )
     loaded = DatabricksDest.from_json(dest.to_json())
     assert loaded == dest
     assert loaded.tables == ["main.analytics.users", "main.analytics.orders"]
     assert loaded.if_table_exists == "replace"
     assert loaded.schema_evolution == "strict"
-    assert loaded.dest_cfg == {"chunkSize": 2048}
+    assert loaded.dest_cfg == {"databricks.logging_level": 20}
 
 
 def test_databricks_src_round_trip_with_named_conn():
@@ -101,3 +125,84 @@ def test_databricks_conn_validate_rejects_schema_without_catalog():
             schema="analytics",
         )
     assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_2
+
+
+# ---------------------------------------------------------------------------
+# Field-spec wiring
+# ---------------------------------------------------------------------------
+
+
+def _hint(cls: type, field: str) -> object:
+    return typing.get_type_hints(cls, include_extras=True)[field]
+
+
+def test_databricks_conn_fields_wire_expected_specs():
+    assert _hint(DatabricksConn, "host_url") == HostUrlSpec
+    assert _hint(DatabricksConn, "token") == CredentialsSpec
+    assert _hint(DatabricksConn, "volume") == VolumeSpec
+    assert _hint(DatabricksConn, "warehouse") == WarehouseSpec | None
+    assert _hint(DatabricksConn, "warehouse_id") == WarehouseIdSpec | None
+    assert _hint(DatabricksConn, "catalog") == IdentifierSpec | None
+    assert _hint(DatabricksConn, "schema") == IdentifierSpec | None
+    assert _hint(DatabricksConn, "entity_whitelist") == EntityWhitelistSpec | None
+    assert _hint(DatabricksConn, "conn_cfg") == CfgSpec | None
+
+
+def test_databricks_src_fields_wire_expected_specs():
+    assert _hint(DatabricksSrc, "conn") == ConnSpec
+    assert _hint(DatabricksSrc, "queries") == QueriesSpec
+    assert _hint(DatabricksSrc, "initial_values") == dict | None
+    assert _hint(DatabricksSrc, "src_cfg") == SrcCfgSpec | None
+
+
+def test_databricks_dest_fields_wire_expected_specs():
+    assert _hint(DatabricksDest, "conn") == ConnSpec
+    assert _hint(DatabricksDest, "tables") == DatabricksTableNamesSpec
+    assert _hint(DatabricksDest, "if_table_exists") == IfTableExistsSpec
+    assert _hint(DatabricksDest, "schema_evolution") == SchemaEvolutionSpec
+    assert _hint(DatabricksDest, "dest_cfg") == DestCfgSpec | None
+
+
+# ---------------------------------------------------------------------------
+# src_cfg / dest_cfg literal-key validation
+# ---------------------------------------------------------------------------
+
+
+def test_databricks_src_rejects_unknown_src_cfg_key():
+    with pytest.raises(ConnInitException) as ei:
+        DatabricksSrc(
+            conn=_conn(),
+            queries=["SELECT 1"],
+            src_cfg={"bogus.key": 1},
+        )
+    assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_3
+
+
+def test_databricks_src_accepts_known_src_cfg_keys():
+    src = DatabricksSrc(
+        conn=_conn(),
+        queries=["SELECT 1"],
+        src_cfg={"databricks.logging_level": 20},
+    )
+    loaded = DatabricksSrc.from_json(src.to_json())
+    assert loaded == src
+
+
+def test_databricks_dest_rejects_unknown_dest_cfg_key():
+    with pytest.raises(ConnInitException) as ei:
+        DatabricksDest(
+            conn=_conn(),
+            tables=["main.analytics.users"],
+            dest_cfg={"bogus.key": 1},
+        )
+    assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_4
+
+
+def test_databricks_dest_accepts_known_dest_cfg_keys():
+    dest = DatabricksDest(
+        conn=_conn(),
+        tables=["main.analytics.users"],
+        dest_cfg={"databricks.logging_level": 20},
+    )
+    loaded = DatabricksDest.from_json(dest.to_json())
+    assert loaded == dest

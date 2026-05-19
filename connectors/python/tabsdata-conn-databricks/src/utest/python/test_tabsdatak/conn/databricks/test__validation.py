@@ -1,45 +1,53 @@
+from __future__ import annotations
+
+import re
 
 import pytest
 
-from tabsdatak.conn.common.error import ConnInitException
+# noinspection PyProtectedMember
 from tabsdatak.conn.databricks import _validation
-from tabsdatak.conn.databricks.error import DatabricksErrorCode
 
 
 pytestmark = pytest.mark.databricks
 
 
+# ---------------------------------------------------------------------------
+# Identifier / warehouse patterns (kept inline as regex value_patterns)
+# ---------------------------------------------------------------------------
+
+
 @pytest.mark.parametrize(
-    "value", ["users", "_t", "T1", "`weird name`"]
+    "value",
+    [
+        "users",
+        "_t",
+        "T1",
+        # Hyphens are part of real-world Databricks resource names
+        # (e.g. ``databricks-ci-catalog`` / ``test-volume``) and
+        # are SQL-safe via the per-part backtick wrapping the
+        # impl applies in ``_fq_for_sql``.
+        "user-name",
+        "databricks-ci-catalog",
+        "test-volume",
+        "`weird name`",
+    ],
 )
-def test_validate_identifier_accepts_valid(value):
-    assert _validation._validate_identifier(value) == value
+def test_identifier_pattern_accepts_valid(value):
+    assert re.fullmatch(_validation.IDENTIFIER_PATTERN, value) is not None
 
 
-def test_validate_identifier_rejects_empty():
-    with pytest.raises(ConnInitException) as ei:
-        _validation._validate_identifier("")
-    assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_5
-
-
-def test_validate_identifier_rejects_too_long():
-    with pytest.raises(ConnInitException) as ei:
-        _validation._validate_identifier("a" * 256)
-    assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_9
-
-
-@pytest.mark.parametrize("value", ["`bad.name`", "` leading`"])
-def test_validate_identifier_rejects_backtick_bad(value):
-    with pytest.raises(ConnInitException) as ei:
-        _validation._validate_identifier(value)
-    assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_10
-
-
-@pytest.mark.parametrize("value", ["1users", "user-name"])
-def test_validate_identifier_rejects_unquoted_bad_shape(value):
-    with pytest.raises(ConnInitException) as ei:
-        _validation._validate_identifier(value)
-    assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_11
+@pytest.mark.parametrize(
+    "value",
+    [
+        "",
+        "1users",          # must start with letter or underscore
+        "user.name",       # dot is the FQN separator
+        "`bad.name`",      # dots forbidden inside backticks too
+        "` leading`",      # leading whitespace inside backticks
+    ],
+)
+def test_identifier_pattern_rejects_invalid(value):
+    assert re.fullmatch(_validation.IDENTIFIER_PATTERN, value) is None
 
 
 @pytest.mark.parametrize(
@@ -51,56 +59,57 @@ def test_validate_identifier_rejects_unquoted_bad_shape(value):
         "`my catalog`.analytics.users",
     ],
 )
-def test_validate_qualified_name_accepts_valid(value):
-    assert _validation._validate_qualified_name(value) == value
+def test_qualified_name_pattern_accepts_valid(value):
+    assert re.fullmatch(_validation.QUALIFIED_NAME_PATTERN, value) is not None
 
 
-def test_validate_qualified_name_rejects_unterminated_backtick():
-    with pytest.raises(ConnInitException) as ei:
-        _validation._validate_qualified_name("main.`unterminated")
-    assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_6
+@pytest.mark.parametrize(
+    "value",
+    [
+        "",
+        "a.b.c.d",
+        "1users",
+    ],
+)
+def test_qualified_name_pattern_rejects_invalid(value):
+    assert re.fullmatch(_validation.QUALIFIED_NAME_PATTERN, value) is None
 
 
-def test_validate_qualified_name_rejects_empty():
-    with pytest.raises(ConnInitException) as ei:
-        _validation._validate_qualified_name("")
-    assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_12
+@pytest.mark.parametrize(
+    "value",
+    [
+        "MY_WAREHOUSE",
+        "abc",
+        "a" * 100,
+    ],
+)
+def test_warehouse_name_pattern_accepts_valid(value):
+    assert re.fullmatch(_validation.WAREHOUSE_NAME_PATTERN, value) is not None
 
 
-def test_validate_qualified_name_rejects_bad_arity():
-    with pytest.raises(ConnInitException) as ei:
-        _validation._validate_qualified_name("a.b.c.d")
-    assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_13
+@pytest.mark.parametrize(
+    "value",
+    [
+        "",
+        "a" * 101,
+        " leading",
+        "trailing ",
+        "with\x00null",
+    ],
+)
+def test_warehouse_name_pattern_rejects_invalid(value):
+    assert re.fullmatch(_validation.WAREHOUSE_NAME_PATTERN, value) is None
 
 
-@pytest.mark.parametrize("value", ["MY_WAREHOUSE", "abc", "a" * 100])
-def test_validate_warehouse_name_accepts_valid(value):
-    assert _validation._validate_warehouse_name(value) == value
-
-
-@pytest.mark.parametrize("value", ["", "a" * 101])
-def test_validate_warehouse_name_rejects_bad_length(value):
-    with pytest.raises(ConnInitException) as ei:
-        _validation._validate_warehouse_name(value)
-    assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_7
-
-
-@pytest.mark.parametrize("value", [" leading", "trailing "])
-def test_validate_warehouse_name_rejects_whitespace(value):
-    with pytest.raises(ConnInitException) as ei:
-        _validation._validate_warehouse_name(value)
-    assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_14
-
-
-def test_validate_warehouse_name_rejects_control_char():
-    with pytest.raises(ConnInitException) as ei:
-        _validation._validate_warehouse_name("with\x00null")
-    assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_15
-
-
-@pytest.mark.parametrize("value", ["0123456789abcdef", "ffffffffffffffff"])
-def test_validate_warehouse_id_accepts_valid(value):
-    assert _validation._validate_warehouse_id(value) == value
+@pytest.mark.parametrize(
+    "value",
+    [
+        "0123456789abcdef",
+        "ffffffffffffffff",
+    ],
+)
+def test_warehouse_id_pattern_accepts_valid(value):
+    assert re.fullmatch(_validation.WAREHOUSE_ID_PATTERN, value) is not None
 
 
 @pytest.mark.parametrize(
@@ -113,7 +122,41 @@ def test_validate_warehouse_id_accepts_valid(value):
         "zzzzzzzzzzzzzzzz",
     ],
 )
-def test_validate_warehouse_id_rejects_invalid(value):
-    with pytest.raises(ConnInitException) as ei:
-        _validation._validate_warehouse_id(value)
-    assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_8
+def test_warehouse_id_pattern_rejects_invalid(value):
+    assert re.fullmatch(_validation.WAREHOUSE_ID_PATTERN, value) is None
+
+
+# ---------------------------------------------------------------------------
+# Table FQN
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "users",
+        "analytics.users",
+        "main.analytics.users",
+        "`my catalog`.`my schema`.`my table`",
+        "`with``embedded backtick`",
+    ],
+)
+def test_databricks_table_fqn_validator_accepts_valid(value):
+    assert _validation.DATABRICKS_TABLE_FQN_VALIDATOR.func(value) == value
+
+
+def test_databricks_table_fqn_validator_rejects_too_many_parts():
+    with pytest.raises(ValueError, match="exceeds max_parts=3"):
+        _validation.DATABRICKS_TABLE_FQN_VALIDATOR.func("a.b.c.d")
+
+
+def test_databricks_table_fqn_validator_rejects_unterminated_quote():
+    with pytest.raises(ValueError, match="unterminated quoted identifier"):
+        _validation.DATABRICKS_TABLE_FQN_VALIDATOR.func("main.`unterminated")
+
+
+def test_databricks_fqn_def_uses_backtick_and_doubled_backtick_escape():
+    assert _validation._DATABRICKS_FQN_DEF.separator == "."
+    assert _validation._DATABRICKS_FQN_DEF.quote == "`"
+    assert _validation._DATABRICKS_FQN_DEF.escape == "`"
+    assert _validation._DATABRICKS_FQN_DEF.outer_only is False

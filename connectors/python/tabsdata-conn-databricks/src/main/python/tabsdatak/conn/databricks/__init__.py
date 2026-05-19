@@ -107,6 +107,7 @@ class DatabricksConn(Conn):
     warehouse_id: WarehouseIdSpec | None = None
     catalog: IdentifierSpec | None = None
     schema: IdentifierSpec | None = None
+    entity_whitelist: EntityWhitelistSpec | None = None
     conn_cfg: CfgSpec | None = None
 
     def validate(self) -> None:
@@ -136,7 +137,6 @@ class DatabricksSrc(Src):
     conn: ConnSpec
     queries: QueriesSpec
     initial_values: dict | None = None
-    entity_whitelist: EntityWhitelistSpec | None = None
     src_cfg: SrcCfgSpec | None = None
 
 
