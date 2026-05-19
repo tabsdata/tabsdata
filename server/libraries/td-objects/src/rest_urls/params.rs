@@ -76,7 +76,7 @@ impl TableAtIdName {
 }
 
 #[ta_objects::Dlo]
-pub struct TableDataVersionAtIdName {
+pub struct PhysicalTableDataVersionAtIdName {
     #[dxo(extractor)]
     collection: CollectionIdName,
     #[dxo(extractor)]
@@ -88,7 +88,7 @@ pub struct TableDataVersionAtIdName {
     uncommitted: UncommittedStatus,
 }
 
-impl TableDataVersionAtIdName {
+impl PhysicalTableDataVersionAtIdName {
     pub fn new(table: TableAtIdName) -> Self {
         Self {
             collection: table.collection,

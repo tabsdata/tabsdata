@@ -5,10 +5,10 @@
 pub mod params;
 
 use crate::types::basic::{
-    AllowDisabled, AtTime, CollectionIdName, ExecutionIdName, FunctionIdName, FunctionRunId,
-    FunctionVersionId, InterCollectionPermissionIdName, LogsCastNumber, PermissionIdName,
-    RoleIdName, SampleLen, SampleOffset, Sql, TableDataVersionId, TableIdName, TransactionIdName,
-    UncommittedStatus, UserIdName, WorkerId, WorkerIdName,
+    AllowDisabled, AtTime, CollectionIdName, ExecutionIdName, FunctionIdName, FunctionVersionId,
+    InterCollectionPermissionIdName, LogicalFunctionRunId, LogsCastNumber, PermissionIdName,
+    PhysicalFunctionRunId, PhysicalTableDataVersionId, RoleIdName, SampleLen, SampleOffset, Sql,
+    TableIdName, TransactionIdName, UncommittedStatus, UserIdName, WorkerId, WorkerIdName,
 };
 use td_common::logging::LOG_EXTENSION;
 use td_common::server::{ERR_LOG_FILE_NAME, FN_LOG_FILE_NAME, OUT_LOG_FILE_NAME, TD_LOG_FILE_NAME};
@@ -75,9 +75,9 @@ pub mod internal {
     pub const FUNCTION_RUN_WORKER: &str = url!(FUNCTION_RUN, WORKER);
 
     #[ta_objects::UrlParam]
-    pub struct FunctionRunWorkerIdParam {
+    pub struct PhysicalFunctionRunWorkerIdParam {
         #[dxo(extractor)]
-        pub function_run_id: FunctionRunId,
+        pub function_run_id: PhysicalFunctionRunId,
         #[dxo(extractor)]
         pub worker_id: WorkerId,
     }
@@ -221,6 +221,21 @@ pub const FUNCTION_UPLOAD: &str = url!(COLLECTION, "/function-bundle-upload");
 
 pub const FUNCTION_HISTORY: &str = url!(FUNCTION, "/history");
 pub const FUNCTION_EXECUTE: &str = url!(FUNCTION, "/execute");
+pub const FUNCTION_PATCH: &str = url!(FUNCTION, "/patch");
+pub const FUNCTION_PATCHES: &str = url!(FUNCTION, "/patches");
+
+// Logical function runs (LFR) — operator-driven endpoints.
+pub const LOGICAL_FUNCTION_RUNS: &str = url!(COLLECTION, "/logical-function-runs");
+pub const LOGICAL_FUNCTION_RUN: &str = url!(LOGICAL_FUNCTION_RUNS, "/{logical_function_run}");
+pub const LOGICAL_FUNCTION_RUN_REPLAY: &str = url!(LOGICAL_FUNCTION_RUN, "/replay");
+
+#[ta_objects::UrlParam]
+pub struct LogicalFunctionRunParam {
+    #[dxo(extractor)]
+    collection: CollectionIdName,
+    #[dxo(extractor)]
+    logical_function_run: LogicalFunctionRunId,
+}
 
 // Function versions
 #[ta_objects::QueryParam]
@@ -306,9 +321,9 @@ pub struct ExecutionParam {
 }
 
 #[ta_objects::UrlParam]
-pub struct TableDataVersionParam {
+pub struct PhysicalTableDataVersionParam {
     #[dxo(extractor)]
-    pub table_data_version: TableDataVersionId,
+    pub table_data_version: PhysicalTableDataVersionId,
 }
 
 #[ta_objects::UrlParam]
@@ -459,7 +474,7 @@ pub const FUNCTION_RUNS: &str = url!(FUNCTION, "/executions");
 pub const FUNCTION_RUN: &str = url!(FUNCTION_RUNS, "/{execution}");
 
 #[ta_objects::UrlParam]
-pub struct FunctionRunParam {
+pub struct PhysicalFunctionRunParam {
     #[dxo(extractor)]
     collection: CollectionIdName,
     #[dxo(extractor)]
@@ -470,6 +485,7 @@ pub struct FunctionRunParam {
 
 pub const FUNCTION_RUN_GET: &str = url!(FUNCTION_RUN);
 pub const FUNCTION_RUN_LIST: &str = url!("/function_runs");
+pub const LOGICAL_FUNCTION_RUN_LIST: &str = url!("/logical_function_runs");
 
 // Table lineage graph
 pub const TABLE_FLOW_GRAPH: &str = url!(TABLE, "/flow");
