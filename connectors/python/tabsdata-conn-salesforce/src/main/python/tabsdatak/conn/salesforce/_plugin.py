@@ -1,25 +1,108 @@
 from __future__ import annotations
 
+import logging
+from dataclasses import dataclass
+from typing import Any, cast
+
 from tabsdatak.conn.salesforce import (
     SalesforceConn,
     SalesforceReportSrc,
     SalesforceSrc,
+    SrcCfgKey,
+    SrcCfgSpec,
 )
 from tabsdatak.spi import (
     Explorer,
+    SrcContext,
     SrcDef,
     SrcPlugin,
+    TableFileSpec,
     TableMode,
 )
 
-
-class _SalesforceSrcPlugin(SrcPlugin[SalesforceSrc]): ...
-
-
-class _SalesforceReportSrcPlugin(SrcPlugin[SalesforceReportSrc]): ...
+logger = logging.getLogger(__name__)
 
 
-class _SalesforceExplorer(Explorer[SalesforceConn]): ...
+# --- src_cfg keys ---------------------------------------------------
+_KEY_SRC_LOGGING_LEVEL: SrcCfgKey = "salesforce.logging_level"
+
+_SRC_CFGS_DEFAULTS: dict[SrcCfgKey, Any] = {
+    _KEY_SRC_LOGGING_LEVEL: logging.ERROR,
+}
+
+
+@dataclass(frozen=True)
+class _ReaderCfg:
+    logging_level: int
+
+
+def _resolve_src_cfg(src_cfg: SrcCfgSpec | None) -> _ReaderCfg:
+    cfg = src_cfg or {}
+    for k in cfg:
+        if k not in _SRC_CFGS_DEFAULTS:
+            logger.warning(
+                f"Unknown src_cfg key {k!r}, ignoring (allowed: "
+                f"{sorted(_SRC_CFGS_DEFAULTS)})"
+            )
+
+    def _get(key: SrcCfgKey) -> Any:
+        return cfg.get(key, _SRC_CFGS_DEFAULTS[key])
+
+    return _ReaderCfg(
+        logging_level=int(_get(_KEY_SRC_LOGGING_LEVEL)),
+    )
+
+# All simple-salesforce / polars / pandas / ijson imports are made
+# inside the plugin method bodies (or in ``_reader.py``) so the
+# conn-salesforce package stays cheap to import for registry scans
+# that only care about the SrcDef metadata.
+
+
+class _SalesforceSrcPlugin(SrcPlugin[SalesforceSrc]):
+
+    def read_in(
+        self,
+        ctx: SrcContext,
+        src: SalesforceSrc,
+    ) -> list[list[TableFileSpec]]:
+        # noinspection PyProtectedMember
+        from tabsdatak.conn.salesforce import _reader
+
+        cfg = _resolve_src_cfg(src.src_cfg)
+        logger.setLevel(cfg.logging_level)
+
+        conn = cast(SalesforceConn, src.conn)
+        api_version = src.api_version
+        sf = _reader.login(conn, api_version=api_version)
+        return _reader.read_soql_src(sf, src, ctx.work_dir())
+
+
+class _SalesforceReportSrcPlugin(SrcPlugin[SalesforceReportSrc]):
+
+    def read_in(
+        self,
+        ctx: SrcContext,
+        src: SalesforceReportSrc,
+    ) -> list[list[TableFileSpec]]:
+        # noinspection PyProtectedMember
+        from tabsdatak.conn.salesforce import _reader
+
+        cfg = _resolve_src_cfg(src.src_cfg)
+        logger.setLevel(cfg.logging_level)
+
+        conn = cast(SalesforceConn, src.conn)
+        sf = _reader.login(conn)
+        return _reader.read_report_src(sf, src, ctx.work_dir())
+
+
+class _SalesforceExplorer(Explorer[SalesforceConn]):
+    def metadata(self, conn: SalesforceConn) -> Any:
+        # TODO
+        pass
+
+    def data(self, conn: SalesforceConn, query: str) -> Any:
+        # TODO
+        pass
 
 
 SALESFORCE_SRC = SrcDef(

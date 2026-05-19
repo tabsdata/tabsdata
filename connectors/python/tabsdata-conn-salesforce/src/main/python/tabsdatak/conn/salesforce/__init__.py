@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from abc import ABC
+from collections.abc import Mapping
 from datetime import datetime
-from typing import Annotated, Literal, TypeAlias, Union
+from typing import Annotated, Any, Literal, TypeAlias, Union
 
 from pydantic import Field
 
@@ -11,6 +12,9 @@ import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
 from tabsdatak.api import Conn, Env, NamedConn, Secret, SecretOrEnvSpec, Src
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common import _validation as _common_validation
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import CfgSpec, Credentials, EntityWhitelistSpec
@@ -36,10 +40,10 @@ class SalesforceTokenCredentials(SalesforceCredentials):
 
 # --- Type aliases ----------------------------------------------------
 
-CredentialsSpec: TypeAlias = SalesforceCredentials
+CredentialsSpec: TypeAlias = SalesforceTokenCredentials
 ApiNameSpec: TypeAlias = Annotated[str, _validation.API_NAME_VALIDATOR]
 ApiVersionSpec: TypeAlias = Annotated[str, _validation.API_VERSION_VALIDATOR]
-
+ObjectsNameSpec: TypeAlias = Annotated[list[ApiNameSpec], _api.NON_EMPTY_LIST_CONSTRAINTS]
 
 InstanceUrlSpec: TypeAlias = Union[
     Annotated[
@@ -81,6 +85,16 @@ OperatorSpec: TypeAlias = Literal[
 FilterSpec: TypeAlias = list[tuple[str, OperatorSpec, str]]
 
 
+# --- SalesforceSrc / SalesforceReportSrc.src_cfg keys ---------------
+SrcCfgKey: TypeAlias = Literal[
+    "salesforce.logging_level",
+]
+
+SrcCfgSpec: TypeAlias = Annotated[
+    Mapping[SrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+]
+
+
 # --- Connection ------------------------------------------------------
 
 
@@ -89,16 +103,8 @@ class SalesforceConn(Conn):
     credentials: CredentialsSpec
     instance_url: InstanceUrlSpec | None = None
     category: str | None = None
-    objects: ApiNameSpec | list[ApiNameSpec] | None = None
+    objects: ObjectsNameSpec | None = None
     conn_cfg: CfgSpec | None = None
-
-    def validate(self) -> None:
-        if self.category and self.objects:
-            # noinspection PyProtectedMember
-            raise SalesforceErrorCode.SALESFORCE_3.exception(
-                category=self.category,
-                objects=self.objects,
-            )
 
 
 ConnSpec: TypeAlias = Union[NamedConn, SalesforceConn]
@@ -115,9 +121,7 @@ class SalesforceSrc(Src):
     initial_last_modified: datetime | None = None
     api_version: ApiVersionSpec | None = None
     entity_whitelist: EntityWhitelistSpec | None = None
-    # TODO: document valid keys for this cfg in the docstring above
-    # (see MySQLSrc src_cfg for the pattern).
-    src_cfg: CfgSpec | None = None
+    src_cfg: SrcCfgSpec | None = None
 
 
 # --- Source: reports --------------------------------------------------
@@ -136,4 +140,9 @@ class SalesforceReportSrc(Src):
     entity_whitelist: EntityWhitelistSpec | None = None
     # TODO: document valid keys for this cfg in the docstring above
     # (see MySQLSrc src_cfg for the pattern).
-    src_cfg: CfgSpec | None = None
+    src_cfg: SrcCfgSpec | None = None
+
+    def validate(self) -> None:
+        if bool(self.last_modified_column) != bool(self.initial_last_modified):
+            # noinspection PyProtectedMember
+            raise SalesforceErrorCode.SALESFORCE_17.exception()
