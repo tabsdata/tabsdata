@@ -2,25 +2,27 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use std::collections::{HashMap, HashSet};
+use itertools::Itertools;
+use std::collections::HashSet;
 use std::ops::Deref;
 use td_database::dynamic::DynamicConnection;
 use td_error::{TdError, td_error};
-use td_objects::dxo::function_requirement::FunctionRequirementDBWithNames;
-use td_objects::dxo::function_run::{CommitFunctionRunDB, FunctionRunDB, UpdateFunctionRunDB};
-use td_objects::dxo::table_data_version::{
-    TableDataVersionDB, TableDataVersionDBWithNames, UpdateTableDataVersionDB,
+use td_objects::dxo::logical::{
+    CommitLogicalFunctionRunDB, LogicalFunctionRunDB, UpdateLogicalFunctionRunDB,
+};
+use td_objects::dxo::physical_table_data_version::{
+    PhysicalTableDataVersionDB, PhysicalTableDataVersionDBWithNames, UpdateTableDataVersionDB,
 };
 use td_objects::dxo::worker::{CallbackRequest, UpdateWorkerDB, WorkerDB};
 use td_objects::dxo::yaml::WorkerOutput;
 use td_objects::dxo::yaml::function_runner::v2::WrittenTable;
 use td_objects::types::basic::{
-    Depth, ExecutionId, FunctionRunId, FunctionRunStatus, HasData, SchemaChanged, WorkerId,
+    AtTime, ExecutionId, FunctionRunStatus, HasData, LogicalFunctionRunId, PhysicalFunctionRunId,
+    SchemaChanged, WorkerId,
 };
-use td_objects::types::recursion::RecursionOptions;
-use td_objects::{Buildable, and, lte};
+use td_objects::{Buildable, and};
 use td_queries::{
-    BasicQueries, ChunkedQueries, FunctionRunQueries, OptionsBuilder, RecursiveQueries,
+    ChunkedQueries, LiveEntry, LogicalCascadeEntry, LogicalPointersEntry, LogicalRunsEntry,
 };
 use td_tower::ctx_service::ReqCtx;
 use td_tower::extractors::{MutRef, Ref};
@@ -28,16 +30,18 @@ use tracing::{debug, instrument};
 
 #[td_error]
 enum UpdateStatusRunError {
-    #[error("Cannot change final 'Committed' status for function run [{0}]")]
-    AlreadyCommitted(FunctionRunId) = 0,
-    #[error("Cannot change final 'Canceled' status for function run [{0}]")]
-    AlreadyCanceled(FunctionRunId) = 1,
-    #[error("Cannot change final 'Yanked' status for function run [{0}]")]
-    AlreadyYanked(FunctionRunId) = 2,
-    #[error("Unexpected function run status transition for function run [{0}]: {1:?} -> {2:?}")]
-    UnexpectedFunctionRunStatusTransition(FunctionRunId, FunctionRunStatus, FunctionRunStatus) = 3,
-    #[error("No function run status update where performed")]
+    #[error("Cannot change final '{1:?}' status for LFR [{0}]")]
+    StickyFinalStatus(LogicalFunctionRunId, FunctionRunStatus) = 0,
+    #[error("Unexpected LFR status transition for LFR [{0}]: {1:?} -> {2:?}")]
+    UnexpectedFunctionRunStatusTransition(
+        LogicalFunctionRunId,
+        FunctionRunStatus,
+        FunctionRunStatus,
+    ) = 3,
+    #[error("No LFR status update was performed")]
     NoOpStatusUpdate = 4,
+    #[error("Absorbed replay-attempt callback for terminal LFR [{0}] (status {1:?})")]
+    ReplayCallbackAbsorbed(LogicalFunctionRunId, FunctionRunStatus) = 5,
 }
 
 #[instrument(
@@ -55,6 +59,7 @@ pub async fn update_worker_status(
     // Worker status update is never conditional, we want to know exactly what got reported,
     // as it doesn't affect execution flow, it's just informational.
     let _ = conn
+        .live()
         .update::<_, WorkerDB>(update.deref(), &*worker_id)
         .await?;
 
@@ -64,81 +69,118 @@ pub async fn update_worker_status(
 #[instrument(
     name = "execution.update_status",
     skip_all,
-    fields(target_status = %update.status, input_count = function_runs.len()),
+    fields(target_status = %update.status, input_count = logical_function_runs.len()),
     level = "debug",
     err(Debug)
 )]
 pub async fn update_function_run_status(
     mut ctx: MutRef<ReqCtx>,
     mut conn: MutRef<DynamicConnection<'static>>,
-    function_runs: Ref<Vec<FunctionRunDB>>,
-    update: Ref<UpdateFunctionRunDB>,
+    logical_function_runs: Ref<Vec<LogicalFunctionRunDB>>,
+    update: Ref<UpdateLogicalFunctionRunDB>,
 ) -> Result<(), TdError> {
-    let input_count = function_runs.len();
+    let input_count = logical_function_runs.len();
     // Validate status transitions and filter out no-op transitions.
-    let function_run_ids = function_runs
+    // Status lives on the LFR; sticky-Committed is enforced here as the
+    // first match arm (replays of a Committed LFR never demote it).
+    let lfr_ids = logical_function_runs
         .iter()
         .filter_map(|current| {
             match (&current.status, &update.status) {
-                // Final status.
-                (FunctionRunStatus::Committed, _) => {
-                    Some(Err(UpdateStatusRunError::AlreadyCommitted(current.id)))
-                }
-
-                (FunctionRunStatus::Yanked, FunctionRunStatus::Yanked) => {
-                    ctx.warning(UpdateStatusRunError::AlreadyYanked(current.id));
-                    None
-                }
-                (FunctionRunStatus::Yanked, _) => {
-                    Some(Err(UpdateStatusRunError::AlreadyYanked(current.id)))
-                }
-
+                // Sticky-final terminals (Committed, Canceled). Worker
+                // callbacks for an in-flight replay attempt (Running,
+                // Done, Error, Failed) absorb silently — the trailing
+                // `redirect_pointers_at_finish` is the layer that
+                // actually captures the replay outcome at the pointer.
+                // Same-state transitions also absorb (idempotent). Any
+                // other target is an operator action and gets refused.
                 (
-                    FunctionRunStatus::Canceled,
-                    // Callback status transition, never returning error to avoid race conditions.
+                    s @ (FunctionRunStatus::Committed | FunctionRunStatus::Canceled),
                     FunctionRunStatus::Running
                     | FunctionRunStatus::Done
                     | FunctionRunStatus::Error
-                    | FunctionRunStatus::Failed
-                    // No-op already canceled status transition.
-                    | FunctionRunStatus::Canceled,
+                    | FunctionRunStatus::Failed,
                 ) => {
-                    ctx.warning(UpdateStatusRunError::AlreadyCanceled(current.id));
+                    ctx.warning(UpdateStatusRunError::StickyFinalStatus(
+                        current.id.clone(),
+                        s.clone(),
+                    ));
                     None
                 }
-                (FunctionRunStatus::Canceled, _) => {
-                    Some(Err(UpdateStatusRunError::AlreadyCanceled(current.id)))
+                (s @ FunctionRunStatus::Yanked, FunctionRunStatus::Yanked)
+                | (
+                    s @ (FunctionRunStatus::Committed | FunctionRunStatus::Canceled),
+                    FunctionRunStatus::Committed | FunctionRunStatus::Canceled,
+                ) if s == &update.status => {
+                    ctx.warning(UpdateStatusRunError::StickyFinalStatus(
+                        current.id.clone(),
+                        s.clone(),
+                    ));
+                    None
+                }
+                (
+                    s @ (FunctionRunStatus::Committed
+                    | FunctionRunStatus::Canceled
+                    | FunctionRunStatus::Yanked),
+                    _,
+                ) => Some(Err(UpdateStatusRunError::StickyFinalStatus(
+                    current.id.clone(),
+                    s.clone(),
+                ))),
+
+                // Non-sticky terminals (Failed, Done) under an in-flight
+                // replay attempt. Running / Error / Failed callbacks
+                // absorb (no downgrade). `Failed → Done` is the
+                // user-visible "replay healed a failed run" promotion;
+                // `Done → Done` is the idempotent self-transition.
+                (
+                    FunctionRunStatus::Failed | FunctionRunStatus::Done,
+                    FunctionRunStatus::Running
+                    | FunctionRunStatus::Error
+                    | FunctionRunStatus::Failed,
+                )
+                | (FunctionRunStatus::Done, FunctionRunStatus::Done) => {
+                    ctx.warning(UpdateStatusRunError::ReplayCallbackAbsorbed(
+                        current.id.clone(),
+                        current.status.clone(),
+                    ));
+                    None
+                }
+                (FunctionRunStatus::Failed, FunctionRunStatus::Done) => {
+                    Some(Ok(current.id.clone()))
                 }
 
                 // Mutable status
-                (FunctionRunStatus::Scheduled, FunctionRunStatus::RunRequested) => {
-                    Some(Ok(current.id))
+                (FunctionRunStatus::Scheduled, FunctionRunStatus::Requested) => {
+                    Some(Ok(current.id.clone()))
                 }
-                (FunctionRunStatus::ReScheduled, FunctionRunStatus::RunRequested) => {
-                    Some(Ok(current.id))
+                (FunctionRunStatus::ReScheduled, FunctionRunStatus::Requested) => {
+                    Some(Ok(current.id.clone()))
                 }
-                (FunctionRunStatus::RunRequested, FunctionRunStatus::Running) => {
-                    Some(Ok(current.id))
+                (FunctionRunStatus::Requested, FunctionRunStatus::Running) => {
+                    Some(Ok(current.id.clone()))
                 }
-                (FunctionRunStatus::Running, FunctionRunStatus::Done) => Some(Ok(current.id)),
+                (FunctionRunStatus::Running, FunctionRunStatus::Done) => {
+                    Some(Ok(current.id.clone()))
+                }
                 (
-                    FunctionRunStatus::RunRequested | FunctionRunStatus::Running,
+                    FunctionRunStatus::Requested | FunctionRunStatus::Running,
                     FunctionRunStatus::Error,
-                ) => Some(Ok(current.id)),
+                ) => Some(Ok(current.id.clone())),
                 (
-                    FunctionRunStatus::RunRequested | FunctionRunStatus::Running,
+                    FunctionRunStatus::Requested | FunctionRunStatus::Running,
                     FunctionRunStatus::Failed,
-                ) => Some(Ok(current.id)),
+                ) => Some(Ok(current.id.clone())),
 
                 // Recover status, only for failed function runs, otherwise just no-op.
                 (
                     FunctionRunStatus::Failed | FunctionRunStatus::OnHold,
                     FunctionRunStatus::ReScheduled,
-                ) => Some(Ok(current.id)),
+                ) => Some(Ok(current.id.clone())),
                 (_, FunctionRunStatus::ReScheduled) => None,
 
                 // Cancel status.
-                (_, FunctionRunStatus::Canceled) => Some(Ok(current.id)),
+                (_, FunctionRunStatus::Canceled) => Some(Ok(current.id.clone())),
 
                 // No-op for transitions between the same states
                 (current, new) if current == new => None,
@@ -146,7 +188,7 @@ pub async fn update_function_run_status(
                 // Error in transition, not safe to proceed.
                 _ => Some(Err(
                     UpdateStatusRunError::UnexpectedFunctionRunStatusTransition(
-                        current.id,
+                        current.id.clone(),
                         current.status.clone(),
                         update.status.clone(),
                     ),
@@ -157,108 +199,124 @@ pub async fn update_function_run_status(
 
     debug!(
         input_count = input_count,
-        actionable_count = function_run_ids.len(),
+        actionable_count = lfr_ids.len(),
         "execution.update_status: filtered transitions"
     );
 
-    // Early return if no function runs are to be updated.
-    // This is a no-op update, so we just return.
-    if function_run_ids.is_empty() {
+    if lfr_ids.is_empty() {
         debug!("execution.update_status: no-op (all filtered)");
         ctx.warning(UpdateStatusRunError::NoOpStatusUpdate);
         return Ok(());
     }
 
     let _ = conn
-        .update_chunked::<_, FunctionRunDB, _>(update.deref(), &function_run_ids)
+        .update_chunked::<_, LogicalFunctionRunDB, _>(update.deref(), &lfr_ids)
         .await?;
     debug!(
-        updated_count = function_run_ids.len(),
-        "execution.update_status: updated function_run(s)"
+        updated_count = lfr_ids.len(),
+        "execution.update_status: updated LFR(s)"
     );
 
-    // Publish function runs if needed, including downstream publishing.
+    // Publish LFRs if needed, including downstream publishing.
     if update.status == FunctionRunStatus::Done {
-        // Collect the unique execution_ids of the function runs that just became Done.
-        // This scopes the commit query to all transactions in these executions, ensuring
-        // downstream transactions whose requirements are now satisfied are also committed.
-        let execution_ids: Vec<ExecutionId> = function_runs
+        let updated_set: HashSet<&LogicalFunctionRunId> = lfr_ids.iter().collect();
+        let execution_ids: Vec<ExecutionId> = logical_function_runs
             .iter()
-            .filter(|fr| function_run_ids.contains(&fr.id))
-            .map(|fr| fr.execution_id.clone())
-            .collect::<HashSet<_>>()
-            .into_iter()
+            .filter(|f| updated_set.contains(&f.id))
+            .map(|f| f.execution_id.clone())
+            .unique()
             .collect();
-        let to_commit = conn.fetch_function_runs_to_commit(&execution_ids).await?;
+        let to_commit_ffrs: Vec<LogicalFunctionRunId> =
+            conn.logical_runs().to_commit(&execution_ids).await?;
         debug!(
-            commit_count = to_commit.len(),
-            "execution.commit: function_run(s) eligible to commit"
+            commit_count = to_commit_ffrs.len(),
+            "execution.commit: LFR(s) eligible to commit"
         );
 
-        let update = CommitFunctionRunDB::default();
-        let _ = conn
-            .update_chunked::<_, FunctionRunDB, _>(&update, &to_commit)
-            .await?;
-        debug!(
-            committed_count = to_commit.len(),
-            "execution.commit: committed function_run(s)"
-        );
-    }
-
-    // Downstream updates.
-    let mut downstream_function_run_updates = HashMap::new();
-    for current in function_run_ids.iter() {
-        let downstream_status = match update.status {
-            FunctionRunStatus::Canceled => Some(FunctionRunStatus::Canceled),
-            FunctionRunStatus::Yanked => Some(FunctionRunStatus::Yanked),
-            FunctionRunStatus::ReScheduled => Some(FunctionRunStatus::ReScheduled),
-            FunctionRunStatus::Failed => Some(FunctionRunStatus::OnHold),
-            _ => None,
-        };
-
-        if let Some(downstream_status) = downstream_status {
-            let function_runs = conn
-                .fetch_all_recursive::<FunctionRequirementDBWithNames, FunctionRunDB>(
-                    OptionsBuilder::default()
-                        .recursion(RecursionOptions::new(Some(Depth::ZERO), None))
-                        .direct_reference(current)
-                        .build()?,
-                )
+        if !to_commit_ffrs.is_empty() {
+            let commit_update = CommitLogicalFunctionRunDB::default();
+            let _ = conn
+                .update_chunked::<_, LogicalFunctionRunDB, _>(&commit_update, &to_commit_ffrs)
                 .await?;
-            let function_run_ids: Vec<_> = function_runs
-                .iter()
-                .map(|f| f.function_run_id)
-                .filter(|id| id != current) // current is already in the required state
-                .collect();
-
-            downstream_function_run_updates
-                .entry(downstream_status)
-                .or_insert_with(HashSet::new)
-                .extend(function_run_ids);
+            debug!(
+                committed_count = to_commit_ffrs.len(),
+                "execution.commit: committed LFR(s)"
+            );
         }
     }
 
-    for (status, function_run_ids) in downstream_function_run_updates {
-        let update = UpdateFunctionRunDB::builder()
-            .status(status.clone())
-            .build()?;
-        let function_run_ids: Vec<_> = function_run_ids.iter().collect();
-        let _ = conn
-            .update_chunked::<_, FunctionRunDB, _>(&update, &function_run_ids)
-            .await?;
-        debug!(
-            downstream_status = %status,
-            downstream_count = function_run_ids.len(),
-            "execution.on_hold_cascade: propagated to downstream run(s)"
-        );
+    let downstream_status = match update.status {
+        FunctionRunStatus::Canceled => Some(FunctionRunStatus::Canceled),
+        FunctionRunStatus::Yanked => Some(FunctionRunStatus::Yanked),
+        FunctionRunStatus::ReScheduled => Some(FunctionRunStatus::ReScheduled),
+        FunctionRunStatus::Failed => Some(FunctionRunStatus::OnHold),
+        _ => None,
+    };
+
+    if let Some(downstream_status) = downstream_status
+        && !lfr_ids.is_empty()
+    {
+        let downstream_lfr_ids = bfs_downstream_lfrs(&mut conn, &lfr_ids).await?;
+
+        if !downstream_lfr_ids.is_empty() {
+            let downstream_update = UpdateLogicalFunctionRunDB::builder()
+                .status(downstream_status.clone())
+                .build()?;
+            let _ = conn
+                .update_chunked::<_, LogicalFunctionRunDB, _>(
+                    &downstream_update,
+                    &downstream_lfr_ids,
+                )
+                .await?;
+            debug!(
+                downstream_status = %downstream_status,
+                downstream_count = downstream_lfr_ids.len(),
+                "execution.on_hold_cascade: propagated to downstream LFR(s)"
+            );
+        }
     }
 
     Ok(())
 }
 
+/// BFS over the logic dependency graph from `starting`. Each iteration
+/// runs a one-hop downstream query against the current frontier, threading
+/// the visited set in as a SQL `NOT IN` exclusion so already-walked LFRs
+/// aren't re-emitted. Loop ends when no new LFR ids surface. Returns the
+/// union of all reachable downstream LFRs, excluding the starting set
+/// itself.
+async fn bfs_downstream_lfrs(
+    conn: &mut DynamicConnection<'static>,
+    starting: &[LogicalFunctionRunId],
+) -> Result<Vec<LogicalFunctionRunId>, TdError> {
+    let starting_set: HashSet<LogicalFunctionRunId> = starting.iter().cloned().collect();
+    let mut visited: HashSet<LogicalFunctionRunId> = starting_set.clone();
+    let mut frontier: Vec<LogicalFunctionRunId> = starting.to_vec();
+
+    while !frontier.is_empty() {
+        let exclude: Vec<LogicalFunctionRunId> = visited.iter().cloned().collect();
+        let next: Vec<LogicalFunctionRunId> = conn
+            .logical_cascade()
+            .downstream_one_hop(&frontier, &exclude)
+            .await?;
+        let mut new_frontier = Vec::new();
+        for id in next {
+            if visited.insert(id.clone()) {
+                new_frontier.push(id);
+            }
+        }
+        frontier = new_frontier;
+    }
+
+    Ok(visited
+        .into_iter()
+        .filter(|id| !starting_set.contains(id))
+        .collect())
+}
+
 pub async fn update_table_data_version_status(
     mut conn: MutRef<DynamicConnection<'static>>,
-    function_run_id: Ref<FunctionRunId>,
+    physical_function_run_id: Ref<PhysicalFunctionRunId>,
     callback: Ref<CallbackRequest>,
 ) -> Result<(), TdError> {
     if let Some(context) = &callback.context
@@ -275,17 +333,29 @@ pub async fn update_table_data_version_status(
 
             // one because single table data version per execution
             let data_version = conn
-                .fetch_one::<TableDataVersionDBWithNames>(and!(*function_run_id, table_name,))
+                .live()
+                .fetch_one::<PhysicalTableDataVersionDBWithNames>(and!(
+                    physical_function_run_id.clone(),
+                    table_name,
+                ))
+                .await?;
+
+            // Walk LTDV pointer history for this table at or before this
+            // TDV's triggered_on to find the previous canonically-bound
+            // with-data TDV. Pointer-walk rather than a raw physical scan
+            // so in-flight replays don't poison the schema-change check.
+            let at = AtTime::try_from(&data_version.triggered_on)?;
+            let latest_version_with_data = conn
+                .logical_pointers()
+                .latest_bound_tdv_with_data_for_table(
+                    &data_version.table_id,
+                    &data_version.triggered_on,
+                    &at,
+                    false,
+                )
                 .await?;
 
             let update = if let Some(table_info) = table_info {
-                let latest_version_with_data = conn
-                    .fetch_latest_before::<{ TableDataVersionDBWithNames::WithData }, TableDataVersionDBWithNames>(
-                        and!(&data_version.table_id, lte!(&data_version.triggered_on)),
-                        0,
-                    )
-                    .await?;
-
                 let schema_changed = match &latest_version_with_data {
                     Some(prev) => SchemaChanged::from(
                         prev.schema_hash.as_ref() != Some(&table_info.schema_hash),
@@ -301,36 +371,28 @@ pub async fn update_table_data_version_status(
                     schema_hash: Some(table_info.schema_hash.clone()),
                     with_data_table_data_version_id: Some(data_version.id.clone()),
                 }
+            } else if let Some(latest_version_with_data) = latest_version_with_data {
+                UpdateTableDataVersionDB {
+                    has_data: Some(HasData::FALSE),
+                    schema_changed: Some(SchemaChanged::FALSE),
+                    column_count: latest_version_with_data.column_count,
+                    row_count: latest_version_with_data.row_count,
+                    schema_hash: latest_version_with_data.schema_hash.clone(),
+                    with_data_table_data_version_id: Some(latest_version_with_data.id),
+                }
             } else {
-                let latest_version_with_data = conn
-                        .fetch_latest_before::<{ TableDataVersionDBWithNames::WithData }, TableDataVersionDBWithNames>(
-                            and!(&data_version.table_id, lte!(&data_version.triggered_on)),
-                            0,
-                        )
-                        .await?;
-
-                if let Some(latest_version_with_data) = latest_version_with_data {
-                    UpdateTableDataVersionDB {
-                        has_data: Some(HasData::FALSE),
-                        schema_changed: Some(SchemaChanged::FALSE),
-                        column_count: latest_version_with_data.column_count,
-                        row_count: latest_version_with_data.row_count,
-                        schema_hash: latest_version_with_data.schema_hash.clone(),
-                        with_data_table_data_version_id: Some(latest_version_with_data.id),
-                    }
-                } else {
-                    UpdateTableDataVersionDB {
-                        has_data: Some(HasData::FALSE),
-                        schema_changed: Some(SchemaChanged::FALSE),
-                        column_count: None,
-                        row_count: None,
-                        schema_hash: None,
-                        with_data_table_data_version_id: None,
-                    }
+                UpdateTableDataVersionDB {
+                    has_data: Some(HasData::FALSE),
+                    schema_changed: Some(SchemaChanged::FALSE),
+                    column_count: None,
+                    row_count: None,
+                    schema_hash: None,
+                    with_data_table_data_version_id: None,
                 }
             };
 
-            conn.update::<_, TableDataVersionDB>(&update, &data_version.id)
+            conn.live()
+                .update::<_, PhysicalTableDataVersionDB>(&update, &data_version.id)
                 .await?;
         }
     }
@@ -350,9 +412,12 @@ pub(crate) mod tests {
     use td_objects::dxo::collection::CollectionDB;
     use td_objects::dxo::execution::{ExecutionDB, ExecutionDBWithStatus};
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
-    use td_objects::dxo::function_run::FunctionRunDB;
+    use td_objects::dxo::logical::LogicalFunctionRunDB;
+    use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
+    use td_objects::dxo::physical_table_data_version::{
+        PhysicalTableDataVersionDB, PhysicalTableDataVersionDBWithFunction,
+    };
     use td_objects::dxo::table::TableDB;
-    use td_objects::dxo::table_data_version::{TableDataVersionDB, TableDataVersionDBWithFunction};
     use td_objects::dxo::transaction::{TransactionDB, TransactionDBWithStatus};
     use td_objects::dxo::worker::WorkerDB;
     use td_objects::types::basic::{
@@ -361,8 +426,8 @@ pub(crate) mod tests {
         UserId, VersionPos, WorkerMessageStatus,
     };
     use td_objects::types::composed::TableDependencyDto;
-    use td_queries::BasicQueries;
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::LiveEntry;
+    use td_queries::test_utils::SeedEntry;
 
     #[derive(Debug, Clone, Eq, PartialEq, Hash)]
     pub(crate) struct TestExecution {
@@ -398,7 +463,7 @@ pub(crate) mod tests {
             &HashMap<&CollectionName, CollectionDB>,
             &HashMap<&TestExecution, ExecutionDB>,
             &HashMap<&TestTransaction, TransactionDB>,
-            &HashMap<&TestFunction, FunctionRunDB>,
+            &HashMap<&TestFunction, PhysicalFunctionRunDB>,
             &HashMap<&TestFunction, WorkerDB>,
         ) -> Fut,
         Fut: Future<Output = Result<(), TdError>>,
@@ -415,12 +480,12 @@ pub(crate) mod tests {
             .map(|c| {
                 let db = db.clone();
                 async move {
-                    let existing = db.fetch_optional::<CollectionDB>(c).await.unwrap();
+                    let existing = db.live().fetch_optional::<CollectionDB>(c).await.unwrap();
 
                     if let Some(existing) = existing {
                         (c, existing)
                     } else {
-                        (c, db.seed_collection(c, &UserId::admin()).await.unwrap())
+                        (c, db.seed().collection(c, &UserId::admin()).await.unwrap())
                     }
                 }
             })
@@ -442,6 +507,7 @@ pub(crate) mod tests {
         {
             let collection = collections.get(&test_function.collection).unwrap();
             let existing = db
+                .live()
                 .fetch_optional::<FunctionDB>(and!(&collection.id, &test_function.name))
                 .await?;
 
@@ -468,7 +534,7 @@ pub(crate) mod tests {
                     .reuse_frozen_tables(false)
                     .build()?;
 
-                let function_version = db.seed_function(collection, &create).await?;
+                let function_version = db.seed().function(collection, &create).await?;
                 function_versions.insert(test_function, function_version);
             }
         }
@@ -484,7 +550,7 @@ pub(crate) mod tests {
                         // use first as the function version for the execution is informational
                         let (_, function) =
                             function_versions.iter().find_or_first(|_| false).unwrap();
-                        (e, value.seed_execution(function).await.unwrap())
+                        (e, value.seed().execution(function).await.unwrap())
                     }
                 }
             })
@@ -509,12 +575,13 @@ pub(crate) mod tests {
                     async move {
                         (
                             *t,
-                            db.seed_transaction(
-                                executions.get(e).unwrap(),
-                                &i.to_string().try_into().unwrap(),
-                            )
-                            .await
-                            .unwrap(),
+                            db.seed()
+                                .transaction(
+                                    executions.get(e).unwrap(),
+                                    &i.to_string().try_into().unwrap(),
+                                )
+                                .await
+                                .unwrap(),
                         )
                     }
                 }
@@ -526,12 +593,12 @@ pub(crate) mod tests {
             .collect::<HashMap<_, _>>();
 
         // Create function runs and table data versions
-        let function_runs: HashSet<_> = test_executions
+        let physical_function_runs: HashSet<_> = test_executions
             .iter()
             .flat_map(|e| e.transactions.iter().map(move |t| (e, t, &t.functions)))
             .flat_map(|(e, t, f)| f.iter().map(move |f| (e, t, f)))
             .collect();
-        let function_runs_futures = function_runs
+        let function_runs_futures = physical_function_runs
             .iter()
             .map(|(e, t, f)| {
                 let db = db.clone();
@@ -541,8 +608,9 @@ pub(crate) mod tests {
                 let executions = executions.clone();
                 let transactions = transactions.clone();
                 async move {
-                    let function_run = db
-                        .seed_function_run(
+                    let physical_function_run = db
+                        .seed()
+                        .physical_function_run(
                             collections.get(&f.collection).unwrap(),
                             function_versions.get(f).unwrap(),
                             executions.get(e).unwrap(),
@@ -553,17 +621,19 @@ pub(crate) mod tests {
                         .unwrap();
 
                     let tables = db
+                        .live()
                         .fetch_all::<TableDB>(&function_versions.get(f).unwrap().id)
                         .await
                         .unwrap();
 
                     for table in &tables {
                         let _ = db
-                            .seed_table_data_version(
+                            .seed()
+                            .physical_table_data_version(
                                 collections.get(&f.collection).unwrap(),
                                 executions.get(e).unwrap(),
                                 transactions.get(t).unwrap(),
-                                &function_run,
+                                &physical_function_run,
                                 table,
                             )
                             .await
@@ -571,11 +641,12 @@ pub(crate) mod tests {
                     }
 
                     let _ = db
-                        .seed_function_requirement(
+                        .seed()
+                        .logical_input(
                             collections.get(&f.collection).unwrap(),
                             executions.get(e).unwrap(),
                             transactions.get(t).unwrap(),
-                            &function_run,
+                            &physical_function_run,
                             tables
                                 .iter()
                                 .find(|f| f.name == TableName::try_from(&default_table).unwrap())
@@ -588,11 +659,11 @@ pub(crate) mod tests {
                         .await
                         .unwrap();
 
-                    (*f, function_run)
+                    (*f, physical_function_run)
                 }
             })
             .collect::<Vec<_>>();
-        let function_runs = futures::future::join_all(function_runs_futures)
+        let physical_function_runs = futures::future::join_all(function_runs_futures)
             .await
             .into_iter()
             .collect::<HashMap<_, _>>();
@@ -609,7 +680,7 @@ pub(crate) mod tests {
             .map(|(e, t, f, d)| {
                 let db = db.clone();
                 let function_versions = function_versions.clone();
-                let function_runs = function_runs.clone();
+                let physical_function_runs = physical_function_runs.clone();
                 let collections = collections.clone();
                 let executions = executions.clone();
                 let transactions = transactions.clone();
@@ -626,6 +697,7 @@ pub(crate) mod tests {
                         .unwrap();
 
                     let tables = db
+                        .live()
                         .fetch_all::<TableDB>(&function_versions.get(dependency_f).unwrap().id)
                         .await
                         .unwrap();
@@ -634,26 +706,28 @@ pub(crate) mod tests {
                         .map(|tdv| (&tdv.name, tdv))
                         .collect::<HashMap<_, _>>();
 
-                    let table_data_versions = db
-                        .fetch_all::<TableDataVersionDB>(
+                    let physical_table_data_versions = db
+                        .live()
+                        .fetch_all::<PhysicalTableDataVersionDB>(
                             &function_versions.get(dependency_f).unwrap().id,
                         )
                         .await
                         .unwrap();
-                    let table_data_versions = table_data_versions
+                    let physical_table_data_versions = physical_table_data_versions
                         .iter()
                         .map(|tdv| (&tdv.name, tdv))
                         .collect::<HashMap<_, _>>();
 
                     let req = db
-                        .seed_function_requirement(
+                        .seed()
+                        .logical_input(
                             collections.get(&f.collection).unwrap(),
                             executions.get(e).unwrap(),
                             transactions.get(t).unwrap(),
-                            function_runs.get(f).unwrap(),
+                            physical_function_runs.get(f).unwrap(),
                             tables.get(&TableName::try_from(&d.table).unwrap()).unwrap(),
-                            Some(function_runs.get(dependency_f).unwrap()),
-                            table_data_versions
+                            Some(physical_function_runs.get(dependency_f).unwrap()),
+                            physical_table_data_versions
                                 .get(&TableName::try_from(&d.table).unwrap())
                                 .cloned(),
                             Some(&DependencyPos::try_from(0).unwrap()),
@@ -683,13 +757,14 @@ pub(crate) mod tests {
                 let db = db.clone();
                 let executions = executions.clone();
                 let transactions = transactions.clone();
-                let function_runs = function_runs.clone();
+                let physical_function_runs = physical_function_runs.clone();
                 async move {
                     let req = db
-                        .seed_function_runner_worker(
+                        .seed()
+                        .function_runner_worker(
                             executions.get(e).unwrap(),
                             transactions.get(t).unwrap(),
-                            function_runs.get(f).unwrap(),
+                            physical_function_runs.get(f).unwrap(),
                             &WorkerMessageStatus::Unlocked,
                         )
                         .await
@@ -709,7 +784,7 @@ pub(crate) mod tests {
             &collections,
             &executions,
             &transactions,
-            &function_runs,
+            &physical_function_runs,
             &workers,
         )
         .await?;
@@ -718,6 +793,7 @@ pub(crate) mod tests {
         // Assert execution
         for test_execution in test_executions {
             let executions = db
+                .live()
                 .fetch_all::<ExecutionDBWithStatus>(&executions.get(test_execution).unwrap().id)
                 .await?;
             assert_eq!(executions.len(), 1);
@@ -728,6 +804,7 @@ pub(crate) mod tests {
         // Assert transactions
         for test_transaction in test_executions.iter().flat_map(|e| &e.transactions) {
             let transactions = db
+                .live()
                 .fetch_all::<TransactionDBWithStatus>(
                     &transactions.get(test_transaction).unwrap().id,
                 )
@@ -743,20 +820,38 @@ pub(crate) mod tests {
             .flat_map(|e| &e.transactions)
             .flat_map(|t| &t.functions)
         {
-            let function_run = function_runs.get(test_function).unwrap();
+            let physical_function_run = physical_function_runs.get(test_function).unwrap();
 
-            // Assert all function_runs are in expected state
-            let function_runs = db.fetch_all::<FunctionRunDB>(&function_run.id).await?;
-            assert_eq!(function_runs.len(), 1);
-            let function_run = &function_runs[0];
-            assert_eq!(function_run.status, test_function.expected_status);
-
-            // Assert all table_data_versions are in expected state
-            let table_data_versions = db
-                .fetch_all::<TableDataVersionDBWithFunction>(&function_run.id)
+            // Assert all physical_function_runs are in expected state. The LFR
+            // carries the canonical flow-control status; derive it via
+            // (execution_id, function_id).
+            let physical_function_runs = db
+                .live()
+                .fetch_all::<PhysicalFunctionRunDB>(&physical_function_run.id)
                 .await?;
-            for table_data_version in &table_data_versions {
-                assert_eq!(table_data_version.status, test_function.expected_status);
+            assert_eq!(physical_function_runs.len(), 1);
+            let physical_function_run = &physical_function_runs[0];
+            let lfr: LogicalFunctionRunDB = db
+                .live()
+                .fetch_one::<LogicalFunctionRunDB>(and!(
+                    &physical_function_run.execution_id,
+                    &physical_function_run.function_id
+                ))
+                .await?;
+            assert_eq!(lfr.status, test_function.expected_status);
+
+            // Per-attempt status on physical_table_data_versions__with_function
+            // mirrors FR.status (the producer attempt's lifecycle).
+            // Canonical (sticky-Committed) status lives on the producer LFR.
+            let physical_table_data_versions = db
+                .live()
+                .fetch_all::<PhysicalTableDataVersionDBWithFunction>(&physical_function_run.id)
+                .await?;
+            for physical_table_data_version in &physical_table_data_versions {
+                assert_eq!(
+                    physical_table_data_version.status,
+                    physical_function_run.status
+                );
             }
         }
 

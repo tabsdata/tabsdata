@@ -19,22 +19,25 @@ use td_objects::dxo::execution::{
     TableNodeResponseBuilder,
 };
 use td_objects::dxo::function::FunctionDBWithNames;
-use td_objects::dxo::function_requirement::FunctionRequirementDB;
-use td_objects::dxo::function_run::{FunctionRunDB, FunctionRunDBBuilder, UpdateFunctionRunDB};
 use td_objects::dxo::graph::{FunctionNodeBuilder, GraphEdge, GraphNode, ResolvedVersion};
-use td_objects::dxo::table_data_version::{
-    ActiveTableDataVersionDB, ExecutionTableDataVersionReadBuilder, TableDataVersionDB,
+use td_objects::dxo::logical::{
+    LogicalFunctionRunDB, LogicalFunctionRunInputDB, LogicalFunctionRunPointerDB,
+    LogicalTableDataVersionDB, LogicalTableDataVersionPointerDB, UpdateLogicalFunctionRunDB,
+};
+use td_objects::dxo::physical_table_data_version::{
+    ActiveTableDataVersionDB, ExecutionTableDataVersionReadBuilder,
 };
 use td_objects::dxo::transaction::{TransactionDB, TransactionDBBuilder};
 use td_objects::graph::{MapGraph, TdGraph};
 use td_objects::transaction::map::{TransactionMap, TransactionMapper};
 use td_objects::types::basic::{
-    Depth, Dot, FunctionOnly, FunctionRunStatus, FunctionStatus, InputIdx, OverrideDisabledTrigger,
-    TableId, Trigger, TriggerType, VersionPos,
+    AtTime, Depth, Dot, FunctionId, FunctionOnly, FunctionRunStatus, FunctionStatus, InputIdx,
+    LogicalPointerReason, LogicalPointerStatus, LogicalTableDataVersionId, OverrideDisabledTrigger,
+    PhysicalTableDataVersionId, TableId, Trigger, TriggerType, VersionPos,
 };
 use td_objects::types::recursion::RecursionOptions;
 use td_objects::types::table_ref::Versions;
-use td_queries::{ChunkedQueries, FunctionRequirementQueries};
+use td_queries::{ChunkedQueries, LogicalCascadeEntry, VersionedEntry};
 use td_tower::api_message;
 use td_tower::ctx_service::ReqCtx;
 use td_tower::extractors::{MutRef, Ref};
@@ -143,14 +146,19 @@ pub async fn build_transactions(
     Ok(transactions)
 }
 
-pub async fn build_function_runs(
+/// Build logical function-run rows for the execution.
+///
+/// One LFR per triggered function, born `Pending` with a NULL pointer.
+/// At dispatch the pointer flips to the concrete `physical_function_runs` row that
+/// already lives alongside (the placeholder is the dispatch target).
+pub async fn build_logical_function_runs(
     transaction_by: Ref<TransactionBy>,
     transaction_map: Ref<TransactionMap<TransactionBy>>,
     execution_plan: Ref<ExecutionPlan>,
-    function_run_builder: Ref<FunctionRunDBBuilder>,
-) -> Result<Vec<FunctionRunDB>, TdError> {
+    execution: Ref<ExecutionDB>,
+) -> Result<Vec<LogicalFunctionRunDB>, TdError> {
     let main_trigger = execution_plan.main_trigger();
-    let function_runs = execution_plan
+    execution_plan
         .triggered_functions()
         .into_iter()
         .map(|f| {
@@ -160,56 +168,115 @@ pub async fn build_function_runs(
             } else {
                 Trigger::Dependency
             };
-
-            function_run_builder
-                .deref()
-                .clone()
+            LogicalFunctionRunDB::builder()
                 .collection_id(f.collection_id)
+                .execution_id(execution.id.clone())
+                .transaction_id(transaction.id.clone())
                 .function_id(f.function_id)
-                .function_version_id(&f.function_version_id)
-                .transaction_id(&transaction.id)
+                .function_version_id(f.function_version_id.clone())
                 .trigger(trigger)
+                .triggered_on(execution.triggered_on)
+                .triggered_by_id(execution.triggered_by_id)
                 .build()
                 .map_err(TdError::from)
         })
-        .collect::<Result<_, _>>()?;
-    Ok(function_runs)
+        .collect()
 }
 
-pub async fn build_table_data_versions(
+/// Build the `InitialMint` pointer-event row that pairs an LFR identity row.
+///
+/// `set_on` / `set_by_id` come from the LFR's plan-time `triggered_on` /
+/// `triggered_by_id` — the identity and its first pointer event are
+/// simultaneous at plan-build.
+pub fn initial_mint_lfr_pointer(
+    lfr: &LogicalFunctionRunDB,
+) -> Result<LogicalFunctionRunPointerDB, TdError> {
+    Ok(LogicalFunctionRunPointerDB::builder()
+        .logical_function_run_id(lfr.id.clone())
+        .status(LogicalPointerStatus::Pending)
+        .physical_function_run_id(None)
+        .set_on(AtTime::try_from(lfr.triggered_on)?)
+        .set_by_id(lfr.triggered_by_id)
+        .reason(LogicalPointerReason::InitialMint)
+        .build()?)
+}
+
+pub async fn build_initial_mint_lfr_pointers(
+    logical_function_runs: Ref<Vec<LogicalFunctionRunDB>>,
+) -> Result<Vec<LogicalFunctionRunPointerDB>, TdError> {
+    logical_function_runs
+        .iter()
+        .map(initial_mint_lfr_pointer)
+        .collect()
+}
+
+/// Build logical table-data-version rows for the execution.
+///
+/// One LTDV per declared output edge, born `Pending` with a NULL pointer.
+/// The producer is the LFR for the function on the source side of the
+/// output edge; LTDVs and LFRs are paired by `function_version_id`.
+pub async fn build_logical_table_data_versions(
     transaction_by: Ref<TransactionBy>,
     transaction_map: Ref<TransactionMap<TransactionBy>>,
-    function_runs: Ref<Vec<FunctionRunDB>>,
     execution_plan: Ref<ExecutionPlan>,
-) -> Result<Vec<TableDataVersionDB>, TdError> {
-    let function_runs_map: HashMap<_, _> = function_runs
+    execution: Ref<ExecutionDB>,
+    logical_function_runs: Ref<Vec<LogicalFunctionRunDB>>,
+) -> Result<Vec<LogicalTableDataVersionDB>, TdError> {
+    // Producer LFR lookup is keyed by function_id (logical identity), not
+    // function_version_id — see `build_function_runs` for why.
+    let ffr_by_function: HashMap<_, _> = logical_function_runs
         .iter()
-        .map(|f| (f.function_version_id.clone(), f))
+        .map(|lfr| (lfr.function_id, lfr.id.clone()))
         .collect();
 
-    let new_table_data_versions = execution_plan
+    execution_plan
         .table_function_output_versions()
         .iter()
         .map(|(t, f, edge)| {
             let transaction = transaction_map.get(&transaction_by.key(f)?)?;
-            let function_run = &function_runs_map[&f.function_version_id];
-            TableDataVersionDB::builder()
+            let producer = ffr_by_function.get(&f.function_id).ok_or_else(|| {
+                api_error!(
+                    ApiError::InternalError,
+                    "Producer LFR not found for function_id {} while building LTDVs",
+                    f.function_id
+                )
+            })?;
+            LogicalTableDataVersionDB::builder()
                 .collection_id(f.collection_id)
+                .execution_id(transaction.execution_id.clone())
+                .transaction_id(transaction.id.clone())
                 .table_id(t.table_id)
-                .name(t.name.clone())
-                .table_version_id(t.table_version_id)
-                .function_version_id(&t.function_version_id)
-                .execution_id(&transaction.execution_id)
-                .transaction_id(&transaction.id)
-                .function_run_id(function_run.id)
-                .function_param_pos(edge.output_pos().cloned().expect("must have output pos"))
-                .triggered_on(function_run.triggered_on)
+                .producer_logical_function_run_id(Some(producer.clone()))
+                .function_param_pos(edge.output_pos().cloned())
+                .triggered_on(execution.triggered_on)
+                .triggered_by_id(execution.triggered_by_id)
                 .build()
                 .map_err(TdError::from)
         })
-        .collect::<Result<_, _>>()?;
+        .collect()
+}
 
-    Ok(new_table_data_versions)
+/// Build the `InitialMint` pointer-event row that pairs an LTDV identity row.
+pub fn initial_mint_ltdv_pointer(
+    ltdv: &LogicalTableDataVersionDB,
+) -> Result<LogicalTableDataVersionPointerDB, TdError> {
+    Ok(LogicalTableDataVersionPointerDB::builder()
+        .logical_table_data_version_id(ltdv.id.clone())
+        .status(LogicalPointerStatus::Pending)
+        .physical_table_data_version_id(None)
+        .set_on(AtTime::try_from(ltdv.triggered_on)?)
+        .set_by_id(ltdv.triggered_by_id)
+        .reason(LogicalPointerReason::InitialMint)
+        .build()?)
+}
+
+pub async fn build_initial_mint_ltdv_pointers(
+    logical_table_data_versions: Ref<Vec<LogicalTableDataVersionDB>>,
+) -> Result<Vec<LogicalTableDataVersionPointerDB>, TdError> {
+    logical_table_data_versions
+        .iter()
+        .map(initial_mint_ltdv_pointer)
+        .collect()
 }
 
 pub async fn resolve_execution_plan_versions(
@@ -217,17 +284,28 @@ pub async fn resolve_execution_plan_versions(
     execution: Ref<ExecutionDB>,
     execution_plan: Ref<ExecutionPlan>,
 ) -> Result<ResolvedExecutionPlan, TdError> {
-    // Phase 1: Pre-resolve all edge versions, caching by (table_id, versions)
-    // since triggered_on is the same for every edge in an execution.
-    let mut edge_results: Vec<ResolvedVersion> = Vec::new();
-    let mut cache: HashMap<(TableId, Versions), Vec<Option<ActiveTableDataVersionDB>>> =
+    let triggered_on = execution.triggered_on;
+    let at_time = AtTime::try_from(triggered_on)?;
+
+    // Per-edge metadata, in plan-iteration order. `cache_key` lets us
+    // share resolved LTDV vectors across edges that ask for the same
+    // (table, versions) — common in execution plans where multiple
+    // downstream functions depend on the same table at the same version.
+    struct EdgeMeta {
+        versions_original: Versions,
+        cache_key: (TableId, Versions),
+    }
+    let mut edge_meta: Vec<EdgeMeta> = Vec::new();
+    let mut ltdv_cache: HashMap<(TableId, Versions), Vec<Option<LogicalTableDataVersionDB>>> =
         HashMap::new();
+
+    // Pass 1 — resolve LTDVs once per (table, versions). Pointer→TDV
+    // translation is deferred to a single batched pass below.
     for edge in execution_plan.graph.inner.edge_references() {
         let source = &execution_plan.graph.inner[edge.source()];
         let target = &execution_plan.graph.inner[edge.target()];
         let versions = edge.weight();
 
-        let triggered_on = execution.triggered_on;
         let (versions_inner, function, table, self_dependency) = match versions {
             GraphEdge::Output { versions, .. } => (versions, source, target, false),
             GraphEdge::Trigger { versions } => (versions, target, source, false),
@@ -253,10 +331,8 @@ pub async fn resolve_execution_plan_versions(
         };
 
         let cache_key = (table.table_id, lookup_versions.clone().into_owned());
-        let found = if let Some(cached) = cache.get(&cache_key) {
-            cached.clone()
-        } else {
-            let result = VersionResolver::builder()
+        if !ltdv_cache.contains_key(&cache_key) {
+            let ltdvs = VersionResolver::builder()
                 .function_id(&function.function_id)
                 .table_id(&table.table_id)
                 .versions(&lookup_versions)
@@ -264,19 +340,97 @@ pub async fn resolve_execution_plan_versions(
                 .build()?
                 .resolve(&mut conn)
                 .await?;
-            cache.insert(cache_key, result.clone());
-            result
-        };
+            ltdv_cache.insert(cache_key.clone(), ltdvs);
+        }
 
-        let found = found
+        edge_meta.push(EdgeMeta {
+            versions_original: versions_inner.clone(),
+            cache_key,
+        });
+    }
+
+    // Pass 2 — translate every LTDV referenced anywhere in the plan to
+    // its currently-bound `ActiveTableDataVersionDB` in two batched
+    // queries: latest pointer event per LTDV at `at_time`, then the TDV
+    // rows for every distinct bound id. Replaces the per-edge per-LTDV
+    // `concrete_at` + `fetch_optional` pair the cache only deduped at
+    // the (table, versions) granularity.
+    let all_ftdv_ids: Vec<LogicalTableDataVersionId> = ltdv_cache
+        .values()
+        .flat_map(|ltdvs| {
+            ltdvs
+                .iter()
+                .filter_map(|f| f.as_ref().map(|f| f.id.clone()))
+        })
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+    let pointers: Vec<LogicalTableDataVersionPointerDB> = if all_ftdv_ids.is_empty() {
+        Vec::new()
+    } else {
+        conn.versioned(&at_time)
+            .fetch_all_chunked::<LogicalTableDataVersionPointerDB>(&all_ftdv_ids)
+            .await?
+    };
+    let bound_tdv_id_by_ftdv: HashMap<LogicalTableDataVersionId, PhysicalTableDataVersionId> =
+        pointers
             .into_iter()
-            .map(|v| v.map(|v| ExecutionTableDataVersionReadBuilder::try_from(&v)?.build()))
-            .map(|opt| opt.transpose())
+            .filter_map(|p| {
+                p.physical_table_data_version_id
+                    .map(|tdv| (p.logical_table_data_version_id, tdv))
+            })
+            .collect();
+    let all_tdv_ids: Vec<PhysicalTableDataVersionId> = bound_tdv_id_by_ftdv
+        .values()
+        .cloned()
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+    let tdvs: Vec<ActiveTableDataVersionDB> = if all_tdv_ids.is_empty() {
+        Vec::new()
+    } else {
+        conn.fetch_all_chunked::<ActiveTableDataVersionDB, _>(&all_tdv_ids)
+            .await?
+    };
+    let tdv_by_id: HashMap<PhysicalTableDataVersionId, ActiveTableDataVersionDB> =
+        tdvs.into_iter().map(|t| (t.id.clone(), t)).collect();
+
+    // Per-cache-key resolved TDV vector, computed once.
+    let resolved_cache: HashMap<(TableId, Versions), Vec<Option<ActiveTableDataVersionDB>>> =
+        ltdv_cache
+            .into_iter()
+            .map(|(k, ltdvs)| {
+                let resolved: Vec<Option<ActiveTableDataVersionDB>> = ltdvs
+                    .into_iter()
+                    .map(|ftdv_opt| -> Option<ActiveTableDataVersionDB> {
+                        let ltdv = ftdv_opt?;
+                        let tdv_id = bound_tdv_id_by_ftdv.get(&ltdv.id)?;
+                        Some(tdv_by_id.get(tdv_id)?.clone())
+                    })
+                    .collect();
+                (k, resolved)
+            })
+            .collect();
+
+    // Pass 3 — assemble per-edge `ResolvedVersion` rows in plan order.
+    let mut edge_results: Vec<ResolvedVersion> = Vec::with_capacity(edge_meta.len());
+    for meta in edge_meta {
+        let resolved = resolved_cache
+            .get(&meta.cache_key)
+            .expect("cache populated for every edge in pass 1");
+        let found = resolved
+            .iter()
+            .map(|tdv_opt| {
+                tdv_opt
+                    .as_ref()
+                    .map(|tdv| ExecutionTableDataVersionReadBuilder::try_from(tdv)?.build())
+                    .transpose()
+            })
             .collect::<Result<Vec<_>, _>>()?;
 
         let resolved_version = ResolvedVersion::builder()
             .inner(found)
-            .original(versions_inner.clone())
+            .original(meta.versions_original)
             .build()?;
         edge_results.push(resolved_version);
     }
@@ -303,74 +457,160 @@ pub async fn resolve_execution_plan_versions(
     Ok(execution_plan)
 }
 
-pub async fn build_function_requirements(
+/// Build logical function-run-input rows for the execution.
+///
+/// One row per resolved-version per input edge of every triggered function:
+/// - Edges without resolved versions (trigger edges, or dep edges that
+///   resolved to nothing) emit a single row with
+///   `requirement_version_pos = NO_VERSIONS`. Trigger edges additionally
+///   carry NULL `requirement_input_idx` / `requirement_dependency_pos`.
+/// - Dep edges with one or more resolved versions emit one row per
+///   version, with `requirement_version_pos = SINGLE_VERSION` (single)
+///   or the iteration index (multiple).
+///
+/// The `requirement_logical_table_data_version_id` is resolved per row
+/// via the logic version resolver, which consults the in-plan LTDV
+/// map first (LTDVs minted earlier in this same plan-build pass) and
+/// then the committed LTDV timeline. Every concrete TDV has an LTDV by
+/// construction, so resolution never falls off the end of the timeline.
+pub async fn build_logical_function_run_inputs(
+    mut conn: MutRef<DynamicConnection<'static>>,
     transaction_by: Ref<TransactionBy>,
     transaction_map: Ref<TransactionMap<TransactionBy>>,
-    function_runs: Ref<Vec<FunctionRunDB>>,
-    execution_plan: Ref<ResolvedExecutionPlan>,
-) -> Result<Vec<FunctionRequirementDB>, TdError> {
-    let mut conditions = vec![];
+    execution_plan: Ref<ExecutionPlan>,
+    execution: Ref<ExecutionDB>,
+    logical_function_runs: Ref<Vec<LogicalFunctionRunDB>>,
+    logical_table_data_versions: Ref<Vec<LogicalTableDataVersionDB>>,
+) -> Result<Vec<LogicalFunctionRunInputDB>, TdError> {
+    let triggered_on = execution.triggered_on;
 
-    let function_runs_map: HashMap<_, _> = function_runs
+    // Consumer LFR lookup: function_id → LFR.id (see `build_function_runs`).
+    let lfr_id_by_function: HashMap<_, _> = logical_function_runs
         .iter()
-        .map(|f| (f.function_version_id.clone(), f))
+        .map(|lfr| (lfr.function_id, lfr.id.clone()))
         .collect();
 
-    let mut input_idx = 0;
-    for (function, table, edge) in execution_plan.function_table_input_versions() {
-        let transaction = transaction_map.get(&transaction_by.key(function)?)?;
-        let mut builder = FunctionRequirementDB::builder();
-        builder
-            // current
-            .collection_id(function.collection_id)
-            .execution_id(&transaction.execution_id)
-            .transaction_id(&transaction.id)
-            .function_run_id(function_runs_map[&function.function_version_id].id)
-            .function_version_id(&function.function_version_id)
-            // condition
-            .requirement_table_id(table.table_id)
-            .requirement_function_version_id(&table.function_version_id)
-            .requirement_table_version_id(table.table_version_id);
+    // In-plan LTDV map keyed by table_id, consumed by VersionResolver for
+    // `Versions::None` / `Head(0)` resolution. Each table has at most one
+    // output LTDV in a typical plan; on collision the last entry wins.
+    let in_plan_by_table: HashMap<TableId, LogicalTableDataVersionDB> = logical_table_data_versions
+        .iter()
+        .map(|ltdv| (ltdv.table_id, ltdv.clone()))
+        .collect();
 
-        if let Some(dependency) = edge.dependency_pos() {
-            builder
-                .requirement_input_idx(InputIdx::try_from(input_idx)?)
-                .requirement_dependency_pos(Some(*dependency));
-            input_idx += 1;
+    // Resolves are deterministic for a given `(function_id, table_id,
+    // versions)` triple at this `triggered_on` and `in_plan_by_table`,
+    // so dedupe across edges that ask for the same upstream slice —
+    // common with multi-consumer plans.
+    let mut resolve_cache: HashMap<
+        (FunctionId, TableId, Versions),
+        Vec<Option<LogicalTableDataVersionDB>>,
+    > = HashMap::new();
+
+    let mut rows = Vec::new();
+    let mut input_idx_counter: i32 = 0;
+    for (function, table, edge) in execution_plan.function_table_input_versions() {
+        let Some(consumer_lfr_id) = lfr_id_by_function.get(&function.function_id) else {
+            return Err(api_error!(
+                ApiError::InternalError,
+                "Consumer LFR not found for function_id {} while building logical inputs",
+                function.function_id
+            ));
+        };
+        let transaction = transaction_map.get(&transaction_by.key(function)?)?;
+
+        let dependency_pos = edge.dependency_pos().cloned();
+        let requirement_input_idx = if dependency_pos.is_some() {
+            let i = input_idx_counter;
+            input_idx_counter += 1;
+            Some(InputIdx::try_from(i)?)
+        } else {
+            None
+        };
+
+        // Self-dependency: read the *previous* version, not the current one.
+        // Shift the relative reference by -1 so HEAD becomes HEAD~1 etc.
+        let lookup_versions = if edge.is_self_dependency() {
+            Cow::Owned(edge.versions().shift(-1))
+        } else {
+            Cow::Borrowed(edge.versions())
+        };
+
+        let cache_key = (
+            function.function_id,
+            table.table_id,
+            lookup_versions.clone().into_owned(),
+        );
+        let resolved = if let Some(cached) = resolve_cache.get(&cache_key) {
+            cached.clone()
+        } else {
+            let r = VersionResolver::builder()
+                .function_id(&function.function_id)
+                .table_id(&table.table_id)
+                .versions(&lookup_versions)
+                .triggered_on(&triggered_on)
+                .in_plan(Some(&in_plan_by_table))
+                .build()?
+                .resolve(&mut conn)
+                .await?;
+            resolve_cache.insert(cache_key, r.clone());
+            r
+        };
+
+        // Emit one row per dep slot, even when the slot didn't resolve to
+        // an LTDV (NULL `requirement_logical_table_data_version_id`). The
+        // worker yaml at dispatch falls back to `DependencyDB` for the
+        // static dep info on those rows. Empty-Vec emits a single
+        // `NO_VERSIONS` placeholder.
+        if resolved.is_empty() {
+            rows.push(
+                LogicalFunctionRunInputDB::builder()
+                    .collection_id(function.collection_id)
+                    .execution_id(transaction.execution_id.clone())
+                    .transaction_id(transaction.id.clone())
+                    .logical_function_run_id(consumer_lfr_id.clone())
+                    .requirement_logical_table_data_version_id(None)
+                    .requirement_input_idx(requirement_input_idx)
+                    .requirement_dependency_pos(dependency_pos)
+                    .requirement_version_pos(VersionPos::NO_VERSIONS)
+                    .build()?,
+            );
+            continue;
         }
 
-        if edge.versions().inner.is_empty() {
-            // If empty was resolved, we set version_pos to NO_VERSIONS to indicate so.
-            builder.requirement_version_pos(VersionPos::NO_VERSIONS);
-            conditions.push(builder.build()?);
-        } else {
-            for (version_pos, version) in edge.versions().inner.iter().enumerate() {
-                // If single version, we set version_pos to SINGLE_VERSION to indicate so.
-                // There should always be a single inner version in that case.
-                let version_pos = if edge.versions().original.is_multiple() {
-                    VersionPos::try_from(version_pos as i32)?
-                } else {
-                    VersionPos::SINGLE_VERSION
-                };
-                builder.requirement_version_pos(version_pos);
-
-                if let Some(version) = version {
-                    builder
-                        .requirement_function_run_id(version.function_run_id)
-                        .requirement_table_data_version_id(version.id.clone());
-                }
-
-                conditions.push(builder.build()?);
-            }
+        let multiple = lookup_versions.is_multiple();
+        for (slot, ftdv_opt) in resolved.iter().enumerate() {
+            let version_pos = if multiple {
+                VersionPos::try_from(slot as i32)?
+            } else {
+                VersionPos::SINGLE_VERSION
+            };
+            rows.push(
+                LogicalFunctionRunInputDB::builder()
+                    .collection_id(function.collection_id)
+                    .execution_id(transaction.execution_id.clone())
+                    .transaction_id(transaction.id.clone())
+                    .logical_function_run_id(consumer_lfr_id.clone())
+                    .requirement_logical_table_data_version_id(
+                        ftdv_opt.as_ref().map(|f| f.id.clone()),
+                    )
+                    .requirement_input_idx(requirement_input_idx)
+                    .requirement_dependency_pos(dependency_pos)
+                    .requirement_version_pos(version_pos)
+                    .build()?,
+            );
         }
     }
 
-    Ok(conditions)
+    Ok(rows)
 }
 
-// similar to `update_function_run_status`
+/// Walks `logical_function_run_inputs → LTDV → latest pointer → TDV →
+/// upstream FR` to find consumers whose upstream is Failed/OnHold, and
+/// flips them to OnHold. The latest-pointer subquery is bounded by the
+/// plan's `at_time` for temporal consistency.
 #[instrument(
-    name = "execution.initial_on_hold",
+    name = "execution.layer.update_initial_function_run_status",
     skip_all,
     fields(execution_id = %execution.id),
     level = "debug",
@@ -379,24 +619,26 @@ pub async fn build_function_requirements(
 pub async fn update_initial_function_run_status(
     mut conn: MutRef<DynamicConnection<'static>>,
     execution: Ref<ExecutionDB>,
+    at_time: Ref<AtTime>,
 ) -> Result<(), TdError> {
-    // Direct join: function_requirements → function_runs via requirement_function_run_id.
-    // Returns only the distinct function_run_ids whose upstream is Failed/OnHold.
-    let on_hold_ids = conn.fetch_blocked_function_run_ids(&execution.id).await?;
+    let lfr_ids = conn
+        .logical_cascade()
+        .blocked_ids(&execution.id, &at_time)
+        .await?;
 
     debug!(
         execution_id = %execution.id,
-        on_hold_count = on_hold_ids.len(),
-        "execution.initial_on_hold: {} function_run(s) start OnHold",
-        on_hold_ids.len()
+        on_hold_count = lfr_ids.len(),
+        "execution.initial_on_hold: {} LFR(s) start OnHold",
+        lfr_ids.len()
     );
 
-    if !on_hold_ids.is_empty() {
-        let update = UpdateFunctionRunDB::builder()
+    if !lfr_ids.is_empty() {
+        let update = UpdateLogicalFunctionRunDB::builder()
             .status(FunctionRunStatus::OnHold)
             .build()?;
         let _ = conn
-            .update_chunked::<_, FunctionRunDB, _>(&update, &on_hold_ids)
+            .update_chunked::<_, LogicalFunctionRunDB, _>(&update, &lfr_ids)
             .await?;
     }
 

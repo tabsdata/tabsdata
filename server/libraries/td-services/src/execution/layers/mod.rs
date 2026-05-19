@@ -4,24 +4,24 @@
 
 use crate::do_authz::DO_AUTHZ;
 use crate::execution::layers::execution::{
-    assert_function_status, build_execution_plan, build_function_requirements, build_function_runs,
-    build_response, build_table_data_versions, build_transaction_map, build_transactions,
-    resolve_execution_plan_versions, update_initial_function_run_status, validate_execution_plan,
-    with_recursion_options,
+    assert_function_status, build_execution_plan, build_initial_mint_lfr_pointers,
+    build_initial_mint_ltdv_pointers, build_logical_function_run_inputs,
+    build_logical_function_runs, build_logical_table_data_versions, build_response,
+    build_transaction_map, build_transactions, resolve_execution_plan_versions,
+    update_initial_function_run_status, validate_execution_plan, with_recursion_options,
 };
 use crate::graph::layers::{FunctionOrTable, GraphConfig, generate_td_graph};
 use td_authz::Authz;
 use td_authz::tower::{AuthzOn, CollAdmin, CollExec};
+use td_objects::StateFilter;
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::dxo::dependency::DependencyDBWithNames;
 use td_objects::dxo::execution::{ExecutionDB, ExecutionDBBuilder, ExecutionRequest};
 use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames};
-use td_objects::dxo::function_requirement::FunctionRequirementDB;
-use td_objects::dxo::function_run::{FunctionRunDB, FunctionRunDBBuilder};
-use td_objects::dxo::table::TableDB;
-use td_objects::dxo::table_data_version::TableDataVersionDB;
+use td_objects::dxo::logical::{
+    LogicalFunctionRunDB, LogicalFunctionRunInputDB, LogicalFunctionRunPointerDB,
+    LogicalTableDataVersionDB, LogicalTableDataVersionPointerDB,
+};
 use td_objects::dxo::transaction::{TransactionDB, TransactionDBBuilder};
-use td_objects::dxo::trigger::TriggerDBWithNames;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
     CollectionId, FunctionId, FunctionOnly, OverrideDisabledTrigger, TriggerType,
@@ -35,21 +35,19 @@ pub(crate) mod execution;
 pub(crate) mod execution_version;
 pub(crate) mod list;
 pub(crate) mod read;
+pub(crate) mod redirect_at_finish;
 pub(crate) mod runtime_info;
 pub(crate) mod update_status;
 
 pub struct GraphOpts;
-impl
-    GraphConfig<
-        { TriggerDBWithNames::Active },
-        { DependencyDBWithNames::Active },
-        { FunctionDB::Executable },
-        { TableDB::Available },
-    > for GraphOpts
-{
+impl GraphConfig for GraphOpts {
     type Authz = DO_AUTHZ;
 
-    fn include_dependency_functions(&self) -> bool {
+    fn function_state() -> StateFilter<FunctionDB> {
+        FunctionDB::executable()
+    }
+
+    fn include_dependency_functions() -> bool {
         false
     }
 }
@@ -92,19 +90,24 @@ pub fn execute() {
         from_fn(With::<ExecutionDB>::try_convert_to::<TransactionDBBuilder, _>),
         from_fn(build_transactions),
         from_fn(insert_vec::<TransactionDB>),
-        // Build new function runs
-        from_fn(With::<ExecutionDB>::try_convert_to::<FunctionRunDBBuilder, _>),
-        from_fn(build_function_runs),
-        from_fn(insert_vec::<FunctionRunDB>),
-        // Build new table data versions
-        from_fn(build_table_data_versions),
-        from_fn(insert_vec::<TableDataVersionDB>),
-        // Create execution plan
+        // Logical LFRs — identity rows + InitialMint pointer events.
+        from_fn(build_logical_function_runs),
+        from_fn(insert_vec::<LogicalFunctionRunDB>),
+        from_fn(build_initial_mint_lfr_pointers),
+        from_fn(insert_vec::<LogicalFunctionRunPointerDB>),
+        // Logical LTDVs — identity rows + InitialMint pointer events.
+        from_fn(build_logical_table_data_versions),
+        from_fn(insert_vec::<LogicalTableDataVersionDB>),
+        from_fn(build_initial_mint_ltdv_pointers),
+        from_fn(insert_vec::<LogicalTableDataVersionPointerDB>),
+        // Resolve plan-build response (used by build_response).
         from_fn(resolve_execution_plan_versions),
-        // Create steps
-        from_fn(build_function_requirements),
-        from_fn(insert_vec::<FunctionRequirementDB>),
-        // Update function run initial status if needed
+        // Logical dependency-binding rows.
+        from_fn(build_logical_function_run_inputs),
+        from_fn(insert_vec::<LogicalFunctionRunInputDB>),
+        // Initial-OnHold: walks the logical chain (LFR_input → LTDV →
+        // pointer → TDV → upstream FR.status) to flip consumers OnHold
+        // when upstream is Failed/OnHold.
         from_fn(update_initial_function_run_status),
         // Execution plan response
         from_fn(build_response),

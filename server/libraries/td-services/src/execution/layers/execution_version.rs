@@ -8,9 +8,12 @@ use td_error::{ApiError, TdError, api_error};
 use td_objects::and;
 use td_objects::dxo::execution::{ExecutionDB, ExecutionResponse, ExecutionResponseInternal};
 use td_objects::dxo::function::FunctionDBWithNames;
-use td_objects::dxo::function_run::FunctionRunDB;
-use td_objects::types::basic::{FunctionRunStatus, FunctionVersionId, SkipIfRunning};
-use td_queries::BasicQueries;
+use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunPointerDB};
+use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
+use td_objects::types::basic::{
+    AtTime, FunctionVersionId, PhysicalFunctionRunStatus, SkipIfRunning,
+};
+use td_queries::{LiveEntry, LogicalPointersEntry};
 use td_tower::default_services::Condition;
 use td_tower::extractors::{MutRef, Ref};
 use tracing::{debug, instrument};
@@ -44,30 +47,52 @@ pub async fn skip_if_running(
     skip_if_running: Ref<SkipIfRunning>,
     latest_execution: Ref<Option<ExecutionDB>>,
 ) -> Result<Condition, TdError> {
+    // The "latest attempt" for an (execution, fvid) is whichever FR the
+    // LFR's pointer is currently bound to — replays leave the prior FR
+    // row in `physical_function_runs` but the pointer is what consumers
+    // (and this gate) should follow.
     let running = match latest_execution.as_ref() {
         Some(latest_execution) => {
-            let function_run = conn
-                .fetch_one::<FunctionRunDB>(and!(function_version_id.deref(), &latest_execution.id))
+            let at = AtTime::now();
+            let lfr: Option<LogicalFunctionRunDB> = conn
+                .live()
+                .fetch_optional(and!(&latest_execution.id, function_version_id.deref()))
                 .await?;
-
-            match function_run.status {
-                FunctionRunStatus::Committed
-                | FunctionRunStatus::Canceled
-                | FunctionRunStatus::Yanked => {
-                    debug!(
-                        function_run_id = %function_run.id,
-                        status = %function_run.status,
-                        "Latest function run not running"
-                    );
+            let bound_fr_id = if let Some(lfr) = lfr {
+                conn.logical_pointers()
+                    .concrete_at::<LogicalFunctionRunPointerDB>(&lfr.id, &at)
+                    .await?
+            } else {
+                None
+            };
+            let physical_function_run: Option<PhysicalFunctionRunDB> = match bound_fr_id {
+                Some(id) => conn.live().fetch_optional(&id).await?,
+                None => None,
+            };
+            match physical_function_run {
+                Some(fr) => match fr.status {
+                    PhysicalFunctionRunStatus::Done
+                    | PhysicalFunctionRunStatus::Failed
+                    | PhysicalFunctionRunStatus::Error => {
+                        debug!(
+                            physical_function_run_id = %fr.id,
+                            status = ?fr.status,
+                            "Latest function run not running"
+                        );
+                        false
+                    }
+                    _ => {
+                        debug!(
+                            physical_function_run_id = %fr.id,
+                            status = ?fr.status,
+                            "Latest function run running"
+                        );
+                        true
+                    }
+                },
+                None => {
+                    debug!("No bound FR for latest execution");
                     false
-                }
-                _ => {
-                    debug!(
-                        function_run_id = %function_run.id,
-                        status = %function_run.status,
-                        "Latest function run running"
-                    );
-                    true
                 }
             }
         }
