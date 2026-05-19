@@ -189,8 +189,7 @@ mod tests {
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_tower_metadata_execution_callback(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
@@ -302,8 +301,7 @@ mod tests {
         .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_callback_running(db: TdPool) -> Result<(), TdError> {
         test_callback(
             db,
@@ -328,8 +326,7 @@ mod tests {
         .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_callback_running_multiple_function_runs(db: TdPool) -> Result<(), TdError> {
         test_callback(
             db,
@@ -364,8 +361,7 @@ mod tests {
         .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_callback_running_multiple_transactions(db: TdPool) -> Result<(), TdError> {
         test_callback(
             db,
@@ -403,8 +399,7 @@ mod tests {
         .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_callback_published(db: TdPool) -> Result<(), TdError> {
         test_callback(
             db,
@@ -439,8 +434,7 @@ mod tests {
         .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_callback_published_downstream(db: TdPool) -> Result<(), TdError> {
         test_callback(
             db,
@@ -488,8 +482,7 @@ mod tests {
         .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_callback_done(db: TdPool) -> Result<(), TdError> {
         test_callback(
             db,
@@ -524,8 +517,7 @@ mod tests {
         .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_callback_failed(db: TdPool) -> Result<(), TdError> {
         test_callback(
             db,
@@ -560,8 +552,7 @@ mod tests {
         .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_callback_failed_downstream(db: TdPool) -> Result<(), TdError> {
         test_callback(
             db,
@@ -596,8 +587,7 @@ mod tests {
         .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_callback_table_data_version_status(db: TdPool) -> Result<(), TdError> {
         test_callback(
             db.clone(),
@@ -712,8 +702,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_callback_table_data_version_data_information(db: TdPool) -> Result<(), TdError> {
         test_callback(
             db.clone(),

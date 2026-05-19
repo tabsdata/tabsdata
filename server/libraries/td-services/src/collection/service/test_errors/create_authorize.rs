@@ -11,8 +11,7 @@ use td_objects::dxo::collection::CollectionCreate;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::types::basic::{AccessTokenId, CollectionName, Description, RoleId, UserId};
 
-#[td_test::test(sqlx)]
-#[tokio::test]
+#[td_test::test(db)]
 async fn test_not_allowed_to_create_collection(db: TdPool) {
     let name = CollectionName::try_from("ds0").unwrap();
     let description = Description::try_from("DS0").unwrap();

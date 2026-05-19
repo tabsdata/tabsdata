@@ -2,60 +2,39 @@
 // Copyright 2025. Tabs Data Inc.
 //
 
-use crate::reqs::TestRequirements;
-use std::collections::HashMap;
-
-#[allow(dead_code)]
-/// Requirements for a Oracle test using URI, user and password.
-pub struct OracleReqs {
-    pub uri: String,
-    pub user: String,
-    pub password: String,
-    vars: HashMap<String, String>,
-}
-
-impl TestRequirements for OracleReqs {
-    fn keys() -> &'static [&'static str] {
-        &["oracle_uri", "oracle_user", "oracle_password"]
-    }
-
-    fn new(vars: impl Into<HashMap<String, String>>) -> Self {
-        let vars = vars.into();
-        Self {
-            uri: vars["oracle_uri"].clone(),
-            user: vars["oracle_user"].clone(),
-            password: vars["oracle_password"].clone(),
-            vars,
-        }
-    }
-
-    fn vars(&self) -> &HashMap<String, String> {
-        &self.vars
+crate::define_requires! {
+    /// Requirements for an Oracle test using URI, user and password.
+    pub struct OracleReqs {
+        uri: oracle_uri,
+        user: oracle_user,
+        password: oracle_password,
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate as td_test;
-
-    use crate::reqs::{OracleReqs, TestRequirementsInEnv};
+    use crate::__private::{TestSetup, TestSetupExecution};
+    use crate::reqs::{OracleReqs, ReqsTestSetup, TestRequirementsInEnv};
     use std::collections::HashMap;
 
-    #[crate::test(when(reqs = OracleReqs, env_prefix= "oracle_test_not_defined", do_not_fail_reqs= true))]
     #[tokio::test]
-    async fn test_signature_oracle_reqs(_s3: OracleReqs) {
-        panic!()
+    async fn test_signature_oracle_reqs_skips_when_missing() {
+        let setup = ReqsTestSetup::<OracleReqs>::new_for_self_test(
+            "test_signature_oracle_reqs_skips_when_missing",
+            "oracle_test_not_defined",
+        );
+        assert!(matches!(setup.setup().await, TestSetupExecution::Skip));
     }
 
     #[test]
     fn test_oracle_reqs() {
         let vars: HashMap<String, String> = HashMap::from([
             (
-                "TEST_DIR".to_string(),
+                "TD_TEST_DIR".to_string(),
                 td_common::tdtestdir!().to_str().unwrap().to_string(),
             ),
             (
-                "TESTS_TIMESTAMP".to_string(),
+                "TD_TEST_TIMESTAMP".to_string(),
                 "0000_00_00_00_00_00".to_string(),
             ),
             ("NS__ORACLE_URI".to_string(), "uri".to_string()),

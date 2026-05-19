@@ -119,8 +119,7 @@ mod tests {
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_tower_metadata_enable_function(db: TdPool) {
         use crate::function::layers::register::{build_workers, stop_current_workers};
         use td_objects::dxo::table::TableDBBuilder;
@@ -193,32 +192,27 @@ mod tests {
         );
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_enable_enabled_empty_function(db: TdPool) -> Result<(), TdError> {
         test_enable_function(db, None, None, None, None, Enabled::TRUE, Enabled::TRUE).await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_enable_disabled_empty_function(db: TdPool) -> Result<(), TdError> {
         test_enable_function(db, None, None, None, None, Enabled::FALSE, Enabled::TRUE).await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_disable_enabled_empty_function(db: TdPool) -> Result<(), TdError> {
         test_enable_function(db, None, None, None, None, Enabled::TRUE, Enabled::FALSE).await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_disable_disabled_empty_function(db: TdPool) -> Result<(), TdError> {
         test_enable_function(db, None, None, None, None, Enabled::FALSE, Enabled::FALSE).await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_enable_disabled(db: TdPool) -> Result<(), TdError> {
         test_enable_function(
             db,
@@ -244,8 +238,7 @@ mod tests {
         .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_disable_enabled(db: TdPool) -> Result<(), TdError> {
         test_enable_function(
             db,

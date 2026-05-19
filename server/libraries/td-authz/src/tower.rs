@@ -126,6 +126,8 @@ use std::mem;
 use std::ops::Deref;
 use std::sync::Arc;
 use td_database::dynamic::DynamicConnection;
+#[cfg(test)]
+use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::RequestContext;
@@ -1270,12 +1272,12 @@ mod tests {
         C6: AuthzRequirements,
         C7: AuthzRequirements,
     >(
+        db: &TdPool,
         authz_context: &Arc<AuthzContextForTest>,
         request_context: &Arc<RequestContext>,
         scope: &Arc<AuthzScope>,
         _authz: Authz<C1, C2, C3, C4, C5, C6, C7>,
     ) {
-        let db = td_database::test_utils::db().await.unwrap();
         let conn = db.acquire().await.unwrap();
         let conn = MutRef::new(conn);
         let res = Authz::<C1, C2, C3, C4, C5, C6, C7>::check(
@@ -1302,13 +1304,13 @@ mod tests {
         C6: AuthzRequirements,
         C7: AuthzRequirements,
     >(
+        db: &TdPool,
         authz_context: &Arc<AuthzContextForTest>,
         request_context: &Arc<RequestContext>,
         scope: &Arc<AuthzScope>,
         _authz: Authz<C1, C2, C3, C4, C5, C6, C7>,
         expected_err: AuthzError,
     ) {
-        let db = td_database::test_utils::db().await.unwrap();
         let conn = db.acquire().await.unwrap();
         let conn = MutRef::new(conn);
         let res = Authz::<C1, C2, C3, C4, C5, C6, C7>::check(
@@ -1333,8 +1335,8 @@ mod tests {
         }
     }
 
-    #[tokio::test]
-    async fn test_default_roles_and_permissions() {
+    #[td_test::test(db)]
+    async fn test_default_roles_and_permissions(db: TdPool) {
         let authz_context = AuthzContextForTest::default();
 
         let sys_admin_context = RequestContext::with(
@@ -1360,6 +1362,7 @@ mod tests {
         let scope = &system_scope;
         let request_context = Arc::new(sys_admin_context);
         assert_ok(
+            &db,
             &authz_context,
             &request_context,
             scope,
@@ -1367,6 +1370,7 @@ mod tests {
         )
         .await;
         assert_ok(
+            &db,
             &authz_context,
             &request_context,
             scope,
@@ -1375,6 +1379,7 @@ mod tests {
         .await;
         let scope = &collection_scope;
         assert_ok(
+            &db,
             &authz_context,
             &request_context,
             scope,
@@ -1382,6 +1387,7 @@ mod tests {
         )
         .await;
         assert_ok(
+            &db,
             &authz_context,
             &request_context,
             scope,
@@ -1389,6 +1395,7 @@ mod tests {
         )
         .await;
         assert_ok(
+            &db,
             &authz_context,
             &request_context,
             scope,
@@ -1396,6 +1403,7 @@ mod tests {
         )
         .await;
         assert_ok(
+            &db,
             &authz_context,
             &request_context,
             scope,
@@ -1407,6 +1415,7 @@ mod tests {
         let request_context = Arc::new(sec_admin_context);
         let scope = &system_scope;
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             scope,
@@ -1415,6 +1424,7 @@ mod tests {
         )
         .await;
         assert_ok(
+            &db,
             &authz_context,
             &request_context,
             scope,
@@ -1423,6 +1433,7 @@ mod tests {
         .await;
         let scope = &collection_scope;
         assert_ok(
+            &db,
             &authz_context,
             &request_context,
             scope,
@@ -1430,6 +1441,7 @@ mod tests {
         )
         .await;
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             scope,
@@ -1438,6 +1450,7 @@ mod tests {
         )
         .await;
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             scope,
@@ -1446,6 +1459,7 @@ mod tests {
         )
         .await;
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             scope,
@@ -1458,6 +1472,7 @@ mod tests {
         let request_context = Arc::new(user_context);
         let scope = &system_scope;
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             scope,
@@ -1466,6 +1481,7 @@ mod tests {
         )
         .await;
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             scope,
@@ -1475,6 +1491,7 @@ mod tests {
         .await;
         let scope = &collection_scope;
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             scope,
@@ -1483,6 +1500,7 @@ mod tests {
         )
         .await;
         assert_ok(
+            &db,
             &authz_context,
             &request_context,
             scope,
@@ -1490,6 +1508,7 @@ mod tests {
         )
         .await;
         assert_ok(
+            &db,
             &authz_context,
             &request_context,
             scope,
@@ -1497,6 +1516,7 @@ mod tests {
         )
         .await;
         assert_ok(
+            &db,
             &authz_context,
             &request_context,
             scope,
@@ -1505,8 +1525,8 @@ mod tests {
         .await;
     }
 
-    #[tokio::test]
-    async fn test_multiple_any_of_all_avail() {
+    #[td_test::test(db)]
+    async fn test_multiple_any_of_all_avail(db: TdPool) {
         let authz_context = AuthzContextForTest::default();
 
         let request_context = Arc::new(RequestContext::with(
@@ -1521,6 +1541,7 @@ mod tests {
 
         // sys_admin role
         assert_ok(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -1529,8 +1550,8 @@ mod tests {
         .await;
     }
 
-    #[tokio::test]
-    async fn test_multiple_any_of_one_avail() {
+    #[td_test::test(db)]
+    async fn test_multiple_any_of_one_avail(db: TdPool) {
         let authz_context = AuthzContextForTest::default();
 
         let request_context = Arc::new(RequestContext::with(
@@ -1545,6 +1566,7 @@ mod tests {
 
         // sys_admin role
         assert_ok(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -1553,8 +1575,8 @@ mod tests {
         .await;
     }
 
-    #[tokio::test]
-    async fn test_multiple_any_of_none_avail() {
+    #[td_test::test(db)]
+    async fn test_multiple_any_of_none_avail(db: TdPool) {
         let authz_context = AuthzContextForTest::default();
 
         let request_context = Arc::new(RequestContext::with(
@@ -1569,6 +1591,7 @@ mod tests {
 
         // sys_admin role
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -1578,8 +1601,8 @@ mod tests {
         .await;
     }
 
-    #[tokio::test]
-    async fn test_collections_all_and_one() {
+    #[td_test::test(db)]
+    async fn test_collections_all_and_one(db: TdPool) {
         let collection0 = CollectionId::default();
         let collection1 = CollectionId::default();
         let all_collections = RoleId::default();
@@ -1605,6 +1628,7 @@ mod tests {
         ));
         let scope = Arc::new(AuthzScope::Collection(AuthzEntity::On(collection0)));
         assert_ok(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -1613,6 +1637,7 @@ mod tests {
         .await;
         let scope = Arc::new(AuthzScope::Collection(AuthzEntity::On(collection1)));
         assert_ok(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -1628,6 +1653,7 @@ mod tests {
         ));
         let scope = Arc::new(AuthzScope::Collection(AuthzEntity::On(collection0)));
         assert_ok(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -1636,6 +1662,7 @@ mod tests {
         .await;
         let scope = Arc::new(AuthzScope::Collection(AuthzEntity::On(collection1)));
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -1645,8 +1672,8 @@ mod tests {
         .await;
     }
 
-    #[tokio::test]
-    async fn test_any_of_generics_1_to_7() {
+    #[td_test::test(db)]
+    async fn test_any_of_generics_1_to_7(db: TdPool) {
         let collection = CollectionId::default();
         let role = RoleId::default();
 
@@ -1663,6 +1690,7 @@ mod tests {
         ));
         let scope = Arc::new(AuthzScope::Collection(AuthzEntity::On(collection)));
         assert_ok(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -1670,6 +1698,7 @@ mod tests {
         )
         .await;
         assert_ok(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -1677,6 +1706,7 @@ mod tests {
         )
         .await;
         assert_ok(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -1684,6 +1714,7 @@ mod tests {
         )
         .await;
         assert_ok(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -1691,6 +1722,7 @@ mod tests {
         )
         .await;
         assert_ok(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -1698,6 +1730,7 @@ mod tests {
         )
         .await;
         assert_ok(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -1712,6 +1745,7 @@ mod tests {
         )
         .await;
         assert_ok(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -1736,6 +1770,7 @@ mod tests {
         ));
         let scope = Arc::new(AuthzScope::Collection(AuthzEntity::On(collection)));
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -1744,6 +1779,7 @@ mod tests {
         )
         .await;
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -1752,6 +1788,7 @@ mod tests {
         )
         .await;
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -1760,6 +1797,7 @@ mod tests {
         )
         .await;
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -1768,6 +1806,7 @@ mod tests {
         )
         .await;
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -1776,6 +1815,7 @@ mod tests {
         )
         .await;
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -1791,6 +1831,7 @@ mod tests {
         )
         .await;
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -1808,8 +1849,8 @@ mod tests {
         .await;
     }
 
-    #[tokio::test]
-    async fn test_collection_system_permission_on_collection_scope() {
+    #[td_test::test(db)]
+    async fn test_collection_system_permission_on_collection_scope(db: TdPool) {
         let collection = CollectionId::default();
         let role = RoleId::default();
 
@@ -1829,6 +1870,7 @@ mod tests {
         ));
         let scope = Arc::new(AuthzScope::Collection(AuthzEntity::On(collection)));
         assert_ok(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -1837,8 +1879,8 @@ mod tests {
         .await;
     }
 
-    #[tokio::test]
-    async fn test_collection_system_permission_on_system_scope() {
+    #[td_test::test(db)]
+    async fn test_collection_system_permission_on_system_scope(db: TdPool) {
         let role = RoleId::default();
         let authz_context = AuthzContextForTest::default().add_permissions(
             role,
@@ -1856,6 +1898,7 @@ mod tests {
         ));
         let scope = Arc::new(AuthzScope::System);
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -1865,8 +1908,8 @@ mod tests {
         .await;
     }
 
-    #[tokio::test]
-    async fn test_collection_all_in_scope_error() {
+    #[td_test::test(db)]
+    async fn test_collection_all_in_scope_error(db: TdPool) {
         let role = RoleId::default();
         let authz_context = AuthzContextForTest::default().add_permissions(
             role,
@@ -1884,6 +1927,7 @@ mod tests {
         ));
         let scope = Arc::new(AuthzScope::Collection(AuthzEntity::All));
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -1893,8 +1937,8 @@ mod tests {
         .await;
     }
 
-    #[tokio::test]
-    async fn test_user_scope_ok() {
+    #[td_test::test(db)]
+    async fn test_user_scope_ok(db: TdPool) {
         let user = UserId::default();
         let role = RoleId::default();
 
@@ -1906,6 +1950,7 @@ mod tests {
         let scope = Arc::new(AuthzScope::User(AuthzEntity::On(user)));
 
         assert_ok(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -1914,8 +1959,8 @@ mod tests {
         .await;
     }
 
-    #[tokio::test]
-    async fn test_user_scope_error() {
+    #[td_test::test(db)]
+    async fn test_user_scope_error(db: TdPool) {
         let user = UserId::default();
         let role = RoleId::default();
 
@@ -1932,6 +1977,7 @@ mod tests {
         let scope = Arc::new(AuthzScope::User(AuthzEntity::On(user)));
 
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -1954,6 +2000,7 @@ mod tests {
         let scope = Arc::new(AuthzScope::User(AuthzEntity::On(user)));
 
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -1963,8 +2010,8 @@ mod tests {
         .await;
     }
 
-    #[tokio::test]
-    async fn test_role_scope_ok() {
+    #[td_test::test(db)]
+    async fn test_role_scope_ok(db: TdPool) {
         let user = UserId::default();
         let role = RoleId::default();
 
@@ -1976,6 +2023,7 @@ mod tests {
         let scope = Arc::new(AuthzScope::Role(AuthzEntity::On(role)));
 
         assert_ok(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -1984,8 +2032,8 @@ mod tests {
         .await;
     }
 
-    #[tokio::test]
-    async fn test_role_scope_error() {
+    #[td_test::test(db)]
+    async fn test_role_scope_error(db: TdPool) {
         let user = UserId::default();
         let role = RoleId::default();
 
@@ -2002,6 +2050,7 @@ mod tests {
         let scope = Arc::new(AuthzScope::Role(AuthzEntity::On(role)));
 
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -2024,6 +2073,7 @@ mod tests {
         let scope = Arc::new(AuthzScope::Role(AuthzEntity::On(role)));
 
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -2033,8 +2083,8 @@ mod tests {
         .await;
     }
 
-    #[tokio::test]
-    async fn test_system_user_scope_ok() {
+    #[td_test::test(db)]
+    async fn test_system_user_scope_ok(db: TdPool) {
         let user = UserId::default();
         let role = RoleId::default();
 
@@ -2053,6 +2103,7 @@ mod tests {
         let scope = Arc::new(AuthzScope::SystemOrUser(AuthzEntity::On(user)));
 
         assert_ok(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -2074,6 +2125,7 @@ mod tests {
         let scope = Arc::new(AuthzScope::SystemOrUser(AuthzEntity::On(user)));
 
         assert_ok(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -2082,8 +2134,8 @@ mod tests {
         .await;
     }
 
-    #[tokio::test]
-    async fn test_system_user_scope_error() {
+    #[td_test::test(db)]
+    async fn test_system_user_scope_error(db: TdPool) {
         let user = UserId::default();
         let role = RoleId::default();
 
@@ -2102,6 +2154,7 @@ mod tests {
         let scope = Arc::new(AuthzScope::SystemOrUser(AuthzEntity::On(user)));
 
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -2124,6 +2177,7 @@ mod tests {
         let scope = Arc::new(AuthzScope::SystemOrUser(AuthzEntity::On(user)));
 
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -2133,8 +2187,8 @@ mod tests {
         .await;
     }
 
-    #[tokio::test]
-    async fn test_system_role_scope_ok() {
+    #[td_test::test(db)]
+    async fn test_system_role_scope_ok(db: TdPool) {
         let role0 = RoleId::default();
         let role1 = RoleId::default();
 
@@ -2154,6 +2208,7 @@ mod tests {
         let scope = Arc::new(AuthzScope::SystemOrRole(AuthzEntity::On(role1)));
 
         assert_ok(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -2174,6 +2229,7 @@ mod tests {
         let scope = Arc::new(AuthzScope::SystemOrRole(AuthzEntity::On(role1)));
 
         assert_ok(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -2182,8 +2238,8 @@ mod tests {
         .await;
     }
 
-    #[tokio::test]
-    async fn test_system_role_scope_error() {
+    #[td_test::test(db)]
+    async fn test_system_role_scope_error(db: TdPool) {
         let role0 = RoleId::default();
         let role1 = RoleId::default();
 
@@ -2203,6 +2259,7 @@ mod tests {
         let scope = Arc::new(AuthzScope::SystemOrRole(AuthzEntity::On(role1)));
 
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -2224,6 +2281,7 @@ mod tests {
         let scope = Arc::new(AuthzScope::SystemOrRole(AuthzEntity::On(role1)));
 
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -2233,9 +2291,8 @@ mod tests {
         .await;
     }
 
-    #[tokio::test]
-    async fn test_role_collections_permissions() {
-        let db = td_database::test_utils::db().await.unwrap();
+    #[td_test::test(db)]
+    async fn test_role_collections_permissions(db: TdPool) {
         let mut conn = db.acquire().await.unwrap();
 
         let role = RoleId::default();
@@ -2264,9 +2321,8 @@ mod tests {
         assert!(perms.contains(&perm_on_collection_2));
     }
 
-    #[tokio::test]
-    async fn test_role_collections_permissions_all() {
-        let db = td_database::test_utils::db().await.unwrap();
+    #[td_test::test(db)]
+    async fn test_role_collections_permissions_all(db: TdPool) {
         let mut conn = db.acquire().await.unwrap();
 
         let role = RoleId::default();
@@ -2297,7 +2353,7 @@ mod tests {
         assert!(perms.contains(&perm_on_all));
     }
 
-    async fn test_admin_collection_permission_on_scope(scope: AuthzScope) {
+    async fn test_admin_collection_permission_on_scope(db: &TdPool, scope: AuthzScope) {
         let collection = CollectionId::default();
         let role = RoleId::default();
 
@@ -2314,6 +2370,7 @@ mod tests {
         ));
         let scope = Arc::new(scope);
         assert_ok(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -2334,6 +2391,7 @@ mod tests {
         ));
         let scope = Arc::new(scope);
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -2343,28 +2401,28 @@ mod tests {
         .await;
     }
 
-    #[tokio::test]
-    async fn test_admin_collection_permission_on_system_scope() {
-        test_admin_collection_permission_on_scope(AuthzScope::System).await;
+    #[td_test::test(db)]
+    async fn test_admin_collection_permission_on_system_scope(db: TdPool) {
+        test_admin_collection_permission_on_scope(&db, AuthzScope::System).await;
     }
 
-    #[tokio::test]
-    async fn test_admin_collection_permission_on_system_user_scope() {
-        test_admin_collection_permission_on_scope(AuthzScope::SystemOrUser(AuthzEntity::On(
-            UserId::default(),
-        )))
+    #[td_test::test(db)]
+    async fn test_admin_collection_permission_on_system_user_scope(db: TdPool) {
+        test_admin_collection_permission_on_scope(
+            &db,
+            AuthzScope::SystemOrUser(AuthzEntity::On(UserId::default())),
+        )
         .await;
     }
 
-    #[tokio::test]
-    async fn test_inter_collection_permission_ok() {
+    #[td_test::test(db)]
+    async fn test_inter_collection_permission_ok(db: TdPool) {
         let source = CollectionId::default();
         let target = ToCollectionId::default();
         let mut authz_context = AuthzContextForTest::default();
         authz_context = authz_context.add_inter_collection_permission(&source, &target);
         let authz_context = Arc::new(authz_context);
 
-        let db = td_database::test_utils::db().await.unwrap();
 
         let list = Arc::new(vec![]);
 
@@ -2409,15 +2467,14 @@ mod tests {
         assert!(matches!(res, Ok(())));
     }
 
-    #[tokio::test]
-    async fn test_inter_collection_permission_err() {
+    #[td_test::test(db)]
+    async fn test_inter_collection_permission_err(db: TdPool) {
         let source = CollectionId::default();
         let target = ToCollectionId::default();
         let mut authz_context = AuthzContextForTest::default();
         authz_context = authz_context.add_inter_collection_permission(&source, &target);
         let authz_context = Arc::new(authz_context);
 
-        let db = td_database::test_utils::db().await.unwrap();
 
         let list = Arc::new(vec![
             InterCollectionAccess::builder()
@@ -2480,12 +2537,11 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn test_visible_collections_no_collection_perm_in_role() {
+    #[td_test::test(db)]
+    async fn test_visible_collections_no_collection_perm_in_role(db: TdPool) {
         let authz_context = AuthzContextForTest::default();
         let authz_context = Arc::new(authz_context);
 
-        let db = td_database::test_utils::db().await.unwrap();
         let mut conn = db.acquire().await.unwrap();
 
         let role = RoleId::default();
@@ -2498,12 +2554,11 @@ mod tests {
         assert!(visible.indirect().is_empty());
     }
 
-    #[tokio::test]
-    async fn test_visible_collections_all_collection_perm_in_role() {
+    #[td_test::test(db)]
+    async fn test_visible_collections_all_collection_perm_in_role(db: TdPool) {
         let authz_context = AuthzContextForTest::default();
         let authz_context = Arc::new(authz_context);
 
-        let db = td_database::test_utils::db().await.unwrap();
         let mut conn = db.acquire().await.unwrap();
 
         let role = RoleId::user();
@@ -2516,9 +2571,8 @@ mod tests {
         assert!(visible.indirect().is_empty());
     }
 
-    #[tokio::test]
-    async fn test_visible_collections_collection_permission_no_inter_collection() {
-        let db = td_database::test_utils::db().await.unwrap();
+    #[td_test::test(db)]
+    async fn test_visible_collections_collection_permission_no_inter_collection(db: TdPool) {
         let mut conn = db.acquire().await.unwrap();
 
         let role = RoleId::default();
@@ -2539,9 +2593,8 @@ mod tests {
         assert!(visible.indirect().is_empty());
     }
 
-    #[tokio::test]
-    async fn test_visible_collections_no_admin_dev_collection_permission_inter_collection() {
-        let db = td_database::test_utils::db().await.unwrap();
+    #[td_test::test(db)]
+    async fn test_visible_collections_no_admin_dev_collection_permission_inter_collection(db: TdPool) {
         let mut conn = db.acquire().await.unwrap();
 
         let role = RoleId::default();
@@ -2565,9 +2618,8 @@ mod tests {
         assert_eq!(visible.indirect().len(), 0);
     }
 
-    #[tokio::test]
-    async fn test_visible_collections_admin_collection_permission_inter_collection() {
-        let db = td_database::test_utils::db().await.unwrap();
+    #[td_test::test(db)]
+    async fn test_visible_collections_admin_collection_permission_inter_collection(db: TdPool) {
         let mut conn = db.acquire().await.unwrap();
 
         let role = RoleId::default();
@@ -2592,9 +2644,8 @@ mod tests {
         assert!(visible.indirect().contains(&inter_collection));
     }
 
-    #[tokio::test]
-    async fn test_visible_collections_dev_collection_permission_inter_collection() {
-        let db = td_database::test_utils::db().await.unwrap();
+    #[td_test::test(db)]
+    async fn test_visible_collections_dev_collection_permission_inter_collection(db: TdPool) {
         let mut conn = db.acquire().await.unwrap();
 
         let role = RoleId::default();
@@ -2619,8 +2670,8 @@ mod tests {
         assert!(visible.indirect().contains(&inter_collection));
     }
 
-    #[tokio::test]
-    async fn test_coll_via_inter_coll_ok() {
+    #[td_test::test(db)]
+    async fn test_coll_via_inter_coll_ok(db: TdPool) {
         let coll0 = CollectionId::default();
         let coll1 = CollectionId::default();
         let coll2 = CollectionId::default();
@@ -2685,6 +2736,7 @@ mod tests {
             role0,
         ));
         assert_ok(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -2700,6 +2752,7 @@ mod tests {
         ));
 
         assert_ok(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -2714,6 +2767,7 @@ mod tests {
             role2,
         ));
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -2729,6 +2783,7 @@ mod tests {
             role3,
         ));
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -2744,6 +2799,7 @@ mod tests {
             role4,
         ));
         assert_ok(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -2758,6 +2814,7 @@ mod tests {
             role5,
         ));
         assert_ok(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -2772,6 +2829,7 @@ mod tests {
             role6,
         ));
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -2787,6 +2845,7 @@ mod tests {
             role7,
         ));
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -2805,6 +2864,7 @@ mod tests {
             role0,
         ));
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -2820,6 +2880,7 @@ mod tests {
             role1,
         ));
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -2835,6 +2896,7 @@ mod tests {
             role2,
         ));
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -2850,6 +2912,7 @@ mod tests {
             role3,
         ));
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -2865,6 +2928,7 @@ mod tests {
             role6,
         ));
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -2880,6 +2944,7 @@ mod tests {
             role7,
         ));
         assert_error(
+            &db,
             &authz_context,
             &request_context,
             &scope,
@@ -2889,8 +2954,8 @@ mod tests {
         .await;
     }
 
-    // #[tokio::test]
-    // async fn test_x() {
+    // #[td_test::test(db)]
+    // async fn test_x(db: TdPool) {
     //     let ccc_01 = CollectionId::default();
     //     let ccc_02 = CollectionId::default();
     //     let bar = RoleId::default();

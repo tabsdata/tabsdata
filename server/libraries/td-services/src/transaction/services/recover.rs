@@ -71,8 +71,7 @@ mod tests {
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_tower_metadata_recover_transaction(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
@@ -139,8 +138,7 @@ mod tests {
         .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_recover_transaction_unique(db: TdPool) -> Result<(), TdError> {
         test_recover_transaction(
             db,
@@ -163,8 +161,7 @@ mod tests {
         .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_recover_transaction_multiple_function(db: TdPool) -> Result<(), TdError> {
         test_recover_transaction(
             db,
@@ -197,8 +194,7 @@ mod tests {
         .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_recover_transaction_multiple_transaction(db: TdPool) -> Result<(), TdError> {
         test_recover_transaction(
             db,
@@ -234,8 +230,7 @@ mod tests {
         .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_recover_transaction_multiple_execution(db: TdPool) -> Result<(), TdError> {
         test_recover_transaction(
             db,
@@ -274,8 +269,7 @@ mod tests {
         .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_recover_transaction_downstream(db: TdPool) -> Result<(), TdError> {
         test_recover_transaction(
             db,
@@ -314,8 +308,7 @@ mod tests {
         .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_recover_transaction_different_collection(db: TdPool) -> Result<(), TdError> {
         test_recover_transaction(
             db,
@@ -348,8 +341,7 @@ mod tests {
         .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_recover_transaction_status_transitions(db: TdPool) -> Result<(), TdError> {
         let recover_transition_for =
             async move |initial: LogicalFunctionRunStatus| -> Result<(), TdError> {
@@ -414,8 +406,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_recover_transaction_status_transitions_no_op(db: TdPool) -> Result<(), TdError> {
         let recover_transition_for =
             async move |initial: LogicalFunctionRunStatus| -> Result<(), TdError> {

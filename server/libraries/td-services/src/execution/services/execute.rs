@@ -86,8 +86,7 @@ pub(crate) mod tests {
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_tower_metadata_execute(db: TdPool) {
         use crate::execution::layers::GraphOpts;
         use crate::execution::layers::execution::{
@@ -252,8 +251,7 @@ pub(crate) mod tests {
             );
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_execute_dependencies_different_collections_permissions_ok(
         db: TdPool,
     ) -> Result<(), TdError> {
@@ -261,8 +259,7 @@ pub(crate) mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_execute_dependencies_different_collections_permissions_forbidden(
         db: TdPool,
     ) -> Result<(), TdError> {
@@ -270,8 +267,7 @@ pub(crate) mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_execute_trigger_different_collections_permissions_ok(
         db: TdPool,
     ) -> Result<(), TdError> {
@@ -279,8 +275,7 @@ pub(crate) mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_execute_trigger_different_collections_permissions_forbidden(
         db: TdPool,
     ) -> Result<(), TdError> {
@@ -288,8 +283,7 @@ pub(crate) mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_execute_single_function(db: TdPool) -> Result<(), TdError> {
         let _ = test_execute(db, true, false, true, true).await?;
         Ok(())
@@ -624,8 +618,7 @@ pub(crate) mod tests {
         }
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_execute_initial_status_upstream_scheduled(db: TdPool) -> Result<(), TdError> {
         test_execute_upstream_initial_status(
             db,
@@ -635,8 +628,7 @@ pub(crate) mod tests {
         .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_execute_initial_status_upstream_on_hold(db: TdPool) -> Result<(), TdError> {
         test_execute_upstream_initial_status(
             db,
@@ -646,8 +638,7 @@ pub(crate) mod tests {
         .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_execute_initial_status_upstream_failed(db: TdPool) -> Result<(), TdError> {
         test_execute_upstream_initial_status(
             db,
@@ -810,8 +801,7 @@ pub(crate) mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_execute_disabled_trigger_err(db: TdPool) -> Result<(), TdError> {
         let res = test_execute_disabled_trigger(db, OverrideDisabledTrigger::FALSE).await?;
         let err = res.unwrap_err();
@@ -822,8 +812,7 @@ pub(crate) mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_execute_disabled_trigger_override(db: TdPool) -> Result<(), TdError> {
         let response = test_execute_disabled_trigger(db, OverrideDisabledTrigger::TRUE).await?;
         let response = response?;

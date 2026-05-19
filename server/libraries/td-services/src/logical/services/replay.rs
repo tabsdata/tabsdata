@@ -94,8 +94,7 @@ mod tests {
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_tower_metadata_replay(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
@@ -229,8 +228,7 @@ mod tests {
     /// picks this up at the next tick to dispatch a worker); LFR.status
     /// stays Committed; the previous `Bound(FR_old)` remains the
     /// latest-Bound binding for downstream readers.
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_replay_committed_mints_new_fr(db: TdPool) -> Result<(), TdError> {
         let (lfr, fr_old, _head) =
             seed_runnable(&db, "c0", "f0", LogicalFunctionRunStatus::Committed).await;
@@ -283,8 +281,7 @@ mod tests {
 
     /// Replay against a Done LFR (terminal but not yet committed) — also
     /// allowed; mints a new FR exactly like the Committed case.
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_replay_done_mints_new_fr(db: TdPool) -> Result<(), TdError> {
         let (lfr, fr_old, _head) =
             seed_runnable(&db, "c0", "f0", LogicalFunctionRunStatus::Done).await;
@@ -302,8 +299,7 @@ mod tests {
     }
 
     /// Replay against an in-flight LFR (Running) — refused.
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_replay_in_flight_refused(db: TdPool) -> Result<(), TdError> {
         let (lfr, _fr, _head) =
             seed_runnable(&db, "c0", "f0", LogicalFunctionRunStatus::Running).await;
@@ -323,8 +319,7 @@ mod tests {
     /// mint FR_new with head fvid intact in `function_version_id` AND
     /// `function_version_patch_id = patch.id`. The response's
     /// `function_version_id` advertises the effective fvid (patch).
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_replay_picks_up_latest_patch(db: TdPool) -> Result<(), TdError> {
         // Seed a Committed LFR for a head function.
         let coll = db
@@ -405,8 +400,7 @@ mod tests {
     /// inserts an LFR identity row and a Pending pointer; status is
     /// Committed so the terminal check passes — only the pointer-Bound
     /// gate should reject.
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_replay_not_bound_refused(db: TdPool) -> Result<(), TdError> {
         let coll = db
             .seed()

@@ -71,8 +71,7 @@ mod tests {
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_tower_metadata_recover_execution(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
@@ -133,8 +132,7 @@ mod tests {
         .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_recover_execution_unique(db: TdPool) -> Result<(), TdError> {
         test_recover_execution(
             db,
@@ -157,8 +155,7 @@ mod tests {
         .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_recover_execution_multiple_function(db: TdPool) -> Result<(), TdError> {
         test_recover_execution(
             db,
@@ -191,8 +188,7 @@ mod tests {
         .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_recover_execution_multiple_transaction(db: TdPool) -> Result<(), TdError> {
         test_recover_execution(
             db,
@@ -228,8 +224,7 @@ mod tests {
         .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_recover_execution_multiple_execution(db: TdPool) -> Result<(), TdError> {
         test_recover_execution(
             db,
@@ -268,8 +263,7 @@ mod tests {
         .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_recover_execution_downstream(db: TdPool) -> Result<(), TdError> {
         test_recover_execution(
             db,
@@ -308,8 +302,7 @@ mod tests {
         .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_recover_execution_different_collection(db: TdPool) -> Result<(), TdError> {
         test_recover_execution(
             db,
@@ -342,8 +335,7 @@ mod tests {
         .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_recover_execution_status_transitions(db: TdPool) -> Result<(), TdError> {
         let recover_transition_for =
             async move |initial: LogicalFunctionRunStatus| -> Result<(), TdError> {
@@ -408,8 +400,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_recover_execution_status_transitions_no_op(db: TdPool) -> Result<(), TdError> {
         let recover_transition_for =
             async move |initial: LogicalFunctionRunStatus| -> Result<(), TdError> {

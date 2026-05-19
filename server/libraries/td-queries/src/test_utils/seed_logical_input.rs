@@ -112,8 +112,7 @@ mod tests {
     };
     use td_security::ENCODED_ID_SYSTEM;
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_seed_logical_input(db: TdPool) {
         let collection = db
             .seed()

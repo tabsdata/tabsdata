@@ -71,8 +71,7 @@ mod tests {
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_tower_metadata_cancel_transaction(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
@@ -140,8 +139,7 @@ mod tests {
         .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_cancel_transaction_unique(db: TdPool) -> Result<(), TdError> {
         test_cancel_transaction(
             db,
@@ -164,8 +162,7 @@ mod tests {
         .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_cancel_transaction_multiple_function(db: TdPool) -> Result<(), TdError> {
         test_cancel_transaction(
             db,
@@ -198,8 +195,7 @@ mod tests {
         .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_cancel_transaction_multiple_transaction(db: TdPool) -> Result<(), TdError> {
         test_cancel_transaction(
             db,
@@ -235,8 +231,7 @@ mod tests {
         .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_cancel_transaction_multiple_execution(db: TdPool) -> Result<(), TdError> {
         test_cancel_transaction(
             db,
@@ -275,8 +270,7 @@ mod tests {
         .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_cancel_transaction_downstream(db: TdPool) -> Result<(), TdError> {
         test_cancel_transaction(
             db,
@@ -315,8 +309,7 @@ mod tests {
         .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_cancel_transaction_different_collection(db: TdPool) -> Result<(), TdError> {
         test_cancel_transaction(
             db,
@@ -349,8 +342,7 @@ mod tests {
         .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_cancel_transaction_status_transitions(db: TdPool) -> Result<(), TdError> {
         let cancel_transition_for =
             async move |initial: LogicalFunctionRunStatus| -> Result<(), TdError> {

@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::{TestSetup, TestSetupExecution};
+use crate::__private::{TestSetup, TestSetupExecution};
 use chrono::{DateTime, Utc};
 use sha2::{Digest, Sha256};
 use std::any::type_name;
@@ -10,6 +10,8 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
+mod define;
+
 pub mod aws_s3;
 pub mod azure_storage;
 
@@ -27,10 +29,12 @@ pub use postgres::PostgresReqs;
 
 const TEST_SKIP_IF_NO_REQS: &str = "TD_TEST_SKIP_IF_NO_REQS";
 
-const TEST_DIR_KEY: &str = "TEST_DIR";
-
-const TESTS_USER_KEY: &str = "TESTS_USER";
-const TESTS_TIMESTAMP_KEY: &str = "TESTS_TIMESTAMP";
+// Framework-owned env vars. All follow the `TD_TEST_*` prefix convention so
+// they're greppable and distinguishable from provider-supplied vars (which use
+// the `<NS>__<KEY>` namespace convention — see TestRequirementsInEnv).
+const TEST_DIR_KEY: &str = "TD_TEST_DIR";
+const TESTS_USER_KEY: &str = "TD_TEST_USER";
+const TESTS_TIMESTAMP_KEY: &str = "TD_TEST_TIMESTAMP";
 
 pub(crate) fn user(vars: &HashMap<String, String>) -> String {
     vars.get(TESTS_USER_KEY)
@@ -82,11 +86,23 @@ pub struct ReqsTestSetup<'a, R> {
 
 impl<'a, R> ReqsTestSetup<'a, R> {
     #[allow(dead_code)]
-    pub fn new(test_name: &'a str, env_prefix: &'a str, do_not_fail: bool) -> Self {
+    pub fn new(test_name: &'a str, env_prefix: &'a str) -> Self {
         Self {
             test_name,
             env_prefix,
-            do_not_fail,
+            do_not_fail: false,
+            _phantom: PhantomData,
+        }
+    }
+
+    /// Constructor used only by td-test's own resolver self-tests to exercise
+    /// the `Skip` path without setting `TD_TEST_SKIP_IF_NO_REQS` in the env.
+    #[doc(hidden)]
+    pub fn new_for_self_test(test_name: &'a str, env_prefix: &'a str) -> Self {
+        Self {
+            test_name,
+            env_prefix,
+            do_not_fail: true,
             _phantom: PhantomData,
         }
     }
@@ -120,9 +136,9 @@ where
 /// to enable resource clean up of resources in the external systems. How? By purging resources
 /// with a timestamp older than a certain threshold.
 ///
-/// The build user can be overridden via the `TESTS_USER` environment variable.
+/// The build user can be overridden via the `TD_TEST_USER` environment variable.
 ///
-/// The build timestamp can be overridden via the `TESTS_TIMESTAMP` environment variable.
+/// The build timestamp can be overridden via the `TD_TEST_TIMESTAMP` environment variable.
 pub trait TestRequirements {
     /// Required keys to create the [`TestRequirements`] instance.
     fn keys() -> &'static [&'static str];
@@ -135,14 +151,14 @@ pub trait TestRequirements {
 
     /// A relative path unique for the test execution.
     ///
-    /// `${TESTS_USER}/${TESTS_TIMESTAMP}/${TEST_DIR}`
+    /// `${TD_TEST_USER}/${TD_TEST_TIMESTAMP}/${TD_TEST_DIR}`
     fn test_path(&self) -> PathBuf {
         test_path(self.vars())
     }
 
     /// A unique identifier for the test execution.
     ///
-    /// `${TESTS_USER}__${TESTS_TIMESTAMP}__SHA256(${TEST_DIR})`
+    /// `${TD_TEST_USER}__${TD_TEST_TIMESTAMP}__SHA256(${TD_TEST_DIR})`
     ///
     /// If `prefix` is `None` a full SHA256 hash is used, otherwise the first `prefix` characters
     /// of the hash are used.

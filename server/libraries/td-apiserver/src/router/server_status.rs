@@ -68,8 +68,7 @@ mod tests {
         router.layer(Extension(context.clone()))
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_status(db: TdPool) {
         let router = ServerStatusRouter::router(Services::build(&Context::with_defaults(db)));
 

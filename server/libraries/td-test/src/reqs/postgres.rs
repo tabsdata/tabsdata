@@ -2,60 +2,39 @@
 // Copyright 2025. Tabs Data Inc.
 //
 
-use crate::reqs::TestRequirements;
-use std::collections::HashMap;
-
-#[allow(dead_code)]
-/// Requirements for a Postgres test using URI, user and password.
-pub struct PostgresReqs {
-    pub uri: String,
-    pub user: String,
-    pub password: String,
-    vars: HashMap<String, String>,
-}
-
-impl TestRequirements for PostgresReqs {
-    fn keys() -> &'static [&'static str] {
-        &["postgres_uri", "postgres_user", "postgres_password"]
-    }
-
-    fn new(vars: impl Into<HashMap<String, String>>) -> Self {
-        let vars = vars.into();
-        Self {
-            uri: vars["postgres_uri"].clone(),
-            user: vars["postgres_user"].clone(),
-            password: vars["postgres_password"].clone(),
-            vars,
-        }
-    }
-
-    fn vars(&self) -> &HashMap<String, String> {
-        &self.vars
+crate::define_requires! {
+    /// Requirements for a Postgres test using URI, user and password.
+    pub struct PostgresReqs {
+        uri: postgres_uri,
+        user: postgres_user,
+        password: postgres_password,
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate as td_test;
-
-    use crate::reqs::{PostgresReqs, TestRequirementsInEnv};
+    use crate::__private::{TestSetup, TestSetupExecution};
+    use crate::reqs::{PostgresReqs, ReqsTestSetup, TestRequirementsInEnv};
     use std::collections::HashMap;
 
-    #[crate::test(when(reqs = PostgresReqs, env_prefix= "postgres_test_not_defined", do_not_fail_reqs= true))]
     #[tokio::test]
-    async fn test_signature_postgres_reqs(_s3: PostgresReqs) {
-        panic!()
+    async fn test_signature_postgres_reqs_skips_when_missing() {
+        let setup = ReqsTestSetup::<PostgresReqs>::new_for_self_test(
+            "test_signature_postgres_reqs_skips_when_missing",
+            "postgres_test_not_defined",
+        );
+        assert!(matches!(setup.setup().await, TestSetupExecution::Skip));
     }
 
     #[test]
     fn test_postgres_reqs() {
         let vars: HashMap<String, String> = HashMap::from([
             (
-                "TEST_DIR".to_string(),
+                "TD_TEST_DIR".to_string(),
                 td_common::tdtestdir!().to_str().unwrap().to_string(),
             ),
             (
-                "TESTS_TIMESTAMP".to_string(),
+                "TD_TEST_TIMESTAMP".to_string(),
                 "0000_00_00_00_00_00".to_string(),
             ),
             ("NS__POSTGRES_URI".to_string(), "uri".to_string()),

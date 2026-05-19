@@ -99,8 +99,7 @@ mod tests {
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_tower_metadata_password_change(db: TdPool) {
         use crate::auth::layers::assert_current_password::assert_current_password;
         use crate::auth::layers::assert_user_enabled::assert_user_enabled;
@@ -147,8 +146,7 @@ mod tests {
             ]);
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_password_change_ok(db: TdPool) -> Result<(), TdError> {
         let context = Context::with_defaults(db.clone());
         let auth_services = AuthServices::build(&context);
@@ -194,8 +192,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_password_change_wrong_user_unauthz(db: TdPool) -> Result<(), td_error::TdError> {
         let auth_services = AuthServices::build(&Context::with_defaults(db.clone()));
         let service = auth_services.password_change.service();
@@ -213,8 +210,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_password_change_wrong_old_password_unauthz(
         db: TdPool,
     ) -> Result<(), td_error::TdError> {

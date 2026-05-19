@@ -222,8 +222,7 @@ mod tests {
         })
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_build_function_run_head_only(db: TdPool) -> Result<(), TdError> {
         let fx = seed_mint_fixture(&db).await?;
         let runnable = RunnableVersion {
@@ -242,8 +241,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_build_function_run_with_patch(db: TdPool) -> Result<(), TdError> {
         let fx = seed_mint_fixture(&db).await?;
         let patch_id = FunctionVersionId::new();
@@ -259,8 +257,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_build_output_tdvs_includes_private_and_system_tables(
         db: TdPool,
     ) -> Result<(), TdError> {
@@ -293,8 +290,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_build_output_tdvs_empty_tables(db: TdPool) -> Result<(), TdError> {
         let fx = seed_mint_fixture(&db).await?;
         let runnable = RunnableVersion {
@@ -306,8 +302,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_build_output_tdvs_propagates_patch_id(db: TdPool) -> Result<(), TdError> {
         let fx = seed_mint_fixture(&db).await?;
         let patch_id = FunctionVersionId::new();

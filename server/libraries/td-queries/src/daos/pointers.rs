@@ -636,8 +636,7 @@ mod tests {
         /// - at the InitialMint event, the LFR is still Pending so
         ///   `physical_function_run_id` is None
         /// - at or after the bind event, returns the bound concrete FR id
-        #[td_test::test(sqlx)]
-        #[tokio::test]
+        #[td_test::test(db)]
         async fn test_function_run_at_walks_pointers(db: TdPool) {
             let collection = db
                 .seed()
@@ -748,8 +747,7 @@ mod tests {
 
         /// `table_data_version_at` mirror of `function_run_at`: pre-mint None,
         /// at-mint None (Pending), post-bind Some(tdv_id).
-        #[td_test::test(sqlx)]
-        #[tokio::test]
+        #[td_test::test(db)]
         async fn test_table_data_version_at_walks_pointers(db: TdPool) {
             let collection = db
                 .seed()

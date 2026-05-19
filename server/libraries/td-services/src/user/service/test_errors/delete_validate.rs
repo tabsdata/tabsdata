@@ -10,12 +10,11 @@ use td_error::assert_service_error;
 use td_objects::Buildable;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::rest_urls::UserParam;
+use td_database::pool::TdPool;
 use td_objects::types::basic::{AccessTokenId, RoleId, UserId, UserIdName};
 
-#[tokio::test]
-async fn test_not_allowed_to_delete_themselves() {
-    let db = td_database::test_utils::db().await.unwrap();
-
+#[td_test::test(db)]
+async fn test_not_allowed_to_delete_themselves(db: TdPool) {
     let service = DeleteUserService::with_defaults(db).service();
 
     let ctx = RequestContext::with(

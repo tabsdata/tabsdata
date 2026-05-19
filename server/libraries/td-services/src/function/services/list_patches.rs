@@ -73,8 +73,7 @@ mod tests {
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_tower_metadata_list_patches(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
@@ -136,8 +135,7 @@ mod tests {
         collection
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_list_patches_returns_empty_for_no_patches(db: TdPool) -> Result<(), TdError> {
         let _coll = seed_patches_fixture(&db).await;
         let param = FunctionParam::builder()
@@ -155,8 +153,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_list_patches_returns_all_patches_latest_first(db: TdPool) -> Result<(), TdError> {
         let _coll = seed_patches_fixture(&db).await;
         let parent: FunctionDBWithNames = {

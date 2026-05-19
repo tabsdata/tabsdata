@@ -11,7 +11,7 @@ use std::time::Instant;
 use strum::IntoEnumIterator;
 use td_common::logging;
 use td_common::logging::{CONSOLE_PROFILE, LoggingOptions};
-use td_database::config::DatabaseConfig;
+use td_database::config::{BackendConfig, DatabaseConfig, EmbeddedConfig};
 use td_execution::TransactionBy;
 use td_objects::Buildable;
 use td_objects::dxo::function::{FunctionDB, FunctionRegister};
@@ -23,8 +23,8 @@ use td_objects::types::basic::{
     UserEnabled, UserName,
 };
 use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
+use td_queries::LiveEntry;
 use td_queries::test_utils::SeedEntry;
-use td_queries::{LiveEntry, QueryExecutor};
 use tracing::Level;
 use tracing::{debug, info};
 use url::Url;
@@ -97,10 +97,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     info!("Starting load test with config: {:?}", args);
 
-    let db_url = args.db_url.unwrap_or_else(|| {
-        Url::from_file_path(td_common::tdtestdir!().join("tabsdata.db")).unwrap()
-    });
-    let database_config = DatabaseConfig::new(db_url).unwrap();
+    // The embedded server (when used) is owned by the returned `TdPool`
+    // and shuts down cleanly when `db` drops at end of main.
+    let database_config = match args.db_url {
+        Some(url) => DatabaseConfig::new(url).unwrap(),
+        None => DatabaseConfig {
+            conn: Some(BackendConfig::embedded_postgres(EmbeddedConfig {
+                data_dir: Some(td_common::tdtestdir!().join("postgres")),
+                port: None,
+                persistent: true,
+            })),
+            ..Default::default()
+        },
+    };
     info!("Connecting to database with: {database_config:?}");
     let db = td_database::db(&database_config).await?;
     db.upgrade().await?;

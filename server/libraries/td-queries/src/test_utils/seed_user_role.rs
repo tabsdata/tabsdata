@@ -40,8 +40,7 @@ pub mod tests {
     use td_objects::dxo::user_role::UserRoleDB;
     use td_objects::types::basic::{Description, RoleName, UserEnabled, UserName};
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_seed_user_role(db: TdPool) {
         let user = db
             .seed()

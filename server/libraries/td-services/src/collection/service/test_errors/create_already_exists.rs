@@ -13,8 +13,7 @@ use td_objects::errors::SqlError;
 use td_objects::types::basic::{AccessTokenId, CollectionName, Description, RoleId, UserId};
 use td_queries::test_utils::SeedEntry;
 
-#[td_test::test(sqlx)]
-#[tokio::test]
+#[td_test::test(db)]
 async fn test_create_already_existing(db: TdPool) {
     let name = CollectionName::try_from("ds0").unwrap();
     let _ = db.seed().collection(&name, &UserId::admin()).await;

@@ -67,8 +67,7 @@ mod tests {
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_tower_metadata_read_workers_logs(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
@@ -97,8 +96,7 @@ mod tests {
             ]);
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_read_workers_logs(db: TdPool) -> Result<(), TdError> {
         let collection = db
             .seed()

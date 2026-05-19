@@ -117,7 +117,7 @@ mod tests {
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(sqlx)]
+    #[td_test::test(db)]
     async fn test_tower_metadata_delete_collection(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
@@ -197,8 +197,7 @@ mod tests {
             ]);
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_delete_collection(db: TdPool) -> Result<(), TdError> {
         // Create 3 functions and 3 tables in the same collection
         let name = CollectionName::try_from("c")?;
@@ -343,8 +342,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_delete_collection_downstream_frozen(db: TdPool) -> Result<(), TdError> {
         let name_c_0 = CollectionName::try_from("c_0")?;
         let collection_0 = db.seed().collection(&name_c_0, &UserId::admin()).await?;

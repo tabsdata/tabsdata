@@ -311,7 +311,12 @@ where
 
     /// Return `version`'s 1-based position (`rn`) in the partition's
     /// timeline at the wrapper's `on`, or `None` if the row doesn't exist.
-    pub async fn fetch_relative_offset<D>(self, version: &Version) -> Result<Option<i32>, SqlError>
+    ///
+    /// Returns `i64`: `rn` comes from `ROW_NUMBER() OVER (...)` which Postgres
+    /// types as `BIGINT`. Sqlite is loose about integer types and would also
+    /// accept `i32`, but matching the strictest backend keeps the scalar
+    /// decode portable.
+    pub async fn fetch_relative_offset<D>(self, version: &Version) -> Result<Option<i64>, SqlError>
     where
         D: DataVersionDao,
         D: VersionedDao<VersionOrder = T, Partition = P>,
@@ -327,7 +332,7 @@ where
             .limit(1)
             .take()
             .with(ranked_cte::<D>(self.partition, self.on)?)
-            .build_query_scalar::<i32>()
+            .build_query_scalar::<i64>()
             .fetch_optional(self.executor)
             .await
             .map_err(SqlError::on_read::<D>)?;
@@ -413,8 +418,7 @@ mod tests {
 
     // --- Versions::None ---
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::DataVersion))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::DataVersion)]
     async fn test_versions_none_returns_head(db: TdPool) -> Result<(), TdError> {
         let r: TestDvDao = (&db)
             .versioned(ON.deref())
@@ -425,8 +429,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::DataVersion))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::DataVersion)]
     async fn test_versions_none_optional_no_match(db: TdPool) -> Result<(), TdError> {
         let before = AtTime::try_from(
             "2025-12-31T00:00:00.000+00:00"
@@ -442,8 +445,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::DataVersion))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::DataVersion)]
     async fn test_versions_none_fetch_all(db: TdPool) -> Result<(), TdError> {
         let r = (&db)
             .versioned(ON.deref())
@@ -457,8 +459,7 @@ mod tests {
 
     // --- Versions::Single(Head) ---
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::DataVersion))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::DataVersion)]
     async fn test_single_head(db: TdPool) -> Result<(), TdError> {
         let r: TestDvDao = (&db)
             .versioned(ON.deref())
@@ -469,8 +470,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::DataVersion))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::DataVersion)]
     async fn test_single_head_back_1(db: TdPool) -> Result<(), TdError> {
         let r: TestDvDao = (&db)
             .versioned(ON.deref())
@@ -481,8 +481,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::DataVersion))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::DataVersion)]
     async fn test_single_head_back_2(db: TdPool) -> Result<(), TdError> {
         let r: TestDvDao = (&db)
             .versioned(ON.deref())
@@ -495,8 +494,7 @@ mod tests {
 
     // --- Versions::Single(Initial) ---
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::DataVersion))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::DataVersion)]
     async fn test_single_initial(db: TdPool) -> Result<(), TdError> {
         // INITIAL: rn == total_count - 0 = 3 -> DV_1
         let r: TestDvDao = (&db)
@@ -508,8 +506,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::DataVersion))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::DataVersion)]
     async fn test_single_initial_forward_1(db: TdPool) -> Result<(), TdError> {
         // INITIAL~1: rn == total_count - 1 = 2 -> DV_2
         let r: TestDvDao = (&db)
@@ -523,8 +520,7 @@ mod tests {
 
     // --- Versions::Single(Fixed) ---
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::DataVersion))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::DataVersion)]
     async fn test_single_fixed(db: TdPool) -> Result<(), TdError> {
         let r: TestDvDao = (&db)
             .versioned(ON.deref())
@@ -537,8 +533,7 @@ mod tests {
 
     // --- Versions::List ---
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::DataVersion))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::DataVersion)]
     async fn test_list_empty(db: TdPool) -> Result<(), TdError> {
         let r = (&db)
             .versioned(ON.deref())
@@ -549,8 +544,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::DataVersion))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::DataVersion)]
     async fn test_list_multiple(db: TdPool) -> Result<(), TdError> {
         let versions = Versions::List(vec![Version::Head(0), Version::Head(-2)]);
         let r = (&db)
@@ -565,8 +559,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::DataVersion))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::DataVersion)]
     async fn test_list_fixed_ids(db: TdPool) -> Result<(), TdError> {
         let versions = Versions::List(vec![
             Version::Fixed(DV_1.clone()),
@@ -586,8 +579,7 @@ mod tests {
 
     // --- Versions::Range ---
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::DataVersion))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::DataVersion)]
     async fn test_range_head(db: TdPool) -> Result<(), TdError> {
         // HEAD~2..HEAD = all 3 versions, ordered rn DESC (oldest first)
         let versions = Versions::Range(Version::Head(-2), Version::Head(0));
@@ -603,8 +595,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::DataVersion))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::DataVersion)]
     async fn test_range_initial(db: TdPool) -> Result<(), TdError> {
         // INITIAL..INITIAL~1 -> rn between total_count-1=2 and total_count-0=3
         let versions = Versions::Range(Version::Initial(0), Version::Initial(1));
@@ -619,8 +610,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::DataVersion))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::DataVersion)]
     async fn test_range_fixed(db: TdPool) -> Result<(), TdError> {
         let versions = Versions::Range(Version::Fixed(DV_1.clone()), Version::Fixed(DV_3.clone()));
         let r = (&db)
@@ -635,8 +625,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::DataVersion))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::DataVersion)]
     async fn test_range_empty_when_reversed(db: TdPool) -> Result<(), TdError> {
         // HEAD..HEAD~2 -> rn <= 1 AND rn >= 3 -> empty
         let versions = Versions::Range(Version::Head(0), Version::Head(-2));
@@ -651,8 +640,7 @@ mod tests {
 
     // --- Versions::New ---
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::DataVersion))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::DataVersion)]
     async fn test_versions_new_returns_error(db: TdPool) {
         let r = (&db)
             .versioned(ON.deref())
@@ -664,8 +652,7 @@ mod tests {
 
     // --- State filtering ---
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::DataVersion))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::DataVersion)]
     async fn test_state_active_filters_deleted(db: TdPool) -> Result<(), TdError> {
         // p1: DV_5 (D, rn=1), DV_4 (A, rn=2)
         // Active + Versions::None (rn=1) -> DV_5 is deleted -> no match
@@ -679,8 +666,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::DataVersion))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::DataVersion)]
     async fn test_state_all_includes_deleted(db: TdPool) -> Result<(), TdError> {
         // p1: DV_5 (D, rn=1) is HEAD; All state includes it
         let r: TestDvDao = (&db)
@@ -694,8 +680,7 @@ mod tests {
 
     // --- on parameter filtering ---
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::DataVersion))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::DataVersion)]
     async fn test_on_parameter_filters_newer_versions(db: TdPool) -> Result<(), TdError> {
         // on = t2: only DV_1 (t1) and DV_2 (t2) in CTE for p0
         // Versions::None = rn=1 = DV_2
@@ -708,8 +693,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::DataVersion))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::DataVersion)]
     async fn test_on_parameter_initial_with_limited_versions(db: TdPool) -> Result<(), TdError> {
         // on = t2: p0 has DV_1 and DV_2 (total_count=2)
         // INITIAL = rn = total_count - 0 = 2 -> DV_1
@@ -724,8 +708,7 @@ mod tests {
 
     // --- fetch_relative_offset ---
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::DataVersion))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::DataVersion)]
     async fn test_relative_offset_head(db: TdPool) -> Result<(), TdError> {
         let r = (&db)
             .versioned(ON.deref())
@@ -736,8 +719,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::DataVersion))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::DataVersion)]
     async fn test_relative_offset_fixed(db: TdPool) -> Result<(), TdError> {
         let r = (&db)
             .versioned(ON.deref())
@@ -748,8 +730,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::DataVersion))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::DataVersion)]
     async fn test_relative_offset_initial(db: TdPool) -> Result<(), TdError> {
         let r = (&db)
             .versioned(ON.deref())
@@ -760,8 +741,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::DataVersion))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::DataVersion)]
     async fn test_relative_offset_nonexistent(db: TdPool) -> Result<(), TdError> {
         let nonexistent = LogicalTableDataVersionId::try_from("LDV20260101.9999999999")?;
         let r = (&db)

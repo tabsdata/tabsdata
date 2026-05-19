@@ -2,60 +2,39 @@
 // Copyright 2025. Tabs Data Inc.
 //
 
-use crate::reqs::TestRequirements;
-use std::collections::HashMap;
-
-#[allow(dead_code)]
-/// Requirements for a MySQL test using URI, user and password.
-pub struct MySqlReqs {
-    pub uri: String,
-    pub user: String,
-    pub password: String,
-    vars: HashMap<String, String>,
-}
-
-impl TestRequirements for MySqlReqs {
-    fn keys() -> &'static [&'static str] {
-        &["mysql_uri", "mysql_user", "mysql_password"]
-    }
-
-    fn new(vars: impl Into<HashMap<String, String>>) -> Self {
-        let vars = vars.into();
-        Self {
-            uri: vars["mysql_uri"].clone(),
-            user: vars["mysql_user"].clone(),
-            password: vars["mysql_password"].clone(),
-            vars,
-        }
-    }
-
-    fn vars(&self) -> &HashMap<String, String> {
-        &self.vars
+crate::define_requires! {
+    /// Requirements for a MySQL test using URI, user and password.
+    pub struct MySqlReqs {
+        uri: mysql_uri,
+        user: mysql_user,
+        password: mysql_password,
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate as td_test;
-
-    use crate::reqs::{MySqlReqs, TestRequirementsInEnv};
+    use crate::__private::{TestSetup, TestSetupExecution};
+    use crate::reqs::{MySqlReqs, ReqsTestSetup, TestRequirementsInEnv};
     use std::collections::HashMap;
 
-    #[crate::test(when(reqs = MySqlReqs, env_prefix= "mysql_test_not_defined", do_not_fail_reqs= true))]
     #[tokio::test]
-    async fn test_signature_mysql_reqs(_s3: MySqlReqs) {
-        panic!()
+    async fn test_signature_mysql_reqs_skips_when_missing() {
+        let setup = ReqsTestSetup::<MySqlReqs>::new_for_self_test(
+            "test_signature_mysql_reqs_skips_when_missing",
+            "mysql_test_not_defined",
+        );
+        assert!(matches!(setup.setup().await, TestSetupExecution::Skip));
     }
 
     #[test]
     fn test_mysql_reqs() {
         let vars: HashMap<String, String> = HashMap::from([
             (
-                "TEST_DIR".to_string(),
+                "TD_TEST_DIR".to_string(),
                 td_common::tdtestdir!().to_str().unwrap().to_string(),
             ),
             (
-                "TESTS_TIMESTAMP".to_string(),
+                "TD_TEST_TIMESTAMP".to_string(),
                 "0000_00_00_00_00_00".to_string(),
             ),
             ("NS__MYSQL_URI".to_string(), "uri".to_string()),

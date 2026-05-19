@@ -201,6 +201,8 @@ impl FromHandler for () {
 mod tests {
     use super::*;
     use crate::ctx_service::ReqCtx;
+    use td_database::dynamic::DynamicConnection;
+    use td_database::pool::TdPool;
 
     #[tokio::test]
     async fn test_ref_extractor() {
@@ -268,26 +270,21 @@ mod tests {
         assert!(handler.get::<i32>().is_none());
     }
 
-    #[tokio::test]
-    async fn test_pool_connection() {
-        let db = td_database::test_utils::db().await.unwrap();
+    #[td_test::test(db)]
+    async fn test_pool_connection(db: TdPool) {
         let mut conn = db.acquire().await.unwrap();
         assert!(conn.ping().await.is_ok());
     }
 
-    #[tokio::test]
-    async fn test_transaction_as_connection() {
-        let db = td_database::test_utils::db().await.unwrap();
+    #[td_test::test(db)]
+    async fn test_transaction_as_connection(db: TdPool) {
         let transaction = db.begin().await.unwrap();
         let mut conn = transaction.into_connection();
         assert!(conn.ping().await.is_ok());
     }
 
-    #[tokio::test]
-    async fn test_mutref_dynamic_connection() {
-        use td_database::dynamic::DynamicConnection;
-
-        let db = td_database::test_utils::db().await.unwrap();
+    #[td_test::test(db)]
+    async fn test_mutref_dynamic_connection(db: TdPool) {
         let conn = db.acquire().await.unwrap();
 
         let mut handler = Handler::new();

@@ -15,8 +15,7 @@ use td_objects::rest_urls::CollectionParam;
 use td_objects::types::basic::{AccessTokenId, CollectionIdName, CollectionName, RoleId, UserId};
 use td_queries::test_utils::SeedEntry;
 
-#[td_test::test(sqlx)]
-#[tokio::test]
+#[td_test::test(db)]
 async fn test_update_already_existing(db: TdPool) {
     let name0 = CollectionName::try_from("ds0").unwrap();
     let _ = db.seed().collection(&name0, &UserId::admin()).await;

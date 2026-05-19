@@ -28,8 +28,7 @@ mod tests {
     use tower::ServiceExt;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_tower_metadata_status(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
@@ -39,8 +38,7 @@ mod tests {
             .assert_service::<(), ApiStatus>(&[type_of_val(&database_status)]);
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_database_status_service(db: TdPool) {
         let service = StatusService::with_defaults(db).service();
         let response = service.oneshot(()).await.unwrap();

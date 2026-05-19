@@ -112,8 +112,7 @@ mod tests {
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_tower_metadata_create_inter_collection_permission(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
@@ -171,8 +170,7 @@ mod tests {
             ]);
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_create_permission_ok(db: TdPool) -> Result<(), TdError> {
         let service = CreateInterCollectionPermissionService::with_defaults(db.clone()).service();
 
@@ -214,8 +212,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_create_permission_same_collection_err(db: TdPool) -> Result<(), TdError> {
         let service = CreateInterCollectionPermissionService::with_defaults(db.clone()).service();
 
@@ -247,8 +244,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_create_permission_authz_err(db: TdPool) -> Result<(), TdError> {
         let service = CreateInterCollectionPermissionService::with_defaults(db.clone()).service();
 

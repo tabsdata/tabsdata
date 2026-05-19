@@ -59,8 +59,7 @@ mod tests {
     use td_objects::dxo::user::UserDB;
     use td_objects::types::basic::{UserEnabled, UserName};
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_seed_user(db: TdPool) {
         let user = db
             .seed()

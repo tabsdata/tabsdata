@@ -2,17 +2,36 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-//! SQLX:
-//! Generate a test function that sets up a test database with fixtures.
-//! Fixtures are currently passed as a String. The path constructed is relative to the current
-//! test: ./fixtures/<fixture>.sql. If a fixture is passed, no schema is loaded.
-//! The function must have a TdPool parameter.
+//! `#[td_test::test(...)]` — exactly one flavor must be set:
 //!
-//! By default (no fixtures), the full schema is created via `TdPool::upgrade()`.
+//! * `db` — runs the test against a freshly provisioned `TdPool`. The
+//!   function must take `db: TdPool`. By default the full schema is installed;
+//!   pass `fixture = some::Type` (one or more times) to install fixtures
+//!   instead.
+//! * `requires = SomeReqs` + `env_prefix = "ns"` — runs only when the
+//!   provider's env vars are present; otherwise skipped (with
+//!   `TD_TEST_SKIP_IF_NO_REQS=true`) or panics. The function must take an arg
+//!   of type `SomeReqs`.
+//!
+//! Optional tokio passthrough: `flavor = "multi_thread"`, `worker_threads = N`.
+//! The macro auto-emits `#[::tokio::test(...)]` so call sites never need to
+//! write that attribute themselves.
 //!
 //! # Examples
-//! #[test(sqlx)]
-//! #[test(sqlx(fixture = "table"))]
+//!
+//! ```ignore
+//! #[td_test::test(db)]
+//! async fn smoke(db: TdPool) { /* ... */ }
+//!
+//! #[td_test::test(db, fixture = crate::fixtures::Foo)]
+//! async fn with_fixture(db: TdPool) { /* ... */ }
+//!
+//! #[td_test::test(db, flavor = "multi_thread")]
+//! async fn parallel(db: TdPool) { /* ... */ }
+//!
+//! #[td_test::test(requires = AwsS3Reqs, env_prefix = "s30")]
+//! async fn s3_only(s3: AwsS3Reqs) { /* ... */ }
+//! ```
 
 extern crate proc_macro;
 mod scoped_test;

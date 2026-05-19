@@ -2,49 +2,29 @@
 // Copyright 2025. Tabs Data Inc.
 //
 
-use crate::reqs::TestRequirements;
-use std::collections::HashMap;
-
-#[allow(dead_code)]
-/// Requirements for a test using GCP storage with Service Account Key (JSON).
-pub struct GcpStorageWithServiceAccountKeyReqs {
-    pub uri: String,
-    pub service_account_key: String,
-    vars: HashMap<String, String>,
-}
-
-impl TestRequirements for GcpStorageWithServiceAccountKeyReqs {
-    fn keys() -> &'static [&'static str] {
-        &["gcp_storage_uri", "gcp_service_account_key"]
-    }
-
-    fn new(vars: impl Into<HashMap<String, String>>) -> Self {
-        let vars = vars.into();
-        Self {
-            uri: vars["gcp_storage_uri"].clone(),
-            service_account_key: vars["gcp_service_account_key"].clone(),
-            vars,
-        }
-    }
-
-    fn vars(&self) -> &HashMap<String, String> {
-        &self.vars
+crate::define_requires! {
+    /// Requirements for a test using Google Cloud Storage with a Service Account Key.
+    pub struct GcpStorageWithServiceAccountKeyReqs {
+        uri: gcp_storage_uri,
+        service_account_key: gcp_service_account_key,
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate as td_test;
-
-    use crate::reqs::{GcpStorageWithServiceAccountKeyReqs, TestRequirementsInEnv};
+    use crate::__private::{TestSetup, TestSetupExecution};
+    use crate::reqs::{
+        GcpStorageWithServiceAccountKeyReqs, ReqsTestSetup, TestRequirementsInEnv,
+    };
     use std::collections::HashMap;
 
-    #[crate::test(when(reqs = GcpStorageWithServiceAccountKeyReqs, env_prefix= "gcp_test_not_defined", do_not_fail_reqs= true))]
     #[tokio::test]
-    async fn test_signature_gcp_storage_with_service_account_key_reqs(
-        _gcp: GcpStorageWithServiceAccountKeyReqs,
-    ) {
-        panic!()
+    async fn test_signature_gcp_storage_with_service_account_key_reqs_skips_when_missing() {
+        let setup = ReqsTestSetup::<GcpStorageWithServiceAccountKeyReqs>::new_for_self_test(
+            "test_signature_gcp_storage_with_service_account_key_reqs_skips_when_missing",
+            "gcp_test_not_defined",
+        );
+        assert!(matches!(setup.setup().await, TestSetupExecution::Skip));
     }
 
     #[test]

@@ -17,8 +17,7 @@ use td_objects::types::basic::{
 };
 use td_queries::test_utils::SeedEntry;
 
-#[td_test::test(sqlx)]
-#[tokio::test]
+#[td_test::test(db)]
 async fn test_update_user_self(db: TdPool) {
     let user = db
         .seed()

@@ -286,8 +286,7 @@ mod tests {
     use tower::ServiceExt;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_tower_metadata_schedule_request(db: TdPool) -> Result<(), TdError> {
         use td_tower::metadata::type_of_val;
 
@@ -415,8 +414,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_schedule_request(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
@@ -612,8 +610,7 @@ mod tests {
     /// the Requested pointer up and creates a worker message for the
     /// fresh PFR. LFR.status must remain Committed; PFR count must be
     /// two (the seeded one + the replay one).
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_schedule_request_replay(db: TdPool) -> Result<(), TdError> {
         use crate::logical::services::replay::ReplayLogicalFunctionRunService;
         use td_objects::and;

@@ -74,8 +74,7 @@ mod tests {
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_tower_metadata_patch(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
@@ -168,8 +167,7 @@ mod tests {
             .create(param, body)
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_patch_creates_row_in_separate_table(db: TdPool) -> Result<(), TdError> {
         let parent = seed_function(&db, "c0", "f0").await;
 
@@ -210,8 +208,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_patch_of_nonexistent_rejected(db: TdPool) -> Result<(), TdError> {
         let _parent = seed_function(&db, "c0", "f0").await;
 
@@ -230,8 +227,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_patch_of_wrong_function_rejected(db: TdPool) -> Result<(), TdError> {
         let collection = seed_collection_helper(&db, "c0").await;
         let _parent_f0 = seed_function_in(&db, &collection, "f0").await;
@@ -257,8 +253,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_patch_of_wrong_collection_rejected(db: TdPool) -> Result<(), TdError> {
         let parent_c0 = seed_function(&db, "c0", "f0").await;
         let _parent_c1 = seed_function(&db, "c1", "f0").await;
@@ -290,8 +285,7 @@ mod tests {
     /// `functions`, so the service's `fetch_one::<FunctionDB>(parent)`
     /// lookup fails. Users wanting "iterate on a patch" should
     /// create a new patch against the same parent.
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_patch_of_patch_rejected(db: TdPool) -> Result<(), TdError> {
         let v0 = seed_function(&db, "c0", "f0").await;
 
@@ -333,8 +327,7 @@ mod tests {
     /// `parent_function_version_id` partition — the latest by
     /// `defined_on`. Catches a trigger regression where the current
     /// table drifts from the base table's latest.
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_function_patches_current_trigger_keeps_latest_per_parent(
         db: TdPool,
     ) -> Result<(), TdError> {

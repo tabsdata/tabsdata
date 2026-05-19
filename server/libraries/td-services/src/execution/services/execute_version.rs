@@ -108,8 +108,7 @@ mod tests {
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_tower_metadata_execute_version(db: TdPool) {
         use crate::execution::layers::GraphOpts;
         use crate::execution::layers::execution::{
@@ -283,8 +282,7 @@ mod tests {
 
     // Similar to tests in execute, but just testing that the functions are found properly.
     // Tests in execute assert the correctness of the execution.
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_execute_version_no_previous_execution(db: TdPool) -> Result<(), TdError> {
         let (function, response) = test_execute_version(db, None, SkipIfRunning::FALSE).await?;
         let ExecutionResponseInternal::Executed(response) = response else {
@@ -294,8 +292,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_execute_version_no_previous_execution_skip_if_running(
         db: TdPool,
     ) -> Result<(), TdError> {
@@ -307,8 +304,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_execute_version_previous_execution_running(db: TdPool) -> Result<(), TdError> {
         let (function, response) = test_execute_version(
             db,
@@ -326,8 +322,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_execute_version_previous_execution_running_skip_if_running(
         db: TdPool,
     ) -> Result<(), TdError> {
@@ -354,8 +349,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_execute_version_previous_execution_committed(db: TdPool) -> Result<(), TdError> {
         let (function, response) = test_execute_version(
             db,
@@ -373,8 +367,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_execute_version_previous_execution_commited_skip_if_running(
         db: TdPool,
     ) -> Result<(), TdError> {
@@ -394,8 +387,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_execute_version_previous_version_different_type_running(
         db: TdPool,
     ) -> Result<(), TdError> {
@@ -415,8 +407,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_execute_version_previous_version_different_type_running_skip_if_running(
         db: TdPool,
     ) -> Result<(), TdError> {
@@ -506,8 +497,7 @@ mod tests {
         Ok((function, response))
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_execute_version_previous_version_err(db: TdPool) -> Result<(), TdError> {
         let collection_0 = db
             .seed()

@@ -220,8 +220,7 @@ mod tests {
     /// patch that was active at `T1`, ignoring any patches registered
     /// after `T1`. Catches the regression where mint reads the freshest
     /// patch wall-clock-now instead of pinning to the request `AtTime`.
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_latest_patch_or_head_time_pinning(db: TdPool) -> Result<(), TdError> {
         let (_coll, head) = seed_head(&db, "c0", "f0").await?;
 
@@ -258,8 +257,7 @@ mod tests {
     /// head's patches. Catches a regression where `partition_by` drifts
     /// from `parent_function_version_id` (or where the batch resolver
     /// crosses partitions).
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_latest_patch_or_head_batch_partition_isolation(
         db: TdPool,
     ) -> Result<(), TdError> {

@@ -128,10 +128,8 @@ mod tests {
     };
     use td_security::ENCODED_ID_SYSTEM;
 
-    #[tokio::test]
-    async fn test_no_logical_ids() -> Result<(), TdError> {
-        let db = td_database::test_utils::db().await?;
-
+    #[td_test::test(db)]
+    async fn test_no_logical_ids(db: TdPool) -> Result<(), TdError> {
         let id = find_last_idl::<ExecutionDB, ExecutionId, EP>(&db).await?;
         assert!(id.is_none());
 
@@ -148,10 +146,8 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_initial_logical_ids() -> Result<(), TdError> {
-        let db = td_database::test_utils::db().await?;
-
+    #[td_test::test(db)]
+    async fn test_initial_logical_ids(db: TdPool) -> Result<(), TdError> {
         let collection = db
             .seed()
             .collection(

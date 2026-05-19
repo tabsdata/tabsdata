@@ -121,8 +121,7 @@ mod tests {
         router.layer(Extension(context.clone()))
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_collections_lifecycle(db: TdPool) {
         let router = CollectionsRouter::router(Arc::new(CollectionServices::build(
             &Context::with_defaults(db),

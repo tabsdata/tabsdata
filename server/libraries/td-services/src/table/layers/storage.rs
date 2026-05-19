@@ -81,14 +81,12 @@ mod tests {
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_resolve_table_location_non_existing(db: TdPool) -> Result<(), TdError> {
         _run_test(db, None, None).await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_resolve_table_location_existing_with_data(db: TdPool) -> Result<(), TdError> {
         let (collection, execution, transaction, physical_function_run, table) =
             _setup_table(db.clone()).await?;
@@ -106,8 +104,7 @@ mod tests {
         _run_test(db, Some(dv.clone()), Some(dv.clone())).await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_resolve_table_location_existing_without_data(db: TdPool) -> Result<(), TdError> {
         let (collection, execution, transaction, physical_function_run, table) =
             _setup_table(db.clone()).await?;
@@ -125,8 +122,7 @@ mod tests {
         _run_test(db, Some(dv), None).await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_resolve_table_location_existing_previous_with_data(
         db: TdPool,
     ) -> Result<(), TdError> {
@@ -156,8 +152,7 @@ mod tests {
         _run_test(db, Some(current_without_data), Some(previous_with_data)).await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_resolve_table_location_existing_previous_with_data_different_table_version(
         db: TdPool,
     ) -> Result<(), TdError> {
@@ -193,8 +188,7 @@ mod tests {
         _run_test(db, Some(current_without_data), Some(previous_with_data)).await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_resolve_table_location_existing_previous_without_data(
         db: TdPool,
     ) -> Result<(), TdError> {
@@ -224,8 +218,7 @@ mod tests {
         _run_test(db, Some(current_without_data), None).await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_resolve_table_location_existing_previous_without_data_different_table_version(
         db: TdPool,
     ) -> Result<(), TdError> {
@@ -466,8 +459,7 @@ mod tests {
 
     // Tests for committed vs uncommitted behavior
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_resolve_committed_data_version_with_uncommitted_true(
         db: TdPool,
     ) -> Result<(), TdError> {
@@ -491,8 +483,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_resolve_committed_data_version_with_uncommitted_false(
         db: TdPool,
     ) -> Result<(), TdError> {
@@ -516,8 +507,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_resolve_uncommitted_data_version_with_uncommitted_true(
         db: TdPool,
     ) -> Result<(), TdError> {
@@ -541,8 +531,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_resolve_uncommitted_data_version_with_uncommitted_false(
         db: TdPool,
     ) -> Result<(), TdError> {

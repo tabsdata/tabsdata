@@ -116,8 +116,7 @@ mod tests {
         router.layer(Extension(context.clone()))
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_users_lifecycle(db: TdPool) {
         let router = UsersRouter::router(Services::build(&Context::with_defaults(db)));
 

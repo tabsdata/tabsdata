@@ -259,13 +259,24 @@ impl Storage {
 }
 
 #[cfg(feature = "test-utils")]
+fn mount_uri(test_dir: impl Into<std::path::PathBuf>) -> String {
+    let test_dir = test_dir.into();
+    // Windows file URIs need an extra leading slash before the drive letter.
+    if cfg!(target_os = "windows") {
+        format!("file:///{}", test_dir.to_string_lossy())
+    } else {
+        format!("file://{}", test_dir.to_string_lossy())
+    }
+}
+
+#[cfg(feature = "test-utils")]
 impl Default for Storage {
     fn default() -> Self {
         let test_dir = td_common::tdtestdir!();
         let mount_def = MountDef::builder()
             .id("id")
             .path("/")
-            .uri(td_test::file::mount_uri(&test_dir))
+            .uri(mount_uri(&test_dir))
             .build()
             .unwrap();
         Storage::from(vec![mount_def]).unwrap()

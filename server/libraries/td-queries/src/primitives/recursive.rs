@@ -371,43 +371,65 @@ where
             .take();
     }
 
-    let mut combined = base;
-    if up_enabled {
-        let mut up = Query::select()
-            .expr_as(Expr::col((Rcv, D::recurse_up())), PartitionId)
-            .from_as(D::table(), Rcv)
-            .join_as(
-                JoinType::InnerJoin,
-                Cte::Reachable,
-                Fx,
-                Expr::col((Rcv, D::recurse_down())).equals((Fx, PartitionId)),
-            )
-            .take();
-        if let Some(t) = on {
-            up = up
-                .and_where(Expr::col((Rcv, D::version_order_col())).lte(t.as_sea_value()))
-                .take();
+    // Build the recursive term as a single SELECT with one self-reference to
+    // `Reachable`. Postgres rejects both (a) recursive references in the
+    // non-recursive (anchor) term and (b) multiple recursive references
+    // anywhere — `base UNION up UNION down` falls into (a), while combining
+    // `up + down` with UNION ALL produces two `JOIN Reachable` and falls into
+    // (b). Sqlite is loose about both. The portable form is one JOIN to
+    // `Reachable` with a directional OR in the ON-clause, and a CASE in the
+    // projection that picks which column to emit based on which direction
+    // matched.
+    let recurse_up = D::recurse_up();
+    let recurse_down = D::recurse_down();
+    let join_cond = match (up_enabled, down_enabled) {
+        (true, true) => {
+            // Match either direction.
+            Condition::any()
+                .add(Expr::col((Rcv, recurse_down)).equals((Fx, PartitionId)))
+                .add(Expr::col((Rcv, recurse_up)).equals((Fx, PartitionId)))
         }
-        combined = combined.union(UnionType::Distinct, up).take();
-    }
-    if down_enabled {
-        let mut down = Query::select()
-            .expr_as(Expr::col((Rcv, D::recurse_down())), PartitionId)
-            .from_as(D::table(), Rcv)
-            .join_as(
-                JoinType::InnerJoin,
-                Cte::Reachable,
-                Fy,
-                Expr::col((Rcv, D::recurse_up())).equals((Fy, PartitionId)),
-            )
-            .take();
-        if let Some(t) = on {
-            down = down
-                .and_where(Expr::col((Rcv, D::version_order_col())).lte(t.as_sea_value()))
-                .take();
+        (true, false) => {
+            Condition::all().add(Expr::col((Rcv, recurse_down)).equals((Fx, PartitionId)))
         }
-        combined = combined.union(UnionType::Distinct, down).take();
+        (false, true) => {
+            Condition::all().add(Expr::col((Rcv, recurse_up)).equals((Fx, PartitionId)))
+        }
+        (false, false) => {
+            // No recursion — anchor only.
+            return Ok(CommonTableExpression::new()
+                .query(base)
+                .table_name(Cte::Reachable)
+                .to_owned());
+        }
+    };
+    let emit_col: Expr = match (up_enabled, down_enabled) {
+        (true, true) => Expr::case(
+            Expr::col((Rcv, recurse_down)).eq(Expr::col((Fx, PartitionId))),
+            Expr::col((Rcv, recurse_up)),
+        )
+        .finally(Expr::col((Rcv, recurse_down)))
+        .into(),
+        (true, false) => Expr::col((Rcv, recurse_up)).into(),
+        (false, true) => Expr::col((Rcv, recurse_down)).into(),
+        (false, false) => unreachable!(),
+    };
+
+    let mut recursive = Query::select()
+        .expr_as(emit_col, PartitionId)
+        .from_as(D::table(), Rcv)
+        .join_as(JoinType::InnerJoin, Cte::Reachable, Fx, join_cond)
+        .take();
+    if let Some(t) = on {
+        recursive = recursive
+            .and_where(Expr::col((Rcv, D::version_order_col())).lte(t.as_sea_value()))
+            .take();
     }
+
+    let combined = {
+        let mut b = base;
+        b.union(UnionType::Distinct, recursive).take()
+    };
 
     Ok(CommonTableExpression::new()
         .query(combined)

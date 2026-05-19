@@ -55,8 +55,7 @@ mod tests {
     use td_objects::dxo::permission::PermissionDB;
     use td_objects::types::basic::{Description, PermissionType, RoleName};
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_seed_permission(db: TdPool) {
         let role = db
             .seed()

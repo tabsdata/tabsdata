@@ -298,8 +298,7 @@ mod tests {
     use url::Url;
 
     //noinspection DuplicatedCode
-    #[td_test::test(when(reqs = S3WithAccessKeySecretKeyReqs, env_prefix= "s30"))]
-    #[tokio::test(flavor = "multi_thread")]
+    #[td_test::test(requires = S3WithAccessKeySecretKeyReqs, env_prefix = "s30", flavor = "multi_thread")]
     async fn test_import_from_local_to_aws(s3: S3WithAccessKeySecretKeyReqs) {
         let col_int = Int64Chunked::from_iter((0i64..1000i64).map(Some))
             .into_series()
@@ -435,8 +434,7 @@ mod tests {
     }
 
     //noinspection DuplicatedCode
-    #[td_test::test(when(reqs = AzureStorageWithAccountKeyReqs, env_prefix= "az0"))]
-    #[tokio::test(flavor = "multi_thread")]
+    #[td_test::test(requires = AzureStorageWithAccountKeyReqs, env_prefix = "az0", flavor = "multi_thread")]
     async fn test_import_from_local_to_azure(az: AzureStorageWithAccountKeyReqs) {
         let col_int = Int64Chunked::from_iter((0i64..1000i64).map(Some))
             .into_series()
@@ -573,8 +571,7 @@ mod tests {
     }
 
     //noinspection DuplicatedCode
-    #[td_test::test(when(reqs = GcpStorageWithServiceAccountKeyReqs, env_prefix= "gcp0"))]
-    #[tokio::test(flavor = "multi_thread")]
+    #[td_test::test(requires = GcpStorageWithServiceAccountKeyReqs, env_prefix = "gcp0", flavor = "multi_thread")]
     async fn test_import_from_local_to_gcp(gcp: GcpStorageWithServiceAccountKeyReqs) {
         let col_int = Int64Chunked::from_iter((0i64..1000i64).map(Some))
             .into_series()
@@ -1110,8 +1107,7 @@ mod tests {
     }
 
     //noinspection DuplicatedCode
-    #[td_test::test(when(reqs = S3WithAccessKeySecretKeyReqs, env_prefix= "s30"))]
-    #[tokio::test(flavor = "multi_thread")]
+    #[td_test::test(requires = S3WithAccessKeySecretKeyReqs, env_prefix = "s30", flavor = "multi_thread")]
     async fn test_import_s3_binary(s3: S3WithAccessKeySecretKeyReqs) {
         let from_base = Location::S3 {
             url: Url::parse(&format!("{}/{}", s3.uri, id())).unwrap(),
@@ -1135,8 +1131,7 @@ mod tests {
         .await;
     }
 
-    #[td_test::test(when(reqs = AzureStorageWithAccountKeyReqs, env_prefix= "az0"))]
-    #[tokio::test(flavor = "multi_thread")]
+    #[td_test::test(requires = AzureStorageWithAccountKeyReqs, env_prefix = "az0", flavor = "multi_thread")]
     async fn test_import_azure_binary(az: AzureStorageWithAccountKeyReqs) {
         let from_base = Location::Azure {
             url: Url::parse(&format!("{}/{}", az.uri, id())).unwrap(),
@@ -1159,8 +1154,7 @@ mod tests {
         .await;
     }
 
-    #[td_test::test(when(reqs = GcpStorageWithServiceAccountKeyReqs, env_prefix= "gcp0"))]
-    #[tokio::test(flavor = "multi_thread")]
+    #[td_test::test(requires = GcpStorageWithServiceAccountKeyReqs, env_prefix = "gcp0", flavor = "multi_thread")]
     async fn test_import_gcp_binary(gcp: GcpStorageWithServiceAccountKeyReqs) {
         let from_base = Location::GCS {
             url: Url::parse(&format!("{}/{}", gcp.uri, id())).unwrap(),

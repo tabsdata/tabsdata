@@ -574,11 +574,10 @@ mod tests {
         reference_id: TestRecursion,
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::Recursive))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::Recursive)]
     async fn test_basic_fetch_all_recursive_downstream(db: TdPool) -> Result<(), TdError> {
         let id = TestId::try_from("R0")?;
-        let result: Vec<BasicTestDao> = (&db)
+        let result: Vec<BasicTestDao> = db
             .recursive::<BasicTestDao, BasicReference>(RecursionOptions::new(
                 Some(Depth::ZERO),
                 None,
@@ -593,11 +592,10 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::Recursive))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::Recursive)]
     async fn test_basic_fetch_all_recursive_upstream(db: TdPool) -> Result<(), TdError> {
         let id = TestId::try_from("R2")?;
-        let result: Vec<BasicTestDao> = (&db)
+        let result: Vec<BasicTestDao> = db
             .recursive::<BasicTestDao, BasicReference>(RecursionOptions::new(
                 None,
                 Some(Depth::ZERO),
@@ -612,11 +610,10 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::Recursive))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::Recursive)]
     async fn test_basic_fetch_all_recursive_both_disabled(db: TdPool) -> Result<(), TdError> {
         let id = TestId::try_from("R0")?;
-        let result: Vec<BasicTestDao> = (&db)
+        let result: Vec<BasicTestDao> = db
             .recursive::<BasicTestDao, BasicReference>(RecursionOptions::new(
                 Some(Depth::ZERO),
                 Some(Depth::ZERO),
@@ -628,13 +625,12 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::Recursive))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::Recursive)]
     async fn test_basic_fetch_all_recursive_depth_limit(db: TdPool) -> Result<(), TdError> {
         // Chain has 2 hops: R0(ref_0) → N0(ref_0→ref_1) → N1(ref_1→ref_2)
         // Depth limit of 1 should only return the immediate neighbor
         let id = TestId::try_from("R0")?;
-        let result: Vec<BasicTestDao> = (&db)
+        let result: Vec<BasicTestDao> = db
             .recursive::<BasicTestDao, BasicReference>(RecursionOptions::new(
                 Some(Depth::ZERO),
                 Some(Depth::try_from(1).unwrap()),
@@ -651,11 +647,10 @@ mod tests {
     // Versioned — direction control
     // ===================================================================
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::RecursiveVersions))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
     async fn test_both_directions_disabled(db: TdPool) {
         let id = TestId::try_from("MMM").unwrap();
-        let result: Vec<TestDao> = (&db)
+        let result: Vec<TestDao> = db
             .historic(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::ZERO),
@@ -668,11 +663,10 @@ mod tests {
         assert_eq!(result.len(), 0);
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::RecursiveVersions))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
     async fn test_both_directions_unlimited(db: TdPool) {
         let id = TestId::try_from("RRR").unwrap();
-        let result: Vec<TestDao> = (&db)
+        let result: Vec<TestDao> = db
             .historic(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(None, None))
             .direct_reference(&id)
@@ -687,11 +681,10 @@ mod tests {
         assert_eq!(result[2], FIXTURE_TEST_DAOS[0]); // AAA
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::RecursiveVersions))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
     async fn test_select_active_versions_none_fetch_all(db: TdPool) {
         let id = TestId::try_from("MMM").unwrap();
-        let result: Vec<TestDao> = (&db)
+        let result: Vec<TestDao> = db
             .historic(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::ZERO),
@@ -712,11 +705,10 @@ mod tests {
         assert_eq!(result[4], FIXTURE_TEST_DAOS[0]);
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::RecursiveVersions))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
     async fn test_select_active_versions_none_fetch_all_upstream(db: TdPool) {
         let id = TestId::try_from("SSS").unwrap();
-        let result: Vec<TestDao> = (&db)
+        let result: Vec<TestDao> = db
             .historic(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 None,
@@ -734,11 +726,10 @@ mod tests {
         assert_eq!(result[2], FIXTURE_TEST_DAOS[0]);
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::RecursiveVersions))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
     async fn test_upstream_only_downstream_disabled(db: TdPool) {
         let id = TestId::try_from("RRR").unwrap();
-        let result: Vec<TestDao> = (&db)
+        let result: Vec<TestDao> = db
             .historic(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 None,
@@ -754,11 +745,10 @@ mod tests {
         assert_eq!(result[1], FIXTURE_TEST_DAOS[0]); // AAA
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::RecursiveVersions))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
     async fn test_downstream_only_upstream_disabled(db: TdPool) {
         let id = TestId::try_from("NNN").unwrap();
-        let result: Vec<TestDao> = (&db)
+        let result: Vec<TestDao> = db
             .historic(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::ZERO),
@@ -781,11 +771,10 @@ mod tests {
     // Versioned — depth limits
     // ===================================================================
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::RecursiveVersions))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
     async fn test_downstream_depth_limit_1(db: TdPool) {
         let id = TestId::try_from("MMM").unwrap();
-        let result: Vec<TestDao> = (&db)
+        let result: Vec<TestDao> = db
             .historic(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::ZERO),
@@ -800,11 +789,10 @@ mod tests {
         assert_eq!(result[0], FIXTURE_TEST_DAOS[0]); // AAA
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::RecursiveVersions))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
     async fn test_downstream_depth_limit_2(db: TdPool) {
         let id = TestId::try_from("MMM").unwrap();
-        let result: Vec<TestDao> = (&db)
+        let result: Vec<TestDao> = db
             .historic(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::ZERO),
@@ -822,11 +810,10 @@ mod tests {
         assert_eq!(result[3], FIXTURE_TEST_DAOS[0]); // AAA
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::RecursiveVersions))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
     async fn test_upstream_depth_limit_2(db: TdPool) {
         let id = TestId::try_from("SSS").unwrap();
-        let result: Vec<TestDao> = (&db)
+        let result: Vec<TestDao> = db
             .historic(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::try_from(2).unwrap()),
@@ -842,11 +829,10 @@ mod tests {
         assert_eq!(result[1], FIXTURE_TEST_DAOS[3]); // DDD
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::RecursiveVersions))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
     async fn test_select_active_versions_none_last_in_stream(db: TdPool) {
         let id = TestId::try_from("SSS").unwrap();
-        let result: Vec<TestDao> = (&db)
+        let result: Vec<TestDao> = db
             .historic(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::try_from(1).unwrap()),
@@ -861,11 +847,10 @@ mod tests {
         assert_eq!(result[0], FIXTURE_TEST_DAOS[4]);
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::RecursiveVersions))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
     async fn test_both_directions_with_depth_limits(db: TdPool) {
         let id = TestId::try_from("NNN").unwrap();
-        let result: Vec<TestDao> = (&db)
+        let result: Vec<TestDao> = db
             .historic(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::try_from(1).unwrap()),
@@ -884,12 +869,11 @@ mod tests {
         assert_eq!(result[3], FIXTURE_TEST_DAOS[0]); // AAA
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::RecursiveVersions))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
     async fn test_asymmetric_depth_limits(db: TdPool) {
         // NNN is at ref_1 in the middle. Use upstream=1, downstream=2
         let id = TestId::try_from("NNN").unwrap();
-        let result: Vec<TestDao> = (&db)
+        let result: Vec<TestDao> = db
             .historic(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::try_from(1).unwrap()),
@@ -914,12 +898,11 @@ mod tests {
     // Versioned — state & time filtering
     // ===================================================================
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::RecursiveVersions))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
     async fn test_select_active_versions_at_time_fetch_all(db: TdPool) {
         let at = time(1);
         let id = TestId::try_from("MMM").unwrap();
-        let result: Vec<TestDao> = (&db)
+        let result: Vec<TestDao> = db
             .historic(&at)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::ZERO),
@@ -937,8 +920,7 @@ mod tests {
         assert_eq!(result[2], FIXTURE_TEST_DAOS[0]);
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::RecursiveVersions))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
     async fn test_at_time_before_any_data(db: TdPool) {
         // Use a time before all fixture data was inserted
         let early = AtTime::try_from(
@@ -948,7 +930,7 @@ mod tests {
         )
         .unwrap();
         let id = TestId::try_from("MMM").unwrap();
-        let result: Vec<TestDao> = (&db)
+        let result: Vec<TestDao> = db
             .historic(&early)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(None, None))
             .direct_reference(&id)
@@ -958,13 +940,12 @@ mod tests {
         assert_eq!(result.len(), 0);
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::RecursiveVersions))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
     async fn test_select_active_versions_break_downstream_by_status_ref(db: TdPool) {
         let at = time(2);
         let id = TestId::try_from("MMM").unwrap();
         // PPP is D at time 2, so it will stop the recursion
-        let result: Vec<TestDao> = (&db)
+        let result: Vec<TestDao> = db
             .historic(&at)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::ZERO),
@@ -983,12 +964,11 @@ mod tests {
         assert_eq!(result[1], FIXTURE_TEST_DAOS[0]);
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::RecursiveVersions))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
     async fn test_select_active_versions_none_deleted(db: TdPool) {
         // OOO is active, but PPP has the same partition_id and is deleted
         let id = TestId::try_from("OOO").unwrap();
-        let result: Vec<TestDao> = (&db)
+        let result: Vec<TestDao> = db
             .historic(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::ZERO),
@@ -1001,8 +981,7 @@ mod tests {
         assert_eq!(result.len(), 0);
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::RecursiveVersions))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
     async fn test_direct_reference_state_relaxes_only_entry_point(
         db: TdPool,
     ) -> Result<(), TdError> {
@@ -1013,14 +992,14 @@ mod tests {
             status: TestStatus::try_from("D")?,
             defined_on: time(5),
         };
-        (&db).live().insert(&deleted_ref).await?;
+        db.live().insert(&deleted_ref).await?;
         let target_ref = RecursionReference {
             id: TestId::try_from("TGT")?,
             reference_id: TestRecursion::try_from("ref_tgt")?,
             status: TestStatus::try_from("A")?,
             defined_on: time(5),
         };
-        (&db).live().insert(&target_ref).await?;
+        db.live().insert(&target_ref).await?;
         let dao = TestDao {
             id: TestId::try_from("OV1")?,
             status: TestStatus::try_from("A")?,
@@ -1028,11 +1007,11 @@ mod tests {
             downstream: TestRecursion::try_from("ref_tgt")?,
             defined_on: time(5),
         };
-        (&db).live().insert(&dao).await?;
+        db.live().insert(&dao).await?;
 
         let id = TestId::try_from("DEL")?;
         // Without direct_reference_state: DEL is deleted, Active filter excludes it.
-        let empty: Vec<TestDao> = (&db)
+        let empty: Vec<TestDao> = db
             .historic(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::ZERO),
@@ -1046,7 +1025,7 @@ mod tests {
         assert_eq!(empty.len(), 0);
 
         // With direct_reference_state(All): the entry point passes regardless of state.
-        let result: Vec<TestDao> = (&db)
+        let result: Vec<TestDao> = db
             .historic(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::ZERO),
@@ -1063,8 +1042,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::RecursiveVersions))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
     async fn test_deleted_dao_excluded_from_recursion(db: TdPool) -> Result<(), TdError> {
         // Insert a deleted DAO in the middle of a chain to verify the
         // recursion_versions CTE filters on D-side state, not just R-side.
@@ -1076,7 +1054,7 @@ mod tests {
                 status: TestStatus::try_from("A")?,
                 defined_on: time(5),
             };
-            (&db).live().insert(&reference).await?;
+            db.live().insert(&reference).await?;
         }
         let dao_a = TestDao {
             id: TestId::try_from("DSA")?,
@@ -1085,7 +1063,7 @@ mod tests {
             downstream: TestRecursion::try_from("ref_ds1")?,
             defined_on: time(5),
         };
-        (&db).live().insert(&dao_a).await?;
+        db.live().insert(&dao_a).await?;
         // This DAO is deleted — should be excluded by Active filter on D
         let dao_b = TestDao {
             id: TestId::try_from("DSB")?,
@@ -1094,10 +1072,10 @@ mod tests {
             downstream: TestRecursion::try_from("ref_ds2")?,
             defined_on: time(5),
         };
-        (&db).live().insert(&dao_b).await?;
+        db.live().insert(&dao_b).await?;
 
         let id = TestId::try_from("DS0")?;
-        let result: Vec<TestDao> = (&db)
+        let result: Vec<TestDao> = db
             .historic(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::ZERO),
@@ -1118,11 +1096,10 @@ mod tests {
     // Graph topology edge cases
     // ===================================================================
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::RecursiveVersions))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
     async fn test_nonexistent_reference(db: TdPool) {
         let id = TestId::try_from("XXX").unwrap();
-        let result: Vec<TestDao> = (&db)
+        let result: Vec<TestDao> = db
             .historic(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(None, None))
             .direct_reference(&id)
@@ -1133,11 +1110,10 @@ mod tests {
         assert_eq!(result.len(), 0);
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::RecursiveVersions))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
     async fn test_downstream_from_leaf_node(db: TdPool) {
         let id = TestId::try_from("QQQ").unwrap();
-        let result: Vec<TestDao> = (&db)
+        let result: Vec<TestDao> = db
             .historic(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::ZERO),
@@ -1151,8 +1127,7 @@ mod tests {
         assert_eq!(result.len(), 0);
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::RecursiveVersions))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
     async fn test_single_node_no_recursion_neighbors(db: TdPool) -> Result<(), TdError> {
         // Create an isolated node with no edges leading anywhere
         let reference = RecursionReference {
@@ -1161,7 +1136,7 @@ mod tests {
             status: TestStatus::try_from("A")?,
             defined_on: time(5),
         };
-        (&db).live().insert(&reference).await?;
+        db.live().insert(&reference).await?;
         let dao = TestDao {
             id: TestId::try_from("IF0")?,
             status: TestStatus::try_from("A")?,
@@ -1169,10 +1144,10 @@ mod tests {
             downstream: TestRecursion::try_from("ref_nowhere")?,
             defined_on: time(5),
         };
-        (&db).live().insert(&dao).await?;
+        db.live().insert(&dao).await?;
 
         let id = TestId::try_from("ISO")?;
-        let result: Vec<TestDao> = (&db)
+        let result: Vec<TestDao> = db
             .historic(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(None, None))
             .direct_reference(&id)
@@ -1184,8 +1159,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::RecursiveVersions))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
     async fn test_cycle_detection(db: TdPool) -> Result<(), TdError> {
         // Create a 4-node cycle: CF0→CF1→CF2→CF3→(back to ref_c0)
         for i in 0..4u32 {
@@ -1195,7 +1169,7 @@ mod tests {
                 status: TestStatus::try_from("A")?,
                 defined_on: time(5),
             };
-            (&db).live().insert(&reference).await?;
+            db.live().insert(&reference).await?;
         }
         for i in 0..4u32 {
             let dao = TestDao {
@@ -1205,11 +1179,11 @@ mod tests {
                 downstream: TestRecursion::try_from(format!("ref_c{}", (i + 1) % 4))?,
                 defined_on: time(5),
             };
-            (&db).live().insert(&dao).await?;
+            db.live().insert(&dao).await?;
         }
 
         let id = TestId::try_from("CC0")?;
-        let result: Vec<TestDao> = (&db)
+        let result: Vec<TestDao> = db
             .historic(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::ZERO),
@@ -1226,8 +1200,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::RecursiveVersions))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
     async fn test_upstream_cycle_detection(db: TdPool) -> Result<(), TdError> {
         // Create 3-node cycle for upstream traversal
         for i in 0..3u32 {
@@ -1237,7 +1210,7 @@ mod tests {
                 status: TestStatus::try_from("A")?,
                 defined_on: time(5),
             };
-            (&db).live().insert(&reference).await?;
+            db.live().insert(&reference).await?;
         }
         for i in 0..3u32 {
             let dao = TestDao {
@@ -1247,11 +1220,11 @@ mod tests {
                 downstream: TestRecursion::try_from(format!("ref_uc{}", (i + 1) % 3))?,
                 defined_on: time(5),
             };
-            (&db).live().insert(&dao).await?;
+            db.live().insert(&dao).await?;
         }
 
         let id = TestId::try_from("UC0")?;
-        let result: Vec<TestDao> = (&db)
+        let result: Vec<TestDao> = db
             .historic(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 None,
@@ -1265,8 +1238,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::RecursiveVersions))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
     async fn test_bidirectional_cycle_detection(db: TdPool) -> Result<(), TdError> {
         // 4-node cycle, query with both directions enabled
         for i in 0..4u32 {
@@ -1276,7 +1248,7 @@ mod tests {
                 status: TestStatus::try_from("A")?,
                 defined_on: time(5),
             };
-            (&db).live().insert(&reference).await?;
+            db.live().insert(&reference).await?;
         }
         for i in 0..4u32 {
             let dao = TestDao {
@@ -1286,11 +1258,11 @@ mod tests {
                 downstream: TestRecursion::try_from(format!("ref_bc{}", (i + 1) % 4))?,
                 defined_on: time(5),
             };
-            (&db).live().insert(&dao).await?;
+            db.live().insert(&dao).await?;
         }
 
         let id = TestId::try_from("BC0")?;
-        let result: Vec<TestDao> = (&db)
+        let result: Vec<TestDao> = db
             .historic(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(None, None))
             .direct_reference(&id)
@@ -1304,8 +1276,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::RecursiveVersions))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
     async fn test_diamond_deduplication(db: TdPool) -> Result<(), TdError> {
         // Create diamond: ref_d0 → ref_d1, ref_d0 → ref_d2, ref_d1 → ref_d3, ref_d2 → ref_d3, ref_d3 → ref_d4
         for i in 0..5u32 {
@@ -1315,7 +1286,7 @@ mod tests {
                 status: TestStatus::try_from("A")?,
                 defined_on: time(5),
             };
-            (&db).live().insert(&reference).await?;
+            db.live().insert(&reference).await?;
         }
         let diamond_edges: Vec<(&str, &str, &str)> = vec![
             ("DA1", "ref_d0", "ref_d1"),
@@ -1332,11 +1303,11 @@ mod tests {
                 downstream: TestRecursion::try_from(*downstream)?,
                 defined_on: time(5),
             };
-            (&db).live().insert(&dao).await?;
+            db.live().insert(&dao).await?;
         }
 
         let id = TestId::try_from("D00")?;
-        let result: Vec<TestDao> = (&db)
+        let result: Vec<TestDao> = db
             .historic(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::ZERO),
@@ -1359,8 +1330,7 @@ mod tests {
     // Type compatibility & stress tests
     // ===================================================================
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_select_active_versions_at_types(db: TdPool) -> Result<(), TdError> {
         use ta_objects::States;
         async fn test_query<const DS: u8, D, const RS: u8, R>(
@@ -1427,8 +1397,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx(fixture = crate::fixtures::RecursiveVersions))]
-    #[tokio::test]
+    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
     async fn test_select_active_versions_heavy(db: TdPool) -> Result<(), TdError> {
         let size: usize = 1000;
 
@@ -1441,7 +1410,7 @@ mod tests {
                 status: TestStatus::try_from("A")?,
                 defined_on: time(5),
             };
-            (&db).live().insert(&reference).await?;
+            db.live().insert(&reference).await?;
             let dao = TestDao {
                 id: TestId::try_from(format!("ZZZ{i:04}"))?,
                 status: TestStatus::try_from("A")?,
@@ -1449,12 +1418,12 @@ mod tests {
                 downstream: TestRecursion::try_from(format!("x_ref_{:04}", i + 1))?,
                 defined_on: time(5),
             };
-            (&db).live().insert(&dao).await?;
+            db.live().insert(&dao).await?;
             daos.push(dao);
         }
 
         let id = TestId::try_from(format!("YYY{:04}", 0))?;
-        let result: Vec<TestDao> = (&db)
+        let result: Vec<TestDao> = db
             .historic(&*LATER)
             .recursive::<TestDao, RecursionReference>(RecursionOptions::new(
                 Some(Depth::ZERO),
@@ -1501,10 +1470,17 @@ mod tests {
                 sql.contains(r#""partition_id""#),
                 "exposes partition_id: {sql}"
             );
-            // Both directions present (UNION joins).
+            // One UNION (anchor vs. recursive); both directions live inside
+            // the recursive term via an OR-join + CASE projection — the
+            // historical two-UNION shape ran into postgres' single
+            // recursive-self-reference rule.
             assert!(
-                sql.matches("UNION").count() >= 2,
-                "two UNIONs (upstream + downstream): {sql}"
+                sql.matches("UNION").count() == 1,
+                "one UNION (anchor + recursive term covers both directions): {sql}"
+            );
+            assert!(
+                sql.contains("CASE"),
+                "directional CASE projection in recursive term: {sql}"
             );
             // No row-number ranking — this is the lightweight reachability walk.
             assert!(!sql.contains("ROW_NUMBER"), "lightweight walk: {sql}");

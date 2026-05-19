@@ -40,8 +40,7 @@ pub mod tests {
     use td_objects::dxo::inter_collection_permission::InterCollectionPermissionDB;
     use td_objects::types::basic::{CollectionName, ToCollectionId, UserId};
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_seed_inter_collection_permission(db: TdPool) {
         let c0 = db
             .seed()

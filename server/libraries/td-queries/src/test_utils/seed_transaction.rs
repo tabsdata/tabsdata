@@ -37,8 +37,7 @@ mod tests {
     use td_objects::types::basic::{BundleId, CollectionName, Decorator, TransactionKey, UserId};
     use td_security::ENCODED_ID_SYSTEM;
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_seed_transaction(db: TdPool) {
         let collection = db
             .seed()

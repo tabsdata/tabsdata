@@ -36,7 +36,7 @@ impl Fixture for DataVersion {
                     .col(ColumnDef::new(TestDvTable::Status).text().not_null())
                     .col(
                         ColumnDef::new(TestDvTable::DefinedOn)
-                            .timestamp()
+                            .timestamp_with_time_zone()
                             .not_null(),
                     )
                     .to_owned(),

@@ -54,8 +54,7 @@ mod tests {
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_tower_metadata_logout(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
@@ -77,8 +76,7 @@ mod tests {
             ]);
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_logout_ok(db: TdPool) -> Result<(), TdError> {
         let context = Context::with_defaults(db.clone());
         let auth_services = AuthServices::build(&context);

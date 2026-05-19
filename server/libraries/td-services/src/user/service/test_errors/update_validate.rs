@@ -15,8 +15,7 @@ use td_objects::rest_urls::UserParam;
 use td_objects::types::basic::{AccessTokenId, RoleId, UserEnabled, UserId, UserIdName, UserName};
 use td_queries::test_utils::SeedEntry;
 
-#[td_test::test(sqlx)]
-#[tokio::test]
+#[td_test::test(db)]
 async fn test_update_request_has_nothing_to_update(db: TdPool) {
     let _ = db
         .seed()

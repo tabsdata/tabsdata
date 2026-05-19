@@ -677,9 +677,8 @@ mod tests {
         assert_eq!(res, "data");
     }
 
-    #[tokio::test]
-    async fn test_connection_provider_layer() {
-        let db = td_database::test_utils::db().await.unwrap();
+    #[td_test::test(db)]
+    async fn test_connection_provider_layer(db: TdPool) {
         let service = ServiceBuilder::new()
             .layer(ServiceEntry::default())
             .layer(ConnectionProvider::new(db))
@@ -696,9 +695,8 @@ mod tests {
         assert!(res);
     }
 
-    #[tokio::test]
-    async fn test_transaction_provider_layer() {
-        let db = td_database::test_utils::db().await.unwrap();
+    #[td_test::test(db)]
+    async fn test_transaction_provider_layer(db: TdPool) {
         let service = ServiceBuilder::new()
             .layer(ServiceEntry::default())
             .layer(TransactionProvider::new(db))

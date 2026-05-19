@@ -76,8 +76,7 @@ mod tests {
         BundleId, CollectionName, Decorator, LogicalFunctionRunStatus, TransactionKey, UserId,
     };
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_seed_worker(db: TdPool) {
         let collection = db
             .seed()

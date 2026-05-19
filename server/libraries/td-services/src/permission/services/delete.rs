@@ -93,8 +93,7 @@ mod tests {
     use tower::ServiceExt;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_tower_metadata_delete_permission(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
@@ -124,8 +123,7 @@ mod tests {
         ]);
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_delete_permission(db: TdPool) -> Result<(), TdError> {
         let role = db
             .seed()
@@ -159,8 +157,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_create_permission_on_collection_by_coll_admin_ok(
         db: TdPool,
     ) -> Result<(), TdError> {
@@ -205,8 +202,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_create_permission_on_other_collection_by_coll_admin_unauthz(
         db: TdPool,
     ) -> Result<(), TdError> {
@@ -259,8 +255,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_create_permission_on_all_collection_by_coll_admin_unauthz(
         db: TdPool,
     ) -> Result<(), TdError> {
@@ -310,8 +305,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_delete_permission_on_collection_by_coll_admin_ok(
         db: TdPool,
     ) -> Result<(), TdError> {
@@ -358,8 +352,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_delete_permission_incorrect_role_err(db: TdPool) -> Result<(), TdError> {
         let coll0 = db
             .seed()
@@ -406,8 +399,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_delete_permission_on_diff_collection_by_coll_admin_unauthz(
         db: TdPool,
     ) -> Result<(), TdError> {
@@ -463,8 +455,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_delete_permission_on_all_collection_by_coll_admin_unauthz(
         db: TdPool,
     ) -> Result<(), TdError> {
@@ -504,8 +495,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_delete_system_permissions(db: TdPool) -> Result<(), TdError> {
         let fixed_permissions = HashSet::from([
             ENCODED_ID_SA_SYS_ADMIN,

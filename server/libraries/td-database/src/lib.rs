@@ -27,7 +27,6 @@ pub async fn db(config: &DatabaseConfig) -> Result<TdPool, DbError> {
 
 #[cfg(test)]
 mod tests {
-    use crate::config::DatabaseConfig;
     use crate::dynamic::DynamicPool;
     #[cfg(sqlite)]
     use crate::error::DbError;
@@ -35,7 +34,6 @@ mod tests {
     use crate::raw_query;
     use crate::sea_query::builder::SeaQueryExt;
     use crate::sea_query::kind::{DatabaseBackend, DatabaseKind};
-    use td_common::tdtestdir;
     use td_security::{
         ENCODED_ID_CA_ALL_SEC_ADMIN, ENCODED_ID_CA_ALL_SYS_ADMIN, ENCODED_ID_CD_ALL_SYS_ADMIN,
         ENCODED_ID_CD_ALL_USER, ENCODED_ID_CR_ALL_SYS_ADMIN, ENCODED_ID_CR_ALL_USER,
@@ -45,7 +43,6 @@ mod tests {
         ENCODED_ID_USER_ROLE_ADMIN_SEC_ADMIN, ENCODED_ID_USER_ROLE_ADMIN_SYS_ADMIN,
         ENCODED_ID_USER_ROLE_ADMIN_USER,
     };
-    use url::Url;
 
     // -----------------------------------------------------------------------
     // Schema introspection helpers
@@ -794,14 +791,6 @@ mod tests {
             "db_version mismatch"
         );
     }
-
-    // -------------------------------------------------------------------
-    // Schema-applies smoke tests — verify `upgrade()` + `check()` succeed
-    // cleanly on a fresh pool, per backend. These exist as a focused
-    // signal that the current schema is portable (and reachable through
-    // the per-backend test pool factory) without the noise of asserting on
-    // specific seeded data.
-    // -------------------------------------------------------------------
 
     #[cfg(sqlite)]
     #[tokio::test]

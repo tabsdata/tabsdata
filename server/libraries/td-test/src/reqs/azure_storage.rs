@@ -2,51 +2,28 @@
 // Copyright 2025. Tabs Data Inc.
 //
 
-use crate::reqs::TestRequirements;
-use std::collections::HashMap;
-
-#[allow(dead_code)]
-/// Requirements for a test using Azure storage with Account Name and Account Key.
-pub struct AzureStorageWithAccountKeyReqs {
-    pub uri: String,
-    pub account_name: String,
-    pub account_key: String,
-    vars: HashMap<String, String>,
-}
-
-impl TestRequirements for AzureStorageWithAccountKeyReqs {
-    fn keys() -> &'static [&'static str] {
-        &["az_uri", "az_account_name", "az_account_key"]
-    }
-
-    fn new(vars: impl Into<HashMap<String, String>>) -> Self {
-        let vars = vars.into();
-        Self {
-            uri: vars["az_uri"].clone(),
-            account_name: vars["az_account_name"].clone(),
-            account_key: vars["az_account_key"].clone(),
-            vars,
-        }
-    }
-
-    fn vars(&self) -> &HashMap<String, String> {
-        &self.vars
+crate::define_requires! {
+    /// Requirements for a test using Azure storage with Account Name and Account Key.
+    pub struct AzureStorageWithAccountKeyReqs {
+        uri: az_uri,
+        account_name: az_account_name,
+        account_key: az_account_key,
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate as td_test;
-
-    use crate::reqs::{AzureStorageWithAccountKeyReqs, TestRequirementsInEnv};
+    use crate::__private::{TestSetup, TestSetupExecution};
+    use crate::reqs::{AzureStorageWithAccountKeyReqs, ReqsTestSetup, TestRequirementsInEnv};
     use std::collections::HashMap;
 
-    #[crate::test(when(reqs = AzureStorageWithAccountKeyReqs, env_prefix= "az_test_not_defined", do_not_fail_reqs= true))]
     #[tokio::test]
-    async fn test_signature_azure_storage_with_account_key_reqs(
-        _az: AzureStorageWithAccountKeyReqs,
-    ) {
-        panic!()
+    async fn test_signature_azure_storage_with_account_key_reqs_skips_when_missing() {
+        let setup = ReqsTestSetup::<AzureStorageWithAccountKeyReqs>::new_for_self_test(
+            "test_signature_azure_storage_with_account_key_reqs_skips_when_missing",
+            "az_test_not_defined",
+        );
+        assert!(matches!(setup.setup().await, TestSetupExecution::Skip));
     }
 
     #[test]

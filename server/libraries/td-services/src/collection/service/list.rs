@@ -48,8 +48,7 @@ mod tests {
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_tower_metadata_list_collections(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
@@ -67,8 +66,7 @@ mod tests {
             ]);
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_list_collection(db: TdPool) {
         let name = CollectionName::try_from("ds0").unwrap();
         let _ = db.seed().collection(&name, &UserId::admin()).await.unwrap();
@@ -85,8 +83,7 @@ mod tests {
         assert_eq!(list.data[0].name, name);
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_list_collection_unauthorized(db: TdPool) -> Result<(), TdError> {
         // Create new role without permissions
         let user = db

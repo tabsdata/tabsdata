@@ -2,7 +2,12 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-#[cfg(test)]
+// The sqlx round-trip test below uses sqlite (its in-memory store is the
+// most lightweight way to exercise Encode/Decode impls inline). It only
+// compiles when the sqlite backend is on; the same `tm_objects::typed`
+// types are independently round-tripped through postgres via the
+// td-database test matrix, so this is overlap coverage, not the only path.
+#[cfg(all(test, sqlite))]
 mod tests {
     use crate as ta_objects;
 

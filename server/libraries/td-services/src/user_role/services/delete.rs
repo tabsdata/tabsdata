@@ -60,8 +60,7 @@ mod tests {
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_tower_metadata_delete_user_role(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
@@ -85,8 +84,7 @@ mod tests {
             ]);
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_delete_user_role(db: TdPool) -> Result<(), TdError> {
         let user = db
             .seed()
@@ -124,8 +122,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_delete_fixed_user_role(db: TdPool) -> Result<(), TdError> {
         let request = RequestContext::with(
             AccessTokenId::default(),

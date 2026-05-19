@@ -350,8 +350,7 @@ pub(crate) mod tests {
         test_run_impl_copy(target).await;
     }
 
-    #[td_test::test(when(reqs = S3WithAccessKeySecretKeyReqs, env_prefix= "s30"))]
-    #[tokio::test]
+    #[td_test::test(requires = S3WithAccessKeySecretKeyReqs, env_prefix = "s30")]
     async fn test_copy_local_to_aws(
         s3: S3WithAccessKeySecretKeyReqs,
     ) -> Result<(), TransporterError> {
@@ -368,8 +367,7 @@ pub(crate) mod tests {
         Ok(())
     }
 
-    #[td_test::test(when(reqs = AzureStorageWithAccountKeyReqs, env_prefix= "az0"))]
-    #[tokio::test]
+    #[td_test::test(requires = AzureStorageWithAccountKeyReqs, env_prefix = "az0")]
     async fn test_copy_local_to_azure(
         az: AzureStorageWithAccountKeyReqs,
     ) -> Result<(), TransporterError> {
@@ -385,8 +383,7 @@ pub(crate) mod tests {
         Ok(())
     }
 
-    #[td_test::test(when(reqs = GcpStorageWithServiceAccountKeyReqs, env_prefix= "gcp0"))]
-    #[tokio::test]
+    #[td_test::test(requires = GcpStorageWithServiceAccountKeyReqs, env_prefix = "gcp0")]
     async fn test_copy_local_to_gcp(
         gcp: GcpStorageWithServiceAccountKeyReqs,
     ) -> Result<(), TransporterError> {

@@ -576,8 +576,7 @@ mod tests {
     }
 
     /// `Versions::None` returns the latest LTDV at `triggered_on`.
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_resolve_logical_none(db: TdPool) -> Result<(), TdError> {
         let (_collection, _function, table_id, ltdvs) = seed_ftdv_timeline(&db, 1).await;
         let triggered_on = TriggeredOn::now();
@@ -597,8 +596,7 @@ mod tests {
     }
 
     /// `Versions::None` consults the in-plan map first when present.
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_resolve_logical_none_in_plan_overrides(db: TdPool) -> Result<(), TdError> {
         let (collection, _function, table_id, _ftdvs) = seed_ftdv_timeline(&db, 1).await;
 
@@ -633,8 +631,7 @@ mod tests {
     }
 
     /// `Versions::Single(Head)` walks back from the most recent LTDV.
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_resolve_logical_single_head(db: TdPool) -> Result<(), TdError> {
         let (_collection, _function, table_id, ltdvs) = seed_ftdv_timeline(&db, 3).await;
         let mut conn = db.acquire().await.unwrap();
@@ -664,8 +661,7 @@ mod tests {
     }
 
     /// `Versions::Single(Initial)` walks forward from the oldest LTDV.
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_resolve_logical_single_initial(db: TdPool) -> Result<(), TdError> {
         let (_collection, _function, table_id, ltdvs) = seed_ftdv_timeline(&db, 3).await;
         let mut conn = db.acquire().await.unwrap();
@@ -696,8 +692,7 @@ mod tests {
 
     /// `Versions::List` mixing Head + Initial preserves index order and
     /// returns `None` for out-of-range slots.
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_resolve_logical_list_relative(db: TdPool) -> Result<(), TdError> {
         let (_collection, _function, table_id, ltdvs) = seed_ftdv_timeline(&db, 2).await;
         let mut conn = db.acquire().await.unwrap();
@@ -730,8 +725,7 @@ mod tests {
 
     /// `Versions::Range` with same-side bounds returns the contiguous slice
     /// in chronological order, padded with `None` when shorter than asked.
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_resolve_logical_range_head(db: TdPool) -> Result<(), TdError> {
         let (_collection, _function, table_id, ltdvs) = seed_ftdv_timeline(&db, 3).await;
         let mut conn = db.acquire().await.unwrap();
@@ -754,8 +748,7 @@ mod tests {
 
     /// `Versions::Range` with descending bounds returns an empty Vec rather
     /// than erroring (best-effort semantics).
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_resolve_logical_range_descending(db: TdPool) -> Result<(), TdError> {
         let (_collection, _function, table_id, _ftdvs) = seed_ftdv_timeline(&db, 3).await;
         let mut conn = db.acquire().await.unwrap();
@@ -775,8 +768,7 @@ mod tests {
 
     /// `Versions::Range(Initial, Initial)` walks forward from the oldest
     /// LTDV in chronological order.
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_resolve_logical_range_initial(db: TdPool) -> Result<(), TdError> {
         let (_collection, _function, table_id, ltdvs) = seed_ftdv_timeline(&db, 3).await;
         let mut conn = db.acquire().await.unwrap();
@@ -800,8 +792,7 @@ mod tests {
     /// `Versions::Range(Initial, Head)` resolves to all LTDVs in the
     /// timeline. Mixed-side bounds don't define a deterministic range size,
     /// so the resolver returns the contiguous slice as-is without padding.
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_resolve_logical_range_mixed_bounds(db: TdPool) -> Result<(), TdError> {
         let (_collection, _function, table_id, ltdvs) = seed_ftdv_timeline(&db, 3).await;
         let mut conn = db.acquire().await.unwrap();
@@ -826,8 +817,7 @@ mod tests {
     /// branch — using a fresh `function_id` not tied to any seeded
     /// execution falls through to `Versions::Range(Initial(0), Head(0))`,
     /// returning every LTDV in the timeline.
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_resolve_logical_new_no_prior_execution(db: TdPool) -> Result<(), TdError> {
         let (_collection, _function, table_id, ltdvs) = seed_ftdv_timeline(&db, 3).await;
         let mut conn = db.acquire().await.unwrap();
@@ -851,8 +841,7 @@ mod tests {
     /// whole timeline. Setup: publisher mints v1, v2 in two
     /// publisher-rooted executions; consumer has an LFR aligned with
     /// run 1's execution; resolving for the consumer must yield {v2}.
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_resolve_logical_new_downstream_consumer(db: TdPool) -> Result<(), TdError> {
         let (collection, _publisher, table_id, ltdvs) = seed_ftdv_timeline(&db, 2).await;
 
@@ -912,8 +901,7 @@ mod tests {
     /// LTDVs partition by `table_id`: a resolver call against table A must
     /// not surface LTDVs minted for table B. Guards against partition
     /// scope leaks.
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_resolve_logical_partition_isolation(db: TdPool) -> Result<(), TdError> {
         let (collection, function, table_a_id, ftdvs_a) = seed_ftdv_timeline(&db, 2).await;
 
@@ -992,8 +980,7 @@ mod tests {
     /// Voided LTDVs remain visible to the resolver. The planner pins
     /// whatever is the latest at `triggered_on` regardless of pointer
     /// status; the gate against running on Voided inputs lives at dispatch.
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_resolve_logical_voided_visible(db: TdPool) -> Result<(), TdError> {
         use td_objects::dxo::logical::LogicalPointerDao;
         use td_objects::types::basic::{LogicalPointerReason, LogicalPointerStatus};

@@ -77,8 +77,7 @@ mod tests {
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_tower_metadata_table_download_state(db: TdPool) {
         use crate::table::layers::storage::resolve_table_location;
         use td_objects::dxo::table::TableDBWithNames;
@@ -139,8 +138,7 @@ mod tests {
             ]);
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[td_test::test(db, flavor = "multi_thread", worker_threads = 1)]
     async fn test_download_state(db: TdPool) -> Result<(), TdError> {
         let context = Context::with_defaults(db);
 

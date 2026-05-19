@@ -51,8 +51,7 @@ mod tests {
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_tower_metadata_read_role(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
@@ -71,8 +70,7 @@ mod tests {
             ]);
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_read_role_with_id(db: TdPool) -> Result<(), TdError> {
         let role = db
             .seed()
@@ -111,8 +109,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_read_role_with_name(db: TdPool) -> Result<(), TdError> {
         let _role = db
             .seed()

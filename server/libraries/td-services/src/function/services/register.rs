@@ -157,8 +157,7 @@ mod tests {
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_tower_metadata_register_function(db: TdPool) {
         use crate::function::layers::register::{
             build_dependency_versions, build_table_versions, build_tables_trigger_versions,
@@ -305,8 +304,7 @@ mod tests {
             ]);
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_register_empty(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
@@ -347,8 +345,7 @@ mod tests {
         assert_register(&db, &UserId::admin(), &collection, &create, &response).await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_register_empty_vec(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
@@ -389,8 +386,7 @@ mod tests {
         assert_register(&db, &UserId::admin(), &collection, &create, &response).await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_register_table_output(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
@@ -431,8 +427,7 @@ mod tests {
         assert_register(&db, &UserId::admin(), &collection, &create, &response).await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_register_table_output_duplicate_output_tables_err(
         db: TdPool,
     ) -> Result<(), TdError> {
@@ -487,8 +482,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_register_table_dependency(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
@@ -529,21 +523,18 @@ mod tests {
         assert_register(&db, &UserId::admin(), &collection, &create, &response).await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_register_implicit_trigger_none(db: TdPool) -> Result<(), TdError> {
         test_register_trigger(db, None).await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_register_implicit_trigger_some_empty(db: TdPool) -> Result<(), TdError> {
         let test_triggers = Some(vec![]);
         test_register_trigger(db, test_triggers).await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_register_implicit_trigger_some(db: TdPool) -> Result<(), TdError> {
         let test_triggers = Some(vec![
             TableTriggerDto::try_from("table_1")?,
@@ -633,8 +624,7 @@ mod tests {
         assert_register(&db, &UserId::admin(), &collection, &create, &response).await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_register_tables_dependencies_triggers(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
@@ -717,8 +707,7 @@ mod tests {
         assert_register(&db, &UserId::admin(), &collection, &create, &response).await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_register_tables_dependencies_different_collections_permissions_ok(
         db: TdPool,
     ) -> Result<(), TdError> {
@@ -726,8 +715,7 @@ mod tests {
             .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_register_tables_dependencies_different_collections_permissions_forbidden(
         db: TdPool,
     ) -> Result<(), TdError> {
@@ -735,8 +723,7 @@ mod tests {
             .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_register_tables_triggers_different_collections_with_tr_permissions_ok(
         db: TdPool,
     ) -> Result<(), TdError> {
@@ -744,8 +731,7 @@ mod tests {
             .await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_register_tables_triggers_different_collections_with_tr_permissions_forbidden(
         db: TdPool,
     ) -> Result<(), TdError> {
@@ -908,8 +894,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_register_same_name(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let _ = db
@@ -958,20 +943,17 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_register_private_tables_all_same_collection(db: TdPool) -> Result<(), TdError> {
         test_private_tables(db, false, false).await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_register_private_tables_deps_diff_collection(db: TdPool) -> Result<(), TdError> {
         test_private_tables(db, true, false).await
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_register_private_tables_triggers_diff_collection(
         db: TdPool,
     ) -> Result<(), TdError> {
@@ -1082,8 +1064,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_private_table_flag(db: TdPool) -> Result<(), TdError> {
         let collection_name_1 = CollectionName::try_from("collection_1")?;
         db.seed()
@@ -1131,8 +1112,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_dependency_fixed_validation(db: TdPool) -> Result<(), TdError> {
         let collection_name_1 = CollectionName::try_from("collection_1")?;
         db.seed()
@@ -1210,8 +1190,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_dependency_range_validation(db: TdPool) -> Result<(), TdError> {
         let collection_name_1 = CollectionName::try_from("collection_1")?;
         db.seed()
@@ -1252,8 +1231,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_workers_created(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("collection")?;
         let collection = db
@@ -1304,8 +1282,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_multiple_workers_error(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("collection")?;
         db.seed()

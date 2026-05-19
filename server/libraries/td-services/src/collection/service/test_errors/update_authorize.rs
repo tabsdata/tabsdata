@@ -15,8 +15,7 @@ use td_objects::rest_urls::CollectionParam;
 use td_objects::types::basic::{AccessTokenId, CollectionIdName, CollectionName, RoleId, UserId};
 use td_queries::test_utils::SeedEntry;
 
-#[td_test::test(sqlx)]
-#[tokio::test]
+#[td_test::test(db)]
 async fn test_not_allowed_to_update_collection(db: TdPool) {
     let name = CollectionName::try_from("ds0").unwrap();
     let _ = db.seed().collection(&name, &UserId::admin()).await;

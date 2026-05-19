@@ -151,8 +151,7 @@ mod tests {
     use td_objects::types::basic::{CollectionName, RoleId, ToCollectionId, UserId};
     use td_queries::test_utils::SeedEntry;
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_get_permissions(db: TdPool) -> Result<(), TdError> {
         let provider = SqlAuthzDataProvider;
         let permissions = provider
@@ -165,8 +164,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_get_inter_collection_permissions(db: TdPool) -> Result<(), TdError> {
         let c0 = db
             .seed()
@@ -201,8 +199,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_provider_get(db: TdPool) -> Result<(), TdError> {
         let c0 = db
             .seed()

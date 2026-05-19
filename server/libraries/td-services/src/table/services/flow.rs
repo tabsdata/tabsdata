@@ -87,8 +87,7 @@ mod tests {
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_tower_metadata_table_flow_graph(db: TdPool) {
         use crate::graph::layers::build::GraphBuilder;
         use td_tower::metadata::type_of_val;
@@ -144,8 +143,7 @@ mod tests {
         ]
     });
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_table_graph_no_deps(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("collection_0")?;
         let collection_0 = db
@@ -233,8 +231,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_table_graph_downstream(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("collection_0")?;
         let collection_0 = db
@@ -375,8 +372,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_table_graph_upstream(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("collection_0")?;
         let collection_0 = db

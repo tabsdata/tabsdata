@@ -74,8 +74,7 @@ mod tests {
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_tower_metadata_update_user(db: TdPool) {
         use td_tower::metadata::type_of_val;
 
@@ -113,8 +112,7 @@ mod tests {
             ]);
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_update_user_admin(db: TdPool) {
         let _ = db
             .seed()
@@ -170,8 +168,7 @@ mod tests {
         assert!(*user.password_must_change)
     }
 
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_update_user_self(db: TdPool) {
         let user = db
             .seed()

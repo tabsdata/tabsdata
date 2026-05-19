@@ -94,8 +94,7 @@ mod tests {
     use url::Url;
 
     #[cfg(feature = "test_tower_metadata")]
-    #[td_test::test(sqlx)]
-    #[tokio::test]
+    #[td_test::test(db)]
     async fn test_tower_metadata_table_sample(db: TdPool) {
         use crate::table::layers::storage::resolve_table_location;
         use td_objects::And;
@@ -167,9 +166,8 @@ mod tests {
     }
 
     //noinspection DuplicatedCode
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_sample() -> Result<(), TdError> {
-        let db = td_database::test_utils::db().await?;
+    #[td_test::test(db, flavor = "multi_thread", worker_threads = 1)]
+    async fn test_sample(db: TdPool) -> Result<(), TdError> {
         let test_dir = td_common::tdtestdir!();
         let url = Url::from_directory_path(test_dir).unwrap();
         let storage = Storage::from(vec![
