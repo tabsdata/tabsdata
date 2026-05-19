@@ -83,6 +83,27 @@ mod definitions {
         pub enabled: Enabled, // added in v4
     }
 
+    /// Body for `POST /api/v1/collections/{coll}/functions/{name}/patch`.
+    ///
+    /// A patch is a code-only override of a specific `FunctionVersionId`
+    /// (`patch_of`). It shares the parent's topology — no `tables`,
+    /// `dependencies`, `triggers`, `workers` — and is reachable only by
+    /// explicit fvid (replay). Fields not set fall back to parent values.
+    #[ta_objects::Dto]
+    pub struct FunctionPatch {
+        /// The function version this patches. Required.
+        #[dxo(extractor)]
+        pub patch_of: FunctionVersionId,
+        pub bundle_id: BundleId,
+        pub snippet: Snippet,
+        #[serde(default)]
+        #[builder(default)]
+        pub runtime_values: Option<FunctionRuntimeValues>,
+        #[serde(default)]
+        #[builder(default)]
+        pub description: Option<Description>,
+    }
+
     #[ta_objects::Dao]
     #[derive(Eq, PartialEq)]
     #[dao(
@@ -145,6 +166,80 @@ mod definitions {
         pub status: FunctionStatus,
         #[dxo(setter, updater(include, try_from = FunctionEnable))]
         pub enabled: Enabled, // added in v4
+    }
+
+    /// Patch DAO — code-only override of a parent function version.
+    /// Lives in its own `function_patches` table so every "find latest
+    /// version" query against `functions` is patch-blind by
+    /// construction. Reachable only by explicit fvid (replay) or via
+    /// the patches list endpoint.
+    ///
+    /// Versioned by `parent_function_version_id`: at any point in time
+    /// each head fvid has at most one current patch (latest
+    /// `defined_on`, `status = Active`). Mint reads through the current
+    /// view via `conn.versioned(at).fetch_*` so a replay scheduled at
+    /// T1 sees the patch active at T1 — not whatever lands between
+    /// request and dispatch. List-patches reads historic instead.
+    #[ta_objects::Dao]
+    #[derive(Eq, PartialEq)]
+    #[dao(
+        sql_table = "function_patches",
+        order_by(col = "defined_on", dir = "desc"),
+        versioned(
+            pk = "id",
+            version_by = "defined_on",
+            partition_by = "parent_function_version_id",
+            current = "function_patches_current",
+        ),
+        states(
+            Active = FunctionStatus::Active,
+        )
+    )]
+    pub struct FunctionPatchDB {
+        #[builder(default = "FunctionVersionId::new()")]
+        #[dxo(extractor)]
+        pub id: FunctionVersionId,
+        pub parent_function_version_id: FunctionVersionId,
+        #[dxo(extractor)]
+        pub function_id: FunctionId,
+        #[dxo(extractor)]
+        pub collection_id: CollectionId,
+        pub snippet: Snippet,
+        #[dxo(extractor)]
+        pub bundle_id: BundleId,
+        pub runtime_values: FunctionRuntimeValues,
+        pub description: Description,
+        pub defined_on: AtTime,
+        pub defined_by_id: UserId,
+        #[builder(default = FunctionStatus::Active)]
+        pub status: FunctionStatus,
+    }
+
+    /// Public DTO for a patch — the response shape for patch create
+    /// and list-patches endpoints. Mirrors `FunctionPatchDB` 1:1;
+    /// clients resolve parent details separately via the parent fvid.
+    #[ta_objects::Dto]
+    #[dto(list(on = FunctionPatchDB))]
+    pub struct FunctionPatchRecord {
+        #[dto(list(pagination_by = "-"))]
+        pub id: FunctionVersionId,
+        #[dto(list(filter, filter_like, order_by))]
+        pub parent_function_version_id: FunctionVersionId,
+        #[dto(list(filter, filter_like, order_by))]
+        pub function_id: FunctionId,
+        #[dto(list(filter, filter_like, order_by))]
+        pub collection_id: CollectionId,
+        pub snippet: Snippet,
+        pub bundle_id: BundleId,
+        pub runtime_values: FunctionRuntimeValues,
+        #[dto(list(filter, filter_like))]
+        pub description: Description,
+        #[dto(list(filter, filter_like, order_by))]
+        pub defined_on: AtTime,
+        #[dto(list(filter, filter_like, order_by))]
+        pub defined_by_id: UserId,
+        #[dto(list(filter, order_by))]
+        pub status: FunctionStatus,
     }
 
     #[ta_objects::Dao]
