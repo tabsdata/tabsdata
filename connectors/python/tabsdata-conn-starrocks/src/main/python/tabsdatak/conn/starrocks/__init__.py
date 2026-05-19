@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import ABC
 from collections.abc import Mapping
 from typing import Annotated, Any, Literal, TypeAlias, Union
 
@@ -17,10 +18,18 @@ from tabsdatak.api import (
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation
 from tabsdatak.conn.common.types import (
+    AwsAccessSecretKey,
+    AwsRegionSpec,
+    AzContainerSpec,
+    AzureAccountKey,
+    BasePathSpec,
     CfgSpec,
-    CloudLocation,
     EntityWhitelistSpec,
+    GCPJson,
+    GCSBucketSpec,
+    S3BucketSpec,
     UserPassword,
+    full_path,
 )
 
 # noinspection PyProtectedMember
@@ -70,6 +79,55 @@ DestCfgKey: TypeAlias = Literal[
 DestCfgSpec: TypeAlias = Annotated[
     Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
 ]
+
+
+# --- Cloud locations -------------------------------------------------
+#
+# StarRocks carries a per-Conn ``staging`` field whose value is one of
+# the concrete CloudLocation subclasses below. They mirror the legacy
+# conn-common shapes but live here so starrocks owns its own location
+# surface and routes init failures through StarRocksErrorCode.
+
+
+class CloudLocation(_api.DescriptorBase, ABC):
+    __kind__ = "startRocksCloudLocation"
+
+
+@_api.dataclass(StarRocksErrorCode.STARROCKS_8, kw_only=True)
+class S3Location(CloudLocation):
+    __kind__ = "startRocksS3Location"
+    bucket: S3BucketSpec
+    region: AwsRegionSpec
+    credentials: AwsAccessSecretKey
+    base_path: BasePathSpec = ""
+    cfg: CfgSpec | None = None
+
+    def full_path(self, path: str) -> str:
+        return full_path(self.base_path, path)
+
+
+@_api.dataclass(StarRocksErrorCode.STARROCKS_9, kw_only=True)
+class AzBlobLocation(CloudLocation):
+    __kind__ = "startRocksAzBlobLocation"
+    container: AzContainerSpec
+    credentials: AzureAccountKey
+    base_path: BasePathSpec = ""
+    cfg: CfgSpec | None = None
+
+    def full_path(self, path: str) -> str:
+        return full_path(self.base_path, path)
+
+
+@_api.dataclass(StarRocksErrorCode.STARROCKS_10, kw_only=True)
+class GCSLocation(CloudLocation):
+    __kind__ = "startRocksGcsLocation"
+    bucket: GCSBucketSpec
+    credentials: GCPJson
+    base_path: BasePathSpec = ""
+    cfg: CfgSpec | None = None
+
+    def full_path(self, path: str) -> str:
+        return full_path(self.base_path, path)
 
 
 # --- Connection ------------------------------------------------------

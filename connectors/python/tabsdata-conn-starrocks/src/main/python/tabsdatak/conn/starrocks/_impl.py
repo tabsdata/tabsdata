@@ -6,12 +6,12 @@ from pathlib import Path
 from typing import Any
 
 from tabsdatak.api import Env, Secret
-from tabsdatak.conn.common.types import (
+from tabsdatak.conn.common.types import UserPassword
+from tabsdatak.conn.starrocks import (
     AzBlobLocation,
     CloudLocation,
     GCSLocation,
     S3Location,
-    UserPassword,
 )
 
 logger = logging.getLogger(__name__)

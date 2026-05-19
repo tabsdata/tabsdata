@@ -47,3 +47,15 @@ class StarRocksErrorCode(ErrorCode):
         StarRocksRuntimeException,
         "StarRocks staging location type is not supported: {kind}",
     )  # build_files_function: unknown CloudLocation subtype
+    STARROCKS_8 = ErrorDef(
+        ConnInitException,
+        "Cannot create S3Location",
+    )  # S3Location
+    STARROCKS_9 = ErrorDef(
+        ConnInitException,
+        "Cannot create AzBlobLocation",
+    )  # AzBlobLocation
+    STARROCKS_10 = ErrorDef(
+        ConnInitException,
+        "Cannot create GCSLocation",
+    )  # GCSLocation
