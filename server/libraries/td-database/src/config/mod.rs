@@ -2,9 +2,36 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+//! Database connection configuration.
+//!
+//! [`BackendConfig`] picks one of the supported backends (sqlite, postgres,
+//! embedded postgres, mysql); each has its own per-backend config struct in
+//! a submodule. [`DatabaseConfig`] bundles that with [`PoolConfig`] for the
+//! sqlx pool settings.
+
+#[cfg(all(postgres, feature = "embedded-postgres"))]
+pub mod embedded;
+#[cfg(mysql)]
+pub mod mysql;
+#[cfg(postgres)]
+pub mod postgres;
+#[cfg(sqlite)]
+pub mod sqlite;
+
+#[cfg(all(postgres, feature = "embedded-postgres"))]
+pub use embedded::EmbeddedConfig;
+#[cfg(mysql)]
+pub use mysql::{MySqlConfig, MySqlUrl};
+#[cfg(postgres)]
+pub use postgres::{PostgresConfig, PostgresUrl};
+#[cfg(sqlite)]
+pub use sqlite::{SqliteConfig, SqliteUrl};
+
 use crate::dynamic::DynamicPool;
+#[cfg(all(postgres, feature = "embedded-postgres"))]
+use crate::embedded::EmbeddedPostgres;
 use crate::error::DbError;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use serde_with::DurationSeconds;
 use serde_with::serde_as;
 use sqlx::any::AnyConnectOptions;
@@ -12,156 +39,24 @@ use sqlx::pool::PoolOptions;
 use sqlx::{ConnectOptions, Database};
 #[cfg(sqlite)]
 use std::fs;
-use std::ops::Deref;
+#[cfg(all(postgres, feature = "embedded-postgres"))]
+use std::path::PathBuf;
 use std::time::Duration;
-use tracing::log::LevelFilter;
 use tracing::debug;
+use tracing::log::LevelFilter;
 #[cfg(sqlite)]
 use tracing::warn;
 use url::Url;
 
 const SLOW_QUERIES_THRESHOLD: u64 = 5000;
 
-// ── DB-specific config structs ──────────────────────────────────────────
+// ── BackendConfig enum ────────────────────────────────────────────────
 
-#[cfg(sqlite)]
-#[derive(Debug, Clone, Serialize)]
-pub struct SqliteUrl(Url);
-
-#[cfg(sqlite)]
-impl Deref for SqliteUrl {
-    type Target = Url;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-#[cfg(sqlite)]
-impl TryFrom<Url> for SqliteUrl {
-    type Error = String;
-
-    fn try_from(url: Url) -> Result<Self, Self::Error> {
-        let scheme = url.scheme();
-        if sqlx::Sqlite::URL_SCHEMES.contains(&scheme) || scheme.eq_ignore_ascii_case("file") {
-            Ok(SqliteUrl(url))
-        } else {
-            Err(format!("expected sqlite URL, found scheme '{scheme}'"))
-        }
-    }
-}
-
-#[cfg(sqlite)]
-impl<'de> Deserialize<'de> for SqliteUrl {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        Url::deserialize(deserializer)?
-            .try_into()
-            .map_err(serde::de::Error::custom)
-    }
-}
-
-#[cfg(sqlite)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SqliteConfig {
-    url: SqliteUrl,
-}
-
-#[cfg(postgres)]
-#[derive(Debug, Clone, Serialize)]
-pub struct PostgresUrl(Url);
-
-#[cfg(postgres)]
-impl Deref for PostgresUrl {
-    type Target = Url;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-#[cfg(postgres)]
-impl TryFrom<Url> for PostgresUrl {
-    type Error = String;
-
-    fn try_from(url: Url) -> Result<Self, Self::Error> {
-        let scheme = url.scheme();
-        if sqlx::Postgres::URL_SCHEMES.contains(&scheme) {
-            Ok(PostgresUrl(url))
-        } else {
-            Err(format!("expected postgres URL, found scheme '{scheme}'"))
-        }
-    }
-}
-
-#[cfg(postgres)]
-impl<'de> Deserialize<'de> for PostgresUrl {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        Url::deserialize(deserializer)?
-            .try_into()
-            .map_err(serde::de::Error::custom)
-    }
-}
-
-#[cfg(postgres)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PostgresConfig {
-    url: PostgresUrl,
-}
-
-#[cfg(mysql)]
-#[derive(Debug, Clone, Serialize)]
-pub struct MySqlUrl(Url);
-
-#[cfg(mysql)]
-impl Deref for MySqlUrl {
-    type Target = Url;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-#[cfg(mysql)]
-impl TryFrom<Url> for MySqlUrl {
-    type Error = String;
-
-    fn try_from(url: Url) -> Result<Self, Self::Error> {
-        let scheme = url.scheme();
-        if sqlx::MySql::URL_SCHEMES.contains(&scheme) {
-            Ok(MySqlUrl(url))
-        } else {
-            Err(format!("expected mysql URL, found scheme '{scheme}'"))
-        }
-    }
-}
-
-#[cfg(mysql)]
-impl<'de> Deserialize<'de> for MySqlUrl {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        Url::deserialize(deserializer)?
-            .try_into()
-            .map_err(serde::de::Error::custom)
-    }
-}
-#[cfg(mysql)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MySqlConfig {
-    url: MySqlUrl,
-}
-
-// ── DbConnConfig enum ──────────────────────────────────────────────────
-
-/// Database connection configuration. Each variant pairs a URL with the
-/// backend-specific config, making URL/config mismatches impossible.
+/// Database connection configuration. Each variant pairs a URL (or, for
+/// embedded postgres, the boot knobs) with the backend-specific config.
 ///
 /// The backend is determined by which config key is present (`sqlite`,
-/// `postgres`, or `mysql`). When none is present the backend is inferred
+/// `postgres`, or `mysql`). When none is present, the backend is inferred
 /// from the URL scheme.
 ///
 /// ```yaml
@@ -176,61 +71,87 @@ pub enum BackendConfig {
     Sqlite(SqliteConfig),
     #[cfg(postgres)]
     Postgres(PostgresConfig),
+    /// In-process Postgres booted by [`crate::embedded::start`] at connect
+    /// time. Mutually exclusive with [`Self::Postgres`] — pick external
+    /// (URL set) or embedded (boot knobs set), not both.
+    #[cfg(all(postgres, feature = "embedded-postgres"))]
+    EmbeddedPostgres(EmbeddedConfig),
     #[cfg(mysql)]
     MySql(MySqlConfig),
 }
 
 impl BackendConfig {
-    /// Returns the connection URL regardless of variant.
-    pub fn url(&self) -> &Url {
+    /// The configured URL. `None` for [`Self::EmbeddedPostgres`], since the
+    /// URL isn't known until the server boots. Query the live URL via
+    /// [`crate::pool::TdPool::url`] instead.
+    pub fn url(&self) -> Option<&Url> {
         match self {
             #[cfg(sqlite)]
-            Self::Sqlite(c) => &c.url,
+            Self::Sqlite(c) => Some(&c.url),
             #[cfg(postgres)]
-            Self::Postgres(c) => &c.url,
+            Self::Postgres(c) => Some(&c.url),
+            #[cfg(all(postgres, feature = "embedded-postgres"))]
+            Self::EmbeddedPostgres(_) => None,
             #[cfg(mysql)]
-            Self::MySql(c) => &c.url,
+            Self::MySql(c) => Some(&c.url),
         }
+    }
+
+    /// Build the embedded-postgres variant from boot knobs.
+    #[cfg(all(postgres, feature = "embedded-postgres"))]
+    pub fn embedded_postgres(cfg: EmbeddedConfig) -> Self {
+        Self::EmbeddedPostgres(cfg)
+    }
+
+    /// Persistent embedded postgres rooted at `data_dir`, optionally on a
+    /// fixed `port`. The apiserver's no-URL fallback uses this so callers
+    /// don't need to import [`EmbeddedConfig`].
+    #[cfg(all(postgres, feature = "embedded-postgres"))]
+    pub fn embedded_postgres_persistent(data_dir: Option<PathBuf>, port: Option<u16>) -> Self {
+        Self::embedded_postgres(EmbeddedConfig {
+            data_dir,
+            port,
+            persistent: true,
+        })
     }
 
     /// Infer the backend variant from the URL scheme.
     pub fn from_url(url: Url) -> Result<Self, DbError> {
         #[cfg(sqlite)]
         if let Ok(sqlite_url) = SqliteUrl::try_from(url.clone()) {
-            return Ok(BackendConfig::Sqlite(SqliteConfig { url: sqlite_url }));
+            return Ok(Self::Sqlite(SqliteConfig { url: sqlite_url }));
         }
         #[cfg(postgres)]
         if let Ok(pg_url) = PostgresUrl::try_from(url.clone()) {
-            return Ok(BackendConfig::Postgres(PostgresConfig { url: pg_url }));
+            return Ok(Self::Postgres(PostgresConfig { url: pg_url }));
         }
         #[cfg(mysql)]
         if let Ok(my_url) = MySqlUrl::try_from(url.clone()) {
-            return Ok(BackendConfig::MySql(MySqlConfig { url: my_url }));
+            return Ok(Self::MySql(MySqlConfig { url: my_url }));
         }
         Err(DbError::UnsupportedDatabase(url.scheme().to_string()))
     }
 
     /// Replace the URL, preserving backend-specific config when the backend
     /// stays the same, or resetting to defaults when the backend changes.
+    /// Setting an explicit URL on the embedded-postgres variant switches it
+    /// to external postgres.
     pub fn with_url(self, url: Url) -> Result<Self, DbError> {
         let new = Self::from_url(url)?;
         Ok(match (self, new) {
             #[cfg(sqlite)]
-            (Self::Sqlite(_old), Self::Sqlite(new)) => {
+            (Self::Sqlite(_), Self::Sqlite(new)) => {
                 debug!("URL changed, preserving sqlite backend");
-                let new = SqliteConfig { url: new.url };
                 Self::Sqlite(new)
             }
             #[cfg(postgres)]
-            (Self::Postgres(_old), Self::Postgres(new)) => {
+            (Self::Postgres(_), Self::Postgres(new)) => {
                 debug!("URL changed, preserving postgres backend");
-                let new = PostgresConfig { url: new.url };
                 Self::Postgres(new)
             }
             #[cfg(mysql)]
-            (Self::MySql(_old), Self::MySql(new)) => {
+            (Self::MySql(_), Self::MySql(new)) => {
                 debug!("URL changed, preserving mysql backend");
-                let new = MySqlConfig { url: new.url };
                 Self::MySql(new)
             }
             #[allow(unreachable_patterns)]
@@ -356,6 +277,16 @@ impl Default for PoolConfig {
 
 // ── DatabaseConfig ─────────────────────────────────────────────────────
 
+/// Result of [`DatabaseConfig::connect`]. Bundles the sqlx pool with the
+/// URL it actually connected to and the embedded postgres handle when one
+/// was booted; `TdPool` parks the handle under `Arc`.
+pub struct ConnectOutput {
+    pub pool: DynamicPool,
+    pub url: Url,
+    #[cfg(feature = "embedded-postgres")]
+    pub embedded: Option<EmbeddedPostgres>,
+}
+
 /// Configuration for a database connection pool.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DatabaseConfig {
@@ -369,7 +300,7 @@ pub struct DatabaseConfig {
 
 impl DatabaseConfig {
     pub fn url(&self) -> Option<&Url> {
-        self.conn.as_ref().map(|c| c.url())
+        self.conn.as_ref().and_then(|c| c.url())
     }
 
     pub fn new<P: Into<Url>>(db_url: P) -> Result<Self, DbError> {
@@ -380,7 +311,10 @@ impl DatabaseConfig {
         Ok(config)
     }
 
-    pub async fn connect(&self) -> Result<DynamicPool, DbError> {
+    /// Connect using this configuration. For the embedded-postgres variant,
+    /// boots the in-process server first and returns the live handle in
+    /// `ConnectOutput.embedded`.
+    pub async fn connect(&self) -> Result<ConnectOutput, DbError> {
         if self.pool.max_connections == u32::MIN {
             Err(DbError::InvalidMaxConnections(self.pool.max_connections))?
         }
@@ -392,35 +326,67 @@ impl DatabaseConfig {
         }
 
         let conn_config = self.conn.as_ref().ok_or(DbError::MissingDatabaseLocation)?;
-        let url = conn_config.url();
-        let conn_options = self.conn_options(url)?;
 
         match conn_config {
             #[cfg(sqlite)]
             BackendConfig::Sqlite(c) => {
                 Self::try_create_missing_dir(&c.url);
+                let conn_options = self.conn_options(&c.url)?;
                 let (rw, ro) = (
                     // important to create rw first so create_if_missing kicks in
                     self.connect_sqlite(&conn_options, false).await?,
                     self.connect_sqlite(&conn_options, true).await?,
                 );
-                Ok(DynamicPool::Sqlite { ro, rw })
+                Ok(ConnectOutput {
+                    pool: DynamicPool::Sqlite { ro, rw },
+                    url: (*c.url).clone(),
+                    #[cfg(feature = "embedded-postgres")]
+                    embedded: None,
+                })
             }
             #[cfg(postgres)]
-            BackendConfig::Postgres { .. } => {
-                let (rw, ro) = (
-                    self.connect_postgres(&conn_options, false).await?,
-                    self.connect_postgres(&conn_options, true).await?,
-                );
-                Ok(DynamicPool::Postgres { ro, rw })
+            BackendConfig::Postgres(c) => {
+                let url = (*c.url).clone();
+                let conn_options = self.conn_options(&url)?;
+                let (rw, ro) = tokio::try_join!(
+                    self.connect_postgres(&conn_options, false),
+                    self.connect_postgres(&conn_options, true),
+                )?;
+                Ok(ConnectOutput {
+                    pool: DynamicPool::Postgres { ro, rw },
+                    url,
+                    #[cfg(feature = "embedded-postgres")]
+                    embedded: None,
+                })
+            }
+            #[cfg(all(postgres, feature = "embedded-postgres"))]
+            BackendConfig::EmbeddedPostgres(ecfg) => {
+                let (pg, url) = crate::embedded::start(ecfg).await?;
+                tracing::info!("Embedded postgres listening at {}", url);
+                let conn_options = self.conn_options(&url)?;
+                let (rw, ro) = tokio::try_join!(
+                    self.connect_postgres(&conn_options, false),
+                    self.connect_postgres(&conn_options, true),
+                )?;
+                Ok(ConnectOutput {
+                    pool: DynamicPool::Postgres { ro, rw },
+                    url,
+                    embedded: Some(pg),
+                })
             }
             #[cfg(mysql)]
-            BackendConfig::MySql { .. } => {
-                let (rw, ro) = (
-                    self.connect_mysql(&conn_options, false).await?,
-                    self.connect_mysql(&conn_options, true).await?,
-                );
-                Ok(DynamicPool::MySql { ro, rw })
+            BackendConfig::MySql(c) => {
+                let conn_options = self.conn_options(&c.url)?;
+                let (rw, ro) = tokio::try_join!(
+                    self.connect_mysql(&conn_options, false),
+                    self.connect_mysql(&conn_options, true),
+                )?;
+                Ok(ConnectOutput {
+                    pool: DynamicPool::MySql { ro, rw },
+                    url: (*c.url).clone(),
+                    #[cfg(feature = "embedded-postgres")]
+                    embedded: None,
+                })
             }
         }
     }
@@ -549,16 +515,18 @@ impl DatabaseConfig {
 mod tests {
     use super::*;
 
-    // ── DbConnConfig round-trip ───────────────────────────────────────
+    // ── BackendConfig round-trip ──────────────────────────────────────
 
+    #[cfg(sqlite)]
     #[test]
     fn conn_sqlite_explicit() {
         let yaml = "url: file:///tmp/test.db";
         let conn: BackendConfig = serde_yaml::from_str(yaml).unwrap();
         assert!(matches!(conn, BackendConfig::Sqlite(_)));
-        assert_eq!(conn.url().as_str(), "file:///tmp/test.db");
+        assert_eq!(conn.url().unwrap().as_str(), "file:///tmp/test.db");
     }
 
+    #[cfg(sqlite)]
     #[test]
     fn conn_sqlite_round_trip() {
         let conn = BackendConfig::from_url(Url::parse("file:///tmp/test.db").unwrap()).unwrap();
@@ -591,12 +559,13 @@ mod tests {
         assert_eq!(conn.url(), conn2.url());
     }
 
+    #[cfg(sqlite)]
     #[test]
     fn conn_infer_sqlite_from_url() {
         let yaml = "url: file:///tmp/inferred.db";
         let conn: BackendConfig = serde_yaml::from_str(yaml).unwrap();
         assert!(matches!(conn, BackendConfig::Sqlite(_)));
-        assert_eq!(conn.url().as_str(), "file:///tmp/inferred.db");
+        assert_eq!(conn.url().unwrap().as_str(), "file:///tmp/inferred.db");
     }
 
     #[cfg(postgres)]
@@ -622,6 +591,9 @@ mod tests {
         assert!(result.is_err());
     }
 
+    /// `sqlite: {}` has no `url`, so deserialization fails. Empty bodies are
+    /// rejected by serde when no untagged variant accepts them.
+    #[cfg(all(sqlite, not(postgres)))]
     #[test]
     fn conn_missing_url_errors() {
         let yaml = "sqlite: {}";
@@ -631,6 +603,7 @@ mod tests {
 
     // ── DatabaseConfig ────────────────────────────────────────────────
 
+    #[cfg(sqlite)]
     #[test]
     fn database_config_conn_inferred() {
         let yaml = "
@@ -641,7 +614,7 @@ max_connections: 20
         let cfg: DatabaseConfig = serde_yaml::from_str(yaml).unwrap();
         assert!(matches!(cfg.conn, Some(BackendConfig::Sqlite(_))));
         assert_eq!(
-            cfg.conn.as_ref().unwrap().url().as_str(),
+            cfg.conn.as_ref().unwrap().url().unwrap().as_str(),
             "file:///tmp/test.db"
         );
         assert_eq!(cfg.pool.min_connections, 2);
@@ -651,15 +624,32 @@ max_connections: 20
         assert!(cfg.pool.test_before_acquire);
     }
 
+    #[cfg(all(postgres, not(sqlite)))]
+    #[test]
+    fn database_config_conn_inferred() {
+        let yaml = "
+url: postgres://user:pass@localhost/mydb
+min_connections: 2
+max_connections: 20
+";
+        let cfg: DatabaseConfig = serde_yaml::from_str(yaml).unwrap();
+        assert!(matches!(cfg.conn, Some(BackendConfig::Postgres(_))));
+        assert_eq!(cfg.pool.min_connections, 2);
+        assert_eq!(cfg.pool.max_connections, 20);
+        assert_eq!(cfg.pool.acquire_timeout, Duration::from_secs(30));
+        assert!(cfg.pool.test_before_acquire);
+    }
+
+    /// An empty body matches [`BackendConfig::EmbeddedPostgres`] when
+    /// `embedded-postgres` is enabled (all three of its fields default).
+    /// Otherwise no variant matches and `conn` parses as `None`.
     #[test]
     fn database_config_no_conn() {
         let yaml = "
 max_connections: 5
 ";
         let cfg: DatabaseConfig = serde_yaml::from_str(yaml).unwrap();
-        assert!(cfg.conn.is_none());
         assert_eq!(cfg.pool.max_connections, 5);
-        // rest defaults
         assert_eq!(cfg.pool.min_connections, 1);
     }
 
@@ -685,15 +675,19 @@ max_connections: 5
     #[test]
     fn database_config_empty_yaml() {
         let cfg: DatabaseConfig = serde_yaml::from_str("{}").unwrap();
-        assert!(cfg.conn.is_none());
         assert_eq!(cfg.pool.min_connections, 1);
         assert_eq!(cfg.pool.max_connections, 10);
     }
 
     #[test]
     fn database_config_round_trip() {
+        #[cfg(sqlite)]
+        let url = Url::parse("file:///tmp/rt.db").unwrap();
+        #[cfg(all(postgres, not(sqlite)))]
+        let url = Url::parse("postgres://user:pass@localhost/rt").unwrap();
+
         let original = DatabaseConfig {
-            conn: Some(BackendConfig::from_url(Url::parse("file:///tmp/rt.db").unwrap()).unwrap()),
+            conn: Some(BackendConfig::from_url(url).unwrap()),
             pool: PoolConfig {
                 min_connections: 3,
                 max_connections: 15,
@@ -704,8 +698,8 @@ max_connections: 5
         let restored: DatabaseConfig = serde_yaml::from_str(&yaml).unwrap();
 
         assert_eq!(
-            original.conn.as_ref().unwrap().url().as_str(),
-            restored.conn.as_ref().unwrap().url().as_str()
+            original.conn.as_ref().unwrap().url().unwrap().as_str(),
+            restored.conn.as_ref().unwrap().url().unwrap().as_str()
         );
         assert_eq!(restored.pool.min_connections, 3);
         assert_eq!(restored.pool.max_connections, 15);

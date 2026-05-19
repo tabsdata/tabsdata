@@ -20,8 +20,17 @@ version = { workspace = true }
 [lib]
 
 [features]
+# Defaults to embedded postgres so `cargo run -p td-apiserver` boots a
+# self-contained server without external db config. Production-only builds
+# can drop it via `--no-default-features --features postgres` (etc).
+default = ["embedded-postgres"]
 api-docs = []
 enterprise = []
+# `embedded-postgres` enables the apiserver's no-URL fallback to a
+# self-hosted Postgres under `$TD_URI_REPOSITORY/database/`.
+embedded-postgres = ["td-database/embedded-postgres"]
+sqlite = ["td-database/sqlite"]
+mysql = ["td-database/mysql"]
 td-test = [
     "dummy",
     "mock-env",

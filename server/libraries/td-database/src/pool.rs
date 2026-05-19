@@ -4,6 +4,8 @@
 
 use crate::config::DatabaseConfig;
 use crate::dynamic::{DynamicConnection, DynamicPool, DynamicTransaction};
+#[cfg(feature = "embedded-postgres")]
+use crate::embedded::EmbeddedPostgres;
 use crate::error::DbError;
 use crate::sea_query::builder::SeaQueryExt;
 use crate::sea_query::kind::DatabaseKind;
@@ -11,6 +13,7 @@ use sea_query::{Expr, ExprTrait, Iden, Query};
 use sqlx::Error;
 use std::cmp::Ordering;
 use std::fmt::Display;
+use std::sync::Arc;
 use td_schema::schema::SchemaVersion;
 use td_schema::{
     CURRENT_TABSDATA_VERSION, CURRENT_VERSION, DB_EDITION_NAME, DB_VERSION_NAME,
@@ -18,10 +21,21 @@ use td_schema::{
 };
 use te_system::edition::{Compatible, Edition, TabsdataEdition};
 use tracing::{debug, info, instrument, warn};
+use url::Url;
 
 #[derive(Debug, Clone)]
 pub struct TdPool {
     pub pool: DynamicPool,
+    /// URL the pool is connected to. `Arc` so `TdPool::clone` stays cheap —
+    /// the URL is set once at connect time and never mutated.
+    url: Arc<Url>,
+    // Owns the embedded postgres server when this pool was booted via the
+    // embedded path. Shared across clones via `Arc` so the server stops
+    // only when the last `TdPool` clone drops. `pool` is declared first
+    // so the sqlx pool drops before the embedded handle within a single
+    // struct drop.
+    #[cfg(feature = "embedded-postgres")]
+    _embedded: Option<Arc<EmbeddedPostgres>>,
 }
 
 impl AsRef<DynamicPool> for TdPool {
@@ -35,13 +49,29 @@ impl AsRef<DynamicPool> for TdPool {
 impl TdPool {
     /// Connects to a database using the given configuration.
     ///
-    /// The schema is assumed to be up to date.
+    /// When `config` configured the postgres backend with `embedded: Some(_)`,
+    /// the embedded server is booted inside [`DatabaseConfig::connect`] and
+    /// the live handle parks here (under `Arc`) so the server stops cleanly
+    /// when the last clone of this pool drops. The schema is assumed to be
+    /// up to date.
     #[instrument(name = "db.pool.connect", skip_all, level = "info", err(Debug))]
     pub async fn connect(config: &DatabaseConfig) -> Result<Self, DbError> {
         info!("db.pool.connect: opening pool");
-        let pool = config.connect().await?;
-        debug!("Connected to database pool: {pool:#?}");
-        Ok(Self { pool })
+        let out = config.connect().await?;
+        debug!("Connected to database pool: {:#?}", out.pool);
+        Ok(Self {
+            pool: out.pool,
+            url: Arc::new(out.url),
+            #[cfg(feature = "embedded-postgres")]
+            _embedded: out.embedded.map(Arc::new),
+        })
+    }
+
+    /// The URL the pool is actually connected to. For external backends this
+    /// matches what was configured; for embedded postgres this is the URL
+    /// the booted server is listening on.
+    pub fn url(&self) -> &Url {
+        &self.url
     }
 
     /// Creates a database using the given configuration.
@@ -83,10 +113,8 @@ impl TdPool {
                 .to_string(),
             ),
             Error::Database(database_err) => {
-                if is_undefined_table_error(
-                    database_err.code().as_deref(),
-                    database_err.message(),
-                ) {
+                if is_undefined_table_error(database_err.code().as_deref(), database_err.message())
+                {
                     DbError::DatabaseSchemaDoesNotExist
                 } else {
                     DbError::SqlError(err)
@@ -405,6 +433,10 @@ mod tests {
         assert!(!is_undefined_table_error(None, "syntax error near 'x'"));
     }
 
+    // Sqlite-only pool-level tests. Postgres-side equivalents for the
+    // cross-backend-meaningful parts (schema_applies, db_version, edition)
+    // live in the top-level `tests` module in `lib.rs`.
+    #[cfg(sqlite)]
     #[tokio::test]
     async fn creates_database_and_schema() {
         let db_file = tdtestdir!().join("test.db");
@@ -419,6 +451,7 @@ mod tests {
         assert!(db_file.exists());
     }
 
+    #[cfg(sqlite)]
     #[tokio::test]
     async fn open_existing_database() {
         let db_file = tdtestdir!().join("test.db");
@@ -446,6 +479,7 @@ mod tests {
         drop(db);
     }
 
+    #[cfg(sqlite)]
     #[tokio::test]
     async fn test_tabsdata_database_schema_does_not_exist() {
         let db_file = tdtestdir!().join("test.db");
@@ -457,6 +491,7 @@ mod tests {
         assert!(matches!(res, Err(DbError::DatabaseSchemaDoesNotExist)));
     }
 
+    #[cfg(sqlite)]
     #[tokio::test]
     async fn test_tabsdata_database_schema_ok() {
         let db_file = tdtestdir!().join("test.db");
@@ -466,6 +501,7 @@ mod tests {
         assert!(db.check_db_version().await.is_ok());
     }
 
+    #[cfg(sqlite)]
     #[tokio::test]
     async fn test_tabsdata_database_schema_missing_db_version() {
         let db_file = tdtestdir!().join("test.db");
@@ -483,6 +519,7 @@ mod tests {
         assert!(matches!(res, Err(DbError::DatabaseCorrupted(_))));
     }
 
+    #[cfg(sqlite)]
     #[tokio::test]
     async fn test_tabsdata_database_schema_invalid_db_version() {
         let db_file = tdtestdir!().join("test.db");
@@ -503,6 +540,7 @@ mod tests {
         assert!(matches!(res, Err(DbError::DatabaseCorrupted(_))));
     }
 
+    #[cfg(sqlite)]
     #[tokio::test]
     async fn test_tabsdata_database_schema_db_needs_upgrade() {
         let db_file = tdtestdir!().join("test.db");
@@ -523,6 +561,7 @@ mod tests {
         assert!(matches!(res, Err(DbError::DatabaseNeedsUpgrade(_))));
     }
 
+    #[cfg(sqlite)]
     #[tokio::test]
     async fn test_tabsdata_database_schema_app_needs_upgrade() {
         let db_file = tdtestdir!().join("test.db");
@@ -543,6 +582,7 @@ mod tests {
         assert!(matches!(res, Err(DbError::DatabaseIsNewer(_, _))));
     }
 
+    #[cfg(sqlite)]
     #[tokio::test]
     async fn test_tabsdata_database_edition_upgrade() {
         let db_file = tdtestdir!().join("test.db");
@@ -554,6 +594,7 @@ mod tests {
         assert_eq!(db_edition.unwrap(), runtime_edition.label());
     }
 
+    #[cfg(sqlite)]
     #[tokio::test]
     async fn test_tabsdata_database_schema_invalid_edition() {
         let db_file = tdtestdir!().join("test.db");
@@ -574,6 +615,7 @@ mod tests {
         assert!(matches!(res, Err(DbError::InvalidEdition(_, _))));
     }
 
+    #[cfg(sqlite)]
     #[tokio::test]
     async fn test_upgrade_idempotent() {
         let db_file = tdtestdir!().join("test.db");
@@ -590,6 +632,7 @@ mod tests {
         db.check().await.unwrap();
     }
 
+    #[cfg(sqlite)]
     #[tokio::test]
     async fn test_execute_batch() {
         let db_file = tdtestdir!().join("test.db");
@@ -614,6 +657,7 @@ mod tests {
         assert_eq!(rows.len(), 2);
     }
 
+    #[cfg(sqlite)]
     #[tokio::test]
     async fn test_backend_returns_sqlite() {
         let db_file = tdtestdir!().join("test.db");

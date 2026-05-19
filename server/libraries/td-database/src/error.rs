@@ -47,4 +47,6 @@ pub enum DbError {
     FailedToCreateOrUpgradeDatabaseEdition(#[source] sqlx::Error) = 5015,
     #[error("Failed to upgrade the database tabsdata edition: {0}")]
     CannotUpgradeEdition(String) = 5016,
+    #[error("Failed to start embedded postgres: {0}")]
+    EmbeddedPostgres(String) = 5018,
 }

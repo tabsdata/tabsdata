@@ -25,7 +25,8 @@ version = { workspace = true }
 [lib]
 
 [features]
-default = ["sqlite", "postgres", "mysql"]
+# embedded-postgres is enabled for DEV, remove on release
+default = ["postgres", "embedded-postgres"]
 
 enterprise = []
 td-test = [
@@ -42,7 +43,14 @@ dummy = []
 mock-env = []
 test_logging = []
 test_tower_metadata = []
-test-utils = []
+# `test-utils` exposes the per-backend test pool factories in
+# `td_database::test_utils`. Pulls in embedded postgres for the postgres
+# factory; sqlite-only test builds can re-enable it via `--features sqlite`.
+test-utils = ["embedded-postgres"]
+# `embedded-postgres` enables the in-process Postgres server used by the
+# apiserver's default-when-no-URL path and by test_utils::postgres. Implies
+# the postgres backend (we need its sqlx driver to talk to the server).
+embedded-postgres = ["postgres", "dep:postgresql_embedded"]
 
 # Backend support features. td-database is the single source of truth — these
 # features pull in the sqlx/sea-query-sqlx pieces per backend and drive the
@@ -82,6 +90,8 @@ te-system = { workspace = true }
 
 async-stream = { workspace = true }
 futures-util = { workspace = true }
+rand = { workspace = true }
+postgresql_embedded = { workspace = true, features = ["bundled", "tokio"], optional = true }
 sea-query = { workspace = true, features = ["derive", "sqlx-utils"] }
 sea-query-sqlx = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

@@ -82,9 +82,10 @@ pub const SUPERVISOR_PROGRAM: &str = "td_supervisor";
 pub const APISERVER: &str = "td_apiserver";
 // The supervisor intentionally does not pass `--database-url` to apiserver
 // invocations: the apiserver picks its database URL from its YAML (set by
-// the user for postgres; defaulted to a local sqlite file by the apiserver
-// itself when no URL is set anywhere). This keeps the supervisor backend-
-// agnostic — it only deals with on-disk instance layout.
+// the user for an external postgres), and otherwise boots an in-process
+// embedded postgres rooted at `$TD_URI_REPOSITORY/database/`. This keeps
+// the supervisor backend-agnostic — it only deals with on-disk instance
+// layout.
 pub const APISERVER_ARGUMENT_STORAGE_URL: &str = "--storage-url";
 pub const APISERVER_ARGUMENT_DB_SCHEMA: &str = "--db-schema";
 
@@ -912,10 +913,11 @@ fn create_database(instance: &Option<PathBuf>) {
     }
     let command = binary
         // The apiserver resolves its database URL from env: `TD_DATABASE_URL`
-        // if set, otherwise `file://$TD_URI_REPOSITORY/database/tabsdata.db`.
-        // Both env vars are inherited by the spawned child; we only need to
-        // ensure `TD_URI_REPOSITORY` is set here because the regular worker
-        // path sets it later in the lifecycle and the one-shot runs first.
+        // if set, otherwise it boots an in-process embedded postgres rooted
+        // at `$TD_URI_REPOSITORY/database/`. Both env vars are inherited by
+        // the spawned child; we only need to ensure `TD_URI_REPOSITORY` is
+        // set here because the regular worker path sets it later in the
+        // lifecycle and the one-shot runs first.
         .env(
             REPOSITORY_URI_ENV,
             prepend_slash(supervisor_repository_absolute.clone()),

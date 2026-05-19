@@ -5,6 +5,7 @@
 [package]
 description = "Tabsdata Test Features"
 name = "td-test"
+build = "build.rs"
 
 authors = { workspace = true }
 edition = { workspace = true }
@@ -19,6 +20,9 @@ version = { workspace = true }
 [lib]
 
 [features]
+# Workspace convention (enforced by td-build's Manifest.toml descriptor): every
+# crate's `td-test` umbrella feature aggregates the three workspace-standard
+# marker features below plus its own dependency routing.
 enterprise = []
 td-test = [
     "dummy",
@@ -42,6 +46,8 @@ ignored = ["openssl", "td-build", "td-test", "toml"]
 [build-dependencies]
 
 # Internal dependencies
+
+td-build = { workspace = true }
 
 # External dependencies
 

@@ -11,6 +11,8 @@ use crate::pool::TdPool;
 
 pub mod config;
 pub mod dynamic;
+#[cfg(feature = "embedded-postgres")]
+pub mod embedded;
 pub mod error;
 pub mod pool;
 pub mod sea_query;
@@ -26,10 +28,13 @@ pub async fn db(config: &DatabaseConfig) -> Result<TdPool, DbError> {
 #[cfg(test)]
 mod tests {
     use crate::config::DatabaseConfig;
+    use crate::dynamic::DynamicPool;
+    #[cfg(sqlite)]
     use crate::error::DbError;
     use crate::pool::TdPool;
     use crate::raw_query;
     use crate::sea_query::builder::SeaQueryExt;
+    use crate::sea_query::kind::{DatabaseBackend, DatabaseKind};
     use td_common::tdtestdir;
     use td_security::{
         ENCODED_ID_CA_ALL_SEC_ADMIN, ENCODED_ID_CA_ALL_SYS_ADMIN, ENCODED_ID_CD_ALL_SYS_ADMIN,
@@ -46,41 +51,115 @@ mod tests {
     // Schema introspection helpers
     // -----------------------------------------------------------------------
 
+    /// Helper that lists user-defined tables across backends. Each backend
+    /// has its own catalog (`sqlite_master` on sqlite, `information_schema`
+    /// on postgres); branching on the pool variant keeps the assertion list
+    /// identical regardless of which backend the test ran against.
     async fn schema_table_names(db: &TdPool) -> Vec<String> {
-        let mut names: Vec<String> = raw_query!(
-            db,
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
-        )
-        .build_query_scalar()
-        .fetch_all(db)
-        .await
-        .unwrap();
+        let mut names: Vec<String> = match &db.pool {
+            #[cfg(sqlite)]
+            DynamicPool::Sqlite { ro, .. } => sqlx::query_scalar(
+                "SELECT name FROM sqlite_master \
+                 WHERE type = 'table' AND name NOT LIKE 'sqlite_%' \
+                 ORDER BY name",
+            )
+            .fetch_all(ro)
+            .await
+            .unwrap(),
+            #[cfg(postgres)]
+            DynamicPool::Postgres { ro, .. } => sqlx::query_scalar(
+                "SELECT table_name FROM information_schema.tables \
+                 WHERE table_schema = 'public' AND table_type = 'BASE TABLE' \
+                 ORDER BY table_name",
+            )
+            .fetch_all(ro)
+            .await
+            .unwrap(),
+            #[cfg(mysql)]
+            DynamicPool::MySql { ro, .. } => sqlx::query_scalar(
+                "SELECT table_name FROM information_schema.tables \
+                 WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE' \
+                 ORDER BY table_name",
+            )
+            .fetch_all(ro)
+            .await
+            .unwrap(),
+        };
         names.sort();
         names
     }
 
     async fn schema_view_names(db: &TdPool) -> Vec<String> {
-        let mut names: Vec<String> = raw_query!(
-            db,
-            "SELECT name FROM sqlite_master WHERE type = 'view' ORDER BY name"
-        )
-        .build_query_scalar()
-        .fetch_all(db)
-        .await
-        .unwrap();
+        let mut names: Vec<String> = match &db.pool {
+            #[cfg(sqlite)]
+            DynamicPool::Sqlite { ro, .. } => sqlx::query_scalar(
+                "SELECT name FROM sqlite_master WHERE type = 'view' ORDER BY name",
+            )
+            .fetch_all(ro)
+            .await
+            .unwrap(),
+            #[cfg(postgres)]
+            DynamicPool::Postgres { ro, .. } => sqlx::query_scalar(
+                "SELECT table_name FROM information_schema.views \
+                 WHERE table_schema = 'public' ORDER BY table_name",
+            )
+            .fetch_all(ro)
+            .await
+            .unwrap(),
+            #[cfg(mysql)]
+            DynamicPool::MySql { ro, .. } => sqlx::query_scalar(
+                "SELECT table_name FROM information_schema.views \
+                 WHERE table_schema = DATABASE() ORDER BY table_name",
+            )
+            .fetch_all(ro)
+            .await
+            .unwrap(),
+        };
         names.sort();
         names
     }
 
+    /// User-defined indexes only. Filters out backend-managed artifacts so
+    /// the assertion list is identical across sqlite and postgres: sqlite
+    /// auto-creates `sqlite_autoindex_*` for primary keys; postgres
+    /// auto-creates `<table>_pkey` for primary keys. Both kinds are
+    /// excluded — we only check the indexes our own schema declared.
     async fn schema_index_names(db: &TdPool) -> Vec<String> {
-        let mut names: Vec<String> = raw_query!(
-            db,
-            "SELECT name FROM sqlite_master WHERE type = 'index' AND name NOT LIKE 'sqlite_autoindex_%' ORDER BY name"
-        )
-        .build_query_scalar()
-        .fetch_all(db)
-        .await
-        .unwrap();
+        let mut names: Vec<String> = match &db.pool {
+            #[cfg(sqlite)]
+            DynamicPool::Sqlite { ro, .. } => sqlx::query_scalar(
+                "SELECT name FROM sqlite_master \
+                 WHERE type = 'index' AND name NOT LIKE 'sqlite_autoindex_%' \
+                 ORDER BY name",
+            )
+            .fetch_all(ro)
+            .await
+            .unwrap(),
+            #[cfg(postgres)]
+            DynamicPool::Postgres { ro, .. } => sqlx::query_scalar(
+                // Excludes postgres-auto-generated indexes:
+                //  - `_pkey` — automatic primary key index.
+                //  - `_key`  — automatic UNIQUE constraint index.
+                // We only assert on indexes the schema explicitly declared.
+                "SELECT indexname FROM pg_indexes \
+                 WHERE schemaname = 'public' \
+                   AND indexname NOT LIKE '%_pkey' \
+                   AND indexname NOT LIKE '%_key' \
+                 ORDER BY indexname",
+            )
+            .fetch_all(ro)
+            .await
+            .unwrap(),
+            #[cfg(mysql)]
+            DynamicPool::MySql { ro, .. } => sqlx::query_scalar(
+                "SELECT DISTINCT index_name FROM information_schema.statistics \
+                 WHERE table_schema = DATABASE() AND index_name <> 'PRIMARY' \
+                 ORDER BY index_name",
+            )
+            .fetch_all(ro)
+            .await
+            .unwrap(),
+        };
         names.sort();
         names
     }
@@ -96,6 +175,7 @@ mod tests {
         .unwrap()
     }
 
+    #[cfg(sqlite)]
     #[tokio::test]
     async fn test_tabsdata_db_schema_creation() {
         let db_file = tdtestdir!().join("test.db");
@@ -111,9 +191,11 @@ mod tests {
         id: String,
     }
 
+    #[cfg(sqlite)]
     #[tokio::test]
-    async fn test_tabsdata_db_default_users() {
-        let db = crate::test_utils::db().await.unwrap();
+    async fn test_tabsdata_db_default_users_sqlite() {
+        let db = crate::test_utils::sqlite::pool().await;
+        db.upgrade().await.unwrap();
         let row: Value = raw_query!(db, "SELECT id FROM users WHERE name = 'admin'")
             .build_query_as()
             .fetch_one(&db)
@@ -122,9 +204,24 @@ mod tests {
         assert_eq!(row.id, ENCODED_ID_USER_ADMIN);
     }
 
+    #[cfg(postgres)]
     #[tokio::test]
-    async fn test_tabsdata_db_default_roles() {
-        let db = crate::test_utils::db().await.unwrap();
+    async fn test_tabsdata_db_default_users_postgres() {
+        let db = crate::test_utils::postgres::pool().await;
+        db.upgrade().await.unwrap();
+        let row: Value = raw_query!(db, "SELECT id FROM users WHERE name = 'admin'")
+            .build_query_as()
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        assert_eq!(row.id, ENCODED_ID_USER_ADMIN);
+    }
+
+    #[cfg(sqlite)]
+    #[tokio::test]
+    async fn test_tabsdata_db_default_roles_sqlite() {
+        let db = crate::test_utils::sqlite::pool().await;
+        db.upgrade().await.unwrap();
         let mut conn = db.acquire().await.unwrap();
 
         let row: Value = raw_query!(db, "SELECT id FROM roles WHERE name = 'sys_admin'")
@@ -149,9 +246,52 @@ mod tests {
         assert_eq!(row.id, ENCODED_ID_ROLE_USER);
     }
 
+    #[cfg(postgres)]
     #[tokio::test]
-    async fn test_tabsdata_db_default_user_roles() {
-        let db = crate::test_utils::db().await.unwrap();
+    async fn test_tabsdata_db_default_roles_postgres() {
+        let db = crate::test_utils::postgres::pool().await;
+        db.upgrade().await.unwrap();
+        let mut conn = db.acquire().await.unwrap();
+
+        let row: Value = raw_query!(db, "SELECT id FROM roles WHERE name = 'sys_admin'")
+            .build_query_as()
+            .fetch_one(&mut conn)
+            .await
+            .unwrap();
+        assert_eq!(row.id, ENCODED_ID_ROLE_SYS_ADMIN);
+
+        let row: Value = raw_query!(db, "SELECT id FROM roles WHERE name = 'sec_admin'")
+            .build_query_as()
+            .fetch_one(&mut conn)
+            .await
+            .unwrap();
+        assert_eq!(row.id, ENCODED_ID_ROLE_SEC_ADMIN);
+
+        let row: Value = raw_query!(db, "SELECT id FROM roles WHERE name = 'user'")
+            .build_query_as()
+            .fetch_one(&mut conn)
+            .await
+            .unwrap();
+        assert_eq!(row.id, ENCODED_ID_ROLE_USER);
+    }
+
+    #[cfg(sqlite)]
+    #[tokio::test]
+    async fn test_tabsdata_db_default_user_roles_sqlite() {
+        let db = crate::test_utils::sqlite::pool().await;
+        db.upgrade().await.unwrap();
+        test_tabsdata_db_default_user_roles_body(db).await;
+    }
+
+    #[cfg(postgres)]
+    #[tokio::test]
+    async fn test_tabsdata_db_default_user_roles_postgres() {
+        let db = crate::test_utils::postgres::pool().await;
+        db.upgrade().await.unwrap();
+        test_tabsdata_db_default_user_roles_body(db).await;
+    }
+
+    async fn test_tabsdata_db_default_user_roles_body(db: TdPool) {
         let mut conn = db.acquire().await.unwrap();
 
         let row: Value = raw_query!(
@@ -200,9 +340,23 @@ mod tests {
         assert_eq!(row.id, ENCODED_ID_USER_ROLE_ADMIN_USER);
     }
 
+    #[cfg(sqlite)]
     #[tokio::test]
-    async fn test_tabsdata_db_default_permissions() {
-        let db = crate::test_utils::db().await.unwrap();
+    async fn test_tabsdata_db_default_permissions_sqlite() {
+        let db = crate::test_utils::sqlite::pool().await;
+        db.upgrade().await.unwrap();
+        test_tabsdata_db_default_permissions_body(db).await;
+    }
+
+    #[cfg(postgres)]
+    #[tokio::test]
+    async fn test_tabsdata_db_default_permissions_postgres() {
+        let db = crate::test_utils::postgres::pool().await;
+        db.upgrade().await.unwrap();
+        test_tabsdata_db_default_permissions_body(db).await;
+    }
+
+    async fn test_tabsdata_db_default_permissions_body(db: TdPool) {
         let mut conn = db.acquire().await.unwrap();
 
         let row: Value = raw_query!(
@@ -397,9 +551,23 @@ mod tests {
     // Schema validation tests — use real TdPool / DynamicPool
     // -------------------------------------------------------------------
 
+    #[cfg(sqlite)]
     #[tokio::test]
-    async fn test_schema_tables() {
-        let db = crate::test_utils::db().await.unwrap();
+    async fn test_schema_tables_sqlite() {
+        let db = crate::test_utils::sqlite::pool().await;
+        db.upgrade().await.unwrap();
+        test_schema_tables_body(db).await;
+    }
+
+    #[cfg(postgres)]
+    #[tokio::test]
+    async fn test_schema_tables_postgres() {
+        let db = crate::test_utils::postgres::pool().await;
+        db.upgrade().await.unwrap();
+        test_schema_tables_body(db).await;
+    }
+
+    async fn test_schema_tables_body(db: TdPool) {
         let tables = schema_table_names(&db).await;
 
         let expected = vec![
@@ -437,9 +605,23 @@ mod tests {
         assert_eq!(tables, expected);
     }
 
+    #[cfg(sqlite)]
     #[tokio::test]
-    async fn test_schema_views() {
-        let db = crate::test_utils::db().await.unwrap();
+    async fn test_schema_views_sqlite() {
+        let db = crate::test_utils::sqlite::pool().await;
+        db.upgrade().await.unwrap();
+        test_schema_views_body(db).await;
+    }
+
+    #[cfg(postgres)]
+    #[tokio::test]
+    async fn test_schema_views_postgres() {
+        let db = crate::test_utils::postgres::pool().await;
+        db.upgrade().await.unwrap();
+        test_schema_views_body(db).await;
+    }
+
+    async fn test_schema_views_body(db: TdPool) {
         let views = schema_view_names(&db).await;
 
         let expected = vec![
@@ -478,12 +660,32 @@ mod tests {
         assert_eq!(views, expected);
     }
 
+    #[cfg(sqlite)]
     #[tokio::test]
-    async fn test_schema_indices() {
-        let db = crate::test_utils::db().await.unwrap();
+    async fn test_schema_indices_sqlite() {
+        let db = crate::test_utils::sqlite::pool().await;
+        db.upgrade().await.unwrap();
+        test_schema_indices_body(db).await;
+    }
+
+    #[cfg(postgres)]
+    #[tokio::test]
+    async fn test_schema_indices_postgres() {
+        let db = crate::test_utils::postgres::pool().await;
+        db.upgrade().await.unwrap();
+        test_schema_indices_body(db).await;
+    }
+
+    async fn test_schema_indices_body(db: TdPool) {
         let indices = schema_index_names(&db).await;
 
-        let expected = vec![
+        // Postgres silently truncates identifiers at 63 characters
+        // (NAMEDATALEN-1) — several of our index names exceed that. The
+        // expected list below is the full sqlite form; we apply the same
+        // truncation rule before comparing on postgres so the assertion
+        // reflects what postgres actually emits. Long-term, those names
+        // should be shortened in the schema; that's a follow-up.
+        let expected_full = vec![
             "bundles___collection_id___idx",
             "collections___name___idx",
             "dependencies___dependency_id__defined_on__id___idx",
@@ -524,15 +726,15 @@ mod tests {
             "logical_table_data_versions___table_id__triggered_on___idx",
             "logical_table_data_versions___transaction_id___idx",
             "permissions___role_id__permission_type__entity___idx",
-            "roles___name___idx",
-            "roles___user_id__role_id___idx",
-            "sessions___expires_on___idx",
-            "sessions___user_id___idx",
             "physical_table_data_versions___collection_id___idx",
             "physical_table_data_versions___execution_id___idx",
             "physical_table_data_versions___physical_function_run_id___idx",
             "physical_table_data_versions___table_id___has_data___idx",
             "physical_table_data_versions___table_id__triggered_on__id___idx",
+            "roles___name___idx",
+            "roles___user_id__role_id___idx",
+            "sessions___expires_on___idx",
+            "sessions___user_id___idx",
             "tables___function_id__status___idx",
             "tables___status___idx",
             "tables___table_id__defined_on__id___idx",
@@ -551,12 +753,27 @@ mod tests {
             "users___enabled___idx",
             "users___name___idx",
         ];
+
+        let backend_truncate = match db.kind() {
+            #[cfg(postgres)]
+            DatabaseBackend::Postgres => 63,
+            #[allow(unreachable_patterns)]
+            _ => usize::MAX,
+        };
+        let mut expected: Vec<String> = expected_full
+            .into_iter()
+            .map(|n| n.chars().take(backend_truncate).collect::<String>())
+            .collect();
+        expected.sort();
+
         assert_eq!(indices, expected);
     }
 
+    #[cfg(sqlite)]
     #[tokio::test]
-    async fn test_schema_version() {
-        let db = crate::test_utils::db().await.unwrap();
+    async fn test_schema_version_sqlite() {
+        let db = crate::test_utils::sqlite::pool().await;
+        db.upgrade().await.unwrap();
         let version = schema_db_version(&db).await;
         assert_eq!(
             version,
@@ -565,12 +782,50 @@ mod tests {
         );
     }
 
+    #[cfg(postgres)]
+    #[tokio::test]
+    async fn test_schema_version_postgres() {
+        let db = crate::test_utils::postgres::pool().await;
+        db.upgrade().await.unwrap();
+        let version = schema_db_version(&db).await;
+        assert_eq!(
+            version,
+            td_schema::CURRENT_VERSION.to_string(),
+            "db_version mismatch"
+        );
+    }
+
+    // -------------------------------------------------------------------
+    // Schema-applies smoke tests — verify `upgrade()` + `check()` succeed
+    // cleanly on a fresh pool, per backend. These exist as a focused
+    // signal that the current schema is portable (and reachable through
+    // the per-backend test pool factory) without the noise of asserting on
+    // specific seeded data.
+    // -------------------------------------------------------------------
+
+    #[cfg(sqlite)]
+    #[tokio::test]
+    async fn test_schema_applies_sqlite() {
+        let db = crate::test_utils::sqlite::pool().await;
+        db.upgrade().await.expect("schema upgrade on sqlite");
+        db.check().await.expect("schema check on sqlite");
+    }
+
+    #[cfg(postgres)]
+    #[tokio::test]
+    async fn test_schema_applies_postgres() {
+        let db = crate::test_utils::postgres::pool().await;
+        db.upgrade().await.expect("schema upgrade on postgres");
+        db.check().await.expect("schema check on postgres");
+    }
+
     /// A 1.x database lacks the `tabsdata_version` row and must be rejected
     /// by the major-version gate before any db_version comparison runs.
+    #[cfg(sqlite)]
     #[tokio::test]
     async fn test_pre_2_0_database_rejected() {
-        let config = crate::test_utils::test_config();
-        let db = TdPool::create(&config).await.unwrap();
+        let db = crate::test_utils::sqlite::pool().await;
+        db.upgrade().await.unwrap();
 
         raw_query!(
             db,

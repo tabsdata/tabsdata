@@ -12,6 +12,8 @@ use std::path::PathBuf;
 use strum::{Display, EnumString, ParseError};
 use ta_services::factory::FieldAccessors;
 use td_authz::jwt::JwtConfig;
+#[cfg(feature = "embedded-postgres")]
+use td_common::server::DATABASE_FOLDER;
 use td_database::config::{BackendConfig, DatabaseConfig};
 use td_error::{TdError, td_error};
 use td_execution::TransactionBy;
@@ -137,15 +139,21 @@ pub enum DbSchema {
 #[derive(Debug, Clone, Args)]
 pub struct Params {
     #[clap(long, alias = "db", env = "TD_DATABASE_URL")]
-    /// Database URL. Defaults to a local SQLite file under
-    /// `$TD_URI_REPOSITORY/database/tabsdata.db` when neither this flag,
-    /// the `TD_DATABASE_URL` env var, nor `database.url` in the YAML is set.
+    /// Database URL.
     database_url: Option<Url>,
     #[clap(long, env = "TD_URI_REPOSITORY", hide = true)]
-    /// Repository URI, populated from `TD_URI_REPOSITORY` for the SQLite
-    /// fallback. Hidden — only used as a CLI hook so the env read flows
-    /// through clap like every other config knob.
+    /// Repository URI, populated from `TD_URI_REPOSITORY`.
     repository_uri: Option<String>,
+    #[cfg(feature = "embedded-postgres")]
+    #[clap(long, env = "TD_EMBEDDED_POSTGRES_PORT")]
+    /// Fixed port for the embedded postgres instance. Without this the
+    /// embedded server picks a random ephemeral port at startup.
+    embedded_postgres_port: Option<u16>,
+    #[cfg(feature = "embedded-postgres")]
+    #[clap(long, env = "TD_EMBEDDED_POSTGRES_DATA_DIR")]
+    /// Override for the embedded postgres data directory. Defaults to
+    /// `$TD_URI_REPOSITORY/DATABASE_FOLDER/`.
+    embedded_postgres_data_dir: Option<PathBuf>,
     #[clap(long)]
     /// Database log level
     database_log_level: Option<LevelFilter>,
@@ -198,6 +206,35 @@ impl Params {
             resolved_storage.url = resolved_storage_url;
         }
         let resolved_storage = Some(resolved_storage);
+
+        let database = {
+            let mut db = config.database;
+            if let Some(url) = &self.database_url {
+                db.conn = Some(match db.conn {
+                    Some(existing) => existing.with_url(url.clone())?,
+                    None => BackendConfig::from_url(url.clone())?,
+                });
+            }
+            // Embedded fallback when no URL is configured. `TD_URI_REPOSITORY`
+            // is exported by the supervisor and seeds the default data dir.
+            #[cfg(feature = "embedded-postgres")]
+            if db.url().is_none() {
+                let data_dir = self.embedded_postgres_data_dir.clone().or_else(|| {
+                    self.repository_uri
+                        .as_deref()
+                        .map(|r| PathBuf::from(r).join(DATABASE_FOLDER))
+                });
+                db.conn = Some(BackendConfig::embedded_postgres_persistent(
+                    data_dir,
+                    self.embedded_postgres_port,
+                ));
+            }
+            if let Some(log_level) = self.database_log_level {
+                db.pool.log_level = log_level;
+            }
+            db
+        };
+
         let config = Config {
             addresses: self
                 .address
@@ -229,31 +266,7 @@ impl Params {
                 .ssl_folder
                 .clone()
                 .unwrap_or_else(|| config.ssl_folder.clone()),
-            database: {
-                let mut config = config.database;
-                if let Some(url) = &self.database_url {
-                    config.conn = Some(match config.conn {
-                        Some(existing) => existing.with_url(url.clone())?,
-                        None => BackendConfig::from_url(url.clone())?,
-                    });
-                }
-                // If nothing has supplied a database URL (YAML, CLI, or env
-                // via `TD_DATABASE_URL`), default to the local SQLite file
-                // under the instance's repository. The repository URI rides
-                // in through clap via `--repository-uri` / `TD_URI_REPOSITORY`,
-                // which the supervisor exports for every spawned worker.
-                if config.conn.is_none()
-                    && let Some(repo) = self.repository_uri.as_deref()
-                {
-                    let url = Url::parse(&format!("file://{repo}/database/tabsdata.db"))
-                        .map_err(|e| ConfigError::DefaultDatabaseUrl(e.to_string()))?;
-                    config.conn = Some(BackendConfig::from_url(url)?);
-                }
-                if let Some(log_level) = self.database_log_level {
-                    config.pool.log_level = log_level;
-                }
-                config
-            },
+            database,
             storage: resolved_storage,
             transaction_by: self
                 .transaction_by
@@ -297,8 +310,6 @@ pub enum ConfigError {
     MissingStorageConfig = 6,
     #[error("The url specified in storage.url is wrong: {0}")]
     InvalidMountDefinition(#[source] StorageError) = 7,
-    #[error("Failed to build default database URL: {0}")]
-    DefaultDatabaseUrl(String) = 8,
 }
 
 #[cfg(test)]
@@ -333,11 +344,15 @@ mod tests {
     fn test_params_resolve() {
         let default_config = Config::default();
 
+        let db_url = Url::from_str("postgres://user:pass@localhost/test").unwrap();
+
         let params = Params {
-            #[cfg(target_os = "windows")]
-            database_url: Some(Url::from_str("file:///c:/test.db").unwrap()),
-            #[cfg(not(target_os = "windows"))]
-            database_url: Some(Url::from_str("file:///test.db").unwrap()),
+            database_url: Some(db_url.clone()),
+            repository_uri: None,
+            #[cfg(feature = "embedded-postgres")]
+            embedded_postgres_port: None,
+            #[cfg(feature = "embedded-postgres")]
+            embedded_postgres_data_dir: None,
             database_log_level: None,
             #[cfg(target_os = "windows")]
             storage_url: Some(String::from("file:///c:/storage")),
@@ -363,18 +378,7 @@ mod tests {
             *resolved_config.addresses,
             NonEmptyAddresses::new(nonempty![SocketAddr::from(([127, 0, 0, 1], 2457))])
         );
-        #[cfg(target_os = "windows")]
-        assert_eq!(
-            resolved_config.database.url(),
-            Some(&Url::from_str("file:///test.db").unwrap())
-            resolved_config.database.url,
-            Some(Url::from_str("file:///c:/test.db").unwrap())
-        );
-        #[cfg(not(target_os = "windows"))]
-        assert_eq!(
-            resolved_config.database.url(),
-            Some(&Url::from_str("file:///test.db").unwrap())
-        );
+        assert_eq!(resolved_config.database.url(), Some(&db_url));
         assert!(resolved_config.clone().storage.is_some());
         #[cfg(target_os = "windows")]
         assert_eq!(
@@ -402,10 +406,12 @@ mod tests {
 
         // Test with some fields not set in Params
         let partial_params = Params {
-            #[cfg(target_os = "windows")]
-            database_url: Some(Url::from_str("file:///c:/test.db").unwrap()),
-            #[cfg(not(target_os = "windows"))]
-            database_url: Some(Url::from_str("file:///test.db").unwrap()),
+            database_url: Some(db_url.clone()),
+            repository_uri: None,
+            #[cfg(feature = "embedded-postgres")]
+            embedded_postgres_port: None,
+            #[cfg(feature = "embedded-postgres")]
+            embedded_postgres_data_dir: None,
             database_log_level: None,
             #[cfg(target_os = "windows")]
             storage_url: Some(String::from("file:///c:/storage")),

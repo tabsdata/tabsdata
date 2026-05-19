@@ -74,6 +74,7 @@ tracing = { workspace = true }
 utoipa = { workspace = true }
 
 [dev-dependencies]
+td-test = { workspace = true }
 td-tower = { workspace = true, features = ["td-test"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]

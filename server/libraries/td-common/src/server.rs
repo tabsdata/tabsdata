@@ -81,7 +81,6 @@ pub const CONFIG_FOLDER: &str = "config";
 pub const WORK_FOLDER: &str = "work";
 
 pub const DATABASE_FOLDER: &str = "database";
-pub const DATABASE_FILE: &str = "tabsdata.db";
 
 pub const STORAGE_FOLDER: &str = "storage";
 
