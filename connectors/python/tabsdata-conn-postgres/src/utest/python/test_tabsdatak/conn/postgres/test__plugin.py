@@ -5,9 +5,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import polars as pl
-import pyarrow.parquet as pq
 import pytest
-from sqlalchemy import create_engine, text
 from sqlalchemy.exc import OperationalError, ProgrammingError
 
 from tabsdatak.conn.common.types import UserPassword
@@ -18,7 +16,7 @@ from tabsdatak.conn.common.sql._engine import (
 )
 from tabsdatak.conn.postgres import PostgresConn, PostgresDest, PostgresSrc
 # noinspection PyProtectedMember
-from tabsdatak.conn.postgres import _adapter as adapter
+from tabsdatak.conn.postgres import _impl as impl
 # noinspection PyProtectedMember
 from tabsdatak.conn.postgres import _plugin as plugin
 from tabsdatak.conn.postgres.error import (
@@ -51,20 +49,6 @@ def _dest_ctx(work: Path) -> _Ctx:
     return _Ctx(work)
 
 
-def _conn_from(cfg) -> PostgresConn:
-    """Build a PostgresConn pointing at the docker container. The URI is
-    ``postgresql+psycopg2://`` so the adapter's ``add_driver_to_uri`` is
-    a no-op and psycopg2 (which IS installed in the dev env) is used."""
-    return PostgresConn(
-        uri=cfg.uri,
-        credentials=cfg.credentials,
-    )
-
-
-def _read_parquet(p: Path) -> pl.DataFrame:
-    return pl.from_arrow(pq.read_table(p))
-
-
 def _make_parquet(path: Path, rows: list[dict]) -> Path:
     pl.DataFrame(rows).write_parquet(path, use_pyarrow=True)
     return path
@@ -88,45 +72,9 @@ def _fast_retry(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# _PostgresSrcPlugin.read_in -- happy path against real Postgres
-# ---------------------------------------------------------------------------
-
-
-def test_src_plugin_read_in_returns_parquet_files(fresh_postgres, work_dir):
-    src = PostgresSrc(
-        conn=_conn_from(fresh_postgres),
-        queries=["SELECT id, name FROM users ORDER BY id"],
-    )
-    out = plugin.PostgresSrcPlugin().read_in(_src_ctx(work_dir), src)
-    assert len(out) == 1
-    df = pl.concat([_read_parquet(p) for p in out[0]])
-    assert df["name"].to_list() == ["alice", "bob", "carol"]
-
-
-def test_src_plugin_read_in_multiple_queries(fresh_postgres, work_dir):
-    src = PostgresSrc(
-        conn=_conn_from(fresh_postgres),
-        queries=[
-            "SELECT id FROM users WHERE age >= :cut ORDER BY id",
-            "SELECT id FROM orders ORDER BY id",
-        ],
-        query_params={"cut": 30},
-    )
-    out = plugin.PostgresSrcPlugin().read_in(_src_ctx(work_dir), src)
-    assert len(out) == 2
-    ids = pl.concat([_read_parquet(p) for p in out[0]])["id"].to_list()
-    order_ids = pl.concat([_read_parquet(p) for p in out[1]])["id"].to_list()
-    assert ids == [1, 3]
-    assert order_ids == [10, 11]
-
-
-# ---------------------------------------------------------------------------
 # _PostgresSrcPlugin.read_in -- error wrapping (fault injection via mocks)
 #
-# We mock ``build_postgres_engine`` to return a MagicMock whose
-# ``connect`` raises the desired exception. Mocking is necessary
-# here -- a real engine can't be forced to surface a specific
-# OperationalError on demand.
+# Real-Postgres happy paths live in ``test__plugin_integration.py``.
 # ---------------------------------------------------------------------------
 
 
@@ -143,77 +91,27 @@ def _bare_conn() -> PostgresConn:
     )
 
 
-def test_src_plugin_wraps_operational_error_as_postgres_7(monkeypatch, work_dir):
+def test_src_plugin_wraps_operational_error_as_postgres_5(monkeypatch, work_dir):
     fake = MagicMock()
     fake.connect.side_effect = OperationalError("conn fail", {}, BaseException("c"))
-    monkeypatch.setattr(adapter, "build_postgres_engine", lambda *a, **kw: fake)
+    monkeypatch.setattr(impl, "build_postgres_engine", lambda *a, **kw: fake)
     src = PostgresSrc(conn=_bare_conn(), queries=["SELECT 1"])
     with pytest.raises(PostgresRuntimeException) as ei:
         plugin.PostgresSrcPlugin().read_in(_src_ctx(work_dir), src)
-    assert ei.value.api_error is PostgresErrorCode.POSTGRES_7
+    assert ei.value.api_error is PostgresErrorCode.POSTGRES_5
     fake.dispose.assert_called()
 
 
-def test_src_plugin_wraps_other_sqlalchemy_error_as_postgres_8(
+def test_src_plugin_wraps_other_sqlalchemy_error_as_postgres_6(
     monkeypatch, work_dir,
 ):
     fake = MagicMock()
     fake.connect.side_effect = ProgrammingError("bad sql", {}, BaseException("p"))
-    monkeypatch.setattr(adapter, "build_postgres_engine", lambda *a, **kw: fake)
+    monkeypatch.setattr(impl, "build_postgres_engine", lambda *a, **kw: fake)
     src = PostgresSrc(conn=_bare_conn(), queries=["SELECT 1"])
     with pytest.raises(PostgresRuntimeException) as ei:
         plugin.PostgresSrcPlugin().read_in(_src_ctx(work_dir), src)
-    assert ei.value.api_error is PostgresErrorCode.POSTGRES_8
-
-
-# ---------------------------------------------------------------------------
-# _PostgresDestPlugin.write_out -- happy path against real Postgres
-# ---------------------------------------------------------------------------
-
-
-def test_dest_plugin_write_out_appends_rows(fresh_postgres, work_dir):
-    src = _make_parquet(
-        work_dir / "in.parquet",
-        [{"id": 100, "name": "dave", "age": 50}],
-    )
-    dest = PostgresDest(
-        conn=_conn_from(fresh_postgres),
-        tables=["users"],
-    )
-    plugin.PostgresDestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
-    eng = create_engine(fresh_postgres.uri_with_credentials)
-    try:
-        with eng.connect() as conn:
-            n = conn.execute(text("SELECT COUNT(*) FROM users")).scalar_one()
-            assert n == 4
-            name = conn.execute(
-                text("SELECT name FROM users WHERE id = 100"),
-            ).scalar_one()
-            assert name == "dave"
-    finally:
-        eng.dispose()
-
-
-def test_dest_plugin_write_out_replace_clears_existing(fresh_postgres, work_dir):
-    src = _make_parquet(
-        work_dir / "in.parquet",
-        [{"id": 1, "name": "only", "age": 1}],
-    )
-    dest = PostgresDest(
-        conn=_conn_from(fresh_postgres),
-        tables=["users"],
-        if_table_exists="replace",
-    )
-    plugin.PostgresDestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
-    eng = create_engine(fresh_postgres.uri_with_credentials)
-    try:
-        with eng.connect() as conn:
-            rows = conn.execute(
-                text("SELECT id, name FROM users"),
-            ).fetchall()
-            assert rows == [(1, "only")]
-    finally:
-        eng.dispose()
+    assert ei.value.api_error is PostgresErrorCode.POSTGRES_6
 
 
 # ---------------------------------------------------------------------------
@@ -221,25 +119,25 @@ def test_dest_plugin_write_out_replace_clears_existing(fresh_postgres, work_dir)
 # ---------------------------------------------------------------------------
 
 
-def test_dest_plugin_raises_postgres_10_on_tables_slots_mismatch(work_dir):
+def test_dest_plugin_raises_postgres_7_on_tables_slots_mismatch(work_dir):
     dest = PostgresDest(conn=_bare_conn(), tables=["users", "orders"])
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     with pytest.raises(PostgresRuntimeException) as ei:
         plugin.PostgresDestPlugin().write_out(
             _dest_ctx(work_dir), dest, [src],
         )
-    assert ei.value.api_error is PostgresErrorCode.POSTGRES_10
+    assert ei.value.api_error is PostgresErrorCode.POSTGRES_7
 
 
-def test_dest_plugin_wraps_operational_error_as_postgres_11(monkeypatch, work_dir):
+def test_dest_plugin_wraps_operational_error_as_postgres_8(monkeypatch, work_dir):
     fake = MagicMock()
     fake.connect.side_effect = OperationalError("conn fail", {}, BaseException("c"))
-    monkeypatch.setattr(adapter, "build_postgres_engine", lambda *a, **kw: fake)
+    monkeypatch.setattr(impl, "build_postgres_engine", lambda *a, **kw: fake)
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     dest = PostgresDest(conn=_bare_conn(), tables=["users"])
     with pytest.raises(PostgresRuntimeException) as ei:
         plugin.PostgresDestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
-    assert ei.value.api_error is PostgresErrorCode.POSTGRES_11
+    assert ei.value.api_error is PostgresErrorCode.POSTGRES_8
     fake.dispose.assert_called()
 
 
@@ -248,7 +146,7 @@ def test_dest_plugin_wraps_other_sqlalchemy_error_as_postgres_9(
 ):
     fake = MagicMock()
     fake.connect.side_effect = ProgrammingError("bad sql", {}, BaseException("p"))
-    monkeypatch.setattr(adapter, "build_postgres_engine", lambda *a, **kw: fake)
+    monkeypatch.setattr(impl, "build_postgres_engine", lambda *a, **kw: fake)
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     dest = PostgresDest(conn=_bare_conn(), tables=["users"])
     with pytest.raises(PostgresRuntimeException) as ei:
@@ -296,3 +194,54 @@ def test_postgres_src_cardinality_uses_queries_length():
 def test_postgres_dest_cardinality_uses_tables_length():
     dest = PostgresDest(conn=_bare_conn(), tables=["users", "orders"])
     assert plugin.POSTGRES_DEST.cardinality(dest) == 2
+
+
+# ---------------------------------------------------------------------------
+# _resolve_src_cfg / _resolve_dest_cfg
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_src_cfg_returns_defaults_when_empty():
+    import logging as _logging
+    cfg = plugin._resolve_src_cfg(None)
+    assert cfg.logging_level == _logging.ERROR
+    assert cfg.read_engine is None
+    assert cfg.chunk_size is None
+
+
+def test_resolve_src_cfg_applies_overrides():
+    cfg = plugin._resolve_src_cfg(
+        {
+            "postgres.logging_level": 20,
+            "tabsdata.sql.sql.readEngine": "polarsSqlAlchemyRead",
+            "tabsdata.sql.chunkSize": 500,
+        }
+    )
+    assert cfg.logging_level == 20
+    assert cfg.read_engine == "polarsSqlAlchemyRead"
+    assert cfg.chunk_size == 500
+
+
+def test_resolve_src_cfg_warns_on_unknown_key_via_raw_dict(caplog):
+    with caplog.at_level("WARNING", logger=plugin.logger.name):
+        plugin._resolve_src_cfg({"bogus.key": "value"})
+    assert any("Unknown src_cfg key" in r.message for r in caplog.records)
+
+
+def test_resolve_dest_cfg_applies_overrides():
+    cfg = plugin._resolve_dest_cfg(
+        {
+            "postgres.logging_level": 20,
+            "tabsdata.sql.sql.writeEngine": "polarsSqlAlchemyWrite",
+            "tabsdata.sql.chunkSize": 500,
+        }
+    )
+    assert cfg.logging_level == 20
+    assert cfg.write_engine == "polarsSqlAlchemyWrite"
+    assert cfg.chunk_size == 500
+
+
+def test_resolve_dest_cfg_warns_on_unknown_key_via_raw_dict(caplog):
+    with caplog.at_level("WARNING", logger=plugin.logger.name):
+        plugin._resolve_dest_cfg({"bogus.key": "value"})
+    assert any("Unknown dest_cfg key" in r.message for r in caplog.records)

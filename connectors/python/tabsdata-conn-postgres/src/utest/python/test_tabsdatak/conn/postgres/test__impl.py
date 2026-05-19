@@ -13,7 +13,7 @@ from tabsdatak.conn.common.sql._engine.reader import SqlReadCfg
 from tabsdatak.conn.common.sql._engine.writer import SqlWriteCfg
 from tabsdatak.conn.postgres import PostgresConn
 # noinspection PyProtectedMember
-from tabsdatak.conn.postgres import _adapter as adapter
+from tabsdatak.conn.postgres import _impl as impl
 
 
 pytestmark = pytest.mark.postgres
@@ -22,7 +22,7 @@ pytestmark = pytest.mark.postgres
 # ---------------------------------------------------------------------------
 # build_postgres_engine -- driver injection, scheme aliasing, credential set
 #
-# We intercept ``create_engine`` and verify the URL the adapter built --
+# We intercept ``create_engine`` and verify the URL the impl built --
 # avoids real DBAPI traffic during unit tests.
 # ---------------------------------------------------------------------------
 
@@ -55,7 +55,7 @@ def _conn() -> PostgresConn:
 
 @pytest.fixture
 def captured(monkeypatch):
-    """Monkey-patch ``adapter.create_engine`` to capture call args."""
+    """Monkey-patch ``impl.create_engine`` to capture call args."""
     box: dict = {}
 
     def fake_create_engine(url, *, connect_args):
@@ -63,12 +63,12 @@ def captured(monkeypatch):
         box["connect_args"] = connect_args
         return _CapturedURL(url, connect_args)
 
-    monkeypatch.setattr(adapter, "create_engine", fake_create_engine)
+    monkeypatch.setattr(impl, "create_engine", fake_create_engine)
     return box
 
 
 def test_build_postgres_engine_injects_psycopg2_driver_when_missing(captured):
-    adapter.build_postgres_engine(
+    impl.build_postgres_engine(
         "postgresql://host:5432/db",
         _credentials(),
         connect_args=None,
@@ -82,7 +82,7 @@ def test_build_postgres_engine_injects_psycopg2_driver_when_missing(captured):
 
 
 def test_build_postgres_engine_preserves_explicit_driver(captured):
-    adapter.build_postgres_engine(
+    impl.build_postgres_engine(
         "postgresql+psycopg2://host:5432/db",
         _credentials(),
         connect_args=None,
@@ -93,7 +93,7 @@ def test_build_postgres_engine_preserves_explicit_driver(captured):
 def test_build_postgres_engine_accepts_postgres_scheme_alias(captured):
     # ``postgres://`` is rewritten to canonical ``postgresql://``;
     # the default driver is then injected.
-    adapter.build_postgres_engine(
+    impl.build_postgres_engine(
         "postgres://host/db",
         _credentials(),
         connect_args=None,
@@ -103,7 +103,7 @@ def test_build_postgres_engine_accepts_postgres_scheme_alias(captured):
 
 def test_build_postgres_engine_preserves_driver_with_postgres_alias(captured):
     # Driver-qualified ``postgres+psycopg2://`` is also accepted.
-    adapter.build_postgres_engine(
+    impl.build_postgres_engine(
         "postgres+psycopg2://host/db",
         _credentials(),
         connect_args=None,
@@ -112,7 +112,7 @@ def test_build_postgres_engine_preserves_driver_with_postgres_alias(captured):
 
 
 def test_build_postgres_engine_accepts_secret_uri(captured):
-    adapter.build_postgres_engine(
+    impl.build_postgres_engine(
         Secret.lit("postgresql://host:5432/db"),
         _credentials(),
         connect_args=None,
@@ -121,7 +121,7 @@ def test_build_postgres_engine_accepts_secret_uri(captured):
 
 
 def test_build_postgres_engine_passes_connect_args(captured):
-    adapter.build_postgres_engine(
+    impl.build_postgres_engine(
         "postgresql://host/db",
         _credentials(),
         connect_args={"sslmode": "require"},
@@ -130,7 +130,7 @@ def test_build_postgres_engine_passes_connect_args(captured):
 
 
 def test_build_postgres_engine_with_no_connect_args_passes_empty_dict(captured):
-    adapter.build_postgres_engine(
+    impl.build_postgres_engine(
         "postgresql://host/db",
         _credentials(),
         connect_args=None,
@@ -144,11 +144,11 @@ def test_build_postgres_engine_with_no_connect_args_passes_empty_dict(captured):
 
 
 def test_postgres_read_cfg_subclasses_sql_read_cfg():
-    assert issubclass(adapter.PostgresReadCfg, SqlReadCfg)
+    assert issubclass(impl.PostgresReadCfg, SqlReadCfg)
 
 
 def test_postgres_read_cfg_creates_engine_from_conn(captured):
-    cfg = adapter.PostgresReadCfg(
+    cfg = impl.PostgresReadCfg(
         conn=_conn(),
         queries=["SELECT 1"],
         transactional=True,
@@ -163,11 +163,11 @@ def test_postgres_read_cfg_creates_engine_from_conn(captured):
 
 
 def test_postgres_write_cfg_subclasses_sql_write_cfg():
-    assert issubclass(adapter.PostgresWriteCfg, SqlWriteCfg)
+    assert issubclass(impl.PostgresWriteCfg, SqlWriteCfg)
 
 
 def test_postgres_write_cfg_creates_engine_from_conn(captured):
-    cfg = adapter.PostgresWriteCfg(
+    cfg = impl.PostgresWriteCfg(
         conn=_conn(),
         target_tables=["t"],
         if_table_exists="append",
@@ -184,7 +184,7 @@ def test_postgres_read_cfg_no_conn_cfg_forwards_empty_connect_args(captured):
         uri="postgresql://host/db",
         credentials=_credentials(),
     )
-    cfg = adapter.PostgresReadCfg(
+    cfg = impl.PostgresReadCfg(
         conn=conn,
         queries=["SELECT 1"],
         transactional=True,
@@ -202,14 +202,14 @@ def test_postgres_read_cfg_no_conn_cfg_forwards_empty_connect_args(captured):
 
 
 def test_read_defaults_pick_polars_with_pandas_allowed():
-    d = adapter.POSTGRES_READ_DEFAULTS
+    d = impl.POSTGRES_READ_DEFAULTS
     assert d[const.READ_ENGINE_KEY] == const.POLARS_SQL_ALCHEMY_READ_ENGINE
     assert const.POLARS_SQL_ALCHEMY_READ_ENGINE in d[const.AVAIL_READ_ENGINES_KEY]
     assert const.PANDAS_SQL_ALCHEMY_READ_ENGINE in d[const.AVAIL_READ_ENGINES_KEY]
 
 
 def test_write_defaults_pick_polars_only():
-    d = adapter.POSTGRES_WRITE_DEFAULTS
+    d = impl.POSTGRES_WRITE_DEFAULTS
     assert d[const.WRITE_ENGINE_KEY] == const.POLARS_SQL_ALCHEMY_WRITE_ENGINE
     assert d[const.AVAIL_WRITE_ENGINES_KEY] == [
         const.POLARS_SQL_ALCHEMY_WRITE_ENGINE,
