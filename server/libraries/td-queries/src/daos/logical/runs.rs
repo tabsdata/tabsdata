@@ -36,9 +36,10 @@ use td_objects::dxo::physical_function_run::{
     PhysicalFunctionRunToExecute,
 };
 use td_objects::dxo::user::UserDBIden;
+use ta_objects::{Dao, DaoCore};
 use td_objects::types::basic::{
-    AtTime, ExecutionId, FunctionRunStatus, LogicalFunctionRunId, LogicalPointerStatus,
-    PhysicalFunctionRunId,
+    AtTime, ExecutionId, FunctionId, FunctionRunStatus, LogicalFunctionRunId, LogicalPointerStatus,
+    PhysicalFunctionRunId, TriggeredOn,
 };
 
 query_handle! {
@@ -105,6 +106,24 @@ where
         Ok(result)
     }
 
+    /// The most recent LFR for `function_id` whose `triggered_on` is
+    /// strictly before `before_time` — `<` (not `<=`) cleanly excludes
+    /// the in-flight LFR, whose `triggered_on` equals the caller's
+    /// argument by construction. Returns `None` if the function has no
+    /// prior run.
+    pub async fn previous_for_function_at(
+        self,
+        function_id: &FunctionId,
+        before_time: &TriggeredOn,
+    ) -> Result<Option<LogicalFunctionRunDB>, SqlError> {
+        let row = previous_lfr_query(function_id, before_time)
+            .build_query_as()
+            .fetch_optional(self.executor)
+            .await
+            .map_err(SqlError::on_read::<LogicalFunctionRunDB>)?;
+        Ok(row)
+    }
+
     /// Fetch the denormalized `PhysicalFunctionRunToExecute` view for a known set
     /// of FR ids (no readiness predicate). Used at dispatch to enrich the
     /// just-minted FRs for the yaml builder.
@@ -122,6 +141,21 @@ where
             .map_err(SqlError::on_read::<PhysicalFunctionRunDB>)?;
         Ok(result)
     }
+}
+
+pub(crate) fn previous_lfr_query(
+    function_id: &FunctionId,
+    before_time: &TriggeredOn,
+) -> sea_query::SelectStatement {
+    Query::select()
+        .columns(LogicalFunctionRunDB::columns())
+        .from(LogicalFunctionRunDB::table())
+        .and_where(Expr::col(LogicalFunctionRunDBIden::FunctionId).eq(function_id.as_sea_value()))
+        .and_where(Expr::col(LogicalFunctionRunDBIden::TriggeredOn).lt(before_time.as_sea_value()))
+        .order_by(LogicalFunctionRunDBIden::TriggeredOn, Order::Desc)
+        .order_by(LogicalFunctionRunDBIden::Id, Order::Desc)
+        .limit(1)
+        .take()
 }
 
 #[derive(Iden, Clone, Copy)]

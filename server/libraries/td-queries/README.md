@@ -354,8 +354,8 @@ DAO/verb prefixes — the wrapper is the namespace.
 ```rust
 db.sessions().purge().await?;
 db.dependencies().active_for_function_at(&fid, &at).await?;
-db.executions().previous_for_function_at(&fid, &before).await?;
 db.executions().list_by_table_data_version(&tdv, &params).await?;
+db.logical_runs().previous_for_function_at(&fid, &before).await?;
 db.logical_runs().to_commit(&execution_ids).await?;
 db.logical_runs().to_execute(&at).await?;
 db.logical_runs().for_dispatch(&fr_ids).await?;

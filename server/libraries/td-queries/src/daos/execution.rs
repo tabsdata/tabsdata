@@ -10,17 +10,15 @@ use sea_query::{Alias, Expr, ExprTrait, JoinType, Order, Query};
 use ta_objects::SeaValue;
 use ta_objects::errors::SqlError;
 use td_database::sea_query::builder::SeaQueryExt;
-use td_objects::dxo::execution::{Execution, VersionedExecutionDB};
+use td_objects::dxo::execution::Execution;
 use td_objects::dxo::logical::{
     LogicalFunctionRunDBIden, LogicalFunctionRunInputDBIden, LogicalTableDataVersionDBIden,
     LogicalTableDataVersionPointerDBIden,
 };
 use td_objects::list::params::ListQueryParams;
-use td_objects::types::basic::{
-    FunctionId, FunctionVersionId, PhysicalTableDataVersionId, TriggeredOn,
-};
+use td_objects::types::basic::{FunctionVersionId, PhysicalTableDataVersionId};
 
-use ta_objects::{Dao, DaoCore, ListDto, VersionedDao};
+use ta_objects::{Dao, ListDto};
 
 query_handle! {
     /// Entry trait providing [`executions`](ExecutionsEntry::executions) on
@@ -41,7 +39,6 @@ type Iden = <DaoOf as ta_objects::TypedColumns>::Iden;
 ///
 /// ```ignore
 /// conn.executions().list_by_table_data_version(&tdv, &params).await?;
-/// conn.executions().previous_for_function_at(&fid, &before).await?;
 /// ```
 pub struct Executions<E> {
     pub(crate) executor: E,
@@ -94,27 +91,6 @@ where
             .collect()
     }
 
-    /// The execution immediately *before* `before_time` for `function_id`,
-    /// skipping any execution that triggered exactly at `before_time` (the
-    /// in-flight one). Used by `Versions::New` resolution to find the
-    /// function's prior execution as the LTDV cutoff.
-    ///
-    /// Returns `None` if the function has no prior execution.
-    pub async fn previous_for_function_at(
-        self,
-        function_id: &FunctionId,
-        before_time: &TriggeredOn,
-    ) -> Result<Option<VersionedExecutionDB>, SqlError> {
-        // function_id is partition-stable on VersionedExecutionDB; ordering
-        // by version_order DESC and skipping the first row gives the
-        // execution immediately prior to the in-flight one at `before_time`.
-        let row = previous_execution_query(function_id, before_time)
-            .build_query_as()
-            .fetch_optional(self.executor)
-            .await
-            .map_err(SqlError::on_read::<VersionedExecutionDB>)?;
-        Ok(row)
-    }
 }
 
 /// List executions consuming a specific TDV as input. Uses an EXISTS
@@ -220,24 +196,6 @@ pub(crate) fn list_by_fv_query(fv_id: &FunctionVersionId) -> sea_query::SelectSt
         .columns(DaoOf::columns().into_iter().map(|c| (Iden::Table, c)))
         .from(Iden::Table)
         .and_where(Expr::exists(exists_subq))
-        .take()
-}
-
-pub(crate) fn previous_execution_query(
-    function_id: &FunctionId,
-    before_time: &TriggeredOn,
-) -> sea_query::SelectStatement {
-    Query::select()
-        .columns(VersionedExecutionDB::columns())
-        .from(VersionedExecutionDB::table())
-        .and_where(Expr::col(VersionedExecutionDB::partition_col()).eq(function_id.as_sea_value()))
-        .and_where(
-            Expr::col(VersionedExecutionDB::version_order_col()).lte(before_time.as_sea_value()),
-        )
-        .order_by(VersionedExecutionDB::version_order_col(), Order::Desc)
-        .order_by(VersionedExecutionDB::pk_col(), Order::Desc)
-        .limit(1)
-        .offset(1)
         .take()
 }
 

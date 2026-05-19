@@ -67,7 +67,7 @@ use td_error::{TdError, td_error};
 use td_objects::dxo::logical::LogicalTableDataVersionDB;
 use td_objects::types::basic::{FunctionId, LogicalTableDataVersionId, TableId, TriggeredOn};
 use td_objects::types::table_ref::{Version, Versions};
-use td_queries::{ChunkedQueries, ExecutionsEntry, LiveEntry, VersionedEntry};
+use td_queries::{ChunkedQueries, LiveEntry, LogicalRunsEntry, VersionedEntry};
 
 #[td_error]
 pub enum VersionResolverError {
@@ -380,13 +380,11 @@ impl<'a> VersionResolver<'a> {
         Ok(found)
     }
 
-    /// `Versions::New` resolution.
-    ///
-    /// "All LTDVs minted after the requesting function's previous
-    /// execution." Read the function's previous execution from
-    /// `VersionedExecutionDB` (offset = 1 to skip the in-flight one), find
-    /// the LTDV at that prior `triggered_on`, then return everything
-    /// strictly newer than that LTDV in the partition.
+    /// `Versions::New`: all LTDVs minted after the requesting function's
+    /// previous run. Cutoff is the prior LFR for `self.function_id` —
+    /// LFRs partition on the function actually running, while `executions`
+    /// partitions on the plan's trigger function, so only the LFR source
+    /// surfaces a downstream consumer's prior runs.
     async fn resolve_new(
         &self,
         conn: &mut DynamicConnection<'_>,
@@ -394,12 +392,12 @@ impl<'a> VersionResolver<'a> {
         let table_id = self.table_id;
         let triggered_on = self.triggered_on;
 
-        let last_execution = conn
-            .executions()
+        let last_lfr = conn
+            .logical_runs()
             .previous_for_function_at(self.function_id, triggered_on)
             .await?;
 
-        let last_logical = match last_execution {
+        let last_logical = match last_lfr {
             Some(last) => {
                 conn.versioned(&last.triggered_on)
                     .data_version(table_id)
@@ -458,8 +456,11 @@ mod tests {
     use td_objects::and;
     use td_objects::dxo::collection::CollectionDB;
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
+    use td_objects::dxo::logical::LogicalFunctionRunDB;
     use td_objects::dxo::logical::LogicalTableDataVersionPointerDB;
     use td_objects::dxo::table::TableDB;
+    use td_objects::types::basic::FunctionRunStatus;
+    use td_objects::types::basic::Trigger;
     use td_objects::types::basic::{
         AtTime, BundleId, CollectionName, Decorator, ExecutionId, LogicalPointerReason,
         LogicalPointerStatus, PhysicalTableDataVersionId, TableName, TableNameDto, TransactionId,
@@ -842,6 +843,69 @@ mod tests {
         assert_eq!(found.len(), 3);
         assert_eq!(found[0].as_ref().unwrap().id, ltdvs[0].id);
         assert_eq!(found[2].as_ref().unwrap().id, ltdvs[2].id);
+        Ok(())
+    }
+
+    /// `Versions::New` for a downstream consumer (never the plan's
+    /// trigger) returns just the delta since its prior LFR — not the
+    /// whole timeline. Setup: publisher mints v1, v2 in two
+    /// publisher-rooted executions; consumer has an LFR aligned with
+    /// run 1's execution; resolving for the consumer must yield {v2}.
+    #[td_test::test(sqlx)]
+    #[tokio::test]
+    async fn test_resolve_logical_new_downstream_consumer(db: TdPool) -> Result<(), TdError> {
+        let (collection, _publisher, table_id, ltdvs) = seed_ftdv_timeline(&db, 2).await;
+
+        // Decorator is irrelevant — we only need a distinct function_id.
+        let consumer_create = FunctionRegister::builder()
+            .try_name("c0")?
+            .try_description("d")?
+            .bundle_id(BundleId::default())
+            .try_snippet("s")?
+            .decorator(Decorator::Publisher)
+            .dependencies(None)
+            .triggers(None)
+            .tables(vec![TableNameDto::try_from("c0_out")?])
+            .try_runtime_values("rt")?
+            .reuse_frozen_tables(false)
+            .build()?;
+        let consumer = db.seed().function(&collection, &consumer_create).await?;
+
+        // Consumer LFR aligned with run 1 — the only cutoff a correct
+        // resolver could use.
+        let lfr_run1 = LogicalFunctionRunDB::builder()
+            .collection_id(collection.id)
+            .execution_id(&ltdvs[0].execution_id)
+            .transaction_id(&ltdvs[0].transaction_id)
+            .function_id(consumer.function_id)
+            .function_version_id(&consumer.id)
+            .trigger(Trigger::Dependency)
+            .triggered_on(ltdvs[0].triggered_on)
+            .triggered_by_id(UserId::admin())
+            .status(FunctionRunStatus::Committed)
+            .build()?;
+        db.live().insert::<LogicalFunctionRunDB>(&lfr_run1).await?;
+
+        let mut conn = db.acquire().await.unwrap();
+        let found = VersionResolver::builder()
+            .function_id(&consumer.function_id)
+            .table_id(&table_id)
+            .versions(&Versions::New)
+            .triggered_on(&TriggeredOn::now())
+            .build()?
+            .resolve(&mut conn)
+            .await?;
+
+        let found_ids: Vec<_> = found
+            .iter()
+            .map(|f| f.as_ref().map(|f| f.id.clone()))
+            .collect();
+        assert_eq!(
+            found.len(),
+            1,
+            "downstream consumer should see only the LTDV minted after its prior run, got {found_ids:?}",
+        );
+        assert_eq!(found[0].as_ref().unwrap().id, ltdvs[1].id);
         Ok(())
     }
 

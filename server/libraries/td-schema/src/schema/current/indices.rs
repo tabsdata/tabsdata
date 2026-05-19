@@ -314,6 +314,17 @@ fn function_run_indices() -> Vec<IndexCreateStatement> {
             .col(LogicalFunctionRuns::FunctionId)
             .unique()
             .to_owned(),
+        // `Versions::New` cutoff lookup: filter by `function_id`, order
+        // by `(triggered_on DESC, id DESC)`, LIMIT 1. Called once per
+        // (function, table) edge at plan-build; without this index every
+        // call would full-scan logical_function_runs.
+        Index::create()
+            .name("logical_function_runs___function_id__triggered_on__id___idx")
+            .table(LogicalFunctionRuns::Table)
+            .col(LogicalFunctionRuns::FunctionId)
+            .col(LogicalFunctionRuns::TriggeredOn)
+            .col(LogicalFunctionRuns::Id)
+            .to_owned(),
         // Canonical (LFR) status indices for the logical-chain cascade.
         Index::create()
             .name("logical_function_runs___execution_id__status___idx")
