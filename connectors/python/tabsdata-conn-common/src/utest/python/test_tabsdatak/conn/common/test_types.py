@@ -6,13 +6,9 @@ from tabsdatak.api import Env, Secret
 from tabsdatak.conn.common.error import ConnErrorCode, ConnInitException
 from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
-    AzBlobLocation,
     AzureAccountKey,
-    CloudLocation,
     Credentials,
     GCPJson,
-    GCSLocation,
-    S3Location,
     UserPassword,
 )
 from tabsdatak.conn.common.types import full_path
@@ -100,86 +96,6 @@ def test_azure_account_key_missing_field_raises_conn_4():
 
 
 # ---------------------------------------------------------------------------
-# Cloud locations
-# ---------------------------------------------------------------------------
-
-
-def _aws():
-    return AwsAccessSecretKey(
-        access_key_id=Env.lit("AKID"),
-        secret_access_key=Secret.lit("secret"),
-    )
-
-
-def test_s3_location_round_trips():
-    loc = S3Location(
-        bucket=Env.lit("my-bucket"),
-        region=Env.lit("us-east-1"),
-        credentials=_aws(),
-        base_path=Env.lit("ch/"),
-    )
-    back = S3Location.from_json(loc.to_json())
-    assert isinstance(back, S3Location)
-
-
-def test_az_blob_location_round_trips():
-    loc = AzBlobLocation(
-        container=Env.lit("my-container"),
-        credentials=AzureAccountKey(
-            account_name=Secret.lit("acct"),
-            account_key=Secret.lit("key"),
-        ),
-        base_path=Env.lit("ch/"),
-    )
-    back = AzBlobLocation.from_json(loc.to_json())
-    assert isinstance(back, AzBlobLocation)
-
-
-def test_gcs_location_round_trips():
-    loc = GCSLocation(
-        bucket=Env.lit("my-bucket"),
-        credentials=GCPJson(json=Secret.lit('{"key":"value"}')),
-        base_path=Env.lit("ch/"),
-    )
-    back = GCSLocation.from_json(loc.to_json())
-    assert isinstance(back, GCSLocation)
-
-
-def test_polymorphic_load_via_cloud_location_base():
-    loc = S3Location(
-        bucket=Env.lit("my-bucket"),
-        region=Env.lit("us-east-1"),
-        credentials=_aws(),
-        base_path=Env.lit("ch/"),
-    )
-    back = CloudLocation.from_json(loc.to_json())
-    assert isinstance(back, S3Location)
-
-
-def test_s3_location_missing_field_raises_conn_5():
-    # ``base_path`` is optional (defaults to ``""``); omit ``region``
-    # to trigger the missing-required-field error.
-    with pytest.raises(ConnInitException) as ei:
-        S3Location(  # type: ignore[call-arg]
-            bucket=Env.lit("my-bucket"),
-            credentials=_aws(),
-        )
-    assert ei.value.api_error is ConnErrorCode.CONN_5
-
-
-def test_az_blob_location_missing_field_raises_conn_6():
-    with pytest.raises(ConnInitException) as ei:
-        AzBlobLocation(container=Env.lit("my-container"))  # type: ignore[call-arg]
-    assert ei.value.api_error is ConnErrorCode.CONN_6
-
-
-def test_gcs_location_missing_field_raises_conn_7():
-    with pytest.raises(ConnInitException) as ei:
-        GCSLocation(bucket=Env.lit("my-bucket"))  # type: ignore[call-arg]
-    assert ei.value.api_error is ConnErrorCode.CONN_7
-
-
-# ---------------------------------------------------------------------------
 # full_path helper
 # ---------------------------------------------------------------------------
 
@@ -234,39 +150,3 @@ def testfull_path_result_never_starts_or_ends_with_slash():
             assert not out.endswith("/"), (bp, p, out)
 
 
-# ---------------------------------------------------------------------------
-# CloudLocation.full_path methods
-# ---------------------------------------------------------------------------
-
-
-def test_s3_locationfull_path_strips_leading_slash_on_path():
-    loc = S3Location(
-        bucket=Env.lit("my-bucket"),
-        region=Env.lit("us-east-1"),
-        credentials=_aws(),
-        base_path="/data/",
-    )
-    assert loc.full_path("/foo.csv") == "data/foo.csv"
-    assert loc.full_path("foo.csv") == "data/foo.csv"
-
-
-def test_az_blob_locationfull_path_with_env_base_path(monkeypatch):
-    monkeypatch.setenv("AZ_BP", "ch/sub")
-    loc = AzBlobLocation(
-        container=Env.lit("my-container"),
-        credentials=AzureAccountKey(
-            account_name=Secret.lit("acct"),
-            account_key=Secret.lit("key"),
-        ),
-        base_path=Env(s="AZ_BP"),
-    )
-    assert loc.full_path("/x/y") == "ch/sub/x/y"
-
-
-def test_gcs_locationfull_path_default_base_path_is_empty():
-    loc = GCSLocation(
-        bucket=Env.lit("my-bucket"),
-        credentials=GCPJson(json=Secret.lit('{"key":"value"}')),
-    )
-    assert loc.full_path("foo") == "foo"
-    assert loc.full_path("/a/b/") == "a/b"

@@ -46,12 +46,6 @@ class GCPJson(GCPCredentials):
 
 @_api.dataclass(ConnErrorCode.CONN_10)
 class GCPHmac(GCPCredentials):
-    """HMAC access key / secret for GCS's S3-compatible endpoint.
-
-    Used by connectors that read or write GCS via the S3 protocol
-    (e.g. ClickHouse's ``s3()`` table function pointed at
-    ``https://storage.googleapis.com``).
-    """
 
     __kind__ = "gcpHmacCredentials"
     access_key: SecretOrEnvSpec
@@ -124,11 +118,6 @@ BasePathSpec: TypeAlias = Union[
 
 
 def full_path(base_path: BasePathSpec, path: str) -> str:
-    """Join ``base_path`` with ``path``, stripping leading and
-    trailing ``/`` from each side and from the result. ``base_path``
-    may be a ``str`` or a ``Secret`` / ``Env`` whose ``.value()``
-    resolves to the path string.
-    """
     resolved: str = base_path if isinstance(base_path, str) else base_path.value()
     return (resolved.strip("/") + "/" + path.strip("/")).strip("/")
 
@@ -228,75 +217,3 @@ EntityWhitelistSpec: TypeAlias = Annotated[
 ]
 
 
-# --- Cloud locations -------------------------------------------------
-
-
-class CloudLocation(_api.DescriptorBase, ABC):
-    __kind__ = "cloudLocation"
-
-
-@_api.dataclass(ConnErrorCode.CONN_5)
-class S3Location(CloudLocation):
-    __kind__ = "s3Location"
-    bucket: S3BucketSpec
-    region: AwsRegionSpec
-    credentials: AwsAccessSecretKey
-    base_path: BasePathSpec = ""
-    cfg: CfgSpec | None = None
-
-    def full_path(self, path: str) -> str:
-        """Resolve ``path`` against ``base_path`` and return the
-        joined result.
-
-        ``path`` is always treated as relative to ``base_path``,
-        even when it starts with ``/`` -- the leading slash is
-        stripped before joining, so ``"/foo"`` and ``"foo"``
-        produce identical output. Trailing slashes on ``path`` /
-        ``base_path`` and on the joined result are also stripped,
-        so the return value never starts or ends with ``/``.
-        """
-        return full_path(self.base_path, path)
-
-
-@_api.dataclass(ConnErrorCode.CONN_6)
-class AzBlobLocation(CloudLocation):
-    __kind__ = "azBlobLocation"
-    container: AzContainerSpec
-    credentials: AzureAccountKey
-    base_path: BasePathSpec = ""
-    cfg: CfgSpec | None = None
-
-    def full_path(self, path: str) -> str:
-        """Resolve ``path`` against ``base_path`` and return the
-        joined result.
-
-        ``path`` is always treated as relative to ``base_path``,
-        even when it starts with ``/`` -- the leading slash is
-        stripped before joining, so ``"/foo"`` and ``"foo"``
-        produce identical output. Trailing slashes on ``path`` /
-        ``base_path`` and on the joined result are also stripped,
-        so the return value never starts or ends with ``/``.
-        """
-        return full_path(self.base_path, path)
-
-
-@_api.dataclass(ConnErrorCode.CONN_7)
-class GCSLocation(CloudLocation):
-    __kind__ = "gcsLocation"
-    bucket: GCSBucketSpec
-    credentials: GCPJson
-    base_path: BasePathSpec = ""
-    cfg: CfgSpec | None = None
-
-    def full_path(self, path: str) -> str:
-        """Resolve ``path`` against ``base_path`` and return the
-        joined result.
-
-        ``path`` is always treated as relative to ``base_path``,
-        even when it starts with ``/`` -- the leading slash is
-        stripped before joining, so ``"/foo"`` and ``"foo"``
-        produce identical output. Trailing slashes on ``path`` /
-        ``base_path`` and on the joined result are also stripped,
-        so the return value never starts or ends with ``/``.
-        """
-        return full_path(self.base_path, path)

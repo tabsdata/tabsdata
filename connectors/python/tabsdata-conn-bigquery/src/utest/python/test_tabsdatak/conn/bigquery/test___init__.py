@@ -12,15 +12,18 @@ from tabsdatak.conn.bigquery import (
     ConnSpec,
     CredentialsSpec,
     DatasetSpec,
+    DestCfgSpec,
     IfTableExistsSpec,
     ProjectSpec,
     SchemaEvolutionSpec,
 )
+from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.bigquery.error import (
     BigQueryValidateException,
     BigqueryErrorCode,
 )
-from tabsdatak.conn.common.types import CfgSpec, GCPJson, GCSLocation
+from tabsdatak.conn.bigquery import GCSLocation
+from tabsdatak.conn.common.types import CfgSpec, GCPJson
 
 
 pytestmark = pytest.mark.bigquery
@@ -50,7 +53,7 @@ def test_bigquery_dest_full_round_trip():
         tables=["`my-project.analytics.users`", "`my-project.analytics.orders`"],
         if_table_exists="replace",
         schema_evolution="strict",
-        dest_cfg={"chunkSize": 2048},
+        dest_cfg={"bigquery.logging_level": 20},
     )
     loaded = BigQueryDest.from_json(dest.to_json())
     assert loaded == dest
@@ -63,7 +66,7 @@ def test_bigquery_dest_full_round_trip():
     ]
     assert loaded.if_table_exists == "replace"
     assert loaded.schema_evolution == "strict"
-    assert loaded.dest_cfg == {"chunkSize": 2048}
+    assert loaded.dest_cfg == {"bigquery.logging_level": 20}
 
 
 def test_bigquery_dest_round_trip_with_named_conn():
@@ -106,4 +109,28 @@ def test_bigquery_dest_fields_wire_expected_specs():
     assert _hint(BigQueryDest, "tables") == BigQueryTableNamesSpec | None
     assert _hint(BigQueryDest, "if_table_exists") == IfTableExistsSpec
     assert _hint(BigQueryDest, "schema_evolution") == SchemaEvolutionSpec
-    assert _hint(BigQueryDest, "dest_cfg") == CfgSpec | None
+    assert _hint(BigQueryDest, "dest_cfg") == DestCfgSpec | None
+
+
+# ---------------------------------------------------------------------------
+# dest_cfg literal-key validation
+# ---------------------------------------------------------------------------
+
+
+def test_bigquery_dest_rejects_unknown_dest_cfg_key():
+    with pytest.raises(ConnInitException) as ei:
+        BigQueryDest(
+            conn=_conn(),
+            tables=["`myproject.mydataset.users`"],
+            dest_cfg={"bogus.key": 1},
+        )
+    assert ei.value.api_error is BigqueryErrorCode.BIGQUERY_3
+
+
+def test_bigquery_dest_accepts_known_dest_cfg_keys():
+    dest = BigQueryDest(
+        conn=_conn(),
+        tables=["`myproject.mydataset.users`"],
+        dest_cfg={"bigquery.logging_level": 20},
+    )
+    assert dest.dest_cfg == {"bigquery.logging_level": 20}

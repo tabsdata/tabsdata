@@ -39,28 +39,29 @@ def test_every_code_constructs_a_conn_init_exception(monkeypatch):
 
 def test_dataclass_tag_codes_carry_a_cannot_create_message(monkeypatch):
     # Per the conn-common convention, every code used as a dataclass
-    # decorator tag (CONN_1..CONN_7) has a "Cannot create <X>"
-    # message template. CONN_8 is raised programmatically from
-    # ``_config.get_cfg`` and carries a different shape, so it's
-    # exempt.
+    # decorator tag has a "Cannot create <X>" message template. CONN_8
+    # is raised programmatically from ``_config.get_cfg`` and carries
+    # a different shape, so it's exempt.
     monkeypatch.setenv(DEBUG_FRAMES_ENV_VAR, "0")
     dataclass_tag_codes = [
         ConnErrorCode.CONN_1,
         ConnErrorCode.CONN_2,
         ConnErrorCode.CONN_3,
         ConnErrorCode.CONN_4,
-        ConnErrorCode.CONN_5,
-        ConnErrorCode.CONN_6,
-        ConnErrorCode.CONN_7,
+        ConnErrorCode.CONN_9,
+        ConnErrorCode.CONN_10,
     ]
     for code in dataclass_tag_codes:
         assert code.value.message_template.startswith("Cannot create ")
 
 
-def test_codes_are_numbered_consecutively_from_one():
-    # Seven dataclass-tag codes (4 credentials + 3 cloud locations in
-    # types.py), CONN_8 for the ``get_cfg`` invalid-value path,
-    # CONN_9 for ``FqnDef``, CONN_10 for ``GCPHmac``. Numbered
-    # CONN_1..CONN_10 in declaration order.
+def test_codes_have_expected_names_with_intentional_gap():
+    # Four credential dataclass-tag codes (CONN_1..CONN_4), CONN_8 for
+    # the ``get_cfg`` invalid-value path, CONN_9 for ``FqnDef``,
+    # CONN_10 for ``GCPHmac``. CONN_5..CONN_7 were intentionally
+    # retired with the CloudLocation move into the per-connector
+    # packages; the gap is preserved so callers that still imported
+    # the conn-common variants surface AttributeError rather than
+    # silently picking up an unrelated code.
     names = [code.name for code in ConnErrorCode]
-    assert names == [f"CONN_{i}" for i in range(1, 11)]
+    assert names == ["CONN_1", "CONN_2", "CONN_3", "CONN_4", "CONN_8", "CONN_9", "CONN_10"]

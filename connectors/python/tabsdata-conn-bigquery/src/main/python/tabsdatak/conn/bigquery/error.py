@@ -51,3 +51,7 @@ class BigqueryErrorCode(ErrorCode):
         BigQueryRuntimeException,
         "BigQueryDest table name {table!r} could not be parsed",
     )  # _BigQueryDestPlugin: table FQN parse failure
+    BIGQUERY_9 = ErrorDef(
+        ConnInitException,
+        "Cannot create GCSLocation",
+    )  # GCSLocation

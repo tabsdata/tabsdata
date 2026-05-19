@@ -8,16 +8,11 @@ from tabsdatak.error import (
 
 
 class ConnException(TabsdataException):
-    """Top-level base exception for the connector hierarchy. Each
-    connector package defines its own subclasses for the categories
-    it needs (init / validate / runtime)."""
 
     pass
 
 
 class ConnInitException(ConnException):
-    """An object in the connector layer could not be created because
-    of attribute type / value issues at construction time."""
 
     pass
 
@@ -33,12 +28,12 @@ class ConnErrorCode(ErrorCode):
         ConnInitException, "Cannot create AzureAccountKey"
     )  # AzureAccountKey
 
-    # --- Cloud locations (tabsdatak.conn.common.typing_) ------------
-    CONN_5 = ErrorDef(ConnInitException, "Cannot create S3Location")  # S3Location
-    CONN_6 = ErrorDef(
-        ConnInitException, "Cannot create AzBlobLocation"
-    )  # AzBlobLocation
-    CONN_7 = ErrorDef(ConnInitException, "Cannot create GCSLocation")  # GCSLocation
+    # --- Misc -------------------------------------------------------
+    # CONN_5 / CONN_6 / CONN_7 (S3Location / AzBlobLocation / GCSLocation)
+    # were moved into the per-connector packages along with the
+    # CloudLocation hierarchy; the numbering gap is intentional --
+    # callers that still imported the conn-common variants now see
+    # AttributeError rather than silently picking up an unrelated code.
     CONN_8 = ErrorDef(
         ConnInitException,
         "Configuration '{name}', invalid value '{value}'. Valid values are: {values}",
