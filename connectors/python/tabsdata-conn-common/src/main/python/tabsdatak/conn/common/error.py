@@ -46,3 +46,6 @@ class ConnErrorCode(ErrorCode):
 
     # --- FQN syntax (tabsdatak.conn.common._validation) -------------
     CONN_9 = ErrorDef(ConnInitException, "Cannot create FqnDef")  # FqnDef
+
+    # --- Credentials (later additions) ------------------------------
+    CONN_10 = ErrorDef(ConnInitException, "Cannot create GCPHmac")  # GCPHmac

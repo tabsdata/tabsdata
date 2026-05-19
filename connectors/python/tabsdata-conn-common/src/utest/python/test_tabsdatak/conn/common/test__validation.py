@@ -47,12 +47,12 @@ def test_fqn_def_is_frozen():
 
 
 def test_fqn_no_quote_joins_bare():
-    assert fqn(["a", "b", "c"], FqnDef(".")) == "a.b.c"
+    assert fqn(["a", "b", "c"], FqnDef(separator=".")) == "a.b.c"
 
 
 def test_fqn_no_quote_rejects_separator_in_element():
     with pytest.raises(ValueError, match="contains separator"):
-        fqn(["a.x", "b"], FqnDef("."))
+        fqn(["a.x", "b"], FqnDef(separator="."))
 
 
 def test_fqn_per_part_quote_always_wraps_each_element():
@@ -129,12 +129,12 @@ def test_fqn_outer_only_rejects_quote_in_element_without_escape():
 
 def test_fqn_rejects_empty_parts_list():
     with pytest.raises(ValueError, match="parts must be non-empty"):
-        fqn([], FqnDef("."))
+        fqn([], FqnDef(separator="."))
 
 
 def test_fqn_rejects_empty_element():
     with pytest.raises(ValueError, match="index 1 is empty"):
-        fqn(["a", ""], FqnDef(".", quote="`"))
+        fqn(["a", ""], FqnDef(separator=".", quote="`"))
 
 
 # ---------------------------------------------------------------------------
@@ -173,7 +173,7 @@ def test_fqn_complete_no_op_when_already_fully_qualified():
 
 def test_fqn_complete_round_trip_with_unfqn_and_fqn():
     from tabsdatak.conn.common._validation import fqn_complete
-    spec = FqnDef(".", quote="`")
+    spec = FqnDef(separator=".", quote="`")
     parsed = unfqn("schema.users", spec, total_parts=3)
     full = fqn_complete(parsed, 3, "main")
     assert fqn(full, spec) == "`main`.`schema`.`users`"
@@ -235,67 +235,67 @@ def test_fqn_complete_returns_new_list_not_aliased():
 
 
 def test_unfqn_no_quote_splits_bare():
-    assert unfqn("a.b.c", FqnDef(".")) == ["a", "b", "c"]
+    assert unfqn("a.b.c", FqnDef(separator=".")) == ["a", "b", "c"]
 
 
 def test_unfqn_per_part_quote_handles_all_quoted():
-    assert unfqn("`a`.`b`.`c`", FqnDef(".", quote="`")) == ["a", "b", "c"]
+    assert unfqn("`a`.`b`.`c`", FqnDef(separator=".", quote="`")) == ["a", "b", "c"]
 
 
 def test_unfqn_per_part_quote_handles_all_bare():
-    assert unfqn("a.b.c", FqnDef(".", quote="`")) == ["a", "b", "c"]
+    assert unfqn("a.b.c", FqnDef(separator=".", quote="`")) == ["a", "b", "c"]
 
 
 def test_unfqn_per_part_quote_handles_mixed():
-    assert unfqn("`a-1`.b.`c`", FqnDef(".", quote="`")) == ["a-1", "b", "c"]
+    assert unfqn("`a-1`.b.`c`", FqnDef(separator=".", quote="`")) == ["a-1", "b", "c"]
 
 
 def test_unfqn_per_part_quote_keeps_separator_inside_quoted():
-    assert unfqn("`a.b`.c", FqnDef(".", quote="`")) == ["a.b", "c"]
+    assert unfqn("`a.b`.c", FqnDef(separator=".", quote="`")) == ["a.b", "c"]
 
 
 def test_unfqn_per_part_doubled_quote_escape_unescapes():
-    assert unfqn('"a""b"."c"', FqnDef(".", quote='"', escape='"')) == ['a"b', "c"]
+    assert unfqn('"a""b"."c"', FqnDef(separator=".", quote='"', escape='"')) == ['a"b', "c"]
 
 
 def test_unfqn_per_part_backslash_escape_unescapes():
-    assert unfqn('"a\\"b"."c"', FqnDef(".", quote='"', escape="\\")) == ['a"b', "c"]
+    assert unfqn('"a\\"b"."c"', FqnDef(separator=".", quote='"', escape="\\")) == ['a"b', "c"]
 
 
 def test_unfqn_rejects_unterminated_quoted_identifier():
     with pytest.raises(ValueError, match="unterminated quoted identifier"):
-        unfqn('"a.b', FqnDef(".", quote='"'))
+        unfqn('"a.b', FqnDef(separator=".", quote='"'))
 
 
 def test_unfqn_rejects_stray_quote_in_bare_element():
     with pytest.raises(ValueError, match="unexpected quote"):
-        unfqn('a"b.c', FqnDef(".", quote='"'))
+        unfqn('a"b.c', FqnDef(separator=".", quote='"'))
 
 
 def test_unfqn_rejects_trailing_separator():
     with pytest.raises(ValueError, match="trailing separator"):
-        unfqn("a.b.", FqnDef(".", quote="`"))
+        unfqn("a.b.", FqnDef(separator=".", quote="`"))
 
 
 def test_unfqn_rejects_leading_separator():
     with pytest.raises(ValueError, match="empty element at position 0"):
-        unfqn(".a.b", FqnDef(".", quote="`"))
+        unfqn(".a.b", FqnDef(separator=".", quote="`"))
 
 
 def test_unfqn_rejects_double_separator():
     with pytest.raises(ValueError, match="empty element"):
-        unfqn("a..b", FqnDef(".", quote="`"))
+        unfqn("a..b", FqnDef(separator=".", quote="`"))
 
 
 def test_unfqn_rejects_missing_separator_between_parts():
     # ``\`a\`\`b\``: two adjacent quoted parts with no separator.
     with pytest.raises(ValueError, match="expected separator"):
-        unfqn("`a``b`", FqnDef(".", quote="`"))
+        unfqn("`a``b`", FqnDef(separator=".", quote="`"))
 
 
 def test_unfqn_rejects_empty_value():
     with pytest.raises(ValueError, match="value must be non-empty"):
-        unfqn("", FqnDef("."))
+        unfqn("", FqnDef(separator="."))
 
 
 def test_unfqn_outer_only_strips_outer_quotes_and_splits():
@@ -385,12 +385,12 @@ def test_unfqn_total_parts_rejects_negative():
 @pytest.mark.parametrize(
     "spec,parts",
     [
-        (FqnDef("."), ["a", "b", "c"]),
-        (FqnDef(".", quote="`"), ["catalog", "schema", "table"]),
-        (FqnDef(".", quote="`"), ["databricks-ci-catalog", "default", "users"]),
-        (FqnDef(".", quote='"', escape='"'), ['weird"name', "x"]),
-        (FqnDef(".", quote="`", outer_only=True), ["proj", "ds", "tbl"]),
-        (FqnDef(":", quote="'", escape="\\"), ["a:b", "c'd", "e"]),
+        (FqnDef(separator="."), ["a", "b", "c"]),
+        (FqnDef(separator=".", quote="`"), ["catalog", "schema", "table"]),
+        (FqnDef(separator=".", quote="`"), ["databricks-ci-catalog", "default", "users"]),
+        (FqnDef(separator=".", quote='"', escape='"'), ['weird"name', "x"]),
+        (FqnDef(separator=".", quote="`", outer_only=True), ["proj", "ds", "tbl"]),
+        (FqnDef(separator=":", quote="'", escape="\\"), ["a:b", "c'd", "e"]),
     ],
 )
 def test_fqn_unfqn_round_trip(spec, parts):
@@ -405,19 +405,19 @@ def test_fqn_unfqn_round_trip(spec, parts):
 def test_name_validate_returns_after_validator_instance():
     from pydantic import AfterValidator
     from tabsdatak.conn.common._validation import name_validate
-    v = name_validate(FqnDef(".", quote="`"), max_parts=3)
+    v = name_validate(FqnDef(separator=".", quote="`"), max_parts=3)
     assert isinstance(v, AfterValidator)
 
 
 def test_name_validate_returned_validator_passes_valid_name():
     from tabsdatak.conn.common._validation import name_validate
-    v = name_validate(FqnDef(".", quote="`"), max_parts=3)
+    v = name_validate(FqnDef(separator=".", quote="`"), max_parts=3)
     assert v.func("catalog.schema.users") == "catalog.schema.users"
 
 
 def test_name_validate_returned_validator_passes_quoted_name():
     from tabsdatak.conn.common._validation import name_validate
-    v = name_validate(FqnDef(".", quote="`"), max_parts=3)
+    v = name_validate(FqnDef(separator=".", quote="`"), max_parts=3)
     assert v.func("`databricks-ci-catalog`.schema.users") == (
         "`databricks-ci-catalog`.schema.users"
     )
@@ -425,28 +425,28 @@ def test_name_validate_returned_validator_passes_quoted_name():
 
 def test_name_validate_rejects_too_many_parts():
     from tabsdatak.conn.common._validation import name_validate
-    v = name_validate(FqnDef(".", quote="`"), max_parts=3)
+    v = name_validate(FqnDef(separator=".", quote="`"), max_parts=3)
     with pytest.raises(ValueError, match="exceeds max_parts=3"):
         v.func("a.b.c.d")
 
 
 def test_name_validate_rejects_invalid_syntax():
     from tabsdatak.conn.common._validation import name_validate
-    v = name_validate(FqnDef(".", quote="`"), max_parts=3)
+    v = name_validate(FqnDef(separator=".", quote="`"), max_parts=3)
     with pytest.raises(ValueError, match="unterminated quoted identifier"):
         v.func("`unterminated")
 
 
 def test_name_validate_rejects_empty_value():
     from tabsdatak.conn.common._validation import name_validate
-    v = name_validate(FqnDef(".", quote="`"), max_parts=3)
+    v = name_validate(FqnDef(separator=".", quote="`"), max_parts=3)
     with pytest.raises(ValueError, match="value must be non-empty"):
         v.func("")
 
 
 def test_name_validate_max_parts_1_allows_single_part():
     from tabsdatak.conn.common._validation import name_validate
-    v = name_validate(FqnDef(".", quote="`"), max_parts=1)
+    v = name_validate(FqnDef(separator=".", quote="`"), max_parts=1)
     assert v.func("users") == "users"
     with pytest.raises(ValueError, match="exceeds max_parts=1"):
         v.func("schema.users")
@@ -455,13 +455,13 @@ def test_name_validate_max_parts_1_allows_single_part():
 def test_name_validate_rejects_zero_max_parts():
     from tabsdatak.conn.common._validation import name_validate
     with pytest.raises(ValueError, match="max_parts must be a positive integer"):
-        name_validate(FqnDef(".", quote="`"), max_parts=0)
+        name_validate(FqnDef(separator=".", quote="`"), max_parts=0)
 
 
 def test_name_validate_rejects_negative_max_parts():
     from tabsdatak.conn.common._validation import name_validate
     with pytest.raises(ValueError, match="max_parts must be a positive integer"):
-        name_validate(FqnDef(".", quote="`"), max_parts=-1)
+        name_validate(FqnDef(separator=".", quote="`"), max_parts=-1)
 
 
 def test_name_validate_used_in_annotated_type_via_pydantic():
@@ -469,7 +469,7 @@ def test_name_validate_used_in_annotated_type_via_pydantic():
     from pydantic import TypeAdapter
     from tabsdatak.conn.common._validation import name_validate
 
-    NameSpec = Annotated[str, name_validate(FqnDef(".", quote="`"), max_parts=3)]
+    NameSpec = Annotated[str, name_validate(FqnDef(separator=".", quote="`"), max_parts=3)]
     ta = TypeAdapter(NameSpec)
 
     assert ta.validate_python("catalog.schema.users") == "catalog.schema.users"
@@ -483,7 +483,7 @@ def test_name_validate_used_in_annotated_type_via_pydantic():
 
 def test_name_validate_works_with_outer_only_spec():
     from tabsdatak.conn.common._validation import name_validate
-    v = name_validate(FqnDef(".", quote="`", outer_only=True), max_parts=3)
+    v = name_validate(FqnDef(separator=".", quote="`", outer_only=True), max_parts=3)
     assert v.func("`proj.ds.tbl`") == "`proj.ds.tbl`"
     with pytest.raises(ValueError, match="exceeds max_parts=3"):
         v.func("`a.b.c.d`")
@@ -491,8 +491,8 @@ def test_name_validate_works_with_outer_only_spec():
 
 def test_name_validate_each_call_returns_fresh_validator():
     from tabsdatak.conn.common._validation import name_validate
-    v1 = name_validate(FqnDef(".", quote="`"), max_parts=3)
-    v2 = name_validate(FqnDef(".", quote="`"), max_parts=3)
+    v1 = name_validate(FqnDef(separator=".", quote="`"), max_parts=3)
+    v2 = name_validate(FqnDef(separator=".", quote="`"), max_parts=3)
     assert v1 is not v2
 
 

@@ -1,3 +1,11 @@
 #
 # Copyright 2026 Tabs Data Inc.
 #
+
+# Required at runtime by ``_id.new_upload_id`` (UUIDv7 backing for
+# the time-ordered per-load namespace). Cloud-SDK deps are
+# intentionally NOT listed here: ``boto3`` (S3), ``azure-storage-blob``
+# (Azure), and ``google-cloud-storage`` (GCS) are pulled in on demand
+# by the corresponding storage class -- a flow that only stages to
+# one provider shouldn't have to install the other two.
+uuid6

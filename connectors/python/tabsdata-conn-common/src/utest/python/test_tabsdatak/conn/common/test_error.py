@@ -58,8 +58,9 @@ def test_dataclass_tag_codes_carry_a_cannot_create_message(monkeypatch):
 
 
 def test_codes_are_numbered_consecutively_from_one():
-    # Seven dataclass-tag codes (4 credentials + 3 cloud locations
-    # in types.py) plus CONN_8 for the ``get_cfg`` invalid-value
-    # path. Numbered CONN_1..CONN_8 in declaration order.
+    # Seven dataclass-tag codes (4 credentials + 3 cloud locations in
+    # types.py), CONN_8 for the ``get_cfg`` invalid-value path,
+    # CONN_9 for ``FqnDef``, CONN_10 for ``GCPHmac``. Numbered
+    # CONN_1..CONN_10 in declaration order.
     names = [code.name for code in ConnErrorCode]
-    assert names == [f"CONN_{i}" for i in range(1, 9)]
+    assert names == [f"CONN_{i}" for i in range(1, 11)]

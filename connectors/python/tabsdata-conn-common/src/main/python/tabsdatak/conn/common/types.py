@@ -44,6 +44,20 @@ class GCPJson(GCPCredentials):
     json: SecretOrEnvSpec
 
 
+@_api.dataclass(ConnErrorCode.CONN_10)
+class GCPHmac(GCPCredentials):
+    """HMAC access key / secret for GCS's S3-compatible endpoint.
+
+    Used by connectors that read or write GCS via the S3 protocol
+    (e.g. ClickHouse's ``s3()`` table function pointed at
+    ``https://storage.googleapis.com``).
+    """
+
+    __kind__ = "gcpHmacCredentials"
+    access_key: SecretOrEnvSpec
+    secret_key: SecretOrEnvSpec
+
+
 # --- AWS -------------------------------------------------------------
 
 

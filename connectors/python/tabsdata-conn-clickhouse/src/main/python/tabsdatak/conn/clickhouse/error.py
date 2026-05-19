@@ -14,6 +14,10 @@ class ClickHouseValidateException(ConnException):
     """Cross-field validation failure for the ClickHouse connector."""
 
 
+class ClickHouseRuntimeException(ConnException):
+    """Runtime failure (plugin / I/O) for the ClickHouse connector."""
+
+
 class ClickHouseErrorCode(ErrorCode):
     CLICKHOUSE_1 = ErrorDef(
         ConnInitException,
@@ -24,37 +28,35 @@ class ClickHouseErrorCode(ErrorCode):
         "ClickHouseDest validation failed",
     )  # ClickHouseDest
     CLICKHOUSE_3 = ErrorDef(
-        ConnInitException,
-        "ClickHouse identifier must be non-empty",
-    )  # _validate_identifier: empty
+        ClickHouseValidateException,
+        "ClickHouseDest.tables must be non-empty",
+    )  # ClickHouseDest.validate()
     CLICKHOUSE_4 = ErrorDef(
-        ConnInitException,
-        "ClickHouse URI must start with clickhouse:// (optionally"
-        " driver-qualified, e.g. clickhouse+http://): {value!r}",
-    )  # _validate_uri
+        ClickHouseRuntimeException,
+        "ClickHouseDest tables/slot count mismatch (tables={tables},"
+        " slots={slots})",
+    )  # _ClickHouseDestPlugin: defensive recheck
     CLICKHOUSE_5 = ErrorDef(
-        ConnInitException,
-        "backtick-quoted ClickHouse identifier may not contain null or"
-        " unescaped backtick: {value!r}",
-    )  # _validate_identifier: backtick body bad chars
+        ClickHouseRuntimeException,
+        "ClickHouse destination connection failed (host={host})",
+    )  # _ClickHouseDestPlugin.write_out: client connect failure
     CLICKHOUSE_6 = ErrorDef(
-        ConnInitException,
-        "backtick-quoted ClickHouse identifier must be non-empty: {value!r}",
-    )  # _validate_identifier: backtick empty
+        ClickHouseRuntimeException,
+        "ClickHouse bulk load failed (table={table})",
+    )  # _ClickHouseDestPlugin.write_out: load failure
     CLICKHOUSE_7 = ErrorDef(
-        ConnInitException,
-        "double-quoted ClickHouse identifier may not contain null or"
-        ' unescaped " : {value!r}',
-    )  # _validate_identifier: double-quoted body bad chars
+        ClickHouseRuntimeException,
+        "Unsupported ClickHouse staging type: {staging}",
+    )  # _ClickHouseDestPlugin.write_out: bad staging type
     CLICKHOUSE_8 = ErrorDef(
         ConnInitException,
-        "double-quoted ClickHouse identifier must be non-empty: {value!r}",
-    )  # _validate_identifier: double-quoted empty
+        "Cannot create S3Location",
+    )  # S3Location (clickhouse-local)
     CLICKHOUSE_9 = ErrorDef(
         ConnInitException,
-        "unquoted ClickHouse identifier must match [A-Za-z_][A-Za-z0-9_]*: {value!r}",
-    )  # _validate_identifier: unquoted bad shape
+        "Cannot create AzBlobLocation",
+    )  # AzBlobLocation (clickhouse-local)
     CLICKHOUSE_10 = ErrorDef(
         ConnInitException,
-        "ClickHouse table name must be one of 'table', 'database.table': {value!r}",
-    )  # _validate_table_fqn: bad arity
+        "Cannot create GCSLocation",
+    )  # GCSLocation (clickhouse-local, GCPHmac credentials)
