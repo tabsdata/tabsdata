@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Annotated, Literal, TypeAlias, Union
+from collections.abc import Mapping
+from typing import Annotated, Any, Literal, TypeAlias, Union
 
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
@@ -11,6 +12,9 @@ from tabsdatak.api import Conn, Dest, Env, NamedConn, Secret
 # noinspection PyProtectedMember
 from tabsdatak.conn.bigquery import _validation
 from tabsdatak.conn.bigquery.error import BigqueryErrorCode
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common import _validation as _common_validation
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import (
@@ -44,6 +48,16 @@ IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
 SchemaEvolutionSpec: TypeAlias = Literal["update", "strict"]
 
 
+# --- BigQueryDest.dest_cfg keys -------------------------------------
+DestCfgKey: TypeAlias = Literal[
+    "bigquery.logging_level",
+]
+
+DestCfgSpec: TypeAlias = Annotated[
+    Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+]
+
+
 # --- Connection ------------------------------------------------------
 
 
@@ -74,4 +88,4 @@ class BigQueryDest(Dest):
     tables: BigQueryTableNamesSpec | None = None
     if_table_exists: IfTableExistsSpec = "append"
     schema_evolution: SchemaEvolutionSpec = "update"
-    dest_cfg: CfgSpec | None = None
+    dest_cfg: DestCfgSpec | None = None
