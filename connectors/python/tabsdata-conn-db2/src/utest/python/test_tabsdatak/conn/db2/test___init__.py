@@ -1,12 +1,27 @@
 from __future__ import annotations
 
+import typing
+
 import pytest
 
 from tabsdatak.api import NamedConn, Secret
 from tabsdatak.error import TabsdataException
 from tabsdatak.conn.common.error import ConnInitException
-from tabsdatak.conn.common.types import UserPassword
-from tabsdatak.conn.db2 import Db2Conn, Db2Dest, Db2Src
+from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
+from tabsdatak.conn.common.types import CfgSpec, UserPassword
+from tabsdatak.conn.db2 import (
+    ConnSpec,
+    CredentialsSpec,
+    Db2Conn,
+    Db2Dest,
+    Db2Src,
+    Db2TableNamesSpec,
+    DestCfgSpec,
+    IfTableExistsSpec,
+    QueriesSpec,
+    SrcCfgSpec,
+    UriSpec,
+)
 # noinspection PyProtectedMember
 from tabsdatak.conn.db2.error import (
     Db2ValidateException,
@@ -68,7 +83,7 @@ def test_db2_src_full_round_trip():
         transactional=False,
         schema_overrides=[None, None],
         query_params={"x": 1},
-        src_cfg={"chunkSize": 1024},
+        src_cfg={"db2.logging_level": 20},
     )
     loaded = Db2Src.from_json(src.to_json())
     assert loaded == src
@@ -76,7 +91,7 @@ def test_db2_src_full_round_trip():
     assert loaded.transactional is False
     assert loaded.schema_overrides == [None, None]
     assert loaded.query_params == {"x": 1}
-    assert loaded.src_cfg == {"chunkSize": 1024}
+    assert loaded.src_cfg == {"db2.logging_level": 20}
 
 
 def test_db2_src_round_trip_with_named_conn():
@@ -126,14 +141,14 @@ def test_db2_dest_full_round_trip():
         tables=["ANALYTICS.USERS", "ANALYTICS.ORDERS"],
         if_table_exists="replace",
         transactional=False,
-        dest_cfg={"chunkSize": 2048},
+        dest_cfg={"db2.logging_level": 20},
     )
     loaded = Db2Dest.from_json(dest.to_json())
     assert loaded == dest
     assert loaded.tables == ["ANALYTICS.USERS", "ANALYTICS.ORDERS"]
     assert loaded.if_table_exists == "replace"
     assert loaded.transactional is False
-    assert loaded.dest_cfg == {"chunkSize": 2048}
+    assert loaded.dest_cfg == {"db2.logging_level": 20}
 
 
 def test_db2_dest_round_trip_with_named_conn():
@@ -147,17 +162,92 @@ def test_db2_dest_round_trip_with_named_conn():
     assert loaded.conn.name == "prod_db2"
 
 
-def test_db2_dest_rejects_bad_table_name():
-    with pytest.raises(ConnInitException) as ei:
-        Db2Dest(
-            conn=_conn(),
-            tables=["bad-name"],
-        )
-    assert ei.value.api_error in {Db2ErrorCode.DB2_4, Db2ErrorCode.DB2_15}
-
-
 def test_db2_dest_defaults_if_table_exists_to_append():
     dest = Db2Dest(conn=_conn(), tables=["ANALYTICS.USERS"])
     assert dest.if_table_exists == "append"
     assert dest.transactional is True
     assert dest.dest_cfg is None
+
+
+# ---------------------------------------------------------------------------
+# Field-spec wiring
+# ---------------------------------------------------------------------------
+
+
+def _hint(cls: type, field: str) -> object:
+    return typing.get_type_hints(cls, include_extras=True)[field]
+
+
+def test_db2_conn_fields_wire_expected_specs():
+    assert _hint(Db2Conn, "uri") == UriSpec
+    assert _hint(Db2Conn, "credentials") == CredentialsSpec
+    assert _hint(Db2Conn, "conn_cfg") == CfgSpec | None
+
+
+def test_db2_src_fields_wire_expected_specs():
+    assert _hint(Db2Src, "conn") == ConnSpec
+    assert _hint(Db2Src, "queries") == QueriesSpec
+    assert _hint(Db2Src, "transactional") is bool
+    assert _hint(Db2Src, "schema_overrides") == SchemaOverrideSpec | None
+    assert _hint(Db2Src, "src_cfg") == SrcCfgSpec | None
+
+
+def test_db2_dest_fields_wire_expected_specs():
+    assert _hint(Db2Dest, "conn") == ConnSpec
+    assert _hint(Db2Dest, "tables") == Db2TableNamesSpec
+    assert _hint(Db2Dest, "if_table_exists") == IfTableExistsSpec
+    assert _hint(Db2Dest, "transactional") is bool
+    assert _hint(Db2Dest, "dest_cfg") == DestCfgSpec | None
+
+
+# ---------------------------------------------------------------------------
+# src_cfg / dest_cfg literal-key validation
+# ---------------------------------------------------------------------------
+
+
+def test_db2_src_rejects_unknown_src_cfg_key():
+    with pytest.raises(ConnInitException) as ei:
+        Db2Src(
+            conn=_conn(),
+            queries=["SELECT 1"],
+            src_cfg={"bogus.key": 1},
+        )
+    assert ei.value.api_error is Db2ErrorCode.DB2_2
+
+
+def test_db2_src_accepts_known_src_cfg_keys():
+    src = Db2Src(
+        conn=_conn(),
+        queries=["SELECT 1"],
+        src_cfg={
+            "db2.logging_level": 20,
+            "tabsdata.sql.sql.readEngine": "polarsSqlAlchemyRead",
+            "tabsdata.sql.chunkSize": 100,
+        },
+    )
+    loaded = Db2Src.from_json(src.to_json())
+    assert loaded == src
+
+
+def test_db2_dest_rejects_unknown_dest_cfg_key():
+    with pytest.raises(ConnInitException) as ei:
+        Db2Dest(
+            conn=_conn(),
+            tables=["analytics.users"],
+            dest_cfg={"bogus.key": 1},
+        )
+    assert ei.value.api_error is Db2ErrorCode.DB2_4
+
+
+def test_db2_dest_accepts_known_dest_cfg_keys():
+    dest = Db2Dest(
+        conn=_conn(),
+        tables=["analytics.users"],
+        dest_cfg={
+            "db2.logging_level": 20,
+            "tabsdata.sql.sql.writeEngine": "polarsSqlAlchemyWrite",
+            "tabsdata.sql.chunkSize": 100,
+        },
+    )
+    loaded = Db2Dest.from_json(dest.to_json())
+    assert loaded == dest

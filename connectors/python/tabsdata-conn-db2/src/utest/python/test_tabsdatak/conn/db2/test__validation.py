@@ -1,99 +1,46 @@
 from __future__ import annotations
 
+import re
+
 import pytest
 
-from tabsdatak.conn.common.error import ConnInitException
 # noinspection PyProtectedMember
 from tabsdatak.conn.db2 import _validation
-from tabsdatak.conn.db2.error import Db2ErrorCode
 
 
 pytestmark = pytest.mark.db2
 
 
 # ---------------------------------------------------------------------------
-# Identifier
+# URI pattern
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
     "value",
     [
-        "USERS",
-        "U_1",
-        "@SES",
-        '"weird name"',
-        '"with""embedded quote"',
-    ],
-)
-def test_validate_identifier_accepts_valid(value):
-    assert _validation.validate_identifier(value) == value
-
-
-def test_validate_identifier_rejects_empty():
-    with pytest.raises(ConnInitException) as ei:
-        _validation.validate_identifier("")
-    assert ei.value.api_error is Db2ErrorCode.DB2_5
-
-
-def test_validate_identifier_rejects_too_long():
-    with pytest.raises(ConnInitException) as ei:
-        _validation.validate_identifier("a" * 129)
-    assert ei.value.api_error is Db2ErrorCode.DB2_12
-
-
-def test_validate_identifier_rejects_delimited_empty():
-    with pytest.raises(ConnInitException) as ei:
-        _validation.validate_identifier('""')
-    assert ei.value.api_error is Db2ErrorCode.DB2_14
-
-
-def test_validate_identifier_rejects_delimited_with_unescaped_quote():
-    # A delimited identifier with a stray unescaped double quote in
-    # the body (after collapsing escapes) is malformed.
-    with pytest.raises(ConnInitException) as ei:
-        _validation.validate_identifier('"bad"name"')
-    assert ei.value.api_error is Db2ErrorCode.DB2_13
-
-
-@pytest.mark.parametrize("value", ["1USERS", "user-name", "user.name", "with space"])
-def test_validate_identifier_rejects_ordinary_bad_shape(value):
-    with pytest.raises(ConnInitException) as ei:
-        _validation.validate_identifier(value)
-    assert ei.value.api_error is Db2ErrorCode.DB2_15
-
-
-# ---------------------------------------------------------------------------
-# URI
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "value",
-    [
+        "db2://host/SAMPLE",
         "db2://host:50000/SAMPLE",
         "ibm_db_sa://host/SAMPLE",
         "db2+ibm_db://host/SAMPLE",
         "DB2://host/db",
     ],
 )
-def test_validate_uri_accepts_valid(value):
-    assert _validation.validate_uri(value) == value
+def test_db2_uri_pattern_accepts_valid(value):
+    assert re.fullmatch(_validation.URI_PATTERN, value) is not None
 
 
 @pytest.mark.parametrize(
     "value",
     [
         "",
-        "host:50000/SAMPLE",
         "mysql://host/db",
         "://host/db",
+        "host:50000/SAMPLE",
     ],
 )
-def test_validate_uri_rejects_invalid(value):
-    with pytest.raises(ConnInitException) as ei:
-        _validation.validate_uri(value)
-    assert ei.value.api_error is Db2ErrorCode.DB2_6
+def test_db2_uri_pattern_rejects_invalid(value):
+    assert re.fullmatch(_validation.URI_PATTERN, value) is None
 
 
 # ---------------------------------------------------------------------------
@@ -104,30 +51,28 @@ def test_validate_uri_rejects_invalid(value):
 @pytest.mark.parametrize(
     "value",
     [
-        "USERS",
-        "ANALYTICS.USERS",
-        '"db"."tbl"',
-        '"weird.name".USERS',
+        "users",
+        "analytics.users",
+        '"schema name".users',
+        '"with""embedded quote"',
     ],
 )
-def test_validate_table_fqn_accepts_valid(value):
-    assert _validation.validate_table_fqn(value) == value
+def test_db2_table_fqn_validator_accepts_valid(value):
+    assert _validation.DB2_TABLE_FQN_VALIDATOR.func(value) == value
 
 
-def test_validate_table_fqn_rejects_bad_arity():
-    with pytest.raises(ConnInitException) as ei:
-        _validation.validate_table_fqn("a.b.c")
-    assert ei.value.api_error is Db2ErrorCode.DB2_17
+def test_db2_table_fqn_validator_rejects_too_many_parts():
+    with pytest.raises(ValueError, match="exceeds max_parts=2"):
+        _validation.DB2_TABLE_FQN_VALIDATOR.func("a.b.c")
 
 
-def test_validate_table_fqn_rejects_unterminated_quote():
-    # ``split_fqn`` raises ValueError when a double quote is left open.
-    with pytest.raises(ConnInitException) as ei:
-        _validation.validate_table_fqn('"db.users')
-    assert ei.value.api_error is Db2ErrorCode.DB2_16
+def test_db2_table_fqn_validator_rejects_unterminated_quote():
+    with pytest.raises(ValueError, match="unterminated quoted identifier"):
+        _validation.DB2_TABLE_FQN_VALIDATOR.func('"db.users')
 
 
-def test_validate_table_fqn_propagates_part_validators():
-    with pytest.raises(ConnInitException) as ei:
-        _validation.validate_table_fqn("user-name")
-    assert ei.value.api_error is Db2ErrorCode.DB2_15
+def test_db2_fqn_def_uses_double_quote_and_doubled_quote_escape():
+    assert _validation._DB2_FQN_DEF.separator == "."
+    assert _validation._DB2_FQN_DEF.quote == '"'
+    assert _validation._DB2_FQN_DEF.escape == '"'
+    assert _validation._DB2_FQN_DEF.outer_only is False
