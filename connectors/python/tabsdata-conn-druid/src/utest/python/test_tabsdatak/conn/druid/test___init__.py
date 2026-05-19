@@ -8,13 +8,16 @@ from tabsdatak.api import NamedConn, Secret
 from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
     CfgSpec,
+    UserPassword,
+)
+from tabsdatak.conn.druid import (
     CloudLocation,
     S3Location,
-    UserPassword,
 )
 from tabsdatak.conn.druid import (
     ConnSpec,
     CredentialsSpec,
+    DestCfgSpec,
     DruidConn,
     DruidDest,
     DruidTableNamesSpec,
@@ -22,6 +25,8 @@ from tabsdatak.conn.druid import (
     SegmentGranularitySpec,
     UrlSpec,
 )
+from tabsdatak.conn.druid.error import DruidErrorCode
+from tabsdatak.conn.common.error import ConnInitException
 
 
 pytestmark = pytest.mark.druid
@@ -62,7 +67,7 @@ def test_druid_dest_full_round_trip():
         max_rows_per_segment=2_000_000,
         max_rows_in_memory=500_000,
         http_timeout_sec=120,
-        dest_cfg={"chunkSize": 4096},
+        dest_cfg={"druid.logging_level": 20},
     )
     loaded = DruidDest.from_json(dest.to_json())
     assert loaded == dest
@@ -75,7 +80,7 @@ def test_druid_dest_full_round_trip():
     assert loaded.max_rows_per_segment == 2_000_000
     assert loaded.max_rows_in_memory == 500_000
     assert loaded.http_timeout_sec == 120
-    assert loaded.dest_cfg == {"chunkSize": 4096}
+    assert loaded.dest_cfg == {"druid.logging_level": 20}
 
 
 def test_druid_dest_round_trip_with_named_conn():
@@ -115,4 +120,38 @@ def test_druid_dest_fields_wire_expected_specs():
     assert _hint(DruidDest, "max_rows_per_segment") is int
     assert _hint(DruidDest, "max_rows_in_memory") is int
     assert _hint(DruidDest, "http_timeout_sec") is int
-    assert _hint(DruidDest, "dest_cfg") == CfgSpec | None
+    assert _hint(DruidDest, "dest_cfg") == DestCfgSpec | None
+
+
+# ---------------------------------------------------------------------------
+# dest_cfg literal-key validation
+# ---------------------------------------------------------------------------
+
+
+def test_druid_dest_rejects_unknown_dest_cfg_key():
+    with pytest.raises(ConnInitException) as ei:
+        DruidDest(
+            conn=_conn(),
+            tables=["my_datasource"],
+            dest_cfg={"bogus.key": 1},
+        )
+    assert ei.value.api_error is DruidErrorCode.DRUID_2
+
+
+def test_druid_dest_accepts_known_dest_cfg_keys():
+    dest = DruidDest(
+        conn=_conn(),
+        tables=["my_datasource"],
+        dest_cfg={
+            "druid.logging_level": 20,
+            "druid.poll_interval_seconds": 5.0,
+            "druid.retry_attempts": 4,
+            "druid.retry_backoff_seconds": 1.5,
+        },
+    )
+    assert dest.dest_cfg == {
+        "druid.logging_level": 20,
+        "druid.poll_interval_seconds": 5.0,
+        "druid.retry_attempts": 4,
+        "druid.retry_backoff_seconds": 1.5,
+    }

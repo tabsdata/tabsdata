@@ -10,13 +10,14 @@ from urllib.parse import urlparse
 
 from tabsdatak.conn.common.file import _transporter
 from tabsdatak.conn.common.file._output import copy_one as _transporter_copy_one
-from tabsdatak.conn.common.types import (
+from tabsdatak.conn.druid import (
     AzBlobLocation,
     CloudLocation,
+    DruidConn,
+    DruidDest,
     GCSLocation,
     S3Location,
 )
-from tabsdatak.conn.druid import DruidConn, DruidDest
 from tabsdatak.conn.druid.error import DruidErrorCode
 
 logger = logging.getLogger(__name__)

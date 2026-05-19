@@ -58,3 +58,15 @@ class DruidErrorCode(ErrorCode):
         DruidRuntimeException,
         "Druid staging location {kind!r} not supported by this connector",
     )  # _DruidDestPlugin.write_out: staging variant the plugin doesn't know
+    DRUID_12 = ErrorDef(
+        ConnInitException,
+        "Cannot create S3Location",
+    )  # S3Location
+    DRUID_13 = ErrorDef(
+        ConnInitException,
+        "Cannot create AzBlobLocation",
+    )  # AzBlobLocation
+    DRUID_14 = ErrorDef(
+        ConnInitException,
+        "Cannot create GCSLocation",
+    )  # GCSLocation

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import ABC
 from collections.abc import Mapping
 from typing import Annotated, Any, Literal, TypeAlias, Union
 
@@ -17,7 +18,19 @@ from tabsdatak.api import (
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation
-from tabsdatak.conn.common.types import CfgSpec, CloudLocation, UserPassword
+from tabsdatak.conn.common.types import (
+    AwsAccessSecretKey,
+    AwsRegionSpec,
+    AzContainerSpec,
+    AzureAccountKey,
+    BasePathSpec,
+    CfgSpec,
+    GCPJson,
+    GCSBucketSpec,
+    S3BucketSpec,
+    UserPassword,
+    full_path,
+)
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.druid import _validation
@@ -65,6 +78,55 @@ DestCfgKey: TypeAlias = Literal[
 DestCfgSpec: TypeAlias = Annotated[
     Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
 ]
+
+
+# --- Cloud locations -------------------------------------------------
+#
+# Druid carries a per-Conn ``staging`` field whose value is one of the
+# concrete CloudLocation subclasses below. The classes mirror the
+# legacy conn-common shapes but live here so druid owns its own
+# location surface (and routes init failures through DruidErrorCode).
+
+
+class CloudLocation(_api.DescriptorBase, ABC):
+    __kind__ = "druidCloudLocation"
+
+
+@_api.dataclass(DruidErrorCode.DRUID_12, kw_only=True)
+class S3Location(CloudLocation):
+    __kind__ = "druidS3Location"
+    bucket: S3BucketSpec
+    region: AwsRegionSpec
+    credentials: AwsAccessSecretKey
+    base_path: BasePathSpec = ""
+    cfg: CfgSpec | None = None
+
+    def full_path(self, path: str) -> str:
+        return full_path(self.base_path, path)
+
+
+@_api.dataclass(DruidErrorCode.DRUID_13, kw_only=True)
+class AzBlobLocation(CloudLocation):
+    __kind__ = "druidAzBlobLocation"
+    container: AzContainerSpec
+    credentials: AzureAccountKey
+    base_path: BasePathSpec = ""
+    cfg: CfgSpec | None = None
+
+    def full_path(self, path: str) -> str:
+        return full_path(self.base_path, path)
+
+
+@_api.dataclass(DruidErrorCode.DRUID_14, kw_only=True)
+class GCSLocation(CloudLocation):
+    __kind__ = "druidGcsLocation"
+    bucket: GCSBucketSpec
+    credentials: GCPJson
+    base_path: BasePathSpec = ""
+    cfg: CfgSpec | None = None
+
+    def full_path(self, path: str) -> str:
+        return full_path(self.base_path, path)
 
 
 # --- Connection ------------------------------------------------------
