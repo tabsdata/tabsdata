@@ -6,11 +6,10 @@ use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use td_common::provider::{CachedProvider, Provider};
-use td_database::sea_query::executor::SeaExecutor;
 use td_error::{TdError, td_error};
 use td_objects::dxo::auth::SessionDBWithNames;
 use td_objects::types::basic::{AccessTokenId, SessionStatus};
-use td_queries::{BasicQueries, SessionQueries};
+use td_queries::{LiveEntry, QueryExecutor, SessionsEntry};
 
 pub type Session = SessionDBWithNames;
 pub type Sessions = CachedProvider<HashMap<AccessTokenId, Arc<Session>>, SqlSessionProvider>;
@@ -47,11 +46,11 @@ impl SqlSessionProvider {
     }
 }
 
-impl<E: SeaExecutor + Send> Provider<HashMap<AccessTokenId, Arc<Session>>, E>
+impl<E: QueryExecutor + Send> Provider<HashMap<AccessTokenId, Arc<Session>>, E>
     for SqlSessionProvider
 {
     async fn get(&self, conn: E) -> Result<Arc<HashMap<AccessTokenId, Arc<Session>>>, TdError> {
-        let sessions = BasicQueries::fetch_all::<Session>(conn, &SessionStatus::Active).await?;
+        let sessions: Vec<Session> = conn.live().fetch_all(&SessionStatus::Active).await?;
         let sessions = sessions
             .into_iter()
             .map(|s| (s.access_token_id, Arc::new(s)))
@@ -61,7 +60,7 @@ impl<E: SeaExecutor + Send> Provider<HashMap<AccessTokenId, Arc<Session>>, E>
 
     async fn purge(&self, conn: E) -> Result<(), TdError> {
         if self.time_to_purge() {
-            conn.purge_sessions().await?;
+            conn.sessions().purge().await?;
         }
         Ok(())
     }

@@ -12,7 +12,7 @@ use td_error::TdError;
 use td_objects::dxo::inter_collection_permission::InterCollectionPermissionDB;
 use td_objects::dxo::permission::PermissionDB;
 use td_objects::types::basic::{CollectionId, PermissionType, RoleId, ToCollectionId};
-use td_queries::BasicQueries;
+use td_queries::LiveEntry;
 use tracing::{debug, error, instrument};
 
 /// Provider that gets permissions and inter-permissions mapping from the database on every `get` call.
@@ -50,7 +50,7 @@ impl SqlAuthzDataProvider {
         &self,
         conn: &mut DynamicConnection<'_>,
     ) -> Result<HashMap<RoleId, Arc<Vec<Permission>>>, TdError> {
-        let permissions = conn.fetch_all::<PermissionDB>(()).await?;
+        let permissions = conn.live().fetch_all::<PermissionDB>(()).await?;
         let total_perms = permissions.len();
         let role_permissions_map: HashMap<RoleId, Arc<Vec<Permission>>> = permissions
             .iter()
@@ -89,7 +89,10 @@ impl SqlAuthzDataProvider {
         &self,
         conn: &mut DynamicConnection<'_>,
     ) -> Result<HashMap<CollectionId, Arc<Vec<ToCollectionId>>>, TdError> {
-        let permissions = conn.fetch_all::<InterCollectionPermissionDB>(()).await?;
+        let permissions = conn
+            .live()
+            .fetch_all::<InterCollectionPermissionDB>(())
+            .await?;
         let edge_count = permissions.len();
         let permissions_map: HashMap<CollectionId, Arc<Vec<ToCollectionId>>> = permissions
             .iter()
@@ -146,7 +149,7 @@ mod tests {
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::types::basic::{CollectionName, RoleId, ToCollectionId, UserId};
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::test_utils::SeedEntry;
 
     #[td_test::test(sqlx)]
     #[tokio::test]
@@ -166,19 +169,25 @@ mod tests {
     #[tokio::test]
     async fn test_get_inter_collection_permissions(db: TdPool) -> Result<(), TdError> {
         let c0 = db
-            .seed_collection(&CollectionName::try_from("c0")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
         let c1 = db
-            .seed_collection(&CollectionName::try_from("c1")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("c1")?, &UserId::admin())
             .await?;
         let c2 = db
-            .seed_collection(&CollectionName::try_from("c2")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("c2")?, &UserId::admin())
             .await?;
-        db.seed_inter_collection_permission(&c0.id, &ToCollectionId::try_from(c1.id)?)
+        db.seed()
+            .inter_collection_permission(&c0.id, &ToCollectionId::try_from(c1.id)?)
             .await?;
-        db.seed_inter_collection_permission(&c0.id, &ToCollectionId::try_from(c2.id)?)
+        db.seed()
+            .inter_collection_permission(&c0.id, &ToCollectionId::try_from(c2.id)?)
             .await?;
-        db.seed_inter_collection_permission(&c1.id, &ToCollectionId::try_from(c2.id)?)
+        db.seed()
+            .inter_collection_permission(&c1.id, &ToCollectionId::try_from(c2.id)?)
             .await?;
 
         let provider = SqlAuthzDataProvider;
@@ -196,19 +205,25 @@ mod tests {
     #[tokio::test]
     async fn test_provider_get(db: TdPool) -> Result<(), TdError> {
         let c0 = db
-            .seed_collection(&CollectionName::try_from("c0")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
         let c1 = db
-            .seed_collection(&CollectionName::try_from("c1")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("c1")?, &UserId::admin())
             .await?;
         let c2 = db
-            .seed_collection(&CollectionName::try_from("c2")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("c2")?, &UserId::admin())
             .await?;
-        db.seed_inter_collection_permission(&c0.id, &ToCollectionId::try_from(&c1.id)?)
+        db.seed()
+            .inter_collection_permission(&c0.id, &ToCollectionId::try_from(&c1.id)?)
             .await?;
-        db.seed_inter_collection_permission(&c0.id, &ToCollectionId::try_from(&c2.id)?)
+        db.seed()
+            .inter_collection_permission(&c0.id, &ToCollectionId::try_from(&c2.id)?)
             .await?;
-        db.seed_inter_collection_permission(&c1.id, &ToCollectionId::try_from(&c2.id)?)
+        db.seed()
+            .inter_collection_permission(&c1.id, &ToCollectionId::try_from(&c2.id)?)
             .await?;
 
         let provider = SqlAuthzDataProvider;
