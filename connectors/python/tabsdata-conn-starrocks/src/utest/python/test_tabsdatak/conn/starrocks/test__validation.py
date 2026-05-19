@@ -1,48 +1,19 @@
+from __future__ import annotations
+
+import re
 
 import pytest
 
-from tabsdatak.conn.common.error import ConnInitException
+# noinspection PyProtectedMember
 from tabsdatak.conn.starrocks import _validation
-from tabsdatak.conn.starrocks.error import StarRocksErrorCode
 
 
 pytestmark = pytest.mark.starrocks
 
 
-@pytest.mark.parametrize("value", ["users", "u_1", "$$", "`weird name`"])
-def test_validate_identifier_accepts_valid(value):
-    assert _validation._validate_identifier(value) == value
-
-
-def test_validate_identifier_rejects_empty():
-    with pytest.raises(ConnInitException) as ei:
-        _validation._validate_identifier("")
-    assert ei.value.api_error is StarRocksErrorCode.STARROCKS_3
-
-
-def test_validate_identifier_rejects_too_long():
-    with pytest.raises(ConnInitException) as ei:
-        _validation._validate_identifier("a" * 65)
-    assert ei.value.api_error is StarRocksErrorCode.STARROCKS_5
-
-
-def test_validate_identifier_rejects_backtick_empty():
-    with pytest.raises(ConnInitException) as ei:
-        _validation._validate_identifier("``")
-    assert ei.value.api_error is StarRocksErrorCode.STARROCKS_7
-
-
-@pytest.mark.parametrize("value", ["user-name", "user.name"])
-def test_validate_identifier_rejects_unquoted_bad_shape(value):
-    with pytest.raises(ConnInitException) as ei:
-        _validation._validate_identifier(value)
-    assert ei.value.api_error is StarRocksErrorCode.STARROCKS_8
-
-
-def test_validate_identifier_rejects_all_digits():
-    with pytest.raises(ConnInitException) as ei:
-        _validation._validate_identifier("123")
-    assert ei.value.api_error is StarRocksErrorCode.STARROCKS_9
+# ---------------------------------------------------------------------------
+# URI pattern
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -54,29 +25,53 @@ def test_validate_identifier_rejects_all_digits():
         "STARROCKS://host/db",
     ],
 )
-def test_validate_uri_accepts_valid(value):
-    assert _validation._validate_uri(value) == value
+def test_starrocks_uri_pattern_accepts_valid(value):
+    assert re.fullmatch(_validation.URI_PATTERN, value) is not None
 
 
-@pytest.mark.parametrize("value", ["", "host:9030/db", "postgres://host/db"])
-def test_validate_uri_rejects_invalid(value):
-    with pytest.raises(ConnInitException) as ei:
-        _validation._validate_uri(value)
-    assert ei.value.api_error is StarRocksErrorCode.STARROCKS_4
+@pytest.mark.parametrize(
+    "value",
+    [
+        "",
+        "host:9030/db",
+        "postgres://host/db",
+        "://host/db",
+    ],
+)
+def test_starrocks_uri_pattern_rejects_invalid(value):
+    assert re.fullmatch(_validation.URI_PATTERN, value) is None
 
 
-@pytest.mark.parametrize("value", ["users", "analytics.users", "`db`.`tbl`"])
-def test_validate_table_fqn_accepts_valid(value):
-    assert _validation._validate_table_fqn(value) == value
+# ---------------------------------------------------------------------------
+# Table FQN
+# ---------------------------------------------------------------------------
 
 
-def test_validate_table_fqn_rejects_bad_arity():
-    with pytest.raises(ConnInitException) as ei:
-        _validation._validate_table_fqn("a.b.c")
-    assert ei.value.api_error is StarRocksErrorCode.STARROCKS_11
+@pytest.mark.parametrize(
+    "value",
+    [
+        "users",
+        "analytics.users",
+        "`db`.`tbl`",
+        "`with``embedded backtick`",
+    ],
+)
+def test_starrocks_table_fqn_validator_accepts_valid(value):
+    assert _validation.STARROCKS_TABLE_FQN_VALIDATOR.func(value) == value
 
 
-def test_validate_table_fqn_propagates_part_validators():
-    with pytest.raises(ConnInitException) as ei:
-        _validation._validate_table_fqn("user-name")
-    assert ei.value.api_error is StarRocksErrorCode.STARROCKS_8
+def test_starrocks_table_fqn_validator_rejects_too_many_parts():
+    with pytest.raises(ValueError, match="exceeds max_parts=2"):
+        _validation.STARROCKS_TABLE_FQN_VALIDATOR.func("a.b.c")
+
+
+def test_starrocks_table_fqn_validator_rejects_unterminated_quote():
+    with pytest.raises(ValueError, match="unterminated quoted identifier"):
+        _validation.STARROCKS_TABLE_FQN_VALIDATOR.func("`db.users")
+
+
+def test_starrocks_fqn_def_uses_backtick_and_doubled_backtick_escape():
+    assert _validation._STARROCKS_FQN_DEF.separator == "."
+    assert _validation._STARROCKS_FQN_DEF.quote == "`"
+    assert _validation._STARROCKS_FQN_DEF.escape == "`"
+    assert _validation._STARROCKS_FQN_DEF.outer_only is False

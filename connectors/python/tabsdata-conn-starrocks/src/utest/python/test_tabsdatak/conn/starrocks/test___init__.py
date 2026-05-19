@@ -1,13 +1,28 @@
+from __future__ import annotations
+
+import typing
 
 import pytest
 
 from tabsdatak.api import NamedConn, Secret
 from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
+    CfgSpec,
     S3Location,
     UserPassword,
 )
-from tabsdatak.conn.starrocks import StarRocksConn, StarRocksDest
+from tabsdatak.conn.starrocks import (
+    ConnSpec,
+    CredentialsSpec,
+    DatabaseSpec,
+    HostSpec,
+    IfTableExistsSpec,
+    PortSpec,
+    SchemaEvolutionSpec,
+    StarRocksConn,
+    StarRocksDest,
+    StarRocksTableNamesSpec,
+)
 
 
 pytestmark = pytest.mark.starrocks
@@ -67,3 +82,28 @@ def test_starrocks_dest_round_trip_with_named_conn():
     assert loaded == dest
     assert isinstance(loaded.conn, NamedConn)
     assert loaded.conn.name == "prod_starrocks"
+
+
+# ---------------------------------------------------------------------------
+# Field-spec wiring
+# ---------------------------------------------------------------------------
+
+
+def _hint(cls: type, field: str) -> object:
+    return typing.get_type_hints(cls, include_extras=True)[field]
+
+
+def test_starrocks_conn_fields_wire_expected_specs():
+    assert _hint(StarRocksConn, "host") == HostSpec
+    assert _hint(StarRocksConn, "port") == PortSpec
+    assert _hint(StarRocksConn, "database") == DatabaseSpec
+    assert _hint(StarRocksConn, "credentials") == CredentialsSpec
+    assert _hint(StarRocksConn, "conn_cfg") == CfgSpec | None
+
+
+def test_starrocks_dest_fields_wire_expected_specs():
+    assert _hint(StarRocksDest, "conn") == ConnSpec
+    assert _hint(StarRocksDest, "tables") == StarRocksTableNamesSpec
+    assert _hint(StarRocksDest, "if_table_exists") == IfTableExistsSpec
+    assert _hint(StarRocksDest, "schema_evolution") == SchemaEvolutionSpec
+    assert _hint(StarRocksDest, "dest_cfg") == CfgSpec | None
