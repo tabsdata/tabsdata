@@ -2,7 +2,8 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::execution::layers::update_status::{notify_scheduler, update_function_run_status};
+use crate::execution::layers::update_status::update_function_run_status;
+use crate::scheduler::layers::request::notify_scheduler;
 use ta_services::factory::service_factory;
 use td_authz::tower::{AuthzOn, CollAdmin, CollExec};
 use td_authz::{Authz, AuthzContext};

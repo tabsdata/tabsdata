@@ -12,13 +12,19 @@ use td_common::server::{
 };
 use td_database::dynamic::DynamicConnection;
 use td_error::{ApiError, TdError, api_error};
+use td_execution::SchedulerNotify;
 use td_objects::dxo::function_run::{FunctionRunDB, UpdateFunctionRunDB};
 use td_objects::dxo::worker::{UpdateWorkerMessageStatusDB, WorkerDB};
 use td_objects::dxo::yaml::function_runner::v2::FunctionInput;
 use td_objects::types::basic::{FunctionRunId, FunctionRunStatus, WorkerId};
 use td_queries::BasicQueries;
 use td_tower::extractors::{MutRef, Ref};
-use tracing::{error, trace, warn};
+use tracing::{debug, error, warn};
+
+pub async fn notify_dispatcher(notify: Ref<SchedulerNotify>) -> Result<(), TdError> {
+    notify.notify_dispatcher();
+    Ok(())
+}
 
 pub async fn unlock_workers_request<T: WorkerMessageQueue>(
     message_queue: Ref<T>,
@@ -122,9 +128,9 @@ pub async fn unlock_function_runner_worker<T: WorkerMessageQueue>(
                         match conn.update::<_, WorkerDB>(&update, &worker_id).await {
                             Ok(_) => match message_queue.commit(&worker_id.to_string()).await {
                                 Ok(_) => {
-                                    trace!(
-                                        "Start function locked message [{}] for function run [{}] is dispatched",
-                                        worker_id, function_run.id
+                                    debug!(
+                                        "Dispatched function runner: worker [{worker_id}] function_run [{}] -> Unlocked",
+                                        function_run.id
                                     );
                                     Ok(())
                                 }
@@ -208,7 +214,7 @@ pub async fn unlock_cron_trigger_workers<T: WorkerMessageQueue>(
     match conn.update::<_, WorkerDB>(&update, &worker_id).await {
         Ok(_) => match message_queue.commit(&worker_id.to_string()).await {
             Ok(_) => {
-                trace!("CronTrigger locked message [{}] is dispatched", worker_id);
+                debug!("Dispatched cron trigger: worker [{worker_id}] -> Unlocked");
                 Ok(())
             }
             Err(e) => Err(api_error!(
@@ -238,7 +244,7 @@ pub async fn unlock_stage_trigger_workers<T: WorkerMessageQueue>(
     match conn.update::<_, WorkerDB>(&update, &worker_id).await {
         Ok(_) => match message_queue.commit(&worker_id.to_string()).await {
             Ok(_) => {
-                trace!("StageTrigger locked message [{}] is dispatched", worker_id);
+                debug!("Dispatched stage trigger: worker [{worker_id}] -> Unlocked");
                 Ok(())
             }
             Err(e) => Err(api_error!(

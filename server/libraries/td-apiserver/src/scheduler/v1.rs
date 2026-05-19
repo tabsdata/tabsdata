@@ -21,7 +21,7 @@ use tracing::{debug, error, trace};
 /// function-run status changes (callback, cancel, recover, execute). This
 /// interval only exists as a safety net to pick up pending work after a server
 /// restart or if a notification is missed.
-const CHECK_FREQUENCY: Duration = Duration::from_secs(1);
+const CHECK_FREQUENCY: Duration = Duration::from_secs(60);
 
 pub struct FunctionRequesterV1 {
     request_service: ServiceProvider<(), (), BoxError>,
@@ -62,8 +62,8 @@ impl ServerRunnable for FunctionRequesterV1 {
                     debug!("Execution plan request scheduler shutting down...");
                     break;
                 }
-                _ = self.notify.notified_requester() => {}
-                _ = tokio::time::sleep(CHECK_FREQUENCY) => {}
+                _ = self.notify.notified_scheduler() => debug!("Request scheduler: tick (notify)"),
+                _ = tokio::time::sleep(CHECK_FREQUENCY) => debug!("Request scheduler: tick (timer)"),
             }
             match self.request().await {
                 Ok(_) => trace!("Execution plan scheduler executed successfully"),
@@ -113,8 +113,8 @@ impl ServerRunnable for FunctionDispatcherV1 {
                     debug!("Execution plan commit scheduler shutting down...");
                     break;
                 }
-                _ = self.notify.notified_dispatcher() => {}
-                _ = tokio::time::sleep(CHECK_FREQUENCY) => {}
+                _ = self.notify.notified_dispatcher() => debug!("Dispatch scheduler: tick (notify)"),
+                _ = tokio::time::sleep(CHECK_FREQUENCY) => debug!("Dispatch scheduler: tick (timer)"),
             }
             match self.commit().await {
                 Ok(_) => trace!("Execution plan commit scheduler executed successfully"),

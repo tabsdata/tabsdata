@@ -7,20 +7,20 @@
 // ---------------------------------------------------------------------------
 //
 // Uses two independent `tokio::sync::Notify` channels — one per scheduler loop
-// (requester and dispatcher). `notify()` calls `notify_one()` on both, which
-// stores a permit when the loop is busy so the next `notified_*().await` returns
+// (scheduler and dispatcher). Each wake uses `notify_one()`, which stores a
+// permit when the target loop is busy so the next `notified_*().await` returns
 // immediately instead of being lost.
 
 #[derive(Clone)]
 pub struct SchedulerNotify {
-    requester: std::sync::Arc<tokio::sync::Notify>,
+    scheduler: std::sync::Arc<tokio::sync::Notify>,
     dispatcher: std::sync::Arc<tokio::sync::Notify>,
 }
 
 impl Default for SchedulerNotify {
     fn default() -> Self {
         Self {
-            requester: std::sync::Arc::new(tokio::sync::Notify::new()),
+            scheduler: std::sync::Arc::new(tokio::sync::Notify::new()),
             dispatcher: std::sync::Arc::new(tokio::sync::Notify::new()),
         }
     }
@@ -31,17 +31,24 @@ impl SchedulerNotify {
         Self::default()
     }
 
-    /// Wake both scheduler loops. Uses `notify_one()` so that a permit is
-    /// stored if a loop is currently busy — the next `notified_*().await`
-    /// returns immediately.
-    pub fn notify(&self) {
-        self.requester.notify_one();
+    /// Wake the scheduler loop so it re-evaluates which function runs are
+    /// ready to execute. Called when external state changes (execute, cancel,
+    /// recover, worker callback). If the scheduler produces new `Locked`
+    /// messages, it wakes the dispatcher itself.
+    pub fn notify_scheduler(&self) {
+        self.scheduler.notify_one();
+    }
+
+    /// Wake the dispatcher loop. Called by the scheduler after producing new
+    /// `Locked` messages so the dispatcher picks them up without waiting for
+    /// the failover timer.
+    pub fn notify_dispatcher(&self) {
         self.dispatcher.notify_one();
     }
 
-    /// Wait for a notification on the requester channel.
-    pub async fn notified_requester(&self) {
-        self.requester.notified().await;
+    /// Wait for a notification on the scheduler channel.
+    pub async fn notified_scheduler(&self) {
+        self.scheduler.notified().await;
     }
 
     /// Wait for a notification on the dispatcher channel.
@@ -58,7 +65,7 @@ mod tests {
     use tokio::sync::Barrier;
 
     #[tokio::test]
-    async fn test_notify_wakes_requester() {
+    async fn test_notify_scheduler_wakes_scheduler() {
         let notify = SchedulerNotify::new();
         let n = notify.clone();
         let barrier = Arc::new(Barrier::new(2));
@@ -66,13 +73,13 @@ mod tests {
 
         let handle = tokio::spawn(async move {
             b.wait().await;
-            n.notified_requester().await;
+            n.notified_scheduler().await;
             true
         });
 
         barrier.wait().await;
         tokio::task::yield_now().await;
-        notify.notify();
+        notify.notify_scheduler();
 
         let result = tokio::time::timeout(Duration::from_secs(1), handle)
             .await
@@ -82,7 +89,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_notify_wakes_dispatcher() {
+    async fn test_notify_dispatcher_wakes_dispatcher() {
         let notify = SchedulerNotify::new();
         let n = notify.clone();
         let barrier = Arc::new(Barrier::new(2));
@@ -96,7 +103,7 @@ mod tests {
 
         barrier.wait().await;
         tokio::task::yield_now().await;
-        notify.notify();
+        notify.notify_dispatcher();
 
         let result = tokio::time::timeout(Duration::from_secs(1), handle)
             .await
@@ -106,36 +113,23 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_notify_wakes_both_loops() {
+    async fn test_notify_scheduler_does_not_wake_dispatcher() {
         let notify = SchedulerNotify::new();
-        let barrier = Arc::new(Barrier::new(3));
+        notify.notify_scheduler();
 
-        let n1 = notify.clone();
-        let b1 = barrier.clone();
-        let req = tokio::spawn(async move {
-            b1.wait().await;
-            n1.notified_requester().await;
-        });
+        let result =
+            tokio::time::timeout(Duration::from_millis(50), notify.notified_dispatcher()).await;
+        assert!(result.is_err(), "dispatcher should not have been woken");
+    }
 
-        let n2 = notify.clone();
-        let b2 = barrier.clone();
-        let disp = tokio::spawn(async move {
-            b2.wait().await;
-            n2.notified_dispatcher().await;
-        });
+    #[tokio::test]
+    async fn test_notify_dispatcher_does_not_wake_scheduler() {
+        let notify = SchedulerNotify::new();
+        notify.notify_dispatcher();
 
-        barrier.wait().await;
-        tokio::task::yield_now().await;
-        notify.notify();
-
-        tokio::time::timeout(Duration::from_secs(1), req)
-            .await
-            .expect("requester timed out")
-            .expect("requester panicked");
-        tokio::time::timeout(Duration::from_secs(1), disp)
-            .await
-            .expect("dispatcher timed out")
-            .expect("dispatcher panicked");
+        let result =
+            tokio::time::timeout(Duration::from_millis(50), notify.notified_scheduler()).await;
+        assert!(result.is_err(), "scheduler should not have been woken");
     }
 
     /// The key behavioural test: notify_one() stores a permit so that a
@@ -144,13 +138,13 @@ mod tests {
     async fn test_notify_stores_permit_when_not_waiting() {
         let notify = SchedulerNotify::new();
 
-        // Nobody is waiting — the permit should be stored.
-        notify.notify();
+        // Nobody is waiting — the permits should be stored.
+        notify.notify_scheduler();
+        notify.notify_dispatcher();
 
-        // Both channels should return immediately.
-        tokio::time::timeout(Duration::from_millis(50), notify.notified_requester())
+        tokio::time::timeout(Duration::from_millis(50), notify.notified_scheduler())
             .await
-            .expect("requester should have returned immediately");
+            .expect("scheduler should have returned immediately");
         tokio::time::timeout(Duration::from_millis(50), notify.notified_dispatcher())
             .await
             .expect("dispatcher should have returned immediately");
@@ -162,12 +156,12 @@ mod tests {
         let b = a.clone();
 
         let handle = tokio::spawn(async move {
-            b.notified_requester().await;
+            b.notified_scheduler().await;
             true
         });
 
         tokio::task::yield_now().await;
-        a.notify();
+        a.notify_scheduler();
 
         let result = tokio::time::timeout(Duration::from_secs(1), handle)
             .await
@@ -183,13 +177,13 @@ mod tests {
 
         let b_clone = b.clone();
         let handle = tokio::spawn(async move {
-            tokio::time::timeout(Duration::from_millis(50), b_clone.notified_requester()).await
+            tokio::time::timeout(Duration::from_millis(50), b_clone.notified_scheduler()).await
         });
 
         tokio::task::yield_now().await;
-        a.notify();
+        a.notify_scheduler();
 
-        // b should NOT be woken by a.notify()
+        // b should NOT be woken by a.notify_scheduler()
         let result = handle.await.expect("task panicked");
         assert!(result.is_err(), "b should have timed out");
     }

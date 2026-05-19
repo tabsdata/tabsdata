@@ -3,9 +3,9 @@
 //
 
 use crate::execution::layers::update_status::{
-    notify_scheduler, update_function_run_status, update_table_data_version_status,
-    update_worker_status,
+    update_function_run_status, update_table_data_version_status, update_worker_status,
 };
+use crate::scheduler::layers::request::notify_scheduler;
 use ta_services::factory::service_factory;
 use td_execution::SchedulerNotify;
 use td_objects::dxo::crudl::UpdateRequest;

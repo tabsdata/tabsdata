@@ -2,6 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::scheduler::layers::dispatch::notify_dispatcher;
 use crate::scheduler::layers::request::{
     create_locked_cron_trigger_workers_start_request,
     create_locked_cron_trigger_workers_stop_request,
@@ -11,6 +12,7 @@ use crate::scheduler::layers::request::{
 };
 use ta_services::factory::service_factory;
 use td_common::server::{FileWorkerMessageQueue, WorkerMessageQueue};
+use td_execution::SchedulerNotify;
 use td_objects::dxo::function_run::{FunctionRunDB, FunctionRunToExecute, UpdateFunctionRunDB};
 use td_objects::dxo::worker::{
     UpdateWorkerDB, UpdateWorkerMessageStatusDB, WorkerDB, WorkerDBWithNames,
@@ -33,6 +35,7 @@ use td_tower::{layer, layers};
     context = Storage,
     context = FileWorkerMessageQueue,
     context = InternalServerAddresses,
+    context = SchedulerNotify,
 )]
 fn service() {
     layers!(
@@ -46,6 +49,7 @@ fn service() {
         stop_stage_trigger_runners::<_, FileWorkerMessageQueue>(),
         // Request stage trigger runners that need to be started
         request_stage_trigger_runners::<_, FileWorkerMessageQueue>(),
+        from_fn(notify_dispatcher),
     )
 }
 
@@ -302,6 +306,7 @@ mod tests {
                 type_of_val(
                     &By::<Vec<WorkerId>>::update_chunked::<UpdateWorkerMessageStatusDB, WorkerDB>,
                 ),
+                type_of_val(&notify_dispatcher),
             ]);
         Ok(())
     }

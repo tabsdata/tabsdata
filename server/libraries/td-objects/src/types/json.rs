@@ -25,9 +25,9 @@ impl<T: Serialize + Debug + Send + Sync + 'static> SeaValue for Json<T> {
     fn as_sea_value(&self) -> Value {
         serde_json::to_value(&self.0)
             .map(|v| Value::Json(Some(Box::new(v))))
-            .unwrap_or({
+            .unwrap_or_else(|e| {
                 // this should never fail as per serde::to_value doc, but just in case
-                error!("Error converting json value {:?} to a sea value", self);
+                error!("Error converting json value {self:?} to a sea value: {e}");
                 Value::Json(None)
             })
     }

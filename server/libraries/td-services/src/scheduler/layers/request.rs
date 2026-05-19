@@ -15,6 +15,7 @@ use td_common::server::{
 };
 use td_database::dynamic::DynamicConnection;
 use td_error::{ApiError, TdError, api_error, td_error};
+use td_execution::SchedulerNotify;
 use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::function_requirement::FunctionRequirementDBWithNames;
 use td_objects::dxo::function_run::FunctionRunToExecute;
@@ -42,6 +43,7 @@ use td_queries::{BasicQueries, FunctionRunQueries};
 use td_storage::Storage;
 use td_storage::location::StorageLocation;
 use td_tower::extractors::{MutRef, Ref};
+use tracing::debug;
 use url::Url;
 
 #[td_error]
@@ -50,10 +52,21 @@ pub enum WorkerRequestError {
     UrlParse(#[from] url::ParseError) = 5000,
 }
 
+pub async fn notify_scheduler(notify: Ref<SchedulerNotify>) -> Result<(), TdError> {
+    notify.notify_scheduler();
+    Ok(())
+}
+
 pub async fn fetch_function_runs_to_execute(
     mut conn: MutRef<DynamicConnection<'static>>,
 ) -> Result<Vec<FunctionRunToExecute>, TdError> {
     let result = conn.fetch_function_runs_to_execute().await?;
+    if !result.is_empty() {
+        debug!(
+            "Request scheduler: {} function run(s) ready to execute",
+            result.len()
+        );
+    }
     Ok(result)
 }
 

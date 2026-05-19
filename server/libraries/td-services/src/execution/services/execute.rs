@@ -4,7 +4,7 @@
 
 use crate::execution::layers::execute;
 use crate::execution::layers::execution::trigger_type_manual;
-use crate::execution::layers::update_status::notify_scheduler;
+use crate::scheduler::layers::request::notify_scheduler;
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
 use td_execution::SchedulerNotify;
