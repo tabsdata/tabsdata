@@ -49,6 +49,7 @@ ignored = ["openssl", "td-build", "td-schema", "toml"]
 # External dependencies
 
 sea-query = { workspace = true, features = ["derive"] }
+strum = { workspace = true, features = ["derive"] }
 tracing = { workspace = true }
 
 hex = { workspace = true }

@@ -6,8 +6,12 @@ pub mod archive;
 pub mod backend;
 pub mod current;
 pub mod deltas;
+pub(crate) mod sql;
 
 use backend::Backend;
+use sea_query::{IndexCreateStatement, InsertStatement, TableCreateStatement};
+
+use sql::{SeedCurrent, TriggerSpec, ViewDef};
 
 /// A complete schema snapshot.
 ///
@@ -85,6 +89,61 @@ pub trait SchemaDelta {
     /// last statement **must** update `db_version` to
     /// [`TO_VERSION`](SchemaDelta::TO_VERSION).
     fn up(backend: Backend) -> Vec<String>;
+}
+
+/// A schema-level unit owning a coherent piece of the database: typically
+/// one table (or one event-log + `_current` snapshot pair), the indices on
+/// that table, the views driven from it, the DB triggers that maintain it,
+/// and any seed rows it needs.
+///
+/// Implementors are zero-sized markers exposed as `pub(super) struct Defs;`
+/// inside their owning module. `current/mod.rs` holds a single ordered
+/// `ENTITIES: &[&dyn Entity]` slice that is the source of truth for
+/// FK-safe table ordering and within-phase view/trigger/index/seed
+/// emission order.
+///
+/// Every method has a `vec![]` default — implementors override only the
+/// phases they participate in. Views are the only method that receives
+/// `&Backend` (view bodies use dialect-specific expressions like
+/// `name_or_id` / `json_object_agg`); the other phases return typed specs
+/// and let [`Backend`] render.
+pub(crate) trait Entity {
+    /// `CREATE TABLE` statements for this entity.
+    fn create_tables(&self) -> Vec<TableCreateStatement> {
+        vec![]
+    }
+
+    /// `CREATE INDEX` statements on this entity's tables.
+    fn create_indices(&self) -> Vec<IndexCreateStatement> {
+        vec![]
+    }
+
+    /// `CREATE VIEW` statements whose `FROM` clause is one of this
+    /// entity's tables. Cross-entity views live in `current/derived_views.rs`
+    /// (declared last in `ENTITIES`) so the single-pass emission below is
+    /// dep-safe by construction.
+    fn create_views(&self, _b: &Backend) -> Vec<ViewDef> {
+        vec![]
+    }
+
+    /// Trigger specs maintaining this entity. [`TriggerSpec::render`]
+    /// dispatches to the matching variant's renderer.
+    fn create_db_triggers(&self) -> Vec<TriggerSpec> {
+        vec![]
+    }
+
+    /// `INSERT` seed statements for this entity. Emitted in `ENTITIES`
+    /// order across the schema, so any cross-entity dependency must
+    /// resolve via earlier entities being seeded first.
+    fn seeds(&self) -> Vec<InsertStatement> {
+        vec![]
+    }
+
+    /// `_current` snapshot seeding specs, rendered by [`SeedCurrent::render`]
+    /// as `INSERT INTO target … SELECT … FROM (ranked CTE) WHERE rn = 1`.
+    fn seed_current(&self) -> Vec<SeedCurrent> {
+        vec![]
+    }
 }
 
 /// A test fixture that creates tables and inserts test data.

@@ -1,0 +1,107 @@
+//
+// Copyright 2026 Tabs Data Inc.
+//
+
+use sea_query::{Alias, Asterisk, ColumnDef, Expr, ExprTrait, Iden, Index, IndexCreateStatement, JoinType, Query, Table, TableCreateStatement};
+
+use super::collections::Collections;
+use super::users::Users;
+use crate::schema::Entity;
+use crate::schema::backend::Backend;
+use crate::schema::sql::ViewDef;
+
+#[derive(Iden, Clone, Copy)]
+#[iden = "functions_current__with_names"]
+pub struct FunctionsCurrentWithNames;
+
+#[derive(Iden, Clone, Copy, strum::EnumIter)]
+#[iden = "functions_current"]
+pub enum FunctionsCurrent {
+    Table,
+    Id,
+    CollectionId,
+    Name,
+    Description,
+    Decorator,
+    RuntimeValues,
+    FunctionId,
+    DataLocation,
+    StorageVersion,
+    BundleId,
+    Snippet,
+    DefinedOn,
+    DefinedById,
+    Status,
+    Connector,
+    Enabled,
+}
+
+pub(super) struct Defs;
+
+impl Entity for Defs {
+    fn create_tables(&self) -> Vec<TableCreateStatement> {
+        // functions_current — holds the latest version per function_id.
+        // Maintained by an AFTER INSERT trigger on functions.
+        vec![
+            Table::create()
+                .table(FunctionsCurrent::Table)
+                .col(ColumnDef::new(FunctionsCurrent::Id).text().not_null().primary_key())
+                .col(ColumnDef::new(FunctionsCurrent::CollectionId).text().not_null())
+                .col(ColumnDef::new(FunctionsCurrent::Name).text().not_null())
+                .col(ColumnDef::new(FunctionsCurrent::Description).text().not_null())
+                .col(ColumnDef::new(FunctionsCurrent::Decorator).text().not_null())
+                .col(ColumnDef::new(FunctionsCurrent::RuntimeValues).text().not_null())
+                .col(ColumnDef::new(FunctionsCurrent::FunctionId).text().not_null().unique_key())
+                .col(ColumnDef::new(FunctionsCurrent::DataLocation).text().not_null())
+                .col(ColumnDef::new(FunctionsCurrent::StorageVersion).text().not_null())
+                .col(ColumnDef::new(FunctionsCurrent::BundleId).text().not_null())
+                .col(ColumnDef::new(FunctionsCurrent::Snippet).text().not_null())
+                .col(ColumnDef::new(FunctionsCurrent::DefinedOn).timestamp_with_time_zone().not_null())
+                .col(ColumnDef::new(FunctionsCurrent::DefinedById).text().not_null())
+                .col(ColumnDef::new(FunctionsCurrent::Status).text().not_null())
+                .col(ColumnDef::new(FunctionsCurrent::Connector).text().null())
+                .col(ColumnDef::new(FunctionsCurrent::Enabled).boolean().default(true))
+                .to_owned(),
+        ]
+    }
+
+    fn create_indices(&self) -> Vec<IndexCreateStatement> {
+        vec![
+            Index::create()
+                .name("functions_current___collection_id___idx")
+                .table(FunctionsCurrent::Table)
+                .col(FunctionsCurrent::CollectionId)
+                .to_owned(),
+            Index::create()
+                .name("functions_current___status___idx")
+                .table(FunctionsCurrent::Table)
+                .col(FunctionsCurrent::Status)
+                .to_owned(),
+        ]
+    }
+
+    fn create_views(&self, b: &Backend) -> Vec<ViewDef> {
+        vec![ViewDef::new(
+            FunctionsCurrentWithNames,
+            Query::select()
+                .expr(Expr::col((FunctionsCurrent::Table, Asterisk)))
+                .expr_as(Expr::col((Collections::Table, Collections::Name)), Alias::new("collection"))
+                .expr_as(
+                    b.name_or_id((Users::Table, Users::Name), (FunctionsCurrent::Table, FunctionsCurrent::DefinedById)),
+                    Alias::new("defined_by"),
+                )
+                .from(FunctionsCurrent::Table)
+                .join(
+                    JoinType::LeftJoin,
+                    Collections::Table,
+                    Expr::col((FunctionsCurrent::Table, FunctionsCurrent::CollectionId)).equals((Collections::Table, Collections::Id)),
+                )
+                .join(
+                    JoinType::LeftJoin,
+                    Users::Table,
+                    Expr::col((FunctionsCurrent::Table, FunctionsCurrent::DefinedById)).equals((Users::Table, Users::Id)),
+                )
+                .to_owned(),
+        )]
+    }
+}

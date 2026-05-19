@@ -1,0 +1,7 @@
+# Wide widths so sea_query column definitions stay one-per-line —
+# `ColumnDef::new(X).text().not_null().primary_key()` reads as a
+# columnar table, not a four-line tower. Applies to chained builders
+# generally (Table::create, ForeignKey::create, Index::create).
+max_width = 140
+chain_width = 140
+fn_call_width = 140
