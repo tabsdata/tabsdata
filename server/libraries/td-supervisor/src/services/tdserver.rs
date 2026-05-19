@@ -2476,8 +2476,14 @@ mod tests {
     #[test]
     fn test_minor_behind() {
         let t = get_target_version().unwrap();
+        // "Same major, smaller minor" isn't representable when minor is 0
+        // (e.g. on a 2.0.x line). Skip in that case — `test_major_behind`
+        // still covers the "instance is older" path.
+        let Some(prev_minor) = t.minor.checked_sub(1) else {
+            return;
+        };
         let instance = tdtestdir!();
-        write_version(&instance, &format!("{}.{}.0", t.major, t.minor - 1));
+        write_version(&instance, &format!("{}.{}.0", t.major, prev_minor));
         assert!(needs_upgrade(instance));
     }
 

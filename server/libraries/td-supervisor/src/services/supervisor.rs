@@ -1835,7 +1835,7 @@ impl Supervisor {
                 Ok(())
             }
             Err(error) => {
-                info!(
+                error!(
                     "Failed notification of worker start: {}\n{}:\n",
                     error,
                     serde_json::to_string_pretty(&message)?
