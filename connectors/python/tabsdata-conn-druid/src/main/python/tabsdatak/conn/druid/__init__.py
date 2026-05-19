@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Annotated, Literal, TypeAlias, Union
+from collections.abc import Mapping
+from typing import Annotated, Any, Literal, TypeAlias, Union
 
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
@@ -13,6 +14,9 @@ from tabsdatak.api import (
     NamedConn,
     Secret,
 )
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common import _validation as _common_validation
 from tabsdatak.conn.common.types import CfgSpec, CloudLocation, UserPassword
 
 # noinspection PyProtectedMember
@@ -50,6 +54,19 @@ SegmentGranularitySpec: TypeAlias = Literal[
 ]
 
 
+# --- DruidDest.dest_cfg keys ----------------------------------------
+DestCfgKey: TypeAlias = Literal[
+    "druid.logging_level",
+    "druid.poll_interval_seconds",
+    "druid.retry_attempts",
+    "druid.retry_backoff_seconds",
+]
+
+DestCfgSpec: TypeAlias = Annotated[
+    Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+]
+
+
 # --- Connection ------------------------------------------------------
 
 
@@ -78,4 +95,4 @@ class DruidDest(Dest):
     max_rows_per_segment: int = 5_000_000
     max_rows_in_memory: int = 1_000_000
     http_timeout_sec: int = 300
-    dest_cfg: CfgSpec | None = None
+    dest_cfg: DestCfgSpec | None = None
