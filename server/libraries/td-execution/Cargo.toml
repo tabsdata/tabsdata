@@ -76,7 +76,6 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 td-execution = { workspace = true, features = ["td-test"] }
-td-security = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }
