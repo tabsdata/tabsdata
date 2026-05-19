@@ -1,3 +1,11 @@
 #
 # Copyright 2026 Tabs Data Inc.
 #
+
+# Docker-driven end-to-end tests for the StarRocks connector use the
+# ``starrocks/allin1-ubuntu`` image. ``docker`` is the official Python
+# SDK and ``mysql-connector-python`` is the DBAPI driver SQLAlchemy
+# picks for the ``mysql+mysqlconnector://`` URIs that the conftest
+# uses to talk to StarRocks.
+docker
+mysql-connector-python

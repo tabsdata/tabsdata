@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Annotated, Literal, TypeAlias, Union
+from collections.abc import Mapping
+from typing import Annotated, Any, Literal, TypeAlias, Union
 
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
@@ -13,6 +14,8 @@ from tabsdatak.api import (
     NamedConn,
     Secret,
 )
+# noinspection PyProtectedMember
+from tabsdatak.conn.common import _validation as _common_validation
 from tabsdatak.conn.common.types import (
     CfgSpec,
     CloudLocation,
@@ -34,7 +37,15 @@ HostSpec: TypeAlias = Union[
     Annotated[Secret, _api.SecretValueConstraints(pattern=r".+")],
     Annotated[Env, _api.EnvValueConstraints(pattern=r".+")],
 ]
-PortSpec: TypeAlias = int
+
+# Port: plain int, or an Env / Secret whose resolved value parses as an
+# unsigned integer. ``StarRocksConn._port()`` does the final cast.
+_PORT_PATTERN = r"[0-9]+"
+PortSpec: TypeAlias = Union[
+    int,
+    Annotated[Env, _api.EnvValueConstraints(pattern=_PORT_PATTERN)],
+    Annotated[Secret, _api.SecretValueConstraints(pattern=_PORT_PATTERN)],
+]
 
 
 _IDENTIFIER_PATTERN = r"[A-Za-z_][A-Za-z0-9_]*"
@@ -51,18 +62,33 @@ IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
 SchemaEvolutionSpec: TypeAlias = Literal["strict", "iceberg"]
 
 
+# --- StarRocksDest.dest_cfg keys ------------------------------------
+DestCfgKey: TypeAlias = Literal[
+    "starrocks.logging_level",
+]
+
+DestCfgSpec: TypeAlias = Annotated[
+    Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+]
+
+
 # --- Connection ------------------------------------------------------
 
 
 @_api.dataclass(StarRocksErrorCode.STARROCKS_1, kw_only=True)
 class StarRocksConn(Conn):
     host: HostSpec
-    staging: CloudLocation
     port: PortSpec = 9030
-    database: DatabaseSpec = "default"
     credentials: CredentialsSpec
+    staging: CloudLocation
+    database: DatabaseSpec = "default"
     entity_whitelist: EntityWhitelistSpec | None = None
     conn_cfg: CfgSpec | None = None
+
+    def _port(self) -> int:
+        if isinstance(self.port, int):
+            return self.port
+        return int(self.port.value())
 
 
 ConnSpec: TypeAlias = Union[NamedConn, StarRocksConn]
@@ -77,4 +103,4 @@ class StarRocksDest(Dest):
     tables: StarRocksTableNamesSpec
     if_table_exists: IfTableExistsSpec = "append"
     schema_evolution: SchemaEvolutionSpec = "strict"
-    dest_cfg: CfgSpec | None = None
+    dest_cfg: DestCfgSpec | None = None
