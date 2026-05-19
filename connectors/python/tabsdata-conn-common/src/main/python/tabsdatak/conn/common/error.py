@@ -43,3 +43,6 @@ class ConnErrorCode(ErrorCode):
         ConnInitException,
         "Configuration '{name}', invalid value '{value}'. Valid values are: {values}",
     )  # GCSLocation
+
+    # --- FQN syntax (tabsdatak.conn.common._validation) -------------
+    CONN_9 = ErrorDef(ConnInitException, "Cannot create FqnDef")  # FqnDef

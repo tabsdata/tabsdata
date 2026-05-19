@@ -24,7 +24,7 @@ class Credentials(ABC, _api.DescriptorBase):
 # --- User / password -------------------------------------------------
 
 
-@_api.dataclass(ConnErrorCode.CONN_1)
+@_api.dataclass(ConnErrorCode.CONN_1, kw_only=True)
 class UserPassword(Credentials):
     __kind__ = "userPasswordCredentials"
     user: SecretOrEnvSpec
@@ -38,7 +38,7 @@ class GCPCredentials(Credentials, ABC):
     pass
 
 
-@_api.dataclass(ConnErrorCode.CONN_2)
+@_api.dataclass(ConnErrorCode.CONN_2, kw_only=True)
 class GCPJson(GCPCredentials):
     __kind__ = "gcpJsonCredentials"
     json: SecretOrEnvSpec
@@ -47,7 +47,7 @@ class GCPJson(GCPCredentials):
 # --- AWS -------------------------------------------------------------
 
 
-@_api.dataclass(ConnErrorCode.CONN_3)
+@_api.dataclass(ConnErrorCode.CONN_3, kw_only=True)
 class AwsAccessSecretKey(Credentials):
     __kind__ = "awsAccessSecretKeyCredentials"
     access_key_id: SecretOrEnvSpec
@@ -61,7 +61,7 @@ class AzureCredentials(Credentials, ABC):
     pass
 
 
-@_api.dataclass(ConnErrorCode.CONN_4)
+@_api.dataclass(ConnErrorCode.CONN_4, kw_only=True)
 class AzureAccountKey(AzureCredentials):
     __kind__ = "azureAccountKeyCredentials"
     account_name: SecretOrEnvSpec

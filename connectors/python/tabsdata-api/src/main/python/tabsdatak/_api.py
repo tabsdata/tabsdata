@@ -123,7 +123,7 @@ _UNIX_CRON_RE = re.compile(rf"^{_CRON_FIELD_RE_STR}(?:\s+{_CRON_FIELD_RE_STR}){{
 
 
 def _validate_table_name(value: str) -> str:
-    if not _IDENTIFIER_RE.match(value):
+    if not _IDENTIFIER_RE.fullmatch(value):
         raise ValueError(
             f"not a valid table name (1-64 chars, must start with a letter, "
             f"alphanumeric and underscore only): {value!r}"
@@ -132,7 +132,7 @@ def _validate_table_name(value: str) -> str:
 
 
 def _validate_coll_table_name(value: str) -> str:
-    if not _COLL_IDENTIFIER_RE.match(value):
+    if not _COLL_IDENTIFIER_RE.fullmatch(value):
         raise ValueError(
             f"not a valid collection-qualified table name "
             f"(<identifier> or <identifier>/<identifier>, no whitespace): "
@@ -142,7 +142,7 @@ def _validate_coll_table_name(value: str) -> str:
 
 
 def _validate_named_connection(value: str) -> str:
-    if not _IDENTIFIER_RE.match(value):
+    if not _IDENTIFIER_RE.fullmatch(value):
         raise ValueError(
             f"not a valid named connection (1-64 chars, must start with a letter, "
             f"alphanumeric and underscore only): {value!r}"
@@ -157,7 +157,7 @@ _ENV_VAR_NAME_RE = re.compile(_ENV_VAR_NAME_RE_STR)
 
 
 def _validate_env_name(value: str) -> str:
-    if not _ENV_VAR_NAME_RE.match(value):
+    if not _ENV_VAR_NAME_RE.fullmatch(value):
         raise ValueError(
             f"not a valid environment variable name (must start with a letter "
             f"or underscore, then letters/digits/underscores): {value!r}"
@@ -199,13 +199,13 @@ def _validate_secret_name(value: str) -> str:
             f"secret name must be 1-{_DNS_1123_SUBDOMAIN_MAX} chars "
             f"(got {len(secret)}): {value!r}"
         )
-    if not _DNS_1123_SUBDOMAIN_RE.match(secret):
+    if not _DNS_1123_SUBDOMAIN_RE.fullmatch(secret):
         raise ValueError(
             f"secret name {secret!r} is not a valid RFC 1123 DNS "
             f"subdomain (lowercase alphanumeric, '-', '.', must start "
             f"and end with alphanumeric)"
         )
-    if not _SECRET_DATA_KEY_RE.match(key):
+    if not _SECRET_DATA_KEY_RE.fullmatch(key):
         raise ValueError(f"secret key {key!r} must match '[-._a-zA-Z0-9]+'")
     return value
 
@@ -213,7 +213,7 @@ def _validate_secret_name(value: str) -> str:
 def _validate_cron_mask(value: str) -> str:
     if value in _K8S_CRON_DESCRIPTORS:
         return value
-    if not _UNIX_CRON_RE.match(value):
+    if not _UNIX_CRON_RE.fullmatch(value):
         raise ValueError(f"not a Kubernetes CronJob schedule: {value!r}")
     if not croniter.is_valid(value):
         raise ValueError(f"invalid cron expression: {value!r}")

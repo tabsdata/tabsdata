@@ -1,9 +1,442 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Annotated, Any, TypeAlias
 
-from pydantic import AfterValidator
+from pydantic import AfterValidator, model_validator
+
+# noinspection PyProtectedMember
+import tabsdatak._api as _api
+from tabsdatak.conn.common.error import ConnErrorCode
+
+# --- FQN syntax + helpers --------------------------------------------
+
+
+def _validate_nonempty_separator(value: str) -> str:
+    if not value:
+        raise ValueError("FqnDef.separator must be non-empty")
+    return value
+
+
+def _validate_nonempty_quote(value: str) -> str:
+    if not value:
+        raise ValueError("FqnDef.quote, when set, must be non-empty")
+    return value
+
+
+# Field specs. Per-field non-emptiness rules are enforced via
+# ``Annotated[..., AfterValidator(...)]`` so the regular pydantic
+# validation pipeline carries them, instead of a hand-written
+# ``__post_init__``. Cross-field rules (``escape``/``outer_only`` each
+# requiring ``quote``) live in ``FqnDef._check_dependencies`` because
+# pydantic field annotations only see one field at a time.
+SeparatorSpec: TypeAlias = Annotated[str, AfterValidator(_validate_nonempty_separator)]
+QuoteSpec: TypeAlias = Annotated[str, AfterValidator(_validate_nonempty_quote)]
+
+
+@_api.dataclass(ConnErrorCode.CONN_9, kw_only=True)
+class FqnDef:
+    """Describes the syntax of a fully-qualified-name (FQN) for a
+    particular system.
+
+    Used by :func:`fqn` to assemble an FQN string from its parts and by
+    :func:`unfqn` to split one back. Examples of the three shapes this
+    dataclass captures:
+
+    - **Per-part quoting** (Databricks, ANSI SQL):
+      ``FqnDef(separator='.', quote='`')`` -> ```a`.`b`.`c```
+    - **Outer-only quoting** (BigQuery):
+      ``FqnDef(separator='.', quote='`', outer_only=True)``
+      -> ```a.b.c```
+    - **No quoting** (purely-textual FQNs):
+      ``FqnDef(separator='.')`` -> ``a.b.c``
+
+    Attributes:
+        separator: the (non-empty) string placed between parts.
+        quote: optional quote character used to wrap parts that need
+            escaping. When ``None`` no quoting is allowed; :func:`fqn`
+            emits bare parts and :func:`unfqn` splits on ``separator``.
+        escape: optional escape sequence for the quote character inside
+            a quoted part. The two characters ``escape + quote``
+            represent a literal ``quote``. The common case
+            ``escape == quote`` encodes the SQL "doubled quote"
+            convention (``""`` -> ``"``). When ``None``, the quote
+            character is not allowed inside a part. Requires ``quote``.
+        outer_only: when ``True`` the entire FQN is wrapped in one pair
+            of ``quote`` characters (BigQuery style) rather than each
+            part being quoted individually. Requires ``quote``.
+    """
+
+    separator: SeparatorSpec
+    quote: QuoteSpec | None = None
+    escape: str | None = None
+    outer_only: bool = False
+
+    @model_validator(mode="after")
+    def _check_dependencies(self) -> "FqnDef":
+        if self.escape is not None and self.quote is None:
+            raise ValueError("FqnDef.escape requires FqnDef.quote to be set")
+        if self.outer_only and self.quote is None:
+            raise ValueError("FqnDef.outer_only requires FqnDef.quote to be set")
+        return self
+
+
+def fqn(parts: list[str], spec: FqnDef) -> str:
+    """Assemble a fully-qualified-name from its parts.
+
+    When ``spec.quote`` is set and ``spec.outer_only`` is false, every
+    part is wrapped in ``spec.quote`` (predictable, round-trippable
+    output). When ``spec.outer_only`` is true, the parts are joined
+    bare with ``spec.separator`` and the whole result is wrapped once.
+    When ``spec.quote`` is ``None``, parts must not contain
+    ``spec.separator`` and are joined bare.
+
+    A part that is already wrapped in ``spec.quote`` (per-part mode
+    only) is passed through as-is. This makes it safe to feed quoted
+    output from another system -- or the output of :func:`unfqn` after
+    a manual edit -- back through :func:`fqn` without double-quoting.
+
+    Args:
+        parts: non-empty list of non-empty parts.
+        spec: the FQN syntax.
+
+    Raises:
+        ValueError: ``parts`` is empty; any part is empty; a part
+            contains the quote character with no ``spec.escape``
+            defined; or a part contains the separator while
+            ``spec.quote`` is ``None``.
+    """
+    if not parts:
+        raise ValueError("fqn: parts must be non-empty")
+    for i, p in enumerate(parts):
+        if not p:
+            raise ValueError(f"fqn: part at index {i} is empty")
+
+    sep, q, esc = spec.separator, spec.quote, spec.escape
+
+    if spec.outer_only:
+        assert q is not None  # enforced by FqnDef.__post_init__
+        for i, p in enumerate(parts):
+            if sep in p:
+                raise ValueError(
+                    f"fqn: part at index {i} contains separator {sep!r} "
+                    f"under outer_only: {p!r}"
+                )
+        joined = sep.join(parts)
+        if q in joined:
+            if esc is None:
+                raise ValueError(
+                    f"fqn: FQN contains quote {q!r} with no escape defined: "
+                    f"{joined!r}"
+                )
+            joined = joined.replace(q, esc + q)
+        return f"{q}{joined}{q}"
+
+    if q is None:
+        for i, p in enumerate(parts):
+            if sep in p:
+                raise ValueError(
+                    f"fqn: part at index {i} contains separator {sep!r} "
+                    f"with no quoting available: {p!r}"
+                )
+        return sep.join(parts)
+
+    quoted: list[str] = []
+    for i, p in enumerate(parts):
+        # No-op pass-through for parts that are already wrapped in
+        # ``q`` (caller's assertion; we don't inspect the body).
+        if (
+            len(p) >= 2 * len(q)
+            and p.startswith(q)
+            and p.endswith(q)
+        ):
+            quoted.append(p)
+            continue
+        body = p
+        if q in body:
+            if esc is None:
+                raise ValueError(
+                    f"fqn: part at index {i} contains quote {q!r} with "
+                    f"no escape defined: {p!r}"
+                )
+            body = body.replace(q, esc + q)
+        quoted.append(f"{q}{body}{q}")
+    return sep.join(quoted)
+
+
+def fqn_complete(
+    parts: list[str | None],
+    total_parts: int,
+    *defaults: str,
+) -> list[str]:
+    """Fill in the leading ``None`` slots of ``parts`` with the
+    positional ``defaults`` values, returning a fully-populated list
+    of length ``total_parts`` suitable for feeding to :func:`fqn`.
+
+    ``parts`` is first normalized to length ``total_parts`` by
+    left-padding with ``None``; then the leading run of ``None``
+    entries is replaced with the ``defaults`` values in order. The
+    typical use case is completing a partially-qualified name from
+    :func:`unfqn` against connection defaults::
+
+        # User wrote ``schema.users``; conn supplies the catalog.
+        parts = unfqn("schema.users", spec, total_parts=3)
+        full = fqn_complete(parts, 3, "main")          # ["main", "schema", "users"]
+        fqn(full, spec)                                 # `main`.`schema`.`users`
+
+    Args:
+        parts: list whose leading entries may be ``None``. Length must
+            not exceed ``total_parts``; ``None`` entries are only
+            permitted in the leading run.
+        total_parts: target length of the returned list.
+        *defaults: replacement values, in order, for the leading
+            ``None`` slots. The number of ``defaults`` must equal the
+            number of leading ``None`` entries after normalization.
+
+    Raises:
+        ValueError: ``total_parts`` is non-positive; ``parts`` has
+            more entries than ``total_parts``; ``parts`` has a
+            ``None`` entry that is not in the leading run; the count
+            of ``defaults`` does not match the leading-``None`` count;
+            or any default is empty.
+    """
+    if total_parts < 1:
+        raise ValueError(
+            f"fqn_complete: total_parts must be a positive integer: "
+            f"{total_parts!r}"
+        )
+    if len(parts) > total_parts:
+        raise ValueError(
+            f"fqn_complete: parts has {len(parts)} entries, exceeds "
+            f"total_parts={total_parts}"
+        )
+
+    padded: list[str | None] = [None] * (total_parts - len(parts)) + list(parts)
+
+    leading_none_count = 0
+    for v in padded:
+        if v is None:
+            leading_none_count += 1
+        else:
+            break
+
+    for i in range(leading_none_count, total_parts):
+        if padded[i] is None:
+            raise ValueError(
+                f"fqn_complete: parts has None at position {i} after the "
+                f"leading run; only leading Nones are allowed: {parts!r}"
+            )
+
+    if len(defaults) != leading_none_count:
+        raise ValueError(
+            f"fqn_complete: expected {leading_none_count} default value(s) "
+            f"to fill the leading None slots, got {len(defaults)}"
+        )
+
+    for i, d in enumerate(defaults):
+        if not d:
+            raise ValueError(f"fqn_complete: default at index {i} is empty")
+
+    # After validation: leading slots filled from defaults, tail copied
+    # from padded (all known to be non-None strings by the check above).
+    tail = [str(v) for v in padded[leading_none_count:]]
+    return list(defaults) + tail
+
+
+def unfqn(
+    value: str,
+    spec: FqnDef,
+    total_parts: int | None = None,
+) -> list[str | None]:
+    """Split a fully-qualified-name back into its parts.
+
+    When ``spec.outer_only`` is true the value must be wrapped in a
+    single ``spec.quote`` pair; the body is then split bare on
+    ``spec.separator`` and any ``spec.escape + spec.quote`` pairs are
+    unescaped. Otherwise each part is detected independently: a part
+    that begins with ``spec.quote`` is parsed as quoted (unescaping
+    ``spec.escape + spec.quote`` pairs along the way), and any other
+    part is read bare up to the next ``spec.separator``. Quoted and
+    bare parts may be mixed freely.
+
+    When ``total_parts`` is set, the returned list is left-padded with
+    ``None`` so it always has exactly ``total_parts`` entries. This is
+    useful for systems that allow partially-qualified names: e.g.
+    ``unfqn("table", spec, total_parts=3)`` returns
+    ``[None, None, "table"]``, leaving slots for ``catalog`` /
+    ``schema`` to be filled in by the caller.
+
+    Args:
+        value: non-empty FQN string.
+        spec: the FQN syntax.
+        total_parts: when set, the exact length of the returned list.
+            Must be a positive integer at least as large as the number
+            of parts found in ``value``.
+
+    Returns:
+        The element list (with quote / escape characters stripped).
+        When ``total_parts`` is set, the list is left-padded with
+        ``None`` to that length; otherwise it has exactly as many
+        entries as ``value`` contains.
+
+    Raises:
+        ValueError: ``value`` is empty; quoted identifier is
+            unterminated; a bare part is empty; a stray quote appears
+            inside a bare part; a trailing or leading separator is
+            seen; ``total_parts`` is non-positive; or ``value`` has more
+            parts than ``total_parts`` allows.
+    """
+    if not value:
+        raise ValueError("unfqn: value must be non-empty")
+    if total_parts is not None and total_parts < 1:
+        raise ValueError(
+            f"unfqn: total_parts must be a positive integer: {total_parts!r}"
+        )
+
+    sep, q, esc = spec.separator, spec.quote, spec.escape
+
+    parts: list[str | None]
+    if spec.outer_only:
+        assert q is not None  # enforced by FqnDef.__post_init__
+        if (
+            len(value) < 2 * len(q)
+            or not value.startswith(q)
+            or not value.endswith(q)
+        ):
+            raise ValueError(
+                f"unfqn: outer_only FQN must be wrapped in {q!r}: {value!r}"
+            )
+        inner = value[len(q) : -len(q)]
+        if esc is not None:
+            inner = inner.replace(esc + q, q)
+        parts = list(inner.split(sep))
+    elif q is None:
+        parts = list(value.split(sep))
+    else:
+        parts = _split_quoted(value, sep, q, esc)
+
+    if total_parts is not None:
+        if len(parts) > total_parts:
+            raise ValueError(
+                f"unfqn: value has {len(parts)} parts, exceeds "
+                f"total_parts={total_parts}: {value!r}"
+            )
+        parts = [None] * (total_parts - len(parts)) + parts
+    return parts
+
+
+def _split_quoted(
+    value: str,
+    sep: str,
+    q: str,
+    esc: str | None,
+) -> list[str | None]:
+    """Walk ``value`` char by char in per-part-quote mode."""
+    n = len(value)
+    parts: list[str | None] = []
+    i = 0
+
+    while True:
+        if value.startswith(q, i):
+            # Quoted part: walk until matching closing quote, honoring
+            # escape sequences (``esc + q`` -> literal ``q``).
+            i += len(q)
+            buf: list[str] = []
+            closed = False
+            while i < n:
+                if esc is not None and value.startswith(esc + q, i):
+                    buf.append(q)
+                    i += len(esc) + len(q)
+                    continue
+                if value.startswith(q, i):
+                    i += len(q)
+                    closed = True
+                    break
+                buf.append(value[i])
+                i += 1
+            if not closed:
+                raise ValueError(
+                    f"unfqn: unterminated quoted identifier in FQN: {value!r}"
+                )
+            parts.append("".join(buf))
+        else:
+            # Bare part: read until next separator.
+            j = i
+            while j < n and not value.startswith(sep, j):
+                if value.startswith(q, j):
+                    raise ValueError(
+                        f"unfqn: unexpected quote {q!r} at position {j} "
+                        f"inside bare element: {value!r}"
+                    )
+                j += 1
+            if j == i:
+                raise ValueError(
+                    f"unfqn: empty element at position {i} in FQN: {value!r}"
+                )
+            parts.append(value[i:j])
+            i = j
+
+        if i >= n:
+            return parts
+        if not value.startswith(sep, i):
+            raise ValueError(
+                f"unfqn: expected separator {sep!r} at position {i}: "
+                f"{value!r}"
+            )
+        i += len(sep)
+        if i >= n:
+            raise ValueError(f"unfqn: trailing separator in FQN: {value!r}")
+
+
+def name_validate(fqn_def: FqnDef, max_parts: int) -> AfterValidator:
+    """Build a pydantic :class:`AfterValidator` for FQN-shaped string
+    fields.
+
+    The returned validator runs :func:`unfqn` against ``fqn_def`` to
+    confirm the value parses as a valid FQN in the target syntax, then
+    bounds the number of parts by ``max_parts``. Use it directly in an
+    :class:`Annotated` type alias::
+
+        DatabricksTableNameSpec: TypeAlias = Annotated[
+            str,
+            _validation.name_validate(DBX_FQN_DEF, max_parts=3),
+        ]
+
+    Each call returns a fresh ``AfterValidator``; reuse the alias (or
+    bind the validator to a module-level constant) rather than rebuilding
+    it on every field.
+
+    Args:
+        fqn_def: the FQN syntax (separator / quote / escape /
+            ``outer_only``) the value must conform to.
+        max_parts: maximum number of parts the value may contain
+            (inclusive, must be a positive integer).
+
+    Returns:
+        An :class:`AfterValidator` wrapping a closure that raises
+        ``ValueError`` either on a syntax error (via :func:`unfqn`) or
+        when the value exceeds ``max_parts`` parts.
+
+    Raises:
+        ValueError: ``max_parts`` is non-positive.
+    """
+    if max_parts < 1:
+        raise ValueError(
+            f"name_validate: max_parts must be a positive integer: "
+            f"{max_parts!r}"
+        )
+
+    def _validate(value: str) -> str:
+        parts = unfqn(value, fqn_def)
+        if len(parts) > max_parts:
+            raise ValueError(
+                f"name has {len(parts)} parts, exceeds max_parts="
+                f"{max_parts}: {value!r}"
+            )
+        return value
+
+    return AfterValidator(_validate)
+
 
 # --- FQN splitting helpers -------------------------------------------
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Annotated, Any, Literal, TypeAlias, Union
 
 from pydantic import StringConstraints
@@ -16,6 +17,9 @@ from tabsdatak.api import (
     Secret,
     Src,
 )
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common import _validation as _common_validation
 from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
 from tabsdatak.conn.common.types import CfgSpec, EntityWhitelistSpec, UserPassword
 
@@ -35,11 +39,41 @@ UriSpec: TypeAlias = Union[
     ],
     Annotated[Env, _api.EnvValueConstraints(pattern=_validation.MSYQL_URI_PATTERN)],
 ]
-IdentifierSpec: TypeAlias = Annotated[str, _validation.MYSQL_IDENTIFIER_VALIDATOR]
 QueriesSpec: TypeAlias = list[str]
 MySQLTableNameSpec: TypeAlias = Annotated[str, _validation.MYSQL_TABLE_FQN_VALIDATOR]
 MySQLTableNamesSpec: TypeAlias = list[MySQLTableNameSpec]
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
+
+
+# --- MySQLSrc.src_cfg keys ------------------------------------------
+#
+# Restricts ``MySQLSrc.src_cfg`` to the keys the source plugin
+# (``_plugin.py`` / engine factory) actually consumes. Pydantic
+# enforces the literal membership of keys at validation time, so
+# unknown keys are rejected at construction; ``CONN_CFG_VALIDATOR``
+# reuses the conn_cfg basic-value checks (str/int/float/bool/None,
+# plus list/dict compositions).
+SrcCfgKey: TypeAlias = Literal[
+    "mysql.logging_level",
+    "tabsdata.sql.sql.readEngine",
+    "tabsdata.sql.chunkSize",
+]
+
+SrcCfgSpec: TypeAlias = Annotated[
+    Mapping[SrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+]
+
+
+# --- MySQLDest.dest_cfg keys ----------------------------------------
+DestCfgKey: TypeAlias = Literal[
+    "mysql.logging_level",
+    "tabsdata.sql.sql.writeEngine",
+    "tabsdata.sql.chunkSize",
+]
+
+DestCfgSpec: TypeAlias = Annotated[
+    Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+]
 
 
 # --- Connection ------------------------------------------------------
@@ -66,7 +100,7 @@ class MySQLSrc(Src):
     transactional: bool = True
     schema_overrides: SchemaOverrideSpec | None = None
     query_params: dict[str, Any] | None = None
-    src_cfg: CfgSpec | None = None
+    src_cfg: SrcCfgSpec | None = None
 
     def validate(self) -> None:
         if self.schema_overrides is not None and len(self.schema_overrides) != len(
@@ -87,4 +121,4 @@ class MySQLDest(Dest):
     tables: MySQLTableNamesSpec
     if_table_exists: IfTableExistsSpec = "append"
     transactional: bool = True
-    dest_cfg: CfgSpec | None = None
+    dest_cfg: DestCfgSpec | None = None
