@@ -2,21 +2,18 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-//! Chunked query execution for slices that may exceed database bind-parameter
-//! limits.
+//! Helpers and per-chunk SQL builders for the `ChunkedQueries` trait
+//! impl in [`crate::generic::chunked`].
 //!
-//! Each element in the slice is resolved via [`SqlCondition`] and combined
-//! with OR. The slice is split into chunks of at most [`MAX_QUERY_CONDITIONS`]
-//! elements, and one query is executed per chunk.
+//! Each `*_chunk_query` returns a single statement covering one chunk
+//! of bind values; the trait impl loops over chunks of size
+//! [`MAX_QUERY_CONDITIONS`].
 
-use crate::versioned::{Cte, latest_ranked_cte};
+use crate::primitives::versioned::{Cte, latest_ranked_cte};
 use sea_query::{Expr, ExprTrait, Query};
 use ta_objects::errors::SqlError;
-use ta_objects::sql_condition::{SqlCondition, resolve_condition};
-use ta_objects::{CurrentDao, Dao, DaoCore, DaoUpdate, States, VersionedDao};
-use td_database::dynamic::DynamicQueryResult;
-use td_database::sea_query::builder::SeaQueryExt;
-use td_database::sea_query::executor::SeaExecutor;
+use ta_objects::sql_condition::SqlCondition;
+use ta_objects::{CurrentDao, Dao, DaoCore, DaoUpdate, VersionedDao};
 use tracing::warn;
 
 /// Maximum conditions per query.
@@ -24,18 +21,21 @@ use tracing::warn;
 /// Conservatively set well below database limits (SQLite: 32,766;
 /// PostgreSQL: 65,535) to leave room for other parameters in the query
 /// (pagination, ordering, additional WHERE clauses).
-/// sea_query::Condition can cause stack overflow when nesting (this is, multiple OR conditions).
-/// With 1000 OR conditions, this can already happen. So, queries should never reach this limit,
-/// this is just a failsafe.
-pub const MAX_QUERY_CONDITIONS: usize = 100;
+/// `sea_query::Condition` can cause stack overflow when nesting (this is,
+/// multiple OR conditions). With 1000 OR conditions, this can already
+/// happen. So, queries should never reach this limit; this is just a
+/// failsafe.
+pub(crate) const MAX_QUERY_CONDITIONS: usize = 100;
 
 /// Maximum rows per batch INSERT statement.
 ///
 /// Capped so that `rows * columns` stays well below database bind-parameter
 /// limits (SQLite: 32,766; PostgreSQL: 65,535).
-const MAX_INSERT_ROWS: usize = 100;
+pub(crate) const MAX_INSERT_ROWS: usize = 100;
 
-fn resolve_or<D: DaoCore>(items: &[impl SqlCondition]) -> Result<sea_query::Condition, SqlError> {
+pub(crate) fn resolve_or<D: DaoCore>(
+    items: &[impl SqlCondition],
+) -> Result<sea_query::Condition, SqlError> {
     let mut cond = sea_query::Condition::any();
     for item in items {
         cond = cond.add(item.resolve::<D>()?);
@@ -43,10 +43,10 @@ fn resolve_or<D: DaoCore>(items: &[impl SqlCondition]) -> Result<sea_query::Cond
     Ok(cond)
 }
 
-/// Emit a warning when a chunked query exceeds MAX_QUERY_PARAMS. This is a
-/// failsafe — callers should use JOINs or scoped queries instead of passing
-/// unbounded slices.
-fn warn_if_chunked<D: DaoCore>(len: usize) {
+/// Emit a warning when a chunked query exceeds [`MAX_QUERY_CONDITIONS`].
+/// This is a failsafe — callers should use JOINs or scoped queries
+/// instead of passing unbounded slices.
+pub(crate) fn warn_if_chunked<D: DaoCore>(len: usize) {
     if len > MAX_QUERY_CONDITIONS {
         let chunks = len.div_ceil(MAX_QUERY_CONDITIONS);
         warn!(
@@ -99,183 +99,37 @@ pub(crate) fn delete_chunk_query<D: DaoCore, V: SqlCondition>(
         .take())
 }
 
-pub(crate) fn fetch_all_at_chunk_query<
-    const S: u8,
-    D: VersionedDao + States<S>,
-    V: SqlCondition,
->(
+pub(crate) fn fetch_all_at_chunk_query<D: VersionedDao, V: SqlCondition>(
     chunk: &[V],
     on: &D::VersionOrder,
+    state_cond: Option<&sea_query::Condition>,
 ) -> Result<sea_query::WithQuery, SqlError> {
-    let state_cond = resolve_condition::<D>(D::state())?;
-    Ok(Query::select()
+    let mut q = Query::select()
         .columns(D::columns())
         .from(Cte::Ranked)
         .and_where(Expr::col(Cte::Rn).eq(1))
         .cond_where(resolve_or::<D>(chunk)?)
-        .cond_where(state_cond)
         .order_by_columns(D::order_by())
-        .take()
-        .with(latest_ranked_cte::<D>(on)?))
+        .take();
+    if let Some(s) = state_cond {
+        q.cond_where(s.clone());
+    }
+    Ok(q.with(latest_ranked_cte::<D>(on)?))
 }
 
-pub(crate) fn fetch_all_current_chunk_query<
-    const S: u8,
-    D: CurrentDao + States<S>,
-    V: SqlCondition,
->(
+pub(crate) fn fetch_all_current_chunk_query<D: CurrentDao, V: SqlCondition>(
     chunk: &[V],
+    state_cond: Option<&sea_query::Condition>,
 ) -> Result<sea_query::SelectStatement, SqlError> {
-    let state_cond = resolve_condition::<D>(D::state())?;
-    Ok(Query::select()
+    let mut q = Query::select()
         .columns(D::columns())
         .from(D::current_table_name())
         .cond_where(resolve_or::<D>(chunk)?)
-        .cond_where(state_cond)
-        .take())
-}
-
-pub trait ChunkedQueries {
-    /// Batch-insert multiple DAOs using multi-row INSERT statements.
-    ///
-    /// Rows are chunked to stay within database bind-parameter limits.
-    /// Each chunk produces a single `INSERT INTO ... VALUES (...), (...), ...`.
-    fn insert_vec<D: Dao>(
-        self,
-        daos: &[D],
-    ) -> impl Future<Output = Result<DynamicQueryResult, SqlError>>;
-
-    fn fetch_all_chunked<D: Dao, V: SqlCondition>(
-        self,
-        values: &[V],
-    ) -> impl Future<Output = Result<Vec<D>, SqlError>>;
-
-    fn update_chunked<U: DaoUpdate, D: DaoCore, V: SqlCondition>(
-        self,
-        dao: &U,
-        values: &[V],
-    ) -> impl Future<Output = Result<DynamicQueryResult, SqlError>>;
-
-    fn delete_chunked<D: DaoCore, V: SqlCondition>(
-        self,
-        values: &[V],
-    ) -> impl Future<Output = Result<DynamicQueryResult, SqlError>>;
-
-    fn fetch_all_at_chunked<const S: u8, D: VersionedDao + States<S>, V: SqlCondition>(
-        self,
-        values: &[V],
-        on: &D::VersionOrder,
-    ) -> impl Future<Output = Result<Vec<D>, SqlError>>;
-
-    fn fetch_all_current_chunked<const S: u8, D: CurrentDao + States<S>, V: SqlCondition>(
-        self,
-        values: &[V],
-    ) -> impl Future<Output = Result<Vec<D>, SqlError>>;
-}
-
-impl<E> ChunkedQueries for E
-where
-    E: SeaExecutor + Send,
-{
-    async fn insert_vec<D: Dao>(mut self, daos: &[D]) -> Result<DynamicQueryResult, SqlError> {
-        let mut result = DynamicQueryResult::empty(&self.kind());
-        for chunk in daos.chunks(MAX_INSERT_ROWS) {
-            let r = insert_vec_query::<D>(chunk)?
-                .build_query()
-                .execute(self.reuse())
-                .await
-                .map_err(|e| SqlError::on_entity(D::display_name(), e))?;
-            result.extend(std::iter::once(r));
-        }
-        Ok(result)
+        .take();
+    if let Some(s) = state_cond {
+        q.cond_where(s.clone());
     }
-
-    async fn fetch_all_chunked<D: Dao, V: SqlCondition>(
-        mut self,
-        values: &[V],
-    ) -> Result<Vec<D>, SqlError> {
-        warn_if_chunked::<D>(values.len());
-        let mut results = Vec::new();
-        for chunk in values.chunks(MAX_QUERY_CONDITIONS) {
-            let r: Vec<D> = fetch_all_chunk_query::<D, V>(chunk)?
-                .build_query_as()
-                .fetch_all(self.reuse())
-                .await
-                .map_err(SqlError::on_read::<D>)?;
-            results.extend(r);
-        }
-        Ok(results)
-    }
-
-    async fn update_chunked<U: DaoUpdate, D: DaoCore, V: SqlCondition>(
-        mut self,
-        dao: &U,
-        values: &[V],
-    ) -> Result<DynamicQueryResult, SqlError> {
-        warn_if_chunked::<D>(values.len());
-        let mut result = DynamicQueryResult::empty(&self.kind());
-        for chunk in values.chunks(MAX_QUERY_CONDITIONS) {
-            let r = update_chunk_query::<U, D, V>(dao, chunk)?
-                .build_query()
-                .execute(self.reuse())
-                .await
-                .map_err(|e| SqlError::on_write::<U>(e, &dao.column_display_values()))?;
-            result.extend(std::iter::once(r));
-        }
-        Ok(result)
-    }
-
-    async fn delete_chunked<D: DaoCore, V: SqlCondition>(
-        mut self,
-        values: &[V],
-    ) -> Result<DynamicQueryResult, SqlError> {
-        warn_if_chunked::<D>(values.len());
-        let mut result = DynamicQueryResult::empty(&self.kind());
-        for chunk in values.chunks(MAX_QUERY_CONDITIONS) {
-            let r = delete_chunk_query::<D, V>(chunk)?
-                .build_query()
-                .execute(self.reuse())
-                .await
-                .map_err(SqlError::on_read::<D>)?;
-            result.extend(std::iter::once(r));
-        }
-        Ok(result)
-    }
-
-    async fn fetch_all_at_chunked<const S: u8, D: VersionedDao + States<S>, V: SqlCondition>(
-        mut self,
-        values: &[V],
-        on: &D::VersionOrder,
-    ) -> Result<Vec<D>, SqlError> {
-        warn_if_chunked::<D>(values.len());
-        let mut results = Vec::new();
-        for chunk in values.chunks(MAX_QUERY_CONDITIONS) {
-            let r: Vec<D> = fetch_all_at_chunk_query::<S, D, V>(chunk, on)?
-                .build_query_as()
-                .fetch_all(self.reuse())
-                .await
-                .map_err(SqlError::on_read::<D>)?;
-            results.extend(r);
-        }
-        Ok(results)
-    }
-
-    async fn fetch_all_current_chunked<const S: u8, D: CurrentDao + States<S>, V: SqlCondition>(
-        mut self,
-        values: &[V],
-    ) -> Result<Vec<D>, SqlError> {
-        warn_if_chunked::<D>(values.len());
-        let mut results = Vec::new();
-        for chunk in values.chunks(MAX_QUERY_CONDITIONS) {
-            let r: Vec<D> = fetch_all_current_chunk_query::<S, D, V>(chunk)?
-                .build_query_as()
-                .fetch_all(self.reuse())
-                .await
-                .map_err(SqlError::on_read::<D>)?;
-            results.extend(r);
-        }
-        Ok(results)
-    }
+    Ok(q)
 }
 
 #[cfg(test)]
@@ -465,10 +319,7 @@ mod tests {
             TestPartition::try_from("p2").unwrap(),
         ];
         let on = TestDefinedOn::try_from(100i64).unwrap();
-        let sql =
-            fetch_all_at_chunk_query::<{ TestVersionedDao::All }, TestVersionedDao, TestPartition>(
-                &ids, &on,
-            )
+        let sql = fetch_all_at_chunk_query::<TestVersionedDao, TestPartition>(&ids, &on, None)
             .unwrap()
             .to_string(SqliteQueryBuilder);
         assert!(sql.starts_with("WITH"), "should be a WITH query: {sql}");
@@ -486,13 +337,9 @@ mod tests {
             TestPartition::try_from("p1").unwrap(),
             TestPartition::try_from("p2").unwrap(),
         ];
-        let sql = fetch_all_current_chunk_query::<
-            { TestCurrentDao::All },
-            TestCurrentDao,
-            TestPartition,
-        >(&ids)
-        .unwrap()
-        .to_string(SqliteQueryBuilder);
+        let sql = fetch_all_current_chunk_query::<TestCurrentDao, TestPartition>(&ids, None)
+            .unwrap()
+            .to_string(SqliteQueryBuilder);
         assert!(
             sql.contains(r#"FROM "test_chunked_current_view""#),
             "should select from current view: {sql}"
@@ -506,11 +353,11 @@ mod tests {
     #[test]
     fn test_fetch_all_current_chunk_query_active_state() {
         let ids = vec![TestPartition::try_from("p1").unwrap()];
-        let sql = fetch_all_current_chunk_query::<
-            { TestCurrentDao::Active },
-            TestCurrentDao,
-            TestPartition,
-        >(&ids)
+        let active = TestCurrentDao::active();
+        let sql = fetch_all_current_chunk_query::<TestCurrentDao, TestPartition>(
+            &ids,
+            Some(active.condition()),
+        )
         .unwrap()
         .to_string(SqliteQueryBuilder);
         assert!(
