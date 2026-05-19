@@ -38,6 +38,10 @@ pub enum SqlError {
     SelectVersionsNew = 5003,
     #[error("DTO conversion error: {0}")]
     DtoConversionError(#[source] td_error::TdError) = 5004,
+    #[error(
+        "[{0}] Refusing to run a destructive operation with no WHERE clause; pass an explicit condition"
+    )]
+    EmptyConditionRefused(String) = 5005,
 }
 
 /// Extra context extracted from a database error across all backends.
@@ -223,10 +227,5 @@ impl SqlError {
     /// with no DAO values available.
     pub fn on_read<D: DaoCore>(error: sqlx::Error) -> Self {
         classify(D::display_name().to_string(), error, &[])
-    }
-
-    /// Classify a `sqlx::Error` when only an entity name string is available.
-    pub fn on_entity(entity: &str, error: sqlx::Error) -> Self {
-        classify(entity.to_string(), error, &[])
     }
 }

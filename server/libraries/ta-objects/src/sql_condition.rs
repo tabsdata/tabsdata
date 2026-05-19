@@ -78,6 +78,13 @@ use td_tower::handler::Handler;
 pub trait SqlCondition: Send + Sync {
     fn resolve<D: DaoCore>(&self) -> Result<sea_query::Condition, SqlError>;
 
+    /// Whether this condition is the empty "match all rows" predicate
+    /// (i.e. `()`). Destructive ops (`delete`, `update`) check this and
+    /// refuse to run without a real WHERE clause.
+    fn matches_all(&self) -> bool {
+        false
+    }
+
     /// Column name → display value pairs for error messages.
     fn display_values<D: DaoCore>(&self) -> Vec<(String, String)> {
         vec![]
@@ -127,6 +134,10 @@ impl<T: SqlCondition + ?Sized> SqlCondition for &T {
         (**self).resolve::<D>()
     }
 
+    fn matches_all(&self) -> bool {
+        (**self).matches_all()
+    }
+
     fn display_values<D: DaoCore>(&self) -> Vec<(String, String)> {
         (**self).display_values::<D>()
     }
@@ -136,6 +147,10 @@ impl<T: SqlCondition + ?Sized> SqlCondition for &T {
 impl SqlCondition for () {
     fn resolve<D: DaoCore>(&self) -> Result<sea_query::Condition, SqlError> {
         Ok(sea_query::Condition::all())
+    }
+
+    fn matches_all(&self) -> bool {
+        true
     }
 }
 
@@ -336,6 +351,10 @@ macro_rules! not {
 impl<T: SqlCondition> SqlCondition for Ref<T> {
     fn resolve<D: DaoCore>(&self) -> Result<sea_query::Condition, SqlError> {
         (**self).resolve::<D>()
+    }
+
+    fn matches_all(&self) -> bool {
+        (**self).matches_all()
     }
 
     fn display_values<D: DaoCore>(&self) -> Vec<(String, String)> {

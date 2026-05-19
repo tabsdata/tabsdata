@@ -19,7 +19,7 @@
 use crate::type_builder::{parse_input_item_struct, td_type};
 use darling::util::{Flag, PathList};
 use darling::{FromAttributes, FromDeriveInput, FromMeta};
-use heck::ToUpperCamelCase;
+use heck::{ToSnakeCase, ToUpperCamelCase};
 use proc_macro::TokenStream;
 use proc_macro2::Ident;
 use quote::{ToTokens, format_ident, quote};
@@ -37,6 +37,12 @@ pub struct DaoArguments {
     versioned: Option<VersionedArguments>,
     recursive: Option<RecursiveArguments>,
     data_version: Flag,
+    /// Opt-out: this DAO is a truly append-only event log (multiple rows
+    /// per partition). Skip the `Dao` impl so callers can't reach for the
+    /// bare `BasicQueries::fetch_*` methods — they must walk through
+    /// `current()` / `versioned(...)` / `historic(...)`.
+    event_log: Flag,
+    logical_pointer: Option<LogicalPointerArguments>,
     #[darling(default)]
     unique: PathList,
     #[darling(default)]
@@ -80,6 +86,23 @@ impl ToTokens for DaoArguments {
         if self.data_version.is_present() {
             args.push(quote! { data_version });
         }
+        if self.event_log.is_present() {
+            args.push(quote! { event_log });
+        }
+        if let Some(fp) = &self.logical_pointer {
+            let logical_id_col = &fp.logical_id_col;
+            let concrete_id_col = &fp.concrete_id_col;
+            let identity = &fp.identity;
+            let kind = &fp.kind;
+            args.push(quote! {
+                logical_pointer(
+                    logical_id_col = #logical_id_col,
+                    concrete_id_col = #concrete_id_col,
+                    identity = #identity,
+                    kind = #kind
+                )
+            });
+        }
         if !self.unique.is_empty() {
             let paths = self.unique.iter();
             args.push(quote! { unique(#(#paths),*) });
@@ -121,6 +144,12 @@ impl DaoArguments {
             } else {
                 self.data_version
             },
+            event_log: if other.event_log.is_present() {
+                other.event_log
+            } else {
+                self.event_log
+            },
+            logical_pointer: other.logical_pointer.or(self.logical_pointer),
             unique: if other.unique.is_empty() {
                 self.unique
             } else {
@@ -165,6 +194,20 @@ impl VersionedArguments {
 struct RecursiveArguments {
     up: String,
     down: String,
+}
+
+#[derive(Debug, FromMeta)]
+struct LogicalPointerArguments {
+    /// Column on this pointer-event table holding the logical identity
+    /// (e.g. `logical_function_run_id`).
+    logical_id_col: String,
+    /// Column holding the concrete-binding FK (Option-typed); NULL on
+    /// Pending / Voided events (e.g. `physical_function_run_id`).
+    concrete_id_col: String,
+    /// The insert-once identity-row DAO type.
+    identity: syn::Path,
+    /// Human-readable kind tag for error messages ("LFR" / "LTDV").
+    kind: String,
 }
 
 // ---- Helpers ---------------------------------------------------------------
@@ -450,7 +493,7 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
         .into();
     }
 
-    // ---- Dao (full read/write: columns, insert_values, order_by) -----------
+    // ---- Dao: column metadata + read/insert capability for all DAOs ------
     let dao_read = quote! {
         impl #impl_generics ta_objects::Dao for #ident #ty_generics #where_clause {
             fn columns() -> impl IntoIterator<Item = Self::Iden>
@@ -466,6 +509,16 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
             {
                 [(#table_iden::#order_col_variant, #order_dir)]
             }
+        }
+    };
+
+    // ---- LiveDao marker (opt out via `#[dao(event_log, ...)]`). See the
+    // `LiveDao` trait doc for the contract and the insert-once footgun.
+    let live_dao_marker = if parsed.event_log.is_present() {
+        quote! {}
+    } else {
+        quote! {
+            impl #impl_generics ta_objects::LiveDao for #ident #ty_generics #where_clause {}
         }
     };
 
@@ -558,10 +611,24 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
         }
     };
 
-    // ---- States ----------------------------------------------------------------
+    // ---- State filter values ---------------------------------------------------
+    // Each `versioned(...)` or `states(...)` DAO gets a `pub fn all() -> StateFilter<Self>`
+    // and one `pub fn <state>() -> StateFilter<Self>` per user-defined state. Each method
+    // pre-resolves the SQL condition for its state, packaged in a phantom-D wrapper that
+    // the query wrappers' `.state(filter)` step accepts (see `ta_objects::StateFilter`).
+    //
+    // The legacy `pub const X: u8 = N` + `impl States<N> for D` are also emitted for the
+    // tower `By::<...>::method::<{X::N}, X>` handlers that are scheduled for removal.
+    // New code should reach for the value methods.
     let states = if parsed.versioned.is_some() || !parsed.states.is_empty() {
         let all_state = quote! {
             impl #impl_generics #ident #ty_generics #where_clause {
+                /// State filter that admits every row (no extra WHERE).
+                #[allow(non_snake_case)]
+                pub fn all() -> ta_objects::StateFilter<Self> {
+                    ta_objects::StateFilter::new(sea_query::Condition::all())
+                }
+                #[doc(hidden)]
                 #[allow(non_upper_case_globals)]
                 pub const All: u8 = 0;
             }
@@ -572,7 +639,7 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
                 }
             }
         };
-        // Sort states by name to ensure deterministic const numbering across compilations.
+        // Sort states by name for deterministic ordering across compilations.
         let mut sorted_states: Vec<_> = parsed.states.iter().collect();
         sorted_states.sort_by_key(|(name, _)| name.to_string());
         let user_states = sorted_states
@@ -580,8 +647,19 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
             .enumerate()
             .map(|(i, (name, value))| {
                 let i = i as u8 + 1;
+                let snake_name = format_ident!("{}", name.to_string().to_snake_case());
                 quote! {
                     impl #impl_generics #ident #ty_generics #where_clause {
+                        /// Macro-generated state filter; see the `states(...)` DAO config.
+                        pub fn #snake_name() -> ta_objects::StateFilter<Self> {
+                            let resolved = ta_objects::sql_condition::resolve_condition::<Self>(
+                                #value
+                            ).expect("static state condition must resolve");
+                            ta_objects::StateFilter::new(
+                                sea_query::Condition::all().add(resolved)
+                            )
+                        }
+                        #[doc(hidden)]
                         #[allow(non_upper_case_globals)]
                         pub const #name: u8 = #i;
                     }
@@ -631,6 +709,84 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
         }
     };
 
+    // ---- LogicalPointerDao impl (emitted from `logical_pointer(...)`) ----
+    let logical_pointer_impl = match &parsed.logical_pointer {
+        None => quote! {},
+        Some(fp) => {
+            let logical_id_field = format_ident!("{}", fp.logical_id_col);
+            let concrete_id_field = format_ident!("{}", fp.concrete_id_col);
+            let logical_id_variant = iden_variant_from_str(&fp.logical_id_col);
+            let concrete_id_variant = iden_variant_from_str(&fp.concrete_id_col);
+            let status_variant = iden_variant_from_str("status");
+            let logical_id_type =
+                require_field!(fields, &fp.logical_id_col, "logical_pointer", ident);
+            let concrete_id_type =
+                require_field!(fields, &fp.concrete_id_col, "logical_pointer", ident);
+            let identity_type = &fp.identity;
+            let kind = &fp.kind;
+            quote! {
+                impl #impl_generics td_objects::dxo::logical::LogicalPointerDao
+                    for #ident #ty_generics #where_clause
+                {
+                    type LogicalId = #logical_id_type;
+                    type ConcreteId = #concrete_id_type;
+                    type IdentityDB = #identity_type;
+                    const KIND: &'static str = #kind;
+
+                    fn logical_id_col() -> Self::Iden {
+                        #table_iden::#logical_id_variant
+                    }
+                    fn concrete_id_col() -> Self::Iden {
+                        #table_iden::#concrete_id_variant
+                    }
+                    fn status_col() -> Self::Iden {
+                        #table_iden::#status_variant
+                    }
+
+                    fn status(&self) -> td_objects::types::basic::LogicalPointerStatus {
+                        self.status.clone()
+                    }
+                    fn logical_id(&self) -> &Self::LogicalId {
+                        &self.#logical_id_field
+                    }
+                    fn concrete_id(&self) -> Option<&Self::ConcreteId> {
+                        self.#concrete_id_field.as_ref()
+                    }
+                    fn build_event(
+                        logical_id: &Self::LogicalId,
+                        status: td_objects::types::basic::LogicalPointerStatus,
+                        concrete_id: Option<Self::ConcreteId>,
+                        set_on: td_objects::types::basic::AtTime,
+                        set_by_id: td_objects::types::basic::UserId,
+                        reason: td_objects::types::basic::LogicalPointerReason,
+                    ) -> Result<Self, td_error::TdError> {
+                        use ta_objects::Buildable;
+                        Ok(Self::builder()
+                            .#logical_id_field(logical_id.clone())
+                            .status(status)
+                            .#concrete_id_field(concrete_id)
+                            .set_on(set_on)
+                            .set_by_id(set_by_id)
+                            .reason(reason)
+                            .build()?)
+                    }
+                    fn initial_mint_for(
+                        identity: &Self::IdentityDB,
+                    ) -> Result<Self, td_error::TdError> {
+                        Self::build_event(
+                            &identity.id,
+                            td_objects::types::basic::LogicalPointerStatus::Pending,
+                            None,
+                            td_objects::types::basic::AtTime::try_from(identity.triggered_on)?,
+                            identity.triggered_by_id,
+                            td_objects::types::basic::LogicalPointerReason::InitialMint,
+                        )
+                    }
+                }
+            }
+        }
+    };
+
     let td_type = td_type(&input, &item);
 
     quote! {
@@ -638,9 +794,11 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
         #typed_columns
         #dao_core
         #dao_read
+        #live_dao_marker
         #access_trait
         #states
         #recursive
+        #logical_pointer_impl
         #td_type
     }
     .into()
@@ -714,7 +872,7 @@ fn is_sqlx_skip(f: &syn::Field) -> bool {
 /// Convert a DAO struct name to a human-readable display name.
 /// Strips from the first `DB` occurrence onwards, then inserts spaces
 /// before uppercase-to-lowercase transitions (CamelCase word boundaries).
-/// `UserDB` → `"User"`, `FunctionRunDB` → `"Function Run"`,
+/// `UserDB` → `"User"`, `PhysicalFunctionRunDB` → `"Function Run"`,
 /// `FunctionDBWithNames` → `"Function"`.
 fn struct_name_to_display_name(name: &str) -> String {
     let name = match name.find("DB") {
@@ -726,7 +884,7 @@ fn struct_name_to_display_name(name: &str) -> String {
     for (i, &c) in chars.iter().enumerate() {
         if i > 0 && c.is_uppercase() {
             // Only add a space at a real word boundary:
-            // uppercase followed by lowercase (e.g. "Run" in "FunctionRun")
+            // uppercase followed by lowercase (e.g. "Run" in "PhysicalFunctionRun")
             // or preceded by lowercase (e.g. "R" after "function")
             let prev_lower = chars[i - 1].is_lowercase();
             let next_lower = chars.get(i + 1).is_some_and(|c| c.is_lowercase());

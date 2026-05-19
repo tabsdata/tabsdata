@@ -111,6 +111,11 @@ pub trait DaoUpdate: DaoCore {
 }
 
 /// Full read/write DAO for a directly-queryable database table.
+/// Implemented by every DAO regardless of whether it's a live table or a
+/// versioned event/timeline table — anywhere we need column metadata
+/// (`SELECT` column list, `INSERT` value list, default ordering) we bound
+/// on `Dao`. The "is it safe to read raw?" property lives on the more
+/// restrictive [`LiveDao`] marker.
 pub trait Dao: DaoCore + td_database::dynamic::DynamicFromRow + Unpin {
     /// All columns in the same order as `insert_values()`.
     fn columns() -> impl IntoIterator<Item = Self::Iden>;
@@ -122,8 +127,26 @@ pub trait Dao: DaoCore + td_database::dynamic::DynamicFromRow + Unpin {
     fn order_by() -> impl IntoIterator<Item = (Self::Iden, sea_query::Order)>;
 }
 
-/// An append-only versioned table. Never queried directly — always through
-/// a ranked-window CTE. Insertable only.
+/// Marker for DAOs whose rows are uniquely addressable by primary key:
+/// one live row per id, or insert-once with stable PK (versioned
+/// timelines). Bare `BasicQueries::fetch_*` methods bound on `LiveDao`
+/// so true append-only event logs (multiple rows per partition) can't
+/// be read raw — those go through `current()` / `versioned(...)` /
+/// `historic(...)`. Opt out with `#[dao(... event_log, ...)]`.
+///
+/// **Footgun on insert-once timelines** (FunctionDB / TableDB / etc.):
+/// `LiveDao` is emitted because the PK is unique, so
+/// `db.live().fetch_one::<FunctionDB>(...)` compiles — but it's safe **only
+/// when the condition is the row's PK** (e.g. `function_version_id`).
+/// A partition column (`function_id`) silently matches multiple
+/// versions; for "latest version at time Y", use
+/// [`crate::QueryEntry::current`] / [`crate::QueryEntry::versioned`].
+pub trait LiveDao: Dao {}
+
+/// An append-only versioned table. Never queried directly — always
+/// through a ranked-window CTE — for tables that *aren't* also
+/// `LiveDao` (true event logs). For insert-once timeline tables, raw
+/// PK lookups via [`Dao`] are safe.
 ///
 /// ## Structural columns
 /// - **Pk**: primary key. Used as a tiebreaker in ROW_NUMBER windows when
@@ -150,16 +173,73 @@ pub trait CurrentDao: VersionedDao {
     fn current_table_name() -> &'static str;
 }
 
-/// Compile-time state filter for queries.
-/// `S = 0` is always `All`. States >= 1 are user-defined.
+/// Internal const-generic state filter trait. Kept for the soon-to-die
+/// tower `By::<...>` handlers. New code should reach for
+/// [`StateFilter<D>`] via the per-DAO value methods (`D::all()`,
+/// `D::active()`) emitted by the `Dao` macro.
+#[doc(hidden)]
 pub trait States<const S: u8>: DaoCore {
     fn state() -> impl crate::sql_condition::SqlCondition;
+}
+
+/// State filter value for queries. Each `Dao` with `versioned(...)` or
+/// `states(...)` gets a per-state value-returning method emitted by the
+/// `Dao` macro (e.g. `FunctionDB::all()`, `FunctionDB::active()`); each
+/// returns a [`StateFilter<Self>`] that pre-resolves the SQL condition.
+///
+/// Pass the value to a query wrapper's `.state(filter)` to bind both
+/// the state filter *and* the DAO type:
+///
+/// ```ignore
+/// db.current().state(FunctionDB::active()).fetch_one(&id).await?;
+/// ```
+///
+/// The default for the bare wrapper (no `.state(...)`) is the implicit
+/// All state — no extra WHERE clause beyond the user condition.
+pub struct StateFilter<D> {
+    _phantom: std::marker::PhantomData<D>,
+    condition: sea_query::Condition,
+}
+
+impl<D> StateFilter<D> {
+    /// Construct a filter from a pre-resolved sea-query condition.
+    /// Used by macro-generated state methods; callers should reach for
+    /// `D::all()` / `D::active()` etc. instead.
+    pub fn new(condition: sea_query::Condition) -> Self {
+        Self {
+            _phantom: std::marker::PhantomData,
+            condition,
+        }
+    }
+
+    /// Borrow the cached condition for inclusion in a WHERE.
+    pub fn condition(&self) -> &sea_query::Condition {
+        &self.condition
+    }
+}
+
+#[doc(hidden)]
+impl<D: DaoCore> StateFilter<D> {
+    /// Bridge for legacy tower handlers that still take `<const S: u8>`.
+    /// New code should not call this — use `D::all()` / `D::active()` etc.
+    pub fn from_states<const S: u8>() -> Self
+    where
+        D: States<S>,
+    {
+        let raw = <D as States<S>>::state();
+        let mut where_cond = sea_query::Condition::all();
+        if let Ok(resolved) = crate::sql_condition::resolve_condition::<D>(raw) {
+            where_cond = where_cond.add(resolved);
+        }
+        Self::new(where_cond)
+    }
 }
 
 /// A `VersionedDao` supporting version range queries (HEAD~N, INITIAL+N, ranges).
 pub trait DataVersionDao: VersionedDao + DaoUpdate {}
 
-/// Hierarchical traversal via recursive CTEs. Only for `DataAccessObject`.
+/// Hierarchical traversal via recursive CTEs. Implementable by any
+/// table-shaped DAO (live or versioned).
 pub trait Recursive: Dao {
     type Key: crate::SeaValue + 'static;
     fn recurse_up() -> Self::Iden;
