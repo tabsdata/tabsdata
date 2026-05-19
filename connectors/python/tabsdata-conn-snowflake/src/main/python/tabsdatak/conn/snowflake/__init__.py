@@ -39,7 +39,9 @@ IdentifierSpec: TypeAlias = Union[
 ]
 
 NameSpec: TypeAlias = IdentifierSpec
-SnowflakeTableNameSpec: TypeAlias = Annotated[str, _validation.TABLE_FQN_VALIDATOR]
+SnowflakeTableNameSpec: TypeAlias = Annotated[
+    str, _validation.SNOWFLAKE_TABLE_FQN_VALIDATOR,
+]
 SnowflakeTableNamesSpec: TypeAlias = list[SnowflakeTableNameSpec]
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
 
@@ -75,6 +77,4 @@ class SnowflakeDest(Dest):
     conn: ConnSpec
     tables: SnowflakeTableNamesSpec
     if_table_exists: IfTableExistsSpec = "append"
-    # TODO: document valid keys for this cfg in the docstring above
-    # (see MySQLSrc src_cfg for the pattern).
     dest_cfg: CfgSpec | None = None

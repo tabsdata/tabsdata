@@ -59,7 +59,7 @@ class _SnowflakeDestPlugin(DestPlugin[SnowflakeDest]):
     ) -> None:
         if len(tables) != len(dest.tables):
             # noinspection PyProtectedMember
-            raise SnowflakeErrorCode.SNOWFLAKE_8.exception(
+            raise SnowflakeErrorCode.SNOWFLAKE_4.exception(
                 tables=len(dest.tables),
                 slots=len(tables),
             )
@@ -84,13 +84,13 @@ class _SnowflakeDestPlugin(DestPlugin[SnowflakeDest]):
             )
         except OperationalError as e:
             # noinspection PyProtectedMember
-            raise SnowflakeErrorCode.SNOWFLAKE_6.exception(
+            raise SnowflakeErrorCode.SNOWFLAKE_5.exception(
                 cause=e,
                 account=conn.account.value(),
             )
         except SQLAlchemyError as e:
             # noinspection PyProtectedMember
-            raise SnowflakeErrorCode.SNOWFLAKE_7.exception(
+            raise SnowflakeErrorCode.SNOWFLAKE_6.exception(
                 cause=e,
                 table=", ".join(dest.tables),
             )
