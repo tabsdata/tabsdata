@@ -2,15 +2,14 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::BasicQueries;
+use crate::{LiveEntry, QueryExecutor};
 use ta_objects::Buildable;
-use td_database::sea_query::executor::SeaExecutor;
 use td_error::TdError;
 use td_objects::dxo::collection::{CollectionCreateDB, CollectionDB, CollectionDBBuilder};
 use td_objects::types::basic::{AtTime, CollectionName, Description, UserId};
 
 pub(crate) async fn seed_collection(
-    db: impl SeaExecutor + Send,
+    db: impl QueryExecutor,
     collection_name: &CollectionName,
     created_by: &UserId,
 ) -> Result<CollectionDB, TdError> {
@@ -24,7 +23,7 @@ pub(crate) async fn seed_collection(
         .modified_by_id(created_by)
         .build()?;
 
-    db.insert(&collection).await?;
+    db.live().insert(&collection).await?;
 
     Ok(CollectionDBBuilder::try_from(&collection)
         .unwrap()
@@ -33,8 +32,8 @@ pub(crate) async fn seed_collection(
 
 #[cfg(test)]
 mod tests {
-    use crate::BasicQueries;
-    use crate::test_utils::SeedQueries;
+    use crate::LiveEntry;
+    use crate::test_utils::SeedEntry;
     use td_database::pool::TdPool;
     use td_objects::dxo::collection::CollectionDB;
     use td_objects::types::basic::{CollectionName, UserId};
@@ -44,14 +43,19 @@ mod tests {
     #[tokio::test]
     async fn test_seed_collection(db: TdPool) {
         let collection = db
-            .seed_collection(
+            .seed()
+            .collection(
                 &CollectionName::try_from("collection").unwrap(),
                 &UserId::try_from(ENCODED_ID_SYSTEM).unwrap(),
             )
             .await
             .unwrap();
 
-        let found = db.fetch_one::<CollectionDB>(&collection.id).await.unwrap();
+        let found = db
+            .live()
+            .fetch_one::<CollectionDB>(&collection.id)
+            .await
+            .unwrap();
         assert_eq!(found.id, collection.id);
         assert_eq!(found.name, collection.name);
         assert_eq!(found.description, collection.description);

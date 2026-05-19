@@ -2,9 +2,8 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::BasicQueries;
+use crate::{LiveEntry, QueryExecutor};
 use ta_objects::{Buildable, TryUpdater};
-use td_database::sea_query::executor::SeaExecutor;
 use td_error::TdError;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::dxo::permission::{PermissionCreate, PermissionDB, PermissionDBBuilder};
@@ -14,7 +13,7 @@ use td_objects::types::basic::{
 };
 
 pub async fn seed_permission(
-    db: impl SeaExecutor + Send,
+    db: impl QueryExecutor,
     permission_type: PermissionType,
     entity_name: Option<EntityName>,
     entity_id: Option<EntityId>,
@@ -44,14 +43,14 @@ pub async fn seed_permission(
     builder.entity_id(entity_id);
     let permission_db = builder.build()?;
 
-    db.insert(&permission_db).await?;
+    db.live().insert(&permission_db).await?;
     Ok(permission_db)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::BasicQueries;
-    use crate::test_utils::SeedQueries;
+    use crate::LiveEntry;
+    use crate::test_utils::SeedEntry;
     use td_database::pool::TdPool;
     use td_objects::dxo::permission::PermissionDB;
     use td_objects::types::basic::{Description, PermissionType, RoleName};
@@ -60,18 +59,24 @@ mod tests {
     #[tokio::test]
     async fn test_seed_permission(db: TdPool) {
         let role = db
-            .seed_role(
+            .seed()
+            .role(
                 RoleName::try_from("joaquin").unwrap(),
                 Description::try_from("super user").unwrap(),
             )
             .await
             .unwrap();
         let permission = db
-            .seed_permission(PermissionType::try_from("sa").unwrap(), None, None, &role)
+            .seed()
+            .permission(PermissionType::try_from("sa").unwrap(), None, None, &role)
             .await
             .unwrap();
 
-        let found = db.fetch_one::<PermissionDB>(&permission.id).await.unwrap();
+        let found = db
+            .live()
+            .fetch_one::<PermissionDB>(&permission.id)
+            .await
+            .unwrap();
         assert_eq!(permission.id, found.id);
         assert_eq!(permission.role_id, found.role_id);
         assert_eq!(permission.permission_type, found.permission_type);

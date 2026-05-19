@@ -2,11 +2,9 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::BasicQueries;
-use crate::VersionedQueries;
+use crate::{CurrentEntry, LiveEntry, QueryExecutor};
 use ta_objects::TryUpdater;
 use ta_objects::and;
-use td_database::sea_query::executor::SeaExecutor;
 use td_error::TdError;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::dxo::dependency::DependencyDBBuilder;
@@ -16,7 +14,7 @@ use td_objects::system::{
     SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES, SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES,
 };
 use td_objects::types::basic::{
-    AccessTokenId, AtTime, DependencyPos, DependencyStatus, RoleId, TableFunctionParamPos, TableId,
+    AccessTokenId, DependencyPos, DependencyStatus, RoleId, TableFunctionParamPos, TableId,
     TableName, TableStatus, UserId,
 };
 use td_objects::types::composed::TableVersions;
@@ -24,7 +22,7 @@ use td_objects::types::table_ref::Versions;
 
 // Very similar to seed_function or build_table_versions, but to seed system tables
 pub(crate) async fn seed_system_tables(
-    db: impl SeaExecutor + Send + Copy,
+    db: impl QueryExecutor + Copy,
     function: &FunctionDB,
 ) -> Result<Vec<TableDB>, TdError> {
     let request_context: ReadRequest<String> = RequestContext::with(
@@ -52,7 +50,7 @@ pub(crate) async fn seed_system_tables(
             .status(TableStatus::Active)
             .build()?;
 
-        db.insert(&table).await?;
+        db.live().insert(&table).await?;
         system_tables.push(table);
     }
 
@@ -67,10 +65,8 @@ pub(crate) async fn seed_system_tables(
         );
 
         let table_db = db
-            .fetch_one_at::<{ TableDBWithNames::All }, TableDBWithNames>(
-                and!(table_collection, table_name),
-                &AtTime::now(),
-            )
+            .current()
+            .fetch_one::<TableDBWithNames>(and!(table_collection, table_name))
             .await?;
 
         let dependency = builder
@@ -84,7 +80,7 @@ pub(crate) async fn seed_system_tables(
             .system(true)
             .build()?;
 
-        db.insert(&dependency).await?;
+        db.live().insert(&dependency).await?;
     }
 
     Ok(system_tables)
@@ -92,20 +88,21 @@ pub(crate) async fn seed_system_tables(
 
 #[cfg(test)]
 mod tests {
-    use crate::VersionedQueries;
-    use crate::test_utils::SeedQueries;
+    use crate::LiveEntry;
+    use crate::test_utils::SeedEntry;
     use ta_objects::Buildable;
     use td_database::pool::TdPool;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::table::TableDB;
-    use td_objects::types::basic::{AtTime, BundleId, CollectionName, Decorator, UserId};
+    use td_objects::types::basic::{BundleId, CollectionName, Decorator, UserId};
     use td_security::ENCODED_ID_SYSTEM;
 
     #[td_test::test(sqlx)]
     #[tokio::test]
     async fn test_seed_system_tables(db: TdPool) {
         let collection = db
-            .seed_collection(
+            .seed()
+            .collection(
                 &CollectionName::try_from("collection").unwrap(),
                 &UserId::try_from(ENCODED_ID_SYSTEM).unwrap(),
             )
@@ -134,15 +131,12 @@ mod tests {
             .build()
             .unwrap();
 
-        let function = db.seed_function(&collection, &create).await.unwrap();
-        let system_tables = db.seed_system_tables(&function).await.unwrap();
+        let function = db.seed().function(&collection, &create).await.unwrap();
+        let system_tables = db.seed().system_tables(&function).await.unwrap();
 
         assert_eq!(system_tables.len(), 1);
         for table in system_tables {
-            let found = db
-                .fetch_one_at::<{ TableDB::All }, TableDB>(&table.id, &AtTime::now())
-                .await
-                .unwrap();
+            let found = db.live().fetch_one::<TableDB>(&table.id).await.unwrap();
             assert_eq!(table.id, found.id);
             assert_eq!(table.collection_id, found.collection_id);
             assert_eq!(table.table_id, found.table_id);

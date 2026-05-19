@@ -2,30 +2,29 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::BasicQueries;
+use crate::{LiveEntry, QueryExecutor};
 use ta_objects::Buildable;
-use td_database::sea_query::executor::SeaExecutor;
 use td_error::TdError;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::function::FunctionDB;
 use td_objects::types::basic::{ExecutionName, TriggerType, TriggeredOn, UserId};
 
 pub(crate) async fn seed_execution(
-    db: impl SeaExecutor + Send,
+    db: impl QueryExecutor,
     function_version: &FunctionDB,
 ) -> Result<ExecutionDB, TdError> {
     _seed_execution(db, function_version, TriggerType::Manual).await
 }
 
 pub(crate) async fn seed_cron_execution(
-    db: impl SeaExecutor + Send,
+    db: impl QueryExecutor,
     function_version: &FunctionDB,
 ) -> Result<ExecutionDB, TdError> {
     _seed_execution(db, function_version, TriggerType::CronTrigger).await
 }
 
 async fn _seed_execution(
-    db: impl SeaExecutor + Send,
+    db: impl QueryExecutor,
     function_version: &FunctionDB,
     trigger_type: TriggerType,
 ) -> Result<ExecutionDB, TdError> {
@@ -40,13 +39,13 @@ async fn _seed_execution(
         .trigger_type(trigger_type)
         .build()?;
 
-    db.insert::<ExecutionDB>(&execution_db).await?;
+    db.live().insert::<ExecutionDB>(&execution_db).await?;
     Ok(execution_db)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::test_utils::SeedQueries;
+    use crate::test_utils::SeedEntry;
     use ta_objects::Buildable;
     use td_database::pool::TdPool;
     use td_objects::dxo::function::FunctionRegister;
@@ -59,7 +58,8 @@ mod tests {
     #[tokio::test]
     async fn test_seed_execution(db: TdPool) {
         let collection = db
-            .seed_collection(
+            .seed()
+            .collection(
                 &CollectionName::try_from("collection").unwrap(),
                 &UserId::try_from(ENCODED_ID_SYSTEM).unwrap(),
             )
@@ -88,9 +88,9 @@ mod tests {
             .build()
             .unwrap();
 
-        let function_version = db.seed_function(&collection, &create).await.unwrap();
+        let function_version = db.seed().function(&collection, &create).await.unwrap();
 
-        let execution = db.seed_execution(&function_version).await.unwrap();
+        let execution = db.seed().execution(&function_version).await.unwrap();
         assert_eq!(
             execution.name,
             Some(ExecutionName::try_from("test_execution").unwrap())

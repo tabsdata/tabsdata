@@ -17,10 +17,14 @@ use td_database::sea_query::builder::SeaQueryExt;
 use td_error::{TdError, td_error};
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::function::FunctionDB;
-use td_objects::dxo::table_data_version::TableDataVersionDB;
+use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalTableDataVersionDB};
+use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
+use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
 use td_objects::dxo::transaction::TransactionDB;
 use td_objects::types::basic::{
-    DV, EP, ExecutionId, FV, FunctionVersionId, TX, TableDataVersionId, TransactionId,
+    EP, ExecutionId, FV, FunctionVersionId, LDV, LFR, LogicalFunctionRunId,
+    LogicalTableDataVersionId, PDV, PFR, PhysicalFunctionRunId, PhysicalTableDataVersionId, TX,
+    TransactionId,
 };
 
 /// Errors that can occur during logical ID initialization.
@@ -83,8 +87,18 @@ pub async fn initialize_logical_ids(db: &TdPool) -> Result<(), TdError> {
     let id = find_last_idl::<FunctionDB, FunctionVersionId, FV>(db).await?;
     FunctionVersionId::init(id)?;
 
-    let id = find_last_idl::<TableDataVersionDB, TableDataVersionId, DV>(db).await?;
-    TableDataVersionId::init(id)?;
+    let id = find_last_idl::<PhysicalFunctionRunDB, PhysicalFunctionRunId, PFR>(db).await?;
+    PhysicalFunctionRunId::init(id)?;
+
+    let id =
+        find_last_idl::<PhysicalTableDataVersionDB, PhysicalTableDataVersionId, PDV>(db).await?;
+    PhysicalTableDataVersionId::init(id)?;
+
+    let id = find_last_idl::<LogicalFunctionRunDB, LogicalFunctionRunId, LFR>(db).await?;
+    LogicalFunctionRunId::init(id)?;
+
+    let id = find_last_idl::<LogicalTableDataVersionDB, LogicalTableDataVersionId, LDV>(db).await?;
+    LogicalTableDataVersionId::init(id)?;
 
     Ok(())
 }
@@ -92,8 +106,8 @@ pub async fn initialize_logical_ids(db: &TdPool) -> Result<(), TdError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::VersionedQueries;
-    use crate::test_utils::SeedQueries;
+    use crate::CurrentEntry;
+    use crate::test_utils::SeedEntry;
     use sea_query::ExprTrait;
     use sea_query::{Expr, Query};
     use ta_objects::Buildable;
@@ -102,15 +116,15 @@ mod tests {
     use td_error::TdError;
     use td_objects::dxo::execution::ExecutionDBIden;
     use td_objects::dxo::function::{FunctionDBIden, FunctionRegister};
+    use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDBIden;
     use td_objects::dxo::table::TableDB;
-    use td_objects::dxo::table_data_version::TableDataVersionDBIden;
     use td_objects::dxo::transaction::TransactionDBIden;
+    use td_objects::types::basic::FunctionRunStatus;
     use td_objects::types::basic::TableName;
     use td_objects::types::basic::TransactionKey;
-    use td_objects::types::basic::{AtTime, FunctionRunStatus};
     use td_objects::types::basic::{
-        BundleId, CollectionName, DV, Decorator, EP, ExecutionId, FV, FunctionVersionId, TX,
-        TableDataVersionId, TableNameDto, TransactionId, UserId,
+        BundleId, CollectionName, Decorator, EP, ExecutionId, FV, FunctionVersionId, PDV,
+        PhysicalTableDataVersionId, TX, TableNameDto, TransactionId, UserId,
     };
     use td_security::ENCODED_ID_SYSTEM;
 
@@ -127,7 +141,8 @@ mod tests {
         let id = find_last_idl::<FunctionDB, FunctionVersionId, FV>(&db).await?;
         assert!(id.is_none());
 
-        let id = find_last_idl::<TableDataVersionDB, TableDataVersionId, DV>(&db).await?;
+        let id = find_last_idl::<PhysicalTableDataVersionDB, PhysicalTableDataVersionId, PDV>(&db)
+            .await?;
         assert!(id.is_none());
         //
         Ok(())
@@ -138,7 +153,8 @@ mod tests {
         let db = td_database::test_utils::db().await?;
 
         let collection = db
-            .seed_collection(
+            .seed()
+            .collection(
                 &CollectionName::try_from("collection")?,
                 &UserId::try_from(ENCODED_ID_SYSTEM)?,
             )
@@ -158,18 +174,19 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let function = db.seed_function(&collection, &create).await?;
-        db.seed_function(&collection, &create).await?;
-        db.seed_function(&collection, &create).await?;
+        let function = db.seed().function(&collection, &create).await?;
+        db.seed().function(&collection, &create).await?;
+        db.seed().function(&collection, &create).await?;
 
-        let execution = db.seed_execution(&function).await?;
+        let execution = db.seed().execution(&function).await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
-        db.seed_transaction(&execution, &transaction_key).await?;
+        db.seed().transaction(&execution, &transaction_key).await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
-        let transaction = db.seed_transaction(&execution, &transaction_key).await?;
+        let transaction = db.seed().transaction(&execution, &transaction_key).await?;
 
-        let function_run = db
-            .seed_function_run(
+        let physical_function_run = db
+            .seed()
+            .physical_function_run(
                 &collection,
                 &function,
                 &execution,
@@ -179,20 +196,19 @@ mod tests {
             .await?;
 
         let table_version = db
-            .fetch_one_at::<{ TableDB::All }, TableDB>(
-                and!(&collection.id, TableName::try_from(table_name)?),
-                &AtTime::now(),
-            )
+            .current()
+            .fetch_one::<TableDB>(and!(&collection.id, TableName::try_from(table_name)?))
             .await?;
 
-        db.seed_table_data_version(
-            &collection,
-            &execution,
-            &transaction,
-            &function_run,
-            &table_version,
-        )
-        .await?;
+        db.seed()
+            .physical_table_data_version(
+                &collection,
+                &execution,
+                &transaction,
+                &physical_function_run,
+                &table_version,
+            )
+            .await?;
 
         let expected = Query::select()
             .expr(Expr::col(FunctionDBIden::Id).max())
@@ -225,13 +241,14 @@ mod tests {
         assert_eq!(id, expected);
 
         let expected = Query::select()
-            .expr(Expr::col(TableDataVersionDBIden::Id).max())
-            .from(TableDataVersionDBIden::Table)
+            .expr(Expr::col(PhysicalTableDataVersionDBIden::Id).max())
+            .from(PhysicalTableDataVersionDBIden::Table)
             .build_query_scalar()
             .fetch_optional(&db)
             .await
             .unwrap();
-        let id = find_last_idl::<TableDataVersionDB, TableDataVersionId, DV>(&db).await?;
+        let id = find_last_idl::<PhysicalTableDataVersionDB, PhysicalTableDataVersionId, PDV>(&db)
+            .await?;
         assert_eq!(id, expected);
 
         Ok(())
@@ -282,12 +299,13 @@ mod tests {
 
         #[test]
         fn test_find_last_idl_table_data_version() {
-            let sql = find_last_idl_query::<TableDataVersionDB, TableDataVersionId>()
-                .unwrap()
-                .to_string(SqliteQueryBuilder);
+            let sql =
+                find_last_idl_query::<PhysicalTableDataVersionDB, PhysicalTableDataVersionId>()
+                    .unwrap()
+                    .to_string(SqliteQueryBuilder);
             assert!(
-                sql.contains("table_data_version"),
-                "should query table_data_versions: {sql}"
+                sql.contains("physical_table_data_version"),
+                "should query physical_table_data_versions: {sql}"
             );
         }
     }

@@ -2,16 +2,15 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::BasicQueries;
+use crate::{LiveEntry, QueryExecutor};
 use ta_objects::{Buildable, TryUpdater};
-use td_database::sea_query::executor::SeaExecutor;
 use td_error::TdError;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::dxo::role::{RoleCreate, RoleDB, RoleDBBuilder};
 use td_objects::types::basic::{AccessTokenId, Description, RoleId, RoleName, UserId};
 
 pub(crate) async fn seed_role(
-    db: impl SeaExecutor + Send,
+    db: impl QueryExecutor,
     name: RoleName,
     description: Description,
 ) -> Result<RoleDB, TdError> {
@@ -32,14 +31,14 @@ pub(crate) async fn seed_role(
         .try_update_from(&request_context)?
         .build()?;
 
-    db.insert(&role_db).await?;
+    db.live().insert(&role_db).await?;
     Ok(role_db)
 }
 
 #[cfg(test)]
 pub mod tests {
-    use crate::BasicQueries;
-    use crate::test_utils::SeedQueries;
+    use crate::LiveEntry;
+    use crate::test_utils::SeedEntry;
     use td_database::pool::TdPool;
     use td_objects::dxo::role::RoleDB;
     use td_objects::types::basic::{Description, RoleName};
@@ -48,7 +47,8 @@ pub mod tests {
     #[tokio::test]
     async fn test_seed_role(db: TdPool) {
         let role = db
-            .seed_role(
+            .seed()
+            .role(
                 RoleName::try_from("joaquin").unwrap(),
                 Description::try_from("super user").unwrap(),
             )
@@ -56,6 +56,7 @@ pub mod tests {
             .unwrap();
 
         let found = db
+            .live()
             .fetch_one::<RoleDB>(&RoleName::try_from("joaquin").unwrap())
             .await
             .unwrap();

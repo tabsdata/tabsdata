@@ -2,13 +2,15 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-use crate::{BasicQueries, ChunkedQueries, CurrentQueries, VersionedQueries};
+use crate::ChunkedQueries;
+use crate::{CurrentEntry, HistoricEntry, LiveEntry};
 use std::marker::PhantomData;
 use std::ops::Deref;
 use ta_objects::errors::{SqlError, format_hint};
 use ta_objects::sql_condition::{ConditionExtract, SqlCondition, SqlRef};
 use ta_objects::{
-    CurrentDao, Dao, DaoCore, DaoUpdate, ListDto, ListFilterExtract, ListRef, States, VersionedDao,
+    CurrentDao, Dao, DaoCore, DaoUpdate, ListDto, ListFilterExtract, ListRef, LiveDao, StateFilter,
+    States, VersionedDao,
 };
 use td_database::dynamic::DynamicConnection;
 use td_error::TdError;
@@ -21,7 +23,7 @@ pub async fn insert<D: Dao>(
     mut conn: MutRef<DynamicConnection<'static>>,
     dao: Ref<D>,
 ) -> Result<(), TdError> {
-    conn.insert(dao.deref()).await?;
+    conn.live().insert(dao.deref()).await?;
     Ok(())
 }
 
@@ -46,9 +48,9 @@ where
         by: SqlRef<E>,
     ) -> Result<D, TdError>
     where
-        D: Dao,
+        D: LiveDao,
     {
-        let result = conn.fetch_one(&by).await?;
+        let result = conn.live().fetch_one(&by).await?;
         Ok(result)
     }
 
@@ -57,9 +59,9 @@ where
         by: SqlRef<E>,
     ) -> Result<Option<D>, TdError>
     where
-        D: Dao,
+        D: LiveDao,
     {
-        let result = conn.fetch_optional(&by).await?;
+        let result = conn.live().fetch_optional(&by).await?;
         Ok(result)
     }
 
@@ -68,9 +70,9 @@ where
         by: SqlRef<E>,
     ) -> Result<Vec<D>, TdError>
     where
-        D: Dao,
+        D: LiveDao,
     {
-        let result = conn.fetch_all(&by).await?;
+        let result = conn.live().fetch_all(&by).await?;
         Ok(result)
     }
 
@@ -79,9 +81,12 @@ where
         by: SqlRef<E>,
     ) -> Result<Vec<D>, TdError>
     where
-        D: Dao + States<S>,
+        D: LiveDao + States<S>,
     {
-        let result = conn.fetch_all_in::<S, D>(&by).await?;
+        let result = conn
+            .live()
+            .fetch_all_in::<D>(StateFilter::from_states::<S>(), &by)
+            .await?;
         Ok(result)
     }
 
@@ -94,7 +99,7 @@ where
         D: DaoCore,
         U: DaoUpdate,
     {
-        let _result = conn.update::<U, D>(update.deref(), &by).await?;
+        let _result = conn.live().update::<U, D>(update.deref(), &by).await?;
         Ok(())
     }
 
@@ -105,7 +110,7 @@ where
     where
         D: DaoCore,
     {
-        let _result = conn.delete::<D>(&by).await?;
+        let _result = conn.live().delete::<D>(&by).await?;
         Ok(())
     }
 
@@ -114,9 +119,9 @@ where
         by: SqlRef<E>,
     ) -> Result<(), TdError>
     where
-        D: Dao,
+        D: LiveDao,
     {
-        let result: Option<D> = conn.fetch_optional(&by).await?;
+        let result: Option<D> = conn.live().fetch_optional(&by).await?;
         match result {
             Some(_) => Ok(()),
             None => {
@@ -138,7 +143,11 @@ where
     where
         D: VersionedDao + States<S>,
     {
-        let result: Option<D> = conn.fetch_optional_at::<S, D>(&by, on.deref()).await?;
+        let result: Option<D> = conn
+            .historic(on.deref())
+            .state(StateFilter::from_states::<S>())
+            .fetch_optional(&by)
+            .await?;
         match result {
             Some(_) => {
                 let vals = by.display_values::<D>();
@@ -152,7 +161,7 @@ where
         }
     }
 
-    pub async fn fetch_one_version<const S: u8, D>(
+    pub async fn historic_fetch_one<const S: u8, D>(
         mut conn: MutRef<DynamicConnection<'static>>,
         on: Ref<D::VersionOrder>,
         by: SqlRef<E>,
@@ -160,24 +169,15 @@ where
     where
         D: VersionedDao + States<S>,
     {
-        let result = conn.fetch_one_at::<S, D>(&by, on.deref()).await?;
+        let result = conn
+            .historic(on.deref())
+            .state(StateFilter::from_states::<S>())
+            .fetch_one(&by)
+            .await?;
         Ok(result)
     }
 
-    #[allow(dead_code)]
-    async fn fetch_optional_version<const S: u8, D>(
-        mut conn: MutRef<DynamicConnection<'static>>,
-        on: Ref<D::VersionOrder>,
-        by: SqlRef<E>,
-    ) -> Result<Option<D>, TdError>
-    where
-        D: VersionedDao + States<S>,
-    {
-        let result = conn.fetch_optional_at::<S, D>(&by, on.deref()).await?;
-        Ok(result)
-    }
-
-    pub async fn fetch_all_versions<const S: u8, D>(
+    pub async fn historic_fetch_all<const S: u8, D>(
         mut conn: MutRef<DynamicConnection<'static>>,
         on: Ref<D::VersionOrder>,
         by: SqlRef<E>,
@@ -185,7 +185,11 @@ where
     where
         D: VersionedDao + States<S>,
     {
-        let result = conn.fetch_all_at::<S, D>(&by, on.deref()).await?;
+        let result = conn
+            .historic(on.deref())
+            .state(StateFilter::from_states::<S>())
+            .fetch_all(&by)
+            .await?;
         Ok(result)
     }
 
@@ -198,30 +202,16 @@ where
     ) -> Result<ListResponse<D>, TdError>
     where
         D: ListDto,
-    {
-        let result = conn.list::<F, D>(&by, &filter, &query_params).await?;
-        build_list_response(&list_params, &query_params, result)
-    }
-
-    pub async fn list_versions_at<F: ListFilterExtract, const S: u8, D>(
-        mut conn: MutRef<DynamicConnection<'static>>,
-        by: SqlRef<E>,
-        filter: ListRef<F>,
-        on: Ref<<<D as ListDto>::Dao as VersionedDao>::VersionOrder>,
-        list_params: Ref<ListParams>,
-        query_params: Ref<ListQueryParams<D>>,
-    ) -> Result<ListResponse<D>, TdError>
-    where
-        D: ListDto,
-        <D as ListDto>::Dao: VersionedDao + States<S>,
+        <D as ListDto>::Dao: LiveDao,
     {
         let result = conn
-            .list_versions_at::<S, F, D>(&by, &filter, on.deref(), &query_params)
+            .live()
+            .list::<F, D>(&by, &filter, &query_params)
             .await?;
         build_list_response(&list_params, &query_params, result)
     }
 
-    pub async fn list_history_at<F: ListFilterExtract, const S: u8, D>(
+    pub async fn historic_list_versions<F: ListFilterExtract, const S: u8, D>(
         mut conn: MutRef<DynamicConnection<'static>>,
         by: SqlRef<E>,
         filter: ListRef<F>,
@@ -234,7 +224,29 @@ where
         <D as ListDto>::Dao: VersionedDao + States<S>,
     {
         let result = conn
-            .list_history_at::<S, F, D>(&by, &filter, on.deref(), &query_params)
+            .historic(on.deref())
+            .state(StateFilter::from_states::<S>())
+            .list_versions::<D, F>(&by, &filter, &query_params)
+            .await?;
+        build_list_response(&list_params, &query_params, result)
+    }
+
+    pub async fn historic_list_full<F: ListFilterExtract, const S: u8, D>(
+        mut conn: MutRef<DynamicConnection<'static>>,
+        by: SqlRef<E>,
+        filter: ListRef<F>,
+        on: Ref<<<D as ListDto>::Dao as VersionedDao>::VersionOrder>,
+        list_params: Ref<ListParams>,
+        query_params: Ref<ListQueryParams<D>>,
+    ) -> Result<ListResponse<D>, TdError>
+    where
+        D: ListDto,
+        <D as ListDto>::Dao: VersionedDao + States<S>,
+    {
+        let result = conn
+            .historic(on.deref())
+            .state(StateFilter::from_states::<S>())
+            .list_full::<D, F>(&by, &filter, &query_params)
             .await?;
         build_list_response(&list_params, &query_params, result)
     }
@@ -246,7 +258,11 @@ where
     where
         D: CurrentDao + States<S>,
     {
-        let result = conn.fetch_one_current::<S, D>(&by).await?;
+        let result = conn
+            .current()
+            .state(StateFilter::from_states::<S>())
+            .fetch_one(&by)
+            .await?;
         Ok(result)
     }
 
@@ -257,7 +273,11 @@ where
     where
         D: CurrentDao + States<S>,
     {
-        let result = conn.fetch_optional_current::<S, D>(&by).await?;
+        let result = conn
+            .current()
+            .state(StateFilter::from_states::<S>())
+            .fetch_optional(&by)
+            .await?;
         Ok(result)
     }
 
@@ -268,7 +288,11 @@ where
     where
         D: CurrentDao + States<S>,
     {
-        let result = conn.fetch_all_current::<S, D>(&by).await?;
+        let result = conn
+            .current()
+            .state(StateFilter::from_states::<S>())
+            .fetch_all(&by)
+            .await?;
         Ok(result)
     }
 
@@ -284,7 +308,9 @@ where
         <D as ListDto>::Dao: CurrentDao + States<S>,
     {
         let result = conn
-            .list_current::<S, F, D>(&by, &filter, &query_params)
+            .current()
+            .state(StateFilter::from_states::<S>())
+            .list::<D, F>(&by, &filter, &query_params)
             .await?;
         build_list_response(&list_params, &query_params, result)
     }
@@ -319,7 +345,7 @@ impl<T: SqlCondition + 'static> By<Vec<T>> {
         Ok(())
     }
 
-    pub async fn fetch_all_versions_chunked<const S: u8, D>(
+    pub async fn historic_fetch_all_chunked<const S: u8, D>(
         mut conn: MutRef<DynamicConnection<'static>>,
         on: Ref<D::VersionOrder>,
         values: Ref<Vec<T>>,
@@ -328,7 +354,9 @@ impl<T: SqlCondition + 'static> By<Vec<T>> {
         D: VersionedDao + States<S>,
     {
         Ok(conn
-            .fetch_all_at_chunked::<S, D, T>(values.deref(), on.deref())
+            .historic(on.deref())
+            .state(StateFilter::from_states::<S>())
+            .fetch_all_chunked::<T>(values.deref())
             .await?)
     }
 
@@ -340,7 +368,9 @@ impl<T: SqlCondition + 'static> By<Vec<T>> {
         D: CurrentDao + States<S>,
     {
         Ok(conn
-            .fetch_all_current_chunked::<S, D, T>(values.deref())
+            .current()
+            .state(StateFilter::from_states::<S>())
+            .fetch_all_chunked::<T>(values.deref())
             .await?)
     }
 }

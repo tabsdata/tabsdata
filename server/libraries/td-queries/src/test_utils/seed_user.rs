@@ -2,9 +2,8 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::BasicQueries;
+use crate::{LiveEntry, QueryExecutor};
 use ta_objects::{Buildable, TryUpdater};
-use td_database::sea_query::executor::SeaExecutor;
 use td_error::TdError;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::dxo::user::{UserCreate, UserDB};
@@ -13,7 +12,7 @@ use td_security::config::PasswordHashingConfig;
 use td_security::password::create_password_hash;
 
 pub(crate) async fn seed_user(
-    db: impl SeaExecutor + Send,
+    db: impl QueryExecutor,
     name: &UserName,
     enabled: &UserEnabled,
 ) -> Result<UserDB, TdError> {
@@ -48,14 +47,14 @@ pub(crate) async fn seed_user(
         .try_update_from(&request_context)?
         .build()?;
 
-    db.insert(&user_db).await?;
+    db.live().insert(&user_db).await?;
     Ok(user_db)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::BasicQueries;
-    use crate::test_utils::SeedQueries;
+    use crate::LiveEntry;
+    use crate::test_utils::SeedEntry;
     use td_database::pool::TdPool;
     use td_objects::dxo::user::UserDB;
     use td_objects::types::basic::{UserEnabled, UserName};
@@ -64,13 +63,14 @@ mod tests {
     #[tokio::test]
     async fn test_seed_user(db: TdPool) {
         let user = db
-            .seed_user(
+            .seed()
+            .user(
                 &UserName::try_from("joaquin").unwrap(),
                 &UserEnabled::from(true),
             )
             .await
             .unwrap();
-        let found = db.fetch_one::<UserDB>(&user.id).await.unwrap();
+        let found = db.live().fetch_one::<UserDB>(&user.id).await.unwrap();
         assert_eq!(found, user);
     }
 }

@@ -2,34 +2,46 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+//! Test-only seed surface. Reach via [`SeedEntry::seed`] on any
+//! [`QueryExecutor`] (e.g. a `TdPool` in test code), then call the
+//! per-DAO seed method:
+//!
+//! ```ignore
+//! let collection = db.seed().collection(&name, &user).await?;
+//! let function = db.seed().function(&collection, &create).await?;
+//! ```
+//!
+//! Only the `test-utils` feature exposes this surface — production code
+//! cannot reach it.
+
+use crate::QueryExecutor;
 use crate::test_utils::seed_collection::seed_collection;
 use crate::test_utils::seed_execution::{seed_cron_execution, seed_execution};
 use crate::test_utils::seed_function::seed_function;
-use crate::test_utils::seed_function_requirement::seed_function_requirement;
-use crate::test_utils::seed_function_run::seed_function_run;
 use crate::test_utils::seed_inter_collection_permission::seed_inter_collection_permission;
+use crate::test_utils::seed_logical_input::seed_logical_input;
 use crate::test_utils::seed_permission::seed_permission;
+use crate::test_utils::seed_physical_function_run::seed_physical_function_run;
+use crate::test_utils::seed_physical_table_data_version::{
+    seed_physical_table_data_version, seed_physical_table_data_version_with_data,
+};
 use crate::test_utils::seed_role::seed_role;
 use crate::test_utils::seed_system_tables::seed_system_tables;
-use crate::test_utils::seed_table_data_version::{
-    seed_table_data_version, seed_table_data_version_with_data,
-};
 use crate::test_utils::seed_transaction::seed_transaction;
 use crate::test_utils::seed_user::seed_user;
 use crate::test_utils::seed_user_role::seed_user_role;
 use crate::test_utils::seed_worker::{seed_function_runner_worker, seed_worker};
-use td_database::sea_query::executor::SeaExecutor;
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::function::{FunctionDB, FunctionRegister};
-use td_objects::dxo::function_requirement::FunctionRequirementDB;
-use td_objects::dxo::function_run::FunctionRunDB;
 use td_objects::dxo::inter_collection_permission::InterCollectionPermissionDB;
+use td_objects::dxo::logical::LogicalFunctionRunInputDB;
 use td_objects::dxo::permission::PermissionDB;
+use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
+use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
 use td_objects::dxo::role::RoleDB;
 use td_objects::dxo::table::TableDB;
-use td_objects::dxo::table_data_version::TableDataVersionDB;
 use td_objects::dxo::transaction::TransactionDB;
 use td_objects::dxo::user::UserDB;
 use td_objects::dxo::user_role::UserRoleDB;
@@ -40,327 +52,218 @@ use td_objects::types::basic::{
     UserEnabled, UserId, UserName, VersionPos, WorkerMessageStatus, WorkerStatus, WorkerType,
 };
 
-pub trait SeedQueries {
-    fn seed_collection(
-        self,
-        collection_name: &CollectionName,
-        created_by: &UserId,
-    ) -> impl Future<Output = Result<CollectionDB, TdError>>;
-
-    fn seed_execution(
-        self,
-        function_version: &FunctionDB,
-    ) -> impl Future<Output = Result<ExecutionDB, TdError>>;
-
-    fn seed_cron_execution(
-        self,
-        function_version: &FunctionDB,
-    ) -> impl Future<Output = Result<ExecutionDB, TdError>>;
-
-    fn seed_function(
-        self,
-        collection: &CollectionDB,
-        function_create: &FunctionRegister,
-    ) -> impl Future<Output = Result<FunctionDB, TdError>>;
-
-    #[allow(clippy::too_many_arguments)]
-    fn seed_function_requirement(
-        self,
-        collection: &CollectionDB,
-        execution: &ExecutionDB,
-        transaction: &TransactionDB,
-        function_run: &FunctionRunDB,
-        requirement_table: &TableDB,
-        requirement_function_run: Option<&FunctionRunDB>,
-        requirement_table_data_version: Option<&TableDataVersionDB>,
-        requirement_dependency_pos: Option<&DependencyPos>,
-        requirement_version_pos: &VersionPos,
-    ) -> impl Future<Output = Result<FunctionRequirementDB, TdError>>;
-
-    fn seed_function_run(
-        self,
-        collection: &CollectionDB,
-        function_version: &FunctionDB,
-        execution: &ExecutionDB,
-        transaction: &TransactionDB,
-        status: &FunctionRunStatus,
-    ) -> impl Future<Output = Result<FunctionRunDB, TdError>>;
-
-    fn seed_inter_collection_permission(
-        self,
-        from_collection: &CollectionId,
-        to_collection: &ToCollectionId,
-    ) -> impl Future<Output = Result<InterCollectionPermissionDB, TdError>>;
-
-    fn seed_permission(
-        self,
-        permission_type: PermissionType,
-        entity_name: Option<EntityName>,
-        entity_id: Option<EntityId>,
-        role_db: &RoleDB,
-    ) -> impl Future<Output = Result<PermissionDB, TdError>>;
-
-    fn seed_role(
-        self,
-        name: RoleName,
-        description: Description,
-    ) -> impl Future<Output = Result<RoleDB, TdError>>;
-
-    fn seed_system_tables(
-        self,
-        function: &FunctionDB,
-    ) -> impl Future<Output = Result<Vec<TableDB>, TdError>>;
-
-    fn seed_table_data_version(
-        self,
-        collection: &CollectionDB,
-        execution: &ExecutionDB,
-        transaction: &TransactionDB,
-        function_run: &FunctionRunDB,
-        table: &TableDB,
-    ) -> impl Future<Output = Result<TableDataVersionDB, TdError>>;
-
-    fn seed_table_data_version_with_data(
-        self,
-        collection: &CollectionDB,
-        execution: &ExecutionDB,
-        transaction: &TransactionDB,
-        function_run: &FunctionRunDB,
-        table: &TableDB,
-    ) -> impl Future<Output = Result<TableDataVersionDB, TdError>>;
-
-    fn seed_transaction(
-        self,
-        execution: &ExecutionDB,
-        transaction_key: &TransactionKey,
-    ) -> impl Future<Output = Result<TransactionDB, TdError>>;
-
-    fn seed_user(
-        self,
-        name: &UserName,
-        enabled: &UserEnabled,
-    ) -> impl Future<Output = Result<UserDB, TdError>>;
-
-    fn seed_user_role(
-        self,
-        user: &UserId,
-        role: &RoleId,
-    ) -> impl Future<Output = Result<UserRoleDB, TdError>>;
-
-    fn seed_worker(
-        self,
-        collection: &CollectionDB,
-        function: &FunctionDB,
-        worker_type: &WorkerType,
-        worker_status: &WorkerStatus,
-        message_status: &WorkerMessageStatus,
-    ) -> impl Future<Output = Result<WorkerDB, TdError>>;
-
-    fn seed_function_runner_worker(
-        self,
-        execution: &ExecutionDB,
-        transaction: &TransactionDB,
-        function_run: &FunctionRunDB,
-        status: &WorkerMessageStatus,
-    ) -> impl Future<Output = Result<WorkerDB, TdError>>;
+query_handle! {
+    /// Entry trait providing [`seed`](SeedEntry::seed) on every
+    /// [`QueryExecutor`](crate::QueryExecutor). Returns a [`Seed`] handle.
+    pub trait SeedEntry {
+        fn seed(self) -> Seed<Self> {
+            Seed { executor: self }
+        }
+    }
 }
 
-impl<E> SeedQueries for E
+pub struct Seed<E> {
+    pub(crate) executor: E,
+}
+
+impl<E> Seed<E>
 where
-    E: SeaExecutor + Send + Copy,
+    E: QueryExecutor + Copy,
 {
-    fn seed_collection(
+    pub async fn collection(
         self,
         collection_name: &CollectionName,
         created_by: &UserId,
-    ) -> impl Future<Output = Result<CollectionDB, TdError>> {
-        seed_collection(self, collection_name, created_by)
+    ) -> Result<CollectionDB, TdError> {
+        seed_collection(self.executor, collection_name, created_by).await
     }
 
-    fn seed_execution(
+    pub async fn execution(self, function_version: &FunctionDB) -> Result<ExecutionDB, TdError> {
+        seed_execution(self.executor, function_version).await
+    }
+
+    pub async fn cron_execution(
         self,
         function_version: &FunctionDB,
-    ) -> impl Future<Output = Result<ExecutionDB, TdError>> {
-        seed_execution(self, function_version)
+    ) -> Result<ExecutionDB, TdError> {
+        seed_cron_execution(self.executor, function_version).await
     }
 
-    fn seed_cron_execution(
-        self,
-        function_version: &FunctionDB,
-    ) -> impl Future<Output = Result<ExecutionDB, TdError>> {
-        seed_cron_execution(self, function_version)
-    }
-
-    fn seed_function(
+    pub async fn function(
         self,
         collection: &CollectionDB,
         function_create: &FunctionRegister,
-    ) -> impl Future<Output = Result<FunctionDB, TdError>> {
-        seed_function(self, collection, function_create)
+    ) -> Result<FunctionDB, TdError> {
+        seed_function(self.executor, collection, function_create).await
     }
 
-    fn seed_function_requirement(
+    #[allow(clippy::too_many_arguments)]
+    pub async fn logical_input(
         self,
         collection: &CollectionDB,
         execution: &ExecutionDB,
         transaction: &TransactionDB,
-        function_run: &FunctionRunDB,
+        physical_function_run: &PhysicalFunctionRunDB,
         requirement_table: &TableDB,
-        requirement_function_run: Option<&FunctionRunDB>,
-        requirement_table_data_version: Option<&TableDataVersionDB>,
+        requirement_function_run: Option<&PhysicalFunctionRunDB>,
+        requirement_table_data_version: Option<&PhysicalTableDataVersionDB>,
         requirement_dependency_pos: Option<&DependencyPos>,
         requirement_version_pos: &VersionPos,
-    ) -> impl Future<Output = Result<FunctionRequirementDB, TdError>> {
-        seed_function_requirement(
-            self,
+    ) -> Result<LogicalFunctionRunInputDB, TdError> {
+        seed_logical_input(
+            self.executor,
             collection,
             execution,
             transaction,
-            function_run,
+            physical_function_run,
             requirement_table,
             requirement_function_run,
             requirement_table_data_version,
             requirement_dependency_pos,
             requirement_version_pos,
         )
+        .await
     }
 
-    fn seed_function_run(
+    pub async fn physical_function_run(
         self,
         collection: &CollectionDB,
         function_version: &FunctionDB,
         execution: &ExecutionDB,
         transaction: &TransactionDB,
         status: &FunctionRunStatus,
-    ) -> impl Future<Output = Result<FunctionRunDB, TdError>> {
-        seed_function_run(
-            self,
+    ) -> Result<PhysicalFunctionRunDB, TdError> {
+        seed_physical_function_run(
+            self.executor,
             collection,
             function_version,
             execution,
             transaction,
             status,
         )
+        .await
     }
 
-    fn seed_inter_collection_permission(
+    pub async fn inter_collection_permission(
         self,
         from_collection: &CollectionId,
         to_collection: &ToCollectionId,
-    ) -> impl Future<Output = Result<InterCollectionPermissionDB, TdError>> {
-        seed_inter_collection_permission(self, from_collection, to_collection)
+    ) -> Result<InterCollectionPermissionDB, TdError> {
+        seed_inter_collection_permission(self.executor, from_collection, to_collection).await
     }
 
-    fn seed_permission(
+    pub async fn permission(
         self,
         permission_type: PermissionType,
         entity_name: Option<EntityName>,
         entity_id: Option<EntityId>,
         role_db: &RoleDB,
-    ) -> impl Future<Output = Result<PermissionDB, TdError>> {
-        seed_permission(self, permission_type, entity_name, entity_id, role_db)
+    ) -> Result<PermissionDB, TdError> {
+        seed_permission(
+            self.executor,
+            permission_type,
+            entity_name,
+            entity_id,
+            role_db,
+        )
+        .await
     }
 
-    fn seed_role(
-        self,
-        name: RoleName,
-        description: Description,
-    ) -> impl Future<Output = Result<RoleDB, TdError>> {
-        seed_role(self, name, description)
+    pub async fn role(self, name: RoleName, description: Description) -> Result<RoleDB, TdError> {
+        seed_role(self.executor, name, description).await
     }
 
-    fn seed_system_tables(
-        self,
-        function: &FunctionDB,
-    ) -> impl Future<Output = Result<Vec<TableDB>, TdError>> {
-        seed_system_tables(self, function)
+    pub async fn system_tables(self, function: &FunctionDB) -> Result<Vec<TableDB>, TdError> {
+        seed_system_tables(self.executor, function).await
     }
 
-    fn seed_table_data_version(
+    pub async fn physical_table_data_version(
         self,
         collection: &CollectionDB,
         execution: &ExecutionDB,
         transaction: &TransactionDB,
-        function_run: &FunctionRunDB,
+        physical_function_run: &PhysicalFunctionRunDB,
         table: &TableDB,
-    ) -> impl Future<Output = Result<TableDataVersionDB, TdError>> {
-        seed_table_data_version(
-            self,
+    ) -> Result<PhysicalTableDataVersionDB, TdError> {
+        seed_physical_table_data_version(
+            self.executor,
             collection,
             execution,
             transaction,
-            function_run,
+            physical_function_run,
             table,
         )
+        .await
     }
 
-    fn seed_table_data_version_with_data(
+    pub async fn physical_table_data_version_with_data(
         self,
         collection: &CollectionDB,
         execution: &ExecutionDB,
         transaction: &TransactionDB,
-        function_run: &FunctionRunDB,
+        physical_function_run: &PhysicalFunctionRunDB,
         table: &TableDB,
-    ) -> impl Future<Output = Result<TableDataVersionDB, TdError>> {
-        seed_table_data_version_with_data(
-            self,
+    ) -> Result<PhysicalTableDataVersionDB, TdError> {
+        seed_physical_table_data_version_with_data(
+            self.executor,
             collection,
             execution,
             transaction,
-            function_run,
+            physical_function_run,
             table,
         )
+        .await
     }
 
-    fn seed_transaction(
+    pub async fn transaction(
         self,
         execution: &ExecutionDB,
         transaction_key: &TransactionKey,
-    ) -> impl Future<Output = Result<TransactionDB, TdError>> {
-        seed_transaction(self, execution, transaction_key)
+    ) -> Result<TransactionDB, TdError> {
+        seed_transaction(self.executor, execution, transaction_key).await
     }
 
-    fn seed_user(
-        self,
-        name: &UserName,
-        enabled: &UserEnabled,
-    ) -> impl Future<Output = Result<UserDB, TdError>> {
-        seed_user(self, name, enabled)
+    pub async fn user(self, name: &UserName, enabled: &UserEnabled) -> Result<UserDB, TdError> {
+        seed_user(self.executor, name, enabled).await
     }
 
-    fn seed_user_role(
-        self,
-        user: &UserId,
-        role: &RoleId,
-    ) -> impl Future<Output = Result<UserRoleDB, TdError>> {
-        seed_user_role(self, user, role)
+    pub async fn user_role(self, user: &UserId, role: &RoleId) -> Result<UserRoleDB, TdError> {
+        seed_user_role(self.executor, user, role).await
     }
 
-    fn seed_worker(
+    pub async fn worker(
         self,
         collection: &CollectionDB,
         function: &FunctionDB,
         worker_type: &WorkerType,
         worker_status: &WorkerStatus,
         message_status: &WorkerMessageStatus,
-    ) -> impl Future<Output = Result<WorkerDB, TdError>> {
+    ) -> Result<WorkerDB, TdError> {
         seed_worker(
-            self,
+            self.executor,
             collection,
             function,
             worker_type,
             worker_status,
             message_status,
         )
+        .await
     }
 
-    fn seed_function_runner_worker(
+    pub async fn function_runner_worker(
         self,
         execution: &ExecutionDB,
         transaction: &TransactionDB,
-        function_run: &FunctionRunDB,
+        physical_function_run: &PhysicalFunctionRunDB,
         status: &WorkerMessageStatus,
-    ) -> impl Future<Output = Result<WorkerDB, TdError>> {
-        seed_function_runner_worker(self, execution, transaction, function_run, status)
+    ) -> Result<WorkerDB, TdError> {
+        seed_function_runner_worker(
+            self.executor,
+            execution,
+            transaction,
+            physical_function_run,
+            status,
+        )
+        .await
     }
 }

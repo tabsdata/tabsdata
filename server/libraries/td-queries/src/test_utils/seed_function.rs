@@ -2,11 +2,9 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::BasicQueries;
-use crate::VersionedQueries;
+use crate::{CurrentEntry, LiveEntry, QueryExecutor};
 use ta_objects::TryUpdater;
 use ta_objects::and;
-use td_database::sea_query::executor::SeaExecutor;
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
@@ -16,12 +14,12 @@ use td_objects::dxo::table::{TableDBBuilder, TableDBWithNames};
 use td_objects::dxo::trigger::TriggerDBBuilder;
 use td_objects::dxo::worker::WorkerDBBuilder;
 use td_objects::types::basic::{
-    AccessTokenId, AtTime, DataLocation, DependencyPos, DependencyStatus, RoleId, StorageVersion,
+    AccessTokenId, DataLocation, DependencyPos, DependencyStatus, RoleId, StorageVersion,
     TableFunctionParamPos, TableId, TableName, TableStatus, TriggerStatus, UserId,
 };
 
 pub(crate) async fn seed_function(
-    db: impl SeaExecutor + Send + Copy,
+    db: impl QueryExecutor + Copy,
     collection: &CollectionDB,
     function_create: &FunctionRegister,
 ) -> Result<FunctionDB, TdError> {
@@ -44,7 +42,7 @@ pub(crate) async fn seed_function(
         .build()?;
 
     // Insert function version
-    db.insert(&function_db).await?;
+    db.live().insert(&function_db).await?;
 
     // Dependencies, tables, triggers
     // Very similar to build_table_versions
@@ -61,7 +59,7 @@ pub(crate) async fn seed_function(
                 .status(TableStatus::Active)
                 .build()?;
 
-            db.insert(&table).await?;
+            db.live().insert(&table).await?;
         }
     }
 
@@ -83,10 +81,8 @@ pub(crate) async fn seed_function(
             };
 
             let table_db: TableDBWithNames = db
-                .fetch_one_at::<{ TableDBWithNames::All }, _>(
-                    and!(table_collection, table_name),
-                    &AtTime::now(),
-                )
+                .current()
+                .fetch_one::<_>(and!(table_collection, table_name))
                 .await?;
 
             let dependency = builder
@@ -100,7 +96,7 @@ pub(crate) async fn seed_function(
                 .system(false)
                 .build()?;
 
-            db.insert(&dependency).await?;
+            db.live().insert(&dependency).await?;
         }
     }
 
@@ -122,10 +118,8 @@ pub(crate) async fn seed_function(
             };
 
             let table_db: TableDBWithNames = db
-                .fetch_one_at::<{ TableDBWithNames::All }, _>(
-                    and!(table_collection, table_name),
-                    &AtTime::now(),
-                )
+                .current()
+                .fetch_one::<_>(and!(table_collection, table_name))
                 .await?;
 
             let trigger = builder
@@ -137,7 +131,7 @@ pub(crate) async fn seed_function(
                 .system(false)
                 .build()?;
 
-            db.insert(&trigger).await?;
+            db.live().insert(&trigger).await?;
         }
     }
 
@@ -152,7 +146,7 @@ pub(crate) async fn seed_function(
                 .worker_config(Some(worker_config.clone()))
                 .build()?;
 
-            db.insert(&worker).await?;
+            db.live().insert(&worker).await?;
         }
     }
 
@@ -161,8 +155,8 @@ pub(crate) async fn seed_function(
 
 #[cfg(test)]
 mod tests {
-    use crate::VersionedQueries;
-    use crate::test_utils::SeedQueries;
+    use crate::HistoricEntry;
+    use crate::test_utils::SeedEntry;
     use ta_objects::Buildable;
     use td_database::pool::TdPool;
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
@@ -173,7 +167,8 @@ mod tests {
     #[tokio::test]
     async fn test_seed_function(db: TdPool) {
         let collection = db
-            .seed_collection(
+            .seed()
+            .collection(
                 &CollectionName::try_from("collection").unwrap(),
                 &UserId::try_from(ENCODED_ID_SYSTEM).unwrap(),
             )
@@ -202,9 +197,10 @@ mod tests {
             .build()
             .unwrap();
 
-        let function = db.seed_function(&collection, &create).await.unwrap();
+        let function = db.seed().function(&collection, &create).await.unwrap();
         let found = db
-            .fetch_one_at::<{ FunctionDB::All }, FunctionDB>((), &AtTime::now())
+            .historic(&AtTime::now())
+            .fetch_one::<FunctionDB>(())
             .await
             .unwrap();
 

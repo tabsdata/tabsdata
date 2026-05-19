@@ -119,9 +119,17 @@ where
 { ... }
 ```
 
-The same pattern applies to `VersionedQueries`, `CurrentQueries`,
-`DataVersionsQueries`, `SessionQueries`, `FunctionRunQueries`, and
-`RecursiveQueries`.
+The same pattern applies to `BasicQueries`, `ChunkedQueries`, and
+`RecursiveEntry`. Per-DAO surfaces (sessions, dependencies, executions,
+physical runs, logical runs, logical pointers) are reached
+through their own entry traits — see [Per-DAO Surfaces](#per-dao-surfaces)
+below.
+
+The point-in-time / current / historic surfaces are reached via the
+`QueryEntry` trait constructors (`db.current()`, `db.versioned(&at)`,
+`db.historic(&at)`) — each returns a wrapper type whose inherent
+methods are the right operations for that read mode. See
+[Query Traits](#query-traits) below.
 
 In practice, this means you can call query methods directly on a pool reference,
 a mutable connection, or a transaction-converted connection:
@@ -266,30 +274,53 @@ Core CRUD operations for any `Dao`:
 | `fetch_all_in::<S, D>(condition)` | SELECT with compile-time state filter |
 | `fetch_latest_before::<S, D>(condition, offset)` | Nth most recent row |
 
-### CurrentQueries
+### `Current<E>` — `db.current()`
 
-Queries against the `_current` materialized view (maintained by triggers,
-contains one row per partition — the latest version):
-
-| Method | Description |
-|--------|-------------|
-| `fetch_one_current::<S, D>(condition)` | One current row |
-| `fetch_optional_current::<S, D>(condition)` | Optional current row |
-| `fetch_all_current::<S, D>(condition)` | All current rows |
-| `list_current::<S, F, D>(condition, filter, params)` | Paginated current list |
-
-### VersionedQueries
-
-Point-in-time queries using a `ROW_NUMBER() OVER (PARTITION BY ... ORDER BY ...)`
-CTE to find the latest version per partition at or before a given timestamp:
+Reads from a [`CurrentDao`]'s `_current` materialised view (maintained
+by triggers, contains one row per partition — the latest version). No
+CTE, no time travel. Reach via `db.current()`:
 
 | Method | Description |
 |--------|-------------|
-| `fetch_one_at::<S, D>(condition, on)` | Latest version at time `on` |
-| `fetch_optional_at::<S, D>(condition, on)` | Optional latest version at time `on` |
-| `fetch_all_at::<S, D>(condition, on)` | All latest versions at time `on` |
-| `list_versions_at::<S, F, D>(condition, filter, on, params)` | Paginated latest versions |
-| `list_history_at::<S, F, D>(condition, filter, on, params)` | All historical versions up to `on` |
+| `fetch_one::<S, D>(condition)` | One current row |
+| `fetch_optional::<S, D>(condition)` | Optional current row |
+| `fetch_all::<S, D>(condition)` | All current rows |
+| `fetch_all_chunked::<S, D, V>(values)` | All current rows for many values, OR'd & chunked |
+| `list::<S, F, D>(condition, filter, params)` | Paginated current list |
+
+### `Versioned<'a, T, E>` — `db.versioned(&at)`
+
+Partition-scoped point-in-time read — the **safe** versioned surface.
+Every method takes the partition and pushes it into the ranked CTE, so
+the window only ranks rows for that partition. Cost is
+O(rows-in-partition).
+
+| Method | Description |
+|--------|-------------|
+| `fetch_one::<S, D>(partition)` | Latest version in `partition` at `at` |
+| `fetch_optional::<S, D>(partition)` | Optional variant |
+| `fetch_all_chunked::<S, D>(partitions)` | One row per partition at `at`, chunked |
+| `data_version(partition).fetch_one::<S, D>(versions)` | `DataVersionDao` row resolution by [`Versions`] selector (Head/Initial/Fixed/Range/List) |
+| `data_version(partition).fetch_optional::<S, D>(versions)` | Optional variant |
+| `data_version(partition).fetch_all::<S, D>(versions)` | All matching rows |
+| `data_version(partition).fetch_relative_offset::<S, D>(version)` | The `rn` of `version` in the partition timeline |
+
+### `Historic<'a, T, E>` — `db.historic(&at)`
+
+Cross-partition ranked-CTE scan — the **slow path**, opt-in by name.
+Reach this surface only when the partition isn't known at the call
+site (e.g. by-name lookups). Cost is O(table size). Per the safety
+memo, the slow path is reachable *only* by saying `historic(at)`
+explicitly.
+
+| Method | Description |
+|--------|-------------|
+| `fetch_one::<S, D>(condition)` | Latest version matching `condition` at `at` |
+| `fetch_optional::<S, D>(condition)` | Optional variant |
+| `fetch_all::<S, D>(condition)` | All latest versions at `at` |
+| `fetch_all_chunked::<S, D, V>(values)` | Same, chunked over `values` |
+| `list_versions::<S, F, D>(condition, filter, params)` | Paginated latest versions |
+| `list_full::<S, F, D>(condition, filter, params)` | All historical versions up to `at` |
 
 The CTE strategy:
 ```sql
@@ -304,43 +335,37 @@ WITH ranked AS (
 SELECT * FROM ranked WHERE rn = 1 AND <condition> AND <state>
 ```
 
-### DataVersionsQueries
-
-Partition-scoped version queries with ranking and counting. Used for table data
-versions where you need version ranges (HEAD~N, INITIAL+N):
-
-| Method | Description |
-|--------|-------------|
-| `fetch_one_data_version_at::<S, D>(partition, on, versions)` | Version by range |
-| `fetch_optional_data_version_at::<S, D>(...)` | Optional version by range |
-| `fetch_all_data_versions_at::<S, D>(...)` | All versions by range |
-| `fetch_relative_offset_at::<S, D>(...)` | Version offset relative to time |
-
-### RecursiveQueries
+### `Recursive<O, E>` — `db.recursive(opts)`
 
 Graph traversal using `WITH RECURSIVE` CTEs. Used for upstream/downstream
-dependency resolution:
+dependency resolution. Dispatch is by the type of `opts`:
 
-| Method | Description |
-|--------|-------------|
-| `fetch_all_recursive::<D, R>(options)` | All reachable nodes |
-| `fetch_all_versions_recursive::<DS, D, RS, R>(options, on)` | Versioned recursive traversal |
+| `opts` type | Method | Description |
+|-------------|--------|-------------|
+| [`Options`] | `fetch_all::<D, R>()` | Non-versioned recursion |
+| [`VersionedOptions<'a, D, R>`] | `fetch_all::<DS, RS>()` | Versioned recursion (D, R inferred from opts) |
 
-### SessionQueries
+### Per-DAO Surfaces
 
-Session lifecycle management:
+Each per-DAO surface is reached through an entry method on the executor
+that yields a wrapper handle. The handle's inherent methods drop the
+DAO/verb prefixes — the wrapper is the namespace.
 
-| Method | Description |
-|--------|-------------|
-| `purge_sessions()` | Delete all expired sessions |
+```rust
+db.sessions().purge().await?;
+db.dependencies().active_for_function_at(&fid, &at).await?;
+db.executions().previous_for_function_at(&fid, &before).await?;
+db.executions().list_by_table_data_version(&tdv, &params).await?;
+db.logical_runs().to_commit(&execution_ids).await?;
+db.logical_runs().to_execute(&at).await?;
+db.logical_runs().for_dispatch(&fr_ids).await?;
+db.logical_pointers::<P>().bind(&id, &concrete, &at, &set_on, &by).await?;
+db.logical_pointers::<P>().concrete_at(&id, &at).await?;
+```
 
-### FunctionRunQueries
-
-Optimized function run lookups using multi-CTE to avoid full table scans:
-
-| Method | Description |
-|--------|-------------|
-| `fetch_to_commit(transaction_id)` | Find function runs ready to commit |
+Each module owns its own entry trait (`SessionsEntry`, `DependenciesEntry`,
+…). Adding a new per-DAO surface is one `dao_handle!` invocation plus the
+inherent `impl` for the wrapper.
 
 ## Transaction Handling
 
@@ -418,7 +443,7 @@ By::<CollectionId>::list::<MyFilter, MyListDto>(conn, by, filter, list_params, q
 
 // Versioned queries
 By::<FunctionId>::fetch_one_version::<ACTIVE, FunctionDB>(conn, on, by).await?;
-By::<CollectionId>::list_versions_at::<MyFilter, ACTIVE, MyDto>(conn, by, filter, on, lp, qp).await?;
+By::<CollectionId>::historic_list_versions::<MyFilter, ACTIVE, MyDto>(conn, by, filter, on, lp, qp).await?;
 
 // Current queries
 By::<CollectionId>::fetch_one_current::<ACTIVE, CollectionDB>(conn, by).await?;
@@ -453,17 +478,25 @@ pool.delete::<UserDB>(&user_id).await?;
 ### Versioned Point-in-Time Query
 
 ```rust
-use td_queries::VersionedQueries;
+use td_queries::QueryEntry;
 
-// Fetch the latest version of a function at a specific time
+// Partition-scoped (safe): function_id is the partition column.
 let function: FunctionDB = pool
-    .fetch_one_at::<{ FunctionDB::ACTIVE }, FunctionDB>(&function_id, &timestamp)
+    .versioned(&timestamp)
+    .fetch_one::<{ FunctionDB::ACTIVE }, FunctionDB>(&function_id)
     .await?;
 
-// List all latest versions at a point in time
+// Cross-partition (slow): name lookup, no partition known.
+let by_name: Vec<FunctionDB> = pool
+    .historic(&timestamp)
+    .fetch_all::<{ FunctionDB::ACTIVE }, FunctionDB>(&function_name)
+    .await?;
+
+// List all latest versions at a point in time.
 let functions: Vec<FunctionListDto> = pool
-    .list_versions_at::<{ FunctionDB::ACTIVE }, MyFilter, FunctionListDto>(
-        &collection_id, &filter, &timestamp, &query_params,
+    .historic(&timestamp)
+    .list_versions::<{ FunctionDB::ACTIVE }, MyFilter, FunctionListDto>(
+        &collection_id, &filter, &query_params,
     )
     .await?;
 ```

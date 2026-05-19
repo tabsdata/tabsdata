@@ -2,16 +2,15 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::BasicQueries;
+use crate::{LiveEntry, QueryExecutor};
 use ta_objects::{Buildable, Setter, TryUpdater};
-use td_database::sea_query::executor::SeaExecutor;
 use td_error::TdError;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::dxo::user_role::UserRoleDB;
 use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
 
 pub(crate) async fn seed_user_role(
-    db: impl SeaExecutor + Send,
+    db: impl QueryExecutor,
     user: &UserId,
     role: &RoleId,
 ) -> Result<UserRoleDB, TdError> {
@@ -29,14 +28,14 @@ pub(crate) async fn seed_user_role(
         .set(role)
         .build()?;
 
-    db.insert(&user_role_db).await?;
+    db.live().insert(&user_role_db).await?;
     Ok(user_role_db)
 }
 
 #[cfg(test)]
 pub mod tests {
-    use crate::BasicQueries;
-    use crate::test_utils::SeedQueries;
+    use crate::LiveEntry;
+    use crate::test_utils::SeedEntry;
     use td_database::pool::TdPool;
     use td_objects::dxo::user_role::UserRoleDB;
     use td_objects::types::basic::{Description, RoleName, UserEnabled, UserName};
@@ -45,23 +44,25 @@ pub mod tests {
     #[tokio::test]
     async fn test_seed_user_role(db: TdPool) {
         let user = db
-            .seed_user(
+            .seed()
+            .user(
                 &UserName::try_from("joaquin").unwrap(),
                 &UserEnabled::from(false),
             )
             .await
             .unwrap();
         let role = db
-            .seed_role(
+            .seed()
+            .role(
                 RoleName::try_from("king").unwrap(),
                 Description::try_from("super user").unwrap(),
             )
             .await
             .unwrap();
 
-        let user_role = db.seed_user_role(&user.id, &role.id).await.unwrap();
+        let user_role = db.seed().user_role(&user.id, &role.id).await.unwrap();
 
-        let found = db.fetch_one::<UserRoleDB>(&role.id).await.unwrap();
+        let found = db.live().fetch_one::<UserRoleDB>(&role.id).await.unwrap();
         assert_eq!(user_role.id, found.id);
         assert_eq!(user_role.user_id, found.user_id);
         assert_eq!(user_role.role_id, found.role_id);

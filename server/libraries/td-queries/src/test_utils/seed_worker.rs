@@ -2,20 +2,19 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::BasicQueries;
+use crate::{LiveEntry, QueryExecutor};
 use ta_objects::Buildable;
-use td_database::sea_query::executor::SeaExecutor;
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::function::FunctionDB;
-use td_objects::dxo::function_run::FunctionRunDB;
+use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::transaction::TransactionDB;
 use td_objects::dxo::worker::WorkerDB;
 use td_objects::types::basic::{WorkerMessageStatus, WorkerStatus, WorkerType};
 
 pub(crate) async fn seed_worker(
-    db: impl SeaExecutor + Send,
+    db: impl QueryExecutor,
     collection: &CollectionDB,
     function: &FunctionDB,
     worker_type: &WorkerType,
@@ -37,40 +36,40 @@ pub(crate) async fn seed_worker(
         .worker_config(None)
         .build()?;
 
-    db.insert::<WorkerDB>(&worker_db).await?;
+    db.live().insert::<WorkerDB>(&worker_db).await?;
     Ok(worker_db)
 }
 
 pub(crate) async fn seed_function_runner_worker(
-    db: impl SeaExecutor + Send,
+    db: impl QueryExecutor,
     execution: &ExecutionDB,
     transaction: &TransactionDB,
-    function_run: &FunctionRunDB,
+    physical_function_run: &PhysicalFunctionRunDB,
     status: &WorkerMessageStatus,
 ) -> Result<WorkerDB, TdError> {
     let worker_db = WorkerDB::builder()
         .collection_id(execution.collection_id)
         .execution_id(Some(execution.id.clone()))
         .transaction_id(Some(transaction.id.clone()))
-        .function_run_id(function_run.id)
-        .function_version_id(&function_run.function_version_id)
+        .function_run_id(Some(physical_function_run.id.clone()))
+        .function_version_id(&physical_function_run.function_version_id)
         .message_status(status)
         .started_on(None)
         .ended_on(None)
-        .status(WorkerStatus::RunRequested)
+        .status(WorkerStatus::Requested)
         .worker_enabled(true)
         .worker_type(WorkerType::FunctionRunner)
         .worker_config(None)
         .build()?;
 
-    db.insert::<WorkerDB>(&worker_db).await?;
+    db.live().insert::<WorkerDB>(&worker_db).await?;
     Ok(worker_db)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::SeedQueries;
+    use crate::test_utils::SeedEntry;
     use td_database::pool::TdPool;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
@@ -81,7 +80,8 @@ mod tests {
     #[tokio::test]
     async fn test_seed_worker(db: TdPool) {
         let collection = db
-            .seed_collection(
+            .seed()
+            .collection(
                 &CollectionName::try_from("collection").unwrap(),
                 &UserId::admin(),
             )
@@ -110,18 +110,20 @@ mod tests {
             .build()
             .unwrap();
 
-        let function_version = db.seed_function(&collection, &create).await.unwrap();
+        let function_version = db.seed().function(&collection, &create).await.unwrap();
 
-        let execution = db.seed_execution(&function_version).await.unwrap();
+        let execution = db.seed().execution(&function_version).await.unwrap();
 
         let transaction_key = TransactionKey::try_from("ANY").unwrap();
         let transaction = db
-            .seed_transaction(&execution, &transaction_key)
+            .seed()
+            .transaction(&execution, &transaction_key)
             .await
             .unwrap();
 
-        let function_run = db
-            .seed_function_run(
+        let physical_function_run = db
+            .seed()
+            .physical_function_run(
                 &collection,
                 &function_version,
                 &execution,
@@ -132,10 +134,11 @@ mod tests {
             .unwrap();
 
         let worker = db
-            .seed_function_runner_worker(
+            .seed()
+            .function_runner_worker(
                 &execution,
                 &transaction,
-                &function_run,
+                &physical_function_run,
                 &WorkerMessageStatus::Locked,
             )
             .await
@@ -144,8 +147,11 @@ mod tests {
         assert_eq!(worker.collection_id, collection.id);
         assert_eq!(worker.execution_id, Some(execution.id));
         assert_eq!(worker.transaction_id, Some(transaction.id));
-        assert_eq!(worker.function_run_id, Some(function_run.id));
-        assert_eq!(worker.function_version_id, function_run.function_version_id);
+        assert_eq!(worker.function_run_id, Some(physical_function_run.id));
+        assert_eq!(
+            worker.function_version_id,
+            physical_function_run.function_version_id
+        );
         assert_eq!(worker.message_status, WorkerMessageStatus::Locked);
     }
 }

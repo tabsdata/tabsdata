@@ -2,16 +2,15 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::BasicQueries;
+use crate::{LiveEntry, QueryExecutor};
 use ta_objects::{Buildable, TryUpdater};
-use td_database::sea_query::executor::SeaExecutor;
 use td_error::TdError;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::dxo::inter_collection_permission::InterCollectionPermissionDB;
 use td_objects::types::basic::{AccessTokenId, CollectionId, RoleId, ToCollectionId, UserId};
 
 pub(crate) async fn seed_inter_collection_permission(
-    db: impl SeaExecutor + Send,
+    db: impl QueryExecutor,
     from_collection: &CollectionId,
     to_collection: &ToCollectionId,
 ) -> Result<InterCollectionPermissionDB, TdError> {
@@ -29,14 +28,14 @@ pub(crate) async fn seed_inter_collection_permission(
         .to_collection_id(to_collection)
         .build()?;
 
-    db.insert(&permission_db).await?;
+    db.live().insert(&permission_db).await?;
     Ok(permission_db)
 }
 
 #[cfg(test)]
 pub mod tests {
-    use crate::BasicQueries;
-    use crate::test_utils::SeedQueries;
+    use crate::LiveEntry;
+    use crate::test_utils::SeedEntry;
     use td_database::pool::TdPool;
     use td_objects::dxo::inter_collection_permission::InterCollectionPermissionDB;
     use td_objects::types::basic::{CollectionName, ToCollectionId, UserId};
@@ -45,19 +44,23 @@ pub mod tests {
     #[tokio::test]
     async fn test_seed_inter_collection_permission(db: TdPool) {
         let c0 = db
-            .seed_collection(&CollectionName::try_from("c0").unwrap(), &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("c0").unwrap(), &UserId::admin())
             .await
             .unwrap();
         let c1 = db
-            .seed_collection(&CollectionName::try_from("c1").unwrap(), &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("c1").unwrap(), &UserId::admin())
             .await
             .unwrap();
         let permission = db
-            .seed_inter_collection_permission(&c0.id, &ToCollectionId::try_from(&c1.id).unwrap())
+            .seed()
+            .inter_collection_permission(&c0.id, &ToCollectionId::try_from(&c1.id).unwrap())
             .await
             .unwrap();
 
         let found = db
+            .live()
             .fetch_all::<InterCollectionPermissionDB>(&permission.id)
             .await
             .unwrap();

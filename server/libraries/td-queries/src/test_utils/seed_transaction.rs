@@ -2,16 +2,15 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::BasicQueries;
+use crate::{LiveEntry, QueryExecutor};
 use ta_objects::Buildable;
-use td_database::sea_query::executor::SeaExecutor;
 use td_error::TdError;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::transaction::TransactionDB;
 use td_objects::types::basic::{TransactionId, TransactionKey};
 
 pub(crate) async fn seed_transaction(
-    db: impl SeaExecutor + Send,
+    db: impl QueryExecutor,
     execution: &ExecutionDB,
     transaction_key: &TransactionKey,
 ) -> Result<TransactionDB, TdError> {
@@ -25,13 +24,13 @@ pub(crate) async fn seed_transaction(
         .triggered_by_id(execution.triggered_by_id)
         .build()?;
 
-    db.insert(&transaction_db).await?;
+    db.live().insert(&transaction_db).await?;
     Ok(transaction_db)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::test_utils::SeedQueries;
+    use crate::test_utils::SeedEntry;
     use ta_objects::Buildable;
     use td_database::pool::TdPool;
     use td_objects::dxo::function::FunctionRegister;
@@ -42,7 +41,8 @@ mod tests {
     #[tokio::test]
     async fn test_seed_transaction(db: TdPool) {
         let collection = db
-            .seed_collection(
+            .seed()
+            .collection(
                 &CollectionName::try_from("collection").unwrap(),
                 &UserId::try_from(ENCODED_ID_SYSTEM).unwrap(),
             )
@@ -71,13 +71,14 @@ mod tests {
             .build()
             .unwrap();
 
-        let function_version = db.seed_function(&collection, &create).await.unwrap();
+        let function_version = db.seed().function(&collection, &create).await.unwrap();
 
-        let execution = db.seed_execution(&function_version).await.unwrap();
+        let execution = db.seed().execution(&function_version).await.unwrap();
 
         let transaction_key = TransactionKey::try_from("ANY").unwrap();
         let transaction = db
-            .seed_transaction(&execution, &transaction_key)
+            .seed()
+            .transaction(&execution, &transaction_key)
             .await
             .unwrap();
 
