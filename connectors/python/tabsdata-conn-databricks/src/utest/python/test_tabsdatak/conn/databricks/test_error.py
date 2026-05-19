@@ -27,6 +27,8 @@ def test_conn_exception_is_a_tabsdata_exception():
 
 
 def test_every_code_uses_known_exception():
+    """Defence: every Databricks error code's declared exception
+    must be one of the package's hierarchy roots."""
     allowed = (
         ConnInitException,
         DatabricksValidateException,

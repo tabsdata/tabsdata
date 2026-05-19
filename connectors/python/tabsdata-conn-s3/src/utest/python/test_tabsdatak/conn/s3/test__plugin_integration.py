@@ -1,3 +1,15 @@
+"""End-to-end S3 integration tests: invoke ``td_transporter`` against
+a real S3 bucket. Skipped unless ALL of these are set:
+
+  - ``TD_TRANSPORTER_BIN``    -- path to a built transporter binary
+  - ``S30__S3_URI``           -- ``s3://bucket[/path/prefix]``
+  - ``S30__S3_REGION``        -- bucket region (e.g. ``us-east-1``)
+  - ``S30__S3_ACCESS_KEY``    -- access key
+  - ``S30__S3_SECRET_KEY``    -- secret key
+
+The URI's path component is used as ``S3Conn.base_path`` so each run
+writes under ``<bucket>/<uri_path>/td-integ/<uuid>/``.
+"""
 
 from __future__ import annotations
 
@@ -74,6 +86,7 @@ class _DestCtx(_SrcCtx):
 
 
 def _parse_uri(uri: str) -> tuple[str, str]:
+    """Split an ``s3://bucket/path`` URI into ``(bucket, path)``."""
     parsed = urlparse(uri)
     bucket = parsed.netloc
     path = parsed.path.lstrip("/")

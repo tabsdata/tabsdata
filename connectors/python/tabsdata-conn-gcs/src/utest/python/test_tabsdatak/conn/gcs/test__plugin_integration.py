@@ -1,3 +1,15 @@
+"""End-to-end GCS integration tests: invoke ``td_transporter`` against
+a real GCS bucket. Skipped unless ALL of these are set:
+
+  - ``TD_TRANSPORTER_BIN``               -- path to a built transporter
+  - ``GCP0__GCP_STORAGE_URI``            -- ``gs://bucket[/path/prefix]``
+  - ``GCP0__GCP_SERVICE_ACCOUNT_KEY``    -- JSON-encoded service-account
+                                            credentials (the whole blob,
+                                            not a file path)
+
+The URI's path component is used as ``GCSConn.base_path`` so each run
+writes under ``<bucket>/<uri_path>/td-integ/<uuid>/``.
+"""
 
 from __future__ import annotations
 
@@ -72,6 +84,7 @@ class _DestCtx(_SrcCtx):
 
 
 def _parse_uri(uri: str) -> tuple[str, str]:
+    """Split a ``gs://bucket/path`` URI into ``(bucket, path)``."""
     parsed = urlparse(uri)
     bucket = parsed.netloc
     path = parsed.path.lstrip("/")

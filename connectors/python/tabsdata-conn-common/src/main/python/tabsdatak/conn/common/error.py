@@ -8,11 +8,16 @@ from tabsdatak.error import (
 
 
 class ConnException(TabsdataException):
+    """Top-level base exception for the connector hierarchy. Each
+    connector package defines its own subclasses for the categories
+    it needs (init / validate / runtime)."""
 
     pass
 
 
 class ConnInitException(ConnException):
+    """An object in the connector layer could not be created because
+    of attribute type / value issues at construction time."""
 
     pass
 

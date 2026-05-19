@@ -70,6 +70,17 @@ def _resolve_dest_cfg(dest_cfg: DestCfgSpec | None) -> _WriterCfg:
 
 
 class DruidDestPlugin(DestPlugin[DruidDest]):
+    """Apache Druid destination plugin.
+
+    Druid ingestion is asynchronous: parquet files first land in a
+    cloud staging area (S3 / GCS / Azure) and then the plugin POSTs a
+    native batch ``index_parallel`` task to the Overlord. The plugin
+    polls the Overlord until the task terminates and returns ``None``
+    on success or raises ``DRUID_*`` on any failure.
+
+    One ingestion task is submitted per target datasource; per-task
+    parallelism is governed by ``DruidDest.max_concurrent_subtasks``.
+    """
 
     def write_out(
         self,

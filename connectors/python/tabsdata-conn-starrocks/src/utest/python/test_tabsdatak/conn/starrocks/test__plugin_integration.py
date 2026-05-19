@@ -1,3 +1,18 @@
+"""End-to-end StarRocks plugin tests against a real StarRocks instance.
+
+The ``fresh_starrocks`` fixture (defined in ``conftest.py``) provisions a
+clean StarRocks backend per test -- either a per-session docker container
+(via the ``starrocks/allin1-ubuntu`` image) or an externally-configured
+server when the relevant environment knobs are set. These tests exercise
+the actual ``StarRocksDestPlugin.write_out`` round-trip end-to-end;
+error-path coverage (fault-injection via mocks) lives in
+``test__plugin.py``.
+
+Because StarRocks bulk loading routes through cloud staging, these tests
+*also* require a usable :class:`S3Location` staging area. The fixture
+takes those settings from ``STARROCKS0__S3_STAGING_*`` env vars; when
+they aren't set the integration tests are skipped.
+"""
 
 from __future__ import annotations
 
@@ -49,6 +64,8 @@ def _dest_ctx(work: Path) -> _DestCtx:
 
 
 def _conn_from(cfg, staging) -> StarRocksConn:
+    """Build a StarRocksConn pointing at the ``fresh_starrocks`` backend
+    and the configured S3 staging area."""
     return StarRocksConn(
         host=cfg.host,
         port=cfg.port,

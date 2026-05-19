@@ -77,6 +77,12 @@ _SFR_TYPE_TO_PANDAS_TYPE = {
 
 
 def login(conn: SalesforceConn, api_version: str | None = None) -> Any:
+    """Create a ``simple_salesforce.Salesforce`` client from the conn's
+    credentials. Wraps simple-salesforce auth errors as
+    ``SalesforceErrorCode.SALESFORCE_10``.
+
+    ``api_version`` overrides the default API version.
+    """
     from simple_salesforce import Salesforce, api as sf_api
 
     credentials = conn.credentials
@@ -102,6 +108,8 @@ def login(conn: SalesforceConn, api_version: str | None = None) -> Any:
 
 
 def _resolve(value: Any) -> str | None:
+    """Resolve a ``Secret`` / ``Env`` reference to its concrete value, or
+    return the input unchanged when it is already a plain string."""
     if value is None:
         return None
     if hasattr(value, "value") and callable(value.value):
@@ -117,6 +125,15 @@ def read_soql_src(
     src: SalesforceSrc,
     work_dir: Path,
 ) -> list[list[Path]]:
+    """Execute every SOQL query in ``src`` against the open Salesforce
+    client ``sf`` and return one ``TableMode.SINGLE``-shaped output per
+    query (each inner list has exactly one parquet file).
+
+    Updates ``src.initial_last_modified`` is *not* attempted -- offset
+    state lives in the framework's initial-values surface, which the
+    connector layer doesn't touch directly yet. The token replacement
+    only uses the value the framework hands us.
+    """
     initial_last_modified = src.initial_last_modified
     # Refuse to run a query that mentions $lastModified unless the
     # caller supplied an initial value -- the legacy contract.
@@ -218,6 +235,8 @@ def read_report_src(
     src: SalesforceReportSrc,
     work_dir: Path,
 ) -> list[list[Path]]:
+    """Run every Salesforce report in ``src`` and return per-report
+    parquet outputs."""
     outputs: list[list[Path]] = []
     for i, report in enumerate(src.reports):
         outputs.append(

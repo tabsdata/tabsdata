@@ -1,3 +1,16 @@
+"""Salesforce connector — public API.
+
+* :class:`SalesforceConn` -- per-org connection (token credentials,
+  optional instance URL, optional ``objects`` / ``category`` API
+  hints, optional ``entity_whitelist``).
+* :class:`SalesforceSrc` -- SOQL source (1 SOQL query per call).
+* :class:`SalesforceReportSrc` -- Analytics Report source
+  (Tabular reports only).
+
+No ``SalesforceDest`` today. Uses ``simple-salesforce`` (REST +
+Bulk API 2.0).
+"""
+
 from __future__ import annotations
 
 from abc import ABC
@@ -100,6 +113,19 @@ SrcCfgSpec: TypeAlias = Annotated[
 
 @_api.dataclass(SalesforceErrorCode.SALESFORCE_2, kw_only=True)
 class SalesforceConn(Conn):
+    """Salesforce org connection.
+
+    :param credentials: :class:`SalesforceTokenCredentials`
+        (username + password + security token).
+    :param instance_url: Optional explicit instance URL.
+    :param category: Optional category hint for entity
+        discovery; mutually exclusive with ``objects``.
+    :param objects: Optional explicit list of Salesforce object
+        API names. Mutually exclusive with ``category``.
+    :param entity_whitelist: Optional regex-based filter.
+    :param conn_cfg: Optional driver-side config dict.
+    """
+
     credentials: CredentialsSpec
     instance_url: InstanceUrlSpec | None = None
     category: str | None = None
@@ -116,6 +142,22 @@ ConnSpec: TypeAlias = Union[NamedConn, SalesforceConn]
 
 @_api.dataclass(SalesforceErrorCode.SALESFORCE_4, kw_only=True)
 class SalesforceSrc(Src):
+    """Salesforce SOQL source — exactly one SOQL query.
+
+    :param conn: :class:`SalesforceConn` (or :class:`NamedConn`).
+    :param queries: SOQL query list (today exactly one; the
+        list shape leaves room for future multi-query support).
+    :param include_deleted: When ``True``, scan deleted rows
+        (queryAll).
+    :param initial_last_modified: Optional cutoff; substituted
+        for ``$lastModified`` tokens in the SOQL string.
+    :param api_version: Optional API version override
+        (e.g. ``"60.0"``).
+    :param entity_whitelist: Optional regex-based filter.
+    :param src_cfg: Optional ``Mapping`` over
+        ``salesforce.logging_level``.
+    """
+
     conn: ConnSpec
     queries: QueriesSpec
     include_deleted: bool = False
@@ -129,6 +171,28 @@ class SalesforceSrc(Src):
 
 @_api.dataclass(SalesforceErrorCode.SALESFORCE_5, kw_only=True)
 class SalesforceReportSrc(Src):
+    """Salesforce report source — Tabular reports only.
+
+    :param conn: :class:`SalesforceConn` (or :class:`NamedConn`).
+    :param reports: Report ids or names; one slot per entry.
+    :param column_name_strategy: ``"columnName"`` (default,
+        API names) or ``"label"`` (display names).
+    :param find_report_by: ``"id"`` or ``"name"`` -- disambiguates
+        when the same string resolves to both.
+    :param filter: Optional list of
+        ``(column, operator, value)`` triples applied to the
+        report on the server before download.
+    :param filter_logic: Optional boolean expression over the
+        ``filter`` entries (e.g. ``"(1 AND 2) OR 3"``).
+    :param last_modified_column: Optional column for incremental
+        last-modified filtering. Requires ``initial_last_modified``.
+    :param initial_last_modified: Cutoff datetime. Requires
+        ``last_modified_column``.
+    :param entity_whitelist: Optional regex-based filter.
+    :param src_cfg: Optional ``Mapping`` over
+        ``salesforce.logging_level``.
+    """
+
     conn: ConnSpec
     reports: ReportsSpec
     column_name_strategy: Literal["columnName", "label"] = "columnName"

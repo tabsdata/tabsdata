@@ -1,3 +1,32 @@
+"""End-to-end Druid integration tests.
+
+The Druid pipeline is two-stage:
+
+  1. Upload parquet to a cloud staging area (S3 / GCS / Azure) using the
+     ``td_transporter`` binary; the staging credentials come from the
+     ``DruidConn.staging`` CloudLocation.
+  2. Submit a native batch ``index_parallel`` ingestion task to the
+     Druid Overlord and poll until it terminates.
+
+The Druid cluster is auto-started by the ``druid_config`` session
+fixture (see :mod:`conftest`) -- docker compose brings up the full
+micro-quickstart stack so no DRUID__* env vars are required. The
+S3 staging side still pulls from the shared ``S30__*`` bundle so the
+test continues to use the team's existing CI bucket.
+
+External prerequisites still gated by env vars:
+
+  - ``TD_TRANSPORTER_BIN`` -- path to a built ``td_transporter`` binary
+  - ``S30__S3_URI``        -- ``s3://bucket[/path/prefix]`` for staging
+  - ``S30__S3_REGION``     -- AWS region for staging bucket
+  - ``S30__S3_ACCESS_KEY`` / ``S30__S3_SECRET_KEY``
+
+The staging URI's bucket / path are used as the
+``DruidConn.staging`` base; each test invocation writes under
+``<bucket>/<base_path>/td-druid/<trx_id>/<rand>/``. The Druid
+datasource each run targets is suffixed with a random id so parallel
+test runs never overwrite each other.
+"""
 
 from __future__ import annotations
 
@@ -92,6 +121,7 @@ class _DestCtx(DestContext):
 
 
 def _parse_s3_uri(uri: str) -> tuple[str, str]:
+    """Split ``s3://bucket[/path]`` into ``(bucket, path)``."""
     parsed = urlparse(uri)
     return parsed.netloc, parsed.path.lstrip("/")
 
@@ -122,6 +152,9 @@ def staging() -> S3Location:
 
 @pytest.fixture
 def fresh_druid(overlord_url, staging) -> DruidConn:
+    """Build a fresh ``DruidConn`` whose staging area lives at
+    ``s3://$S30__S3_URI`` and whose Overlord points at the auto-started
+    docker compose stack."""
     return DruidConn(
         overlord_url=overlord_url,
         staging=staging,
@@ -150,6 +183,7 @@ def _make_parquet(path: Path, rows: list[dict]) -> Path:
 
 
 def _druid_sql(broker_url: str, sql: str) -> list[dict]:
+    """Run a SQL query against the Druid Broker."""
     import requests
 
     resp = requests.post(

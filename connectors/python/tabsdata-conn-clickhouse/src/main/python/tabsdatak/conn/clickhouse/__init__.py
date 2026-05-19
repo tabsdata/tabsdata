@@ -1,3 +1,17 @@
+"""ClickHouse connector — public API.
+
+* :class:`ClickHouseConn` -- per-cluster ClickHouse connection
+  (host, port, credentials, database, cloud staging area).
+* :class:`ClickHouseDest` -- destination: list of table FQNs;
+  one parquet slot per table. Writes go through a cloud-staged
+  bulk loader (S3 / GCS / Azure) rather than row-by-row inserts.
+
+``port`` and ``secure`` accept ``int|bool|Env|Secret``;
+``ClickHouseConn._port()`` / ``._secure()`` resolve to runtime
+``int`` / ``bool`` for the plugin. Iceberg-style schema
+evolution is supported on the dest.
+"""
+
 from __future__ import annotations
 
 from abc import ABC
@@ -182,6 +196,21 @@ class GCSLocation(CloudLocation):
 
 @_api.dataclass(ClickHouseErrorCode.CLICKHOUSE_1, kw_only=True)
 class ClickHouseConn(Conn):
+    """ClickHouse connection.
+
+    :param host: ClickHouse host.
+    :param port: HTTP port; default 8123. Accepts ``int``,
+        ``Env``, or ``Secret`` -- use ``_port()`` to read as int.
+    :param credentials: :class:`UserPassword`.
+    :param staging: :class:`CloudLocation` (S3 / AzBlob / GCS).
+    :param database: Default database; default ``"default"``.
+    :param secure: ``True`` for HTTPS, ``False`` for HTTP.
+        Accepts ``bool``, ``Env``, or ``Secret``; use
+        ``_secure()`` to read as bool.
+    :param entity_whitelist: Optional regex-based table filter.
+    :param conn_cfg: Optional driver-side config dict.
+    """
+
     host: HostSpec
     port: PortSpec = 8123
     credentials: CredentialsSpec
@@ -210,6 +239,18 @@ ConnSpec: TypeAlias = Union[NamedConn, ClickHouseConn]
 
 @_api.dataclass(ClickHouseErrorCode.CLICKHOUSE_2, kw_only=True)
 class ClickHouseDest(Dest):
+    """ClickHouse destination — one parquet slot per table.
+
+    :param conn: :class:`ClickHouseConn` (or :class:`NamedConn`).
+    :param tables: FQN table names (``[<db>.]<table>``); one
+        parquet slot per entry.
+    :param if_table_exists: ``"append"`` (default) or
+        ``"replace"``.
+    :param schema_evolution: ``"strict"`` (default) or
+        ``"iceberg"`` (apply Iceberg-style schema deltas).
+    :param dest_cfg: Optional dest cfg dict.
+    """
+
     conn: ConnSpec
     tables: ClickHouseTableNamesSpec
     if_table_exists: IfTableExistsSpec = "append"

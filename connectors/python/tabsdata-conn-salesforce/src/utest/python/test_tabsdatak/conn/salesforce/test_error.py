@@ -37,6 +37,8 @@ def test_conn_exception_is_a_tabsdata_exception():
 
 
 def test_every_code_uses_known_exception():
+    """Defence: each code's declared exception must be one of the
+    package's hierarchy roots."""
     allowed = (
         ConnInitException,
         SalesforceValidateException,
@@ -47,6 +49,7 @@ def test_every_code_uses_known_exception():
 
 
 def test_codes_are_consecutively_numbered():
+    """Defence: each code must end with the (1-based) integer index."""
     members = list(SalesforceErrorCode)
     for idx, member in enumerate(members, start=1):
         assert member.name == f"SALESFORCE_{idx}", (

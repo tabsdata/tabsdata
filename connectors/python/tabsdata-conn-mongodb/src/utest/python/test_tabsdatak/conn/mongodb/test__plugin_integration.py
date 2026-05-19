@@ -1,3 +1,13 @@
+"""End-to-end MongoDB integration tests: invoke the destination plugin
+against a real MongoDB server.
+
+The ``mongodb_config`` fixture (in :mod:`conftest`) auto-starts a
+``mongo`` docker container on a random host port and exposes its
+connection details to the tests below -- no environment-variable setup
+required when docker is available. Each test scopes its writes to a
+fresh, uuid-tagged collection name under the container's
+``td_integ`` database so concurrent runs don't trample each other.
+"""
 
 from __future__ import annotations
 
@@ -66,6 +76,8 @@ def database(mongodb_config) -> str:
 
 @pytest.fixture
 def collection_name() -> str:
+    """Per-test, unique collection name (kept short -- ``uuid4().hex``
+    is 32 chars, well under MongoDB's 235-byte cap)."""
     return f"td_integ_{uuid.uuid4().hex}"
 
 
@@ -83,6 +95,7 @@ def work_dir(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def cleanup(conn: MongoDBConn, database: str, collection_name: str):
+    """Drop the collection after the test."""
     yield
     import pymongo
 

@@ -283,6 +283,13 @@ def _wait_for_db(host: str, port: int, user: str, password: str, db: str) -> Non
 
 
 def _wait_for_backend_alive(engine) -> None:
+    """Poll ``SHOW BACKENDS`` until at least one BE reports Alive=true.
+
+    The allin1-ubuntu image starts the FE before its bundled BE has
+    finished registering; queries that need storage capacity (CREATE
+    TABLE, INSERT) fail with ``Cluster has no available capacity``
+    until the BE is in the cluster.
+    """
     from sqlalchemy import text
 
     deadline = time.monotonic() + _BE_READY_TIMEOUT_S
@@ -312,6 +319,10 @@ _BE_READY_TIMEOUT_S = 180
 
 
 def _seed_schema(cfg: DBConfig) -> None:
+    """Drop + recreate the canonical ``users`` / ``orders`` tables that
+    the integration tests load into. We do *not* seed rows -- the
+    plugin tests insert from parquet via FILES() and verify the result.
+    """
     from sqlalchemy import create_engine, text
 
     engine = create_engine(cfg.uri_with_credentials)
@@ -521,6 +532,11 @@ _S3_BASE_PATH_ENV = "STARROCKS0__S3_STAGING_BASE_PATH"
 
 
 def _split_s3_uri(uri: str) -> tuple[str, str | None]:
+    """Split ``s3://<bucket>[/<path>]`` into ``(bucket, base_path)``.
+
+    Returns ``base_path=None`` when the URI carries only a bucket so
+    callers can apply their own default.
+    """
     prefix = "s3://"
     if not uri.startswith(prefix):
         raise ValueError(

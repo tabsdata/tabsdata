@@ -107,6 +107,7 @@ def test_resolve_dest_tokens_passes_through():
 
 
 class _BogusFormat:
+    """Stand-in for a future enum member none of the helpers handle."""
     name = "BOGUS"
     value = "BOGUS"
 
@@ -166,6 +167,9 @@ _STUB_ERRORS = _plugin.FilePluginErrors(
 
 
 class _StubSrc:
+    """Duck-typed stand-in for any connector's Src dataclass --
+    ReaderConf.from_src only reads ``.conn``, ``.paths``, ``.format``,
+    ``.format_cfg``, ``.initial_last_modified`` and ``.file_info``."""
 
     def __init__(self):
         self.conn = object()
@@ -197,6 +201,7 @@ def test_reader_conf_from_src_handles_none_format_cfg():
 
 
 class _StubDest:
+    """Mirror of ``_StubSrc`` for the dest side."""
 
     def __init__(self):
         self.conn = object()
@@ -382,6 +387,8 @@ def test_run_read_in_run_env_failure_wraps_as_cred_resolution(monkeypatch, tmp_p
 
 
 def _make_exc(exc_cls):
+    """``TransporterRunError`` takes ``(returncode, stdout, stderr)``;
+    the other two take a single message string."""
     if exc_cls is _transporter.TransporterRunError:
         return exc_cls(1, "", "boom")
     return exc_cls("boom")

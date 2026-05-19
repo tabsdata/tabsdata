@@ -27,6 +27,12 @@ from tabsdatak.conn.common.types import CfgSpec, GCPJson
 
 
 def _gcp_json_to_dict(credentials: GCPJson) -> dict[str, Any]:
+    """Resolve a ``GCPJson`` credentials field to a plain dict.
+
+    Mirrors the legacy behaviour: the service-account-key JSON travels
+    through the connector as a ``Secret`` / ``Env``-backed string, and
+    the underlying SDK takes a ``dict``.
+    """
     raw = credentials.json.value()
     return json.loads(raw)
 
@@ -36,6 +42,14 @@ def build_bigquery_client(
     project: str | None,
     connect_args: CfgSpec | None,
 ) -> Any:
+    """Build a ``google.cloud.bigquery.Client``.
+
+    ``project`` is forwarded to the SDK so queries / load jobs default
+    to it when a table FQN omits the project component. ``connect_args``
+    is the free-form ``conn_cfg``-style cfg dict and is forwarded
+    verbatim as keyword arguments to ``Client.from_service_account_info``
+    (i.e. it must be a flat ``str``-keyed mapping the SDK accepts).
+    """
     from google.cloud import bigquery
 
     info = _gcp_json_to_dict(credentials)
@@ -49,6 +63,7 @@ def build_gcs_client(
     credentials: GCPJson,
     connect_args: CfgSpec | None,
 ) -> Any:
+    """Build a ``google.cloud.storage.Client``."""
     from google.cloud import storage
 
     info = _gcp_json_to_dict(credentials)
@@ -60,6 +75,15 @@ def build_gcs_client(
 
 
 def unquote_table_fqn(table: str) -> str:
+    """Strip outer backticks from a BigQuery table FQN.
+
+    The :data:`tabsdatak.conn.bigquery._validation.BIGQUERY_TABLE_FQN_VALIDATOR`
+    requires the user-supplied value to be wrapped in outer-only
+    backticks (``\\`project.dataset.table\\```). The BigQuery SDK accepts
+    a bare ``project.dataset.table`` string in ``load_table_from_uri``
+    / ``client.query``, so we drop the wrapping quotes (and re-resolve
+    any backslash-escaped inner backticks) before forwarding.
+    """
     # noinspection PyProtectedMember
     from tabsdatak.conn.common._validation import unfqn
 
@@ -73,6 +97,14 @@ def unquote_table_fqn(table: str) -> str:
 
 @dataclass(kw_only=True)
 class BigQueryWriteCfg:
+    """Resolved configuration for ``_BigQueryDestPlugin.write_out``.
+
+    Mirrors :class:`MySQLWriteCfg`'s purpose in the SQL connectors -- a
+    plain dataclass holding the already-resolved view of the
+    ``BigQueryDest`` (and its ``BigQueryConn``) plus a couple of derived
+    fields the plugin needs to drive the staging-upload-then-load-job
+    sequence.
+    """
 
     conn: BigQueryConn
     target_tables: list[str]
@@ -107,6 +139,23 @@ def build_load_job_config(
     if_table_exists: IfTableExistsSpec,
     schema_evolution: SchemaEvolutionSpec,
 ) -> Any:
+    """Translate the dest's strategy fields into a BigQuery
+    ``LoadJobConfig`` for a parquet -> table load.
+
+    Mirrors legacy ``BigQueryDest._upload_single_uri_to_table``:
+
+    - ``if_table_exists='replace'`` -> ``WRITE_TRUNCATE``; schema is
+      replaced wholesale, so no ``schema_update_options`` are passed.
+    - ``if_table_exists='append'`` + ``schema_evolution='strict'`` ->
+      ``WRITE_APPEND`` with no schema-update options (incoming parquet
+      must match the table's current schema).
+    - ``if_table_exists='append'`` + ``schema_evolution='update'`` ->
+      ``WRITE_APPEND`` with ``ALLOW_FIELD_ADDITION`` and
+      ``ALLOW_FIELD_RELAXATION``.
+
+    ``CREATE_IF_NEEDED`` is set unconditionally so the first write to a
+    new table creates it.
+    """
     from google.cloud import bigquery
 
     if if_table_exists == "replace":

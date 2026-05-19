@@ -50,10 +50,16 @@ DUMMY_TIME_COLUMN = "__td_dummy_time"
 
 
 def _resolve(value: Any) -> str:
+    """Resolve a possibly Secret / Env field to its string value.
+
+    Plain ``str`` is returned as-is; everything else is assumed to be a
+    ``Secret`` / ``Env`` descriptor with a ``.value()`` accessor.
+    """
     return value if isinstance(value, str) else value.value()
 
 
 def _sanitize_url(url: str) -> str:
+    """Strip embedded credentials from a URL for safe logging."""
     parsed = urlparse(url)
     if parsed.username or parsed.password:
         host_part = parsed.hostname or ""
@@ -70,15 +76,24 @@ def _sanitize_url(url: str) -> str:
 
 @dataclass(frozen=True, slots=True)
 class StagedFile:
+    """A single parquet file staged at a cloud location, identified by
+    the cloud-native URI Druid will use for ingestion."""
 
     uri: str
 
 
 def _staging_subdir(ctx_trx_id: str) -> str:
+    """Return the per-execution subdir under ``staging.base_path``.
+
+    Uses ``trx_id`` so each transaction lands in its own directory and
+    parallel runs never collide. A random suffix is appended so retries
+    of the same trx don't clash with leftovers from a partial prior run.
+    """
     return f"td-druid/{ctx_trx_id}/{uuid.uuid4().hex[:8]}"
 
 
 def _join_path(base: str, *parts: str) -> str:
+    """Join cloud-path segments with single ``/`` separators."""
     pieces = [base.strip("/")] if base else []
     for p in parts:
         pieces.append(p.strip("/"))
@@ -86,6 +101,7 @@ def _join_path(base: str, *parts: str) -> str:
 
 
 def staged_uri(location: CloudLocation, key: str) -> str:
+    """Build the cloud-native URI for a key under ``location``."""
     if isinstance(location, S3Location):
         bucket = _resolve(location.bucket)
         return f"s3://{bucket}/{key}"
@@ -108,6 +124,12 @@ def staged_uri(location: CloudLocation, key: str) -> str:
 def _transporter_target(
     location: CloudLocation, key: str
 ) -> _transporter.TransporterLocation:
+    """Build the ``TransporterLocation`` target for a staged file.
+
+    The cloud-side credentials are passed via the transporter env (so
+    they don't leak into request YAML on disk); the URL identifies the
+    target object under ``location``.
+    """
     if isinstance(location, S3Location):
         bucket = _resolve(location.bucket)
         return _transporter.TransporterS3(
@@ -144,6 +166,11 @@ def _transporter_target(
 
 
 def _transporter_env(location: CloudLocation) -> dict[str, str]:
+    """Build the env dict the transporter binary needs for ``location``.
+
+    Mirrors the per-flavor ``run_env`` helpers in the cloud-side
+    connectors (s3, gcs, azureblob).
+    """
     if isinstance(location, S3Location):
         creds = location.credentials
         return {
@@ -176,6 +203,14 @@ def upload_staged_files(
     subdir: str,
     work_dir: Path,
 ) -> list[str]:
+    """Copy ``parquet_files`` to ``staging/<subdir>`` via the
+    transporter binary; return the list of staged-file URIs.
+
+    Each parquet file is uploaded under a deterministic name --
+    ``part-NNNNN-<basename>`` -- so ordering matches the input and so
+    parallel writes never overlap. The function returns the list of
+    cloud-native URIs Druid will see in the ingestion ``inputSource``.
+    """
     pairs: list[tuple[_transporter.TransporterLocation, _transporter.TransporterLocation]] = []
     uris: list[str] = []
     base_path = getattr(staging, "base_path", "") or ""
@@ -205,6 +240,14 @@ def upload_staged_files(
 
 
 def build_input_source(location: CloudLocation, uris: list[str]) -> dict:
+    """Translate ``location`` + a list of staged file URIs into the
+    ``spec.ioConfig.inputSource`` block of a Druid ``index_parallel`` spec.
+
+    The function passes per-task credentials in the spec so the Druid
+    cluster does not need to be pre-configured with the destination's
+    cloud account. This mirrors the legacy ``DruidCloudStorage``
+    implementations in ``tabsdata._io.cloud_staging.druid``.
+    """
     if isinstance(location, S3Location):
         creds = location.credentials
         return {
@@ -255,6 +298,12 @@ def build_ingestion_spec(
     max_rows_per_segment: int,
     max_rows_in_memory: int,
 ) -> dict:
+    """Build a native batch ``index_parallel`` ingestion spec.
+
+    The spec uses ``useSchemaDiscovery`` so Druid auto-detects columns
+    from the Parquet metadata, ``rollup: False`` to ingest raw rows,
+    and ``queryGranularity: none`` to preserve row-level timestamps.
+    """
     if time_column:
         timestamp_spec = {"column": time_column, "format": "auto"}
     else:
@@ -321,6 +370,13 @@ _ALLOWED_METHODS = frozenset({"get", "post"})
 
 @dataclass
 class OverlordClient:
+    """Thin HTTP client around the Druid Overlord REST API.
+
+    Wraps a ``requests.Session`` with HTTP basic auth and a small
+    retry loop for transient failures. Construction is cheap; the
+    plugin builds a fresh client per ``write_out`` call and closes
+    it (via ``close``) when ingestion finishes.
+    """
 
     base_url: str
     auth: tuple[str, str] | None = None
@@ -403,6 +459,7 @@ class OverlordClient:
     # ----- Druid operations -----
 
     def submit_task(self, spec: dict) -> str:
+        """POST a task spec; return the task id."""
         path = "/druid/indexer/v1/task"
         resp = self._request_with_retry("post", self._url(path), json=spec)
         try:
@@ -424,6 +481,11 @@ class OverlordClient:
         return task_id
 
     def task_status(self, task_id: str) -> tuple[str, dict]:
+        """GET the Overlord status payload for ``task_id``.
+
+        Returns ``(status_code, payload)`` where ``status_code`` is
+        Druid's status (``RUNNING`` / ``WAITING`` / ``SUCCESS`` / ...).
+        """
         path = f"/druid/indexer/v1/task/{task_id}/status"
         resp = self._request_with_retry("get", self._url(path))
         try:
@@ -447,6 +509,11 @@ class OverlordClient:
         return status_code, payload
 
     def task_reports(self, task_id: str) -> dict:
+        """Fetch the per-task ingestion reports (best-effort).
+
+        Returns an empty dict if the report can't be fetched -- the
+        caller should treat a missing report as a non-fatal log line.
+        """
         path = f"/druid/indexer/v1/task/{task_id}/reports"
         try:
             resp = self._request_with_retry("get", self._url(path))
@@ -458,6 +525,12 @@ class OverlordClient:
             return {}
 
     def wait_for_completion(self, task_id: str) -> None:
+        """Poll until ``task_id`` terminates; raise on failure.
+
+        Returns silently on ``SUCCESS``; on any other terminal status
+        (``FAILED``, ``UNKNOWN``, ...) raises ``DRUID_9`` with a
+        best-effort error message extracted from the task report.
+        """
         while True:
             status_code, _ = self.task_status(task_id)
             if status_code in ("RUNNING", "WAITING"):
@@ -514,6 +587,8 @@ def make_overlord_client(conn: DruidConn) -> OverlordClient:
 def make_overlord_client_for_dest(
     conn: DruidConn, dest: DruidDest
 ) -> OverlordClient:
+    """Build an Overlord client whose ``timeout_sec`` reflects the
+    destination's ``http_timeout_sec`` knob."""
     creds = conn.credentials
     auth = (_resolve(creds.user), _resolve(creds.password))
     return OverlordClient(

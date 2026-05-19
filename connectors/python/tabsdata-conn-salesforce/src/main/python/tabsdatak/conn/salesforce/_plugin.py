@@ -59,6 +59,8 @@ def _resolve_src_cfg(src_cfg: SrcCfgSpec | None) -> _ReaderCfg:
 
 
 class _SalesforceSrcPlugin(SrcPlugin[SalesforceSrc]):
+    """Run SOQL queries against Salesforce and emit one parquet file
+    per query (``TableMode.SINGLE``)."""
 
     def read_in(
         self,
@@ -82,6 +84,8 @@ class _SalesforceSrcPlugin(SrcPlugin[SalesforceSrc]):
 
 
 class _SalesforceReportSrcPlugin(SrcPlugin[SalesforceReportSrc]):
+    """Run Salesforce Analytics reports and emit one parquet file per
+    report (``TableMode.SINGLE``)."""
 
     def read_in(
         self,

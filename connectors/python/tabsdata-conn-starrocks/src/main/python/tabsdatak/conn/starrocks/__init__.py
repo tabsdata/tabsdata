@@ -1,3 +1,16 @@
+"""StarRocks connector — public API.
+
+* :class:`StarRocksConn` -- per-cluster StarRocks connection
+  (host, port, credentials, database, cloud staging area).
+* :class:`StarRocksDest` -- destination: list of table FQNs;
+  one parquet slot per table. Writes go through an S3 staging
+  area + native ``FILES()`` ingestion.
+
+``port`` accepts ``int|Env|Secret``; ``StarRocksConn._port()``
+resolves to runtime ``int``. Iceberg-style schema evolution is
+supported on the dest.
+"""
+
 from __future__ import annotations
 
 from abc import ABC
@@ -135,6 +148,18 @@ class GCSLocation(CloudLocation):
 
 @_api.dataclass(StarRocksErrorCode.STARROCKS_1, kw_only=True)
 class StarRocksConn(Conn):
+    """StarRocks connection.
+
+    :param host: StarRocks FE host.
+    :param port: MySQL-protocol port; default 9030. Accepts
+        ``int``, ``Env``, or ``Secret`` -- use ``_port()`` to read.
+    :param credentials: :class:`UserPassword`.
+    :param staging: :class:`CloudLocation` (S3 / AzBlob / GCS).
+    :param database: Default database; default ``"default"``.
+    :param entity_whitelist: Optional regex-based table filter.
+    :param conn_cfg: Optional driver-side config dict.
+    """
+
     host: HostSpec
     port: PortSpec = 9030
     credentials: CredentialsSpec
@@ -157,6 +182,17 @@ ConnSpec: TypeAlias = Union[NamedConn, StarRocksConn]
 
 @_api.dataclass(StarRocksErrorCode.STARROCKS_2, kw_only=True)
 class StarRocksDest(Dest):
+    """StarRocks destination — one parquet slot per table.
+
+    :param conn: :class:`StarRocksConn` (or :class:`NamedConn`).
+    :param tables: FQN table names; one parquet slot per entry.
+    :param if_table_exists: ``"append"`` (default) or
+        ``"replace"``.
+    :param schema_evolution: ``"strict"`` (default) or
+        ``"iceberg"``.
+    :param dest_cfg: Optional dest cfg dict.
+    """
+
     conn: ConnSpec
     tables: StarRocksTableNamesSpec
     if_table_exists: IfTableExistsSpec = "append"

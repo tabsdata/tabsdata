@@ -1,3 +1,12 @@
+"""End-to-end LocalFile integration tests: invoke ``td_transporter``
+against real filesystem paths. Skipped unless ``TD_TRANSPORTER_BIN``
+is set and points at an existing executable.
+
+Unlike the cloud variants, no credentials are required. Set the
+binary path once::
+
+    export TD_TRANSPORTER_BIN=/path/to/td_transporter
+"""
 
 from __future__ import annotations
 
@@ -194,6 +203,7 @@ def test_src_wildcard_with_no_matches_returns_empty_slot(tmp_path: Path):
 
 
 def _set_mtime(path: Path, when: datetime) -> None:
+    """Set both atime and mtime to ``when`` (UTC) on ``path``."""
     ts = when.astimezone(timezone.utc).timestamp()
     os.utime(path, (ts, ts))
 

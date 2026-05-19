@@ -73,11 +73,23 @@ _DUP_KEY_CODE = 11000
 
 
 def _resolve_uri(conn: MongoDBConn) -> str:
+    """Return the URI as a plain ``str``.
+
+    ``conn.uri`` may be a literal ``str`` or a ``Secret`` / ``Env``
+    descriptor. The latter pair share a ``.value()`` resolver.
+    """
     uri = conn.uri
     return uri if isinstance(uri, str) else uri.value()
 
 
 def _uri_with_credentials(conn: MongoDBConn) -> str:
+    """Inject the user/password from ``conn.credentials`` into ``conn.uri``.
+
+    Mirrors the legacy ``_connector.py`` behaviour: take the first
+    ``://`` separator and splice ``user:password@`` after it. The
+    credentials are URL-encoded with ``quote_plus`` so special chars
+    (``@``, ``:``, ``/``, ...) round-trip safely.
+    """
     uri = _resolve_uri(conn)
     user = quote_plus(conn.credentials.user.value())
     password = quote_plus(conn.credentials.password.value())
@@ -85,6 +97,11 @@ def _uri_with_credentials(conn: MongoDBConn) -> str:
 
 
 def _pymongo_kwargs(conn: MongoDBConn) -> dict[str, Any]:
+    """Extract ``pymongo.MongoClient`` kwargs from ``conn.conn_cfg``.
+
+    Recognises keys prefixed with ``"pymongo."`` per the connector
+    cfg convention; strips the prefix before forwarding.
+    """
     cfg = conn.conn_cfg or {}
     out: dict[str, Any] = {}
     for k, v in cfg.items():
@@ -94,6 +111,12 @@ def _pymongo_kwargs(conn: MongoDBConn) -> dict[str, Any]:
 
 
 def _build_client(conn: MongoDBConn) -> Any:
+    """Build a ``pymongo.MongoClient`` and verify connectivity.
+
+    Wraps every connect / ping failure as ``MONGODB_19`` so the runtime
+    sees a single, well-typed error category for "couldn't reach
+    MongoDB".
+    """
     import pymongo
     from pymongo.errors import PyMongoError
 
@@ -116,6 +139,12 @@ def _build_client(conn: MongoDBConn) -> Any:
 
 
 def _split_collection(value: str) -> tuple[str, str]:
+    """Split ``"db.collection"`` into ``(db, collection)``.
+
+    A bare collection without a leading ``database.`` is rejected with
+    ``MONGODB_22`` -- a write target must be fully qualified so the
+    plugin knows which database to address.
+    """
     if "." not in value:
         raise MongodbErrorCode.MONGODB_22.exception(value=value)
     db, _, coll = value.partition(".")
@@ -125,6 +154,12 @@ def _split_collection(value: str) -> tuple[str, str]:
 
 
 def _ensure_clean_collection(collection: "Collection") -> None:
+    """Implement ``if_collection_exists="replace"``.
+
+    Drop the collection if it has any documents, then insert + delete
+    a sentinel so the collection materialises (collections can't be
+    created inside a transaction).
+    """
     if collection.count_documents({}):
         collection.drop()
     collection.insert_one({})
@@ -135,6 +170,13 @@ def _ensure_clean_collection(collection: "Collection") -> None:
 
 
 def _iter_parquet_documents(path: TableFileSpec):
+    """Yield ``dict`` documents from a parquet file using polars.
+
+    Polars is the project's preferred dataframe lib and handles
+    nested / list / struct columns when reading parquet. ``to_dicts()``
+    materialises the column-major frame into row-major dicts ready
+    for ``bulk_write``.
+    """
     import polars as pl
 
     df = pl.read_parquet(str(path))
@@ -342,6 +384,8 @@ class _MongoDBDestPlugin(DestPlugin[MongoDBDest]):
 
 
 def _all_dup_key_errors(e: Any) -> bool:
+    """Return True iff every writeError in the bulk-write error is
+    a duplicate-key (code 11000)."""
     details = getattr(e, "details", None) or {}
     errors = details.get("writeErrors") or []
     if not errors:

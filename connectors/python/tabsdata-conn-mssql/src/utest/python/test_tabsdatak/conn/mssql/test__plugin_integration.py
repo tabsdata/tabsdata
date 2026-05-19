@@ -1,3 +1,12 @@
+"""End-to-end MSSQL plugin tests against a real MSSQL instance.
+
+The ``fresh_mssql`` fixture (defined in ``conftest.py``) provisions a
+clean MSSQL backend per test -- either a per-session docker container
+or an externally-configured server when the relevant environment knobs
+are set. These tests exercise the actual ``MSSQLSrcPlugin.read_in`` /
+``MSSQLDestPlugin.write_out`` round-trips end-to-end; error-path
+coverage (fault-injection via mocks) lives in ``test__plugin.py``.
+"""
 
 from __future__ import annotations
 
@@ -71,6 +80,9 @@ def _dest_ctx(work: Path) -> _DestCtx:
 
 
 def _conn_from(cfg) -> MSSQLConn:
+    """Build an MSSQLConn pointing at the ``fresh_mssql`` backend. The
+    fixture's URI is the driver-qualified ``mssql+pyodbc://`` form so
+    the impl's ``add_driver_to_uri`` is a no-op."""
     return MSSQLConn(
         uri=cfg.uri,
         credentials=cfg.credentials,

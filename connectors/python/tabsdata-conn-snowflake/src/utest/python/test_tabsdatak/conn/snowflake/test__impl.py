@@ -202,6 +202,8 @@ def test_build_snowflake_connection_calls_connect_with_resolved_params(monkeypat
 
 @pytest.fixture
 def fake_sf_connection(monkeypatch):
+    """Replace ``impl.build_snowflake_connection`` with a stub that
+    returns a fake connection capturing every executed SQL string."""
     fake = _FakeConnection()
     monkeypatch.setattr(impl, "build_snowflake_connection", lambda conn: fake)
     return fake

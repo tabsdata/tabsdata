@@ -121,6 +121,7 @@ def _require_docker():
 
 
 def _compose_service_container(client, project: str, service: str):
+    """Return the running container for ``project/service``, or None."""
     containers = client.containers.list(
         all=True,
         filters={
@@ -231,6 +232,11 @@ def _start_druid_compose() -> DruidContainerConfig:
 
 @pytest.fixture(scope="session")
 def druid_config(tmp_path_factory, worker_id) -> DruidContainerConfig:
+    """Auto-started Druid cluster shared across the session.
+
+    File-locked across xdist workers so only one process brings up the
+    compose stack; the rest reuse it.
+    """
     if worker_id == "master":
         return _start_druid_compose()
     root = tmp_path_factory.getbasetemp().parent

@@ -1,3 +1,28 @@
+"""End-to-end Databricks plugin tests against a real Databricks
+workspace.
+
+Databricks is a managed cloud platform -- there's no docker fallback
+the way there is for MySQL / Postgres / ClickHouse. The fixture
+expects an externally-configured workspace and Personal Access Token
+exposed via the same env-var convention the legacy
+``tabsdata-databricks`` test suite uses (see
+``connectors/python/tabsdata-databricks/.../conftest.py``):
+
+  - DBX0__HOST            -- workspace URL
+  - DBX0__TOKEN           -- Personal Access Token
+  - DBX0__CATALOG         -- Unity Catalog catalog
+  - DBX0__SCHEMA          -- schema within the catalog
+  - DBX0__VOLUME          -- managed volume name (1- / 2- / 3-part)
+  - DBX0__WAREHOUSE_NAME  -- warehouse to execute SQL on
+
+If any of these are missing the whole module skips with a clear
+reason. Each test allocates a unique scratch table prefixed with
+``itest_<test_name>_<uuid>`` so concurrent / sequential runs don't
+collide; tables are dropped before and after.
+
+Error-path coverage (fault-injection via mocks) lives in
+``test__plugin.py``.
+"""
 
 from __future__ import annotations
 
@@ -124,6 +149,11 @@ def work_dir(tmp_path):
 
 @pytest.fixture(scope="session")
 def databricks_config():
+    """Pin the env-var-derived config once per session.
+
+    Same env vars the legacy ``tabsdata-databricks`` suite reads --
+    ``DBX0__{HOST,TOKEN,CATALOG,SCHEMA,VOLUME,WAREHOUSE_NAME}``.
+    """
 
     @dataclass(frozen=True)
     class _Cfg:
@@ -157,6 +187,8 @@ def _conn_from(cfg) -> DatabricksConn:
 
 @pytest.fixture
 def scratch_table(databricks_config, request):
+    """Allocate a per-test fully-qualified table name and drop it
+    before and after via ``databricks.sql``."""
     base = (request.node.originalname or request.node.name).replace(
         "test_", ""
     )
@@ -314,6 +346,8 @@ def _seed(databricks_config, work_dir, scratch_table):
 def test_fqn_bare_table_uses_conn_defaults(
     databricks_config, work_dir, scratch_table,
 ):
+    """1-part bare table -- relies on ``conn.catalog`` +
+    ``conn.schema`` for resolution."""
     _seed(databricks_config, work_dir, scratch_table)
     bare = scratch_table.rsplit(".", 1)[-1]
     add = _make_parquet(
@@ -334,6 +368,8 @@ def test_fqn_bare_table_uses_conn_defaults(
 def test_fqn_two_part_uses_conn_catalog(
     databricks_config, work_dir, scratch_table,
 ):
+    """2-part ``<schema>.<table>`` -- relies on ``conn.catalog``
+    for the missing leading part."""
     _seed(databricks_config, work_dir, scratch_table)
     _catalog, schema, bare = scratch_table.split(".")
     two_part = f"{schema}.{bare}"
@@ -355,6 +391,10 @@ def test_fqn_two_part_uses_conn_catalog(
 def test_fqn_quoted_three_part(
     databricks_config, work_dir, scratch_table,
 ):
+    """Each FQN part is supplied backtick-quoted by the caller --
+    exercises ``unfqn`` -> ``_fully_qualify_table`` ->
+    ``_fq_for_sql`` quote-round-trip end-to-end against the real
+    warehouse."""
     _seed(databricks_config, work_dir, scratch_table)
     catalog, schema, bare = scratch_table.split(".")
     quoted = f"`{catalog}`.`{schema}`.`{bare}`"
@@ -381,6 +421,8 @@ def test_fqn_quoted_three_part(
 def test_src_plugin_round_trip(
     databricks_config, work_dir, scratch_table,
 ):
+    """Seed a table via the dest plugin, then read it back via the
+    src plugin and verify the row count."""
     from tabsdatak.conn.databricks import _impl
 
     seed = _make_parquet(

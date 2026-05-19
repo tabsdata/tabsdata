@@ -72,6 +72,9 @@ def _conn() -> SalesforceConn:
 
 
 class _FakeSF:
+    """Drop-in for ``simple_salesforce.Salesforce`` that records inputs
+    and returns canned data. Each test customises the canned data on
+    the instance before invoking the plugin."""
 
     def __init__(self):
         self.query_all_iter_calls: list[tuple[str, bool]] = []

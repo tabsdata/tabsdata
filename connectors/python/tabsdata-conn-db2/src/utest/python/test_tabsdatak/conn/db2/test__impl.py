@@ -28,6 +28,7 @@ pytestmark = pytest.mark.db2
 
 
 class _CapturedURL:
+    """Stand-in for a sqlalchemy Engine with the URL we captured."""
 
     def __init__(self, url, connect_args):
         self.url = url
@@ -54,6 +55,7 @@ def _conn() -> Db2Conn:
 
 @pytest.fixture
 def captured(monkeypatch):
+    """Monkey-patch ``impl.create_engine`` to capture call args."""
     box: dict = {}
 
     def fake_create_engine(url, *, connect_args):

@@ -1,3 +1,16 @@
+"""Databricks connector — public API.
+
+* :class:`DatabricksConn` -- per-workspace connection (host_url,
+  PAT token, warehouse, volume, catalog/schema).
+* :class:`DatabricksSrc` -- source: list of SQL statements; one
+  parquet slot per statement. Uses the Statement Execution API
+  + external-link Arrow streams.
+* :class:`DatabricksDest` -- destination: list of table FQNs;
+  one parquet slot per table. Uses Volumes + ``COPY INTO``.
+
+Token, host, identifier fields accept ``Env`` / ``Secret``.
+"""
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -100,6 +113,22 @@ DestCfgSpec: TypeAlias = Annotated[
 
 @_api.dataclass(DatabricksErrorCode.DATABRICKS_1, kw_only=True)
 class DatabricksConn(Conn):
+    """Databricks workspace connection.
+
+    :param host_url: Workspace URL
+        (e.g. ``https://acme.cloud.databricks.com``).
+    :param token: Personal access token (PAT). Stored as a
+        ``Secret`` / ``Env``.
+    :param volume: Unity Catalog volume used to stage parquet.
+    :param warehouse: SQL warehouse name (mutually exclusive
+        with ``warehouse_id``).
+    :param warehouse_id: SQL warehouse id.
+    :param catalog: Default catalog.
+    :param schema: Default schema (requires ``catalog``).
+    :param entity_whitelist: Optional regex-based table filter.
+    :param conn_cfg: Optional driver-side config dict.
+    """
+
     host_url: HostUrlSpec
     token: CredentialsSpec
     volume: VolumeSpec
@@ -134,6 +163,16 @@ ConnSpec: TypeAlias = Union[NamedConn, DatabricksConn]
 
 @_api.dataclass(DatabricksErrorCode.DATABRICKS_3, kw_only=True)
 class DatabricksSrc(Src):
+    """Databricks source — one parquet slot per SQL statement.
+
+    :param conn: :class:`DatabricksConn` (or :class:`NamedConn`).
+    :param queries: List of SQL statements.
+    :param initial_values: Optional ``{key: value}`` bind
+        substituted as ``{key}`` placeholders in each query.
+    :param src_cfg: Optional ``Mapping`` over
+        ``databricks.logging_level``.
+    """
+
     conn: ConnSpec
     queries: QueriesSpec
     initial_values: dict | None = None
@@ -145,6 +184,18 @@ class DatabricksSrc(Src):
 
 @_api.dataclass(DatabricksErrorCode.DATABRICKS_4, kw_only=True)
 class DatabricksDest(Dest):
+    """Databricks destination — one parquet slot per table.
+
+    :param conn: :class:`DatabricksConn` (or :class:`NamedConn`).
+    :param tables: Table names ([catalog.][schema.]table).
+    :param if_table_exists: ``"append"`` (default) or
+        ``"replace"``.
+    :param schema_evolution: ``"strict"`` (default) or
+        ``"update"`` (forwards ``mergeSchema=true`` to
+        ``COPY INTO``).
+    :param dest_cfg: Optional dest cfg dict.
+    """
+
     conn: ConnSpec
     tables: DatabricksTableNamesSpec
     if_table_exists: IfTableExistsSpec = "append"

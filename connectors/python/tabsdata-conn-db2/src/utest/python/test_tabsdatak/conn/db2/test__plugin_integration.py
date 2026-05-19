@@ -1,3 +1,12 @@
+"""End-to-end Db2 plugin tests against a real Db2 instance.
+
+The ``fresh_db2`` fixture (defined in ``conftest.py``) provisions a
+clean Db2 backend per test -- either a per-session docker container
+or an externally-configured server when the relevant environment knobs
+are set. These tests exercise the actual ``Db2SrcPlugin.read_in`` /
+``Db2DestPlugin.write_out`` round-trips end-to-end; error-path
+coverage (fault-injection via mocks) lives in ``test__plugin.py``.
+"""
 
 from __future__ import annotations
 
@@ -71,6 +80,9 @@ def _dest_ctx(work: Path) -> _DestCtx:
 
 
 def _conn_from(cfg) -> Db2Conn:
+    """Build a Db2Conn pointing at the ``fresh_db2`` backend. The URI
+    is ``db2+ibm_db://`` so the impl's ``add_driver_to_uri`` is a
+    no-op and ibm_db (which IS installed in the dev env) is used."""
     return Db2Conn(
         uri=cfg.uri,
         credentials=cfg.credentials,

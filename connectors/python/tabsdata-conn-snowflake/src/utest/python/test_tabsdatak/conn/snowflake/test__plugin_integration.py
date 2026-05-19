@@ -1,3 +1,18 @@
+"""End-to-end Snowflake integration tests: write parquet files to
+real Snowflake tables via SQLAlchemy. Skipped unless ALL of these
+env vars are set:
+
+  - ``SNW__ACCOUNT``    -- Snowflake account identifier
+  - ``SNW__USER``       -- Snowflake user
+  - ``SNW__PAT``        -- Snowflake Personal Access Token (used as password)
+  - ``SNW__DATABASE``   -- target database
+  - ``SNW__SCHEMA``     -- target schema
+  - ``SNW__WAREHOUSE``  -- warehouse to use
+  - ``SNW__ROLE``       -- (optional) role to assume
+
+Each test creates a uniquely-named table under the configured schema
+so concurrent runs don't collide.
+"""
 
 from __future__ import annotations
 
@@ -112,6 +127,8 @@ def conn() -> SnowflakeConn:
 
 @pytest.fixture
 def run_table() -> str:
+    """A unique table name for each test, so parallel runs don't
+    clash."""
     return f"TD_INTEG_{uuid.uuid4().hex[:12].upper()}"
 
 

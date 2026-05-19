@@ -1,3 +1,16 @@
+"""BigQuery connector — public API.
+
+* :class:`BigQueryConn` -- per-project BigQuery connection
+  (project + GCS staging + GCP credentials).
+* :class:`BigQueryDest` -- destination: list of fully-qualified
+  table names (``project.dataset.table``); one parquet slot per
+  table. Writes go via a GCS staging bucket and a
+  ``load_table_from_uri`` load job.
+
+No ``BigQuerySrc`` today. Credential fields accept ``Env`` /
+``Secret`` references.
+"""
+
 from __future__ import annotations
 
 from abc import ABC
@@ -90,6 +103,18 @@ class GCSLocation(CloudLocation):
 
 @_api.dataclass(BigqueryErrorCode.BIGQUERY_1, kw_only=True)
 class BigQueryConn(Conn):
+    """BigQuery connection.
+
+    :param staging: :class:`GCSLocation` used as the parquet
+        staging bucket for load jobs.
+    :param credentials: GCP service-account JSON
+        (:class:`GCPJson`).
+    :param project: Default GCP project. Optional.
+    :param dataset: Default BigQuery dataset. Optional.
+    :param entity_whitelist: Optional regex-based table filter.
+    :param conn_cfg: Optional driver-side config dict.
+    """
+
     staging: GCSLocation
     credentials: CredentialsSpec
     project: ProjectSpec | None = None
@@ -111,6 +136,19 @@ ConnSpec: TypeAlias = Union[NamedConn, BigQueryConn]
 
 @_api.dataclass(BigqueryErrorCode.BIGQUERY_3, kw_only=True)
 class BigQueryDest(Dest):
+    """BigQuery destination — one parquet slot per target table.
+
+    :param conn: :class:`BigQueryConn` (or :class:`NamedConn`).
+    :param tables: Fully-qualified table names
+        (``[project.]dataset.table``). One slot per table.
+    :param if_table_exists: ``"append"`` (default) or
+        ``"replace"`` (drop + recreate).
+    :param schema_evolution: ``"strict"`` (default) or
+        ``"update"`` (allow new columns).
+    :param dest_cfg: Optional dest cfg dict; key set is
+        ``"bigquery.logging_level"``.
+    """
+
     conn: ConnSpec
     tables: BigQueryTableNamesSpec | None = None
     if_table_exists: IfTableExistsSpec = "append"

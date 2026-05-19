@@ -1,3 +1,16 @@
+"""Apache Druid connector — public API.
+
+* :class:`DruidConn` -- per-Druid-Overlord connection.
+* :class:`DruidDest` -- destination: list of datasource names;
+  one parquet slot per datasource. Writes go in two stages:
+  parquet -> cloud staging (S3 / GCS / Azure), then a native
+  batch ``index_parallel`` task to the Overlord with polling
+  until completion.
+
+No ``DruidSrc``. URL and credential fields accept ``Env`` /
+``Secret`` references.
+"""
+
 from __future__ import annotations
 
 from abc import ABC
@@ -134,6 +147,19 @@ class GCSLocation(CloudLocation):
 
 @_api.dataclass(DruidErrorCode.DRUID_1, kw_only=True)
 class DruidConn(Conn):
+    """Druid Overlord connection.
+
+    :param overlord_url: Druid Overlord URL
+        (e.g. ``http://druid.example:8081``). ``Env`` / ``Secret``
+        accepted.
+    :param staging: :class:`S3Location` / :class:`AzBlobLocation`
+        / :class:`GCSLocation` -- the cloud staging area for
+        parquet uploads.
+    :param credentials: :class:`UserPassword` -- Overlord HTTP
+        basic-auth credentials.
+    :param conn_cfg: Optional driver-side config dict.
+    """
+
     overlord_url: UrlSpec
     staging: CloudLocation
     credentials: CredentialsSpec
@@ -148,6 +174,25 @@ ConnSpec: TypeAlias = Union[NamedConn, DruidConn]
 
 @_api.dataclass(DruidErrorCode.DRUID_2, kw_only=True)
 class DruidDest(Dest):
+    """Druid destination — one parquet slot per datasource.
+
+    :param conn: :class:`DruidConn` (or :class:`NamedConn`).
+    :param tables: Datasource names; one slot per entry.
+    :param if_table_exists: ``"append"`` (default) or
+        ``"replace"`` (overwrite the datasource).
+    :param time_column: Name of the row-level timestamp column.
+    :param segment_granularity: Druid segment grain
+        (``SECOND``..``YEAR``, default ``ALL``).
+    :param max_concurrent_subtasks: Druid ingestion-task
+        concurrency knob.
+    :param max_rows_per_segment: Per-segment row cap.
+    :param max_rows_in_memory: Per-task memory cap.
+    :param http_timeout_sec: HTTP request timeout (s).
+    :param dest_cfg: Optional dest cfg dict; keys include
+        ``druid.logging_level`` / ``druid.poll_interval_seconds`` /
+        ``druid.retry_attempts`` / ``druid.retry_backoff_seconds``.
+    """
+
     conn: ConnSpec
     tables: DruidTableNamesSpec
     if_table_exists: IfTableExistsSpec = "append"

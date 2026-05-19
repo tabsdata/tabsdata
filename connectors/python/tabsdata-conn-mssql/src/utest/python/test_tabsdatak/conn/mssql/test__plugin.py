@@ -63,6 +63,8 @@ def work_dir(tmp_path: Path) -> Path:
 
 @pytest.fixture(autouse=True)
 def _fast_retry(monkeypatch):
+    """Retry tests inject failing engines; shrink the deadlines so
+    those tests finish in <1s."""
     monkeypatch.setattr(saw_reader, "RETRY_WAIT_S", 0)
     monkeypatch.setattr(saw_reader, "RETRY_TIMEOUT_S", 1)
     monkeypatch.setattr(saw_writer, "RETRY_WAIT_S", 0)
@@ -77,6 +79,8 @@ def _fast_retry(monkeypatch):
 
 
 def _bare_conn() -> MSSQLConn:
+    """Minimal MSSQLConn for error tests -- the URI/creds never see
+    a real driver (the engine is mocked)."""
     from tabsdatak.api import Secret
     return MSSQLConn(
         uri="mssql://stub.invalid:1433/db",

@@ -1,3 +1,30 @@
+"""End-to-end BigQuery plugin tests against real BigQuery + GCS.
+
+BigQuery and GCS are managed services -- there is no per-test
+docker-based provisioning fixture like the ones the SQL connectors
+get. These tests therefore opt-in via a small set of environment
+variables that, when set, point the plugin at a real workspace:
+
+- ``GCP0__GCP_SERVICE_ACCOUNT_KEY`` -- service-account-key JSON (the
+  contents of the file, not a path); used for both BigQuery API auth
+  and GCS staging uploads.
+- ``GCP0__BIGQUERY_PROJECT`` -- the GCP project id.
+- ``GCP0__BIGQUERY_DATASET`` -- the target BigQuery dataset (must
+  already exist in the project; the plugin creates tables under it
+  but not datasets).
+- ``GCP0__GCP_STORAGE_URI`` -- the GCS staging location as a
+  ``gs://<bucket>[/<base_path>]`` URI. The bucket portion is fed to
+  :class:`GCSLocation.bucket`; the path portion (if any) becomes
+  ``base_path``, with ``"staging/"`` as the default when absent.
+
+The ``GCP0__GCP_STORAGE_ACCESS_KEY`` / ``GCP0__GCP_STORAGE_SECRET_KEY``
+HMAC pair is intentionally NOT consumed here -- BigQuery's staging
+goes through the native GCS API on the service-account JSON.
+
+When any of the required variables is missing all tests in this
+file are skipped at collection time. Error-path coverage
+(fault-injection via mocks) lives in ``test__plugin.py``.
+"""
 
 from __future__ import annotations
 
@@ -96,6 +123,13 @@ class _BqConfig:
 
 
 def _split_gs_uri(uri: str) -> tuple[str, str]:
+    """Split ``gs://<bucket>[/<path>]`` into ``(bucket, base_path)``.
+
+    Path defaults to ``"staging/"`` when the URI carries only a bucket.
+    The returned ``base_path`` is normalized to always end with ``/``
+    so callers don't have to worry about ``GCSLocation.full_path``
+    join semantics.
+    """
     prefix = "gs://"
     if not uri.startswith(prefix):
         raise ValueError(
@@ -142,6 +176,9 @@ def _conn_from(cfg: _BqConfig) -> BigQueryConn:
 
 
 def _table_fqn(cfg: _BqConfig, table: str) -> str:
+    """Build the user-facing FQN (outer-only backticks per BigQuery
+    syntax). The plugin strips the wrapping backticks before
+    forwarding to the SDK."""
     return f"`{cfg.project}.{cfg.dataset}.{table}`"
 
 

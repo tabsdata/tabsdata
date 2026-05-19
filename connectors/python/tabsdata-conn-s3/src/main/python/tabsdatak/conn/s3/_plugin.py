@@ -28,6 +28,8 @@ def _s3_uri(bucket: str, path_entry: str) -> str:
 
 
 def _resolve(value) -> str:
+    """``S3Conn`` fields accept ``str | Secret | Env``; ``str`` values
+    are stored verbatim, Secret/Env resolve through ``.value()``."""
     return value if isinstance(value, str) else value.value()
 
 

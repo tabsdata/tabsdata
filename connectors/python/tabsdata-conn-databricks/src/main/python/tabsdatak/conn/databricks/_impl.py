@@ -1,3 +1,18 @@
+"""Databricks adapter: every driver-touching piece used by
+``_plugin.py``.
+
+The legacy :class:`tabsdata.connector.databricks._connector.DatabricksSource`
+and :class:`DatabricksDestination` are ported here, adapted to the
+new-model ``DatabricksConn`` / ``DatabricksSrc`` / ``DatabricksDest``
+classes. The library choice matches the legacy: ``databricks.sdk``
+(WorkspaceClient + statement_execution API + Files API) plus
+``databricks.sql`` (Connection for ``COPY INTO`` / DDL). No SQLAlchemy.
+
+All driver imports happen inside method bodies so importing
+``tabsdatak.conn.databricks`` stays cheap when nothing actually runs
+the plugin (registry scans pay only for the SrcDef / DestDef
+metadata).
+"""
 
 from __future__ import annotations
 
@@ -68,6 +83,7 @@ class DatabricksWriteCfg:
 
 
 def _host_value(conn: DatabricksConn) -> str:
+    """Resolve ``conn.host_url`` to a plain string."""
     return conn.host_url.value()
 
 
@@ -76,6 +92,8 @@ def _token_value(conn: DatabricksConn) -> str:
 
 
 def _build_workspace_client(conn: DatabricksConn):
+    """Return a :class:`databricks.sdk.WorkspaceClient` bound to the
+    connection's PAT."""
     try:
         import databricks.sdk as dbsdk
     except ImportError as e:
@@ -92,6 +110,13 @@ def _build_workspace_client(conn: DatabricksConn):
 def _resolve_warehouse_id(
     ws_client: dbsdk.WorkspaceClient, conn: DatabricksConn
 ) -> str:
+    """Look up the warehouse id from ``conn``.
+
+    ``conn.warehouse_id`` wins if set; otherwise ``conn.warehouse``
+    (name) is resolved via the workspace's warehouse list. The
+    cross-field check in ``DatabricksConn.validate`` ensures at most
+    one is set.
+    """
     if conn.warehouse_id is not None:
         return conn.warehouse_id.value()
     if conn.warehouse is None:
@@ -111,6 +136,8 @@ def _resolve_warehouse_id(
 def _build_sql_connection(
     ws_client: dbsdk.WorkspaceClient, conn: DatabricksConn
 ) -> dbsql.Connection:
+    """Return a :class:`databricks.sql.Connection` bound to the
+    workspace + warehouse identified by ``conn``."""
     try:
         import databricks.sql as dbsql
         from databricks.sdk.core import Config, pat_auth
@@ -141,6 +168,10 @@ def _build_sql_connection(
 def _replace_initial_values(
     statement: str, initial_values: dict[str, Any]
 ) -> str:
+    """Naive ``{key}`` -> repr-value substitution. Matches the legacy
+    behaviour: dict keys are interpolated as ``{key}`` placeholders in
+    the statement string. Strings are quoted; non-strings use
+    ``repr()``."""
     out = statement
     for k, v in initial_values.items():
         token = "{" + k + "}"
@@ -152,6 +183,14 @@ def _replace_initial_values(
 
 
 def _chunk_links_iterator(ws_client, response):
+    """Walk the external-link payload chunk-by-chunk, fetching the
+    next page from ``statement_execution.get_statement_result_chunk_n``
+    on demand.
+
+    Returns a callable that yields ``(chunk_index, external_link)`` on
+    each call (thread-safe). When the result is exhausted it returns
+    ``None``.
+    """
 
     @dataclass
     class _State:
@@ -203,6 +242,9 @@ def _chunk_links_iterator(ws_client, response):
 
 
 def _download_chunk(link):
+    """Fetch a single external-link payload and parse it as an
+    Arrow IPC stream. Retried with fixed-wait backoff (matches the
+    legacy ``tenacity`` configuration)."""
     import pyarrow.ipc as ipc
     import requests
 
@@ -237,6 +279,8 @@ def _download_chunk(link):
 
 
 class _ChunkWriter:
+    """Drain pa.Tables to a single parquet file, preserving order
+    across worker threads."""
 
     def __init__(self, path: Path) -> None:
         import pyarrow.parquet as pq
@@ -291,6 +335,10 @@ def execute_query(
     work_dir: Path,
     index: int,
 ) -> Path:
+    """Execute one query via ``statement_execution.execute_statement``
+    (``Disposition.EXTERNAL_LINKS`` + ``Format.ARROW_STREAM``), poll
+    until completion, then download every result chunk and write them
+    in order to a single parquet file under ``work_dir``."""
     from databricks.sdk.service.sql import (
         Disposition,
         Format,
@@ -352,11 +400,31 @@ def execute_query(
 
 
 def _fq_for_sql(fq_table: str) -> str:
+    """Return the SQL-safe (per-part backtick-wrapped) form of a
+    ``catalog.schema.table`` name.
+
+    Accepts a bare dotted name (output of :func:`_fully_qualify_table`)
+    OR a name whose parts are already backtick-quoted -- a single
+    ``unfqn`` -> ``fqn`` round-trip strips any pre-existing quotes so
+    the result never double-quotes.
+    """
     parts = unfqn(fq_table, _DATABRICKS_FQN_DEF)
     return fqn(parts, _DATABRICKS_FQN_DEF)
 
 
 def _fully_qualify_table(conn: DatabricksConn, table: str) -> str:
+    """Resolve ``table`` to a 3-part bare ``catalog.schema.table`` name,
+    drawing from ``conn.catalog`` / ``conn.schema`` to fill in the
+    missing leading parts. Accepts parts that are bare or backtick-
+    quoted (with ```` `` ```` to escape an embedded backtick).
+
+    The result is BARE -- callers re-apply quoting via
+    :func:`_fq_for_sql` when feeding the value back into SQL, and use
+    the bare parts directly for ``/Volumes/...`` paths.
+
+    Raises a :class:`DatabricksValidateException` (DATABRICKS_11) if
+    the result is not 3-part.
+    """
     catalog = conn.catalog.value() if conn.catalog is not None else None
     schema = conn.schema.value() if conn.schema is not None else None
     parts = unfqn(table, _DATABRICKS_FQN_DEF, total_parts=3)
@@ -372,6 +440,17 @@ def _fully_qualify_table(conn: DatabricksConn, table: str) -> str:
 
 
 def _volume_path(conn: DatabricksConn, fq_table: str) -> str:
+    """Compute the ``/Volumes/<catalog>/<schema>/<volume>`` prefix
+    that ``COPY INTO`` will read from. ``conn.volume`` may itself be
+    a 1-, 2-, or 3-part name; the rules match the legacy:
+
+    - 3-part volume (``c.s.v``): used verbatim.
+    - 2-part volume (``s.v``): catalog comes from the table's first
+      segment (which is always present at this point because
+      ``_fully_qualify_table`` already ran).
+    - 1-part volume (``v``): catalog and schema both come from the
+      table.
+    """
     parts = fq_table.split(".", maxsplit=2)
     t_catalog, t_schema, _t_name = parts
     volume_raw = conn.volume.value()
@@ -391,6 +470,9 @@ def upload_file_to_volume(
     fq_table: str,
     local_path: Path,
 ) -> str:
+    """Upload ``local_path`` to the conn's volume and return the
+    in-volume absolute path (suitable for ``read_files`` /
+    ``COPY INTO``)."""
     target = f"{_volume_path(conn, fq_table)}/{local_path.name}"
     logger.debug("Uploading %s to volume %s", local_path, target)
     with open(local_path, "rb") as f:
@@ -404,6 +486,10 @@ def copy_into_table(
     file_in_volume: str,
     fq_table: str,
 ) -> None:
+    """Execute the legacy CREATE-OR-REPLACE / CREATE-IF-NOT-EXISTS +
+    COPY INTO sequence against ``fq_table`` from ``file_in_volume``.
+    The exact statements mirror the legacy
+    ``_perform_upload_to_table`` codepath."""
     cursor = sql_conn.cursor()
     sql_fq = _fq_for_sql(fq_table)
     if cfg.if_table_exists == "replace":
@@ -450,6 +536,9 @@ def copy_into_table(
 
 
 def delete_from_volume(ws_client, file_in_volume: str) -> None:
+    """Delete a previously-uploaded volume file. Failures are logged
+    and swallowed -- COPY INTO has already landed and an orphan
+    volume file is not worth failing the whole write_out for."""
     try:
         ws_client.files.delete(file_in_volume)
     except Exception:  # noqa: BLE001 -- best-effort cleanup
@@ -463,6 +552,10 @@ def delete_from_volume(ws_client, file_in_volume: str) -> None:
 
 
 def read_all_queries(cfg: DatabricksReadCfg, work_dir: Path) -> list[Path]:
+    """Execute every statement in ``cfg.queries`` against the
+    workspace and return the list of resulting parquet paths (one per
+    query, in order). The plugin maps these into
+    ``list[list[TableFileSpec]]`` for the SPI."""
     logger.debug("databricks: establishing workspace client")
     ws_client = _build_workspace_client(cfg.conn)
     out: list[Path] = []
@@ -478,6 +571,9 @@ def write_all_tables(
     cfg: DatabricksWriteCfg,
     parquet_files: list[Path],
 ) -> None:
+    """Upload each parquet file to the volume and run the matching
+    CREATE / COPY INTO sequence. Failures are surfaced to the caller
+    which wraps them into the appropriate CLICKHOUSE_* code."""
     if len(cfg.target_tables) != len(parquet_files):
         # Should already have been caught by the plugin; defensive.
         from tabsdatak.conn.databricks.error import DatabricksErrorCode

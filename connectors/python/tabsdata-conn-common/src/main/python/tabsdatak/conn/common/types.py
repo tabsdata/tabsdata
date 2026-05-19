@@ -46,6 +46,12 @@ class GCPJson(GCPCredentials):
 
 @_api.dataclass(ConnErrorCode.CONN_10)
 class GCPHmac(GCPCredentials):
+    """HMAC access key / secret for GCS's S3-compatible endpoint.
+
+    Used by connectors that read or write GCS via the S3 protocol
+    (e.g. ClickHouse's ``s3()`` table function pointed at
+    ``https://storage.googleapis.com``).
+    """
 
     __kind__ = "gcpHmacCredentials"
     access_key: SecretOrEnvSpec
@@ -118,6 +124,11 @@ BasePathSpec: TypeAlias = Union[
 
 
 def full_path(base_path: BasePathSpec, path: str) -> str:
+    """Join ``base_path`` with ``path``, stripping leading and
+    trailing ``/`` from each side and from the result. ``base_path``
+    may be a ``str`` or a ``Secret`` / ``Env`` whose ``.value()``
+    resolves to the path string.
+    """
     resolved: str = base_path if isinstance(base_path, str) else base_path.value()
     return (resolved.strip("/") + "/" + path.strip("/")).strip("/")
 

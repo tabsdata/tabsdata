@@ -1,3 +1,16 @@
+"""MySQL connector — public API.
+
+* :class:`MySQLConn` -- per-instance MySQL connection.
+* :class:`MySQLSrc` -- source: list of SOQL/SELECT queries; produces
+  one parquet slot per query.
+* :class:`MySQLDest` -- destination: list of target table names;
+  consumes one parquet slot per table.
+
+URI and credential fields accept ``Env`` / ``Secret`` references.
+Cross-cutting cfg keys live in ``src_cfg`` / ``dest_cfg`` (chunk
+size, read/write engine selection).
+"""
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -81,6 +94,20 @@ DestCfgSpec: TypeAlias = Annotated[
 
 @_api.dataclass(MysqlErrorCode.MYSQL_1, kw_only=True)
 class MySQLConn(Conn):
+    """MySQL connection.
+
+    :param uri: SQLAlchemy-style URI
+        (``mysql+mysqlconnector://host:port/db``). Accepts a plain
+        str, ``Env``, or ``Secret``.
+    :param credentials: :class:`UserPassword` -- user + password
+        spliced into the URI by the engine factory.
+    :param entity_whitelist: Optional list of regex patterns; the
+        runtime uses these to narrow which tables this conn
+        contributes to discovery.
+    :param conn_cfg: Optional driver-side config (forwarded as
+        ``connect_args`` to SQLAlchemy).
+    """
+
     uri: UriSpec
     credentials: CredentialsSpec
     entity_whitelist: EntityWhitelistSpec | None = None
@@ -95,6 +122,22 @@ ConnSpec: TypeAlias = Union[NamedConn, MySQLConn]
 
 @_api.dataclass(MysqlErrorCode.MYSQL_2, kw_only=True)
 class MySQLSrc(Src):
+    """MySQL source — one parquet slot per SELECT query.
+
+    :param conn: :class:`MySQLConn` (or :class:`NamedConn`).
+    :param queries: List of SELECT statements; one slot per query.
+    :param transactional: When ``True`` (default), run all queries
+        inside one transactional session; ``False`` opens a fresh
+        autocommit connection per query.
+    :param schema_overrides: Optional per-query column dtype hints
+        (one entry per query, same length as ``queries``); else MYSQL_3.
+    :param query_params: Optional ``{name: value}`` bind parameters
+        substituted into every query via SQLAlchemy ``:name`` syntax.
+    :param src_cfg: Optional ``Mapping`` over the literal cfg key
+        set (``mysql.logging_level``, ``tabsdata.sql.sql.readEngine``,
+        ``tabsdata.sql.chunkSize``).
+    """
+
     conn: ConnSpec
     queries: QueriesSpec
     transactional: bool = True
@@ -117,6 +160,20 @@ class MySQLSrc(Src):
 
 @_api.dataclass(MysqlErrorCode.MYSQL_4, kw_only=True)
 class MySQLDest(Dest):
+    """MySQL destination — write one parquet slot per target table.
+
+    :param conn: :class:`MySQLConn` (or :class:`NamedConn`).
+    :param tables: Target table names (FQN or bare); one parquet
+        slot per table.
+    :param if_table_exists: ``"append"`` (default) or ``"replace"``
+        (truncate before insert).
+    :param transactional: When ``True`` (default), wrap every table
+        write in one transactional session.
+    :param dest_cfg: Optional ``Mapping`` over the literal cfg key
+        set (``mysql.logging_level``,
+        ``tabsdata.sql.sql.writeEngine``, ``tabsdata.sql.chunkSize``).
+    """
+
     conn: ConnSpec
     tables: MySQLTableNamesSpec
     if_table_exists: IfTableExistsSpec = "append"

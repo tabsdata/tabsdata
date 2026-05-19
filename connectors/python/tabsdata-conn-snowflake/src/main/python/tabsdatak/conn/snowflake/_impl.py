@@ -1,3 +1,18 @@
+"""Snowflake adapter: every driver-touching piece used by ``_plugin.py``.
+
+The legacy :class:`tabsdata.connector.snowflake._connector.SnowflakeDestination`
+is ported here, adapted to the new-model ``SnowflakeConn`` /
+``SnowflakeDest`` classes. Snowflake bulk loads go through the native
+:mod:`snowflake.connector` Python driver -- a stage (temporary by
+default; permanent when ``conn.stage`` is set) + ``PUT`` to upload the
+parquet file + ``COPY INTO`` to ingest. NO SQLAlchemy / polars
+write_database path -- the legacy approach is dramatically faster and
+sidesteps the polars ``Unexpected three-part table name`` quirk.
+
+All driver imports happen inside method bodies so importing
+``tabsdatak.conn.snowflake`` stays cheap when nothing actually runs
+the plugin (registry scans pay only for the DestDef metadata).
+"""
 
 from __future__ import annotations
 
@@ -59,6 +74,9 @@ def _credentials(conn: SnowflakeConn) -> UserPassword:
 
 
 def _connection_parameters(conn: SnowflakeConn) -> dict[str, str]:
+    """Resolve ``SnowflakeConn`` into the ``snowflake.connector.connect``
+    kwargs. ``password`` carries either a Snowflake password or a PAT;
+    the driver accepts both at the same slot."""
     creds = _credentials(conn)
     params: dict[str, str] = {
         "account": conn.account.value(),
@@ -77,6 +95,8 @@ def _connection_parameters(conn: SnowflakeConn) -> dict[str, str]:
 
 
 def build_snowflake_connection(conn: SnowflakeConn) -> sfc.SnowflakeConnection:
+    """Open a :class:`snowflake.connector.SnowflakeConnection` bound
+    to ``conn``'s resolved parameters."""
     try:
         from snowflake.connector import connect
     except ImportError as e:
@@ -92,6 +112,15 @@ def build_snowflake_connection(conn: SnowflakeConn) -> sfc.SnowflakeConnection:
 
 
 def _fq_for_sql(fq_table: str) -> str:
+    """Return the SQL-safe (per-part double-quoted) form of a 1/2/3-part
+    snowflake identifier.
+
+    Accepts a bare dotted name OR a name whose parts are already
+    double-quoted -- a single ``unfqn`` -> ``fqn`` round-trip strips
+    any pre-existing quotes so the result never double-quotes.
+    Embedded double quotes inside a part are preserved via the
+    Snowflake doubled-quote escape convention (``""``).
+    """
     parts = unfqn(fq_table, _SNOWFLAKE_FQN_DEF)
     return fqn(parts, _SNOWFLAKE_FQN_DEF)
 
@@ -100,6 +129,10 @@ def _fq_for_sql(fq_table: str) -> str:
 
 
 def _stage(conn: SnowflakeConn) -> tuple[str, bool]:
+    """Return ``(stage_name, is_temporary)`` for the connection. When
+    ``conn.stage`` is set the stage is treated as permanent (caller
+    owns its lifecycle); otherwise a session-scoped TEMPORARY stage
+    is used."""
     if conn.stage is not None:
         return conn.stage.value(), False
     return _DEFAULT_TEMP_STAGE, True
@@ -111,6 +144,8 @@ def _create_stage_if_not_exists(cursor, stage: str, is_temp: bool) -> None:
 
 
 def _put_file_to_stage(cursor, file_path: Path, stage: str) -> str:
+    """``PUT`` ``file_path`` into ``@stage`` and return the basename
+    snowflake will index it under."""
     # snowflake's PUT accepts a file:// URI; use absolute path so
     # the driver doesn't try to resolve against its own cwd.
     file_uri = f"file://{file_path.resolve()}"
@@ -121,6 +156,10 @@ def _put_file_to_stage(cursor, file_path: Path, stage: str) -> str:
 def _create_table_from_inferred_schema(
     cursor, stage: str, file_name: str, sql_table: str,
 ) -> None:
+    """``CREATE TABLE IF NOT EXISTS`` for ``sql_table`` (already
+    routed through :func:`_fq_for_sql`) using a schema inferred from
+    the staged parquet file (mirrors the legacy template-with-
+    infer_schema approach)."""
     cursor.execute(
         "CREATE FILE FORMAT IF NOT EXISTS tabsdata_parquet TYPE = PARQUET"
     )
@@ -159,7 +198,13 @@ def _copy_into(
 
 
 def write_all_tables(cfg: SnowflakeWriteCfg, files: list[Path]) -> None:
-    logger.debug("snowflake: establishing connection to account %r", cfg.conn.account.value())
+    """Bulk-load each parquet file in ``files`` into its corresponding
+    table in ``cfg.target_tables``. Opens a single Snowflake connection
+    per call and re-uses it across every (file, table) pair."""
+    logger.debug(
+        "snowflake: establishing connection to account %r",
+        cfg.conn.account.value(),
+    )
     sf_conn = build_snowflake_connection(cfg.conn)
     try:
         if cfg.conn.warehouse is not None:

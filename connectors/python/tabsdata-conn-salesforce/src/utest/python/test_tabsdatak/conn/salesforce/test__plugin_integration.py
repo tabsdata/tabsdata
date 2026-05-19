@@ -1,3 +1,22 @@
+"""End-to-end Salesforce integration tests against a real Salesforce
+org. Skipped unless ALL of these are set:
+
+  - ``SF0__USERNAME``        -- Salesforce login (e.g. ``etl@example.com``)
+  - ``SF0__PASSWORD``        -- Salesforce password
+  - ``SF0__SECURITY_TOKEN``  -- Per-user security token
+  - ``SF0__INSTANCE_URL``    -- Optional; required only when the user
+                                is associated with more than one
+                                instance (e.g. sandbox vs prod)
+  - ``SF0__OBJECT``          -- The SObject to SELECT from (e.g.
+                                ``Account``); must already exist in
+                                the org
+
+The tests issue read-only SOQL queries -- no destructive operations
+are performed against the live org. There is no Salesforce equivalent
+of the ``fresh_<db>`` per-test container fixture used by the SQL
+connectors; production Salesforce orgs are shared / persistent, so
+isolation is the caller's responsibility (use a sandbox org).
+"""
 
 from __future__ import annotations
 

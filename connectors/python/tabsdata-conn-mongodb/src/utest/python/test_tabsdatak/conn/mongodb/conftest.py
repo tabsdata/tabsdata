@@ -91,6 +91,13 @@ class MongoDBContainerConfig:
 
     @property
     def uri(self) -> str:
+        """Connection URI WITHOUT credentials.
+
+        :class:`MongoDBConn.credentials` carries the user/password; the
+        plugin splices them into the URI at write time via
+        :func:`_plugin._uri_with_credentials`. Embedding the credentials
+        here would double them on the wire.
+        """
         return (
             f"mongodb://{self.host}:{self.port}"
             "/?serverSelectionTimeoutMS=15000"
@@ -228,6 +235,11 @@ def _start_mongo_container() -> MongoDBContainerConfig:
 
 @pytest.fixture(scope="session")
 def mongodb_config(tmp_path_factory, worker_id) -> MongoDBContainerConfig:
+    """Auto-started ``mongo`` container shared across the session.
+
+    File-locked across xdist workers so only one process starts the
+    container; the rest reuse it.
+    """
     if worker_id == "master":
         return _start_mongo_container()
     root = tmp_path_factory.getbasetemp().parent

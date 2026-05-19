@@ -48,6 +48,8 @@ class _Ctx:
 
 
 def _bare_conn() -> MongoDBConn:
+    """A MongoDBConn whose URI never reaches a real driver -- the
+    pymongo client is monkeypatched in every test."""
     return MongoDBConn(
         uri="mongodb://stub.invalid:27017",
         credentials=UserPassword(
@@ -75,6 +77,8 @@ def work_dir(tmp_path: Path) -> Path:
 
 
 class _FakeSession:
+    """Drop-in stand-in for ``pymongo.ClientSession`` capturing the
+    txn lifecycle the plugin drives."""
 
     def __init__(self) -> None:
         self.started_transactions = 0
@@ -101,6 +105,7 @@ class _FakeSession:
 
 
 class _FakeCollection:
+    """Captures bulk_write calls and the count_documents/drop sequence."""
 
     def __init__(self, name: str, exists: bool = False) -> None:
         self.name = name
@@ -155,6 +160,9 @@ class _FakeAdmin:
 
 
 class _FakeClient:
+    """A test double for ``pymongo.MongoClient`` that exposes the
+    surface the plugin uses: ``admin.command``, ``client[db]``,
+    ``start_session``, ``close``."""
 
     def __init__(self, ping_raises: Exception | None = None) -> None:
         self.databases: dict[str, _FakeDatabase] = {}
@@ -175,6 +183,7 @@ class _FakeClient:
 
 
 def _install_client(monkeypatch, client: _FakeClient) -> _FakeClient:
+    """Make ``pymongo.MongoClient(...)`` return ``client``."""
     captured = {}
 
     def factory(uri, **kwargs):

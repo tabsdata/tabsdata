@@ -1,3 +1,21 @@
+"""Snowflake connector — public API.
+
+Defines the dataclasses a flow author wires onto a publisher,
+subscriber, or transformer to target Snowflake:
+
+* :class:`SnowflakeConn` -- per-account connection (account id,
+  user/password, optional default role/database/schema/warehouse/
+  stage).
+* :class:`SnowflakeDest` -- destination wrapper bound to a
+  :class:`SnowflakeConn` plus a list of target table names. Used
+  by the destination plugin (``COPY INTO`` via a stage).
+
+Snowflake is dest-only in this connector; there is no
+``SnowflakeSrc``. Identifier and account fields accept ``Env`` /
+``Secret`` references so values can be injected from the runtime
+environment rather than hard-coded.
+"""
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -65,6 +83,25 @@ DestCfgSpec: TypeAlias = Annotated[
 
 @_api.dataclass(SnowflakeErrorCode.SNOWFLAKE_1, kw_only=True)
 class SnowflakeConn(Conn):
+    """Snowflake account connection.
+
+    :param account: Snowflake account locator (e.g. ``ABCDEFG-XY12345``).
+        Accepts a plain str, ``Env``, or ``Secret``.
+    :param credentials: :class:`UserPassword` (user + password / PAT).
+    :param role: Default Snowflake role. Optional.
+    :param database: Default database. Required if ``schema`` is set.
+    :param schema: Default schema. Requires ``database``.
+    :param warehouse: Default warehouse to ``USE`` before write.
+        Optional -- the dest plugin issues ``USE WAREHOUSE`` only when set.
+    :param stage: Permanent stage to use for ``PUT`` + ``COPY INTO``.
+        When unset the plugin creates a session-scoped ``TEMPORARY`` stage.
+    :param conn_cfg: Optional driver-specific config dict
+        (snowflake-connector-python kwargs).
+
+    Cross-field rule: ``schema`` without ``database`` raises
+    ``SNOWFLAKE_2``.
+    """
+
     account: AccountSpec
     credentials: CredentialsSpec
     role: NameSpec | None = None
@@ -88,6 +125,20 @@ ConnSpec: TypeAlias = Union[NamedConn, SnowflakeConn]
 
 @_api.dataclass(SnowflakeErrorCode.SNOWFLAKE_3, kw_only=True)
 class SnowflakeDest(Dest):
+    """Snowflake destination — write one parquet per target table.
+
+    :param conn: :class:`SnowflakeConn` (or :class:`NamedConn`).
+    :param tables: Fully-qualified Snowflake table names
+        (``[<db>.]<schema>.<table>`` or bare). Identifier parts
+        accept double-quoted spelling for case-sensitive / special-
+        char names.
+    :param if_table_exists: ``"append"`` (default) or ``"replace"``
+        (issues ``TRUNCATE`` before ``COPY INTO`` to preserve the
+        existing schema).
+    :param dest_cfg: Optional dest cfg dict; the only key the plugin
+        consumes today is ``"snowflake.logging_level"``.
+    """
+
     conn: ConnSpec
     tables: SnowflakeTableNamesSpec
     if_table_exists: IfTableExistsSpec = "append"

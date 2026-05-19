@@ -21,6 +21,9 @@ logger = logging.getLogger(__name__)
 
 
 def _resolve(value: Any) -> str:
+    """Resolve a field whose annotation is ``str | Secret | Env`` to a
+    bare ``str``. ``str`` values are returned verbatim; ``Secret`` /
+    ``Env`` are dereferenced through ``.value()``."""
     if isinstance(value, (Secret, Env)):
         return value.value()
     return str(value)
@@ -36,6 +39,11 @@ def build_starrocks_engine(
     credentials: UserPassword,
     connect_args: dict | None = None,
 ):
+    """Create a SQLAlchemy engine talking to StarRocks via the
+    MySQL wire protocol. ``mysql+mysqlconnector://`` is used so the
+    runtime only needs ``mysql-connector-python`` (which the legacy
+    plugin already required) and not a separate driver shim.
+    """
     from sqlalchemy import create_engine
 
     user = credentials.user.value()
@@ -60,6 +68,8 @@ def _kv(items: dict[str, str]) -> str:
 
 
 def _common_directory(paths: list[str]) -> str:
+    """Longest shared directory prefix across all *paths*. Mirrors the
+    legacy ``cloud_storage._common_directory`` helper."""
     parts_list = [p.rsplit("/", 1)[0] for p in paths]
     if len(set(parts_list)) == 1:
         return parts_list[0]
@@ -71,12 +81,20 @@ def _common_directory(paths: list[str]) -> str:
 
 
 def _path_expr(uris: list[str]) -> str:
+    """One URI passes through verbatim; many uris collapse to a
+    ``<commondir>/*`` wildcard which StarRocks' ``FILES()`` accepts."""
     if len(uris) == 1:
         return uris[0]
     return _common_directory(uris) + "/*"
 
 
 def build_files_function(staging: CloudLocation, staged_uris: list[str]) -> str:
+    """Build a ``FILES(...)`` table-function call for *staged_uris*.
+
+    Per-cloud credential and endpoint settings are pulled from
+    *staging* (the user-supplied :class:`CloudLocation` on
+    :class:`StarRocksConn`).
+    """
     if isinstance(staging, S3Location):
         bucket = _resolve(staging.bucket)
         region = _resolve(staging.region)
@@ -120,6 +138,10 @@ def build_files_function(staging: CloudLocation, staged_uris: list[str]) -> str:
 
 
 def staged_uri(staging: CloudLocation, key: str) -> str:
+    """Render an absolute URI under *staging* for the relative *key*.
+    The URI format is the one StarRocks' ``FILES()`` table function
+    consumes for the corresponding cloud backend.
+    """
     rel = staging.full_path(key) if hasattr(staging, "full_path") else key.lstrip("/")
     if isinstance(staging, S3Location):
         bucket = _resolve(staging.bucket)
@@ -147,6 +169,8 @@ def staged_uri(staging: CloudLocation, key: str) -> str:
 
 
 def transporter_target(staging: CloudLocation, key: str):
+    """Build the :class:`TransporterLocation` *destination* for a
+    parquet upload to *staging* under the relative *key*."""
     # Local imports keep the conn-common-file dependency optional for
     # plain Conn-construction users who never call write_out.
     from tabsdatak.conn.common.file import _transporter as t
@@ -181,6 +205,8 @@ def transporter_target(staging: CloudLocation, key: str):
 
 
 def transporter_env(staging: CloudLocation) -> dict[str, str]:
+    """Resolve the credentials on *staging* into env vars the
+    transporter binary reads at runtime."""
     from tabsdatak.conn.common.file import _transporter as t
 
     if isinstance(staging, S3Location):
@@ -226,12 +252,16 @@ class StarRocksWriteCfg:
 
 
 def _quote_ident(name: str) -> str:
+    """Quote a StarRocks identifier with backticks. If the value is
+    already backtick-quoted we leave it as-is."""
     if name.startswith("`") and name.endswith("`"):
         return name
     return f"`{name}`"
 
 
 def _qualify(database: str, table: str) -> str:
+    r"""Return ``\`db\`.\`tbl\``` -- handling pre-qualified inputs
+    (``a.b``) by splitting at the unquoted dot."""
     from tabsdatak.conn.common._validation import split_fqn
 
     parts = split_fqn(table, quote="`")
@@ -247,6 +277,12 @@ def upload_parquet(
     parquet_path: Path,
     table_key: str,
 ) -> str:
+    """Upload one local parquet to *staging* under
+    ``<upload_id>/<table_key>/<filename>`` and return the staged URI.
+
+    Returns the same URI shape that :func:`build_files_function` /
+    :func:`staged_uri` expect.
+    """
     from tabsdatak.conn.common.file import _output, _transporter as t
 
     rel = f"{upload_id}/{table_key}/{parquet_path.name}"
@@ -270,6 +306,14 @@ def execute(
     work_dir: Path,
     upload_id: str,
 ) -> None:
+    """Stage each parquet to cloud, then issue one
+    ``INSERT INTO <table> SELECT * FROM FILES(...)`` per table.
+
+    Each table is loaded independently (StarRocks does not support
+    multi-statement transactions for bulk loads); a failure after some
+    tables have loaded leaves those tables with the new rows -- the
+    documented recovery path is to re-run in ``replace`` mode.
+    """
     from sqlalchemy import text
 
     if cfg.if_table_exists not in ("append", "replace"):

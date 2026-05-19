@@ -1,3 +1,14 @@
+"""End-to-end Azure Blob integration tests: invoke ``td_transporter``
+against a real container. Skipped unless ALL of these are set:
+
+  - ``TD_TRANSPORTER_BIN``    -- path to a built transporter binary
+  - ``AZ0__AZ_URI``           -- ``az://container[/path/prefix]``
+  - ``AZ0__AZ_ACCOUNT_NAME``  -- storage account name
+  - ``AZ0__AZ_ACCOUNT_KEY``   -- storage account key
+
+The URI's path component is used as ``AzureBlobConn.base_path`` so each
+run writes under ``<container>/<uri_path>/td-integ/<uuid>/``.
+"""
 
 from __future__ import annotations
 
@@ -73,6 +84,7 @@ class _DestCtx(_SrcCtx):
 
 
 def _parse_uri(uri: str) -> tuple[str, str]:
+    """Split an ``az://container/path`` URI into ``(container, path)``."""
     parsed = urlparse(uri)
     container = parsed.netloc
     path = parsed.path.lstrip("/")

@@ -1,3 +1,9 @@
+"""Unit tests for the Databricks impl -- the pure-Python helpers
+that don't need the SDK / SQL connector libraries at module level.
+
+End-to-end coverage against a real Databricks workspace lives in
+``test__plugin_integration.py``.
+"""
 
 from __future__ import annotations
 

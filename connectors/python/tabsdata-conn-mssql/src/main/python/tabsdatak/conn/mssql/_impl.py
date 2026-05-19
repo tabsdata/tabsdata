@@ -38,6 +38,9 @@ _DRIVERS: dict[str, str] = {"mssql": "pyodbc"}
 
 
 def _is_odbc_connection_string(value: str) -> bool:
+    """ODBC connection strings have no scheme separator. The
+    validator already restricts the input to one of the two shapes,
+    so this is just the URI/ODBC discriminator."""
     return "://" not in value
 
 
