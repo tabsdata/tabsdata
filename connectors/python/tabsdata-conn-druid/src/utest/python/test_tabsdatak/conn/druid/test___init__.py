@@ -1,13 +1,27 @@
+from __future__ import annotations
+
+import typing
 
 import pytest
 
 from tabsdatak.api import NamedConn, Secret
 from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
+    CfgSpec,
+    CloudLocation,
     S3Location,
     UserPassword,
 )
-from tabsdatak.conn.druid import DruidConn, DruidDest
+from tabsdatak.conn.druid import (
+    ConnSpec,
+    CredentialsSpec,
+    DruidConn,
+    DruidDest,
+    DruidTableNamesSpec,
+    IfTableExistsSpec,
+    SegmentGranularitySpec,
+    UrlSpec,
+)
 
 
 pytestmark = pytest.mark.druid
@@ -73,3 +87,32 @@ def test_druid_dest_round_trip_with_named_conn():
     assert loaded == dest
     assert isinstance(loaded.conn, NamedConn)
     assert loaded.conn.name == "prod_druid"
+
+
+# ---------------------------------------------------------------------------
+# Field-spec wiring
+# ---------------------------------------------------------------------------
+
+
+def _hint(cls: type, field: str) -> object:
+    return typing.get_type_hints(cls, include_extras=True)[field]
+
+
+def test_druid_conn_fields_wire_expected_specs():
+    assert _hint(DruidConn, "overlord_url") == UrlSpec
+    assert _hint(DruidConn, "staging") == CloudLocation
+    assert _hint(DruidConn, "credentials") == CredentialsSpec
+    assert _hint(DruidConn, "conn_cfg") == CfgSpec | None
+
+
+def test_druid_dest_fields_wire_expected_specs():
+    assert _hint(DruidDest, "conn") == ConnSpec
+    assert _hint(DruidDest, "tables") == DruidTableNamesSpec
+    assert _hint(DruidDest, "if_table_exists") == IfTableExistsSpec
+    assert _hint(DruidDest, "time_column") == str | None
+    assert _hint(DruidDest, "segment_granularity") == SegmentGranularitySpec
+    assert _hint(DruidDest, "max_concurrent_subtasks") is int
+    assert _hint(DruidDest, "max_rows_per_segment") is int
+    assert _hint(DruidDest, "max_rows_in_memory") is int
+    assert _hint(DruidDest, "http_timeout_sec") is int
+    assert _hint(DruidDest, "dest_cfg") == CfgSpec | None
