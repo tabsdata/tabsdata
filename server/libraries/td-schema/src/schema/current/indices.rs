@@ -6,9 +6,13 @@ use sea_query::{Index, IndexCreateStatement};
 
 use super::collections::Collections;
 use super::functions::{
-    Bundles, Dependencies, DependenciesCurrent, Executions, FunctionRequirements, FunctionRuns,
-    Functions, FunctionsCurrent, TableDataVersions, Tables, TablesCurrent, Transactions, Triggers,
-    TriggersCurrent,
+    Bundles, Dependencies, DependenciesCurrent, Executions, FunctionPatches, Functions,
+    FunctionsCurrent, PhysicalFunctionRuns, PhysicalTableDataVersions, Tables, TablesCurrent,
+    Transactions, Triggers, TriggersCurrent,
+};
+use super::logical::{
+    LogicalFunctionRunInputs, LogicalFunctionRunPointers, LogicalFunctionRuns,
+    LogicalTableDataVersionPointers, LogicalTableDataVersions,
 };
 use super::permissions::{InterCollectionPermissions, Permissions};
 use super::roles::{Roles, UsersRoles};
@@ -21,6 +25,7 @@ pub fn all() -> Vec<IndexCreateStatement> {
     indices.extend(collection_indices());
     indices.extend(function_indices());
     indices.extend(functions_current_indices());
+    indices.extend(function_patch_indices());
     indices.extend(table_indices());
     indices.extend(tables_current_indices());
     indices.extend(execution_indices());
@@ -32,11 +37,95 @@ pub fn all() -> Vec<IndexCreateStatement> {
     indices.extend(bundle_indices());
     indices.extend(dependency_indices());
     indices.extend(dependencies_current_indices());
-    indices.extend(function_requirement_indices());
     indices.extend(session_indices());
     indices.extend(role_indices());
     indices.extend(permission_indices());
+    indices.extend(logical_indices());
     indices
+}
+
+fn logical_indices() -> Vec<IndexCreateStatement> {
+    vec![
+        // LFR: lookup by execution_id (read-execution path).
+        Index::create()
+            .name("logical_function_runs___execution_id___idx")
+            .table(LogicalFunctionRuns::Table)
+            .col(LogicalFunctionRuns::ExecutionId)
+            .to_owned(),
+        // LFR: lookup by transaction_id (cancel cascade scans the transaction's LFRs).
+        Index::create()
+            .name("logical_function_runs___transaction_id___idx")
+            .table(LogicalFunctionRuns::Table)
+            .col(LogicalFunctionRuns::TransactionId)
+            .to_owned(),
+        // LFR pointers: latest-pointer-per-LFR scan
+        // (PARTITION BY logical_function_run_id ORDER BY set_on DESC, id DESC).
+        Index::create()
+            .name("logical_function_run_pointers___logical_function_run_id__set_on__id___idx")
+            .table(LogicalFunctionRunPointers::Table)
+            .col(LogicalFunctionRunPointers::LogicalFunctionRunId)
+            .col(LogicalFunctionRunPointers::SetOn)
+            .col(LogicalFunctionRunPointers::Id)
+            .to_owned(),
+        // LFR pointers: reverse lookup from concrete FR to the LFR(s) that
+        // currently or historically point at it.
+        Index::create()
+            .name("logical_function_run_pointers___function_run_id___idx")
+            .table(LogicalFunctionRunPointers::Table)
+            .col(LogicalFunctionRunPointers::PhysicalFunctionRunId)
+            .to_owned(),
+        // LTDV: hot path — `Head(0)` resolution scans by table_id ordered by triggered_on.
+        Index::create()
+            .name("logical_table_data_versions___table_id__triggered_on___idx")
+            .table(LogicalTableDataVersions::Table)
+            .col(LogicalTableDataVersions::TableId)
+            .col(LogicalTableDataVersions::TriggeredOn)
+            .to_owned(),
+        // LTDV: lookup by execution / transaction (read-execution and cancel paths).
+        Index::create()
+            .name("logical_table_data_versions___execution_id___idx")
+            .table(LogicalTableDataVersions::Table)
+            .col(LogicalTableDataVersions::ExecutionId)
+            .to_owned(),
+        Index::create()
+            .name("logical_table_data_versions___transaction_id___idx")
+            .table(LogicalTableDataVersions::Table)
+            .col(LogicalTableDataVersions::TransactionId)
+            .to_owned(),
+        // LTDV: producer-side lookup (find every output an LFR produces).
+        Index::create()
+            .name("logical_table_data_versions___producer_logical_function_run_id___idx")
+            .table(LogicalTableDataVersions::Table)
+            .col(LogicalTableDataVersions::ProducerLogicalFunctionRunId)
+            .to_owned(),
+        // LTDV pointers: latest-pointer-per-LTDV scan
+        // (PARTITION BY logical_table_data_version_id ORDER BY set_on DESC, id DESC).
+        Index::create()
+            .name("logical_table_data_version_pointers___logical_table_data_version_id__set_on__id___idx")
+            .table(LogicalTableDataVersionPointers::Table)
+            .col(LogicalTableDataVersionPointers::LogicalTableDataVersionId)
+            .col(LogicalTableDataVersionPointers::SetOn)
+            .col(LogicalTableDataVersionPointers::Id)
+            .to_owned(),
+        // LTDV pointers: reverse lookup from concrete TDV.
+        Index::create()
+            .name("logical_table_data_version_pointers___table_data_version_id___idx")
+            .table(LogicalTableDataVersionPointers::Table)
+            .col(LogicalTableDataVersionPointers::PhysicalTableDataVersionId)
+            .to_owned(),
+        // LFR inputs: scheduler readiness query joins on logical_function_run_id.
+        Index::create()
+            .name("logical_function_run_inputs___logical_function_run_id___idx")
+            .table(LogicalFunctionRunInputs::Table)
+            .col(LogicalFunctionRunInputs::LogicalFunctionRunId)
+            .to_owned(),
+        // LFR inputs: lookup by execution (plan rebuild and read paths).
+        Index::create()
+            .name("logical_function_run_inputs___execution_id___idx")
+            .table(LogicalFunctionRunInputs::Table)
+            .col(LogicalFunctionRunInputs::ExecutionId)
+            .to_owned(),
+    ]
 }
 
 fn user_indices() -> Vec<IndexCreateStatement> {
@@ -93,6 +182,22 @@ fn functions_current_indices() -> Vec<IndexCreateStatement> {
             .name("functions_current___status___idx")
             .table(FunctionsCurrent::Table)
             .col(FunctionsCurrent::Status)
+            .to_owned(),
+    ]
+}
+
+fn function_patch_indices() -> Vec<IndexCreateStatement> {
+    // The "latest patch of head fvid" hot path now reads
+    // `function_patches_current` (one row per parent_function_version_id,
+    // with the partition column declared `unique_key()` → indexed). The
+    // historic `function_patches` base table is only scanned by
+    // list-patches, which orders by `(function_id, defined_on DESC)`.
+    vec![
+        Index::create()
+            .name("function_patches___function_id__defined_on___idx")
+            .table(FunctionPatches::Table)
+            .col(FunctionPatches::FunctionId)
+            .col(FunctionPatches::DefinedOn)
             .to_owned(),
     ]
 }
@@ -167,35 +272,65 @@ fn execution_indices() -> Vec<IndexCreateStatement> {
 }
 
 fn function_run_indices() -> Vec<IndexCreateStatement> {
+    use crate::schema::current::logical::LogicalFunctionRuns;
+
     vec![
         Index::create()
             .name("function_runs___collection_id___idx")
-            .table(FunctionRuns::Table)
-            .col(FunctionRuns::CollectionId)
-            .to_owned(),
-        // Composite for executions__with_status view (aggregates by execution_id + status)
-        Index::create()
-            .name("function_runs___execution_id__status___idx")
-            .table(FunctionRuns::Table)
-            .col(FunctionRuns::ExecutionId)
-            .col(FunctionRuns::Status)
-            .to_owned(),
-        // Composite for transactions__with_status view (aggregates by transaction_id + status)
-        Index::create()
-            .name("function_runs___transaction_id__status___idx")
-            .table(FunctionRuns::Table)
-            .col(FunctionRuns::TransactionId)
-            .col(FunctionRuns::Status)
+            .table(PhysicalFunctionRuns::Table)
+            .col(PhysicalFunctionRuns::CollectionId)
             .to_owned(),
         Index::create()
             .name("function_runs___function_version_id___idx")
-            .table(FunctionRuns::Table)
-            .col(FunctionRuns::FunctionVersionId)
+            .table(PhysicalFunctionRuns::Table)
+            .col(PhysicalFunctionRuns::FunctionVersionId)
+            .to_owned(),
+        // Per-attempt status indices (FR-listing endpoints).
+        Index::create()
+            .name("function_runs___execution_id__status___idx")
+            .table(PhysicalFunctionRuns::Table)
+            .col(PhysicalFunctionRuns::ExecutionId)
+            .col(PhysicalFunctionRuns::Status)
+            .to_owned(),
+        Index::create()
+            .name("function_runs___transaction_id__status___idx")
+            .table(PhysicalFunctionRuns::Table)
+            .col(PhysicalFunctionRuns::TransactionId)
+            .col(PhysicalFunctionRuns::Status)
             .to_owned(),
         Index::create()
             .name("function_runs___status___idx")
-            .table(FunctionRuns::Table)
-            .col(FunctionRuns::Status)
+            .table(PhysicalFunctionRuns::Table)
+            .col(PhysicalFunctionRuns::Status)
+            .to_owned(),
+        // FR → LFR derivation (status cascade, callback, redirect, replay).
+        // Unique by construction: at most one LFR per `(execution_id,
+        // function_id)`. The `.unique()` lifts that invariant from
+        // service-layer convention to DB structure.
+        Index::create()
+            .name("logical_function_runs___execution_id__function_id___idx")
+            .table(LogicalFunctionRuns::Table)
+            .col(LogicalFunctionRuns::ExecutionId)
+            .col(LogicalFunctionRuns::FunctionId)
+            .unique()
+            .to_owned(),
+        // Canonical (LFR) status indices for the logical-chain cascade.
+        Index::create()
+            .name("logical_function_runs___execution_id__status___idx")
+            .table(LogicalFunctionRuns::Table)
+            .col(LogicalFunctionRuns::ExecutionId)
+            .col(LogicalFunctionRuns::Status)
+            .to_owned(),
+        Index::create()
+            .name("logical_function_runs___transaction_id__status___idx")
+            .table(LogicalFunctionRuns::Table)
+            .col(LogicalFunctionRuns::TransactionId)
+            .col(LogicalFunctionRuns::Status)
+            .to_owned(),
+        Index::create()
+            .name("logical_function_runs___status___idx")
+            .table(LogicalFunctionRuns::Table)
+            .col(LogicalFunctionRuns::Status)
             .to_owned(),
     ]
 }
@@ -204,33 +339,33 @@ fn table_data_version_indices() -> Vec<IndexCreateStatement> {
     vec![
         Index::create()
             .name("table_data_versions___collection_id___idx")
-            .table(TableDataVersions::Table)
-            .col(TableDataVersions::CollectionId)
+            .table(PhysicalTableDataVersions::Table)
+            .col(PhysicalTableDataVersions::CollectionId)
             .to_owned(),
         Index::create()
             .name("table_data_versions___execution_id___idx")
-            .table(TableDataVersions::Table)
-            .col(TableDataVersions::ExecutionId)
+            .table(PhysicalTableDataVersions::Table)
+            .col(PhysicalTableDataVersions::ExecutionId)
             .to_owned(),
         Index::create()
             .name("table_data_versions___function_run_id___idx")
-            .table(TableDataVersions::Table)
-            .col(TableDataVersions::FunctionRunId)
+            .table(PhysicalTableDataVersions::Table)
+            .col(PhysicalTableDataVersions::FunctionRunId)
             .to_owned(),
         // Note: single table_id index removed — it's a prefix of these composites
         Index::create()
             .name("table_data_versions___table_id___has_data___idx")
-            .table(TableDataVersions::Table)
-            .col(TableDataVersions::TableId)
-            .col(TableDataVersions::HasData)
+            .table(PhysicalTableDataVersions::Table)
+            .col(PhysicalTableDataVersions::TableId)
+            .col(PhysicalTableDataVersions::HasData)
             .to_owned(),
         // Composite index for versioned queries: PARTITION BY table_id ORDER BY triggered_on DESC, id DESC
         Index::create()
             .name("table_data_versions___table_id__triggered_on__id___idx")
-            .table(TableDataVersions::Table)
-            .col(TableDataVersions::TableId)
-            .col(TableDataVersions::TriggeredOn)
-            .col(TableDataVersions::Id)
+            .table(PhysicalTableDataVersions::Table)
+            .col(PhysicalTableDataVersions::TableId)
+            .col(PhysicalTableDataVersions::TriggeredOn)
+            .col(PhysicalTableDataVersions::Id)
             .to_owned(),
     ]
 }
@@ -345,41 +480,6 @@ fn dependency_indices() -> Vec<IndexCreateStatement> {
             .name("dependencies___table_function_id___idx")
             .table(Dependencies::Table)
             .col(Dependencies::TableFunctionId)
-            .to_owned(),
-    ]
-}
-
-fn function_requirement_indices() -> Vec<IndexCreateStatement> {
-    vec![
-        // For recursive downstream traversal (recurse_down column)
-        Index::create()
-            .name("function_requirements___function_run_id___idx")
-            .table(FunctionRequirements::Table)
-            .col(FunctionRequirements::FunctionRunId)
-            .to_owned(),
-        // For recursive upstream traversal (recurse_up column)
-        Index::create()
-            .name("function_requirements___requirement_function_run_id___idx")
-            .table(FunctionRequirements::Table)
-            .col(FunctionRequirements::RequirementFunctionRunId)
-            .to_owned(),
-        // For listing executions by function version
-        Index::create()
-            .name("function_requirements___function_version_id___idx")
-            .table(FunctionRequirements::Table)
-            .col(FunctionRequirements::FunctionVersionId)
-            .to_owned(),
-        // For list_executions_by_table_data_version query
-        Index::create()
-            .name("function_requirements___requirement_table_data_version_id___idx")
-            .table(FunctionRequirements::Table)
-            .col(FunctionRequirements::RequirementTableDataVersionId)
-            .to_owned(),
-        // For querying function_requirements__with_names by execution_id
-        Index::create()
-            .name("function_requirements___execution_id___idx")
-            .table(FunctionRequirements::Table)
-            .col(FunctionRequirements::ExecutionId)
             .to_owned(),
     ]
 }

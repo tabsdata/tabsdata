@@ -259,6 +259,229 @@ impl Backend {
             Self::MySql => format!("DROP TRIGGER IF EXISTS {}", trigger.name),
         }
     }
+
+    /// Render a `BEFORE UPDATE` trigger that refuses any transition out of a
+    /// sticky-terminal set. Same-state transitions (idempotent) are allowed;
+    /// any other target raises an error that the service layer surfaces.
+    pub(crate) fn create_sticky_terminals_trigger(
+        &self,
+        trigger: &StickyTerminalsTriggerDef,
+    ) -> String {
+        let values = trigger
+            .terminal_values
+            .iter()
+            .map(|v| format!("'{v}'"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        match self {
+            #[cfg(feature = "sqlite")]
+            Self::Sqlite => format!(
+                "CREATE TRIGGER {name} BEFORE UPDATE OF {col} ON {table}\n\
+                 FOR EACH ROW WHEN OLD.{col} IN ({values}) AND NEW.{col} != OLD.{col}\n\
+                 BEGIN\n  \
+                   SELECT RAISE(ABORT, '{table}.{col} is sticky in terminal state');\n\
+                 END",
+                name = trigger.name,
+                table = trigger.source_table,
+                col = trigger.status_col,
+            ),
+            #[cfg(feature = "postgres")]
+            Self::Postgres => format!(
+                "CREATE OR REPLACE FUNCTION {name}_fn() RETURNS TRIGGER AS $$\n\
+                 BEGIN\n  \
+                   IF OLD.{col} IN ({values}) AND NEW.{col} != OLD.{col} THEN\n    \
+                     RAISE EXCEPTION '{table}.{col} is sticky in terminal state';\n  \
+                   END IF;\n  \
+                   RETURN NEW;\n\
+                 END;\n\
+                 $$ LANGUAGE plpgsql;\n\
+                 CREATE TRIGGER {name} BEFORE UPDATE OF {col} ON {table}\n\
+                 FOR EACH ROW EXECUTE FUNCTION {name}_fn()",
+                name = trigger.name,
+                table = trigger.source_table,
+                col = trigger.status_col,
+            ),
+            #[cfg(feature = "mysql")]
+            Self::MySql => format!(
+                "CREATE TRIGGER {name} BEFORE UPDATE ON {table}\n\
+                 FOR EACH ROW\n\
+                 BEGIN\n  \
+                   IF OLD.{col} IN ({values}) AND NEW.{col} != OLD.{col} THEN\n    \
+                     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{table}.{col} is sticky in terminal state';\n  \
+                   END IF;\n\
+                 END",
+                name = trigger.name,
+                table = trigger.source_table,
+                col = trigger.status_col,
+            ),
+        }
+    }
+
+    /// Render an `AFTER INSERT` trigger that maintains a `_current` table
+    /// *guarded by a version column*. Differs from [`create_trigger`] in two
+    /// ways:
+    ///
+    /// 1. The `_current` row is only replaced when `NEW.{version_col}` is
+    ///    strictly greater than the existing row's `{version_col}`, with a
+    ///    deterministic tie-break on `{tie_break_col}` (lexicographic) for
+    ///    equal versions.
+    /// 2. Out-of-order inserts (e.g. a back-dated patch) leave the current
+    ///    view untouched.
+    pub(crate) fn create_versioned_current_trigger(&self, trigger: &VersionedTriggerDef) -> String {
+        let cols = trigger.columns.join(", ");
+        let new_cols: Vec<String> = trigger.columns.iter().map(|c| format!("NEW.{c}")).collect();
+        let new_vals = new_cols.join(", ");
+        match self {
+            #[cfg(feature = "sqlite")]
+            Self::Sqlite => format!(
+                "CREATE TRIGGER {name} AFTER INSERT ON {source}\n\
+                 FOR EACH ROW WHEN NOT EXISTS (\n  \
+                   SELECT 1 FROM {target}\n  \
+                   WHERE {partition} = NEW.{partition}\n    \
+                     AND ({version} > NEW.{version}\n         \
+                          OR ({version} = NEW.{version} AND {tie_break} >= NEW.{tie_break}))\n\
+                 )\n\
+                 BEGIN\n  \
+                   DELETE FROM {target} WHERE {partition} = NEW.{partition};\n  \
+                   INSERT INTO {target} ({cols}) VALUES ({new_vals});\n\
+                 END",
+                name = trigger.name,
+                source = trigger.source_table,
+                target = trigger.target_table,
+                partition = trigger.partition_col,
+                version = trigger.version_col,
+                tie_break = trigger.tie_break_col,
+            ),
+            #[cfg(feature = "postgres")]
+            Self::Postgres => {
+                let updates: Vec<String> = trigger
+                    .columns
+                    .iter()
+                    .filter(|c| **c != trigger.partition_col)
+                    .map(|c| format!("{c} = EXCLUDED.{c}"))
+                    .collect();
+                let update_set = updates.join(", ");
+                format!(
+                    "CREATE OR REPLACE FUNCTION {name}_fn() RETURNS TRIGGER AS $$\n\
+                     BEGIN\n  \
+                       INSERT INTO {target} ({cols}) VALUES ({new_vals})\n  \
+                       ON CONFLICT ({partition}) DO UPDATE SET {update_set}\n  \
+                       WHERE EXCLUDED.{version} > {target}.{version}\n     \
+                          OR (EXCLUDED.{version} = {target}.{version}\n         \
+                              AND EXCLUDED.{tie_break} > {target}.{tie_break});\n  \
+                       RETURN NEW;\n\
+                     END;\n\
+                     $$ LANGUAGE plpgsql;\n\
+                     CREATE TRIGGER {name} AFTER INSERT ON {source}\n\
+                     FOR EACH ROW EXECUTE FUNCTION {name}_fn()",
+                    name = trigger.name,
+                    source = trigger.source_table,
+                    target = trigger.target_table,
+                    partition = trigger.partition_col,
+                    version = trigger.version_col,
+                    tie_break = trigger.tie_break_col,
+                )
+            }
+            #[cfg(feature = "mysql")]
+            Self::MySql => {
+                // MySQL trigger bodies can't run `IF` over a SELECT FROM the
+                // target table inside the trigger that fired the INSERT.
+                // Use a stored procedure-style guard via `INSERT … SELECT`
+                // and `ON DUPLICATE KEY UPDATE` with a `IF(NEW.version >
+                // OLD.version, NEW.col, OLD.col)` per column.
+                let updates: Vec<String> = trigger
+                    .columns
+                    .iter()
+                    .filter(|c| **c != trigger.partition_col)
+                    .map(|c| {
+                        format!(
+                            "{c} = IF(NEW.{v} > {target}.{v} OR (NEW.{v} = {target}.{v} AND NEW.{tb} > {target}.{tb}), NEW.{c}, {target}.{c})",
+                            v = trigger.version_col,
+                            tb = trigger.tie_break_col,
+                            target = trigger.target_table,
+                        )
+                    })
+                    .collect();
+                let update_set = updates.join(", ");
+                format!(
+                    "CREATE TRIGGER {name} AFTER INSERT ON {source}\n\
+                     FOR EACH ROW BEGIN\n  \
+                       INSERT INTO {target} ({cols}) VALUES ({new_vals})\n  \
+                       ON DUPLICATE KEY UPDATE {update_set};\n\
+                     END",
+                    name = trigger.name,
+                    source = trigger.source_table,
+                    target = trigger.target_table,
+                )
+            }
+        }
+    }
+
+    /// Render `BEFORE UPDATE` and `BEFORE DELETE` triggers that refuse any
+    /// mutation on an insert-only event log. Returns two statements (the
+    /// caller flattens them into the schema stream).
+    pub(crate) fn create_immutable_triggers(&self, trigger: &ImmutableTriggerDef) -> Vec<String> {
+        let upd_name = format!("{}_no_update", trigger.name);
+        let del_name = format!("{}_no_delete", trigger.name);
+        match self {
+            #[cfg(feature = "sqlite")]
+            Self::Sqlite => vec![
+                format!(
+                    "CREATE TRIGGER {upd_name} BEFORE UPDATE ON {table}\n\
+                     FOR EACH ROW BEGIN\n  \
+                       SELECT RAISE(ABORT, '{table} is insert-only');\n\
+                     END",
+                    table = trigger.source_table,
+                ),
+                format!(
+                    "CREATE TRIGGER {del_name} BEFORE DELETE ON {table}\n\
+                     FOR EACH ROW BEGIN\n  \
+                       SELECT RAISE(ABORT, '{table} is insert-only');\n\
+                     END",
+                    table = trigger.source_table,
+                ),
+            ],
+            #[cfg(feature = "postgres")]
+            Self::Postgres => vec![
+                format!(
+                    "CREATE OR REPLACE FUNCTION {name}_fn() RETURNS TRIGGER AS $$\n\
+                     BEGIN\n  \
+                       RAISE EXCEPTION '{table} is insert-only';\n\
+                     END;\n\
+                     $$ LANGUAGE plpgsql;\n\
+                     CREATE TRIGGER {upd_name} BEFORE UPDATE ON {table}\n\
+                     FOR EACH ROW EXECUTE FUNCTION {name}_fn()",
+                    name = trigger.name,
+                    table = trigger.source_table,
+                ),
+                format!(
+                    "CREATE TRIGGER {del_name} BEFORE DELETE ON {table}\n\
+                     FOR EACH ROW EXECUTE FUNCTION {name}_fn()",
+                    name = trigger.name,
+                    table = trigger.source_table,
+                ),
+            ],
+            #[cfg(feature = "mysql")]
+            Self::MySql => vec![
+                format!(
+                    "CREATE TRIGGER {upd_name} BEFORE UPDATE ON {table}\n\
+                     FOR EACH ROW\n\
+                     BEGIN\n  \
+                       SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{table} is insert-only';\n\
+                     END",
+                    table = trigger.source_table,
+                ),
+                format!(
+                    "CREATE TRIGGER {del_name} BEFORE DELETE ON {table}\n\
+                     FOR EACH ROW\n\
+                     BEGIN\n  \
+                       SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{table} is insert-only';\n\
+                     END",
+                    table = trigger.source_table,
+                ),
+            ],
+        }
+    }
 }
 
 /// A trigger definition for maintaining a `_current` table from an append-only
@@ -274,4 +497,53 @@ pub(crate) struct TriggerDef {
     pub partition_col: &'static str,
     /// All column names (must match both source and target tables).
     pub columns: Vec<&'static str>,
+}
+
+/// An `AFTER INSERT` trigger that maintains a `_current` table with a
+/// version-column guard: out-of-order inserts (older `version_col` value)
+/// do not regress the current view. Tie-broken deterministically on
+/// `tie_break_col`. Used for time-versioned event logs whose `defined_on`
+/// can arrive out of order (e.g. back-dated patches).
+pub(crate) struct VersionedTriggerDef {
+    /// Trigger name, e.g. `"function_patches__maintain_current"`.
+    pub name: &'static str,
+    /// Source (append-only) table name.
+    pub source_table: &'static str,
+    /// Target `_current` table name.
+    pub target_table: &'static str,
+    /// Partition column (the natural-key column of the `_current` view).
+    pub partition_col: &'static str,
+    /// Version column (typically `"defined_on"`).
+    pub version_col: &'static str,
+    /// Tie-break column for equal `version_col` values (typically `"id"`).
+    pub tie_break_col: &'static str,
+    /// All column names (must match both source and target tables).
+    pub columns: Vec<&'static str>,
+}
+
+/// A `BEFORE UPDATE` guard that refuses any transition out of a set of
+/// "sticky terminal" status values. Lifts service-layer sticky-Committed
+/// semantics into a DDL invariant.
+pub(crate) struct StickyTerminalsTriggerDef {
+    /// Trigger name, e.g. `"logical_function_runs__sticky_terminals"`.
+    pub name: &'static str,
+    /// Table name, e.g. `"logical_function_runs"`.
+    pub source_table: &'static str,
+    /// Status column name, e.g. `"status"`.
+    pub status_col: &'static str,
+    /// Persisted enum codes that are sticky-final (e.g. `&["C", "X", "Y"]`
+    /// for Committed/Canceled/Yanked). The domain crate that owns the
+    /// status enum is expected to carry a unit test pinning these codes
+    /// to the enum variants — `td-schema` cannot import the enum
+    /// (foundational crate ordering).
+    pub terminal_values: &'static [&'static str],
+}
+
+/// A `BEFORE UPDATE` / `BEFORE DELETE` guard that refuses mutation entirely.
+/// Used to lift "insert-only event log" semantics into DDL.
+pub(crate) struct ImmutableTriggerDef {
+    /// Base name; `_no_update` and `_no_delete` suffixes are appended.
+    pub name: &'static str,
+    /// Table name.
+    pub source_table: &'static str,
 }
