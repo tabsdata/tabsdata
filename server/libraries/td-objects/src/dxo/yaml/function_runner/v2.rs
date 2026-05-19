@@ -5,9 +5,9 @@
 use crate::dxo::yaml::location::{Location, Locations};
 use crate::types::basic::{
     AtTime, CollectionId, CollectionName, ColumnCount, DependencyPos, ExecutionId, ExecutionName,
-    FunctionName, FunctionRunId, FunctionVersionId, InputIdx, IsEmptyVersions, PartitionFileName,
-    PartitionName, RowCount, SchemaHash, TableDataVersionId, TableFunctionParamPos, TableId,
-    TableName, TableVersionId, TransactionId, TriggeredOn, VersionPos,
+    FunctionName, FunctionVersionId, InputIdx, IsEmptyVersions, PartitionFileName, PartitionName,
+    PhysicalFunctionRunId, PhysicalTableDataVersionId, RowCount, SchemaHash, TableFunctionParamPos,
+    TableId, TableName, TableVersionId, TransactionId, TriggeredOn, VersionPos,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -42,7 +42,7 @@ pub struct FunctionInfo {
     pub function_version_id: FunctionVersionId,
     pub function_defined_on: AtTime,
     pub function: FunctionName,
-    pub function_run_id: FunctionRunId,
+    pub function_run_id: PhysicalFunctionRunId,
     pub function_bundle: Location,
     pub function_stage: Location,
     pub triggered_on: TriggeredOn,
@@ -67,11 +67,11 @@ pub struct InputTableVersion {
     #[builder(default)]
     pub transaction_id: Option<TransactionId>,
     #[builder(default)]
-    pub function_run_id: Option<FunctionRunId>,
+    pub function_run_id: Option<PhysicalFunctionRunId>,
     #[builder(default)]
     pub triggered_on: Option<AtTime>,
     #[builder(default)]
-    pub table_data_version_id: Option<TableDataVersionId>,
+    pub table_data_version_id: Option<PhysicalTableDataVersionId>,
     #[builder(default)]
     pub location: Option<Location>,
     pub input_idx: InputIdx,
@@ -99,9 +99,9 @@ pub struct InputPartitionTableVersion {
     table_version_id: TableVersionId,
     execution_id: Option<ExecutionId>,
     transaction_id: Option<TransactionId>,
-    function_run_id: Option<FunctionRunId>,
+    function_run_id: Option<PhysicalFunctionRunId>,
     triggered_on: Option<AtTime>,
-    table_data_version_id: Option<TableDataVersionId>,
+    table_data_version_id: Option<PhysicalTableDataVersionId>,
     partitions: HashMap<PartitionName, Location>,
     input_idx: InputIdx,
     table_pos: DependencyPos,
@@ -185,7 +185,7 @@ pub struct OutputTableVersion {
     pub collection: CollectionName,
     pub table_id: TableId,
     pub table_version_id: TableVersionId,
-    pub table_data_version_id: TableDataVersionId,
+    pub table_data_version_id: PhysicalTableDataVersionId,
     pub location: Location,
     pub table_pos: TableFunctionParamPos,
 }
@@ -198,7 +198,7 @@ pub struct OutputPartitionTableVersion {
     collection: CollectionName,
     table_id: TableId,
     table_version_id: TableVersionId,
-    table_data_version_id: TableDataVersionId,
+    table_data_version_id: PhysicalTableDataVersionId,
     base_location: Location,
     table_pos: TableFunctionParamPos,
 }
@@ -246,10 +246,10 @@ mod tests {
     fn test_function_runner_input_ser_deser() {
         let collection_id = CollectionId::default();
         let function_version_id = FunctionVersionId::new();
-        let function_run_id = FunctionRunId::default();
+        let function_run_id = PhysicalFunctionRunId::new();
         let table_id = TableId::default();
         let table_version_id = TableVersionId::default();
-        let table_data_version_id = TableDataVersionId::new();
+        let table_data_version_id = PhysicalTableDataVersionId::new();
         let triggered_on = TriggeredOn::default();
         let transaction_id = TransactionId::new();
         let execution_id = ExecutionId::new();
@@ -263,7 +263,7 @@ mod tests {
                 function_version_id: function_version_id.clone(),
                 function: FunctionName::try_from("function").unwrap(),
                 function_defined_on: defined_on,
-                function_run_id,
+                function_run_id: function_run_id.clone(),
                 function_bundle: Location {
                     uri: Url::try_from("file:///bundle").unwrap(),
                     env_prefix: None,
@@ -352,6 +352,7 @@ mod tests {
         let function_version_id = function_version_id.unpadded_str();
         let transaction_id = transaction_id.unpadded_str();
         let execution_id = execution_id.unpadded_str();
+        let function_run_id = function_run_id.unpadded_str();
         let table_data_version_id = table_data_version_id.unpadded_str();
 
         assert_eq!(
@@ -468,7 +469,7 @@ output:
             .table_version_id(TableVersionId::default())
             .execution_id(ExecutionId::new())
             .transaction_id(TransactionId::new())
-            .table_data_version_id(TableDataVersionId::new())
+            .table_data_version_id(PhysicalTableDataVersionId::new())
             .location(location.clone())
             .try_input_idx(1)?
             .try_table_pos(1)?
@@ -488,9 +489,9 @@ output:
             .table_version_id(TableVersionId::default())
             .execution_id(ExecutionId::new())
             .transaction_id(TransactionId::new())
-            .function_run_id(FunctionRunId::default())
+            .function_run_id(PhysicalFunctionRunId::new())
             .triggered_on(AtTime::default())
-            .table_data_version_id(TableDataVersionId::new())
+            .table_data_version_id(PhysicalTableDataVersionId::new())
             .try_input_idx(1)?
             .try_table_pos(1)?
             .try_version_pos(1)?
@@ -510,9 +511,9 @@ output:
             .table_version_id(TableVersionId::default())
             .execution_id(ExecutionId::new())
             .transaction_id(TransactionId::new())
-            .function_run_id(FunctionRunId::default())
+            .function_run_id(PhysicalFunctionRunId::new())
             .triggered_on(AtTime::default())
-            .table_data_version_id(TableDataVersionId::new())
+            .table_data_version_id(PhysicalTableDataVersionId::new())
             .try_input_idx(1)?
             .try_table_pos(1)?
             .try_version_pos(1)?
@@ -535,9 +536,9 @@ output:
             .table_version_id(TableVersionId::default())
             .execution_id(ExecutionId::new())
             .transaction_id(TransactionId::new())
-            .function_run_id(FunctionRunId::default())
+            .function_run_id(PhysicalFunctionRunId::new())
             .triggered_on(AtTime::default())
-            .table_data_version_id(TableDataVersionId::new())
+            .table_data_version_id(PhysicalTableDataVersionId::new())
             .location(location.clone())
             .try_input_idx(1)?
             .try_table_pos(1)?
@@ -561,9 +562,9 @@ output:
             .table_version_id(TableVersionId::default())
             .execution_id(ExecutionId::new())
             .transaction_id(TransactionId::new())
-            .function_run_id(FunctionRunId::default())
+            .function_run_id(PhysicalFunctionRunId::new())
             .triggered_on(AtTime::default())
-            .table_data_version_id(TableDataVersionId::new())
+            .table_data_version_id(PhysicalTableDataVersionId::new())
             .try_input_idx(1)?
             .try_table_pos(1)?
             .try_version_pos(1)?
@@ -599,7 +600,7 @@ output:
                 .try_collection("cn")?
                 .table_id(TableId::default())
                 .table_version_id(TableVersionId::default())
-                .table_data_version_id(TableDataVersionId::new())
+                .table_data_version_id(PhysicalTableDataVersionId::new())
                 .location(location.clone())
                 .try_table_pos(1)?
                 .build()?,
@@ -614,7 +615,7 @@ output:
                 .try_collection("cn")?
                 .table_id(TableId::default())
                 .table_version_id(TableVersionId::default())
-                .table_data_version_id(TableDataVersionId::new())
+                .table_data_version_id(PhysicalTableDataVersionId::new())
                 .base_location(location.clone())
                 .try_table_pos(1)?
                 .build()?,
@@ -694,7 +695,7 @@ output:
             .table_version_id(TableVersionId::default())
             .execution_id(ExecutionId::new())
             .transaction_id(TransactionId::new())
-            .table_data_version_id(TableDataVersionId::new())
+            .table_data_version_id(PhysicalTableDataVersionId::new())
             .location(locations[1].clone())
             .try_input_idx(0)?
             .try_table_pos(-1)?
@@ -708,9 +709,9 @@ output:
             .table_version_id(TableVersionId::default())
             .execution_id(ExecutionId::new())
             .transaction_id(TransactionId::new())
-            .function_run_id(FunctionRunId::default())
+            .function_run_id(PhysicalFunctionRunId::new())
             .triggered_on(AtTime::default())
-            .table_data_version_id(TableDataVersionId::new())
+            .table_data_version_id(PhysicalTableDataVersionId::new())
             .location(locations[2].clone())
             .try_input_idx(0)?
             .try_table_pos(0)?
@@ -724,9 +725,9 @@ output:
             .table_version_id(TableVersionId::default())
             .execution_id(ExecutionId::new())
             .transaction_id(TransactionId::new())
-            .function_run_id(FunctionRunId::default())
+            .function_run_id(PhysicalFunctionRunId::new())
             .triggered_on(AtTime::default())
-            .table_data_version_id(TableDataVersionId::new())
+            .table_data_version_id(PhysicalTableDataVersionId::new())
             .location(locations[3].clone())
             .try_input_idx(1)?
             .try_table_pos(0)?
@@ -740,9 +741,9 @@ output:
             .table_version_id(TableVersionId::default())
             .execution_id(ExecutionId::new())
             .transaction_id(TransactionId::new())
-            .function_run_id(FunctionRunId::default())
+            .function_run_id(PhysicalFunctionRunId::new())
             .triggered_on(AtTime::default())
-            .table_data_version_id(TableDataVersionId::new())
+            .table_data_version_id(PhysicalTableDataVersionId::new())
             .location(locations[4].clone())
             .try_input_idx(2)?
             .try_table_pos(1)?
@@ -755,7 +756,7 @@ output:
                 .try_collection("collection_1")?
                 .table_id(TableId::default())
                 .table_version_id(TableVersionId::default())
-                .table_data_version_id(TableDataVersionId::new())
+                .table_data_version_id(PhysicalTableDataVersionId::new())
                 .location(locations[5].clone())
                 .try_table_pos(-1)?
                 .build()?,
@@ -767,7 +768,7 @@ output:
                 .try_collection("collection_1")?
                 .table_id(TableId::default())
                 .table_version_id(TableVersionId::default())
-                .table_data_version_id(TableDataVersionId::new())
+                .table_data_version_id(PhysicalTableDataVersionId::new())
                 .location(locations[6].clone())
                 .try_table_pos(1)?
                 .build()?,
@@ -779,7 +780,7 @@ output:
                 .try_collection("collection_1")?
                 .table_id(TableId::default())
                 .table_version_id(TableVersionId::default())
-                .table_data_version_id(TableDataVersionId::new())
+                .table_data_version_id(PhysicalTableDataVersionId::new())
                 .location(locations[7].clone())
                 .try_table_pos(1)?
                 .build()?,
@@ -791,7 +792,7 @@ output:
             .function_version_id(FunctionVersionId::new())
             .function_defined_on(AtTime::default())
             .function(FunctionName::try_from("fn")?)
-            .function_run_id(FunctionRunId::default())
+            .function_run_id(PhysicalFunctionRunId::new())
             .function_bundle(locations[8].clone())
             .function_stage(locations[0].clone())
             .triggered_on(TriggeredOn::default())

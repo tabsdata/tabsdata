@@ -15,6 +15,10 @@ pub mod stage_trigger;
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum WorkerInput {
     FunctionV2(Box<function_runner::v2::FunctionInput>),
+    /// Logical-only input format. Worker resolves
+    /// `logical_table_data_version_id` to a concrete TDV at execution
+    /// start. Output side stays pre-resolved (same as v2).
+    FunctionV3(Box<function_runner::v3::FunctionInput>),
     CronTriggerV1(Box<cron_trigger::v1::CronTriggerInput>),
     StageTriggerV1(Box<stage_trigger::v1::StageTriggerInput>),
 }
@@ -23,6 +27,7 @@ impl WorkerInput {
     pub fn collection(&self) -> &CollectionName {
         match self {
             WorkerInput::FunctionV2(i) => &i.info.collection,
+            WorkerInput::FunctionV3(i) => &i.info.collection,
             WorkerInput::CronTriggerV1(i) => &i.info.collection,
             WorkerInput::StageTriggerV1(i) => &i.info.collection,
         }
@@ -31,6 +36,7 @@ impl WorkerInput {
     pub fn function(&self) -> &FunctionName {
         match self {
             WorkerInput::FunctionV2(i) => &i.info.function,
+            WorkerInput::FunctionV3(i) => &i.info.function,
             WorkerInput::CronTriggerV1(i) => &i.info.function,
             WorkerInput::StageTriggerV1(i) => &i.info.function,
         }
@@ -49,6 +55,11 @@ impl Locations for WorkerInput {
     fn locations(&self) -> Vec<&Location> {
         match self {
             WorkerInput::FunctionV2(i) => i.locations(),
+            // v3 ships only logical refs for the function and its
+            // inputs/outputs; the worker resolves them at execution time.
+            // Server-visible locations are limited to `function_data`
+            // (collection-scoped storage; pointer-independent).
+            WorkerInput::FunctionV3(i) => vec![&i.info.function_data],
             WorkerInput::CronTriggerV1(i) => i.locations(),
             WorkerInput::StageTriggerV1(i) => i.locations(),
         }
