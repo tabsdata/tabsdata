@@ -8692,7 +8692,6 @@ dependencies = [
  "td-execution",
  "td-objects",
  "td-queries",
- "td-security",
  "td-test",
  "te-execution",
  "thiserror 2.0.18",

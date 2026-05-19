@@ -816,6 +816,57 @@ class APIServer:
         response = self.post_binary(endpoint, data=bundle)
         return self.raise_for_status_or_return(raise_for_status, response)
 
+    def function_patch(
+        self,
+        collection_name: str,
+        function_name: str,
+        patch_of: str,
+        bundle_id: str,
+        snippet: str,
+        runtime_values: str = None,
+        description: str = None,
+        raise_for_status: bool = True,
+    ):
+        endpoint = f"/collections/{collection_name}/functions/{function_name}/patch"
+        data = self.get_params_dict(
+            ["patch_of", "bundle_id", "snippet", "runtime_values", "description"],
+            [patch_of, bundle_id, snippet, runtime_values, description],
+        )
+        response = self.post(endpoint, json=data)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def function_list_patches(
+        self,
+        collection_name: str,
+        function_name: str,
+        request_len: int = None,
+        request_filter: List[str] | str = None,
+        order_by: str = None,
+        pagination_id: str = None,
+        next_step: str = None,
+        raise_for_status: bool = True,
+    ):
+        endpoint = f"/collections/{collection_name}/functions/{function_name}/patches"
+        params = self.get_params_dict(
+            DEFAULT_LIST_ENDPOINT_PARAMETERS,
+            [request_len, request_filter, order_by, pagination_id, next_step],
+        )
+        response = self.get(endpoint, params)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def logical_function_run_replay(
+        self,
+        collection_name: str,
+        logical_function_run_id: str,
+        raise_for_status: bool = True,
+    ):
+        endpoint = (
+            f"/collections/{collection_name}"
+            f"/logical-function-runs/{logical_function_run_id}/replay"
+        )
+        response = self.post(endpoint, json={})
+        return self.raise_for_status_or_return(raise_for_status, response)
+
     def role_create(
         self, name: str, description: str = None, raise_for_status: bool = True
     ):

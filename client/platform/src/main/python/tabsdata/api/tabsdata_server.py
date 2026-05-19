@@ -514,6 +514,143 @@ class Collection:
         )
         return Function(self.connection, self, function_name)
 
+    def patch_function(
+        self,
+        function_name: str,
+        function_path: str,
+        patch_of: str,
+        description: str = None,
+        path_to_bundle: str = None,
+        requirements: str = None,
+        local_packages: List[str] | str | None = None,
+        raise_for_status: bool = True,
+    ) -> dict:
+        """
+        Register a code-only patch of an existing function version.
+
+        A patch shares the parent's topology (tables, dependencies, triggers,
+        workers) — only the bundle / snippet / runtime values / description
+        can be overridden. Patches are reachable only by explicit fvid via
+        replay.
+
+        Args:
+            function_name (str): Name of the function to patch.
+            function_path (str): Path to the function file in the form
+                ``/path/to/file.py::function_name``.
+            patch_of (str): Function-version id (fvid) this patches.
+            description (str, optional): New description.
+            path_to_bundle (str, optional): Directory to bundle and send. If
+                None, the folder containing the function file is bundled.
+            requirements (str, optional): Path to a custom requirements.yaml.
+                If not provided, inferred from the current Python env.
+            local_packages (List[str] | str, optional): Local packages to
+                include in the bundle.
+            raise_for_status (bool, optional): Raise on non-2xx. Defaults to
+                True.
+
+        Returns:
+            dict: The created FunctionPatchRecord (id, parent_function_version_id,
+                bundle_id, snippet, defined_on, defined_by_id, ...).
+
+        Raises:
+            APIServerError: If the patch could not be created.
+        """
+        temporary_directory = tempfile.TemporaryDirectory(dir=tabsdata_temp_folder())
+        try:
+            valid_python_versions = (
+                self.connection
+                .runtime_info_get()
+                .json()
+                .get("data", {})
+                .get("python_versions")
+            )
+            archive = _create_archive(
+                function_path,
+                temporary_directory,
+                path_to_bundle,
+                requirements,
+                local_packages,
+                valid_python_versions,
+                collection=self.name,
+            )
+            function_snippet = archive.function_snippet
+            context_location = archive.context_location
+            with open(context_location, "rb") as file:
+                bundle = file.read()
+        finally:
+            temporary_directory.cleanup()
+
+        response = self.connection.function_upload_bundle(
+            collection_name=self.name,
+            bundle=bundle,
+            raise_for_status=raise_for_status,
+        )
+        bundle_id = response.json().get("data").get("id")
+
+        # TODO: Remove this once the parameter is optional
+        runtime_values = "{}"
+
+        response = self.connection.function_patch(
+            collection_name=self.name,
+            function_name=function_name,
+            patch_of=patch_of,
+            bundle_id=bundle_id,
+            snippet=function_snippet,
+            runtime_values=runtime_values,
+            description=description,
+            raise_for_status=raise_for_status,
+        )
+        return response.json().get("data") or {}
+
+    def list_function_patches(
+        self,
+        function_name: str,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> List[dict]:
+        """
+        List patch versions for a function (latest first).
+
+        Returns:
+            List[dict]: Each dict is a FunctionPatchRecord.
+        """
+        return list(
+            self.list_function_patches_generator(
+                function_name,
+                filter=filter,
+                order_by=order_by,
+                raise_for_status=raise_for_status,
+            )
+        )
+
+    def list_function_patches_generator(
+        self,
+        function_name: str,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> Generator[dict]:
+        first_page = True
+        next_pagination_id = None
+        next_step = None
+        while first_page or (next_pagination_id and next_step):
+            response = self.connection.function_list_patches(
+                self.name,
+                function_name,
+                request_filter=filter,
+                order_by=order_by,
+                pagination_id=next_pagination_id,
+                next_step=next_step,
+                raise_for_status=raise_for_status,
+            )
+            data = response.json().get("data") or {}
+            next_pagination_id = data.get("next_pagination_id")
+            next_step = data.get("next")
+            for raw_patch in data.get("data") or []:
+                yield raw_patch
+            first_page = False
+
     def update(
         self, name: str, description: str = None, raise_for_status: bool = True
     ) -> Collection:
@@ -1437,6 +1574,49 @@ class Function:
         self.name = result.name
         self.collection = result.collection
         return result
+
+    def patch(
+        self,
+        function_path: str,
+        patch_of: str,
+        description: str = None,
+        directory_to_bundle: str = None,
+        requirements: str = None,
+        local_packages: List[str] | str | None = None,
+        raise_for_status: bool = True,
+    ) -> dict:
+        """
+        Register a code-only patch of this function's `patch_of` version.
+
+        See `Collection.patch_function` for argument semantics.
+        """
+        return self.collection.patch_function(
+            self.name,
+            function_path,
+            patch_of=patch_of,
+            description=description,
+            path_to_bundle=directory_to_bundle,
+            requirements=requirements,
+            local_packages=local_packages,
+            raise_for_status=raise_for_status,
+        )
+
+    @property
+    def patches(self) -> List[dict]:
+        return self.list_patches()
+
+    def list_patches(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> List[dict]:
+        return self.collection.list_function_patches(
+            self.name,
+            filter=filter,
+            order_by=order_by,
+            raise_for_status=raise_for_status,
+        )
 
     def enable(self, enabled: bool = True, raise_for_status: bool = True) -> Function:
         collection = self.collection
@@ -3832,6 +4012,79 @@ class TabsdataServer:
             enabled=enabled,
             raise_for_status=raise_for_status,
         )
+
+    def patch_function(
+        self,
+        collection_name: str,
+        function_name: str,
+        function_path: str,
+        patch_of: str,
+        description: str = None,
+        directory_to_bundle: str = None,
+        requirements: str = None,
+        local_packages: List[str] | str | None = None,
+        raise_for_status: bool = True,
+    ) -> dict:
+        """
+        Register a code-only patch of an existing function version. The
+        patch shares the parent's topology — only bundle / snippet /
+        runtime values / description can be overridden. Reachable only by
+        explicit fvid via replay.
+
+        Returns:
+            dict: The created FunctionPatchRecord.
+        """
+        collection = Collection(self.connection, collection_name)
+        return collection.patch_function(
+            function_name,
+            function_path,
+            patch_of=patch_of,
+            description=description,
+            path_to_bundle=directory_to_bundle,
+            requirements=requirements,
+            local_packages=local_packages,
+            raise_for_status=raise_for_status,
+        )
+
+    def list_function_patches(
+        self,
+        collection_name: str,
+        function_name: str,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> List[dict]:
+        """List patch versions for a function (latest first)."""
+        collection = Collection(self.connection, collection_name)
+        return collection.list_function_patches(
+            function_name,
+            filter=filter,
+            order_by=order_by,
+            raise_for_status=raise_for_status,
+        )
+
+    def replay_logical_function_run(
+        self,
+        collection_name: str,
+        logical_function_run_id: str,
+        raise_for_status: bool = True,
+    ) -> dict:
+        """
+        Re-execute a finished LFR — mint a new concrete physical function
+        run against the latest patch (or head, if no patch exists). The
+        pointer stays bound to the previous FR until the new attempt
+        finishes successfully.
+
+        Returns:
+            dict: { logical_function_run_id, previous_function_run_id,
+                    new_function_run_id, function_version_id }
+        """
+        response = self.connection.logical_function_run_replay(
+            collection_name=collection_name,
+            logical_function_run_id=logical_function_run_id,
+            raise_for_status=raise_for_status,
+        )
+        return response.json().get("data") or {}
 
     def enable_function(
         self,

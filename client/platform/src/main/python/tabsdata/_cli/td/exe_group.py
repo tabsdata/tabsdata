@@ -800,7 +800,7 @@ def obtain_list_worker_filters(
     if fn:
         request_filter.append(f"function:eq:{fn}")
     if fn_run:
-        request_filter.append(f"function_run_id:eq:{fn_run}")
+        request_filter.append(f"physical_function_run_id:eq:{fn_run}")
     if collection:
         request_filter.append(f"collection:eq:{collection}")
     if trx:
@@ -1144,3 +1144,43 @@ def recover(ctx: click.Context, plan: str, trx: str):
             "Either a plan ID with '--plan' or a transaction ID "
             "with '--trx' must be provided."
         )
+
+
+@exe.command()
+@click.option(
+    "--coll",
+    "-c",
+    help="Name of the collection to which the logical function run belongs.",
+)
+@click.option(
+    "--lfr",
+    help="ID of the logical function run (LFR) to replay.",
+)
+@click.pass_context
+def replay(ctx: click.Context, coll: str, lfr: str):
+    """Re-execute a finished logical function run.
+
+    Mints a new concrete physical function run against the latest patch (or
+    head, if no patch exists). The pointer stays bound to the previous
+    attempt's outputs until the new attempt finishes successfully.
+    """
+    verify_login_or_prompt(ctx)
+    coll = (
+        coll
+        or get_currently_pinned_object(ctx, "collection")
+        or logical_prompt(ctx, "Name of the collection to which the LFR belongs")
+    )
+    lfr = lfr or logical_prompt(ctx, "ID of the logical function run to replay")
+    click.echo(f"Replaying logical function run '{lfr}' in collection '{coll}'")
+    click.echo("-" * 10)
+    try:
+        server: TabsdataServer = ctx.obj["tabsdataserver"]
+        result = server.replay_logical_function_run(coll, lfr)
+        click.echo("Replay scheduled")
+        click.echo(f"LFR id:               {result.get('logical_function_run_id')}")
+        click.echo(f"Previous FR (bound):  {result.get('previous_function_run_id')}")
+        click.echo(f"New FR (running):     {result.get('new_function_run_id')}")
+        click.echo(f"Function version id:  {result.get('function_version_id')}")
+    except Exception as e:
+        hint_common_solutions(ctx, e)
+        raise click.ClickException(f"Failed to replay logical function run: {e}")

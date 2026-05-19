@@ -801,3 +801,178 @@ def disable(
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to disable function: {e}")
+
+
+@fn.command()
+@click.option(
+    "--name",
+    "-n",
+    help="Name of the function to patch.",
+)
+@click.option(
+    "--coll",
+    "-c",
+    help="Name of the collection to which the function belongs.",
+)
+@click.option(
+    "--patch-of",
+    help=(
+        "Function-version id (fvid) this patch overrides. Use 'td fn info "
+        "--show-history' to find available fvids."
+    ),
+)
+@click.option(
+    "--path",
+    help=(
+        "Path to the function file. Must be of the form "
+        "'/path/to/file.py::function_name'. Will be prompted "
+        "for it if not provided."
+    ),
+)
+@click.option("--description", help="Description of the patch.")
+@click.option(
+    "--dir-to-bundle",
+    help=(
+        "Path to the directory that should be stored in the bundle for "
+        "execution in the backend. If not provided, the folder where the "
+        "function file is will be used."
+    ),
+)
+@click.option(
+    "--requirements",
+    help=(
+        "Path to the requirements file. If not provided, the requirements file will "
+        "be generated based on your current Python environment."
+    ),
+)
+@click.option(
+    "--local-pkg",
+    type=str,
+    multiple=True,
+    help="Path to a local package to include in the bundle.",
+)
+@click.pass_context
+def patch(
+    ctx: click.Context,
+    name: str,
+    coll: str,
+    patch_of: str,
+    path: str,
+    description: str,
+    dir_to_bundle: str,
+    requirements: str,
+    local_pkg: Tuple[str, ...],
+):
+    """Register a code-only patch of a function version.
+
+    A patch shares the parent's topology (tables, dependencies, triggers,
+    workers) — only bundle / snippet / runtime values / description can be
+    overridden. Patches are reachable only by explicit fvid via replay.
+    """
+    verify_login_or_prompt(ctx)
+    coll = (
+        coll
+        or get_currently_pinned_object(ctx, "collection")
+        or logical_prompt(ctx, "Name of the collection to which the function belongs")
+    )
+    name = name or logical_prompt(ctx, "Name of the function to patch")
+    patch_of = patch_of or logical_prompt(
+        ctx, "Function-version id (fvid) this patch overrides"
+    )
+    path = path or logical_prompt(
+        ctx,
+        "Path to the function file. Must be of the form "
+        "'/path/to/file.py::function_name'",
+    )
+    description = description or ""
+    local_pkg = [p for p in local_pkg] if local_pkg else None
+    click.echo(
+        f"Patching function '{name}' in collection '{coll}' "
+        f"(patch_of={patch_of})"
+    )
+    click.echo("-" * 10)
+    try:
+        server: TabsdataServer = ctx.obj["tabsdataserver"]
+        record = server.patch_function(
+            collection_name=coll,
+            function_name=name,
+            function_path=path,
+            patch_of=patch_of,
+            description=description,
+            directory_to_bundle=dir_to_bundle,
+            requirements=requirements,
+            local_packages=local_pkg,
+        )
+        click.echo("Patch registered successfully")
+        click.echo(f"Patch id (fvid): {record.get('id')}")
+        click.echo(f"Patches fvid:    {record.get('parent_function_version_id')}")
+        show_hint(
+            ctx,
+            "Replay a finished logical-function-run against the latest patch "
+            "with 'td exe replay --coll <coll> --lfr <lfr_id>'.",
+            final_empty_line=True,
+        )
+    except Exception as e:
+        hint_common_solutions(ctx, e)
+        raise click.ClickException(f"Failed to patch function: {e}")
+
+
+@fn.command("list-patches")
+@click.option(
+    "--name",
+    "-n",
+    help="Name of the function whose patches will be listed.",
+)
+@click.option(
+    "--coll",
+    "-c",
+    help="Name of the collection to which the function belongs.",
+)
+@click.pass_context
+def list_patches(ctx: click.Context, name: str, coll: str):
+    """List patch versions of a function (latest first)."""
+    verify_login_or_prompt(ctx)
+    coll = (
+        coll
+        or get_currently_pinned_object(ctx, "collection")
+        or logical_prompt(ctx, "Name of the collection to which the function belongs")
+    )
+    name = name or logical_prompt(ctx, "Name of the function whose patches will be listed")
+    try:
+        server: TabsdataServer = ctx.obj["tabsdataserver"]
+        patches = server.list_function_patches(coll, name)
+
+        table = Table(title=f"Patches of function '{name}' in collection '{coll}'")
+        table.add_column("Patch id (fvid)", style="cyan", no_wrap=True)
+        table.add_column("Patches fvid")
+        table.add_column("Description")
+        table.add_column("Defined on")
+        table.add_column("Defined by")
+        table.add_column("Status")
+
+        for p in patches:
+            defined_on = p.get("defined_on")
+            if isinstance(defined_on, (int, float)):
+                # epoch milliseconds -> ISO-ish UTC string
+                from datetime import datetime, timezone
+                defined_on = (
+                    datetime.fromtimestamp(defined_on / 1000.0, tz=timezone.utc)
+                    .strftime("%Y-%m-%dT%H:%M:%SZ")
+                )
+            table.add_row(
+                p.get("id") or "",
+                p.get("parent_function_version_id") or "",
+                p.get("description") or "",
+                beautify_time(defined_on) if defined_on else "",
+                p.get("defined_by") or p.get("defined_by_id") or "",
+                p.get("status") or "",
+            )
+
+        click.echo()
+        console = Console()
+        console.print(table)
+        click.echo(f"Number of patches: {len(patches)}")
+        click.echo()
+    except Exception as e:
+        hint_common_solutions(ctx, e)
+        raise click.ClickException(f"Failed to list patches: {e}")

@@ -478,7 +478,8 @@ def versions(ctx: click.Context, coll: str, name: str, details: bool):
     )
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        data_version_list = server.list_dataversions(coll, name)
+        # /data-versions returns all statuses; the CLI lists committed only.
+        data_version_list = server.list_dataversions(coll, name, filter="status:eq:C")
 
         table = Table(title=f"Data versions for table '{name}'")
         table.add_column("ID", style="cyan", no_wrap=True)
