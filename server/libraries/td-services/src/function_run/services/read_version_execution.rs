@@ -2,11 +2,13 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::function_run::layers::resolve_bound_function_run;
 use ta_services::factory::service_factory;
-use td_objects::And;
 use td_objects::dxo::crudl::ReadRequest;
 use td_objects::dxo::execution::ExecutionDB;
-use td_objects::dxo::function_run::{FunctionRun, FunctionRunBuilder, FunctionRunDBWithNames};
+use td_objects::dxo::physical_function_run::{
+    PhysicalFunctionRun, PhysicalFunctionRunBuilder, PhysicalFunctionRunDBWithNames,
+};
 use td_objects::rest_urls::internal::FunctionVersionExecution;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{ExecutionId, ExecutionIdName, FunctionVersionId};
@@ -19,7 +21,7 @@ use td_tower::layers;
 #[service_factory(
     name = FunctionVersionExecutionReadService,
     request = ReadRequest<FunctionVersionExecution>,
-    response = FunctionRun,
+    response = PhysicalFunctionRun,
     connection = ConnectionProvider,
 )]
 fn service() {
@@ -32,11 +34,15 @@ fn service() {
         // find execution ID
         from_fn(By::<ExecutionIdName>::fetch_one::<ExecutionDB>),
         from_fn(With::<ExecutionDB>::extract::<ExecutionId>),
-        // find function run
-        from_fn(By::<And![ExecutionId, FunctionVersionId]>::fetch_one::<FunctionRunDBWithNames>),
-        // Build FunctionRun
-        from_fn(With::<FunctionRunDBWithNames>::try_convert_to::<FunctionRunBuilder, _>),
-        from_fn(With::<FunctionRunBuilder>::build::<FunctionRun>),
+        // find function run via LFR pointer: replays mint multiple FRs
+        // under one LFR identity; the canonical one is whatever the
+        // pointer currently binds to.
+        from_fn(resolve_bound_function_run),
+        // Build PhysicalFunctionRun
+        from_fn(
+            With::<PhysicalFunctionRunDBWithNames>::try_convert_to::<PhysicalFunctionRunBuilder, _>
+        ),
+        from_fn(With::<PhysicalFunctionRunBuilder>::build::<PhysicalFunctionRun>),
     )
 }
 
@@ -52,9 +58,9 @@ mod tests {
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionName, FunctionRunStatus,
-        RoleId, TableNameDto, TransactionKey, UserId, UserName,
+        PhysicalFunctionRunStatus, RoleId, TableNameDto, TransactionKey, UserId, UserName,
     };
-    use td_queries::test_utils::SeedQueries;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -66,7 +72,7 @@ mod tests {
         FunctionVersionExecutionReadService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<ReadRequest<FunctionVersionExecution>, FunctionRun>(&[
+            .assert_service::<ReadRequest<FunctionVersionExecution>, PhysicalFunctionRun>(&[
                 type_of_val(
                     &With::<ReadRequest<FunctionVersionExecution>>::extract_name::<
                         FunctionVersionExecution,
@@ -77,15 +83,18 @@ mod tests {
                 // find execution ID
                 type_of_val(&By::<ExecutionIdName>::fetch_one::<ExecutionDB>),
                 type_of_val(&With::<ExecutionDB>::extract::<ExecutionId>),
-                // find function run
+                // find function run via LFR pointer: replays mint multiple FRs
+                // under one LFR identity; the canonical one is whatever the
+                // pointer currently binds to.
+                type_of_val(&resolve_bound_function_run),
+                // Build PhysicalFunctionRun
                 type_of_val(
-                    &By::<And![ExecutionId, FunctionVersionId]>::fetch_one::<FunctionRunDBWithNames>,
+                    &With::<PhysicalFunctionRunDBWithNames>::try_convert_to::<
+                        PhysicalFunctionRunBuilder,
+                        _,
+                    >,
                 ),
-                // Build FunctionRun
-                type_of_val(
-                    &With::<FunctionRunDBWithNames>::try_convert_to::<FunctionRunBuilder, _>,
-                ),
-                type_of_val(&With::<FunctionRunBuilder>::build::<FunctionRun>),
+                type_of_val(&With::<PhysicalFunctionRunBuilder>::build::<PhysicalFunctionRun>),
             ]);
     }
 
@@ -93,7 +102,8 @@ mod tests {
     #[tokio::test]
     async fn test_read_function_version_execution_run(db: TdPool) -> Result<(), TdError> {
         let collection = db
-            .seed_collection(&CollectionName::try_from("collection")?, &UserId::admin())
+            .seed()
+            .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
 
         let dependencies = None;
@@ -111,13 +121,14 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let function_version = db.seed_function(&collection, &create).await?;
+        let function_version = db.seed().function(&collection, &create).await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
 
-        let execution = db.seed_execution(&function_version).await?;
-        let transaction = db.seed_transaction(&execution, &transaction_key).await?;
-        let function_run = db
-            .seed_function_run(
+        let execution = db.seed().execution(&function_version).await?;
+        let transaction = db.seed().transaction(&execution, &transaction_key).await?;
+        let physical_function_run = db
+            .seed()
+            .physical_function_run(
                 &collection,
                 &function_version,
                 &execution,
@@ -138,19 +149,23 @@ mod tests {
         let service = FunctionVersionExecutionReadService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         let response = response?;
-        assert_eq!(response.id, function_run.id);
-        assert_eq!(response.collection_id, function_run.collection_id);
+        assert_eq!(response.id, physical_function_run.id);
+        assert_eq!(response.collection_id, physical_function_run.collection_id);
         assert_eq!(
             response.function_version_id,
-            function_run.function_version_id
+            physical_function_run.function_version_id
         );
-        assert_eq!(response.execution_id, function_run.execution_id);
-        assert_eq!(response.transaction_id, function_run.transaction_id);
-        assert_eq!(response.triggered_on, function_run.triggered_on);
-        assert_eq!(response.trigger, function_run.trigger);
-        assert_eq!(response.started_on, function_run.started_on);
-        assert_eq!(response.ended_on, function_run.ended_on);
-        assert_eq!(response.status, function_run.status);
+        assert_eq!(response.execution_id, physical_function_run.execution_id);
+        assert_eq!(
+            response.transaction_id,
+            physical_function_run.transaction_id
+        );
+        assert_eq!(response.triggered_on, physical_function_run.triggered_on);
+        assert_eq!(response.trigger, physical_function_run.trigger);
+        assert_eq!(response.started_on, physical_function_run.started_on);
+        assert_eq!(response.ended_on, physical_function_run.ended_on);
+        // Status lives on the LFR; the read endpoint joins it in.
+        assert_eq!(response.status, PhysicalFunctionRunStatus::Done);
         assert_eq!(response.name, FunctionName::try_from("joaquin")?);
         assert_eq!(response.collection, collection.name);
         assert_eq!(response.execution, execution.name);
