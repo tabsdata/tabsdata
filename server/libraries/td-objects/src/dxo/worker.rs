@@ -8,7 +8,7 @@ mod definitions {
     use crate::dxo::yaml::WorkerOutput;
     use crate::types::basic::{
         AtTime, CollectionId, CollectionName, CronMask, Enabled, ExecutionId, ExecutionName,
-        FunctionName, FunctionRunId, FunctionVersionId, SizeThreshold, TimeoutThresholdMin,
+        FunctionName, FunctionVersionId, PhysicalFunctionRunId, SizeThreshold, TimeoutThresholdMin,
         TransactionId, WorkerConfig, WorkerId, WorkerMessageStatus, WorkerStatus, WorkerType,
     };
     use chrono::{DateTime, Utc};
@@ -33,7 +33,7 @@ mod definitions {
         #[builder(default)]
         pub transaction_id: Option<TransactionId>,
         #[builder(default)]
-        pub function_run_id: Option<FunctionRunId>,
+        pub function_run_id: Option<PhysicalFunctionRunId>,
         #[dxo(builder(include, field = "id"))]
         pub function_version_id: FunctionVersionId,
         #[builder(default = "WorkerMessageStatus::None")]
@@ -85,7 +85,7 @@ mod definitions {
         #[dto(list(filter, filter_like, order_by))]
         pub transaction_id: Option<TransactionId>,
         #[dto(list(filter, order_by))]
-        pub function_run_id: Option<FunctionRunId>,
+        pub function_run_id: Option<PhysicalFunctionRunId>,
         #[dto(list(filter, filter_like, order_by))]
         pub function_version_id: FunctionVersionId,
         #[dto(list(filter, order_by))]
@@ -147,11 +147,11 @@ mod definitions {
     }
 
     impl UpdateWorkerDB {
-        pub async fn run_requested() -> Result<Self, TdError> {
+        pub async fn requested() -> Result<Self, TdError> {
             Ok(Self {
                 started_on: None,
                 ended_on: None,
-                status: WorkerStatus::RunRequested,
+                status: WorkerStatus::Requested,
             })
         }
 

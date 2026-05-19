@@ -3,8 +3,8 @@
 //
 
 use crate::dxo::function::FunctionDBWithNames;
+use crate::dxo::physical_table_data_version::ExecutionTableDataVersionRead;
 use crate::dxo::table::TableDBWithNames;
-use crate::dxo::table_data_version::ExecutionTableDataVersionRead;
 use crate::types::basic::{
     CollectionId, CollectionName, DependencyPos, Enabled, FunctionId, FunctionName,
     FunctionVersionId, SelfDependency, System, TableFunctionParamPos, TableId, TableName,
@@ -197,6 +197,17 @@ impl<V> GraphEdge<V> {
             GraphEdge::Output { .. } => None,
             GraphEdge::Trigger { .. } => None,
             GraphEdge::Dependency { dependency, .. } => Some(&dependency.dep_pos),
+        }
+    }
+
+    /// True for `Dependency` edges marked `self_dependency` (a function
+    /// depending on its own output table). Self-dep semantics: the consumer
+    /// reads the *previous* version, not the current one — V2 plan-build
+    /// shifts `Versions` by -1 before resolving, mirroring V1's resolver.
+    pub fn is_self_dependency(&self) -> bool {
+        match self {
+            GraphEdge::Dependency { dependency, .. } => *dependency.self_dependency,
+            _ => false,
         }
     }
 

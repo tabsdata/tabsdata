@@ -7,12 +7,12 @@ mod definitions {
     use crate::dxo::crudl::RequestContext;
     use crate::dxo::function::{Function, FunctionDBWithNames};
     use crate::dxo::graph::{FunctionNode, GraphEdge, TableNode};
-    use crate::dxo::table_data_version::ExecutionTableDataVersionRead;
+    use crate::dxo::physical_table_data_version::ExecutionTableDataVersionRead;
     use crate::types::basic::{
         AtTime, CollectionId, CollectionName, Dot, Enabled, ExecutionId, ExecutionName,
         ExecutionStatus, FunctionId, FunctionName, FunctionOnly, FunctionRunStatus,
-        FunctionVersionId, OverrideDisabledTrigger, SkipIfRunning, StatusCount, System,
-        TableDataVersionId, TableName, TableVersionId, TransactionId, TriggerType, TriggeredOn,
+        FunctionVersionId, OverrideDisabledTrigger, PhysicalTableDataVersionId, SkipIfRunning,
+        StatusCount, System, TableName, TableVersionId, TransactionId, TriggerType, TriggeredOn,
         UserId, UserName,
     };
     use crate::types::composed::TableVersions;
@@ -203,7 +203,7 @@ mod definitions {
     #[ta_objects::Dto]
     #[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
     pub struct ResolvedVersionResponse {
-        pub inner: Vec<Option<TableDataVersionId>>,
+        pub inner: Vec<Option<PhysicalTableDataVersionId>>,
         pub original: TableVersions,
     }
 
@@ -232,7 +232,7 @@ mod definitions {
             TableVersionId,
             GraphEdge<ResolvedVersionResponse>,
         )>,
-        pub relations_info: HashMap<TableDataVersionId, ExecutionTableDataVersionRead>,
+        pub relations_info: HashMap<PhysicalTableDataVersionId, ExecutionTableDataVersionRead>,
     }
 
     #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]

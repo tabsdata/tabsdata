@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::types::basic::{CollectionName, TableDataVersionId};
+use crate::types::basic::{CollectionName, LogicalTableDataVersionId};
 use crate::types::table_ref::{TableRef, Version, VersionedTableRef, Versions};
 use constcat::concat;
 use regex::Regex;
@@ -144,7 +144,7 @@ pub fn parse_version(s: impl Into<String>) -> Result<Version, TdError> {
                 Version::Initial(plus)
             } else {
                 let version = captures.name("id").unwrap().as_str();
-                let id = TableDataVersionId::from(IdL::parse(version)?);
+                let id = LogicalTableDataVersionId::from(IdL::parse(version)?);
                 Version::Fixed(id)
             };
             Ok(version)
@@ -404,7 +404,7 @@ mod tests {
         let version = parse_version(id).unwrap();
         assert_eq!(
             version,
-            Version::Fixed(TableDataVersionId::from(IdL::new_legacy(id)))
+            Version::Fixed(LogicalTableDataVersionId::from(IdL::new_legacy(id)))
         );
         assert!(parse_version("A".repeat(26)).is_err());
     }
@@ -470,15 +470,15 @@ mod tests {
         let versions = parse_versions(format!("{id}")).unwrap();
         assert_eq!(
             versions,
-            Versions::Single(Version::Fixed(TableDataVersionId::from(IdL::new_legacy(
-                id
-            ))))
+            Versions::Single(Version::Fixed(LogicalTableDataVersionId::from(
+                IdL::new_legacy(id)
+            )))
         );
         let versions = parse_versions(format!("{id},HEAD~2")).unwrap();
         assert_eq!(
             versions,
             Versions::List(vec![
-                Version::Fixed(TableDataVersionId::from(IdL::new_legacy(id))),
+                Version::Fixed(LogicalTableDataVersionId::from(IdL::new_legacy(id))),
                 Version::Head(-2)
             ])
         );
@@ -487,14 +487,14 @@ mod tests {
             versions,
             Versions::List(vec![
                 Version::Head(-2),
-                Version::Fixed(TableDataVersionId::from(IdL::new_legacy(id)))
+                Version::Fixed(LogicalTableDataVersionId::from(IdL::new_legacy(id)))
             ])
         );
         let versions = parse_versions(format!("{id},INITIAL~2")).unwrap();
         assert_eq!(
             versions,
             Versions::List(vec![
-                Version::Fixed(TableDataVersionId::from(IdL::new_legacy(id))),
+                Version::Fixed(LogicalTableDataVersionId::from(IdL::new_legacy(id))),
                 Version::Initial(2)
             ])
         );
@@ -503,7 +503,7 @@ mod tests {
             versions,
             Versions::List(vec![
                 Version::Initial(2),
-                Version::Fixed(TableDataVersionId::from(IdL::new_legacy(id)))
+                Version::Fixed(LogicalTableDataVersionId::from(IdL::new_legacy(id)))
             ])
         );
 

@@ -9,7 +9,7 @@ use std::fmt::Debug;
 use td_error::td_error;
 use td_tower::error::{ConnectionError, FromHandlerError};
 
-/// Request context for the logic layer.
+/// Request context for the logical layer.
 #[ta_objects::Dlo]
 pub struct RequestContext {
     /// The ID of the access token in the request.
@@ -223,7 +223,7 @@ impl RequestContext {
     }
 }
 
-/// Error returned by the logic layer operations.
+/// Error returned by the logical layer operations.
 #[td_error]
 pub enum CrudlErrorX {
     #[error("Cannot create, a unique value in data already exists: {0}")]
