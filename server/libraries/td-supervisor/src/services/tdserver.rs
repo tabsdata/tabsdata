@@ -1638,7 +1638,8 @@ fn needs_upgrade(instance: PathBuf) -> bool {
             exit(GeneralError.code());
         }
     };
-    source < target
+    // Patch bumps are no-ops by policy, so compare major.minor only.
+    (source.major, source.minor) < (target.major, target.minor)
 }
 
 fn create_instance_folders(
@@ -2428,4 +2429,78 @@ pub fn show_std_out_and_err(output: &Output) {
 
 pub async fn start() {
     TabsDataCli {}.run().await;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use td_common::tdtestdir;
+
+    fn write_version(instance: &Path, version: &str) {
+        fs::write(instance.join(".version"), version).unwrap();
+    }
+
+    #[test]
+    fn test_non_existent_instance() {
+        let missing = tdtestdir!().join("does-not-exist");
+        assert!(!needs_upgrade(missing));
+    }
+
+    #[test]
+    fn test_same_version() {
+        let instance = tdtestdir!();
+        write_version(&instance, TABSDATA_VERSION.trim());
+        assert!(!needs_upgrade(instance));
+    }
+
+    #[test]
+    fn test_patch_level_drift() {
+        let t = get_target_version().unwrap();
+        let instance = tdtestdir!();
+        write_version(
+            &instance,
+            &format!("{}.{}.{}-pre", t.major, t.minor, t.patch),
+        );
+        assert!(!needs_upgrade(instance));
+    }
+
+    #[test]
+    fn test_patch_ahead() {
+        let t = get_target_version().unwrap();
+        let instance = tdtestdir!();
+        write_version(&instance, &format!("{}.{}.{}", t.major, t.minor, u64::MAX));
+        assert!(!needs_upgrade(instance));
+    }
+
+    #[test]
+    fn test_minor_behind() {
+        let t = get_target_version().unwrap();
+        let instance = tdtestdir!();
+        write_version(&instance, &format!("{}.{}.0", t.major, t.minor - 1));
+        assert!(needs_upgrade(instance));
+    }
+
+    #[test]
+    fn test_minor_ahead() {
+        let t = get_target_version().unwrap();
+        let instance = tdtestdir!();
+        write_version(&instance, &format!("{}.{}.0", t.major, t.minor + 1));
+        assert!(!needs_upgrade(instance));
+    }
+
+    #[test]
+    fn test_major_behind() {
+        let instance = tdtestdir!();
+        write_version(&instance, "0.1.0");
+        assert!(needs_upgrade(instance));
+    }
+
+    #[test]
+    fn test_major_ahead() {
+        let t = get_target_version().unwrap();
+        let instance = tdtestdir!();
+        write_version(&instance, &format!("{}.0.0", t.major + 1));
+        assert!(!needs_upgrade(instance));
+    }
 }
