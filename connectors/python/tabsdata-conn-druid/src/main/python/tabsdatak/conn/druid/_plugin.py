@@ -85,6 +85,7 @@ class DruidDestPlugin(DestPlugin[DruidDest]):
 
         cfg = _resolve_dest_cfg(dest.dest_cfg)
         logger.setLevel(cfg.logging_level)
+        logger.info("druid: write_out starting (%d table(s))", len(dest.tables or []))
 
         # ---- Defensive recheck ----------------------------------
         # The framework already validates ``cardinality`` upstream; the
@@ -111,12 +112,19 @@ class DruidDestPlugin(DestPlugin[DruidDest]):
         subdir_root = adapter._staging_subdir(ctx.trx_id)
 
         # ---- Submit one ingestion task per datasource ------------
+        logger.debug("druid: establishing overlord client")
         client = adapter.make_overlord_client_for_dest(conn, dest)
+        total = len(dest.tables)
         with client:
             for slot_idx, (datasource, parquet) in enumerate(
                 zip(dest.tables, tables)
             ):
+                logger.info(
+                    "druid: writing datasource %d/%d: %r",
+                    slot_idx + 1, total, datasource,
+                )
                 slot_subdir = f"{subdir_root}/slot{slot_idx}"
+                logger.info("druid: staging parquet for %r", datasource)
                 try:
                     staged_uris = adapter.upload_staged_files(
                         staging=staging,

@@ -60,6 +60,7 @@ class SqlAlchemyReadEngine(SqlReadEngine, ABC):
         parameters: Mapping[str, Any] | None = src.query_params or None
 
         def _run() -> list[list[TableFileSpec]]:
+            logger.debug("sql-reader: establishing engine")
             engine = src.create_sql_alchemy_engine()
             try:
                 results: list[list[TableFileSpec]] = []
@@ -76,6 +77,7 @@ class SqlAlchemyReadEngine(SqlReadEngine, ABC):
                         )
                 return results
             finally:
+                logger.debug("sql-reader: disposing engine")
                 engine.dispose()
 
         return _retry()(_run)
@@ -94,7 +96,10 @@ class SqlAlchemyReadEngine(SqlReadEngine, ABC):
             const.READ_CHUNK_SIZE_KEY,
             const.READ_CHUNK_SIZE_DEFAULT,
         )
+        total = len(src.queries)
+        logger.info("sql-reader: reading %d quer(ies)", total)
         for i, query in enumerate(src.queries):
+            logger.info("sql-reader: reading query %d/%d", i + 1, total)
             overrides = (
                 resolve_schema_overrides(src.schema_overrides[i])
                 if src.schema_overrides is not None
@@ -109,7 +114,9 @@ class SqlAlchemyReadEngine(SqlReadEngine, ABC):
                 schema_overrides=overrides,
                 parameters=parameters,
             )
+            logger.debug("sql-reader: query %d/%d produced %d chunk(s)", i + 1, total, len(files))
             results.append([ParquetFile(p) for p in files])
+        logger.info("sql-reader: finished reading %d quer(ies)", total)
 
 
 def _pandas_read(

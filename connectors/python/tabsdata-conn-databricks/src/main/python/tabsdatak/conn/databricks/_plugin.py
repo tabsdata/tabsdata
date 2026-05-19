@@ -133,6 +133,7 @@ class _DatabricksSrcPlugin(SrcPlugin[DatabricksSrc]):
 
         cfg = _resolve_src_cfg(src.src_cfg)
         logger.setLevel(cfg.logging_level)
+        logger.info("databricks: read_in starting (%d queries)", len(src.queries or []))
         # The databricks SDK's own logger is far noisier than the
         # caller's logger.setLevel here -- forward the same level
         # so the SDK doesn't fight us.
@@ -190,6 +191,7 @@ class _DatabricksDestPlugin(DestPlugin[DatabricksDest]):
 
         cfg = _resolve_dest_cfg(dest.dest_cfg)
         logger.setLevel(cfg.logging_level)
+        logger.info("databricks: write_out starting (%d table(s))", len(dest.tables or []))
         logging.getLogger("databricks").setLevel(cfg.logging_level)
 
         # Verifies that the number of incoming parquet files matches

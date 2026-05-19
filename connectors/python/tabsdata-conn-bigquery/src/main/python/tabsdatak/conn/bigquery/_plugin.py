@@ -75,6 +75,7 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDest]):
 
         cfg = _resolve_dest_cfg(dest.dest_cfg)
         logger.setLevel(cfg.logging_level)
+        logger.info("bigquery: write_out starting (%d table(s))", len(dest.tables or []))
 
         write_cfg = BigQueryWriteCfg.from_dest(dest)
 
@@ -93,6 +94,7 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDest]):
         conn = cast(BigQueryConn, write_cfg.conn)
         project_str = conn.project.value() if conn.project is not None else None
 
+        logger.debug("bigquery: establishing BigQuery client (project=%r)", project_str)
         try:
             bq_client = build_bigquery_client(
                 conn.credentials,
@@ -105,6 +107,7 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDest]):
                 project=project_str,
             )
 
+        logger.debug("bigquery: establishing GCS staging client")
         gcs_client = build_gcs_client(
             conn.staging.credentials,
             conn.staging.cfg,
@@ -122,9 +125,12 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDest]):
             relative = conn.staging.full_path(file_name)
             staging_uris.append(f"gs://{staging_bucket}/{relative}")
 
+        total = len(write_cfg.target_tables)
         try:
             # Phase 1: upload each parquet to its staging GCS URI.
-            for parquet_path, uri in zip(tables, staging_uris):
+            logger.info("bigquery: staging %d parquet file(s) to GCS", total)
+            for i, (parquet_path, uri) in enumerate(zip(tables, staging_uris), 1):
+                logger.debug("bigquery: staging %d/%d to %s", i, total, uri)
                 try:
                     _upload_to_gcs(gcs_client, Path(parquet_path), uri)
                 except Exception as e:
@@ -135,9 +141,12 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDest]):
 
             # Phase 2: kick off one ``load_table_from_uri`` per table
             # and wait for each load job to complete.
-            for table_fqn, uri in zip(
-                write_cfg.target_tables, staging_uris
-            ):
+            for i, (table_fqn, uri) in enumerate(zip(
+                write_cfg.target_tables, staging_uris,
+            ), 1):
+                logger.info(
+                    "bigquery: writing table %d/%d: %r", i, total, table_fqn,
+                )
                 try:
                     _load_table_from_uri(
                         bq_client,
@@ -153,6 +162,7 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDest]):
                         cause=e,
                         table=table_fqn,
                     )
+                logger.debug("bigquery: finished table %r", table_fqn)
         finally:
             # Best-effort cleanup of staging files (mirrors the
             # legacy behaviour). A failed deletion is logged at WARN
@@ -160,6 +170,7 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDest]):
             # succeeded / failed; the auxiliary file's fate is
             # secondary.
             for uri in staging_uris:
+                logger.debug("bigquery: deleting staged file %s", uri)
                 try:
                     _delete_gcs_uri(gcs_client, uri)
                 except Exception:  # pragma: no cover - defensive

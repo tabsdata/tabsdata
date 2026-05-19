@@ -105,6 +105,9 @@ class SnowflakeDestPlugin(DestPlugin[SnowflakeDest]):
             )
 
         conn = cast(SnowflakeConn, dest.conn)
+        logger.info(
+            "snowflake: write_out starting (%d table(s))", len(dest.tables)
+        )
         write_cfg = _impl.SnowflakeWriteCfg(
             conn=conn,
             target_tables=list(dest.tables),
@@ -124,6 +127,9 @@ class SnowflakeDestPlugin(DestPlugin[SnowflakeDest]):
                 cause=e,
                 table=", ".join(write_cfg.target_tables),
             )
+        logger.info(
+            "snowflake: write_out finished (%d table(s))", len(dest.tables)
+        )
 
 
 class SnowflakeExplorer(Explorer[SnowflakeConn]):

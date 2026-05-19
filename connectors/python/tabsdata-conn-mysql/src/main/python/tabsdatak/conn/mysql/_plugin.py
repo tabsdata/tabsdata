@@ -140,6 +140,7 @@ class MySQLSrcPlugin(SrcPlugin[MySQLSrc]):
 
         cfg = _resolve_src_cfg(src.src_cfg)
         logger.setLevel(cfg.logging_level)
+        logger.info("mysql: read_in starting (%d queries)", len(src.queries or []))
 
         read_cfg = MySQLReadCfg(
             conn=cast(MySQLConn, src.conn),
@@ -193,6 +194,7 @@ class MySQLDestPlugin(DestPlugin[MySQLDest]):
 
         cfg = _resolve_dest_cfg(dest.dest_cfg)
         logger.setLevel(cfg.logging_level)
+        logger.info("mysql: write_out starting (%d table(s))", len(dest.tables or []))
 
         # Verifies that the number of incoming parquet files
         # matches the destination's declared ``tables`` (MYSQL_7).

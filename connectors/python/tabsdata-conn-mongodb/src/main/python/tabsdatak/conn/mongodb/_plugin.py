@@ -155,6 +155,10 @@ class _MongoDBDestPlugin(DestPlugin[MongoDBDest]):
 
         cfg = _resolve_dest_cfg(dest.dest_cfg)
         logger.setLevel(cfg.logging_level)
+        logger.info(
+            "mongodb: write_out starting (%d collection(s))",
+            len(dest.collections_with_ids or []),
+        )
 
         # Defensive recheck -- the framework already enforces
         # ``len(tables) == cardinality(dest)`` via the binding, but
@@ -166,14 +170,20 @@ class _MongoDBDestPlugin(DestPlugin[MongoDBDest]):
             )
 
         conn = cast(MongoDBConn, dest.conn)
+        logger.debug("mongodb: establishing pymongo client")
         client = _build_client(conn)
+        total = len(dest.collections_with_ids)
         try:
             session_cm = client.start_session()
             session = session_cm.__enter__()
             try:
-                for table, (collection_fqn, id_field) in zip(
+                for i, (table, (collection_fqn, id_field)) in enumerate(zip(
                     tables, dest.collections_with_ids,
-                ):
+                ), 1):
+                    logger.info(
+                        "mongodb: writing collection %d/%d: %r",
+                        i, total, collection_fqn,
+                    )
                     self._write_one(
                         client=client,
                         session=session if dest.use_trxs else None,
@@ -182,6 +192,7 @@ class _MongoDBDestPlugin(DestPlugin[MongoDBDest]):
                         id_field=id_field,
                         table=table,
                     )
+                    logger.debug("mongodb: finished collection %r", collection_fqn)
             finally:
                 session_cm.__exit__(None, None, None)
         except (BulkWriteError, PyMongoError):
@@ -191,6 +202,7 @@ class _MongoDBDestPlugin(DestPlugin[MongoDBDest]):
             # treat as the same write-side failure category.
             raise
         finally:
+            logger.debug("mongodb: closing pymongo client")
             client.close()
 
     # --- Per-collection writer ----------------------------------------

@@ -159,6 +159,7 @@ def _copy_into(
 
 
 def write_all_tables(cfg: SnowflakeWriteCfg, files: list[Path]) -> None:
+    logger.debug("snowflake: establishing connection to account %r", cfg.conn.account.value())
     sf_conn = build_snowflake_connection(cfg.conn)
     try:
         if cfg.conn.warehouse is not None:
@@ -167,13 +168,19 @@ def write_all_tables(cfg: SnowflakeWriteCfg, files: list[Path]) -> None:
             with sf_conn.cursor() as cur:
                 cur.execute(f"USE WAREHOUSE {warehouse}")
         stage, is_temp = _stage(cfg.conn)
-        for file_path, table in zip(
+        for i, (file_path, table) in enumerate(zip(
             files, cfg.target_tables, strict=True,
-        ):
+        ), 1):
+            logger.info(
+                "snowflake: writing table %d/%d: %r",
+                i, len(cfg.target_tables), table,
+            )
             _write_one(
                 sf_conn, cfg, stage, is_temp, Path(file_path), table,
             )
+            logger.debug("snowflake: finished table %r", table)
     finally:
+        logger.debug("snowflake: closing connection")
         sf_conn.close()
 
 

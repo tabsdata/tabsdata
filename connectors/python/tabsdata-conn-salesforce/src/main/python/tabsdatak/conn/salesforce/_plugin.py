@@ -70,11 +70,15 @@ class _SalesforceSrcPlugin(SrcPlugin[SalesforceSrc]):
 
         cfg = _resolve_src_cfg(src.src_cfg)
         logger.setLevel(cfg.logging_level)
+        logger.info("salesforce: read_in starting (%d quer(ies))", len(src.queries))
 
         conn = cast(SalesforceConn, src.conn)
         api_version = src.api_version
         sf = _reader.login(conn, api_version=api_version)
-        return _reader.read_soql_src(sf, src, ctx.work_dir())
+        try:
+            return _reader.read_soql_src(sf, src, ctx.work_dir())
+        finally:
+            logger.info("salesforce: read_in finished (%d quer(ies))", len(src.queries))
 
 
 class _SalesforceReportSrcPlugin(SrcPlugin[SalesforceReportSrc]):
@@ -89,10 +93,14 @@ class _SalesforceReportSrcPlugin(SrcPlugin[SalesforceReportSrc]):
 
         cfg = _resolve_src_cfg(src.src_cfg)
         logger.setLevel(cfg.logging_level)
+        logger.info("salesforce: read_in starting (%d report(s))", len(src.reports))
 
         conn = cast(SalesforceConn, src.conn)
         sf = _reader.login(conn)
-        return _reader.read_report_src(sf, src, ctx.work_dir())
+        try:
+            return _reader.read_report_src(sf, src, ctx.work_dir())
+        finally:
+            logger.info("salesforce: read_in finished (%d report(s))", len(src.reports))
 
 
 class _SalesforceExplorer(Explorer[SalesforceConn]):

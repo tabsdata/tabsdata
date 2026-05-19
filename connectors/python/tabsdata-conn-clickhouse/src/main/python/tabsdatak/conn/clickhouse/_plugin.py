@@ -83,6 +83,7 @@ class _ClickHouseDestPlugin(DestPlugin[ClickHouseDest]):
 
         cfg = _resolve_dest_cfg(dest.dest_cfg)
         logger.setLevel(cfg.logging_level)
+        logger.info("clickhouse: write_out starting (%d table(s))", len(dest.tables or []))
 
         # Verifies that the number of incoming parquet files
         # matches the destination's declared ``tables``

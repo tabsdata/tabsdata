@@ -125,6 +125,7 @@ class OracleSrcPlugin(SrcPlugin[OracleSrc]):
 
         cfg = _resolve_src_cfg(src.src_cfg)
         logger.setLevel(cfg.logging_level)
+        logger.info("oracle: read_in starting (%d queries)", len(src.queries or []))
 
         read_cfg = OracleReadCfg(
             conn=cast(OracleConn, src.conn),
@@ -169,6 +170,7 @@ class OracleDestPlugin(DestPlugin[OracleDest]):
 
         cfg = _resolve_dest_cfg(dest.dest_cfg)
         logger.setLevel(cfg.logging_level)
+        logger.info("oracle: write_out starting (%d table(s))", len(dest.tables or []))
 
         # Verifies that the number of incoming parquet files
         # matches the destination's declared ``tables`` (ORACLE_7).

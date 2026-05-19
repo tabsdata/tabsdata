@@ -65,6 +65,7 @@ class SqlAlchemyWriteEngine(SqlWriteEngine, ABC):
             )
 
         def _run() -> None:
+            logger.debug("sql-writer: establishing engine")
             engine = dest.create_sql_alchemy_engine()
             try:
                 if dest.transactional:
@@ -76,6 +77,7 @@ class SqlAlchemyWriteEngine(SqlWriteEngine, ABC):
                         self._run_writes(write_loader, conn, dest, files)
                         conn.commit()
             finally:
+                logger.debug("sql-writer: disposing engine")
                 engine.dispose()
 
         _retry()(_run)
@@ -92,7 +94,12 @@ class SqlAlchemyWriteEngine(SqlWriteEngine, ABC):
             const.WRITE_CHUNK_SIZE_KEY,
             const.WRITE_CHUNK_SIZE_DEFAULT,
         )
-        for parquet_path, table in zip(files, dest.target_tables):
+        total = len(dest.target_tables)
+        logger.info("sql-writer: writing %d table(s)", total)
+        for i, (parquet_path, table) in enumerate(
+            zip(files, dest.target_tables), 1,
+        ):
+            logger.info("sql-writer: writing table %d/%d: %r", i, total, table)
             write_loader(
                 connection=conn,
                 parquet_file=Path(parquet_path),
@@ -100,6 +107,8 @@ class SqlAlchemyWriteEngine(SqlWriteEngine, ABC):
                 if_table_exists=dest.if_table_exists,
                 chunk_size=chunk_size,
             )
+            logger.debug("sql-writer: finished table %r", table)
+        logger.info("sql-writer: finished writing %d table(s)", total)
 
 
 def _polars_write(

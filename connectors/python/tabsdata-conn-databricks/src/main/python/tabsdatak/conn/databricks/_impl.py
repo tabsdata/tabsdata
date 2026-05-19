@@ -224,6 +224,13 @@ def _download_chunk(link):
         except Exception as e:  # noqa: BLE001 -- retry loop
             last_exc = e
             if attempt < _DOWNLOAD_RETRY_ATTEMPTS:
+                logger.warning(
+                    "databricks: chunk download attempt %d/%d failed (%s); retrying in %ds",
+                    attempt,
+                    _DOWNLOAD_RETRY_ATTEMPTS,
+                    e,
+                    _DOWNLOAD_RETRY_WAIT_SECONDS,
+                )
                 time.sleep(_DOWNLOAD_RETRY_WAIT_SECONDS)
     assert last_exc is not None
     raise last_exc
@@ -456,10 +463,14 @@ def delete_from_volume(ws_client, file_in_volume: str) -> None:
 
 
 def read_all_queries(cfg: DatabricksReadCfg, work_dir: Path) -> list[Path]:
+    logger.debug("databricks: establishing workspace client")
     ws_client = _build_workspace_client(cfg.conn)
     out: list[Path] = []
+    total = len(cfg.queries)
     for index, statement in enumerate(cfg.queries):
+        logger.info("databricks: reading query %d/%d", index + 1, total)
         out.append(execute_query(ws_client, cfg, statement, work_dir, index))
+        logger.debug("databricks: finished query %d/%d", index + 1, total)
     return out
 
 
@@ -476,13 +487,18 @@ def write_all_tables(
             slots=len(parquet_files),
         )
 
+    logger.debug("databricks: establishing workspace client")
     ws_client = _build_workspace_client(cfg.conn)
+    logger.debug("databricks: establishing SQL connection")
     sql_conn = _build_sql_connection(ws_client, cfg.conn)
+    total = len(cfg.target_tables)
     try:
-        for raw_table, parquet_path in zip(
-            cfg.target_tables, parquet_files
-        ):
+        for i, (raw_table, parquet_path) in enumerate(zip(
+            cfg.target_tables, parquet_files,
+        ), 1):
             fq_table = _fully_qualify_table(cfg.conn, raw_table)
+            logger.info("databricks: writing table %d/%d: %s", i, total, fq_table)
+            logger.info("databricks: staging parquet for %s", fq_table)
             file_in_volume = upload_file_to_volume(
                 ws_client, cfg.conn, fq_table, parquet_path
             )
@@ -491,6 +507,9 @@ def write_all_tables(
                     sql_conn, cfg, file_in_volume, fq_table
                 )
             finally:
+                logger.debug("databricks: deleting staged file %s", file_in_volume)
                 delete_from_volume(ws_client, file_in_volume)
+            logger.debug("databricks: finished table %s", fq_table)
     finally:
+        logger.debug("databricks: closing SQL connection")
         sql_conn.close()

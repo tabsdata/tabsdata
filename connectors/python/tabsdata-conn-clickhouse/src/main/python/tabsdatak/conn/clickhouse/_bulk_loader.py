@@ -153,8 +153,8 @@ class CloudStagedBulkLoader:
                 self.dialect.apply_native_schema_evolution(
                     self.load_mode, table_name, old_schema, arrow_schema
                 )
-                logger.debug(
-                    "Applied native schema evolution to table '%s'",
+                logger.info(
+                    "clickhouse: applied native schema evolution to table %r",
                     table_name,
                 )
 
@@ -174,8 +174,8 @@ class CloudStagedBulkLoader:
                 self.dialect.apply_schema_delta(
                     self.load_mode, table_name, delta
                 )
-                logger.debug(
-                    "Applied Iceberg schema evolution to table '%s'",
+                logger.info(
+                    "clickhouse: applied iceberg schema evolution to table %r",
                     table_name,
                 )
 

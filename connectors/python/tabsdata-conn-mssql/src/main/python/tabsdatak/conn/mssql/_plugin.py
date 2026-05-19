@@ -125,6 +125,7 @@ class MSSQLSrcPlugin(SrcPlugin[MSSQLSrc]):
 
         cfg = _resolve_src_cfg(src.src_cfg)
         logger.setLevel(cfg.logging_level)
+        logger.info("mssql: read_in starting (%d queries)", len(src.queries or []))
 
         read_cfg = MSSQLReadCfg(
             conn=cast(MSSQLConn, src.conn),
@@ -178,6 +179,7 @@ class MSSQLDestPlugin(DestPlugin[MSSQLDest]):
 
         cfg = _resolve_dest_cfg(dest.dest_cfg)
         logger.setLevel(cfg.logging_level)
+        logger.info("mssql: write_out starting (%d table(s))", len(dest.tables or []))
 
         # Verifies that the number of incoming parquet files
         # matches the destination's declared ``tables`` (MSSQL_7).

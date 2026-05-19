@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable
@@ -14,6 +15,8 @@ from tabsdatak.spi import (
     SrcContext,
     TableFileSpec,
 )
+
+logger = logging.getLogger(__name__)
 
 # --- Format / value helpers ----------------------------------------
 
@@ -117,8 +120,11 @@ def import_files(
         except ApiException as e:
             raise errors.cred_resolution.exception(cause=e, reason=str(e))
 
+    total = len(cfg.paths)
+    logger.info("file-reader: import_files starting (%d path(s))", total)
     results: list[list[TableFileSpec]] = []
     for slot_idx, entry in enumerate(cfg.paths):
+        logger.info("file-reader: importing path %d/%d: %r", slot_idx + 1, total, entry)
         slot_dir = ctx.work_dir() / f"slot{slot_idx}"
         slot_dir.mkdir(parents=True, exist_ok=True)
         location = build_location(conn, entry)
@@ -143,7 +149,12 @@ def import_files(
             target = f.get("to") if isinstance(f, dict) else None
             if target:
                 slot_files.append(ParquetFile(target))
+        logger.debug(
+            "file-reader: path %d/%d produced %d file(s)",
+            slot_idx + 1, total, len(slot_files),
+        )
         results.append(slot_files)
+    logger.info("file-reader: import_files finished (%d path(s))", total)
     return results
 
 
@@ -171,8 +182,11 @@ def copy_out(
         except ApiException as e:
             raise errors.cred_resolution.exception(cause=e, reason=str(e))
 
+    total = len(cfg.paths)
+    logger.info("file-writer: copy_out starting (%d path(s))", total)
     pairs: list[tuple[Any, Any]] = []
-    for parquet_path, entry in zip(tables, cfg.paths):
+    for i, (parquet_path, entry) in enumerate(zip(tables, cfg.paths), 1):
+        logger.info("file-writer: writing path %d/%d: %r", i, total, entry)
         resolved_entry = resolve_dest_tokens(entry)
         source_loc = _transporter.TransporterLocalFile(
             _transporter.path_to_file_uri(parquet_path)
@@ -199,3 +213,4 @@ def copy_out(
             cause=e,
             path=", ".join(cfg.paths),
         )
+    logger.info("file-writer: copy_out finished (%d path(s))", total)

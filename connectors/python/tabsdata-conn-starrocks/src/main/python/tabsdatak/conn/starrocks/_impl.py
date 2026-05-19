@@ -278,6 +278,7 @@ def execute(
             f"got {cfg.if_table_exists!r}",
         )
 
+    logger.debug("starrocks: establishing SQLAlchemy engine to %s:%s", cfg.host, cfg.port)
     engine = build_starrocks_engine(
         host=cfg.host,
         port=cfg.port,
@@ -285,8 +286,15 @@ def execute(
         credentials=cfg.credentials,
         connect_args=cfg.conn_cfg,
     )
+    total = len(cfg.target_tables)
     try:
-        for table_name, parquet in zip(cfg.target_tables, tables):
+        for i, (table_name, parquet) in enumerate(
+            zip(cfg.target_tables, tables), 1,
+        ):
+            logger.info(
+                "starrocks: writing table %d/%d: %r", i, total, table_name,
+            )
+            logger.info("starrocks: staging parquet for %r", table_name)
             staged = upload_parquet(
                 cfg.staging,
                 work_dir,
