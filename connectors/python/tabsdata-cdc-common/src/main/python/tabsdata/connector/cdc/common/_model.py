@@ -7,6 +7,7 @@ from __future__ import annotations
 import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import StrEnum
 from typing import Union
 
@@ -42,6 +43,7 @@ class CdcDataChange:
     operation: str
     transaction: str
     sequence: int
+    timestamp: datetime
     table: str
     schema: SchemaVersion
     new_values: dict
@@ -53,6 +55,7 @@ class CdcDataChange:
         size += sys.getsizeof(self.operation)
         size += sys.getsizeof(self.transaction)
         size += sys.getsizeof(self.sequence)
+        size += sys.getsizeof(self.timestamp)
         size += sys.getsizeof(self.table)
         size += sys.getsizeof(self.schema)
         size += sys.getsizeof(self.new_values)

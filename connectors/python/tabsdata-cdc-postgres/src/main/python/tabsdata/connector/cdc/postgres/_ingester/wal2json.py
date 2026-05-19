@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Generator, Iterable
-from datetime import date, datetime, time as dt_time
+from datetime import date, datetime, time as dt_time, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -383,6 +383,7 @@ class Wal2JsonIngester(CdcIngester):
         op: str,
         xid: str,
         sequence: int,
+        timestamp: datetime,
         schema_version: SchemaVersion,
         new_values: dict,
         old_values: dict,
@@ -406,6 +407,7 @@ class Wal2JsonIngester(CdcIngester):
             operation=op,
             transaction=xid,
             sequence=sequence,
+            timestamp=timestamp,
             table=qualified,
             new_values=new_values,
             old_values=old_values,
@@ -490,6 +492,9 @@ class Wal2JsonIngester(CdcIngester):
                     break
                 payload = orjson.loads(message.payload)
                 xid = str(payload["xid"])
+                timestamp = datetime.fromisoformat(payload["timestamp"]).astimezone(
+                    timezone.utc
+                )
                 changes = payload["change"]
                 lsn_offset = LsnOffset(lsn=message.data_start)
                 sequence = 0
@@ -499,6 +504,7 @@ class Wal2JsonIngester(CdcIngester):
                         change=change,
                         xid=xid,
                         sequence=sequence,
+                        timestamp=timestamp,
                         offset=lsn_offset,
                     )
                     if data_change is not None:
@@ -518,6 +524,7 @@ class Wal2JsonIngester(CdcIngester):
         change: dict,
         xid: str,
         sequence: int,
+        timestamp: datetime,
         offset: LsnOffset | None = None,
     ) -> CdcDataChange | None:
         qualified = self.resolve_table(change)
@@ -548,6 +555,7 @@ class Wal2JsonIngester(CdcIngester):
             op=op,
             xid=xid,
             sequence=sequence,
+            timestamp=timestamp,
             schema_version=schema_version,
             new_values=new_values,
             old_values=old_values,
@@ -579,6 +587,7 @@ class Wal2JsonIngester(CdcIngester):
             self._blocking_timeout_seconds * PENDING_TIMEOUT_MULTIPLIER
         )
         xid: str | None = None
+        timestamp: datetime | None = None
         sequence: int = 0
         try:
             while True:
@@ -596,6 +605,9 @@ class Wal2JsonIngester(CdcIngester):
                 action = payload.get("action")
                 if action == V2Actions.BEGIN:
                     xid = str(payload["xid"])
+                    timestamp = datetime.fromisoformat(payload["timestamp"]).astimezone(
+                        timezone.utc
+                    )
                     sequence = 0
                     continue
                 if action == V2Actions.COMMIT:
@@ -610,6 +622,7 @@ class Wal2JsonIngester(CdcIngester):
                     payload=payload,
                     xid=xid,
                     sequence=sequence,
+                    timestamp=timestamp,
                     offset=lsn_offset,
                 )
                 if data_change is not None:
@@ -628,6 +641,7 @@ class Wal2JsonIngester(CdcIngester):
         payload: dict,
         xid: str,
         sequence: int,
+        timestamp: datetime,
         offset: LsnOffset | None = None,
     ) -> CdcDataChange | None:
         qualified = self.resolve_table(payload)
@@ -658,6 +672,7 @@ class Wal2JsonIngester(CdcIngester):
             op=op,
             xid=xid,
             sequence=sequence,
+            timestamp=timestamp,
             schema_version=schema_version,
             new_values=new_values,
             old_values=old_values,

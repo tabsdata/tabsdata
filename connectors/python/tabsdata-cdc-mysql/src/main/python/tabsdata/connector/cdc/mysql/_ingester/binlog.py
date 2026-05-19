@@ -7,12 +7,18 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Generator
+from datetime import datetime, timezone
 from typing import Any
 
 import polars as pl
 import pymysql
 from pymysqlreplication import BinLogStreamReader
-from pymysqlreplication.event import GtidEvent, HeartbeatLogEvent
+from pymysqlreplication.event import (
+    GtidEvent,
+    HeartbeatLogEvent,
+    QueryEvent,
+    XidEvent,
+)
 from pymysqlreplication.row_event import (
     DeleteRowsEvent,
     UpdateRowsEvent,
@@ -34,6 +40,7 @@ from tabsdata.connector.cdc.common.constants import (
 )
 from tabsdata.connector.cdc.common.typing import QualifiedTablesSpec
 from tabsdata.connector.cdc.mysql._connection import MySQLCdcConn
+from tabsdata.connector.cdc.mysql.constants import PENDING_TIMESTAMP
 from tabsdata.connector.cdc.mysql.typing import (
     BinlogPosition,
     GtidPosition,
@@ -55,6 +62,8 @@ class IngesterOperations:
 
 BINLOG_START_POSITION = 4
 HEARTBEAT_INTERVAL_SECONDS = 1
+
+BUFFER_TRANSACTIONS = True
 
 OPERATION_MAP = {
     IngesterOperations.INSERT: CdcOperation.INSERT,
@@ -182,6 +191,8 @@ class BinlogIngester(CdcIngester):
                 UpdateRowsEvent,
                 DeleteRowsEvent,
                 GtidEvent,
+                QueryEvent,
+                XidEvent,
                 HeartbeatLogEvent,
             ],
         }
@@ -349,6 +360,12 @@ class BinlogIngester(CdcIngester):
         return tuple(schema)
 
     def poll_changes(self, session: Any) -> Generator[CdcChange, None, None]:
+        if BUFFER_TRANSACTIONS:
+            yield from self.poll_changes_buffered(session)
+        else:
+            yield from self.poll_changes_unbuffered(session)
+
+    def poll_changes_unbuffered(self, session: Any) -> Generator[CdcChange, None, None]:
         deadline = time.monotonic() + self._blocking_timeout_seconds
         gtid: str | None = None
         seq: int = 0
@@ -363,6 +380,92 @@ class BinlogIngester(CdcIngester):
                     seq = 0
                 elif isinstance(event, HeartbeatLogEvent):
                     if time.monotonic() > deadline:
+                        break
+                elif isinstance(
+                    event, (WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent)
+                ):
+                    qualified = self.as_qualified_table(event.schema, event.table)
+                    if qualified is None:
+                        continue
+                    op = OPERATION_MAP[type(event)]
+                    commit_ts = datetime.fromtimestamp(event.timestamp, tz=timezone.utc)
+                    raw_schema = self.extract_raw_schema(event)
+                    schema_version = self._schema_registry.register_from_log(
+                        qualified,
+                        raw_schema,
+                    )
+                    for row in event.rows:
+                        seq += 1
+                        match event:
+                            case WriteRowsEvent():
+                                new_values = row["values"]
+                                old_values = {column: None for column in new_values}
+                            case UpdateRowsEvent():
+                                new_values = row["after_values"]
+                                old_values = row["before_values"]
+                            case DeleteRowsEvent():
+                                new_values = row["values"]
+                                old_values = {column: None for column in new_values}
+                            case _:
+                                raise CdcError(
+                                    ErrorCode.CDC5,
+                                    type(event).__name__,
+                                    "binlog",
+                                    qualified,
+                                )
+                        self.localize_values(new_values)
+                        self.localize_values(old_values)
+                        yield CdcDataChange(
+                            operation=op,
+                            transaction=gtid,
+                            sequence=seq,
+                            timestamp=commit_ts,
+                            table=qualified,
+                            new_values=new_values,
+                            old_values=old_values,
+                            offset=GtidOffset(gtid=gtid),
+                            schema=schema_version,
+                        )
+        except Exception as error:
+            logger.error(
+                f"Error while polling changes: "
+                f"exception when polling gtid={gtid} @ seq={seq}: "
+                f"{type(error).__name__}: {error}",
+                exc_info=True,
+            )
+            raise
+
+    def poll_changes_buffered(self, session: Any) -> Generator[CdcChange, None, None]:
+        deadline = time.monotonic() + self._blocking_timeout_seconds
+        gtid: str | None = None
+        seq: int = 0
+        pending: list[CdcDataChange] = []
+        try:
+            for event in self._stream:
+                if isinstance(event, GtidEvent):
+                    if not pending and time.monotonic() > deadline:
+                        break
+                    gtid = event.gtid
+                    seq = 0
+                elif isinstance(event, (XidEvent, QueryEvent)):
+                    if (
+                        isinstance(event, QueryEvent)
+                        and (event.query or "").strip().upper() != "COMMIT"
+                    ):
+                        continue
+                    commit_timestamp = datetime.fromtimestamp(
+                        event.timestamp, tz=timezone.utc
+                    )
+                    for change in pending:
+                        change.timestamp = commit_timestamp
+                        yield change
+                    if gtid is not None:
+                        self._mark = GtidOffset(gtid=gtid)
+                    pending = []
+                    gtid = None
+                    seq = 0
+                elif isinstance(event, HeartbeatLogEvent):
+                    if not pending and time.monotonic() > deadline:
                         break
                 elif isinstance(
                     event, (WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent)
@@ -397,20 +500,24 @@ class BinlogIngester(CdcIngester):
                                 )
                         self.localize_values(new_values)
                         self.localize_values(old_values)
-                        yield CdcDataChange(
-                            operation=op,
-                            transaction=gtid,
-                            sequence=seq,
-                            table=qualified,
-                            new_values=new_values,
-                            old_values=old_values,
-                            offset=GtidOffset(gtid=gtid),
-                            schema=schema_version,
+                        pending.append(
+                            CdcDataChange(
+                                operation=op,
+                                transaction=gtid,
+                                sequence=seq,
+                                timestamp=PENDING_TIMESTAMP,
+                                table=qualified,
+                                new_values=new_values,
+                                old_values=old_values,
+                                offset=GtidOffset(gtid=gtid),
+                                schema=schema_version,
+                            )
                         )
         except Exception as error:
             logger.error(
                 f"Error while polling changes: "
-                f"exception when polling gtid={gtid} @ seq={seq}: "
+                f"exception when polling gtid={gtid} @ seq={seq} "
+                f"with {len(pending)} pending rows: "
                 f"{type(error).__name__}: {error}",
                 exc_info=True,
             )
