@@ -250,7 +250,7 @@ venusian==3.1.1
 virtualenv==21.2.0
 waitress==3.0.2
 watchdog==6.0.0
-wcwidth==0.7.0
+wcwidth==0.2.14
 webob==1.8.9
 websocket-client==1.9.0
 wheel==0.46.3

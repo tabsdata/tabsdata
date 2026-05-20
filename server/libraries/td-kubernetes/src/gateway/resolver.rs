@@ -37,11 +37,11 @@ impl ConfigurationResolver {
         Self { system }
     }
 
-    pub async fn resolve_sys(&self, contents: &str) -> Result<String, TdError> {
-        sys::resolve(contents, &self.system)
+    pub async fn resolve_sys(&self, content: &str) -> Result<String, TdError> {
+        sys::resolve(content, &self.system)
     }
 
-    pub async fn resolve_env(&self, contents: &str) -> Result<String, TdError> {
-        env::resolve(contents)
+    pub async fn resolve_env(&self, content: &str) -> Result<String, TdError> {
+        env::resolve(content)
     }
 }

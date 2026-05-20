@@ -22,8 +22,8 @@ use crate::error::gateway::ResolverError;
 static PATTERN: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"\$\{env:(\w+)(\?)?}").expect("invalid env regex"));
 
-pub(super) fn resolve(leaf: &str) -> Result<String, TdError> {
-    let mut current = leaf.to_string();
+pub(super) fn resolve(text: &str) -> Result<String, TdError> {
+    let mut current = text.to_string();
     while let Some(captures) = PATTERN.captures(&current) {
         let placeholder = captures.get(0).unwrap().as_str().to_string();
         let variable = captures.get(1).unwrap().as_str().to_string();

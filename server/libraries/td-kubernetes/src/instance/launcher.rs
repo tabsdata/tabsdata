@@ -31,6 +31,8 @@ const POD_CONDITION_READY: &str = "Ready";
 const POD_CONDITION_STATUS_TRUE: &str = "True";
 const POD_PHASE_FAILED: &str = "Failed";
 
+const WORKLOAD_LABEL_SELECTOR: &str = "app.kubernetes.io/part-of=tabsdata";
+
 pub async fn start_workload(
     provider: &dyn Provider,
     profile: &Profile,
@@ -353,7 +355,7 @@ async fn delete_workload(provider: &dyn Provider, multi: &MultiProgress) -> Resu
     let client = build_kube_client(&config)?;
     let pods_api: Api<Pod> = Api::namespaced(client.clone(), &config.default_namespace);
     let jobs_api: Api<Job> = Api::namespaced(client, &config.default_namespace);
-    let list_params = ListParams::default();
+    let list_params = ListParams::default().labels(WORKLOAD_LABEL_SELECTOR);
     let delete_params = DeleteParams {
         propagation_policy: Some(PropagationPolicy::Background),
         ..DeleteParams::default()
@@ -409,7 +411,7 @@ async fn workload_exists_inner(provider: &dyn Provider) -> Result<bool> {
     let client = build_kube_client(&config)?;
     let pods_api: Api<Pod> = Api::namespaced(client.clone(), &config.default_namespace);
     let jobs_api: Api<Job> = Api::namespaced(client, &config.default_namespace);
-    let list_params = ListParams::default();
+    let list_params = ListParams::default().labels(WORKLOAD_LABEL_SELECTOR);
     let namespace = config.default_namespace.clone();
     let pods_namespace = namespace.clone();
     let jobs_namespace = namespace;
