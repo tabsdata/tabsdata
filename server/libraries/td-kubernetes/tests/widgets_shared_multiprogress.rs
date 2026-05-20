@@ -2,9 +2,7 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-use td_kubernetes::client::tdkserver::widgets::{
-    phase_spinner, phase_spinner_in, spinner,
-};
+use td_kubernetes::client::tdkserver::widgets::{phase_spinner, phase_spinner_in, spinner};
 
 #[test]
 fn spinner_exposes_its_multi_progress() {

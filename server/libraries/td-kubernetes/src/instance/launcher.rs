@@ -238,7 +238,10 @@ pub async fn apply_regular_phase(
         report_validation(path, topology.validate_pod(&pod))?;
         prepared.push((path.clone(), pod));
     }
-    let phase = phase_spinner_in(multi, &format!("Applying {} regular pod(s)", prepared.len()));
+    let phase = phase_spinner_in(
+        multi,
+        &format!("Applying {} regular pod(s)", prepared.len()),
+    );
     let creates = prepared.into_iter().map(|(path, pod)| {
         let api = api.clone();
         let namespace = config.default_namespace.clone();

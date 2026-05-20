@@ -2,9 +2,7 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-use td_kubernetes::gateway::resolver::{
-    ConfigurationResolver, HashicorpConfig, SystemValues,
-};
+use td_kubernetes::gateway::resolver::{ConfigurationResolver, HashicorpConfig, SystemValues};
 
 fn resolver_with_system(system: SystemValues) -> ConfigurationResolver {
     ConfigurationResolver::new(HashicorpConfig::default(), system)
@@ -46,9 +44,7 @@ async fn missing_required_env_returns_error() {
     unsafe { std::env::remove_var("TD_TEST_RESOLVER_MISSING") };
 
     let resolver = resolver();
-    let result = resolver
-        .resolve("${env:TD_TEST_RESOLVER_MISSING}")
-        .await;
+    let result = resolver.resolve("${env:TD_TEST_RESOLVER_MISSING}").await;
     assert!(result.is_err(), "expected missing env var to error");
 }
 

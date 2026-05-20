@@ -95,12 +95,17 @@ pub fn load_config<T: Config>(
         .add_source(config::Config::try_from(&default_config).unwrap())
         .add_source(config::File::with_name(app_config_file.to_str().unwrap()).required(false))
         .add_source(config::File::with_name(app_user_config_file.to_str().unwrap()).required(false))
-        .add_source(config::File::with_name(home_dir_config_file.to_str().unwrap()).required(false));
+        .add_source(
+            config::File::with_name(home_dir_config_file.to_str().unwrap()).required(false),
+        );
 
     if let Some(path) = config_file.as_ref() {
-        info!("Loading configuration from explicit file: {}", path.display());
-        config_builder =
-            config_builder.add_source(config::File::with_name(path.to_str().unwrap()).required(true));
+        info!(
+            "Loading configuration from explicit file: {}",
+            path.display()
+        );
+        config_builder = config_builder
+            .add_source(config::File::with_name(path.to_str().unwrap()).required(true));
     }
 
     config_builder = config_builder.add_source(config::Environment::with_prefix(&app_env_prefix));

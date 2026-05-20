@@ -55,12 +55,7 @@ fn missing_config_folder_is_ignored_when_explicit_file_supplied() {
     let custom = write_yaml(&dir, "custom.yaml", "supplied_only", 12);
     let nonexistent_folder = dir.path().join("does-not-exist");
 
-    let config = load_config::<Sample>(
-        "td-1912",
-        Some(nonexistent_folder),
-        Some(custom),
-        false,
-    );
+    let config = load_config::<Sample>("td-1912", Some(nonexistent_folder), Some(custom), false);
     assert_eq!(config.name, "supplied_only");
     assert_eq!(config.port, 12);
 }
