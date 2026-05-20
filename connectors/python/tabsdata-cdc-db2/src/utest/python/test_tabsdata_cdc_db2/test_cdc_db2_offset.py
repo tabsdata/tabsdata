@@ -47,48 +47,51 @@ def test_offset_resume(db2_cdc_config):
         user=config.root_user,
         password=config.root_password,
     )
-    connection.autocommit = False
+    try:
+        connection.autocommit = False
 
-    cursor = connection.cursor()
-    sampler = Db2CdcSampler(config.container, config.port, cursor)
+        cursor = connection.cursor()
+        sampler = Db2CdcSampler(config.container, config.port, cursor)
 
-    uri = f"db2://{config.host}:{config.port}/{config.database}"
-    credentials = UserPasswordCredentials(
-        user=config.cdc_user,
-        password=config.cdc_password,
-    )
-    conn = Db2CdcConn(
-        uri=uri,
-        credentials=credentials,
-    )
-
-    def trigger_factory(
-        iteration: int,
-        checkpoint_df: pl.DataFrame | None,
-    ) -> Db2CdcTrigger:
-        if iteration == 0 or checkpoint_df is None or checkpoint_df.is_empty():
-            start_from = "head"
-        else:
-            row = checkpoint_df.row(0, named=True)
-            seqs = {col: row[col].hex() for col in checkpoint_df.columns}
-            start_from = TableCommitSeqPosition(seqs=seqs)
-        return Db2CdcTrigger(
-            conn=conn,
-            tables=[cd_table.qualified],
-            start_from=start_from,
-            blocking_timeout_seconds=6,
-            buffer_max_rows=5,
-            buffer_max_bytes=None,
-            buffer_max_secs=10,
-            trigger_max_rows=7,
-            trigger_max_bytes=None,
-            trigger_max_secs=10,
-            end=datetime.now(timezone.utc) + timedelta(minutes=TRIGGER_END_MINUTES),
+        uri = f"db2://{config.host}:{config.port}/{config.database}"
+        credentials = UserPasswordCredentials(
+            user=config.cdc_user,
+            password=config.cdc_password,
+        )
+        conn = Db2CdcConn(
+            uri=uri,
+            credentials=credentials,
         )
 
-    run_offset_resume_test(
-        connection=connection,
-        table=table,
-        sampler=sampler,
-        trigger_factory=trigger_factory,
-    )
+        def trigger_factory(
+            iteration: int,
+            checkpoint_df: pl.DataFrame | None,
+        ) -> Db2CdcTrigger:
+            if iteration == 0 or checkpoint_df is None or checkpoint_df.is_empty():
+                start_from = "head"
+            else:
+                row = checkpoint_df.row(0, named=True)
+                seqs = {col: row[col].hex() for col in checkpoint_df.columns}
+                start_from = TableCommitSeqPosition(seqs=seqs)
+            return Db2CdcTrigger(
+                conn=conn,
+                tables=[cd_table.qualified],
+                start_from=start_from,
+                blocking_timeout_seconds=6,
+                buffer_max_rows=5,
+                buffer_max_bytes=None,
+                buffer_max_secs=10,
+                trigger_max_rows=7,
+                trigger_max_bytes=None,
+                trigger_max_secs=10,
+                end=datetime.now(timezone.utc) + timedelta(minutes=TRIGGER_END_MINUTES),
+            )
+
+        run_offset_resume_test(
+            connection=connection,
+            table=table,
+            sampler=sampler,
+            trigger_factory=trigger_factory,
+        )
+    finally:
+        connection.close()

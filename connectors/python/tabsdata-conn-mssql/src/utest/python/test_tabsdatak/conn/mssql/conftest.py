@@ -496,7 +496,8 @@ def mssql_config(tmp_path_factory, worker_id) -> Iterator[DBConfig]:
     try:
         yield cfg
     finally:
-        _remove_container(_MSSQL_CONTAINER)
+        if worker_id == "master":
+            _remove_container(_MSSQL_CONTAINER)
 
 
 # Per-test re-seed so write tests don't leak rows into subsequent

@@ -456,7 +456,8 @@ def mysql_config(tmp_path_factory, worker_id) -> Iterator[DBConfig]:
     try:
         yield cfg
     finally:
-        _remove_container(_MYSQL_CONTAINER)
+        if worker_id == "master":
+            _remove_container(_MYSQL_CONTAINER)
 
 
 @pytest.fixture(scope="session")
@@ -499,7 +500,8 @@ def mariadb_config(tmp_path_factory, worker_id) -> Iterator[DBConfig]:
     try:
         yield cfg
     finally:
-        _remove_container(_MARIADB_CONTAINER)
+        if worker_id == "master":
+            _remove_container(_MARIADB_CONTAINER)
 
 
 # Per-test re-seed so write tests don't leak rows into subsequent

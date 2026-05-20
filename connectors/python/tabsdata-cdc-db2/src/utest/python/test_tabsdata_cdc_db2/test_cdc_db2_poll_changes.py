@@ -53,37 +53,40 @@ def test_poll_changes_insert_update_delete(db2_cdc_config):
         user=config.root_user,
         password=config.root_password,
     )
-    connection.autocommit = False
+    try:
+        connection.autocommit = False
 
-    cursor = connection.cursor()
-    sampler = Db2CdcSampler(config.container, config.port, cursor)
+        cursor = connection.cursor()
+        sampler = Db2CdcSampler(config.container, config.port, cursor)
 
-    uri = f"db2://{config.host}:{config.port}/{config.database}"
-    credentials = UserPasswordCredentials(
-        user=config.cdc_user,
-        password=config.cdc_password,
-    )
-    conn = Db2CdcConn(
-        uri=uri,
-        credentials=credentials,
-    )
-    trigger = Db2CdcTrigger(
-        conn=conn,
-        tables=[cd_table.qualified],
-        start_from="head",
-        blocking_timeout_seconds=6,
-        buffer_max_rows=10_000,
-        buffer_max_secs=10,
-        trigger_max_secs=10,
-        end=datetime.now(timezone.utc) + timedelta(minutes=TRIGGER_END_MINUTES),
-    )
+        uri = f"db2://{config.host}:{config.port}/{config.database}"
+        credentials = UserPasswordCredentials(
+            user=config.cdc_user,
+            password=config.cdc_password,
+        )
+        conn = Db2CdcConn(
+            uri=uri,
+            credentials=credentials,
+        )
+        trigger = Db2CdcTrigger(
+            conn=conn,
+            tables=[cd_table.qualified],
+            start_from="head",
+            blocking_timeout_seconds=6,
+            buffer_max_rows=10_000,
+            buffer_max_secs=10,
+            trigger_max_secs=10,
+            end=datetime.now(timezone.utc) + timedelta(minutes=TRIGGER_END_MINUTES),
+        )
 
-    run_poll_changes_test(
-        connection=connection,
-        table=table,
-        sampler=sampler,
-        trigger=trigger,
-    )
+        run_poll_changes_test(
+            connection=connection,
+            table=table,
+            sampler=sampler,
+            trigger=trigger,
+        )
+    finally:
+        connection.close()
 
 
 @pytest.mark.cdc_db2
@@ -108,37 +111,40 @@ def test_end_to_end_insert_update_delete(db2_cdc_config):
         user=config.root_user,
         password=config.root_password,
     )
-    connection.autocommit = False
+    try:
+        connection.autocommit = False
 
-    cursor = connection.cursor()
-    sampler = Db2CdcSampler(config.container, config.port, cursor)
+        cursor = connection.cursor()
+        sampler = Db2CdcSampler(config.container, config.port, cursor)
 
-    uri = f"db2://{config.host}:{config.port}/{config.database}"
-    credentials = UserPasswordCredentials(
-        user=config.cdc_user,
-        password=config.cdc_password,
-    )
-    conn = Db2CdcConn(
-        uri=uri,
-        credentials=credentials,
-    )
-    trigger = Db2CdcTrigger(
-        conn=conn,
-        tables=[cd_table.qualified],
-        start_from="head",
-        blocking_timeout_seconds=6,
-        buffer_max_rows=10_000,
-        buffer_max_secs=10,
-        trigger_max_secs=10,
-        end=datetime.now(timezone.utc) + timedelta(minutes=TRIGGER_END_MINUTES),
-    )
+        uri = f"db2://{config.host}:{config.port}/{config.database}"
+        credentials = UserPasswordCredentials(
+            user=config.cdc_user,
+            password=config.cdc_password,
+        )
+        conn = Db2CdcConn(
+            uri=uri,
+            credentials=credentials,
+        )
+        trigger = Db2CdcTrigger(
+            conn=conn,
+            tables=[cd_table.qualified],
+            start_from="head",
+            blocking_timeout_seconds=6,
+            buffer_max_rows=10_000,
+            buffer_max_secs=10,
+            trigger_max_secs=10,
+            end=datetime.now(timezone.utc) + timedelta(minutes=TRIGGER_END_MINUTES),
+        )
 
-    run_end_to_end_test(
-        connection=connection,
-        table=table,
-        sampler=sampler,
-        trigger=trigger,
-    )
+        run_end_to_end_test(
+            connection=connection,
+            table=table,
+            sampler=sampler,
+            trigger=trigger,
+        )
+    finally:
+        connection.close()
 
 
 @pytest.mark.cdc_db2
@@ -164,36 +170,39 @@ def test_end_to_end_format(db2_cdc_config, cdc_format):
         user=config.root_user,
         password=config.root_password,
     )
-    connection.autocommit = False
+    try:
+        connection.autocommit = False
 
-    cursor = connection.cursor()
-    sampler = Db2CdcSampler(config.container, config.port, cursor)
+        cursor = connection.cursor()
+        sampler = Db2CdcSampler(config.container, config.port, cursor)
 
-    uri = f"db2://{config.host}:{config.port}/{config.database}"
-    credentials = UserPasswordCredentials(
-        user=config.cdc_user,
-        password=config.cdc_password,
-    )
-    conn = Db2CdcConn(
-        uri=uri,
-        credentials=credentials,
-    )
-    trigger = Db2CdcTrigger(
-        conn=conn,
-        tables=[cd_table.qualified],
-        start_from="head",
-        cdc_format=cdc_format,
-        blocking_timeout_seconds=6,
-        buffer_max_rows=10_000,
-        buffer_max_secs=10,
-        trigger_max_secs=10,
-        end=datetime.now(timezone.utc) + timedelta(minutes=TRIGGER_END_MINUTES),
-    )
+        uri = f"db2://{config.host}:{config.port}/{config.database}"
+        credentials = UserPasswordCredentials(
+            user=config.cdc_user,
+            password=config.cdc_password,
+        )
+        conn = Db2CdcConn(
+            uri=uri,
+            credentials=credentials,
+        )
+        trigger = Db2CdcTrigger(
+            conn=conn,
+            tables=[cd_table.qualified],
+            start_from="head",
+            cdc_format=cdc_format,
+            blocking_timeout_seconds=6,
+            buffer_max_rows=10_000,
+            buffer_max_secs=10,
+            trigger_max_secs=10,
+            end=datetime.now(timezone.utc) + timedelta(minutes=TRIGGER_END_MINUTES),
+        )
 
-    run_end_to_end_format_test(
-        connection=connection,
-        table=table,
-        sampler=sampler,
-        trigger=trigger,
-        cdc_format=cdc_format,
-    )
+        run_end_to_end_format_test(
+            connection=connection,
+            table=table,
+            sampler=sampler,
+            trigger=trigger,
+            cdc_format=cdc_format,
+        )
+    finally:
+        connection.close()

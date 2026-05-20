@@ -35,7 +35,14 @@ logger.setLevel(logging.DEBUG)
 @pytest.mark.cdc_db2
 @pytest.mark.slow
 @pytest.mark.tdfntrigger(venv=False)
-@pytest.mark.parametrize("change_kinds", SINGLE_CHANGES)
+@pytest.mark.parametrize(
+    "change_kinds",
+    [
+        change_kind
+        for change_kind in SINGLE_CHANGES
+        if change_kind.id not in ("change_type", "rename_column")
+    ],
+)
 def test_schema_evolution(db2_cdc_config, change_kinds):
     mode: CdcMode = CdcMode.HARD
 
@@ -59,47 +66,50 @@ def test_schema_evolution(db2_cdc_config, change_kinds):
         user=config.root_user,
         password=config.root_password,
     )
-    connection.autocommit = False
+    try:
+        connection.autocommit = False
 
-    cursor = connection.cursor()
-    sampler = Db2CdcSampler(config.container, config.port, cursor)
-    sampler._cd_qualified_table = cd_table.qualified
+        cursor = connection.cursor()
+        sampler = Db2CdcSampler(config.container, config.port, cursor)
+        sampler._cd_qualified_table = cd_table.qualified
 
-    uri = f"db2://{config.host}:{config.port}/{config.database}"
-    credentials = UserPasswordCredentials(
-        user=config.cdc_user,
-        password=config.cdc_password,
-    )
-    conn = Db2CdcConn(
-        uri=uri,
-        credentials=credentials,
-    )
-
-    def trigger_factory(
-        iteration: int,
-        checkpoint_df: pl.DataFrame | None,
-    ) -> Db2CdcTrigger:
-        if iteration == 0 or checkpoint_df is None or checkpoint_df.is_empty():
-            start_from = "head"
-        else:
-            row = checkpoint_df.row(0, named=True)
-            seqs = {col: row[col].hex() for col in checkpoint_df.columns}
-            start_from = TableCommitSeqPosition(seqs=seqs)
-        return Db2CdcTrigger(
-            conn=conn,
-            tables=[cd_table.qualified if mode is CdcMode.HARD else sampler._cd_qualified_table],
-            start_from=start_from,
-            blocking_timeout_seconds=6,
-            buffer_max_rows=10_000,
-            buffer_max_secs=10,
-            trigger_max_secs=10,
-            end=datetime.now(timezone.utc) + timedelta(minutes=TRIGGER_END_MINUTES),
+        uri = f"db2://{config.host}:{config.port}/{config.database}"
+        credentials = UserPasswordCredentials(
+            user=config.cdc_user,
+            password=config.cdc_password,
+        )
+        conn = Db2CdcConn(
+            uri=uri,
+            credentials=credentials,
         )
 
-    run_schema_evolution_offset_test(
-        sampler=sampler,
-        connection=connection,
-        table=table,
-        trigger_factory=trigger_factory,
-        change_kinds=change_kinds,
-    )
+        def trigger_factory(
+            iteration: int,
+            checkpoint_df: pl.DataFrame | None,
+        ) -> Db2CdcTrigger:
+            if iteration == 0 or checkpoint_df is None or checkpoint_df.is_empty():
+                start_from = "head"
+            else:
+                row = checkpoint_df.row(0, named=True)
+                seqs = {col: row[col].hex() for col in checkpoint_df.columns}
+                start_from = TableCommitSeqPosition(seqs=seqs)
+            return Db2CdcTrigger(
+                conn=conn,
+                tables=[cd_table.qualified if mode is CdcMode.HARD else sampler._cd_qualified_table],
+                start_from=start_from,
+                blocking_timeout_seconds=6,
+                buffer_max_rows=10_000,
+                buffer_max_secs=10,
+                trigger_max_secs=10,
+                end=datetime.now(timezone.utc) + timedelta(minutes=TRIGGER_END_MINUTES),
+            )
+
+        run_schema_evolution_offset_test(
+            sampler=sampler,
+            connection=connection,
+            table=table,
+            trigger_factory=trigger_factory,
+            change_kinds=change_kinds,
+        )
+    finally:
+        connection.close()

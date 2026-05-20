@@ -58,55 +58,58 @@ def test_continuous_dml(db2_cdc_config, q_tables, q_threads):
         user=config.root_user,
         password=config.root_password,
     )
-    connection.autocommit = False
+    try:
+        connection.autocommit = False
 
-    cursor = connection.cursor()
-    sampler = Db2CdcSampler(config.container, config.port, cursor)
+        cursor = connection.cursor()
+        sampler = Db2CdcSampler(config.container, config.port, cursor)
 
-    for table in tables:
-        sampler.create_table(table)
-    connection.commit()
+        for table in tables:
+            sampler.create_table(table)
+        connection.commit()
 
-    uri = f"db2://{config.host}:{config.port}/{config.database}"
-    credentials = UserPasswordCredentials(
-        user=config.cdc_user,
-        password=config.cdc_password,
-    )
-    conn = Db2CdcConn(
-        uri=uri,
-        credentials=credentials,
-    )
-
-    trigger = Db2CdcTrigger(
-        conn=conn,
-        tables=[cd_table.qualified for cd_table in cd_tables],
-        start_from="head",
-        blocking_timeout_seconds=4,
-        buffer_max_rows=64,
-        buffer_max_secs=4,
-        trigger_max_rows=128,
-        trigger_max_secs=4,
-        end=datetime.now(timezone.utc) + timedelta(minutes=TRIGGER_END_MINUTES),
-    )
-
-    def dml_worker_factory():
-        w_conn = ibm_db_dbi.connect(
-            host=config.host,
-            dsn=f"PORT={config.port};PROTOCOL=TCPIP;",
-            database=config.database,
-            user=config.root_user,
-            password=config.root_password,
+        uri = f"db2://{config.host}:{config.port}/{config.database}"
+        credentials = UserPasswordCredentials(
+            user=config.cdc_user,
+            password=config.cdc_password,
         )
-        w_conn.autocommit = False
-        w_cursor = w_conn.cursor()
-        w_sampler = Db2CdcSampler(config.container, config.port, w_cursor)
-        return w_conn, w_sampler
+        conn = Db2CdcConn(
+            uri=uri,
+            credentials=credentials,
+        )
 
-    run_continuous_dml_test(
-        sampler=sampler,
-        connection=connection,
-        tables=tables,
-        trigger=trigger,
-        dml_worker_threads=q_threads,
-        dml_worker_factory=dml_worker_factory,
-    )
+        trigger = Db2CdcTrigger(
+            conn=conn,
+            tables=[cd_table.qualified for cd_table in cd_tables],
+            start_from="head",
+            blocking_timeout_seconds=4,
+            buffer_max_rows=64,
+            buffer_max_secs=4,
+            trigger_max_rows=128,
+            trigger_max_secs=4,
+            end=datetime.now(timezone.utc) + timedelta(minutes=TRIGGER_END_MINUTES),
+        )
+
+        def dml_worker_factory():
+            w_conn = ibm_db_dbi.connect(
+                host=config.host,
+                dsn=f"PORT={config.port};PROTOCOL=TCPIP;",
+                database=config.database,
+                user=config.root_user,
+                password=config.root_password,
+            )
+            w_conn.autocommit = False
+            w_cursor = w_conn.cursor()
+            w_sampler = Db2CdcSampler(config.container, config.port, w_cursor)
+            return w_conn, w_sampler
+
+        run_continuous_dml_test(
+            sampler=sampler,
+            connection=connection,
+            tables=tables,
+            trigger=trigger,
+            dml_worker_threads=q_threads,
+            dml_worker_factory=dml_worker_factory,
+        )
+    finally:
+        connection.close()

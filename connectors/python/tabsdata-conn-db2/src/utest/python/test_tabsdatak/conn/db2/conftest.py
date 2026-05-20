@@ -269,9 +269,9 @@ def _tune_db2_for_concurrency(container_name: str, db: str) -> None:
     # BACKUP PENDING state on the IBM community image (SQL1116N).
     tune_script = (
         "su - db2inst1 -c '"
-        "db2 update dbm cfg using MAX_CONNECTIONS 128 MAX_COORDAGENTS 128"
+        "db2 update dbm cfg using MAX_CONNECTIONS 512 MAX_COORDAGENTS 512"
         f" && db2 connect to {db}"
-        " && db2 update db cfg using MAXAPPLS 128"
+        " && db2 update db cfg using MAXAPPLS 512"
         " && db2 connect reset"
         " && db2 terminate"
         "'"
@@ -319,6 +319,8 @@ def _wait_for_db(host: str, port: int, user: str, password: str, db: str) -> Non
 
 def _seed_schema(cfg: DBConfig) -> None:
     from sqlalchemy import create_engine, text
+
+    _wait_for_db(cfg.host, cfg.port, cfg.user, cfg.password, cfg.database)
 
     # Db2 has no ``DROP TABLE IF EXISTS``; the compound statement
     # below installs a SQLSTATE '42704' (undefined name) handler so
@@ -455,6 +457,10 @@ def _build_config(
         environment=environment,
         forwarded_port=port,
     )
+    logger.info(
+        "_build_config[%s]: _free_port=%s, ensure_container=%s",
+        name, port, host_port,
+    )
     cfg = DBConfig(
         host="127.0.0.1",
         port=host_port,
@@ -522,7 +528,8 @@ def db2_config(tmp_path_factory, worker_id) -> Iterator[DBConfig]:
     try:
         yield cfg
     finally:
-        _remove_container(_DB2_CONTAINER)
+        if worker_id == "master":
+            _remove_container(_DB2_CONTAINER)
 
 
 # Per-test re-seed so write tests don't leak rows into subsequent

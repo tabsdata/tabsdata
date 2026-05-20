@@ -52,7 +52,7 @@ class CdcMode(Enum):
 DEFAULT_PYTEST_DB2_CDC_DOCKER_CONTAINER_NAME: str = f"{CDC_CONTAINER_PREFIX}db2-cdc"
 
 DB2_CDC_FORWARDED_PORT: str = "50000/tcp"
-DB2_CDC_IMAGE: str = "icr.io/db2_community/db2:latest"
+DB2_CDC_IMAGE: str = "icr.io/db2_community/db2:11.5.9.0"
 DB2_CDC_DOCKER_DONE_MESSAGE: str = "Setup has completed."
 DB2_CDC_TABSDATA_SETUP_DONE_MESSAGE: str = "tabsdata container setup finished"
 DB2_CDC_TABSDATA_SETUP_DONE_MARKER: str = "/tmp/tabsdata_setup_done"
@@ -197,11 +197,36 @@ def db2_exec(container: Container, command: str) -> str:
     code, output = container.exec_run(
         ["bash", "-l", "-c", command],
         user="db2inst1",
+        environment={"DB2BQTIME": "3", "DB2BQTRY": "240"},
     )
     output = output.decode("utf-8", errors="replace")
     if code != 0:
         raise RuntimeError(f"Db2 command failed:\n{command}\n\n{output}")
     return output
+
+
+def asnclp_generate_script(
+    container: Container, asnclp_input: str, script_name: str,
+) -> str:
+    db2_exec(
+        container,
+        f'cd "$HOME" && rm -f {script_name} && '
+        f"printf '{asnclp_input}' | asnclp",
+    )
+    output = db2_exec(container, f'cat "$HOME/{script_name}"')
+    return output
+
+
+def db2_run_sql_script(port: int, script: str) -> None:
+    lines = [
+        line for line in script.splitlines()
+        if line.strip() and not line.lstrip().startswith("--")
+    ]
+    body = "\n".join(lines)
+    statements = [stmt.strip() for stmt in body.split(";") if stmt.strip()]
+    with db2_cursor(port) as (cursor, _connection):
+        for stmt in statements:
+            cursor.execute(stmt)
 
 
 def get_db2_home(container: Container) -> str:
@@ -234,26 +259,17 @@ def setup_db2_archive(container: Container) -> None:
     logger.info("Setting Db2 archive log completed successfully")
 
 
-def setup_cdc_db2_asn(container: Container) -> None:
+def setup_cdc_db2_asn(container: Container, port: int) -> None:
     control_script = DB2_CDC_CONTROL_SCRIPT.upper()
-    db2_exec(
-        container,
-        f'cd "$HOME" && '
-        f"rm -f {control_script} && "
-        f"printf "
-        f"'"
+    asnclp_input = (
         f"set output capture script {control_script}\\n"
         f"set server capture to db {DB2_CDC_DATABASE}\\n"
         f"set capture schema source {DB2_CDC_ASN_SCHEMA}\\n"
         f"create control tables for capture server\\n"
         f"quit\\n"
-        f"' "
-        f"| "
-        f"asnclp && "
-        f"db2 connect to {DB2_CDC_DATABASE} && "
-        f"db2 -tvf {control_script} && "
-        f"db2 terminate",
     )
+    script = asnclp_generate_script(container, asnclp_input, control_script)
+    db2_run_sql_script(port, script)
 
     logger.info("Setting asn system configuration completed successfully")
 
@@ -704,12 +720,7 @@ def register_table_for_cdc(
         cursor.execute(f"alter table {schema}.{table} data capture changes")
     logger.info(f"Created table {source_table} with data capture enabled")
 
-    db2_exec(
-        container,
-        f'cd "$HOME" && '
-        f"rm -f {register_script} && "        
-        f"printf "
-        f"'"
+    asnclp_input = (
         f"set output capture script {register_script}\\n"
         f"set server capture to db {DB2_CDC_DATABASE}\\n"
         f"set capture schema source {DB2_CDC_ASN_SCHEMA}\\n"
@@ -722,12 +733,9 @@ def register_table_for_cdc(
         f"options "
         f"capture all\\n"
         f"quit\\n"
-        f"' "
-        f"| asnclp && "
-        f"db2 connect to {DB2_CDC_DATABASE} && "
-        f"db2 -tvf {register_script} && "
-        f"db2 terminate",
     )
+    script = asnclp_generate_script(container, asnclp_input, register_script)
+    db2_run_sql_script(port, script)
     logger.info(f"Registration of {source_table} for data capture finished")
 
     map_id = send_capstart_signal(port, schema, table, staging_table)
@@ -851,12 +859,7 @@ def reregister_table_for_cdc(
 
     logger.info(f"Re-enabled data capture for {source_table}")
 
-    db2_exec(
-        container,
-        f'cd "$HOME" && '
-        f"rm -f {register_script} && "
-        f"printf "
-        f"'"
+    asnclp_input = (
         f"set output capture script {register_script}\\n"
         f"set server capture to db {DB2_CDC_DATABASE}\\n"
         f"set capture schema source {DB2_CDC_ASN_SCHEMA}\\n"
@@ -869,12 +872,9 @@ def reregister_table_for_cdc(
         f"options "
         f"capture all\\n"
         f"quit\\n"
-        f"' "
-        f"| asnclp && "
-        f"db2 connect to {DB2_CDC_DATABASE} && "
-        f"db2 -tvf {register_script} && "
-        f"db2 terminate",
     )
+    script = asnclp_generate_script(container, asnclp_input, register_script)
+    db2_run_sql_script(port, script)
     logger.info(f"Re-registration of {source_table} for data capture finished")
 
     map_id = send_capstart_signal(port, schema, table, staging_table)
@@ -1112,9 +1112,17 @@ def create_cdc_db2_container(
         name=name,
         image=DB2_CDC_IMAGE,
         environment=[
+            "LICENSE=accept",
             f"DB2INST1_PASSWORD={DB2_CDC_ROOT_PASSWORD}",
             f"DBNAME={DB2_CDC_DATABASE}",
-            "LICENSE=accept",
+            "BLU=false",
+            "ENABLE_ORACLE_COMPATIBILITY=false",
+            "UPDATEAVAIL=NO",
+            "TO_CREATE_SAMPLEDB=false",
+            "REPODB=false",
+            "IS_OSXFS=false",
+            "PERSISTENT_HOME=true",
+            "HADR_ENABLED=false",
         ],
         forwarded_ports={DB2_CDC_FORWARDED_PORT: None},
         privileged=True,
@@ -1180,20 +1188,17 @@ def wait_for_tabsdata_setup_done(container: Container) -> None:
         raise
 
 
-def resize_db2_buffer_pool(container: Container) -> None:
+def resize_db2_buffer_pool(port: int) -> None:
     logger.info("Resizing DB2 CDC buffer pool to 256 MB")
-    output = db2_exec(
-        container,
-        f"db2 connect to {DB2_CDC_DATABASE} && "
-        f"db2 alter bufferpool ibmdefaultbp size 65536",
-    )
-    logger.info(f"DB2 CDC buffer pool resized to 256 MB: {output}")
+    with db2_cursor(port) as (cursor, _connection):
+        cursor.execute("ALTER BUFFERPOOL ibmdefaultbp SIZE 65536")
+    logger.info("DB2 CDC buffer pool resized to 256 MB")
 
 
 def setup_cdc_db2_container(container: Container, port: int) -> str:
     get_db2_home(container)
     setup_db2_archive(container)
-    setup_cdc_db2_asn(container)
+    setup_cdc_db2_asn(container, port)
     setup_cdc_db2_asncap(container, port)
     signal = setup_cdc_db2_signal(container, port)
 
@@ -1214,7 +1219,7 @@ def create_cdc_db2_database(
     if created:
         signal = setup_cdc_db2_container(container, port)
         check_cdc_db2_container(port, signal)
-        resize_db2_buffer_pool(container)
+        resize_db2_buffer_pool(port)
         log_tabsdata_setup_done(container)
     else:
         wait_for_tabsdata_setup_done(container)

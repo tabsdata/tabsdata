@@ -180,6 +180,8 @@ def wait_for_db2_ready(port):
 
     elapsed = 0
     while True:
+        connection = None
+        cursor = None
         try:
             connection = db.connect(
                 f"DATABASE={DB2_DB_NAME};"
@@ -190,8 +192,6 @@ def wait_for_db2_ready(port):
             )
             cursor = connection.cursor()
             cursor.execute("SELECT 1 FROM SYSIBM.SYSDUMMY1")
-            cursor.close()
-            connection.close()
             logger.info(f"DB2 readiness check passed on port {port}")
             return
         except Exception as err:
@@ -207,6 +207,11 @@ def wait_for_db2_ready(port):
                     f"{DB2_WAIT_POLL_INTERVAL_SECONDS} second(s): {err}"
                 )
                 sleep(DB2_WAIT_POLL_INTERVAL_SECONDS)
+        finally:
+            if cursor is not None:
+                cursor.close()
+            if connection is not None:
+                connection.close()
 
 
 def log_tabsdata_setup_done(container):
@@ -247,20 +252,27 @@ def wait_for_tabsdata_setup_done(container):
         raise
 
 
-def resize_db2_buffer_pool(container):
+def resize_db2_buffer_pool(port):
+    import ibm_db_dbi as db
+
     logger.info("Resizing DB2 buffer pool to 256 MB")
-    exit_code, output = container.exec_run(
-        ["bash", "-l", "-c",
-         f"db2 connect to {DB2_DB_NAME} && "
-         f"db2 alter bufferpool ibmdefaultbp size 65536"],
-        user="db2inst1",
+    connection = db.connect(
+        f"DATABASE={DB2_DB_NAME};"
+        f"HOSTNAME=127.0.0.1;"
+        f"PORT={port};"
+        f"PROTOCOL=TCPIP;",
+        user=DB2_DB_USER, password=DB_PASSWORD,
     )
-    output_text = output.decode("utf-8", errors="replace")
-    if exit_code != 0:
-        raise RuntimeError(
-            f"DB2 buffer pool resize failed with code {exit_code}: {output_text}"
-        )
-    logger.info(f"DB2 buffer pool resized to 256 MB: {output_text}")
+    try:
+        cursor = connection.cursor()
+        try:
+            cursor.execute("ALTER BUFFERPOOL ibmdefaultbp SIZE 65536")
+            connection.commit()
+        finally:
+            cursor.close()
+    finally:
+        connection.close()
+    logger.info("DB2 buffer pool resized to 256 MB")
 
 
 def tune_db2_for_concurrency(container):
@@ -269,9 +281,9 @@ def tune_db2_for_concurrency(container):
     # no db2stop/db2start needed. The restart used to put TESTDB into
     # BACKUP PENDING state on the IBM community image (SQL1116N).
     tune_script = (
-        "db2 update dbm cfg using MAX_CONNECTIONS 128 MAX_COORDAGENTS 128"
+        "db2 update dbm cfg using MAX_CONNECTIONS 512 MAX_COORDAGENTS 512"
         f" && db2 connect to {DB2_DB_NAME}"
-        " && db2 update db cfg using MAXAPPLS 128"
+        " && db2 update db cfg using MAXAPPLS 512"
         " && db2 connect reset"
         " && db2 terminate"
     )
@@ -306,17 +318,24 @@ def create_docker_db2_database(
         wait_for_db2_ready(port)
         return port
     else:
-        pull_docker_image("icr.io/db2_community/db2:latest", platform="linux/amd64")
+        pull_docker_image("icr.io/db2_community/db2:11.5.9.0", platform="linux/amd64")
         try:
             container = client.containers.run(
-                "icr.io/db2_community/db2:latest",
+                "icr.io/db2_community/db2:11.5.9.0",
                 name=name,
                 platform="linux/amd64",
                 environment=[
-                    f"DB2INST1_PASSWORD={DB_PASSWORD}",
                     "LICENSE=accept",
+                    f"DB2INST1_PASSWORD={DB_PASSWORD}",
                     f"DBNAME={DB2_DB_NAME}",
-
+                    "BLU=false",
+                    "ENABLE_ORACLE_COMPATIBILITY=false",
+                    "UPDATEAVAIL=NO",
+                    "TO_CREATE_SAMPLEDB=false",
+                    "REPODB=false",
+                    "IS_OSXFS=false",
+                    "PERSISTENT_HOME=true",
+                    "HADR_ENABLED=false",
                 ],
                 ports={DB2_FORWARDED_PORT: None},
                 detach=True,
@@ -444,6 +463,6 @@ def create_docker_db2_database(
         finally:
             mydb.close()
         logger.info("DB2 container created successfully")
-        resize_db2_buffer_pool(container)
+        resize_db2_buffer_pool(port)
         log_tabsdata_setup_done(container)
         return port
