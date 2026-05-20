@@ -278,6 +278,9 @@ def _prepare_docker_starrocks_database(port: int) -> None:
         cursor.execute(
             'admin set frontend config ("default_replication_num" = "1")'
         )
+        cursor.execute(
+            'admin set frontend config ("storage_usage_hard_limit_reserve_bytes" = "1073741824")'
+        )
         cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{STARROCKS_DB_NAME}`")
     conn.close()
     _wait_for_database(port)

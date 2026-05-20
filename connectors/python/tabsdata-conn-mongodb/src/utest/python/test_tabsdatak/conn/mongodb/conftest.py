@@ -27,6 +27,13 @@ from filelock import FileLock
 from xdist.workermanage import WorkerController
 
 from tabsdata._utils.tdlogging import setup_tests_logging
+from test_tabsdata.common.constants import (
+    CONTAINER_PORT_BINDING_WAIT_POLL_INTERVAL_SECONDS,
+    CONTAINER_PORT_BINDING_WAIT_TIMEOUT_SECONDS,
+    DOCKER_REGULAR_CONTAINER_INFIX,
+    DOCKER_UTEST_CONTAINER_INFIX,
+    PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
+)
 
 # noinspection PyUnusedImports
 from test_tabsdata.conftest import (
@@ -73,7 +80,12 @@ def pytest_sessionfinish(session, exitstatus):
 
 
 _MONGO_IMAGE = "mongo:6.0.21"
-_MONGO_CONTAINER_NAME = "tdpytest_c_conn_mongodb"
+_MONGO_CONTAINER_NAME = (
+    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}"
+    f"{DOCKER_UTEST_CONTAINER_INFIX}"
+    f"{DOCKER_REGULAR_CONTAINER_INFIX}"
+    "mongodb"
+)
 _MONGO_PORT_INSIDE = "27017/tcp"
 _MONGO_USER = "mongo_user"
 _MONGO_PASSWORD = "mongo_password"
@@ -141,6 +153,19 @@ def _container_port(container) -> int | None:
         return None
 
 
+def _wait_for_container_port(container) -> int | None:
+    import time
+
+    deadline = time.monotonic() + CONTAINER_PORT_BINDING_WAIT_TIMEOUT_SECONDS
+    while time.monotonic() < deadline:
+        container.reload()
+        port = _container_port(container)
+        if port is not None:
+            return port
+        time.sleep(CONTAINER_PORT_BINDING_WAIT_POLL_INTERVAL_SECONDS)
+    return None
+
+
 def _wait_for_mongo_ready(uri: str, timeout_s: int = 60) -> None:
     import time
 
@@ -175,8 +200,7 @@ def _start_mongo_container() -> MongoDBContainerConfig:
     if existing is not None:
         if existing.status != "running":
             existing.start()
-        existing.reload()
-        host_port = _container_port(existing)
+        host_port = _wait_for_container_port(existing)
         if host_port is None:
             existing.remove(force=True)
             existing = None
@@ -214,8 +238,7 @@ def _start_mongo_container() -> MongoDBContainerConfig:
     except APIError as exc:
         pytest.skip(f"docker run {_MONGO_IMAGE!r} failed: {exc}")
 
-    container.reload()
-    host_port = _container_port(container)
+    host_port = _wait_for_container_port(container)
     if host_port is None:
         container.remove(force=True)
         pytest.skip("docker container started but published no host port")

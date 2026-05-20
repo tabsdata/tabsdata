@@ -36,6 +36,8 @@ from tabsdata._utils.tdlogging import setup_tests_logging
 from tabsdatak.api import Secret
 from tabsdatak.conn.common.types import UserPassword
 from test_tabsdata.common.constants import (
+    CONTAINER_PORT_BINDING_WAIT_POLL_INTERVAL_SECONDS,
+    CONTAINER_PORT_BINDING_WAIT_TIMEOUT_SECONDS,
     DOCKER_REGULAR_CONTAINER_INFIX,
     DOCKER_UTEST_CONTAINER_INFIX,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
@@ -192,8 +194,7 @@ def _ensure_container(
     if existing is not None:
         if existing.status != "running":
             existing.start()
-        existing.reload()
-        host_port = _container_port(existing)
+        host_port = _wait_for_container_port(existing)
         if host_port is None:
             existing.remove(force=True)
             existing = None
@@ -224,8 +225,7 @@ def _ensure_container(
     except APIError as exc:
         _fail_or_skip(f"docker run {image!r} failed: {exc}")
 
-    container.reload()
-    host_port = _container_port(container)
+    host_port = _wait_for_container_port(container)
     if host_port is None:
         container.remove(force=True)
         _fail_or_skip("docker container started but published no host port")
@@ -241,6 +241,17 @@ def _container_port(container) -> int | None:
         return int(bindings[0]["HostPort"])
     except (KeyError, ValueError, IndexError):
         return None
+
+
+def _wait_for_container_port(container) -> int | None:
+    deadline = time.monotonic() + CONTAINER_PORT_BINDING_WAIT_TIMEOUT_SECONDS
+    while time.monotonic() < deadline:
+        container.reload()
+        port = _container_port(container)
+        if port is not None:
+            return port
+        time.sleep(CONTAINER_PORT_BINDING_WAIT_POLL_INTERVAL_SECONDS)
+    return None
 
 
 def _tune_db2_for_concurrency(container_name: str, db: str) -> None:
@@ -309,6 +320,31 @@ def _wait_for_db(host: str, port: int, user: str, password: str, db: str) -> Non
     )
 
 
+_TRANSIENT_COMMS_MARKERS = ("CLI0108E", "SQLCODE=-99999", "SQL1224N")
+
+
+def _is_transient_comms_error(exc: BaseException) -> bool:
+    message = str(exc)
+    return any(marker in message for marker in _TRANSIENT_COMMS_MARKERS)
+
+
+def run_query_with_retry(query_fn, *, timeout_s: float = 60.0, poll_s: float = 0.5):
+    from sqlalchemy.exc import DBAPIError, OperationalError
+
+    deadline = time.monotonic() + timeout_s
+    last_error: Exception | None = None
+    while True:
+        try:
+            return query_fn()
+        except (OperationalError, DBAPIError) as exc:
+            if not _is_transient_comms_error(exc):
+                raise
+            last_error = exc
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(poll_s)
+
+
 def _seed_schema(cfg: DBConfig) -> None:
     from sqlalchemy import create_engine, text
 
@@ -325,7 +361,8 @@ def _seed_schema(cfg: DBConfig) -> None:
     )
 
     engine = create_engine(cfg.uri_with_credentials)
-    try:
+
+    def _seed():
         with engine.begin() as conn:
             conn.execute(text(drop_if_exists.format(tbl="orders")))
             conn.execute(text(drop_if_exists.format(tbl="users")))
@@ -354,6 +391,9 @@ def _seed_schema(cfg: DBConfig) -> None:
                 "INSERT INTO orders (id, user_id, qty) VALUES (11, 2, 5)",
             ):
                 conn.execute(text(sql))
+
+    try:
+        run_query_with_retry(_seed)
     finally:
         engine.dispose()
 

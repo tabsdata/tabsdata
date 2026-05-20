@@ -49,6 +49,8 @@ from tabsdatak.conn.clickhouse import (
     S3Location,
 )
 from test_tabsdata.common.constants import (
+    CONTAINER_PORT_BINDING_WAIT_POLL_INTERVAL_SECONDS,
+    CONTAINER_PORT_BINDING_WAIT_TIMEOUT_SECONDS,
     DOCKER_REGULAR_CONTAINER_INFIX,
     DOCKER_UTEST_CONTAINER_INFIX,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
@@ -215,6 +217,17 @@ def _container_port(container) -> int | None:
         return None
 
 
+def _wait_for_container_port(container) -> int | None:
+    deadline = time.monotonic() + CONTAINER_PORT_BINDING_WAIT_TIMEOUT_SECONDS
+    while time.monotonic() < deadline:
+        container.reload()
+        port = _container_port(container)
+        if port is not None:
+            return port
+        time.sleep(CONTAINER_PORT_BINDING_WAIT_POLL_INTERVAL_SECONDS)
+    return None
+
+
 def _ensure_container(
     *,
     name: str,
@@ -233,8 +246,7 @@ def _ensure_container(
     if existing is not None:
         if existing.status != "running":
             existing.start()
-        existing.reload()
-        host_port = _container_port(existing)
+        host_port = _wait_for_container_port(existing)
         if host_port is None:
             existing.remove(force=True)
             existing = None
@@ -269,8 +281,7 @@ def _ensure_container(
             f"docker run {image!r} failed: {exc}"
         )
 
-    container.reload()
-    host_port = _container_port(container)
+    host_port = _wait_for_container_port(container)
     if host_port is None:
         container.remove(force=True)
         _fail_or_skip(

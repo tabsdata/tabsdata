@@ -21,6 +21,7 @@ from tabsdatak.conn.db2 import Db2Conn, Db2Dest, Db2Src
 # noinspection PyProtectedMember
 from tabsdatak.conn.db2 import _plugin as plugin
 from tabsdatak.spi import DestContext, SrcContext
+from test_tabsdatak.conn.db2.conftest import run_query_with_retry
 
 
 pytestmark = pytest.mark.db2
@@ -159,13 +160,16 @@ def test_dest_plugin_write_out_appends_rows(fresh_db2, work_dir):
     plugin.Db2DestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
     eng = create_engine(fresh_db2.uri_with_credentials)
     try:
-        with eng.connect() as conn:
-            n = conn.execute(text("SELECT COUNT(*) FROM users")).scalar_one()
-            assert n == 4
-            name = conn.execute(
-                text("SELECT name FROM users WHERE id = 100"),
-            ).scalar_one()
-            assert name == "dave"
+        def _read():
+            with eng.connect() as conn:
+                n = conn.execute(text("SELECT COUNT(*) FROM users")).scalar_one()
+                name = conn.execute(
+                    text("SELECT name FROM users WHERE id = 100"),
+                ).scalar_one()
+                return n, name
+        n, name = run_query_with_retry(_read)
+        assert n == 4
+        assert name == "dave"
     finally:
         eng.dispose()
 
@@ -183,10 +187,12 @@ def test_dest_plugin_write_out_replace_clears_existing(fresh_db2, work_dir):
     plugin.Db2DestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
     eng = create_engine(fresh_db2.uri_with_credentials)
     try:
-        with eng.connect() as conn:
-            rows = conn.execute(
-                text("SELECT id, name FROM users"),
-            ).fetchall()
-            assert rows == [(1, "only")]
+        def _read():
+            with eng.connect() as conn:
+                return conn.execute(
+                    text("SELECT id, name FROM users"),
+                ).fetchall()
+        rows = run_query_with_retry(_read)
+        assert rows == [(1, "only")]
     finally:
         eng.dispose()

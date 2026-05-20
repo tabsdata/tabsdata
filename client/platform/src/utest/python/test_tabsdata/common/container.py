@@ -8,6 +8,8 @@ import logging
 from time import sleep
 
 from test_tabsdata.common.constants import (
+    CONTAINER_PORT_BINDING_WAIT_POLL_INTERVAL_SECONDS,
+    CONTAINER_PORT_BINDING_WAIT_TIMEOUT_SECONDS,
     CONTAINER_WAIT_POLL_INTERVAL_SECONDS,
     CONTAINER_WAIT_TIMEOUT_SECONDS,
     IMAGE_PULL_MAXIMUM_RETRY_COUNT,
@@ -36,12 +38,38 @@ def wait_for_container_running(container):
         container.reload()
 
 
+def _container_port(container, port: str) -> int | None:
+    port_binding = (
+        container.attrs.get("NetworkSettings", {}).get("Ports", {}).get(port)
+    )
+    if not port_binding:
+        return None
+    host_port = port_binding[0].get("HostPort")
+    if not host_port:
+        return None
+    try:
+        return int(host_port)
+    except (TypeError, ValueError):
+        return None
+
+
+def _wait_for_container_port(container, port: str) -> int | None:
+    elapsed = 0.0
+    while elapsed <= CONTAINER_PORT_BINDING_WAIT_TIMEOUT_SECONDS:
+        container.reload()
+        host_port = _container_port(container, port)
+        if host_port is not None:
+            return host_port
+        sleep(CONTAINER_PORT_BINDING_WAIT_POLL_INTERVAL_SECONDS)
+        elapsed += CONTAINER_PORT_BINDING_WAIT_POLL_INTERVAL_SECONDS
+    return None
+
+
 def get_container_port_binding(container, port: str) -> int:
-    port_binding = container.attrs["NetworkSettings"]["Ports"].get(port)
-    if port_binding and len(port_binding) > 0:
-        return int(port_binding[0]["HostPort"])
-    else:
+    host_port = _wait_for_container_port(container, port)
+    if host_port is None:
         raise Exception(f"Port {port} is not bound in the container.")
+    return host_port
 
 
 def pull_docker_image(image, platform=None):
