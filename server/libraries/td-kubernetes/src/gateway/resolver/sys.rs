@@ -1,0 +1,66 @@
+//
+// Copyright 2026 Tabs Data Inc.
+//
+
+//! `${sys:KEY}` resolution — substitutes a predefined set of system values
+//! passed by the caller through [`SystemValues`].
+
+use std::str::FromStr;
+
+use once_cell::sync::Lazy;
+use regex::Regex;
+use strum::{AsRefStr, EnumIter, EnumString, IntoEnumIterator};
+use td_error::TdError;
+
+use crate::error::gateway::ResolverError;
+
+static PATTERN: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"\$\{sys:(\w+)}").expect("invalid sys regex"));
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, EnumString, AsRefStr, EnumIter)]
+pub enum SystemKey {
+    #[strum(serialize = "TDK_REPOSITORY_URL")]
+    TdkRepositoryUrl,
+}
+
+impl SystemKey {
+    fn supported() -> String {
+        Self::iter()
+            .map(|key| key.as_ref().to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct SystemValues {
+    pub repository_url: Option<String>,
+}
+
+impl SystemValues {
+    fn lookup(&self, key: SystemKey) -> Option<&str> {
+        match key {
+            SystemKey::TdkRepositoryUrl => self.repository_url.as_deref(),
+        }
+    }
+}
+
+pub(super) fn resolve(leaf: &str, values: &SystemValues) -> Result<String, TdError> {
+    let mut current = leaf.to_string();
+    while let Some(captures) = PATTERN.captures(&current) {
+        let placeholder = captures.get(0).unwrap().as_str().to_string();
+        let raw_key = captures.get(1).unwrap().as_str();
+        let key =
+            SystemKey::from_str(raw_key).map_err(|_| ResolverError::UnsupportedSystemKey {
+                key: raw_key.to_string(),
+                supported: SystemKey::supported(),
+            })?;
+        let value = values
+            .lookup(key)
+            .ok_or_else(|| ResolverError::MissingSystemValue {
+                key: key.as_ref().to_string(),
+            })?;
+        current = current.replace(&placeholder, value);
+    }
+    Ok(current)
+}

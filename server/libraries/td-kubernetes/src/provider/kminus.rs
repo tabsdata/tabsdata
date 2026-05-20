@@ -10,9 +10,12 @@ use std::io::Read;
 use std::path::PathBuf;
 
 use async_trait::async_trait;
+use indicatif::MultiProgress;
 use td_common::env::TABSDATA_HOME_DIR;
-use td_common::server::{DEFAULT_INSTANCE, INSTANCES_FOLDER};
-use td_common::status::ExitStatus::{GeneralError, NoAction};
+use td_common::os::name_program;
+use td_common::server::{DATABASE_FILE, DEFAULT_INSTANCE, INSTANCES_FOLDER};
+use td_common::status::ExitStatus::{GeneralError, NoAction, TabsDataError};
+use td_python::python::resolve_python_binary;
 use tracing::info;
 
 use crate::cerror;
@@ -20,7 +23,11 @@ use crate::client::tdkcontext::{KminusInputs, TdkContext};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::validate_instance_name;
 use crate::client::tdkserver::widgets::spinner;
-use crate::constants::{FOLDER_CLUSTER, PROVIDER_KMINUS};
+use crate::constants::{
+    FOLDER_CLUSTER, FOLDER_DATABASE, FOLDER_PYTHON, FOLDER_REPOSITORY, FOLDER_RUNTIMES,
+    FOLDER_STORAGE, PROVIDER_KMINUS,
+};
+use crate::gateway::resolver::{ConfigurationResolver, HashicorpConfig, SystemValues};
 use crate::instance::launcher::{start_workload, stop_workload};
 use crate::instance::manifest::MANIFEST_FILE;
 use crate::instance::profile::load_profile;
@@ -33,7 +40,11 @@ use crate::provider::kminus::cluster::{InstanceFolderGuard, KminusCluster};
 use crate::provider::kminus::instance::KminusInstance;
 use crate::provider::{Cluster, Instance, Provider, Transaction};
 use crate::system::exit::{Result, abort};
+use crate::system::subprocess::apply_detached_flags;
 use crate::topology::{Topology, topology_for};
+
+const APISERVER_BINARY: &str = "td_apiserver";
+const PYVENV_BINARY: &str = "td_pyvenv";
 
 pub struct KminusProvider {
     name: String,
@@ -117,6 +128,33 @@ impl KminusProvider {
             topology,
             inputs,
         })
+    }
+
+    fn prepare_cluster_inner(&self) -> Result<Box<dyn Transaction>> {
+        if let Err(error) = fs::create_dir_all(&self.folder) {
+            cerror!(
+                "Failed to create instance folder {}: {error}",
+                self.folder.display()
+            );
+            return abort(GeneralError);
+        }
+        let guard = InstanceFolderGuard::new(self.folder.clone());
+        let repository = self.folder.join(FOLDER_REPOSITORY);
+        for subfolder in [
+            &repository,
+            &repository.join(FOLDER_DATABASE),
+            &repository.join(FOLDER_STORAGE),
+        ] {
+            if let Err(error) = fs::create_dir_all(subfolder) {
+                cerror!(
+                    "Failed to create repository folder {}: {error}",
+                    subfolder.display()
+                );
+                return abort(GeneralError);
+            }
+        }
+        self.cluster.create()?;
+        Ok(Box::new(guard))
     }
 
     fn kube_summary(&self) -> KubeSummary {
@@ -327,33 +365,202 @@ impl Provider for KminusProvider {
     }
 
     async fn prepare_cluster(&self) -> Result<Box<dyn Transaction>> {
-        if let Err(error) = fs::create_dir_all(&self.folder) {
+        let bar = spinner("Preparing kminus cluster");
+        let result = self.prepare_cluster_inner();
+        match &result {
+            Ok(_) => bar.finish("Kminus cluster prepared"),
+            Err(_) => bar.finish_and_clear(),
+        }
+        result
+    }
+
+    async fn create_database(&self) -> Result {
+        let repository = self.folder.join(FOLDER_REPOSITORY);
+        let database_path = repository.join(FOLDER_DATABASE).join(DATABASE_FILE);
+        let storage_path = repository.join(FOLDER_STORAGE);
+        let database_url = match url::Url::from_file_path(&database_path) {
+            Ok(url) => url,
+            Err(_) => {
+                cerror!(
+                    "Failed to convert database path '{}' to file:// URL",
+                    database_path.display()
+                );
+                return abort(GeneralError);
+            }
+        };
+        let storage_url = match url::Url::from_directory_path(&storage_path) {
+            Ok(url) => url,
+            Err(_) => {
+                cerror!(
+                    "Failed to convert storage path '{}' to file:// URL",
+                    storage_path.display()
+                );
+                return abort(GeneralError);
+            }
+        };
+        let apiserver = name_program(&PathBuf::from(APISERVER_BINARY));
+        let bar = spinner("Creating tabsdata database schema");
+        let mut command = std::process::Command::new(&apiserver);
+        command
+            .arg("--database-url")
+            .arg(database_url.as_str())
+            .arg("--storage-url")
+            .arg(storage_url.as_str())
+            .arg("--db-schema")
+            .arg("create");
+        apply_detached_flags(&mut command);
+        let result = command.output();
+        match result {
+            Ok(output) => {
+                if !output.status.success() {
+                    bar.finish_and_clear();
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    cerror!(
+                        "'{} --db-schema create' failed with status {}: {}",
+                        apiserver.display(),
+                        output.status,
+                        stderr.trim()
+                    );
+                    return abort(GeneralError);
+                }
+                bar.finish("Tabsdata database schema created");
+                Ok(())
+            }
+            Err(error) => {
+                bar.finish_and_clear();
+                cerror!(
+                    "Failed to run '{} --db-schema create': {error}",
+                    apiserver.display()
+                );
+                abort(GeneralError)
+            }
+        }
+    }
+
+    async fn create_runtimes(&self) -> Result {
+        let runtimes_python = self.folder.join(FOLDER_RUNTIMES).join(FOLDER_PYTHON);
+        if let Err(error) = fs::create_dir_all(&runtimes_python) {
             cerror!(
-                "Failed to create instance folder {}: {error}",
-                self.folder.display()
+                "Failed to create runtimes folder '{}': {error}",
+                runtimes_python.display()
             );
             return abort(GeneralError);
         }
-        let guard = InstanceFolderGuard::new(self.folder.clone());
-        self.cluster.create()?;
-        Ok(Box::new(guard))
+        let pyvenv = match resolve_python_binary(PYVENV_BINARY) {
+            Ok(path) => path,
+            Err(error) => {
+                cerror!("Failed to locate the '{PYVENV_BINARY}' binary: {error}");
+                return abort(GeneralError);
+            }
+        };
+        let bar = spinner("Creating Python virtual environment templates");
+        let mut command = std::process::Command::new(&pyvenv);
+        command.arg("create").arg("--target").arg(&runtimes_python);
+        apply_detached_flags(&mut command);
+        let result = command.output();
+        match result {
+            Ok(output) => {
+                if !output.status.success() {
+                    bar.finish_and_clear();
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    cerror!(
+                        "Failed to create Python virtual environment templates under '{}': {}",
+                        runtimes_python.display(),
+                        stderr.trim()
+                    );
+                    return abort(GeneralError);
+                }
+                bar.finish("Python virtual environment templates created");
+                info!("Current Python environment tabsdata metadata:");
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                for line in stdout.lines() {
+                    info!("  {line}");
+                }
+                Ok(())
+            }
+            Err(error) => {
+                bar.finish_and_clear();
+                cerror!(
+                    "Failed to create Python virtual environment templates under '{}': {error}",
+                    runtimes_python.display()
+                );
+                abort(GeneralError)
+            }
+        }
     }
 
     async fn start_cluster(&self) -> Result {
         let bar = spinner("Starting kminus cluster");
         let result = self.cluster.start().await;
-        bar.finish_and_clear();
+        match &result {
+            Ok(()) => bar.finish("Kminus cluster started"),
+            Err(_) => bar.finish_and_clear(),
+        }
         result
     }
 
     async fn stop_cluster(&self) -> Result<bool> {
         let bar = spinner("Stopping kminus cluster");
         let result = self.cluster.stop().await;
-        bar.finish_and_clear();
+        match &result {
+            Ok(_) => bar.finish("Kminus cluster stopped"),
+            Err(_) => bar.finish_and_clear(),
+        }
         result
     }
 
     async fn stage_configmap(&self) -> Result {
+        let bar = spinner("Staging tabsdata configmap");
+        let result = self.stage_configmap_inner().await;
+        match &result {
+            Ok(()) => bar.finish("Tabsdata configmap staged"),
+            Err(_) => bar.finish_and_clear(),
+        }
+        result
+    }
+
+    async fn store_configmap(&self) -> Result {
+        Ok(())
+    }
+
+    async fn start_instance(&self) -> Result {
+        let bar = spinner("Starting tabsdata instance");
+        let result = self.start_instance_inner(bar.multi()).await;
+        match &result {
+            Ok(_) => bar.finish("Tabsdata instance started"),
+            Err(_) => bar.finish_and_clear(),
+        }
+        result
+    }
+
+    async fn stop_instance(&self) -> Result<bool> {
+        let bar = spinner("Stopping tabsdata instance");
+        let result = self.stop_instance_inner(bar.multi()).await;
+        match &result {
+            Ok(_) => bar.finish("Tabsdata instance stopped"),
+            Err(_) => bar.finish_and_clear(),
+        }
+        result
+    }
+
+    fn topology(&self) -> &'static dyn Topology {
+        self.topology
+    }
+
+    async fn kube_config(&self) -> Result<kube::Config> {
+        build_kubeconfig(Some(&self.cluster.kubefile()), None, None).await
+    }
+
+    fn system_values(&self) -> SystemValues {
+        let repository_url = url::Url::from_file_path(self.folder.join(FOLDER_REPOSITORY))
+            .ok()
+            .map(|url| url.to_string());
+        SystemValues { repository_url }
+    }
+}
+
+impl KminusProvider {
+    async fn stage_configmap_inner(&self) -> Result {
         let loaded = load_profile(self.topology)?;
         let staging_profile = self.cluster.staging_profile_path();
         if let Err(error) = fs::create_dir_all(&staging_profile) {
@@ -363,6 +570,7 @@ impl Provider for KminusProvider {
             );
             return abort(GeneralError);
         }
+        let resolver = ConfigurationResolver::new(HashicorpConfig::default(), self.system_values());
         for decoded_path in loaded.manifest.entries.keys() {
             let virtual_target = match loaded.tree.join(decoded_path) {
                 Ok(target) => target,
@@ -381,14 +589,24 @@ impl Provider for KminusProvider {
                     return abort(GeneralError);
                 }
             };
-            let mut content = Vec::new();
-            if let Err(error) = reader.read_to_end(&mut content) {
+            let mut content = String::new();
+            if let Err(error) = reader.read_to_string(&mut content) {
                 cerror!(
-                    "Failed to read virtual file '{}': {error}",
+                    "Failed to read virtual file '{}' as UTF-8: {error}",
                     virtual_target.as_str()
                 );
                 return abort(GeneralError);
             }
+            let resolved = match resolver.resolve(&content).await {
+                Ok(resolved) => resolved,
+                Err(error) => {
+                    cerror!(
+                        "Failed to resolve placeholders in '{}': {error}",
+                        virtual_target.as_str()
+                    );
+                    return abort(TabsDataError);
+                }
+            };
             let disk_path = staging_profile.join(decoded_path);
             if let Some(parent) = disk_path.parent()
                 && let Err(error) = fs::create_dir_all(parent)
@@ -399,7 +617,7 @@ impl Provider for KminusProvider {
                 );
                 return abort(GeneralError);
             }
-            if let Err(error) = fs::write(&disk_path, &content) {
+            if let Err(error) = fs::write(&disk_path, resolved.as_bytes()) {
                 cerror!("Failed to write '{}': {error}", disk_path.display());
                 return abort(GeneralError);
             }
@@ -422,27 +640,15 @@ impl Provider for KminusProvider {
         Ok(())
     }
 
-    async fn store_configmap(&self) -> Result {
-        Ok(())
-    }
-
-    async fn start_instance(&self) -> Result {
+    async fn start_instance_inner(&self, multi: &MultiProgress) -> Result {
         self.instance.start().await?;
         let profile = load_profile(self.topology)?;
-        start_workload(self, &profile).await
+        start_workload(self, &profile, multi).await
     }
 
-    async fn stop_instance(&self) -> Result<bool> {
-        let stopped_workload = stop_workload(self).await?;
+    async fn stop_instance_inner(&self, multi: &MultiProgress) -> Result<bool> {
+        let stopped_workload = stop_workload(self, multi).await?;
         let stopped_instance = self.instance.stop().await?;
         Ok(stopped_workload || stopped_instance)
-    }
-
-    fn topology(&self) -> &'static dyn Topology {
-        self.topology
-    }
-
-    async fn kube_config(&self) -> Result<kube::Config> {
-        build_kubeconfig(Some(&self.cluster.kubefile()), None, None).await
     }
 }

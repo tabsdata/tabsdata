@@ -62,6 +62,8 @@ pub async fn command_create(arguments: CreateArguments) -> Result {
     }
 
     let tx = provider.prepare_cluster().await?;
+    provider.create_database().await?;
+    provider.create_runtimes().await?;
     provider.prepare_instance().await?;
     tx.commit();
     provider.report_created_runtime();

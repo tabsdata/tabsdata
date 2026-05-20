@@ -17,6 +17,7 @@ use walkdir::WalkDir;
 
 use crate::cerror;
 use crate::constants::{PROGRAM_TD_RESOURCE, RESOURCE_KPROFILE};
+use crate::gateway::resolver::ConfigurationResolver;
 use crate::instance::manifest::{MANIFEST_FILE, Manifest};
 use crate::system::exit::{Result, abort};
 use crate::system::subprocess::apply_detached_flags;
@@ -193,7 +194,10 @@ pub fn load_profile(topology: &dyn Topology) -> Result<Profile> {
     })
 }
 
-pub fn encode_for_configmap(loaded: &Profile) -> Result<BTreeMap<String, String>> {
+pub async fn encode_for_configmap(
+    loaded: &Profile,
+    resolver: &ConfigurationResolver,
+) -> Result<BTreeMap<String, String>> {
     let mut data = BTreeMap::new();
     for decoded_path in loaded.manifest.entries.keys() {
         let target = match loaded.tree.join(decoded_path) {
@@ -218,7 +222,17 @@ pub fn encode_for_configmap(loaded: &Profile) -> Result<BTreeMap<String, String>
             );
             return abort(GeneralError);
         }
-        data.insert(encode_path(decoded_path), content);
+        let resolved = match resolver.resolve(&content).await {
+            Ok(resolved) => resolved,
+            Err(error) => {
+                cerror!(
+                    "Failed to resolve placeholders in '{}': {error}",
+                    target.as_str()
+                );
+                return abort(TabsDataError);
+            }
+        };
+        data.insert(encode_path(decoded_path), resolved);
     }
     let manifest_yaml = match serde_yaml::to_string(&loaded.manifest) {
         Ok(yaml) => yaml,

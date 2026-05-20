@@ -7,36 +7,46 @@ use super::*;
 #[test]
 fn spinner_returns_unfinished_progress_bar() {
     let bar = spinner("loading");
-    assert!(!bar.is_finished());
+    assert!(!bar.bar.is_finished());
     bar.finish_and_clear();
 }
 
 #[test]
 fn spinner_carries_the_provided_message() {
     let bar = spinner("starting kminus cluster");
-    assert_eq!(bar.message(), "starting kminus cluster");
+    assert_eq!(bar.bar.message(), "starting kminus cluster");
     bar.finish_and_clear();
 }
 
 #[test]
 fn spinner_accepts_empty_message() {
     let bar = spinner("");
-    assert_eq!(bar.message(), "");
+    assert_eq!(bar.bar.message(), "");
     bar.finish_and_clear();
 }
 
 #[test]
 fn spinner_accepts_unicode_message() {
     let bar = spinner("café — starting");
-    assert_eq!(bar.message(), "café — starting");
+    assert_eq!(bar.bar.message(), "café — starting");
     bar.finish_and_clear();
 }
 
 #[test]
 fn spinner_finish_and_clear_marks_finished() {
     let bar = spinner("any");
+    let inner = bar.bar.clone();
     bar.finish_and_clear();
-    assert!(bar.is_finished());
+    assert!(inner.is_finished());
+}
+
+#[test]
+fn spinner_finish_marks_finished_with_done_message() {
+    let bar = spinner("any");
+    let inner = bar.bar.clone();
+    bar.finish("Done with any");
+    assert!(inner.is_finished());
+    assert!(inner.message().contains("Done with any"));
 }
 
 #[test]
@@ -72,8 +82,8 @@ fn show_banner_does_not_panic() {
 
 #[test]
 fn phase_spinner_creates_unfinished_header_with_message() {
-    let phase = phase_spinner("Applying init Jobs");
-    assert_eq!(phase.header.message(), "Applying init Jobs");
+    let phase = phase_spinner("Applying init jobs");
+    assert_eq!(phase.header.message(), "Applying init jobs");
     assert!(!phase.header.is_finished());
     drop(phase);
 }

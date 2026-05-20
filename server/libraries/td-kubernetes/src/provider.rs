@@ -15,6 +15,7 @@ use td_common::status::ExitStatus::GeneralError;
 use crate::cerror;
 use crate::client::tdkcontext::TdkContext;
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
+use crate::gateway::resolver::SystemValues;
 use crate::provider::kminus::KminusProvider;
 use crate::provider::kubernetes::KubernetesProvider;
 use crate::system::exit::{Result, abort};
@@ -100,6 +101,8 @@ pub trait Provider: Send + Sync {
     fn report_stopped_runtime(&self);
 
     async fn prepare_cluster(&self) -> Result<Box<dyn Transaction>>;
+    async fn create_database(&self) -> Result;
+    async fn create_runtimes(&self) -> Result;
     async fn start_cluster(&self) -> Result;
     async fn stop_cluster(&self) -> Result<bool>;
 
@@ -114,6 +117,8 @@ pub trait Provider: Send + Sync {
 
     fn topology(&self) -> &'static dyn Topology;
     async fn kube_config(&self) -> Result<Config>;
+
+    fn system_values(&self) -> SystemValues;
 }
 
 pub async fn provider_for(

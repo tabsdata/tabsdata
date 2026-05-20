@@ -5,6 +5,11 @@
 pub const ENV_KUBECONFIG: &str = "KUBECONFIG";
 
 pub const FOLDER_CLUSTER: &str = "cluster";
+pub const FOLDER_REPOSITORY: &str = "repository";
+pub const FOLDER_DATABASE: &str = "database";
+pub const FOLDER_STORAGE: &str = "storage";
+pub const FOLDER_RUNTIMES: &str = "runtimes";
+pub const FOLDER_PYTHON: &str = "python";
 pub const FOLDER_STAGING: &str = "staging";
 pub const FOLDER_PROFILE: &str = "profile";
 pub const FOLDER_KUBE: &str = ".kube";

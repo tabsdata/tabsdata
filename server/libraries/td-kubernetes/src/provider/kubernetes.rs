@@ -8,6 +8,7 @@ pub mod instance;
 use std::path::PathBuf;
 
 use async_trait::async_trait;
+use indicatif::MultiProgress;
 use kube::Config;
 use td_common::server::DEFAULT_INSTANCE;
 use td_common::status::ExitStatus::{GeneralError, NoAction};
@@ -16,7 +17,9 @@ use tracing::info;
 use crate::cerror;
 use crate::client::tdkcontext::{KubernetesInputs, TdkContext};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
+use crate::client::tdkserver::widgets::spinner;
 use crate::constants::{CONFIGMAP_TABSDATA, PROVIDER_KUBERNETES};
+use crate::gateway::resolver::{ConfigurationResolver, HashicorpConfig, SystemValues};
 use crate::instance::launcher::{start_workload, stop_workload};
 use crate::instance::manifest::MANIFEST_FILE;
 use crate::instance::profile::{encode_for_configmap, load_profile};
@@ -256,25 +259,98 @@ impl Provider for KubernetesProvider {
     fn report_stopped_runtime(&self) {}
 
     async fn prepare_cluster(&self) -> Result<Box<dyn Transaction>> {
-        self.cluster.create()?;
+        let bar = spinner("Preparing kubernetes cluster");
+        let result = self.cluster.create();
+        match &result {
+            Ok(_) => bar.finish("Kubernetes cluster prepared"),
+            Err(_) => bar.finish_and_clear(),
+        }
+        result?;
         Ok(Box::new(()))
     }
 
     async fn start_cluster(&self) -> Result {
-        self.cluster.start().await
+        let bar = spinner("Starting kubernetes cluster");
+        let result = self.cluster.start().await;
+        match &result {
+            Ok(_) => bar.finish("Kubernetes cluster started"),
+            Err(_) => bar.finish_and_clear(),
+        }
+        result
     }
 
     async fn stop_cluster(&self) -> Result<bool> {
-        self.cluster.stop().await
+        let bar = spinner("Stopping kubernetes cluster");
+        let result = self.cluster.stop().await;
+        match &result {
+            Ok(_) => bar.finish("Kubernetes cluster stopped"),
+            Err(_) => bar.finish_and_clear(),
+        }
+        result
     }
 
     async fn stage_configmap(&self) -> Result {
+        let bar = spinner("Staging tabsdata configmap");
+        bar.finish("Tabsdata configmap staged");
         Ok(())
     }
 
     async fn store_configmap(&self) -> Result {
+        let bar = spinner("Storing tabsdata configmap");
+        let result = self.store_configmap_inner().await;
+        match &result {
+            Ok(()) => bar.finish("Tabsdata configmap stored"),
+            Err(_) => bar.finish_and_clear(),
+        }
+        result
+    }
+
+    async fn start_instance(&self) -> Result {
+        let bar = spinner("Starting tabsdata instance");
+        let result = self.start_instance_inner(bar.multi()).await;
+        match &result {
+            Ok(_) => bar.finish("Tabsdata instance started"),
+            Err(_) => bar.finish_and_clear(),
+        }
+        result
+    }
+
+    async fn stop_instance(&self) -> Result<bool> {
+        let bar = spinner("Stopping tabsdata instance");
+        let result = self.stop_instance_inner(bar.multi()).await;
+        match &result {
+            Ok(_) => bar.finish("Tabsdata instance stopped"),
+            Err(_) => bar.finish_and_clear(),
+        }
+        result
+    }
+
+    fn topology(&self) -> &'static dyn Topology {
+        self.topology
+    }
+
+    async fn kube_config(&self) -> Result<kube::Config> {
+        Ok(self.config.clone())
+    }
+
+    fn system_values(&self) -> SystemValues {
+        SystemValues::default()
+    }
+
+    async fn create_database(&self) -> Result {
+        Ok(())
+    }
+
+    async fn create_runtimes(&self) -> Result {
+        Ok(())
+    }
+}
+
+impl KubernetesProvider {
+    async fn store_configmap_inner(&self) -> Result {
         let loaded = load_profile(self.topology)?;
-        let configmap_data = encode_for_configmap(&loaded)?;
+        let resolver = ConfigurationResolver::new(HashicorpConfig::default(), self.system_values());
+        let configmap_data = encode_for_configmap(&loaded, &resolver).await?;
         let client = build_kube_client(&self.config)?;
         create_configmap(
             &client,
@@ -285,23 +361,15 @@ impl Provider for KubernetesProvider {
         .await
     }
 
-    async fn start_instance(&self) -> Result {
+    async fn start_instance_inner(&self, multi: &MultiProgress) -> Result {
         self.instance.start().await?;
         let profile = load_profile(self.topology)?;
-        start_workload(self, &profile).await
+        start_workload(self, &profile, multi).await
     }
 
-    async fn stop_instance(&self) -> Result<bool> {
-        let stopped_workload = stop_workload(self).await?;
+    async fn stop_instance_inner(&self, multi: &MultiProgress) -> Result<bool> {
+        let stopped_workload = stop_workload(self, multi).await?;
         let stopped_instance = self.instance.stop().await?;
         Ok(stopped_workload || stopped_instance)
-    }
-
-    fn topology(&self) -> &'static dyn Topology {
-        self.topology
-    }
-
-    async fn kube_config(&self) -> Result<kube::Config> {
-        Ok(self.config.clone())
     }
 }

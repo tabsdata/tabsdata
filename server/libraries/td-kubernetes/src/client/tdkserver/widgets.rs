@@ -72,15 +72,47 @@ pub fn show_banner() {
     show_box(BANNER, 80);
 }
 
-pub fn spinner(message: &str) -> ProgressBar {
-    let bar = ProgressBar::new_spinner();
+pub struct Spinner {
+    multi: MultiProgress,
+    bar: ProgressBar,
+}
+
+pub fn spinner(message: &str) -> Spinner {
+    let multi = MultiProgress::new();
+    let bar = multi.add(ProgressBar::new_spinner());
     bar.set_style(
         ProgressStyle::with_template("{spinner:.cyan} {msg} {elapsed:.dim}")
             .unwrap_or_else(|_| ProgressStyle::default_spinner()),
     );
     bar.set_message(message.to_owned());
     bar.enable_steady_tick(Duration::from_millis(120));
-    bar
+    Spinner { multi, bar }
+}
+
+const SPINNER_DONE_MARKER: &str = "\u{2714}";
+
+impl Spinner {
+    pub fn multi(&self) -> &MultiProgress {
+        &self.multi
+    }
+
+    pub fn finish(self, done_message: &str) {
+        let elapsed = humantime::format_duration(Duration::from_secs(
+            self.bar.elapsed().as_secs(),
+        ));
+        self.bar.set_style(
+            ProgressStyle::with_template(&format!(
+                "{SPINNER_DONE_MARKER} {{msg}} {{elapsed:.dim}}"
+            ))
+            .unwrap_or_else(|_| ProgressStyle::default_spinner()),
+        );
+        self.bar
+            .finish_with_message(format!("{done_message} ({elapsed})"));
+    }
+
+    pub fn finish_and_clear(self) {
+        self.bar.finish_and_clear();
+    }
 }
 
 pub struct PhaseSpinner {
@@ -89,7 +121,11 @@ pub struct PhaseSpinner {
 }
 
 pub fn phase_spinner(message: &str) -> PhaseSpinner {
-    let multi = MultiProgress::new();
+    phase_spinner_in(&MultiProgress::new(), message)
+}
+
+pub fn phase_spinner_in(parent: &MultiProgress, message: &str) -> PhaseSpinner {
+    let multi = parent.clone();
     let header = multi.add(ProgressBar::new_spinner());
     header.set_style(
         ProgressStyle::with_template("{spinner:.cyan} {msg} {elapsed:.dim}")
@@ -116,7 +152,6 @@ impl PhaseSpinner {
 impl Drop for PhaseSpinner {
     fn drop(&mut self) {
         self.header.finish_and_clear();
-        let _ = self.multi.clear();
     }
 }
 
