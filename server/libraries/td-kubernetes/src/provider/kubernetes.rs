@@ -19,10 +19,10 @@ use crate::client::tdkcontext::{KubernetesInputs, TdkContext};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::widgets::spinner;
 use crate::constants::{CONFIGMAP_TABSDATA, PROVIDER_KUBERNETES};
-use crate::gateway::resolver::{ConfigurationResolver, HashicorpConfig, SystemValues};
+use crate::gateway::resolver::{ConfigurationResolver, SystemValues};
 use crate::instance::launcher::{start_workload, stop_workload};
 use crate::instance::manifest::MANIFEST_FILE;
-use crate::instance::profile::{encode_for_configmap, load_profile};
+use crate::instance::profile::{decode_from_configmap, encode_for_configmap, load_profile};
 use crate::instance::verify_manifest_compatibility;
 use crate::kubernetes::action::configmap::read_configmap;
 use crate::kubernetes::action::{
@@ -333,8 +333,8 @@ impl Provider for KubernetesProvider {
         Ok(self.config.clone())
     }
 
-    fn system_values(&self) -> SystemValues {
-        SystemValues::default()
+    fn system_values(&self) -> Result<SystemValues> {
+        Ok(SystemValues::default())
     }
 
     async fn create_database(&self) -> Result {
@@ -349,7 +349,7 @@ impl Provider for KubernetesProvider {
 impl KubernetesProvider {
     async fn store_configmap_inner(&self) -> Result {
         let loaded = load_profile(self.topology)?;
-        let resolver = ConfigurationResolver::new(HashicorpConfig::default(), self.system_values());
+        let resolver = ConfigurationResolver::new(self.system_values()?);
         let configmap_data = encode_for_configmap(&loaded, &resolver).await?;
         let client = build_kube_client(&self.config)?;
         create_configmap(
@@ -363,7 +363,20 @@ impl KubernetesProvider {
 
     async fn start_instance_inner(&self, multi: &MultiProgress) -> Result {
         self.instance.start().await?;
-        let profile = load_profile(self.topology)?;
+        let client = build_kube_client(&self.config)?;
+        let data = match read_configmap(&client, &self.config.default_namespace, CONFIGMAP_TABSDATA)
+            .await?
+        {
+            Some(data) => data,
+            None => {
+                cerror!(
+                    "ConfigMap '{CONFIGMAP_TABSDATA}' not found in namespace '{}'.",
+                    self.config.default_namespace,
+                );
+                return abort(GeneralError);
+            }
+        };
+        let profile = decode_from_configmap(&data)?;
         start_workload(self, &profile, multi).await
     }
 

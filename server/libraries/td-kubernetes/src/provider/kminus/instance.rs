@@ -7,6 +7,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use td_common::status::ExitStatus::GeneralError;
+use tracing::info;
 use walkdir::WalkDir;
 
 use crate::cerror;
@@ -42,7 +43,16 @@ impl KminusInstance {
             return Ok(None);
         }
         let mut data = BTreeMap::new();
-        let walker = WalkDir::new(&staged_folder).follow_links(false).into_iter();
+        let walker = WalkDir::new(&staged_folder)
+            .follow_links(false)
+            .into_iter()
+            .filter_entry(|entry| {
+                entry.depth() == 0
+                    || entry
+                        .file_name()
+                        .to_str()
+                        .is_none_or(|name| !name.starts_with('.'))
+            });
         for entry in walker {
             let entry = match entry {
                 Ok(entry) => entry,
@@ -59,10 +69,20 @@ impl KminusInstance {
                 continue;
             }
             let path = entry.path();
+            if is_hidden(path) {
+                continue;
+            }
             let relative = path.strip_prefix(&staged_folder).unwrap_or(path);
             let relative_string = relative.to_string_lossy().replace('\\', "/");
             let contents = match fs::read_to_string(path) {
                 Ok(contents) => contents,
+                Err(error) if error.kind() == std::io::ErrorKind::InvalidData => {
+                    info!(
+                        "Skipping non-UTF-8 file in staging folder: '{}'",
+                        path.display()
+                    );
+                    continue;
+                }
                 Err(error) => {
                     cerror!("Failed to read '{}': {error}", path.display());
                     return abort(GeneralError);
@@ -117,4 +137,18 @@ impl Instance for KminusInstance {
     async fn is_alive(&self) -> bool {
         false
     }
+}
+
+#[cfg(windows)]
+fn is_hidden(path: &Path) -> bool {
+    use std::os::windows::fs::MetadataExt;
+    const FILE_ATTRIBUTE_HIDDEN: u32 = 0x2;
+    fs::metadata(path)
+        .map(|m| m.file_attributes() & FILE_ATTRIBUTE_HIDDEN != 0)
+        .unwrap_or(false)
+}
+
+#[cfg(not(windows))]
+fn is_hidden(_path: &Path) -> bool {
+    false
 }

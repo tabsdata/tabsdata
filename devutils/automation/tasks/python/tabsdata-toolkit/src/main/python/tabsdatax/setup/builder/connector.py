@@ -137,7 +137,7 @@ def build(setup_file: str) -> None:
                         "assets",
                         "manifest",
                         "*",
-                    )
+                    ),
                 ],
                 descriptor.namespace("tabsdatak"): [
                     "py.typed",
@@ -145,7 +145,7 @@ def build(setup_file: str) -> None:
                         "assets",
                         "manifest",
                         "*",
-                    )
+                    ),
                 ],
             },
             data_files=datafiles,

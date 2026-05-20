@@ -41,7 +41,8 @@ from mypy.types import Instance, Type as MypyType
 
 LOG_CONFIG_CODE = ErrorCode(
     "tabsdatax-logging",
-    "Code from 'tabsdatak' module must not configure logging (levels, handlers, filters)",
+    "Code from 'tabsdatak' module must not configure logging "
+    "(levels, handlers, filters)",
     "tabsdatax",
 )
 

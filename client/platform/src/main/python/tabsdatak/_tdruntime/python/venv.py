@@ -223,7 +223,7 @@ class PythonEnvironment:
             "install",
             "--quiet",
             "--python",
-            str(self.python_binary()),
+            str(self.python()),
             "-r",
             str(requirements),
             "-c",
@@ -259,7 +259,7 @@ class PythonEnvironment:
             "install",
             "--quiet",
             "--python",
-            str(self.python_binary()),
+            str(self.python()),
             "--upgrade",
             "pip",
         ])
@@ -270,7 +270,7 @@ class PythonEnvironment:
             "install",
             "--quiet",
             "--python",
-            str(self.python_binary()),
+            str(self.python()),
         ]
         if any(package.recipe == InstallRecipe.EDITABLE for package in packages):
             command.extend([
@@ -303,13 +303,16 @@ class PythonEnvironment:
             ),
         )
 
-    def python_binary(self) -> Path:
+    def scripts(self) -> Path:
         paths = sysconfig.get_paths(
             scheme="venv",
             vars={"base": str(self.root), "platbase": str(self.root)},
         )
+        return Path(paths["scripts"])
+
+    def python(self) -> Path:
         # noinspection PyDeprecation
-        return Path(paths["scripts"]) / ("python" + sysconfig.get_config_var("EXE"))
+        return self.scripts() / ("python" + sysconfig.get_config_var("EXE"))
 
     def archive(self, archive_path: Path) -> None:
         if archive_path.exists():

@@ -15,7 +15,11 @@ impl ParsedFileName {
     pub fn render(&self) -> String {
         let mut rendered = String::with_capacity(
             self.name.len()
-                + self.tokens.iter().map(|token| token.len() + 1).sum::<usize>()
+                + self
+                    .tokens
+                    .iter()
+                    .map(|token| token.len() + 1)
+                    .sum::<usize>()
                 + self.extensions.len(),
         );
         rendered.push_str(&self.name);
@@ -85,7 +89,9 @@ fn score_candidate(candidate: &ParsedFileName, axes: &[Axis]) -> Option<usize> {
     Some(candidate.tokens.len())
 }
 
-pub fn group_by_key(filenames: &[String]) -> BTreeMap<(String, String), Vec<(usize, ParsedFileName)>> {
+pub fn group_by_key(
+    filenames: &[String],
+) -> BTreeMap<(String, String), Vec<(usize, ParsedFileName)>> {
     let mut groups: BTreeMap<(String, String), Vec<(usize, ParsedFileName)>> = BTreeMap::new();
     for (index, filename) in filenames.iter().enumerate() {
         let parsed = parse_filename(filename);

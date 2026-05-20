@@ -178,9 +178,6 @@ script = [
     os_family = os_family
     debug "🔸🔸🔸 OS family: ${os_family}"
 
-    debug "🔸🔸🔸 Cleaning up tabsdata_extra_paths.pth..."
-    exec python -c "import site, os; pth = os.path.join(site.getsitepackages()[0], 'tabsdata_extra_paths.pth'); os.remove(pth) if os.path.exists(pth) else None"
-
     debug "🚀 uv pip install --quiet -e . --config-settings editable_mode=compat --no-build-isolation"
     exec --fail-on-error uv pip install --quiet -e . --config-settings editable_mode=compat --no-build-isolation
 

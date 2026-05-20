@@ -3,65 +3,45 @@
 //
 
 //! Configuration resolver — substitutes typed placeholder tokens
-//! (`${env:...}`, `${hashicorp:...}`, `${sys:...}`) inside arbitrary text
-//! with their resolved values.
+//! (`${env:...}` and `${sys:...}`) inside arbitrary text with their
+//! resolved values.
 //!
-//! Each placeholder family ("source") lives in its own submodule. The
-//! [`ConfigurationResolver`] dispatches to a [`Source`] variant and applies
-//! the resulting transformation to the entire text in a single pass per
-//! source. Sources are applied in the order requested by the caller via
-//! [`ConfigurationResolver::resolve`].
+//! Each placeholder family lives in its own submodule and is reached
+//! through a dedicated method on [`ConfigurationResolver`]:
+//!
+//! * [`ConfigurationResolver::resolve_sys`] — substitutes `${sys:...}`
+//!   tokens against the [`SystemValues`] passed at construction. Used
+//!   by this crate at staging time to bake system-derived values into
+//!   pod yamls.
+//! * [`ConfigurationResolver::resolve_env`] — substitutes `${env:...}`
+//!   tokens against the current process environment. Reserved for
+//!   downstream consumers (workers loading their own config) and is
+//!   intentionally NOT chained from `resolve_sys`.
 
 mod env;
-mod hashicorp;
 mod sys;
 
-use strum::{AsRefStr, EnumIter, IntoEnumIterator};
+#[cfg(test)]
+mod tests;
+
 use td_error::TdError;
 
-pub use hashicorp::HashicorpConfig;
 pub use sys::{SystemKey, SystemValues};
 
-use crate::error::gateway::ResolverError;
-
-#[derive(Debug, Clone, Copy, Eq, PartialEq, AsRefStr, EnumIter)]
-pub enum Source {
-    #[strum(serialize = "env")]
-    Environment,
-    #[strum(serialize = "hashicorp")]
-    Hashicorp,
-    #[strum(serialize = "sys")]
-    System,
-}
-
 pub struct ConfigurationResolver {
-    hashicorp: HashicorpConfig,
     system: SystemValues,
 }
 
 impl ConfigurationResolver {
-    pub fn new(hashicorp: HashicorpConfig, system: SystemValues) -> Self {
-        Self { hashicorp, system }
+    pub fn new(system: SystemValues) -> Self {
+        Self { system }
     }
 
-    pub async fn resolve(&self, contents: &str) -> Result<String, TdError> {
-        let mut current = contents.to_string();
-        for source in Source::iter() {
-            current = self.apply(&current, source).await?;
-        }
-        Ok(current)
+    pub async fn resolve_sys(&self, contents: &str) -> Result<String, TdError> {
+        sys::resolve(contents, &self.system)
     }
 
-    async fn apply(&self, text: &str, source: Source) -> Result<String, TdError> {
-        match source {
-            Source::Environment => env::resolve(text),
-            Source::Hashicorp => hashicorp::resolve(text, &self.hashicorp).await,
-            Source::System => sys::resolve(text, &self.system),
-            #[allow(unreachable_patterns)]
-            other => Err(ResolverError::UnimplementedSource {
-                name: other.as_ref().to_string(),
-            }
-            .into()),
-        }
+    pub async fn resolve_env(&self, contents: &str) -> Result<String, TdError> {
+        env::resolve(contents)
     }
 }

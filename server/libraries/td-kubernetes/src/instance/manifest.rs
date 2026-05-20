@@ -12,7 +12,7 @@ use thiserror::Error;
 use crate::error::manifest::ManifestError;
 
 pub const MANIFEST_SCHEMA: u32 = 1;
-pub const MANIFEST_FILE: &str = "_manifest.yaml";
+pub const MANIFEST_FILE: &str = "manifest.yaml";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Manifest {

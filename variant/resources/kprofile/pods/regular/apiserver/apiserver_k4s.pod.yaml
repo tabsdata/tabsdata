@@ -35,12 +35,12 @@ spec:
     - name: apiserver
       image: /dev/null
       imagePullPolicy: IfNotPresent
-      command: ["td_apiserver"]
+      command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:TDK_PYENV_SCRIPTS_FOLDER}/td_apiserver"]
       args:
         - --config-file
-        - $(CONTAINER_ROOT)/etc/configmaps/tabsdata/pods__regular__apiserver__apiserver.yaml
+        - $(CONTAINER_ROOT)/tabsdata/configmaps/tabsdata/pods__regular__apiserver__apiserver.yaml
       ports:
-        - name: http
+        - name: public-http
           containerPort: 2457
           protocol: TCP
       resources:
@@ -53,8 +53,11 @@ spec:
           drop: ["ALL"]
         # readOnlyRootFilesystem: true   # enable after mapping writable paths to emptyDir mounts
       volumeMounts:
-        - name: tabsdata
-          mountPath: /etc/configmaps/tabsdata
+        - name: configmap-tabsdata
+          mountPath: /tabsdata/configmaps/tabsdata
+          readOnly: true
+        - name: pyenv
+          mountPath: /tabsdata/pyenv
           readOnly: true
       # livenessProbe:
       #   httpGet:
@@ -84,6 +87,9 @@ spec:
         - name: CONTAINER_ROOT
           value: "$(KM_CONTAINER_ROOT)"
   volumes:
-    - name: tabsdata
+    - name: configmap-tabsdata
       configMap:
         name: tabsdata
+    - name: pyenv
+      hostPath:
+        path: "${sys:TDK_PYENV_TD_ROOT}"

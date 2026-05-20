@@ -7,11 +7,13 @@ from __future__ import annotations
 import logging
 import os
 import shutil
-from typing import Callable
+from pathlib import Path
+from typing import Callable, Sequence
 
 from setuptools import Distribution
 from setuptools.command.bdist_egg import bdist_egg as _bdist_egg
 from setuptools.command.build import build as _build
+from setuptools.command.editable_wheel import editable_wheel as _editable_wheel
 from setuptools.command.sdist import sdist as _sdist
 
 try:
@@ -136,6 +138,36 @@ def create_custom_sdist_class(skip_readme_check: bool = False) -> type[_sdist]:
                 return
 
     return CustomSDist
+
+
+def create_custom_editable_wheel_class(
+    extra_paths: Sequence[str],
+    project_root: str,
+) -> type[_editable_wheel]:
+    root = Path(project_root).resolve()
+    resolved_extras = tuple(
+        str((root / relative).resolve())
+        for relative in extra_paths
+        if (root / relative).is_dir()
+    )
+
+    class CustomEditableWheel(_editable_wheel):
+        def _select_strategy(self, name, tag, build_lib):
+            strategy = super()._select_strategy(name, tag, build_lib)
+            if not resolved_extras:
+                return strategy
+            path_entries = getattr(strategy, "path_entries", None)
+            if path_entries is None:
+                logger.warning(
+                    f"Editable strategy {type(strategy).__name__} does not "
+                    f"expose path_entries; extra editable paths will not be "
+                    f"injected."
+                )
+                return strategy
+            path_entries.extend(Path(entry) for entry in resolved_extras)
+            return strategy
+
+    return CustomEditableWheel
 
 
 def ensure_egg_folder() -> None:

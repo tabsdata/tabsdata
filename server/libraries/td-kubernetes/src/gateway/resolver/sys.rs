@@ -20,7 +20,15 @@ static PATTERN: Lazy<Regex> =
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, EnumString, AsRefStr, EnumIter)]
 pub enum SystemKey {
     #[strum(serialize = "TDK_REPOSITORY_URL")]
-    TdkRepositoryUrl,
+    RepositoryUrl,
+    #[strum(serialize = "TDK_REPOSITORY_PATH")]
+    RepositoryPath,
+    #[strum(serialize = "TDK_PYENV_TD_ROOT")]
+    PyenvTdRoot,
+    #[strum(serialize = "TDK_PYENV_AG_ROOT")]
+    PyenvAgRoot,
+    #[strum(serialize = "TDK_PYENV_SCRIPTS_FOLDER")]
+    PyenvScriptsFolder,
 }
 
 impl SystemKey {
@@ -35,12 +43,20 @@ impl SystemKey {
 #[derive(Debug, Clone, Default)]
 pub struct SystemValues {
     pub repository_url: Option<String>,
+    pub repository_path: Option<String>,
+    pub pyenv_td_root: Option<String>,
+    pub pyenv_ag_root: Option<String>,
+    pub pyenv_scripts_folder: Option<String>,
 }
 
 impl SystemValues {
     fn lookup(&self, key: SystemKey) -> Option<&str> {
         match key {
-            SystemKey::TdkRepositoryUrl => self.repository_url.as_deref(),
+            SystemKey::RepositoryUrl => self.repository_url.as_deref(),
+            SystemKey::RepositoryPath => self.repository_path.as_deref(),
+            SystemKey::PyenvTdRoot => self.pyenv_td_root.as_deref(),
+            SystemKey::PyenvAgRoot => self.pyenv_ag_root.as_deref(),
+            SystemKey::PyenvScriptsFolder => self.pyenv_scripts_folder.as_deref(),
         }
     }
 }

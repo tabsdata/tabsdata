@@ -3,10 +3,12 @@
 //
 
 use crate::error::PythonError::{
-    OutputEncodingError, PythonBinaryNotFound, ScriptsFolderNotFound, ScriptsFolderResolutionError,
-    ScriptsFolderResolutionFailure,
+    OutputEncodingError, PyenvPythonNotFound, PyenvPythonResolutionError,
+    PyenvPythonResolutionFailure, PyenvPythonScriptsNotFound, PyenvPythonScriptsResolutionError,
+    PyenvPythonScriptsResolutionFailure, PythonBinaryNotFound, ScriptsFolderNotFound,
+    ScriptsFolderResolutionError, ScriptsFolderResolutionFailure,
 };
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use td_common::os::name_program;
 use td_error::TdError;
@@ -14,6 +16,10 @@ use tracing::debug;
 
 const PYTHON: &str = "python";
 const PYTHON_SCRIPTS_QUERY: &str = "import sysconfig; print(sysconfig.get_path('scripts'))";
+
+const PYVENV_COMMAND_PYTHON: &str = "python";
+const PYVENV_COMMAND_SCRIPTS: &str = "scripts";
+const PYVENV_ARGUMENT_TARGET: &str = "--target";
 
 pub fn get_python_scripts_folder() -> Result<PathBuf, TdError> {
     let python = name_program(&PathBuf::from(PYTHON));
@@ -51,4 +57,42 @@ pub fn resolve_python_binary(program_name: &str) -> Result<PathBuf, TdError> {
     } else {
         Err(TdError::new(PythonBinaryNotFound(program_path)))
     }
+}
+
+pub fn resolve_pyenv_python(pyvenv: &Path, target: &Path) -> Result<PathBuf, TdError> {
+    let output = Command::new(pyvenv)
+        .arg(PYVENV_COMMAND_PYTHON)
+        .arg(PYVENV_ARGUMENT_TARGET)
+        .arg(target)
+        .output()
+        .map_err(PyenvPythonResolutionFailure)?;
+    if !output.status.success() {
+        return Err(TdError::new(PyenvPythonResolutionError(output.status)));
+    }
+    let stdout = String::from_utf8(output.stdout).map_err(OutputEncodingError)?;
+    let python_path = PathBuf::from(stdout.trim());
+    if !python_path.exists() {
+        return Err(TdError::new(PyenvPythonNotFound(python_path)));
+    }
+    Ok(python_path)
+}
+
+pub fn resolve_pyenv_python_scripts(pyvenv: &Path, target: &Path) -> Result<PathBuf, TdError> {
+    let output = Command::new(pyvenv)
+        .arg(PYVENV_COMMAND_SCRIPTS)
+        .arg(PYVENV_ARGUMENT_TARGET)
+        .arg(target)
+        .output()
+        .map_err(PyenvPythonScriptsResolutionFailure)?;
+    if !output.status.success() {
+        return Err(TdError::new(PyenvPythonScriptsResolutionError(
+            output.status,
+        )));
+    }
+    let stdout = String::from_utf8(output.stdout).map_err(OutputEncodingError)?;
+    let scripts_path = PathBuf::from(stdout.trim());
+    if !scripts_path.exists() {
+        return Err(TdError::new(PyenvPythonScriptsNotFound(scripts_path)));
+    }
+    Ok(scripts_path)
 }

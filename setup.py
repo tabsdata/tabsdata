@@ -14,6 +14,7 @@ from tabsdatax.setup.common.commands import (
     create_custom_bdist_egg_class,
     create_custom_bdist_wheel_class,
     create_custom_build_class,
+    create_custom_editable_wheel_class,
     create_custom_sdist_class,
     ensure_egg_folder,
 )
@@ -43,7 +44,6 @@ from tabsdatax.setup.tabsdata.discovery import discover_tabsdata_commands
 from tabsdatax.setup.tabsdata.editable import (
     EDITABLE_EXTRA_PATHS,
     create_editable_binary_symlinks,
-    create_editable_extra_pth_file,
     create_editable_libexec_links,
 )
 from tabsdatax.setup.tabsdata.launcher import build_launchers
@@ -198,7 +198,6 @@ console_scripts: list[str] = [
 ]
 console_scripts.extend(load_console_scripts())
 
-create_editable_extra_pth_file(__file__, EDITABLE_EXTRA_PATHS)
 create_editable_binary_symlinks(datafiles)
 ensure_egg_folder()
 
@@ -253,6 +252,10 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                 python_version_tag,
                 python_version_abi,
                 get_platname,
+            ),
+            "editable_wheel": create_custom_editable_wheel_class(
+                EDITABLE_EXTRA_PATHS,
+                ROOT,
             ),
             "clean": create_custom_clean_class(
                 ROOT,

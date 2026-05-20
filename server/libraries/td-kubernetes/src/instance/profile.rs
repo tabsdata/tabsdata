@@ -19,7 +19,7 @@ use walkdir::WalkDir;
 use crate::cerror;
 use crate::constants::{PROGRAM_TD_RESOURCE, RESOURCE_KPROFILE};
 use crate::gateway::resolver::ConfigurationResolver;
-use crate::instance::manifest::{MANIFEST_FILE, Manifest};
+use crate::instance::manifest::{MANIFEST_FILE, Manifest, deserialize_manifest};
 use crate::instance::profile::bundle::{ParsedFileName, parse_filename, pick_winner};
 use crate::system::exit::{Result, abort};
 use crate::system::subprocess::apply_detached_flags;
@@ -272,7 +272,7 @@ pub async fn encode_for_configmap(
             );
             return abort(GeneralError);
         }
-        let resolved = match resolver.resolve(&content).await {
+        let resolved = match resolver.resolve_sys(&content).await {
             Ok(resolved) => resolved,
             Err(error) => {
                 cerror!(
@@ -293,6 +293,66 @@ pub async fn encode_for_configmap(
     };
     data.insert(MANIFEST_FILE.to_owned(), manifest_yaml);
     Ok(data)
+}
+
+pub fn decode_from_configmap(data: &BTreeMap<String, String>) -> Result<Profile> {
+    let manifest_yaml = match data.get(MANIFEST_FILE) {
+        Some(yaml) => yaml,
+        None => {
+            cerror!("Configmap is missing the '{MANIFEST_FILE}' entry.");
+            return abort(TabsDataError);
+        }
+    };
+    let manifest = match deserialize_manifest(manifest_yaml) {
+        Ok(manifest) => manifest,
+        Err(error) => {
+            cerror!("Failed to deserialize '{MANIFEST_FILE}' from configmap: {error}");
+            return abort(TabsDataError);
+        }
+    };
+    let memory: VfsPath = MemoryFS::new().into();
+    for (encoded, content) in data {
+        if encoded == MANIFEST_FILE {
+            continue;
+        }
+        let decoded = encoded.replace(PATH_SEPARATOR, "/");
+        let target = match memory.join(&decoded) {
+            Ok(target) => target,
+            Err(error) => {
+                cerror!("Failed to compose virtual path for '{decoded}': {error}");
+                return abort(GeneralError);
+            }
+        };
+        let parent = target.parent();
+        if let Err(error) = parent.create_dir_all() {
+            cerror!(
+                "Failed to create virtual directory '{}': {error}",
+                parent.as_str()
+            );
+            return abort(GeneralError);
+        }
+        let mut writer = match target.create_file() {
+            Ok(writer) => writer,
+            Err(error) => {
+                cerror!(
+                    "Failed to create virtual file '{}': {error}",
+                    target.as_str()
+                );
+                return abort(GeneralError);
+            }
+        };
+        if let Err(error) = writer.write_all(content.as_bytes()) {
+            cerror!(
+                "Failed to write virtual file '{}': {error}",
+                target.as_str()
+            );
+            return abort(GeneralError);
+        }
+    }
+    Ok(Profile {
+        tree: memory,
+        manifest,
+    })
 }
 
 pub fn encode_path(decoded: &str) -> String {

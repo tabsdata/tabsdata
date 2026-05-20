@@ -31,13 +31,19 @@ TABSDATA_CORE_PACKAGES: str = "Tabsdata Core Packages"
 
 COMMAND_RESOLVE: str = "resolve"
 COMMAND_CREATE: str = "create"
+COMMAND_PYTHON: str = "python"
+COMMAND_SCRIPTS: str = "scripts"
 
-VENV_SERVER: str = "server"
-VENV_AGENT: str = "agent"
+VENV_TD: str = "td"
+VENV_AG: str = "ag"
 
 
 def main() -> int:
     arguments = parse_arguments()
+    if arguments.command == COMMAND_PYTHON:
+        return python(arguments.target)
+    if arguments.command == COMMAND_SCRIPTS:
+        return scripts(arguments.target)
     try:
         profile = PythonEnvironment(Path(sys.prefix)).resolve()
     except Exception as error:
@@ -47,6 +53,26 @@ def main() -> int:
         print(line)
     if arguments.command == COMMAND_CREATE:
         return create(profile, arguments.target)
+    return 0
+
+
+def python(target: Path) -> int:
+    try:
+        path = PythonEnvironment(target).python()
+    except Exception as error:
+        print(f"Error: {error}", file=sys.stderr)
+        return 1
+    print(path)
+    return 0
+
+
+def scripts(target: Path) -> int:
+    try:
+        path = PythonEnvironment(target).scripts()
+    except Exception as error:
+        print(f"Error: {error}", file=sys.stderr)
+        return 1
+    print(path)
     return 0
 
 
@@ -66,6 +92,32 @@ def parse_arguments() -> argparse.Namespace:
         type=Path,
         required=True,
         help="Folder where the Python virtual environment templates will be created",
+    )
+    python_parser = subparsers.add_parser(
+        COMMAND_PYTHON,
+        help=(
+            "Print the absolute path of the Python binary of the Python"
+            " virtual environment at <target>"
+        ),
+    )
+    python_parser.add_argument(
+        "--target",
+        type=Path,
+        required=True,
+        help="Root folder of the Python virtual environment",
+    )
+    scripts_parser = subparsers.add_parser(
+        COMMAND_SCRIPTS,
+        help=(
+            "Print the absolute path of the scripts folder of the Python"
+            " virtual environment at <target>"
+        ),
+    )
+    scripts_parser.add_argument(
+        "--target",
+        type=Path,
+        required=True,
+        help="Root folder of the Python virtual environment",
     )
     arguments = parser.parse_args()
     if arguments.command is None:
@@ -108,11 +160,11 @@ def build_recipes(profile: EnvironmentProfile) -> tuple[VenvRecipe, ...]:
         )
         + connector_recipes
     )
-    server = VenvRecipe(name=VENV_SERVER, packages=server_recipes)
+    server = VenvRecipe(name=VENV_TD, packages=server_recipes)
     if profile.edition != TabsdataEdition.ENTERPRISE:
         return (server,)
     agent_recipes = profile.packages + connector_recipes
-    agent = VenvRecipe(name=VENV_AGENT, packages=agent_recipes)
+    agent = VenvRecipe(name=VENV_AG, packages=agent_recipes)
     return server, agent
 
 

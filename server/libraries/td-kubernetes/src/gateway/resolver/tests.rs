@@ -2,10 +2,10 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-use td_kubernetes::gateway::resolver::{ConfigurationResolver, HashicorpConfig, SystemValues};
+use crate::gateway::resolver::{ConfigurationResolver, SystemValues};
 
 fn resolver_with_system(system: SystemValues) -> ConfigurationResolver {
-    ConfigurationResolver::new(HashicorpConfig::default(), system)
+    ConfigurationResolver::new(system)
 }
 
 fn resolver() -> ConfigurationResolver {
@@ -16,7 +16,7 @@ fn resolver() -> ConfigurationResolver {
 async fn resolves_unsubstituted_text_unchanged() {
     let resolver = resolver();
     let resolved = resolver
-        .resolve("plain content with no placeholders")
+        .resolve_sys("plain content with no placeholders")
         .await
         .expect("resolve");
     assert_eq!(resolved, "plain content with no placeholders");
@@ -30,7 +30,7 @@ async fn resolves_required_env_placeholder() {
 
     let resolver = resolver();
     let resolved = resolver
-        .resolve("hello ${env:TD_TEST_RESOLVER_REQUIRED}")
+        .resolve_env("hello ${env:TD_TEST_RESOLVER_REQUIRED}")
         .await
         .expect("resolve");
     assert_eq!(resolved, "hello world");
@@ -44,7 +44,9 @@ async fn missing_required_env_returns_error() {
     unsafe { std::env::remove_var("TD_TEST_RESOLVER_MISSING") };
 
     let resolver = resolver();
-    let result = resolver.resolve("${env:TD_TEST_RESOLVER_MISSING}").await;
+    let result = resolver
+        .resolve_env("${env:TD_TEST_RESOLVER_MISSING}")
+        .await;
     assert!(result.is_err(), "expected missing env var to error");
 }
 
@@ -55,7 +57,7 @@ async fn optional_env_placeholder_falls_back_to_empty_string() {
 
     let resolver = resolver();
     let resolved = resolver
-        .resolve("prefix-${env:TD_TEST_RESOLVER_OPTIONAL?}-suffix")
+        .resolve_env("prefix-${env:TD_TEST_RESOLVER_OPTIONAL?}-suffix")
         .await
         .expect("resolve");
     assert_eq!(resolved, "prefix--suffix");
@@ -71,7 +73,7 @@ async fn multiple_env_placeholders_resolve_left_to_right() {
 
     let resolver = resolver();
     let resolved = resolver
-        .resolve("${env:TD_TEST_RESOLVER_A}/${env:TD_TEST_RESOLVER_B}")
+        .resolve_env("${env:TD_TEST_RESOLVER_A}/${env:TD_TEST_RESOLVER_B}")
         .await
         .expect("resolve");
     assert_eq!(resolved, "alpha/beta");
@@ -86,9 +88,10 @@ async fn multiple_env_placeholders_resolve_left_to_right() {
 async fn resolves_system_repository_url() {
     let resolver = resolver_with_system(SystemValues {
         repository_url: Some("file:///var/lib/tabsdata/instance/repo".to_string()),
+        ..SystemValues::default()
     });
     let resolved = resolver
-        .resolve("uri: ${sys:TDK_REPOSITORY_URL}/database/tabsdata.db")
+        .resolve_sys("uri: ${sys:TDK_REPOSITORY_URL}/database/tabsdata.db")
         .await
         .expect("resolve");
     assert_eq!(
@@ -101,31 +104,15 @@ async fn resolves_system_repository_url() {
 async fn missing_system_value_returns_error() {
     let resolver = resolver_with_system(SystemValues {
         repository_url: None,
+        ..SystemValues::default()
     });
-    let result = resolver.resolve("${sys:TDK_REPOSITORY_URL}").await;
+    let result = resolver.resolve_sys("${sys:TDK_REPOSITORY_URL}").await;
     assert!(result.is_err(), "missing system value should error");
 }
 
 #[tokio::test]
 async fn unknown_system_key_returns_error() {
     let resolver = resolver();
-    let result = resolver.resolve("${sys:UNKNOWN_KEY}").await;
+    let result = resolver.resolve_sys("${sys:UNKNOWN_KEY}").await;
     assert!(result.is_err(), "unknown system key should error");
-}
-
-#[tokio::test]
-async fn mixed_env_and_system_resolve_together() {
-    // SAFETY: scoped env write.
-    unsafe { std::env::set_var("TD_TEST_RESOLVER_MIXED", "marker") };
-
-    let resolver = resolver_with_system(SystemValues {
-        repository_url: Some("file:///root".to_string()),
-    });
-    let resolved = resolver
-        .resolve("e=${env:TD_TEST_RESOLVER_MIXED} s=${sys:TDK_REPOSITORY_URL}")
-        .await
-        .expect("resolve");
-    assert_eq!(resolved, "e=marker s=file:///root");
-
-    unsafe { std::env::remove_var("TD_TEST_RESOLVER_MIXED") };
 }

@@ -118,7 +118,7 @@ pub trait Provider: Send + Sync {
     fn topology(&self) -> &'static dyn Topology;
     async fn kube_config(&self) -> Result<Config>;
 
-    fn system_values(&self) -> SystemValues;
+    fn system_values(&self) -> Result<SystemValues>;
 }
 
 pub async fn provider_for(

@@ -5,13 +5,9 @@
 from __future__ import annotations
 
 import logging
-import os
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from collections.abc import Sequence
 
 logger = logging.getLogger(__name__)
 
@@ -29,49 +25,6 @@ EDITABLE_EXTRA_PATHS = [
 
 def is_editable_install() -> bool:
     return "editable_wheel" in sys.argv or "develop" in sys.argv
-
-
-def create_editable_extra_pth_file(
-    setup_file: str,
-    extra_paths: Sequence[str] | None = None,
-) -> None:
-    if not is_editable_install():
-        return
-
-    if extra_paths is None:
-        extra_paths = EDITABLE_EXTRA_PATHS
-
-    try:
-        import site
-
-        site_packages_list = site.getsitepackages()
-        if not site_packages_list:
-            return
-        site_packages = site_packages_list[0]
-    except (AttributeError, IndexError):
-        return
-
-    project_root = os.path.dirname(os.path.abspath(setup_file))
-    pth_file = os.path.join(
-        site_packages,
-        "tabsdata_extra_paths.pth",
-    )
-
-    pth_lines = []
-    for relative_extra_path in extra_paths:
-        absolute_extra_path = os.path.join(
-            project_root,
-            relative_extra_path,
-        )
-        if os.path.isdir(absolute_extra_path):
-            pth_lines.append(absolute_extra_path)
-
-    if pth_lines:
-        try:
-            with open(pth_file, "w") as f:
-                f.write("\n".join(pth_lines) + "\n")
-        except (OSError, IOError):
-            pass
 
 
 def create_editable_binary_symlinks(

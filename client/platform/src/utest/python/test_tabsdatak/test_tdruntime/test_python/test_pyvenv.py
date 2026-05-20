@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 
 from tabsdatak._tdruntime.python.pyvenv import (
-    VENV_AGENT,
-    VENV_SERVER,
+    VENV_AG,
+    VENV_TD,
     build_connector_recipe,
     build_connector_recipes,
     build_recipes,
@@ -69,7 +69,7 @@ def test_build_recipes_open_source_returns_server_only():
     )
     recipes = build_recipes(profile)
     assert len(recipes) == 1
-    assert recipes[0].name == VENV_SERVER
+    assert recipes[0].name == VENV_TD
 
 
 def test_build_recipes_enterprise_returns_server_and_agent():
@@ -80,8 +80,8 @@ def test_build_recipes_enterprise_returns_server_and_agent():
     profile = make_profile((main, agent), edition=TabsdataEdition.ENTERPRISE)
     recipes = build_recipes(profile)
     assert len(recipes) == 2
-    assert recipes[0].name == VENV_SERVER
-    assert recipes[1].name == VENV_AGENT
+    assert recipes[0].name == VENV_TD
+    assert recipes[1].name == VENV_AG
 
 
 def test_build_recipes_server_excludes_agent_package():

@@ -67,7 +67,6 @@ pub async fn apply_init_phase(
             continue;
         }
         let yaml = read_pod_manifest(profile, path)?;
-        let yaml = resolve_pod_manifest(&yaml)?;
         let mut job = deserialize_init_job(path, &yaml)?;
         topology.enrich_init_job(&mut job)?;
         report_validation(path, topology.validate_init_job(&job))?;
@@ -161,10 +160,6 @@ fn has_failed_condition(job: &Job) -> bool {
     })
 }
 
-fn resolve_pod_manifest(yaml: &str) -> Result<String> {
-    Ok(yaml.to_owned())
-}
-
 fn is_pod_manifest(path: &str) -> bool {
     path.rsplit('/')
         .next()
@@ -233,7 +228,6 @@ pub async fn apply_regular_phase(
             continue;
         }
         let yaml = read_pod_manifest(profile, path)?;
-        let yaml = resolve_pod_manifest(&yaml)?;
         let mut pod = deserialize_regular_pod(path, &yaml)?;
         topology.enrich_regular_pod(&mut pod)?;
         report_validation(path, topology.validate_regular_pod(&pod))?;

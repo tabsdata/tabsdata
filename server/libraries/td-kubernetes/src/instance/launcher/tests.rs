@@ -221,12 +221,6 @@ fn deserialize_regular_pod_aborts_for_invalid_yaml() {
 }
 
 #[test]
-fn resolve_pod_manifest_passes_through_unchanged() {
-    let yaml = "kind: Pod\n";
-    assert_eq!(resolve_pod_manifest(yaml).expect("resolve"), yaml);
-}
-
-#[test]
 fn read_pod_manifest_returns_file_contents() {
     let contents = "kind: Job\nmetadata:\n  name: x\n";
     let profile = profile_with_file("pods/init/x.yaml", contents);

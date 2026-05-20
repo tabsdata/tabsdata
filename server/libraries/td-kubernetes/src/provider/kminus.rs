@@ -15,7 +15,7 @@ use td_common::env::TABSDATA_HOME_DIR;
 use td_common::os::name_program;
 use td_common::server::{DATABASE_FILE, DEFAULT_INSTANCE, INSTANCES_FOLDER};
 use td_common::status::ExitStatus::{GeneralError, NoAction, TabsDataError};
-use td_python::python::resolve_python_binary;
+use td_python::python::{get_python_scripts_folder, resolve_python_binary};
 use tracing::info;
 
 use crate::cerror;
@@ -24,14 +24,16 @@ use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::validate_instance_name;
 use crate::client::tdkserver::widgets::spinner;
 use crate::constants::{
-    FOLDER_CLUSTER, FOLDER_DATABASE, FOLDER_PYTHON, FOLDER_REPOSITORY, FOLDER_RUNTIMES,
-    FOLDER_STORAGE, PROVIDER_KMINUS,
+    CONFIGMAP_TABSDATA, FOLDER_CLUSTER, FOLDER_DATABASE, FOLDER_PYENV_AG, FOLDER_PYENV_TD,
+    FOLDER_PYTHON, FOLDER_REPOSITORY, FOLDER_RUNTIMES, FOLDER_STORAGE, PROVIDER_KMINUS,
 };
-use crate::gateway::resolver::{ConfigurationResolver, HashicorpConfig, SystemValues};
+use crate::gateway::resolver::{ConfigurationResolver, SystemValues};
 use crate::instance::launcher::{start_workload, stop_workload};
 use crate::instance::manifest::MANIFEST_FILE;
-use crate::instance::profile::load_profile;
+use crate::instance::profile::{decode_from_configmap, load_profile};
 use crate::instance::verify_manifest_compatibility;
+use crate::kubernetes::action::configmap::read_configmap;
+use crate::kubernetes::client::build_kube_client;
 use crate::kubernetes::kubeconfig::{
     build_kubeconfig, resolve_cluster_name, resolve_cluster_url, resolve_current_context,
     resolve_namespace,
@@ -551,11 +553,47 @@ impl Provider for KminusProvider {
         build_kubeconfig(Some(&self.cluster.kubefile()), None, None).await
     }
 
-    fn system_values(&self) -> SystemValues {
-        let repository_url = url::Url::from_file_path(self.folder.join(FOLDER_REPOSITORY))
+    fn system_values(&self) -> Result<SystemValues> {
+        let repository_folder = self.folder.join(FOLDER_REPOSITORY);
+        let repository_url = url::Url::from_file_path(&repository_folder)
             .ok()
             .map(|url| url.to_string());
-        SystemValues { repository_url }
+        let repository_path = Some(repository_folder.to_string_lossy().to_string());
+        let runtimes_python = self.folder.join(FOLDER_RUNTIMES).join(FOLDER_PYTHON);
+        let pyenv_td_root = Some(
+            runtimes_python
+                .join(FOLDER_PYENV_TD)
+                .to_string_lossy()
+                .to_string(),
+        );
+        let pyenv_ag_root = Some(
+            runtimes_python
+                .join(FOLDER_PYENV_AG)
+                .to_string_lossy()
+                .to_string(),
+        );
+        let scripts_folder = match get_python_scripts_folder() {
+            Ok(path) => path,
+            Err(error) => {
+                cerror!("Failed to resolve the Python scripts folder: {error}");
+                return abort(GeneralError);
+            }
+        };
+        let Some(scripts_name) = scripts_folder.file_name().and_then(|name| name.to_str()) else {
+            cerror!(
+                "Unable to extract the Python scripts folder name from '{}'.",
+                scripts_folder.display()
+            );
+            return abort(GeneralError);
+        };
+        let pyenv_scripts_folder = Some(scripts_name.to_string());
+        Ok(SystemValues {
+            repository_url,
+            repository_path,
+            pyenv_td_root,
+            pyenv_ag_root,
+            pyenv_scripts_folder,
+        })
     }
 }
 
@@ -570,7 +608,7 @@ impl KminusProvider {
             );
             return abort(GeneralError);
         }
-        let resolver = ConfigurationResolver::new(HashicorpConfig::default(), self.system_values());
+        let resolver = ConfigurationResolver::new(self.system_values()?);
         for decoded_path in loaded.manifest.entries.keys() {
             let virtual_target = match loaded.tree.join(decoded_path) {
                 Ok(target) => target,
@@ -597,7 +635,7 @@ impl KminusProvider {
                 );
                 return abort(GeneralError);
             }
-            let resolved = match resolver.resolve(&content).await {
+            let resolved = match resolver.resolve_sys(&content).await {
                 Ok(resolved) => resolved,
                 Err(error) => {
                     cerror!(
@@ -642,7 +680,20 @@ impl KminusProvider {
 
     async fn start_instance_inner(&self, multi: &MultiProgress) -> Result {
         self.instance.start().await?;
-        let profile = load_profile(self.topology)?;
+        let config = self.kube_config().await?;
+        let client = build_kube_client(&config)?;
+        let data =
+            match read_configmap(&client, &config.default_namespace, CONFIGMAP_TABSDATA).await? {
+                Some(data) => data,
+                None => {
+                    cerror!(
+                        "ConfigMap '{CONFIGMAP_TABSDATA}' not found in namespace '{}'.",
+                        config.default_namespace,
+                    );
+                    return abort(GeneralError);
+                }
+            };
+        let profile = decode_from_configmap(&data)?;
         start_workload(self, &profile, multi).await
     }
 

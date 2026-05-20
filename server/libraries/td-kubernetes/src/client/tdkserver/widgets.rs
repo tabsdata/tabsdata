@@ -98,14 +98,9 @@ impl Spinner {
 
     pub fn finish(self, done_message: &str) {
         let elapsed = humantime::format_duration(Duration::from_secs(self.bar.elapsed().as_secs()));
-        self.bar.set_style(
-            ProgressStyle::with_template(&format!(
-                "{SPINNER_DONE_MARKER} {{msg}} {{elapsed:.dim}}"
-            ))
-            .unwrap_or_else(|_| ProgressStyle::default_spinner()),
-        );
-        self.bar
-            .finish_with_message(format!("{done_message} ({elapsed})"));
+        let line = format!("{SPINNER_DONE_MARKER} {done_message} ({elapsed})");
+        let _ = self.multi.println(&line);
+        self.bar.finish_and_clear();
     }
 
     pub fn finish_and_clear(self) {

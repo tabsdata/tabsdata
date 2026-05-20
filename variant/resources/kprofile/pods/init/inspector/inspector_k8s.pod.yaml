@@ -5,7 +5,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: inspector
+  name: td-inspector
   namespace: tabsdata
   annotations:
     tabsdata.com/description: "Tabsdata inspector init job"
@@ -44,19 +44,19 @@ spec:
         # runAsGroup: 1000    # enable together with runAsUser
         # fsGroup: 1000       # only relevant once Pod has volumes
       containers:
-        - name: worker
+        - name: inspector
           image: busybox:1.37
           imagePullPolicy: IfNotPresent
           command: ["sh", "-c"]
           args:
             - |
               set -e
-              echo "[inspector] reading mounted ConfigMap 'tabsdata' under /etc/configmaps/tabsdata"
-              for f in /etc/configmaps/tabsdata/*; do
+              echo "Reading mounted ConfigMap 'tabsdata' under $KM_CONTAINER_ROOT/tabsdata/configmaps/tabsdata"
+              for f in ${KM_CONTAINER_ROOT}/tabsdata/configmaps/tabsdata/*; do
                 [ -f "$f" ] || continue
                 printf '[inspector]   %s = %s\n' "$(basename "$f")" "$(cat "$f")"
               done
-              echo "[inspector] done"
+              echo "Done!"
           resources:
             requests:
               cpu: "100m"
@@ -67,13 +67,13 @@ spec:
               drop: ["ALL"]
             # readOnlyRootFilesystem: true   # enable after mapping writable paths to emptyDir mounts
           volumeMounts:
-            - name: tabsdata
-              mountPath: /etc/configmaps/tabsdata
+            - name: configmap-tabsdata
+              mountPath: /tabsdata/configmaps/tabsdata
               readOnly: true
           env:
             - name: CONTAINER_ROOT
               value: ""
       volumes:
-        - name: tabsdata
+        - name: configmap-tabsdata
           configMap:
             name: tabsdata

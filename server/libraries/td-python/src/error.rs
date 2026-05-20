@@ -53,4 +53,20 @@ pub enum PythonError {
     TabsdataVersionResolutionFailure(#[source] Error) = 5020,
     #[error("Resolving the tabsdata package version finished with errors: {0}")]
     TabsdataVersionResolutionError(ExitStatus) = 5021,
+    #[error("Resolving the Python binary of the Python virtual environment failed: {0}")]
+    PyenvPythonResolutionFailure(#[source] Error) = 5022,
+    #[error(
+        "Resolving the Python binary of the Python virtual environment finished with errors: {0}"
+    )]
+    PyenvPythonResolutionError(ExitStatus) = 5023,
+    #[error("Python binary of the Python virtual environment not found: {0}")]
+    PyenvPythonNotFound(PathBuf) = 5024,
+    #[error("Resolving the scripts folder of the Python virtual environment failed: {0}")]
+    PyenvPythonScriptsResolutionFailure(#[source] Error) = 5025,
+    #[error(
+        "Resolving the scripts folder of the Python virtual environment finished with errors: {0}"
+    )]
+    PyenvPythonScriptsResolutionError(ExitStatus) = 5026,
+    #[error("Scripts folder of the Python virtual environment not found: {0}")]
+    PyenvPythonScriptsNotFound(PathBuf) = 5027,
 }
