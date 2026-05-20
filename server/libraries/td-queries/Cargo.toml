@@ -40,7 +40,7 @@ test_tower_metadata = []
 test-utils = ["td-schema/test-utils"]
 
 [package.metadata.cargo-machete]
-ignored = ["td-queries", "derive_builder", "openssl", "regex", "serde", "sqlx", "strum", "td-build", "thiserror", "toml", "utoipa"]
+ignored = ["td-queries", "derive_builder", "openssl", "regex", "serde", "sqlx", "strum", "td-build", "thiserror", "tokio", "toml", "utoipa"]
 
 # Build dependencies
 
@@ -70,7 +70,6 @@ td-tower = { workspace = true }
 # External dependencies
 
 derive_builder = { workspace = true }
-futures-util = { workspace = true }
 sea-query = { workspace = true, features = ["sqlx-utils"] }
 strum = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
