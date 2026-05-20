@@ -692,6 +692,9 @@ features = ["serde"]
 version = "1.22.0"
 features = ["v7"]
 
+[workspace.dependencies.vaultrs]
+version = "0.8.0"
+
 [workspace.dependencies.vergen-gix]
 version = "9.1.0"
 features = ["build", "cargo", "emit_and_set", "rustc", "si"]

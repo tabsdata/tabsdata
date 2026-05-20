@@ -72,11 +72,14 @@ clap_derive = { workspace = true }
 colored = { workspace = true }
 dirs = { workspace = true }
 futures = { workspace = true }
+humantime = { workspace = true }
 indicatif = { workspace = true }
 k8s-openapi = { workspace = true, features = ["latest"] }
 kube = { workspace = true, default-features = false, features = ["client", "config", "runtime", "rustls-tls"] }
 libc = { workspace = true }
+once_cell = { workspace = true }
 reedline = { workspace = true }
+regex = { workspace = true }
 rustls = { workspace = true, features = ["aws-lc-rs", "ring"] }
 semver = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
@@ -92,6 +95,8 @@ textwrap = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+url = { workspace = true }
+vaultrs = { workspace = true }
 vfs = { workspace = true }
 walkdir = { workspace = true }
 
