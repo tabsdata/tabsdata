@@ -4,22 +4,28 @@
 
 use k8s_openapi::api::core::v1::Pod;
 
+use crate::instance::profile::bundle::Axis;
 use crate::pod::{ValidationError, kubernetes as kubernetes_pod};
-use crate::topology::{PROVIDER_PREFIX_K4S, PROVIDER_PREFIX_K8S, ProviderPrefixes, Topology};
+use crate::topology::{
+    PROVIDER_AXIS_NAME, PROVIDER_VALUE_K4S, PROVIDER_VALUE_K8S, Topology,
+};
 
 pub struct KubernetesTopology;
 
-const PREFIXES: ProviderPrefixes = ProviderPrefixes {
-    keep: PROVIDER_PREFIX_K8S,
-    drop: &[PROVIDER_PREFIX_K4S],
-};
+const PROVIDER_VALUES: &[&str] = &[PROVIDER_VALUE_K8S, PROVIDER_VALUE_K4S];
+
+const AXES: &[Axis] = &[Axis {
+    name: PROVIDER_AXIS_NAME,
+    preferred: PROVIDER_VALUE_K8S,
+    known: PROVIDER_VALUES,
+}];
 
 impl Topology for KubernetesTopology {
-    fn provider_prefixes(&self) -> &'static ProviderPrefixes {
-        &PREFIXES
+    fn axes(&self) -> &'static [Axis] {
+        AXES
     }
 
-    fn validate_pod(&self, pod: &Pod) -> Vec<ValidationError> {
+    fn validate_regular_pod(&self, pod: &Pod) -> Vec<ValidationError> {
         kubernetes_pod::validate(pod)
     }
 }

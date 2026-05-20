@@ -78,7 +78,7 @@ pub struct Spinner {
 }
 
 pub fn spinner(message: &str) -> Spinner {
-    let multi = MultiProgress::new();
+    let multi = td_common::logging::multi_progress().unwrap_or_default();
     let bar = multi.add(ProgressBar::new_spinner());
     bar.set_style(
         ProgressStyle::with_template("{spinner:.cyan} {msg} {elapsed:.dim}")
@@ -119,7 +119,8 @@ pub struct PhaseSpinner {
 }
 
 pub fn phase_spinner(message: &str) -> PhaseSpinner {
-    phase_spinner_in(&MultiProgress::new(), message)
+    let multi = td_common::logging::multi_progress().unwrap_or_default();
+    phase_spinner_in(&multi, message)
 }
 
 pub fn phase_spinner_in(parent: &MultiProgress, message: &str) -> PhaseSpinner {

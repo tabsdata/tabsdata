@@ -12,6 +12,7 @@ use chrono::Utc;
 use td_common::status::ExitStatus::{GeneralError, TabsDataError};
 use td_python::python::resolve_python_binary;
 use td_python::tabsdata::tabsdata_version;
+use tracing::info;
 use vfs::{MemoryFS, VfsPath};
 use walkdir::WalkDir;
 
@@ -19,9 +20,10 @@ use crate::cerror;
 use crate::constants::{PROGRAM_TD_RESOURCE, RESOURCE_KPROFILE};
 use crate::gateway::resolver::ConfigurationResolver;
 use crate::instance::manifest::{MANIFEST_FILE, Manifest};
+use crate::instance::profile::bundle::{ParsedFileName, parse_filename, pick_winner};
 use crate::system::exit::{Result, abort};
 use crate::system::subprocess::apply_detached_flags;
-use crate::topology::{PROVIDER_PREFIX_K, ProviderPrefixes, Topology};
+use crate::topology::Topology;
 
 pub const PATH_SEPARATOR: &str = "__";
 
@@ -82,6 +84,13 @@ pub fn resolve_kprofile_path() -> Result<PathBuf> {
     Ok(path)
 }
 
+struct DiscoveryFile {
+    parent: String,
+    file: String,
+    parsed: ParsedFileName,
+    content: Vec<u8>,
+}
+
 pub fn load_profile(topology: &dyn Topology) -> Result<Profile> {
     let root = resolve_kprofile_path()?;
     let tabsdata_version = match tabsdata_version() {
@@ -91,9 +100,10 @@ pub fn load_profile(topology: &dyn Topology) -> Result<Profile> {
             return abort(TabsDataError);
         }
     };
-    let prefixes = topology.provider_prefixes();
+    let axes = topology.axes();
     let memory: VfsPath = MemoryFS::new().into();
-    let mut paths: Vec<String> = Vec::new();
+    let mut entries: Vec<(String, String)> = Vec::new();
+    let mut discoveries: Vec<DiscoveryFile> = Vec::new();
 
     let walker = WalkDir::new(&root)
         .follow_links(false)
@@ -125,17 +135,59 @@ pub fn load_profile(topology: &dyn Topology) -> Result<Profile> {
         let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
             continue;
         };
-        let Some(filtered_name) = filename_for_provider(file_name, prefixes) else {
-            continue;
-        };
+        let parsed = parse_filename(file_name);
         let relative = path.strip_prefix(&root).unwrap_or(path);
         let parent = relative.parent().unwrap_or_else(|| Path::new(""));
-        let parent_string = parent.to_string_lossy().replace('\\', "/");
-        let manifest_path = if parent_string.is_empty() {
-            filtered_name.clone()
-        } else {
-            format!("{parent_string}/{filtered_name}")
+        let string = parent.to_string_lossy().replace('\\', "/");
+        let content = match fs::read(path) {
+            Ok(bytes) => bytes,
+            Err(error) => {
+                cerror!("Failed to read '{}': {error}", path.display());
+                return abort(GeneralError);
+            }
         };
+        discoveries.push(DiscoveryFile {
+            parent: string,
+            parsed: parsed,
+            file: file_name.to_owned(),
+            content: content,
+        });
+    }
+
+    let mut groups: BTreeMap<(String, String, String), Vec<usize>> = BTreeMap::new();
+    for (index, file) in discoveries.iter().enumerate() {
+        let key = (
+            file.parent.clone(),
+            file.parsed.name.clone(),
+            file.parsed.extensions.clone(),
+        );
+        groups.entry(key).or_default().push(index);
+    }
+
+    for (key, indices) in groups {
+        let group_parsed: Vec<ParsedFileName> = indices
+            .iter()
+            .map(|index| discoveries[*index].parsed.clone())
+            .collect();
+        let Some(group_winner) = pick_winner(&group_parsed, axes) else {
+            continue;
+        };
+        let winner_index = indices[group_winner];
+        let winner = &discoveries[winner_index];
+        let stripped_name = winner.parsed.render_stripped();
+        let manifest_path = if key.0.is_empty() {
+            stripped_name.clone()
+        } else {
+            format!("{}/{stripped_name}", key.0)
+        };
+        if winner.file != stripped_name {
+            let source = if key.0.is_empty() {
+                winner.file.clone()
+            } else {
+                format!("{}/{}", key.0, winner.file)
+            };
+            info!("Bundle resolved '{manifest_path}' from '{source}'");
+        }
         if let Err(component) = validate_path_components(&manifest_path) {
             cerror!(
                 "Path component '{component}' in '{manifest_path}' contains characters not \
@@ -144,12 +196,10 @@ pub fn load_profile(topology: &dyn Topology) -> Result<Profile> {
             );
             return abort(TabsDataError);
         }
-        let content = match fs::read(path) {
-            Ok(bytes) => bytes,
-            Err(error) => {
-                cerror!("Failed to read '{}': {error}", path.display());
-                return abort(GeneralError);
-            }
+        let original_path = if key.0.is_empty() {
+            winner.file.clone()
+        } else {
+            format!("{}/{}", key.0, winner.file)
         };
         let target = match memory.join(&manifest_path) {
             Ok(target) => target,
@@ -176,18 +226,18 @@ pub fn load_profile(topology: &dyn Topology) -> Result<Profile> {
                 return abort(GeneralError);
             }
         };
-        if let Err(error) = writer.write_all(&content) {
+        if let Err(error) = writer.write_all(&winner.content) {
             cerror!(
                 "Failed to write virtual file '{}': {error}",
                 target.as_str()
             );
             return abort(GeneralError);
         }
-        paths.push(manifest_path);
+        entries.push((manifest_path, original_path));
     }
 
     let now = Utc::now();
-    let manifest = Manifest::initial_install(&tabsdata_version, now, paths);
+    let manifest = Manifest::initial_install(&tabsdata_version, now, entries);
     Ok(Profile {
         tree: memory,
         manifest,
@@ -246,21 +296,15 @@ pub async fn encode_for_configmap(
 }
 
 pub fn encode_path(decoded: &str) -> String {
-    decoded.replace('/', PATH_SEPARATOR)
-}
-
-pub fn decode_path(encoded: &str) -> String {
-    encoded.replace(PATH_SEPARATOR, "/")
-}
-
-fn filename_for_provider(name: &str, prefixes: &ProviderPrefixes) -> Option<String> {
-    if prefixes.drop.iter().any(|prefix| name.starts_with(prefix)) {
-        return None;
+    let mut encoded = String::with_capacity(decoded.len());
+    for character in decoded.chars() {
+        match character {
+            '/' | '\\' => encoded.push_str(PATH_SEPARATOR),
+            ':' | '?' => {}
+            other => encoded.push(other),
+        }
     }
-    if let Some(rest) = name.strip_prefix(prefixes.keep) {
-        return Some(format!("{PROVIDER_PREFIX_K}{rest}"));
-    }
-    Some(name.to_owned())
+    encoded
 }
 
 fn validate_path_components(path: &str) -> std::result::Result<(), String> {
@@ -278,6 +322,8 @@ fn is_valid_path_component(name: &str) -> bool {
             .chars()
             .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '.'))
 }
+
+pub mod bundle;
 
 #[cfg(test)]
 mod tests;

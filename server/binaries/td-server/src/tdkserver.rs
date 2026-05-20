@@ -118,7 +118,7 @@ async fn main() {
         max_level: Some(Level::INFO),
         profile: Some(CONSOLE_PROFILE.to_string()),
         enable_bootstrap_notice: false,
-        format: LogFormat::CompactColored,
+        format: LogFormat::CompactColoredSpinner,
         ..Default::default()
     });
     unsafe {

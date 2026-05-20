@@ -19,7 +19,8 @@ use crate::kubernetes::client::build_kube_client;
 use crate::pod::ValidationError;
 use crate::provider::Provider;
 use crate::system::exit::{Result, abort};
-use crate::topology::PROVIDER_PREFIX_K;
+
+const POD_MANIFEST_SUFFIX: &str = ".pod.yaml";
 
 const INIT_PHASE_PREFIX: &str = "pods/init/";
 const REGULAR_PHASE_PREFIX: &str = "pods/regular/";
@@ -167,7 +168,7 @@ fn resolve_pod_manifest(yaml: &str) -> Result<String> {
 fn is_pod_manifest(path: &str) -> bool {
     path.rsplit('/')
         .next()
-        .is_some_and(|name| name.starts_with(PROVIDER_PREFIX_K))
+        .is_some_and(|name| name.ends_with(POD_MANIFEST_SUFFIX))
 }
 
 fn report_validation(path: &str, errors: Vec<ValidationError>) -> Result {
@@ -234,8 +235,8 @@ pub async fn apply_regular_phase(
         let yaml = read_pod_manifest(profile, path)?;
         let yaml = resolve_pod_manifest(&yaml)?;
         let mut pod = deserialize_regular_pod(path, &yaml)?;
-        topology.enrich_pod(&mut pod)?;
-        report_validation(path, topology.validate_pod(&pod))?;
+        topology.enrich_regular_pod(&mut pod)?;
+        report_validation(path, topology.validate_regular_pod(&pod))?;
         prepared.push((path.clone(), pod));
     }
     let phase = phase_spinner_in(

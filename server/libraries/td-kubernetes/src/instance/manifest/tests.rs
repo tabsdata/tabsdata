@@ -25,6 +25,7 @@ fn manifest_with_entries(entries: &[(&str, &str, EntryState)]) -> Manifest {
                 state: *state,
                 version: (*version).to_owned(),
                 created: now,
+                source: (*path).to_owned(),
                 versions: vec![VersionStamp {
                     version: (*version).to_owned(),
                     ..stamp.clone()
@@ -47,7 +48,13 @@ fn initial_install_seeds_every_entry_as_active_with_one_changed_stamp() {
     let manifest = Manifest::initial_install(
         "1.4.0",
         now,
-        ["pods/init/foo.yaml".to_owned(), "config.yaml".to_owned()],
+        [
+            (
+                "pods/init/foo.yaml".to_owned(),
+                "pods/init/foo_k8s.yaml".to_owned(),
+            ),
+            ("config.yaml".to_owned(), "config.yaml".to_owned()),
+        ],
     );
     assert_eq!(manifest.schema, MANIFEST_SCHEMA);
     assert_eq!(manifest.version, "1.4.0");
@@ -64,6 +71,30 @@ fn initial_install_seeds_every_entry_as_active_with_one_changed_stamp() {
         assert_eq!(stamp.when, now);
         assert!(stamp.changed);
     }
+}
+
+#[test]
+fn initial_install_records_source_for_each_entry() {
+    let now = fixed_time();
+    let manifest = Manifest::initial_install(
+        "1.4.0",
+        now,
+        [
+            (
+                "pods/init/foo.yaml".to_owned(),
+                "pods/init/foo_k8s.yaml".to_owned(),
+            ),
+            ("config.yaml".to_owned(), "config.yaml".to_owned()),
+        ],
+    );
+    assert_eq!(
+        manifest.entries.get("pods/init/foo.yaml").unwrap().source,
+        "pods/init/foo_k8s.yaml"
+    );
+    assert_eq!(
+        manifest.entries.get("config.yaml").unwrap().source,
+        "config.yaml"
+    );
 }
 
 #[test]

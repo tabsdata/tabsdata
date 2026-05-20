@@ -59,7 +59,11 @@ fn profile_with_file(path: &str, contents: &str) -> Profile {
         .write_all(contents.as_bytes())
         .expect("write contents");
     drop(writer);
-    let manifest = Manifest::initial_install("1.0.0", Utc::now(), std::iter::once(path.to_owned()));
+    let manifest = Manifest::initial_install(
+        "1.0.0",
+        Utc::now(),
+        std::iter::once((path.to_owned(), path.to_owned())),
+    );
     Profile { tree, manifest }
 }
 

@@ -22,5 +22,5 @@ fn validate_returns_empty_for_default_pod_with_no_rules_in_place() {
 fn topology_validate_pod_routes_to_kubernetes_validate() {
     let topology = KubernetesTopology;
     let pod = Pod::default();
-    assert_eq!(topology.validate_pod(&pod), validate(&pod));
+    assert_eq!(topology.validate_regular_pod(&pod), validate(&pod));
 }

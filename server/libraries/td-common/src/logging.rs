@@ -79,6 +79,25 @@ pub enum LogFormat {
     Full,
     Compact,
     CompactColored,
+    CompactSpinner,
+    CompactColoredSpinner,
+}
+
+impl LogFormat {
+    fn formatter(self) -> LogFormat {
+        match self {
+            LogFormat::CompactSpinner => LogFormat::Compact,
+            LogFormat::CompactColoredSpinner => LogFormat::CompactColored,
+            other => other,
+        }
+    }
+
+    fn uses_indicatif(self) -> bool {
+        matches!(
+            self,
+            LogFormat::CompactSpinner | LogFormat::CompactColoredSpinner
+        )
+    }
 }
 
 struct CompactFormat;
@@ -144,7 +163,7 @@ where
     S: Subscriber + for<'a> LookupSpan<'a>,
     W: for<'a> MakeWriter<'a> + Send + Sync + 'static,
 {
-    match format {
+    match format.formatter() {
         LogFormat::Full => tracing_subscriber::fmt::layer()
             .with_ansi(log_with_ansi)
             .with_writer(writer)
@@ -162,6 +181,9 @@ where
             .with_writer(writer)
             .with_filter(base_filter)
             .boxed(),
+        LogFormat::CompactSpinner | LogFormat::CompactColoredSpinner => {
+            unreachable!("formatter() collapses spinner variants")
+        }
     }
 }
 
@@ -173,7 +195,7 @@ fn build_sink_layer<S>(
 where
     S: Subscriber + for<'a> LookupSpan<'a>,
 {
-    match format {
+    match format.formatter() {
         LogFormat::Full => tracing_subscriber::fmt::layer()
             .with_ansi(log_with_ansi)
             .with_writer(writer)
@@ -188,6 +210,9 @@ where
             .with_ansi(true)
             .with_writer(writer)
             .boxed(),
+        LogFormat::CompactSpinner | LogFormat::CompactColoredSpinner => {
+            unreachable!("formatter() collapses spinner variants")
+        }
     }
 }
 
@@ -203,6 +228,12 @@ static LOG_RELOAD_HANDLE: OnceCell<Handle<EnvFilter, Registry>> = OnceCell::new(
 
 // Global logger provider, initialized once.
 static LOGGER_PROVIDER: OnceCell<LoggerGuard> = OnceCell::new();
+
+static INDICATIF_MULTI_PROGRESS: OnceCell<indicatif::MultiProgress> = OnceCell::new();
+
+pub fn multi_progress() -> Option<indicatif::MultiProgress> {
+    INDICATIF_MULTI_PROGRESS.get().cloned()
+}
 
 // Struct to hold the logger provider and ensure proper shutdown.
 struct LoggerGuard {
@@ -257,7 +288,16 @@ fn init<W: for<'a> MakeWriter<'a> + Send + Sync + 'static>(
         None => build_default_filter(max_level, &directives),
     };
 
-    let base_layer = build_base_layer(writer, log_with_ansi, base_filter, format);
+    let base_writer: BoxMakeWriter = if format.uses_indicatif() {
+        let mp = indicatif::MultiProgress::new();
+        INDICATIF_MULTI_PROGRESS.set(mp.clone()).ok();
+        BoxMakeWriter::new(tracing_indicatif::writer::IndicatifWriter::<
+            tracing_indicatif::writer::Stderr,
+        >::new(mp))
+    } else {
+        BoxMakeWriter::new(writer)
+    };
+    let base_layer = build_base_layer(base_writer, log_with_ansi, base_filter, format);
 
     let (filter, sinks) = match profile {
         Some(profile) => (build_profile_filter(&profile), profile.sinks.clone()),

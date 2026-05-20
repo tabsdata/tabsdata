@@ -666,6 +666,9 @@ version = "0.1.44"
 [workspace.dependencies.tracing-futures]
 version = "0.2.5"
 
+[workspace.dependencies.tracing-indicatif]
+version = "0.3.14"
+
 [workspace.dependencies.tracing-panic]
 version = "0.1.2"
 

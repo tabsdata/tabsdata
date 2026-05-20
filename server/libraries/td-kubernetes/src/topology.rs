@@ -8,20 +8,16 @@ pub mod kubernetes;
 use k8s_openapi::api::batch::v1::Job;
 use k8s_openapi::api::core::v1::Pod;
 
+use crate::instance::profile::bundle::Axis;
 use crate::pod::ValidationError;
 use crate::provider::ClusterProvider;
 use crate::system::exit::Result;
 use crate::topology::kminus::KminusTopology;
 use crate::topology::kubernetes::KubernetesTopology;
 
-pub const PROVIDER_PREFIX_K: &str = "k-";
-pub const PROVIDER_PREFIX_K8S: &str = "k8s-";
-pub const PROVIDER_PREFIX_K4S: &str = "k4s-";
-
-pub struct ProviderPrefixes {
-    pub keep: &'static str,
-    pub drop: &'static [&'static str],
-}
+pub const PROVIDER_AXIS_NAME: &str = "provider";
+pub const PROVIDER_VALUE_K8S: &str = "k8s";
+pub const PROVIDER_VALUE_K4S: &str = "k4s";
 
 /// A `Topology` is the combination of three orthogonal axes:
 ///
@@ -37,10 +33,10 @@ pub struct ProviderPrefixes {
 /// contribute their own behavior, and keeping the trait plus per-topology
 /// types lets that growth land here without churning every call site.
 pub trait Topology: Send + Sync {
-    fn provider_prefixes(&self) -> &'static ProviderPrefixes;
-    fn validate_pod(&self, pod: &Pod) -> Vec<ValidationError>;
+    fn axes(&self) -> &'static [Axis];
+    fn validate_regular_pod(&self, pod: &Pod) -> Vec<ValidationError>;
 
-    fn enrich_pod(&self, pod: &mut Pod) -> Result {
+    fn enrich_regular_pod(&self, pod: &mut Pod) -> Result {
         let _ = pod;
         Ok(())
     }

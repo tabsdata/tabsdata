@@ -28,6 +28,7 @@ pub struct ManifestEntry {
     pub state: EntryState,
     pub version: String,
     pub created: DateTime<Utc>,
+    pub source: String,
     pub versions: Vec<VersionStamp>,
 }
 
@@ -46,22 +47,23 @@ pub struct VersionStamp {
 }
 
 impl Manifest {
-    pub fn initial_install<I>(tabsdata_version: &str, now: DateTime<Utc>, entry_paths: I) -> Self
+    pub fn initial_install<I>(tabsdata_version: &str, now: DateTime<Utc>, entries: I) -> Self
     where
-        I: IntoIterator<Item = String>,
+        I: IntoIterator<Item = (String, String)>,
     {
         let stamp = VersionStamp {
             version: tabsdata_version.to_owned(),
             when: now,
             changed: true,
         };
-        let entries = entry_paths
+        let entries = entries
             .into_iter()
-            .map(|path| {
+            .map(|(path, source)| {
                 let entry = ManifestEntry {
                     state: EntryState::Active,
                     version: tabsdata_version.to_owned(),
                     created: now,
+                    source: source,
                     versions: vec![stamp.clone()],
                 };
                 (path, entry)
