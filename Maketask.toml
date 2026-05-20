@@ -1050,7 +1050,38 @@ category = "08 - Linter"
 description = "Task 'fmt' for Python projects"
 run_task = [
     { name = [
-        "__os__fmt_py_ruff"
+        "__os__fmt_py"
+    ] }
+]
+
+[tasks.lint]
+plugin = "td-task-tracker"
+category = "08 - Linter"
+description = "Run linters across the whole project"
+run_task = [
+    { name = [
+        "lint_rs",
+        "lint_py"
+    ] }
+]
+
+[tasks.lint_rs]
+plugin = "td-task-tracker"
+category = "08 - Linter"
+description = "Task 'lint' for Rust projects"
+run_task = [
+    { name = [
+        "__os__lint_rs"
+    ] }
+]
+
+[tasks.lint_py]
+plugin = "td-task-tracker"
+category = "08 - Linter"
+description = "Task 'lint' for Python projects"
+run_task = [
+    { name = [
+        "__os__lint_py"
     ] }
 ]
 
@@ -1083,7 +1114,7 @@ category = "09 - Repair"
 description = "Task 'format' for Python projects"
 run_task = [
     { name = [
-        "__os__format_py_ruff"
+        "__os__format_py"
     ] }
 ]
 

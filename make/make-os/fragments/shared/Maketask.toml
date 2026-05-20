@@ -70,6 +70,9 @@ extend = [
     { path = "./make/make-os/fragments/tasks/fmt_rs.toml", relative = "git" },
     { path = "./make/make-os/fragments/tasks/fmt_py.toml", relative = "git" },
 
+    { path = "./make/make-os/fragments/tasks/lint_rs.toml", relative = "git" },
+    { path = "./make/make-os/fragments/tasks/lint_py.toml", relative = "git" },
+
     { path = "./make/make-os/fragments/tasks/format_rs.toml", relative = "git" },
     { path = "./make/make-os/fragments/tasks/format_py.toml", relative = "git" },
 

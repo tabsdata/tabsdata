@@ -34,7 +34,8 @@ matplotlib==3.10.8
 maturin==1.12.6
 mimesis==19.1.0
 mkdocs==1.6.1
-mypy==1.19.1
+mypy==2.1.0
+mypy-extensions==1.1.0
 parquet-tools==0.2.16
 pdoc==16.0.0
 pip-audit==2.10.0
@@ -70,6 +71,7 @@ textual==8.2.3
 tomlkit==0.14.0
 tqdm==4.67.3
 twine==6.2.0
+types-PyYAML==6.0.3
 tzlocal==5.3.1
 uvicorn==0.42.0
 virtualenv==21.2.0

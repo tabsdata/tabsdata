@@ -551,6 +551,7 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
         },
         package_data={
             "tabsdata": [
+                "py.typed",
                 os.path.join(
                     "assets",
                     "manifest",
@@ -564,6 +565,7 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                 *yaml_files_tabsdata,
             ],
             "tabsdatak": [
+                "py.typed",
                 os.path.join(
                     "assets",
                     "manifest",

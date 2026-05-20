@@ -15,6 +15,7 @@ archspec==0.2.5
 argcomplete==3.6.3
 argon2-cffi==25.1.0
 argon2-cffi-bindings==25.1.0
+ast-serialize==0.5.0
 attrs==23.2.0
 azure-core==1.41.0
 azure-storage-blob==12.28.0
@@ -121,7 +122,7 @@ mkdocs==1.6.1
 mkdocs-get-deps==0.2.2
 more-itertools==11.0.2 ; platform_machine != 'ppc64le' and platform_machine != 's390x'
 msgpack==1.1.2
-mypy==1.19.1
+mypy==2.1.0
 mypy-extensions==1.1.0
 mysql-connector-python==9.6.0
 nh3==0.3.5
@@ -235,6 +236,7 @@ tomlkit==0.14.0
 tqdm==4.67.3
 translationstring==1.4
 twine==6.2.0
+types-pyyaml==6.0.3
 typing-extensions==4.15.0
 typing-inspection==0.4.2
 tzdata==2026.2

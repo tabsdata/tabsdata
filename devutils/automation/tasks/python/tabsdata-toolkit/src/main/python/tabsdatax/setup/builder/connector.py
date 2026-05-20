@@ -132,6 +132,7 @@ def build(setup_file: str) -> None:
             },
             package_data={
                 descriptor.namespace("tabsdata"): [
+                    "py.typed",
                     os.path.join(
                         "assets",
                         "manifest",
@@ -139,6 +140,7 @@ def build(setup_file: str) -> None:
                     )
                 ],
                 descriptor.namespace("tabsdatak"): [
+                    "py.typed",
                     os.path.join(
                         "assets",
                         "manifest",

@@ -36,6 +36,8 @@ dependencies = [
     "archspec==0.2.5",
     "colorama==0.4.6",
     "distlib==0.4.0",
+    "mypy==2.1.0",
+    "mypy-extensions==1.1.0",
     "packaging==26.0",
     "psutil==7.2.2",
     "py-cpuinfo==9.0.0",

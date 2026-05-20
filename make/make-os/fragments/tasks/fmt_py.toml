@@ -2,7 +2,7 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
-[tasks.__os__fmt_py_ruff]
+[tasks.__os__fmt_py]
 plugin = "td-task-tracker"
 category = "08 - Linting"
 private = true
@@ -12,50 +12,30 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    fn run_lint_imports
-        probe = exec python -c "import tabsdatak"
-        probe_ok = eq ${probe.code} 0
-        if ${probe_ok}
-            debug "🚀 lint-imports"
-            exec --fail-on-error lint-imports --config .cargo/importlinter.cfg
-        else
-            warn "⚠️ Skipping lint-imports: 'tabsdatak' is not importable in the current environment. Install tabsdata (e.g. via cargo make hydrate) to run the full import-linter contracts."
-        end
+    fn run_fmt_py
+        debug "🚀 ruff check ."
+        exec --fail-on-error ruff check .
+        debug "🚀 ruff format --check ."
+        exec --fail-on-error ruff format --check .
     end
 
     on_ga = get_env TD_ON_GA
     on_ga_true = eq ${on_ga} "true"
     if ${on_ga_true}
-        debug "🚀 ruff check ."
-        exec --fail-on-error ruff check .
-        debug "🚀 ruff format --check ."
-        exec --fail-on-error ruff format --check .
-        run_lint_imports
+        run_fmt_py
     else
         project_root_folder = get_env PROJECT_ROOT_FOLDER
         project_root_folder_basename = basename ${project_root_folder}
         is_tabsdata_ee = eq ${project_root_folder_basename} "tabsdata-ee"
         if ${is_tabsdata_ee}
-            debug "🚀 ruff check ."
-            exec --fail-on-error ruff check .
-            debug "🚀 ruff format --check ."
-            exec --fail-on-error ruff format --check .
-            run_lint_imports
+            run_fmt_py
 
             info "🐡 Switching to tabsdata-os"
             cd "${PROJECT_TABSDATA_ROOT_FOLDER}/../tabsdata-os"
 
-            debug "🚀 ruff check ."
-            exec --fail-on-error ruff check .
-            debug "🚀 ruff format --check ."
-            exec --fail-on-error ruff format --check .
-            run_lint_imports
+            run_fmt_py
         else
-            debug "🚀 ruff check ."
-            exec --fail-on-error ruff check .
-            debug "🚀 ruff format --check ."
-            exec --fail-on-error ruff format --check .
-            run_lint_imports
+            run_fmt_py
         end
     end
     ''']

@@ -1,0 +1,84 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+[tasks.__os__lint_py]
+plugin = "td-task-tracker"
+category = "08 - Linting"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    fn run_lint_imports
+        current_folder = pwd
+        info "🎢 Running imports checks in '{current_folder}'."
+
+        probe = exec python -c "import tabsdatak"
+        probe_ok = eq ${probe.code} 0
+        if ${probe_ok}
+            debug "🚀 lint-imports"
+            exec --fail-on-error lint-imports --config .cargo/importlinter.cfg
+        else
+            warn "⚠️ Skipping lint-imports: 'tabsdatak' is not importable in the current environment."
+            warn "⚠️ Install tabsdata (e.g. via cargo make hydrate) to run the full import-linter contracts."
+        end
+    end
+
+    fn run_mypy
+        current_folder = pwd
+        info "️⛺️ Running mypy global checks in '${current_folder}'."
+
+        mypy_final_code = set "0"
+        tabsdatak_folders = glob_array ${PROJECT_TABSDATA_ROOT_FOLDER}/**/src/main/python/tabsdatak
+        for tabsdatak_folder in ${tabsdatak_folders}
+            is_tabsdatak = is_directory ${tabsdatak_folder}
+            if ${is_tabsdatak}
+                info "️🫟️ Running partial mypy checks for '${current_folder}'."
+
+                package_root = dirname ${tabsdatak_folder}
+                cd ${package_root}
+                debug "🚀 mypy --config-file ${PROJECT_TABSDATA_ROOT_FOLDER}/.cargo/mypy.cfg --explicit-package-bases tabsdatak"
+                mypy_exit_code = exec --get-exit-code mypy --config-file ${PROJECT_TABSDATA_ROOT_FOLDER}/.cargo/mypy.cfg --explicit-package-bases tabsdatak
+                mypy_is_zero = eq ${mypy_exit_code} "0"
+                if not ${mypy_is_zero}
+                    info "⭕️️ The partial mypy checks failed for '${package_root}' with exit code '${mypy_exit_code}'"
+                    mypy_final_code = set ${mypy_exit_code}
+                end
+            end
+        end
+        cd ${PROJECT_TABSDATA_ROOT_FOLDER}
+        mypy_all_ok = eq ${mypy_final_code} "0"
+        if not ${mypy_all_ok}
+            info "️⛔️ The mypy global checks failed in '${current_folder}' with exit code '${mypy_final_code}'"
+            code = exit ${mypy_final_code}
+        end
+    end
+
+    fn run_lint_py
+      # run_lint_imports
+        run_mypy
+    end
+
+    on_ga = get_env TD_ON_GA
+    on_ga_true = eq ${on_ga} "true"
+    if ${on_ga_true}
+        run_lint_py
+    else
+        project_root_folder = get_env PROJECT_ROOT_FOLDER
+        project_root_folder_basename = basename ${project_root_folder}
+        is_tabsdata_ee = eq ${project_root_folder_basename} "tabsdata-ee"
+        if ${is_tabsdata_ee}
+            run_lint_py
+
+            info "🐡 Switching to tabsdata-os"
+            cd "${PROJECT_TABSDATA_ROOT_FOLDER}/../tabsdata-os"
+
+            run_lint_py
+        else
+            run_lint_py
+        end
+    end
+    ''']

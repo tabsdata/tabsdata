@@ -142,6 +142,7 @@ tenacity==9.1.4
 thrift==0.20.0
 tomlkit==0.15.0
 types-awscrt==0.31.3
+types-pyyaml==6.0.3
 types-s3transfer==0.16.0
 typing-extensions==4.15.0
 typing-inspection==0.4.2
