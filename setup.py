@@ -190,6 +190,7 @@ console_scripts: list[str] = [
     "td_resource = tabsdata._utils.internal._resources:main",
     "td_srvinf = tabsdata._tabsserver.tools.server_info:main",
     "td_stagetrigger = tabsdata._tabsserver.invoker:main",
+    "td_pyvenv = tabsdatak._tdruntime.python.pyvenv:main",
     "td_upgrader = tabsdata._tabsserver.server.upgrader.upgrader:main",
     "td_venv = tabsdata._tabsserver.pyenv_creation:main",
     "tdconn = tabsdata._cli.tdconn.cli:cli",
