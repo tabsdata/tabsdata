@@ -288,7 +288,7 @@ def check_pe(filepath: str) -> list[LibInfo]:
 
 def get_libs(filepath: str) -> list[LibInfo] | None:
     if not os.path.isfile(filepath):
-        logger.error(f"File not found: {filepath}")
+        logger.warning(f"File not found: {filepath}")
         return None
 
     file_type = detect_file_type(filepath)

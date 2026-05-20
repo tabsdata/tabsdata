@@ -105,6 +105,7 @@ script = [
         rm -r ${wheels_folder}
     end
 
+    brush_roots = array
     components_folders = array modules extensions
     for component_folder in ${components_folders}
         component_path = join_path ${PROJECT_RS_TO_EXPANSIONS_PYTHON_FOLDER} ${component_folder}
@@ -116,44 +117,14 @@ script = [
                 python_folder = join_path ${component_path} ${python_folder}
                 is_python_folder = is_directory ${python_folder}
                 if ${is_python_folder}
-                    cd "${python_folder}"
-                    extensions = array .so .dll .dylib .pyd
-                    for extension in ${extensions}
-                        info "🧹🧹 Brushing extension: ${extension}"
-                        glob_files = glob_array ./**/*${extension}*
-                        for file in ${glob_files}
-                            file = join_path ${python_folder} ${file}
-                            info "🧹 Brushing file: ${file}"
-                            retries = set 36
-                            retry = set 0
-                            keep = set true
-                            while ${keep}
-                                file_exists = exec python -c "import os, sys; sys.exit(0 if os.path.lexists(sys.argv[1]) else 1)" "${file}"
-                                if equals ${file_exists.code} 0
-                                    output = exec python -c "import os, sys; os.unlink(sys.argv[1])" "${file}"
-                                    if equals ${output.code} 0
-                                        info "✅ Successfully deleted file: ${file}"
-                                        keep = set false
-                                    else
-                                        retry = calc ${retry} + 1
-                                        if greater_than ${retry} ${retries}
-                                            error "❌ Failed to delete file after 3 minutes: ${file}"
-                                            code = exit 1
-                                        else
-                                            info "⏳ Failed to delete ${file}. Retrying in 5 seconds... (${retry}/${retries})"
-                                            sleep 5000
-                                        end
-                                    end
-                                else
-                                    info "🚹 File no longer exists: ${file}. Break."
-                                    keep = set false
-                                end
-                            end
-                        end
-                    end
+                    array_push ${brush_roots} ${python_folder}
                 end
             end
         end
+    end
+    brush_count = array_length ${brush_roots}
+    if greater_than ${brush_count} 0
+        exec --fail-on-error python ${BRUSH_NATIVE_LIBS_SCRIPT} %{brush_roots}
     end
     ''']
 
@@ -172,6 +143,7 @@ script = [
         rm -r ${wheels_folder}
     end
 
+    brush_roots = array
     components_folders = array modules extensions
     for component_folder in ${components_folders}
         component_path = join_path ${PROJECT_RS_TY_EXPANSIONS_POLARS_FOLDER} ${component_folder}
@@ -183,43 +155,13 @@ script = [
                 python_folder = join_path ${component_path} ${python_folder}
                 is_python_folder = is_directory ${python_folder}
                 if ${is_python_folder}
-                    cd "${python_folder}"
-                    extensions = array .so .dll .dylib .pyd
-                    for extension in ${extensions}
-                        info "🧹🧹 Brushing extension: ${extension}"
-                        glob_files = glob_array ./**/*${extension}*
-                        for file in ${glob_files}
-                            file = join_path ${python_folder} ${file}
-                            info "🧹 Brushing file: ${file}"
-                            retries = set 36
-                            retry = set 0
-                            keep = set true
-                            while ${keep}
-                                file_exists = exec python -c "import os, sys; sys.exit(0 if os.path.lexists(sys.argv[1]) else 1)" "${file}"
-                                if equals ${file_exists.code} 0
-                                    output = exec python -c "import os, sys; os.unlink(sys.argv[1])" "${file}"
-                                    if equals ${output.code} 0
-                                        info "✅ Successfully deleted file: ${file}"
-                                        keep = set false
-                                    else
-                                        retry = calc ${retry} + 1
-                                        if greater_than ${retry} ${retries}
-                                            error "❌ Failed to delete file after 3 minutes: ${file}"
-                                            code = exit 1
-                                        else
-                                            info "⏳ Failed to delete ${file}. Retrying in 5 seconds... (${retry}/${retries})"
-                                            sleep 5000
-                                        end
-                                    end
-                                else
-                                    info "🚹 File no longer exists: ${file}. Break."
-                                    keep = set false
-                                end
-                            end
-                        end
-                    end
+                    array_push ${brush_roots} ${python_folder}
                 end
             end
         end
+    end
+    brush_count = array_length ${brush_roots}
+    if greater_than ${brush_count} 0
+        exec --fail-on-error python ${BRUSH_NATIVE_LIBS_SCRIPT} %{brush_roots}
     end
     ''']
