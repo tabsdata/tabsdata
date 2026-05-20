@@ -100,6 +100,7 @@ tokio = { workspace = true, features = ["full"] }
 indicatif = { workspace = true }
 tracing = { workspace = true }
 tracing-indicatif = { workspace = true }
+tracing-panic = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 url = { workspace = true, features = ["serde"] }
 utoipa = { workspace = true, features = ["url"] }

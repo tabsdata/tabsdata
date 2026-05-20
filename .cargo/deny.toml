@@ -50,6 +50,7 @@ deny = [
         "rustpython-parser",
         "rustls",
         "rustls-platform-verifier",
+        "serial_test",
         "sqlparser",
         "sqlx-core",
         "sqlx-mysql",
@@ -131,3 +132,15 @@ crate = "malachite-nz"
 [[licenses.exceptions]]
 allow = ["LGPL-3.0-only"]
 crate = "malachite-q"
+
+[[licenses.exceptions]]
+allow = ["PostgreSQL"]
+crate = "postgresql_archive"
+
+[[licenses.exceptions]]
+allow = ["PostgreSQL"]
+crate = "postgresql_commands"
+
+[[licenses.exceptions]]
+allow = ["PostgreSQL"]
+crate = "postgresql_embedded"

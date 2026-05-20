@@ -13,7 +13,7 @@ use async_trait::async_trait;
 use indicatif::MultiProgress;
 use td_common::env::TABSDATA_HOME_DIR;
 use td_common::os::name_program;
-use td_common::server::{DATABASE_FILE, DEFAULT_INSTANCE, INSTANCES_FOLDER};
+use td_common::server::{DEFAULT_INSTANCE, INSTANCES_FOLDER};
 use td_common::status::ExitStatus::{GeneralError, NoAction, TabsDataError};
 use td_python::python::{get_python_scripts_folder, resolve_python_binary};
 use tracing::info;

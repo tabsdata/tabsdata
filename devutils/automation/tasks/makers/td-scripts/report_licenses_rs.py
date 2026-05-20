@@ -48,6 +48,7 @@ normalized_licenses = {
     "(Apache-2.0 OR ISC) AND ISC AND OpenSSL": "Apache License Version 2.0 or Internet Systems Consortium License, and Internet Systems Consortium License, and OpenSSL License",              # noqa: E231,E241,E501
     "(Apache-2.0 OR ISC) AND ISC": "Apache License Version 2.0 or Internet Systems Consortium License, and Internet Systems Consortium License",                                               # noqa: E231,E241,E501
     "(Apache-2.0 OR MIT) AND BSD-3-Clause": "Apache License Version 2.0 or MIT License, and BSD Revised License (BSD-3-Clause)",                                                               # noqa: E231,E241,E501
+    "(Apache-2.0 OR MIT) AND PostgreSQL": "Apache License Version 2.0 or MIT License, and PostgreSQL License",                                                                                 # noqa: E231,E241,E501
     "(Apache-2.0 OR MIT) AND Unicode-3.0": "Apache License Version 2.0 or MIT License, and Unicode License Version 3.0",                                                                       # noqa: E231,E241,E501
     "(Apache-2.0 OR MIT) AND Unicode-DFS-2016": "Apache License Version 2.0 or MIT License, and Unicode Data Files and Software 2016",                                                         # noqa: E231,E241,E501
     "(MIT OR Apache-2.0)": "MIT License or Apache License Version 2.0",                                                                                                                        # noqa: E231,E241,E501
