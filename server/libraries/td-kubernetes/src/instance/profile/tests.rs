@@ -39,7 +39,7 @@ fn is_valid_path_component_accepts_alphanumerics_dash_dot() {
 #[test]
 fn is_valid_path_component_rejects_underscore() {
     assert!(!is_valid_path_component("foo_bar"));
-    assert!(!is_valid_path_component("manifest.yaml"));
+    assert!(!is_valid_path_component("_manifest.yaml"));
     assert!(!is_valid_path_component("pods__init"));
 }
 

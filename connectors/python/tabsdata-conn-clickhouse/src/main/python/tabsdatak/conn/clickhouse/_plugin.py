@@ -83,7 +83,9 @@ class _ClickHouseDestPlugin(DestPlugin[ClickHouseDest]):
 
         cfg = _resolve_dest_cfg(dest.dest_cfg)
         logger.setLevel(cfg.logging_level)
-        logger.info("clickhouse: write_out starting (%d table(s))", len(dest.tables or []))
+        logger.info(
+            "clickhouse: write_out starting (%d table(s))", len(dest.tables or [])
+        )
 
         # Verifies that the number of incoming parquet files
         # matches the destination's declared ``tables``
@@ -112,11 +114,7 @@ class _ClickHouseDestPlugin(DestPlugin[ClickHouseDest]):
                 staging=type(conn.staging).__name__,
             )
         except Exception as e:  # noqa: BLE001 -- runtime wrapper
-            host = (
-                conn.host.value()
-                if hasattr(conn.host, "value")
-                else conn.host
-            )
+            host = conn.host.value() if hasattr(conn.host, "value") else conn.host
             # Heuristic: connect-class failures from
             # clickhouse-connect raise ``DatabaseError`` or
             # similar; we surface the connection-failure code

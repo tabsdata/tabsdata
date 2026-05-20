@@ -4,7 +4,8 @@
 
 rpk redpanda start \
   --smp 1 \
-  --memory 1G \
+  --memory 2G \
+  --reserve-memory 0M \
   --overprovisioned \
   --advertise-kafka-addr internal://${KAFKA_ADVERTISE_ADDRESS}:${KAFKA_INTERNAL_LISTENER_PORT},external://${KAFKA_ADVERTISE_ADDRESS}:${KAFKA_EXTERNAL_HOST_PORT} \
   --set redpanda.kafka_api='[{"name":"internal","address":"${KAFKA_BIND_ADDRESS}","port":${KAFKA_INTERNAL_LISTENER_PORT},"authentication_method":"none"},{"name":"external","address":"${KAFKA_BIND_ADDRESS}","port":${KAFKA_EXTERNAL_LISTENER_PORT},"authentication_method":"sasl"}]' \

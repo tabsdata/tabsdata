@@ -31,6 +31,7 @@ from tabsdata.api.tabsdata_server import (
     _convert_timestamp_to_string,
     _top_and_convert_to_timestamp,
 )
+from test_tabsdata.common.retry import retry_until_pfr_bound
 from test_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
     APISERVER_URL,
@@ -1011,11 +1012,15 @@ def test_tabsdata_server_class_read_run(tabsserver_connection):
     plan = function.trigger(
         f"test_tabsdata_server_class_read_run_plan_{uuid.uuid4().hex[:16]}"
     )
-    response = tabsserver_connection.read_function_run(
-        collection.name, function.name, plan.id
+    response = retry_until_pfr_bound(
+        lambda: tabsserver_connection.read_function_run(
+            collection.name, function.name, plan.id
+        )
     )
     assert HTTPStatus(response.status_code).is_success
-    response = tabsserver_connection.read_function_run(collection, function, plan)
+    response = retry_until_pfr_bound(
+        lambda: tabsserver_connection.read_function_run(collection, function, plan)
+    )
     assert HTTPStatus(response.status_code).is_success
 
 

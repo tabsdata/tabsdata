@@ -52,7 +52,8 @@ UriSpec: TypeAlias = Union[
 ]
 QueriesSpec: TypeAlias = list[str]
 PostgresTableNameSpec: TypeAlias = Annotated[
-    str, _validation.POSTGRES_TABLE_FQN_VALIDATOR,
+    str,
+    _validation.POSTGRES_TABLE_FQN_VALIDATOR,
 ]
 PostgresTableNamesSpec: TypeAlias = list[PostgresTableNameSpec]
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]

@@ -65,9 +65,7 @@ SchemaEvolutionSpec: TypeAlias = Literal["update", "strict"]
 
 
 # --- BigQueryDest.dest_cfg keys -------------------------------------
-DestCfgKey: TypeAlias = Literal[
-    "bigquery.logging_level",
-]
+DestCfgKey: TypeAlias = Literal["bigquery.logging_level",]
 
 DestCfgSpec: TypeAlias = Annotated[
     Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR

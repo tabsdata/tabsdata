@@ -53,7 +53,9 @@ class KeyValue:
 # ---------------------------------------------------------------------------
 
 
-def find_by_kind(json_serde_data: JsonSerdeData, kind: str) -> list[tuple[JsonPath, Envelope]]:
+def find_by_kind(
+    json_serde_data: JsonSerdeData, kind: str
+) -> list[tuple[JsonPath, Envelope]]:
     """Return every envelope under `node` whose ``kind`` equals `kind`.
 
     Each result is a ``(json_path, envelope)`` pair. The path uses the
@@ -109,7 +111,9 @@ def _parse_path(path: JsonPath) -> list[str | int]:
     return tokens
 
 
-def replace_at(json_serde_data: JsonSerdeData, path: JsonPath, value: JsonSerdeData) -> None:
+def replace_at(
+    json_serde_data: JsonSerdeData, path: JsonPath, value: JsonSerdeData
+) -> None:
     """Replace the element at `path` inside `node` with `value`, in place.
 
     `path` must use the syntax produced by `find_by_kind`. Replacing the
@@ -231,7 +235,9 @@ def dehydrate_secrets(hydrated_data: JsonSerdeData) -> JsonSerdeData:
     return out
 
 
-def hydrate_secrets(dehydrated_data: JsonSerdeData, secrets: list[KeyValue]) -> JsonSerdeData:
+def hydrate_secrets(
+    dehydrated_data: JsonSerdeData, secrets: list[KeyValue]
+) -> JsonSerdeData:
     """Return a deep copy of ``dehydrated_data`` with every ``secretRef``
     envelope rewritten as a ``secretLiteral`` carrying the matching value.
 
@@ -262,7 +268,9 @@ def hydrate_secrets(dehydrated_data: JsonSerdeData, secrets: list[KeyValue]) -> 
             extra=sorted(provided - expected),
         )
 
-    values: dict[str, str] = {kv.key: kv.value for kv in secrets if kv.value is not None}
+    values: dict[str, str] = {
+        kv.key: kv.value for kv in secrets if kv.value is not None
+    }
 
     out = deepcopy(dehydrated_data)
     for path, env in find_by_kind(out, _SECRET_REF_KIND):
@@ -277,7 +285,9 @@ def hydrate_secrets(dehydrated_data: JsonSerdeData, secrets: list[KeyValue]) -> 
     return out
 
 
-def hydrate_secrets_as_envs(dehydrated_data: JsonSerdeData, prefix: str) -> JsonSerdeData:
+def hydrate_secrets_as_envs(
+    dehydrated_data: JsonSerdeData, prefix: str
+) -> JsonSerdeData:
     """Return a deep copy of ``dehydrated_data`` with every ``secretRef``
     envelope rewritten as a ``secretLiteral``, taking each value from the
     process environment under ``prefix + <inferred key>``.
@@ -293,7 +303,9 @@ def hydrate_secrets_as_envs(dehydrated_data: JsonSerdeData, prefix: str) -> Json
             the inferred keys).
     """
     secrets = [
-        KeyValue(key=_to_env_name(path), value=os.environ.get(prefix + _to_env_name(path)))
+        KeyValue(
+            key=_to_env_name(path), value=os.environ.get(prefix + _to_env_name(path))
+        )
         for path, _ in find_by_kind(dehydrated_data, _SECRET_REF_KIND)
     ]
     return hydrate_secrets(dehydrated_data, secrets)
@@ -336,7 +348,9 @@ def extract_connection_names(data: JsonSerdeData) -> list[str]:
     """
     seen: dict[str, None] = {}
     for _path, env in find_by_kind(data, _CONNECTION_REF_KIND):
-        seen.setdefault(_resolve_connection_name(env["spec"][_CONNECTION_NAME_FIELD]), None)
+        seen.setdefault(
+            _resolve_connection_name(env["spec"][_CONNECTION_NAME_FIELD]), None
+        )
     return list(seen)
 
 

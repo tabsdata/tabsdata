@@ -52,6 +52,7 @@ def _resolve_dest_cfg(dest_cfg: DestCfgSpec | None) -> _WriterCfg:
         logging_level=int(_get(_KEY_DEST_LOGGING_LEVEL)),
     )
 
+
 # All sqlalchemy and transporter imports are made inside the plugin
 # method bodies below. The conn-starrocks package should be cheap to
 # import even when no flow actually uses the plugin (registry scans
@@ -73,7 +74,9 @@ class StarRocksDestPlugin(DestPlugin[StarRocksDest]):
 
         cfg = _resolve_dest_cfg(dest.dest_cfg)
         logger.setLevel(cfg.logging_level)
-        logger.info("starrocks: write_out starting (%d table(s))", len(dest.tables or []))
+        logger.info(
+            "starrocks: write_out starting (%d table(s))", len(dest.tables or [])
+        )
 
         # Verifies that the number of incoming parquet files matches
         # the destination's declared ``tables`` (STARROCKS_3).

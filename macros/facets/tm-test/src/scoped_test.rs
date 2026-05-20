@@ -95,7 +95,9 @@ fn try_scoped_test(args: TokenStream, item: TokenStream) -> darling::Result<Toke
         }
         (false, Some(reqs)) => {
             let env_prefix = args.env_prefix.as_ref().ok_or_else(|| {
-                darling::Error::custom("`env_prefix = \"...\"` is required when using `requires = ...`")
+                darling::Error::custom(
+                    "`env_prefix = \"...\"` is required when using `requires = ...`",
+                )
             })?;
             if !args.fixtures.is_empty() {
                 return Err(darling::Error::custom(

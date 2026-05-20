@@ -24,7 +24,6 @@ from tabsdatak.conn.common.sql._iceberg import (
     validate_delta,
 )
 
-
 __all__ = [
     # Re-exported for callers that import all iceberg pieces from a
     # single dialect module.
@@ -89,14 +88,9 @@ class ClickHouseRenderer(DialectRenderer):
 
         if change.action == Action.ADD_COLUMN:
             effective_type = (
-                f"Nullable({d['type']})"
-                if d.get("nullable", True)
-                else d["type"]
+                f"Nullable({d['type']})" if d.get("nullable", True) else d["type"]
             )
-            stmt = (
-                f"ALTER TABLE {t} ADD COLUMN "
-                f"`{change.column}` {effective_type}"
-            )
+            stmt = f"ALTER TABLE {t} ADD COLUMN `{change.column}` {effective_type}"
             if d.get("default") is not None:
                 stmt += f" DEFAULT {d['default']}"
             return stmt
@@ -108,15 +102,11 @@ class ClickHouseRenderer(DialectRenderer):
             new_type = d["new_type"]
             if d.get("nullable", False):
                 new_type = f"Nullable({new_type})"
-            return (
-                f"ALTER TABLE {t} MODIFY COLUMN "
-                f"`{change.column}` {new_type}"
-            )
+            return f"ALTER TABLE {t} MODIFY COLUMN `{change.column}` {new_type}"
 
         if change.action == Action.SET_NULLABLE:
             return (
-                f"ALTER TABLE {t} MODIFY COLUMN "
-                f"`{change.column}` Nullable({d['type']})"
+                f"ALTER TABLE {t} MODIFY COLUMN `{change.column}` Nullable({d['type']})"
             )
 
         if change.action == Action.SET_DEFAULT:
@@ -130,16 +120,11 @@ class ClickHouseRenderer(DialectRenderer):
             )
 
         if change.action == Action.DROP_DEFAULT:
-            return (
-                f"ALTER TABLE {t} MODIFY COLUMN "
-                f"`{change.column}` REMOVE DEFAULT"
-            )
+            return f"ALTER TABLE {t} MODIFY COLUMN `{change.column}` REMOVE DEFAULT"
 
         if change.action == Action.REORDER_COLUMN:
             effective_type = (
-                f"Nullable({d['type']})"
-                if d.get("nullable", True)
-                else d["type"]
+                f"Nullable({d['type']})" if d.get("nullable", True) else d["type"]
             )
             after = d.get("after_column")
             if after is None:
@@ -154,9 +139,7 @@ class ClickHouseRenderer(DialectRenderer):
 
         return None
 
-    def _create_table_sql(
-        self, table_name: str, col_defs: str
-    ) -> str:
+    def _create_table_sql(self, table_name: str, col_defs: str) -> str:
         return (
             f"CREATE TABLE {table_name} (\n    {col_defs}\n) "
             f"ENGINE = MergeTree() ORDER BY tuple()"
@@ -192,14 +175,11 @@ def parse_clickhouse_type(type_str: str) -> tuple[str, bool]:
     while changed:
         changed = False
         if type_str.startswith("Nullable(") and type_str.endswith(")"):
-            type_str = type_str[len("Nullable("):-1]
+            type_str = type_str[len("Nullable(") : -1]
             nullable = True
             changed = True
-        if (
-            type_str.startswith("LowCardinality(")
-            and type_str.endswith(")")
-        ):
-            type_str = type_str[len("LowCardinality("):-1]
+        if type_str.startswith("LowCardinality(") and type_str.endswith(")"):
+            type_str = type_str[len("LowCardinality(") : -1]
             changed = True
 
     return type_str, nullable
@@ -266,14 +246,10 @@ def table_schema_from_arrow(
     columns = []
     for field in arrow_schema:
         ch_type = _arrow_type_to_clickhouse(field.type)
-        is_container = any(
-            check(field.type) for check in container_checks
-        )
+        is_container = any(check(field.type) for check in container_checks)
         if is_container:
             nullable = False
-        elif (
-            column_nulls is not None and field.name in column_nulls
-        ):
+        elif column_nulls is not None and field.name in column_nulls:
             nullable = column_nulls[field.name] is not False
         else:
             nullable = field.nullable

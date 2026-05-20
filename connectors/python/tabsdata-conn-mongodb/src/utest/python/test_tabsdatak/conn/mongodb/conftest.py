@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import logging
-import socket
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -131,12 +130,6 @@ def _require_docker():
     return client
 
 
-def _free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
-
-
 def _container_port(container) -> int | None:
     ports = (container.attrs.get("NetworkSettings") or {}).get("Ports") or {}
     bindings = ports.get(_MONGO_PORT_INSIDE) or []
@@ -207,20 +200,25 @@ def _start_mongo_container() -> MongoDBContainerConfig:
         except APIError as exc:
             pytest.skip(f"docker image {_MONGO_IMAGE!r} pull failed: {exc}")
 
-    host_port = _free_port()
     try:
-        client.containers.run(
+        container = client.containers.run(
             _MONGO_IMAGE,
             name=_MONGO_CONTAINER_NAME,
             environment=[
                 f"MONGO_INITDB_ROOT_USERNAME={_MONGO_USER}",
                 f"MONGO_INITDB_ROOT_PASSWORD={_MONGO_PASSWORD}",
             ],
-            ports={_MONGO_PORT_INSIDE: host_port},
+            ports={_MONGO_PORT_INSIDE: None},
             detach=True,
         )
     except APIError as exc:
         pytest.skip(f"docker run {_MONGO_IMAGE!r} failed: {exc}")
+
+    container.reload()
+    host_port = _container_port(container)
+    if host_port is None:
+        container.remove(force=True)
+        pytest.skip("docker container started but published no host port")
 
     cfg = MongoDBContainerConfig(
         host="127.0.0.1",

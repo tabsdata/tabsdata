@@ -62,16 +62,15 @@ IdentifierSpec: TypeAlias = Union[
 
 NameSpec: TypeAlias = IdentifierSpec
 SnowflakeTableNameSpec: TypeAlias = Annotated[
-    str, _validation.SNOWFLAKE_TABLE_FQN_VALIDATOR,
+    str,
+    _validation.SNOWFLAKE_TABLE_FQN_VALIDATOR,
 ]
 SnowflakeTableNamesSpec: TypeAlias = list[SnowflakeTableNameSpec]
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
 
 
 # --- SnowflakeDest.dest_cfg keys ------------------------------------
-DestCfgKey: TypeAlias = Literal[
-    "snowflake.logging_level",
-]
+DestCfgKey: TypeAlias = Literal["snowflake.logging_level",]
 
 DestCfgSpec: TypeAlias = Annotated[
     Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR

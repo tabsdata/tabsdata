@@ -9,7 +9,6 @@ import datetime
 import logging
 import os
 import re
-import socket
 import time
 from dataclasses import dataclass
 from typing import Iterator
@@ -203,12 +202,6 @@ def _require_docker():
     return client
 
 
-def _free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
-
-
 def _container_port(container) -> int | None:
     ports = (
         container.attrs.get("NetworkSettings") or {}
@@ -227,7 +220,6 @@ def _ensure_container(
     name: str,
     image: str,
     environment: list[str],
-    forwarded_port: int,
 ) -> int:
     from docker.errors import APIError, ImageNotFound, NotFound
 
@@ -265,7 +257,7 @@ def _ensure_container(
             image,
             name=name,
             environment=environment,
-            ports={_CLICKHOUSE_HTTP_PORT_INSIDE: forwarded_port},
+            ports={_CLICKHOUSE_HTTP_PORT_INSIDE: None},
             ulimits=[
                 # ClickHouse recommends a high nofile limit.
                 {"Name": "nofile", "Soft": 262144, "Hard": 262144},
@@ -492,7 +484,6 @@ def _build_config(
     image: str,
     staging: CloudLocation,
 ) -> CHConfig:
-    port = _free_port()
     host_port = _ensure_container(
         name=name,
         image=image,
@@ -500,7 +491,6 @@ def _build_config(
             f"CLICKHOUSE_PASSWORD={_DB_PASSWORD}",
             "CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1",
         ],
-        forwarded_port=port,
     )
     cfg = CHConfig(
         host="127.0.0.1",

@@ -31,10 +31,7 @@ pub async fn upload_function_write_to_storage(
     collection_id: Ref<CollectionId>,
     request: Ref<FunctionUpload>,
 ) -> Result<BundleHash, TdError> {
-    let stream = request
-        .stream()
-        .await
-        .ok_or(UploadError::MissingBody)?; //cannot easily test this error
+    let stream = request.stream().await.ok_or(UploadError::MissingBody)?; //cannot easily test this error
 
     let body_with_io_error = stream.map_err(std::io::Error::other);
     let body_reader = StreamReader::new(body_with_io_error);

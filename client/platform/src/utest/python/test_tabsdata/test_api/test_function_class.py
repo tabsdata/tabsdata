@@ -15,6 +15,7 @@ from tabsdata.api.tabsdata_server import (
     Table,
     Worker,
 )
+from test_tabsdata.common.retry import retry_until_pfr_bound
 from test_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
     LOCAL_PACKAGES_LIST,
@@ -336,9 +337,9 @@ def test_function_class_read_run(tabsserver_connection):
     plan = function.trigger(
         f"test_function_class_read_run_plan_{uuid.uuid4().hex[:16]}"
     )
-    response = function.read_run(plan)
+    response = retry_until_pfr_bound(lambda: function.read_run(plan))
     assert HTTPStatus(response.status_code).is_success
-    response = function.read_run(plan.id)
+    response = retry_until_pfr_bound(lambda: function.read_run(plan.id))
     assert HTTPStatus(response.status_code).is_success
 
 

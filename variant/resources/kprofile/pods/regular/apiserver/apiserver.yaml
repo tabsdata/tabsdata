@@ -17,7 +17,11 @@ jwt:
   access_token_expiration: 3600
 request_timeout: 60
 database:
-  url: ${sys:TDK_REPOSITORY_URL}/database/tabsdata.db
+  # If omitted, the apiserver boots an in-process embedded Postgres rooted
+  # at ${TD_URI_REPOSITORY}/database/. To point at an external server,
+  # uncomment and set `url`. SQLite is supported when built with the
+  # `sqlite` feature (`url: file:///path/to/tabsdata.db`).
+  # url: postgres://user:pass@host:5432/tabsdata
   min_connections: 1
   max_connections: 10
   acquire_timeout: 30

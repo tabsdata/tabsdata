@@ -42,8 +42,7 @@ class DruidErrorCode(ErrorCode):
     )  # _DruidDestPlugin.write_out: staging upload
     DRUID_8 = ErrorDef(
         DruidRuntimeException,
-        "Druid ingestion task submission failed "
-        "(datasource={datasource}, url={url})",
+        "Druid ingestion task submission failed (datasource={datasource}, url={url})",
     )  # _DruidDestPlugin.write_out: HTTP submit
     DRUID_9 = ErrorDef(
         DruidRuntimeException,

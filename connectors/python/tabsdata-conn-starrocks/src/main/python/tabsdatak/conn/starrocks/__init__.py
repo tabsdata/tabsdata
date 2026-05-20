@@ -28,6 +28,7 @@ from tabsdatak.api import (
     NamedConn,
     Secret,
 )
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation
 from tabsdatak.conn.common.types import (
@@ -77,7 +78,8 @@ DatabaseSpec: TypeAlias = Union[
     Annotated[Env, _api.EnvValueConstraints(pattern=_IDENTIFIER_PATTERN)],
 ]
 StarRocksTableNameSpec: TypeAlias = Annotated[
-    str, _validation.STARROCKS_TABLE_FQN_VALIDATOR,
+    str,
+    _validation.STARROCKS_TABLE_FQN_VALIDATOR,
 ]
 StarRocksTableNamesSpec: TypeAlias = list[StarRocksTableNameSpec]
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
@@ -85,9 +87,7 @@ SchemaEvolutionSpec: TypeAlias = Literal["strict", "iceberg"]
 
 
 # --- StarRocksDest.dest_cfg keys ------------------------------------
-DestCfgKey: TypeAlias = Literal[
-    "starrocks.logging_level",
-]
+DestCfgKey: TypeAlias = Literal["starrocks.logging_level",]
 
 DestCfgSpec: TypeAlias = Annotated[
     Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR

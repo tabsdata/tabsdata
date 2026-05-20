@@ -114,7 +114,9 @@ class SqlAlchemyReadEngine(SqlReadEngine, ABC):
                 schema_overrides=overrides,
                 parameters=parameters,
             )
-            logger.debug("sql-reader: query %d/%d produced %d chunk(s)", i + 1, total, len(files))
+            logger.debug(
+                "sql-reader: query %d/%d produced %d chunk(s)", i + 1, total, len(files)
+            )
             results.append([ParquetFile(p) for p in files])
         logger.info("sql-reader: finished reading %d quer(ies)", total)
 

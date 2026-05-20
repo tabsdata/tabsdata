@@ -176,5 +176,3 @@ def build_load_job_config(
         schema_update_options=schema_update_options,
         create_disposition=bigquery.CreateDisposition.CREATE_IF_NEEDED,
     )
-
-

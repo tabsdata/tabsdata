@@ -52,7 +52,8 @@ UriSpec: TypeAlias = Union[
 ]
 QueriesSpec: TypeAlias = list[str]
 Db2TableNameSpec: TypeAlias = Annotated[
-    str, _validation.DB2_TABLE_FQN_VALIDATOR,
+    str,
+    _validation.DB2_TABLE_FQN_VALIDATOR,
 ]
 Db2TableNamesSpec: TypeAlias = list[Db2TableNameSpec]
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]

@@ -219,12 +219,18 @@ class _MongoDBDestPlugin(DestPlugin[MongoDBDest]):
             session_cm = client.start_session()
             session = session_cm.__enter__()
             try:
-                for i, (table, (collection_fqn, id_field)) in enumerate(zip(
-                    tables, dest.collections_with_ids,
-                ), 1):
+                for i, (table, (collection_fqn, id_field)) in enumerate(
+                    zip(
+                        tables,
+                        dest.collections_with_ids,
+                    ),
+                    1,
+                ):
                     logger.info(
                         "mongodb: writing collection %d/%d: %r",
-                        i, total, collection_fqn,
+                        i,
+                        total,
+                        collection_fqn,
                     )
                     self._write_one(
                         client=client,

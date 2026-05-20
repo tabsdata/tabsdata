@@ -63,7 +63,7 @@ impl Manifest {
                     state: EntryState::Active,
                     version: tabsdata_version.to_owned(),
                     created: now,
-                    source: source,
+                    source,
                     versions: vec![stamp.clone()],
                 };
                 (path, entry)

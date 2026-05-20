@@ -7,7 +7,6 @@ from __future__ import annotations
 import logging
 import os
 import re
-import socket
 import time
 import urllib.parse
 from dataclasses import dataclass
@@ -162,18 +161,11 @@ def _require_docker():
     return client
 
 
-def _free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
-
-
 def _ensure_container(
     *,
     name: str,
     image: str,
     environment: list[str],
-    forwarded_port: int,
 ) -> int:
     from docker.errors import APIError, ImageNotFound, NotFound
 
@@ -209,7 +201,7 @@ def _ensure_container(
             image,
             name=name,
             environment=environment,
-            ports={"5432/tcp": forwarded_port},
+            ports={"5432/tcp": None},
             detach=True,
         )
     except APIError as exc:
@@ -379,12 +371,10 @@ def _build_config(
     image: str,
     environment: list[str],
 ) -> DBConfig:
-    port = _free_port()
     host_port = _ensure_container(
         name=name,
         image=image,
         environment=environment,
-        forwarded_port=port,
     )
     cfg = DBConfig(
         host="127.0.0.1",

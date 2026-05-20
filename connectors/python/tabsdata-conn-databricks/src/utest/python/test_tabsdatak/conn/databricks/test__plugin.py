@@ -150,7 +150,7 @@ def test_resolve_src_cfg_logs_unknown_keys(caplog):
     )
     assert cfg.logging_level == 20
     assert any(
-        "Unknown src_cfg key" in rec.message for rec in caplog.records
+        "Unknown src_cfg key" in rec.getMessage() for rec in caplog.records
     )
 
 

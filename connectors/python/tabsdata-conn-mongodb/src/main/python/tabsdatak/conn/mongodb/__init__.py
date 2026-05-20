@@ -49,9 +49,7 @@ IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
 
 
 # --- MongoDBDest.dest_cfg keys --------------------------------------
-DestCfgKey: TypeAlias = Literal[
-    "mongodb.logging_level",
-]
+DestCfgKey: TypeAlias = Literal["mongodb.logging_level",]
 
 DestCfgSpec: TypeAlias = Annotated[
     Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
@@ -117,6 +115,7 @@ class MongoDBDest(Dest):
         Note: ``pymongo.*`` options are read from ``conn.conn_cfg``
         (not ``dest_cfg``) and forwarded to ``pymongo.MongoClient``.
     """
+
     conn: ConnSpec
     collections_with_ids: CollectionsWithIdsSpec
     if_collection_exists: IfTableExistsSpec = "append"

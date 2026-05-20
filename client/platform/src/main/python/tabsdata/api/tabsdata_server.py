@@ -2526,7 +2526,7 @@ class Table:
 
     @property
     def dataversions(self) -> List[DataVersion]:
-        return self.list_dataversions()
+        return self.list_dataversions(filter="status:eq:C")
 
     @property
     def function(self) -> Function | None:

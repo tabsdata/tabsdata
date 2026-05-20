@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import io
 import logging
-import os
 import threading
 import time
 import uuid
@@ -32,9 +31,10 @@ from tabsdatak.conn.databricks import DatabricksConn
 from tabsdatak.conn.databricks._validation import _DATABRICKS_FQN_DEF
 
 if TYPE_CHECKING:
+    import pyarrow as pa
+
     import databricks.sdk as dbsdk
     import databricks.sql as dbsql
-    import pyarrow as pa
 
 logger = logging.getLogger(__name__)
 
@@ -128,9 +128,7 @@ def _resolve_warehouse_id(
     for w in ws_client.warehouses.list():
         if w.name == target_name:
             return w.id
-    raise ValueError(
-        f"Databricks warehouse {target_name!r} not found in workspace"
-    )
+    raise ValueError(f"Databricks warehouse {target_name!r} not found in workspace")
 
 
 def _build_sql_connection(
@@ -165,9 +163,7 @@ def _build_sql_connection(
 # --- Source: query execution + chunked download ---------------------
 
 
-def _replace_initial_values(
-    statement: str, initial_values: dict[str, Any]
-) -> str:
+def _replace_initial_values(statement: str, initial_values: dict[str, Any]) -> str:
     """Naive ``{key}`` -> repr-value substitution. Matches the legacy
     behaviour: dict keys are interpolated as ``{key}`` placeholders in
     the statement string. Strings are quoted; non-strings use
@@ -226,8 +222,7 @@ def _chunk_links_iterator(ws_client, response):
                     next_chunk_index = last_link.next_chunk_index
                     if next_chunk_index is not None:
                         state.payload = (
-                            ws_client.statement_execution
-                            .get_statement_result_chunk_n(
+                            ws_client.statement_execution.get_statement_result_chunk_n(
                                 state.statement_id,
                                 next_chunk_index,
                             )
@@ -260,14 +255,13 @@ def _download_chunk(link):
                 ),
             ) as response:
                 response.raise_for_status()
-                return ipc.open_stream(
-                    io.BytesIO(response.content)
-                ).read_all()
+                return ipc.open_stream(io.BytesIO(response.content)).read_all()
         except Exception as e:  # noqa: BLE001 -- retry loop
             last_exc = e
             if attempt < _DOWNLOAD_RETRY_ATTEMPTS:
                 logger.warning(
-                    "databricks: chunk download attempt %d/%d failed (%s); retrying in %ds",
+                    "databricks: chunk download attempt %d/%d failed (%s);"
+                    " retrying in %ds",
                     attempt,
                     _DOWNLOAD_RETRY_ATTEMPTS,
                     e,
@@ -365,9 +359,7 @@ def execute_query(
         StatementState.RUNNING,
     ):
         time.sleep(cfg.poll_interval_seconds)
-        response = ws_client.statement_execution.get_statement(
-            response.statement_id
-        )
+        response = ws_client.statement_execution.get_statement(response.statement_id)
 
     if response.status.state != StatementState.SUCCEEDED:
         raise RuntimeError(
@@ -381,9 +373,7 @@ def execute_query(
         if cfg.download_threads <= 1:
             _process_chunks(next_link, chunk_writer)
         else:
-            with ThreadPoolExecutor(
-                max_workers=cfg.download_threads
-            ) as executor:
+            with ThreadPoolExecutor(max_workers=cfg.download_threads) as executor:
                 futures = [
                     executor.submit(_process_chunks, next_link, chunk_writer)
                     for _ in range(cfg.download_threads)
@@ -589,9 +579,13 @@ def write_all_tables(
     sql_conn = _build_sql_connection(ws_client, cfg.conn)
     total = len(cfg.target_tables)
     try:
-        for i, (raw_table, parquet_path) in enumerate(zip(
-            cfg.target_tables, parquet_files,
-        ), 1):
+        for i, (raw_table, parquet_path) in enumerate(
+            zip(
+                cfg.target_tables,
+                parquet_files,
+            ),
+            1,
+        ):
             fq_table = _fully_qualify_table(cfg.conn, raw_table)
             logger.info("databricks: writing table %d/%d: %s", i, total, fq_table)
             logger.info("databricks: staging parquet for %s", fq_table)
@@ -599,9 +593,7 @@ def write_all_tables(
                 ws_client, cfg.conn, fq_table, parquet_path
             )
             try:
-                copy_into_table(
-                    sql_conn, cfg, file_in_volume, fq_table
-                )
+                copy_into_table(sql_conn, cfg, file_in_volume, fq_table)
             finally:
                 logger.debug("databricks: deleting staged file %s", file_in_volume)
                 delete_from_volume(ws_client, file_in_volume)

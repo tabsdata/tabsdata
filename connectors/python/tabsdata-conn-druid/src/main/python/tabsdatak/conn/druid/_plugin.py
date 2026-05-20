@@ -127,12 +127,12 @@ class DruidDestPlugin(DestPlugin[DruidDest]):
         client = adapter.make_overlord_client_for_dest(conn, dest)
         total = len(dest.tables)
         with client:
-            for slot_idx, (datasource, parquet) in enumerate(
-                zip(dest.tables, tables)
-            ):
+            for slot_idx, (datasource, parquet) in enumerate(zip(dest.tables, tables)):
                 logger.info(
                     "druid: writing datasource %d/%d: %r",
-                    slot_idx + 1, total, datasource,
+                    slot_idx + 1,
+                    total,
+                    datasource,
                 )
                 slot_subdir = f"{subdir_root}/slot{slot_idx}"
                 logger.info("druid: staging parquet for %r", datasource)
@@ -155,9 +155,7 @@ class DruidDestPlugin(DestPlugin[DruidDest]):
                     )
 
                 # Build the per-task ingestion spec.
-                input_source = adapter.build_input_source(
-                    staging, staged_uris
-                )
+                input_source = adapter.build_input_source(staging, staged_uris)
                 spec = adapter.build_ingestion_spec(
                     datasource=datasource,
                     input_source=input_source,
@@ -188,8 +186,7 @@ class DruidDestPlugin(DestPlugin[DruidDest]):
                     )
 
                 logger.info(
-                    "Druid ingestion task submitted "
-                    "(datasource=%s, task_id=%s)",
+                    "Druid ingestion task submitted (datasource=%s, task_id=%s)",
                     datasource,
                     task_id,
                 )

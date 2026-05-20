@@ -6,6 +6,7 @@ from pyarrow import schema
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.clickhouse._modes import LoadMode
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.clickhouse._results import BulkLoadResult
 
@@ -53,9 +54,7 @@ class Dialect(ABC):
         """Check existence of a table."""
 
     @abstractmethod
-    def get_table_schema(
-        self, load_mode: LoadMode, table_name: str
-    ) -> schema:
+    def get_table_schema(self, load_mode: LoadMode, table_name: str) -> schema:
         """Return the current schema for the given table."""
 
     @abstractmethod
@@ -77,17 +76,13 @@ class Dialect(ABC):
 
     # --- Schema operations (batch, default loop) ---------------------
 
-    def tables_exist(
-        self, load_mode: LoadMode, table_names: list[str]
-    ) -> list[bool]:
+    def tables_exist(self, load_mode: LoadMode, table_names: list[str]) -> list[bool]:
         return [self.table_exists(load_mode, name) for name in table_names]
 
     def get_table_schemas(
         self, load_mode: LoadMode, table_names: list[str]
     ) -> list[schema]:
-        return [
-            self.get_table_schema(load_mode, name) for name in table_names
-        ]
+        return [self.get_table_schema(load_mode, name) for name in table_names]
 
     def create_tables(
         self, load_mode: LoadMode, items: list[tuple[str, object]]
@@ -98,10 +93,7 @@ class Dialect(ABC):
     def verify_schemas(
         self, load_mode: LoadMode, items: list[tuple[str, object]]
     ) -> list[bool]:
-        return [
-            self.verify_schema(load_mode, name, schema)
-            for name, schema in items
-        ]
+        return [self.verify_schema(load_mode, name, schema) for name, schema in items]
 
     # --- Schema evolution (single-table) -----------------------------
 
@@ -124,16 +116,10 @@ class Dialect(ABC):
         new_arrow_schema: schema,
         column_nulls: dict[str, bool | None] | None = None,
     ):
-        raise NotImplementedError(
-            "Dialect does not implement compute_evolution_delta"
-        )
+        raise NotImplementedError("Dialect does not implement compute_evolution_delta")
 
-    def apply_schema_delta(
-        self, load_mode: LoadMode, table_name: str, delta
-    ) -> None:
-        raise NotImplementedError(
-            "Dialect does not implement apply_schema_delta"
-        )
+    def apply_schema_delta(self, load_mode: LoadMode, table_name: str, delta) -> None:
+        raise NotImplementedError("Dialect does not implement apply_schema_delta")
 
     # --- Schema evolution (batch) ------------------------------------
 
@@ -156,9 +142,7 @@ class Dialect(ABC):
     # --- Data operations (single-table, abstract) --------------------
 
     @abstractmethod
-    def truncate_table(
-        self, load_mode: LoadMode, table_name: str
-    ) -> None:
+    def truncate_table(self, load_mode: LoadMode, table_name: str) -> None:
         """Truncate a table."""
 
     @abstractmethod
@@ -170,18 +154,12 @@ class Dialect(ABC):
     ) -> BulkLoadResult:
         """Start a bulk load from the staged files."""
 
-    def poll_bulk_load(
-        self, load_mode: LoadMode, job_handle: str
-    ) -> BulkLoadResult:
-        raise NotImplementedError(
-            "Dialect does not support async bulk loads"
-        )
+    def poll_bulk_load(self, load_mode: LoadMode, job_handle: str) -> BulkLoadResult:
+        raise NotImplementedError("Dialect does not support async bulk loads")
 
     # --- Data operations (batch) -------------------------------------
 
-    def truncate_tables(
-        self, load_mode: LoadMode, table_names: list[str]
-    ) -> None:
+    def truncate_tables(self, load_mode: LoadMode, table_names: list[str]) -> None:
         for name in table_names:
             self.truncate_table(load_mode, name)
 
@@ -191,31 +169,21 @@ class Dialect(ABC):
         items: list[tuple[str, list[str]]],
     ) -> list[BulkLoadResult]:
         return [
-            self.bulk_load(load_mode, table_name, refs)
-            for table_name, refs in items
+            self.bulk_load(load_mode, table_name, refs) for table_name, refs in items
         ]
 
     def poll_bulk_load_all(
         self, load_mode: LoadMode, job_handles: list[str]
     ) -> list[BulkLoadResult]:
-        return [
-            self.poll_bulk_load(load_mode, handle)
-            for handle in job_handles
-        ]
+        return [self.poll_bulk_load(load_mode, handle) for handle in job_handles]
 
     # --- Transactions ------------------------------------------------
 
     def begin_transaction(self) -> None:
-        raise NotImplementedError(
-            "Dialect does not support transactions"
-        )
+        raise NotImplementedError("Dialect does not support transactions")
 
     def commit_transaction(self) -> None:
-        raise NotImplementedError(
-            "Dialect does not support transactions"
-        )
+        raise NotImplementedError("Dialect does not support transactions")
 
     def rollback_transaction(self) -> None:
-        raise NotImplementedError(
-            "Dialect does not support transactions"
-        )
+        raise NotImplementedError("Dialect does not support transactions")

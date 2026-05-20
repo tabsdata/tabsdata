@@ -316,9 +316,10 @@ class _ValuePattern:
 
             # Reconstruct so the field's pattern wins, and the literal
             # model_validator runs against the field's pattern.
-            return type(instance)(
-                **{field_name: getattr(instance, field_name), "_value_pattern": regex}
-            )
+            return type(instance)(**{
+                field_name: getattr(instance, field_name),
+                "_value_pattern": regex,
+            })
 
         return core_schema.no_info_wrap_validator_function(wrap, base)
 

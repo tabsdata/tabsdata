@@ -15,5 +15,6 @@ CLICKHOUSE_FQN_DEF = FqnDef(separator=".", quote="`", escape="`")
 # from ``CLICKHOUSE_FQN_DEF`` so per-field annotations stay
 # declarative.
 CLICKHOUSE_TABLE_FQN_VALIDATOR = name_validate(
-    CLICKHOUSE_FQN_DEF, max_parts=2,
+    CLICKHOUSE_FQN_DEF,
+    max_parts=2,
 )

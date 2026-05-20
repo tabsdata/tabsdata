@@ -1,6 +1,7 @@
 """GCS connector — public API.
 
-* :class:`GCSConn` -- per-GCS connection (bucket, credentials (GCPJson), project, base_path, conn_cfg).
+* :class:`GCSConn` -- per-GCS connection (bucket, credentials (GCPJson),
+  project, base_path, conn_cfg).
 * :class:`GCSSrc` -- source: list of `paths` (glob-style);
   one parquet slot per path.
 * :class:`GCSDest` -- destination: list of `paths`; one

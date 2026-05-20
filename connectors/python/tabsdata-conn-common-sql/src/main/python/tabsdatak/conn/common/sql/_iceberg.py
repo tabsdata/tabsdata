@@ -22,7 +22,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
 
-
 # --- Models ----------------------------------------------------------
 
 
@@ -87,12 +86,9 @@ class UnsafeSchemaChangeError(Exception):
     def __init__(self, unsafe_changes: list[SchemaChange]):
         self.unsafe_changes = unsafe_changes
         details = "; ".join(
-            f"{c.action.value} on '{c.column}' ({c.detail})"
-            for c in unsafe_changes
+            f"{c.action.value} on '{c.column}' ({c.detail})" for c in unsafe_changes
         )
-        super().__init__(
-            f"Unsafe schema changes detected: {details}"
-        )
+        super().__init__(f"Unsafe schema changes detected: {details}")
 
 
 # --- Core: compute / validate delta ----------------------------------
@@ -177,10 +173,7 @@ def compute_delta(
 
         # 2c-i: Type change.
         if old.type != new.type:
-            safe = (
-                new.type in widen_map
-                and old.type in widen_map[new.type]
-            )
+            safe = new.type in widen_map and old.type in widen_map[new.type]
             delta.changes.append(
                 SchemaChange(
                     action=Action.ALTER_TYPE,
@@ -253,11 +246,7 @@ def compute_delta(
         for new_pos, name in enumerate(common_in_s2_order):
             old_pos = common_in_s1_order.index(name)
             if old_pos != new_pos:
-                after_col = (
-                    common_in_s2_order[new_pos - 1]
-                    if new_pos > 0
-                    else None
-                )
+                after_col = common_in_s2_order[new_pos - 1] if new_pos > 0 else None
                 col = s2_map[name]
                 delta.changes.append(
                     SchemaChange(
@@ -278,9 +267,7 @@ def compute_delta(
     return delta
 
 
-def validate_delta(
-    delta: SchemaDelta, strict: bool = False
-) -> bool:
+def validate_delta(delta: SchemaDelta, strict: bool = False) -> bool:
     """Validate a schema delta.
 
     When ``strict`` is True, raise :class:`UnsafeSchemaChangeError` on
@@ -366,10 +353,7 @@ class DialectRenderer(ABC):
 
     def _render_create_table(self, delta: SchemaDelta) -> str:
         add_columns = sorted(
-            [
-                c for c in delta.changes
-                if c.action == Action.ADD_COLUMN
-            ],
+            [c for c in delta.changes if c.action == Action.ADD_COLUMN],
             key=lambda c: c.detail["position"],
         )
         col_defs = ",\n    ".join(
@@ -383,7 +367,5 @@ class DialectRenderer(ABC):
         )
         return self._create_table_sql(delta.table_name, col_defs)
 
-    def _create_table_sql(
-        self, table_name: str, col_defs: str
-    ) -> str:
+    def _create_table_sql(self, table_name: str, col_defs: str) -> str:
         return f"CREATE TABLE {table_name} (\n    {col_defs}\n)"

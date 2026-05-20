@@ -45,8 +45,7 @@ class DatabricksErrorCode(ErrorCode):
     )  # _DatabricksSrcPlugin.read_in: query / download failure
     DATABRICKS_7 = ErrorDef(
         DatabricksRuntimeException,
-        "DatabricksDest tables/slot count mismatch"
-        " (tables={tables}, slots={slots})",
+        "DatabricksDest tables/slot count mismatch (tables={tables}, slots={slots})",
     )  # _DatabricksDestPlugin.write_out: defensive recheck
     DATABRICKS_8 = ErrorDef(
         DatabricksRuntimeException,
@@ -54,8 +53,7 @@ class DatabricksErrorCode(ErrorCode):
     )  # _DatabricksDestPlugin.write_out: workspace / sql connect failure
     DATABRICKS_9 = ErrorDef(
         DatabricksRuntimeException,
-        "Databricks upload to volume failed"
-        " (table={table}, volume={volume})",
+        "Databricks upload to volume failed (table={table}, volume={volume})",
     )  # _DatabricksDestPlugin.write_out: volume upload failure
     DATABRICKS_10 = ErrorDef(
         DatabricksRuntimeException,

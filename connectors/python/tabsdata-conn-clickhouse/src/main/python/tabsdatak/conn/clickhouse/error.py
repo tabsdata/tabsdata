@@ -33,8 +33,7 @@ class ClickHouseErrorCode(ErrorCode):
     )  # ClickHouseDest.validate()
     CLICKHOUSE_4 = ErrorDef(
         ClickHouseRuntimeException,
-        "ClickHouseDest tables/slot count mismatch (tables={tables},"
-        " slots={slots})",
+        "ClickHouseDest tables/slot count mismatch (tables={tables}, slots={slots})",
     )  # _ClickHouseDestPlugin: defensive recheck
     CLICKHOUSE_5 = ErrorDef(
         ClickHouseRuntimeException,

@@ -75,7 +75,9 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDest]):
 
         cfg = _resolve_dest_cfg(dest.dest_cfg)
         logger.setLevel(cfg.logging_level)
-        logger.info("bigquery: write_out starting (%d table(s))", len(dest.tables or []))
+        logger.info(
+            "bigquery: write_out starting (%d table(s))", len(dest.tables or [])
+        )
 
         write_cfg = BigQueryWriteCfg.from_dest(dest)
 
@@ -119,9 +121,9 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDest]):
 
         staging_uris: list[str] = []
         for index in range(len(tables)):
-            file_name = (
-                f"auxiliary_{index}_{uuid.uuid4().hex[:16]}.parquet"
-            ).replace("-", "_")
+            file_name = (f"auxiliary_{index}_{uuid.uuid4().hex[:16]}.parquet").replace(
+                "-", "_"
+            )
             relative = conn.staging.full_path(file_name)
             staging_uris.append(f"gs://{staging_bucket}/{relative}")
 
@@ -141,11 +143,18 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDest]):
 
             # Phase 2: kick off one ``load_table_from_uri`` per table
             # and wait for each load job to complete.
-            for i, (table_fqn, uri) in enumerate(zip(
-                write_cfg.target_tables, staging_uris,
-            ), 1):
+            for i, (table_fqn, uri) in enumerate(
+                zip(
+                    write_cfg.target_tables,
+                    staging_uris,
+                ),
+                1,
+            ):
                 logger.info(
-                    "bigquery: writing table %d/%d: %r", i, total, table_fqn,
+                    "bigquery: writing table %d/%d: %r",
+                    i,
+                    total,
+                    table_fqn,
                 )
                 try:
                     _load_table_from_uri(

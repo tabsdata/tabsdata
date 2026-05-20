@@ -1,6 +1,7 @@
 """S3 connector — public API.
 
-* :class:`S3Conn` -- per-S3 connection (bucket, region, credentials (AwsAccessSecretKey), base_path, conn_cfg).
+* :class:`S3Conn` -- per-S3 connection (bucket, region,
+  credentials (AwsAccessSecretKey), base_path, conn_cfg).
 * :class:`S3Src` -- source: list of `paths` (glob-style);
   one parquet slot per path.
 * :class:`S3Dest` -- destination: list of `paths`; one

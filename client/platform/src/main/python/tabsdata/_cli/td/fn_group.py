@@ -887,8 +887,7 @@ def patch(
     description = description or ""
     local_pkg = [p for p in local_pkg] if local_pkg else None
     click.echo(
-        f"Patching function '{name}' in collection '{coll}' "
-        f"(patch_of={patch_of})"
+        f"Patching function '{name}' in collection '{coll}' (patch_of={patch_of})"
     )
     click.echo("-" * 10)
     try:
@@ -937,7 +936,9 @@ def list_patches(ctx: click.Context, name: str, coll: str):
         or get_currently_pinned_object(ctx, "collection")
         or logical_prompt(ctx, "Name of the collection to which the function belongs")
     )
-    name = name or logical_prompt(ctx, "Name of the function whose patches will be listed")
+    name = name or logical_prompt(
+        ctx, "Name of the function whose patches will be listed"
+    )
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         patches = server.list_function_patches(coll, name)
@@ -955,10 +956,10 @@ def list_patches(ctx: click.Context, name: str, coll: str):
             if isinstance(defined_on, (int, float)):
                 # epoch milliseconds -> ISO-ish UTC string
                 from datetime import datetime, timezone
-                defined_on = (
-                    datetime.fromtimestamp(defined_on / 1000.0, tz=timezone.utc)
-                    .strftime("%Y-%m-%dT%H:%M:%SZ")
-                )
+
+                defined_on = datetime.fromtimestamp(
+                    defined_on / 1000.0, tz=timezone.utc
+                ).strftime("%Y-%m-%dT%H:%M:%SZ")
             table.add_row(
                 p.get("id") or "",
                 p.get("parent_function_version_id") or "",

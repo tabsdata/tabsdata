@@ -3,7 +3,6 @@ from __future__ import annotations
 import csv
 import gzip
 import logging
-import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -305,8 +304,7 @@ def _run_one_report(
 
         # Translate the system column names to the requested strategy.
         column_names = [
-            col_sys_meta[col][src.column_name_strategy]
-            for col in col_sys_order
+            col_sys_meta[col][src.column_name_strategy] for col in col_sys_order
         ]
 
         parquet_path = _stream_report_to_parquet(
@@ -341,9 +339,7 @@ def _resolve_report_id(
     if find_by is None:
         # Inferred lookup -- try both id and name and disambiguate.
         looks_like_id = bool(re.fullmatch(_SFR_ID_PATTERN, report))
-        id_match = (
-            _lookup_report(sf, report, "id") if looks_like_id else None
-        )
+        id_match = _lookup_report(sf, report, "id") if looks_like_id else None
         name_match = _lookup_report(sf, report, "name")
         if id_match and name_match and id_match != name_match:
             raise SalesforceErrorCode.SALESFORCE_14.exception(report=report)
@@ -418,9 +414,7 @@ def _obtain_report_metadata(
             _SFR_DATATYPE_KEY: datatype,
             _SFR_COLUMN_NAME_KEY: col_sys_name,
         }
-    ordered_col_types = [
-        col_sys_meta[col][_SFR_DATATYPE_KEY] for col in col_sys_order
-    ]
+    ordered_col_types = [col_sys_meta[col][_SFR_DATATYPE_KEY] for col in col_sys_order]
     return col_sys_order, reverse_lookup, ordered_col_types, col_sys_meta
 
 
@@ -474,9 +468,7 @@ def _await_report_stream(
         if status == "Success":
             break
         if status == "Error":
-            msg = response.get("attributes", {}).get(
-                "errorMessage", "<unknown>"
-            )
+            msg = response.get("attributes", {}).get("errorMessage", "<unknown>")
             raise RuntimeError(f"Report generation failed: {msg}")
         time.sleep(poll_interval)
 

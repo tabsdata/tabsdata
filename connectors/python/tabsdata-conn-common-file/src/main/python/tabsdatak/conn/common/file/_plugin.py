@@ -151,7 +151,9 @@ def import_files(
                 slot_files.append(ParquetFile(target))
         logger.debug(
             "file-reader: path %d/%d produced %d file(s)",
-            slot_idx + 1, total, len(slot_files),
+            slot_idx + 1,
+            total,
+            len(slot_files),
         )
         results.append(slot_files)
     logger.info("file-reader: import_files finished (%d path(s))", total)

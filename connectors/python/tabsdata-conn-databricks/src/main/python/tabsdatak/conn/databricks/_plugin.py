@@ -144,20 +144,14 @@ class _DatabricksSrcPlugin(SrcPlugin[DatabricksSrc]):
             conn=conn,
             queries=list(src.queries),
             initial_values=(
-                dict(src.initial_values)
-                if src.initial_values is not None
-                else None
+                dict(src.initial_values) if src.initial_values is not None else None
             ),
         )
         host = (
-            conn.host_url.value()
-            if hasattr(conn.host_url, "value")
-            else conn.host_url
+            conn.host_url.value() if hasattr(conn.host_url, "value") else conn.host_url
         )
         try:
-            parquet_paths = _impl.read_all_queries(
-                read_cfg, ctx.work_dir()
-            )
+            parquet_paths = _impl.read_all_queries(read_cfg, ctx.work_dir())
         except DatabricksValidateException:
             raise  # adapter-side validation is already typed
         except Exception as e:  # noqa: BLE001 -- runtime wrapper
@@ -191,7 +185,9 @@ class _DatabricksDestPlugin(DestPlugin[DatabricksDest]):
 
         cfg = _resolve_dest_cfg(dest.dest_cfg)
         logger.setLevel(cfg.logging_level)
-        logger.info("databricks: write_out starting (%d table(s))", len(dest.tables or []))
+        logger.info(
+            "databricks: write_out starting (%d table(s))", len(dest.tables or [])
+        )
         logging.getLogger("databricks").setLevel(cfg.logging_level)
 
         # Verifies that the number of incoming parquet files matches
@@ -210,9 +206,7 @@ class _DatabricksDestPlugin(DestPlugin[DatabricksDest]):
             schema_evolution=dest.schema_evolution,
         )
         host = (
-            conn.host_url.value()
-            if hasattr(conn.host_url, "value")
-            else conn.host_url
+            conn.host_url.value() if hasattr(conn.host_url, "value") else conn.host_url
         )
         try:
             # ``tables`` is ``list[TableFileSpec]`` =

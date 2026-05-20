@@ -226,5 +226,3 @@ CfgSpec: TypeAlias = Annotated[dict, _validation.CONN_CFG_VALIDATOR]
 EntityWhitelistSpec: TypeAlias = Annotated[
     list[str], _validation.ENTITY_WHITELIST_VALIDATOR
 ]
-
-

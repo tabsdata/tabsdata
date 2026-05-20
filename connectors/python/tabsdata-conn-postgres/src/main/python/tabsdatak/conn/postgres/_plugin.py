@@ -104,6 +104,7 @@ def _resolve_dest_cfg(dest_cfg: DestCfgSpec | None) -> _WriterCfg:
         chunk_size=int(raw_chunk) if raw_chunk is not None else None,
     )
 
+
 # All sqlalchemy, conn-common-sql and DBAPI-driver imports are made
 # inside the plugin method bodies below. The conn-postgres package
 # should be cheap to import even when no flow actually uses the
@@ -182,7 +183,9 @@ class PostgresDestPlugin(DestPlugin[PostgresDest]):
 
         cfg = _resolve_dest_cfg(dest.dest_cfg)
         logger.setLevel(cfg.logging_level)
-        logger.info("postgres: write_out starting (%d table(s))", len(dest.tables or []))
+        logger.info(
+            "postgres: write_out starting (%d table(s))", len(dest.tables or [])
+        )
 
         # Verifies that the number of incoming parquet files
         # matches the destination's declared ``tables`` (POSTGRES_7).

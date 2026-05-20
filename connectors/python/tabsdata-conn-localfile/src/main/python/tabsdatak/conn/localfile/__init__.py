@@ -44,7 +44,6 @@ from tabsdatak.conn.common.file.typing_ import (
 from tabsdatak.conn.common.types import BasePathSpec, CfgSpec, full_path
 from tabsdatak.conn.localfile.error import LocalFileErrorCode
 
-
 # --- LocalFileSrc.src_cfg keys --------------------------------------
 SrcCfgKey: TypeAlias = Literal["tabsdata.file.chunkSize"]
 

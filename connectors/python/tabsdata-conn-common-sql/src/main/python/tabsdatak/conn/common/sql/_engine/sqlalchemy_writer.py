@@ -97,7 +97,8 @@ class SqlAlchemyWriteEngine(SqlWriteEngine, ABC):
         total = len(dest.target_tables)
         logger.info("sql-writer: writing %d table(s)", total)
         for i, (parquet_path, table) in enumerate(
-            zip(files, dest.target_tables), 1,
+            zip(files, dest.target_tables),
+            1,
         ):
             logger.info("sql-writer: writing table %d/%d: %r", i, total, table)
             write_loader(

@@ -52,7 +52,8 @@ UriSpec: TypeAlias = Union[
 ]
 QueriesSpec: TypeAlias = list[str]
 OracleTableNameSpec: TypeAlias = Annotated[
-    str, _validation.ORACLE_TABLE_FQN_VALIDATOR,
+    str,
+    _validation.ORACLE_TABLE_FQN_VALIDATOR,
 ]
 OracleTableNamesSpec: TypeAlias = list[OracleTableNameSpec]
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]

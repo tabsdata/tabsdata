@@ -17,7 +17,6 @@ the plugin (registry scans pay only for the DestDef metadata).
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -154,15 +153,16 @@ def _put_file_to_stage(cursor, file_path: Path, stage: str) -> str:
 
 
 def _create_table_from_inferred_schema(
-    cursor, stage: str, file_name: str, sql_table: str,
+    cursor,
+    stage: str,
+    file_name: str,
+    sql_table: str,
 ) -> None:
     """``CREATE TABLE IF NOT EXISTS`` for ``sql_table`` (already
     routed through :func:`_fq_for_sql`) using a schema inferred from
     the staged parquet file (mirrors the legacy template-with-
     infer_schema approach)."""
-    cursor.execute(
-        "CREATE FILE FORMAT IF NOT EXISTS tabsdata_parquet TYPE = PARQUET"
-    )
+    cursor.execute("CREATE FILE FORMAT IF NOT EXISTS tabsdata_parquet TYPE = PARQUET")
     cursor.execute(
         f"CREATE TABLE IF NOT EXISTS {sql_table} USING template ("
         f"SELECT array_agg(object_construct(*)) "
@@ -213,15 +213,27 @@ def write_all_tables(cfg: SnowflakeWriteCfg, files: list[Path]) -> None:
             with sf_conn.cursor() as cur:
                 cur.execute(f"USE WAREHOUSE {warehouse}")
         stage, is_temp = _stage(cfg.conn)
-        for i, (file_path, table) in enumerate(zip(
-            files, cfg.target_tables, strict=True,
-        ), 1):
+        for i, (file_path, table) in enumerate(
+            zip(
+                files,
+                cfg.target_tables,
+                strict=True,
+            ),
+            1,
+        ):
             logger.info(
                 "snowflake: writing table %d/%d: %r",
-                i, len(cfg.target_tables), table,
+                i,
+                len(cfg.target_tables),
+                table,
             )
             _write_one(
-                sf_conn, cfg, stage, is_temp, Path(file_path), table,
+                sf_conn,
+                cfg,
+                stage,
+                is_temp,
+                Path(file_path),
+                table,
             )
             logger.debug("snowflake: finished table %r", table)
     finally:

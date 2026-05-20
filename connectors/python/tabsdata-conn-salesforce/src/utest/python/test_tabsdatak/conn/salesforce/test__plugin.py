@@ -382,4 +382,4 @@ def test_resolve_src_cfg_applies_overrides():
 def test_resolve_src_cfg_warns_on_unknown_key_via_raw_dict(caplog):
     with caplog.at_level("WARNING", logger=plugin.logger.name):
         plugin._resolve_src_cfg({"bogus.key": "value"})
-    assert any("Unknown src_cfg key" in r.message for r in caplog.records)
+    assert any("Unknown src_cfg key" in r.getMessage() for r in caplog.records)

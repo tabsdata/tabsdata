@@ -81,7 +81,8 @@ VolumeSpec: TypeAlias = Union[
 ]
 QueriesSpec: TypeAlias = list[str]
 DatabricksTableNameSpec: TypeAlias = Annotated[
-    str, _validation.DATABRICKS_TABLE_FQN_VALIDATOR,
+    str,
+    _validation.DATABRICKS_TABLE_FQN_VALIDATOR,
 ]
 DatabricksTableNamesSpec: TypeAlias = list[DatabricksTableNameSpec]
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
@@ -89,9 +90,7 @@ SchemaEvolutionSpec: TypeAlias = Literal["update", "strict"]
 
 
 # --- DatabricksSrc.src_cfg keys -------------------------------------
-SrcCfgKey: TypeAlias = Literal[
-    "databricks.logging_level",
-]
+SrcCfgKey: TypeAlias = Literal["databricks.logging_level",]
 
 SrcCfgSpec: TypeAlias = Annotated[
     Mapping[SrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
@@ -99,9 +98,7 @@ SrcCfgSpec: TypeAlias = Annotated[
 
 
 # --- DatabricksDest.dest_cfg keys -----------------------------------
-DestCfgKey: TypeAlias = Literal[
-    "databricks.logging_level",
-]
+DestCfgKey: TypeAlias = Literal["databricks.logging_level",]
 
 DestCfgSpec: TypeAlias = Annotated[
     Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR

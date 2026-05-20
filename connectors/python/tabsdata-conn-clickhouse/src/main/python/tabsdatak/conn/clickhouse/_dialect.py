@@ -8,21 +8,28 @@ from pyarrow import schema
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.clickhouse._clickhouse_config import ClickHouseConfig
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.clickhouse._cloud_storage import (
     ClickHouseCloudStorage,
 )
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.clickhouse._dialect_base import Dialect
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.clickhouse._errors import SchemaError
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.clickhouse._modes import LoadMode
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.clickhouse._results import BulkLoadResult
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.clickhouse._statuses import BulkLoadStatus
 from tabsdatak.conn.clickhouse._validation import CLICKHOUSE_FQN_DEF
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._validation import fqn, unfqn
 
@@ -52,9 +59,7 @@ _ARROW_TO_CLICKHOUSE: dict = {
     pa.date32(): "Date32",
 }
 
-_TIMESTAMP_PRECISION: dict[str, int] = {
-    "s": 0, "ms": 3, "us": 6, "ns": 9
-}
+_TIMESTAMP_PRECISION: dict[str, int] = {"s": 0, "ms": 3, "us": 6, "ns": 9}
 
 # Container types are not wrapped in Nullable() in ClickHouse.
 _CONTAINER_TYPE_CHECKS = (
@@ -84,10 +89,7 @@ def _arrow_type_to_clickhouse(arrow_type: pa.DataType) -> str:
             return f"DateTime64({precision}, '{arrow_type.tz}')"
         return f"DateTime64({precision})"
 
-    if (
-        pa.types.is_list(arrow_type)
-        or pa.types.is_large_list(arrow_type)
-    ):
+    if pa.types.is_list(arrow_type) or pa.types.is_large_list(arrow_type):
         inner = _arrow_type_to_clickhouse(arrow_type.value_type)
         return f"Array({inner})"
 
@@ -98,14 +100,11 @@ def _arrow_type_to_clickhouse(arrow_type: pa.DataType) -> str:
 
     if pa.types.is_struct(arrow_type):
         fields = ", ".join(
-            f"{f.name} {_arrow_type_to_clickhouse(f.type)}"
-            for f in arrow_type
+            f"{f.name} {_arrow_type_to_clickhouse(f.type)}" for f in arrow_type
         )
         return f"Tuple({fields})"
 
-    raise TypeError(
-        f"Unsupported PyArrow type for ClickHouse: {arrow_type}"
-    )
+    raise TypeError(f"Unsupported PyArrow type for ClickHouse: {arrow_type}")
 
 
 def schema_to_clickhouse_columns(
@@ -126,9 +125,7 @@ def schema_to_clickhouse_columns(
     columns = []
     for field in arrow_schema:
         ch_type = _arrow_type_to_clickhouse(field.type)
-        is_container = any(
-            check(field.type) for check in _CONTAINER_TYPE_CHECKS
-        )
+        is_container = any(check(field.type) for check in _CONTAINER_TYPE_CHECKS)
         if is_container:
             nullable = False
         elif column_nulls is not None and field.name in column_nulls:
@@ -161,9 +158,7 @@ _CLICKHOUSE_SIMPLE_TYPES: dict[str, pa.DataType] = {
     "DateTime": pa.timestamp("s"),
 }
 
-_PRECISION_TO_UNIT: dict[int, str] = {
-    0: "s", 3: "ms", 6: "us", 9: "ns"
-}
+_PRECISION_TO_UNIT: dict[int, str] = {0: "s", 3: "ms", 6: "us", 9: "ns"}
 
 
 def _clickhouse_type_to_arrow(ch_type: str) -> pa.DataType:
@@ -175,9 +170,7 @@ def _clickhouse_type_to_arrow(ch_type: str) -> pa.DataType:
 
     for wrapper in ("Nullable(", "LowCardinality("):
         if ch_type.startswith(wrapper) and ch_type.endswith(")"):
-            return _clickhouse_type_to_arrow(
-                ch_type[len(wrapper):-1]
-            )
+            return _clickhouse_type_to_arrow(ch_type[len(wrapper) : -1])
 
     if ch_type in _CLICKHOUSE_SIMPLE_TYPES:
         return _CLICKHOUSE_SIMPLE_TYPES[ch_type]
@@ -223,9 +216,7 @@ def _clickhouse_type_to_arrow(ch_type: str) -> pa.DataType:
                 depth -= 1
             elif c == "," and depth == 0:
                 key_type = _clickhouse_type_to_arrow(inner[:i].strip())
-                val_type = _clickhouse_type_to_arrow(
-                    inner[i + 1:].strip()
-                )
+                val_type = _clickhouse_type_to_arrow(inner[i + 1 :].strip())
                 return pa.map_(key_type, val_type)
         raise TypeError(f"Could not parse Map type: {ch_type!r}")
 
@@ -236,9 +227,7 @@ def _clickhouse_type_to_arrow(ch_type: str) -> pa.DataType:
 # ClickHouse client) ------------------------------------------------
 
 
-def clickhouse_fqn_parts(
-    table_name: str, default_db: str
-) -> tuple[str, str]:
+def clickhouse_fqn_parts(table_name: str, default_db: str) -> tuple[str, str]:
     """Return ``(database, table)`` for a user-supplied table name.
 
     Input may be 1-part (``"users"``) or 2-part
@@ -338,9 +327,7 @@ class ClickHouseDialect(Dialect):
         )
         return result.result_rows[0][0] > 0
 
-    def get_table_schema(
-        self, load_mode: LoadMode, table_name: str
-    ) -> schema:
+    def get_table_schema(self, load_mode: LoadMode, table_name: str) -> schema:
         """Return the table schema as a PyArrow schema."""
         db, tbl = self._fqn_parts(table_name)
         result = self._client.query(
@@ -362,12 +349,8 @@ class ClickHouseDialect(Dialect):
         arrow_schema: schema,
         column_nulls: dict[str, bool | None] | None = None,
     ) -> None:
-        col_defs = schema_to_clickhouse_columns(
-            arrow_schema, column_nulls
-        )
-        columns = ",\n    ".join(
-            f"`{name}` {typ}" for name, typ in col_defs
-        )
+        col_defs = schema_to_clickhouse_columns(arrow_schema, column_nulls)
+        columns = ",\n    ".join(f"`{name}` {typ}" for name, typ in col_defs)
         fq = self._fqn(table_name)
         ddl = (
             f"CREATE TABLE {fq} (\n"
@@ -480,19 +463,13 @@ class ClickHouseDialect(Dialect):
                         default=col.default,
                     )
             desired_columns.append(col)
-        desired = type(desired)(
-            table_name=desired.table_name, columns=desired_columns
-        )
+        desired = type(desired)(table_name=desired.table_name, columns=desired_columns)
 
-        delta = compute_delta(
-            current, desired, CLICKHOUSE_TYPE_WIDENING_MAP
-        )
+        delta = compute_delta(current, desired, CLICKHOUSE_TYPE_WIDENING_MAP)
         validate_delta(delta, strict=True)
         return delta
 
-    def apply_schema_delta(
-        self, load_mode: LoadMode, table_name: str, delta
-    ) -> None:
+    def apply_schema_delta(self, load_mode: LoadMode, table_name: str, delta) -> None:
         """Apply a SchemaDelta by rendering and executing ClickHouse
         ALTER statements."""
         # noinspection PyProtectedMember
@@ -502,16 +479,12 @@ class ClickHouseDialect(Dialect):
 
         stmts = render_clickhouse_sql(delta)
         for stmt in stmts:
-            logger.info(
-                "Schema evolution on '%s': %s", table_name, stmt
-            )
+            logger.info("Schema evolution on '%s': %s", table_name, stmt)
             self._client.command(stmt)
 
     # --- Data operations ---------------------------------------------
 
-    def truncate_table(
-        self, load_mode: LoadMode, table_name: str
-    ) -> None:
+    def truncate_table(self, load_mode: LoadMode, table_name: str) -> None:
         fq = self._fqn(table_name)
         self._client.command(f"TRUNCATE TABLE {fq}")
         logger.debug("Truncated table: %s", fq)
@@ -531,22 +504,16 @@ class ClickHouseDialect(Dialect):
         """
         fq = self._fqn(table_name)
         for ref in staged_file_refs:
-            table_fn = self._cloud_storage.clickhouse_table_function(
-                ref
-            )
+            table_fn = self._cloud_storage.clickhouse_table_function(ref)
             sql = f"INSERT INTO {fq} SELECT * FROM {table_fn}"
             logger.debug("Executing INSERT INTO")
             self._client.command(sql)
-            logger.debug(
-                "Inserted data into %s from %s", fq, ref
-            )
+            logger.debug("Inserted data into %s from %s", fq, ref)
         return BulkLoadResult(status=BulkLoadStatus.COMPLETED)
 
     # --- Internal helpers --------------------------------------------
 
-    def _get_raw_columns(
-        self, table_name: str
-    ) -> list[tuple[str, str]]:
+    def _get_raw_columns(self, table_name: str) -> list[tuple[str, str]]:
         """Return ``[(name, type_string), ...]`` from ``system.columns``."""
         db, tbl = self._fqn_parts(table_name)
         result = self._client.query(

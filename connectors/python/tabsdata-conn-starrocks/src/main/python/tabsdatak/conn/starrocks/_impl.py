@@ -48,10 +48,7 @@ def build_starrocks_engine(
 
     user = credentials.user.value()
     password = credentials.password.value()
-    url = (
-        f"mysql+mysqlconnector://{user}:{password}"
-        f"@{host}:{port}/{database}"
-    )
+    url = f"mysql+mysqlconnector://{user}:{password}@{host}:{port}/{database}"
     return create_engine(url, connect_args=dict(connect_args or {}))
 
 
@@ -96,23 +93,30 @@ def build_files_function(staging: CloudLocation, staged_uris: list[str]) -> str:
     :class:`StarRocksConn`).
     """
     if isinstance(staging, S3Location):
-        bucket = _resolve(staging.bucket)
         region = _resolve(staging.region)
         creds = staging.credentials
-        return "FILES(" + _kv({
-            "path": _path_expr(staged_uris),
-            "format": "parquet",
-            "aws.s3.access_key": creds.access_key_id.value(),
-            "aws.s3.secret_key": creds.secret_access_key.value(),
-            "aws.s3.region": region,
-        }) + ")"
+        return (
+            "FILES("
+            + _kv({
+                "path": _path_expr(staged_uris),
+                "format": "parquet",
+                "aws.s3.access_key": creds.access_key_id.value(),
+                "aws.s3.secret_key": creds.secret_access_key.value(),
+                "aws.s3.region": region,
+            })
+            + ")"
+        )
     if isinstance(staging, AzBlobLocation):
         creds = staging.credentials
-        return "FILES(" + _kv({
-            "path": _path_expr(staged_uris),
-            "format": "parquet",
-            "azure.blob.shared_key": creds.account_key.value(),
-        }) + ")"
+        return (
+            "FILES("
+            + _kv({
+                "path": _path_expr(staged_uris),
+                "format": "parquet",
+                "azure.blob.shared_key": creds.account_key.value(),
+            })
+            + ")"
+        )
     if isinstance(staging, GCSLocation):
         # StarRocks reads from GCS via the S3-compatible HMAC layer; the
         # ``s3a://`` paths are constructed by the caller before this
@@ -322,7 +326,9 @@ def execute(
             f"got {cfg.if_table_exists!r}",
         )
 
-    logger.debug("starrocks: establishing SQLAlchemy engine to %s:%s", cfg.host, cfg.port)
+    logger.debug(
+        "starrocks: establishing SQLAlchemy engine to %s:%s", cfg.host, cfg.port
+    )
     engine = build_starrocks_engine(
         host=cfg.host,
         port=cfg.port,
@@ -333,10 +339,14 @@ def execute(
     total = len(cfg.target_tables)
     try:
         for i, (table_name, parquet) in enumerate(
-            zip(cfg.target_tables, tables), 1,
+            zip(cfg.target_tables, tables),
+            1,
         ):
             logger.info(
-                "starrocks: writing table %d/%d: %r", i, total, table_name,
+                "starrocks: writing table %d/%d: %r",
+                i,
+                total,
+                table_name,
             )
             logger.info("starrocks: staging parquet for %r", table_name)
             staged = upload_parquet(
@@ -354,7 +364,8 @@ def execute(
                 conn.execute(text(f"INSERT INTO {qualified} SELECT * FROM {files_fn}"))
             logger.info(
                 "starrocks: loaded %s from %d staged file(s)",
-                qualified, 1,
+                qualified,
+                1,
             )
     finally:
         engine.dispose()

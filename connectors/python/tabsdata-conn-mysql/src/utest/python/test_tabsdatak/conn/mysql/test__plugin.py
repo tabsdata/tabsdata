@@ -232,7 +232,7 @@ def test_resolve_src_cfg_warns_on_unknown_key_via_raw_dict(caplog):
     # Bypass pydantic by passing a plain dict directly to the resolver.
     with caplog.at_level("WARNING", logger=plugin.logger.name):
         cfg = plugin._resolve_src_cfg({"bogus.key": "value"})
-    assert any("Unknown src_cfg key" in r.message for r in caplog.records)
+    assert any("Unknown src_cfg key" in r.getMessage() for r in caplog.records)
     assert cfg.read_engine is None  # defaults still apply
 
 
@@ -260,4 +260,4 @@ def test_resolve_dest_cfg_applies_overrides():
 def test_resolve_dest_cfg_warns_on_unknown_key_via_raw_dict(caplog):
     with caplog.at_level("WARNING", logger=plugin.logger.name):
         plugin._resolve_dest_cfg({"bogus.key": "value"})
-    assert any("Unknown dest_cfg key" in r.message for r in caplog.records)
+    assert any("Unknown dest_cfg key" in r.getMessage() for r in caplog.records)

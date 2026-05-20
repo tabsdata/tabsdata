@@ -148,9 +148,9 @@ pub fn load_profile(topology: &dyn Topology) -> Result<Profile> {
         };
         discoveries.push(DiscoveryFile {
             parent: string,
-            parsed: parsed,
+            parsed,
             file: file_name.to_owned(),
-            content: content,
+            content,
         });
     }
 

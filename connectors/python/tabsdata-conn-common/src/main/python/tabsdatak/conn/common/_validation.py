@@ -92,9 +92,7 @@ class FqnDef:
         if self.outer_only and self.quote is None:
             raise ValueError("FqnDef.outer_only requires FqnDef.quote to be set")
         if self.close_quote is not None and self.quote is None:
-            raise ValueError(
-                "FqnDef.close_quote requires FqnDef.quote to be set"
-            )
+            raise ValueError("FqnDef.close_quote requires FqnDef.quote to be set")
         return self
 
 
@@ -146,8 +144,7 @@ def fqn(parts: list[str], spec: FqnDef) -> str:
         if c in joined:
             if esc is None:
                 raise ValueError(
-                    f"fqn: FQN contains quote {c!r} with no escape defined: "
-                    f"{joined!r}"
+                    f"fqn: FQN contains quote {c!r} with no escape defined: {joined!r}"
                 )
             joined = joined.replace(c, esc + c)
         return f"{q}{joined}{c}"
@@ -166,11 +163,7 @@ def fqn(parts: list[str], spec: FqnDef) -> str:
     for i, p in enumerate(parts):
         # No-op pass-through for parts that are already wrapped in
         # ``q``..``c`` (caller's assertion; we don't inspect the body).
-        if (
-            len(p) >= len(q) + len(c)
-            and p.startswith(q)
-            and p.endswith(c)
-        ):
+        if len(p) >= len(q) + len(c) and p.startswith(q) and p.endswith(c):
             quoted.append(p)
             continue
         body = p
@@ -223,8 +216,7 @@ def fqn_complete(
     """
     if total_parts < 1:
         raise ValueError(
-            f"fqn_complete: total_parts must be a positive integer: "
-            f"{total_parts!r}"
+            f"fqn_complete: total_parts must be a positive integer: {total_parts!r}"
         )
     if len(parts) > total_parts:
         raise ValueError(
@@ -326,8 +318,7 @@ def unfqn(
             or not value.endswith(c)
         ):
             raise ValueError(
-                f"unfqn: outer_only FQN must be wrapped in {q!r}..{c!r}: "
-                f"{value!r}"
+                f"unfqn: outer_only FQN must be wrapped in {q!r}..{c!r}: {value!r}"
             )
         inner = value[len(q) : -len(c)]
         if esc is not None:
@@ -410,8 +401,7 @@ def _split_quoted(
             return parts
         if not value.startswith(sep, i):
             raise ValueError(
-                f"unfqn: expected separator {sep!r} at position {i}: "
-                f"{value!r}"
+                f"unfqn: expected separator {sep!r} at position {i}: {value!r}"
             )
         i += len(sep)
         if i >= n:
@@ -452,16 +442,14 @@ def name_validate(fqn_def: FqnDef, max_parts: int) -> AfterValidator:
     """
     if max_parts < 1:
         raise ValueError(
-            f"name_validate: max_parts must be a positive integer: "
-            f"{max_parts!r}"
+            f"name_validate: max_parts must be a positive integer: {max_parts!r}"
         )
 
     def _validate(value: str) -> str:
         parts = unfqn(value, fqn_def)
         if len(parts) > max_parts:
             raise ValueError(
-                f"name has {len(parts)} parts, exceeds max_parts="
-                f"{max_parts}: {value!r}"
+                f"name has {len(parts)} parts, exceeds max_parts={max_parts}: {value!r}"
             )
         return value
 

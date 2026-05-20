@@ -52,6 +52,7 @@ def _resolve_src_cfg(src_cfg: SrcCfgSpec | None) -> _ReaderCfg:
         logging_level=int(_get(_KEY_SRC_LOGGING_LEVEL)),
     )
 
+
 # All simple-salesforce / polars / pandas / ijson imports are made
 # inside the plugin method bodies (or in ``_reader.py``) so the
 # conn-salesforce package stays cheap to import for registry scans

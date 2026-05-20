@@ -54,7 +54,8 @@ UriSpec: TypeAlias = Union[
 ]
 QueriesSpec: TypeAlias = list[str]
 MSSQLTableNameSpec: TypeAlias = Annotated[
-    str, _validation.MSSQL_TABLE_FQN_VALIDATOR,
+    str,
+    _validation.MSSQL_TABLE_FQN_VALIDATOR,
 ]
 MSSQLTableNamesSpec: TypeAlias = list[MSSQLTableNameSpec]
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]

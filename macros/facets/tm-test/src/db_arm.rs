@@ -206,4 +206,3 @@ fn serial_attr_for(backend: Backend) -> TokenStream2 {
     let lock_name = format_ident!("{}_{}", backend.name(), bucket);
     quote! { #[::td_test::file_serial(#lock_name, crate = ::td_test::serial_test)] }
 }
-

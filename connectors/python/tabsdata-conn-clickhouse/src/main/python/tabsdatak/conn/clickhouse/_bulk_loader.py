@@ -8,18 +8,23 @@ import pyarrow.parquet as pq
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.clickhouse._cloud_storage import CloudStorage
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.clickhouse._dialect_base import Dialect
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.clickhouse._errors import BulkLoadError, SchemaError
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.clickhouse._modes import (
     LoadMode,
     SchemaEvolutionMode,
     WriteMode,
 )
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.clickhouse._results import BulkLoadResult
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.clickhouse._statuses import BulkLoadStatus
 
@@ -74,9 +79,7 @@ class CloudStagedBulkLoader:
 
     # --- Phase 1: Validate & Prepare ---------------------------------
 
-    def phase_validate_and_prepare(
-        self, tables: dict[str, list[Path]]
-    ) -> None:
+    def phase_validate_and_prepare(self, tables: dict[str, list[Path]]) -> None:
         """Phase 1 -- Validate all tables and prepare them
         (create/evolve/truncate). Fails fast before any data movement."""
         logger.info("Phase 1: Validate & Prepare")
@@ -88,9 +91,7 @@ class CloudStagedBulkLoader:
             logger.debug(f"Truncating tables: {table_names}")
             self.dialect.truncate_tables(self.load_mode, table_names)
 
-        logger.info(
-            "Phase 1 complete: all tables validated and prepared."
-        )
+        logger.info("Phase 1 complete: all tables validated and prepared.")
 
     def validate_and_prepare_table(
         self, table_name: str, parquet_paths: list[Path]
@@ -98,9 +99,7 @@ class CloudStagedBulkLoader:
         """Validate and prepare a single table."""
         for parquet_path in parquet_paths:
             if not parquet_path.exists():
-                raise FileNotFoundError(
-                    f"Parquet file not found: {parquet_path}"
-                )
+                raise FileNotFoundError(f"Parquet file not found: {parquet_path}")
 
         # Read schema from the first file (all files for the same table
         # share the same schema).
@@ -122,9 +121,7 @@ class CloudStagedBulkLoader:
                 self.load_mode, table_name, arrow_schema, column_nulls
             )
         else:
-            self.ensure_schema_compatible(
-                table_name, arrow_schema, column_nulls
-            )
+            self.ensure_schema_compatible(table_name, arrow_schema, column_nulls)
 
     def ensure_schema_compatible(
         self,
@@ -134,9 +131,7 @@ class CloudStagedBulkLoader:
     ) -> None:
         """Check schema compatibility and apply evolution if configured."""
         try:
-            self.dialect.verify_schema(
-                self.load_mode, table_name, arrow_schema
-            )
+            self.dialect.verify_schema(self.load_mode, table_name, arrow_schema)
         except SchemaError:
             if self.schema_evolution == SchemaEvolutionMode.NONE:
                 raise
@@ -147,9 +142,7 @@ class CloudStagedBulkLoader:
                         f"Schema mismatch for '{table_name}' and dialect"
                         f" does not support native schema evolution."
                     )
-                old_schema = self.dialect.get_table_schema(
-                    self.load_mode, table_name
-                )
+                old_schema = self.dialect.get_table_schema(self.load_mode, table_name)
                 self.dialect.apply_native_schema_evolution(
                     self.load_mode, table_name, old_schema, arrow_schema
                 )
@@ -171,9 +164,7 @@ class CloudStagedBulkLoader:
                     arrow_schema,
                     column_nulls,
                 )
-                self.dialect.apply_schema_delta(
-                    self.load_mode, table_name, delta
-                )
+                self.dialect.apply_schema_delta(self.load_mode, table_name, delta)
                 logger.info(
                     "clickhouse: applied iceberg schema evolution to table %r",
                     table_name,
@@ -215,9 +206,7 @@ class CloudStagedBulkLoader:
                     if stats is None or not stats.has_null_count:
                         stats_missing.add(name)
                     else:
-                        null_counts[name] = (
-                            null_counts.get(name, 0) + stats.null_count
-                        )
+                        null_counts[name] = null_counts.get(name, 0) + stats.null_count
 
         result: dict[str, bool | None] = {}
         for name in all_columns:
@@ -229,29 +218,21 @@ class CloudStagedBulkLoader:
 
     # --- Phase 2: Upload to Storage ----------------------------------
 
-    def phase_upload(
-        self, tables: dict[str, list[Path]]
-    ) -> dict[str, list[str]]:
+    def phase_upload(self, tables: dict[str, list[Path]]) -> dict[str, list[str]]:
         """Phase 2 -- Upload all Parquet files to cloud storage."""
         logger.info("Phase 2: Upload to Storage")
         staged_files: dict[str, list[str]] = {}
         total_files = 0
         for table_name, local_paths in tables.items():
-            staged_uris = self.cloud_storage.upload(
-                self.upload_id, local_paths
-            )
+            staged_uris = self.cloud_storage.upload(self.upload_id, local_paths)
             staged_files[table_name] = staged_uris
             total_files += len(staged_uris)
-        logger.info(
-            "Phase 2 complete: all files staged (%d).", total_files
-        )
+        logger.info("Phase 2 complete: all files staged (%d).", total_files)
         return staged_files
 
     # --- Phase 3: Bulk Load ------------------------------------------
 
-    def phase_bulk_load(
-        self, staged_files: dict[str, list[str]]
-    ) -> None:
+    def phase_bulk_load(self, staged_files: dict[str, list[str]]) -> None:
         """Phase 3 -- Bulk load all staged files into their target
         tables. Uses dialect batch methods and handles transactions and
         async polling."""
@@ -287,24 +268,18 @@ class CloudStagedBulkLoader:
         deadline = time.monotonic() + self.poll_timeout
         while True:
             pending_indices = [
-                i
-                for i, r in enumerate(results)
-                if r.status == BulkLoadStatus.PENDING
+                i for i, r in enumerate(results) if r.status == BulkLoadStatus.PENDING
             ]
             if not pending_indices:
                 break
-            pending_handles = [
-                results[i].job_handle for i in pending_indices
-            ]
+            pending_handles = [results[i].job_handle for i in pending_indices]
             if time.monotonic() >= deadline:
                 raise BulkLoadError(
                     f"Polling timed out after {self.poll_timeout}s. "
                     f"Still pending: {pending_handles}"
                 )
             time.sleep(self.poll_interval)
-            polled = self.dialect.poll_bulk_load_all(
-                self.load_mode, pending_handles
-            )
+            polled = self.dialect.poll_bulk_load_all(self.load_mode, pending_handles)
             for idx, polled_result in zip(pending_indices, polled):
                 results[idx] = polled_result
                 if polled_result.status == BulkLoadStatus.FAILED:
@@ -320,8 +295,7 @@ class CloudStagedBulkLoader:
         for (table_name, _), result in zip(items, results):
             if result.status == BulkLoadStatus.FAILED:
                 raise BulkLoadError(
-                    f"Bulk load failed for table '{table_name}': "
-                    f"{result.error}"
+                    f"Bulk load failed for table '{table_name}': {result.error}"
                 )
             logger.info(
                 "Bulk load complete for '%s': %s rows loaded",
@@ -335,9 +309,7 @@ class CloudStagedBulkLoader:
         """Phase 4 -- Clean up staged files if the dialect does not
         auto-cleanup."""
         if self.dialect.supports_auto_cleanup():
-            logger.info(
-                "Phase 4: Skipped (dialect supports auto-cleanup)."
-            )
+            logger.info("Phase 4: Skipped (dialect supports auto-cleanup).")
             return
 
         logger.info("Phase 4: Cleanup")
@@ -345,6 +317,4 @@ class CloudStagedBulkLoader:
             self.cloud_storage.delete(self.upload_id)
             logger.info("Phase 4 complete.")
         except Exception:
-            logger.error(
-                "Cleanup failed (non-fatal, will be retried on next run)"
-            )
+            logger.error("Cleanup failed (non-fatal, will be retried on next run)")

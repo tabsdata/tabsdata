@@ -28,15 +28,9 @@ def _build_clickhouse_config(conn: ClickHouseConn):
         ClickHouseConfig,
     )
 
-    host = (
-        conn.host.value()
-        if hasattr(conn.host, "value")
-        else conn.host
-    )
+    host = conn.host.value() if hasattr(conn.host, "value") else conn.host
     database = (
-        conn.database.value()
-        if hasattr(conn.database, "value")
-        else conn.database
+        conn.database.value() if hasattr(conn.database, "value") else conn.database
     )
     user = conn.credentials.user.value()
     password = conn.credentials.password.value()
@@ -74,9 +68,7 @@ def build_cloud_storage(staging: CloudLocation):
             region=staging.region.value(),
             base_path=staging.base_path or "",
             access_key_id=staging.credentials.access_key_id.value(),
-            secret_access_key=(
-                staging.credentials.secret_access_key.value()
-            ),
+            secret_access_key=(staging.credentials.secret_access_key.value()),
         )
         return S3ClickHouseStorage(cfg)
 
@@ -100,8 +92,7 @@ def build_cloud_storage(staging: CloudLocation):
         return GCSClickHouseStorage(cfg)
 
     raise TypeError(
-        f"Unsupported ClickHouse staging location: "
-        f"{type(staging).__name__}"
+        f"Unsupported ClickHouse staging location: {type(staging).__name__}"
     )
 
 
@@ -155,9 +146,7 @@ def write_via_bulk_loader(
     dialect = ClickHouseDialect(ch_config, cloud_storage)
 
     write_mode = (
-        WriteMode.REPLACE
-        if cfg.if_table_exists == "replace"
-        else WriteMode.APPEND
+        WriteMode.REPLACE if cfg.if_table_exists == "replace" else WriteMode.APPEND
     )
     schema_evo = (
         SchemaEvolutionMode.ICEBERG

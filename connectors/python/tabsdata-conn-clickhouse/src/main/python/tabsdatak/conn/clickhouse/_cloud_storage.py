@@ -18,11 +18,7 @@ def _make_key(base_path: str, upload_id: str, filename: str) -> str:
     """Build a slash-joined object key with no leading slash and no
     empty path components (so an empty ``base_path`` simply collapses
     to ``"<upload_id>/<filename>"``)."""
-    parts = [
-        p
-        for p in (base_path.strip("/"), upload_id, filename)
-        if p
-    ]
+    parts = [p for p in (base_path.strip("/"), upload_id, filename) if p]
     return "/".join(parts)
 
 
@@ -85,12 +81,8 @@ class S3Storage(CloudStorage):
         s3 = self._client()
         uris = []
         for path in local_paths:
-            key = _make_key(
-                self._config.base_path, upload_id, path.name
-            )
-            logger.debug(
-                "Uploading %s to s3://%s/%s", path, self._config.bucket, key
-            )
+            key = _make_key(self._config.base_path, upload_id, path.name)
+            logger.debug("Uploading %s to s3://%s/%s", path, self._config.bucket, key)
             s3.upload_file(str(path), self._config.bucket, key)
             uri = (
                 f"https://{self._config.bucket}"
@@ -104,21 +96,17 @@ class S3Storage(CloudStorage):
         prefix = self._config.base_path.rstrip("/") + "/"
         to_delete = []
         paginator = s3.get_paginator("list_objects_v2")
-        for page in paginator.paginate(
-            Bucket=self._config.bucket, Prefix=prefix
-        ):
+        for page in paginator.paginate(Bucket=self._config.bucket, Prefix=prefix):
             for obj in page.get("Contents", []):
-                relative = obj["Key"][len(prefix):]
+                relative = obj["Key"][len(prefix) :]
                 file_upload_id = relative.split("/")[0]
                 if file_upload_id <= up_to_id:
                     to_delete.append({"Key": obj["Key"]})
 
         # S3 delete_objects accepts at most 1000 keys per call.
         for i in range(0, len(to_delete), 1000):
-            batch = to_delete[i:i + 1000]
-            s3.delete_objects(
-                Bucket=self._config.bucket, Delete={"Objects": batch}
-            )
+            batch = to_delete[i : i + 1000]
+            s3.delete_objects(Bucket=self._config.bucket, Delete={"Objects": batch})
         logger.debug(
             "Deleted %d staged S3 object(s) with upload_id <= %s",
             len(to_delete),
@@ -165,9 +153,7 @@ class GCSStorage(CloudStorage):
         bucket = self._client().bucket(self._config.bucket)
         uris = []
         for path in local_paths:
-            key = _make_key(
-                self._config.base_path, upload_id, path.name
-            )
+            key = _make_key(self._config.base_path, upload_id, path.name)
             logger.debug(
                 "Uploading %s to gs://%s/%s",
                 path,
@@ -195,7 +181,7 @@ class GCSStorage(CloudStorage):
         file_blobs = []
         deleted_upload_ids: set[str] = set()
         for blob in bucket.list_blobs(prefix=prefix):
-            relative = blob.name[len(prefix):]
+            relative = blob.name[len(prefix) :]
             file_upload_id = relative.split("/")[0]
             if file_upload_id <= up_to_id:
                 file_blobs.append(blob)
@@ -216,9 +202,7 @@ class GCSStorage(CloudStorage):
             up_to_id,
         )
 
-    def _delete_hns_folders(
-        self, prefix: str, upload_ids: set[str]
-    ) -> int:
+    def _delete_hns_folders(self, prefix: str, upload_ids: set[str]) -> int:
         try:
             from google.cloud import storage_control_v2
         except ImportError:
@@ -235,9 +219,7 @@ class GCSStorage(CloudStorage):
             )
             try:
                 sc_client.delete_folder(
-                    request=storage_control_v2.DeleteFolderRequest(
-                        name=folder_resource
-                    )
+                    request=storage_control_v2.DeleteFolderRequest(name=folder_resource)
                 )
                 count += 1
             except Exception:  # noqa: BLE001 -- flat bucket
@@ -278,19 +260,13 @@ class AzureStorage(CloudStorage):
                 "azure-storage-blob is required for Azure cloud storage."
                 " Install it with: pip install azure-storage-blob"
             ) from e
-        return BlobServiceClient.from_connection_string(
-            self._connection_string()
-        )
+        return BlobServiceClient.from_connection_string(self._connection_string())
 
     def upload(self, upload_id: str, local_paths: list[Path]) -> list[str]:
-        container = self._service().get_container_client(
-            self._config.container
-        )
+        container = self._service().get_container_client(self._config.container)
         blob_paths = []
         for path in local_paths:
-            blob_name = _make_key(
-                self._config.base_path, upload_id, path.name
-            )
+            blob_name = _make_key(self._config.base_path, upload_id, path.name)
             logger.debug(
                 "Uploading %s to azure://%s/%s",
                 path,
@@ -298,20 +274,16 @@ class AzureStorage(CloudStorage):
                 blob_name,
             )
             with open(path, "rb") as data:
-                container.upload_blob(
-                    name=blob_name, data=data, overwrite=True
-                )
+                container.upload_blob(name=blob_name, data=data, overwrite=True)
             blob_paths.append(blob_name)
         return blob_paths
 
     def delete(self, up_to_id: str) -> None:
-        container = self._service().get_container_client(
-            self._config.container
-        )
+        container = self._service().get_container_client(self._config.container)
         prefix = self._config.base_path.rstrip("/") + "/"
         to_delete = []
         for blob in container.list_blobs(name_starts_with=prefix):
-            relative = blob.name[len(prefix):]
+            relative = blob.name[len(prefix) :]
             file_upload_id = relative.split("/")[0]
             if file_upload_id <= up_to_id:
                 to_delete.append(blob.name)

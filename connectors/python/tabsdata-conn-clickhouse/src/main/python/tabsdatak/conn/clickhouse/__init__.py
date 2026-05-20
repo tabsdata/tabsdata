@@ -33,6 +33,7 @@ from tabsdatak.api import (
 # noinspection PyProtectedMember
 from tabsdatak.conn.clickhouse import _validation
 from tabsdatak.conn.clickhouse.error import ClickHouseErrorCode
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation
 from tabsdatak.conn.common.types import (
@@ -96,7 +97,8 @@ DatabaseSpec: TypeAlias = Union[
     Annotated[Env, _api.EnvValueConstraints(pattern=_IDENTIFIER_PATTERN)],
 ]
 ClickHouseTableNameSpec: TypeAlias = Annotated[
-    str, _validation.CLICKHOUSE_TABLE_FQN_VALIDATOR,
+    str,
+    _validation.CLICKHOUSE_TABLE_FQN_VALIDATOR,
 ]
 ClickHouseTableNamesSpec: TypeAlias = list[ClickHouseTableNameSpec]
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
@@ -110,9 +112,7 @@ SchemaEvolutionSpec: TypeAlias = Literal["strict", "iceberg"]
 # of keys at validation time, so unknown keys are rejected at
 # construction; ``CONN_CFG_VALIDATOR`` reuses the conn_cfg basic-value
 # checks (str/int/float/bool/None, plus list/dict compositions).
-DestCfgKey: TypeAlias = Literal[
-    "clickhouse.logging_level",
-]
+DestCfgKey: TypeAlias = Literal["clickhouse.logging_level",]
 
 DestCfgSpec: TypeAlias = Annotated[
     Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR

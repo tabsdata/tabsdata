@@ -139,7 +139,7 @@ def test_liveness_beat_failure_inside_loop_does_not_kill_thread(
             assert recovered.wait(timeout=2.0)
 
     assert calls["n"] >= 3  # at least one recovered beat after failure
-    assert any("liveness beat failed" in r.message for r in caplog.records)
+    assert any("liveness beat failed" in r.getMessage() for r in caplog.records)
 
 
 # --- max_failed_beats: env var & escalation ---
@@ -159,14 +159,14 @@ def test_max_failed_beats_non_integer_falls_back(monkeypatch, caplog):
     monkeypatch.setenv("TD_LIVENESS_MAX_FAILED_BEATS", "not-an-int")
     with caplog.at_level("WARNING", logger="tabsdatak._tdrunner.function._lib.liveness"):
         assert _max_failed_beats_from_env() == 5
-    assert any("not an integer" in r.message for r in caplog.records)
+    assert any("not an integer" in r.getMessage() for r in caplog.records)
 
 
 def test_max_failed_beats_below_one_falls_back(monkeypatch, caplog):
     monkeypatch.setenv("TD_LIVENESS_MAX_FAILED_BEATS", "0")
     with caplog.at_level("WARNING", logger="tabsdatak._tdrunner.function._lib.liveness"):
         assert _max_failed_beats_from_env() == 5
-    assert any("below 1" in r.message for r in caplog.records)
+    assert any("below 1" in r.getMessage() for r in caplog.records)
 
 
 def test_liveness_constructor_overrides_env(monkeypatch, tmp_path):
@@ -197,7 +197,7 @@ def test_liveness_threshold_raises_from_exit(tmp_path, monkeypatch, caplog):
         with pytest.raises(LivenessFailureError, match="3 consecutive times"):
             with Liveness(p, interval=0.005, max_failed_beats=3):
                 assert threshold_hit.wait(timeout=2.0)
-    assert any("marking stale" in r.message for r in caplog.records)
+    assert any("marking stale" in r.getMessage() for r in caplog.records)
 
 
 def test_liveness_recovery_resets_counter(tmp_path, monkeypatch):
@@ -259,4 +259,4 @@ def test_liveness_exit_suppresses_liveness_failure_when_body_raised(
     # The body's RuntimeError propagated, NOT LivenessFailureError.
     assert not isinstance(exc_info.value, LivenessFailureError)
     # The liveness failure was logged at ERROR so it's still visible.
-    assert any("liveness failure suppressed" in r.message for r in caplog.records)
+    assert any("liveness failure suppressed" in r.getMessage() for r in caplog.records)

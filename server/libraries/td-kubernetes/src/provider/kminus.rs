@@ -378,18 +378,7 @@ impl Provider for KminusProvider {
 
     async fn create_database(&self) -> Result {
         let repository = self.folder.join(FOLDER_REPOSITORY);
-        let database_path = repository.join(FOLDER_DATABASE).join(DATABASE_FILE);
         let storage_path = repository.join(FOLDER_STORAGE);
-        let database_url = match url::Url::from_file_path(&database_path) {
-            Ok(url) => url,
-            Err(_) => {
-                cerror!(
-                    "Failed to convert database path '{}' to file:// URL",
-                    database_path.display()
-                );
-                return abort(GeneralError);
-            }
-        };
         let storage_url = match url::Url::from_directory_path(&storage_path) {
             Ok(url) => url,
             Err(_) => {
@@ -404,8 +393,6 @@ impl Provider for KminusProvider {
         let bar = spinner("Creating tabsdata database schema");
         let mut command = std::process::Command::new(&apiserver);
         command
-            .arg("--database-url")
-            .arg(database_url.as_str())
             .arg("--storage-url")
             .arg(storage_url.as_str())
             .arg("--db-schema")

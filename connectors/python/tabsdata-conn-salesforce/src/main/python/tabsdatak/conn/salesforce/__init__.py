@@ -56,7 +56,9 @@ class SalesforceTokenCredentials(SalesforceCredentials):
 CredentialsSpec: TypeAlias = SalesforceTokenCredentials
 ApiNameSpec: TypeAlias = Annotated[str, _validation.API_NAME_VALIDATOR]
 ApiVersionSpec: TypeAlias = Annotated[str, _validation.API_VERSION_VALIDATOR]
-ObjectsNameSpec: TypeAlias = Annotated[list[ApiNameSpec], _api.NON_EMPTY_LIST_CONSTRAINTS]
+ObjectsNameSpec: TypeAlias = Annotated[
+    list[ApiNameSpec], _api.NON_EMPTY_LIST_CONSTRAINTS
+]
 
 InstanceUrlSpec: TypeAlias = Union[
     Annotated[
@@ -99,9 +101,7 @@ FilterSpec: TypeAlias = list[tuple[str, OperatorSpec, str]]
 
 
 # --- SalesforceSrc / SalesforceReportSrc.src_cfg keys ---------------
-SrcCfgKey: TypeAlias = Literal[
-    "salesforce.logging_level",
-]
+SrcCfgKey: TypeAlias = Literal["salesforce.logging_level",]
 
 SrcCfgSpec: TypeAlias = Annotated[
     Mapping[SrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR

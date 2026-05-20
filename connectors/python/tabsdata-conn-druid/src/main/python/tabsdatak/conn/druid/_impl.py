@@ -211,7 +211,9 @@ def upload_staged_files(
     parallel writes never overlap. The function returns the list of
     cloud-native URIs Druid will see in the ingestion ``inputSource``.
     """
-    pairs: list[tuple[_transporter.TransporterLocation, _transporter.TransporterLocation]] = []
+    pairs: list[
+        tuple[_transporter.TransporterLocation, _transporter.TransporterLocation]
+    ] = []
     uris: list[str] = []
     base_path = getattr(staging, "base_path", "") or ""
     for idx, src_path in enumerate(parquet_files):
@@ -415,9 +417,7 @@ class OverlordClient:
 
     # ----- request helpers -----
 
-    def _request_with_retry(
-        self, method: str, url: str, **kwargs
-    ) -> Any:
+    def _request_with_retry(self, method: str, url: str, **kwargs) -> Any:
         if method not in _ALLOWED_METHODS:
             raise ValueError(
                 f"unsupported HTTP method {method!r}; "
@@ -520,7 +520,8 @@ class OverlordClient:
             return resp.json()
         except Exception:
             logger.exception(
-                "unable to fetch task reports for %s", task_id,
+                "unable to fetch task reports for %s",
+                task_id,
             )
             return {}
 
@@ -549,10 +550,7 @@ class OverlordClient:
 
     def _extract_error(self, task_id: str, status_code: str) -> str:
         report = self.task_reports(task_id)
-        stats = (
-            report.get("ingestionStatsAndErrors", {})
-            .get("payload", {})
-        )
+        stats = report.get("ingestionStatsAndErrors", {}).get("payload", {})
         primary = stats.get("errorMsg") or f"status={status_code}"
         details: list[str] = []
         error_msgs = stats.get("errorMsgs")
@@ -584,9 +582,7 @@ def make_overlord_client(conn: DruidConn) -> OverlordClient:
     )
 
 
-def make_overlord_client_for_dest(
-    conn: DruidConn, dest: DruidDest
-) -> OverlordClient:
+def make_overlord_client_for_dest(conn: DruidConn, dest: DruidDest) -> OverlordClient:
     """Build an Overlord client whose ``timeout_sec`` reflects the
     destination's ``http_timeout_sec`` knob."""
     creds = conn.credentials
