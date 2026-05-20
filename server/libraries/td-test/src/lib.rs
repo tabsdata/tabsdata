@@ -13,6 +13,14 @@ mod backend_cfg;
 pub mod db;
 pub mod reqs;
 
+// Re-exported so the `#[td_test::test(db)]` macro can emit
+// `#[::td_test::file_serial(...)]` without requiring every consumer crate to
+// declare `serial_test` as a dev-dependency. The macro is invoked with
+// `crate = ::td_test::serial_test` so its expansion resolves runtime symbols
+// through this re-export instead of `::serial_test`.
+pub use ::serial_test;
+pub use serial_test::file_serial;
+
 #[doc(hidden)]
 pub mod __private {
     use std::future::Future;

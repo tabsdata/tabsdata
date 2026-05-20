@@ -13,9 +13,11 @@
 //!   `TD_TEST_SKIP_IF_NO_REQS=true`) or panics. The function must take an arg
 //!   of type `SomeReqs`.
 //!
-//! Optional tokio passthrough: `flavor = "multi_thread"`, `worker_threads = N`.
-//! The macro auto-emits `#[::tokio::test(...)]` so call sites never need to
-//! write that attribute themselves.
+//! Any attribute key not handled by this macro (everything except `db`,
+//! `fixture`, `requires`, `env_prefix`) is forwarded verbatim to the
+//! auto-emitted `#[::tokio::test(...)]`, so `flavor`, `worker_threads`,
+//! `start_paused`, etc. work without changes here. Call sites never need to
+//! write the `#[tokio::test]` attribute themselves.
 //!
 //! # Examples
 //!
@@ -34,6 +36,9 @@
 //! ```
 
 extern crate proc_macro;
+mod common;
+mod db_arm;
+mod requires_arm;
 mod scoped_test;
 
 use proc_macro::TokenStream;

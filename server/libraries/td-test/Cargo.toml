@@ -70,6 +70,7 @@ td-schema = { workspace = true }
 chrono = { workspace = true }
 hex = { workspace = true }
 path-slash = { workspace = true }
+serial_test = { workspace = true }
 sha2 = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 whoami = { workspace = true }

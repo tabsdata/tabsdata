@@ -585,6 +585,10 @@ version = "3.16.1"
 [workspace.dependencies.serde_yaml]
 version = "0.9.34"
 
+[workspace.dependencies.serial_test]
+version = "3.4.0"
+features = ["file_locks"]
+
 [workspace.dependencies.sqlx]
 version = "0.8.6"
 features = ["chrono", "runtime-tokio"]
