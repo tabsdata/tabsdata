@@ -12,6 +12,17 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
+    fn run_lint_imports
+        probe = exec python -c "import tabsdatak"
+        probe_ok = eq ${probe.code} 0
+        if ${probe_ok}
+            debug "🚀 lint-imports"
+            exec --fail-on-error lint-imports --config .cargo/importlinter.cfg
+        else
+            warn "⚠️ Skipping lint-imports: 'tabsdatak' is not importable in the current environment. Install tabsdata (e.g. via cargo make hydrate) to run the full import-linter contracts."
+        end
+    end
+
     on_ga = get_env TD_ON_GA
     on_ga_true = eq ${on_ga} "true"
     if ${on_ga_true}
@@ -19,6 +30,7 @@ script = [
         exec --fail-on-error ruff check .
         debug "🚀 ruff format --check ."
         exec --fail-on-error ruff format --check .
+        run_lint_imports
     else
         project_root_folder = get_env PROJECT_ROOT_FOLDER
         project_root_folder_basename = basename ${project_root_folder}
@@ -28,6 +40,7 @@ script = [
             exec --fail-on-error ruff check .
             debug "🚀 ruff format --check ."
             exec --fail-on-error ruff format --check .
+            run_lint_imports
 
             info "🐡 Switching to tabsdata-os"
             cd "${PROJECT_TABSDATA_ROOT_FOLDER}/../tabsdata-os"
@@ -36,11 +49,13 @@ script = [
             exec --fail-on-error ruff check .
             debug "🚀 ruff format --check ."
             exec --fail-on-error ruff format --check .
+            run_lint_imports
         else
             debug "🚀 ruff check ."
             exec --fail-on-error ruff check .
             debug "🚀 ruff format --check ."
             exec --fail-on-error ruff format --check .
+            run_lint_imports
         end
     end
     ''']
