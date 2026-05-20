@@ -76,6 +76,7 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 td-process = { workspace = true, features = ["td-test"] }
+tempfile = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

@@ -9118,6 +9118,7 @@ dependencies = [
  "td-common",
  "td-objects",
  "td-process",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
