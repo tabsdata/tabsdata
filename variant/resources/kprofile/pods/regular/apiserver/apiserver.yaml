@@ -1,11 +1,43 @@
 #
-# Copyright 2026 Tabs Data Inc.
+# Copyright 2024 Tabs Data Inc.
 #
 
-name: apiserver
-parameters:
-  - stdin-config: true
-  - ssl-folder: ${TD_PATH_INSTANCE}/workspace/config/ssl
-get-states:
-  - state-type: blob
-    state-key: apiserver-configuration
+addresses:
+  - 0.0.0.0:2457
+internal_addresses:
+  - 0.0.0.0:2458
+password:
+  algorithm: argon2id
+  version: 19
+  memory_cost_mib: 20
+  time_cost: 2
+  parallelism_cost: 1
+jwt:
+  # secret: null # by default a UUID is generated
+  access_token_expiration: 3600
+request_timeout: 60
+database:
+  url: ${sys:TDK_REPOSITORY_URL}/database/tabsdata.db
+  min_connections: 1
+  max_connections: 10
+  acquire_timeout: 30
+  max_lifetime: 3600
+  idle_timeout: 60
+  test_before_acquire: true
+  log_level: off
+storage:
+  mounts:
+    - id: ROOT
+      path: /
+      uri: ${sys:TDK_REPOSITORY_URL}/storage/data/
+    # IMPORTANT: /bundles must be a local mount.
+    - id: BUNDLES
+      path: /bundles
+      uri: ${sys:TDK_REPOSITORY_URL}/storage/bundles/
+#    # Mount configuration sample:
+#    - id: PREFIX
+#      path: /foo
+#      uri: ${sys:TDK_REPOSITORY_URL}/storage/storage/data/
+#      options:
+#        - option_1: value1
+#          option_2: value2

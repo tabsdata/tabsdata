@@ -1,0 +1,40 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+# Demo: ConfigMap-volume mount in real Kubernetes.
+#
+# Mounts the pre-existing `tabsdata` ConfigMap (staged by the cluster-start
+# flow) as a directory. Each key in the ConfigMap surfaces as a file under
+# the mount path. The container reads each file and prints it.
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: init-11
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: worker
+          image: busybox:1.37
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -e
+              echo "[init-11] reading mounted ConfigMap 'tabsdata' under /etc/tabsdata"
+              for f in /etc/tabsdata/*; do
+                [ -f "$f" ] || continue
+                printf '[init-11]   %s = %s\n' "$(basename "$f")" "$(cat "$f")"
+              done
+              echo "[init-11] done"
+          volumeMounts:
+            - name: tabsdata
+              mountPath: /etc/tabsdata
+              readOnly: true
+      volumes:
+        - name: tabsdata
+          configMap:
+            name: tabsdata

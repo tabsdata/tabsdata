@@ -1,0 +1,22 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: regular-07
+spec:
+  restartPolicy: Always
+  containers:
+    - name: worker
+      image: /dev/null
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          i=0
+          while true; do
+              i=$((i + 1))
+              echo "[regular-07] tick $i"
+              sleep 5
+          done

@@ -1,0 +1,35 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: td-apiserver
+  namespace: td-${TD_INSTANCE_NAME}
+  labels:
+    app.kubernetes.io/name: tabsdata
+    app.kubernetes.io/component: apiserver
+    tabsdata.com/instance: ${TD_INSTANCE_NAME}
+    tabsdata.com/worker-tier: regular
+spec:
+  restartPolicy: Always
+  containers:
+    - name: apiserver
+      image: ${TD_NPT_BIN}/td_apiserver
+      command: ["td_apiserver"]
+      env:
+        - name: TD_PATH_INSTANCE
+          value: ${TD_PATH_INSTANCE}
+        - name: TD_PATH_WORKSPACE
+          value: ${TD_PATH_WORKSPACE}
+        - name: TD_PATH_REPOSITORY
+          value: ${TD_PATH_REPOSITORY}
+        - name: TD_PATH_CONFIG
+          value: ${TD_PATH_CONFIG}
+        - name: TD_URI_REPOSITORY
+          value: ${TD_URI_REPOSITORY}
+        - name: POD_NAME
+          value: td-apiserver
+        - name: POD_NAMESPACE
+          value: td-${TD_INSTANCE_NAME}

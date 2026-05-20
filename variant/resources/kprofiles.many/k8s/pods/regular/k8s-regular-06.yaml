@@ -1,0 +1,22 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: regular-06
+spec:
+  restartPolicy: Always
+  containers:
+    - name: worker
+      image: busybox:1.37
+      command: ["sh", "-c"]
+      args:
+        - |
+          i=0
+          while true; do
+              i=$((i + 1))
+              echo "[regular-06] tick $i"
+              sleep 5
+          done
