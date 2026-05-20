@@ -13,12 +13,12 @@ fi
 case "$PROJECT" in
     tabsdata|tabsdata-os|tabsdata-ee)
         if [ -d /workspace/tabsdata-km ]; then
-            cd /workspace/tabsdata-km && cargo make assembly --no-permit
+            cd /workspace/tabsdata-km && cargo make --env profile=assembly assembly --no-permit
         elif [ -d /workspace/kminus ]; then
-            cd /workspace/kminus && cargo make assembly --no-permit
+            cd /workspace/kminus && cargo make --env profile=assembly assembly --no-permit
         fi
         ;;
 esac
 
 cd "/workspace/$PROJECT"
-cargo make "${TARGET:-build}" --no-permit "$@"
+cargo make --env profile=assembly "${TARGET:-build}" --no-permit "$@"
