@@ -451,6 +451,44 @@ def lock_connectors_constants(root: str, connectors: list[tuple[str, str]]) -> N
         logger.debug("⚠️️ constants.py TABSDATA_CONNECTORS_NAMES already up to date")
 
 
+def lock_connectors_venv(root: str, connectors: list[tuple[str, str]]) -> None:
+    venv_py_file = os.path.join(
+        root,
+        "client",
+        "platform",
+        "src",
+        "main",
+        "python",
+        "tabsdatak",
+        "_tdruntime",
+        "python",
+        "venv.py",
+    )
+    venv_py_path = Path(venv_py_file)
+    if not venv_py_path.is_file():
+        logger.warning(f"⚠️ File venv.py not found: {venv_py_path}")
+        return
+
+    content = venv_py_path.read_text(encoding="utf-8")
+
+    connector_names = sorted(name for _, name in connectors)
+
+    if connector_names:
+        names_list = ",\n".join(f'    "{name}"' for name in connector_names)
+        new_list = f"TABSDATA_CONNECTORS_NAMES: tuple[str, ...] = (\n{names_list},\n)"
+    else:
+        new_list = "TABSDATA_CONNECTORS_NAMES: tuple[str, ...] = ()"
+
+    pattern = r"TABSDATA_CONNECTORS_NAMES: tuple\[str, \.\.\.\] = \([^)]*\)"
+    new_content = re.sub(pattern, new_list, content)
+
+    if new_content != content:
+        venv_py_path.write_text(new_content, encoding="utf-8")
+        logger.info("🔐️ File venv.py TABSDATA_CONNECTORS_NAMES locked!")
+    else:
+        logger.debug("⚠️️ File venv.py TABSDATA_CONNECTORS_NAMES already up to date")
+
+
 def read_markers_from_pytest_ini(pytest_ini_path: Path) -> list[str]:
     config = configparser.RawConfigParser()
     config.read(pytest_ini_path, encoding="utf-8")
@@ -643,6 +681,7 @@ def lock(root: str):
         lock_requirements_first_party(root, connectors, year)
         lock_requirements_third_party_all(root, connectors, year)
         lock_connectors_constants(root, connectors)
+        lock_connectors_venv(root, connectors)
     lock_requirements_first_party_versions(root)
     lock_pyprojects(Path(root), connectors, python_modules, polars_modules)
     lock_pyproject_markers(root)
