@@ -20,6 +20,8 @@ pub const FILE_KUBECONFIG: &str = "config";
 pub const PROVIDER_KUBERNETES: &str = "kubernetes";
 pub const PROVIDER_KMINUS: &str = "kminus";
 
+pub const KMINUS_MIN_NOFILE: u64 = 65536;
+
 pub const RESOURCE_KPROFILE: &str = "resources/kprofile";
 
 pub const PROGRAM_TD_RESOURCE: &str = "td_resource";

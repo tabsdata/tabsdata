@@ -15,6 +15,7 @@ use td_common::status::ExitStatus::GeneralError;
 use crate::cerror;
 use crate::client::tdkcontext::TdkContext;
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
+use crate::constants::KMINUS_MIN_NOFILE;
 use crate::gateway::resolver::SystemValues;
 use crate::provider::kminus::KminusProvider;
 use crate::provider::kubernetes::KubernetesProvider;
@@ -138,10 +139,40 @@ pub async fn provider_for(
             Ok(Box::new(provider))
         }
         ClusterProvider::Kminus => {
+            check_kminus_ulimit()?;
             let provider = KminusProvider::build(cluster, instance)?;
             Ok(Box::new(provider))
         }
     }
+}
+
+#[cfg(unix)]
+fn check_kminus_ulimit() -> Result {
+    use td_common::limits::{Resource, limit};
+
+    let nofile = match limit(Resource::NOFILE) {
+        Ok(limits) => limits,
+        Err(error) => {
+            cerror!("Failed to read the current process's open-files limit: {error}");
+            return abort(GeneralError);
+        }
+    };
+    if nofile.soft < KMINUS_MIN_NOFILE {
+        cerror!(
+            "The kminus provider requires at least {KMINUS_MIN_NOFILE} open files \
+             (current soft limit is {soft}, hard limit is {hard}). Raise it with \
+             `ulimit -n {KMINUS_MIN_NOFILE}` and rerun this command.",
+            soft = nofile.soft,
+            hard = nofile.hard,
+        );
+        return abort(GeneralError);
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn check_kminus_ulimit() -> Result {
+    Ok(())
 }
 
 pub async fn provider_for_or_tdkcontext(
