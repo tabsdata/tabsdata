@@ -50,7 +50,12 @@ const EXTENSION: &str = "yaml";
 ///
 /// For environment variables lookups, names are fully uppercased and hyphens '-' are
 /// replaced with underscores '_'.
-pub fn load_config<T: Config>(config_name: &str, config_folder: Option<PathBuf>, stdin: bool) -> T {
+pub fn load_config<T: Config>(
+    config_name: &str,
+    config_folder: Option<PathBuf>,
+    config_file: Option<PathBuf>,
+    stdin: bool,
+) -> T {
     info!(config = %config_name, stdin = stdin, "process.launcher: loading config");
     let current_folder = obtain_current_dir();
     let _ = (match config_folder {
@@ -90,8 +95,15 @@ pub fn load_config<T: Config>(config_name: &str, config_folder: Option<PathBuf>,
         .add_source(config::Config::try_from(&default_config).unwrap())
         .add_source(config::File::with_name(app_config_file.to_str().unwrap()).required(false))
         .add_source(config::File::with_name(app_user_config_file.to_str().unwrap()).required(false))
-        .add_source(config::File::with_name(home_dir_config_file.to_str().unwrap()).required(false))
-        .add_source(config::Environment::with_prefix(&app_env_prefix));
+        .add_source(config::File::with_name(home_dir_config_file.to_str().unwrap()).required(false));
+
+    if let Some(path) = config_file.as_ref() {
+        info!("Loading configuration from explicit file: {}", path.display());
+        config_builder =
+            config_builder.add_source(config::File::with_name(path.to_str().unwrap()).required(true));
+    }
+
+    config_builder = config_builder.add_source(config::Environment::with_prefix(&app_env_prefix));
 
     // stdin if flagged to use it
     if stdin {
@@ -174,7 +186,7 @@ mod tests {
 
     #[test]
     fn test_load_config_no_files() {
-        let config = load_config::<MyConfig>("my-config", None, false);
+        let config = load_config::<MyConfig>("my-config", None, None, false);
         assert_eq!(config.name, "default_name");
         assert_eq!(config.port(), &1u16);
     }
@@ -193,7 +205,7 @@ mod tests {
             },
         );
 
-        let config = load_config::<MyConfig>("my-config", None, false);
+        let config = load_config::<MyConfig>("my-config", None, None, false);
         assert_eq!(config.name, "app_config_name");
         assert_eq!(config.port(), &2u16);
     }
@@ -217,7 +229,7 @@ mod tests {
             },
         );
 
-        let config = load_config::<MyConfig>("my-config", None, false);
+        let config = load_config::<MyConfig>("my-config", None, None, false);
         assert_eq!(config.name, "user_config_name");
         assert_eq!(config.port(), &3u16);
     }
@@ -253,7 +265,7 @@ mod tests {
             },
         );
 
-        let config = load_config::<MyConfig>("my-config", None, false);
+        let config = load_config::<MyConfig>("my-config", None, None, false);
 
         assert_eq!(config.name, "user_home_dir_config_name");
         assert_eq!(config.port(), &4u16);
@@ -299,7 +311,7 @@ mod tests {
             std::env::set_var("MY_CONFIG_ENV_PORT", "5");
         }
 
-        let config = load_config::<MyConfig>("my-config-env", None, false);
+        let config = load_config::<MyConfig>("my-config-env", None, None, false);
 
         assert_eq!(config.name, "env_config_name");
         assert_eq!(config.port(), &5u16);

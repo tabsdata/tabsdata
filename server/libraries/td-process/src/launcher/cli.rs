@@ -71,6 +71,12 @@ struct CliParser<P: Params> {
         help = "Whether to ingest additional config from stdin"
     )]
     stdin_config: Option<bool>,
+    #[arg(
+        long = "config-file",
+        help = "Path to a YAML configuration file. Applied as the highest-precedence \
+                YAML source (after the discovered files, before env vars and stdin)."
+    )]
+    config_file: Option<PathBuf>,
 }
 
 /// Entry point for all CLI commands.
@@ -107,18 +113,21 @@ impl<C: Config, P: Params> Cli<C, P> {
         R: Into<ExitStatus>,
     {
         let stdin_config = parser.stdin_config.unwrap_or(false);
+        let config_file = parser.config_file.clone();
         match parser.config {
             Some(ConfigArg::Default) => {
                 Self::print_config(config_name, "Default", &C::default());
                 ExitStatus::Success
             }
             Some(ConfigArg::Current) => {
-                let config: C = config::load_config(config_name, config_dir, stdin_config);
+                let config: C =
+                    config::load_config(config_name, config_dir, config_file, stdin_config);
                 Self::print_config(config_name, "Current", &config);
                 ExitStatus::Success
             }
             _ => {
-                let config: C = config::load_config(config_name, config_dir, stdin_config);
+                let config: C =
+                    config::load_config(config_name, config_dir, config_file, stdin_config);
                 app(config, parser.params).into()
             }
         }
