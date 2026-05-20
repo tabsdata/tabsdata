@@ -39,21 +39,22 @@ pub async fn resolve_table_location(
         .await?;
 
     if let Some(data_version) = data_version {
-        let (path, _) = get_spath(&data_version);
+        let (path, _) = get_spath(&data_version)?;
         Ok(Some(path))
     } else {
         Ok(None)
     }
 }
 
-fn get_spath(data_version: &PhysicalTableDataVersionDBWithNames) -> (SPath, StorageLocation) {
-    StorageLocation::try_from(&data_version.storage_version)
-        .unwrap()
+fn get_spath(
+    data_version: &PhysicalTableDataVersionDBWithNames,
+) -> Result<(SPath, StorageLocation), TdError> {
+    Ok(StorageLocation::from(&data_version.storage_version)
         .builder(&data_version.data_location)
         .collection(&data_version.collection_id)
         .data(&data_version.id)
         .table(&data_version.table_id, &data_version.table_version_id)
-        .build()
+        .build()?)
 }
 
 #[cfg(test)]
@@ -392,7 +393,7 @@ mod tests {
         let expected = if let Some(expected_data_version) = expected_data_version {
             let expected_data_version: PhysicalTableDataVersionDBWithNames =
                 db.live().fetch_one(&expected_data_version.id).await?;
-            let (expected, _) = get_spath(&expected_data_version);
+            let (expected, _) = get_spath(&expected_data_version)?;
             Some(expected)
         } else {
             None

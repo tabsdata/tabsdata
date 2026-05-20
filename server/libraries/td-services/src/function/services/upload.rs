@@ -182,7 +182,7 @@ mod tests {
             .builder(&data_location)
             .collection(&collection.id)
             .function(&bundle.id)
-            .build();
+            .build()?;
         let content = context.storage.read(&bundle_location).await?;
         let content = String::from_utf8(content).unwrap();
         assert_eq!(content, payload);

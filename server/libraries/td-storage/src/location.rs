@@ -2,90 +2,73 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::SPath;
-use serde::{Deserialize, Serialize};
+use crate::{SPath, StorageError};
 use std::fmt::Debug;
-use std::ops::Deref;
 use td_objects::types::basic::{
     BundleId, CollectionId, DataLocation, FunctionId, FunctionVersionId, Partition,
     PhysicalTableDataVersionId, StorageVersion, TableId, TableVersionId, TransactionId,
 };
 
-/// The [`StorageLocation`] creates storage URIS for the different types of data tabsdata stores.
-///
-/// It is an enum to allow adding URI creation strategies and using them side to side in a
-/// backwards compatible way.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, strum::Display)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub enum StorageLocation {
-    /// Version 2 of the storage location. produces [`SPath`] in the following format
-    /// (words in uppercase are placeholders for IDs):
+    /// The [`StorageLocation`] creates storage URIS for the different types of data tabsdata stores.
     ///
-    /// LOCATION: function datalocation
-    /// COLLECTION: collection ID
-    /// FUNCTION: function ID
-    /// FUNCTION_VERSION: function_version ID
-    /// TRANSACTION: transaction ID
-    /// DATA_VERSION: data_version ID
-    /// TABLE: table ID
-    /// TABLE_VERSION: table_version ID
+    /// It is an enum to allow adding URI creation strategies and using them side to side in a
+    /// backwards compatible way.
     ///
-    /// * /LOCATION
-    /// * /LOCATION/c/COLLECTION
-    /// * /LOCATION/c/COLLECTION/x/TRANSACTION/f/FUNCTION_VERSION (physical_function_run contents)
-    /// * /LOCATION/c/COLLECTION/d/DATA_VERSION/t/TABLE/TABLE_VERSION.t
-    /// * /LOCATION/c/COLLECTION/d/DATA_VERSION/t/TABLE/TABLE_VERSION/p/PARTITION.p
-    /// * /bundles/c/COLLECTION/f/BUNDLE.tgz
-    /// * /stages/c/COLLECTION/f/FUNCTION
-    V2,
+    /// Variant `V1` produces [`SPath`] in the following format (words in uppercase are placeholders
+    /// for IDs):
+    ///
+    /// * LOCATION: function datalocation
+    /// * COLLECTION: collection ID
+    /// * FUNCTION: function ID
+    /// * FUNCTION_VERSION: function_version ID
+    /// * TRANSACTION: transaction ID
+    /// * DATA_VERSION: data_version ID
+    /// * TABLE: table ID
+    /// * TABLE_VERSION: table_version ID
+    ///
+    /// Layouts:
+    /// * `/LOCATION`
+    /// * `/LOCATION/c/COLLECTION`
+    /// * `/LOCATION/c/COLLECTION/x/TRANSACTION/f/FUNCTION_VERSION` (physical_function_run contents)
+    /// * `/LOCATION/c/COLLECTION/d/DATA_VERSION/t/TABLE/TABLE_VERSION.t`
+    /// * `/LOCATION/c/COLLECTION/d/DATA_VERSION/t/TABLE/TABLE_VERSION/p/PARTITION.p`
+    /// * `/bundles/c/COLLECTION/f/BUNDLE.tgz`
+    /// * `/stages/c/COLLECTION/f/FUNCTION`
+    #[default]
+    V1,
 }
 
 impl StorageLocation {
     /// Return the current version of the storage location.
     pub fn current() -> Self {
-        Self::V2
+        Self::default()
     }
 
     /// Return a builder for the storage location variant
     pub fn builder(&self, location: &DataLocation) -> LocationBuilder {
         match self {
-            StorageLocation::V2 => LocationBuilder::new(
-                SPath::parse(location.deref()).unwrap(),
-                Box::new(V2LocationBuilder),
-            ),
-        }
-    }
-
-    pub fn parse<'a>(version: impl Into<&'a str>) -> Result<Self, String> {
-        match version.into() {
-            "V1" => Ok(Self::V2),
-            unknown_version => Err(format!("Unknown StorageLocation version {unknown_version}")),
+            StorageLocation::V1 => {
+                LocationBuilder::new(location.clone(), Box::new(V1LocationBuilder))
+            }
         }
     }
 }
 
-impl From<StorageLocation> for String {
-    fn from(value: StorageLocation) -> Self {
-        value.to_string()
-    }
-}
-
-impl TryFrom<String> for StorageLocation {
-    type Error = String;
-    fn try_from(value: String) -> Result<Self, String> {
-        StorageLocation::parse(value.as_str())
-    }
-}
-
-impl TryFrom<&StorageVersion> for StorageLocation {
-    type Error = String;
-    fn try_from(value: &StorageVersion) -> Result<Self, String> {
-        StorageLocation::parse(value.as_str())
+/// 1:1 mapping with [`StorageVersion`]: each variant here has the same-named
+/// variant there. Infallible because the variant sets are kept in sync.
+impl From<&StorageVersion> for StorageLocation {
+    fn from(value: &StorageVersion) -> Self {
+        match value {
+            StorageVersion::V1 => Self::V1,
+        }
     }
 }
 
 #[derive(Debug, Clone, Default)]
 struct LocationBuilderInfo {
-    location: SPath,
+    location: DataLocation,
     collection: Option<String>,
     bundle: Option<String>,
     stage: Option<String>,
@@ -128,12 +111,15 @@ impl TableBuilder {
     }
 
     /// Build the table location.
-    pub fn build(&self) -> (SPath, StorageLocation) {
+    pub fn build(&self) -> Result<(SPath, StorageLocation), StorageError> {
         self.version_builder.build(&self.info, None)
     }
 
     /// Build the meta table location.
-    pub fn build_meta(&self, meta_name: impl Into<String>) -> (SPath, StorageLocation) {
+    pub fn build_meta(
+        &self,
+        meta_name: impl Into<String>,
+    ) -> Result<(SPath, StorageLocation), StorageError> {
         self.version_builder.build(
             &self.info,
             Some(format!("{}.meta", meta_name.into()).as_str()),
@@ -183,12 +169,15 @@ impl DataBuilder {
     }
 
     /// Build the data location.
-    pub fn build(&self) -> (SPath, StorageLocation) {
+    pub fn build(&self) -> Result<(SPath, StorageLocation), StorageError> {
         self.version_builder.build(&self.info, None)
     }
 
     /// Build the meta data location.
-    pub fn build_meta(&self, meta_name: impl Into<String>) -> (SPath, StorageLocation) {
+    pub fn build_meta(
+        &self,
+        meta_name: impl Into<String>,
+    ) -> Result<(SPath, StorageLocation), StorageError> {
         self.version_builder.build(
             &self.info,
             Some(format!("{}.meta", meta_name.into()).as_str()),
@@ -211,12 +200,15 @@ impl FunctionBuilder {
     }
 
     /// Build the function location.
-    pub fn build(&self) -> (SPath, StorageLocation) {
+    pub fn build(&self) -> Result<(SPath, StorageLocation), StorageError> {
         self.version_builder.build(&self.info, None)
     }
 
     /// Build the meta function location.
-    pub fn build_meta(&self, meta_name: impl Into<String>) -> (SPath, StorageLocation) {
+    pub fn build_meta(
+        &self,
+        meta_name: impl Into<String>,
+    ) -> Result<(SPath, StorageLocation), StorageError> {
         self.version_builder.build(
             &self.info,
             Some(format!("{}.meta", meta_name.into()).as_str()),
@@ -238,12 +230,15 @@ impl StageBuilder {
     }
 
     /// Build the stage location.
-    pub fn build(&self) -> (SPath, StorageLocation) {
+    pub fn build(&self) -> Result<(SPath, StorageLocation), StorageError> {
         self.version_builder.build(&self.info, None)
     }
 
     /// Build the meta stage location.
-    pub fn build_meta(&self, meta_name: impl Into<String>) -> (SPath, StorageLocation) {
+    pub fn build_meta(
+        &self,
+        meta_name: impl Into<String>,
+    ) -> Result<(SPath, StorageLocation), StorageError> {
         self.version_builder.build(
             &self.info,
             Some(format!("{}.meta", meta_name.into()).as_str()),
@@ -265,12 +260,15 @@ impl CheckpointBuilder {
     }
 
     /// Build the checkpoint location.
-    pub fn build(&self) -> (SPath, StorageLocation) {
+    pub fn build(&self) -> Result<(SPath, StorageLocation), StorageError> {
         self.version_builder.build(&self.info, None)
     }
 
     /// Build the meta checkpoint location.
-    pub fn build_meta(&self, meta_name: impl Into<String>) -> (SPath, StorageLocation) {
+    pub fn build_meta(
+        &self,
+        meta_name: impl Into<String>,
+    ) -> Result<(SPath, StorageLocation), StorageError> {
         self.version_builder.build(
             &self.info,
             Some(format!("{}.meta", meta_name.into()).as_str()),
@@ -343,12 +341,15 @@ impl CollectionBuilder {
     }
 
     /// Build the collection location.
-    pub fn build(&self) -> (SPath, StorageLocation) {
+    pub fn build(&self) -> Result<(SPath, StorageLocation), StorageError> {
         self.version_builder.build(&self.info, None)
     }
 
     /// Build the meta collection location.
-    pub fn build_meta(&self, meta_name: impl Into<String>) -> (SPath, StorageLocation) {
+    pub fn build_meta(
+        &self,
+        meta_name: impl Into<String>,
+    ) -> Result<(SPath, StorageLocation), StorageError> {
         self.version_builder.build(
             &self.info,
             Some(format!("{}.meta", meta_name.into()).as_str()),
@@ -381,12 +382,15 @@ impl TransactionBuilder {
     }
 
     /// Build the transaction location.
-    pub fn build(&self) -> (SPath, StorageLocation) {
+    pub fn build(&self) -> Result<(SPath, StorageLocation), StorageError> {
         self.version_builder.build(&self.info, None)
     }
 
     /// Build the meta collection location.
-    pub fn build_meta(&self, meta_name: impl Into<String>) -> (SPath, StorageLocation) {
+    pub fn build_meta(
+        &self,
+        meta_name: impl Into<String>,
+    ) -> Result<(SPath, StorageLocation), StorageError> {
         self.version_builder.build(
             &self.info,
             Some(format!("{}.meta", meta_name.into()).as_str()),
@@ -409,12 +413,15 @@ impl FunctionVersionBuilder {
     }
 
     /// Build the function_version location.
-    pub fn build(&self) -> (SPath, StorageLocation) {
+    pub fn build(&self) -> Result<(SPath, StorageLocation), StorageError> {
         self.version_builder.build(&self.info, None)
     }
 
     /// Build the meta collection location.
-    pub fn build_meta(&self, meta_name: impl Into<String>) -> (SPath, StorageLocation) {
+    pub fn build_meta(
+        &self,
+        meta_name: impl Into<String>,
+    ) -> Result<(SPath, StorageLocation), StorageError> {
         self.version_builder.build(
             &self.info,
             Some(format!("{}.meta", meta_name.into()).as_str()),
@@ -430,10 +437,10 @@ pub struct LocationBuilder {
 }
 
 impl LocationBuilder {
-    fn new(location: impl Into<SPath>, version_builder: Box<dyn VersionLocationBuilder>) -> Self {
+    fn new(location: DataLocation, version_builder: Box<dyn VersionLocationBuilder>) -> Self {
         Self {
             info: LocationBuilderInfo {
-                location: location.into(),
+                location,
                 ..Default::default()
             },
             version_builder,
@@ -442,7 +449,7 @@ impl LocationBuilder {
 
     /// Set the location for the location builder.
     pub fn location(&mut self, location: &DataLocation) -> &mut Self {
-        self.info.location = SPath::parse(location.as_str()).unwrap();
+        self.info.location = location.clone();
         self
     }
 
@@ -458,12 +465,15 @@ impl LocationBuilder {
     }
 
     /// Build the location.
-    pub fn build(&self) -> (SPath, StorageLocation) {
+    pub fn build(&self) -> Result<(SPath, StorageLocation), StorageError> {
         self.version_builder.build(&self.info, None)
     }
 
     /// Build the meta location.
-    pub fn build_meta(&self, meta_name: impl Into<String>) -> (SPath, StorageLocation) {
+    pub fn build_meta(
+        &self,
+        meta_name: impl Into<String>,
+    ) -> Result<(SPath, StorageLocation), StorageError> {
         self.version_builder.build(
             &self.info,
             Some(format!("{}.meta", meta_name.into()).as_str()),
@@ -476,89 +486,97 @@ impl LocationBuilder {
 /// It is used to build the location based on the information provided.
 trait VersionLocationBuilder: Debug {
     /// Build the location based on the information provided.
-    fn build(&self, info: &LocationBuilderInfo, postfix: Option<&str>) -> (SPath, StorageLocation);
+    fn build(
+        &self,
+        info: &LocationBuilderInfo,
+        postfix: Option<&str>,
+    ) -> Result<(SPath, StorageLocation), StorageError>;
 }
 
 /// Builder for the V1 version.
 #[derive(Debug)]
-struct V2LocationBuilder;
+struct V1LocationBuilder;
 
-impl VersionLocationBuilder for V2LocationBuilder {
-    fn build(&self, info: &LocationBuilderInfo, postfix: Option<&str>) -> (SPath, StorageLocation) {
-        let mut path = info.location.clone();
+impl VersionLocationBuilder for V1LocationBuilder {
+    fn build(
+        &self,
+        info: &LocationBuilderInfo,
+        postfix: Option<&str>,
+    ) -> Result<(SPath, StorageLocation), StorageError> {
+        let mut path = SPath::parse(info.location.as_str())?;
         if let Some(collection) = &info.collection {
-            path = path.child("c").unwrap().child(collection).unwrap();
+            path = path.child("c")?.child(collection)?;
             if let Some(bundle) = &info.bundle {
                 // Bundles are stored at /bundles/c/COLLECTION/f/BUNDLE.tgz
                 // we need to recalculate the base path accordingly.
                 path = SPath::default()
-                    .child("bundles")
-                    .unwrap()
-                    .child("c")
-                    .unwrap()
-                    .child(collection)
-                    .unwrap();
+                    .child("bundles")?
+                    .child("c")?
+                    .child(collection)?;
 
-                path = path
-                    .child("f")
-                    .unwrap()
-                    .child(&format!("{bundle}.tgz"))
-                    .unwrap();
+                path = path.child("f")?.child(&format!("{bundle}.tgz"))?;
             } else if let Some(stage) = &info.stage {
                 // Stages are stored at /stages/c/COLLECTION/f
                 // we need to recalculate the base path accordingly.
                 path = SPath::default()
-                    .child("stages")
-                    .unwrap()
-                    .child("c")
-                    .unwrap()
-                    .child(collection)
-                    .unwrap();
-                path = path.child("f").unwrap().child(stage).unwrap();
+                    .child("stages")?
+                    .child("c")?
+                    .child(collection)?;
+                path = path.child("f")?.child(stage)?;
             } else if let Some(stage) = &info.checkpoint {
                 // Checkpoints are stored at /checkpoints/c/COLLECTION/f
                 path = SPath::default()
-                    .child("checkpoints")
-                    .unwrap()
-                    .child("c")
-                    .unwrap()
-                    .child(collection)
-                    .unwrap();
-                path = path.child("f").unwrap().child(stage).unwrap();
+                    .child("checkpoints")?
+                    .child("c")?
+                    .child(collection)?;
+                path = path.child("f")?.child(stage)?;
             } else if let Some(data_version) = &info.data_version {
                 // function always is present if data is present
-                path = path.child("d").unwrap().child(data_version).unwrap();
+                path = path.child("d")?.child(data_version)?;
                 if let Some(table) = &info.table {
-                    let table_version = info.table_version.as_ref().unwrap();
-                    path = path.child("t").unwrap().child(table).unwrap();
+                    // `table_version` is set in lockstep with `table` by
+                    // `TableBuilder::table` / `partition`.
+                    let table_version = info.table_version.as_ref().ok_or_else(|| {
+                        StorageError::InvalidPath(
+                            path.to_string(),
+                            "table set without table_version".to_string(),
+                        )
+                    })?;
+                    path = path.child("t")?.child(table)?;
                     if let Some(partition) = &info.partition {
                         path = path
-                            .child(table_version)
-                            .unwrap()
-                            .child("p")
-                            .unwrap()
-                            .child(&format!("{partition}.p"))
-                            .unwrap();
+                            .child(table_version)?
+                            .child("p")?
+                            .child(&format!("{partition}.p"))?;
                     } else {
-                        path = path.child(&format!("{table_version}.t")).unwrap();
+                        path = path.child(&format!("{table_version}.t"))?;
                     }
                 }
             } else if let Some(transaction) = &info.transaction {
-                path = path.child("x").unwrap().child(transaction).unwrap();
+                path = path.child("x")?.child(transaction)?;
                 if let Some(function_version) = &info.function_version {
-                    path = path.child("f").unwrap().child(function_version).unwrap();
+                    path = path.child("f")?.child(function_version)?;
                 }
             }
         }
         if let Some(postfix) = postfix {
-            let name = path.filename().unwrap();
+            let name = path.filename().ok_or_else(|| {
+                StorageError::InvalidPath(
+                    path.to_string(),
+                    "cannot append postfix to root path".to_string(),
+                )
+            })?;
             path = path
                 .parent()
-                .unwrap()
-                .child(&format!("{name}-{postfix}"))
-                .unwrap()
+                .ok_or_else(|| {
+                    StorageError::InvalidPath(
+                        path.to_string(),
+                        "cannot take parent of root path".to_string(),
+                    )
+                })?
+                .child(&format!("{name}-{postfix}"))?
         }
-        (path, StorageLocation::V2)
+        Ok((path, StorageLocation::V1))
     }
 }
 
@@ -573,15 +591,18 @@ mod tests {
 
     #[test]
     fn test_data_location_current_version() {
-        assert!(matches!(StorageLocation::current(), StorageLocation::V2))
+        assert!(matches!(StorageLocation::current(), StorageLocation::V1))
     }
 
     #[test]
     fn test_location_current_builder_version() -> Result<(), TdError> {
         let data_location = DataLocation::try_from("/")?;
         assert!(matches!(
-            StorageLocation::current().builder(&data_location).build().1,
-            StorageLocation::V2
+            StorageLocation::current()
+                .builder(&data_location)
+                .build()?
+                .1,
+            StorageLocation::V1
         ));
         Ok(())
     }
@@ -589,12 +610,12 @@ mod tests {
     #[test]
     fn test_location_builder_v2() -> Result<(), TdError> {
         let data_location = DataLocation::try_from("/L")?;
-        let mut builder = StorageLocation::V2.builder(&data_location);
-        assert_eq!(builder.build().0, SPath::parse("/L")?);
-        assert_eq!(builder.build_meta("foo").0, SPath::parse("/L-foo.meta")?);
+        let mut builder = StorageLocation::V1.builder(&data_location);
+        assert_eq!(builder.build()?.0, SPath::parse("/L")?);
+        assert_eq!(builder.build_meta("foo")?.0, SPath::parse("/L-foo.meta")?);
         let data_location = DataLocation::try_from("/LL")?;
         builder.location(&data_location);
-        assert_eq!(builder.build().0, SPath::parse("/LL")?);
+        assert_eq!(builder.build()?.0, SPath::parse("/LL")?);
         Ok(())
     }
 
@@ -602,21 +623,21 @@ mod tests {
     fn test_collection_builder_v2() -> Result<(), TdError> {
         let data_location = DataLocation::try_from("/L")?;
         let collection = CollectionId::default();
-        let mut builder = StorageLocation::V2
+        let mut builder = StorageLocation::V1
             .builder(&data_location)
             .collection(&collection);
         assert_eq!(
-            builder.build().0,
+            builder.build()?.0,
             SPath::parse(format!("/L/c/{collection}"))?
         );
         assert_eq!(
-            builder.build_meta("foo").0,
-            SPath::parse(format!("/L/c/{collection}-foo.meta")).unwrap()
+            builder.build_meta("foo")?.0,
+            SPath::parse(format!("/L/c/{collection}-foo.meta"))?
         );
         let collection = CollectionId::default();
         builder.collection(&collection);
         assert_eq!(
-            builder.build().0,
+            builder.build()?.0,
             SPath::parse(format!("/L/c/{collection}"))?
         );
         Ok(())
@@ -627,23 +648,23 @@ mod tests {
         let data_location = DataLocation::try_from("/L")?;
         let collection = CollectionId::default();
         let bundle = BundleId::default();
-        let mut builder = StorageLocation::V2
+        let mut builder = StorageLocation::V1
             .builder(&data_location)
             .collection(&collection)
             .function(&bundle);
         assert_eq!(
-            builder.build().0,
+            builder.build()?.0,
             SPath::parse(format!("/bundles/c/{collection}/f/{bundle}.tgz"))?
         );
         assert_eq!(
-            builder.build_meta("foo").0,
+            builder.build_meta("foo")?.0,
             SPath::parse(format!("/bundles/c/{collection}/f/{bundle}.tgz-foo.meta"))?
         );
 
         let bundle = BundleId::default();
         builder.function(&bundle);
         assert_eq!(
-            builder.build().0,
+            builder.build()?.0,
             SPath::parse(format!("/bundles/c/{collection}/f/{bundle}.tgz"))?
         );
         Ok(())
@@ -654,23 +675,23 @@ mod tests {
         let data_location = DataLocation::try_from("/L")?;
         let collection = CollectionId::default();
         let function = FunctionId::default();
-        let mut builder = StorageLocation::V2
+        let mut builder = StorageLocation::V1
             .builder(&data_location)
             .collection(&collection)
             .stage(&function);
         assert_eq!(
-            builder.build().0,
+            builder.build()?.0,
             SPath::parse(format!("/stages/c/{collection}/f/{function}"))?
         );
         assert_eq!(
-            builder.build_meta("foo").0,
+            builder.build_meta("foo")?.0,
             SPath::parse(format!("/stages/c/{collection}/f/{function}-foo.meta"))?
         );
 
         let function = FunctionId::default();
         builder.function(&function);
         assert_eq!(
-            builder.build().0,
+            builder.build()?.0,
             SPath::parse(format!("/stages/c/{collection}/f/{function}"))?
         );
         Ok(())
@@ -681,17 +702,17 @@ mod tests {
         let data_location = DataLocation::try_from("/L")?;
         let collection = CollectionId::default();
         let physical_table_data_version = PhysicalTableDataVersionId::new();
-        let mut builder = StorageLocation::V2
+        let mut builder = StorageLocation::V1
             .builder(&data_location)
             .collection(&collection)
             .data(&physical_table_data_version);
 
         assert_eq!(
-            builder.build().0,
+            builder.build()?.0,
             SPath::parse(format!("/L/c/{collection}/d/{physical_table_data_version}"))?
         );
         assert_eq!(
-            builder.build_meta("foo").0,
+            builder.build_meta("foo")?.0,
             SPath::parse(format!(
                 "/L/c/{collection}/d/{physical_table_data_version}-foo.meta"
             ))?
@@ -699,7 +720,7 @@ mod tests {
         let physical_table_data_version = PhysicalTableDataVersionId::new();
         builder.data(&physical_table_data_version);
         assert_eq!(
-            builder.build().0,
+            builder.build()?.0,
             SPath::parse(format!("/L/c/{collection}/d/{physical_table_data_version}"))?
         );
         Ok(())
@@ -712,20 +733,20 @@ mod tests {
         let physical_table_data_version = PhysicalTableDataVersionId::new();
         let table = TableId::default();
         let table_version = TableVersionId::default();
-        let mut builder = StorageLocation::V2
+        let mut builder = StorageLocation::V1
             .builder(&data_location)
             .collection(&collection)
             .data(&physical_table_data_version)
             .table(&table, &table_version);
 
         assert_eq!(
-            builder.build().0,
+            builder.build()?.0,
             SPath::parse(format!(
                 "/L/c/{collection}/d/{physical_table_data_version}/t/{table}/{table_version}.t"
             ))?
         );
         assert_eq!(
-            builder.build_meta("foo").0,
+            builder.build_meta("foo")?.0,
             SPath::parse(format!(
                 "/L/c/{collection}/d/{physical_table_data_version}/t/{table}/{table_version}.t-foo.meta"
             ))?
@@ -735,7 +756,7 @@ mod tests {
         let table_version = TableVersionId::default();
         builder.table(&table, &table_version);
         assert_eq!(
-            builder.build().0,
+            builder.build()?.0,
             SPath::parse(format!(
                 "/L/c/{collection}/d/{physical_table_data_version}/t/{table}/{table_version}.t"
             ))?
@@ -744,13 +765,13 @@ mod tests {
         let partition = Partition::try_from("p")?;
         builder.partition(&table, &table_version, &partition);
         assert_eq!(
-            builder.build().0,
+            builder.build()?.0,
             SPath::parse(format!(
                 "/L/c/{collection}/d/{physical_table_data_version}/t/{table}/{table_version}/p/{partition}.p"
             ))?
         );
         assert_eq!(
-            builder.build_meta("foo").0,
+            builder.build_meta("foo")?.0,
             SPath::parse(format!(
                 "/L/c/{collection}/d/{physical_table_data_version}/t/{table}/{table_version}/p/{partition}.p-foo.meta"
             ))?
@@ -761,7 +782,7 @@ mod tests {
         let partition = Partition::try_from("p")?;
         builder.partition(&table, &table_version, &partition);
         assert_eq!(
-            builder.build().0,
+            builder.build()?.0,
             SPath::parse(format!(
                 "/L/c/{collection}/d/{physical_table_data_version}/t/{table}/{table_version}/p/{partition}.p"
             ))?
@@ -775,19 +796,19 @@ mod tests {
         let collection = CollectionId::default();
         let transaction = TransactionId::new();
         let function_version = FunctionVersionId::new();
-        let builder = StorageLocation::V2
+        let builder = StorageLocation::V1
             .builder(&data_location)
             .collection(&collection)
             .transaction(&transaction)
             .function_version(&function_version);
         assert_eq!(
-            builder.build().0,
+            builder.build()?.0,
             SPath::parse(format!(
                 "/L/c/{collection}/x/{transaction}/f/{function_version}"
             ))?
         );
         assert_eq!(
-            builder.build_meta("foo").0,
+            builder.build_meta("foo")?.0,
             SPath::parse(format!(
                 "/L/c/{collection}/x/{transaction}/f/{function_version}-foo.meta"
             ))?

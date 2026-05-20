@@ -177,10 +177,6 @@ pub struct Snippet;
 #[ta_objects::typed(string)]
 pub struct Sql;
 
-#[ta_objects::typed(string(min_len = 1, max_len = 10, default = "V1"))]
-#[derive(Eq, PartialEq, Hash)]
-pub struct StorageVersion;
-
 #[ta_objects::typed(string, try_from = TableNameDto)]
 #[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct TableName;

@@ -412,14 +412,14 @@ pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessag
         let mut get_states = HashSet::new();
 
         // Build storage location
-        let storage_location = StorageLocation::try_from(&f.storage_version).unwrap();
+        let storage_location = StorageLocation::from(&f.storage_version);
 
         // Bundle location
         let (path, _) = storage_location
             .builder(&f.data_location)
             .collection(&f.collection_id)
             .function(&f.bundle_id)
-            .build();
+            .build()?;
         let (bundle_location, env_prefix) = build_external_location(&storage, &path)?;
         get_states.insert(env_prefix);
 
@@ -428,7 +428,7 @@ pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessag
             .builder(&f.data_location)
             .collection(&f.collection_id)
             .stage(&f.function_id)
-            .build();
+            .build()?;
         let (stage_location, env_prefix) = build_external_location(&storage, &path)?;
         get_states.insert(env_prefix);
 
@@ -446,7 +446,7 @@ pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessag
             .collection(&f.collection_id)
             .transaction(&f.transaction_id)
             .function_version(effective_fvid)
-            .build();
+            .build()?;
         let (function_run_location, env_prefix) = build_external_location(&storage, &path)?;
         get_states.insert(env_prefix);
 
@@ -642,7 +642,7 @@ pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessag
                                 &data_version_with_data.table_id,
                                 &data_version_with_data.table_version_id,
                             )
-                            .build();
+                            .build()?;
                         let (location, env_prefix) = build_external_location(&storage, &path)?;
                         get_states.insert(env_prefix);
                         (Some(found_data_version.clone()), Some(location))
@@ -698,7 +698,7 @@ pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessag
                 .collection(&table.collection_id)
                 .data(&table.id)
                 .table(&table.table_id, &table.table_version_id)
-                .build();
+                .build()?;
             let (location, env_prefix) = build_external_location(&storage, &path)?;
             get_states.insert(env_prefix);
 
@@ -1010,12 +1010,12 @@ pub async fn create_locked_stage_trigger_workers_start_request<T: WorkerMessageQ
             })?;
 
         // Function bundle
-        let storage_location = StorageLocation::try_from(&f.storage_version).unwrap();
+        let storage_location = StorageLocation::from(&f.storage_version);
         let (path, _) = storage_location
             .builder(&f.data_location)
             .collection(&f.collection_id)
             .function(&f.bundle_id)
-            .build();
+            .build()?;
         let (function_bundle, _) = build_external_location(&storage, &path)?;
 
         // Function stage
@@ -1023,7 +1023,7 @@ pub async fn create_locked_stage_trigger_workers_start_request<T: WorkerMessageQ
             .builder(&f.data_location)
             .collection(&f.collection_id)
             .stage(&f.function_id)
-            .build();
+            .build()?;
         let (function_stage, _) = build_external_location(&storage, &path)?;
 
         // Function checkpoint
@@ -1031,7 +1031,7 @@ pub async fn create_locked_stage_trigger_workers_start_request<T: WorkerMessageQ
             .builder(&f.data_location)
             .collection(&f.collection_id)
             .checkpoint(&f.function_id)
-            .build();
+            .build()?;
         let (function_checkpoint, _) = build_external_location(&storage, &path)?;
 
         // Build info

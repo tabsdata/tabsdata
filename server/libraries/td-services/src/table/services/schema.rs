@@ -199,8 +199,7 @@ mod tests {
                         )
                         .await?;
 
-                    let (path, _) = StorageLocation::try_from(&storage_location)
-                        .unwrap()
+                    let (path, _) = StorageLocation::from(&storage_location)
                         .builder(&function_version.data_location)
                         .collection(&physical_table_data_version.collection_id)
                         .data(&physical_table_data_version.id)
@@ -208,7 +207,7 @@ mod tests {
                             &physical_table_data_version.table_id,
                             &physical_table_data_version.table_version_id,
                         )
-                        .build();
+                        .build()?;
 
                     let url = storage.to_external_uri(&path)?.0;
                     let path = url.abs_path();

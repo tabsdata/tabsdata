@@ -5,84 +5,6 @@
 use td_common::execution_status::WorkerCallbackStatus;
 use td_error::{ApiError, TdError, api_error};
 
-/// Status of a logical pointer (LFR or LTDV) at any moment.
-///
-/// `Pending`: the logical row exists but no concrete is bound yet.
-/// `Bound`:   bound to a concrete row.
-/// `Voided`:  not bound; only re-bindable via an explicit operator redirect.
-#[ta_objects::typed_enum]
-#[derive(Eq, PartialEq, Hash)]
-pub enum LogicalPointerStatus {
-    #[typed_enum(rename = "P")]
-    Pending,
-    #[typed_enum(rename = "B")]
-    Bound,
-    #[typed_enum(rename = "V")]
-    Voided,
-}
-
-/// Reason recorded on every pointer-changing event in the logical history.
-///
-/// `InitialMint` rows describe the creation of a logical row at plan-build
-/// time (status begins `Pending`). `InitialDispatch` is the auto-bind at
-/// dispatch (`Pending → Bound`). `InitialMaterialization` is reserved for
-/// retroactive lazy-mint of a V1-born concrete TDV (LTDV created already
-/// `Bound`, no dispatch event). `TransactionCancelManual` /
-/// `UpstreamCancellationManual` describe the void paths.
-///
-/// `OperatorRedirect` is the explicit operator-driven repointing — the
-/// only way `Voided → Bound`, `Bound → Bound(different concrete)`, or any
-/// rebind that the auto path refuses, can occur. Always carries the
-/// operator's actual user id in `set_by_id`, never `UserId::admin`.
-#[ta_objects::typed_enum]
-#[derive(Eq, PartialEq, Hash)]
-pub enum LogicalPointerReason {
-    #[typed_enum(rename = "IM")]
-    InitialMint,
-    #[typed_enum(rename = "ID")]
-    InitialDispatch,
-    #[typed_enum(rename = "IT")]
-    InitialMaterialization,
-    #[typed_enum(rename = "TC")]
-    TransactionCancelManual,
-    #[typed_enum(rename = "UC")]
-    UpstreamCancellationManual,
-    #[typed_enum(rename = "OR")]
-    OperatorRedirect,
-    /// Explicit operator force-void of a `Bound` (or `Pending`) logical
-    /// row. Distinct from `TransactionCancelManual` (which the cancel
-    /// pipeline uses to void only `Pending` rows) — `OperatorForceVoid`
-    /// records that the operator deliberately abandoned a binding without
-    /// choosing a replacement, including bindings that were already Bound
-    /// to a concrete attempt.
-    #[typed_enum(rename = "OV")]
-    OperatorForceVoid,
-    /// Worker-finish redirect on a replay attempt's success. The LFR
-    /// pointer was `Bound(PFR_old)` while the replay PFR ran; on its
-    /// `Done` callback `redirect_at_finish` appends `Bound(PFR_new)`
-    /// with this reason. Paired with `Bound` status.
-    #[typed_enum(rename = "RR")]
-    ReplayRedirect,
-}
-
-/// Kind of replay-audit row written by the replay / delete-replay
-/// endpoints to `logical_function_run_replays`.
-#[ta_objects::typed_enum]
-#[derive(Eq, PartialEq, Hash)]
-pub enum ReplayKind {
-    /// Operator created a fresh `PhysicalFunctionRunDB` and redirected the LFR
-    /// pointer to it.
-    #[typed_enum(rename = "R")]
-    Replay,
-    /// Operator undid the most-recent replay; LFR rebound to the prior
-    /// concrete FR.
-    #[typed_enum(rename = "B")]
-    Rollback,
-    /// Operator undid the LFR's only binding; LFR transitioned to Voided.
-    #[typed_enum(rename = "V")]
-    Void,
-}
-
 #[ta_objects::typed_enum]
 #[derive(Eq, PartialEq)]
 pub enum Decorator {
@@ -196,6 +118,60 @@ impl TryFrom<WorkerCallbackStatus> for LogicalFunctionRunStatus {
         };
         Ok(status)
     }
+}
+
+/// Status of a logical pointer (LFR or LTDV) at any moment.
+#[ta_objects::typed_enum]
+#[derive(Eq, PartialEq, Hash)]
+pub enum LogicalPointerStatus {
+    /// The logical row exists but no concrete is bound yet.
+    #[typed_enum(rename = "P")]
+    Pending,
+    /// Bound to a concrete row.
+    #[typed_enum(rename = "B")]
+    Bound,
+    /// Not bound; only re-bindable via an explicit operator redirect.
+    #[typed_enum(rename = "V")]
+    Voided,
+}
+
+/// Reason recorded on every pointer-changing event in the logical history.
+#[ta_objects::typed_enum]
+#[derive(Eq, PartialEq, Hash)]
+pub enum LogicalPointerReason {
+    /// Logical row created at plan-build time; status begins `Pending`.
+    #[typed_enum(rename = "IM")]
+    InitialMint,
+    /// Auto-bind at dispatch: `Pending → Bound`.
+    #[typed_enum(rename = "ID")]
+    InitialDispatch,
+    /// Retroactive lazy-mint of a V1-born concrete TDV; LTDV is created
+    /// already `Bound` with no dispatch event.
+    #[typed_enum(rename = "IT")]
+    InitialMaterialization,
+    /// Void path used by the cancel pipeline; only voids `Pending` rows.
+    #[typed_enum(rename = "TC")]
+    TransactionCancelManual,
+    /// Void path triggered by upstream cancellation.
+    #[typed_enum(rename = "UC")]
+    UpstreamCancellationManual,
+    /// Explicit operator-driven repointing. The only path to
+    /// `Voided → Bound`, `Bound → Bound(different concrete)`, or any
+    /// rebind the auto path refuses. Always carries the operator's
+    /// actual user id in `set_by_id`, never `UserId::admin`.
+    #[typed_enum(rename = "OR")]
+    OperatorRedirect,
+    /// Operator force-void of a `Bound` (or `Pending`) row — deliberately
+    /// abandons a binding without choosing a replacement. Distinct from
+    /// `TransactionCancelManual`, which only voids `Pending` rows.
+    #[typed_enum(rename = "OV")]
+    OperatorForceVoid,
+    /// Worker-finish redirect on a replay attempt's success. LFR pointer
+    /// was `Bound(PFR_old)` while the replay PFR ran; on its `Done`
+    /// callback `redirect_at_finish` appends `Bound(PFR_new)` with this
+    /// reason. Paired with `Bound` status.
+    #[typed_enum(rename = "RR")]
+    ReplayRedirect,
 }
 
 /// Per-attempt status on `physical_function_runs`. Independent of
@@ -342,6 +318,24 @@ impl PermissionType {
     }
 }
 
+/// Kind of replay-audit row written by the replay / delete-replay
+/// endpoints to `logical_function_run_replays`.
+#[ta_objects::typed_enum]
+#[derive(Eq, PartialEq, Hash)]
+pub enum ReplayKind {
+    /// Operator created a fresh `PhysicalFunctionRunDB` and redirected the LFR
+    /// pointer to it.
+    #[typed_enum(rename = "R")]
+    Replay,
+    /// Operator undid the most-recent replay; LFR rebound to the prior
+    /// concrete FR.
+    #[typed_enum(rename = "B")]
+    Rollback,
+    /// Operator undid the LFR's only binding; LFR transitioned to Voided.
+    #[typed_enum(rename = "V")]
+    Void,
+}
+
 #[ta_objects::typed_enum]
 #[derive(Eq, PartialEq)]
 pub enum SessionStatus {
@@ -357,6 +351,14 @@ pub enum SessionStatus {
     InvalidLogout,
     #[typed_enum(rename = "i_ud")]
     InvalidUserDisabled,
+}
+
+/// Kept 1:1 with `td_storage::location::StorageLocation`.
+#[ta_objects::typed_enum]
+#[derive(Default, Eq, PartialEq, Hash)]
+pub enum StorageVersion {
+    #[default]
+    V1,
 }
 
 #[ta_objects::typed_enum]
