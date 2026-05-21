@@ -14,6 +14,9 @@ from tabsdatak.conn.postgres import (
     CredentialsSpec,
     DestCfgSpec,
     IfTableExistsSpec,
+    LsnPosition,
+    PostgresCdcConn,
+    PostgresCdcStreamSrc,
     PostgresConn,
     PostgresDest,
     PostgresSrc,
@@ -239,3 +242,154 @@ def test_postgres_dest_accepts_known_dest_cfg_keys():
     )
     loaded = PostgresDest.from_json(dest.to_json())
     assert loaded == dest
+
+
+# =====================================================================
+# CDC public primitives -- LsnPosition / PostgresCdcConn /
+# PostgresCdcStreamSrc
+# =====================================================================
+#
+# These types live on the public postgres surface (``__init__.py``)
+# so users build CDC sources without reaching into private
+# modules. The plugin (``_cdc_plugin.py``) converts ``columns_format``
+# / ``flatten_columns`` onto the common runner ``CdcFormat`` -- see
+# ``test__cdc_plugin.py`` for that conversion.
+
+
+def _cdc_creds():
+    return UserPassword(user=Secret.lit("u"), password=Secret.lit("p"))
+
+
+# --- LsnPosition ----------------------------------------------------
+
+
+def test_lsn_position_round_trip():
+    p = LsnPosition(lsn=12345)
+    assert p.lsn == 12345
+
+
+def test_lsn_position_rejects_non_int():
+    with pytest.raises(ConnInitException) as ei:
+        LsnPosition(lsn="abc")  # type: ignore[arg-type]
+    assert ei.value.api_error is PostgresErrorCode.POSTGRES_12
+
+
+def test_lsn_position_negative_is_lenient():
+    # ``int`` accepts negatives; semantically meaningless for an
+    # LSN but the validator does not enforce that.
+    p = LsnPosition(lsn=-1)
+    assert p.lsn == -1
+
+
+# --- PostgresCdcConn ------------------------------------------------
+
+
+def test_postgres_cdc_conn_minimal_construction():
+    conn = PostgresCdcConn(
+        uri="postgresql://host:5432/db",
+        credentials=_cdc_creds(),
+    )
+    assert conn.uri == "postgresql://host:5432/db"
+
+
+def test_postgres_cdc_conn_is_not_a_postgres_conn_subclass():
+    # PostgresCdcConn deliberately does not subclass PostgresConn.
+    assert not issubclass(PostgresCdcConn, PostgresConn)
+    assert not issubclass(PostgresConn, PostgresCdcConn)
+
+
+# --- PostgresCdcStreamSrc -------------------------------------------
+
+
+def _cdc_stream_src(**overrides) -> PostgresCdcStreamSrc:
+    kw = dict(
+        conn=PostgresCdcConn(uri="postgresql://h/d", credentials=_cdc_creds()),
+        tables=["public.users"],
+        replication_slot="tdcdc_slot",
+        start_from="tail",
+    )
+    kw.update(overrides)
+    return PostgresCdcStreamSrc(**kw)
+
+
+def test_postgres_cdc_stream_src_minimal_construction():
+    src = _cdc_stream_src()
+    assert src.tables == ["public.users"]
+    assert src.replication_slot == "tdcdc_slot"
+    assert src.start_from == "tail"
+    # Flat format-field defaults.
+    assert src.columns_format == "columns"
+    assert src.flatten_columns is True
+    # Slot behavior default.
+    assert src.replication_slot_behavior == "reuse"
+    assert src.publication_name is None
+
+
+def test_postgres_cdc_stream_src_accepts_explicit_format_fields():
+    src = _cdc_stream_src(
+        columns_format="map",
+        flatten_columns=False,
+    )
+    assert src.columns_format == "map"
+    assert src.flatten_columns is False
+
+
+def test_postgres_cdc_stream_src_rejects_unknown_columns_format():
+    with pytest.raises(ConnInitException) as ei:
+        _cdc_stream_src(columns_format="bogus")  # type: ignore[arg-type]
+    assert ei.value.api_error is PostgresErrorCode.POSTGRES_11
+
+
+def test_postgres_cdc_stream_src_rejects_unknown_slot_behavior():
+    with pytest.raises(ConnInitException) as ei:
+        _cdc_stream_src(replication_slot_behavior="bogus")  # type: ignore[arg-type]
+    assert ei.value.api_error is PostgresErrorCode.POSTGRES_11
+
+
+def test_postgres_cdc_stream_src_accepts_lsn_start_from():
+    src = _cdc_stream_src(start_from=LsnPosition(lsn=42))
+    assert isinstance(src.start_from, LsnPosition)
+    assert src.start_from.lsn == 42
+
+
+def test_postgres_cdc_stream_src_accepts_head_and_tail_start_from():
+    head = _cdc_stream_src(start_from="head")
+    assert head.start_from == "head"
+    tail = _cdc_stream_src(start_from="tail")
+    assert tail.start_from == "tail"
+
+
+def test_postgres_cdc_stream_src_accepts_publication_name():
+    src = _cdc_stream_src(publication_name="pub_users")
+    assert src.publication_name == "pub_users"
+
+
+def test_postgres_cdc_stream_src_rejects_unknown_src_cfg_key():
+    with pytest.raises(ConnInitException) as ei:
+        _cdc_stream_src(src_cfg={"bogus.key": 1})  # type: ignore[dict-item]
+    assert ei.value.api_error is PostgresErrorCode.POSTGRES_11
+
+
+def test_postgres_cdc_stream_src_accepts_known_src_cfg_keys():
+    src = _cdc_stream_src(
+        src_cfg={
+            "postgres.cdc.blocking_timeout_seconds": 5,
+            "postgres.cdc.wal2json_format_version": 2,
+            "tabsdata.cdc.buffer.max_rows": 1000,
+            "tabsdata.cdc.poll_interval_seconds": 2,
+        },
+    )
+    assert src.src_cfg["tabsdata.cdc.buffer.max_rows"] == 1000
+
+
+def test_postgres_cdc_stream_src_json_round_trip():
+    src = _cdc_stream_src(
+        tables=["public.users", "public.orders"],
+        start_from=LsnPosition(lsn=12345),
+        columns_format="struct",
+        flatten_columns=False,
+        publication_name="pub_users",
+        replication_slot_behavior="create",
+    )
+    loaded = PostgresCdcStreamSrc.from_json(src.to_json())
+    assert loaded == src
