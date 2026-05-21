@@ -10,8 +10,11 @@ from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
 from tabsdatak.conn.common.types import CfgSpec, UserPassword
 from tabsdatak.conn.db2 import (
+    CommitSeqPosition,
     ConnSpec,
     CredentialsSpec,
+    Db2CdcConn,
+    Db2CdcStreamSrc,
     Db2Conn,
     Db2Dest,
     Db2Src,
@@ -20,6 +23,8 @@ from tabsdatak.conn.db2 import (
     IfTableExistsSpec,
     QueriesSpec,
     SrcCfgSpec,
+    TableCommitSeqPosition,
+    TimestampPosition,
     UriSpec,
 )
 # noinspection PyProtectedMember
@@ -251,3 +256,170 @@ def test_db2_dest_accepts_known_dest_cfg_keys():
     )
     loaded = Db2Dest.from_json(dest.to_json())
     assert loaded == dest
+
+
+# =====================================================================
+# CDC public primitives -- CommitSeqPosition / TableCommitSeqPosition /
+# TimestampPosition / Db2CdcConn / Db2CdcStreamSrc
+# =====================================================================
+#
+# These types live on the public db2 surface (``__init__.py``)
+# so users build CDC sources without reaching into private
+# modules. The plugin (``_cdc_plugin.py``) converts ``columns_format``
+# / ``flatten_columns`` / the db2-local ``TimestampPosition`` onto
+# the common runner types -- see ``test__cdc_plugin.py`` for that
+# conversion.
+
+from datetime import datetime, timezone  # noqa: E402
+
+
+def _cdc_creds():
+    return UserPassword(user=Secret.lit("u"), password=Secret.lit("p"))
+
+
+# --- Position primitives --------------------------------------------
+
+
+def test_commitseq_position_round_trip():
+    p = CommitSeqPosition(seq="00" * 16)
+    assert p.seq == "00" * 16
+
+
+def test_commitseq_position_rejects_non_string():
+    with pytest.raises(ConnInitException) as ei:
+        CommitSeqPosition(seq=42)  # type: ignore[arg-type]
+    assert ei.value.api_error is Db2ErrorCode.DB2_12
+
+
+def test_table_commitseq_position_round_trip():
+    p = TableCommitSeqPosition(
+        seqs={"CDSCHEMA.CDTABLE1": "ab" * 16, "CDSCHEMA.CDTABLE2": "cd" * 16},
+    )
+    assert p.seqs["CDSCHEMA.CDTABLE1"] == "ab" * 16
+    assert p.seqs["CDSCHEMA.CDTABLE2"] == "cd" * 16
+
+
+def test_table_commitseq_position_rejects_non_string_value():
+    with pytest.raises(ConnInitException) as ei:
+        TableCommitSeqPosition(seqs={"CDSCHEMA.CDTABLE": 42})  # type: ignore[dict-item]
+    assert ei.value.api_error is Db2ErrorCode.DB2_13
+
+
+def test_timestamp_position_round_trip():
+    ts = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    p = TimestampPosition(ts=ts)
+    assert p.ts == ts
+
+
+def test_cdc_typing_classes_are_db2_local_not_common_reexports():
+    # Pins the boundary: the user-visible CDC dataclasses must be
+    # db2-local so a knob added on a future Oracle CDC source
+    # cannot accidentally widen the db2 schema.
+    from tabsdatak.conn.common.sql.cdc.typing import (
+        TimestampPosition as _CommonTimestampPosition,
+    )
+
+    assert TimestampPosition is not _CommonTimestampPosition
+
+
+# --- Db2CdcConn -----------------------------------------------------
+
+
+def test_db2_cdc_conn_minimal_construction():
+    conn = Db2CdcConn(
+        uri="db2+ibm_db://host:50000/sample",
+        credentials=_cdc_creds(),
+    )
+    assert conn.uri == "db2+ibm_db://host:50000/sample"
+
+
+def test_db2_cdc_conn_is_not_a_db2_conn_subclass():
+    # Db2CdcConn deliberately does not subclass Db2Conn.
+    assert not issubclass(Db2CdcConn, Db2Conn)
+    assert not issubclass(Db2Conn, Db2CdcConn)
+
+
+# --- Db2CdcStreamSrc ------------------------------------------------
+
+
+def _cdc_stream_src(**overrides) -> Db2CdcStreamSrc:
+    kw = dict(
+        conn=Db2CdcConn(
+            uri="db2+ibm_db://h:50000/sample",
+            credentials=_cdc_creds(),
+        ),
+        tables=["CDSCHEMA.USERS_CD"],
+        start_from="tail",
+    )
+    kw.update(overrides)
+    return Db2CdcStreamSrc(**kw)
+
+
+def test_db2_cdc_stream_src_minimal_construction():
+    src = _cdc_stream_src()
+    assert src.tables == ["CDSCHEMA.USERS_CD"]
+    assert src.start_from == "tail"
+    assert src.columns_format == "columns"
+    assert src.flatten_columns is True
+
+
+def test_db2_cdc_stream_src_accepts_explicit_format_fields():
+    src = _cdc_stream_src(columns_format="map", flatten_columns=False)
+    assert src.columns_format == "map"
+    assert src.flatten_columns is False
+
+
+def test_db2_cdc_stream_src_rejects_unknown_columns_format():
+    with pytest.raises(ConnInitException) as ei:
+        _cdc_stream_src(columns_format="bogus")  # type: ignore[arg-type]
+    assert ei.value.api_error is Db2ErrorCode.DB2_11
+
+
+def test_db2_cdc_stream_src_accepts_commitseq_start_from():
+    src = _cdc_stream_src(start_from=CommitSeqPosition(seq="ab" * 16))
+    assert isinstance(src.start_from, CommitSeqPosition)
+
+
+def test_db2_cdc_stream_src_accepts_table_commitseq_start_from():
+    src = _cdc_stream_src(
+        start_from=TableCommitSeqPosition(
+            seqs={"CDSCHEMA.USERS_CD": "ab" * 16},
+        ),
+    )
+    assert isinstance(src.start_from, TableCommitSeqPosition)
+
+
+def test_db2_cdc_stream_src_accepts_timestamp_start_from():
+    ts = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    src = _cdc_stream_src(start_from=TimestampPosition(ts=ts))
+    assert isinstance(src.start_from, TimestampPosition)
+    assert src.start_from.ts == ts
+
+
+def test_db2_cdc_stream_src_rejects_unknown_src_cfg_key():
+    with pytest.raises(ConnInitException) as ei:
+        _cdc_stream_src(src_cfg={"bogus.key": 1})  # type: ignore[dict-item]
+    assert ei.value.api_error is Db2ErrorCode.DB2_11
+
+
+def test_db2_cdc_stream_src_accepts_known_src_cfg_keys():
+    src = _cdc_stream_src(
+        src_cfg={
+            "db2.cdc.blocking_timeout_seconds": 5,
+            "db2.cdc.fetch_size": 5000,
+            "tabsdata.cdc.buffer.max_rows": 1000,
+            "tabsdata.cdc.poll_interval_seconds": 2,
+        },
+    )
+    assert src.src_cfg["tabsdata.cdc.buffer.max_rows"] == 1000
+
+
+def test_db2_cdc_stream_src_json_round_trip():
+    src = _cdc_stream_src(
+        tables=["CDSCHEMA.USERS_CD", "CDSCHEMA.ORDERS_CD"],
+        start_from=CommitSeqPosition(seq="ab" * 16),
+        columns_format="struct",
+        flatten_columns=False,
+    )
+    loaded = Db2CdcStreamSrc.from_json(src.to_json())
+    assert loaded == src
