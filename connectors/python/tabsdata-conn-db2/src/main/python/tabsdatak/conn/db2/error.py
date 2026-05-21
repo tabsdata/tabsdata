@@ -56,3 +56,66 @@ class Db2ErrorCode(ErrorCode):
         Db2RuntimeException,
         "Db2 write failed (table={table})",
     )  # _Db2DestPlugin: write failure inside write_out
+
+    # --- CDC --------------------------------------------------------
+
+    DB2_10 = ErrorDef(
+        ConnInitException,
+        "Db2CdcConn validation failed",
+    )  # Db2CdcConn dataclass tag
+    DB2_11 = ErrorDef(
+        ConnInitException,
+        "Db2CdcStreamSrc validation failed",
+    )  # Db2CdcStreamSrc dataclass tag
+    DB2_12 = ErrorDef(
+        ConnInitException,
+        "Cannot create CommitSeqPosition",
+    )  # CommitSeqPosition dataclass tag
+    DB2_13 = ErrorDef(
+        ConnInitException,
+        "Cannot create TableCommitSeqPosition",
+    )  # TableCommitSeqPosition dataclass tag
+    DB2_14 = ErrorDef(
+        ConnInitException,
+        "Cannot create TimestampPosition",
+    )  # db2-local TimestampPosition dataclass tag
+    DB2_15 = ErrorDef(
+        Db2RuntimeException,
+        "Db2 SQL replication init failed (start_from={start_from!r})",
+    )  # SqlReplicaIngester: cannot translate start_from
+    DB2_16 = ErrorDef(
+        Db2RuntimeException,
+        "Db2 capture registration missing for cd_owner={cd_owner!r} "
+        "cd_table={cd_table!r} in ASN.IBMSNAP_REGISTER",
+    )  # gather_table_identity: CD table not registered
+    DB2_17 = ErrorDef(
+        Db2RuntimeException,
+        "Db2 source table missing: {schema!r}.{table!r}",
+    )  # gather_table_identity: source table no longer exists
+    DB2_18 = ErrorDef(
+        Db2RuntimeException,
+        "Db2 CD before-image prefix missing on registration "
+        "(cd_owner={cd_owner!r} cd_table={cd_table!r}); UPDATE "
+        "pre-images cannot be matched",
+    )  # match_cd_columns: registration has no IBMSNAP_REGISTER.before_img_prefix
+    DB2_19 = ErrorDef(
+        Db2RuntimeException,
+        "Db2 CD column matching failed -- unmatched before-image "
+        "columns {unmatched_before!r} (after-image: {unmatched_after!r}, "
+        "prefix={prefix!r})",
+    )  # match_cd_columns: orphaned before-image columns
+    DB2_20 = ErrorDef(
+        Db2RuntimeException,
+        "Db2 CD column matching failed -- after-image columns "
+        "{unmatched_after!r} have no before-image sibling under "
+        "prefix={prefix!r}",
+    )  # match_cd_columns: orphaned after-image columns
+    DB2_21 = ErrorDef(
+        Db2RuntimeException,
+        "Db2 sqlreplica offset type mismatch (got {actual!r})",
+    )  # commit_offset / CommitSeqOffset.update: unexpected offset type
+    DB2_22 = ErrorDef(
+        Db2RuntimeException,
+        "Db2 sqlreplica event: unknown IBMSNAP_OPERATION {op!r} "
+        "for {table!r}",
+    )  # poll_changes: row carries an unrecognised operation code

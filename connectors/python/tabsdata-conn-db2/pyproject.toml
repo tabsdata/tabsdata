@@ -50,6 +50,7 @@ Source = "https://github.com/tabsdata/tabsdata"
 [project.entry-points."tabsdatak.connectors"]
 src_db2 = "tabsdatak.conn.db2._plugin:DB2_SRC"
 dest_db2 = "tabsdatak.conn.db2._plugin:DB2_DEST"
+stream_src_db2_cdc = "tabsdatak.conn.db2._cdc_plugin:DB2_CDC_STREAM_SRC"
 
 [tool.pytest.ini_options]
 addopts = "--import-mode=importlib"

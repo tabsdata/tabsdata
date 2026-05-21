@@ -14,6 +14,7 @@ size, read/write engine selection).
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import datetime
 from typing import Annotated, Any, Literal, TypeAlias, Union
 
 from pydantic import StringConstraints
@@ -29,6 +30,7 @@ from tabsdatak.api import (
     NamedConn,
     Secret,
     Src,
+    StreamSrc,
 )
 
 # noinspection PyProtectedMember
@@ -169,3 +171,82 @@ class Db2Dest(Dest):
     if_table_exists: IfTableExistsSpec = "append"
     transactional: bool = True
     dest_cfg: DestCfgSpec | None = None
+
+
+# --- CDC public primitives ------------------------------------------
+#
+# These types are db2-local rather than re-exported from
+# ``conn.common.sql.cdc.typing`` so the user-visible schema of one
+# connector cannot widen another's by accident. The plugin
+# (``_cdc_plugin.py``) converts them onto the runner-side common
+# representation when invoking the dialect-agnostic ``run_cdc`` loop.
+
+# Relative position keywords: ``"head"`` rewinds to the oldest
+# available row in each tracked CD (change-data) table; ``"tail"``
+# skips to each CD table's current watermark.
+RelativePositionSpec: TypeAlias = Literal["head", "tail"]
+
+# Layout for the columns payload on each emitted change row.
+CdcColumnsFormatSpec: TypeAlias = Literal["columns", "struct", "map"]
+
+
+@_api.dataclass(Db2ErrorCode.DB2_12, frozen=True, kw_only=True)
+class CommitSeqPosition:
+    seq: str
+
+
+@_api.dataclass(Db2ErrorCode.DB2_13, frozen=True, kw_only=True)
+class TableCommitSeqPosition:
+    seqs: dict[str, str]
+
+
+@_api.dataclass(Db2ErrorCode.DB2_14, frozen=True, kw_only=True)
+class TimestampPosition:
+    ts: datetime
+
+
+Db2CdcStartFromSpec: TypeAlias = Union[
+    RelativePositionSpec,
+    CommitSeqPosition,
+    TableCommitSeqPosition,
+    TimestampPosition,
+]
+
+
+# --- Db2CdcStreamSrc.src_cfg keys -----------------------------------
+CdcSrcCfgKey: TypeAlias = Literal[
+    "db2.cdc.blocking_timeout_seconds",
+    "db2.cdc.fetch_size",
+    "tabsdata.cdc.buffer.max_rows",
+    "tabsdata.cdc.buffer.max_bytes",
+    "tabsdata.cdc.buffer.max_secs",
+    "tabsdata.cdc.trigger.max_rows",
+    "tabsdata.cdc.trigger.max_bytes",
+    "tabsdata.cdc.trigger.max_secs",
+    "tabsdata.cdc.poll_interval_seconds",
+]
+
+CdcSrcCfgSpec: TypeAlias = Annotated[
+    Mapping[CdcSrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+]
+
+
+@_api.dataclass(Db2ErrorCode.DB2_10, kw_only=True)
+class Db2CdcConn(Conn):
+    uri: UriSpec
+    credentials: CredentialsSpec
+    entity_whitelist: EntityWhitelistSpec | None = None
+    conn_cfg: CfgSpec | None = None
+
+
+CdcConnSpec: TypeAlias = Union[NamedConn, Db2CdcConn]
+
+
+@_api.dataclass(Db2ErrorCode.DB2_11, kw_only=True)
+class Db2CdcStreamSrc(StreamSrc):
+    conn: CdcConnSpec
+    tables: list[Db2TableNameSpec]
+    start_from: Db2CdcStartFromSpec
+    columns_format: CdcColumnsFormatSpec = "columns"
+    flatten_columns: bool = True
+    src_cfg: CdcSrcCfgSpec | None = None
