@@ -1,14 +1,29 @@
 """MySQL connector — public API.
 
+Batch:
+
 * :class:`MySQLConn` -- per-instance MySQL connection.
 * :class:`MySQLSrc` -- source: list of SOQL/SELECT queries; produces
   one parquet slot per query.
 * :class:`MySQLDest` -- destination: list of target table names;
   consumes one parquet slot per table.
 
+CDC (change-data capture):
+
+* :class:`MySQLCdcConn` -- per-instance MySQL CDC connection.
+  Sibling of :class:`MySQLConn`; adds ``server_id`` for the binlog
+  replication identity.
+* :class:`MySQLCdcStreamSrc` -- stream source that emits one
+  tableframe-batch per binlog flush across the tracked tables.
+* :class:`GtidPosition` / :class:`BinlogPosition` /
+  :class:`TimestampPosition` -- ``start_from`` primitives for
+  resuming binlog replication at a specific position.
+
 URI and credential fields accept ``Env`` / ``Secret`` references.
 Cross-cutting cfg keys live in ``src_cfg`` / ``dest_cfg`` (chunk
-size, read/write engine selection).
+size, read/write engine selection); CDC tuning lives in
+``MySQLCdcStreamSrc.src_cfg`` (buffer / trigger thresholds, polling
+cadence).
 """
 
 from __future__ import annotations
@@ -67,17 +82,44 @@ CdcColumnsFormatSpec: TypeAlias = Literal["columns", "struct", "map"]
 
 @_api.dataclass(MysqlErrorCode.MYSQL_12, frozen=True, kw_only=True)
 class GtidPosition:
+    """Start binlog replication at a specific MySQL Global
+    Transaction ID. The ingester converts ``"uuid:N"`` to the
+    pymysqlreplication-friendly set range ``"uuid:1-N"``.
+
+    :param gtid: GTID to resume from, in ``"uuid:N"`` shape (single
+        position) or ``"uuid:M-N"`` shape (range). Empty string is
+        the cold-start marker.
+    """
+
     gtid: str
 
 
 @_api.dataclass(MysqlErrorCode.MYSQL_13, frozen=True, kw_only=True)
 class BinlogPosition:
+    """Start binlog replication at a binlog file + byte offset
+    (the pre-GTID position shape).
+
+    :param file: Binlog filename as reported by
+        ``SHOW BINARY LOGS`` (e.g. ``"mysql-bin.000001"``).
+    :param pos: Byte offset within ``file``. The binlog file's
+        magic bytes occupy positions 0-3; use 4 to replay from the
+        beginning.
+    """
+
     file: str
     pos: int
 
 
 @_api.dataclass(MysqlErrorCode.MYSQL_18, frozen=True, kw_only=True)
 class TimestampPosition:
+    """Start binlog replication at the first event with a timestamp
+    at or after ``ts``.
+
+    :param ts: Wall-clock cut-off; tz-aware datetimes are honoured,
+        naive datetimes are interpreted in the MySQL server's
+        timezone.
+    """
+
     ts: datetime
 
 
@@ -253,6 +295,31 @@ CdcSrcCfgSpec: TypeAlias = Annotated[
 
 @_api.dataclass(MysqlErrorCode.MYSQL_10, kw_only=True)
 class MySQLCdcConn(Conn):
+    """MySQL CDC connection.
+
+    Mirrors :class:`MySQLConn` for the SQLAlchemy / catalog
+    introspection side and adds ``server_id`` -- the unique replica
+    identifier the source uses for binlog replication. Each
+    concurrent CDC connection against the same MySQL must declare a
+    distinct ``server_id``; collisions cause the source to disconnect
+    one of the replicas.
+
+    Not a subclass of :class:`MySQLConn`: CDC and batch SQL have
+    different operational guarantees (replication grants vs query
+    permissions, replica id reservation) and a divergent attribute
+    set is expected over time.
+
+    :param uri: SQLAlchemy-style URI; accepts ``str`` / ``Env`` /
+        ``Secret`` per :data:`UriSpec`.
+    :param credentials: :class:`UserPassword`.
+    :param server_id: MySQL replica id for the binlog stream.
+        Default 512 matches the legacy connector.
+    :param entity_whitelist: Optional regex patterns narrowing
+        discovery.
+    :param conn_cfg: Optional driver-side config forwarded as
+        ``connect_args``.
+    """
+
     uri: UriSpec
     credentials: CredentialsSpec
     server_id: int = DEFAULT_SERVER_ID
@@ -265,6 +332,28 @@ CdcConnSpec: TypeAlias = Union[NamedConn, MySQLCdcConn]
 
 @_api.dataclass(MysqlErrorCode.MYSQL_11, kw_only=True)
 class MySQLCdcStreamSrc(StreamSrc):
+    """MySQL CDC stream source -- emits one tableframe-batch per
+    binlog flush across the tracked tables.
+
+    :param conn: :class:`MySQLCdcConn` (or :class:`NamedConn`).
+    :param tables: Qualified ``schema.table`` names to track.
+    :param start_from: Where to begin reading the binlog when no
+        prior offset has been persisted on the trx context --
+        ``"head"`` / ``"tail"`` keywords, a :class:`GtidPosition`, a
+        :class:`BinlogPosition`, or a :class:`TimestampPosition`.
+    :param columns_format: Layout for the new (and old, when present)
+        columns payload on each emitted change row. See
+        :data:`CdcColumnsFormatSpec`.
+    :param flatten_columns: When ``True`` the new columns are inlined
+        as top-level columns -- the connector's downstream consumer
+        sees an ordinary tabular row and ``columns_format`` only
+        affects the *old*-columns layout.
+    :param src_cfg: Optional ``Mapping`` over the literal
+        :data:`CdcSrcCfgKey` set -- buffer / trigger thresholds and
+        polling cadence. The plugin falls back to its built-in
+        defaults for missing keys.
+    """
+
     conn: CdcConnSpec
     tables: list[MySQLTableNameSpec]
     start_from: MySQLCdcStartFromSpec

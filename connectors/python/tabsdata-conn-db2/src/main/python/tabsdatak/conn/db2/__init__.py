@@ -1,14 +1,33 @@
 """Db2 connector — public API.
 
+Batch:
+
 * :class:`Db2Conn` -- per-instance Db2 connection.
 * :class:`Db2Src` -- source: list of SELECT queries; produces
   one parquet slot per query.
 * :class:`Db2Dest` -- destination: list of target table names;
   consumes one parquet slot per table.
 
+CDC (change-data capture):
+
+* :class:`Db2CdcConn` -- per-instance Db2 CDC connection.
+  Sibling of :class:`Db2Conn`; expects the IBM SQL Replication
+  apparatus (``ASN.IBMSNAP_*`` control tables + ``asncap``
+  capture program) to be in place in the same database.
+* :class:`Db2CdcStreamSrc` -- stream source that polls the IBM
+  SQL Replication CD (change-data) tables and emits one
+  tableframe-batch per capture flush. ``tables`` lists the CD
+  table FQNs (not the source tables); the ingester resolves the
+  source via ``ASN.IBMSNAP_REGISTER``.
+* :class:`CommitSeqPosition` / :class:`TableCommitSeqPosition` /
+  :class:`TimestampPosition` -- ``start_from`` primitives for
+  resuming CD-table ingestion at a specific commit sequence.
+
 URI and credential fields accept ``Env`` / ``Secret`` references.
 Cross-cutting cfg keys live in ``src_cfg`` / ``dest_cfg`` (chunk
-size, read/write engine selection).
+size, read/write engine selection); CDC tuning lives in
+``Db2CdcStreamSrc.src_cfg`` (buffer / trigger thresholds, polling
+cadence, server-side fetch size).
 """
 
 from __future__ import annotations
@@ -192,16 +211,45 @@ CdcColumnsFormatSpec: TypeAlias = Literal["columns", "struct", "map"]
 
 @_api.dataclass(Db2ErrorCode.DB2_12, frozen=True, kw_only=True)
 class CommitSeqPosition:
+    """Start ingestion at a single global commit sequence applied
+    to every tracked CD table.
+
+    :param seq: Hex-string form of the binary 16-byte
+        ``IBMSNAP_COMMITSEQ`` column (e.g.
+        ``"00000000000000000000000000000042"``). All-zeros is the
+        cold-start marker.
+    """
+
     seq: str
 
 
 @_api.dataclass(Db2ErrorCode.DB2_13, frozen=True, kw_only=True)
 class TableCommitSeqPosition:
+    """Start ingestion at per-table commit sequences -- useful when
+    different CD tables need to resume from independent positions
+    (e.g. after a partial re-snapshot).
+
+    :param seqs: Mapping of qualified CD table names
+        (``"CDSCHEMA.CDTABLE"``) to hex-string commit-sequence
+        values. Tracked CD tables missing from this mapping start
+        from :data:`COMMITSEQ_ORIGIN` (16 zero bytes).
+    """
+
     seqs: dict[str, str]
 
 
 @_api.dataclass(Db2ErrorCode.DB2_14, frozen=True, kw_only=True)
 class TimestampPosition:
+    """Start ingestion at the earliest commit sequence whose
+    ``IBMSNAP_LOGMARKER`` is at or after ``ts``. The translation
+    is a one-shot lookup in ``ASN.IBMSNAP_UOW``; once resolved the
+    per-table marks advance independently.
+
+    :param ts: Wall-clock cut-off; tz-aware datetimes are honoured,
+        naive datetimes are interpreted in the Db2 server's
+        timezone.
+    """
+
     ts: datetime
 
 
@@ -233,6 +281,31 @@ CdcSrcCfgSpec: TypeAlias = Annotated[
 
 @_api.dataclass(Db2ErrorCode.DB2_10, kw_only=True)
 class Db2CdcConn(Conn):
+    """Db2 CDC connection.
+
+    Mirrors :class:`Db2Conn` for the SQLAlchemy / catalog
+    introspection side. SQL Replication does not require a
+    distinct replica identifier on the connection: the CD tables
+    + the ``ASN.IBMSNAP_*`` capture tables live in the same
+    database that the source resides in, so a normal authenticated
+    role with SELECT on the CD tables and ``ASN.IBMSNAP_REGISTER``
+    is sufficient.
+
+    Not a subclass of :class:`Db2Conn`: CDC and batch SQL have
+    different operational guarantees (the capture / apply schema
+    has to be in place, the connecting role typically needs
+    different grants) and a divergent attribute set is expected
+    over time.
+
+    :param uri: SQLAlchemy-style URI; accepts ``str`` / ``Env`` /
+        ``Secret`` per :data:`UriSpec`.
+    :param credentials: :class:`UserPassword`.
+    :param entity_whitelist: Optional regex patterns narrowing
+        discovery.
+    :param conn_cfg: Optional driver-side config forwarded as
+        ``connect_args``.
+    """
+
     uri: UriSpec
     credentials: CredentialsSpec
     entity_whitelist: EntityWhitelistSpec | None = None
@@ -244,6 +317,37 @@ CdcConnSpec: TypeAlias = Union[NamedConn, Db2CdcConn]
 
 @_api.dataclass(Db2ErrorCode.DB2_11, kw_only=True)
 class Db2CdcStreamSrc(StreamSrc):
+    """Db2 CDC stream source -- emits one tableframe-batch per
+    capture-table flush across the tracked CD (change-data)
+    tables.
+
+    Db2 SQL Replication captures changes into shadow ``CD``
+    tables; the ASN capture program (``asncap``) populates them
+    in the background. ``tables`` here lists the CD tables (not
+    the source tables); the ingester resolves the source via
+    ``ASN.IBMSNAP_REGISTER`` and reads the IBMSNAP_* system
+    columns to discover the operation / commit sequence /
+    intent sequence / before-image prefix.
+
+    :param conn: :class:`Db2CdcConn` (or :class:`NamedConn`).
+    :param tables: Qualified ``cd_schema.cd_table`` CD table names.
+    :param start_from: ``"head"`` (every tracked CD table replayed
+        from the origin), ``"tail"`` (each table's current
+        watermark), a :class:`CommitSeqPosition` (single seq
+        applied to every table), a :class:`TableCommitSeqPosition`
+        (per-table seqs), or a :class:`TimestampPosition` (the
+        max commit sequence whose IBMSNAP_LOGMARKER is at or
+        before ``ts``).
+    :param columns_format: Layout for the new (and old) columns
+        payload on each emitted change row. See
+        :data:`CdcColumnsFormatSpec`.
+    :param flatten_columns: When ``True`` the new columns are
+        inlined as top-level columns.
+    :param src_cfg: Optional ``Mapping`` over the literal
+        :data:`CdcSrcCfgKey` set -- buffer / trigger thresholds,
+        polling cadence, server-side fetch size.
+    """
+
     conn: CdcConnSpec
     tables: list[Db2TableNameSpec]
     start_from: Db2CdcStartFromSpec

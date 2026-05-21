@@ -1,14 +1,31 @@
 """Postgres connector — public API.
 
+Batch:
+
 * :class:`PostgresConn` -- per-instance Postgres connection.
 * :class:`PostgresSrc` -- source: list of SELECT queries; produces
   one parquet slot per query.
 * :class:`PostgresDest` -- destination: list of target table names;
   consumes one parquet slot per table.
 
+CDC (change-data capture):
+
+* :class:`PostgresCdcConn` -- per-instance Postgres CDC connection.
+  Sibling of :class:`PostgresConn`; the connecting role must hold
+  the ``REPLICATION`` attribute.
+* :class:`PostgresCdcStreamSrc` -- stream source that emits one
+  tableframe-batch per WAL flush across the tracked tables. The
+  source attaches to a *logical replication slot* (named on the
+  src; created or reused per
+  :data:`ReplicationSlotBehaviorSpec`).
+* :class:`LsnPosition` -- ``start_from`` primitive for resuming
+  logical replication at a specific WAL LSN.
+
 URI and credential fields accept ``Env`` / ``Secret`` references.
 Cross-cutting cfg keys live in ``src_cfg`` / ``dest_cfg`` (chunk
-size, read/write engine selection).
+size, read/write engine selection); CDC tuning lives in
+``PostgresCdcStreamSrc.src_cfg`` (buffer / trigger thresholds,
+polling cadence, wal2json format version).
 """
 
 from __future__ import annotations
@@ -203,6 +220,16 @@ Wal2JsonFormatVersionSpec: TypeAlias = Literal[1, 2]
 
 @_api.dataclass(PostgresErrorCode.POSTGRES_12, frozen=True, kw_only=True)
 class LsnPosition:
+    """Start logical replication at a specific WAL Log Sequence
+    Number. Resuming from a persisted offset uses this shape too --
+    the runner serialises ``LsnOffset.write()`` to
+    ``{"lsn": int}`` on the trx state.
+
+    :param lsn: 64-bit integer LSN -- the form
+        ``pg_current_wal_lsn() - '0/0'::pg_lsn`` returns. Use ``0``
+        to replay from the oldest WAL the slot retains.
+    """
+
     lsn: int
 
 
@@ -232,6 +259,29 @@ CdcSrcCfgSpec: TypeAlias = Annotated[
 
 @_api.dataclass(PostgresErrorCode.POSTGRES_10, kw_only=True)
 class PostgresCdcConn(Conn):
+    """Postgres CDC connection.
+
+    Mirrors :class:`PostgresConn` for the SQLAlchemy / catalog
+    introspection side. The replication slot + publication live on
+    :class:`PostgresCdcStreamSrc` instead -- one connection can
+    front multiple sources if they each use a distinct slot.
+
+    Not a subclass of :class:`PostgresConn`: CDC and batch SQL have
+    different operational guarantees (the connecting role needs the
+    ``REPLICATION`` attribute; the slot retention model is separate
+    from query permissions) and a divergent attribute set is
+    expected over time.
+
+    :param uri: SQLAlchemy-style URI; accepts ``str`` / ``Env`` /
+        ``Secret`` per :data:`UriSpec`.
+    :param credentials: :class:`UserPassword`. The connecting role
+        must have the ``REPLICATION`` attribute.
+    :param entity_whitelist: Optional regex patterns narrowing
+        discovery.
+    :param conn_cfg: Optional driver-side config forwarded as
+        ``connect_args``.
+    """
+
     uri: UriSpec
     credentials: CredentialsSpec
     entity_whitelist: EntityWhitelistSpec | None = None
@@ -243,6 +293,36 @@ CdcConnSpec: TypeAlias = Union[NamedConn, PostgresCdcConn]
 
 @_api.dataclass(PostgresErrorCode.POSTGRES_11, kw_only=True)
 class PostgresCdcStreamSrc(StreamSrc):
+    """Postgres CDC stream source -- emits one tableframe-batch per
+    WAL flush across the tracked tables.
+
+    Postgres logical replication requires a *replication slot*: a
+    persistent cursor on the WAL the database refuses to garbage-
+    collect until the consumer confirms. The source's
+    ``replication_slot`` names the slot;
+    ``replication_slot_behavior`` controls whether the plugin
+    creates it (``"create"``, no-op if it already exists) or
+    requires it to exist (``"reuse"``, default).
+
+    :param conn: :class:`PostgresCdcConn` (or :class:`NamedConn`).
+    :param tables: Qualified ``schema.table`` names to track.
+    :param replication_slot: Logical replication slot to attach to.
+    :param replication_slot_behavior: ``"reuse"`` (default) or
+        ``"create"``.
+    :param publication_name: Optional publication name to scope the
+        slot's output (wal2json's ``publication_names`` option).
+    :param start_from: ``"head"`` (replay from the oldest available
+        WAL), ``"tail"`` (current WAL LSN), or a :class:`LsnPosition`.
+    :param columns_format: Layout for the new (and old) columns
+        payload on each emitted change row. See
+        :data:`CdcColumnsFormatSpec`.
+    :param flatten_columns: When ``True`` the new columns are
+        inlined as top-level columns.
+    :param src_cfg: Optional ``Mapping`` over the literal
+        :data:`CdcSrcCfgKey` set -- buffer / trigger thresholds,
+        polling cadence, wal2json format version.
+    """
+
     conn: CdcConnSpec
     tables: list[PostgresTableNameSpec]
     replication_slot: str
