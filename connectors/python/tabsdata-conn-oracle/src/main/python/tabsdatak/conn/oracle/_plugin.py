@@ -19,7 +19,7 @@ from tabsdatak.spi import (
     DestDef,
     DestPlugin,
     Explorer,
-    SrcContext,
+    SrcPluginCtx,
     SrcDef,
     SrcPlugin,
     TableFileSpec,
@@ -115,7 +115,7 @@ def _resolve_dest_cfg(dest_cfg: DestCfgSpec | None) -> _WriterCfg:
 class OracleSrcPlugin(SrcPlugin[OracleSrc]):
     def read_in(
         self,
-        ctx: SrcContext,
+        ctx: SrcPluginCtx,
         src: OracleSrc,
     ) -> list[list[TableFileSpec]]:
         from sqlalchemy.exc import OperationalError, SQLAlchemyError
@@ -142,7 +142,7 @@ class OracleSrcPlugin(SrcPlugin[OracleSrc]):
         )
 
         try:
-            return engine.read(read_cfg, ctx.work_dir())
+            return engine.read(read_cfg, ctx.work_dir)
         except OperationalError as e:
             raise OracleErrorCode.ORACLE_5.exception(
                 cause=e,

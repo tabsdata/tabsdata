@@ -11,7 +11,7 @@ from tabsdatak.spi import (
     DestDef,
     DestPlugin,
     Explorer,
-    SrcContext,
+    SrcPluginCtx,
     SrcDef,
     SrcPlugin,
     TableFileSpec,
@@ -75,7 +75,7 @@ ERRORS = _plugin.FilePluginErrors(
 class GCSSrcPlugin(SrcPlugin[GCSSrc]):
     def read_in(
         self,
-        ctx: SrcContext,
+        ctx: SrcPluginCtx,
         src: GCSSrc,
     ) -> list[list[TableFileSpec]]:
         return _plugin.import_files(

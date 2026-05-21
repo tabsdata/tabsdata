@@ -141,7 +141,7 @@ class DruidDestPlugin(DestPlugin[DruidDest]):
                         staging=staging,
                         parquet_files=[parquet],
                         subdir=slot_subdir,
-                        work_dir=ctx.work_dir(),
+                        work_dir=ctx.work_dir,
                     )
                 except (
                     _transporter.TransporterRunError,

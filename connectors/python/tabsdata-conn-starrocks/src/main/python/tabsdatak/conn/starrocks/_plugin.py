@@ -110,7 +110,7 @@ class StarRocksDestPlugin(DestPlugin[StarRocksDest]):
         upload_id = uuid.uuid4().hex
 
         try:
-            adapter.execute(write_cfg, list(tables), ctx.work_dir(), upload_id)
+            adapter.execute(write_cfg, list(tables), ctx.work_dir, upload_id)
         except OperationalError as e:
             raise StarRocksErrorCode.STARROCKS_4.exception(
                 cause=e,

@@ -10,7 +10,7 @@ from tabsdatak.spi import (
     DestDef,
     DestPlugin,
     Explorer,
-    SrcContext,
+    SrcPluginCtx,
     SrcDef,
     SrcPlugin,
     TableFileSpec,
@@ -53,7 +53,7 @@ ERRORS = _file_plugin.FilePluginErrors(
 class LocalFileSrcPlugin(SrcPlugin[LocalFileSrc]):
     def read_in(
         self,
-        ctx: SrcContext,
+        ctx: SrcPluginCtx,
         src: LocalFileSrc,
     ) -> list[list[TableFileSpec]]:
         return _file_plugin.import_files(

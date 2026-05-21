@@ -19,7 +19,7 @@ from tabsdatak.spi import (
     DestDef,
     DestPlugin,
     Explorer,
-    SrcContext,
+    SrcPluginCtx,
     SrcDef,
     SrcPlugin,
     TableFileSpec,
@@ -115,7 +115,7 @@ def _resolve_dest_cfg(dest_cfg: DestCfgSpec | None) -> _WriterCfg:
 class PostgresSrcPlugin(SrcPlugin[PostgresSrc]):
     def read_in(
         self,
-        ctx: SrcContext,
+        ctx: SrcPluginCtx,
         src: PostgresSrc,
     ) -> list[list[TableFileSpec]]:
         from sqlalchemy.exc import OperationalError, SQLAlchemyError
@@ -145,7 +145,7 @@ class PostgresSrcPlugin(SrcPlugin[PostgresSrc]):
         )
 
         try:
-            return engine.read(read_cfg, ctx.work_dir())
+            return engine.read(read_cfg, ctx.work_dir)
         except OperationalError as e:
             # Engine connect / handshake failures bubble up as
             # OperationalError both for the initial connect and

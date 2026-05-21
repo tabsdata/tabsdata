@@ -23,7 +23,7 @@ from tabsdatak.spi import (
     DestPlugin,
     Explorer,
     ParquetFile,
-    SrcContext,
+    SrcPluginCtx,
     SrcDef,
     SrcPlugin,
     TableFileSpec,
@@ -125,7 +125,7 @@ def _is_connection_error(exc: BaseException) -> bool:
 class _DatabricksSrcPlugin(SrcPlugin[DatabricksSrc]):
     def read_in(
         self,
-        ctx: SrcContext,
+        ctx: SrcPluginCtx,
         src: DatabricksSrc,
     ) -> list[list[TableFileSpec]]:
         # noinspection PyProtectedMember
@@ -151,7 +151,9 @@ class _DatabricksSrcPlugin(SrcPlugin[DatabricksSrc]):
             conn.host_url.value() if hasattr(conn.host_url, "value") else conn.host_url
         )
         try:
-            parquet_paths = _impl.read_all_queries(read_cfg, ctx.work_dir())
+            parquet_paths = _impl.read_all_queries(
+                read_cfg, ctx.work_dir
+            )
         except DatabricksValidateException:
             raise  # adapter-side validation is already typed
         except Exception as e:  # noqa: BLE001 -- runtime wrapper
