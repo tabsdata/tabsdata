@@ -1,3 +1,25 @@
+"""Error machinery for the tabsdata API.
+
+Every framework error flows through three layers:
+
+* :class:`ErrorCode` -- an :class:`enum.Enum` whose variants carry an
+  :class:`ErrorDef` (exception class + message template). Concrete
+  enums (e.g. :class:`ApiErrorCode`, ``MysqlErrorCode``) declare one
+  variant per validation site.
+* :class:`ErrorDef` -- ``(exception, message_template)`` tuple bound
+  to each enum variant. The template is ``str.format_map``-applied
+  with the kwargs passed to :meth:`ErrorCode.exception`.
+* :class:`TabsdataException` -- base exception. Carries the
+  triggering :class:`ErrorCode`, an optional cause, the kwargs used
+  to render the message, and a captured user source frame (the
+  filename + line where the user's code triggered the error -- on
+  by default, gated by the ``TABSDATA_DEBUG_FRAMES`` env var).
+
+The :class:`Api*Exception` family below partitions the API errors
+into init-time / runtime / internal so handlers can react to the
+right severity without matching on individual codes.
+"""
+
 from __future__ import annotations
 
 import inspect
@@ -73,6 +95,16 @@ def _capture_user_source() -> str | None:
 # which would silently merge distinct error codes.
 @dataclass(frozen=True, eq=False)
 class ErrorDef:
+    """Static description of one error site: the exception class to
+    raise plus a ``str.format_map`` message template.
+
+    :param exception: :class:`TabsdataException` subclass to
+        instantiate.
+    :param message_template: Format string applied with the kwargs
+        from :meth:`ErrorCode.exception` (missing keys are left as
+        ``{name}`` placeholders).
+    """
+
     exception: Type["TabsdataException"]
     message_template: str
 
@@ -106,11 +138,31 @@ class _ErrorCodeMeta(EnumMeta, ABCMeta):
 
 
 class ErrorCode(Enum, metaclass=_ErrorCodeMeta):
+    """Abstract base for connector error-code enums.
+
+    Concrete subclasses declare variants whose values are
+    :class:`ErrorDef` instances. Call :meth:`exception` to render a
+    template and raise the bound exception::
+
+        raise MysqlErrorCode.MYSQL_5.exception(
+            cause=sqlalchemy_err, uri=conn.uri,
+        )
+    """
+
     def exception(
         self,
         cause: Exception | None = None,
         **kwargs: Any,
     ) -> "TabsdataException":
+        """Build a :class:`TabsdataException` for this code.
+
+        :param cause: Underlying exception to chain via
+            ``__cause__`` (the framework also sets
+            ``__suppress_context__`` so the traceback reads as
+            ``raise ... from cause``).
+        :param kwargs: Substituted into the template; surplus keys
+            are stashed on the resulting exception's ``extra``.
+        """
         error_def: ErrorDef = self.value
         message = error_def.message_template.format_map(_SafeFormatDict(kwargs))
         return error_def.exception(
@@ -129,6 +181,16 @@ class ErrorCode(Enum, metaclass=_ErrorCodeMeta):
 
 
 class TabsdataException(Exception):
+    """Base class for every framework error.
+
+    Carries the originating :class:`ErrorCode` (``api_error``),
+    optional underlying ``cause``, the kwargs used to render the
+    message (``extra``), and -- when
+    ``TABSDATA_DEBUG_FRAMES`` is enabled -- a ``filename:lineno:
+    source`` snippet pinpointing the user's call site
+    (``source``).
+    """
+
     def __init__(
         self,
         api_error: ErrorCode,

@@ -1,3 +1,19 @@
+"""Connector registry built from the ``tabsdatak.connectors``
+entry-point group.
+
+On first lookup, :func:`_scan` walks every installed entry point,
+loads the registration dataclass (:class:`~tabsdatak.spi.SrcDef` /
+:class:`~tabsdatak.spi.StreamSrcDef` / :class:`~tabsdatak.spi.DestDef`),
+and indexes it by both the Python class (e.g. ``MySQLSrc``) and the
+wire-stable ``src_type`` / ``dest_type`` identifier. Duplicates
+warn-and-skip; the first registration wins.
+
+Per-process in-memory registrations made via the ``register_*``
+hooks are tracked separately so they survive
+:func:`reload_connectors` -- useful for tests that inject ad-hoc
+bindings without publishing a package.
+"""
+
 from __future__ import annotations
 
 import importlib.metadata
@@ -126,18 +142,24 @@ def _ensure() -> None:
 
 
 def avail_srcs() -> dict[str, SrcDef]:
+    """Snapshot of registered batch sources, keyed by
+    ``src_type``."""
     _ensure()
     assert _SRC_BY_TYPE is not None
     return dict(_SRC_BY_TYPE)
 
 
 def avail_stream_srcs() -> dict[str, StreamSrcDef]:
+    """Snapshot of registered stream sources, keyed by
+    ``src_type``."""
     _ensure()
     assert _STREAM_SRC_BY_TYPE is not None
     return dict(_STREAM_SRC_BY_TYPE)
 
 
 def avail_dests() -> dict[str, DestDef]:
+    """Snapshot of registered destinations, keyed by
+    ``dest_type``."""
     _ensure()
     assert _DEST_BY_TYPE is not None
     return dict(_DEST_BY_TYPE)
@@ -149,6 +171,8 @@ def avail_dests() -> dict[str, DestDef]:
 
 
 def get_src(cls: Type[Src]) -> SrcDef:
+    """Resolve a concrete :class:`Src` subclass to its registered
+    :class:`SrcDef`. Raises ``KeyError`` if no binding exists."""
     _ensure()
     assert _SRC_BY_CLASS is not None  # noqa: S101 -- _ensure populates
     try:
@@ -162,6 +186,9 @@ def get_src(cls: Type[Src]) -> SrcDef:
 
 
 def get_stream_src(cls: Type[StreamSrc]) -> StreamSrcDef:
+    """Resolve a concrete :class:`StreamSrc` subclass to its
+    registered :class:`StreamSrcDef`. Raises ``KeyError`` if no
+    binding exists."""
     _ensure()
     assert _STREAM_SRC_BY_CLASS is not None
     try:
@@ -175,6 +202,8 @@ def get_stream_src(cls: Type[StreamSrc]) -> StreamSrcDef:
 
 
 def get_dest(cls: Type[Dest]) -> DestDef:
+    """Resolve a concrete :class:`Dest` subclass to its registered
+    :class:`DestDef`. Raises ``KeyError`` if no binding exists."""
     _ensure()
     assert _DEST_BY_CLASS is not None
     try:
@@ -193,6 +222,8 @@ def get_dest(cls: Type[Dest]) -> DestDef:
 
 
 def register_src(defx: SrcDef) -> None:
+    """Inject a :class:`SrcDef` at runtime (test fixtures,
+    in-process plugins). Survives :func:`reload_connectors`."""
     _ensure()
     assert _SRC_BY_CLASS is not None and _SRC_BY_TYPE is not None
     _SRC_BY_CLASS[defx.src] = defx
@@ -201,6 +232,8 @@ def register_src(defx: SrcDef) -> None:
 
 
 def register_stream_src(defx: StreamSrcDef) -> None:
+    """Inject a :class:`StreamSrcDef` at runtime. Survives
+    :func:`reload_connectors`."""
     _ensure()
     assert _STREAM_SRC_BY_CLASS is not None and _STREAM_SRC_BY_TYPE is not None
     _STREAM_SRC_BY_CLASS[defx.src] = defx
@@ -209,6 +242,8 @@ def register_stream_src(defx: StreamSrcDef) -> None:
 
 
 def register_dest(defx: DestDef) -> None:
+    """Inject a :class:`DestDef` at runtime. Survives
+    :func:`reload_connectors`."""
     _ensure()
     assert _DEST_BY_CLASS is not None and _DEST_BY_TYPE is not None
     _DEST_BY_CLASS[defx.dest] = defx
@@ -217,6 +252,8 @@ def register_dest(defx: DestDef) -> None:
 
 
 def reload_connectors() -> None:
+    """Drop the cached registry and rescan entry points. Any
+    in-process ``register_*`` injections are reapplied."""
     # ``_scan`` re-applies ``_INJECTED_*`` at the end, so a reload is
     # just "clear caches + re-scan".
     global _SRC_BY_CLASS, _STREAM_SRC_BY_CLASS, _DEST_BY_CLASS

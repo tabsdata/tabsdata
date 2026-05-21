@@ -1,3 +1,33 @@
+"""Internal framework primitives shared across :mod:`tabsdatak.api`
+/ :mod:`tabsdatak.spi` / :mod:`tabsdatak._info`.
+
+Most of the surface here is private. The pieces connector
+packages import as ``tabsdatak._api`` are:
+
+* :func:`dataclass` -- the framework dataclass decorator. Wraps
+  :func:`pydantic.dataclasses.dataclass` and translates pydantic
+  ``ValidationError`` into the
+  :class:`~tabsdatak.error.TabsdataException` family with a
+  caller-chosen :class:`~tabsdatak.error.ErrorCode`. Used by
+  every concrete ``Conn`` / ``Src`` / ``Dest`` / ``StreamSrc`` /
+  position dataclass.
+* :class:`JsonSerde` -- mixin providing JSON envelope round-trip
+  (``to_json`` / ``from_json``) with a ``__kind__`` discriminator
+  for polymorphic loading.
+* :class:`DescriptorBase` -- :class:`JsonSerde` plus the tagging
+  the runtime relies on.
+* :class:`BaseEnv` / :class:`BaseSecret` -- shared machinery for
+  :class:`~tabsdatak.api.Env` / :class:`~tabsdatak.api.Secret`.
+* :class:`EnvValueConstraints` / :class:`SecretValueConstraints` --
+  field-site value-pattern constraints.
+* ``*_CONSTRAINTS`` validators -- per-domain name patterns
+  (table, env-var, cron mask, ...).
+* :func:`callable_to_str` / :func:`callable_from_str` /
+  :func:`qualified_class` / :func:`resolve_class` --
+  ``*Info``-side helpers for JSON round-trip of functions /
+  class references.
+"""
+
 from __future__ import annotations
 
 import dataclasses
@@ -46,6 +76,15 @@ def dataclass(
     api_error: ErrorCode,
     **dc_kwargs: Any,
 ) -> Callable[[_C], _C]:
+    """Decorator wrapping :func:`pydantic.dataclasses.dataclass`.
+
+    Translates pydantic ``ValidationError`` raised during
+    construction into ``api_error.exception(cause=e)`` so every
+    framework dataclass surfaces a stable :class:`ErrorCode`.
+    ``dc_kwargs`` are forwarded to pydantic; ``frozen=True`` is the
+    default (override with ``frozen=False`` if you genuinely need
+    mutability).
+    """
     # API dataclasses are frozen by default: once constructed, instances
     # cannot be mutated (attribute assignment raises FrozenInstanceError).
     # This protects invariants that were validated at construction time --
@@ -258,6 +297,18 @@ CONTEXT_KEY_RE_STR = r'^(?=.{1,253}$)([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])
 
 
 class _ValuePattern:
+    """Base for the :class:`AfterValidator` adapters that pin a
+    regex to the *resolved* value of an :class:`Env` /
+    :class:`Secret` field.
+
+    Subclasses (:class:`EnvValueConstraints`,
+    :class:`SecretValueConstraints`) override :meth:`_on_class` to
+    declare which value-reference family they cover. The validator
+    runs at pydantic schema time -- when a bare string is passed
+    where the field expects an Env / Secret, it is auto-wrapped as
+    the matching literal subclass with the pattern injected.
+    """
+
     def __init__(self, *, pattern: str):
         if not isinstance(pattern, str):
             raise TypeError(f"pattern() expects a regex string, got {type(pattern)!r}")
@@ -337,6 +388,11 @@ class _ValuePattern:
 
 
 class EnvValueConstraints(_ValuePattern):
+    """Field-site value-pattern check for
+    :class:`~tabsdatak.api.Env` references. Use as
+    ``Annotated[Env, EnvValueConstraints(pattern=...)]`` on a
+    per-connector ``UriSpec`` / credential alias."""
+
     def _on_class(self) -> Type:
         from tabsdatak.api import Env
 
@@ -347,6 +403,11 @@ ENV_VALUE_NAMED_CONN_CONSTRAINTS = EnvValueConstraints(pattern=_ENV_VAR_NAME_RE_
 
 
 class SecretValueConstraints(_ValuePattern):
+    """Field-site value-pattern check for
+    :class:`~tabsdatak.api.Secret` references. Use as
+    ``Annotated[Secret, SecretValueConstraints(pattern=...)]``
+    on a per-connector ``UriSpec`` / credential alias."""
+
     def _on_class(self) -> Type:
         from tabsdatak.api import Secret
 
@@ -722,6 +783,15 @@ _ENVELOPE_KEYS = frozenset({"kind", "apiVersion", "type", "spec"})
 
 
 class JsonSerde:
+    """Mixin providing envelope-based JSON round-trip
+    (:meth:`to_json` / :meth:`from_json`) for framework dataclasses.
+
+    Each subclass sets ``__kind__`` (the on-wire discriminator) and
+    optionally ``__api_version__`` + ``__migrations__`` for schema
+    evolution. Polymorphic loads validate that the envelope's
+    ``type`` resolves to a subclass of the receiving class --
+    arbitrary class loading from untrusted input is rejected."""
+
     __kind__: ClassVar[str] = "unknown"
     __api_version__: ClassVar[str] = "1.0"
     __migrations__: ClassVar[dict[str, tuple[str, Callable[[dict], dict]]]] = {}
@@ -824,6 +894,12 @@ class JsonSerde:
 
 
 class DescriptorBase(JsonSerde):
+    """Common ancestor for framework-described user types (Trigger,
+    Conn, Src, StreamSrc, Dest, ...). Layers JSON round-trip on top
+    of ``JsonSerde`` and provides a ``validate()`` hook that runs
+    after construction, in addition to the pydantic dataclass
+    field-level validation."""
+
     def validate(self) -> None:
         pass
 
@@ -994,6 +1070,9 @@ class BaseSecret(JsonSerde, ABC):
 
 
 def qualified_class(cls: type) -> str:
+    """Render ``cls`` as ``"module:qualname"`` for JSON envelope
+    serialisation. Rejects locally-defined classes (qualname
+    contains ``<locals>``) -- they can't be re-imported."""
     qualname = cls.__qualname__
     if "<locals>" in qualname:
         raise ValueError(
@@ -1005,6 +1084,9 @@ def qualified_class(cls: type) -> str:
 
 
 def resolve_class(spec: str) -> type:
+    """Inverse of :func:`qualified_class` -- import the module and
+    walk the qualname path. Raises ``ValueError`` on a malformed
+    spec, a missing module / attribute, or a non-class target."""
     if ":" not in spec:
         raise ValueError(f"type {spec!r}: expected '<module>:<qualname>'")
     mod_name, _, qualname = spec.partition(":")
@@ -1052,6 +1134,8 @@ def _migrate(spec: dict, from_version: str, target: type) -> dict:
 
 
 def callable_to_str(func: Callable[..., Any]) -> str:
+    """Render ``func`` as ``"module:qualname"`` for JSON envelope
+    serialisation of ``*Info.func``. Rejects closures."""
     qualname = func.__qualname__
     if "<locals>" in qualname:
         # noinspection PyUnresolvedReferences
@@ -1065,6 +1149,8 @@ def callable_to_str(func: Callable[..., Any]) -> str:
 
 
 def callable_from_str(spec: str) -> Callable[..., Any]:
+    """Inverse of :func:`callable_to_str` -- resolve a
+    ``"module:qualname"`` string back to the callable."""
     if ":" not in spec:
         raise ValueError(f"callable {spec!r}: expected '<module>:<qualname>'")
     mod_name, _, qualname = spec.partition(":")

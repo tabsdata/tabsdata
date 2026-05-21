@@ -1,3 +1,30 @@
+"""Public API for declaring tabsdata flows.
+
+A flow is built from four decorated functions:
+
+* ``@publisher`` -- batch pull from a :class:`Src` into one or
+  more ``output_tables``.
+* ``@stream_publisher`` -- long-lived pull from a :class:`StreamSrc`
+  (CDC, log tail, queue tail) into ``output_tables``.
+* ``@transformer`` -- read one or more ``input_tables`` and emit
+  ``output_tables`` (no external connection).
+* ``@subscriber`` -- batch push of ``input_tables`` to a
+  :class:`Dest`.
+
+Each decorator wraps the user function in an ``*Info`` descriptor
+(``PublisherInfo`` / ``StreamPublisherInfo`` / ``TransformerInfo``
+/ ``SubscriberInfo``) and the framework picks the descriptor up
+during flow registration. Triggers (``CronTrigger`` /
+``TablesTrigger`` / ``AllTablesTrigger``) declare *when* a function
+fires; connections (:class:`Conn` / :class:`NamedConn`) and value
+references (:class:`Env` / :class:`Secret`) declare the *where*
+and the *credentials*.
+
+The :class:`TrxCtx` interface is what the runtime hands to every
+decorated function so it can read trx identifiers and persist
+per-flow scratch state across invocations.
+"""
+
 import importlib
 from abc import ABC, abstractmethod
 from typing import Annotated, Callable, TypeAlias, Union
@@ -29,39 +56,68 @@ TableFrameSpec: TypeAlias = TableFrame | None
 TableFramesSpec: TypeAlias = list[TableFrame | None] | None
 
 
+# Output-table name in the local flow. Must match the per-flow
+# table-name pattern (alphanumerics, underscores, leading letter).
 TableNameSpec: TypeAlias = Annotated[str, _api.TABLE_NAME_CONSTRAINTS]
 TableNamesSpec: TypeAlias = Annotated[
     list[TableNameSpec], _api.NON_EMPTY_LIST_CONSTRAINTS
 ]
 
+# Cross-collection table reference, of shape ``"collection/table"``.
+# ``input_tables`` and ``TablesTrigger.tables`` use this form so a
+# function can read from / fire on tables that live in a different
+# collection.
 CollTableNameSpec: TypeAlias = Annotated[str, _api.COLL_TABLE_NAME_CONSTRAINTS]
 CollTableNamesSpec: TypeAlias = Annotated[
     list[CollTableNameSpec], _api.NON_EMPTY_LIST_CONSTRAINTS
 ]
 
+# Five-field cron expression understood by ``croniter``.
 CronMaskSpec: TypeAlias = Annotated[str, _api.CRON_MASK_CONSTRAINTS]
 
 
 @_api.dataclass(ApiErrorCode.API_1)
 class Trigger(ABC, _api.DescriptorBase):
+    """Abstract base for the trigger family.
+
+    Concrete triggers (:class:`CronTrigger`, :class:`TablesTrigger`,
+    :class:`AllTablesTrigger`) live on a function's ``trigger_by``
+    argument and control *when* the runtime fires it."""
+
     __kind__ = "trigger"
 
 
 @_api.dataclass(ApiErrorCode.API_2)
 class CronTrigger(Trigger):
+    """Fire on a cron schedule.
+
+    :param mask: Five-field cron expression (UTC).
+    """
+
     mask: CronMaskSpec
 
 
 @_api.dataclass(ApiErrorCode.API_3)
 class TablesTrigger(Trigger):
+    """Fire when one of a named set of upstream tables produces a
+    new batch.
+
+    :param tables: ``"collection/table"`` references to watch.
+    """
+
     tables: CollTableNamesSpec
 
 
 @_api.dataclass(ApiErrorCode.API_4)
 class AllTablesTrigger(Trigger):
+    """Fire when *any* upstream table the function reads from
+    produces a new batch."""
+
     pass
 
 
+# ``@publisher`` cannot use :class:`AllTablesTrigger` (publishers
+# have no upstream tables to watch); the other two decorators do.
 PublisherTriggerBySpec: TypeAlias = Union[CronTrigger, TablesTrigger]
 TransformerTriggerBySpec: TypeAlias = Union[
     CronTrigger,
@@ -87,12 +143,25 @@ EnvVarNameSpec: TypeAlias = Annotated[str, _api.ENV_NAME_CONSTRAINTS]
 
 @_api.dataclass(ApiErrorCode.API_7)
 class Env(_api.BaseEnv):
+    """Reference to an environment-variable value, resolved lazily
+    at flow run time.
+
+    Use :meth:`lit` to embed a value inline (rejects the env-var
+    lookup; the literal is the value). Subclasses may set
+    ``_value_pattern`` to constrain the resolved value to a regex.
+
+    :param s: Name of the environment variable.
+    """
+
     s: EnvVarNameSpec
     __kind__ = "envRef"
     _value_pattern: str | None = Field(default=None, init=False)
 
     @classmethod
     def lit(cls, value: str) -> "Env":
+        """Wrap ``value`` as an inline literal that bypasses the
+        env-var lookup. Useful for declarative tests and one-shot
+        scripts that don't want to depend on the environment."""
         return _LiteralEnv(s=value, _value_pattern=cls._value_pattern)
 
 
@@ -117,6 +186,16 @@ class _LiteralEnv(Env):
 
 @_api.dataclass(ApiErrorCode.API_10)
 class Secret(_api.BaseSecret):
+    """Reference to a secret value resolved by the runtime's
+    secret store (per-flow scope).
+
+    Bare ``Secret()`` is the canonical user-facing construction;
+    the internal ``_s`` / ``_value_pattern`` fields are populated
+    by the framework's resolver or by :meth:`lit`. Use
+    :meth:`lit` to embed a value inline. Subclasses may set
+    ``_value_pattern`` to constrain the resolved value to a regex.
+    """
+
     # ``init=False`` makes ``Secret()`` the only valid construction
     # shape at the user-facing ``__init__`` site -- IDEs and type
     # checkers surface ``Secret('foo')`` and ``Secret(_s='foo')`` as
@@ -131,6 +210,9 @@ class Secret(_api.BaseSecret):
 
     @classmethod
     def lit(cls, value: str) -> "Secret":
+        """Wrap ``value`` as an inline literal that bypasses the
+        secret-store lookup. Useful for declarative tests and
+        one-shot scripts."""
         return _LiteralSecret(_s=value, _value_pattern=cls._value_pattern)
 
 
@@ -168,9 +250,18 @@ class _Conn(ABC, _api.DescriptorBase):
 
 
 class Conn(_Conn, ABC):
+    """Abstract base for every connection.
+
+    Concrete subclasses live in the per-database connector
+    packages (e.g. ``MySQLConn``, ``MySQLCdcConn``) and declare
+    their own ``uri`` / ``credentials`` / ``conn_cfg`` fields."""
+
     __kind__ = "connectionDef"
 
 
+# A connection slot resolved by *name* (looked up in the flow's
+# named-connection registry). Accepts either the raw name as a
+# string or an :class:`Env` reference that yields the name.
 ConnectionNameSpec: TypeAlias = Union[
     Annotated[str, _api.NAMED_CONN_CONSTRAINTS],
     Annotated[Env, _api.ENV_VALUE_NAMED_CONN_CONSTRAINTS],
@@ -179,6 +270,14 @@ ConnectionNameSpec: TypeAlias = Union[
 
 @_api.dataclass(ApiErrorCode.API_13)
 class NamedConn(Conn):
+    """Reference to a connection by name; the runtime resolves the
+    name to a concrete :class:`Conn` at flow run time.
+
+    :param name: Connection identifier registered with the
+        runtime. Accepts a plain string or an :class:`Env`
+        reference.
+    """
+
     __kind__ = "connectionRef"
     name: ConnectionNameSpec
 
@@ -191,6 +290,16 @@ class NamedConn(Conn):
 # (`PublisherInfo.source: Src`, ...) opt into
 # `arbitrary_types_allowed=True` so pydantic validates via isinstance.
 class Src[C: Conn](ABC, _api.DescriptorBase):
+    """Abstract batch source. Used as the ``source`` argument of
+    ``@publisher``.
+
+    Concrete subclasses live in connector packages (e.g.
+    ``MySQLSrc``, ``PostgresSrc``); each declares a ``conn`` field
+    bound to its connector's :class:`Conn` union and any per-source
+    knobs (queries, tables, cfg). The plugin / cardinality wiring
+    is registered via :class:`tabsdatak.spi.SrcDef`.
+    """
+
     __kind__ = "sourceDef"
     # Abstract field-style annotation: subclasses bind `conn` to their
     # concrete connection union. Advertises the contract; pydantic does
@@ -199,6 +308,16 @@ class Src[C: Conn](ABC, _api.DescriptorBase):
 
 
 class StreamSrc[C: Conn](ABC, _api.DescriptorBase):
+    """Abstract stream source. Used as the ``source`` argument of
+    ``@stream_publisher``.
+
+    Concrete subclasses (e.g. ``MySQLCdcStreamSrc``,
+    ``PostgresCdcStreamSrc``) declare their own ``tables`` /
+    ``start_from`` / ``src_cfg`` knobs and bind to a connector
+    :class:`Conn`. Wiring is registered via
+    :class:`tabsdatak.spi.StreamSrcDef`.
+    """
+
     __kind__ = "streamSourceDef"
     # Abstract field-style annotation: subclasses bind `conn` to their
     # concrete connection union. Advertises the contract; pydantic does
@@ -207,11 +326,25 @@ class StreamSrc[C: Conn](ABC, _api.DescriptorBase):
 
 
 class Dest[C: Conn](ABC, _api.DescriptorBase):
+    """Abstract destination. Used as the ``destination`` argument
+    of ``@subscriber``.
+
+    Concrete subclasses (e.g. ``MySQLDest``, ``PostgresDest``)
+    declare a ``conn`` field plus per-destination knobs (target
+    tables, replace/append, cfg). Wiring is registered via
+    :class:`tabsdatak.spi.DestDef`.
+    """
+
     __kind__ = "destinationDef"
     conn: C
 
 
 class OnTablesAction(ABC, _api.JsonSerde):
+    """Abstract base for declarative table-side-effect actions
+    that fire alongside a function's normal output (e.g. publish a
+    notification, write an audit row). The runtime executes the
+    action only when the function's primary output succeeds."""
+
     __kind__ = "onTablesAction"
 
 
@@ -230,6 +363,19 @@ def publisher(
     trigger_by: PublisherTriggerBySpec | None = None,
     on_tables: OnTablesActionSpec | None = None,
 ) -> Callable:
+    """Decorate a function as a batch publisher.
+
+    :param source: The :class:`Src` to pull from.
+    :param output_tables: Local table names this function emits;
+        the function's return shape must match the cardinality
+        of ``source``.
+    :param trigger_by: Optional :class:`CronTrigger` /
+        :class:`TablesTrigger`; if omitted the function fires only
+        on manual run.
+    :param on_tables: Optional declarative side-effects that fire
+        alongside the function's primary output.
+    """
+
     def _publisher(func):
         return _info_cls("PublisherInfo")(
             func, source, output_tables, trigger_by, on_tables
@@ -245,6 +391,19 @@ def stream_publisher(
     output_tables: TableNamesSpec,
     on_tables: OnTablesActionSpec | None = None,
 ) -> Callable:
+    """Decorate a function as a stream publisher.
+
+    :param source: The :class:`StreamSrc` to consume.
+    :param use_existing_data: When ``True``, replay everything the
+        source's ``start_from`` makes available; when ``False``,
+        skip to the live edge before emitting.
+    :param flush_interval_mins: Fallback rollover window: the
+        runtime closes the current batch every N minutes if the
+        source's own rollover threshold has not fired.
+    :param output_tables: Local table names the function emits.
+    :param on_tables: Optional declarative side-effects.
+    """
+
     def _stream_publisher(func):
         return _info_cls("StreamPublisherInfo")(
             func,
@@ -264,6 +423,16 @@ def transformer(
     trigger_by: TransformerTriggerBySpec | None = None,
     on_tables: OnTablesActionSpec | None = None,
 ) -> Callable:
+    """Decorate a function as a transformer (table-to-table, no
+    external connection).
+
+    :param input_tables: ``"collection/table"`` references to read.
+    :param output_tables: Local table names this function emits.
+    :param trigger_by: Optional :class:`CronTrigger` /
+        :class:`TablesTrigger` / :class:`AllTablesTrigger`.
+    :param on_tables: Optional declarative side-effects.
+    """
+
     def _transformer(func):
         return _info_cls("TransformerInfo")(
             func, input_tables, output_tables, trigger_by, on_tables
@@ -277,34 +446,66 @@ def subscriber(
     input_tables: CollTableNamesSpec,
     trigger_by: SubscriberTriggerBySpec | None = None,
 ) -> Callable:
+    """Decorate a function as a subscriber (push tables to an
+    external destination).
+
+    :param destination: The :class:`Dest` to write to.
+    :param input_tables: ``"collection/table"`` references to ship.
+    :param trigger_by: Optional :class:`CronTrigger` /
+        :class:`TablesTrigger` / :class:`AllTablesTrigger`.
+    """
+
     def _subscriber(func):
         return _info_cls("SubscriberInfo")(func, destination, input_tables, trigger_by)
 
     return _subscriber
 
 
+# Per-flow scratch-key identifier; restricted to dotted identifiers
+# so the key space is namespaceable across plugins.
 ContextKeySpec: TypeAlias = Annotated[str, StringConstraints(pattern=_api.CONTEXT_KEY_RE_STR)]
+# Allowed per-flow scratch-value shapes -- primitives + flat
+# list/dict-of-strings. Stays JSON-serialisable end-to-end.
 ContextValueSpec: TypeAlias = Union[str, int, float, bool, list[str], dict[str, str]]
 
+
 class TrxCtx(ABC):
+    """Per-trx context handed by the runtime to every decorated
+    function and connector plugin.
+
+    Carries trx-level identifiers (``exec_plan_id``, ``trx_id``,
+    ``exec_plan_ts``) plus a per-flow scratch store for state that
+    needs to survive across invocations (``get_attr`` /
+    ``store_attr``) and a metadata sink for trx-side observability
+    (``add_metadata``).
+    """
 
     @property
     @abstractmethod
-    def exec_plan_id(self) -> str: ...
+    def exec_plan_id(self) -> str:
+        """Unique id of the running execution plan."""
 
     @property
     @abstractmethod
-    def trx_id(self) -> str: ...
+    def trx_id(self) -> str:
+        """Unique id of the current trx within the plan."""
 
     @property
     @abstractmethod
-    def exec_plan_ts(self) -> str: ...
+    def exec_plan_ts(self) -> str:
+        """ISO-8601 timestamp of when the plan started."""
 
     @abstractmethod
-    def get_attr(self, attr: ContextKeySpec) -> ContextValueSpec | None: ...
+    def get_attr(self, attr: ContextKeySpec) -> ContextValueSpec | None:
+        """Read a per-flow scratch value (returns ``None`` if
+        unset)."""
 
     @abstractmethod
-    def store_attr(self, attr: ContextKeySpec, val: ContextValueSpec | None): ...
+    def store_attr(self, attr: ContextKeySpec, val: ContextValueSpec | None):
+        """Write a per-flow scratch value -- persists across trx
+        invocations within the same flow."""
 
     @abstractmethod
-    def add_metadata(self, attr: ContextKeySpec, val: ContextValueSpec | None): ...
+    def add_metadata(self, attr: ContextKeySpec, val: ContextValueSpec | None):
+        """Attach trx-level metadata for observability / lineage.
+        Not durable across trx invocations."""

@@ -1,3 +1,18 @@
+"""Function descriptors built by the user-facing decorators.
+
+The four decorators in :mod:`tabsdatak.api` (``@publisher``,
+``@stream_publisher``, ``@transformer``, ``@subscriber``) wrap
+the user function in the matching ``*Info`` dataclass below.
+Each Info captures the decorator's static arguments + a callable
+reference to the function, validates the signature against the
+declared input/output shapes, and rejects the original
+``func(...)`` call so users can't accidentally invoke the wrapped
+function directly.
+
+These dataclasses are also the JSON serialisation surface for a
+flow definition; ``func`` round-trips as ``"module:qualname"``.
+"""
+
 from __future__ import annotations
 
 from typing import Callable
@@ -35,6 +50,14 @@ def _val_func(v):
 
 @_api.dataclass(ApiErrorCode.API_17, config=_ARBITRARY)
 class PublisherInfo(_api.JsonSerde):
+    """Descriptor for a ``@publisher``-decorated function.
+
+    Carries the user function plus its declared
+    :class:`~tabsdatak.api.Src`, output-table names, optional
+    trigger and on-tables side-effects. Construction validates
+    the function signature against the source's slot count /
+    mode and the declared outputs."""
+
     __kind__ = "publisherDef"
 
     func: Callable
@@ -71,6 +94,13 @@ class PublisherInfo(_api.JsonSerde):
 
 @_api.dataclass(ApiErrorCode.API_18, config=_ARBITRARY)
 class StreamPublisherInfo(_api.JsonSerde):
+    """Descriptor for a ``@stream_publisher``-decorated function.
+
+    Captures the :class:`~tabsdatak.api.StreamSrc`, the
+    ``use_existing_data`` replay flag, the ``fallback_rollover_mins``
+    batching window, and the output-table contract. Stream-publisher
+    inputs are always array-mode (one event fans out across rows)."""
+
     __kind__ = "streamPublisherDef"
 
     func: Callable
@@ -111,6 +141,12 @@ class StreamPublisherInfo(_api.JsonSerde):
 
 @_api.dataclass(ApiErrorCode.API_19, config=_ARBITRARY)
 class TransformerInfo(_api.JsonSerde):
+    """Descriptor for a ``@transformer``-decorated function.
+
+    Table-to-table inside the flow (no external connection).
+    Inputs are cross-collection ``"collection/table"`` references;
+    outputs are local table names."""
+
     __kind__ = "transformerDef"
 
     func: Callable
@@ -146,6 +182,14 @@ class TransformerInfo(_api.JsonSerde):
 
 @_api.dataclass(ApiErrorCode.API_20, config=_ARBITRARY)
 class SubscriberInfo(_api.JsonSerde):
+    """Descriptor for a ``@subscriber``-decorated function.
+
+    Carries the user function plus its declared
+    :class:`~tabsdatak.api.Dest`, the input-table references
+    (``"collection/table"``), and an optional trigger. The
+    function receives one tableframe per input slot and returns
+    nothing -- the destination plugin handles the actual write."""
+
     __kind__ = "subscriberDef"
 
     func: Callable
