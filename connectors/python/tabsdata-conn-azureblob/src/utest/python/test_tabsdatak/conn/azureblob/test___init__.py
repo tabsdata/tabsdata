@@ -95,6 +95,54 @@ def test_azureblob_dest_round_trip_with_named_conn():
     assert loaded.conn.name == "prod_azure"
 
 
+# ---------------------------------------------------------------------------
+# Conn / Src / Dest init validation
+# ---------------------------------------------------------------------------
+
+
+def test_azureblob_conn_rejects_missing_container():
+    from tabsdatak.conn.common.error import ConnInitException
+
+    with pytest.raises(ConnInitException) as ei:
+        AzureBlobConn(  # type: ignore[call-arg]
+            credentials=AzureAccountKey(
+                account_name=Secret(),
+                account_key=Secret(),
+            ),
+        )
+    assert ei.value.api_error is AzureBlobErrorCode.AZURE_BLOB_1
+
+
+def test_azureblob_conn_rejects_missing_credentials():
+    from tabsdatak.conn.common.error import ConnInitException
+
+    with pytest.raises(ConnInitException) as ei:
+        AzureBlobConn(container=Secret())  # type: ignore[call-arg]
+    assert ei.value.api_error is AzureBlobErrorCode.AZURE_BLOB_1
+
+
+def test_azureblob_src_rejects_missing_paths():
+    from tabsdatak.conn.common.error import ConnInitException
+
+    with pytest.raises(ConnInitException) as ei:
+        AzureBlobSrc(  # type: ignore[call-arg]
+            conn=_conn(),
+            format=SrcFileFormat.CSV,
+        )
+    assert ei.value.api_error is AzureBlobErrorCode.AZURE_BLOB_2
+
+
+def test_azureblob_dest_rejects_missing_paths():
+    from tabsdatak.conn.common.error import ConnInitException
+
+    with pytest.raises(ConnInitException) as ei:
+        AzureBlobDest(  # type: ignore[call-arg]
+            conn=_conn(),
+            format=DestFileFormat.CSV,
+        )
+    assert ei.value.api_error is AzureBlobErrorCode.AZURE_BLOB_4
+
+
 def test_azureblob_validate_rejects_cross_side_format_cfg_keys():
     with pytest.raises(AzureBlobValidateException) as ei:
         AzureBlobSrc(

@@ -152,3 +152,52 @@ def test_s3_conn_full_path_strips_trailing_slashes():
     c = _conn_with_base("/data")
     assert c.full_path("sub/foo.csv/") == "data/sub/foo.csv"
     assert c.full_path("/") == "data"
+
+
+# ---------------------------------------------------------------------------
+# Conn / Src / Dest init validation
+# ---------------------------------------------------------------------------
+
+
+def test_s3_conn_rejects_missing_bucket():
+    from tabsdatak.conn.common.error import ConnInitException
+
+    with pytest.raises(ConnInitException) as ei:
+        S3Conn(  # type: ignore[call-arg]
+            region="us-east-1",
+            credentials=AwsAccessSecretKey(
+                access_key_id=Secret.lit("AKIA..."),
+                secret_access_key=Secret.lit("secret"),
+            ),
+        )
+    assert ei.value.api_error is S3ErrorCode.S3_1
+
+
+def test_s3_conn_rejects_missing_credentials():
+    from tabsdatak.conn.common.error import ConnInitException
+
+    with pytest.raises(ConnInitException) as ei:
+        S3Conn(bucket="my-bucket", region="us-east-1")  # type: ignore[call-arg]
+    assert ei.value.api_error is S3ErrorCode.S3_1
+
+
+def test_s3_src_rejects_missing_paths():
+    from tabsdatak.conn.common.error import ConnInitException
+
+    with pytest.raises(ConnInitException) as ei:
+        S3Src(  # type: ignore[call-arg]
+            conn=_conn(),
+            format=SrcFileFormat.CSV,
+        )
+    assert ei.value.api_error is S3ErrorCode.S3_2
+
+
+def test_s3_dest_rejects_missing_paths():
+    from tabsdatak.conn.common.error import ConnInitException
+
+    with pytest.raises(ConnInitException) as ei:
+        S3Dest(  # type: ignore[call-arg]
+            conn=_conn(),
+            format=DestFileFormat.CSV,
+        )
+    assert ei.value.api_error is S3ErrorCode.S3_4

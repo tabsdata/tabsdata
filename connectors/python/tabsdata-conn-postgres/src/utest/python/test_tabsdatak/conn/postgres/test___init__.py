@@ -395,3 +395,29 @@ def test_postgres_cdc_stream_src_json_round_trip():
     )
     loaded = PostgresCdcStreamSrc.from_json(src.to_json())
     assert loaded == src
+
+
+# ---------------------------------------------------------------------------
+# PostgresConn init validation error code
+# ---------------------------------------------------------------------------
+
+
+def test_postgres_conn_rejects_missing_uri():
+    from tabsdatak.conn.common.error import ConnInitException
+
+    with pytest.raises(ConnInitException) as ei:
+        PostgresConn(  # type: ignore[call-arg]
+            credentials=UserPassword(
+                user=Secret.lit("u"),
+                password=Secret.lit("p"),
+            ),
+        )
+    assert ei.value.api_error is PostgresErrorCode.POSTGRES_1
+
+
+def test_postgres_conn_rejects_missing_credentials():
+    from tabsdatak.conn.common.error import ConnInitException
+
+    with pytest.raises(ConnInitException) as ei:
+        PostgresConn(uri="postgresql://h:5432/d")  # type: ignore[call-arg]
+    assert ei.value.api_error is PostgresErrorCode.POSTGRES_1

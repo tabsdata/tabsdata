@@ -155,3 +155,15 @@ def test_druid_dest_accepts_known_dest_cfg_keys():
         "druid.retry_attempts": 4,
         "druid.retry_backoff_seconds": 1.5,
     }
+
+
+def test_druid_conn_rejects_missing_overlord_url():
+    with pytest.raises(ConnInitException) as ei:
+        DruidConn(  # type: ignore[call-arg]
+            staging=_staging(),
+            credentials=UserPassword(
+                user=Secret.lit("u"),
+                password=Secret.lit("p"),
+            ),
+        )
+    assert ei.value.api_error is DruidErrorCode.DRUID_1

@@ -206,3 +206,14 @@ def test_databricks_dest_accepts_known_dest_cfg_keys():
     )
     loaded = DatabricksDest.from_json(dest.to_json())
     assert loaded == dest
+
+
+def test_databricks_conn_rejects_missing_required_fields():
+    from tabsdatak.conn.common.error import ConnInitException
+
+    with pytest.raises(ConnInitException) as ei:
+        DatabricksConn(  # type: ignore[call-arg]
+            token=Secret.lit("dapi-..."),
+            volume="main.staging.v",
+        )
+    assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_1

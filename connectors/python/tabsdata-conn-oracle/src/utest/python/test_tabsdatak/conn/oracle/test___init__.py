@@ -239,3 +239,29 @@ def test_oracle_dest_accepts_known_dest_cfg_keys():
     )
     loaded = OracleDest.from_json(dest.to_json())
     assert loaded == dest
+
+
+# ---------------------------------------------------------------------------
+# OracleConn init validation error code
+# ---------------------------------------------------------------------------
+
+
+def test_oracle_conn_rejects_missing_uri():
+    from tabsdatak.conn.common.error import ConnInitException
+
+    with pytest.raises(ConnInitException) as ei:
+        OracleConn(  # type: ignore[call-arg]
+            credentials=UserPassword(
+                user=Secret.lit("u"),
+                password=Secret.lit("p"),
+            ),
+        )
+    assert ei.value.api_error is OracleErrorCode.ORACLE_1
+
+
+def test_oracle_conn_rejects_missing_credentials():
+    from tabsdatak.conn.common.error import ConnInitException
+
+    with pytest.raises(ConnInitException) as ei:
+        OracleConn(uri="oracle+oracledb://h:1521/db")  # type: ignore[call-arg]
+    assert ei.value.api_error is OracleErrorCode.ORACLE_1

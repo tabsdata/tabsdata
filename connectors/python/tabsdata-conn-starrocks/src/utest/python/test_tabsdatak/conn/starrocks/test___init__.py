@@ -194,3 +194,15 @@ def test_starrocks_dest_accepts_known_dest_cfg_keys():
         dest_cfg={"starrocks.logging_level": 20},
     )
     assert dest.dest_cfg == {"starrocks.logging_level": 20}
+
+
+def test_starrocks_conn_rejects_missing_required_fields():
+    with pytest.raises(ConnInitException) as ei:
+        StarRocksConn(  # type: ignore[call-arg]
+            staging=_staging(),
+            credentials=UserPassword(
+                user=Secret.lit("u"),
+                password=Secret.lit("p"),
+            ),
+        )
+    assert ei.value.api_error is StarRocksErrorCode.STARROCKS_1

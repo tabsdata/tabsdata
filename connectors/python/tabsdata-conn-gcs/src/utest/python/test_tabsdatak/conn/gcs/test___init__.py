@@ -145,3 +145,46 @@ def test_gcs_conn_full_path_strips_trailing_slashes():
     c = _conn_with_base("/data")
     assert c.full_path("sub/foo.csv/") == "data/sub/foo.csv"
     assert c.full_path("/") == "data"
+
+
+# ---------------------------------------------------------------------------
+# Conn / Src / Dest init validation
+# ---------------------------------------------------------------------------
+
+
+def test_gcs_conn_rejects_missing_bucket():
+    from tabsdatak.conn.common.error import ConnInitException
+
+    with pytest.raises(ConnInitException) as ei:
+        GCSConn(credentials=GCPJson(json=Secret()))  # type: ignore[call-arg]
+    assert ei.value.api_error is GcsErrorCode.GCS_1
+
+
+def test_gcs_conn_rejects_missing_credentials():
+    from tabsdatak.conn.common.error import ConnInitException
+
+    with pytest.raises(ConnInitException) as ei:
+        GCSConn(bucket="my-bucket")  # type: ignore[call-arg]
+    assert ei.value.api_error is GcsErrorCode.GCS_1
+
+
+def test_gcs_src_rejects_missing_paths():
+    from tabsdatak.conn.common.error import ConnInitException
+
+    with pytest.raises(ConnInitException) as ei:
+        GCSSrc(  # type: ignore[call-arg]
+            conn=_conn(),
+            format=SrcFileFormat.CSV,
+        )
+    assert ei.value.api_error is GcsErrorCode.GCS_2
+
+
+def test_gcs_dest_rejects_missing_paths():
+    from tabsdatak.conn.common.error import ConnInitException
+
+    with pytest.raises(ConnInitException) as ei:
+        GCSDest(  # type: ignore[call-arg]
+            conn=_conn(),
+            format=DestFileFormat.CSV,
+        )
+    assert ei.value.api_error is GcsErrorCode.GCS_4

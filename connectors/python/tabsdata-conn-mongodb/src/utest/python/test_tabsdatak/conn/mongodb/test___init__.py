@@ -177,3 +177,16 @@ def test_mongodb_dest_accepts_known_dest_cfg_keys():
         dest_cfg={"mongodb.logging_level": 20},
     )
     assert dest.dest_cfg == {"mongodb.logging_level": 20}
+
+
+def test_mongodb_conn_rejects_missing_uri():
+    from tabsdatak.conn.common.error import ConnInitException
+
+    with pytest.raises(ConnInitException) as ei:
+        MongoDBConn(  # type: ignore[call-arg]
+            credentials=UserPassword(
+                user=Secret.lit("u"),
+                password=Secret.lit("p"),
+            ),
+        )
+    assert ei.value.api_error is MongodbErrorCode.MONGODB_1

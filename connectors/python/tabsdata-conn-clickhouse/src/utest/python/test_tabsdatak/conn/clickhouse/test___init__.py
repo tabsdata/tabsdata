@@ -269,3 +269,17 @@ def test_gcs_location_rejects_swapped_credentials():
 def test_gcs_location_field_specs():
     assert _hint(GCSLocation, "credentials") == GCPJson
     assert _hint(GCSLocation, "hmac_credentials") == GCPHmac
+
+
+def test_clickhouse_conn_rejects_missing_required_fields():
+    from tabsdatak.conn.common.error import ConnInitException
+
+    with pytest.raises(ConnInitException) as ei:
+        ClickHouseConn(  # type: ignore[call-arg]
+            staging=_staging(),
+            credentials=UserPassword(
+                user=Secret.lit("u"),
+                password=Secret.lit("p"),
+            ),
+        )
+    assert ei.value.api_error is ClickHouseErrorCode.CLICKHOUSE_1

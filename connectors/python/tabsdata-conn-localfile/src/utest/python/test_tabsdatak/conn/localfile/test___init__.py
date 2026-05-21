@@ -132,3 +132,38 @@ def test_localfile_conn_full_path_strips_trailing_slashes():
     c = LocalFileConn(base_path="/data")
     assert c.full_path("sub/foo.csv/") == "data/sub/foo.csv"
     assert c.full_path("/") == "data"
+
+
+# ---------------------------------------------------------------------------
+# Conn / Src / Dest init validation
+# ---------------------------------------------------------------------------
+
+
+def test_localfile_conn_rejects_bad_base_path_type():
+    from tabsdatak.conn.common.error import ConnInitException
+
+    with pytest.raises(ConnInitException) as ei:
+        LocalFileConn(base_path=42)  # type: ignore[arg-type]
+    assert ei.value.api_error is LocalFileErrorCode.LOCALFILE_1
+
+
+def test_localfile_src_rejects_missing_paths():
+    from tabsdatak.conn.common.error import ConnInitException
+
+    with pytest.raises(ConnInitException) as ei:
+        LocalFileSrc(  # type: ignore[call-arg]
+            conn=_conn(),
+            format=SrcFileFormat.CSV,
+        )
+    assert ei.value.api_error is LocalFileErrorCode.LOCALFILE_2
+
+
+def test_localfile_dest_rejects_missing_paths():
+    from tabsdatak.conn.common.error import ConnInitException
+
+    with pytest.raises(ConnInitException) as ei:
+        LocalFileDest(  # type: ignore[call-arg]
+            conn=_conn(),
+            format=DestFileFormat.CSV,
+        )
+    assert ei.value.api_error is LocalFileErrorCode.LOCALFILE_4

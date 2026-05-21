@@ -134,3 +134,15 @@ def test_bigquery_dest_accepts_known_dest_cfg_keys():
         dest_cfg={"bigquery.logging_level": 20},
     )
     assert dest.dest_cfg == {"bigquery.logging_level": 20}
+
+
+def test_bigquery_conn_rejects_missing_staging():
+    from tabsdatak.conn.common.error import ConnInitException
+
+    with pytest.raises(ConnInitException) as ei:
+        BigQueryConn(  # type: ignore[call-arg]
+            credentials=GCPJson(json=Secret()),
+            project="my-project",
+            dataset="analytics",
+        )
+    assert ei.value.api_error is BigqueryErrorCode.BIGQUERY_1

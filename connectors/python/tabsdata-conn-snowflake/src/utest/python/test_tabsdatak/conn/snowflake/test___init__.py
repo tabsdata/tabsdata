@@ -144,3 +144,30 @@ def test_snowflake_dest_accepts_known_dest_cfg_keys():
     )
     loaded = SnowflakeDest.from_json(dest.to_json())
     assert loaded == dest
+
+
+# ---------------------------------------------------------------------------
+# SnowflakeConn init validation error code
+# ---------------------------------------------------------------------------
+
+
+def test_snowflake_conn_rejects_missing_account():
+    from tabsdatak.conn.common.error import ConnInitException
+
+    with pytest.raises(ConnInitException) as ei:
+        SnowflakeConn(  # type: ignore[call-arg]
+            credentials=UserPassword(
+                user=Secret.lit("u"),
+                password=Secret.lit("p"),
+            ),
+            database="DB",
+        )
+    assert ei.value.api_error is SnowflakeErrorCode.SNOWFLAKE_1
+
+
+def test_snowflake_conn_rejects_missing_credentials():
+    from tabsdatak.conn.common.error import ConnInitException
+
+    with pytest.raises(ConnInitException) as ei:
+        SnowflakeConn(account="ACME", database="DB")  # type: ignore[call-arg]
+    assert ei.value.api_error is SnowflakeErrorCode.SNOWFLAKE_1

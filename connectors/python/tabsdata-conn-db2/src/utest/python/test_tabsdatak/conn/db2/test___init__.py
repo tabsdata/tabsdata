@@ -425,3 +425,29 @@ def test_db2_cdc_stream_src_json_round_trip():
     )
     loaded = Db2CdcStreamSrc.from_json(src.to_json())
     assert loaded == src
+
+
+# ---------------------------------------------------------------------------
+# Db2Conn init validation error code
+# ---------------------------------------------------------------------------
+
+
+def test_db2_conn_rejects_missing_uri():
+    from tabsdatak.conn.common.error import ConnInitException
+
+    with pytest.raises(ConnInitException) as ei:
+        Db2Conn(  # type: ignore[call-arg]
+            credentials=UserPassword(
+                user=Secret.lit("u"),
+                password=Secret.lit("p"),
+            ),
+        )
+    assert ei.value.api_error is Db2ErrorCode.DB2_1
+
+
+def test_db2_conn_rejects_missing_credentials():
+    from tabsdatak.conn.common.error import ConnInitException
+
+    with pytest.raises(ConnInitException) as ei:
+        Db2Conn(uri="db2+ibm_db://h:50000/db")  # type: ignore[call-arg]
+    assert ei.value.api_error is Db2ErrorCode.DB2_1

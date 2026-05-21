@@ -458,3 +458,29 @@ def test_mysql_cdc_stream_src_json_round_trip():
     )
     loaded = MySQLCdcStreamSrc.from_json(src.to_json())
     assert loaded == src
+
+
+# ---------------------------------------------------------------------------
+# Conn / Src / Dest init validation error codes
+# ---------------------------------------------------------------------------
+
+
+def test_mysql_conn_rejects_missing_uri():
+    from tabsdatak.conn.common.error import ConnInitException
+
+    with pytest.raises(ConnInitException) as ei:
+        MySQLConn(  # type: ignore[call-arg]
+            credentials=UserPassword(
+                user=Secret.lit("etl"),
+                password=Secret.lit("hunter2"),
+            ),
+        )
+    assert ei.value.api_error is MysqlErrorCode.MYSQL_1
+
+
+def test_mysql_conn_rejects_missing_credentials():
+    from tabsdatak.conn.common.error import ConnInitException
+
+    with pytest.raises(ConnInitException) as ei:
+        MySQLConn(uri="mysql://h:3306/d")  # type: ignore[call-arg]
+    assert ei.value.api_error is MysqlErrorCode.MYSQL_1

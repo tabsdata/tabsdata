@@ -268,3 +268,29 @@ def test_mssql_dest_accepts_known_dest_cfg_keys():
     )
     loaded = MSSQLDest.from_json(dest.to_json())
     assert loaded == dest
+
+
+# ---------------------------------------------------------------------------
+# MSSQLConn init validation error code
+# ---------------------------------------------------------------------------
+
+
+def test_mssql_conn_rejects_missing_uri():
+    from tabsdatak.conn.common.error import ConnInitException
+
+    with pytest.raises(ConnInitException) as ei:
+        MSSQLConn(  # type: ignore[call-arg]
+            credentials=UserPassword(
+                user=Secret.lit("u"),
+                password=Secret.lit("p"),
+            ),
+        )
+    assert ei.value.api_error is MssqlErrorCode.MSSQL_1
+
+
+def test_mssql_conn_rejects_missing_credentials():
+    from tabsdatak.conn.common.error import ConnInitException
+
+    with pytest.raises(ConnInitException) as ei:
+        MSSQLConn(uri="mssql+pyodbc://h/d")  # type: ignore[call-arg]
+    assert ei.value.api_error is MssqlErrorCode.MSSQL_1
