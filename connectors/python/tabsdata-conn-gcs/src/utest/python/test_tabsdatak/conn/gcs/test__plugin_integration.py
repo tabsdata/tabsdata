@@ -79,6 +79,15 @@ class _SrcCtx:
     def exec_plan_ts(self) -> str:
         return "2026-01-01T00:00:00.000000+00:00"
 
+    def get_attr(self, attr):
+        return None
+
+    def store_attr(self, attr, val):
+        pass
+
+    def add_metadata(self, attr, val):
+        pass
+
 
 class _DestCtx(_SrcCtx):
     pass
