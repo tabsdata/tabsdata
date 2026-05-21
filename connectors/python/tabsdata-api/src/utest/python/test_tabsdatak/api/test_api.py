@@ -966,6 +966,69 @@ def test_auto_publisher_decorator_default_none_on_tables():
     assert my_pub.on_tables is None
 
 
+def test_stream_publisher_rejects_trailing_trx_ctx_param():
+    # ``@stream_publisher`` is the one decorator where the trailing
+    # ``ctx: TrxCtx`` shape is rejected -- stream publishers run
+    # inside the runtime's long-lived plugin loop, not per-trx, so
+    # no ``TrxCtx`` is available at the call boundary.
+    with pytest.raises(ApiException) as excinfo:
+        @m.stream_publisher(
+            source=_auto_src(),
+            use_existing_data=False,
+            flush_interval_mins=1,
+            output_tables=["t1"],
+        )
+        def _my_pub(
+            t1: list[tableframe.TableFrame | None] | None,
+            ctx: m.TrxCtx,
+        ) -> tuple[tableframe.TableFrame | None]:
+            return (None,)
+    assert excinfo.value.api_error is ApiErrorCode.API_18
+
+
+def test_stream_publisher_rejects_any_extra_trailing_param():
+    # Confirm the same is true for a non-TrxCtx extra param; the
+    # error message should mention the no-ctx-allowed rule, not the
+    # "TrxCtx required" rule that applies to the other three
+    # decorators.
+    with pytest.raises(ApiException) as excinfo:
+        @m.stream_publisher(
+            source=_auto_src(),
+            use_existing_data=False,
+            flush_interval_mins=1,
+            output_tables=["t1"],
+        )
+        def _my_pub(
+            t1: list[tableframe.TableFrame | None] | None,
+            extra: dict,
+        ) -> tuple[tableframe.TableFrame | None]:
+            return (None,)
+    assert excinfo.value.api_error is ApiErrorCode.API_18
+    assert "trailing TrxCtx parameter is not supported here" in str(excinfo.value)
+
+
+def test_subscriber_signature_allows_optional_trailing_trx_ctx():
+    @m.subscriber(destination=_dest(), input_tables=["coll/t1"])
+    def my_sub(
+        t1: tableframe.TableFrame | None,
+        ctx: m.TrxCtx,
+    ) -> tuple[tableframe.TableFrame | None]:
+        return (t1,)
+
+    assert isinstance(my_sub, _info.SubscriberInfo)
+
+
+def test_transformer_signature_allows_optional_trailing_trx_ctx():
+    @m.transformer(input_tables=["coll/t1"], output_tables=["out"])
+    def my_trf(
+        t1: tableframe.TableFrame | None,
+        ctx: m.TrxCtx,
+    ) -> tuple[tableframe.TableFrame | None]:
+        return (t1,)
+
+    assert isinstance(my_trf, _info.TransformerInfo)
+
+
 # ---------------------------------------------------------------------------
 # AutoSrc / AutoSrcDef
 # ---------------------------------------------------------------------------
