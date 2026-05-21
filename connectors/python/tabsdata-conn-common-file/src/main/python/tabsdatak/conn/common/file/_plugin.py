@@ -12,7 +12,7 @@ from tabsdatak.error import ApiException, ErrorCode
 from tabsdatak.spi import (
     DestContext,
     ParquetFile,
-    SrcContext,
+    SrcPluginCtx,
     TableFileSpec,
 )
 
@@ -105,7 +105,7 @@ RunEnvBuilder = Callable[[Any], dict[str, str]]
 
 def import_files(
     *,
-    ctx: SrcContext,
+    ctx: SrcPluginCtx,
     cfg: ReaderConf,
     build_location: LocationBuilder,
     errors: FilePluginErrors,
@@ -125,7 +125,7 @@ def import_files(
     results: list[list[TableFileSpec]] = []
     for slot_idx, entry in enumerate(cfg.paths):
         logger.info("file-reader: importing path %d/%d: %r", slot_idx + 1, total, entry)
-        slot_dir = ctx.work_dir() / f"slot{slot_idx}"
+        slot_dir = ctx.work_dir / f"slot{slot_idx}"
         slot_dir.mkdir(parents=True, exist_ok=True)
         location = build_location(conn, entry)
         try:
@@ -199,7 +199,7 @@ def copy_out(
     try:
         _output.copy_one(
             source_target_pairs=pairs,
-            work_dir=ctx.work_dir(),
+            work_dir=ctx.work_dir,
             format=cfg.format,
             env=env,
         )

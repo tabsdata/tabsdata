@@ -15,7 +15,7 @@ from tabsdatak.spi import (
     DestDef,
     DestPlugin,
     Explorer,
-    SrcContext,
+    SrcPluginCtx,
     SrcDef,
     SrcPlugin,
     TableFileSpec,
@@ -84,7 +84,7 @@ ERRORS = _plugin.FilePluginErrors(
 
 
 class AzureBlobSrcPlugin(SrcPlugin[AzureBlobSrc]):
-    def read_in(self, ctx: SrcContext, src: AzureBlobSrc) -> list[list[TableFileSpec]]:
+    def read_in(self, ctx: SrcPluginCtx, src: AzureBlobSrc) -> list[list[TableFileSpec]]:
         return _plugin.import_files(
             ctx=ctx,
             cfg=_plugin.ReaderConf.from_src(src),
