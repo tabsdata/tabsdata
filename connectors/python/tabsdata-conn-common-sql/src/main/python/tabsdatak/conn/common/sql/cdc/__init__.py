@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from tabsdatak.conn.common.sql.cdc.typing import (
     CdcFormat,
-    CdcValuesFormatSpec,
+    CdcColumnsFormatSpec,
     QualifiedTableSpec,
     QualifiedTablesSpec,
     RelativePositionSpec,
@@ -24,7 +24,7 @@ from tabsdatak.conn.common.sql.cdc.typing import (
 
 __all__ = [
     "CdcFormat",
-    "CdcValuesFormatSpec",
+    "CdcColumnsFormatSpec",
     "QualifiedTableSpec",
     "QualifiedTablesSpec",
     "RelativePositionSpec",

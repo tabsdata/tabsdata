@@ -52,10 +52,10 @@ def build_pa_schema(
     """Compose the parquet schema for emitted CDC rows.
 
     Meta columns (op / tx / sq / fmt / flat / sch) come first, then
-    the value payload laid out per ``cdc_format``: flat columns,
-    nested struct, or JSON-encoded map. When ``flatten_values`` is
-    set, the *new* values are inlined at top level and only the
-    *old* values follow the chosen payload layout."""
+    the columns payload laid out per ``cdc_format``: flat columns,
+    nested struct, or JSON-encoded map. When ``flatten_columns`` is
+    set, the *new* columns are inlined at top level and only the
+    *old* columns follow the chosen payload layout."""
     fields: list[pa.Field] = [
         pa.field(CDC_META_OP, pa.utf8()),
         pa.field(CDC_META_TX, pa.utf8()),
@@ -65,11 +65,11 @@ def build_pa_schema(
         pa.field(CDC_META_SCH, pa.utf8()),
     ]
 
-    if cdc_format.flatten_values:
+    if cdc_format.flatten_columns:
         for column in columns:
             fields.append(pa.field(column.name, column.patype))
     else:
-        match cdc_format.values_format:
+        match cdc_format.columns_format:
             case "columns":
                 for column in columns:
                     fields.append(
@@ -85,10 +85,10 @@ def build_pa_schema(
                 fields.append(pa.field(CDC_DATA_MAP_NEW, pa.utf8()))
             case _:
                 raise ValueError(
-                    f"Unsupported values format: {cdc_format.values_format!r}"
+                    f"Unsupported columns format: {cdc_format.columns_format!r}"
                 )
 
-    match cdc_format.values_format:
+    match cdc_format.columns_format:
         case "columns":
             for column in columns:
                 fields.append(
@@ -105,7 +105,7 @@ def build_pa_schema(
             fields.append(pa.field(CDC_DATA_MAP_OLD, pa.utf8(), nullable=True))
         case _:
             raise ValueError(
-                f"Unsupported values_format: {cdc_format.values_format!r}"
+                f"Unsupported columns_format: {cdc_format.columns_format!r}"
             )
 
     return pa.schema(fields)

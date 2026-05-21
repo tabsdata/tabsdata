@@ -57,28 +57,27 @@ class TimestampPosition:
 # Output format
 # ---------------------------------------------------------------------
 
-# Layout for the ``new_values`` (and optional ``old_values``) payload
-# on each emitted change row:
+# Layout for the source columns payload on each emitted change row:
 #   * ``"columns"`` -- one parquet column per source column, prefixed
 #     by `CDC_DATA_COL_NEW_PREFIX` / `CDC_DATA_COL_OLD_PREFIX`.
 #   * ``"struct"``  -- a single struct column carrying every source
 #     column as a nested field.
 #   * ``"map"``     -- a single utf8 column holding a JSON-encoded
 #     map of source columns to values.
-CdcValuesFormatSpec: TypeAlias = Literal["columns", "struct", "map"]
+CdcColumnsFormatSpec: TypeAlias = Literal["columns", "struct", "map"]
 
 
 @_api.dataclass(SqlCdcErrorCode.SQL_CDC_7, frozen=True, kw_only=True)
 class CdcFormat:
     """Output format for emitted CDC rows.
 
-    :param values_format: Layout for the new (and old, when present)
-        values payload. See ``CdcValuesFormatSpec`` for the options.
-    :param flatten_values: When ``True`` the new values are inlined
+    :param columns_format: Layout for the new (and old, when present)
+        columns payload. See ``CdcColumnsFormatSpec`` for the options.
+    :param flatten_columns: When ``True`` the new columns are inlined
         as top-level columns -- the connector's downstream consumer
-        sees an ordinary tabular row and ``values_format`` only
-        affects the *old*-values layout.
+        sees an ordinary tabular row and ``columns_format`` only
+        affects the *old*-columns layout.
     """
 
-    values_format: CdcValuesFormatSpec = "columns"
-    flatten_values: bool = True
+    columns_format: CdcColumnsFormatSpec = "columns"
+    flatten_columns: bool = True
