@@ -53,6 +53,7 @@ class _Ctx:
     _work: Path
     _trx: str = "trx-unit"
 
+    @property
     def work_dir(self) -> Path:
         return self._work
 

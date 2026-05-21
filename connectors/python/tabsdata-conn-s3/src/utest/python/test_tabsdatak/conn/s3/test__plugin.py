@@ -88,13 +88,13 @@ def test_run_env_resolves_credentials_to_server_side_env_var_names():
 
 def _src_ctx(work: Path):
     ctx = MagicMock()
-    ctx.work_dir.return_value = work
+    ctx.work_dir = work
     return ctx
 
 
 def _dest_ctx(work: Path):
     ctx = MagicMock()
-    ctx.work_dir.return_value = work
+    ctx.work_dir = work
     return ctx
 
 

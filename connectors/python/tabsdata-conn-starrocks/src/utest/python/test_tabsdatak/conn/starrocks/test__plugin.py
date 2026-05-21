@@ -36,6 +36,7 @@ pytestmark = pytest.mark.starrocks
 class _Ctx:
     _work: Path
 
+    @property
     def work_dir(self) -> Path:
         return self._work
 

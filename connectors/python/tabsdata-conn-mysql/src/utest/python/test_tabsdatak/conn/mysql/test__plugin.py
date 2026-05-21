@@ -37,6 +37,7 @@ pytestmark = pytest.mark.mysql
 class _Ctx:
     _work: Path
 
+    @property
     def work_dir(self) -> Path:
         return self._work
 

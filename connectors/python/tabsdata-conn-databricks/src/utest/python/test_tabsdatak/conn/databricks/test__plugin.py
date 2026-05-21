@@ -47,6 +47,7 @@ pytestmark = pytest.mark.databricks
 class _Ctx:
     _work: Path
 
+    @property
     def work_dir(self) -> Path:
         return self._work
 

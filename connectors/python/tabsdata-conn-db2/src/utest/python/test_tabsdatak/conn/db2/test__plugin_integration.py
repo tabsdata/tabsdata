@@ -20,7 +20,7 @@ from sqlalchemy import create_engine, text
 from tabsdatak.conn.db2 import Db2Conn, Db2Dest, Db2Src
 # noinspection PyProtectedMember
 from tabsdatak.conn.db2 import _plugin as plugin
-from tabsdatak.spi import DestContext, SrcContext
+from tabsdatak.spi import DestContext, SrcPluginCtx
 from test_tabsdatak.conn.db2.conftest import run_query_with_retry
 
 
@@ -32,10 +32,11 @@ pytestmark = pytest.mark.db2
 # ---------------------------------------------------------------------------
 
 
-class _SrcCtx(SrcContext):
+class _SrcCtx(SrcPluginCtx):
     def __init__(self, work_dir: Path) -> None:
         self._work_dir = work_dir
 
+    @property
     def work_dir(self) -> Path:
         return self._work_dir
 
@@ -51,11 +52,36 @@ class _SrcCtx(SrcContext):
     def exec_plan_ts(self) -> str:
         return "2026-01-01T00:00:00.000000+00:00"
 
+    @property
+    def collection_id(self) -> str:
+        return "test-collection-id"
+
+    @property
+    def collection_name(self) -> str:
+        return "test-collection"
+
+    @property
+    def function_id(self) -> str:
+        return "test-function-id"
+
+    @property
+    def function_name(self) -> str:
+        return "test-function"
+
+    def get_attr(self, attr):
+        return None
+
+    def store_attr(self, attr, val):
+        pass
+
+    def add_metadata(self, attr, val):
+        pass
 
 class _DestCtx(DestContext):
     def __init__(self, work_dir: Path) -> None:
         self._work_dir = work_dir
 
+    @property
     def work_dir(self) -> Path:
         return self._work_dir
 
@@ -71,6 +97,30 @@ class _DestCtx(DestContext):
     def exec_plan_ts(self) -> str:
         return "2026-01-01T00:00:00.000000+00:00"
 
+    @property
+    def collection_id(self) -> str:
+        return "test-collection-id"
+
+    @property
+    def collection_name(self) -> str:
+        return "test-collection"
+
+    @property
+    def function_id(self) -> str:
+        return "test-function-id"
+
+    @property
+    def function_name(self) -> str:
+        return "test-function"
+
+    def get_attr(self, attr):
+        return None
+
+    def store_attr(self, attr, val):
+        pass
+
+    def add_metadata(self, attr, val):
+        pass
 
 def _src_ctx(work: Path) -> _SrcCtx:
     return _SrcCtx(work)

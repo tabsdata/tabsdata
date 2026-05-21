@@ -100,13 +100,13 @@ def test_credentials_rejects_non_account_key():
 
 def _src_ctx(work: Path):
     ctx = MagicMock()
-    ctx.work_dir.return_value = work
+    ctx.work_dir = work
     return ctx
 
 
 def _dest_ctx(work: Path):
     ctx = MagicMock()
-    ctx.work_dir.return_value = work
+    ctx.work_dir = work
     return ctx
 
 

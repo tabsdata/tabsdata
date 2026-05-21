@@ -65,6 +65,7 @@ class _SrcCtx:
     def __init__(self, work_dir: Path) -> None:
         self._work_dir = work_dir
 
+    @property
     def work_dir(self) -> Path:
         return self._work_dir
 

@@ -135,6 +135,7 @@ class _DestCtx(DestContext):
     def __init__(self, work_dir: Path) -> None:
         self._work_dir = work_dir
 
+    @property
     def work_dir(self) -> Path:
         return self._work_dir
 
@@ -150,6 +151,30 @@ class _DestCtx(DestContext):
     def exec_plan_ts(self) -> str:
         return "2026-01-01T00:00:00.000000+00:00"
 
+    @property
+    def collection_id(self) -> str:
+        return "test-collection-id"
+
+    @property
+    def collection_name(self) -> str:
+        return "test-collection"
+
+    @property
+    def function_id(self) -> str:
+        return "test-function-id"
+
+    @property
+    def function_name(self) -> str:
+        return "test-function"
+
+    def get_attr(self, attr):
+        return None
+
+    def store_attr(self, attr, val):
+        pass
+
+    def add_metadata(self, attr, val):
+        pass
 
 def _stub_build_location(_conn, _entry):  # pragma: no cover - never reached
     raise AssertionError("build_location should not be called on slot-mismatch path")
@@ -251,7 +276,7 @@ def test_run_write_out_slot_count_mismatch_raises_file_common_16(tmp_path):
 # no real binary needed.
 
 
-from tabsdatak.spi import SrcContext
+from tabsdatak.spi import SrcPluginCtx
 from tabsdatak.error import ApiErrorCode
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.file import _input as _input_module
@@ -259,11 +284,12 @@ from tabsdatak.conn.common.file import _input as _input_module
 from tabsdatak.conn.common.file import _output as _output_module
 
 
-class _SrcCtx(SrcContext):
+class _SrcCtx(SrcPluginCtx):
 
     def __init__(self, work_dir: Path) -> None:
         self._work_dir = work_dir
 
+    @property
     def work_dir(self) -> Path:
         return self._work_dir
 
@@ -278,6 +304,51 @@ class _SrcCtx(SrcContext):
     @property
     def exec_plan_ts(self) -> str:
         return "2026-01-01T00:00:00.000000+00:00"
+
+    @property
+    def collection_id(self) -> str:
+        return "test-collection-id"
+
+    @property
+    def collection_name(self) -> str:
+        return "test-collection"
+
+    @property
+    def function_id(self) -> str:
+        return "test-function-id"
+
+    @property
+    def function_name(self) -> str:
+        return "test-function"
+
+    def get_attr(self, attr):
+        return None
+
+    def store_attr(self, attr, val):
+        pass
+
+    def add_metadata(self, attr, val):
+        pass
+
+
+class _RecordingSrcCtx(_SrcCtx):
+    """SrcPluginCtx stub that records get/store calls and serves a
+    pre-populated attribute map -- so tests can assert the lastmod
+    read/write contract end-to-end."""
+
+    def __init__(self, work_dir: Path, attrs: dict | None = None) -> None:
+        super().__init__(work_dir)
+        self.attrs: dict = dict(attrs or {})
+        self.gets: list[str] = []
+        self.stores: list[tuple[str, object]] = []
+
+    def get_attr(self, attr):
+        self.gets.append(attr)
+        return self.attrs.get(attr)
+
+    def store_attr(self, attr, val):
+        self.stores.append((attr, val))
+        self.attrs[attr] = val
 
 
 def _location_builder(_conn, entry):
@@ -457,6 +528,133 @@ def test_run_read_in_skips_report_entries_without_to_field(monkeypatch, tmp_path
     )
     assert len(out[0]) == 1
     assert str(out[0][0]) == "/x/keep.parquet"
+
+
+# --- run_read_in: lastmod cursor via ctx attrs ------------------------
+
+
+def test_run_read_in_passes_prior_lastmod_from_ctx_per_slot(monkeypatch, tmp_path):
+    # The plugin reads the per-slot cursor (``file-lastmod.slot<N>``)
+    # from the trx context and forwards it as ``lastmod_info`` to
+    # ``import_one``. Different slots get different prior values.
+    seen_lastmod: list[str | None] = []
+
+    def fake_import_one(**kw):
+        seen_lastmod.append(kw.get("lastmod_info"))
+        return _stub_report([])
+
+    monkeypatch.setattr(_input_module, "import_one", fake_import_one)
+
+    ctx = _RecordingSrcCtx(
+        tmp_path,
+        attrs={
+            "file-lastmod.slot0": "cursor-A",
+            "file-lastmod.slot1": "cursor-B",
+        },
+    )
+    cfg = _plugin.ReaderConf(
+        conn=object(),
+        paths=["a", "b"],
+        format=_transporter.TransporterParquetFormat(),
+    )
+    _plugin.import_files(
+        ctx=ctx,
+        cfg=cfg,
+        build_location=_location_builder,
+        errors=_RUN_ERRORS,
+    )
+    assert seen_lastmod == ["cursor-A", "cursor-B"]
+    assert ctx.gets == ["file-lastmod.slot0", "file-lastmod.slot1"]
+
+
+def test_run_read_in_no_prior_lastmod_passes_none(monkeypatch, tmp_path):
+    # First-run / cold-start: ctx has no cursor yet, so ``lastmod_info``
+    # arrives at ``import_one`` as ``None``. The Src's
+    # ``initial_lastmod`` is what the transporter uses to seed.
+    seen: list[dict] = []
+
+    def fake_import_one(**kw):
+        seen.append(kw)
+        return _stub_report([])
+
+    monkeypatch.setattr(_input_module, "import_one", fake_import_one)
+
+    cfg = _plugin.ReaderConf(
+        conn=object(),
+        paths=["a"],
+        format=_transporter.TransporterParquetFormat(),
+        initial_lastmod="2026-01-01T00:00:00.000000+00:00",
+    )
+    _plugin.import_files(
+        ctx=_RecordingSrcCtx(tmp_path),
+        cfg=cfg,
+        build_location=_location_builder,
+        errors=_RUN_ERRORS,
+    )
+    assert seen[0]["lastmod_info"] is None
+    assert seen[0]["initial_lastmod"] == "2026-01-01T00:00:00.000000+00:00"
+
+
+def test_run_read_in_stores_report_lastmod_back_to_ctx(monkeypatch, tmp_path):
+    # After import, the transporter's fresh ``lastmod_info`` is staged
+    # on the ctx under the per-slot key so the next trx can resume.
+    def fake_import_one(**kw):
+        target = str(kw["target_dir"] / "out.parquet")
+        slot_name = kw["target_dir"].name  # slot0 / slot1 / ...
+        files = [{"to": target}]
+        return _transporter.TransporterReport(
+            files=files,
+            lastmod_info=f"cursor-{slot_name}-fresh",
+            raw={},
+        )
+
+    monkeypatch.setattr(_input_module, "import_one", fake_import_one)
+
+    ctx = _RecordingSrcCtx(tmp_path)
+    cfg = _plugin.ReaderConf(
+        conn=object(),
+        paths=["a", "b"],
+        format=_transporter.TransporterParquetFormat(),
+    )
+    _plugin.import_files(
+        ctx=ctx,
+        cfg=cfg,
+        build_location=_location_builder,
+        errors=_RUN_ERRORS,
+    )
+    assert ctx.stores == [
+        ("file-lastmod.slot0", "cursor-slot0-fresh"),
+        ("file-lastmod.slot1", "cursor-slot1-fresh"),
+    ]
+
+
+def test_run_read_in_skips_store_when_report_has_no_lastmod(monkeypatch, tmp_path):
+    # Transporter may return ``lastmod_info=None`` (no observable files
+    # in this slot). Don't clobber the prior cursor in that case --
+    # leave it in place so the next trx still resumes from where the
+    # last productive trx left off.
+    monkeypatch.setattr(
+        _input_module, "import_one",
+        lambda **_kw: _stub_report([]),  # lastmod_info=None by default
+    )
+
+    ctx = _RecordingSrcCtx(
+        tmp_path,
+        attrs={"file-lastmod.slot0": "stays-put"},
+    )
+    cfg = _plugin.ReaderConf(
+        conn=object(),
+        paths=["a"],
+        format=_transporter.TransporterParquetFormat(),
+    )
+    _plugin.import_files(
+        ctx=ctx,
+        cfg=cfg,
+        build_location=_location_builder,
+        errors=_RUN_ERRORS,
+    )
+    assert ctx.stores == []
+    assert ctx.attrs["file-lastmod.slot0"] == "stays-put"
 
 
 # --- run_write_out ----------------------------------------------------

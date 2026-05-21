@@ -67,6 +67,7 @@ class _SrcCtx:
     def __init__(self, work_dir: Path) -> None:
         self._work_dir = work_dir
 
+    @property
     def work_dir(self) -> Path:
         return self._work_dir
 
@@ -87,6 +88,7 @@ class _DestCtx(DestContext):
     def __init__(self, work_dir: Path) -> None:
         self._work_dir = work_dir
 
+    @property
     def work_dir(self) -> Path:
         return self._work_dir
 
@@ -102,6 +104,30 @@ class _DestCtx(DestContext):
     def exec_plan_ts(self) -> str:
         return "2026-01-01T00:00:00.000000+00:00"
 
+    @property
+    def collection_id(self) -> str:
+        return "test-collection-id"
+
+    @property
+    def collection_name(self) -> str:
+        return "test-collection"
+
+    @property
+    def function_id(self) -> str:
+        return "test-function-id"
+
+    @property
+    def function_name(self) -> str:
+        return "test-function"
+
+    def get_attr(self, attr):
+        return None
+
+    def store_attr(self, attr, val):
+        pass
+
+    def add_metadata(self, attr, val):
+        pass
 
 # ---------------------------------------------------------------------------
 # Fixtures
