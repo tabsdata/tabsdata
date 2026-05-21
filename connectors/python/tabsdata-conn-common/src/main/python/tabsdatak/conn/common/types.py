@@ -1,3 +1,15 @@
+"""Cross-connector type shapes shared by every ``tabsdatak.conn.*``
+package.
+
+Lives under ``tabsdata-conn-common`` so each connector imports the
+same field aliases (``UserPassword``, ``AwsAccessSecretKey``,
+``GCPJson``, ``EntityWhitelistSpec``, ``CfgSpec``, etc.) instead
+of redefining them per package. ``Env`` / ``Secret`` references
+are honoured uniformly: a bare string passed to one of these
+fields is auto-wrapped as ``Secret.lit(...)`` at field-validation
+time.
+"""
+
 from __future__ import annotations
 
 from abc import ABC

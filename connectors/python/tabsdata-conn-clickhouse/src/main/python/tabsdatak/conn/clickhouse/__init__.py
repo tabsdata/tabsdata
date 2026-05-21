@@ -249,11 +249,21 @@ class ClickHouseConn(Conn):
     conn_cfg: CfgSpec | None = None
 
     def _port(self) -> int:
+        """Resolve :attr:`port` to a concrete ``int``. The field
+        accepts ``int`` / ``Env`` / ``Secret`` so this helper
+        unwraps the referenced value before passing it to the
+        client. Call this rather than reading ``.port`` directly
+        when a real port number is required."""
         if isinstance(self.port, int):
             return self.port
         return int(self.port.value())
 
     def _secure(self) -> bool:
+        """Resolve :attr:`secure` to a concrete ``bool``. The field
+        accepts ``bool`` / ``Env`` / ``Secret``; this helper unwraps
+        ``Env`` / ``Secret`` string values and parses the standard
+        truthy literals (``"true"`` / ``"1"`` / ``"yes"``, case-
+        insensitive)."""
         if isinstance(self.secure, bool):
             return self.secure
         return self.secure.value().strip().lower() in ("true", "1", "yes")

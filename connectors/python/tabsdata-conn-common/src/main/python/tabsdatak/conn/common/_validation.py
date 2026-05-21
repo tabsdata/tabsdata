@@ -1,3 +1,10 @@
+"""Cross-connector pydantic validators shared by every
+``tabsdatak.conn.*`` package: fully-qualified-name parsing,
+identifier shape checks, conn_cfg / src_cfg / dest_cfg key-set
+validators, etc. Connectors compose these into their own
+``Annotated[...]`` field aliases rather than re-implementing
+them."""
+
 from __future__ import annotations
 
 import re

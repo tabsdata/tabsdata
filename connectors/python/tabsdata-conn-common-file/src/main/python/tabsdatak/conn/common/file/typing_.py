@@ -1,3 +1,23 @@
+"""Shared types for the cloud-file (object-store) connectors:
+``azureblob``, ``gcs``, ``localfile``, ``s3``.
+
+* :class:`SrcFileFormat` / :class:`DestFileFormat` -- enumerations
+  of the parquet / csv / json / avro / log formats the file
+  connectors can read and write. The ``AUTO`` variant lets the
+  transporter infer the format from the file extension.
+* :class:`FileInfo` -- per-row provenance enrichment opt-in
+  (``BASENAME`` / ``FULLPATH`` / ``NONE``).
+* Field aliases (``PathsSpec`` / ``FormatCfgSpec``) used by every
+  cloud-file ``Src`` / ``Dest`` dataclass for the per-flow
+  ``paths`` list and per-format ``format_cfg`` dict.
+
+The per-format ``format_cfg`` dict is side-typed: only the keys
+appropriate for the ``Src`` side (``has_header``, ``separator``,
+...) are accepted on ``*Src`` instances; the ``Dest``-side keys
+(``include_header``, ``compression``, ...) are accepted only on
+``*Dest`` instances. Cross-side keys fail field validation.
+"""
+
 from __future__ import annotations
 
 from enum import Enum

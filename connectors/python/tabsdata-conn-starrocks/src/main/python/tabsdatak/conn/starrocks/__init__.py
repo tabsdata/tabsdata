@@ -196,6 +196,11 @@ class StarRocksConn(Conn):
     conn_cfg: CfgSpec | None = None
 
     def _port(self) -> int:
+        """Resolve :attr:`port` to a concrete ``int``. The field
+        accepts ``int`` / ``Env`` / ``Secret`` so this helper
+        unwraps the referenced value before passing it to the
+        client. Call this rather than reading ``.port`` directly
+        when a real port number is required."""
         if isinstance(self.port, int):
             return self.port
         return int(self.port.value())
