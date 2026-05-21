@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable
+from typing import Any, Callable, cast
 
 from tabsdatak.conn.common.file import _input, _output, _transporter
 from tabsdatak.conn.common.file.error import FileCommonErrorCode
@@ -103,6 +103,17 @@ RunEnvBuilder = Callable[[Any], dict[str, str]]
 # --- Orchestrators -------------------------------------------------
 
 
+# Per-slot incremental cursor key. The transporter emits an opaque
+# ``lastmod_info`` blob summarizing every file it observed in this
+# slot; we stash it on the trx context so the next trx can resume
+# where this one left off. Slots are addressed positionally
+# (``slot0``, ``slot1``, ...) so a Src whose ``paths`` ordering is
+# stable round-trips cleanly. The key shape (one alphanumeric label
+# per dot-separated segment, no underscores) matches the context-key
+# regex declared on `ContextKeySpec`.
+_LASTMOD_KEY_PREFIX = "file-lastmod.slot"
+
+
 def import_files(
     *,
     ctx: SrcPluginCtx,
@@ -128,12 +139,17 @@ def import_files(
         slot_dir = ctx.work_dir / f"slot{slot_idx}"
         slot_dir.mkdir(parents=True, exist_ok=True)
         location = build_location(conn, entry)
+        lastmod_key = f"{_LASTMOD_KEY_PREFIX}{slot_idx}"
+        # Resume from the prior trx's cursor if one was stored; otherwise
+        # fall back to the Src's baseline (the first-run seed).
+        prior_lastmod = cast(str|None, ctx.get_attr(lastmod_key))
         try:
             report = _input.import_one(
                 source=location,
                 target_dir=slot_dir,
                 format=cfg.format,
                 initial_lastmod=cfg.initial_lastmod,
+                lastmod_info=prior_lastmod,
                 file_info=cfg.file_info,
                 env=env,
             )
@@ -144,11 +160,17 @@ def import_files(
         except _transporter.TransporterReportError as e:
             raise errors.report_invalid.exception(cause=e, path=entry)
 
+        # Stage this slot's fresh cursor for the next trx. The transporter
+        # may return ``None`` (no files observed; nothing to track), in
+        # which case the prior value stays in effect for the next run.
+        if report.lastmod_info is not None:
+            ctx.store_attr(lastmod_key, report.lastmod_info)
+
         slot_files: list[TableFileSpec] = []
         for f in report.files:
             target = f.get("to") if isinstance(f, dict) else None
             if target:
-                slot_files.append(ParquetFile(target))
+                slot_files.append(ParquetFile(cast(str, target)))
         logger.debug(
             "file-reader: path %d/%d produced %d file(s)",
             slot_idx + 1,
