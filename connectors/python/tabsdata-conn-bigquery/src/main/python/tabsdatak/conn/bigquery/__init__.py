@@ -86,6 +86,19 @@ class CloudLocation(_api.DescriptorBase, ABC):
 
 @_api.dataclass(BigqueryErrorCode.BIGQUERY_8, kw_only=True)
 class GCSLocation(CloudLocation):
+    """GCS staging area used by ``BigQueryDest``. The plugin uploads
+    parquet files here, then issues a ``LOAD DATA`` /
+    ``load_table_from_uri`` against BigQuery referencing the
+    object.
+
+    :param bucket: GCS bucket name.
+    :param credentials: GCP service-account JSON credentials.
+    :param base_path: Optional object-key prefix under the bucket
+        (e.g. ``"staging/bigquery/"``); defaults to bucket root.
+    :param cfg: Optional cfg dict passed to the underlying GCS
+        client.
+    """
+
     __kind__ = "bigQueryGcsLocation"
     bucket: GCSBucketSpec
     credentials: GCPJson

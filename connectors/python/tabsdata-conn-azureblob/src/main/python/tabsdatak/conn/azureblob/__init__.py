@@ -81,12 +81,19 @@ DestCfgSpec: TypeAlias = Annotated[
 
 @_api.dataclass(AzureBlobErrorCode.AZURE_BLOB_1, kw_only=True)
 class AzureBlobConn(Conn):
-    """Azure Blob connection.
+    """Azure Blob Storage connection.
 
-    Holds the bucket/container/region or base_path and the
-    credentials. The src/dest classes wrap this conn and add
-    the per-flow ``paths`` list. See module docstring for the
-    full field set.
+    :param container: Azure Blob container name
+        (e.g. ``"my-container"``).
+    :param credentials: Storage-account key credentials -- a
+        ``UserPassword`` whose ``user`` is the account name and
+        ``password`` is the account key. ``Env`` / ``Secret``
+        references are resolved at session open.
+    :param base_path: Optional path prefix under the container
+        (e.g. ``"datalake/raw/"``); the src/dest ``paths`` are
+        resolved against it. Defaults to the container root.
+    :param conn_cfg: Optional driver-side cfg dict forwarded to
+        the underlying Azure Blob client.
     """
 
     container: AzContainerSpec

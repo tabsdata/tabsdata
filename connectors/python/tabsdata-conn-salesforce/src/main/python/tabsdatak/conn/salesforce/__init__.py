@@ -40,11 +40,27 @@ from tabsdatak.conn.salesforce.error import SalesforceErrorCode
 
 
 class SalesforceCredentials(Credentials, ABC):
-    pass
+    """Abstract base for Salesforce credential shapes. Today only
+    :class:`SalesforceTokenCredentials` (username + password +
+    security token) is supported; sibling subclasses can add
+    OAuth / JWT auth without changing the connector surface."""
 
 
 @_api.dataclass(SalesforceErrorCode.SALESFORCE_1, kw_only=True)
 class SalesforceTokenCredentials(SalesforceCredentials):
+    """Salesforce username + password + security-token credentials,
+    the standard SOAP / REST credential triple. All three fields
+    accept ``Env`` / ``Secret`` references; the plugin combines
+    ``password`` and ``security_token`` per Salesforce's expected
+    concatenated-secret format at login time.
+
+    :param username: Salesforce login username
+        (e.g. ``"user@example.com"``).
+    :param password: Salesforce login password.
+    :param security_token: User-specific security token (reset
+        from Salesforce setup > Reset My Security Token).
+    """
+
     __kind__ = "salesforceTokenCredentials"
     username: SecretOrEnvSpec
     password: SecretOrEnvSpec
@@ -176,8 +192,12 @@ class SalesforceReportSrc(Src):
     :param reports: Report ids or names; one slot per entry.
     :param column_name_strategy: ``"columnName"`` (default,
         API names) or ``"label"`` (display names).
-    :param find_report_by: ``"id"`` or ``"name"`` -- disambiguates
-        when the same string resolves to both.
+    :param find_report_by: Lookup strategy for entries in
+        ``reports`` that could be interpreted as either a Salesforce
+        report id (15- or 18-char alphanumeric) or a report name.
+        ``"id"`` forces id lookup, ``"name"`` forces name lookup.
+        Leave unset to auto-detect; set explicitly when both forms
+        resolve to a hit and you need to break the tie.
     :param filter: Optional list of
         ``(column, operator, value)`` triples applied to the
         report on the server before download.

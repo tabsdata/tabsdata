@@ -92,12 +92,22 @@ DestCfgSpec: TypeAlias = Annotated[
 
 @_api.dataclass(GcsErrorCode.GCS_1, kw_only=True)
 class GCSConn(Conn):
-    """GCS connection.
+    """Google Cloud Storage connection.
 
-    Holds the bucket/container/region or base_path and the
-    credentials. The src/dest classes wrap this conn and add
-    the per-flow ``paths`` list. See module docstring for the
-    full field set.
+    :param bucket: GCS bucket name (e.g. ``"my-data-bucket"``).
+    :param credentials: GCP service-account credentials. Either
+        :class:`GCPJson` (service-account JSON, native API path,
+        recommended) or HMAC keys for the S3-compatible endpoint.
+        ``Env`` / ``Secret`` references resolved at session open.
+    :param project: Optional GCP project id; required only when the
+        credentials don't carry an embedded project (HMAC keys), or
+        when you want to bill / quota a different project from the
+        one the service account belongs to.
+    :param base_path: Optional object-key prefix under the bucket
+        (e.g. ``"datalake/raw/"``); src/dest ``paths`` resolve
+        against it. Defaults to bucket root.
+    :param conn_cfg: Optional driver-side cfg dict forwarded to
+        the underlying GCS client.
     """
 
     bucket: GCSBucketSpec

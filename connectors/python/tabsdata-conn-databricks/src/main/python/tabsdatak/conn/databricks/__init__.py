@@ -117,9 +117,13 @@ class DatabricksConn(Conn):
     :param token: Personal access token (PAT). Stored as a
         ``Secret`` / ``Env``.
     :param volume: Unity Catalog volume used to stage parquet.
-    :param warehouse: SQL warehouse name (mutually exclusive
-        with ``warehouse_id``).
-    :param warehouse_id: SQL warehouse id.
+    :param warehouse: SQL warehouse name. The plugin resolves it
+        to an id at connect time via the workspace API. Mutually
+        exclusive with ``warehouse_id`` -- set exactly one.
+    :param warehouse_id: SQL warehouse id (the stable identifier
+        shown in the workspace URL). Skips the name → id lookup
+        ``warehouse`` would do. Mutually exclusive with
+        ``warehouse``.
     :param catalog: Default catalog.
     :param schema: Default schema (requires ``catalog``).
     :param entity_whitelist: Optional regex-based table filter.
@@ -164,8 +168,12 @@ class DatabricksSrc(Src):
 
     :param conn: :class:`DatabricksConn` (or :class:`NamedConn`).
     :param queries: List of SQL statements.
-    :param initial_values: Optional ``{key: value}`` bind
-        substituted as ``{key}`` placeholders in each query.
+    :param initial_values: Optional ``{key: value}`` bind dict;
+        each occurrence of ``{key}`` in a query is substituted by
+        the corresponding value at execute time (Python
+        ``str.format``-style; values are inlined verbatim, not
+        parameterised -- use only for literal-safe substitutions
+        like dates and ids).
     :param src_cfg: Optional ``Mapping`` over
         ``databricks.logging_level``.
     """

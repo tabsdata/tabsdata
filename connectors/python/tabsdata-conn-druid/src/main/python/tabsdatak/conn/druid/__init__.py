@@ -107,6 +107,19 @@ class CloudLocation(_api.DescriptorBase, ABC):
 
 @_api.dataclass(DruidErrorCode.DRUID_12, kw_only=True)
 class S3Location(CloudLocation):
+    """S3 staging area used by ``DruidDest``. The plugin uploads
+    parquet files here, then issues a Druid ingestion spec
+    referencing the S3 input source.
+
+    :param bucket: S3 bucket name.
+    :param region: AWS region (e.g. ``"us-east-1"``).
+    :param credentials: AWS access-key / secret-key pair.
+    :param base_path: Optional key prefix under the bucket
+        (e.g. ``"staging/druid/"``).
+    :param cfg: Optional cfg dict passed to the underlying S3
+        client.
+    """
+
     __kind__ = "druidS3Location"
     bucket: S3BucketSpec
     region: AwsRegionSpec
@@ -120,6 +133,16 @@ class S3Location(CloudLocation):
 
 @_api.dataclass(DruidErrorCode.DRUID_13, kw_only=True)
 class AzBlobLocation(CloudLocation):
+    """Azure Blob staging area used by ``DruidDest``. The plugin
+    uploads parquet to the container, then issues a Druid ingestion
+    spec referencing the Azure input source.
+
+    :param container: Azure Blob container name.
+    :param credentials: Storage-account key credentials.
+    :param base_path: Optional path prefix under the container.
+    :param cfg: Optional cfg dict for the Azure Blob client.
+    """
+
     __kind__ = "druidAzBlobLocation"
     container: AzContainerSpec
     credentials: AzureAccountKey
@@ -132,6 +155,16 @@ class AzBlobLocation(CloudLocation):
 
 @_api.dataclass(DruidErrorCode.DRUID_14, kw_only=True)
 class GCSLocation(CloudLocation):
+    """GCS staging area used by ``DruidDest``. The plugin uploads
+    parquet to the bucket, then issues a Druid ingestion spec
+    referencing the GCS input source.
+
+    :param bucket: GCS bucket name.
+    :param credentials: GCP service-account JSON credentials.
+    :param base_path: Optional object-key prefix under the bucket.
+    :param cfg: Optional cfg dict for the GCS client.
+    """
+
     __kind__ = "druidGcsLocation"
     bucket: GCSBucketSpec
     credentials: GCPJson
@@ -180,7 +213,11 @@ class DruidDest(Dest):
     :param tables: Datasource names; one slot per entry.
     :param if_table_exists: ``"append"`` (default) or
         ``"replace"`` (overwrite the datasource).
-    :param time_column: Name of the row-level timestamp column.
+    :param time_column: Name of the row-level timestamp column
+        Druid uses as its primary ``__time`` field at ingest. Druid
+        requires a time column on every datasource; if the source
+        rows don't carry one, leave unset and the ingestion spec
+        falls back to the current ingest time.
     :param segment_granularity: Druid segment grain
         (``SECOND``..``YEAR``, default ``ALL``).
     :param max_concurrent_subtasks: Druid ingestion-task

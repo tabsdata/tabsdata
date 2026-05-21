@@ -108,6 +108,17 @@ class CloudLocation(_api.DescriptorBase, ABC):
 
 @_api.dataclass(StarRocksErrorCode.STARROCKS_8, kw_only=True)
 class S3Location(CloudLocation):
+    """S3 staging area used by ``StarRocksDest``. The plugin
+    uploads parquet files here, then issues a StarRocks
+    ``BROKER LOAD`` / ``FILES()`` reference for ingest.
+
+    :param bucket: S3 bucket name.
+    :param region: AWS region (e.g. ``"us-east-1"``).
+    :param credentials: AWS access-key / secret-key pair.
+    :param base_path: Optional key prefix under the bucket.
+    :param cfg: Optional cfg dict for the S3 client.
+    """
+
     __kind__ = "startRocksS3Location"
     bucket: S3BucketSpec
     region: AwsRegionSpec
@@ -121,6 +132,14 @@ class S3Location(CloudLocation):
 
 @_api.dataclass(StarRocksErrorCode.STARROCKS_9, kw_only=True)
 class AzBlobLocation(CloudLocation):
+    """Azure Blob staging area used by ``StarRocksDest``.
+
+    :param container: Azure Blob container name.
+    :param credentials: Storage-account key credentials.
+    :param base_path: Optional path prefix under the container.
+    :param cfg: Optional cfg dict for the Azure Blob client.
+    """
+
     __kind__ = "startRocksAzBlobLocation"
     container: AzContainerSpec
     credentials: AzureAccountKey
@@ -133,6 +152,14 @@ class AzBlobLocation(CloudLocation):
 
 @_api.dataclass(StarRocksErrorCode.STARROCKS_10, kw_only=True)
 class GCSLocation(CloudLocation):
+    """GCS staging area used by ``StarRocksDest``.
+
+    :param bucket: GCS bucket name.
+    :param credentials: GCP service-account JSON credentials.
+    :param base_path: Optional object-key prefix under the bucket.
+    :param cfg: Optional cfg dict for the GCS client.
+    """
+
     __kind__ = "startRocksGcsLocation"
     bucket: GCSBucketSpec
     credentials: GCPJson

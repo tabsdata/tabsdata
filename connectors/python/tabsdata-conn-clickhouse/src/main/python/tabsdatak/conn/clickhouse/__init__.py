@@ -138,6 +138,21 @@ class CloudLocation(_api.DescriptorBase, ABC):
 
 @_api.dataclass(ClickHouseErrorCode.CLICKHOUSE_8, kw_only=True)
 class S3Location(CloudLocation):
+    """S3 staging area used by ``ClickHouseDest`` to land parquet
+    files before issuing the ``COPY`` / ``INSERT INTO ... FROM s3()``
+    statement. ClickHouse reads parquet directly from S3, so the
+    plugin uploads to this bucket and references the resulting
+    object via ClickHouse's S3 table function.
+
+    :param bucket: S3 bucket name (e.g. ``"my-staging-bucket"``).
+    :param region: AWS region (e.g. ``"us-east-1"``).
+    :param credentials: AWS access-key / secret-key pair.
+    :param base_path: Optional key prefix under the bucket
+        (e.g. ``"staging/clickhouse/"``); defaults to bucket root.
+    :param cfg: Optional cfg dict passed to the underlying
+        S3 client.
+    """
+
     __kind__ = "clickHouseS3Location"
     bucket: S3BucketSpec
     region: AwsRegionSpec
@@ -151,6 +166,19 @@ class S3Location(CloudLocation):
 
 @_api.dataclass(ClickHouseErrorCode.CLICKHOUSE_9, kw_only=True)
 class AzBlobLocation(CloudLocation):
+    """Azure Blob Storage staging area used by ``ClickHouseDest``.
+    The plugin uploads parquet files to the container and references
+    them via ClickHouse's ``azureBlobStorage()`` table function.
+
+    :param container: Azure Blob container name.
+    :param credentials: Storage-account key credentials.
+    :param base_path: Optional path prefix under the container
+        (e.g. ``"staging/clickhouse/"``); defaults to container
+        root.
+    :param cfg: Optional cfg dict passed to the underlying
+        Azure Blob client.
+    """
+
     __kind__ = "clickHouseAzBlobLocation"
     container: AzContainerSpec
     credentials: AzureAccountKey

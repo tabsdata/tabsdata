@@ -83,37 +83,42 @@ ConnSpec: TypeAlias = Union[NamedConn, MongoDBConn]
 
 @_api.dataclass(MongodbErrorCode.MONGODB_2, kw_only=True)
 class MongoDBDest(Dest):
-    """MongoDB destination.
+    """MongoDB destination — one parquet slot per collection.
 
-    Fields:
-      conn: MongoDB connection (or a NamedConn ref).
-      collections_with_ids: list of ``(collection, id_field)`` tuples
-        identifying each target collection and the document field to
-        use as the unique id. ``id_field=None`` lets MongoDB
-        autogenerate the ``_id``.
-      if_collection_exists: ``"append"`` (default) leaves existing
-        documents alone; ``"replace"`` drops the collection first.
-      use_trxs: when True, each batch of ``docs_per_trx`` documents is
-        wrapped in a MongoDB transaction. Requires the server to be
-        configured with a replica set.
-      docs_per_trx: maximum documents per write batch / transaction.
-      maintain_order: when True, documents are inserted in the order
-        they appear in the input.
-      update_existing: when True, existing documents with the same id
-        are upserted (UpdateOne with upsert=True); when False the
-        insert proceeds with InsertOne and a collision aborts the
-        batch. Ignored when ``id_field`` is None (auto-generated ids
-        never collide).
-      fail_on_duplicate_key: when True, a duplicate-key error from
-        MongoDB is re-raised. When False the error is logged and the
-        batch continues.
-      log_intermediate_files: when True, each intermediate JSONL
-        chunk is logged as it is persisted. Useful for debugging
-        large writes.
-      dest_cfg: typed plugin-level config (see ``DestCfgKey``).
-        Currently the only key is ``"mongodb.logging_level"`` (int).
-        Note: ``pymongo.*`` options are read from ``conn.conn_cfg``
-        (not ``dest_cfg``) and forwarded to ``pymongo.MongoClient``.
+    :param conn: :class:`MongoDBConn` (or :class:`NamedConn`).
+    :param collections_with_ids: List of
+        ``(collection_name, id_field)`` tuples; one slot per
+        entry. ``collection_name`` is the destination collection
+        and ``id_field`` is the document field used as the unique
+        id (e.g. ``("users", "user_id")``). Pass ``id_field=None``
+        (e.g. ``("logs", None)``) to let MongoDB auto-generate
+        ``_id``.
+    :param if_collection_exists: ``"append"`` (default) leaves
+        existing documents alone; ``"replace"`` drops the
+        collection first.
+    :param use_trxs: When ``True``, each batch of ``docs_per_trx``
+        documents is wrapped in a MongoDB transaction. Requires the
+        server to be configured with a replica set.
+    :param docs_per_trx: Max documents per write batch /
+        transaction (default 1000). Must be > 0.
+    :param maintain_order: When ``True``, documents are inserted in
+        the order they appear in the input (slower but deterministic
+        ordering on the server).
+    :param update_existing: When ``True``, existing documents with
+        the same id are upserted (``UpdateOne`` with
+        ``upsert=True``); when ``False``, ``InsertOne`` is used and
+        a collision aborts the batch. Ignored when ``id_field`` is
+        ``None`` (auto-generated ids never collide).
+    :param fail_on_duplicate_key: When ``True``, a duplicate-key
+        error from MongoDB is re-raised. When ``False`` the error is
+        logged and the batch continues.
+    :param log_intermediate_files: When ``True``, each intermediate
+        JSONL chunk written to the work dir is logged before upload
+        -- useful for debugging large writes.
+    :param dest_cfg: Optional ``Mapping`` over the single key
+        ``"mongodb.logging_level"`` (int). Note: ``pymongo.*``
+        options are read from ``conn.conn_cfg`` (not ``dest_cfg``)
+        and forwarded to ``pymongo.MongoClient``.
     """
 
     conn: ConnSpec
