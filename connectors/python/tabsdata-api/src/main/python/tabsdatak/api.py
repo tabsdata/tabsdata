@@ -12,7 +12,7 @@ from tabsdatak.tableframe import TableFrame
 # --- Decorated-function slot types ------------------------------------
 #
 # Every input parameter or output element of a ``@publisher`` /
-# ``@auto_publisher`` / ``@transformer`` / ``@subscriber`` function
+# ``@stream_publisher`` / ``@transformer`` / ``@subscriber`` function
 # must be annotated as one of these aliases. They make the nullability
 # explicit:
 #
@@ -74,12 +74,12 @@ SubscriberTriggerBySpec: TypeAlias = Union[
     AllTablesTrigger,
 ]
 
-# Auto-publisher fallback rollover window. Whole minutes; the runtime
+# stream-publisher fallback rollover window. Whole minutes; the runtime
 # closes the current batch and starts a new one every
 # ``fallback_rollover_mins`` minutes if the source's own rollover
 # threshold has not fired. Lower-bounded at 1 (zero / negative would
 # either spin or be undefined).
-FallbackRolloverMinsSpec: TypeAlias = Annotated[int, Field(ge=1)]
+FlushIntervalSpec: TypeAlias = Annotated[int, Field(ge=1)]
 
 
 EnvVarNameSpec: TypeAlias = Annotated[str, _api.ENV_NAME_CONSTRAINTS]
@@ -185,7 +185,7 @@ class NamedConn(Conn):
 
 # Src / Dest / OnTablesAction stay as pure abstract classes (no dataclass
 # decoration). Concrete fields live only on implementer subclasses, which
-# carry their impl-layer wiring via a `SrcDef` / `AutoSrcDef` / `DestDef`
+# carry their impl-layer wiring via a `SrcDef` / `streamSrcDef` / `DestDef`
 # binding declared in `_<name>_plugin.py` (see `tabsdatak.spi`). The
 # framework dataclasses that reference these bases as field types
 # (`PublisherInfo.source: Src`, ...) opt into
@@ -198,11 +198,11 @@ class Src[C: Conn](ABC, _api.DescriptorBase):
     conn: C
 
 
-class AutoSrc[C: Conn](ABC, _api.DescriptorBase):
-    __kind__ = "autoSourceDef"
+class StreamSrc[C: Conn](ABC, _api.DescriptorBase):
+    __kind__ = "streamSourceDef"
     # Abstract field-style annotation: subclasses bind `conn` to their
     # concrete connection union. Advertises the contract; pydantic does
-    # not enforce it on the ABC itself -- the AutoSrcDef does.
+    # not enforce it on the ABC itself -- the streamSrcDef does.
     conn: C
 
 
@@ -238,24 +238,24 @@ def publisher(
     return _publisher
 
 
-def auto_publisher(
-    source: AutoSrc,
+def stream_publisher(
+    source: StreamSrc,
     use_existing_data: bool,
-    fallback_rollover_mins: FallbackRolloverMinsSpec,
+    flush_interval_mins: FlushIntervalSpec,
     output_tables: TableNamesSpec,
     on_tables: OnTablesActionSpec | None = None,
 ) -> Callable:
-    def _publisher(func):
-        return _info_cls("AutoPublisherInfo")(
+    def _stream_publisher(func):
+        return _info_cls("StreamPublisherInfo")(
             func,
             source,
             use_existing_data,
-            fallback_rollover_mins,
+            flush_interval_mins,
             output_tables,
             on_tables,
         )
 
-    return _publisher
+    return _stream_publisher
 
 
 def transformer(

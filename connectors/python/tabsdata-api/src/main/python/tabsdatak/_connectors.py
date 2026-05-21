@@ -4,8 +4,8 @@ import importlib.metadata
 import warnings
 from typing import Type
 
-from tabsdatak.api import AutoSrc, Dest, Src
-from tabsdatak.spi import AutoSrcDef, DestDef, SrcDef
+from tabsdatak.api import StreamSrc, Dest, Src
+from tabsdatak.spi import StreamSrcDef, DestDef, SrcDef
 
 _ENTRY_POINT_GROUP = "tabsdatak.connectors"
 
@@ -14,30 +14,30 @@ _ENTRY_POINT_GROUP = "tabsdatak.connectors"
 # scan; the public ``avail_*`` accessors and the internal ``_get_*``
 # helpers build the indices on first access.
 _SRC_BY_CLASS: dict[Type[Src], SrcDef] | None = None
-_AUTO_SRC_BY_CLASS: dict[Type[AutoSrc], AutoSrcDef] | None = None
+_STREAM_SRC_BY_CLASS: dict[Type[StreamSrc], StreamSrcDef] | None = None
 _DEST_BY_CLASS: dict[Type[Dest], DestDef] | None = None
 _SRC_BY_TYPE: dict[str, SrcDef] | None = None
-_AUTO_SRC_BY_TYPE: dict[str, AutoSrcDef] | None = None
+_STREAM_SRC_BY_TYPE: dict[str, StreamSrcDef] | None = None
 _DEST_BY_TYPE: dict[str, DestDef] | None = None
 
 # Persistent record of in-process registrations made via
-# :func:`register_src` / :func:`register_auto_src` / :func:`register_dest`.
+# :func:`register_src` / :func:`register_stream_src` / :func:`register_dest`.
 # Re-applied after every :func:`reload_connectors` so test fixtures
 # (and any other dynamic registrations) survive a registry reload.
 _INJECTED_SRCS: list[SrcDef] = []
-_INJECTED_AUTO_SRCS: list[AutoSrcDef] = []
+_INJECTED_STREAM_SRCS: list[StreamSrcDef] = []
 _INJECTED_DESTS: list[DestDef] = []
 
 
 def _scan() -> None:
-    global _SRC_BY_CLASS, _AUTO_SRC_BY_CLASS, _DEST_BY_CLASS
-    global _SRC_BY_TYPE, _AUTO_SRC_BY_TYPE, _DEST_BY_TYPE
+    global _SRC_BY_CLASS, _STREAM_SRC_BY_CLASS, _DEST_BY_CLASS
+    global _SRC_BY_TYPE, _STREAM_SRC_BY_TYPE, _DEST_BY_TYPE
 
     src_by_cls: dict[Type[Src], SrcDef] = {}
-    auto_src_by_cls: dict[Type[AutoSrc], AutoSrcDef] = {}
+    stream_src_by_cls: dict[Type[StreamSrc], StreamSrcDef] = {}
     dest_by_cls: dict[Type[Dest], DestDef] = {}
     src_by_type: dict[str, SrcDef] = {}
-    auto_src_by_type: dict[str, AutoSrcDef] = {}
+    stream_src_by_type: dict[str, StreamSrcDef] = {}
     dest_by_type: dict[str, DestDef] = {}
 
     for ep in importlib.metadata.entry_points(group=_ENTRY_POINT_GROUP):
@@ -63,17 +63,17 @@ def _scan() -> None:
                 continue
             src_by_cls[obj.src] = obj
             src_by_type[obj.src_type] = obj
-        elif isinstance(obj, AutoSrcDef):
-            if obj.src in auto_src_by_cls:
+        elif isinstance(obj, StreamSrcDef):
+            if obj.src in stream_src_by_cls:
                 warnings.warn(
-                    f"tabsdatak.connectors: duplicate AutoSrcDef "
+                    f"tabsdatak.connectors: duplicate StreamSrcDef "
                     f"for {obj.src.__qualname__} (existing wins)",
                     RuntimeWarning,
                     stacklevel=2,
                 )
                 continue
-            auto_src_by_cls[obj.src] = obj
-            auto_src_by_type[obj.src_type] = obj
+            stream_src_by_cls[obj.src] = obj
+            stream_src_by_type[obj.src_type] = obj
         elif isinstance(obj, DestDef):
             if obj.dest in dest_by_cls:
                 warnings.warn(
@@ -89,16 +89,16 @@ def _scan() -> None:
             warnings.warn(
                 f"tabsdatak.connectors: entry point {ep.name!r} "
                 f"resolved to {type(obj).__name__}, expected "
-                f"SrcDef / AutoSrcDef / DestDef; skipping",
+                f"SrcDef / StreamSrcDef / DestDef; skipping",
                 RuntimeWarning,
                 stacklevel=2,
             )
 
     _SRC_BY_CLASS = src_by_cls
-    _AUTO_SRC_BY_CLASS = auto_src_by_cls
+    _STREAM_SRC_BY_CLASS = stream_src_by_cls
     _DEST_BY_CLASS = dest_by_cls
     _SRC_BY_TYPE = dict(sorted(src_by_type.items()))
-    _AUTO_SRC_BY_TYPE = dict(sorted(auto_src_by_type.items()))
+    _STREAM_SRC_BY_TYPE = dict(sorted(stream_src_by_type.items()))
     _DEST_BY_TYPE = dict(sorted(dest_by_type.items()))
 
     # Always re-apply previously-injected fixtures so they survive any
@@ -107,9 +107,9 @@ def _scan() -> None:
     for defx in _INJECTED_SRCS:
         _SRC_BY_CLASS[defx.src] = defx
         _SRC_BY_TYPE[defx.src_type] = defx
-    for defx in _INJECTED_AUTO_SRCS:
-        _AUTO_SRC_BY_CLASS[defx.src] = defx
-        _AUTO_SRC_BY_TYPE[defx.src_type] = defx
+    for defx in _INJECTED_STREAM_SRCS:
+        _STREAM_SRC_BY_CLASS[defx.src] = defx
+        _STREAM_SRC_BY_TYPE[defx.src_type] = defx
     for defx in _INJECTED_DESTS:
         _DEST_BY_CLASS[defx.dest] = defx
         _DEST_BY_TYPE[defx.dest_type] = defx
@@ -131,10 +131,10 @@ def avail_srcs() -> dict[str, SrcDef]:
     return dict(_SRC_BY_TYPE)
 
 
-def avail_auto_srcs() -> dict[str, AutoSrcDef]:
+def avail_stream_srcs() -> dict[str, StreamSrcDef]:
     _ensure()
-    assert _AUTO_SRC_BY_TYPE is not None
-    return dict(_AUTO_SRC_BY_TYPE)
+    assert _STREAM_SRC_BY_TYPE is not None
+    return dict(_STREAM_SRC_BY_TYPE)
 
 
 def avail_dests() -> dict[str, DestDef]:
@@ -161,14 +161,14 @@ def get_src(cls: Type[Src]) -> SrcDef:
         ) from None
 
 
-def get_auto_src(cls: Type[AutoSrc]) -> AutoSrcDef:
+def get_stream_src(cls: Type[StreamSrc]) -> StreamSrcDef:
     _ensure()
-    assert _AUTO_SRC_BY_CLASS is not None
+    assert _STREAM_SRC_BY_CLASS is not None
     try:
-        return _AUTO_SRC_BY_CLASS[cls]
+        return _STREAM_SRC_BY_CLASS[cls]
     except KeyError:
         raise KeyError(
-            f"no AutoSrcDef registered for {cls.__qualname__}; "
+            f"no StreamSrcDef registered for {cls.__qualname__}; "
             f"install the connector package or check its entry-point "
             f"declaration in pyproject.toml"
         ) from None
@@ -200,12 +200,12 @@ def register_src(defx: SrcDef) -> None:
     _INJECTED_SRCS.append(defx)
 
 
-def register_auto_src(defx: AutoSrcDef) -> None:
+def register_stream_src(defx: StreamSrcDef) -> None:
     _ensure()
-    assert _AUTO_SRC_BY_CLASS is not None and _AUTO_SRC_BY_TYPE is not None
-    _AUTO_SRC_BY_CLASS[defx.src] = defx
-    _AUTO_SRC_BY_TYPE[defx.src_type] = defx
-    _INJECTED_AUTO_SRCS.append(defx)
+    assert _STREAM_SRC_BY_CLASS is not None and _STREAM_SRC_BY_TYPE is not None
+    _STREAM_SRC_BY_CLASS[defx.src] = defx
+    _STREAM_SRC_BY_TYPE[defx.src_type] = defx
+    _INJECTED_STREAM_SRCS.append(defx)
 
 
 def register_dest(defx: DestDef) -> None:
@@ -219,12 +219,12 @@ def register_dest(defx: DestDef) -> None:
 def reload_connectors() -> None:
     # ``_scan`` re-applies ``_INJECTED_*`` at the end, so a reload is
     # just "clear caches + re-scan".
-    global _SRC_BY_CLASS, _AUTO_SRC_BY_CLASS, _DEST_BY_CLASS
-    global _SRC_BY_TYPE, _AUTO_SRC_BY_TYPE, _DEST_BY_TYPE
+    global _SRC_BY_CLASS, _STREAM_SRC_BY_CLASS, _DEST_BY_CLASS
+    global _SRC_BY_TYPE, _STREAM_SRC_BY_TYPE, _DEST_BY_TYPE
     _SRC_BY_CLASS = None
-    _AUTO_SRC_BY_CLASS = None
+    _STREAM_SRC_BY_CLASS = None
     _DEST_BY_CLASS = None
     _SRC_BY_TYPE = None
-    _AUTO_SRC_BY_TYPE = None
+    _STREAM_SRC_BY_TYPE = None
     _DEST_BY_TYPE = None
     _scan()

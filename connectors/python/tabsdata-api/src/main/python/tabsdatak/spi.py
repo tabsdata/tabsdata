@@ -13,13 +13,13 @@ from typing import (
     Union,
     get_args,
     get_origin,
-    get_type_hints,
+    get_type_hints, Mapping,
 )
 
-from pydantic import ConfigDict, model_validator, StringConstraints
+from pydantic import ConfigDict, model_validator
 
 import tabsdatak._api as _api
-from tabsdatak.api import AutoSrc, Conn, Dest, Src, TrxCtx
+from tabsdatak.api import StreamSrc, Conn, Dest, Src, TrxCtx, TableNameSpec, ContextKeySpec, ContextValueSpec
 from tabsdatak.error import ApiErrorCode
 
 
@@ -31,11 +31,6 @@ class ParquetFile(Path):
 # files on disk. Plugins materialise rows to these paths during reads
 # and consume them during writes.
 TableFileSpec: TypeAlias = ParquetFile
-
-# Auto-source plugins persist a manifest file across rollover windows
-# so the runtime can skip files that were already consumed. Format is
-# plugin-defined; the framework only handles its location.
-ManifestFileSpec: TypeAlias = Path
 
 
 class TableMode(Enum):
@@ -71,44 +66,89 @@ class SrcPluginCtx(TrxCtx, PluginCtx, ABC): ...
 
 
 class SrcPlugin[S: Src](ABC):
-    # TODO nail down this API.
-    #
-    # IDEA: when the source's TableMode is SINGLE, the inner lists
-    # always have exactly one element; ARRAY sources may have
-    # variable-length inner lists.
+
     @abstractmethod
     def read_in(self, ctx: SrcPluginCtx, src: S) -> list[list[TableFileSpec]]: ...
+    # if TableMode is SINGLE, inner list must always have 1 element.
 
 
-class AutoSrcPluginCtx(PluginCtx, ABC): ...
+FilesSpec: TypeAlias = Annotated[
+    list[TableFileSpec], _api.NON_EMPTY_LIST_CONSTRAINTS
+]
 
 
-class AutoSrcPlugin[AS: AutoSrc](ABC):
-    # TODO nail down this API.
-    #
-    # IDEA: when the source's TableMode is SINGLE, the inner lists
-    # always have exactly one element; ARRAY sources may have
-    # variable-length inner lists.
+# ``ParquetFile`` is a ``pathlib.Path`` subclass, not a pydantic type;
+# pydantic cannot synthesize a schema for it on its own. The same
+# ``arbitrary_types_allowed=True`` escape hatch the ``SrcDef`` /
+# ``StreamSrcDef`` / ``DestDef`` dataclasses use below applies to any
+# dataclass that holds files (``TableManifest`` here).
+_ARBITRARY = ConfigDict(arbitrary_types_allowed=True)
+
+
+@_api.dataclass(
+    ApiErrorCode.API_21, config=_ARBITRARY, frozen=True, kw_only=True
+)
+class TableManifest:
+    table: TableNameSpec
+    files: FilesSpec
+
+StreamManifestSpec: TypeAlias = Annotated[
+    list[TableManifest], _api.NON_EMPTY_LIST_CONSTRAINTS
+]
+
+class StageRef(ABC): ...
+
+StreamStateSpec: TypeAlias = Mapping[ContextKeySpec, ContextValueSpec]
+
+class StreamSrcPluginCtx(PluginCtx, ABC):
+
     @abstractmethod
-    def read_in(
+    def is_active(self) -> bool: ...
+
+    @abstractmethod
+    def stage(self, manifest: StreamManifestSpec) -> StageRef: ...
+    # Must be files within the working directory
+    # table names in manifest must be a subset of tables in src
+
+    @abstractmethod
+    def commit(self, stage_ref: StageRef): ...
+
+    @abstractmethod
+    def trigger(self) -> bool: ...
+
+    @abstractmethod
+    def trigger_monitor(self) -> bool: ...
+
+    @abstractmethod
+    def read_state(self) -> StreamStateSpec: ...
+
+    @abstractmethod
+    def write_state(self, state: StreamStateSpec): ...
+
+
+
+
+class StreamSrcPlugin[SS: StreamSrc](ABC):
+    @abstractmethod
+    def run(
         self,
-        ctx: AutoSrcPluginCtx,
-        src: AS,
-    ) -> tuple[ManifestFileSpec, list[list[TableFileSpec]]]: ...
+        ctx: StreamSrcPluginCtx,
+        stream_src: SS,
+    ): ...
 
 
 class DestContext(TrxCtx, PluginCtx, ABC): ...
 
 
 class DestPlugin[D: Dest](ABC):
-    # TODO nail down this API.
+
     @abstractmethod
     def write_out(
         self,
         ctx: DestContext,
         dest: D,
         tables: list[TableFileSpec],
-    ) -> None: ...
+    ): ...
 
 
 class Explorer[C: Conn](ABC):
@@ -213,12 +253,12 @@ def check_plugin_param_type(
         )
 
 
-# The `SrcDef` / `AutoSrcDef` / `DestDef` dataclasses carry
+# The `SrcDef` / `StreamSrcDef` / `DestDef` dataclasses carry
 # `Type[...]` fields whose argument types are abstract classes
 # (`SrcPlugin`, `Explorer`, ...), not pydantic types.
-# `arbitrary_types_allowed=True` tells pydantic to validate those
-# fields via issubclass / isinstance checks.
-_ARBITRARY = ConfigDict(arbitrary_types_allowed=True)
+# `arbitrary_types_allowed=True` (the ``_ARBITRARY`` ConfigDict
+# defined above) tells pydantic to validate those fields via
+# issubclass / isinstance checks.
 
 
 @_api.dataclass(ApiErrorCode.API_14, config=_ARBITRARY)
@@ -243,21 +283,22 @@ class SrcDef[C: Conn, S: Src]:
 
 
 @_api.dataclass(ApiErrorCode.API_15, config=_ARBITRARY)
-class AutoSrcDef[C: Conn, S: AutoSrc]:
+class StreamSrcDef[C: Conn, S: StreamSrc]:
     src_type: str
     src_version: str
     conn: Type[C]
     src: Type[S]
-    table_mode: TableMode
     cardinality: Callable[[S], int]
     uses_manifest: bool
-    plugin: Type[AutoSrcPlugin]
+    plugin: Type[StreamSrcPlugin]
     explorer: Type[Explorer] | None
 
     @model_validator(mode="after")
-    def _validate(self) -> "AutoSrcDef":
-        check_conn_field(self.src, "auto_source", self.conn)
-        check_plugin_param_type(self.plugin, "read_in", "src", self.src)
+    def _validate(self) -> "StreamSrcDef":
+        check_conn_field(self.src, "stream_source", self.conn)
+        # ``StreamSrcPlugin`` defines ``run(ctx, stream_src)``, not the
+        # batch-mode ``read_in(ctx, src)`` from ``SrcPlugin``.
+        check_plugin_param_type(self.plugin, "run", "stream_src", self.src)
         if self.explorer is not None:
             check_plugin_param_type(self.explorer, "metadata", "conn", self.conn)
             check_plugin_param_type(self.explorer, "data", "conn", self.conn)

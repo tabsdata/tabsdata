@@ -251,7 +251,7 @@ CONTEXT_KEY_RE_STR = r'^(?=.{1,253}$)([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])
 # deserialization, so a value that does not match the pattern is rejected
 # at the boundary rather than at first-use.
 #
-# A bare ``str`` at the field site is auto-promoted to the literal sibling
+# A bare ``str`` at the field site is stream-promoted to the literal sibling
 # class with the pattern injected -- so callers can write
 # ``MyConn(user="alice")`` instead of ``MyConn(user=Secret.literal("alice"))``.
 # ---------------------------------------------------------------------------
@@ -380,7 +380,7 @@ def check_tz_aware_datetime(obj: Any) -> Any:
 
 
 # ---------------------------------------------------------------------------
-# Callable-signature validation for the @publisher / @auto_publisher /
+# Callable-signature validation for the @publisher / @stream_publisher /
 # @transformer / @subscriber decorators. The contract is flat:
 #
 #   - The first ``input_count`` positional parameters are typed as a

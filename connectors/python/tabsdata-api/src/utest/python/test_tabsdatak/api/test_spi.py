@@ -7,17 +7,16 @@ import pytest
 
 # noinspection PyProtectedMember
 from tabsdatak import _api
-from tabsdatak.api import AutoSrc, Conn, Dest, Src
+from tabsdatak.api import StreamSrc, Conn, Dest, Src
 from tabsdatak.error import ApiErrorCode, ApiException
 from tabsdatak.spi import (
-    AutoSrcPluginCtx,
-    AutoSrcDef,
-    AutoSrcPlugin,
+    StreamSrcPluginCtx,
+    StreamSrcDef,
+    StreamSrcPlugin,
     DestContext,
     DestDef,
     DestPlugin,
     Explorer,
-    ManifestFileSpec,
     SrcPluginCtx,
     SrcDef,
     SrcPlugin,
@@ -262,7 +261,7 @@ class _SDSrc(Src):
 
 
 @_api.dataclass(ApiErrorCode.API_14)
-class _SDAutoSrc(AutoSrc):
+class _SDStreamSrc(StreamSrc):
     conn: _Conn
 
 
@@ -276,11 +275,11 @@ class _SDSrcPlugin(SrcPlugin[_SDSrc]):
         return [[]]
 
 
-class _SDAutoSrcPlugin(AutoSrcPlugin[_SDAutoSrc]):
-    def read_in(
+class _SDStreamSrcPlugin(StreamSrcPlugin[_SDStreamSrc]):
+    def run(
         self,
-        ctx: AutoSrcPluginCtx,
-        src: _SDAutoSrc,
+        ctx: StreamSrcPluginCtx,
+        src: _SDStreamSrc,
     ) -> tuple[ManifestFileSpec, list[list[TableFileSpec]]]:
         from pathlib import Path
 
@@ -319,15 +318,15 @@ def test_src_def_constructs_with_valid_fields():
 
 
 def test_auto_src_def_constructs_with_valid_fields():
-    AutoSrcDef(
+    StreamSrcDef(
         conn=_Conn,
         src_type="ok",
         src_version="v1",
-        src=_SDAutoSrc,
+        src=_SDStreamSrc,
         table_mode=TableMode.SINGLE,
         cardinality=lambda s: 1,
         uses_manifest=False,
-        plugin=_SDAutoSrcPlugin,
+        plugin=_SDStreamSrcPlugin,
         explorer=_SDExplorer,
     )
 
@@ -353,7 +352,7 @@ class _BadSrcType(Src):
 
 
 @_api.dataclass(ApiErrorCode.API_14)
-class _BadAutoSrcType(AutoSrc):
+class _BadStreamSrcType(StreamSrc):
     conn: int  # type: ignore[assignment]
 
 
@@ -367,8 +366,8 @@ class _DummySrcPlugin(SrcPlugin):
         return [[]]
 
 
-class _DummyAutoSrcPlugin(AutoSrcPlugin):
-    def read_in(self, ctx, src):
+class _DummyStreamSrcPlugin(StreamSrcPlugin):
+    def run(self, ctx, src):
 
         return (Path("/dev/null"), [[]])
 
@@ -395,15 +394,15 @@ def test_src_def_rejects_bad_src_conn_type():
 
 def test_auto_src_def_rejects_bad_src_conn_type():
     with pytest.raises(ApiException) as excinfo:
-        AutoSrcDef(
+        StreamSrcDef(
             conn=Conn,
             src_type="bad",
             src_version="v1",
-            src=_BadAutoSrcType,
+            src=_BadStreamSrcType,
             table_mode=TableMode.SINGLE,
             cardinality=lambda s: 1,
             uses_manifest=False,
-            plugin=_DummyAutoSrcPlugin,
+            plugin=_DummyStreamSrcPlugin,
             explorer=None,
         )
     assert excinfo.value.api_error is ApiErrorCode.API_15

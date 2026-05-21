@@ -70,13 +70,13 @@ class PublisherInfo(_api.JsonSerde):
 
 
 @_api.dataclass(ApiErrorCode.API_18, config=_ARBITRARY)
-class AutoPublisherInfo(_api.JsonSerde):
-    __kind__ = "autoPublisherDef"
+class StreamPublisherInfo(_api.JsonSerde):
+    __kind__ = "streamPublisherDef"
 
     func: Callable
-    source: api.AutoSrc
+    source: api.StreamSrc
     use_existing_data: bool
-    fallback_rollover_mins: api.FallbackRolloverMinsSpec
+    fallback_rollover_mins: api.FlushIntervalSpec
     output_tables: api.TableNamesSpec
     on_tables: api.OnTablesActionSpec | None
 
@@ -95,12 +95,15 @@ class AutoPublisherInfo(_api.JsonSerde):
     def _check_func_signature(self):
         from tabsdatak import _connectors
 
-        definition = _connectors.get_auto_src(type(self.source))
-        input_mode = "single" if definition.table_mode is TableMode.SINGLE else "array"
+        definition = _connectors.get_stream_src(type(self.source))
+        # ``StreamSrcDef`` carries no ``table_mode`` -- stream sources
+        # emit a batch of tableframes per event (one event can fan
+        # out across rows), so the decorated function's input slots
+        # are always array-mode (``TableFramesSpec``).
         _api.check_callable_signature(
             self.func,
             input_count=definition.cardinality(self.source),
-            input_mode=input_mode,
+            input_mode="array",
             output_count=len(self.output_tables),
         )
         return self

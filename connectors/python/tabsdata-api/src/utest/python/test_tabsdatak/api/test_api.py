@@ -68,30 +68,31 @@ _connectors.register_dest(spi.DestDef(
 ))
 
 
-# Auto-source fixture: same shape as _Src above but on the AutoSrc /
-# AutoSrcDef / AutoSrcPlugin rails so we can exercise
-# `auto_publisher` and `AutoPublisherInfo`.
-class _TestAutoSrcPlugin(spi.AutoSrcPlugin):
+# Stream-source fixture: same shape as _Src above but on the
+# StreamSrc / StreamSrcDef / StreamSrcPlugin rails. ``StreamSrcDef``
+# carries no ``table_mode`` -- stream sources do not declare one --
+# and its plugin uses ``run(ctx, stream_src)`` (validated by
+# ``StreamSrcDef._validate``) rather than batch-mode ``read_in``.
+class _TestStreamSrcPlugin(spi.StreamSrcPlugin):
     ...
 
 
 @_api.dataclass(ApiErrorCode.API_14)
-class _AutoSrc(m.AutoSrc):
+class _StreamSrc(m.StreamSrc):
     pass
 
 
-_AUTO_SRC_DEFX = spi.AutoSrcDef(
-        conn=m.Conn,
+_STREAM_SRC_DEFX = spi.StreamSrcDef(
+    conn=m.Conn,
     src_type="watch",
     src_version="v1",
-    src=_AutoSrc,
-    table_mode=spi.TableMode.SINGLE,
+    src=_StreamSrc,
     cardinality=lambda src: 1,
     uses_manifest=False,
-    plugin=_TestAutoSrcPlugin,
+    plugin=_TestStreamSrcPlugin,
     explorer=None,
 )
-_connectors.register_auto_src(_AUTO_SRC_DEFX)
+_connectors.register_stream_src(_STREAM_SRC_DEFX)
 
 
 class _OnTab(m.OnTablesAction):
@@ -104,6 +105,16 @@ class _OnTab(m.OnTablesAction):
 # `TableFrame` (auto-nullable) and a `tuple[TableFrame]` return.
 def _good_1in_1out(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
     return (t1,)
+
+
+# Stream-source variant: input slot is array-mode (`TableFramesSpec`)
+# because ``StreamSrcDef`` does not declare a table-mode and the
+# framework treats stream sources as emitting a batch of tableframes
+# per event. Output stays single-mode per output table.
+def _good_1in_1out_stream(
+    t1: list[tableframe.TableFrame | None] | None,
+) -> tuple[tableframe.TableFrame | None]:
+    return (None,)
 
 
 # ---------------------------------------------------------------------------
@@ -168,8 +179,8 @@ def _dest() -> _Dest:
     return _Dest()
 
 
-def _auto_src() -> _AutoSrc:
-    return _AutoSrc()
+def _auto_src() -> _StreamSrc:
+    return _StreamSrc()
 
 
 def test_publisher_dataclass_constructs_ok():
@@ -846,8 +857,8 @@ def test_cron_mask_rejects_invalid(mask):
 
 def test_auto_publisher_dataclass_constructs_ok():
     src = _auto_src()
-    p = _info.AutoPublisherInfo(
-        _good_1in_1out, src, False, 5, ["t1"], None,
+    p = _info.StreamPublisherInfo(
+        _good_1in_1out_stream, src, False, 5, ["t1"], None,
     )
     assert p.source is src
     assert p.use_existing_data is False
@@ -860,7 +871,7 @@ def test_auto_publisher_dataclass_rollover_below_one_raises_api_10():
     # Field-level Field(ge=1) on FallbackRolloverMinsSpec triggers
     # AutoPublisherInfo's @_api.dataclass tag.
     with pytest.raises(ApiException) as excinfo:
-        _info.AutoPublisherInfo(
+        _info.StreamPublisherInfo(
             _good_1in_1out, _auto_src(), False, 0, ["t1"], None,
         )
     assert excinfo.value.api_error is ApiErrorCode.API_18
@@ -868,7 +879,7 @@ def test_auto_publisher_dataclass_rollover_below_one_raises_api_10():
 
 def test_auto_publisher_dataclass_negative_rollover_raises_api_10():
     with pytest.raises(ApiException) as excinfo:
-        _info.AutoPublisherInfo(
+        _info.StreamPublisherInfo(
             _good_1in_1out, _auto_src(), True, -1, ["t1"], None,
         )
     assert excinfo.value.api_error is ApiErrorCode.API_18
@@ -877,7 +888,7 @@ def test_auto_publisher_dataclass_negative_rollover_raises_api_10():
 def test_auto_publisher_dataclass_empty_output_tables_raises_api_10():
     # TableNamesSpec min_length=1 invariant inherited from regular publishers.
     with pytest.raises(ApiException) as excinfo:
-        _info.AutoPublisherInfo(
+        _info.StreamPublisherInfo(
             _good_1in_1out, _auto_src(), False, 1, [], None,
         )
     assert excinfo.value.api_error is ApiErrorCode.API_18
@@ -890,23 +901,23 @@ def test_auto_publisher_dataclass_signature_mismatch_raises_api_10():
         return (t1, t1)
 
     with pytest.raises(ApiException) as excinfo:
-        _info.AutoPublisherInfo(
+        _info.StreamPublisherInfo(
             bad_outputs, _auto_src(), False, 1, ["t1"], None,
         )
     assert excinfo.value.api_error is ApiErrorCode.API_18
 
 
 def test_auto_publisher_decorator_returns_auto_publisher_instance():
-    @m.auto_publisher(
+    @m.stream_publisher(
         source=_auto_src(),
         use_existing_data=True,
-        fallback_rollover_mins=10,
+        flush_interval_mins=10,
         output_tables=["t1"],
     )
-    def my_pub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
-        return (t1,)
+    def my_pub(t1: list[tableframe.TableFrame | None] | None) -> tuple[tableframe.TableFrame | None]:
+        return (None,)
 
-    assert isinstance(my_pub, _info.AutoPublisherInfo)
+    assert isinstance(my_pub, _info.StreamPublisherInfo)
     assert my_pub.use_existing_data is True
     assert my_pub.fallback_rollover_mins == 10
 
@@ -916,10 +927,10 @@ def test_auto_publisher_decorator_rejects_rollover_below_one_with_api_10():
     # AutoPublisherInfo _api.dataclass is constructed (i.e. when the
     # factory's returned decorator is applied to a function).
     with pytest.raises(ApiException) as excinfo:
-        @m.auto_publisher(
+        @m.stream_publisher(
             source=_auto_src(),
             use_existing_data=False,
-            fallback_rollover_mins=0,
+            flush_interval_mins=0,
             output_tables=["t1"],
         )
         def _f(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
@@ -928,29 +939,29 @@ def test_auto_publisher_decorator_rejects_rollover_below_one_with_api_10():
 
 
 def test_auto_publisher_decorator_accepts_on_tables_hooks():
-    @m.auto_publisher(
+    @m.stream_publisher(
         source=_auto_src(),
         use_existing_data=False,
-        fallback_rollover_mins=15,
+        flush_interval_mins=15,
         output_tables=["t1"],
         on_tables=[_OnTab()],
     )
-    def my_pub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
-        return (t1,)
+    def my_pub(t1: list[tableframe.TableFrame | None] | None) -> tuple[tableframe.TableFrame | None]:
+        return (None,)
 
     assert my_pub.on_tables is not None
     assert len(my_pub.on_tables) == 1
 
 
 def test_auto_publisher_decorator_default_none_on_tables():
-    @m.auto_publisher(
+    @m.stream_publisher(
         source=_auto_src(),
         use_existing_data=False,
-        fallback_rollover_mins=1,
+        flush_interval_mins=1,
         output_tables=["t1"],
     )
-    def my_pub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
-        return (t1,)
+    def my_pub(t1: list[tableframe.TableFrame | None] | None) -> tuple[tableframe.TableFrame | None]:
+        return (None,)
 
     assert my_pub.on_tables is None
 
@@ -962,9 +973,9 @@ def test_auto_publisher_decorator_default_none_on_tables():
 
 def test_auto_src_defx_resolves_via_registry():
     from tabsdatak import _connectors
-    defx = _connectors.get_auto_src(_AutoSrc)
-    assert isinstance(defx, spi.AutoSrcDef)
-    assert defx.src is _AutoSrc
+    defx = _connectors.get_stream_src(_StreamSrc)
+    assert isinstance(defx, spi.StreamSrcDef)
+    assert defx.src is _StreamSrc
     assert defx.src_type == "watch"
     assert defx.uses_manifest is False
 
@@ -978,7 +989,7 @@ def test_auto_src_def_rejects_missing_conn_field():
         pass
 
     with pytest.raises(ApiException) as excinfo:
-        spi.AutoSrcDef(
+        spi.StreamSrcDef(
         conn=m.Conn,
             src_type="bad",
             src_version="v1",
@@ -986,7 +997,7 @@ def test_auto_src_def_rejects_missing_conn_field():
             table_mode=spi.TableMode.SINGLE,
             cardinality=lambda src: 1,
             uses_manifest=False,
-            plugin=_TestAutoSrcPlugin,
+            plugin=_TestStreamSrcPlugin,
             explorer=None,
         )
 

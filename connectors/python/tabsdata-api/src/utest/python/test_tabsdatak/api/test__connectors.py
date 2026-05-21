@@ -5,7 +5,7 @@ import pytest
 
 from tabsdatak.api import Dest, Src
 from tabsdatak._connectors import (
-    avail_auto_srcs,
+    avail_stream_srcs,
     avail_dests,
     avail_srcs,
     get_dest,
@@ -13,7 +13,7 @@ from tabsdatak._connectors import (
     reload_connectors,
 )
 from tabsdatak.spi import (
-    AutoSrcDef,
+    StreamSrcDef,
     DestDef,
     DestPlugin,
     Explorer,
@@ -89,8 +89,8 @@ def test_dest_entries_are_well_typed():
 
 
 def test_auto_src_entries_are_well_typed():
-    for src_type, defx in avail_auto_srcs().items():
-        assert isinstance(defx, AutoSrcDef), src_type
+    for src_type, defx in avail_stream_srcs().items():
+        assert isinstance(defx, StreamSrcDef), src_type
 
 
 def test_avail_returns_a_fresh_dict():

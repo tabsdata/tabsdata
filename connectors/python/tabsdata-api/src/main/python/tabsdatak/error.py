@@ -248,26 +248,28 @@ class ApiErrorCode(ErrorCode):
 
     # --- Source / destination / action bases (tabsdatak.spi) --------
     # Tag for every concrete `Src` / `Dest` subclass, every `SrcDef` /
-    # `AutoSrcDef` / `DestDef`, and the conn-field type-checks those
+    # `streamSrcDef` / `DestDef`, and the conn-field type-checks those
     # bindings run on construction.
     API_14 = ErrorDef(ApiInitException, "Cannot create SrcDef")
     # SrcDef
-    API_15 = ErrorDef(ApiInitException, "Cannot create AutoSrcDef")
-    # AutoSrcDef
+    API_15 = ErrorDef(ApiInitException, "Cannot create streamSrcDef")
+    # streamSrcDef
     API_16 = ErrorDef(ApiInitException, "Cannot create DestDef")
     # DestDef
 
     # --- Flow primitives (tabsdatak._info) --------------------------
-    # The @publisher / @transformer / @subscriber / @auto_publisher
+    # The @publisher / @transformer / @subscriber / @stream_publisher
     # factories construct the matching Info dataclass directly; that
     # construction is the single validation surface for both
     # argument-type and signature-shape failures, so the factory has
     # no separate code.
     API_17 = ErrorDef(ApiInternalException, "@publisher validation failed")
     # PublisherInfo dataclass (covers @publisher factory args + sig)
-    API_18 = ErrorDef(ApiInternalException, "@auto_publisher validation failed")
-    # AutoPublisherInfo dataclass (covers @auto_publisher factory args + sig)
+    API_18 = ErrorDef(ApiInternalException, "@stream_publisher validation failed")
+    # streamPublisherInfo dataclass (covers @stream_publisher factory args + sig)
     API_19 = ErrorDef(ApiInternalException, "@transformer validation failed")
     # TransformerInfo dataclass (covers @transformer factory args + sig)
     API_20 = ErrorDef(ApiInternalException, "@subscriber validation failed")
     # SubscriberInfo dataclass (covers @subscriber factory args + sig)
+    API_21 = ErrorDef(ApiInitException, "Cannot create StageManifestEntry")
+    # StageManifestEntry

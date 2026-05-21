@@ -23,19 +23,19 @@ Three modules. Everything an end user ever types comes from one of them.
 ```python
 # 1. Core API: decorators + abstract bases + value refs + type aliases.
 from tabsdatak.api import (
-  publisher, auto_publisher, transformer, subscriber,  # entry points
-  CronTrigger,  # firing rule
-  NamedConn,  # ref by name
-  Env, Secret,  # ValRef subclasses
-  # function-signature slot
+    publisher, stream_publisher, transformer, subscriber,  # entry points
+    CronTrigger,  # firing rule
+    NamedConn,  # ref by name
+    Env, Secret,  # ValRef subclasses
+    # function-signature slot
 )
 from tabsdatak.tableframe import TableFrame
 
 # 2. Cross-cutting connector types: credentials, cloud locations, conn_cfg.
 from tabsdatak.conn.common.types import (
-  UserPassword, GCPJson, AwsAccessSecretKey,
-  AzureAccountKey, HMAC,
-  S3Location, AzBlobLocation, GCSLocation,
+    UserPassword, GCPJson, AwsAccessSecretKey,
+    AzureAccountKey, HMAC,
+    S3Location, AzBlobLocation, GCSLocation,
 )
 
 # 3. The vendor connector you need (one of ~17). Example:
@@ -46,7 +46,7 @@ from tabsdatak.error import ApiException
 from tabsdatak.conn.common.error import ConnException
 
 # 5. (Optional) Discover what's installed at runtime.
-from tabsdatak._connectors import avail_srcs, avail_auto_srcs, avail_dests
+from tabsdatak._connectors import avail_srcs, avail_stream_srcs, avail_dests
 # Each returns a fresh dict keyed by src_type / dest_type
 # ("mysql", "s3", "salesforce_report", ...). Values are SrcDef /
 # AutoSrcDef / DestDef instances exposing the concrete config
@@ -55,7 +55,7 @@ from tabsdatak._connectors import avail_srcs, avail_auto_srcs, avail_dests
 
 # 6. (Optional) Vendor-level metadata without importing connectors.
 from tabsdatak.conn.common._connectors import (
-  CONNECTORS, list_connectors, import_connector,
+    CONNECTORS, list_connectors, import_connector,
 )
 # CONNECTORS is a dict[str, ConnectorInfo] keyed by vendor key
 # ("mysql", "s3", ...). Each ConnectorInfo carries class names
