@@ -1,0 +1,82 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+[build-system]
+requires = []
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tabsdata-conn-kafka"
+description = "Kafka connector."
+authors = [{name = "Tabs Data Inc."}]
+keywords = [
+    "tabsdata",
+    "tabsdatak",
+    "data",
+    "tables",
+    "pub/sub",
+    "publish/subscribe",
+    "kafka",
+    "stream",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "Programming Language :: JavaScript",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+    "Programming Language :: Rust",
+    "Operating System :: OS Independent",
+]
+dynamic = [
+    "version",
+    "license",
+    "readme",
+    "requires-python",
+    "dependencies",
+    "optional-dependencies",
+]
+
+[project.urls]
+Homepage = "https://tabsdata.com"
+Documentation = "https://docs.tabsdata.com"
+Source = "https://github.com/tabsdata/tabsdata"
+
+[project.entry-points."tabsdatak.connectors"]
+stream_src_kafka = "tabsdatak.conn.kafka._stream_plugin:KAFKA_STREAM_SRC"
+
+[tool.pytest.ini_options]
+addopts = "--import-mode=importlib"
+consider_namespace_packages = true
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+    "ignore::pytest.PytestUnknownMarkWarning",
+    "ignore::authlib.deprecate.AuthlibDeprecationWarning",
+]
+markers = [
+    "kafka: mark tests that require a kafka docker container.",
+    "kafka_docker: end-to-end test that needs a docker daemon and a Kafka image.",
+]
+
+[tool.coverage.html]
+directory = "coverage_html_report"
+
+[tool.coverage.report]
+exclude_also = [
+    "@(abc\\.)?abstractmethod",
+]
+
+[tool.licensecheck]
+using = "requirements:requirements.txt"
+
+[tool.ruff]
+extend = "../../../pyproject.toml"
+
+[tool.tabsdata]
+name = "tabsdata-conn-kafka"
+display = "Kafka Connector (tabsdatak)"
