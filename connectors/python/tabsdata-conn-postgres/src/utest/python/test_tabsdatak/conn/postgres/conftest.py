@@ -108,6 +108,12 @@ _POSTGRES_CONTAINER = (
     f"{DOCKER_REGULAR_CONTAINER_INFIX}"
     "postgres"
 )
+_POSTGRES_CDC_CONTAINER = (
+    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}"
+    f"{DOCKER_UTEST_CONTAINER_INFIX}"
+    f"{DOCKER_REGULAR_CONTAINER_INFIX}"
+    "postgres-cdc"
+)
 
 _DB_NAME = "testing"
 _DB_USER = "etl"
@@ -168,6 +174,8 @@ def _ensure_container(
     name: str,
     image: str,
     environment: list[str],
+    forwarded_port: int | None = None,
+    command: list[str] | None = None,
 ) -> int:
     from docker.errors import APIError, ImageNotFound, NotFound
 
@@ -197,14 +205,17 @@ def _ensure_container(
         except APIError as exc:
             _fail_or_skip(f"docker image {image!r} pull failed: {exc}")
 
+    run_kwargs: dict = dict(
+        name=name,
+        environment=environment,
+        ports={"5432/tcp": forwarded_port},
+        detach=True,
+    )
+    if command is not None:
+        run_kwargs["command"] = command
+
     try:
-        container = client.containers.run(
-            image,
-            name=name,
-            environment=environment,
-            ports={"5432/tcp": None},
-            detach=True,
-        )
+        container = client.containers.run(image, **run_kwargs)
     except APIError as exc:
         _fail_or_skip(f"docker run {image!r} failed: {exc}")
 
@@ -455,3 +466,171 @@ def fresh_postgres(postgres_config, tmp_path_factory, worker_id) -> DBConfig:
         with FileLock(str(lock_path)):
             _seed_schema(postgres_config)
     return postgres_config
+
+
+# --- CDC fixtures ---------------------------------------------------
+#
+# Logical-replication-enabled Postgres container for CDC integration
+# tests. Modelled on the legacy ``tabsdata-cdc-postgres`` docker
+# fixture: ``wal_level=logical``, generous replication-slot /
+# WAL-sender allotments, the wal2json output plugin installed into
+# the running container, a role with REPLICATION attribute, and a
+# logical replication slot pre-created.
+
+_POSTGRES_CDC_IMAGE = "postgres:17.2"
+
+_POSTGRES_CDC_FLAGS = [
+    "postgres",
+    "-c", "wal_level=logical",
+    "-c", "max_replication_slots=1024",
+    "-c", "max_wal_senders=1024",
+    "-c", "wal_keep_size=1024",
+    "-c", "max_logical_replication_workers=4",
+]
+
+_REPLICATION_SLOT = "tdcdc_slot"
+
+
+def _install_wal2json(container) -> None:
+    """``wal2json`` is shipped as ``postgresql-17-wal2json`` on
+    Debian/Ubuntu. Install it inside the live container (the
+    base postgres image doesn't carry it). No server reload is
+    needed: the ``.so`` is loaded on-demand by the
+    logical-decoding subsystem when a replication slot specifies
+    it as its output plugin."""
+    code, out = container.exec_run(
+        ["bash", "-lc",
+         "apt-get update && apt-get install -y postgresql-17-wal2json"],
+    )
+    if code != 0:
+        _fail_or_skip(
+            "wal2json plugin install failed inside the postgres-cdc "
+            f"container:\n{out.decode('utf-8', errors='replace')}"
+        )
+
+
+def _grant_replication_and_create_slot(cfg: "DBConfig") -> None:
+    """Postgres logical replication needs a role with the
+    ``REPLICATION`` attribute and a slot using the wal2json output
+    plugin. The test role gets both at session-startup time."""
+    from sqlalchemy import create_engine, text
+
+    engine = create_engine(
+        cfg.uri_with_credentials, isolation_level="AUTOCOMMIT",
+    )
+    try:
+        with engine.connect() as conn:
+            conn.execute(text(
+                f"alter role {cfg.user} with replication"
+            ))
+            row = conn.execute(text(
+                "select slot_name from pg_replication_slots "
+                "where slot_name = :slot"
+            ), {"slot": _REPLICATION_SLOT}).fetchone()
+            if not row:
+                conn.execute(text(
+                    "select pg_create_logical_replication_slot("
+                    ":slot, 'wal2json')"
+                ), {"slot": _REPLICATION_SLOT})
+    finally:
+        engine.dispose()
+
+
+def _seed_cdc_schema(cfg: "DBConfig") -> None:
+    """Single tracked table for CDC tests, with ``replica identity
+    full`` so UPDATE / DELETE events carry the pre-image values."""
+    from sqlalchemy import create_engine, text
+
+    engine = create_engine(cfg.uri_with_credentials)
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("DROP TABLE IF EXISTS users"))
+            conn.execute(text(
+                "CREATE TABLE users ("
+                "  id INTEGER PRIMARY KEY,"
+                "  name VARCHAR(64) NOT NULL,"
+                "  age INTEGER NOT NULL"
+                ")"
+            ))
+            conn.execute(text("ALTER TABLE users REPLICA IDENTITY FULL"))
+    finally:
+        engine.dispose()
+
+
+def _build_cdc_config() -> tuple["DBConfig", object | None]:
+    import docker
+
+    port = _free_port()
+    host_port = _ensure_container(
+        name=_POSTGRES_CDC_CONTAINER,
+        image=_POSTGRES_CDC_IMAGE,
+        environment=[
+            f"POSTGRES_DB={_DB_NAME}",
+            f"POSTGRES_USER={_DB_USER}",
+            f"POSTGRES_PASSWORD={_DB_PASSWORD}",
+        ],
+        forwarded_port=port,
+        command=_POSTGRES_CDC_FLAGS,
+    )
+    cfg = DBConfig(
+        host="127.0.0.1",
+        port=host_port,
+        user=_DB_USER,
+        password=_DB_PASSWORD,
+        database=_DB_NAME,
+    )
+    _wait_for_db(cfg.host, cfg.port, cfg.user, cfg.password, cfg.database)
+
+    # Install wal2json + create the slot inside the running container.
+    client = docker.from_env()
+    container = client.containers.get(_POSTGRES_CDC_CONTAINER)
+    _install_wal2json(container)
+    _grant_replication_and_create_slot(cfg)
+    _seed_cdc_schema(cfg)
+    return cfg, container
+
+
+@pytest.fixture(scope="session")
+def postgres_cdc_config(tmp_path_factory, worker_id) -> Iterator[DBConfig]:
+    """Session-scoped logical-replication-enabled Postgres
+    container for CDC integration tests."""
+    external = _external_config(
+        prefix="POSTGRESCDC0",
+        backend="POSTGRESCDC",
+        fixture="postgres_cdc_config",
+    )
+    if external is not None:
+        if _should_reseed_external("POSTGRESCDC0", "POSTGRESCDC"):
+            _grant_replication_and_create_slot(external)
+            _seed_cdc_schema(external)
+        yield external
+        return
+
+    if worker_id == "master":
+        cfg, _ = _build_cdc_config()
+    else:
+        root_tmp_dir = tmp_path_factory.getbasetemp().parent
+        lock_path = root_tmp_dir / "docker_postgres_cdc_config_creation.lock"
+        with FileLock(str(lock_path)):
+            cfg, _ = _build_cdc_config()
+    try:
+        yield cfg
+    finally:
+        _remove_container(_POSTGRES_CDC_CONTAINER)
+
+
+@pytest.fixture
+def fresh_postgres_cdc(
+    postgres_cdc_config, tmp_path_factory, worker_id,
+) -> DBConfig:
+    """Per-test reset of the tracked ``users`` table. The WAL +
+    replication slot accumulate across tests so
+    ``start_from="head"`` / ``"tail"`` can be exercised."""
+    if worker_id == "master":
+        _seed_cdc_schema(postgres_cdc_config)
+    else:
+        root_tmp_dir = tmp_path_factory.getbasetemp().parent
+        lock_path = root_tmp_dir / "docker_postgres_cdc_config_seed.lock"
+        with FileLock(str(lock_path)):
+            _seed_cdc_schema(postgres_cdc_config)
+    return postgres_cdc_config
