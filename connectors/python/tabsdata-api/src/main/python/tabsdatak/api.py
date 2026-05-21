@@ -365,6 +365,13 @@ def publisher(
 ) -> Callable:
     """Decorate a function as a batch publisher.
 
+    The decorated function's signature is one parameter per input
+    slot the source declares (mode ``single`` -> ``TableFrameSpec``,
+    mode ``array`` -> ``TableFramesSpec``), followed by an
+    *optional* trailing ``ctx: TrxCtx`` parameter. The runtime
+    supplies a :class:`TrxCtx` when ``ctx`` is declared and skips
+    it otherwise. No other extra parameters are allowed.
+
     :param source: The :class:`Src` to pull from.
     :param output_tables: Local table names this function emits;
         the function's return shape must match the cardinality
@@ -392,6 +399,15 @@ def stream_publisher(
     on_tables: OnTablesActionSpec | None = None,
 ) -> Callable:
     """Decorate a function as a stream publisher.
+
+    The decorated function's signature is one parameter per input
+    slot the stream source declares (always array-mode --
+    ``TableFramesSpec``). Unlike :func:`publisher` /
+    :func:`transformer` / :func:`subscriber`, a trailing
+    ``ctx: TrxCtx`` parameter is **not** allowed: stream publishers
+    run inside the runtime's long-lived stream-plugin loop, not
+    per-trx, so there is no :class:`TrxCtx` available at the call
+    boundary.
 
     :param source: The :class:`StreamSrc` to consume.
     :param use_existing_data: When ``True``, replay everything the
@@ -426,6 +442,13 @@ def transformer(
     """Decorate a function as a transformer (table-to-table, no
     external connection).
 
+    The decorated function's signature is one parameter per entry
+    in ``input_tables`` (slot type accepts either
+    :data:`TableFrameSpec` or :data:`TableFramesSpec`), followed by
+    an *optional* trailing ``ctx: TrxCtx`` parameter. The runtime
+    supplies a :class:`TrxCtx` when ``ctx`` is declared and skips
+    it otherwise. No other extra parameters are allowed.
+
     :param input_tables: ``"collection/table"`` references to read.
     :param output_tables: Local table names this function emits.
     :param trigger_by: Optional :class:`CronTrigger` /
@@ -448,6 +471,12 @@ def subscriber(
 ) -> Callable:
     """Decorate a function as a subscriber (push tables to an
     external destination).
+
+    The decorated function's signature is one parameter per entry
+    in ``input_tables`` (slot type :data:`TableFrameSpec`),
+    followed by an *optional* trailing ``ctx: TrxCtx`` parameter.
+    The runtime supplies a :class:`TrxCtx` when ``ctx`` is declared
+    and skips it otherwise. No other extra parameters are allowed.
 
     :param destination: The :class:`Dest` to write to.
     :param input_tables: ``"collection/table"`` references to ship.

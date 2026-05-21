@@ -580,6 +580,7 @@ def _format_expected_signature(
     input_count: int,
     input_mode: str,
     output_count: int,
+    allow_trx_ctx: bool = True,
 ) -> str:
     if input_mode == "array":
         in_t = "TableFramesSpec"
@@ -590,11 +591,15 @@ def _format_expected_signature(
     if not params:
         params = "# no input parameters"
     out_args = ", ".join(["TableFrameSpec"] * output_count) if output_count > 0 else ""
+    ctx_note = (
+        " (an optional trailing ``ctx: TrxCtx`` parameter is also allowed)"
+        if allow_trx_ctx else ""
+    )
 
     return (
         f"\n\nExpected signature ({input_count} input slot(s), "
         f"{output_count} output slot(s); slot type "
-        f"= {_slot_mode_hint(input_mode)}):\n"
+        f"= {_slot_mode_hint(input_mode)}{ctx_note}):\n"
         f"    def {name}(\n"
         f"        {params},\n"
         f"    ) -> tuple[{out_args}]:\n"
@@ -632,13 +637,31 @@ def check_callable_signature(
     input_count: int,
     input_mode: str,
     output_count: int,
+    allow_trx_ctx: bool = True,
 ) -> None:
+    """Validate a decorated function's signature against the
+    declared input / output shape.
+
+    :param input_count: Number of input-slot parameters.
+    :param input_mode: ``"single"`` (each slot is a
+        ``TableFrameSpec``), ``"array"`` (each slot is a
+        ``TableFramesSpec``), or ``"any"`` (either).
+    :param output_count: Number of return-tuple elements.
+    :param allow_trx_ctx: When ``True`` (the default for
+        ``@publisher`` / ``@transformer`` / ``@subscriber``), a
+        single trailing ``ctx: TrxCtx`` parameter is allowed after
+        the input slots. ``@stream_publisher`` passes ``False`` --
+        stream publishers run inside the runtime's long-lived
+        plugin loop, not per-trx, so no ``TrxCtx`` is available
+        at the call boundary.
+    """
     name = getattr(func, "__name__", repr(func))
     expected = _format_expected_signature(
         name,
         input_count=input_count,
         input_mode=input_mode,
         output_count=output_count,
+        allow_trx_ctx=allow_trx_ctx,
     )
 
     try:
@@ -651,20 +674,28 @@ def check_callable_signature(
 
     # Accepted shape:
     #   - exactly ``input_count`` slot params, or
-    #   - ``input_count`` slot params followed by one optional trailing
-    #     param annotated as ``TrxCtx`` (or a subclass).
+    #   - when ``allow_trx_ctx`` is True, ``input_count`` slot
+    #     params followed by one optional trailing param
+    #     annotated as ``TrxCtx`` (or a subclass).
     if len(params) < input_count:
         raise ValueError(
             f"{name!r}: must declare at least {input_count} parameter(s) "
             f"(got {len(params)}){expected}"
         )
-    if len(params) > input_count + 1:
+    max_params = input_count + (1 if allow_trx_ctx else 0)
+    if len(params) > max_params:
+        if allow_trx_ctx:
+            raise ValueError(
+                f"{name!r}: declares {len(params)} parameter(s) but only "
+                f"{input_count} input slot(s) plus an optional trailing "
+                f"TrxCtx parameter are allowed{expected}"
+            )
         raise ValueError(
             f"{name!r}: declares {len(params)} parameter(s) but only "
-            f"{input_count} input slot(s) plus an optional trailing "
-            f"TrxCtx parameter are allowed{expected}"
+            f"{input_count} input slot(s) are allowed (a trailing "
+            f"TrxCtx parameter is not supported here){expected}"
         )
-    if len(params) == input_count + 1:
+    if allow_trx_ctx and len(params) == input_count + 1:
         extra = params[input_count]
         extra_hint = hints.get(extra.name)
         if extra_hint is None or not _is_trx_ctx_slot(extra_hint):

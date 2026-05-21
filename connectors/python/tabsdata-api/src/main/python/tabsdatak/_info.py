@@ -130,11 +130,15 @@ class StreamPublisherInfo(_api.JsonSerde):
         # emit a batch of tableframes per event (one event can fan
         # out across rows), so the decorated function's input slots
         # are always array-mode (``TableFramesSpec``).
+        # ``allow_trx_ctx=False`` -- stream publishers run inside the
+        # runtime's long-lived stream-plugin loop, not per-trx, so
+        # there is no ``TrxCtx`` at the call boundary.
         _api.check_callable_signature(
             self.func,
             input_count=definition.cardinality(self.source),
             input_mode="array",
             output_count=len(self.output_tables),
+            allow_trx_ctx=False,
         )
         return self
 
