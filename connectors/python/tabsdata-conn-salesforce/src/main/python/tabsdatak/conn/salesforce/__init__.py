@@ -153,7 +153,6 @@ class SalesforceSrc(Src):
         for ``$lastModified`` tokens in the SOQL string.
     :param api_version: Optional API version override
         (e.g. ``"60.0"``).
-    :param entity_whitelist: Optional regex-based filter.
     :param src_cfg: Optional ``Mapping`` over
         ``salesforce.logging_level``.
     """
@@ -188,7 +187,6 @@ class SalesforceReportSrc(Src):
         last-modified filtering. Requires ``initial_last_modified``.
     :param initial_last_modified: Cutoff datetime. Requires
         ``last_modified_column``.
-    :param entity_whitelist: Optional regex-based filter.
     :param src_cfg: Optional ``Mapping`` over
         ``salesforce.logging_level``.
     """

@@ -187,9 +187,9 @@ class DatabricksDest(Dest):
     :param tables: Table names ([catalog.][schema.]table).
     :param if_table_exists: ``"append"`` (default) or
         ``"replace"``.
-    :param schema_evolution: ``"strict"`` (default) or
-        ``"update"`` (forwards ``mergeSchema=true`` to
-        ``COPY INTO``).
+    :param schema_evolution: ``"update"`` (default; forwards
+        ``mergeSchema=true`` to ``COPY INTO``) or ``"strict"``
+        (reject schema changes).
     :param dest_cfg: Optional dest cfg dict.
     """
 

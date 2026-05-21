@@ -141,8 +141,8 @@ class BigQueryDest(Dest):
         (``[project.]dataset.table``). One slot per table.
     :param if_table_exists: ``"append"`` (default) or
         ``"replace"`` (drop + recreate).
-    :param schema_evolution: ``"strict"`` (default) or
-        ``"update"`` (allow new columns).
+    :param schema_evolution: ``"update"`` (default; allow new
+        columns) or ``"strict"`` (reject schema changes).
     :param dest_cfg: Optional dest cfg dict; key set is
         ``"bigquery.logging_level"``.
     """
