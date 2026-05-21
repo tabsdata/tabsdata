@@ -6,7 +6,9 @@ from __future__ import annotations
 
 import logging
 import os
+import random
 import re
+import string
 import time
 import urllib.parse
 from dataclasses import dataclass
@@ -675,6 +677,7 @@ def _seed_cdc_schema(cfg: "DBConfig") -> None:
                 "  IBMSNAP_OPERATION CHAR(1) NOT NULL,"
                 "  IBMSNAP_COMMITSEQ VARCHAR(16) FOR BIT DATA NOT NULL,"
                 "  IBMSNAP_INTENTSEQ VARCHAR(16) FOR BIT DATA NOT NULL,"
+                "  IBMSNAP_LOGMARKER TIMESTAMP NOT NULL,"
                 "  ID INTEGER,"
                 "  NAME VARCHAR(64),"
                 "  AGE INTEGER,"
@@ -708,3 +711,138 @@ def fresh_db2_cdc(db2_config, tmp_path_factory, worker_id) -> DBConfig:
         with FileLock(str(lock_path)):
             _seed_cdc_schema(db2_config)
     return db2_config
+
+
+# --- Real-asncap CDC fixture ----------------------------------------
+#
+# Companion to ``fresh_db2_cdc`` (synthetic-ASN). This one provisions
+# the real IBM SQL Replication apparatus inside the ``db2_config``
+# container: archive logging, ``asnclp`` control tables, the
+# ``asncap`` capture program, and an ``AsncapWatchdog`` -- the same
+# sequence the legacy ``tabsdata-cdc-db2`` suite runs against its
+# dedicated ``tdcdcdb`` container. Tests drive change events by
+# inserting into real source tables; asncap propagates them to the
+# CD table the way it would in production.
+
+from test_tabsdatak.conn.db2 import _cdc_docker  # noqa: E402
+
+
+@pytest.fixture(scope="session")
+def db2_asncap_ready(db2_config, tmp_path_factory, worker_id):
+    """One-shot provisioning of asncap on the ``db2_config`` container.
+
+    Cost: ~30s for archive + backup + asnclp + asncap startup on top of
+    the ~3-min ``db2_config`` cold boot. Subsequent tests reuse it.
+    Returns a :class:`_cdc_docker.Db2CdcConfig` carrying the live
+    Container handle so per-test ``register_table_for_cdc`` calls can
+    ``exec_run`` inside it."""
+    container = _cdc_docker.find_container_by_host_port(db2_config.port)
+    if container is None:
+        raise RuntimeError(
+            f"Could not locate the docker container behind db2_config "
+            f"at host_port={db2_config.port}. asncap setup requires "
+            f"exec_run access inside the container."
+        )
+
+    # The ported docker helpers default to ``DB2_CDC_DATABASE`` /
+    # ``DB2_CDC_ROOT_USER`` / ``DB2_CDC_ROOT_PASSWORD`` (the legacy
+    # tdcdcdb credentials from ``test_tabsdata.common.constants``).
+    # Rebind them to match the actual ``db2_config`` container so
+    # ``db2_conn`` / ``db2_cursor`` authenticate successfully.
+    _cdc_docker.DB2_CDC_DATABASE = db2_config.database
+    _cdc_docker.DB2_CDC_ROOT_USER = db2_config.user
+    _cdc_docker.DB2_CDC_ROOT_PASSWORD = db2_config.password
+
+    def _provision() -> None:
+        _cdc_docker.get_db2_home(container)
+        _cdc_docker.setup_db2_archive(container, port=db2_config.port)
+        # Co-existence with the synthetic-ASN tests (``fresh_db2_cdc``):
+        # they leave ``ASN.IBMSNAP_REGISTER`` + ``IBMSNAP_UOW`` behind
+        # in the same TESTDB container; asnclp's
+        # ``create control tables`` refuses to proceed against any
+        # pre-existing ASN tables. Drop the schema clean unless asnclp
+        # has already provisioned the full set itself in a prior run.
+        if not _cdc_docker.asn_schema_is_provisioned(db2_config.port):
+            _cdc_docker.drop_asn_schema_tables(db2_config.port)
+            _cdc_docker.setup_cdc_db2_asn(container)
+            _cdc_docker.setup_cdc_db2_asncap(container, db2_config.port)
+        else:
+            logger.info(
+                "asnclp control tables already present; reusing them"
+            )
+            _cdc_docker.ensure_asncap_running(container)
+
+    if worker_id == "master":
+        _provision()
+    else:
+        root_tmp_dir = tmp_path_factory.getbasetemp().parent
+        lock_path = root_tmp_dir / "docker_db2_cdc_asncap_setup.lock"
+        with FileLock(str(lock_path)):
+            _provision()
+
+    _cdc_docker.AsncapWatchdog.ensure_started(container, db2_config.port)
+
+    cfg = _cdc_docker.Db2CdcConfig(
+        container=container,
+        host=db2_config.host,
+        port=db2_config.port,
+        database=db2_config.database,
+        root_user=db2_config.user,
+        root_password=db2_config.password,
+        cdc_user=db2_config.user,
+        cdc_password=db2_config.password,
+    )
+    try:
+        yield cfg
+    finally:
+        _cdc_docker.AsncapWatchdog.shutdown()
+
+
+@pytest.fixture
+def fresh_db2_cdc_asncap(db2_asncap_ready, request):
+    """Per-test CDC config that registers a uniquely-named source
+    table for the test and tears it down afterwards.
+
+    The test signature looks like ``def test_foo(fresh_db2_cdc_asncap)``;
+    the fixture returns ``(cfg, source_schema, source_table)`` so the
+    test can drive ``INSERT/UPDATE/DELETE`` against the source and let
+    asncap propagate to the CD table the ingester reads from."""
+    cfg = db2_asncap_ready
+    suffix = "".join(
+        random.choices(string.ascii_uppercase + string.digits, k=10)
+    )
+    source_table = f"USERS_{suffix}"
+    source_schema = cfg.root_user.upper()
+    ddl = (
+        f"create table {source_table} ("
+        f"id integer not null primary key, "
+        f"name varchar(64) not null, "
+        f"age integer not null"
+        f")"
+    )
+    _cdc_docker.register_table_for_cdc(
+        container=cfg.container,
+        port=cfg.port,
+        schema=source_schema,
+        table=source_table,
+        ddl=ddl,
+        wait=True,
+    )
+
+    def _teardown() -> None:
+        try:
+            _cdc_docker.deregister_table_from_cdc(
+                container=cfg.container,
+                port=cfg.port,
+                schema=source_schema,
+                table=source_table,
+                mode=_cdc_docker.CdcMode.HARD,
+            )
+        except Exception as exc:  # noqa: BLE001 -- teardown must not raise
+            logger.warning(
+                f"deregister of {source_schema}.{source_table} "
+                f"failed during teardown: {exc}"
+            )
+
+    request.addfinalizer(_teardown)
+    return cfg, source_schema, source_table

@@ -182,7 +182,13 @@ def _insert_cd_row(
 ) -> None:
     """Synthesise one capture event by inserting a row into the CD
     table (and a matching IBMSNAP_UOW row if a timestamp is given,
-    so ``TimestampPosition`` translation can find it)."""
+    so ``TimestampPosition`` translation can find it).
+
+    ``IBMSNAP_LOGMARKER`` on the CD row is the per-event commit
+    timestamp the ingester reads back; default to ``uow_ts`` when
+    provided (so CD + UOW agree on the same commit), otherwise
+    stamp ``now``."""
+    logmarker = uow_ts if uow_ts is not None else datetime.now(timezone.utc)
     eng = create_engine(cfg.uri_with_credentials)
     try:
         with eng.begin() as conn:
@@ -190,14 +196,16 @@ def _insert_cd_row(
                 text(
                     f"insert into {_CD_SCHEMA}.{_CD_TABLE} "
                     "(IBMSNAP_OPERATION, IBMSNAP_COMMITSEQ, IBMSNAP_INTENTSEQ, "
+                    " IBMSNAP_LOGMARKER, "
                     " ID, NAME, AGE, X_ID, X_NAME, X_AGE) "
-                    "values (:op, :cs, :is_, :id, :name, :age, "
+                    "values (:op, :cs, :is_, :lm, :id, :name, :age, "
                     "        :xid, :xname, :xage)"
                 ),
                 {
                     "op": op,
                     "cs": commitseq,
                     "is_": intentseq,
+                    "lm": logmarker,
                     "id": id_,
                     "name": name,
                     "age": age,
