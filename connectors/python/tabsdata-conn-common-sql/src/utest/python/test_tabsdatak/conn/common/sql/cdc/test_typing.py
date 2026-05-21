@@ -21,24 +21,24 @@ from tabsdatak.conn.common.sql.cdc.typing import (
 
 def test_cdc_format_defaults():
     fmt = CdcFormat()
-    assert fmt.values_format == "columns"
-    assert fmt.flatten_values is True
+    assert fmt.columns_format == "columns"
+    assert fmt.flatten_columns is True
 
 
 def test_cdc_format_kw_only_columns():
-    fmt = CdcFormat(values_format="columns", flatten_values=False)
-    assert fmt.values_format == "columns"
-    assert fmt.flatten_values is False
+    fmt = CdcFormat(columns_format="columns", flatten_columns=False)
+    assert fmt.columns_format == "columns"
+    assert fmt.flatten_columns is False
 
 
 def test_cdc_format_accepts_struct_and_map():
-    assert CdcFormat(values_format="struct").values_format == "struct"
-    assert CdcFormat(values_format="map").values_format == "map"
+    assert CdcFormat(columns_format="struct").columns_format == "struct"
+    assert CdcFormat(columns_format="map").columns_format == "map"
 
 
-def test_cdc_format_rejects_unknown_values_format():
+def test_cdc_format_rejects_unknown_columns_format():
     with pytest.raises(SqlCdcInitException):
-        CdcFormat(values_format="bogus")  # type: ignore[arg-type]
+        CdcFormat(columns_format="bogus")  # type: ignore[arg-type]
 
 
 def test_cdc_format_is_frozen():
@@ -46,7 +46,7 @@ def test_cdc_format_is_frozen():
     # Frozen pydantic dataclass: setattr raises (FrozenInstanceError
     # or pydantic-flavoured equivalent wrapped by ApiException).
     with pytest.raises(Exception):
-        fmt.values_format = "struct"  # type: ignore[misc]
+        fmt.columns_format = "struct"  # type: ignore[misc]
 
 
 # --- TimestampPosition ----------------------------------------------

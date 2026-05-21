@@ -63,9 +63,9 @@ def test_raw_schema_hash_ignores_raw_type_object():
 
 def test_meta_columns_lead_in_every_layout():
     for fmt in (
-        CdcFormat(values_format="columns"),
-        CdcFormat(values_format="struct"),
-        CdcFormat(values_format="map"),
+        CdcFormat(columns_format="columns"),
+        CdcFormat(columns_format="struct"),
+        CdcFormat(columns_format="map"),
     ):
         schema = build_pa_schema(_cols(), fmt)
         first_six = [schema.field(i).name for i in range(6)]
@@ -79,27 +79,27 @@ def test_meta_columns_lead_in_every_layout():
         ]
 
 
-# --- flatten_values=True: new values inline at top level ------------
+# --- flatten_columns=True: new values inline at top level ------------
 
 
 def test_flatten_true_inlines_new_values_at_top_level():
-    schema = build_pa_schema(_cols(), CdcFormat(flatten_values=True))
+    schema = build_pa_schema(_cols(), CdcFormat(flatten_columns=True))
     names = [f.name for f in schema]
     # After the 6 meta columns, the two source columns appear inline.
     assert "id" in names
     assert "name" in names
-    # And the *old* layout still follows `values_format` -- default
+    # And the *old* layout still follows `columns_format` -- default
     # is "columns" so old fields are prefixed.
     assert f"{CDC_DATA_COL_OLD_PREFIX}.id" in names
     assert f"{CDC_DATA_COL_OLD_PREFIX}.name" in names
 
 
-# --- flatten_values=False: each values_format produces a distinct
+# --- flatten_columns=False: each columns_format produces a distinct
 #     payload layout ------------------------------------------------
 
 
 def test_columns_layout_uses_prefixed_columns_per_source_column():
-    fmt = CdcFormat(values_format="columns", flatten_values=False)
+    fmt = CdcFormat(columns_format="columns", flatten_columns=False)
     schema = build_pa_schema(_cols(), fmt)
     names = [f.name for f in schema]
     assert f"{CDC_DATA_COL_NEW_PREFIX}.id" in names
@@ -109,7 +109,7 @@ def test_columns_layout_uses_prefixed_columns_per_source_column():
 
 
 def test_struct_layout_emits_two_struct_columns():
-    fmt = CdcFormat(values_format="struct", flatten_values=False)
+    fmt = CdcFormat(columns_format="struct", flatten_columns=False)
     schema = build_pa_schema(_cols(), fmt)
     names = [f.name for f in schema]
     assert CDC_DATA_ROW_NEW in names
@@ -120,7 +120,7 @@ def test_struct_layout_emits_two_struct_columns():
 
 
 def test_map_layout_emits_two_utf8_columns():
-    fmt = CdcFormat(values_format="map", flatten_values=False)
+    fmt = CdcFormat(columns_format="map", flatten_columns=False)
     schema = build_pa_schema(_cols(), fmt)
     names = [f.name for f in schema]
     assert CDC_DATA_MAP_NEW in names
