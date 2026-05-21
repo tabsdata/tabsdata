@@ -119,7 +119,13 @@ class KafkaStreamSrcPlugin(StreamSrcPlugin[KafkaStreamSrc]):
 
         conn = cast(KafkaConn, stream_src.conn)
         cfg = _resolve_rollover_cfg(stream_src)
-        logger.setLevel(cfg["logging_level"])
+        # Set the level on the whole connector namespace so the
+        # plugin, consumer wrapper, serdes and the kafka-config
+        # builder all report at the same verbosity (mirrors the
+        # ``run_cdc`` convention on ``tabsdatak.conn.common.sql.cdc``).
+        logging.getLogger("tabsdatak.conn.kafka").setLevel(
+            cfg["logging_level"],
+        )
         logger.info(
             "kafka-stream: starting (topic=%r, format=%r)",
             stream_src.topic, stream_src.data_format,
@@ -180,6 +186,7 @@ class KafkaStreamSrcPlugin(StreamSrcPlugin[KafkaStreamSrc]):
         )
 
         _setup_sigterm_handler()
+        logger.info("kafka-stream: entering poll loop")
         try:
             self._consume_loop(
                 ctx=ctx,

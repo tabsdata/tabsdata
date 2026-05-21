@@ -163,6 +163,37 @@ def test_plugin_run_no_dlq_topic_skips_producer(
         producer_cls.assert_not_called()
 
 
+# --- logging_level wiring ------------------------------------------
+
+
+@patch("tabsdatak.conn.kafka._stream_plugin._setup_sigterm_handler")
+@patch("confluent_kafka.Consumer")
+def test_plugin_run_applies_logging_level_to_connector_namespace(
+    consumer_cls, _sigterm, tmp_path,
+):
+    """``kafka.logging_level`` must apply to the whole
+    ``tabsdatak.conn.kafka`` namespace, not just the plugin
+    module; that's how the consumer + serdes loggers pick it up
+    (parallels the ``run_cdc`` convention)."""
+    consumer = MagicMock()
+    consumer.poll.return_value = None
+    consumer_cls.return_value = consumer
+
+    pkg_logger = logging.getLogger("tabsdatak.conn.kafka")
+    prev = pkg_logger.level
+    pkg_logger.setLevel(logging.NOTSET)
+    try:
+        ctx = _make_ctx(tmp_path, active_calls=[False])
+        plugin = KafkaStreamSrcPlugin()
+        plugin.run(
+            ctx,
+            _src(src_cfg={"kafka.logging_level": logging.DEBUG}),
+        )
+        assert pkg_logger.level == logging.DEBUG
+    finally:
+        pkg_logger.setLevel(prev)
+
+
 # --- Test helpers --------------------------------------------------
 
 
