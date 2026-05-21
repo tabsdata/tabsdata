@@ -49,6 +49,7 @@ Source = "https://github.com/tabsdata/tabsdata"
 [project.entry-points."tabsdatak.connectors"]
 src_mysql = "tabsdatak.conn.mysql._plugin:MYSQL_SRC"
 dest_mysql = "tabsdatak.conn.mysql._plugin:MYSQL_DEST"
+stream_src_mysql_cdc = "tabsdatak.conn.mysql._cdc_plugin:MYSQL_CDC_STREAM_SRC"
 
 [tool.pytest.ini_options]
 addopts = "--import-mode=importlib"

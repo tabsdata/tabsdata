@@ -14,6 +14,7 @@ size, read/write engine selection).
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import datetime
 from typing import Annotated, Any, Literal, TypeAlias, Union
 
 from pydantic import StringConstraints
@@ -29,6 +30,7 @@ from tabsdatak.api import (
     NamedConn,
     Secret,
     Src,
+    StreamSrc,
 )
 
 # noinspection PyProtectedMember
@@ -39,6 +41,52 @@ from tabsdatak.conn.common.types import CfgSpec, EntityWhitelistSpec, UserPasswo
 # noinspection PyProtectedMember
 from tabsdatak.conn.mysql import _validation
 from tabsdatak.conn.mysql.error import MysqlErrorCode
+
+
+# --- CDC public primitives ------------------------------------------
+#
+# These types are mysql-local rather than re-exported from
+# ``conn.common.sql.cdc.typing`` so the user-visible schema of one
+# connector cannot widen another's by accident. The plugin
+# (``_cdc_plugin.py``) converts them onto the runner-side common
+# representation when invoking the dialect-agnostic ``run_cdc`` loop.
+
+# Default MySQL replica ``server_id`` for the binlog stream. Each
+# concurrent CDC replica must use a unique id across the cluster;
+# 512 is the legacy default and works fine for single-replica
+# deployments. ``MySQLCdcConn.server_id`` overrides per-connection.
+DEFAULT_SERVER_ID = 512
+
+# Relative position keywords: ``"head"`` rewinds to the oldest
+# available change in retention; ``"tail"`` skips to the live edge.
+RelativePositionSpec: TypeAlias = Literal["head", "tail"]
+
+# Layout for the columns payload on each emitted change row.
+CdcColumnsFormatSpec: TypeAlias = Literal["columns", "struct", "map"]
+
+
+@_api.dataclass(MysqlErrorCode.MYSQL_12, frozen=True, kw_only=True)
+class GtidPosition:
+    gtid: str
+
+
+@_api.dataclass(MysqlErrorCode.MYSQL_13, frozen=True, kw_only=True)
+class BinlogPosition:
+    file: str
+    pos: int
+
+
+@_api.dataclass(MysqlErrorCode.MYSQL_18, frozen=True, kw_only=True)
+class TimestampPosition:
+    ts: datetime
+
+
+MySQLCdcStartFromSpec: TypeAlias = Union[
+    RelativePositionSpec,
+    GtidPosition,
+    BinlogPosition,
+    TimestampPosition,
+]
 
 # --- Type aliases ----------------------------------------------------
 
@@ -179,3 +227,47 @@ class MySQLDest(Dest):
     if_table_exists: IfTableExistsSpec = "append"
     transactional: bool = True
     dest_cfg: DestCfgSpec | None = None
+
+
+# --- CDC -------------------------------------------------------------
+
+
+# Allowed keys on ``MySQLCdcStreamSrc.src_cfg``. The plugin reads
+# these (falling back to defaults) before constructing the runner's
+# ``CdcRunConfig``.
+CdcSrcCfgKey: TypeAlias = Literal[
+    "mysql.cdc.blocking_timeout_seconds",
+    "tabsdata.cdc.buffer.max_rows",
+    "tabsdata.cdc.buffer.max_bytes",
+    "tabsdata.cdc.buffer.max_secs",
+    "tabsdata.cdc.trigger.max_rows",
+    "tabsdata.cdc.trigger.max_bytes",
+    "tabsdata.cdc.trigger.max_secs",
+    "tabsdata.cdc.poll_interval_seconds",
+]
+
+CdcSrcCfgSpec: TypeAlias = Annotated[
+    Mapping[CdcSrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+]
+
+
+@_api.dataclass(MysqlErrorCode.MYSQL_10, kw_only=True)
+class MySQLCdcConn(Conn):
+    uri: UriSpec
+    credentials: CredentialsSpec
+    server_id: int = DEFAULT_SERVER_ID
+    entity_whitelist: EntityWhitelistSpec | None = None
+    conn_cfg: CfgSpec | None = None
+
+
+CdcConnSpec: TypeAlias = Union[NamedConn, MySQLCdcConn]
+
+
+@_api.dataclass(MysqlErrorCode.MYSQL_11, kw_only=True)
+class MySQLCdcStreamSrc(StreamSrc):
+    conn: CdcConnSpec
+    tables: list[MySQLTableNameSpec]
+    start_from: MySQLCdcStartFromSpec
+    columns_format: CdcColumnsFormatSpec = "columns"
+    flatten_columns: bool = True
+    src_cfg: CdcSrcCfgSpec | None = None
