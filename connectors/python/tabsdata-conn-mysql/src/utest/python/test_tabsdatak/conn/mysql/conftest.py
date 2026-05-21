@@ -120,6 +120,12 @@ _MYSQL_CONTAINER = (
     f"{DOCKER_REGULAR_CONTAINER_INFIX}"
     "mysql"
 )
+_MYSQL_CDC_CONTAINER = (
+    f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}"
+    f"{DOCKER_UTEST_CONTAINER_INFIX}"
+    f"{DOCKER_REGULAR_CONTAINER_INFIX}"
+    "mysql-cdc"
+)
 _MARIADB_CONTAINER = (
     f"{PYTEST_DEFAULT_ENVIRONMENT_PREFIX}"
     f"{DOCKER_UTEST_CONTAINER_INFIX}"
@@ -187,6 +193,8 @@ def _ensure_container(
     name: str,
     image: str,
     environment: list[str],
+    forwarded_port: int | None = None,
+    command: list[str] | None = None,
 ) -> int:
     from docker.errors import APIError, ImageNotFound, NotFound
 
@@ -216,14 +224,17 @@ def _ensure_container(
         except APIError as exc:
             _fail_or_skip(f"docker image {image!r} pull failed: {exc}")
 
+    run_kwargs: dict = dict(
+        name=name,
+        environment=environment,
+        ports={"3306/tcp": forwarded_port},
+        detach=True,
+    )
+    if command is not None:
+        run_kwargs["command"] = command
+
     try:
-        container = client.containers.run(
-            image,
-            name=name,
-            environment=environment,
-            ports={"3306/tcp": None},
-            detach=True,
-        )
+        container = client.containers.run(image, **run_kwargs)
     except APIError as exc:
         _fail_or_skip(f"docker run {image!r} failed: {exc}")
 
@@ -518,3 +529,147 @@ def fresh_mysql(mysql_config, tmp_path_factory, worker_id) -> DBConfig:
         with FileLock(str(lock_path)):
             _seed_schema(mysql_config)
     return mysql_config
+
+
+# --- CDC fixtures ---------------------------------------------------
+#
+# Binlog-enabled MySQL container for CDC integration tests.
+# Modelled on the legacy ``tabsdata-cdc-mysql`` docker fixture:
+# ROW format, FULL row image / metadata, GTID mode, replication
+# grants. The container is session-scoped (``mysql_cdc_config``)
+# and the per-test ``fresh_mysql_cdc`` re-seeds the user table so
+# tests start from a clean baseline.
+
+_MYSQL_CDC_IMAGE = "mysql:9.1.0"
+
+_MYSQL_CDC_FLAGS = [
+    "--server-id=1",
+    "--log-bin=mysql-bin",
+    "--binlog_format=ROW",
+    "--binlog_row_image=FULL",
+    "--binlog_row_metadata=FULL",
+    "--gtid_mode=ON",
+    "--enforce_gtid_consistency=ON",
+    "--binlog_expire_logs_seconds=604800",
+]
+
+
+def _grant_replication(cfg: "DBConfig") -> None:
+    """The legacy CDC trigger needs REPLICATION SLAVE / CLIENT to
+    open a binlog stream and SELECT on the tracked database for
+    catalog introspection. Granted to the existing test user."""
+    from sqlalchemy import create_engine, text
+
+    root_uri = (
+        f"mysql+pymysql://"
+        f"{urllib.parse.quote('root', safe='')}:"
+        f"{urllib.parse.quote(_ROOT_PASSWORD, safe='')}"
+        f"@{cfg.host}:{cfg.port}/{cfg.database}"
+    )
+    engine = create_engine(root_uri)
+    try:
+        with engine.connect() as conn:
+            for stmt in (
+                f"grant replication slave, replication client on *.* "
+                f"to '{cfg.user}'@'%'",
+                f"grant select on {cfg.database}.* to '{cfg.user}'@'%'",
+                f"grant reload on *.* to '{cfg.user}'@'%'",
+                "flush privileges",
+            ):
+                conn.execute(text(stmt))
+    finally:
+        engine.dispose()
+
+
+def _seed_cdc_schema(cfg: "DBConfig") -> None:
+    """Same shape as ``_seed_schema`` but only the ``users`` table --
+    CDC tests work one tracked table for simplicity."""
+    from sqlalchemy import create_engine, text
+
+    engine = create_engine(cfg.uri_with_credentials)
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("DROP TABLE IF EXISTS users"))
+            conn.execute(text(
+                "CREATE TABLE users ("
+                "  id INT PRIMARY KEY,"
+                "  name VARCHAR(64) NOT NULL,"
+                "  age INT NOT NULL"
+                ") ENGINE=InnoDB"
+            ))
+    finally:
+        engine.dispose()
+
+
+def _build_cdc_config() -> "DBConfig":
+    port = _free_port()
+    host_port = _ensure_container(
+        name=_MYSQL_CDC_CONTAINER,
+        image=_MYSQL_CDC_IMAGE,
+        environment=[
+            f"MYSQL_ROOT_PASSWORD={_ROOT_PASSWORD}",
+            f"MYSQL_DATABASE={_DB_NAME}",
+            f"MYSQL_USER={_DB_USER}",
+            f"MYSQL_PASSWORD={_DB_PASSWORD}",
+        ],
+        forwarded_port=port,
+        command=_MYSQL_CDC_FLAGS,
+    )
+    cfg = DBConfig(
+        host="127.0.0.1",
+        port=host_port,
+        user=_DB_USER,
+        password=_DB_PASSWORD,
+        database=_DB_NAME,
+    )
+    _wait_for_db(cfg.host, cfg.port, cfg.user, cfg.password, cfg.database)
+    _grant_replication(cfg)
+    _seed_cdc_schema(cfg)
+    return cfg
+
+
+@pytest.fixture(scope="session")
+def mysql_cdc_config(tmp_path_factory, worker_id) -> Iterator[DBConfig]:
+    """Session-scoped binlog-enabled MySQL container for CDC
+    integration tests."""
+    # External-DB env-var path mirrors ``mysql_config``: opt out of
+    # docker by setting ``MYSQLCDC0__MYSQLCDC_ENVS=true`` and
+    # providing URI / USER / PASSWORD / DATABASE.
+    external = _external_config(
+        prefix="MYSQLCDC0", backend="MYSQLCDC", fixture="mysql_cdc_config",
+    )
+    if external is not None:
+        if _should_reseed_external("MYSQLCDC0", "MYSQLCDC"):
+            _grant_replication(external)
+            _seed_cdc_schema(external)
+        yield external
+        return
+
+    if worker_id == "master":
+        cfg = _build_cdc_config()
+    else:
+        root_tmp_dir = tmp_path_factory.getbasetemp().parent
+        lock_path = root_tmp_dir / "docker_mysql_cdc_config_creation.lock"
+        with FileLock(str(lock_path)):
+            cfg = _build_cdc_config()
+    try:
+        yield cfg
+    finally:
+        _remove_container(_MYSQL_CDC_CONTAINER)
+
+
+@pytest.fixture
+def fresh_mysql_cdc(
+    mysql_cdc_config, tmp_path_factory, worker_id,
+) -> DBConfig:
+    """Per-test reset of the tracked table -- the binlog itself
+    accumulates across tests but each test starts from a clean
+    ``users`` table."""
+    if worker_id == "master":
+        _seed_cdc_schema(mysql_cdc_config)
+    else:
+        root_tmp_dir = tmp_path_factory.getbasetemp().parent
+        lock_path = root_tmp_dir / "docker_mysql_cdc_config_seed.lock"
+        with FileLock(str(lock_path)):
+            _seed_cdc_schema(mysql_cdc_config)
+    return mysql_cdc_config
