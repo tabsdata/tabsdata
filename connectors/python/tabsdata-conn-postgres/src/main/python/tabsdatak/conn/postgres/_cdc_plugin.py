@@ -61,6 +61,7 @@ logger = logging.getLogger(__name__)
 # schema-construction time. ``_build_cdc_run_config`` reads from
 # src_cfg and falls back to common-sql defaults.
 _KEY_CDC_BLOCKING_TIMEOUT: CdcSrcCfgKey = "postgres.cdc.blocking_timeout_seconds"
+_KEY_CDC_LOGGING_LEVEL: CdcSrcCfgKey = "postgres.cdc.logging_level"
 _KEY_CDC_WAL2JSON_FORMAT_VERSION: CdcSrcCfgKey = (
     "postgres.cdc.wal2json_format_version"
 )
@@ -104,6 +105,7 @@ def _build_cdc_run_config(
         poll_interval_seconds=cfg.get(
             _KEY_CDC_POLL_INTERVAL, DEFAULT_POLL_INTERVAL_SECONDS
         ),
+        logging_level=int(cfg.get(_KEY_CDC_LOGGING_LEVEL, logging.ERROR)),
     )
 
 
@@ -118,6 +120,15 @@ class PostgresCdcStreamSrcPlugin(StreamSrcPlugin[PostgresCdcStreamSrc]):
     ):
         conn = cast(PostgresCdcConn, stream_src.conn)
         cfg = _build_cdc_run_config(stream_src)
+        # Sync this connector's logger level with the runner +
+        # sentinels (``run_cdc`` handles the common-sql namespace).
+        logger.setLevel(cfg.logging_level)
+        logger.info(
+            "postgres-cdc: starting (%d table(s), slot=%r, start_from=%r)",
+            len(stream_src.tables or []),
+            stream_src.replication_slot,
+            stream_src.start_from,
+        )
         src_cfg = stream_src.src_cfg or {}
         blocking_timeout = src_cfg.get(
             _KEY_CDC_BLOCKING_TIMEOUT, DEFAULT_BLOCKING_TIMEOUT_SECONDS,
@@ -135,7 +146,10 @@ class PostgresCdcStreamSrcPlugin(StreamSrcPlugin[PostgresCdcStreamSrc]):
             publication_name=stream_src.publication_name,
             wal2json_format_version=int(wal2json_format),
         )
-        run_cdc(ctx=ctx, ingester=ingester, cfg=cfg)
+        try:
+            run_cdc(ctx=ctx, ingester=ingester, cfg=cfg)
+        finally:
+            logger.info("postgres-cdc: stopped")
 
 
 POSTGRES_CDC_STREAM_SRC = StreamSrcDef(

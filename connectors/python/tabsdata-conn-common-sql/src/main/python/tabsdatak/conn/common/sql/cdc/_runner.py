@@ -54,6 +54,12 @@ class CdcRunConfig:
     trigger_max_bytes: int | None = DEFAULT_TRIGGER_MAX_BYTES
     trigger_max_secs: int = DEFAULT_TRIGGER_MAX_SECS
     poll_interval_seconds: int = DEFAULT_POLL_INTERVAL_SECONDS
+    # Connector plugins resolve this from their ``src_cfg`` (e.g.
+    # ``mysql.cdc.logging_level``). ``run_cdc`` applies it to the
+    # whole ``tabsdatak.conn.common.sql.cdc`` namespace so the
+    # runner / sentinels / ingester INFO milestones surface at
+    # the level the user picked.
+    logging_level: int = logging.ERROR
 
 
 def _setup_signal_handlers() -> threading.Event:
@@ -118,15 +124,30 @@ def run_cdc(
 
     The function returns normally on graceful stop (ctx inactive
     or signal raised); any uncaught exception propagates."""
+    # Bring every logger under the cdc namespace (runner +
+    # sentinels + ingester base) to the level the plugin picked
+    # via ``cfg.logging_level``. Per-connector loggers (mysql /
+    # postgres / db2) are set independently by their plugins.
+    logging.getLogger("tabsdatak.conn.common.sql.cdc").setLevel(
+        cfg.logging_level,
+    )
+
     stop_signal = _setup_signal_handlers()
     session = None
     buffer_sentinel: BufferSentinel | None = None
     disk_sentinel: DiskSentinel | None = None
     try:
+        logger.info(
+            "run_cdc: starting (ingester=%s)", ingester.ingester_type,
+        )
         session = ingester.open_session()
         tracked_tables = ingester.harvest_tables(
             session=session,
             cdc_format=cfg.cdc_format,
+        )
+        logger.info(
+            "run_cdc: harvested %d table(s): %s",
+            len(tracked_tables), sorted(tracked_tables.keys()),
         )
 
         disk_sentinel = DiskSentinel(
@@ -153,6 +174,7 @@ def run_cdc(
 
         buffer_sentinel.reset_timer()
         disk_sentinel.reset_timer()
+        logger.info("run_cdc: entering poll loop")
 
         while not stop_signal.is_set() and ctx.is_active():
             disk_sentinel.retry_trigger()
@@ -163,10 +185,15 @@ def run_cdc(
             if disk_sentinel.flush(force=False):
                 ingester.commit_offset(buffer_sentinel.offset)
                 _save_offset(ctx, buffer_sentinel.offset)
+                logger.info(
+                    "run_cdc: flushed + committed offset",
+                )
             stop_signal.wait(timeout=cfg.poll_interval_seconds)
 
         if stop_signal.is_set():
             logger.info("run_cdc: interrupted; exiting loop")
+        else:
+            logger.info("run_cdc: ctx inactive; exiting loop")
     finally:
         # Drain in-flight rows + parquet files on shutdown so we
         # don't leave a half-batch unstaged. Errors here are
@@ -183,3 +210,4 @@ def run_cdc(
             logger.exception("run_cdc: shutdown flush failed")
         if session is not None:
             ingester.close_session(session)
+        logger.info("run_cdc: stopped")

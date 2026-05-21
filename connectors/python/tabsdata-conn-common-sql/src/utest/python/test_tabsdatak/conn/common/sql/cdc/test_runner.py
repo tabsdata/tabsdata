@@ -254,3 +254,56 @@ def test_run_cdc_drains_in_flight_rows_on_shutdown(tmp_path):
     assert ingester.commits  # at least one offset was committed
     # And the work directory now contains parquet output.
     assert any(p.suffix == ".parquet" for p in tmp_path.iterdir())
+
+
+# --- logging_level wiring -------------------------------------------
+
+
+def test_cdc_run_config_logging_level_default_is_error():
+    import logging
+    cfg = CdcRunConfig()
+    assert cfg.logging_level == logging.ERROR
+
+
+def test_run_cdc_applies_logging_level_to_cdc_namespace(tmp_path):
+    """``run_cdc`` should propagate the plugin-chosen level onto
+    the ``tabsdatak.conn.common.sql.cdc`` namespace so INFO
+    milestones from the runner / sentinels / ingester base
+    surface for the user."""
+    import logging
+
+    ingester = _StubIngester(tables="s.t1", events=[])
+    ctx, _state = _ctx(tmp_path, active_cycles=1)
+    cfg = CdcRunConfig(
+        poll_interval_seconds=0,
+        logging_level=logging.DEBUG,
+    )
+
+    # Reset to NOTSET so we observe the side-effect.
+    cdc_logger = logging.getLogger("tabsdatak.conn.common.sql.cdc")
+    cdc_logger.setLevel(logging.NOTSET)
+    try:
+        run_cdc(ctx=ctx, ingester=ingester, cfg=cfg)
+        assert cdc_logger.level == logging.DEBUG
+    finally:
+        cdc_logger.setLevel(logging.NOTSET)
+
+
+def test_run_cdc_logs_lifecycle_milestones_at_info(tmp_path, caplog):
+    import logging
+
+    ingester = _StubIngester(tables="s.t1", events=[])
+    ctx, _state = _ctx(tmp_path, active_cycles=1)
+    cfg = CdcRunConfig(
+        poll_interval_seconds=0,
+        logging_level=logging.INFO,
+    )
+    with caplog.at_level(
+        logging.INFO, logger="tabsdatak.conn.common.sql.cdc._runner",
+    ):
+        run_cdc(ctx=ctx, ingester=ingester, cfg=cfg)
+    messages = [record.message for record in caplog.records]
+    assert any("starting" in m for m in messages)
+    assert any("harvested" in m for m in messages)
+    assert any("entering poll loop" in m for m in messages)
+    assert any("stopped" in m for m in messages)

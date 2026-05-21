@@ -279,6 +279,7 @@ class MySQLDest(Dest):
 # ``CdcRunConfig``.
 CdcSrcCfgKey: TypeAlias = Literal[
     "mysql.cdc.blocking_timeout_seconds",
+    "mysql.cdc.logging_level",
     "tabsdata.cdc.buffer.max_rows",
     "tabsdata.cdc.buffer.max_bytes",
     "tabsdata.cdc.buffer.max_secs",

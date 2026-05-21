@@ -374,12 +374,14 @@ def test_postgres_cdc_stream_src_accepts_known_src_cfg_keys():
     src = _cdc_stream_src(
         src_cfg={
             "postgres.cdc.blocking_timeout_seconds": 5,
+            "postgres.cdc.logging_level": 20,
             "postgres.cdc.wal2json_format_version": 2,
             "tabsdata.cdc.buffer.max_rows": 1000,
             "tabsdata.cdc.poll_interval_seconds": 2,
         },
     )
     assert src.src_cfg["tabsdata.cdc.buffer.max_rows"] == 1000
+    assert src.src_cfg["postgres.cdc.logging_level"] == 20
 
 
 def test_postgres_cdc_stream_src_json_round_trip():

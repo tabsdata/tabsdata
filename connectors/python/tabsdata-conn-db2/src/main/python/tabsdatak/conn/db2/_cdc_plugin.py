@@ -60,6 +60,7 @@ logger = logging.getLogger(__name__)
 # src_cfg and falls back to common-sql defaults.
 _KEY_CDC_BLOCKING_TIMEOUT: CdcSrcCfgKey = "db2.cdc.blocking_timeout_seconds"
 _KEY_CDC_FETCH_SIZE: CdcSrcCfgKey = "db2.cdc.fetch_size"
+_KEY_CDC_LOGGING_LEVEL: CdcSrcCfgKey = "db2.cdc.logging_level"
 _KEY_CDC_BUFFER_MAX_ROWS: CdcSrcCfgKey = "tabsdata.cdc.buffer.max_rows"
 _KEY_CDC_BUFFER_MAX_BYTES: CdcSrcCfgKey = "tabsdata.cdc.buffer.max_bytes"
 _KEY_CDC_BUFFER_MAX_SECS: CdcSrcCfgKey = "tabsdata.cdc.buffer.max_secs"
@@ -101,6 +102,7 @@ def _build_cdc_run_config(
         poll_interval_seconds=cfg.get(
             _KEY_CDC_POLL_INTERVAL, DEFAULT_POLL_INTERVAL_SECONDS
         ),
+        logging_level=int(cfg.get(_KEY_CDC_LOGGING_LEVEL, logging.ERROR)),
     )
 
 
@@ -115,6 +117,14 @@ class Db2CdcStreamSrcPlugin(StreamSrcPlugin[Db2CdcStreamSrc]):
     ):
         conn = cast(Db2CdcConn, stream_src.conn)
         cfg = _build_cdc_run_config(stream_src)
+        # Sync this connector's logger level with the runner +
+        # sentinels (``run_cdc`` handles the common-sql namespace).
+        logger.setLevel(cfg.logging_level)
+        logger.info(
+            "db2-cdc: starting (%d CD table(s), start_from=%r)",
+            len(stream_src.tables or []),
+            stream_src.start_from,
+        )
         src_cfg = stream_src.src_cfg or {}
         blocking_timeout = src_cfg.get(
             _KEY_CDC_BLOCKING_TIMEOUT, DEFAULT_BLOCKING_TIMEOUT_SECONDS,
@@ -127,7 +137,10 @@ class Db2CdcStreamSrcPlugin(StreamSrcPlugin[Db2CdcStreamSrc]):
             blocking_timeout_seconds=blocking_timeout,
             fetch_size=fetch_size,
         )
-        run_cdc(ctx=ctx, ingester=ingester, cfg=cfg)
+        try:
+            run_cdc(ctx=ctx, ingester=ingester, cfg=cfg)
+        finally:
+            logger.info("db2-cdc: stopped")
 
 
 DB2_CDC_STREAM_SRC = StreamSrcDef(

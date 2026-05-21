@@ -407,11 +407,13 @@ def test_db2_cdc_stream_src_accepts_known_src_cfg_keys():
         src_cfg={
             "db2.cdc.blocking_timeout_seconds": 5,
             "db2.cdc.fetch_size": 5000,
+            "db2.cdc.logging_level": 20,
             "tabsdata.cdc.buffer.max_rows": 1000,
             "tabsdata.cdc.poll_interval_seconds": 2,
         },
     )
     assert src.src_cfg["tabsdata.cdc.buffer.max_rows"] == 1000
+    assert src.src_cfg["db2.cdc.logging_level"] == 20
 
 
 def test_db2_cdc_stream_src_json_round_trip():

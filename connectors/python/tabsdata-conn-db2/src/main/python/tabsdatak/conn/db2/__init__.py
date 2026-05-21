@@ -265,6 +265,7 @@ Db2CdcStartFromSpec: TypeAlias = Union[
 CdcSrcCfgKey: TypeAlias = Literal[
     "db2.cdc.blocking_timeout_seconds",
     "db2.cdc.fetch_size",
+    "db2.cdc.logging_level",
     "tabsdata.cdc.buffer.max_rows",
     "tabsdata.cdc.buffer.max_bytes",
     "tabsdata.cdc.buffer.max_secs",

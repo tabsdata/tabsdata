@@ -242,6 +242,7 @@ PostgresCdcStartFromSpec: TypeAlias = Union[
 # --- PostgresCdcStreamSrc.src_cfg keys ------------------------------
 CdcSrcCfgKey: TypeAlias = Literal[
     "postgres.cdc.blocking_timeout_seconds",
+    "postgres.cdc.logging_level",
     "postgres.cdc.wal2json_format_version",
     "tabsdata.cdc.buffer.max_rows",
     "tabsdata.cdc.buffer.max_bytes",

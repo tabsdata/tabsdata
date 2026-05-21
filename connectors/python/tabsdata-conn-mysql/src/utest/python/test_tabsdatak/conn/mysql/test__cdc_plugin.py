@@ -105,6 +105,40 @@ def test_run_config_format_fields_default_to_columns_flattened():
     assert cfg.cdc_format.flatten_columns is True
 
 
+# --- logging_level wiring -------------------------------------------
+
+
+def test_run_config_logging_level_default_is_error():
+    import logging
+    cfg = _build_cdc_run_config(_src())
+    assert cfg.logging_level == logging.ERROR
+
+
+def test_run_config_logging_level_picks_up_src_cfg_override():
+    import logging
+    src = _src(src_cfg={"mysql.cdc.logging_level": logging.DEBUG})
+    cfg = _build_cdc_run_config(src)
+    assert cfg.logging_level == logging.DEBUG
+
+
+def test_plugin_run_applies_logging_level_to_connector_logger():
+    import logging
+    src = _src(src_cfg={"mysql.cdc.logging_level": logging.DEBUG})
+    ctx = MagicMock()
+    connector_logger = logging.getLogger("tabsdatak.conn.mysql._cdc_plugin")
+    connector_logger.setLevel(logging.NOTSET)
+    try:
+        with patch(
+            "tabsdatak.conn.mysql._cdc_plugin.run_cdc",
+        ), patch(
+            "tabsdatak.conn.mysql._cdc_plugin.BinlogIngester",
+        ):
+            MySQLCdcStreamSrcPlugin().run(ctx=ctx, stream_src=src)
+        assert connector_logger.level == logging.DEBUG
+    finally:
+        connector_logger.setLevel(logging.NOTSET)
+
+
 # --- Plugin.run wires the right BinlogIngester ----------------------
 
 

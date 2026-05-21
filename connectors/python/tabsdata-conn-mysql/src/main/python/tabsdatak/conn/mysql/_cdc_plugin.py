@@ -61,6 +61,7 @@ logger = logging.getLogger(__name__)
 # schema-construction time. ``_resolve_*`` reads from src_cfg and
 # falls back to common-sql defaults.
 _KEY_CDC_BLOCKING_TIMEOUT: CdcSrcCfgKey = "mysql.cdc.blocking_timeout_seconds"
+_KEY_CDC_LOGGING_LEVEL: CdcSrcCfgKey = "mysql.cdc.logging_level"
 _KEY_CDC_BUFFER_MAX_ROWS: CdcSrcCfgKey = "tabsdata.cdc.buffer.max_rows"
 _KEY_CDC_BUFFER_MAX_BYTES: CdcSrcCfgKey = "tabsdata.cdc.buffer.max_bytes"
 _KEY_CDC_BUFFER_MAX_SECS: CdcSrcCfgKey = "tabsdata.cdc.buffer.max_secs"
@@ -101,6 +102,7 @@ def _build_cdc_run_config(
         poll_interval_seconds=cfg.get(
             _KEY_CDC_POLL_INTERVAL, DEFAULT_POLL_INTERVAL_SECONDS
         ),
+        logging_level=int(cfg.get(_KEY_CDC_LOGGING_LEVEL, logging.ERROR)),
     )
 
 
@@ -115,6 +117,14 @@ class MySQLCdcStreamSrcPlugin(StreamSrcPlugin[MySQLCdcStreamSrc]):
     ):
         conn = cast(MySQLCdcConn, stream_src.conn)
         cfg = _build_cdc_run_config(stream_src)
+        # Sync this connector's logger level with the runner +
+        # sentinels (``run_cdc`` handles the common-sql namespace).
+        logger.setLevel(cfg.logging_level)
+        logger.info(
+            "mysql-cdc: starting (%d table(s), start_from=%r)",
+            len(stream_src.tables or []),
+            stream_src.start_from,
+        )
         blocking_timeout = (
             (stream_src.src_cfg or {}).get(
                 _KEY_CDC_BLOCKING_TIMEOUT, DEFAULT_BLOCKING_TIMEOUT_SECONDS
@@ -127,7 +137,10 @@ class MySQLCdcStreamSrcPlugin(StreamSrcPlugin[MySQLCdcStreamSrc]):
             server_id=conn.server_id,
             blocking_timeout_seconds=blocking_timeout,
         )
-        run_cdc(ctx=ctx, ingester=ingester, cfg=cfg)
+        try:
+            run_cdc(ctx=ctx, ingester=ingester, cfg=cfg)
+        finally:
+            logger.info("mysql-cdc: stopped")
 
 
 MYSQL_CDC_STREAM_SRC = StreamSrcDef(
