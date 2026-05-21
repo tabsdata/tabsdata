@@ -50,6 +50,7 @@ Source = "https://github.com/tabsdata/tabsdata"
 [project.entry-points."tabsdatak.connectors"]
 src_postgres = "tabsdatak.conn.postgres._plugin:POSTGRES_SRC"
 dest_postgres = "tabsdatak.conn.postgres._plugin:POSTGRES_DEST"
+stream_src_postgres_cdc = "tabsdatak.conn.postgres._cdc_plugin:POSTGRES_CDC_STREAM_SRC"
 
 [tool.pytest.ini_options]
 addopts = "--import-mode=importlib"

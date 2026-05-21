@@ -29,6 +29,7 @@ from tabsdatak.api import (
     NamedConn,
     Secret,
     Src,
+    StreamSrc,
 )
 
 # noinspection PyProtectedMember
@@ -169,3 +170,85 @@ class PostgresDest(Dest):
     if_table_exists: IfTableExistsSpec = "append"
     transactional: bool = True
     dest_cfg: DestCfgSpec | None = None
+
+
+# --- CDC public primitives ------------------------------------------
+#
+# These types are postgres-local rather than re-exported from
+# ``conn.common.sql.cdc.typing`` so the user-visible schema of one
+# connector cannot widen another's by accident. The plugin
+# (``_cdc_plugin.py``) converts them onto the runner-side common
+# representation when invoking the dialect-agnostic ``run_cdc`` loop.
+
+# Relative position keywords: ``"head"`` rewinds to the oldest
+# available change available on the replication slot; ``"tail"``
+# skips to the current WAL position so only events that occur
+# *after* the trigger starts are emitted.
+RelativePositionSpec: TypeAlias = Literal["head", "tail"]
+
+# Layout for the columns payload on each emitted change row.
+CdcColumnsFormatSpec: TypeAlias = Literal["columns", "struct", "map"]
+
+# Slot create / reuse strategy. ``"reuse"`` (default) attaches to an
+# existing logical replication slot; ``"create"`` creates one and
+# falls back to attach if it already exists.
+ReplicationSlotBehaviorSpec: TypeAlias = Literal["create", "reuse"]
+
+# wal2json output-plugin format version. v2 is the default
+# (per-action ``B`` / ``I`` / ``U`` / ``D`` / ``C`` messages with
+# explicit transaction begin/commit framing); v1 is the older
+# whole-transaction batch payload.
+Wal2JsonFormatVersionSpec: TypeAlias = Literal[1, 2]
+
+
+@_api.dataclass(PostgresErrorCode.POSTGRES_12, frozen=True, kw_only=True)
+class LsnPosition:
+    lsn: int
+
+
+PostgresCdcStartFromSpec: TypeAlias = Union[
+    RelativePositionSpec,
+    LsnPosition,
+]
+
+
+# --- PostgresCdcStreamSrc.src_cfg keys ------------------------------
+CdcSrcCfgKey: TypeAlias = Literal[
+    "postgres.cdc.blocking_timeout_seconds",
+    "postgres.cdc.wal2json_format_version",
+    "tabsdata.cdc.buffer.max_rows",
+    "tabsdata.cdc.buffer.max_bytes",
+    "tabsdata.cdc.buffer.max_secs",
+    "tabsdata.cdc.trigger.max_rows",
+    "tabsdata.cdc.trigger.max_bytes",
+    "tabsdata.cdc.trigger.max_secs",
+    "tabsdata.cdc.poll_interval_seconds",
+]
+
+CdcSrcCfgSpec: TypeAlias = Annotated[
+    Mapping[CdcSrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATOR
+]
+
+
+@_api.dataclass(PostgresErrorCode.POSTGRES_10, kw_only=True)
+class PostgresCdcConn(Conn):
+    uri: UriSpec
+    credentials: CredentialsSpec
+    entity_whitelist: EntityWhitelistSpec | None = None
+    conn_cfg: CfgSpec | None = None
+
+
+CdcConnSpec: TypeAlias = Union[NamedConn, PostgresCdcConn]
+
+
+@_api.dataclass(PostgresErrorCode.POSTGRES_11, kw_only=True)
+class PostgresCdcStreamSrc(StreamSrc):
+    conn: CdcConnSpec
+    tables: list[PostgresTableNameSpec]
+    replication_slot: str
+    start_from: PostgresCdcStartFromSpec
+    replication_slot_behavior: ReplicationSlotBehaviorSpec = "reuse"
+    publication_name: str | None = None
+    columns_format: CdcColumnsFormatSpec = "columns"
+    flatten_columns: bool = True
+    src_cfg: CdcSrcCfgSpec | None = None

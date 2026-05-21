@@ -56,3 +56,45 @@ class PostgresErrorCode(ErrorCode):
         PostgresRuntimeException,
         "Postgres write failed (table={table})",
     )  # _PostgresDestPlugin: write failure inside write_out
+
+    # --- CDC --------------------------------------------------------
+
+    POSTGRES_10 = ErrorDef(
+        ConnInitException,
+        "PostgresCdcConn validation failed",
+    )  # PostgresCdcConn dataclass tag
+    POSTGRES_11 = ErrorDef(
+        ConnInitException,
+        "PostgresCdcStreamSrc validation failed",
+    )  # PostgresCdcStreamSrc dataclass tag
+    POSTGRES_12 = ErrorDef(
+        ConnInitException,
+        "Cannot create LsnPosition",
+    )  # LsnPosition dataclass tag
+    POSTGRES_13 = ErrorDef(
+        PostgresRuntimeException,
+        "Postgres wal2json stream init failed (start_from={start_from!r})",
+    )  # Wal2JsonIngester.init_stream: cannot translate start_from
+    POSTGRES_14 = ErrorDef(
+        PostgresRuntimeException,
+        "Postgres replication stream: cannot resolve {position!r} -- "
+        "is wal_level=logical and a replication slot available?",
+    )  # current_wal_lsn / start_replication: cannot determine position
+    POSTGRES_15 = ErrorDef(
+        PostgresRuntimeException,
+        "Postgres wal2json event: column without a name or type in {payload!r}",
+    )  # extract_raw_schema: malformed change payload
+    POSTGRES_16 = ErrorDef(
+        PostgresRuntimeException,
+        "Postgres wal2json offset type mismatch (got {actual!r})",
+    )  # commit_offset / GtidOffset.update: unexpected offset type
+    POSTGRES_17 = ErrorDef(
+        PostgresRuntimeException,
+        "Postgres wal2json: unsupported format-version {version!r} "
+        "(expected 1 or 2)",
+    )  # Wal2JsonIngester.poll_changes: unknown format-version
+    POSTGRES_18 = ErrorDef(
+        PostgresRuntimeException,
+        "Postgres wal2json: pending transaction never committed "
+        "(xid={xid!r}); slot may be stuck",
+    )  # poll_changes_v2: COMMIT timed out
