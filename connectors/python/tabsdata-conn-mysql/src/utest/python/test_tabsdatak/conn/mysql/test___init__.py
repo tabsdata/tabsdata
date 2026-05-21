@@ -10,16 +10,22 @@ from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
 from tabsdatak.conn.common.types import CfgSpec, EntityWhitelistSpec, UserPassword
 from tabsdatak.conn.mysql import (
+    BinlogPosition,
     ConnSpec,
     CredentialsSpec,
+    DEFAULT_SERVER_ID,
     DestCfgSpec,
+    GtidPosition,
     IfTableExistsSpec,
+    MySQLCdcConn,
+    MySQLCdcStreamSrc,
     MySQLConn,
     MySQLDest,
     MySQLSrc,
     MySQLTableNamesSpec,
     QueriesSpec,
     SrcCfgSpec,
+    TimestampPosition,
     UriSpec,
 )
 # noinspection PyProtectedMember
@@ -254,3 +260,199 @@ def test_mysql_dest_accepts_known_dest_cfg_keys():
         "tabsdata.sql.sql.writeEngine": "polarsSqlAlchemyWrite",
         "tabsdata.sql.chunkSize": 100,
     }
+
+
+# =====================================================================
+# CDC public primitives -- GtidPosition / BinlogPosition /
+# TimestampPosition / MySQLCdcConn / MySQLCdcStreamSrc
+# =====================================================================
+#
+# These types live on the public mysql surface (``__init__.py``)
+# so users build CDC sources without reaching into private
+# modules. The plugin (``_cdc_plugin.py``) converts the mysql-local
+# format / TimestampPosition onto the common runner types -- see
+# ``test__cdc_plugin.py`` for that conversion.
+
+from datetime import datetime, timezone  # noqa: E402
+
+# --- Position primitives --------------------------------------------
+
+
+def test_gtid_position_round_trip():
+    g = GtidPosition(gtid="uuid-1:42")
+    assert g.gtid == "uuid-1:42"
+
+
+def test_gtid_position_rejects_non_string():
+    with pytest.raises(ConnInitException) as ei:
+        GtidPosition(gtid=42)  # type: ignore[arg-type]
+    assert ei.value.api_error is MysqlErrorCode.MYSQL_12
+
+
+def test_binlog_position_round_trip():
+    b = BinlogPosition(file="mysql-bin.000001", pos=100)
+    assert b.file == "mysql-bin.000001"
+    assert b.pos == 100
+
+
+def test_binlog_position_negative_pos_is_lenient():
+    # The validator just type-checks ``int``; negative positions
+    # are syntactically valid but semantically meaningless.
+    b = BinlogPosition(file="x", pos=-1)
+    assert b.pos == -1
+
+
+def test_timestamp_position_is_mysql_local():
+    ts = TimestampPosition(ts=datetime(2026, 1, 1, tzinfo=timezone.utc))
+    assert ts.ts.year == 2026
+
+
+def test_cdc_typing_classes_are_mysql_local_not_common_reexports():
+    # Pins the boundary: the user-visible CDC dataclasses must be
+    # mysql-local so a knob added on a future Postgres CDC source
+    # cannot accidentally widen the mysql schema.
+    from tabsdatak.conn.common.sql.cdc.typing import (
+        TimestampPosition as _CommonTimestampPosition,
+    )
+
+    assert TimestampPosition is not _CommonTimestampPosition
+
+
+# --- MySQLCdcConn ---------------------------------------------------
+
+
+def _cdc_creds():
+    return UserPassword(user=Secret.lit("u"), password=Secret.lit("p"))
+
+
+def test_mysql_cdc_conn_default_server_id():
+    conn = MySQLCdcConn(
+        uri="mysql://host:3306/db",
+        credentials=_cdc_creds(),
+    )
+    assert conn.server_id == DEFAULT_SERVER_ID
+    assert conn.uri == "mysql://host:3306/db"
+
+
+def test_mysql_cdc_conn_explicit_server_id():
+    conn = MySQLCdcConn(
+        uri="mysql://host/db",
+        credentials=_cdc_creds(),
+        server_id=999,
+    )
+    assert conn.server_id == 999
+
+
+def test_mysql_cdc_conn_is_not_a_mysql_conn_subclass():
+    # MySQLCdcConn deliberately does not subclass MySQLConn; the
+    # connector treats them as siblings with overlapping fields.
+    assert not issubclass(MySQLCdcConn, MySQLConn)
+    assert not issubclass(MySQLConn, MySQLCdcConn)
+
+
+# --- MySQLCdcStreamSrc ----------------------------------------------
+
+
+def test_mysql_cdc_stream_src_minimal_construction():
+    src = MySQLCdcStreamSrc(
+        conn=MySQLCdcConn(uri="mysql://h/d", credentials=_cdc_creds()),
+        tables=["app.users"],
+        start_from="tail",
+    )
+    assert src.tables == ["app.users"]
+    assert src.start_from == "tail"
+    assert src.columns_format == "columns"
+    assert src.flatten_columns is True
+
+
+def test_mysql_cdc_stream_src_accepts_explicit_format_fields():
+    src = MySQLCdcStreamSrc(
+        conn=MySQLCdcConn(uri="mysql://h/d", credentials=_cdc_creds()),
+        tables=["app.users"],
+        start_from="head",
+        columns_format="map",
+        flatten_columns=False,
+    )
+    assert src.columns_format == "map"
+    assert src.flatten_columns is False
+
+
+def test_mysql_cdc_stream_src_rejects_unknown_columns_format():
+    with pytest.raises(ConnInitException) as ei:
+        MySQLCdcStreamSrc(
+            conn=MySQLCdcConn(uri="mysql://h/d", credentials=_cdc_creds()),
+            tables=["app.users"],
+            start_from="tail",
+            columns_format="bogus",  # type: ignore[arg-type]
+        )
+    assert ei.value.api_error is MysqlErrorCode.MYSQL_11
+
+
+def test_mysql_cdc_stream_src_accepts_gtid_start_from():
+    src = MySQLCdcStreamSrc(
+        conn=MySQLCdcConn(uri="mysql://h/d", credentials=_cdc_creds()),
+        tables=["app.users"],
+        start_from=GtidPosition(gtid="uuid:1"),
+    )
+    assert isinstance(src.start_from, GtidPosition)
+
+
+def test_mysql_cdc_stream_src_accepts_binlog_start_from():
+    src = MySQLCdcStreamSrc(
+        conn=MySQLCdcConn(uri="mysql://h/d", credentials=_cdc_creds()),
+        tables=["app.users"],
+        start_from=BinlogPosition(file="bin.000001", pos=4),
+    )
+    assert isinstance(src.start_from, BinlogPosition)
+
+
+def test_mysql_cdc_stream_src_accepts_timestamp_start_from():
+    ts = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    src = MySQLCdcStreamSrc(
+        conn=MySQLCdcConn(uri="mysql://h/d", credentials=_cdc_creds()),
+        tables=["app.users"],
+        start_from=TimestampPosition(ts=ts),
+    )
+    assert isinstance(src.start_from, TimestampPosition)
+    assert src.start_from.ts == ts
+
+
+def test_mysql_cdc_stream_src_rejects_unknown_src_cfg_key():
+    with pytest.raises(ConnInitException) as ei:
+        MySQLCdcStreamSrc(
+            conn=MySQLCdcConn(uri="mysql://h/d", credentials=_cdc_creds()),
+            tables=["app.users"],
+            start_from="tail",
+            src_cfg={"bogus.key": 1},  # type: ignore[dict-item]
+        )
+    assert ei.value.api_error is MysqlErrorCode.MYSQL_11
+
+
+def test_mysql_cdc_stream_src_accepts_known_src_cfg_keys():
+    src = MySQLCdcStreamSrc(
+        conn=MySQLCdcConn(uri="mysql://h/d", credentials=_cdc_creds()),
+        tables=["app.users"],
+        start_from="head",
+        src_cfg={
+            "mysql.cdc.blocking_timeout_seconds": 5,
+            "tabsdata.cdc.buffer.max_rows": 1000,
+            "tabsdata.cdc.poll_interval_seconds": 2,
+        },
+    )
+    assert src.src_cfg["tabsdata.cdc.buffer.max_rows"] == 1000
+
+
+def test_mysql_cdc_stream_src_json_round_trip():
+    src = MySQLCdcStreamSrc(
+        conn=MySQLCdcConn(
+            uri="mysql://h/d",
+            credentials=_cdc_creds(),
+            server_id=777,
+        ),
+        tables=["app.users", "app.orders"],
+        start_from=GtidPosition(gtid="uuid-x:42"),
+        columns_format="struct",
+        flatten_columns=False,
+    )
+    loaded = MySQLCdcStreamSrc.from_json(src.to_json())
+    assert loaded == src
