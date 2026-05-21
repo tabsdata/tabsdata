@@ -575,3 +575,136 @@ def fresh_db2(db2_config, tmp_path_factory, worker_id) -> DBConfig:
         with FileLock(str(lock_path)):
             _seed_schema(db2_config)
     return db2_config
+
+
+# --- CDC fixtures ---------------------------------------------------
+#
+# Db2's IBM SQL Replication apparatus is much heavier than mysql's
+# binlog or postgres's logical decoding: it relies on the ``asncap``
+# capture program populating shadow CD tables via the ASN control
+# tables. Reproducing that machinery (asnclp control-table creation,
+# asncap watchdog, registration ALTER TABLEs) in a test fixture is
+# 1000+ lines and brittle.
+#
+# Instead the CDC fixture synthesises just the shape the ingester
+# reads from: an ``ASN`` schema with the two control tables it
+# queries (``IBMSNAP_REGISTER``, ``IBMSNAP_UOW``), a source table,
+# and a CD table with the IBMSNAP_* system columns + the user
+# columns + their before-image siblings. Integration tests then
+# emit synthetic change events by inserting rows into the CD table
+# directly. This exercises every code path in the ingester (table
+# identity resolution against IBMSNAP_REGISTER, per-table watermark
+# polling, CD-column matching via the registered ``before_img_prefix``,
+# row emission with mapped ops, offset advance) without needing the
+# asncap capture program.
+
+# The CD-table schema used by the integration tests. ``BEFORE_PREFIX``
+# matches the value the fixture writes into IBMSNAP_REGISTER.
+CDC_BEFORE_PREFIX = "X_"
+CDC_SOURCE_SCHEMA = "DB2INST1"
+CDC_SOURCE_TABLE = "USERS"
+CDC_CD_SCHEMA = "DB2INST1"
+CDC_CD_TABLE = "USERS_CD"
+
+
+def _seed_cdc_schema(cfg: "DBConfig") -> None:
+    """Build the IBM SQL Replication apparatus the ingester reads
+    from, by hand:
+
+    * ``ASN.IBMSNAP_REGISTER`` -- one row mapping the CD table back
+      to the source table, with our chosen before-image prefix.
+    * ``ASN.IBMSNAP_UOW`` -- for ``TimestampPosition`` translation
+      (the ingester computes
+      ``max(IBMSNAP_COMMITSEQ) where IBMSNAP_LOGMARKER <= ts``).
+    * Source ``DB2INST1.USERS`` -- visible to the SA inspector so
+      ``inspector.has_table(source_owner, source_table)`` passes.
+    * CD ``DB2INST1.USERS_CD`` -- IBMSNAP_* + user + before-image
+      columns.
+
+    All structures are dropped + recreated per-test so each test
+    starts from a clean slate.
+    """
+    from sqlalchemy import create_engine, text
+
+    engine = create_engine(cfg.uri_with_credentials)
+    try:
+        with engine.begin() as conn:
+            # ASN schema -- Db2 has no IF NOT EXISTS for CREATE SCHEMA
+            # on this version, so probe SYSCAT.SCHEMATA first.
+            row = conn.execute(text(
+                "select schemaname from syscat.schemata "
+                "where schemaname = 'ASN'"
+            )).fetchone()
+            if not row:
+                conn.execute(text("create schema ASN"))
+            # IBMSNAP_REGISTER -- drop / recreate.
+            for stmt in (
+                "drop table ASN.IBMSNAP_REGISTER",
+                f"drop table ASN.IBMSNAP_UOW",
+                f"drop table {CDC_CD_SCHEMA}.{CDC_CD_TABLE}",
+                f"drop table {CDC_SOURCE_SCHEMA}.{CDC_SOURCE_TABLE}",
+            ):
+                try:
+                    conn.execute(text(stmt))
+                except Exception:  # noqa: BLE001 -- table may not exist
+                    pass
+            conn.execute(text(
+                "create table ASN.IBMSNAP_REGISTER ("
+                "  SOURCE_OWNER VARCHAR(128) NOT NULL,"
+                "  SOURCE_TABLE VARCHAR(128) NOT NULL,"
+                "  CD_OWNER VARCHAR(128) NOT NULL,"
+                "  CD_TABLE VARCHAR(128) NOT NULL,"
+                "  BEFORE_IMG_PREFIX VARCHAR(4)"
+                ")"
+            ))
+            conn.execute(text(
+                "create table ASN.IBMSNAP_UOW ("
+                "  IBMSNAP_COMMITSEQ VARCHAR(16) FOR BIT DATA NOT NULL,"
+                "  IBMSNAP_LOGMARKER TIMESTAMP NOT NULL"
+                ")"
+            ))
+            conn.execute(text(
+                f"create table {CDC_SOURCE_SCHEMA}.{CDC_SOURCE_TABLE} ("
+                "  ID INTEGER NOT NULL PRIMARY KEY,"
+                "  NAME VARCHAR(64) NOT NULL,"
+                "  AGE INTEGER NOT NULL"
+                ")"
+            ))
+            conn.execute(text(
+                f"create table {CDC_CD_SCHEMA}.{CDC_CD_TABLE} ("
+                "  IBMSNAP_OPERATION CHAR(1) NOT NULL,"
+                "  IBMSNAP_COMMITSEQ VARCHAR(16) FOR BIT DATA NOT NULL,"
+                "  IBMSNAP_INTENTSEQ VARCHAR(16) FOR BIT DATA NOT NULL,"
+                "  ID INTEGER,"
+                "  NAME VARCHAR(64),"
+                "  AGE INTEGER,"
+                "  X_ID INTEGER,"
+                "  X_NAME VARCHAR(64),"
+                "  X_AGE INTEGER"
+                ")"
+            ))
+            conn.execute(text(
+                "insert into ASN.IBMSNAP_REGISTER "
+                "(SOURCE_OWNER, SOURCE_TABLE, CD_OWNER, CD_TABLE, "
+                " BEFORE_IMG_PREFIX) values "
+                f"('{CDC_SOURCE_SCHEMA}', '{CDC_SOURCE_TABLE}', "
+                f" '{CDC_CD_SCHEMA}', '{CDC_CD_TABLE}', "
+                f" '{CDC_BEFORE_PREFIX}')"
+            ))
+    finally:
+        engine.dispose()
+
+
+@pytest.fixture
+def fresh_db2_cdc(db2_config, tmp_path_factory, worker_id) -> DBConfig:
+    """Per-test reset of the ASN + CD schema. Reuses the
+    session-scoped ``db2_config`` so the (slow) Db2 container
+    boot is paid only once per session."""
+    if worker_id == "master":
+        _seed_cdc_schema(db2_config)
+    else:
+        root_tmp_dir = tmp_path_factory.getbasetemp().parent
+        lock_path = root_tmp_dir / "docker_db2_cdc_config_seed.lock"
+        with FileLock(str(lock_path)):
+            _seed_cdc_schema(db2_config)
+    return db2_config
