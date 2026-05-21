@@ -19,7 +19,7 @@ sits one layer below in ``_cdc_impl.py``.
 from __future__ import annotations
 
 import logging
-from typing import cast
+from typing import Any, cast
 
 from tabsdatak.conn.common.sql.cdc._runner import CdcRunConfig, run_cdc
 from tabsdatak.conn.common.sql.cdc.constants import (
@@ -47,6 +47,7 @@ from tabsdatak.conn.db2 import (
 # noinspection PyProtectedMember
 from tabsdatak.conn.db2._cdc_impl import DEFAULT_FETCH_SIZE, SqlReplicaIngester
 from tabsdatak.spi import (
+    Explorer,
     StreamSrcDef,
     StreamSrcPlugin,
     StreamSrcPluginCtx,
@@ -143,6 +144,16 @@ class Db2CdcStreamSrcPlugin(StreamSrcPlugin[Db2CdcStreamSrc]):
             logger.info("db2-cdc: stopped")
 
 
+class Db2CdcExplorer(Explorer[Db2CdcConn]):
+    def metadata(self, conn: Db2CdcConn) -> Any:
+        # TODO
+        pass
+
+    def data(self, conn: Db2CdcConn, query: str) -> Any:
+        # TODO
+        pass
+
+
 DB2_CDC_STREAM_SRC = StreamSrcDef(
     conn=Db2CdcConn,
     src_type="db2-cdc",
@@ -151,5 +162,5 @@ DB2_CDC_STREAM_SRC = StreamSrcDef(
     cardinality=lambda src: len(src.tables),
     uses_manifest=True,
     plugin=Db2CdcStreamSrcPlugin,
-    explorer=None,
+    explorer=Db2CdcExplorer,
 )

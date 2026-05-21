@@ -20,7 +20,7 @@ sits one layer below in ``_cdc_impl.py``.
 from __future__ import annotations
 
 import logging
-from typing import cast
+from typing import Any, cast
 
 from tabsdatak.conn.common.sql.cdc._runner import CdcRunConfig, run_cdc
 from tabsdatak.conn.common.sql.cdc.constants import (
@@ -49,6 +49,7 @@ from tabsdatak.conn.postgres._cdc_impl import (
     Wal2JsonIngester,
 )
 from tabsdatak.spi import (
+    Explorer,
     StreamSrcDef,
     StreamSrcPlugin,
     StreamSrcPluginCtx,
@@ -152,6 +153,16 @@ class PostgresCdcStreamSrcPlugin(StreamSrcPlugin[PostgresCdcStreamSrc]):
             logger.info("postgres-cdc: stopped")
 
 
+class PostgresCdcExplorer(Explorer[PostgresCdcConn]):
+    def metadata(self, conn: PostgresCdcConn) -> Any:
+        # TODO
+        pass
+
+    def data(self, conn: PostgresCdcConn, query: str) -> Any:
+        # TODO
+        pass
+
+
 POSTGRES_CDC_STREAM_SRC = StreamSrcDef(
     conn=PostgresCdcConn,
     src_type="postgres-cdc",
@@ -160,5 +171,5 @@ POSTGRES_CDC_STREAM_SRC = StreamSrcDef(
     cardinality=lambda src: len(src.tables),
     uses_manifest=True,
     plugin=PostgresCdcStreamSrcPlugin,
-    explorer=None,
+    explorer=PostgresCdcExplorer,
 )

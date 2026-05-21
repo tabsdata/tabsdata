@@ -21,7 +21,7 @@ sits one layer below in ``_cdc_impl.py``.
 from __future__ import annotations
 
 import logging
-from typing import cast
+from typing import Any, cast
 
 from tabsdatak.conn.common.sql.cdc._runner import CdcRunConfig, run_cdc
 from tabsdatak.conn.common.sql.cdc.constants import (
@@ -49,6 +49,7 @@ from tabsdatak.conn.mysql import (
 # noinspection PyProtectedMember
 from tabsdatak.conn.mysql._cdc_impl import BinlogIngester
 from tabsdatak.spi import (
+    Explorer,
     StreamSrcDef,
     StreamSrcPlugin,
     StreamSrcPluginCtx,
@@ -143,6 +144,16 @@ class MySQLCdcStreamSrcPlugin(StreamSrcPlugin[MySQLCdcStreamSrc]):
             logger.info("mysql-cdc: stopped")
 
 
+class MySQLCdcExplorer(Explorer[MySQLCdcConn]):
+    def metadata(self, conn: MySQLCdcConn) -> Any:
+        # TODO
+        pass
+
+    def data(self, conn: MySQLCdcConn, query: str) -> Any:
+        # TODO
+        pass
+
+
 MYSQL_CDC_STREAM_SRC = StreamSrcDef(
     conn=MySQLCdcConn,
     src_type="mysql-cdc",
@@ -151,5 +162,5 @@ MYSQL_CDC_STREAM_SRC = StreamSrcDef(
     cardinality=lambda src: len(src.tables),
     uses_manifest=True,
     plugin=MySQLCdcStreamSrcPlugin,
-    explorer=None,
+    explorer=MySQLCdcExplorer,
 )

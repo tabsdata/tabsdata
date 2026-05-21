@@ -21,7 +21,7 @@ import logging
 import signal
 import time
 from datetime import datetime, timezone
-from typing import cast
+from typing import Any, cast
 
 from tabsdatak.conn.kafka import (
     KafkaConn,
@@ -46,6 +46,7 @@ from tabsdatak.conn.kafka._stream_impl import (
 )
 from tabsdatak.conn.kafka.error import KafkaErrorCode
 from tabsdatak.spi import (
+    Explorer,
     ParquetFile,
     StageRef,
     StreamSrcDef,
@@ -333,6 +334,16 @@ class KafkaStreamSrcPlugin(StreamSrcPlugin[KafkaStreamSrc]):
         return time.time()
 
 
+class KafkaExplorer(Explorer[KafkaConn]):
+    def metadata(self, conn: KafkaConn) -> Any:
+        # TODO
+        pass
+
+    def data(self, conn: KafkaConn, query: str) -> Any:
+        # TODO
+        pass
+
+
 KAFKA_STREAM_SRC = StreamSrcDef(
     conn=KafkaConn,
     src_type="kafka",
@@ -344,5 +355,5 @@ KAFKA_STREAM_SRC = StreamSrcDef(
     # manifest-stage contract the CDC sources use.
     uses_manifest=True,
     plugin=KafkaStreamSrcPlugin,
-    explorer=None,
+    explorer=KafkaExplorer,
 )

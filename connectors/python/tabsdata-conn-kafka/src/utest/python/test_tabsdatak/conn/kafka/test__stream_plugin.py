@@ -47,12 +47,14 @@ def _src(**overrides) -> KafkaStreamSrc:
 
 
 def test_kafka_stream_src_def_shape():
+    from tabsdatak.conn.kafka._stream_plugin import KafkaExplorer
+
     assert KAFKA_STREAM_SRC.src_type == "kafka"
     assert KAFKA_STREAM_SRC.src_version == "v1"
     assert KAFKA_STREAM_SRC.conn is KafkaConn
     assert KAFKA_STREAM_SRC.src is KafkaStreamSrc
     assert KAFKA_STREAM_SRC.plugin is KafkaStreamSrcPlugin
-    assert KAFKA_STREAM_SRC.explorer is None
+    assert KAFKA_STREAM_SRC.explorer is KafkaExplorer
     assert KAFKA_STREAM_SRC.uses_manifest is True
 
 
