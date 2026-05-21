@@ -996,9 +996,21 @@ def test_auto_src_def_rejects_missing_conn_field():
 # Env / _LiteralEnv (was test_api_env.py)
 # ===========================================================================
 
+
+def test_env_extends_base_env():
+    # ``BaseEnv`` in ``_api`` is the method-host for the public
+    # ``Env`` -- `_name`, `_value`, `_validate`, `value` live there.
+    # Asserting the inheritance keeps the base from being silently
+    # dropped (which would re-introduce method duplication in
+    # ``api.py``).
+    assert issubclass(Env, _api.BaseEnv)
+    assert issubclass(_LiteralEnv, _api.BaseEnv)
+
+
 def test_env_attributes(monkeypatch):
     monkeypatch.setenv("FOO", "foo")
     e = Env("FOO")
+    assert e._name() == "FOO"
     assert isinstance(e, Env)
     assert e.s == "FOO"
     assert e._name() == "FOO"
@@ -1288,6 +1300,16 @@ def test_env_ref_to_literal_substitution_in_json_round_trip():
 # Secret / _LiteralSecret (was test_api_secret.py)
 # ===========================================================================
 
+
+def test_secret_extends_base_secret():
+    # ``BaseSecret`` in ``_api`` is the method-host for the public
+    # ``Secret`` -- `_name`, `_value`, `_validate`, `value`,
+    # `_secret_key`, and the empty-init guard live there. Asserting
+    # the inheritance keeps the base from being silently dropped.
+    assert issubclass(Secret, _api.BaseSecret)
+    assert issubclass(_LiteralSecret, _api.BaseSecret)
+
+
 def test_secret_attributes():
     # ``Secret()`` builds an anonymous *ref* with the placeholder
     # ``_s`` -- there is no public way to attach a key/name; the
@@ -1325,6 +1347,32 @@ def test_secret_direct_construction():
     # same placeholder shape (the secret-store integration is what
     # eventually swaps it for a resolved literal).
     assert s._s == "<secret>"
+
+
+def test_secret_constructor_is_empty_rejects_kwargs():
+    with pytest.raises(ApiException) as ei:
+        Secret(_s="vault#KEY")
+    assert ei.value.api_error is ApiErrorCode.API_10
+
+
+def test_secret_constructor_is_empty_rejects_value_pattern_kwarg():
+    with pytest.raises(ApiException) as ei:
+        Secret(_value_pattern=r".+")
+    assert ei.value.api_error is ApiErrorCode.API_10
+
+
+def test_secret_constructor_is_empty_rejects_positional_args():
+    with pytest.raises(ApiException) as ei:
+        Secret("vault#KEY")
+    assert ei.value.api_error is ApiErrorCode.API_10
+
+
+def test_literal_secret_constructor_still_accepts_args():
+    # The empty-init guard fires only on `Secret` itself, never on
+    # `_LiteralSecret` -- the literal subclass legitimately takes a
+    # value at construction (it's how `Secret.lit` builds them).
+    lit = _LiteralSecret("hunter2")
+    assert lit._s == "hunter2"
 
 
 def test_secret_value_raises_without_resolver():
@@ -1726,7 +1774,12 @@ def test_secret_pattern_reconstructs_and_rejects_literal_failing_new_pattern():
 
 
 def test_secret_pattern_reconstructs_ref_when_incoming_pattern_differs():
-    incoming = Secret(_s="vault#TOKEN", _value_pattern=r".+")
+    # Frame this Secret with both private fields populated -- the
+    # public `Secret()` user-init is empty-only, so synthesize via the
+    # pydantic validator (the same path envelope round-trips use).
+    incoming = Secret.__pydantic_validator__.validate_python(
+        {"_s": "vault#TOKEN", "_value_pattern": r".+"}
+    )
     s = _SrcWithHexField(incoming)
     assert isinstance(s.s, Secret)
     assert not isinstance(s.s, _LiteralSecret)
