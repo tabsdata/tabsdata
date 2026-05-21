@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tabsdata-conn-kafka"
-description = "Kafka connector."
+description = "Tabsdata plugin to access Kafka data."
 authors = [{name = "Tabs Data Inc."}]
 keywords = [
     "tabsdata",
@@ -58,10 +58,6 @@ filterwarnings = [
     "ignore::pytest.PytestUnknownMarkWarning",
     "ignore::authlib.deprecate.AuthlibDeprecationWarning",
 ]
-markers = [
-    "kafka: mark tests that require a kafka docker container.",
-    "kafka_docker: end-to-end test that needs a docker daemon and a Kafka image.",
-]
 
 [tool.coverage.html]
 directory = "coverage_html_report"
@@ -79,4 +75,4 @@ extend = "../../../pyproject.toml"
 
 [tool.tabsdata]
 name = "tabsdata-conn-kafka"
-display = "Kafka Connector (tabsdatak)"
+display = "Kafka Connector"
