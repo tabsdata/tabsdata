@@ -686,18 +686,90 @@ def test_publisher_output_rejects_list_element_regardless_of_mode():
     assert "return tuple element" in str(excinfo.value)
 
 
-def test_publisher_signature_allows_extra_params_after_input_slots():
+def test_publisher_signature_rejects_extra_non_ctx_params_after_input_slots():
+    # The only param allowed past the input slots is an optional
+    # trailing ``ctx: TrxCtx`` -- arbitrary extras (config / logger /
+    # etc.) are rejected so the runtime can deterministically infer
+    # whether to pass a ctx instance.
+    src = _src()  # table_count=1
+
+    with pytest.raises(ApiException) as excinfo:
+        @m.publisher(source=src, output_tables=["t"])
+        def _my_pub(
+            t1: tableframe.TableFrame | None,
+            config: dict[str, str],
+            logger: object,
+        ) -> tuple[tableframe.TableFrame | None]:
+            return (t1,)
+
+    assert excinfo.value.api_error is ApiErrorCode.API_17
+
+
+def test_publisher_signature_allows_optional_trailing_trx_ctx():
     src = _src()  # table_count=1
 
     @m.publisher(source=src, output_tables=["t"])
     def my_pub(
         t1: tableframe.TableFrame | None,
-        config: dict[str, str],
-        logger: object,
+        ctx: m.TrxCtx,
     ) -> tuple[tableframe.TableFrame | None]:
         return (t1,)
 
     assert isinstance(my_pub, _info.PublisherInfo)
+
+
+def test_publisher_signature_rejects_trailing_non_trx_ctx_param():
+    # A trailing param that is neither a slot nor a TrxCtx subclass is
+    # rejected -- the contract is "tableframes... then an optional
+    # TrxCtx", nothing else.
+    src = _src()
+
+    with pytest.raises(ApiException) as excinfo:
+        @m.publisher(source=src, output_tables=["t"])
+        def _my_pub(
+            t1: tableframe.TableFrame | None,
+            ctx: dict,
+        ) -> tuple[tableframe.TableFrame | None]:
+            return (t1,)
+
+    assert excinfo.value.api_error is ApiErrorCode.API_17
+
+
+def test_has_trx_ctx_param_detects_trailing_ctx():
+    def f(t1: tableframe.TableFrame | None, ctx: m.TrxCtx) -> tuple[
+        tableframe.TableFrame | None
+    ]:
+        return (t1,)
+
+    assert _api.has_trx_ctx_param(f) is True
+
+
+def test_has_trx_ctx_param_false_without_ctx():
+    def f(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
+        return (t1,)
+
+    assert _api.has_trx_ctx_param(f) is False
+
+
+def test_has_trx_ctx_param_accepts_trx_ctx_subclass():
+    # Subclasses of TrxCtx (e.g. plugin contexts) also count.
+    class _MyCtx(m.TrxCtx):
+        @property
+        def exec_plan_id(self) -> str: return "x"
+        @property
+        def trx_id(self) -> str: return "x"
+        @property
+        def exec_plan_ts(self) -> str: return "x"
+        def get_attr(self, attr): return None
+        def store_attr(self, attr, val): pass
+        def add_metadata(self, attr, val): pass
+
+    def f(t1: tableframe.TableFrame | None, ctx: _MyCtx) -> tuple[
+        tableframe.TableFrame | None
+    ]:
+        return (t1,)
+
+    assert _api.has_trx_ctx_param(f) is True
 
 
 def test_publisher_signature_accepts_explicit_table_frame_or_none():
