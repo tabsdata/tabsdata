@@ -20,6 +20,7 @@
 -r ../connectors/python/tabsdata-conn-db2/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-conn-druid/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-conn-gcs/requirements/requirements-third-party.txt
+-r ../connectors/python/tabsdata-conn-kafka/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-conn-localfile/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-conn-mongodb/requirements/requirements-third-party.txt
 -r ../connectors/python/tabsdata-conn-mssql/requirements/requirements-third-party.txt

@@ -19,6 +19,7 @@ tabsdata-conn-databricks==2.0.0
 tabsdata-conn-db2==2.0.0
 tabsdata-conn-druid==2.0.0
 tabsdata-conn-gcs==2.0.0
+tabsdata-conn-kafka==2.0.0
 tabsdata-conn-localfile==2.0.0
 tabsdata-conn-mongodb==2.0.0
 tabsdata-conn-mssql==2.0.0

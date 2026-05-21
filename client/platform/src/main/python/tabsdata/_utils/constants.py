@@ -28,6 +28,7 @@ TABSDATA_CONNECTORS_NAMES = [
     "conn-db2",
     "conn-druid",
     "conn-gcs",
+    "conn-kafka",
     "conn-localfile",
     "conn-mongodb",
     "conn-mssql",

@@ -22,6 +22,7 @@
 -r connectors/python/tabsdata-conn-db2/requirements.txt
 -r connectors/python/tabsdata-conn-druid/requirements.txt
 -r connectors/python/tabsdata-conn-gcs/requirements.txt
+-r connectors/python/tabsdata-conn-kafka/requirements.txt
 -r connectors/python/tabsdata-conn-localfile/requirements.txt
 -r connectors/python/tabsdata-conn-mongodb/requirements.txt
 -r connectors/python/tabsdata-conn-mssql/requirements.txt

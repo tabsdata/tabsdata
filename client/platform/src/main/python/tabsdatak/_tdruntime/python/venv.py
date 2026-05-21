@@ -55,6 +55,7 @@ TABSDATA_CONNECTORS_NAMES: tuple[str, ...] = (
     "tabsdata-conn-db2",
     "tabsdata-conn-druid",
     "tabsdata-conn-gcs",
+    "tabsdata-conn-kafka",
     "tabsdata-conn-localfile",
     "tabsdata-conn-mongodb",
     "tabsdata-conn-mssql",
