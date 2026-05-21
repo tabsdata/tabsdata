@@ -6,6 +6,7 @@ called in order, and the trigger-pending retry loop tracks
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -50,11 +51,15 @@ def _tracked(name: str) -> TrackedTable:
     )
 
 
+_TS = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+
 def _change(table: str, pid: int) -> CdcDataChange:
     return CdcDataChange(
         operation="i",
         transaction="tx",
         sequence=pid,
+        timestamp=_TS,
         table=table,
         schema=_sv(),
         new_values={"id": pid, "name": f"n{pid}"},

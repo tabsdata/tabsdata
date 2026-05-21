@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import pyarrow as pa
@@ -57,11 +58,15 @@ def _tt(table: str) -> TrackedTable:
     )
 
 
+_TS = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+
 def _change(table: str, pos: int) -> CdcDataChange:
     return CdcDataChange(
         operation="i",
         transaction="tx",
         sequence=pos,
+        timestamp=_TS,
         table=table,
         schema=_sv(),
         new_values={"id": pos},

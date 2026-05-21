@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 
 import pyarrow as pa
 import sqlalchemy as sa
@@ -23,6 +24,7 @@ from tabsdatak.conn.common.sql.cdc.constants import (
     CDC_META_OP,
     CDC_META_SCH,
     CDC_META_SQ,
+    CDC_META_TS,
     CDC_META_TX,
 )
 from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
@@ -42,11 +44,15 @@ def _sv() -> SchemaVersion:
     )
 
 
+_TS = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+
 def _change(operation: str = "i", new=None, old=None) -> CdcDataChange:
     return CdcDataChange(
         operation=operation,
         transaction="tx-1",
         sequence=42,
+        timestamp=_TS,
         table="s.t",
         schema=_sv(),
         new_values=new if new is not None else {"id": 1, "name": "alice"},
@@ -59,6 +65,7 @@ def test_meta_columns_always_present():
     assert rec[CDC_META_OP] == "i"
     assert rec[CDC_META_TX] == "tx-1"
     assert rec[CDC_META_SQ] == 42
+    assert rec[CDC_META_TS] == _TS
     assert rec[CDC_META_FMT] == "columns"
     assert rec[CDC_META_FLAT] is True
     assert rec[CDC_META_SCH] == "deadbeef00000000"

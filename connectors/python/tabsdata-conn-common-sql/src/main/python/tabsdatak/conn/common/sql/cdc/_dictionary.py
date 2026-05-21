@@ -27,6 +27,7 @@ from tabsdatak.conn.common.sql.cdc.constants import (
     CDC_META_OP,
     CDC_META_SCH,
     CDC_META_SQ,
+    CDC_META_TS,
     CDC_META_TX,
     DOT,
 )
@@ -60,6 +61,7 @@ def build_pa_schema(
         pa.field(CDC_META_OP, pa.utf8()),
         pa.field(CDC_META_TX, pa.utf8()),
         pa.field(CDC_META_SQ, pa.int64()),
+        pa.field(CDC_META_TS, pa.timestamp("us", tz="UTC")),
         pa.field(CDC_META_FMT, pa.utf8()),
         pa.field(CDC_META_FLAT, pa.bool_()),
         pa.field(CDC_META_SCH, pa.utf8()),

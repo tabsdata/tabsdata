@@ -29,7 +29,12 @@ import pymysql
 import pymysqlreplication.constants.FIELD_TYPE as FIELD_TYPE
 import sqlalchemy.types as sa_types
 from pymysqlreplication import BinLogStreamReader
-from pymysqlreplication.event import GtidEvent, HeartbeatLogEvent
+from pymysqlreplication.event import (
+    GtidEvent,
+    HeartbeatLogEvent,
+    QueryEvent,
+    XidEvent,
+)
 from pymysqlreplication.row_event import (
     DeleteRowsEvent,
     UpdateRowsEvent,
@@ -88,6 +93,17 @@ HEARTBEAT_INTERVAL_SECONDS = 1
 # pymysqlreplication's binlog file's start byte (after the magic
 # bytes). Used for ``RelativePositionSpec="head"``.
 BINLOG_START_POSITION = 4
+
+# Placeholder timestamp stamped on rows held in the buffered poll's
+# pending list. The real commit timestamp is written in on the next
+# XidEvent / QueryEvent("COMMIT") that closes the transaction.
+PENDING_TIMESTAMP = datetime.min.replace(tzinfo=timezone.utc)
+
+# When True the poll loop buffers rows per-transaction and stamps
+# them with the commit timestamp on XidEvent / QueryEvent("COMMIT").
+# When False each row carries its own binlog-event timestamp (the
+# behaviour pre-TS port).
+BUFFER_TRANSACTIONS = True
 
 
 # Internal start-position shape consumed by the ingester after the
@@ -476,6 +492,8 @@ class BinlogIngester(CdcIngester):
                 UpdateRowsEvent,
                 DeleteRowsEvent,
                 GtidEvent,
+                QueryEvent,
+                XidEvent,
                 HeartbeatLogEvent,
             ],
         }
@@ -654,6 +672,14 @@ class BinlogIngester(CdcIngester):
     # ------------------------------------------------------------------
 
     def poll_changes(self, session: Any) -> Generator[CdcChange, None, None]:
+        if BUFFER_TRANSACTIONS:
+            yield from self._poll_changes_buffered(session)
+        else:
+            yield from self._poll_changes_unbuffered(session)
+
+    def _poll_changes_unbuffered(
+        self, session: Any,
+    ) -> Generator[CdcChange, None, None]:
         # ``deadline`` caps the time we'll spend in a single poll
         # before returning control to the runner. Without it,
         # blocking=True + a stream that's idle would hang the
@@ -675,6 +701,85 @@ class BinlogIngester(CdcIngester):
                 seq = 0
             elif isinstance(event, HeartbeatLogEvent):
                 if time.monotonic() > deadline:
+                    return
+            elif isinstance(event, (WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent)):
+                qualified = self._as_qualified_table(event.schema, event.table)
+                if qualified is None:
+                    continue
+                op = _OPERATION_MAP[type(event)]
+                commit_ts = datetime.fromtimestamp(event.timestamp, tz=timezone.utc)
+                raw_schema = self._extract_raw_schema(event)
+                if self._schema_registry is None:  # pragma: no cover
+                    return
+                schema_version = self._schema_registry.register_from_log(
+                    qualified, raw_schema,
+                )
+                for row in event.rows:
+                    seq += 1
+                    match event:
+                        case WriteRowsEvent():
+                            new_values = row["values"]
+                            old_values = {column: None for column in new_values}
+                        case UpdateRowsEvent():
+                            new_values = row["after_values"]
+                            old_values = row["before_values"]
+                        case DeleteRowsEvent():
+                            new_values = row["values"]
+                            old_values = {column: None for column in new_values}
+                        case _:  # pragma: no cover - unreachable
+                            continue
+                    self.localize_values(new_values)
+                    self.localize_values(old_values)
+                    yield CdcDataChange(
+                        operation=op,
+                        transaction=gtid or "",
+                        sequence=seq,
+                        timestamp=commit_ts,
+                        table=qualified,
+                        new_values=new_values,
+                        old_values=old_values,
+                        offset=GtidOffset(gtid=gtid or ""),
+                        schema=schema_version,
+                    )
+
+    def _poll_changes_buffered(
+        self, session: Any,
+    ) -> Generator[CdcChange, None, None]:
+        # Buffered mode holds rows in ``pending`` until the closing
+        # XidEvent / QueryEvent("COMMIT") arrives, so every yielded
+        # row carries the *commit* timestamp (not the row's own
+        # binlog-event timestamp).
+        deadline = time.monotonic() + self._blocking_timeout_seconds
+        gtid: str | None = None
+        seq: int = 0
+        pending: list[CdcDataChange] = []
+        if self._stream is None:
+            return
+        for event in self._stream:
+            if isinstance(event, GtidEvent):
+                if not pending and time.monotonic() > deadline:
+                    return
+                gtid = event.gtid
+                seq = 0
+            elif isinstance(event, (XidEvent, QueryEvent)):
+                if (
+                    isinstance(event, QueryEvent)
+                    and (event.query or "").strip().upper() != "COMMIT"
+                ):
+                    continue
+                commit_timestamp = datetime.fromtimestamp(
+                    event.timestamp, tz=timezone.utc,
+                )
+                for change in pending:
+                    change.timestamp = commit_timestamp
+                    yield change
+                if gtid is not None:
+                    self._mark = GtidOffset(gtid=gtid)
+                pending = []
+                gtid = None
+                seq = 0
+            elif isinstance(event, HeartbeatLogEvent):
+                if not pending and time.monotonic() > deadline:
                     return
             elif isinstance(event, (WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent)):
                 qualified = self._as_qualified_table(event.schema, event.table)
@@ -703,13 +808,16 @@ class BinlogIngester(CdcIngester):
                             continue
                     self.localize_values(new_values)
                     self.localize_values(old_values)
-                    yield CdcDataChange(
-                        operation=op,
-                        transaction=gtid or "",
-                        sequence=seq,
-                        table=qualified,
-                        new_values=new_values,
-                        old_values=old_values,
-                        offset=GtidOffset(gtid=gtid or ""),
-                        schema=schema_version,
+                    pending.append(
+                        CdcDataChange(
+                            operation=op,
+                            transaction=gtid or "",
+                            sequence=seq,
+                            timestamp=PENDING_TIMESTAMP,
+                            table=qualified,
+                            new_values=new_values,
+                            old_values=old_values,
+                            offset=GtidOffset(gtid=gtid or ""),
+                            schema=schema_version,
+                        )
                     )

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import pytest
 import sqlalchemy as sa
 
@@ -112,11 +114,15 @@ def _sv() -> SchemaVersion:
     )
 
 
+_TS = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+
 def test_cdc_data_change_sizeof_is_positive():
     change = CdcDataChange(
         operation="i",
         transaction="tx-1",
         sequence=1,
+        timestamp=_TS,
         table="s.t",
         schema=_sv(),
         new_values={"id": 1, "name": "alice"},
@@ -131,6 +137,7 @@ def test_cdc_data_change_with_old_values_is_larger_than_without():
         operation="u",
         transaction="tx-1",
         sequence=1,
+        timestamp=_TS,
         table="s.t",
         schema=sv,
         new_values={"id": 1},
@@ -140,6 +147,7 @@ def test_cdc_data_change_with_old_values_is_larger_than_without():
         operation="u",
         transaction="tx-1",
         sequence=1,
+        timestamp=_TS,
         table="s.t",
         schema=sv,
         new_values={"id": 1},

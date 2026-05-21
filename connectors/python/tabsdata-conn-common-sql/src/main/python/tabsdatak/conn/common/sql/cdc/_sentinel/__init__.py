@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from datetime import timezone
 from decimal import Decimal
 from typing import Any
 
@@ -27,6 +28,7 @@ from tabsdatak.conn.common.sql.cdc.constants import (
     CDC_META_OP,
     CDC_META_SCH,
     CDC_META_SQ,
+    CDC_META_TS,
     CDC_META_TX,
     DOT,
 )
@@ -66,6 +68,7 @@ def row_to_record(
         CDC_META_OP: change.operation,
         CDC_META_TX: change.transaction,
         CDC_META_SQ: change.sequence,
+        CDC_META_TS: change.timestamp.astimezone(timezone.utc),
         CDC_META_FMT: cdc_format.columns_format,
         CDC_META_FLAT: cdc_format.flatten_columns,
         CDC_META_SCH: change.schema.hash,

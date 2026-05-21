@@ -30,7 +30,7 @@ import logging
 import time
 from collections.abc import Generator, Iterable
 from dataclasses import dataclass
-from datetime import datetime, tzinfo
+from datetime import datetime, timezone, tzinfo
 from typing import Any, Literal, TypeAlias, Union
 
 import sqlalchemy as sa
@@ -777,6 +777,7 @@ class SqlReplicaIngester(CdcIngester):
                 IBMSNAP_OPERATION.quoted,
                 IBMSNAP_COMMITSEQ.quoted,
                 IBMSNAP_INTENTSEQ.quoted,
+                IBMSNAP_LOGMARKER.quoted,
             ]
             + column_names
             + column_inames
@@ -808,6 +809,10 @@ class SqlReplicaIngester(CdcIngester):
                 )
             commit_seq = row_map[IBMSNAP_COMMITSEQ.sa_name]
             intent_seq = row_map[IBMSNAP_INTENTSEQ.sa_name]
+            logmarker: datetime = row_map[IBMSNAP_LOGMARKER.sa_name]
+            if logmarker.tzinfo is None:
+                logmarker = logmarker.replace(tzinfo=self._server_tz)
+            commit_ts = logmarker.astimezone(timezone.utc)
             new_values = {
                 col.name: row_map.get(col.sa_name)
                 for col in tracked.columns
@@ -827,6 +832,7 @@ class SqlReplicaIngester(CdcIngester):
                 operation=op,
                 transaction=commit_seq.hex(),
                 sequence=int.from_bytes(intent_seq, byteorder="big"),
+                timestamp=commit_ts,
                 table=tracked.data_table.qualified,
                 new_values=new_values,
                 old_values=old_values,

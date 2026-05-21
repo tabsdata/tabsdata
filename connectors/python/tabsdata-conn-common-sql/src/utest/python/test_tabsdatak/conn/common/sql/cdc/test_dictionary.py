@@ -23,6 +23,7 @@ from tabsdatak.conn.common.sql.cdc.constants import (
     CDC_META_OP,
     CDC_META_SCH,
     CDC_META_SQ,
+    CDC_META_TS,
     CDC_META_TX,
 )
 from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
@@ -68,11 +69,12 @@ def test_meta_columns_lead_in_every_layout():
         CdcFormat(columns_format="map"),
     ):
         schema = build_pa_schema(_cols(), fmt)
-        first_six = [schema.field(i).name for i in range(6)]
-        assert first_six == [
+        first_seven = [schema.field(i).name for i in range(7)]
+        assert first_seven == [
             CDC_META_OP,
             CDC_META_TX,
             CDC_META_SQ,
+            CDC_META_TS,
             CDC_META_FMT,
             CDC_META_FLAT,
             CDC_META_SCH,

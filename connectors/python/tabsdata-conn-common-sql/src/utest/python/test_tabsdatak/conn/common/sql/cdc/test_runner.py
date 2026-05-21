@@ -7,6 +7,7 @@ number of poll cycles so the loop terminates cleanly.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -64,11 +65,15 @@ def _sv() -> SchemaVersion:
     )
 
 
+_TS = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+
 def _change(table: str, pos: int) -> CdcDataChange:
     return CdcDataChange(
         operation="i",
         transaction="tx",
         sequence=pos,
+        timestamp=_TS,
         table=table,
         schema=_sv(),
         new_values={"id": pos},
