@@ -10,7 +10,7 @@ from tabsdatak import _api
 from tabsdatak.api import AutoSrc, Conn, Dest, Src
 from tabsdatak.error import ApiErrorCode, ApiException
 from tabsdatak.spi import (
-    AutoSrcContext,
+    AutoSrcPluginCtx,
     AutoSrcDef,
     AutoSrcPlugin,
     DestContext,
@@ -18,7 +18,7 @@ from tabsdatak.spi import (
     DestPlugin,
     Explorer,
     ManifestFileSpec,
-    SrcContext,
+    SrcPluginCtx,
     SrcDef,
     SrcPlugin,
     TableFileSpec,
@@ -193,7 +193,7 @@ class _CheckOtherSrc(Src):
 
 
 class _GoodSrcPlugin(SrcPlugin[_CheckSrc]):
-    def read_in(self, ctx: SrcContext, src: _CheckSrc) -> list[list[TableFileSpec]]:
+    def read_in(self, ctx: SrcPluginCtx, src: _CheckSrc) -> list[list[TableFileSpec]]:
         return [[]]
 
 
@@ -203,7 +203,7 @@ class _PluginNoAnnotation(SrcPlugin[_CheckSrc]):
 
 
 class _PluginWrongType(SrcPlugin[_CheckSrc]):
-    def read_in(self, ctx: SrcContext, src: _CheckOtherSrc) -> list[list[TableFileSpec]]:
+    def read_in(self, ctx: SrcPluginCtx, src: _CheckOtherSrc) -> list[list[TableFileSpec]]:
         return [[]]
 
 
@@ -272,14 +272,14 @@ class _SDDest(Dest):
 
 
 class _SDSrcPlugin(SrcPlugin[_SDSrc]):
-    def read_in(self, ctx: SrcContext, src: _SDSrc) -> list[list[TableFileSpec]]:
+    def read_in(self, ctx: SrcPluginCtx, src: _SDSrc) -> list[list[TableFileSpec]]:
         return [[]]
 
 
 class _SDAutoSrcPlugin(AutoSrcPlugin[_SDAutoSrc]):
     def read_in(
         self,
-        ctx: AutoSrcContext,
+        ctx: AutoSrcPluginCtx,
         src: _SDAutoSrc,
     ) -> tuple[ManifestFileSpec, list[list[TableFileSpec]]]:
         from pathlib import Path
@@ -464,7 +464,7 @@ class _OtherDest(Dest):
 
 class _MismatchSrcPlugin(SrcPlugin[_SDSrc]):
     # Annotated against ``_OtherSrc``, but the Def binds ``_SDSrc``.
-    def read_in(self, ctx: SrcContext, src: _OtherSrc) -> list[list[TableFileSpec]]:
+    def read_in(self, ctx: SrcPluginCtx, src: _OtherSrc) -> list[list[TableFileSpec]]:
         return [[]]
 
 
