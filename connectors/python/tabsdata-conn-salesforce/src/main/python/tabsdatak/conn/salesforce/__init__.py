@@ -156,7 +156,7 @@ ConnSpec: TypeAlias = Union[NamedConn, SalesforceConn]
 # --- Source: SOQL queries --------------------------------------------
 
 
-@_api.dataclass(SalesforceErrorCode.SALESFORCE_4, kw_only=True)
+@_api.dataclass(SalesforceErrorCode.SALESFORCE_3, kw_only=True)
 class SalesforceSrc(Src):
     """Salesforce SOQL source — exactly one SOQL query.
 
@@ -184,7 +184,7 @@ class SalesforceSrc(Src):
 # --- Source: reports --------------------------------------------------
 
 
-@_api.dataclass(SalesforceErrorCode.SALESFORCE_5, kw_only=True)
+@_api.dataclass(SalesforceErrorCode.SALESFORCE_4, kw_only=True)
 class SalesforceReportSrc(Src):
     """Salesforce report source — Tabular reports only.
 

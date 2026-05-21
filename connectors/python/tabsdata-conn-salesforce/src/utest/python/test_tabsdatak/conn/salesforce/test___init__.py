@@ -134,7 +134,7 @@ def test_salesforce_src_rejects_unknown_src_cfg_key():
             queries=["SELECT Id FROM Account"],
             src_cfg={"bogus.key": 1},
         )
-    assert ei.value.api_error is SalesforceErrorCode.SALESFORCE_4
+    assert ei.value.api_error is SalesforceErrorCode.SALESFORCE_3
 
 
 def test_salesforce_src_accepts_known_src_cfg_keys():
@@ -154,7 +154,7 @@ def test_salesforce_report_src_rejects_unknown_src_cfg_key():
             reports=["00O000000000001"],
             src_cfg={"bogus.key": 1},
         )
-    assert ei.value.api_error is SalesforceErrorCode.SALESFORCE_5
+    assert ei.value.api_error is SalesforceErrorCode.SALESFORCE_4
 
 
 def test_salesforce_report_src_accepts_known_src_cfg_keys():
