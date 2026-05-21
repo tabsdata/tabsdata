@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import dataclasses
 import functools
 import importlib
 import inspect
+import os
 import re
 import typing
+from abc import ABC
 from datetime import datetime
 from typing import Any, Callable, ClassVar, Type, TypeVar, Union, dataclass_transform
 
@@ -13,17 +16,18 @@ from pydantic import (
     AfterValidator,
     Field,
     GetCoreSchemaHandler,
+    PrivateAttr,
     TypeAdapter,
     ValidationError,
     model_validator,
 )
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 from pydantic.errors import PydanticSchemaGenerationError
-from pydantic_core import core_schema
+from pydantic_core import ArgsKwargs, core_schema
 
 # Error codes and exceptions live in `tabsdatak.api_error` so callers
 # only depend on that module when they want to react to errors.
-from tabsdatak.error import ErrorCode
+from tabsdatak.error import ApiErrorCode, ErrorCode
 
 _C = TypeVar("_C", bound=type)
 
@@ -34,7 +38,10 @@ _C = TypeVar("_C", bound=type)
 # class and flag "unexpected argument" on every call site. Pydantic's own
 # @pydantic.dataclasses.dataclass carries the same marker internally, which
 # is why direct use of it does not warn.
-@dataclass_transform(frozen_default=True)
+@dataclass_transform(
+    frozen_default=True,
+    field_specifiers=(dataclasses.field, Field, PrivateAttr),
+)
 def dataclass(
     api_error: ErrorCode,
     **dc_kwargs: Any,
@@ -232,6 +239,7 @@ NON_EMPTY_LIST_CONSTRAINTS = Field(min_length=1)
 
 CONTEXT_KEY_RE_STR = r'^(?=.{1,253}$)([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$'
 
+
 # ---------------------------------------------------------------------------
 # Pattern annotation marker for Env / Secret fields.
 #
@@ -318,10 +326,12 @@ class _ValuePattern:
 
             # Reconstruct so the field's pattern wins, and the literal
             # model_validator runs against the field's pattern.
-            return type(instance)(**{
-                field_name: getattr(instance, field_name),
-                "_value_pattern": regex,
-            })
+            # ``Secret.__init__`` is empty-only (the user-facing guard
+            # in ``api.py``); route via the pydantic validator so the
+            # framework reconstruction is not subject to that guard.
+            return type(instance).__pydantic_validator__.validate_python(
+                {field_name: getattr(instance, field_name), "_value_pattern": regex}
+            )
 
         return core_schema.no_info_wrap_validator_function(wrap, base)
 
@@ -822,6 +832,160 @@ class DescriptorBase(JsonSerde):
         check_tz_aware_datetime(self)
         self.validate()
         return self
+
+
+# ---------------------------------------------------------------------------
+# Bases for `tabsdatak.api.Env` and `tabsdatak.api.Secret`.
+#
+# These bases host the underscore-prefixed methods (``_name`` /
+# ``_value`` / ``_validate`` / ``value``) plus, for ``BaseSecret``,
+# the empty-init guard and the ``_secret_key`` factory. The public
+# classes in ``api.py`` only declare their fields, their wire
+# ``__kind__``, and their public ``lit`` factory -- keeping the
+# public surface small and readable.
+#
+# These are NOT a shared base -- ``BaseEnv`` and ``BaseSecret`` are
+# independent per-class machinery layers that happen to look
+# similar. Each extends ``JsonSerde`` so the leaf classes in
+# ``api.py`` need only one base.
+# ---------------------------------------------------------------------------
+
+
+class BaseEnv(JsonSerde, ABC):
+    """Method-host for ``tabsdatak.api.Env``. The leaf class declares
+    the ``s`` and ``_value_pattern`` fields so pydantic discovers
+    them; methods live here so ``api.py`` stays focused."""
+
+    def _name(self) -> str:
+        return self.s  # type: ignore[attr-defined]
+
+    def _value(self) -> str:
+        val = os.environ.get(self.s)  # type: ignore[attr-defined]
+        if val is None:
+            raise ApiErrorCode.API_8.exception(name=self.s)  # type: ignore[attr-defined]
+        return val
+
+    def _validate(self, val: str) -> str:
+        pattern = self._value_pattern  # type: ignore[attr-defined]
+        if pattern is not None and re.fullmatch(pattern, val) is None:
+            raise ApiErrorCode.API_6.exception(
+                name=self._name(),
+                pattern=pattern,
+                value=val,
+            )
+        return val
+
+    def value(self) -> str:
+        return self._validate(self._value())
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def _reinject_private_from_dict(cls, data: Any, handler) -> Any:
+        # ``Env._value_pattern`` is ``init=False`` so the IDE flags
+        # ``Env(s='X', _value_pattern=...)`` at edit time. But the
+        # framework's wrap-validator (the field-level pattern marker
+        # in ``_ValuePattern``) and envelope round-trips pass it via
+        # the dict path -- pydantic's standard handler would drop it
+        # along with the constructor signature. Stash and re-inject
+        # after the handler runs.
+        #
+        # ``Env``'s primary field ``s`` is ``init=True``; we only need
+        # to round-trip the private ``_value_pattern``. The literal
+        # subclass redeclares ``_value_pattern`` with ``init=True``,
+        # so the handler picks it up directly there -- no re-inject
+        # needed and this hook is a no-op for it.
+        from tabsdatak.api import Env
+
+        if cls is Env and isinstance(data, dict) and "_value_pattern" in data:
+            v = data["_value_pattern"]
+            instance = handler(data)
+            object.__setattr__(instance, "_value_pattern", v)
+            return instance
+        return handler(data)
+
+
+class BaseSecret(JsonSerde, ABC):
+    """Method-host for ``tabsdatak.api.Secret``. Same shape as
+    ``BaseEnv`` -- methods live here, fields stay on the leaf. Also
+    hosts the empty-init guard: user code may only write
+    ``Secret()``; named refs go through ``Secret._secret_key`` and
+    inline values through ``Secret.lit``. Envelope round-trip and
+    internal factories arrive via the pydantic validator with a
+    plain dict (not ``ArgsKwargs``) and bypass the guard."""
+
+    def _name(self) -> str:
+        return self._s  # type: ignore[attr-defined]
+
+    def _value(self) -> str:
+        # No resolver wired up by default: refs only resolve under a
+        # secret-store integration that is not part of the API package.
+        raise ApiErrorCode.API_11.exception(name=self._s)  # type: ignore[attr-defined]
+
+    def _validate(self, val: str) -> str:
+        pattern = self._value_pattern  # type: ignore[attr-defined]
+        if pattern is not None and re.fullmatch(pattern, val) is None:
+            raise ApiErrorCode.API_6.exception(
+                name=self._name(),
+                pattern=pattern,
+                value=val,
+            )
+        return val
+
+    def value(self) -> str:
+        return self._validate(self._value())
+
+    @classmethod
+    def _secret_key(cls, name: str) -> Any:
+        # ``Secret``'s private fields are ``init=False`` so they
+        # cannot be set from the user-visible ``__init__``; route
+        # through the pydantic validator instead, where the dict-input
+        # path re-injects them after the (empty) handler runs.
+        return cls.__pydantic_validator__.validate_python(  # type: ignore[attr-defined]
+            {"_s": name, "_value_pattern": cls._value_pattern}  # type: ignore[attr-defined]
+        )
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def _enforce_empty_user_init(cls, data: Any, handler) -> Any:
+        # Two-way guard wrapping pydantic's standard validation:
+        #
+        # 1. ``ArgsKwargs`` arrives only from the user-visible
+        #    ``__init__`` site. On ``Secret`` itself it must be empty
+        #    (``Secret()``); anything else is a misuse. The literal
+        #    subclass overrides its fields with ``init=True`` and is
+        #    unaffected.
+        #
+        # 2. Dict input arrives from envelope round-trip and the
+        #    ``_secret_key`` factory. ``Secret``'s private fields are
+        #    ``init=False`` so the standard validator drops them; we
+        #    stash them before handler runs and ``object.__setattr__``
+        #    them back afterwards. (Frozen-dataclass workaround.)
+        #
+        # ``Secret`` is late-imported so the ``cls is Secret`` check
+        # works without a load-time cycle.
+        from tabsdatak.api import Secret
+
+        if isinstance(data, ArgsKwargs):
+            if cls is Secret and (data.args or data.kwargs):
+                raise ValueError(
+                    f"{cls.__qualname__}() takes no arguments; "
+                    f"use Secret.lit(value) for inline values, or "
+                    f"Secret._secret_key(name) for a named reference"
+                )
+            return handler(data)
+
+        if cls is Secret and isinstance(data, dict):
+            stash = {
+                k: data[k]
+                for k in ("_s", "_value_pattern")
+                if k in data
+            }
+            instance = handler(data)
+            for k, v in stash.items():
+                object.__setattr__(instance, k, v)
+            return instance
+
+        return handler(data)
 
 
 # ---------------------------------------------------------------------------

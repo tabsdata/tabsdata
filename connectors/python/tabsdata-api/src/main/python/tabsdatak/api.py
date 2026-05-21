@@ -1,6 +1,4 @@
 import importlib
-import os
-import re
 from abc import ABC, abstractmethod
 from typing import Annotated, Callable, TypeAlias, Union
 
@@ -88,45 +86,21 @@ EnvVarNameSpec: TypeAlias = Annotated[str, _api.ENV_NAME_CONSTRAINTS]
 
 
 @_api.dataclass(ApiErrorCode.API_7)
-class Env(_api.JsonSerde):
+class Env(_api.BaseEnv):
     s: EnvVarNameSpec
     __kind__ = "envRef"
-    _value_pattern: str | None = None
-
-    def _name(self) -> str:
-        return self.s
-
-    def _value(self) -> str:
-        val = os.environ.get(self.s)
-        if val is None:
-            raise ApiErrorCode.API_8.exception(name=self.s)
-        return val
-
-    def _validate(self, val: str) -> str:
-        pattern = self._value_pattern
-        if pattern is not None:
-            if re.fullmatch(pattern, val) is None:
-                raise ApiErrorCode.API_6.exception(
-                    name=self._name(),
-                    pattern=pattern,
-                    value=val,
-                )
-        return val
+    _value_pattern: str | None = Field(default=None, init=False)
 
     @classmethod
     def lit(cls, value: str) -> "Env":
         return _LiteralEnv(s=value, _value_pattern=cls._value_pattern)
-
-    def value(self) -> str:
-        val = self._value()
-        val = self._validate(val)
-        return val
 
 
 @_api.dataclass(ApiErrorCode.API_9)
 class _LiteralEnv(Env):
     s: str
     __kind__ = "envLiteral"
+    _value_pattern: str | None = None
 
     def _name(self) -> str:
         return "<literal>"
@@ -142,54 +116,42 @@ class _LiteralEnv(Env):
 
 
 @_api.dataclass(ApiErrorCode.API_10)
-class Secret(_api.JsonSerde):
-    _s: str = "<secret>"
+class Secret(_api.BaseSecret):
+    # ``init=False`` makes ``Secret()`` the only valid construction
+    # shape at the user-facing ``__init__`` site -- IDEs and type
+    # checkers surface ``Secret('foo')`` and ``Secret(_s='foo')`` as
+    # errors at edit time, layered on top of the runtime guard in
+    # ``BaseSecret._enforce_empty_user_init``. Envelope round-trips
+    # and the ``_secret_key`` factory go through the dict-input path,
+    # where the wrap-validator re-injects these fields after pydantic
+    # runs (since ``init=False`` would otherwise drop them).
+    _s: str = Field(default="<secret>", init=False)
     __kind__ = "secretRef"
-    _value_pattern: str | None = None
-
-    def _name(self) -> str:
-        return self._s
-
-    def _value(self) -> str:
-        # No resolver wired up by default: refs only resolve under a
-        # secret-store integration that is not part of the API package.
-        raise ApiErrorCode.API_11.exception(name=self._s)
-
-    @classmethod
-    def _secret_key(cls, name: str) -> "Secret":
-        return cls(_s=name)
+    _value_pattern: str | None = Field(default=None, init=False)
 
     @classmethod
     def lit(cls, value: str) -> "Secret":
         return _LiteralSecret(_s=value, _value_pattern=cls._value_pattern)
 
-    def _validate(self, val: str) -> str:
-        pattern = self._value_pattern
-        if pattern is not None:
-            if re.fullmatch(pattern, val) is None:
-                raise ApiErrorCode.API_6.exception(
-                    name=self._name(),
-                    pattern=pattern,
-                    value=val,
-                )
-        return val
-
-    def value(self) -> str:
-        val = self._value()
-        val = self._validate(val)
-        return val
-
 
 @_api.dataclass(ApiErrorCode.API_12)
 class _LiteralSecret(Secret):
+    # Redeclare both private fields with ``init=True`` to override
+    # ``Secret``'s ``init=False``. ``_LiteralSecret`` is private but
+    # the framework's wrap-validator and the ``Secret.lit`` factory
+    # construct instances with ``_s`` / ``_value_pattern`` populated;
+    # the ``_check_literal_pattern`` model_validator below runs at
+    # ``mode='after'`` and needs both fields visible to pydantic so
+    # they're set before it fires.
     _s: str
+    _value_pattern: str | None = None
     __kind__ = "secretLiteral"
 
     def _name(self) -> str:
         return "<literal>"
 
     def _value(self) -> str:
-        # Literal: ``s`` is the value verbatim, not a secret ref.
+        # Literal: ``_s`` is the value verbatim, not a secret ref.
         return self._s
 
     @model_validator(mode="after")

@@ -275,12 +275,12 @@ slot count for a given source / destination instance.
 from tabsdatak.conn.my import MyConn, MyDest, MySrc
 from tabsdatak.spi import (
     DestDef, DestPlugin, Explorer,
-    SrcContext, SrcDef, SrcPlugin, TableFileSpec, TableMode,
+    SrcPluginCtx, SrcDef, SrcPlugin, TableFileSpec, TableMode,
 )
 
 
 class _MySrcPlugin(SrcPlugin[MyConn, MySrc]):
-    def read_in(self, ctx: SrcContext, src: MySrc) -> list[list[TableFileSpec]]: ...
+    def read_in(self, ctx: SrcPluginCtx, src: MySrc) -> list[list[TableFileSpec]]: ...
 
 
 class _MyDestPlugin(DestPlugin[MyConn, MyDest]):
@@ -289,6 +289,7 @@ class _MyDestPlugin(DestPlugin[MyConn, MyDest]):
 
 class _MyExplorer(Explorer[MyConn]):
     def metadata(self, conn: MyConn): ...
+
     def data(self, conn: MyConn, query: str): ...
 
 
