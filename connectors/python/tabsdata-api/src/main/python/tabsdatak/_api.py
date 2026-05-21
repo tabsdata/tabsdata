@@ -230,6 +230,8 @@ SECRET_NAME_CONSTRAINTS = AfterValidator(_validate_secret_name)
 NON_EMPTY_LIST_CONSTRAINTS = Field(min_length=1)
 
 
+CONTEXT_KEY_RE_STR = r'^(?=.{1,253}$)([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$'
+
 # ---------------------------------------------------------------------------
 # Pattern annotation marker for Env / Secret fields.
 #
@@ -378,9 +380,13 @@ def check_tz_aware_datetime(obj: Any) -> Any:
 #     are ``None``-bearing (see the docstring on them in ``api.py``);
 #     bare ``TableFrame`` / ``list[TableFrame]`` is rejected because
 #     it does not express the runtime's may-be-``None`` contract.
-#     Parameters past the first ``input_count`` are not inspected --
-#     the decorated function may take additional config / logger / etc.
-#     arguments.
+#   - An optional final positional parameter may be annotated as
+#     ``TrxCtx`` (or a subclass). When present the framework passes a
+#     transaction-context instance at call time; the function uses
+#     ``ctx.get_attr`` / ``ctx.store_attr`` to read state from the
+#     previous transaction and stage state for the next one. The
+#     return shape is unaffected -- ctx flows out via in-place updates
+#     on the context object, never via the return tuple.
 #   - The return is annotated as a fixed-length
 #     ``tuple[T1, ..., Tm]`` where ``m == output_count`` and each
 #     ``Ti`` is a ``TableFrameSpec`` slot.
@@ -525,6 +531,30 @@ def _format_expected_signature(
     )
 
 
+def _is_trx_ctx_slot(t: Any) -> bool:
+    # `TrxCtx` lives in `tabsdatak.api`, which imports from this
+    # module -- defer the import to avoid a load-time cycle.
+    from tabsdatak.api import TrxCtx
+
+    return isinstance(t, type) and issubclass(t, TrxCtx)
+
+
+def has_trx_ctx_param(func: Callable[..., Any]) -> bool:
+    """True if ``func``'s last parameter is annotated as ``TrxCtx`` (or a
+    subclass). The runtime uses this to decide whether to pass a
+    transaction-context instance when invoking the function."""
+    try:
+        hints = typing.get_type_hints(func)
+    except Exception:
+        return False
+    sig = inspect.signature(func)
+    params = list(sig.parameters.values())
+    if not params:
+        return False
+    last_hint = hints.get(params[-1].name)
+    return last_hint is not None and _is_trx_ctx_slot(last_hint)
+
+
 def check_callable_signature(
     func: Callable[..., Any],
     *,
@@ -547,11 +577,32 @@ def check_callable_signature(
 
     sig = inspect.signature(func)
     params = list(sig.parameters.values())
+
+    # Accepted shape:
+    #   - exactly ``input_count`` slot params, or
+    #   - ``input_count`` slot params followed by one optional trailing
+    #     param annotated as ``TrxCtx`` (or a subclass).
     if len(params) < input_count:
         raise ValueError(
             f"{name!r}: must declare at least {input_count} parameter(s) "
             f"(got {len(params)}){expected}"
         )
+    if len(params) > input_count + 1:
+        raise ValueError(
+            f"{name!r}: declares {len(params)} parameter(s) but only "
+            f"{input_count} input slot(s) plus an optional trailing "
+            f"TrxCtx parameter are allowed{expected}"
+        )
+    if len(params) == input_count + 1:
+        extra = params[input_count]
+        extra_hint = hints.get(extra.name)
+        if extra_hint is None or not _is_trx_ctx_slot(extra_hint):
+            raise ValueError(
+                f"{name!r}: trailing parameter {extra.name!r} is "
+                f"annotated as "
+                f"{_render_type(extra_hint) if extra_hint is not None else 'unannotated'!r} "
+                f"but must be a TrxCtx subclass{expected}"
+            )
 
     # Each of the first input_count parameters must have a slot-type annotation.
     for i in range(input_count):
