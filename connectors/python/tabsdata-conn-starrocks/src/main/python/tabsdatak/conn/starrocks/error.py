@@ -39,10 +39,7 @@ class StarRocksErrorCode(ErrorCode):
         StarRocksRuntimeException,
         "StarRocks write failed (table={table})",
     )  # _StarRocksDestPlugin: write failure inside write_out
-    STARROCKS_6 = ErrorDef(
-        StarRocksRuntimeException,
-        "StarRocks staging upload failed (table={table})",
-    )  # _StarRocksDestPlugin: failure uploading parquet to staging
+    # STARROCKS_6 reserved (unused).
     STARROCKS_7 = ErrorDef(
         StarRocksRuntimeException,
         "StarRocks staging location type is not supported: {kind}",

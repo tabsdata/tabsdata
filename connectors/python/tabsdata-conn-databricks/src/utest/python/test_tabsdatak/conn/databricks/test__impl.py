@@ -106,13 +106,13 @@ class TestFullyQualifyTable:
         conn = _conn(catalog=None, schema=None)
         with pytest.raises(DatabricksValidateException) as ei:
             _impl._fully_qualify_table(conn, "users")
-        assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_11
+        assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_10
 
     def test_two_part_without_catalog_raises(self):
         conn = _conn(catalog=None, schema=None)
         with pytest.raises(DatabricksValidateException) as ei:
             _impl._fully_qualify_table(conn, "analytics.users")
-        assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_11
+        assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_10
 
 
 # ---------------------------------------------------------------------------

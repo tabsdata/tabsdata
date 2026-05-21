@@ -412,7 +412,7 @@ def _fully_qualify_table(conn: DatabricksConn, table: str) -> str:
     :func:`_fq_for_sql` when feeding the value back into SQL, and use
     the bare parts directly for ``/Volumes/...`` paths.
 
-    Raises a :class:`DatabricksValidateException` (DATABRICKS_11) if
+    Raises a :class:`DatabricksValidateException` (DATABRICKS_10) if
     the result is not 3-part.
     """
     catalog = conn.catalog.value() if conn.catalog is not None else None
@@ -425,7 +425,7 @@ def _fully_qualify_table(conn: DatabricksConn, table: str) -> str:
     if any(p is None for p in parts):
         from tabsdatak.conn.databricks.error import DatabricksErrorCode
 
-        raise DatabricksErrorCode.DATABRICKS_11.exception(value=table)
+        raise DatabricksErrorCode.DATABRICKS_10.exception(value=table)
     return ".".join(parts)
 
 

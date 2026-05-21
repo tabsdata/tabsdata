@@ -84,7 +84,7 @@ class CloudLocation(_api.DescriptorBase, ABC):
     __kind__ = "bigQueryCloudLocation"
 
 
-@_api.dataclass(BigqueryErrorCode.BIGQUERY_9, kw_only=True)
+@_api.dataclass(BigqueryErrorCode.BIGQUERY_8, kw_only=True)
 class GCSLocation(CloudLocation):
     __kind__ = "bigQueryGcsLocation"
     bucket: GCSBucketSpec

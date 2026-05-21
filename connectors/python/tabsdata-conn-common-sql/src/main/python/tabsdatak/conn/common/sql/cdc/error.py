@@ -51,18 +51,12 @@ class SqlCdcErrorCode(ErrorCode):
         "Table {schema!r}.{table!r}: catalog column {catalog!r} does not "
         "match SQLAlchemy column {sa!r}",
     )
-    # Offset framing: caller tried to merge an offset from a
-    # different concrete type.
-    SQL_CDC_6 = ErrorDef(
-        SqlCdcRuntimeException,
-        "Offset type mismatch: cannot update {expected!r} with {actual!r}",
-    )
     # CdcFormat / position dataclasses: pydantic validation surfaced.
-    SQL_CDC_7 = ErrorDef(
+    SQL_CDC_6 = ErrorDef(
         SqlCdcInitException,
         "Cannot create CdcFormat",
     )
-    SQL_CDC_8 = ErrorDef(
+    SQL_CDC_7 = ErrorDef(
         SqlCdcInitException,
         "Cannot create TimestampPosition",
     )

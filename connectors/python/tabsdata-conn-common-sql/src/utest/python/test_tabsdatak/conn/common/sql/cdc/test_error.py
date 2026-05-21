@@ -34,7 +34,6 @@ def test_codes_are_numbered_consecutively_from_one():
         "SQL_CDC_5",
         "SQL_CDC_6",
         "SQL_CDC_7",
-        "SQL_CDC_8",
     ]
 
 

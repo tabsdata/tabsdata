@@ -216,7 +216,7 @@ class _DatabricksDestPlugin(DestPlugin[DatabricksDest]):
             # entry is path-like directly -- no ``.path`` access.
             _impl.write_all_tables(write_cfg, list(tables))
         except DatabricksValidateException:
-            raise  # adapter-side validation is already typed (DATABRICKS_11)
+            raise  # adapter-side validation is already typed (DATABRICKS_10)
         except Exception as e:  # noqa: BLE001 -- runtime wrapper
             if _is_connection_error(e):
                 raise DatabricksErrorCode.DATABRICKS_8.exception(
@@ -225,7 +225,7 @@ class _DatabricksDestPlugin(DestPlugin[DatabricksDest]):
                 )
             # COPY INTO failure -- best-effort table identification
             # via dest.tables.
-            raise DatabricksErrorCode.DATABRICKS_10.exception(
+            raise DatabricksErrorCode.DATABRICKS_9.exception(
                 cause=e,
                 table=", ".join(write_cfg.target_tables),
             )

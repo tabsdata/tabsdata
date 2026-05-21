@@ -42,7 +42,7 @@ QualifiedTablesSpec: TypeAlias = Union[QualifiedTableSpec, list[QualifiedTableSp
 RelativePositionSpec: TypeAlias = Literal["head", "tail"]
 
 
-@_api.dataclass(SqlCdcErrorCode.SQL_CDC_8, frozen=True, kw_only=True)
+@_api.dataclass(SqlCdcErrorCode.SQL_CDC_7, frozen=True, kw_only=True)
 class TimestampPosition:
     """Start CDC ingestion at the change-stream offset that
     corresponds to a wall-clock timestamp. The per-database ingester
@@ -67,7 +67,7 @@ class TimestampPosition:
 CdcColumnsFormatSpec: TypeAlias = Literal["columns", "struct", "map"]
 
 
-@_api.dataclass(SqlCdcErrorCode.SQL_CDC_7, frozen=True, kw_only=True)
+@_api.dataclass(SqlCdcErrorCode.SQL_CDC_6, frozen=True, kw_only=True)
 class CdcFormat:
     """Output format for emitted CDC rows.
 

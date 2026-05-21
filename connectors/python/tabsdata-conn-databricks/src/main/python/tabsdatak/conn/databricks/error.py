@@ -53,13 +53,9 @@ class DatabricksErrorCode(ErrorCode):
     )  # _DatabricksDestPlugin.write_out: workspace / sql connect failure
     DATABRICKS_9 = ErrorDef(
         DatabricksRuntimeException,
-        "Databricks upload to volume failed (table={table}, volume={volume})",
-    )  # _DatabricksDestPlugin.write_out: volume upload failure
-    DATABRICKS_10 = ErrorDef(
-        DatabricksRuntimeException,
         "Databricks COPY INTO failed (table={table})",
     )  # _DatabricksDestPlugin.write_out: COPY INTO failure
-    DATABRICKS_11 = ErrorDef(
+    DATABRICKS_10 = ErrorDef(
         DatabricksValidateException,
         "Databricks table name {value!r} must resolve to a fully-"
         "qualified 'catalog.schema.table' (set conn.catalog and/or"

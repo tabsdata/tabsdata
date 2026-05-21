@@ -254,7 +254,7 @@ def test_dest_plugin_wraps_connection_failure_as_databricks_8(
     assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_8
 
 
-def test_dest_plugin_wraps_copy_failure_as_databricks_10(
+def test_dest_plugin_wraps_copy_failure_as_databricks_9(
     monkeypatch, work_dir,
 ):
     monkeypatch.setattr(
@@ -268,20 +268,20 @@ def test_dest_plugin_wraps_copy_failure_as_databricks_10(
             _dest(),
             [_parquet(work_dir, "in.parquet")],
         )
-    assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_10
+    assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_9
 
 
 def test_dest_plugin_passes_validate_exception_through(
     monkeypatch, work_dir,
 ):
-    """DatabricksValidateException (e.g. DATABRICKS_11 from
+    """DatabricksValidateException (e.g. DATABRICKS_10 from
     ``_fully_qualify_table``) is already correctly typed; the
-    plugin must not wrap it in DATABRICKS_10."""
+    plugin must not wrap it in DATABRICKS_9."""
     monkeypatch.setattr(
         impl,
         "write_all_tables",
         MagicMock(
-            side_effect=DatabricksErrorCode.DATABRICKS_11.exception(
+            side_effect=DatabricksErrorCode.DATABRICKS_10.exception(
                 value="bad_name"
             ),
         ),
@@ -292,7 +292,7 @@ def test_dest_plugin_passes_validate_exception_through(
             _dest(),
             [_parquet(work_dir, "in.parquet")],
         )
-    assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_11
+    assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_10
 
 
 def test_dest_plugin_dispatches_to_adapter(monkeypatch, work_dir):
