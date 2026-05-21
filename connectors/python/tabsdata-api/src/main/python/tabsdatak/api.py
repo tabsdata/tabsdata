@@ -1,10 +1,10 @@
 import importlib
 import os
 import re
-from abc import ABC
+from abc import ABC, abstractmethod
 from typing import Annotated, Callable, TypeAlias, Union
 
-from pydantic import Field, model_validator
+from pydantic import Field, model_validator, StringConstraints
 
 # noinspection PyProtectedMember
 from tabsdatak import _api
@@ -319,3 +319,30 @@ def subscriber(
         return _info_cls("SubscriberInfo")(func, destination, input_tables, trigger_by)
 
     return _subscriber
+
+
+ContextKeySpec: TypeAlias = Annotated[str, StringConstraints(pattern=_api.CONTEXT_KEY_RE_STR)]
+ContextValueSpec: TypeAlias = Union[str, int, float, bool, list[str], dict[str, str]]
+
+class TrxCtx(ABC):
+
+    @property
+    @abstractmethod
+    def exec_plan_id(self) -> str: ...
+
+    @property
+    @abstractmethod
+    def trx_id(self) -> str: ...
+
+    @property
+    @abstractmethod
+    def exec_plan_ts(self) -> str: ...
+
+    @abstractmethod
+    def get_attr(self, attr: ContextKeySpec) -> ContextValueSpec | None: ...
+
+    @abstractmethod
+    def store_attr(self, attr: ContextKeySpec, val: ContextValueSpec | None): ...
+
+    @abstractmethod
+    def add_metadata(self, attr: ContextKeySpec, val: ContextValueSpec | None): ...

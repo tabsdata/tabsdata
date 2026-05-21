@@ -16,10 +16,10 @@ from typing import (
     get_type_hints,
 )
 
-from pydantic import ConfigDict, model_validator
+from pydantic import ConfigDict, model_validator, StringConstraints
 
 import tabsdatak._api as _api
-from tabsdatak.api import AutoSrc, Conn, Dest, Src
+from tabsdatak.api import AutoSrc, Conn, Dest, Src, TrxCtx
 from tabsdatak.error import ApiErrorCode
 
 
@@ -43,23 +43,31 @@ class TableMode(Enum):
     ARRAY = "array"
 
 
-class SrcContext(ABC):
+class PluginCtx(ABC):
+
+    @property
+    @abstractmethod
+    def collection_id(self) -> str: ...
+
+    @property
+    @abstractmethod
+    def collection_name(self) -> str: ...
+
+    @property
+    @abstractmethod
+    def function_id(self) -> str: ...
+
+    @property
+    @abstractmethod
+    def function_name(self) -> str: ...
+
+    @property
     @abstractmethod
     def work_dir(self) -> Path: ...
 
-    @property
-    @abstractmethod
-    def exec_plan_id(self) -> str: ...
 
-    @property
-    @abstractmethod
-    def trx_id(self) -> str: ...
 
-    @property
-    @abstractmethod
-    def exec_plan_ts(self) -> str: ...
-
-    # TODO RO access to metadata, RW access to state (e.g. last_mod).
+class SrcPluginCtx(TrxCtx, PluginCtx, ABC): ...
 
 
 class SrcPlugin[S: Src](ABC):
@@ -69,14 +77,10 @@ class SrcPlugin[S: Src](ABC):
     # always have exactly one element; ARRAY sources may have
     # variable-length inner lists.
     @abstractmethod
-    def read_in(self, ctx: SrcContext, src: S) -> list[list[TableFileSpec]]: ...
+    def read_in(self, ctx: SrcPluginCtx, src: S) -> list[list[TableFileSpec]]: ...
 
 
-class AutoSrcContext(ABC):
-    @abstractmethod
-    def work_dir(self) -> Path: ...
-
-    # TODO RO access to metadata, RW access to state (e.g. manifest).
+class AutoSrcPluginCtx(PluginCtx, ABC): ...
 
 
 class AutoSrcPlugin[AS: AutoSrc](ABC):
@@ -88,28 +92,12 @@ class AutoSrcPlugin[AS: AutoSrc](ABC):
     @abstractmethod
     def read_in(
         self,
-        ctx: AutoSrcContext,
+        ctx: AutoSrcPluginCtx,
         src: AS,
     ) -> tuple[ManifestFileSpec, list[list[TableFileSpec]]]: ...
 
 
-class DestContext(ABC):
-    @abstractmethod
-    def work_dir(self) -> Path: ...
-
-    @property
-    @abstractmethod
-    def exec_plan_id(self) -> str: ...
-
-    @property
-    @abstractmethod
-    def trx_id(self) -> str: ...
-
-    @property
-    @abstractmethod
-    def exec_plan_ts(self) -> str: ...
-
-    # TODO RO access to metadata, RW access to state.
+class DestContext(TrxCtx, PluginCtx, ABC): ...
 
 
 class DestPlugin[D: Dest](ABC):
