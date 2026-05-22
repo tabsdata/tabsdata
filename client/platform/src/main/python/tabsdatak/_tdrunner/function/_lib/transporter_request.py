@@ -4,9 +4,10 @@
 
 """Transporter request YAML builder.
 
-The publisher's prep-localize-state and prep-upload-state commands
-generate a YAML request that the `td_transporter` binary consumes to
-copy parquet files between cloud storage and local disk.
+The publisher's prep-localize-state, prep-upload-state and
+prep-upload-tables commands generate a YAML request that the
+`td_transporter` binary consumes to copy parquet files between cloud
+storage and local disk.
 
 Endpoint types and URI→endpoint resolution live in `endpoint.py` (a
 cloud-storage concern). This module owns the transporter binary's
@@ -18,6 +19,7 @@ on-wire YAML format: the `!CopyV1` envelope, the per-endpoint tags
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import yaml
 from pydantic import BaseModel, ConfigDict
@@ -32,7 +34,22 @@ from tabsdatak._tdrunner.function._lib.endpoint import (
     S3Endpoint,
     endpoint_from_location,
 )
+from tabsdatak._tdrunner.function._lib.outputs_manifest import (
+    MANIFEST_FILE_KEY,
+    MANIFEST_NAME_KEY,
+)
 from tabsdatak._tdrunner.function._lib.request import Request
+
+
+class OutputTableNotInManifestError(ValueError):
+    """A `request.output` table has no matching entry in the outputs manifest.
+
+    Raised by `build_upload_tables_request` when the function's outputs
+    manifest is missing a table that the request declares — typically a
+    sign of a mismatch between `info.output_tables` (in the bundle's
+    `function_def.json`) and `request.output` (set by the apiserver).
+    """
+
 
 # ---- copy request ---------------------------------------------------------
 
@@ -122,6 +139,52 @@ def build_upload_state_request(
                 source=LocalFileEndpoint(
                     url=_local_uri(state_dir / f"{table.name}.parquet")
                 ),
+                target=endpoint_from_location(table.location),
+            )
+        )
+    return TransporterCopyRequest(pairs=tuple(pairs))
+
+
+def build_upload_tables_request(
+    request: Request, manifest_entries: list[dict[str, Any]]
+) -> TransporterCopyRequest:
+    """Build a copy request that pushes the user-function's output
+    tables to cloud, using paths from the outputs manifest.
+
+    Iterates `request.output`. For each table with a non-null
+    `Location`, looks up the matching entry in `manifest_entries` by
+    name (manifest key `name`) and:
+      * skips when the manifest's `file` is `None` (the user function
+        returned `None` for this slot — "not modified this run");
+      * otherwise emits a `CopyPair` whose source is the absolute
+        parquet path the manifest carries.
+
+    Tables in `request.output` with `location is None` are silently
+    skipped (the apiserver didn't pre-allocate storage for them).
+
+    Raises:
+        OutputTableNotInManifestError: a `request.output` table with a
+            non-null location has no matching entry in
+            `manifest_entries`.
+    """
+    files_by_name: dict[str, str | None] = {
+        e[MANIFEST_NAME_KEY]: e.get(MANIFEST_FILE_KEY) for e in manifest_entries
+    }
+    pairs: list[CopyPair] = []
+    for table in request.output:
+        if table.location is None:
+            continue
+        if table.name not in files_by_name:
+            raise OutputTableNotInManifestError(
+                f"output table {table.name!r} declared in request "
+                f"has no entry in the outputs manifest"
+            )
+        src = files_by_name[table.name]
+        if src is None:
+            continue
+        pairs.append(
+            CopyPair(
+                source=LocalFileEndpoint(url=_local_uri(Path(src))),
                 target=endpoint_from_location(table.location),
             )
         )
