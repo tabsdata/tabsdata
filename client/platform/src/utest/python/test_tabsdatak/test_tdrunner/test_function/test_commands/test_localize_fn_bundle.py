@@ -36,7 +36,7 @@ def _set_argv(monkeypatch, request_path, dest_dir, liveness):
             "localize-fn-bundle",
             "--request",
             str(request_path),
-            "--dir",
+            "--bundle-dir",
             str(dest_dir),
             "--liveness",
             str(liveness),

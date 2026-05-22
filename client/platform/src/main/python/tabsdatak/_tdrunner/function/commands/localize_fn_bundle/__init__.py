@@ -6,7 +6,7 @@
 
 Step 3 of the publisher init-container chain. Reads the bundle URI from
 request.yaml, fetches the tarball via `td_transporter`, and extracts it
-into ``--dir``. See `docs/02-PublisherInitContainers.md`.
+into ``--bundle-dir``. See `docs/02-PublisherInitContainers.md`.
 
 Bundle-fetch protocol per Q-2.3 (option a): we shell out to
 `td_transporter` rather than doing HTTP/cloud-SDK fetches in Python — the
@@ -47,9 +47,9 @@ INFO = (
     "localize-fn-bundle — fetch the function bundle via td_transporter and extract it"
 )
 MAN = (
-    "localize-fn-bundle --request <PATH> --dir <PATH> --liveness <PATH>\n\n"
+    "localize-fn-bundle --request <PATH> --bundle-dir <PATH> --liveness <PATH>\n\n"
     "Reads the bundle URI from --request, downloads the tarball via "
-    "td_transporter, and extracts it to --dir. Step 3 of the publisher "
+    "td_transporter, and extracts it to --bundle-dir. Step 3 of the publisher "
     "init-container chain."
 )
 
@@ -68,7 +68,11 @@ def _build_parser():
         man=MAN,
     )
     parser.add_argument("--request", required=True, help="Path to request.yaml")
-    parser.add_argument("--dir", required=True, help="Destination dir for extraction")
+    parser.add_argument(
+        "--bundle-dir",
+        required=True,
+        help="Destination dir for bundle extraction",
+    )
     return parser
 
 
@@ -109,7 +113,7 @@ def _extract(archive: Path, dest_dir: Path) -> None:
 def _run() -> int:
     args = _build_parser().parse_args()
     request_path = Path(args.request)
-    dest_dir = Path(args.dir)
+    dest_dir = Path(args.bundle_dir)
     liveness_path = Path(args.liveness)
 
     with Liveness(liveness_path):

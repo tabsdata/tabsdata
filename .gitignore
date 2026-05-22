@@ -150,3 +150,8 @@ wheels/
 client/platform/src/main/python/tabsdata/assets
 src/main/python/tabsdata_agent/assets
 test-results
+
+# Local-only smoke-test harness for run-source-plugin / stamp-inputs.
+# Kept on disk for manual chain verification; never committed.
+/donotmerge.py
+/donotmergefolder/
