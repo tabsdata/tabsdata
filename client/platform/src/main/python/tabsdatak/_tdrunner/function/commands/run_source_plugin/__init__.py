@@ -19,7 +19,6 @@ from pathlib import Path
 from urllib.parse import urlparse
 from urllib.request import url2pathname
 
-import yaml
 from pydantic import ValidationError
 
 from tabsdatak._bundle import BUNDLE_MANIFEST_FILENAME, BUNDLE_USER_CODE_DIRNAME
@@ -27,6 +26,11 @@ from tabsdatak._connectors import get_src
 from tabsdatak._info import KIND_PUBLISHER_DEF, PublisherInfo, _unwrap_info
 from tabsdatak._tdrunner.function._lib.cli import build_parser, run_command
 from tabsdatak._tdrunner.function._lib.errors import CommandSpecificError
+from tabsdatak._tdrunner.function._lib.inputs_manifest import (
+    MANIFEST_FILES_KEY,
+    MANIFEST_NAME_KEY,
+    write_inputs_manifest,
+)
 from tabsdatak._tdrunner.function._lib.liveness import Liveness
 from tabsdatak._tdrunner.function._lib.request import (
     InvalidRequestError,
@@ -63,11 +67,6 @@ EXIT_WRONG_KIND = 13
 EXIT_NO_PLUGIN = 14
 EXIT_PLUGIN_FAILED = 15
 EXIT_MANIFEST_WRITE_FAILED = 16
-
-# Inputs-manifest YAML schema keys.
-_MANIFEST_INPUTS_KEY = "inputs"
-_MANIFEST_NAME_KEY = "name"
-_MANIFEST_FILES_KEY = "files"
 
 
 def _build_parser():
@@ -356,16 +355,14 @@ def _write_inputs_manifest(
 
     entries = [
         {
-            _MANIFEST_NAME_KEY: parameters[i],
-            _MANIFEST_FILES_KEY: [_normalise_table_file(f) for f in produced[i]],
+            MANIFEST_NAME_KEY: parameters[i],
+            MANIFEST_FILES_KEY: [_normalise_table_file(f) for f in produced[i]],
         }
         for i in range(cardinality)
     ]
-    data = {_MANIFEST_INPUTS_KEY: entries}
 
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+        write_inputs_manifest(entries, path)
     except OSError as exc:
         raise CommandSpecificError(
             EXIT_MANIFEST_WRITE_FAILED,
