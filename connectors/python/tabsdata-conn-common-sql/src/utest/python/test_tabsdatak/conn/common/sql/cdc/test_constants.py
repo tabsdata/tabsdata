@@ -15,25 +15,24 @@ def test_cdc_operation_codes():
 
 
 def test_meta_column_names_use_td_prefix():
-    # ``TD_CONNECTOR_COLUMN_PREFIX`` includes its trailing dot
-    # (``"@td."``), so the ``DOT.join`` composition produces a
-    # double-dot in the final name. The legacy CDC connectors emit
-    # the same shape; downstream consumers parse on these literals.
-    assert C.CDC_META_OP == "@td..cdc.meta.op"
-    assert C.CDC_META_TX == "@td..cdc.meta.tx"
-    assert C.CDC_META_SQ == "@td..cdc.meta.sq"
-    assert C.CDC_META_FMT == "@td..cdc.meta.fmt"
-    assert C.CDC_META_FLAT == "@td..cdc.meta.flat"
-    assert C.CDC_META_SCH == "@td..cdc.meta.sch"
+    # ``TD_CONNECTOR_COLUMN_PREFIX`` already carries its trailing dot
+    # (``"@td."``); composition concatenates it with dot-joined infixes
+    # so the resulting names contain a single dot between every segment.
+    assert C.CDC_META_OP == "@td.cdc.meta.op"
+    assert C.CDC_META_TX == "@td.cdc.meta.tx"
+    assert C.CDC_META_SQ == "@td.cdc.meta.sq"
+    assert C.CDC_META_FMT == "@td.cdc.meta.fmt"
+    assert C.CDC_META_FLAT == "@td.cdc.meta.flat"
+    assert C.CDC_META_SCH == "@td.cdc.meta.sch"
 
 
 def test_data_column_prefixes():
-    assert C.CDC_DATA_COL_NEW_PREFIX == "@td..cdc.data.col.new"
-    assert C.CDC_DATA_COL_OLD_PREFIX == "@td..cdc.data.col.old"
-    assert C.CDC_DATA_ROW_NEW == "@td..cdc.data.row.new"
-    assert C.CDC_DATA_ROW_OLD == "@td..cdc.data.row.old"
-    assert C.CDC_DATA_MAP_NEW == "@td..cdc.data.map.new"
-    assert C.CDC_DATA_MAP_OLD == "@td..cdc.data.map.old"
+    assert C.CDC_DATA_COL_NEW_PREFIX == "@td.cdc.data.col.new"
+    assert C.CDC_DATA_COL_OLD_PREFIX == "@td.cdc.data.col.old"
+    assert C.CDC_DATA_ROW_NEW == "@td.cdc.data.row.new"
+    assert C.CDC_DATA_ROW_OLD == "@td.cdc.data.row.old"
+    assert C.CDC_DATA_MAP_NEW == "@td.cdc.data.map.new"
+    assert C.CDC_DATA_MAP_OLD == "@td.cdc.data.map.old"
 
 
 def test_default_buffer_thresholds():

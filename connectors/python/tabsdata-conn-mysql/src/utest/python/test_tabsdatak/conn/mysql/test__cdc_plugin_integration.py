@@ -374,7 +374,7 @@ def test_cdc_update_and_delete_events_surface(fresh_mysql_cdc, tmp_path):
     files = _all_staged_files(ctx)
     assert files, "no committed manifest files produced"
     df = pl.concat([_read_parquet(p) for p in files])
-    # The meta-op column ``@td..cdc.meta.op`` is the discriminator.
+    # The meta-op column ``@td.cdc.meta.op`` is the discriminator.
     op_col = next(c for c in df.columns if c.endswith("cdc.meta.op"))
     ops = set(df[op_col].to_list())
     # We expect at least one INSERT (the seed) and one each of
