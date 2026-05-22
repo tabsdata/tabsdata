@@ -54,7 +54,7 @@ from tabsdatak._tdrunner.function._lib.inputs_manifest import (
     load_inputs_manifest,
     write_inputs_manifest,
 )
-from tabsdatak._tdrunner.function._lib.liveness import Liveness
+from tabsdatak._tdrunner.function._lib.liveness import install_liveness_handler
 from tabsdatak._tdrunner.function._lib.request import (
     InvalidRequestError,
     load_request,
@@ -192,52 +192,51 @@ def _run() -> int:
     inputs_manifest = Path(args.inputs_manifest)
     enriched_dir = Path(args.enriched_dir)
     enriched_manifest = Path(args.enriched_inputs_manifest)
-    liveness_path = Path(args.liveness)
+    install_liveness_handler(Path(args.liveness))
 
-    with Liveness(liveness_path):
-        request = _load_request_or_fail(request_path)
-        entries = _load_inputs_manifest_or_fail(inputs_manifest)
+    request = _load_request_or_fail(request_path)
+    entries = _load_inputs_manifest_or_fail(inputs_manifest)
 
-        execution = str(request.info.execution_id)
-        transaction = str(request.info.transaction_id)
-        # TODO: replace EMPTY_TIMESTAMP with `request.info.triggered_on`
-        # (or whatever the field ends up being named) once it lands in
-        # request.yaml's schema. See module docstring for the full
-        # cleanup plan.
-        timestamp = EMPTY_TIMESTAMP
+    execution = str(request.info.execution_id)
+    transaction = str(request.info.transaction_id)
+    # TODO: replace EMPTY_TIMESTAMP with `request.info.triggered_on`
+    # (or whatever the field ends up being named) once it lands in
+    # request.yaml's schema. See module docstring for the full
+    # cleanup plan.
+    timestamp = EMPTY_TIMESTAMP
 
-        enriched_entries: list[dict] = []
-        for slot_idx, entry in enumerate(entries):
-            name = entry.get(MANIFEST_NAME_KEY, f"slot{slot_idx}")
-            files = entry.get(MANIFEST_FILES_KEY) or []
+    enriched_entries: list[dict] = []
+    for slot_idx, entry in enumerate(entries):
+        name = entry.get(MANIFEST_NAME_KEY, f"slot{slot_idx}")
+        files = entry.get(MANIFEST_FILES_KEY) or []
 
-            slot_dir = enriched_dir / f"slot{slot_idx}"
-            enriched_files: list[str] = []
-            for src in files:
-                src_path = Path(src)
-                dest_path = slot_dir / src_path.name
-                _stamp_file(
-                    src_path,
-                    dest_path,
-                    execution=execution,
-                    transaction=transaction,
-                    version=EMPTY_VERSION,
-                    timestamp=timestamp,
-                )
-                enriched_files.append(str(dest_path.absolute()))
+        slot_dir = enriched_dir / f"slot{slot_idx}"
+        enriched_files: list[str] = []
+        for src in files:
+            src_path = Path(src)
+            dest_path = slot_dir / src_path.name
+            _stamp_file(
+                src_path,
+                dest_path,
+                execution=execution,
+                transaction=transaction,
+                version=EMPTY_VERSION,
+                timestamp=timestamp,
+            )
+            enriched_files.append(str(dest_path.absolute()))
 
-            enriched_entries.append({
-                MANIFEST_NAME_KEY: name,
-                MANIFEST_FILES_KEY: enriched_files,
-            })
+        enriched_entries.append({
+            MANIFEST_NAME_KEY: name,
+            MANIFEST_FILES_KEY: enriched_files,
+        })
 
-        try:
-            write_inputs_manifest(enriched_entries, enriched_manifest)
-        except OSError as exc:
-            raise CommandSpecificError(
-                EXIT_MANIFEST_WRITE_FAILED,
-                f"failed to write enriched inputs manifest {enriched_manifest}: {exc}",
-            ) from exc
+    try:
+        write_inputs_manifest(enriched_entries, enriched_manifest)
+    except OSError as exc:
+        raise CommandSpecificError(
+            EXIT_MANIFEST_WRITE_FAILED,
+            f"failed to write enriched inputs manifest {enriched_manifest}: {exc}",
+        ) from exc
     return 0
 
 

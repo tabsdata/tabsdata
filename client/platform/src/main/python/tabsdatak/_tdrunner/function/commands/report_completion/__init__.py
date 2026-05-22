@@ -40,7 +40,7 @@ from tabsdatak._tdrunner.function._lib.cli import (
     run_command,
 )
 from tabsdatak._tdrunner.function._lib.errors import CommandSpecificError
-from tabsdatak._tdrunner.function._lib.liveness import Liveness
+from tabsdatak._tdrunner.function._lib.liveness import install_liveness_handler
 from tabsdatak._tdrunner.function._lib.outputs_manifest import (
     MANIFEST_FILE_KEY,
     MANIFEST_NAME_KEY,
@@ -198,37 +198,36 @@ def _run() -> int:
     outputs_manifest_path = Path(args.outputs_manifest)
     state_dir = Path(args.state_dir)
     out_path = Path(args.out)
-    liveness_path = Path(args.liveness)
+    install_liveness_handler(Path(args.liveness))
 
-    with Liveness(liveness_path):
-        try:
-            request = load_request(request_path)
-        except (FileNotFoundError, InvalidRequestError) as exc:
-            raise CommandSpecificError(
-                EXIT_BAD_REQUEST, f"unreadable request.yaml: {exc}"
-            ) from exc
+    try:
+        request = load_request(request_path)
+    except (FileNotFoundError, InvalidRequestError) as exc:
+        raise CommandSpecificError(
+            EXIT_BAD_REQUEST, f"unreadable request.yaml: {exc}"
+        ) from exc
 
-        try:
-            manifest_entries = load_outputs_manifest(outputs_manifest_path)
-        except (FileNotFoundError, InvalidOutputsManifestError) as exc:
-            raise CommandSpecificError(
-                EXIT_BAD_MANIFEST,
-                f"unreadable outputs manifest: {exc}",
-            ) from exc
+    try:
+        manifest_entries = load_outputs_manifest(outputs_manifest_path)
+    except (FileNotFoundError, InvalidOutputsManifestError) as exc:
+        raise CommandSpecificError(
+            EXIT_BAD_MANIFEST,
+            f"unreadable outputs manifest: {exc}",
+        ) from exc
 
-        response = _build_response_payload(request, manifest_entries, state_dir)
+    response = _build_response_payload(request, manifest_entries, state_dir)
 
-        # Write the response to --out FIRST so it's persisted even when
-        # the subsequent POST fails.
-        try:
-            write_response(response, out_path)
-        except OSError as exc:
-            raise CommandSpecificError(
-                EXIT_WRITE_FAILED, f"failed to write {out_path}: {exc}"
-            ) from exc
+    # Write the response to --out FIRST so it's persisted even when
+    # the subsequent POST fails.
+    try:
+        write_response(response, out_path)
+    except OSError as exc:
+        raise CommandSpecificError(
+            EXIT_WRITE_FAILED, f"failed to write {out_path}: {exc}"
+        ) from exc
 
-        body = out_path.read_bytes()
-        _post(url, token, body)
+    body = out_path.read_bytes()
+    _post(url, token, body)
     return 0
 
 

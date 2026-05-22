@@ -56,7 +56,7 @@ from tabsdatak._tdrunner.function._lib.inputs_manifest import (
     InvalidManifestError,
     load_inputs_manifest,
 )
-from tabsdatak._tdrunner.function._lib.liveness import Liveness
+from tabsdatak._tdrunner.function._lib.liveness import install_liveness_handler
 from tabsdatak._tdrunner.function._lib.outputs_manifest import (
     MANIFEST_FILE_KEY,
     MANIFEST_NAME_KEY,
@@ -422,43 +422,42 @@ def _run() -> int:
     inputs_manifest_path = Path(args.inputs_manifest)
     out_dir = Path(args.out_dir)
     outputs_manifest_path = Path(args.outputs_manifest)
-    liveness_path = Path(args.liveness)
+    install_liveness_handler(Path(args.liveness))
 
-    with Liveness(liveness_path):
-        _load_request_or_fail(request_path)  # validates shape, not used otherwise yet
-        info = _load_function_def(bundle_dir)
-        entries = _load_inputs_manifest_or_fail(inputs_manifest_path)
+    _load_request_or_fail(request_path)  # validates shape, not used otherwise yet
+    info = _load_function_def(bundle_dir)
+    entries = _load_inputs_manifest_or_fail(inputs_manifest_path)
 
-        func = _unwrap_info(info.func)
-        table_modes = _infer_table_modes(func)
-        if len(entries) != len(table_modes):
-            raise CommandSpecificError(
-                EXIT_BAD_MANIFEST,
-                f"inputs manifest has {len(entries)} entries but the "
-                f"user function declares {len(table_modes)} input slots",
-            )
+    func = _unwrap_info(info.func)
+    table_modes = _infer_table_modes(func)
+    if len(entries) != len(table_modes):
+        raise CommandSpecificError(
+            EXIT_BAD_MANIFEST,
+            f"inputs manifest has {len(entries)} entries but the "
+            f"user function declares {len(table_modes)} input slots",
+        )
 
-        # Build the positional args for the user function from the
-        # inputs manifest. Manifest order mirrors function parameter
-        # order.
-        call_args: list[Any] = []
-        for entry, table_mode in zip(entries, table_modes):
-            files = entry.get(MANIFEST_FILES_KEY) or []
-            call_args.append(_materialise_input_slot(files, table_mode=table_mode))
+    # Build the positional args for the user function from the
+    # inputs manifest. Manifest order mirrors function parameter
+    # order.
+    call_args: list[Any] = []
+    for entry, table_mode in zip(entries, table_modes):
+        files = entry.get(MANIFEST_FILES_KEY) or []
+        call_args.append(_materialise_input_slot(files, table_mode=table_mode))
 
-        output_tables = _output_table_names(info)
-        result = _invoke_user_function(func, call_args, output_tables)
+    output_tables = _output_table_names(info)
+    result = _invoke_user_function(func, call_args, output_tables)
 
-        out_dir.mkdir(parents=True, exist_ok=True)
-        entries_out = _sink_outputs(result, output_tables, out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    entries_out = _sink_outputs(result, output_tables, out_dir)
 
-        try:
-            write_outputs_manifest(entries_out, outputs_manifest_path)
-        except OSError as exc:
-            raise CommandSpecificError(
-                EXIT_OUTPUTS_MANIFEST_WRITE_FAILED,
-                f"failed to write outputs manifest {outputs_manifest_path}: {exc}",
-            ) from exc
+    try:
+        write_outputs_manifest(entries_out, outputs_manifest_path)
+    except OSError as exc:
+        raise CommandSpecificError(
+            EXIT_OUTPUTS_MANIFEST_WRITE_FAILED,
+            f"failed to write outputs manifest {outputs_manifest_path}: {exc}",
+        ) from exc
 
     return 0
 

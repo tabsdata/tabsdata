@@ -34,7 +34,7 @@ from tabsdatak._tdrunner.function._lib.inputs_manifest import (
     MANIFEST_NAME_KEY,
     write_inputs_manifest,
 )
-from tabsdatak._tdrunner.function._lib.liveness import Liveness
+from tabsdatak._tdrunner.function._lib.liveness import install_liveness_handler
 from tabsdatak._tdrunner.function._lib.request import (
     InvalidRequestError,
     Request,
@@ -165,45 +165,44 @@ def _run() -> int:
     out_path = Path(args.out)
     inputs_manifest_path = Path(args.inputs_manifest)
     state_manifest_path = Path(args.state_manifest)
-    liveness_path = Path(args.liveness)
+    install_liveness_handler(Path(args.liveness))
 
-    with Liveness(liveness_path):
-        try:
-            request = load_request(request_path)
-        except (FileNotFoundError, InvalidRequestError) as exc:
-            raise CommandSpecificError(
-                EXIT_BAD_REQUEST, f"unreadable request.yaml: {exc}"
-            ) from exc
+    try:
+        request = load_request(request_path)
+    except (FileNotFoundError, InvalidRequestError) as exc:
+        raise CommandSpecificError(
+            EXIT_BAD_REQUEST, f"unreadable request.yaml: {exc}"
+        ) from exc
 
-        try:
-            copy_req = build_localize_state_request(request, in_dir, state_dir)
-        except UnsupportedSchemeError as exc:
-            raise CommandSpecificError(EXIT_UNSUPPORTED_SCHEME, str(exc)) from exc
+    try:
+        copy_req = build_localize_state_request(request, in_dir, state_dir)
+    except UnsupportedSchemeError as exc:
+        raise CommandSpecificError(EXIT_UNSUPPORTED_SCHEME, str(exc)) from exc
 
-        try:
-            write_transporter_request(copy_req, out_path)
-        except OSError as exc:
-            raise CommandSpecificError(
-                EXIT_WRITE_FAILED, f"failed to write {out_path}: {exc}"
-            ) from exc
+    try:
+        write_transporter_request(copy_req, out_path)
+    except OSError as exc:
+        raise CommandSpecificError(
+            EXIT_WRITE_FAILED, f"failed to write {out_path}: {exc}"
+        ) from exc
 
-        inputs_entries = _build_inputs_manifest_entries(request, in_dir)
-        try:
-            write_inputs_manifest(inputs_entries, inputs_manifest_path)
-        except OSError as exc:
-            raise CommandSpecificError(
-                EXIT_INPUTS_MANIFEST_WRITE_FAILED,
-                f"failed to write {inputs_manifest_path}: {exc}",
-            ) from exc
+    inputs_entries = _build_inputs_manifest_entries(request, in_dir)
+    try:
+        write_inputs_manifest(inputs_entries, inputs_manifest_path)
+    except OSError as exc:
+        raise CommandSpecificError(
+            EXIT_INPUTS_MANIFEST_WRITE_FAILED,
+            f"failed to write {inputs_manifest_path}: {exc}",
+        ) from exc
 
-        state_entries = _build_state_manifest_entries(request, state_dir)
-        try:
-            write_state_manifest(state_entries, state_manifest_path)
-        except OSError as exc:
-            raise CommandSpecificError(
-                EXIT_STATE_MANIFEST_WRITE_FAILED,
-                f"failed to write {state_manifest_path}: {exc}",
-            ) from exc
+    state_entries = _build_state_manifest_entries(request, state_dir)
+    try:
+        write_state_manifest(state_entries, state_manifest_path)
+    except OSError as exc:
+        raise CommandSpecificError(
+            EXIT_STATE_MANIFEST_WRITE_FAILED,
+            f"failed to write {state_manifest_path}: {exc}",
+        ) from exc
     return 0
 
 

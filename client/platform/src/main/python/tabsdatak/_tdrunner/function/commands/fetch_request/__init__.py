@@ -21,7 +21,7 @@ from tabsdatak._tdrunner.function._lib.cli import (
     run_command,
 )
 from tabsdatak._tdrunner.function._lib.errors import CommandSpecificError
-from tabsdatak._tdrunner.function._lib.liveness import Liveness
+from tabsdatak._tdrunner.function._lib.liveness import install_liveness_handler
 from tabsdatak._tdrunner.function.commands import tabsdata_command
 
 VERSION = "0.1.0"
@@ -62,16 +62,15 @@ def _run() -> int:
     url = resolve_value(args.url)
     token = resolve_value(args.token)
     out_path = Path(args.out)
-    liveness_path = Path(args.liveness)
+    install_liveness_handler(Path(args.liveness))
 
-    with Liveness(liveness_path):
-        body = _fetch(url, token)
-        try:
-            out_path.write_bytes(body)
-        except OSError as exc:
-            raise CommandSpecificError(
-                EXIT_WRITE_ERROR, f"failed to write {out_path}: {exc}"
-            ) from exc
+    body = _fetch(url, token)
+    try:
+        out_path.write_bytes(body)
+    except OSError as exc:
+        raise CommandSpecificError(
+            EXIT_WRITE_ERROR, f"failed to write {out_path}: {exc}"
+        ) from exc
     return 0
 
 

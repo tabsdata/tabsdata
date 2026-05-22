@@ -41,28 +41,28 @@ def _set_argv(monkeypatch, request_path: Path, report: Path, liveness: Path):
 def test_main_returns_zero_when_transporter_succeeds(monkeypatch, tmp_path):
     captured: dict = {}
 
-    def fake(request_yaml, report, liveness=None):
+    def fake(request_yaml, report):
         captured["request_yaml"] = request_yaml
         captured["report"] = report
-        captured["had_liveness"] = liveness is not None
         return 0
 
     monkeypatch.setattr(f"{_MOD}.run_transporter", fake)
     request = tmp_path / "transporter.yaml"
     report = tmp_path / "transporter-report.yaml"
-    _set_argv(monkeypatch, request, report, tmp_path / "live")
+    liveness = tmp_path / "live"
+    _set_argv(monkeypatch, request, report, liveness)
     rc = main()
     assert rc == 0
     assert captured["request_yaml"] == request
     assert captured["report"] == report
-    assert captured["had_liveness"] is True
+    # Installing the handler creates the liveness file before any
+    # transporter work runs.
+    assert liveness.exists()
 
 
 @pytest.mark.parametrize("rc", [1, 2, 7, 42])
 def test_main_propagates_nonzero_exit(monkeypatch, tmp_path, rc):
-    monkeypatch.setattr(
-        f"{_MOD}.run_transporter", lambda req, report, liveness=None: rc
-    )
+    monkeypatch.setattr(f"{_MOD}.run_transporter", lambda req, report: rc)
     _set_argv(
         monkeypatch,
         tmp_path / "x.yaml",
@@ -73,7 +73,7 @@ def test_main_propagates_nonzero_exit(monkeypatch, tmp_path, rc):
 
 
 def test_main_missing_binary_returns_command_specific(monkeypatch, tmp_path):
-    def fake(req, report, liveness=None):
+    def fake(req, report):
         raise TransporterNotFoundError("nope")
 
     monkeypatch.setattr(f"{_MOD}.run_transporter", fake)

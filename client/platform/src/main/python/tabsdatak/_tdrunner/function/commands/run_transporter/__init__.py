@@ -14,7 +14,7 @@ from pathlib import Path
 
 from tabsdatak._tdrunner.function._lib.cli import build_parser, run_command
 from tabsdatak._tdrunner.function._lib.errors import CommandSpecificError
-from tabsdatak._tdrunner.function._lib.liveness import Liveness
+from tabsdatak._tdrunner.function._lib.liveness import install_liveness_handler
 from tabsdatak._tdrunner.function._lib.transporter_proc import (
     TransporterNotFoundError,
     run_transporter,
@@ -61,9 +61,9 @@ def _run() -> int:
     args = _build_parser().parse_args()
     request_yaml = Path(args.request)
     report = Path(args.report)
-    liveness = Liveness(Path(args.liveness))
+    install_liveness_handler(Path(args.liveness))
     try:
-        return run_transporter(request_yaml, report, liveness=liveness)
+        return run_transporter(request_yaml, report)
     except TransporterNotFoundError as exc:
         raise CommandSpecificError(
             EXIT_BINARY_MISSING, f"td_transporter not found: {exc}"

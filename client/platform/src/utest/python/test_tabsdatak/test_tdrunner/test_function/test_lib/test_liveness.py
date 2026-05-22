@@ -4,22 +4,22 @@
 
 from __future__ import annotations
 
-import time
+import logging
+import os
+import threading
 
 import pytest
 
-from tabsdatak._tdrunner.function._lib import liveness as liveness_module
 from tabsdatak._tdrunner.function._lib.liveness import (
-    Liveness,
-    LivenessFailureError,
-    _max_failed_beats_from_env,
+    LivenessLogHandler,
     beat,
+    install_liveness_handler,
 )
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
 
-# --- beat ---
+# --- beat ----------------------------------------------------------------
 
 
 def test_beat_creates_file(tmp_path):
@@ -40,9 +40,7 @@ def test_beat_updates_mtime(tmp_path):
     p = tmp_path / "live"
     p.touch()
     initial_mtime = p.stat().st_mtime
-    # Force the mtime backwards so the next beat is observably newer.
-    import os
-
+    # Force mtime backwards so the next beat is observably newer.
     os.utime(p, (initial_mtime - 100.0, initial_mtime - 100.0))
     beat(p)
     assert p.stat().st_mtime > initial_mtime - 100.0
@@ -54,209 +52,202 @@ def test_beat_missing_parent_raises(tmp_path):
         beat(p)
 
 
-# --- Liveness (context-manager only) ---
+# --- LivenessLogHandler --------------------------------------------------
 
 
-def test_liveness_context_manager_creates_file(tmp_path):
+def _make_record(level: int = logging.INFO, msg: str = "x") -> logging.LogRecord:
+    return logging.LogRecord(
+        name="test",
+        level=level,
+        pathname=__file__,
+        lineno=0,
+        msg=msg,
+        args=None,
+        exc_info=None,
+    )
+
+
+def test_handler_touches_on_construction(tmp_path):
     p = tmp_path / "live"
-    with Liveness(p, interval=10.0):
-        pass
+    assert not p.exists()
+    LivenessLogHandler(p)
     assert p.exists()
 
 
-def test_liveness_stops_on_exception(tmp_path):
+def test_handler_emit_touches_file(tmp_path):
     p = tmp_path / "live"
-    live = Liveness(p, interval=10.0)
-    with pytest.raises(RuntimeError):
-        with live:
-            raise RuntimeError("boom")
-    assert live._thread is None
+    h = LivenessLogHandler(p)
+    initial_mtime = p.stat().st_mtime
+    # Force mtime backwards so the post-emit touch is observably newer.
+    os.utime(p, (initial_mtime - 100.0, initial_mtime - 100.0))
+    h.emit(_make_record())
+    assert p.stat().st_mtime > initial_mtime - 100.0
 
 
-def test_liveness_exit_exits_loop_promptly(tmp_path):
-    p = tmp_path / "live"
-    start = time.monotonic()
-    with Liveness(p, interval=60.0):
-        pass
-    elapsed = time.monotonic() - start
-    # If __exit__ didn't signal the Event, the daemon would sleep ~60s.
-    assert elapsed < 1.0
-
-
-def test_liveness_periodic_beats(tmp_path, monkeypatch):
-    """The daemon thread emits a beat more than once when intervals elapse."""
-    counter = {"n": 0}
-    event = __import__("threading").Event()
-
-    def counting_beat(path):
-        counter["n"] += 1
-        if counter["n"] >= 3:
-            event.set()
-
-    monkeypatch.setattr(liveness_module, "beat", counting_beat)
-
-    p = tmp_path / "live"
-    with Liveness(p, interval=0.005):
-        assert event.wait(timeout=2.0)
-    # Initial beat + at least 2 periodic beats
-    assert counter["n"] >= 3
-
-
-def test_liveness_enter_raises_if_parent_missing(tmp_path):
+def test_handler_construction_swallows_missing_parent(tmp_path):
+    """Construction with a missing parent dir doesn't raise; emit
+    surfaces the failure via handleError instead."""
     p = tmp_path / "no" / "such" / "live"
-    with pytest.raises(FileNotFoundError):
-        with Liveness(p, interval=10.0):
-            pytest.fail("body should not execute when __enter__ raises")
+    h = LivenessLogHandler(p)
+    # No exception during construction. emit will fail and go through
+    # handleError. We monkey the handler to capture it.
+    captured: list[logging.LogRecord] = []
+    h.handleError = lambda record: captured.append(record)  # type: ignore[method-assign]
+    h.emit(_make_record())
+    assert len(captured) == 1
 
 
-def test_liveness_beat_failure_inside_loop_does_not_kill_thread(
-    tmp_path, monkeypatch, caplog
-):
-    """A `beat` failure below the threshold is logged and the loop continues."""
-    import threading as _threading
-
-    calls = {"n": 0}
-    saw_failure = _threading.Event()
-    recovered = _threading.Event()
-
-    def flaky_beat(path):
-        calls["n"] += 1
-        # Initial beat from __enter__ succeeds (n=1). Next beat fails
-        # (n=2). Subsequent beats succeed; we want to observe at least
-        # one post-failure success to prove the thread survived.
-        if calls["n"] == 2:
-            saw_failure.set()
-            raise OSError("transient")
-        if calls["n"] >= 3:
-            recovered.set()
-
-    monkeypatch.setattr(liveness_module, "beat", flaky_beat)
-
+def test_handler_emit_routes_touch_errors_through_handleError(tmp_path, monkeypatch):
     p = tmp_path / "live"
-    with caplog.at_level("WARNING", logger="tabsdatak._tdrunner.function._lib.liveness"):
-        with Liveness(p, interval=0.005, max_failed_beats=99):
-            assert saw_failure.wait(timeout=2.0)
-            assert recovered.wait(timeout=2.0)
+    h = LivenessLogHandler(p)
 
-    assert calls["n"] >= 3  # at least one recovered beat after failure
-    assert any("liveness beat failed" in r.getMessage() for r in caplog.records)
+    captured: list[logging.LogRecord] = []
+    h.handleError = lambda record: captured.append(record)  # type: ignore[method-assign]
 
+    def boom(_self):
+        raise OSError("disk full")
 
-# --- max_failed_beats: env var & escalation ---
-
-
-def test_max_failed_beats_default_when_env_unset(monkeypatch):
-    monkeypatch.delenv("TD_LIVENESS_MAX_FAILED_BEATS", raising=False)
-    assert _max_failed_beats_from_env() == 5
+    monkeypatch.setattr("pathlib.Path.touch", boom)
+    h.emit(_make_record())
+    assert len(captured) == 1
 
 
-def test_max_failed_beats_from_env(monkeypatch):
-    monkeypatch.setenv("TD_LIVENESS_MAX_FAILED_BEATS", "12")
-    assert _max_failed_beats_from_env() == 12
-
-
-def test_max_failed_beats_non_integer_falls_back(monkeypatch, caplog):
-    monkeypatch.setenv("TD_LIVENESS_MAX_FAILED_BEATS", "not-an-int")
-    with caplog.at_level("WARNING", logger="tabsdatak._tdrunner.function._lib.liveness"):
-        assert _max_failed_beats_from_env() == 5
-    assert any("not an integer" in r.getMessage() for r in caplog.records)
-
-
-def test_max_failed_beats_below_one_falls_back(monkeypatch, caplog):
-    monkeypatch.setenv("TD_LIVENESS_MAX_FAILED_BEATS", "0")
-    with caplog.at_level("WARNING", logger="tabsdatak._tdrunner.function._lib.liveness"):
-        assert _max_failed_beats_from_env() == 5
-    assert any("below 1" in r.getMessage() for r in caplog.records)
-
-
-def test_liveness_constructor_overrides_env(monkeypatch, tmp_path):
-    monkeypatch.setenv("TD_LIVENESS_MAX_FAILED_BEATS", "3")
-    live = Liveness(tmp_path / "live", interval=10.0, max_failed_beats=7)
-    assert live._max_failed_beats == 7
-
-
-def test_liveness_threshold_raises_from_exit(tmp_path, monkeypatch, caplog):
-    """After max_failed_beats consecutive failures, __exit__ raises."""
-    import threading as _threading
-
-    threshold_hit = _threading.Event()
-
-    def always_fail_beat(path, _counter={"n": 0}):
-        _counter["n"] += 1
-        if _counter["n"] == 1:
-            # initial beat in __enter__ — succeed so the thread starts.
-            return
-        if _counter["n"] >= 4:
-            threshold_hit.set()
-        raise OSError("persistent disk error")
-
-    monkeypatch.setattr(liveness_module, "beat", always_fail_beat)
-
+def test_handler_survives_concurrent_emits(tmp_path):
+    """Many threads emitting simultaneously must not crash. Each touch
+    is idempotent — a few extra syscalls under contention is fine."""
     p = tmp_path / "live"
-    with caplog.at_level("ERROR", logger="tabsdatak._tdrunner.function._lib.liveness"):
-        with pytest.raises(LivenessFailureError, match="3 consecutive times"):
-            with Liveness(p, interval=0.005, max_failed_beats=3):
-                assert threshold_hit.wait(timeout=2.0)
-    assert any("marking stale" in r.getMessage() for r in caplog.records)
+    h = LivenessLogHandler(p)
+
+    def hammer():
+        for _ in range(100):
+            h.emit(_make_record())
+
+    threads = [threading.Thread(target=hammer) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert p.exists()
 
 
-def test_liveness_recovery_resets_counter(tmp_path, monkeypatch):
-    """Successful beats between failures reset the consecutive counter."""
-    import threading as _threading
+# --- install_liveness_handler -------------------------------------------
 
-    # Fail, fail, succeed, fail, fail — max consecutive = 2, threshold = 3.
-    # No raise expected.
-    pattern = iter([True, False, False, True, False, False])
-    done = _threading.Event()
-    seen = {"count": 0}
 
-    def patterned_beat(path):
-        seen["count"] += 1
-        if seen["count"] == 1:
-            return  # initial beat in __enter__ always succeeds
+def _cleanup_handler(handler: LivenessLogHandler):
+    logging.getLogger().removeHandler(handler)
+
+
+def test_install_attaches_handler_to_root_logger(tmp_path):
+    p = tmp_path / "live"
+    h = install_liveness_handler(p)
+    try:
+        assert h in logging.getLogger().handlers
+    finally:
+        _cleanup_handler(h)
+
+
+def test_install_returns_the_installed_handler(tmp_path):
+    p = tmp_path / "live"
+    h = install_liveness_handler(p)
+    try:
+        assert isinstance(h, LivenessLogHandler)
+    finally:
+        _cleanup_handler(h)
+
+
+def test_install_creates_file_immediately(tmp_path):
+    p = tmp_path / "live"
+    h = install_liveness_handler(p)
+    try:
+        assert p.exists()
+    finally:
+        _cleanup_handler(h)
+
+
+def test_install_is_idempotent_removes_prior_liveness_handler(tmp_path):
+    """A second install replaces the first — never accumulates."""
+    p1 = tmp_path / "live1"
+    p2 = tmp_path / "live2"
+    h1 = install_liveness_handler(p1)
+    h2 = install_liveness_handler(p2)
+    try:
+        handlers = [
+            h for h in logging.getLogger().handlers if isinstance(h, LivenessLogHandler)
+        ]
+        assert handlers == [h2]
+        assert h1 not in handlers
+    finally:
+        _cleanup_handler(h2)
+
+
+def test_install_does_not_remove_unrelated_handlers(tmp_path):
+    """Only previous LivenessLogHandlers are removed; stream handlers etc. stay."""
+    p = tmp_path / "live"
+    other = logging.StreamHandler()
+    logging.getLogger().addHandler(other)
+    try:
+        h = install_liveness_handler(p)
         try:
-            ok = next(pattern)
-        except StopIteration:
-            done.set()
-            return
-        if seen["count"] >= 6:
-            done.set()
-        if not ok:
-            raise OSError("transient")
+            assert other in logging.getLogger().handlers
+            assert h in logging.getLogger().handlers
+        finally:
+            _cleanup_handler(h)
+    finally:
+        logging.getLogger().removeHandler(other)
 
-    monkeypatch.setattr(liveness_module, "beat", patterned_beat)
 
+def test_install_bumps_root_level_so_info_records_reach_handler(tmp_path):
+    """After install, an INFO record from any child logger reaches the
+    handler — i.e. the root logger isn't filtering it out at level."""
+    root = logging.getLogger()
+    original_level = root.level
+    try:
+        root.setLevel(logging.WARNING)  # would suppress INFO
+        p = tmp_path / "live"
+        h = install_liveness_handler(p)
+        try:
+            initial_mtime = p.stat().st_mtime
+            os.utime(p, (initial_mtime - 100.0, initial_mtime - 100.0))
+            logging.getLogger("tabsdatak.child").info("hello")
+            assert p.stat().st_mtime > initial_mtime - 100.0
+        finally:
+            _cleanup_handler(h)
+    finally:
+        root.setLevel(original_level)
+
+
+def test_install_catches_records_from_third_party_loggers(tmp_path):
+    """Records from any top-level logger (sqlalchemy, polars, boto3,
+    …) propagate to root and tick the handler. This is the whole
+    point of attaching at root rather than at ``tabsdatak``.
+
+    We use a synthetic logger name rather than a real library name —
+    libraries actually loaded in the test process (e.g. sqlalchemy)
+    configure their own loggers' levels and can suppress an INFO
+    record at the emitting logger before it ever propagates to
+    root, which would have nothing to do with our install path.
+    """
     p = tmp_path / "live"
-    with Liveness(p, interval=0.005, max_failed_beats=3):
-        assert done.wait(timeout=2.0)
-    # Exited cleanly — counter never reached 3 consecutive failures.
+    h = install_liveness_handler(p)
+    try:
+        initial_mtime = p.stat().st_mtime
+        os.utime(p, (initial_mtime - 100.0, initial_mtime - 100.0))
+        logging.getLogger("td_test.fake_third_party_lib").info("hello")
+        assert p.stat().st_mtime > initial_mtime - 100.0
+    finally:
+        _cleanup_handler(h)
 
 
-def test_liveness_exit_suppresses_liveness_failure_when_body_raised(
-    tmp_path, monkeypatch, caplog
-):
-    """If the with-body raises, __exit__ doesn't shadow it with LivenessFailureError."""
-    import threading as _threading
-
-    threshold_hit = _threading.Event()
-
-    def always_fail(path, _counter={"n": 0}):
-        _counter["n"] += 1
-        if _counter["n"] == 1:
-            return  # initial beat
-        if _counter["n"] >= 3:
-            threshold_hit.set()
-        raise OSError("disk")
-
-    monkeypatch.setattr(liveness_module, "beat", always_fail)
-
+def test_install_logger_emit_propagates_to_handler(tmp_path):
+    """End-to-end: a logger.info() call from a sub-logger ticks the
+    file via the installed handler. Covers the path tdrunner code
+    relies on."""
     p = tmp_path / "live"
-    with caplog.at_level("ERROR", logger="tabsdatak._tdrunner.function._lib.liveness"):
-        with pytest.raises(RuntimeError, match="body error") as exc_info:
-            with Liveness(p, interval=0.005, max_failed_beats=2):
-                assert threshold_hit.wait(timeout=2.0)
-                raise RuntimeError("body error")
-    # The body's RuntimeError propagated, NOT LivenessFailureError.
-    assert not isinstance(exc_info.value, LivenessFailureError)
-    # The liveness failure was logged at ERROR so it's still visible.
-    assert any("liveness failure suppressed" in r.getMessage() for r in caplog.records)
+    h = install_liveness_handler(p)
+    try:
+        initial_mtime = p.stat().st_mtime
+        os.utime(p, (initial_mtime - 100.0, initial_mtime - 100.0))
+        logging.getLogger("tabsdatak._tdrunner.function.commands.x").info("x")
+        assert p.stat().st_mtime > initial_mtime - 100.0
+    finally:
+        _cleanup_handler(h)

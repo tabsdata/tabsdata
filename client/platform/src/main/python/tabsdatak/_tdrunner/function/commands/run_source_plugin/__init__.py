@@ -31,7 +31,7 @@ from tabsdatak._tdrunner.function._lib.inputs_manifest import (
     MANIFEST_NAME_KEY,
     write_inputs_manifest,
 )
-from tabsdatak._tdrunner.function._lib.liveness import Liveness
+from tabsdatak._tdrunner.function._lib.liveness import install_liveness_handler
 from tabsdatak._tdrunner.function._lib.request import (
     InvalidRequestError,
     load_request,
@@ -376,22 +376,21 @@ def _run() -> int:
     bundle_dir = Path(args.bundle_dir)
     out_dir = Path(args.out_dir)
     inputs_manifest = Path(args.inputs_manifest)
-    liveness_path = Path(args.liveness)
+    install_liveness_handler(Path(args.liveness))
 
-    with Liveness(liveness_path):
-        request = _load_request(request_path)
-        info = _load_function_def(bundle_dir)
-        plugin = _resolve_plugin(info)
-        ctx = _SrcContext(
-            work_dir=out_dir,
-            exec_plan_id=str(request.info.execution_id),
-            trx_id=str(request.info.transaction_id),
-            collection_id=str(request.info.collection_id),
-            collection_name=request.info.collection,
-            function_id=str(request.info.function_run_id),
-        )
-        produced = _invoke_read_in(plugin, ctx, info.source)
-        _write_inputs_manifest(info, produced, inputs_manifest)
+    request = _load_request(request_path)
+    info = _load_function_def(bundle_dir)
+    plugin = _resolve_plugin(info)
+    ctx = _SrcContext(
+        work_dir=out_dir,
+        exec_plan_id=str(request.info.execution_id),
+        trx_id=str(request.info.transaction_id),
+        collection_id=str(request.info.collection_id),
+        collection_name=request.info.collection,
+        function_id=str(request.info.function_run_id),
+    )
+    produced = _invoke_read_in(plugin, ctx, info.source)
+    _write_inputs_manifest(info, produced, inputs_manifest)
     return 0
 
 

@@ -27,7 +27,7 @@ from pathlib import Path
 from tabsdatak._tdrunner.function._lib.bundle import extract_bundle
 from tabsdatak._tdrunner.function._lib.cli import build_parser, run_command
 from tabsdatak._tdrunner.function._lib.errors import CommandSpecificError
-from tabsdatak._tdrunner.function._lib.liveness import Liveness
+from tabsdatak._tdrunner.function._lib.liveness import install_liveness_handler
 from tabsdatak._tdrunner.function._lib.request import (
     InvalidRequestError,
     load_request,
@@ -116,19 +116,18 @@ def _run() -> int:
     args = _build_parser().parse_args()
     request_path = Path(args.request)
     dest_dir = Path(args.bundle_dir)
-    liveness_path = Path(args.liveness)
+    install_liveness_handler(Path(args.liveness))
 
-    with Liveness(liveness_path):
-        request = _load_request(request_path)
-        with tempfile.TemporaryDirectory() as tmp:
-            tmp_dir = Path(tmp)
-            bundle_local = tmp_dir / "bundle.tar.gz"
-            transporter_yaml = tmp_dir / "transporter.yaml"
-            transporter_report = tmp_dir / "transporter-report.yaml"
-            _fetch_via_transporter(
-                request, bundle_local, transporter_yaml, transporter_report
-            )
-            _extract(bundle_local, dest_dir)
+    request = _load_request(request_path)
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_dir = Path(tmp)
+        bundle_local = tmp_dir / "bundle.tar.gz"
+        transporter_yaml = tmp_dir / "transporter.yaml"
+        transporter_report = tmp_dir / "transporter-report.yaml"
+        _fetch_via_transporter(
+            request, bundle_local, transporter_yaml, transporter_report
+        )
+        _extract(bundle_local, dest_dir)
     return 0
 
 

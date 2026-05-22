@@ -29,7 +29,7 @@ from pathlib import Path
 from tabsdatak._tdrunner.function._lib.cli import build_parser, run_command
 from tabsdatak._tdrunner.function._lib.endpoint import UnsupportedSchemeError
 from tabsdatak._tdrunner.function._lib.errors import CommandSpecificError
-from tabsdatak._tdrunner.function._lib.liveness import Liveness
+from tabsdatak._tdrunner.function._lib.liveness import install_liveness_handler
 from tabsdatak._tdrunner.function._lib.outputs_manifest import (
     InvalidOutputsManifestError,
     load_outputs_manifest,
@@ -96,37 +96,36 @@ def _run() -> int:
     request_path = Path(args.request)
     outputs_manifest_path = Path(args.outputs_manifest)
     out_path = Path(args.out)
-    liveness_path = Path(args.liveness)
+    install_liveness_handler(Path(args.liveness))
 
-    with Liveness(liveness_path):
-        try:
-            request = load_request(request_path)
-        except (FileNotFoundError, InvalidRequestError) as exc:
-            raise CommandSpecificError(
-                EXIT_BAD_REQUEST, f"unreadable request.yaml: {exc}"
-            ) from exc
+    try:
+        request = load_request(request_path)
+    except (FileNotFoundError, InvalidRequestError) as exc:
+        raise CommandSpecificError(
+            EXIT_BAD_REQUEST, f"unreadable request.yaml: {exc}"
+        ) from exc
 
-        try:
-            manifest_entries = load_outputs_manifest(outputs_manifest_path)
-        except (FileNotFoundError, InvalidOutputsManifestError) as exc:
-            raise CommandSpecificError(
-                EXIT_BAD_MANIFEST,
-                f"unreadable outputs manifest: {exc}",
-            ) from exc
+    try:
+        manifest_entries = load_outputs_manifest(outputs_manifest_path)
+    except (FileNotFoundError, InvalidOutputsManifestError) as exc:
+        raise CommandSpecificError(
+            EXIT_BAD_MANIFEST,
+            f"unreadable outputs manifest: {exc}",
+        ) from exc
 
-        try:
-            copy_req = build_upload_tables_request(request, manifest_entries)
-        except OutputTableNotInManifestError as exc:
-            raise CommandSpecificError(EXIT_MANIFEST_MISMATCH, str(exc)) from exc
-        except UnsupportedSchemeError as exc:
-            raise CommandSpecificError(EXIT_UNSUPPORTED_SCHEME, str(exc)) from exc
+    try:
+        copy_req = build_upload_tables_request(request, manifest_entries)
+    except OutputTableNotInManifestError as exc:
+        raise CommandSpecificError(EXIT_MANIFEST_MISMATCH, str(exc)) from exc
+    except UnsupportedSchemeError as exc:
+        raise CommandSpecificError(EXIT_UNSUPPORTED_SCHEME, str(exc)) from exc
 
-        try:
-            write_transporter_request(copy_req, out_path)
-        except OSError as exc:
-            raise CommandSpecificError(
-                EXIT_WRITE_FAILED, f"failed to write {out_path}: {exc}"
-            ) from exc
+    try:
+        write_transporter_request(copy_req, out_path)
+    except OSError as exc:
+        raise CommandSpecificError(
+            EXIT_WRITE_FAILED, f"failed to write {out_path}: {exc}"
+        ) from exc
     return 0
 
 

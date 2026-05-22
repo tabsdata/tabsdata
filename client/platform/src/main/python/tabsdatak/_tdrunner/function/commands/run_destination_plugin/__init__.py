@@ -32,7 +32,7 @@ from tabsdatak._connectors import get_dest
 from tabsdatak._info import KIND_SUBSCRIBER_DEF, SubscriberInfo
 from tabsdatak._tdrunner.function._lib.cli import build_parser, run_command
 from tabsdatak._tdrunner.function._lib.errors import CommandSpecificError
-from tabsdatak._tdrunner.function._lib.liveness import Liveness
+from tabsdatak._tdrunner.function._lib.liveness import install_liveness_handler
 from tabsdatak._tdrunner.function._lib.outputs_manifest import (
     MANIFEST_FILE_KEY,
     MANIFEST_NAME_KEY,
@@ -298,25 +298,24 @@ def _run() -> int:
     request_path = Path(args.request)
     bundle_dir = Path(args.bundle_dir)
     outputs_manifest_path = Path(args.outputs_manifest)
-    liveness_path = Path(args.liveness)
+    install_liveness_handler(Path(args.liveness))
 
-    with Liveness(liveness_path):
-        request = _load_request_or_fail(request_path)
-        info = _load_function_def(bundle_dir)
-        plugin = _resolve_plugin(info)
+    request = _load_request_or_fail(request_path)
+    info = _load_function_def(bundle_dir)
+    plugin = _resolve_plugin(info)
 
-        entries = _load_outputs_manifest_or_fail(outputs_manifest_path)
-        tables = _tables_from_manifest(entries)
+    entries = _load_outputs_manifest_or_fail(outputs_manifest_path)
+    tables = _tables_from_manifest(entries)
 
-        ctx = _DestContext(
-            work_dir=bundle_dir,
-            exec_plan_id=str(request.info.execution_id),
-            trx_id=str(request.info.transaction_id),
-            collection_id=str(request.info.collection_id),
-            collection_name=request.info.collection,
-            function_id=str(request.info.function_run_id),
-        )
-        _invoke_write_out(plugin, ctx, info.destination, tables)
+    ctx = _DestContext(
+        work_dir=bundle_dir,
+        exec_plan_id=str(request.info.execution_id),
+        trx_id=str(request.info.transaction_id),
+        collection_id=str(request.info.collection_id),
+        collection_name=request.info.collection,
+        function_id=str(request.info.function_run_id),
+    )
+    _invoke_write_out(plugin, ctx, info.destination, tables)
     return 0
 
 
