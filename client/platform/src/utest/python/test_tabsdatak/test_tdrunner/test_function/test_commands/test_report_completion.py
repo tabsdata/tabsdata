@@ -18,8 +18,10 @@ import pytest
 import yaml
 
 from tabsdatak._tdrunner.function.commands.report_completion import (
+    EXIT_BAD_MANIFEST,
     EXIT_BAD_REQUEST,
     EXIT_HTTP_ERROR,
+    EXIT_MANIFEST_MISMATCH,
     EXIT_WRITE_FAILED,
     main,
 )
@@ -36,7 +38,7 @@ def _set_argv(
     url,
     token,
     request,
-    out_dir,
+    outputs_manifest,
     state_dir,
     out,
     liveness,
@@ -52,8 +54,8 @@ def _set_argv(
             str(token),
             "--request",
             str(request),
-            "--out-dir",
-            str(out_dir),
+            "--outputs-manifest",
+            str(outputs_manifest),
             "--state-dir",
             str(state_dir),
             "--out",
@@ -78,6 +80,11 @@ def _write_request(path, *, output=None, system_output=None):
         "system_output": system_output or [],
     }
     path.write_text(yaml.safe_dump(body))
+    return path
+
+
+def _write_manifest(path: Path, entries: list) -> Path:
+    path.write_text(yaml.safe_dump({"outputs": entries}))
     return path
 
 
@@ -137,10 +144,14 @@ def test_main_writes_response_and_posts(monkeypatch, tmp_path, http_server):
         output=[{"name": "customers"}],
         system_output=[{"name": "td-initial-values"}],
     )
-    out_dir = tmp_path / "out"
     state_dir = tmp_path / "state"
-    _write_parquet(out_dir / "customers.parquet", id=[1, 2, 3], name=["a", "b", "c"])
+    customers_parquet = tmp_path / "out" / "slot0" / "customers.parquet"
+    _write_parquet(customers_parquet, id=[1, 2, 3], name=["a", "b", "c"])
     _write_parquet(state_dir / "td-initial-values.parquet", offset=[42])
+    manifest = _write_manifest(
+        tmp_path / "outputs_manifest.yaml",
+        [{"name": "customers", "file": str(customers_parquet)}],
+    )
 
     out = tmp_path / "response.yaml"
     _set_argv(
@@ -148,7 +159,7 @@ def test_main_writes_response_and_posts(monkeypatch, tmp_path, http_server):
         url=f"{base_url}/api/v1/done",
         token="tok",
         request=request_yaml,
-        out_dir=out_dir,
+        outputs_manifest=manifest,
         state_dir=state_dir,
         out=out,
         liveness=tmp_path / "live",
@@ -172,10 +183,16 @@ def test_main_writes_response_and_posts(monkeypatch, tmp_path, http_server):
     assert posted["body"] == body
 
 
-def test_main_no_info_when_parquet_missing(monkeypatch, tmp_path, http_server):
+def test_main_no_info_when_manifest_file_is_null(monkeypatch, tmp_path, http_server):
+    """A manifest entry with `file: null` (user returned None for that
+    slot) yields a NoData entry in the response."""
     base_url, _, _ = http_server
     request_yaml = _write_request(
         tmp_path / "request.yaml", output=[{"name": "missing"}]
+    )
+    manifest = _write_manifest(
+        tmp_path / "outputs_manifest.yaml",
+        [{"name": "missing", "file": None}],
     )
     out = tmp_path / "response.yaml"
     _set_argv(
@@ -183,7 +200,7 @@ def test_main_no_info_when_parquet_missing(monkeypatch, tmp_path, http_server):
         url=f"{base_url}/done",
         token="tok",
         request=request_yaml,
-        out_dir=tmp_path / "out",
+        outputs_manifest=manifest,
         state_dir=tmp_path / "state",
         out=out,
         liveness=tmp_path / "live",
@@ -193,17 +210,43 @@ def test_main_no_info_when_parquet_missing(monkeypatch, tmp_path, http_server):
     assert parsed["output"][0] == {"table": "missing"}
 
 
+def test_main_no_info_when_state_parquet_missing(monkeypatch, tmp_path, http_server):
+    """A request.system_output table whose parquet doesn't exist in
+    state_dir yields a NoData entry."""
+    base_url, _, _ = http_server
+    request_yaml = _write_request(
+        tmp_path / "request.yaml",
+        system_output=[{"name": "unwritten-state"}],
+    )
+    manifest = _write_manifest(tmp_path / "outputs_manifest.yaml", [])
+    out = tmp_path / "response.yaml"
+    _set_argv(
+        monkeypatch,
+        url=f"{base_url}/done",
+        token="tok",
+        request=request_yaml,
+        outputs_manifest=manifest,
+        state_dir=tmp_path / "state",
+        out=out,
+        liveness=tmp_path / "live",
+    )
+    assert main() == 0
+    parsed = yaml.safe_load(out.read_text())
+    assert parsed["output"][0] == {"table": "unwritten-state"}
+
+
 def test_main_resolves_env_refs(monkeypatch, tmp_path, http_server):
     base_url, request_log, _ = http_server
     monkeypatch.setenv("TD_TEST_RC_URL", f"{base_url}/done")
     monkeypatch.setenv("TD_TEST_RC_TOK", "secret")
     request_yaml = _write_request(tmp_path / "request.yaml")
+    manifest = _write_manifest(tmp_path / "outputs_manifest.yaml", [])
     _set_argv(
         monkeypatch,
         url="env:TD_TEST_RC_URL",
         token="env:TD_TEST_RC_TOK",
         request=request_yaml,
-        out_dir=tmp_path / "out",
+        outputs_manifest=manifest,
         state_dir=tmp_path / "state",
         out=tmp_path / "response.yaml",
         liveness=tmp_path / "live",
@@ -217,17 +260,73 @@ def test_main_resolves_env_refs(monkeypatch, tmp_path, http_server):
 
 def test_main_missing_request_returns_bad_request(monkeypatch, tmp_path, http_server):
     base_url, _, _ = http_server
+    manifest = _write_manifest(tmp_path / "outputs_manifest.yaml", [])
     _set_argv(
         monkeypatch,
         url=f"{base_url}/done",
         token="tok",
         request=tmp_path / "no-request.yaml",
-        out_dir=tmp_path / "out",
+        outputs_manifest=manifest,
         state_dir=tmp_path / "state",
         out=tmp_path / "response.yaml",
         liveness=tmp_path / "live",
     )
     assert main() == EXIT_BAD_REQUEST
+
+
+def test_main_missing_manifest_returns_bad_manifest(monkeypatch, tmp_path, http_server):
+    base_url, _, _ = http_server
+    request_yaml = _write_request(tmp_path / "request.yaml")
+    _set_argv(
+        monkeypatch,
+        url=f"{base_url}/done",
+        token="tok",
+        request=request_yaml,
+        outputs_manifest=tmp_path / "no-manifest.yaml",
+        state_dir=tmp_path / "state",
+        out=tmp_path / "response.yaml",
+        liveness=tmp_path / "live",
+    )
+    assert main() == EXIT_BAD_MANIFEST
+
+
+def test_main_malformed_manifest_returns_bad_manifest(
+    monkeypatch, tmp_path, http_server
+):
+    base_url, _, _ = http_server
+    request_yaml = _write_request(tmp_path / "request.yaml")
+    bad = tmp_path / "outputs_manifest.yaml"
+    bad.write_text("outputs: [{unclosed")
+    _set_argv(
+        monkeypatch,
+        url=f"{base_url}/done",
+        token="tok",
+        request=request_yaml,
+        outputs_manifest=bad,
+        state_dir=tmp_path / "state",
+        out=tmp_path / "response.yaml",
+        liveness=tmp_path / "live",
+    )
+    assert main() == EXIT_BAD_MANIFEST
+
+
+def test_main_output_table_missing_from_manifest_returns_mismatch(
+    monkeypatch, tmp_path, http_server
+):
+    base_url, _, _ = http_server
+    request_yaml = _write_request(tmp_path / "request.yaml", output=[{"name": "ghost"}])
+    manifest = _write_manifest(tmp_path / "outputs_manifest.yaml", [])
+    _set_argv(
+        monkeypatch,
+        url=f"{base_url}/done",
+        token="tok",
+        request=request_yaml,
+        outputs_manifest=manifest,
+        state_dir=tmp_path / "state",
+        out=tmp_path / "response.yaml",
+        liveness=tmp_path / "live",
+    )
+    assert main() == EXIT_MANIFEST_MISMATCH
 
 
 def test_main_http_error_returns_http_error_but_writes_out(
@@ -236,13 +335,14 @@ def test_main_http_error_returns_http_error_but_writes_out(
     base_url, _, server = http_server
     server.next_status = 500
     request_yaml = _write_request(tmp_path / "request.yaml")
+    manifest = _write_manifest(tmp_path / "outputs_manifest.yaml", [])
     out = tmp_path / "response.yaml"
     _set_argv(
         monkeypatch,
         url=f"{base_url}/done",
         token="tok",
         request=request_yaml,
-        out_dir=tmp_path / "out",
+        outputs_manifest=manifest,
         state_dir=tmp_path / "state",
         out=out,
         liveness=tmp_path / "live",
@@ -260,12 +360,13 @@ def test_main_url_error_returns_http_error(monkeypatch, tmp_path):
 
     monkeypatch.setattr(urllib.request, "urlopen", fake)
     request_yaml = _write_request(tmp_path / "request.yaml")
+    manifest = _write_manifest(tmp_path / "outputs_manifest.yaml", [])
     _set_argv(
         monkeypatch,
         url="http://127.0.0.1:1/done",
         token="tok",
         request=request_yaml,
-        out_dir=tmp_path / "out",
+        outputs_manifest=manifest,
         state_dir=tmp_path / "state",
         out=tmp_path / "response.yaml",
         liveness=tmp_path / "live",
@@ -276,12 +377,13 @@ def test_main_url_error_returns_http_error(monkeypatch, tmp_path):
 def test_main_write_error_returns_write_failed(monkeypatch, tmp_path, http_server):
     base_url, _, _ = http_server
     request_yaml = _write_request(tmp_path / "request.yaml")
+    manifest = _write_manifest(tmp_path / "outputs_manifest.yaml", [])
     _set_argv(
         monkeypatch,
         url=f"{base_url}/done",
         token="tok",
         request=request_yaml,
-        out_dir=tmp_path / "out",
+        outputs_manifest=manifest,
         state_dir=tmp_path / "state",
         out=tmp_path / "no" / "such" / "response.yaml",
         liveness=tmp_path / "live",
