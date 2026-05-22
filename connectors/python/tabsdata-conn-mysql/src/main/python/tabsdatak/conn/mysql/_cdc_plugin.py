@@ -98,7 +98,9 @@ def _build_cdc_run_config(
         buffer_max_bytes=cfg.get(_KEY_CDC_BUFFER_MAX_BYTES, DEFAULT_BUFFER_MAX_BYTES),
         buffer_max_secs=cfg.get(_KEY_CDC_BUFFER_MAX_SECS, DEFAULT_BUFFER_MAX_SECS),
         trigger_max_rows=cfg.get(_KEY_CDC_TRIGGER_MAX_ROWS, DEFAULT_TRIGGER_MAX_ROWS),
-        trigger_max_bytes=cfg.get(_KEY_CDC_TRIGGER_MAX_BYTES, DEFAULT_TRIGGER_MAX_BYTES),
+        trigger_max_bytes=cfg.get(
+            _KEY_CDC_TRIGGER_MAX_BYTES, DEFAULT_TRIGGER_MAX_BYTES
+        ),
         trigger_max_secs=cfg.get(_KEY_CDC_TRIGGER_MAX_SECS, DEFAULT_TRIGGER_MAX_SECS),
         poll_interval_seconds=cfg.get(
             _KEY_CDC_POLL_INTERVAL, DEFAULT_POLL_INTERVAL_SECONDS
@@ -126,10 +128,8 @@ class MySQLCdcStreamSrcPlugin(StreamSrcPlugin[MySQLCdcStreamSrc]):
             len(stream_src.tables or []),
             stream_src.start_from,
         )
-        blocking_timeout = (
-            (stream_src.src_cfg or {}).get(
-                _KEY_CDC_BLOCKING_TIMEOUT, DEFAULT_BLOCKING_TIMEOUT_SECONDS
-            )
+        blocking_timeout = (stream_src.src_cfg or {}).get(
+            _KEY_CDC_BLOCKING_TIMEOUT, DEFAULT_BLOCKING_TIMEOUT_SECONDS
         )
         ingester = BinlogIngester(
             conn=conn,

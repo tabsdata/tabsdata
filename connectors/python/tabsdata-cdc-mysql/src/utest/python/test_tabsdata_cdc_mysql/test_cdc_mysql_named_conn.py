@@ -50,6 +50,8 @@ from test_tabsdata_cdc_common.common.continuous import run_continuous_dml_test
 from test_tabsdata_cdc_mysql.common.db import server_id
 from test_tabsdata_cdc_mysql.common.sql import MySQLCdcSampler
 
+pytestmark = [pytest.mark.xdist_group("cdc-mysql-cdc_mysql_named_conn_seq")]
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 

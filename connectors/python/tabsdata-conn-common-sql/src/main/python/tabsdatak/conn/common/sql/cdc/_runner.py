@@ -138,7 +138,8 @@ def run_cdc(
     disk_sentinel: DiskSentinel | None = None
     try:
         logger.info(
-            "run_cdc: starting (ingester=%s)", ingester.ingester_type,
+            "run_cdc: starting (ingester=%s)",
+            ingester.ingester_type,
         )
         session = ingester.open_session()
         tracked_tables = ingester.harvest_tables(
@@ -147,7 +148,8 @@ def run_cdc(
         )
         logger.info(
             "run_cdc: harvested %d table(s): %s",
-            len(tracked_tables), sorted(tracked_tables.keys()),
+            len(tracked_tables),
+            sorted(tracked_tables.keys()),
         )
 
         disk_sentinel = DiskSentinel(

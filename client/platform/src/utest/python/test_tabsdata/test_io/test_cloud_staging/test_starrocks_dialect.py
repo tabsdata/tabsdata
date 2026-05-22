@@ -46,6 +46,9 @@ from test_tabsdata.conftest import TESTING_RESOURCES_FOLDER
 import tabsdata as td
 
 
+
+pytestmark = [pytest.mark.xdist_group("starrocks_seq")]
+
 # ── Fixtures ──────────────────────────────────────────────────────────────────────────
 
 

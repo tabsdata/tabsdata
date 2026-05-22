@@ -13,6 +13,7 @@ from tabsdata.connector.cdc.db2._matching import (
 )
 from tabsdata.exceptions import Db2CdcError, ErrorCode
 
+pytestmark = [pytest.mark.xdist_group("cdc-db2-cdc_db2_matching_seq")]
 
 def _cols(*names_and_types: tuple[str, sa.types.TypeEngine]) -> list[tuple[str, sa.types.TypeEngine]]:
     return list(names_and_types)

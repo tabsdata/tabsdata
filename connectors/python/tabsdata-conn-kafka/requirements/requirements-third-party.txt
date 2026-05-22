@@ -2,10 +2,10 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
-avro
-boto3
-confluent-kafka
-grpcio-tools
-jsonschema
-orjson
-protobuf
+avro==1.12.1
+boto3==1.42.73
+confluent-kafka==2.14.0
+grpcio-tools==1.80.0
+jsonschema==4.26.0
+orjson==3.11.7
+protobuf==6.33.6

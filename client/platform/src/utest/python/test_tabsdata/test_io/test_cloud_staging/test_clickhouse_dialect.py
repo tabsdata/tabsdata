@@ -40,6 +40,9 @@ from tabsdata._io.cloud_staging.common.modes import LoadMode, SchemaEvolutionMod
 from tabsdata._io.cloud_staging.common.statuses import BulkLoadStatus
 
 
+
+pytestmark = [pytest.mark.xdist_group("platform-clickhouse_dialect_seq")]
+
 # ── Fixtures ──────────────────────────────────────────────────────────────────────────
 
 

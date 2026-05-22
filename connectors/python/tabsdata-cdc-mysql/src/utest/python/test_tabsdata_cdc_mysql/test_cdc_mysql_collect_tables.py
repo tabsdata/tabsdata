@@ -10,6 +10,7 @@ from tabsdata.connector.cdc.mysql._ingester.binlog import BinlogIngester
 from tabsdata.exceptions import CdcError, ErrorCode
 from test_tabsdata_cdc_mysql.common.db import server_id
 
+pytestmark = [pytest.mark.xdist_group("cdc-mysql-cdc_mysql_collect_tables_seq")]
 
 @pytest.mark.cdc_mysql
 @pytest.mark.slow

@@ -55,7 +55,6 @@ from tabsdatak.spi import (
     TableManifest,
 )
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -96,6 +95,7 @@ def _setup_sigterm_handler() -> None:
     loop unwinds cleanly through its ``finally`` (final flush +
     commit). Only installs on the main thread; the integration
     tests patch this out when running the plugin on a worker."""
+
     def _handler(_signum, _frame):  # noqa: ANN001 -- signal callback
         raise KeyboardInterrupt
 
@@ -129,18 +129,21 @@ class KafkaStreamSrcPlugin(StreamSrcPlugin[KafkaStreamSrc]):
         )
         logger.info(
             "kafka-stream: starting (topic=%r, format=%r)",
-            stream_src.topic, stream_src.data_format,
+            stream_src.topic,
+            stream_src.data_format,
         )
 
         kafka_configs = build_kafka_configs(
-            conn=conn, group_id=stream_src.group_id,
+            conn=conn,
+            group_id=stream_src.group_id,
         )
         try:
             consumer = Consumer(kafka_configs)
             consumer.list_topics(timeout=cfg["connection_timeout_secs"])
         except Exception as exc:
             raise KafkaErrorCode.KAFKA_6.exception(
-                cause=exc, servers=kafka_configs.get("bootstrap.servers"),
+                cause=exc,
+                servers=kafka_configs.get("bootstrap.servers"),
             )
 
         consumer.subscribe([stream_src.topic])
@@ -160,7 +163,8 @@ class KafkaStreamSrcPlugin(StreamSrcPlugin[KafkaStreamSrc]):
         )
         sr_client_alt = None
         if sr_client is not None and stream_src.data_format not in (
-            "json", "avro",
+            "json",
+            "avro",
         ):
             # Only Protobuf SR needs the second client.
             sr_client_alt = build_schema_registry_client(
@@ -221,7 +225,8 @@ class KafkaStreamSrcPlugin(StreamSrcPlugin[KafkaStreamSrc]):
             return producer
         except Exception as exc:
             raise KafkaErrorCode.KAFKA_7.exception(
-                cause=exc, servers=kafka_configs.get("bootstrap.servers"),
+                cause=exc,
+                servers=kafka_configs.get("bootstrap.servers"),
             )
 
     def _consume_loop(
@@ -247,8 +252,8 @@ class KafkaStreamSrcPlugin(StreamSrcPlugin[KafkaStreamSrc]):
                     datetime.now(timezone.utc) > stream_src.end
                 ):
                     logger.info(
-                        "kafka-stream: end-time reached, exiting loop "
-                        "(end=%s)", stream_src.end,
+                        "kafka-stream: end-time reached, exiting loop (end=%s)",
+                        stream_src.end,
                     )
                     break
                 ctx.trigger_monitor()
@@ -257,8 +262,7 @@ class KafkaStreamSrcPlugin(StreamSrcPlugin[KafkaStreamSrc]):
                     reset_buffer=reset_on_next_consume,
                 )
                 logger.debug(
-                    "kafka-stream: poll completed (reason=%s, msgs=%d, "
-                    "size_mb=%d)",
+                    "kafka-stream: poll completed (reason=%s, msgs=%d, size_mb=%d)",
                     rollover_reason.value,
                     buffer.message_count,
                     buffer.size_mb,
@@ -314,10 +318,12 @@ class KafkaStreamSrcPlugin(StreamSrcPlugin[KafkaStreamSrc]):
             return time.time()
         # ``TableManifest.files`` does an ``isinstance(..., ParquetFile)``
         # check; ``Path``-cast won't pass. Wrap explicitly.
-        manifest = [TableManifest(
-            table=stream_src.output_table(),
-            files=[ParquetFile(parquet_path)],
-        )]
+        manifest = [
+            TableManifest(
+                table=stream_src.output_table(),
+                files=[ParquetFile(parquet_path)],
+            )
+        ]
         stage_ref: StageRef = ctx.stage(manifest)
         ctx.commit(stage_ref)
         kafka_consumer.commit()
@@ -329,7 +335,8 @@ class KafkaStreamSrcPlugin(StreamSrcPlugin[KafkaStreamSrc]):
             ctx.trigger()
         logger.info(
             "kafka-stream: staged + committed (reason=%s, msgs=%d)",
-            rollover_reason.value, buffer.message_count,
+            rollover_reason.value,
+            buffer.message_count,
         )
         return time.time()
 

@@ -560,7 +560,6 @@ def _seed_cdc_schema(cfg: "DBConfig") -> None:
 def _build_cdc_config() -> tuple["DBConfig", object | None]:
     import docker
 
-    port = _free_port()
     host_port = _ensure_container(
         name=_POSTGRES_CDC_CONTAINER,
         image=_POSTGRES_CDC_IMAGE,
@@ -569,7 +568,6 @@ def _build_cdc_config() -> tuple["DBConfig", object | None]:
             f"POSTGRES_USER={_DB_USER}",
             f"POSTGRES_PASSWORD={_DB_PASSWORD}",
         ],
-        forwarded_port=port,
         command=_POSTGRES_CDC_FLAGS,
     )
     cfg = DBConfig(

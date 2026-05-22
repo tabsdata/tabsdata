@@ -33,19 +33,29 @@ from typing import (
     Annotated,
     Any,
     Callable,
+    Mapping,
     Type,
     TypeAlias,
     TypeVar,
     Union,
     get_args,
     get_origin,
-    get_type_hints, Mapping,
+    get_type_hints,
 )
 
 from pydantic import ConfigDict, model_validator
 
 import tabsdatak._api as _api
-from tabsdatak.api import StreamSrc, Conn, Dest, Src, TrxCtx, TableNameSpec, ContextKeySpec, ContextValueSpec
+from tabsdatak.api import (
+    Conn,
+    ContextKeySpec,
+    ContextValueSpec,
+    Dest,
+    Src,
+    StreamSrc,
+    TableNameSpec,
+    TrxCtx,
+)
 from tabsdatak.error import ApiErrorCode
 
 
@@ -111,7 +121,6 @@ class PluginCtx(ABC):
         Cleaned up by the runtime after the trx completes."""
 
 
-
 class SrcPluginCtx(TrxCtx, PluginCtx, ABC):
     """Context handed to :meth:`SrcPlugin.read_in` -- combines
     :class:`tabsdatak.api.TrxCtx` (trx identifiers + scratch state)
@@ -130,12 +139,11 @@ class SrcPlugin[S: Src](ABC):
         :class:`TableMode` is ``SINGLE`` each inner list has
         exactly one file; in ``ARRAY`` mode it may have more.
         """
+
     # if TableMode is SINGLE, inner list must always have 1 element.
 
 
-FilesSpec: TypeAlias = Annotated[
-    list[TableFileSpec], _api.NON_EMPTY_LIST_CONSTRAINTS
-]
+FilesSpec: TypeAlias = Annotated[list[TableFileSpec], _api.NON_EMPTY_LIST_CONSTRAINTS]
 
 
 # ``ParquetFile`` is a ``pathlib.Path`` subclass, not a pydantic type;
@@ -146,9 +154,7 @@ FilesSpec: TypeAlias = Annotated[
 _ARBITRARY = ConfigDict(arbitrary_types_allowed=True)
 
 
-@_api.dataclass(
-    ApiErrorCode.API_21, config=_ARBITRARY, frozen=True, kw_only=True
-)
+@_api.dataclass(ApiErrorCode.API_21, config=_ARBITRARY, frozen=True, kw_only=True)
 class TableManifest:
     """One table's worth of parquet files in a stream stage batch.
 
@@ -206,6 +212,7 @@ class StreamSrcPluginCtx(PluginCtx, ABC):
         Returns an opaque :class:`StageRef` to pass to
         :meth:`commit`. Files in the manifest must live under
         :attr:`work_dir`."""
+
     # Must be files within the working directory
     # table names in manifest must be a subset of tables in src
 
@@ -233,8 +240,6 @@ class StreamSrcPluginCtx(PluginCtx, ABC):
     @abstractmethod
     def write_state(self, state: StreamStateSpec):
         """Persist per-flow state for the next run."""
-
-
 
 
 class StreamSrcPlugin[SS: StreamSrc](ABC):

@@ -7,5 +7,5 @@
 # used by both the seed step and SQLAlchemy when the test URI is
 # qualified `mysql+pymysql://`. The `[rsa]` extra pulls in `cryptography`
 # so pymysql can do MySQL 9.x's default caching_sha2_password auth.
-docker
-pymysql[rsa]
+docker==7.1.0
+pymysql[rsa]==1.2.0

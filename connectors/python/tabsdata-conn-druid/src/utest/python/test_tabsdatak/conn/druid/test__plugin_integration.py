@@ -84,7 +84,7 @@ def _staging_gates_ok() -> bool:
     ])
 
 
-pytestmark = [pytestmark, pytest.mark.skipif(not _staging_gates_ok(), reason=_skip_reason)]
+pytestmark = [pytestmark, pytest.mark.skipif(not _staging_gates_ok(), reason=_skip_reason), pytest.mark.xdist_group("druid-plugin_integration_seq")]
 
 
 # ---------------------------------------------------------------------------

@@ -18,7 +18,6 @@ from typing import Any, Literal
 import sqlalchemy.types as sa_types
 from sqlalchemy.sql.elements import quoted_name
 
-
 # ``CdcIngesterType`` discriminates which raw-type set
 # ``Dialect.cdc_to_sa`` should expect. ``binlog`` -> MySQL
 # pymysqlreplication TYPE codes; ``wal2json`` -> Postgres logical
@@ -47,9 +46,7 @@ class Dialect(ABC):
         lower-fold for Postgres, unchanged for MySQL)."""
 
     @abstractmethod
-    def parse_qualified_table(
-        self, tablespec: str
-    ) -> tuple[quoted_name, quoted_name]:
+    def parse_qualified_table(self, tablespec: str) -> tuple[quoted_name, quoted_name]:
         """Parse ``"schema.table"`` (or its dialect-specific quoted
         equivalent) into ``(schema, table)`` ``quoted_name`` pairs.
         Raises ``ValueError`` when the spec is malformed."""

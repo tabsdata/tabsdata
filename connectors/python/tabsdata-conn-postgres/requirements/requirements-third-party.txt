@@ -2,5 +2,5 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
-orjson
-psycopg2-binary
+orjson==3.11.7
+psycopg2-binary==2.9.11

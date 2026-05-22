@@ -21,6 +21,7 @@ from tabsdatax.pytest.plugins.harvester.internal.constants import (
     FIXTURE_SCOPE_ORDER,
     FixtureLifecycle,
 )
+from tabsdatax.pytest.plugins.harvester.internal.helpers import normalize_nodeid
 from tabsdatax.pytest.plugins.harvester.internal.schema import FixtureState
 from tabsdatax.pytest.plugins.harvester.internal.writer import MetaMessage, MetaWriter
 
@@ -196,7 +197,7 @@ class FixtureTracker:
         Uses in-memory counters to avoid race conditions with the async
         writer queue.
         """
-        fixtures = self._test_fixtures.get(nodeid, set())
+        fixtures = self._test_fixtures.get(normalize_nodeid(nodeid), set())
         for fname in fixtures:
             c = self._counts.get(fname)
             if c is None:

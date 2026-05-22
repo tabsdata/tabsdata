@@ -677,18 +677,18 @@ script = [
 
     existing_markers = get_env MARKERS
     if is_empty ${existing_markers}
-        markers = set "not cdc_db2"
+        markers = set "not cdc_db2 and not db2_seq"
     else
-        markers = set "${existing_markers} and not cdc_db2"
+        markers = set "(${existing_markers}) and not cdc_db2 and not db2_seq"
     end
     set_env MARKERS ${markers}
 
     if eq ${verbose} "false"
-        debug "🚀 pytest ${td_tb} ${td_fail} -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini=\"filterwarnings=ignore\" -n 16 --dist=loadfile %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m \"${markers}\""
-        exit_code = exec --get-exit-code pytest ${td_tb} ${td_fail} -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini="filterwarnings=ignore" -n 16 --dist=loadfile %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m "${markers}"
+        debug "🚀 pytest ${td_tb} ${td_fail} -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini=\"filterwarnings=ignore\" -n 16 --dist=loadgroup %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m \"${markers}\""
+        exit_code = exec --get-exit-code pytest ${td_tb} ${td_fail} -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini="filterwarnings=ignore" -n 16 --dist=loadgroup %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m "${markers}"
     else
-        debug "🚀 pytest ${td_tb} ${td_fail} -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini=\"filterwarnings=ignore\" -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m \"${markers}\""
-        exit_code = exec --get-exit-code pytest ${td_tb} ${td_fail} -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini="filterwarnings=ignore" -v --full-trace --log-level=DEBUG -n 16 --dist=loadfile %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m "${markers}"
+        debug "🚀 pytest ${td_tb} ${td_fail} -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini=\"filterwarnings=ignore\" -v --full-trace --log-level=DEBUG -n 16 --dist=loadgroup %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m \"${markers}\""
+        exit_code = exec --get-exit-code pytest ${td_tb} ${td_fail} -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini="filterwarnings=ignore" -v --full-trace --log-level=DEBUG -n 16 --dist=loadgroup %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m "${markers}"
     end
     is_zero = eq ${exit_code} "0"
     is_five = eq ${exit_code} "5"

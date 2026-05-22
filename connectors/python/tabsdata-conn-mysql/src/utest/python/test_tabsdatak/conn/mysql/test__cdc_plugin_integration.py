@@ -41,7 +41,7 @@ from tabsdatak.spi import StageRef, StreamSrcPluginCtx
 
 logger = logging.getLogger(__name__)
 
-pytestmark = pytest.mark.mysql
+pytestmark = [pytest.mark.mysql, pytest.mark.xdist_group("mysql-cdc_plugin_integration_seq")]
 
 
 # ---------------------------------------------------------------------------

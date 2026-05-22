@@ -43,7 +43,7 @@ from tabsdatak.spi import StageRef, StreamSrcPluginCtx
 
 logger = logging.getLogger(__name__)
 
-pytestmark = pytest.mark.postgres
+pytestmark = [pytest.mark.postgres, pytest.mark.xdist_group("postgres-cdc_plugin_integration_seq")]
 
 
 # The replication slot the conftest pre-creates. Keep in sync with

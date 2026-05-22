@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Iterator
 
 from filelock import FileLock
+from tenacity import retry, stop_after_delay, wait_fixed
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -325,7 +326,20 @@ def _wait_for_backend_alive(engine) -> None:
 
 _BE_READY_TIMEOUT_S = 180
 
+# Mirror the production-side StarRocks retry policy from
+# ``tabsdata/_io/cloud_staging/starrocks/dialect.py``: StarRocks
+# transiently reports "Current available backends: []" under heavy
+# concurrent transactional load (single-BE container on emulated
+# ARM). Retry the seed for up to 5 minutes on a 5-second cadence.
+_STARROCKS_QUERY_RETRY_TIMEOUT_SECONDS = 300
+_STARROCKS_QUERY_RETRY_INTERVAL_SECONDS = 5
 
+
+@retry(
+    stop=stop_after_delay(_STARROCKS_QUERY_RETRY_TIMEOUT_SECONDS),
+    wait=wait_fixed(_STARROCKS_QUERY_RETRY_INTERVAL_SECONDS),
+    reraise=True,
+)
 def _seed_schema(cfg: DBConfig) -> None:
     """Drop + recreate the canonical ``users`` / ``orders`` tables that
     the integration tests load into. We do *not* seed rows -- the

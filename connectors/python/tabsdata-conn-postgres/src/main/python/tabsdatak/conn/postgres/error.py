@@ -90,8 +90,7 @@ class PostgresErrorCode(ErrorCode):
     )  # commit_offset / GtidOffset.update: unexpected offset type
     POSTGRES_17 = ErrorDef(
         PostgresRuntimeException,
-        "Postgres wal2json: unsupported format-version {version!r} "
-        "(expected 1 or 2)",
+        "Postgres wal2json: unsupported format-version {version!r} (expected 1 or 2)",
     )  # Wal2JsonIngester.poll_changes: unknown format-version
     POSTGRES_18 = ErrorDef(
         PostgresRuntimeException,

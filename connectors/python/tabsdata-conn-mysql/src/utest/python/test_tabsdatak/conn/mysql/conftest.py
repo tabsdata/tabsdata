@@ -602,7 +602,6 @@ def _seed_cdc_schema(cfg: "DBConfig") -> None:
 
 
 def _build_cdc_config() -> "DBConfig":
-    port = _free_port()
     host_port = _ensure_container(
         name=_MYSQL_CDC_CONTAINER,
         image=_MYSQL_CDC_IMAGE,
@@ -612,7 +611,6 @@ def _build_cdc_config() -> "DBConfig":
             f"MYSQL_USER={_DB_USER}",
             f"MYSQL_PASSWORD={_DB_PASSWORD}",
         ],
-        forwarded_port=port,
         command=_MYSQL_CDC_FLAGS,
     )
     cfg = DBConfig(

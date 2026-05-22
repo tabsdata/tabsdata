@@ -16,6 +16,8 @@ from test_tabsdata_cdc_db2.common.fixtures.schema import (
     CD_PREFIX,
 )
 
+pytestmark = [pytest.mark.xdist_group("cdc-db2-cdc_db2_collect_tables_seq")]
+
 OLD_VALUES_PREFIX = DB2_CDC_OLD_VALUES_PREFIX
 
 

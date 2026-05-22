@@ -385,6 +385,8 @@ def _make_src(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.db2_seq
+@pytest.mark.xdist_group("db2_seq")
 def test_cdc_insert_event_stages_a_committed_manifest(fresh_db2_cdc_asncap, tmp_path):
     cfg, source_schema, source_table = fresh_db2_cdc_asncap
     work = tmp_path / "work"
@@ -416,6 +418,8 @@ def test_cdc_insert_event_stages_a_committed_manifest(fresh_db2_cdc_asncap, tmp_
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.db2_seq
+@pytest.mark.xdist_group("db2_seq")
 def test_cdc_insert_update_delete_events_surface(fresh_db2_cdc_asncap, tmp_path):
     cfg, source_schema, source_table = fresh_db2_cdc_asncap
     work = tmp_path / "work"
@@ -458,6 +462,8 @@ def test_cdc_insert_update_delete_events_surface(fresh_db2_cdc_asncap, tmp_path)
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.db2_seq
+@pytest.mark.xdist_group("db2_seq")
 def test_cdc_tail_skips_pre_existing_events(fresh_db2_cdc_asncap, tmp_path):
     cfg, source_schema, source_table = fresh_db2_cdc_asncap
     work = tmp_path / "work"
@@ -507,6 +513,8 @@ def test_cdc_tail_skips_pre_existing_events(fresh_db2_cdc_asncap, tmp_path):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.db2_seq
+@pytest.mark.xdist_group("db2_seq")
 def test_cdc_resumes_from_commitseq_position(fresh_db2_cdc_asncap, tmp_path):
     cfg, source_schema, source_table = fresh_db2_cdc_asncap
     work = tmp_path / "work"
@@ -553,6 +561,8 @@ def test_cdc_resumes_from_commitseq_position(fresh_db2_cdc_asncap, tmp_path):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.db2_seq
+@pytest.mark.xdist_group("db2_seq")
 def test_cdc_persists_offset_to_ctx_state(fresh_db2_cdc_asncap, tmp_path):
     cfg, source_schema, source_table = fresh_db2_cdc_asncap
     work = tmp_path / "work"

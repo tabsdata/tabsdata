@@ -17,7 +17,13 @@ from test_tabsdata.conftest import (
 )
 
 # noinspection PyUnresolvedReferences
-from . import pytestmark  # noqa: F401
+from . import pytestmark as _package_pytestmark  # noqa: F401
+
+# Module-level pytestmark must combine the package marker with a
+# file-specific xdist_group so all tests in this file land on the
+# same worker (they share CLI / function-registry state that breaks
+# when ``--dist=loadgroup`` spreads them across workers).
+pytestmark = [_package_pytestmark, pytest.mark.xdist_group("platform-fn_group_seq")]
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

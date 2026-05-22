@@ -10,6 +10,7 @@ from tabsdata.connector.cdc.postgres._ingester.wal2json import Wal2JsonIngester
 from tabsdata.exceptions import CdcError, ErrorCode
 from test_tabsdata_cdc_postgres.common.db import replication_slot
 
+pytestmark = [pytest.mark.xdist_group("postgres_cdc_seq")]
 
 @pytest.mark.cdc_postgres
 @pytest.mark.slow

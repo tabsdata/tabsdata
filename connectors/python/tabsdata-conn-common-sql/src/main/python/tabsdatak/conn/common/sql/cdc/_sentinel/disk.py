@@ -118,10 +118,7 @@ class DiskSentinel:
         stop: int,
     ) -> None:
         pa_schema = rows[start].schema.pa_schema
-        records = [
-            row_to_record(rows[i], self._cdc_format)
-            for i in range(start, stop)
-        ]
+        records = [row_to_record(rows[i], self._cdc_format) for i in range(start, stop)]
         # noinspection PyArgumentList
         pa_table = pa.Table.from_pylist(mapping=records, schema=pa_schema)
 
@@ -140,7 +137,10 @@ class DiskSentinel:
 
         logger.debug(
             "Buffer flush: wrote %s -> %s (%d rows, %d bytes)",
-            table, file_name, file_rows, file_bytes,
+            table,
+            file_name,
+            file_rows,
+            file_bytes,
         )
 
     # ------------------------------------------------------------------
@@ -188,17 +188,14 @@ class DiskSentinel:
         self._last_flushed = time.time()
 
     def flush(self, force: bool = False) -> bool:
-        rows_hit = (
-            self._max_rows is not None and self._total_rows >= self._max_rows
-        )
-        bytes_hit = (
-            self._max_bytes is not None and self._total_bytes >= self._max_bytes
-        )
+        rows_hit = self._max_rows is not None and self._total_rows >= self._max_rows
+        bytes_hit = self._max_bytes is not None and self._total_bytes >= self._max_bytes
         time_hit = (time.time() - self._last_flushed) >= self._max_secs
         if self.has_data and (force or rows_hit or bytes_hit or time_hit):
             logger.debug(
                 "Disk flush: staging (%d rows, %d bytes)",
-                self._total_rows, self._total_bytes,
+                self._total_rows,
+                self._total_bytes,
             )
             self.stage_data()
             return True

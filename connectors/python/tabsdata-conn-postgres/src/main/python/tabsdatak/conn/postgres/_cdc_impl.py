@@ -41,13 +41,13 @@ from sqlalchemy.dialects.postgresql import BYTEA
 from sqlalchemy.sql.elements import quoted_name
 from sqlalchemy.types import BLOB, CLOB, LargeBinary, Text
 
+from tabsdatak.conn.common.sql.cdc._dictionary import SchemaVersion
 from tabsdatak.conn.common.sql.cdc._ingester import CdcIngester
 from tabsdatak.conn.common.sql.cdc._model import (
     CdcChange,
     CdcDataChange,
     CdcOffset,
 )
-from tabsdatak.conn.common.sql.cdc._dictionary import SchemaVersion
 from tabsdatak.conn.common.sql.cdc.constants import (
     DEFAULT_BLOCKING_TIMEOUT_SECONDS,
     DOT,
@@ -57,7 +57,6 @@ from tabsdatak.conn.common.sql.cdc.dialect import CdcIngesterType, Dialect
 from tabsdatak.conn.common.sql.cdc.typing import QualifiedTablesSpec
 from tabsdatak.conn.postgres import LsnPosition
 from tabsdatak.conn.postgres.error import PostgresErrorCode
-
 
 logger = logging.getLogger(__name__)
 
@@ -244,14 +243,10 @@ class PostgresDialect(Dialect):
         # Postgres folds unquoted identifiers to lower case.
         return name.lower()
 
-    def parse_qualified_table(
-        self, tablespec: str
-    ) -> tuple[quoted_name, quoted_name]:
+    def parse_qualified_table(self, tablespec: str) -> tuple[quoted_name, quoted_name]:
         spec = tablespec.strip()
         if not spec or "." not in spec:
-            raise ValueError(
-                f"expected 'schema.table', got {tablespec!r}"
-            )
+            raise ValueError(f"expected 'schema.table', got {tablespec!r}")
         schema_part, _, table_part = spec.partition(".")
 
         def _unquote(part: str) -> tuple[str, bool]:
@@ -605,8 +600,7 @@ class Wal2JsonIngester(CdcIngester):
         if not columns:
             raise PostgresErrorCode.POSTGRES_15.exception(payload=payload)
         return tuple(
-            (column["name"], column["type"], column["type"])
-            for column in columns
+            (column["name"], column["type"], column["type"]) for column in columns
         )
 
     # ------------------------------------------------------------------
@@ -741,12 +735,15 @@ class Wal2JsonIngester(CdcIngester):
     # --- v1 -----------------------------------------------------------
 
     def _poll_changes_v1(
-        self, _session: Any,
+        self,
+        _session: Any,
     ) -> Generator[CdcChange, None, None]:
         deadline = time.monotonic() + self._blocking_timeout_seconds
         while True:
             message = self._read_next_message(
-                pending=False, deadline=deadline, pending_timeout=deadline,
+                pending=False,
+                deadline=deadline,
+                pending_timeout=deadline,
             )
             if message is None:
                 break
@@ -787,7 +784,8 @@ class Wal2JsonIngester(CdcIngester):
             return None
         raw_schema = self._extract_raw_schema_v1(change)
         schema_version = self._schema_registry.register_from_log(
-            qualified, raw_schema,
+            qualified,
+            raw_schema,
         )
         kind = change.get("kind")
         op = _V1_OPERATION_MAP.get(kind)
@@ -836,7 +834,8 @@ class Wal2JsonIngester(CdcIngester):
     # --- v2 -----------------------------------------------------------
 
     def _poll_changes_v2(
-        self, _session: Any,
+        self,
+        _session: Any,
     ) -> Generator[CdcChange, None, None]:
         deadline = time.monotonic() + self._blocking_timeout_seconds
         pending_timeout = time.monotonic() + (
@@ -900,7 +899,8 @@ class Wal2JsonIngester(CdcIngester):
             return None
         raw_schema = self._extract_raw_schema_v2(payload)
         schema_version = self._schema_registry.register_from_log(
-            qualified, raw_schema,
+            qualified,
+            raw_schema,
         )
         action = payload.get("action")
         op = _V2_OPERATION_MAP.get(action)

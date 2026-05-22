@@ -18,6 +18,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from tabsdatax.pytest.plugins.harvester.internal.helpers import normalize_nodeid
 from tabsdatax.pytest.plugins.harvester.internal.schema import ComponentState
 from tabsdatax.pytest.plugins.harvester.internal.writer import MetaMessage, MetaWriter
 
@@ -68,7 +69,7 @@ class ComponentTracker:
 
     def get_component(self, nodeid: str) -> str:
         """Return the component name for a test nodeid."""
-        return self._test_components.get(nodeid, COMPONENT_UNKNOWN)
+        return self._test_components.get(normalize_nodeid(nodeid), COMPONENT_UNKNOWN)
 
     def register_all(self, items: list[pytest.Item]) -> None:
         """Build component-to-test mapping from collected items."""
@@ -119,7 +120,7 @@ class ComponentTracker:
         *outcome* should be one of ``"passed"``, ``"failed"``,
         ``"skipped"``.
         """
-        component = self._test_components.get(nodeid)
+        component = self._test_components.get(normalize_nodeid(nodeid))
         if component is None:
             return
         c = self._counts.get(component)

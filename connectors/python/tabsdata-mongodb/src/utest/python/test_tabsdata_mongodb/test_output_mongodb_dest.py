@@ -46,6 +46,9 @@ from test_tabsdata_mongodb.test_output_mongodb_named_conn.example import (
     testing_tabsdata_function as output_mongodb_named_conn_generator,
 )
 
+
+pytestmark = [pytest.mark.xdist_group("mongodb-output_mongodb_dest_seq")]
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 

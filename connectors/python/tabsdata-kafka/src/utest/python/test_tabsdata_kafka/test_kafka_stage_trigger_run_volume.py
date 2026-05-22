@@ -28,6 +28,9 @@ from test_tabsdata_kafka.conftest import (
     get_protobuf_message,
 )
 
+
+pytestmark = [pytest.mark.xdist_group("kafka-kafka_stage_trigger_run_volume_seq")]
+
 logger = logging.getLogger(__name__)
 
 logger.setLevel(logging.DEBUG)

@@ -27,6 +27,12 @@ fs_retry = retry(
 )
 
 
+def normalize_nodeid(nodeid: str) -> str:
+    if nodeid.rfind("@") > nodeid.rfind("]"):
+        return nodeid.rsplit("@", 1)[0]
+    return nodeid
+
+
 def sanitize(nodeid: str) -> str:
     base = nodeid.replace("/", "_").replace("::", "__").replace(" ", "_")
     # Append a short hash to avoid collisions on case-insensitive filesystems

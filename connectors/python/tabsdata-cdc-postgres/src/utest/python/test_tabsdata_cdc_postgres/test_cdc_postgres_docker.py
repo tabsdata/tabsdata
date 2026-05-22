@@ -6,6 +6,7 @@ import pytest
 
 from test_tabsdata_cdc_postgres.common.fixtures.docker import POSTGRES_CDC_DATABASE, POSTGRES_CDC_SLOT, POSTGRES_CDC_USER
 
+pytestmark = [pytest.mark.xdist_group("postgres_cdc_seq")]
 
 @pytest.mark.cdc_postgres
 @pytest.mark.slow

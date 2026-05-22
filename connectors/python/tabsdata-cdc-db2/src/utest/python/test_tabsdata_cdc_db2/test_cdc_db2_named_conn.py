@@ -49,6 +49,8 @@ from test_tabsdata_cdc_common.common.continuous import run_continuous_dml_test
 from test_tabsdata_cdc_db2.common.fixtures.docker import DB2_CDC_STAGING_TABLE_PREFIX
 from test_tabsdata_cdc_db2.common.sql import Db2CdcSampler
 
+pytestmark = [pytest.mark.xdist_group("cdc-db2-cdc_db2_named_conn_seq")]
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 

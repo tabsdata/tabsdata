@@ -19,6 +19,7 @@ from tabsdata.connector.cdc.postgres.typing import LsnPosition
 from test_tabsdata_cdc_common.common.shared import TRIGGER_END_MINUTES, run_offset_resume_test
 from test_tabsdata_cdc_postgres.common.sql import PostgresCdcSampler
 
+pytestmark = [pytest.mark.xdist_group("postgres_cdc_seq")]
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

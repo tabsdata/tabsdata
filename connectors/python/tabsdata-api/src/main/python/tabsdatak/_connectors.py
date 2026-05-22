@@ -20,8 +20,8 @@ import importlib.metadata
 import warnings
 from typing import Type
 
-from tabsdatak.api import StreamSrc, Dest, Src
-from tabsdatak.spi import StreamSrcDef, DestDef, SrcDef
+from tabsdatak.api import Dest, Src, StreamSrc
+from tabsdatak.spi import DestDef, SrcDef, StreamSrcDef
 
 _ENTRY_POINT_GROUP = "tabsdatak.connectors"
 

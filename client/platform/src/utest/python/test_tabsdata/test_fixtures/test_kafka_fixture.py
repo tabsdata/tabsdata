@@ -9,6 +9,9 @@ import requests
 from confluent_kafka import KafkaError, KafkaException
 from confluent_kafka.admin import AdminClient
 
+
+pytestmark = [pytest.mark.xdist_group("platform-kafka_fixture_seq")]
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 

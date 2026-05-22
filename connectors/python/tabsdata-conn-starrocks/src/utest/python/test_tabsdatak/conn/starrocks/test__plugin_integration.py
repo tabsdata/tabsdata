@@ -29,7 +29,7 @@ from tabsdatak.conn.starrocks import _plugin as plugin
 from tabsdatak.spi import DestContext
 
 
-pytestmark = pytest.mark.starrocks
+pytestmark = [pytest.mark.starrocks, pytest.mark.xdist_group("starrocks_seq")]
 
 
 # ---------------------------------------------------------------------------

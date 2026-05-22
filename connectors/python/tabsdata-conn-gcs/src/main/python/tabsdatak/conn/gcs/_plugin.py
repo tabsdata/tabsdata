@@ -11,9 +11,9 @@ from tabsdatak.spi import (
     DestDef,
     DestPlugin,
     Explorer,
-    SrcPluginCtx,
     SrcDef,
     SrcPlugin,
+    SrcPluginCtx,
     TableFileSpec,
     TableMode,
 )

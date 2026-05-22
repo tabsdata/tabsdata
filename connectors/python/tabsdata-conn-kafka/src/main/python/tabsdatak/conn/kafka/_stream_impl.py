@@ -17,9 +17,10 @@ from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from tabsdatak.conn.kafka import KafkaConn
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.kafka._serdes import KafkaSerde, SchemaIdCompatibles, SchemaIdSpec
-from tabsdatak.conn.kafka import KafkaConn
 from tabsdatak.conn.kafka.error import KafkaErrorCode
 
 if TYPE_CHECKING:  # pragma: no cover -- typing-only
@@ -126,10 +127,7 @@ class MessagesBuffer:
 
         column_names = sorted(self._messages[0].keys())
         table = pa.Table.from_pydict(
-            mapping={
-                k: [m.get(k) for m in self._messages]
-                for k in column_names
-            },
+            mapping={k: [m.get(k) for m in self._messages] for k in column_names},
         )
         pq.write_table(table, file_path)
         self._flushed = True
@@ -172,7 +170,8 @@ class KafkaConsumer:
 
     def _new_buffer(self) -> MessagesBuffer:
         return MessagesBuffer(
-            self._topic, self._serde.schema_id_compatibles_checker(),
+            self._topic,
+            self._serde.schema_id_compatibles_checker(),
         )
 
     @property
@@ -190,7 +189,8 @@ class KafkaConsumer:
         buffer before polling (used after a time rollover that the
         runner already staged)."""
         from confluent_kafka.serialization import (
-            MessageField, SerializationContext,
+            MessageField,
+            SerializationContext,
         )
 
         if reset_buffer:
@@ -217,7 +217,8 @@ class KafkaConsumer:
             except Exception as exc:  # noqa: BLE001 -- surface to DLQ
                 logger.error(
                     "Failed to deserialise message at offset %s: %s",
-                    msg.offset(), exc,
+                    msg.offset(),
+                    exc,
                 )
                 self._send_to_dlq(msg, exc)
                 continue
@@ -247,14 +248,17 @@ class KafkaConsumer:
                 return RolloverReason.Size, rolled
 
     def _send_to_dlq(
-        self, msg: "Message", error: Exception | Any,
+        self,
+        msg: "Message",
+        error: Exception | Any,
     ) -> None:
         if not (self._dlq_producer and self._dlq_topic):
             return
         envelope = {
             "original_value": (
                 msg.value().decode("utf-8", errors="replace")
-                if msg.value() is not None else None
+                if msg.value() is not None
+                else None
             ),
             "error": str(error),
             "topic": msg.topic(),
@@ -274,7 +278,8 @@ class KafkaConsumer:
         """Sync-commit the last successfully-buffered offset."""
         if self._commit_message is not None:
             self._consumer.commit(
-                message=self._commit_message, asynchronous=False,
+                message=self._commit_message,
+                asynchronous=False,
             )
             self._commit_message = None
 
@@ -315,7 +320,8 @@ def build_kafka_configs(
         cfg[_SASL_USERNAME_KEY] = conn.credentials.user.value()
         cfg[_SASL_PASSWORD_KEY] = conn.credentials.password.value()
     effective_group_id = (
-        conn.group_id if (conn.enforce_connection_params and conn.group_id)
+        conn.group_id
+        if (conn.enforce_connection_params and conn.group_id)
         else group_id
     )
     if not effective_group_id:

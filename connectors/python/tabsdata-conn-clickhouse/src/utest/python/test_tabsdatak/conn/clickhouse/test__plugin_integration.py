@@ -45,7 +45,7 @@ from test_tabsdatak.conn.clickhouse._integration_helpers import (
 )
 
 
-pytestmark = pytest.mark.clickhouse
+pytestmark = [pytest.mark.clickhouse, pytest.mark.xdist_group("clickhouse-plugin_integration_seq")]
 
 
 # ---------------------------------------------------------------------------

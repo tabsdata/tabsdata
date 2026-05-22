@@ -116,6 +116,5 @@ class Db2ErrorCode(ErrorCode):
     )  # commit_offset / CommitSeqOffset.update: unexpected offset type
     DB2_22 = ErrorDef(
         Db2RuntimeException,
-        "Db2 sqlreplica event: unknown IBMSNAP_OPERATION {op!r} "
-        "for {table!r}",
+        "Db2 sqlreplica event: unknown IBMSNAP_OPERATION {op!r} for {table!r}",
     )  # poll_changes: row carries an unrecognised operation code

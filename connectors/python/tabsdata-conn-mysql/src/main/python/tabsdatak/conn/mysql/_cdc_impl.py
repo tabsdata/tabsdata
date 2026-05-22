@@ -80,7 +80,6 @@ from tabsdatak.conn.common.sql.cdc.typing import (
 from tabsdatak.conn.mysql import BinlogPosition, GtidPosition
 from tabsdatak.conn.mysql.error import MysqlErrorCode
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -217,14 +216,10 @@ class MySQLDialect(Dialect):
     def default_case_fold(self, name: str) -> str:
         return name
 
-    def parse_qualified_table(
-        self, tablespec: str
-    ) -> tuple[quoted_name, quoted_name]:
+    def parse_qualified_table(self, tablespec: str) -> tuple[quoted_name, quoted_name]:
         spec = tablespec.strip()
         if not spec or "." not in spec:
-            raise ValueError(
-                f"expected 'schema.table', got {tablespec!r}"
-            )
+            raise ValueError(f"expected 'schema.table', got {tablespec!r}")
         schema_part, _, table_part = spec.partition(".")
 
         def _unquote(part: str) -> tuple[str, bool]:
@@ -304,7 +299,8 @@ class MySQLDialect(Dialect):
         column_class = _FIELD_TYPE_MAP.get(column_type)
         if column_class is None:
             raise ValueError(
-                f"Unsupported MySQL binlog cdc type: {cdc_type!r} (code={column_type!r})"
+                f"Unsupported MySQL binlog cdc type: {cdc_type!r}"
+                f" (code={column_type!r})"
             )
         if column_class is sa_types.Numeric:
             precision = getattr(cdc_type, "precision", None)
@@ -678,7 +674,8 @@ class BinlogIngester(CdcIngester):
             yield from self._poll_changes_unbuffered(session)
 
     def _poll_changes_unbuffered(
-        self, session: Any,
+        self,
+        session: Any,
     ) -> Generator[CdcChange, None, None]:
         # ``deadline`` caps the time we'll spend in a single poll
         # before returning control to the runner. Without it,
@@ -712,7 +709,8 @@ class BinlogIngester(CdcIngester):
                 if self._schema_registry is None:  # pragma: no cover
                     return
                 schema_version = self._schema_registry.register_from_log(
-                    qualified, raw_schema,
+                    qualified,
+                    raw_schema,
                 )
                 for row in event.rows:
                     seq += 1
@@ -743,7 +741,8 @@ class BinlogIngester(CdcIngester):
                     )
 
     def _poll_changes_buffered(
-        self, session: Any,
+        self,
+        session: Any,
     ) -> Generator[CdcChange, None, None]:
         # Buffered mode holds rows in ``pending`` until the closing
         # XidEvent / QueryEvent("COMMIT") arrives, so every yielded
@@ -768,7 +767,8 @@ class BinlogIngester(CdcIngester):
                 ):
                     continue
                 commit_timestamp = datetime.fromtimestamp(
-                    event.timestamp, tz=timezone.utc,
+                    event.timestamp,
+                    tz=timezone.utc,
                 )
                 for change in pending:
                     change.timestamp = commit_timestamp
@@ -790,7 +790,8 @@ class BinlogIngester(CdcIngester):
                 if self._schema_registry is None:  # pragma: no cover
                     return
                 schema_version = self._schema_registry.register_from_log(
-                    qualified, raw_schema,
+                    qualified,
+                    raw_schema,
                 )
                 for row in event.rows:
                     seq += 1

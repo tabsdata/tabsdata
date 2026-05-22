@@ -64,7 +64,6 @@ from tabsdatak.conn.db2 import (
 )
 from tabsdatak.conn.db2.error import Db2ErrorCode
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -177,14 +176,10 @@ class Db2Dialect(Dialect):
         # Db2 folds unquoted identifiers to upper case.
         return name.upper()
 
-    def parse_qualified_table(
-        self, tablespec: str
-    ) -> tuple[quoted_name, quoted_name]:
+    def parse_qualified_table(self, tablespec: str) -> tuple[quoted_name, quoted_name]:
         spec = tablespec.strip()
         if not spec or "." not in spec:
-            raise ValueError(
-                f"expected 'schema.table', got {tablespec!r}"
-            )
+            raise ValueError(f"expected 'schema.table', got {tablespec!r}")
         schema_part, _, table_part = spec.partition(".")
 
         def _unquote(part: str) -> tuple[str, bool]:
@@ -286,7 +281,8 @@ def match_cd_columns(
 
     if not before_column_prefix:
         raise Db2ErrorCode.DB2_18.exception(
-            cd_owner=cd_schema, cd_table=cd_table,
+            cd_owner=cd_schema,
+            cd_table=cd_table,
         )
 
     prefix = before_column_prefix
@@ -375,18 +371,12 @@ class CommitSeqOffset(CdcOffset):
 
     def write(self) -> dict:
         # Serialise binary commitseqs as hex strings.
-        return {
-            table: commitseq.hex()
-            for table, commitseq in self.commits.items()
-        }
+        return {table: commitseq.hex() for table, commitseq in self.commits.items()}
 
     @classmethod
     def read(cls, data: dict) -> "CommitSeqOffset":
         return cls(
-            commits={
-                table: bytes.fromhex(seq)
-                for table, seq in (data or {}).items()
-            }
+            commits={table: bytes.fromhex(seq) for table, seq in (data or {}).items()}
         )
 
     def copy(self) -> "CommitSeqOffset":
@@ -497,7 +487,8 @@ class SqlReplicaIngester(CdcIngester):
             from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode
 
             raise SqlCdcErrorCode.SQL_CDC_1.exception(
-                table=tablespec, reason=str(error),
+                table=tablespec,
+                reason=str(error),
             ) from error
 
         real_cd_schema = self.resolve_identifier(cd_schema)
@@ -519,14 +510,13 @@ class SqlReplicaIngester(CdcIngester):
 
         if registration is None:
             raise Db2ErrorCode.DB2_16.exception(
-                cd_owner=real_cd_schema, cd_table=real_cd_table,
+                cd_owner=real_cd_schema,
+                cd_table=real_cd_table,
             )
 
         source_owner = registration[0].strip()
         source_table = registration[1].strip()
-        before_img_prefix = (
-            registration[2].strip() if registration[2] else None
-        )
+        before_img_prefix = registration[2].strip() if registration[2] else None
 
         normalized_source_schema = sa_dialect.normalize_name(
             quoted_name(source_owner, quote=False)
@@ -540,7 +530,8 @@ class SqlReplicaIngester(CdcIngester):
             schema=normalized_source_schema,
         ):
             raise Db2ErrorCode.DB2_17.exception(
-                schema=source_owner, table=source_table,
+                schema=source_owner,
+                table=source_table,
             )
 
         data_table = TableObject(schema=source_owner, table=source_table)
@@ -562,7 +553,8 @@ class SqlReplicaIngester(CdcIngester):
         super().gather_table_structure(tracked_table, inspector, prefix)
 
     def prepare_inspector(
-        self, inspector: sa.engine.reflection.Inspector,
+        self,
+        inspector: sa.engine.reflection.Inspector,
     ) -> None:
         """Resolve the SQLAlchemy-normalised names of the IBMSNAP
         system columns so ``poll_changes`` can index the row
@@ -607,7 +599,8 @@ class SqlReplicaIngester(CdcIngester):
             quoted_name(tracked.cdc_table.table, quote=False)
         )
         sa_columns = inspector.get_columns(
-            normalized_table, schema=normalized_schema,
+            normalized_table,
+            schema=normalized_schema,
         )
 
         with inspector.bind.connect() as connection:
@@ -637,9 +630,7 @@ class SqlReplicaIngester(CdcIngester):
                     satype=sa_type,
                     oname=oname,
                     sa_name=sa_dialect.normalize_name(name),
-                    sa_oname=(
-                        sa_dialect.normalize_name(oname) if oname else None
-                    ),
+                    sa_oname=(sa_dialect.normalize_name(oname) if oname else None),
                 )
             )
         tracked.columns = columns
@@ -768,9 +759,7 @@ class SqlReplicaIngester(CdcIngester):
     ) -> Generator[CdcDataChange, None, None]:
         column_names = [f'"{column.name}"' for column in tracked.columns]
         column_inames = [
-            f'"{column.oname}"'
-            for column in tracked.columns
-            if column.oname
+            f'"{column.oname}"' for column in tracked.columns if column.oname
         ]
         select_columns = (
             [
@@ -783,9 +772,7 @@ class SqlReplicaIngester(CdcIngester):
             + column_inames
         )
         select_clause = ", ".join(select_columns)
-        cd_qualified = (
-            f"{tracked.cdc_table.schema}{DOT}{tracked.cdc_table.table}"
-        )
+        cd_qualified = f"{tracked.cdc_table.schema}{DOT}{tracked.cdc_table.table}"
         query = text(
             f"select {select_clause} "
             f"from {cd_qualified} "
@@ -805,7 +792,8 @@ class SqlReplicaIngester(CdcIngester):
             op = _OPERATION_MAP.get(db_op)
             if op is None:
                 raise Db2ErrorCode.DB2_22.exception(
-                    op=db_op, table=tracked.data_table.qualified,
+                    op=db_op,
+                    table=tracked.data_table.qualified,
                 )
             commit_seq = row_map[IBMSNAP_COMMITSEQ.sa_name]
             intent_seq = row_map[IBMSNAP_INTENTSEQ.sa_name]
@@ -813,10 +801,7 @@ class SqlReplicaIngester(CdcIngester):
             if logmarker.tzinfo is None:
                 logmarker = logmarker.replace(tzinfo=self._server_tz)
             commit_ts = logmarker.astimezone(timezone.utc)
-            new_values = {
-                col.name: row_map.get(col.sa_name)
-                for col in tracked.columns
-            }
+            new_values = {col.name: row_map.get(col.sa_name) for col in tracked.columns}
             self.localize_values(new_values)
             if op == CdcOperation.UPDATE:
                 old_values = {}
@@ -858,7 +843,8 @@ class SqlReplicaIngester(CdcIngester):
                 for tracked in self._tracked_tables.values():
                     qualified = tracked.cdc_table.qualified
                     commit = self._mark.commits.get(
-                        qualified, COMMITSEQ_ORIGIN,
+                        qualified,
+                        COMMITSEQ_ORIGIN,
                     )
                     watermark = watermarks.get(qualified)
                     if watermark is None or watermark <= commit:
@@ -867,12 +853,15 @@ class SqlReplicaIngester(CdcIngester):
                         tracked.data_table.qualified
                     ]
                     raw_schema = self._extract_raw_schema(
-                        session, tracked, before_prefix,
+                        session,
+                        tracked,
+                        before_prefix,
                     )
                     if self._schema_registry is None:  # pragma: no cover
                         return
                     schema_version = self._schema_registry.register_from_log(
-                        tracked.data_table.qualified, raw_schema,
+                        tracked.data_table.qualified,
+                        raw_schema,
                     )
                     yield from self._query_table_changes(
                         connection=connection,

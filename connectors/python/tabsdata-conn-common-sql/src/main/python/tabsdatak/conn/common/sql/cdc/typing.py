@@ -15,7 +15,6 @@ from typing import Literal, TypeAlias, Union
 import tabsdatak._api as _api
 from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode
 
-
 # ---------------------------------------------------------------------
 # Table specs
 # ---------------------------------------------------------------------

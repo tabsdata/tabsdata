@@ -140,7 +140,8 @@ class CdcIngester(ABC):
             schema, table = self.dialect.parse_qualified_table(tablespec)
         except ValueError as error:
             raise SqlCdcErrorCode.SQL_CDC_1.exception(
-                table=tablespec, reason=str(error),
+                table=tablespec,
+                reason=str(error),
             ) from error
 
         db_schema = self.resolve_identifier(schema)
@@ -150,16 +151,15 @@ class CdcIngester(ABC):
         normalized_schema = sa_dialect.normalize_name(
             quoted_name(db_schema, quote=False)
         )
-        normalized_table = sa_dialect.normalize_name(
-            quoted_name(db_table, quote=False)
-        )
+        normalized_table = sa_dialect.normalize_name(quoted_name(db_table, quote=False))
 
         if not inspector.has_table(
             normalized_table,
             schema=normalized_schema,
         ):
             raise SqlCdcErrorCode.SQL_CDC_2.exception(
-                schema=db_schema, table=db_table,
+                schema=db_schema,
+                table=db_table,
             )
 
         table_object = TableObject(schema=db_schema, table=db_table)
@@ -187,9 +187,7 @@ class CdcIngester(ABC):
         normalized_schema = sa_dialect.normalize_name(
             quoted_name(db_schema, quote=False)
         )
-        normalized_table = sa_dialect.normalize_name(
-            quoted_name(db_table, quote=False)
-        )
+        normalized_table = sa_dialect.normalize_name(quoted_name(db_table, quote=False))
 
         sa_columns = inspector.get_columns(
             normalized_table,
@@ -197,7 +195,8 @@ class CdcIngester(ABC):
         )
         if not sa_columns:
             raise SqlCdcErrorCode.SQL_CDC_3.exception(
-                schema=db_schema, table=db_table,
+                schema=db_schema,
+                table=db_table,
             )
 
         with inspector.bind.connect() as connection:
@@ -209,15 +208,19 @@ class CdcIngester(ABC):
 
         if len(db_columns) != len(sa_columns):
             raise SqlCdcErrorCode.SQL_CDC_4.exception(
-                schema=db_schema, table=db_table,
-                catalog=len(db_columns), sa=len(sa_columns),
+                schema=db_schema,
+                table=db_table,
+                catalog=len(db_columns),
+                sa=len(sa_columns),
             )
 
         for db_column, sa_column in zip(db_columns, sa_columns):
             if db_column.upper() != sa_column["name"].upper():
                 raise SqlCdcErrorCode.SQL_CDC_5.exception(
-                    schema=db_schema, table=db_table,
-                    catalog=db_column, sa=sa_column["name"],
+                    schema=db_schema,
+                    table=db_table,
+                    catalog=db_column,
+                    sa=sa_column["name"],
                 )
 
         columns = []
@@ -225,8 +228,10 @@ class CdcIngester(ABC):
             if self.dialect.is_large_column(sa_column["type"]):
                 logger.info(
                     "Excluding large column %r (%s) from %s.%s",
-                    db_column, type(sa_column["type"]).__name__,
-                    db_schema, db_table,
+                    db_column,
+                    type(sa_column["type"]).__name__,
+                    db_schema,
+                    db_table,
                 )
                 continue
             oname = f"{before_img_prefix}{db_column}" if before_img_prefix else None
@@ -266,8 +271,7 @@ class CdcIngester(ABC):
         # Cross-map the SA-name PK columns to their catalog names so
         # downstream emits the same identifier the source uses.
         inspector_to_catalog = {
-            sa_col["name"]: db_col
-            for sa_col, db_col in zip(sa_columns, db_columns)
+            sa_col["name"]: db_col for sa_col, db_col in zip(sa_columns, db_columns)
         }
         return [inspector_to_catalog.get(pk, pk) for pk in inspector_pk]
 

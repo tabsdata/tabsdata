@@ -5,6 +5,6 @@
 # Docker-driven end-to-end tests for the Db2 connector. `ibm-db` ships
 # prebuilt wheels with the IBM Data Server Driver bundled (no separate
 # native install on macOS/Linux). `ibm-db-sa` is the SQLAlchemy dialect.
-docker
-ibm-db
-ibm-db-sa
+docker==7.1.0
+ibm-db==3.2.8 ; platform_machine != 'aarch64'
+ibm-db-sa==0.4.4 ; platform_machine != 'aarch64'

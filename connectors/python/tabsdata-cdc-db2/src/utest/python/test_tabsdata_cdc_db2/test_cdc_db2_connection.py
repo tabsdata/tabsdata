@@ -15,6 +15,7 @@ from test_tabsdata_cdc_db2.common.fixtures.docker import (
 
 logger = logging.getLogger(__name__)
 
+pytestmark = [pytest.mark.xdist_group("cdc-db2-cdc_db2_connection_seq")]
 
 @pytest.mark.cdc_db2
 @pytest.mark.slow

@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from tenacity import retry, stop_after_delay, wait_fixed
+
 from tabsdatak.api import Env, Secret
 from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn.starrocks import (
@@ -15,6 +17,20 @@ from tabsdatak.conn.starrocks import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Mirror the StarRocks retry policy used by
+# ``tabsdata/_io/cloud_staging/starrocks/dialect.py``: StarRocks
+# transiently reports "Current available backends: []" under heavy
+# concurrent transactional load. Retry the SQL block for up to 5
+# minutes on a 5-second cadence.
+_STARROCKS_QUERY_RETRY_TIMEOUT_SECONDS = 300
+_STARROCKS_QUERY_RETRY_INTERVAL_SECONDS = 5
+
+_starrocks_retry = retry(
+    stop=stop_after_delay(_STARROCKS_QUERY_RETRY_TIMEOUT_SECONDS),
+    wait=wait_fixed(_STARROCKS_QUERY_RETRY_INTERVAL_SECONDS),
+    reraise=True,
+)
 
 
 # --- Value-resolution helpers ----------------------------------------
@@ -336,6 +352,18 @@ def execute(
         credentials=cfg.credentials,
         connect_args=cfg.conn_cfg,
     )
+
+    @_starrocks_retry
+    def _load_one(qualified: str, files_fn: str) -> None:
+        """``TRUNCATE`` (replace mode) + ``INSERT INTO ... FROM FILES(...)``
+        for a single table, retried on transient StarRocks errors such as
+        "Current available backends: []" that surface under heavy
+        concurrent load on a single-BE cluster."""
+        with engine.begin() as conn:
+            if cfg.if_table_exists == "replace":
+                conn.execute(text(f"TRUNCATE TABLE {qualified}"))
+            conn.execute(text(f"INSERT INTO {qualified} SELECT * FROM {files_fn}"))
+
     total = len(cfg.target_tables)
     try:
         for i, (table_name, parquet) in enumerate(
@@ -358,10 +386,7 @@ def execute(
             )
             files_fn = build_files_function(cfg.staging, [staged])
             qualified = _qualify(cfg.database, table_name)
-            with engine.begin() as conn:
-                if cfg.if_table_exists == "replace":
-                    conn.execute(text(f"TRUNCATE TABLE {qualified}"))
-                conn.execute(text(f"INSERT INTO {qualified} SELECT * FROM {files_fn}"))
+            _load_one(qualified, files_fn)
             logger.info(
                 "starrocks: loaded %s from %d staged file(s)",
                 qualified,

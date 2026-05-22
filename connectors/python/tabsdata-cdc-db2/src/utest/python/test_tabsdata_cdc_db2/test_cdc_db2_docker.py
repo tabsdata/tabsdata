@@ -8,6 +8,8 @@ import pytest
 
 from test_tabsdata_cdc_db2.common.fixtures.docker import DB2_CDC_DATABASE
 
+pytestmark = [pytest.mark.xdist_group("cdc-db2-cdc_db2_docker_seq")]
+
 logger = logging.getLogger(__name__)
 
 

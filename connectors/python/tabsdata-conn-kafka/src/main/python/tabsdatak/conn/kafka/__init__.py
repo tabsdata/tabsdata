@@ -35,7 +35,6 @@ from tabsdatak.conn.common import _validation as _common_validation
 from tabsdatak.conn.common.types import CfgSpec, EntityWhitelistSpec, UserPassword
 from tabsdatak.conn.kafka.error import KafkaErrorCode
 
-
 # --- Credential aliases ---------------------------------------------
 
 
@@ -116,7 +115,8 @@ class AwsGlueSchemaRegistry:
 # Discriminated union of supported schema-registry types. ``None``
 # (the default on :class:`KafkaConn`) means schema-less ingest.
 SchemaRegistrySpec: TypeAlias = Union[
-    ConfluentSchemaRegistry, AwsGlueSchemaRegistry,
+    ConfluentSchemaRegistry,
+    AwsGlueSchemaRegistry,
 ]
 
 

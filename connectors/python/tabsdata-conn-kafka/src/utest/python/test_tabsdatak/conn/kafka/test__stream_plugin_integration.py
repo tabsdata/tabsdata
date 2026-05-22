@@ -61,7 +61,7 @@ from tabsdatak.spi import StageRef, StreamSrcPluginCtx
 
 logger = logging.getLogger(__name__)
 
-pytestmark = pytest.mark.kafka
+pytestmark = [pytest.mark.kafka, pytest.mark.xdist_group("kafka-stream_plugin_integration_seq")]
 
 
 _SCHEMAS_DIR = Path(__file__).parent.parent.parent.parent.parent / (

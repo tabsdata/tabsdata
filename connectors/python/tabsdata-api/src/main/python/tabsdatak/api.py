@@ -29,7 +29,7 @@ import importlib
 from abc import ABC, abstractmethod
 from typing import Annotated, Callable, TypeAlias, Union
 
-from pydantic import Field, model_validator, StringConstraints
+from pydantic import Field, StringConstraints, model_validator
 
 # noinspection PyProtectedMember
 from tabsdatak import _api
@@ -492,7 +492,9 @@ def subscriber(
 
 # Per-flow scratch-key identifier; restricted to dotted identifiers
 # so the key space is namespaceable across plugins.
-ContextKeySpec: TypeAlias = Annotated[str, StringConstraints(pattern=_api.CONTEXT_KEY_RE_STR)]
+ContextKeySpec: TypeAlias = Annotated[
+    str, StringConstraints(pattern=_api.CONTEXT_KEY_RE_STR)
+]
 # Allowed per-flow scratch-value shapes -- primitives + flat
 # list/dict-of-strings. Stays JSON-serialisable end-to-end.
 ContextValueSpec: TypeAlias = Union[str, int, float, bool, list[str], dict[str, str]]

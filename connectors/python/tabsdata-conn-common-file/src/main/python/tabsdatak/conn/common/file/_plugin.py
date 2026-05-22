@@ -142,7 +142,7 @@ def import_files(
         lastmod_key = f"{_LASTMOD_KEY_PREFIX}{slot_idx}"
         # Resume from the prior trx's cursor if one was stored; otherwise
         # fall back to the Src's baseline (the first-run seed).
-        prior_lastmod = cast(str|None, ctx.get_attr(lastmod_key))
+        prior_lastmod = cast(str | None, ctx.get_attr(lastmod_key))
         try:
             report = _input.import_one(
                 source=location,

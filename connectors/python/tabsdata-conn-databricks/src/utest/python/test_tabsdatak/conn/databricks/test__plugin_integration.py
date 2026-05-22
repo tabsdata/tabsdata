@@ -86,6 +86,7 @@ pytestmark = [
             + " missing)"
         ),
     ),
+    pytest.mark.xdist_group("databricks-plugin_integration_seq"),
 ]
 
 

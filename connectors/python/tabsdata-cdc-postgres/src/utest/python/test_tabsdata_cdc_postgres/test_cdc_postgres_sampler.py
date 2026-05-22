@@ -15,6 +15,7 @@ from tabsdata.connector.cdc.common.constants import CdcOperation
 from test_tabsdata.test_tableframe.common import pretty_polars, pretty_pandas
 from test_tabsdata_cdc_postgres.common.sql import PostgresCdcSampler
 
+pytestmark = [pytest.mark.xdist_group("postgres_cdc_seq")]
 
 @pytest.mark.cdc_postgres
 @pytest.mark.slow

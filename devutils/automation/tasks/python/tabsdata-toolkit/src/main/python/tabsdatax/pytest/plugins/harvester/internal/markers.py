@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from tabsdatax.pytest.plugins.harvester.internal.helpers import normalize_nodeid
 from tabsdatax.pytest.plugins.harvester.internal.schema import MarkerState
 from tabsdatax.pytest.plugins.harvester.internal.writer import MetaMessage, MetaWriter
 
@@ -92,7 +93,7 @@ class MarkerTracker:
         *outcome* should be one of ``"passed"``, ``"failed"``,
         ``"skipped"``.
         """
-        markers = self._test_markers.get(nodeid, set())
+        markers = self._test_markers.get(normalize_nodeid(nodeid), set())
         for name in markers:
             c = self._counts.get(name)
             if c is None:

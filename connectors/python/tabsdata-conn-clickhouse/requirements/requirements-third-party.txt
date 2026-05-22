@@ -8,4 +8,4 @@
 # (Azure), and ``google-cloud-storage`` (GCS) are pulled in on demand
 # by the corresponding storage class -- a flow that only stages to
 # one provider shouldn't have to install the other two.
-uuid6
+uuid6==2025.0.1

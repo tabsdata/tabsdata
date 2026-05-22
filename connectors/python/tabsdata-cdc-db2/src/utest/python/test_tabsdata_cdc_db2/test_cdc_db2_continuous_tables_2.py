@@ -26,6 +26,7 @@ from test_tabsdata_cdc_db2.common.sql import Db2CdcSampler
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+pytestmark = [pytest.mark.xdist_group("cdc-db2-cdc_db2_continuous_tables_2_seq")]
 
 @pytest.mark.cdc_db2
 @pytest.mark.slow

@@ -7,5 +7,5 @@
 # Driver for SQL Server (`msodbcsql18`) to be installed at the system
 # level (e.g. `brew install unixodbc msodbcsql18` on macOS). A missing
 # driver surfaces as a clear `pyodbc.InterfaceError` at engine build time.
-docker
-pyodbc
+docker==7.1.0
+pyodbc==5.3.0

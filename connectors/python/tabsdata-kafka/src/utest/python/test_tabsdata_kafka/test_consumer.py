@@ -21,6 +21,9 @@ from test_tabsdata_kafka.conftest import (
     produce_kafka_messages,
 )
 
+
+pytestmark = [pytest.mark.xdist_group("kafka-consumer_seq")]
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 

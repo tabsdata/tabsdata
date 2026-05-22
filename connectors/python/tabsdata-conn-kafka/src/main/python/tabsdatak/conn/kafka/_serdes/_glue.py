@@ -37,9 +37,8 @@ from tabsdatak.conn.kafka.error import KafkaErrorCode
 
 if TYPE_CHECKING:  # pragma: no cover
     from confluent_kafka.serialization import (
-        Deserializer, SerializationContext, Serializer,
+        SerializationContext,
     )
-    from google.protobuf.message import Message
 
 
 logger = logging.getLogger(__name__)
@@ -57,7 +56,9 @@ class GlueKafkaSerde(KafkaSerde, ABC):
     schema-version UUID, which becomes the buffer's schema id."""
 
     def extract_schema_id(
-        self, data: bytes, _message: dict,
+        self,
+        data: bytes,
+        _message: dict,
     ) -> SchemaIdSpec:
         if data is None or len(data) < 18:
             raise KafkaErrorCode.KAFKA_13.exception(
@@ -80,7 +81,8 @@ class _AwsGlueSerializer:
     header to the format-specific payload bytes."""
 
     def __init__(
-        self, *,
+        self,
+        *,
         glue_client: Any,
         registry_name: str,
         schema_name: str,
@@ -181,7 +183,8 @@ class JsonGlueKafkaSerde(GlueKafkaSerde):
     """Glue SR + JSON Schema."""
 
     def __init__(
-        self, *,
+        self,
+        *,
         glue_client: Any,
         registry_name: str,
         schema_name: str,
@@ -234,7 +237,8 @@ class JsonGlueKafkaSerde(GlueKafkaSerde):
 
                 schema_str = inner.get_schema_definition(schema_uuid)
                 jsonschema.validate(
-                    instance=obj, schema=json.loads(schema_str),
+                    instance=obj,
+                    schema=json.loads(schema_str),
                 )
             return obj
 
@@ -255,7 +259,8 @@ class AvroGlueKafkaSerde(GlueKafkaSerde):
     encode/decode."""
 
     def __init__(
-        self, *,
+        self,
+        *,
         glue_client: Any,
         registry_name: str,
         schema_name: str,
@@ -341,7 +346,8 @@ class ProtobufGlueKafkaSerde(GlueKafkaSerde):
     """Glue SR + Protobuf."""
 
     def __init__(
-        self, *,
+        self,
+        *,
         glue_client: Any,
         registry_name: str,
         schema_name: str,

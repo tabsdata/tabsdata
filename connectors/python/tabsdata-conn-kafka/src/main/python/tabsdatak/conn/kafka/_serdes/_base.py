@@ -43,7 +43,8 @@ class KafkaSerde(ABC):
 
     def __init__(self) -> None:
         def _deserializer_with_schema_id(
-            data: bytes, ctx: "SerializationContext",
+            data: bytes,
+            ctx: "SerializationContext",
         ) -> tuple[dict, SchemaIdSpec]:
             message = self.deserializer()(data, ctx)
             schema_id = self.extract_schema_id(data, message)
@@ -67,13 +68,16 @@ class KafkaSerde(ABC):
 
     @abstractmethod
     def extract_schema_id(
-        self, data: bytes, message: dict,
+        self,
+        data: bytes,
+        message: dict,
     ) -> SchemaIdSpec: ...
 
     def deserializer_with_schema_id(
         self,
     ) -> Callable[
-        [bytes, "SerializationContext"], tuple[dict, SchemaIdSpec],
+        [bytes, "SerializationContext"],
+        tuple[dict, SchemaIdSpec],
     ]:
         """Convenience wrapper used by the consumer: returns a
         callable that yields ``(record, schema_id)`` in one call."""

@@ -57,7 +57,6 @@ from tabsdatak.conn.common.types import CfgSpec, EntityWhitelistSpec, UserPasswo
 from tabsdatak.conn.mysql import _validation
 from tabsdatak.conn.mysql.error import MysqlErrorCode
 
-
 # --- CDC public primitives ------------------------------------------
 #
 # These types are mysql-local rather than re-exported from

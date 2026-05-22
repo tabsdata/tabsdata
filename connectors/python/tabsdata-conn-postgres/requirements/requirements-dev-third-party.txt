@@ -4,5 +4,5 @@
 
 # Docker-driven end-to-end tests for the Postgres connector. `psycopg2-binary`
 # ships pre-built wheels so no compiler is needed at install time.
-docker
-psycopg2-binary
+docker==7.1.0
+psycopg2-binary==2.9.11

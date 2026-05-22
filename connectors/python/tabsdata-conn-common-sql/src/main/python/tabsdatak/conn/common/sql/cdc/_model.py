@@ -68,9 +68,7 @@ class CdcDataChange:
         size += sum(sys.getsizeof(value) for value in self.new_values.values())
         if self.old_values:
             size += sys.getsizeof(self.old_values)
-            size += sum(
-                sys.getsizeof(value) for value in self.old_values.values()
-            )
+            size += sum(sys.getsizeof(value) for value in self.old_values.values())
         if self.offset:
             size += sys.getsizeof(self.offset)
         return size

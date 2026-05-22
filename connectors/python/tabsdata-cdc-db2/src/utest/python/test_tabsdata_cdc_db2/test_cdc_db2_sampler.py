@@ -15,6 +15,7 @@ from tabsdata.connector.cdc.common.constants import CdcOperation
 from test_tabsdata.test_tableframe.common import pretty_polars, pretty_pandas
 from test_tabsdata_cdc_db2.common.sql import Db2CdcSampler
 
+pytestmark = [pytest.mark.xdist_group("cdc-db2-cdc_db2_sampler_seq")]
 
 @pytest.mark.cdc_db2
 @pytest.mark.slow

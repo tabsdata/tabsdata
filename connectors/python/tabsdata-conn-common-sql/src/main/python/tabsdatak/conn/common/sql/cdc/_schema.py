@@ -85,7 +85,10 @@ class SchemaRegistry:
 
         logger.info(
             "Registered schema version %d for table %s (hash=%s, columns=%d)",
-            version_ordinal, table, sch, len(columns),
+            version_ordinal,
+            table,
+            sch,
+            len(columns),
         )
 
         return sv
@@ -96,8 +99,7 @@ class SchemaRegistry:
         tracked_table: TrackedTable,
     ) -> SchemaVersion:
         raw_schema = tuple(
-            (col.name, repr(col.satype), col.satype)
-            for col in tracked_table.columns
+            (col.name, repr(col.satype), col.satype) for col in tracked_table.columns
         )
         sch = raw_schema_hash(raw_schema)
 
@@ -126,7 +128,9 @@ class SchemaRegistry:
 
         logger.info(
             "Registered catalog schema version 0 for table %s (hash=%s, columns=%d)",
-            table, sch, len(columns),
+            table,
+            sch,
+            len(columns),
         )
 
         return sv

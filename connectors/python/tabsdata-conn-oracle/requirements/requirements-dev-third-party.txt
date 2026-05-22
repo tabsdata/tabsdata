@@ -5,5 +5,5 @@
 # Docker-driven end-to-end tests for the Oracle connector. `oracledb` is
 # pure Python in thin mode (no Oracle Instant Client install needed for
 # the docker e2e tests). Apache 2.0.
-docker
-oracledb
+docker==7.1.0
+oracledb==3.4.2

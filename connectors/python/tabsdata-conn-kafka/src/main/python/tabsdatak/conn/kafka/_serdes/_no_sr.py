@@ -40,7 +40,9 @@ class NonSrKafkaSerde(KafkaSerde, ABC):
     messages whose key set is a subset of the current buffer's."""
 
     def extract_schema_id(
-        self, _data: bytes, message: dict,
+        self,
+        _data: bytes,
+        message: dict,
     ) -> SchemaIdSpec:
         return tuple(sorted(message.keys()))
 
@@ -191,7 +193,8 @@ class ProtobufKafkaSerde(NonSrKafkaSerde):
     serialise / deserialise."""
 
     def __init__(
-        self, *,
+        self,
+        *,
         protobuf_schema: str,
         message_name: str,
         working_dir: str,

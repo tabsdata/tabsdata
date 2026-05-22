@@ -285,6 +285,8 @@ def _run_plugin_in_thread(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.db2_seq
+@pytest.mark.xdist_group("db2_seq")
 def test_cdc_insert_event_stages_a_committed_manifest(
     fresh_db2_cdc, tmp_path,
 ):
@@ -330,6 +332,8 @@ def test_cdc_insert_event_stages_a_committed_manifest(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.db2_seq
+@pytest.mark.xdist_group("db2_seq")
 def test_cdc_insert_update_delete_events_surface(fresh_db2_cdc, tmp_path):
     cfg = fresh_db2_cdc
     work = tmp_path / "work"
@@ -386,6 +390,8 @@ def test_cdc_insert_update_delete_events_surface(fresh_db2_cdc, tmp_path):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.db2_seq
+@pytest.mark.xdist_group("db2_seq")
 def test_cdc_tail_skips_pre_existing_events(fresh_db2_cdc, tmp_path):
     cfg = fresh_db2_cdc
     work = tmp_path / "work"
@@ -446,6 +452,8 @@ def test_cdc_tail_skips_pre_existing_events(fresh_db2_cdc, tmp_path):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.db2_seq
+@pytest.mark.xdist_group("db2_seq")
 def test_cdc_resumes_from_commitseq_position(fresh_db2_cdc, tmp_path):
     cfg = fresh_db2_cdc
     work = tmp_path / "work"
@@ -490,6 +498,8 @@ def test_cdc_resumes_from_commitseq_position(fresh_db2_cdc, tmp_path):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.db2_seq
+@pytest.mark.xdist_group("db2_seq")
 def test_cdc_persists_offset_to_ctx_state(fresh_db2_cdc, tmp_path):
     cfg = fresh_db2_cdc
     work = tmp_path / "work"

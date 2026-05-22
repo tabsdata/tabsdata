@@ -26,6 +26,7 @@ from test_tabsdata_cdc_db2.common.fixtures.docker import (
 )
 from test_tabsdata_cdc_db2.common.sql import Db2CdcSampler
 
+pytestmark = [pytest.mark.xdist_group("cdc-db2-cdc_db2_schema_offset_multi_seq")]
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

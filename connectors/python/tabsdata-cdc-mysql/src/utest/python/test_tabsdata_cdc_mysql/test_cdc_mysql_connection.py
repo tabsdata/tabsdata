@@ -11,6 +11,7 @@ from test_tabsdata_cdc_mysql.common.fixtures.docker import (
     MYSQL_CDC_DATABASE,
 )
 
+pytestmark = [pytest.mark.xdist_group("cdc-mysql-cdc_mysql_connection_seq")]
 
 @pytest.mark.cdc_mysql
 @pytest.mark.slow

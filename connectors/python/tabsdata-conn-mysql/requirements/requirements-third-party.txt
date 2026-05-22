@@ -4,5 +4,5 @@
 
 # MySQL binlog stream reader -- used by ``_cdc_ingester.BinlogIngester``
 # to consume the source's change stream.
-pymysql
-mysql-replication
+pymysql==1.2.0
+mysql-replication==1.0.15

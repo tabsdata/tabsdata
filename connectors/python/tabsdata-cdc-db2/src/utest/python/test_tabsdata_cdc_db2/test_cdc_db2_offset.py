@@ -20,6 +20,7 @@ from test_tabsdata_cdc_common.common.shared import TRIGGER_END_MINUTES, run_offs
 from test_tabsdata_cdc_db2.common.fixtures.docker import DB2_CDC_STAGING_TABLE_PREFIX
 from test_tabsdata_cdc_db2.common.sql import Db2CdcSampler
 
+pytestmark = [pytest.mark.xdist_group("cdc-db2-cdc_db2_offset_seq")]
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

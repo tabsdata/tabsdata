@@ -23,7 +23,7 @@ from tabsdatak.conn.mssql import _plugin as plugin
 from tabsdatak.spi import DestContext, SrcPluginCtx
 
 
-pytestmark = pytest.mark.mssql
+pytestmark = [pytest.mark.mssql, pytest.mark.xdist_group("mssql-plugin_integration_seq")]
 
 
 # ---------------------------------------------------------------------------

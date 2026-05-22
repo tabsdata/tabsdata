@@ -6,6 +6,7 @@ import pytest
 
 from test_tabsdata_cdc_mysql.common.fixtures.docker import MYSQL_CDC_DATABASE, MYSQL_CDC_USER
 
+pytestmark = [pytest.mark.xdist_group("cdc-mysql-cdc_mysql_docker_seq")]
 
 @pytest.mark.cdc_mysql
 @pytest.mark.slow

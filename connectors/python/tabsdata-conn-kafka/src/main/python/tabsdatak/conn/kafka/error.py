@@ -55,8 +55,7 @@ class KafkaErrorCode(ErrorCode):
     )  # dlq producer startup
     KAFKA_8 = ErrorDef(
         KafkaRuntimeException,
-        "Kafka consumer group.id is required but not set "
-        "(group_id={group_id!r})",
+        "Kafka consumer group.id is required but not set (group_id={group_id!r})",
     )  # _build_kafka_configs: no group.id
     KAFKA_9 = ErrorDef(
         KafkaRuntimeException,
@@ -73,8 +72,7 @@ class KafkaErrorCode(ErrorCode):
     )  # _process_message: deserialize raised
     KAFKA_12 = ErrorDef(
         KafkaRuntimeException,
-        "Kafka end-time reached before any data was consumed "
-        "(end={end!r})",
+        "Kafka end-time reached before any data was consumed (end={end!r})",
     )  # consume_loop: hit ``end`` empty-handed
 
     # --- Serdes -----------------------------------------------------
@@ -90,8 +88,7 @@ class KafkaErrorCode(ErrorCode):
     )  # JsonKafkaSerde / JsonSrKafkaSerde: invalid JSON schema string
     KAFKA_15 = ErrorDef(
         KafkaRuntimeException,
-        "Kafka JSON serde: message does not conform to schema "
-        "({error!s})",
+        "Kafka JSON serde: message does not conform to schema ({error!s})",
     )  # JsonKafkaSerde: jsonschema validation failure
     KAFKA_16 = ErrorDef(
         KafkaRuntimeException,
@@ -99,8 +96,7 @@ class KafkaErrorCode(ErrorCode):
     )  # get_protobuf_class: protoc invocation failed
     KAFKA_17 = ErrorDef(
         KafkaRuntimeException,
-        "Kafka Protobuf serde: message {message_name!r} not found "
-        "in compiled schema",
+        "Kafka Protobuf serde: message {message_name!r} not found in compiled schema",
     )  # get_protobuf_class: message_name absent from FileDescriptorSet
     KAFKA_18 = ErrorDef(
         KafkaRuntimeException,

@@ -26,7 +26,7 @@ from tabsdatak.conn.kafka._serdes._base import KafkaSerde
 from tabsdatak.conn.kafka.error import KafkaErrorCode
 
 if TYPE_CHECKING:  # pragma: no cover
-    from confluent_kafka.schema_registry import SchemaRegistryClient
+    pass
 
 
 logger = logging.getLogger(__name__)
@@ -155,7 +155,8 @@ def build_serde(
             )
 
     raise KafkaErrorCode.KAFKA_9.exception(
-        format=fmt_label, sr_mode=mode,
+        format=fmt_label,
+        sr_mode=mode,
     )
 
 
@@ -189,9 +190,7 @@ def build_schema_registry_client(
 
         # Glue boto3 client picks credentials off the environment.
         # We populate the standard envvars from the config.
-        os.environ["AWS_ACCESS_KEY_ID"] = (
-            schema_registry.credentials.user.value()
-        )
+        os.environ["AWS_ACCESS_KEY_ID"] = schema_registry.credentials.user.value()
         os.environ["AWS_SECRET_ACCESS_KEY"] = (
             schema_registry.credentials.password.value()
         )

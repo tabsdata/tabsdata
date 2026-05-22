@@ -27,6 +27,9 @@ from test_tabsdata_kafka.conftest import (
     kafka_consumer_fixture,
 )
 
+
+pytestmark = [pytest.mark.xdist_group("kafka-kafka_stage_trigger_run_time_seq")]
+
 logger = logging.getLogger(__name__)
 
 logger.setLevel(logging.DEBUG)

@@ -82,6 +82,7 @@ markers = [
     "databricks_live: live test that needs a real Databricks workspace.",
     "db2: mark test as requiring a db2 docker container.",
     "db2_docker: end-to-end test that needs a docker daemon and a Db2 image.",
+    "db2_seq: mark test as requiring running sequentially in the db2 scope (normally using a docker container).",
     "dq: mark tests for data quality functionality.",
     "druid: mark tests that require Druid dialect/connection logic.",
     "gcs: mark tests that require credentials to GCS.",

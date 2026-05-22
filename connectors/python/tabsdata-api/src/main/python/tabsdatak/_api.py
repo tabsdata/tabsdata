@@ -276,7 +276,11 @@ SECRET_NAME_CONSTRAINTS = AfterValidator(_validate_secret_name)
 NON_EMPTY_LIST_CONSTRAINTS = Field(min_length=1)
 
 
-CONTEXT_KEY_RE_STR = r'^(?=.{1,253}$)([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$'
+CONTEXT_KEY_RE_STR = (
+    r"^(?=.{1,253}$)"
+    r"([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)"
+    r"(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -380,9 +384,10 @@ class _ValuePattern:
             # ``Secret.__init__`` is empty-only (the user-facing guard
             # in ``api.py``); route via the pydantic validator so the
             # framework reconstruction is not subject to that guard.
-            return type(instance).__pydantic_validator__.validate_python(
-                {field_name: getattr(instance, field_name), "_value_pattern": regex}
-            )
+            return type(instance).__pydantic_validator__.validate_python({
+                field_name: getattr(instance, field_name),
+                "_value_pattern": regex,
+            })
 
         return core_schema.no_info_wrap_validator_function(wrap, base)
 
@@ -593,7 +598,8 @@ def _format_expected_signature(
     out_args = ", ".join(["TableFrameSpec"] * output_count) if output_count > 0 else ""
     ctx_note = (
         " (an optional trailing ``ctx: TrxCtx`` parameter is also allowed)"
-        if allow_trx_ctx else ""
+        if allow_trx_ctx
+        else ""
     )
 
     return (
@@ -699,10 +705,12 @@ def check_callable_signature(
         extra = params[input_count]
         extra_hint = hints.get(extra.name)
         if extra_hint is None or not _is_trx_ctx_slot(extra_hint):
+            rendered = (
+                _render_type(extra_hint) if extra_hint is not None else "unannotated"
+            )
             raise ValueError(
                 f"{name!r}: trailing parameter {extra.name!r} is "
-                f"annotated as "
-                f"{_render_type(extra_hint) if extra_hint is not None else 'unannotated'!r} "
+                f"annotated as {rendered!r} "
                 f"but must be a TrxCtx subclass{expected}"
             )
 
@@ -1082,11 +1090,7 @@ class BaseSecret(JsonSerde, ABC):
             return handler(data)
 
         if cls is Secret and isinstance(data, dict):
-            stash = {
-                k: data[k]
-                for k in ("_s", "_value_pattern")
-                if k in data
-            }
+            stash = {k: data[k] for k in ("_s", "_value_pattern") if k in data}
             instance = handler(data)
             for k, v in stash.items():
                 object.__setattr__(instance, k, v)

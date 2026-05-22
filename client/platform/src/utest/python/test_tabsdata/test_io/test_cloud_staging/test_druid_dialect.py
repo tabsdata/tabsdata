@@ -41,6 +41,9 @@ from tabsdata._io.cloud_staging.druid.dialect import (
 )
 
 
+
+pytestmark = [pytest.mark.xdist_group("platform-druid_dialect_seq")]
+
 # ── Fixtures ──────────────────────────────────────────────────────────────────────────
 
 

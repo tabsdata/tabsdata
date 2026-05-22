@@ -34,7 +34,9 @@ class SrKafkaSerde(KafkaSerde, ABC):
     a big-endian unsigned int."""
 
     def extract_schema_id(
-        self, data: bytes, _message: dict,
+        self,
+        data: bytes,
+        _message: dict,
     ) -> SchemaIdSpec:
         if data is None or len(data) < 5:
             raise KafkaErrorCode.KAFKA_13.exception(
@@ -53,7 +55,8 @@ class AvroSrKafkaSerde(SrKafkaSerde):
     serializer/deserializer underneath."""
 
     def __init__(
-        self, *,
+        self,
+        *,
         schema_registry_client: "SchemaRegistryClient",
         avro_schema: str | None = None,
     ):
@@ -94,7 +97,8 @@ class JsonSrKafkaSerde(SrKafkaSerde):
     """Confluent SR + JSON Schema."""
 
     def __init__(
-        self, *,
+        self,
+        *,
         schema_registry_client: "SchemaRegistryClient",
         json_schema: str | None = None,
     ):
@@ -144,7 +148,8 @@ class ProtobufSrKafkaSerde(SrKafkaSerde):
     breaks protobuf deserialisation."""
 
     def __init__(
-        self, *,
+        self,
+        *,
         serializer_registry_client: "SchemaRegistryClient",
         deserializer_registry_client: "SchemaRegistryClient",
         protobuf_schema: str,
@@ -158,10 +163,12 @@ class ProtobufSrKafkaSerde(SrKafkaSerde):
             message_name=message_name,
         )
         self._serializer = self._make_serializer(
-            serializer_registry_client, msg_class,
+            serializer_registry_client,
+            msg_class,
         )
         self._deserializer = self._make_deserializer(
-            deserializer_registry_client, msg_class,
+            deserializer_registry_client,
+            msg_class,
         )
         self._schema = protobuf_schema
         self._message_name = message_name

@@ -412,6 +412,59 @@ def check_cdc_postgres_container(port: int, signal: str) -> None:
     check_cdc_postgres_replica_operation_stream(port, signal)
 
 
+def _drop_leftover_replication_slots(port: int) -> None:
+    conn = None
+    try:
+        conn = psycopg2.connect(
+            host=DB_HOST,
+            port=str(port),
+            dbname=POSTGRES_CDC_DATABASE,
+            user=POSTGRES_CDC_ROOT_USER,
+            password=POSTGRES_CDC_ROOT_PASSWORD,
+        )
+        conn.autocommit = True
+        with conn.cursor() as cur:
+            cur.execute(
+                "select"
+                "    slot_name,"
+                "    active_pid "
+                "from"
+                "    pg_replication_slots "
+                "where"
+                "    slot_name like 'td_slot_%'"
+            )
+            rows = cur.fetchall()
+            if not rows:
+                return
+            logger.info(
+                "Dropping %d leftover td_slot_* replication slot(s)",
+                len(rows),
+            )
+            for slot_name, active_pid in rows:
+                if active_pid:
+                    cur.execute(
+                        "select"
+                        "    pg_terminate_backend(%s)",
+                        (active_pid,),
+                    )
+                try:
+                    cur.execute(
+                        "select"
+                        "    pg_drop_replication_slot(%s)",
+                        (slot_name,),
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "Failed to drop leftover slot %r: %s",
+                        slot_name, exc,
+                    )
+    except Exception as exc:  # noqa: BLE001 -- best-effort cleanup
+        logger.warning("Leftover-slot cleanup skipped: %s", exc)
+    finally:
+        if conn is not None:
+            conn.close()
+
+
 def create_cdc_postgres_database(
     name: str = DEFAULT_PYTEST_POSTGRES_CDC_DOCKER_CONTAINER_NAME,
 ) -> tuple[Container, int]:
@@ -420,6 +473,7 @@ def create_cdc_postgres_database(
     if created:
         signal = setup_cdc_postgres_container(container, port)
         check_cdc_postgres_container(port, signal)
+    _drop_leftover_replication_slots(port)
 
     return container, port
 
@@ -513,4 +567,48 @@ def postgres_cdc_slot(postgres_cdc_config):
     rcursor.create_replication_slot(slot_name, output_plugin="wal2json")
     rcursor.close()
     rconn.close()
-    return slot_name
+    try:
+        yield slot_name
+    finally:
+        # Drop the slot so it doesn't pin WAL on disk across test
+        # sessions. Without this, each run leaks one td_slot_* and
+        # postgres eventually struggles to keep up.
+        cleanup_conn = None
+        try:
+            cleanup_conn = psycopg2.connect(
+                host=config.host,
+                port=str(config.port),
+                dbname=config.database,
+                user=config.cdc_user,
+                password=config.cdc_password,
+            )
+            cleanup_conn.autocommit = True
+            with cleanup_conn.cursor() as cur:
+                # Terminate any consumer still attached, then drop.
+                cur.execute(
+                    "select"
+                    "    pg_terminate_backend(active_pid) "
+                    "from"
+                    "    pg_replication_slots "
+                    "where"
+                    "    slot_name = %s "
+                    "and"
+                    "    active",
+                    (slot_name,),
+                )
+                cur.execute(
+                    "select"
+                    "    pg_drop_replication_slot(slot_name) "
+                    "from"
+                    "    pg_replication_slots "
+                    "where"
+                    "    slot_name = %s",
+                    (slot_name,),
+                )
+        except Exception as exc:  # noqa: BLE001 -- teardown must not raise
+            logger.warning(
+                "Failed to drop replication slot %r: %s", slot_name, exc,
+            )
+        finally:
+            if cleanup_conn is not None:
+                cleanup_conn.close()

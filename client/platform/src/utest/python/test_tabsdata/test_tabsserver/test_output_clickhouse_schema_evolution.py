@@ -23,7 +23,9 @@ from tabsdata._io.cloud_staging.common.errors import SchemaError
 from tabsdata.connector.schema.evolution.iceberg.models import UnsafeSchemaChangeError
 
 # noinspection PyUnresolvedReferences
-from . import pytestmark  # noqa: F401
+from . import pytestmark as _package_pytestmark  # noqa: F401
+
+pytestmark = [_package_pytestmark, pytest.mark.xdist_group("platform-output_clickhouse_schema_evolution_seq")]
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

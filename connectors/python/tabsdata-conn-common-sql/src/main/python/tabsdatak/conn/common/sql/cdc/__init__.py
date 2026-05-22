@@ -14,8 +14,8 @@ declare on their ``StreamSrc`` subclasses (``CdcFormat``,
 from __future__ import annotations
 
 from tabsdatak.conn.common.sql.cdc.typing import (
-    CdcFormat,
     CdcColumnsFormatSpec,
+    CdcFormat,
     QualifiedTableSpec,
     QualifiedTablesSpec,
     RelativePositionSpec,

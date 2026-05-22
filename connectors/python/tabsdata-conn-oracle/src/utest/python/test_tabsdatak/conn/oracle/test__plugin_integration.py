@@ -23,7 +23,7 @@ from tabsdatak.conn.oracle import _plugin as plugin
 from tabsdatak.spi import DestContext, SrcPluginCtx
 
 
-pytestmark = pytest.mark.oracle
+pytestmark = [pytest.mark.oracle, pytest.mark.xdist_group("oracle-plugin_integration_seq")]
 
 
 # ---------------------------------------------------------------------------

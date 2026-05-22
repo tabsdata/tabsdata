@@ -86,6 +86,8 @@ def clean(project_folder, inclusion_patterns, exclusion_patterns):
                 and first_component != ".pytest_cache"
                 and first_component != ".coverage"
                 and first_component != ".ruff_cache"
+                and first_component != ".mypy_cache"
+                and first_component != ".grimp_cache"
             ):
                 logger.debug(f"✏️    - Skipping root dot file/folder: {full_path}")
                 continue
@@ -122,11 +124,7 @@ def clean_py(project_folder):
 
             for entry in os.scandir(connectors_folder):
                 if entry.is_dir():
-                    connector_name_parts = entry.name.split("-", 1)
-                    if (
-                        len(connector_name_parts) != 2
-                        or connector_name_parts[0] != "tabsdata"
-                    ):
+                    if not entry.name.startswith("tabsdata-"):
                         logger.debug(f"⛔️ Invalid connector folder name: {entry.name}")
                     else:
                         tabsdata_connectors.append(entry.name)
@@ -139,6 +137,7 @@ def clean_py(project_folder):
         ".cache",
         ".coverage*",
         ".egg-info",
+        ".grimp_cache",
         ".mypy_cache",
         ".pytest_cache",
         ".ruff_cache",
@@ -170,40 +169,33 @@ def clean_py(project_folder):
 
     connectors = gather_connectors()
     for connector in connectors:
-        connector_submodule_name = connector.split("-", 1)[1]
-        connector_submodule_parts = connector_submodule_name.split("-")
-        inclusion_patterns.append(
-            os.path.join(
-                "connectors",
-                "python",
-                connector,
-                "src",
-                "main",
-                "python",
-                "tabsdata",
-                "connector",
-                *connector_submodule_parts,
-                "assets",
-                "manifest",
-                "BANNER",
-            ),
-        )
-        inclusion_patterns.append(
-            os.path.join(
-                "connectors",
-                "python",
-                connector,
-                "src",
-                "main",
-                "python",
-                "tabsdata",
-                "connector",
-                *connector_submodule_parts,
-                "assets",
-                "manifest",
-                "LICENSE",
-            ),
-        )
+        for leaf in ("BANNER", "LICENSE"):
+            inclusion_patterns.append(
+                os.path.join(
+                    "connectors",
+                    "python",
+                    connector,
+                    "src",
+                    "main",
+                    "python",
+                    "**",
+                    "assets",
+                    "manifest",
+                    leaf,
+                ),
+            )
+        for ext_suffix in ("*.so", "*.pyd"):
+            inclusion_patterns.append(
+                os.path.join(
+                    "python",
+                    "src",
+                    "main",
+                    "python",
+                    "tabsdata",
+                    "**",
+                    ext_suffix,
+                ),
+            )
 
     exclusion_patterns = [
         ".coveragerc",

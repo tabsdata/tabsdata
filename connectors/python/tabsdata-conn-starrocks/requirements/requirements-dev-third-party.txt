@@ -7,5 +7,5 @@
 # SDK and ``mysql-connector-python`` is the DBAPI driver SQLAlchemy
 # picks for the ``mysql+mysqlconnector://`` URIs that the conftest
 # uses to talk to StarRocks.
-docker
-mysql-connector-python
+docker==7.1.0
+mysql-connector-python==9.6.0

@@ -23,7 +23,7 @@ from tabsdatak.conn.mysql import _plugin as plugin
 from tabsdatak.spi import DestContext, SrcPluginCtx
 
 
-pytestmark = pytest.mark.mysql
+pytestmark = [pytest.mark.mysql, pytest.mark.xdist_group("mysql-plugin_integration_seq")]
 
 
 # ---------------------------------------------------------------------------

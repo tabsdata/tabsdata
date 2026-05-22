@@ -20,6 +20,7 @@ from test_tabsdata_cdc_common.common.evolution import MULTI_CHANGES, ALL_CHANGES
 from test_tabsdata_cdc_mysql.common.db import server_id
 from test_tabsdata_cdc_mysql.common.sql import MySQLCdcSampler
 
+pytestmark = [pytest.mark.xdist_group("cdc-mysql-cdc_mysql_schema_multi_seq")]
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

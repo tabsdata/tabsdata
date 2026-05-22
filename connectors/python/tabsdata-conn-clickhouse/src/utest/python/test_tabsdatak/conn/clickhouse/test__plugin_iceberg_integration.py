@@ -63,8 +63,7 @@ pytestmark = [
             " against Azure / GCS would only re-validate cloud I/O,"
             " not iceberg semantics."
         ),
-    ),
-]
+    ), pytest.mark.xdist_group("clickhouse-plugin_iceberg_integration_seq")]
 
 
 # ---------------------------------------------------------------------------

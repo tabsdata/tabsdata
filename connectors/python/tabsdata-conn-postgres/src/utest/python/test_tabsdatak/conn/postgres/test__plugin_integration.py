@@ -23,7 +23,7 @@ from tabsdatak.conn.postgres import _plugin as plugin
 from tabsdatak.spi import DestContext, SrcPluginCtx
 
 
-pytestmark = pytest.mark.postgres
+pytestmark = [pytest.mark.postgres, pytest.mark.xdist_group("postgres-plugin_integration_seq")]
 
 
 # ---------------------------------------------------------------------------

@@ -63,9 +63,7 @@ logger = logging.getLogger(__name__)
 # src_cfg and falls back to common-sql defaults.
 _KEY_CDC_BLOCKING_TIMEOUT: CdcSrcCfgKey = "postgres.cdc.blocking_timeout_seconds"
 _KEY_CDC_LOGGING_LEVEL: CdcSrcCfgKey = "postgres.cdc.logging_level"
-_KEY_CDC_WAL2JSON_FORMAT_VERSION: CdcSrcCfgKey = (
-    "postgres.cdc.wal2json_format_version"
-)
+_KEY_CDC_WAL2JSON_FORMAT_VERSION: CdcSrcCfgKey = "postgres.cdc.wal2json_format_version"
 _KEY_CDC_BUFFER_MAX_ROWS: CdcSrcCfgKey = "tabsdata.cdc.buffer.max_rows"
 _KEY_CDC_BUFFER_MAX_BYTES: CdcSrcCfgKey = "tabsdata.cdc.buffer.max_bytes"
 _KEY_CDC_BUFFER_MAX_SECS: CdcSrcCfgKey = "tabsdata.cdc.buffer.max_secs"
@@ -101,7 +99,9 @@ def _build_cdc_run_config(
         buffer_max_bytes=cfg.get(_KEY_CDC_BUFFER_MAX_BYTES, DEFAULT_BUFFER_MAX_BYTES),
         buffer_max_secs=cfg.get(_KEY_CDC_BUFFER_MAX_SECS, DEFAULT_BUFFER_MAX_SECS),
         trigger_max_rows=cfg.get(_KEY_CDC_TRIGGER_MAX_ROWS, DEFAULT_TRIGGER_MAX_ROWS),
-        trigger_max_bytes=cfg.get(_KEY_CDC_TRIGGER_MAX_BYTES, DEFAULT_TRIGGER_MAX_BYTES),
+        trigger_max_bytes=cfg.get(
+            _KEY_CDC_TRIGGER_MAX_BYTES, DEFAULT_TRIGGER_MAX_BYTES
+        ),
         trigger_max_secs=cfg.get(_KEY_CDC_TRIGGER_MAX_SECS, DEFAULT_TRIGGER_MAX_SECS),
         poll_interval_seconds=cfg.get(
             _KEY_CDC_POLL_INTERVAL, DEFAULT_POLL_INTERVAL_SECONDS
@@ -132,10 +132,12 @@ class PostgresCdcStreamSrcPlugin(StreamSrcPlugin[PostgresCdcStreamSrc]):
         )
         src_cfg = stream_src.src_cfg or {}
         blocking_timeout = src_cfg.get(
-            _KEY_CDC_BLOCKING_TIMEOUT, DEFAULT_BLOCKING_TIMEOUT_SECONDS,
+            _KEY_CDC_BLOCKING_TIMEOUT,
+            DEFAULT_BLOCKING_TIMEOUT_SECONDS,
         )
         wal2json_format = src_cfg.get(
-            _KEY_CDC_WAL2JSON_FORMAT_VERSION, DEFAULT_WAL2JSON_FORMAT_VERSION,
+            _KEY_CDC_WAL2JSON_FORMAT_VERSION,
+            DEFAULT_WAL2JSON_FORMAT_VERSION,
         )
         ingester = Wal2JsonIngester(
             conn=conn,

@@ -51,6 +51,9 @@ from test_tabsdata_mongodb.test_output_mongodb_none.example import (
     output_mongodb_none,
 )
 
+
+pytestmark = [pytest.mark.xdist_group("mongodb-output_mongodb_seq")]
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 

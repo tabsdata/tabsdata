@@ -161,6 +161,8 @@ def work_dir(tmp_path: Path) -> Path:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.db2_seq
+@pytest.mark.xdist_group("db2_seq")
 def test_src_plugin_read_in_returns_parquet_files(fresh_db2, work_dir):
     src = Db2Src(
         conn=_conn_from(fresh_db2),
@@ -174,6 +176,8 @@ def test_src_plugin_read_in_returns_parquet_files(fresh_db2, work_dir):
     assert df[name_col].to_list() == ["alice", "bob", "carol"]
 
 
+@pytest.mark.db2_seq
+@pytest.mark.xdist_group("db2_seq")
 def test_src_plugin_read_in_multiple_queries(fresh_db2, work_dir):
     src = Db2Src(
         conn=_conn_from(fresh_db2),
@@ -198,6 +202,8 @@ def test_src_plugin_read_in_multiple_queries(fresh_db2, work_dir):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.db2_seq
+@pytest.mark.xdist_group("db2_seq")
 def test_dest_plugin_write_out_appends_rows(fresh_db2, work_dir):
     src = _make_parquet(
         work_dir / "in.parquet",
@@ -224,6 +230,8 @@ def test_dest_plugin_write_out_appends_rows(fresh_db2, work_dir):
         eng.dispose()
 
 
+@pytest.mark.db2_seq
+@pytest.mark.xdist_group("db2_seq")
 def test_dest_plugin_write_out_replace_clears_existing(fresh_db2, work_dir):
     src = _make_parquet(
         work_dir / "in.parquet",

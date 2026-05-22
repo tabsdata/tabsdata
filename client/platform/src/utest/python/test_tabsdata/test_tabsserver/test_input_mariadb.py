@@ -42,7 +42,9 @@ from test_tabsdata.test_input_mariadb_initial_values.example import (
 )
 
 # noinspection PyUnresolvedReferences
-from . import pytestmark  # noqa: F401
+from . import pytestmark as _package_pytestmark  # noqa: F401
+
+pytestmark = [_package_pytestmark, pytest.mark.xdist_group("platform-input_mariadb_seq")]
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
