@@ -21,7 +21,6 @@ parse run-env.yaml, and does not spawn any subprocess of the venv itself.
 from __future__ import annotations
 
 import tarfile
-import tempfile
 from pathlib import Path
 
 from tabsdatak._tdrunner.function._lib.bundle import extract_bundle
@@ -47,10 +46,13 @@ INFO = (
     "localize-fn-bundle — fetch the function bundle via td_transporter and extract it"
 )
 MAN = (
-    "localize-fn-bundle --request <PATH> --bundle-dir <PATH> --liveness <PATH>\n\n"
+    "localize-fn-bundle --request <PATH> --bundle-dir <PATH> "
+    "--scratch-dir <PATH> --liveness <PATH>\n\n"
     "Reads the bundle URI from --request, downloads the tarball via "
-    "td_transporter, and extracts it to --bundle-dir. Step 3 of the publisher "
-    "init-container chain."
+    "td_transporter, and extracts it to --bundle-dir. Intermediate "
+    "files (bundle archive, transporter request/report) are written "
+    "under --scratch-dir; the caller owns its lifecycle. Step 3 of the "
+    "publisher init-container chain."
 )
 
 # Command-specific exit codes (>= 10 per docs/01-CommandBasics.md).
@@ -72,6 +74,16 @@ def _build_parser():
         "--bundle-dir",
         required=True,
         help="Destination dir for bundle extraction",
+    )
+    parser.add_argument(
+        "--scratch-dir",
+        required=True,
+        dest="scratch_dir",
+        help=(
+            "Directory where the command stages the bundle archive, the "
+            "transporter request and the transporter report. Caller owns "
+            "its lifecycle (the command does not clean it up)."
+        ),
     )
     return parser
 
@@ -116,18 +128,16 @@ def _run() -> int:
     args = _build_parser().parse_args()
     request_path = Path(args.request)
     dest_dir = Path(args.bundle_dir)
+    scratch_dir = Path(args.scratch_dir)
     install_liveness_handler(Path(args.liveness))
 
     request = _load_request(request_path)
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp_dir = Path(tmp)
-        bundle_local = tmp_dir / "bundle.tar.gz"
-        transporter_yaml = tmp_dir / "transporter.yaml"
-        transporter_report = tmp_dir / "transporter-report.yaml"
-        _fetch_via_transporter(
-            request, bundle_local, transporter_yaml, transporter_report
-        )
-        _extract(bundle_local, dest_dir)
+    scratch_dir.mkdir(parents=True, exist_ok=True)
+    bundle_local = scratch_dir / "bundle.tar.gz"
+    transporter_yaml = scratch_dir / "transporter.yaml"
+    transporter_report = scratch_dir / "transporter-report.yaml"
+    _fetch_via_transporter(request, bundle_local, transporter_yaml, transporter_report)
+    _extract(bundle_local, dest_dir)
     return 0
 
 

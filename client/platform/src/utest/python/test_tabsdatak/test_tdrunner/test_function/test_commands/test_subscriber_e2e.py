@@ -270,6 +270,8 @@ def test_subscriber_full_chain(
             str(request_yaml),
             "--bundle-dir",
             str(extracted),
+            "--scratch-dir",
+            str(tmp_path / "localize-scratch"),
             "--liveness",
             str(tmp_path / "liveness-localize"),
         ],

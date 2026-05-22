@@ -28,7 +28,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 _MOD = "tabsdatak._tdrunner.function.commands.localize_fn_bundle"
 
 
-def _set_argv(monkeypatch, request_path, dest_dir, liveness):
+def _set_argv(monkeypatch, request_path, dest_dir, liveness, scratch_dir):
     monkeypatch.setattr(
         sys,
         "argv",
@@ -38,6 +38,8 @@ def _set_argv(monkeypatch, request_path, dest_dir, liveness):
             str(request_path),
             "--bundle-dir",
             str(dest_dir),
+            "--scratch-dir",
+            str(scratch_dir),
             "--liveness",
             str(liveness),
         ],
@@ -101,14 +103,34 @@ def test_main_happy_path(monkeypatch, tmp_path):
     request_yaml = _write_request(tmp_path / "request.yaml")
     dest = tmp_path / "bundle"
     liveness = tmp_path / "live"
+    scratch = tmp_path / "scratch"
 
     _stub_transporter_returns(monkeypatch, tar_target_files={"a.py": b"print('hi')"})
 
-    _set_argv(monkeypatch, request_yaml, dest, liveness)
+    _set_argv(monkeypatch, request_yaml, dest, liveness, scratch)
     rc = main()
     assert rc == 0
     assert (dest / "a.py").read_bytes() == b"print('hi')"
     assert liveness.exists()
+    # The command stages its intermediates under --scratch-dir and does
+    # not clean up — caller controls lifecycle.
+    assert (scratch / "bundle.tar.gz").exists()
+    assert (scratch / "transporter.yaml").exists()
+
+
+def test_main_creates_scratch_dir_when_absent(monkeypatch, tmp_path):
+    """--scratch-dir does not need to exist beforehand; the command
+    mkdir's it on demand."""
+    request_yaml = _write_request(tmp_path / "request.yaml")
+    scratch = tmp_path / "scratch_does_not_exist"
+    assert not scratch.exists()
+    _stub_transporter_returns(monkeypatch, tar_target_files={"a.py": b"x"})
+
+    _set_argv(
+        monkeypatch, request_yaml, tmp_path / "bundle", tmp_path / "live", scratch
+    )
+    assert main() == 0
+    assert scratch.is_dir()
 
 
 # --- error paths ---
@@ -120,6 +142,7 @@ def test_main_missing_request_returns_bad_request(monkeypatch, tmp_path):
         tmp_path / "no-such-request.yaml",
         tmp_path / "bundle",
         tmp_path / "live",
+        tmp_path / "scratch",
     )
     assert main() == EXIT_BAD_REQUEST
 
@@ -127,7 +150,13 @@ def test_main_missing_request_returns_bad_request(monkeypatch, tmp_path):
 def test_main_malformed_request_returns_bad_request(monkeypatch, tmp_path):
     bad = tmp_path / "request.yaml"
     bad.write_text("info: { unclosed")
-    _set_argv(monkeypatch, bad, tmp_path / "bundle", tmp_path / "live")
+    _set_argv(
+        monkeypatch,
+        bad,
+        tmp_path / "bundle",
+        tmp_path / "live",
+        tmp_path / "scratch",
+    )
     assert main() == EXIT_BAD_REQUEST
 
 
@@ -138,7 +167,13 @@ def test_main_transporter_not_found_returns_transporter_failed(monkeypatch, tmp_
         raise TransporterNotFoundError("no binary")
 
     monkeypatch.setattr(f"{_MOD}.run_transporter", fake)
-    _set_argv(monkeypatch, request_yaml, tmp_path / "bundle", tmp_path / "live")
+    _set_argv(
+        monkeypatch,
+        request_yaml,
+        tmp_path / "bundle",
+        tmp_path / "live",
+        tmp_path / "scratch",
+    )
     assert main() == EXIT_TRANSPORTER_FAILED
 
 
@@ -147,7 +182,13 @@ def test_main_transporter_nonzero_returns_transporter_failed(monkeypatch, tmp_pa
     monkeypatch.setattr(
         f"{_MOD}.run_transporter", lambda yaml_path, report, liveness=None: 7
     )
-    _set_argv(monkeypatch, request_yaml, tmp_path / "bundle", tmp_path / "live")
+    _set_argv(
+        monkeypatch,
+        request_yaml,
+        tmp_path / "bundle",
+        tmp_path / "live",
+        tmp_path / "scratch",
+    )
     assert main() == EXIT_TRANSPORTER_FAILED
 
 
@@ -166,7 +207,13 @@ def test_main_corrupt_bundle_returns_extract_failed(monkeypatch, tmp_path):
         return 0
 
     monkeypatch.setattr(f"{_MOD}.run_transporter", fake)
-    _set_argv(monkeypatch, request_yaml, tmp_path / "bundle", tmp_path / "live")
+    _set_argv(
+        monkeypatch,
+        request_yaml,
+        tmp_path / "bundle",
+        tmp_path / "live",
+        tmp_path / "scratch",
+    )
     assert main() == EXIT_EXTRACT_FAILED
 
 
@@ -178,7 +225,13 @@ def test_main_missing_bundle_after_transporter_returns_extract_failed(
     monkeypatch.setattr(
         f"{_MOD}.run_transporter", lambda yaml_path, report, liveness=None: 0
     )
-    _set_argv(monkeypatch, request_yaml, tmp_path / "bundle", tmp_path / "live")
+    _set_argv(
+        monkeypatch,
+        request_yaml,
+        tmp_path / "bundle",
+        tmp_path / "live",
+        tmp_path / "scratch",
+    )
     assert main() == EXIT_EXTRACT_FAILED
 
 
