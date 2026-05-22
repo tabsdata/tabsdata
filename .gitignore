@@ -151,7 +151,7 @@ client/platform/src/main/python/tabsdata/assets
 src/main/python/tabsdata_agent/assets
 test-results
 
-# Local-only smoke-test harness for run-source-plugin / stamp-inputs.
+# Local-only smoke-test harnesses for the publisher / transformer chains
+# (donotmerge.py, donotmergetransformer.py, and their workspace folders).
 # Kept on disk for manual chain verification; never committed.
-/donotmerge.py
-/donotmergefolder/
+/donotmerge*
