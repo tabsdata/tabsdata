@@ -15,11 +15,10 @@ import time
 import uuid
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Type, cast
+from typing import TYPE_CHECKING, Any
 
-from pydantic import TypeAdapter
-
-from tabsdatak.api import Secret, Env
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.types import _convert
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.kafka._serdes import KafkaSerde, SchemaIdCompatibles, SchemaIdSpec
@@ -306,7 +305,7 @@ def build_kafka_configs(*, conn: KafkaConn) -> dict:
     ``auto.offset.reset=earliest`` + ``enable.auto.commit=False``
     (the plugin commits explicitly after each rollover)."""
     cfg: dict = dict(conn.conn_cfg or {})
-    cfg[_BOOTSTRAP_SERVERS_KEY] = _resolve(conn.servers)
+    cfg[_BOOTSTRAP_SERVERS_KEY] = _convert(conn.servers, str)
     cfg[_AUTO_OFFSET_RESET_KEY] = "earliest"
     cfg[_ENABLE_AUTO_COMMIT_KEY] = False
     if conn.credentials is not None:
@@ -314,11 +313,5 @@ def build_kafka_configs(*, conn: KafkaConn) -> dict:
         cfg[_SASL_MECHANISM_KEY] = "SCRAM-SHA-256"
         cfg[_SASL_USERNAME_KEY] = conn.credentials.user.value()
         cfg[_SASL_PASSWORD_KEY] = conn.credentials.password.value()
-    cfg[_GROUP_ID_KEY] = _resolve(conn.group_id)
+    cfg[_GROUP_ID_KEY] = _convert(conn.group_id, str)
     return cfg
-
-
-def _resolve(spec: str|Secret|Env) -> str:
-    """Return the string form of a ``str`` / ``Secret`` / ``Env``
-    spec."""
-    return spec if isinstance(spec, str) else spec.value()

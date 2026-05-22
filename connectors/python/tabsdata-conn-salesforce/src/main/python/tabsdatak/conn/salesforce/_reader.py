@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.salesforce import (
     SalesforceConn,
     SalesforceReportSrc,
@@ -89,7 +91,9 @@ def login(conn: SalesforceConn, api_version: str | None = None) -> Any:
         raise SalesforceErrorCode.SALESFORCE_12.exception(
             kind=type(credentials).__name__,
         )
-    instance_url = _resolve(conn.instance_url) if conn.instance_url else None
+    instance_url = (
+        _convert(conn.instance_url, str) if conn.instance_url else None
+    )
     version = api_version or sf_api.DEFAULT_API_VERSION
     try:
         return Salesforce(
@@ -104,16 +108,6 @@ def login(conn: SalesforceConn, api_version: str | None = None) -> Any:
             cause=e,
             instance_url=instance_url,
         )
-
-
-def _resolve(value: Any) -> str | None:
-    """Resolve a ``Secret`` / ``Env`` reference to its concrete value, or
-    return the input unchanged when it is already a plain string."""
-    if value is None:
-        return None
-    if hasattr(value, "value") and callable(value.value):
-        return value.value()
-    return str(value)
 
 
 # --- SOQL source ----------------------------------------------------------

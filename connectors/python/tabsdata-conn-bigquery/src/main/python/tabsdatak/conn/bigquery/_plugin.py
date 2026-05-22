@@ -13,6 +13,9 @@ from tabsdatak.conn.bigquery import (
     DestCfgSpec,
 )
 from tabsdatak.conn.bigquery.error import BigqueryErrorCode
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.types import _convert
 from tabsdatak.spi import (
     DestContext,
     DestDef,
@@ -115,9 +118,7 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDest]):
             conn.staging.cfg,
         )
 
-        staging_bucket = conn.staging.bucket
-        if not isinstance(staging_bucket, str):
-            staging_bucket = staging_bucket.value()
+        staging_bucket = _convert(conn.staging.bucket, str)
 
         staging_uris: list[str] = []
         for index in range(len(tables)):

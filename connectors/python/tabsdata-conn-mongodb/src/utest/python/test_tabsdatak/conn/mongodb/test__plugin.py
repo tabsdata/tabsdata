@@ -512,20 +512,8 @@ def test_write_out_aborts_transaction_on_failure(monkeypatch, work_dir):
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_uri_plain_str():
-    conn = _bare_conn()
-    assert plugin._resolve_uri(conn) == "mongodb://stub.invalid:27017"
-
-
-def test_resolve_uri_secret():
-    conn = MongoDBConn(
-        uri=Secret.lit("mongodb://other:27017"),
-        credentials=UserPassword(
-            user=Secret.lit("u"),
-            password=Secret.lit("p"),
-        ),
-    )
-    assert plugin._resolve_uri(conn) == "mongodb://other:27017"
+# uri resolution coverage moved to _convert tests in
+# tabsdata-conn-common (test_types.test_convert_*).
 
 
 def test_uri_with_credentials_inlines_user_pass():

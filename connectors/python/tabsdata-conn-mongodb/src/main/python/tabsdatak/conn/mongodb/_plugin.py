@@ -12,6 +12,9 @@ from tabsdatak.conn.mongodb import (
     MongoDBDest,
 )
 from tabsdatak.conn.mongodb.error import MongodbErrorCode
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.types import _convert
 from tabsdatak.spi import (
     DestContext,
     DestDef,
@@ -72,16 +75,6 @@ _DUP_KEY_CODE = 11000
 # --- URI / client helpers --------------------------------------------
 
 
-def _resolve_uri(conn: MongoDBConn) -> str:
-    """Return the URI as a plain ``str``.
-
-    ``conn.uri`` may be a literal ``str`` or a ``Secret`` / ``Env``
-    descriptor. The latter pair share a ``.value()`` resolver.
-    """
-    uri = conn.uri
-    return uri if isinstance(uri, str) else uri.value()
-
-
 def _uri_with_credentials(conn: MongoDBConn) -> str:
     """Inject the user/password from ``conn.credentials`` into ``conn.uri``.
 
@@ -90,7 +83,7 @@ def _uri_with_credentials(conn: MongoDBConn) -> str:
     credentials are URL-encoded with ``quote_plus`` so special chars
     (``@``, ``:``, ``/``, ...) round-trip safely.
     """
-    uri = _resolve_uri(conn)
+    uri = _convert(conn.uri, str)
     user = quote_plus(conn.credentials.user.value())
     password = quote_plus(conn.credentials.password.value())
     return uri.replace("://", f"://{user}:{password}@", 1)

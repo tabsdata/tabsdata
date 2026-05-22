@@ -6,9 +6,11 @@
   one parquet slot per table. Writes go through an S3 staging
   area + native ``FILES()`` ingestion.
 
-``port`` accepts ``int|Env|Secret``; ``StarRocksConn._port()``
-resolves to runtime ``int``. Iceberg-style schema evolution is
-supported on the dest.
+``port`` accepts ``int|Env|Secret``; call
+``_convert(conn.port, int)`` from
+``tabsdatak.conn.common.types`` at the use site to resolve to a
+runtime ``int``. Iceberg-style schema evolution is supported on
+the dest.
 """
 
 from __future__ import annotations
@@ -62,7 +64,8 @@ HostSpec: TypeAlias = Union[
 ]
 
 # Port: plain int, or an Env / Secret whose resolved value parses as an
-# unsigned integer. ``StarRocksConn._port()`` does the final cast.
+# unsigned integer. Call ``_convert(conn.port, int)`` at the use site to
+# do the final cast.
 _PORT_PATTERN = r"[0-9]+"
 PortSpec: TypeAlias = Union[
     int,
@@ -179,7 +182,8 @@ class StarRocksConn(Conn):
 
     :param host: StarRocks FE host.
     :param port: MySQL-protocol port; default 9030. Accepts
-        ``int``, ``Env``, or ``Secret`` -- use ``_port()`` to read.
+        ``int``, ``Env``, or ``Secret`` -- resolve at the use site
+        with ``_convert(conn.port, int)``.
     :param credentials: :class:`UserPassword`.
     :param staging: :class:`CloudLocation` (S3 / AzBlob / GCS).
     :param database: Default database; default ``"default"``.
@@ -194,16 +198,6 @@ class StarRocksConn(Conn):
     database: DatabaseSpec = "default"
     entity_whitelist: EntityWhitelistSpec | None = None
     conn_cfg: CfgSpec | None = None
-
-    def _port(self) -> int:
-        """Resolve :attr:`port` to a concrete ``int``. The field
-        accepts ``int`` / ``Env`` / ``Secret`` so this helper
-        unwraps the referenced value before passing it to the
-        client. Call this rather than reading ``.port`` directly
-        when a real port number is required."""
-        if isinstance(self.port, int):
-            return self.port
-        return int(self.port.value())
 
 
 ConnSpec: TypeAlias = Union[NamedConn, StarRocksConn]

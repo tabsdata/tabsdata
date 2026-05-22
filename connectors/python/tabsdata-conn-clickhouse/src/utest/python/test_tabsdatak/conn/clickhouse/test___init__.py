@@ -121,7 +121,7 @@ def test_clickhouse_dest_fields_wire_expected_specs():
 
 
 # ---------------------------------------------------------------------------
-# ClickHouseConn._port() / _secure() casting helpers
+# port / secure resolution via _convert at the use site
 # ---------------------------------------------------------------------------
 
 
@@ -137,24 +137,36 @@ def _bare_conn(*, port, secure=False):
     )
 
 
-def test_port_method_returns_int_when_int():
-    assert _bare_conn(port=8443)._port() == 8443
+def test_port_resolves_int():
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common.types import _convert
+
+    assert _convert(_bare_conn(port=8443).port, int) == 8443
 
 
-def test_port_method_resolves_env(monkeypatch):
+def test_port_resolves_env(monkeypatch):
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common.types import _convert
+
     monkeypatch.setenv("CH_PORT", "9001")
-    assert _bare_conn(port=Env("CH_PORT"))._port() == 9001
+    assert _convert(_bare_conn(port=Env("CH_PORT")).port, int) == 9001
 
 
-def test_port_method_resolves_secret_literal():
-    assert _bare_conn(port=Secret.lit("9002"))._port() == 9002
+def test_port_resolves_secret_literal():
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common.types import _convert
+
+    assert _convert(_bare_conn(port=Secret.lit("9002")).port, int) == 9002
 
 
 def test_port_env_non_numeric_rejected_at_value(monkeypatch):
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common.types import _convert
+
     monkeypatch.setenv("CH_PORT_BAD", "notanumber")
     conn = _bare_conn(port=Env("CH_PORT_BAD"))
     with pytest.raises(Exception):
-        conn._port()
+        _convert(conn.port, int)
 
 
 def test_port_secret_literal_non_numeric_rejected_at_construction():
@@ -163,14 +175,23 @@ def test_port_secret_literal_non_numeric_rejected_at_construction():
         _bare_conn(port=Secret.lit("notanumber"))
 
 
-def test_secure_method_returns_bool_when_bool():
-    assert _bare_conn(port=1, secure=True)._secure() is True
-    assert _bare_conn(port=1, secure=False)._secure() is False
+def test_secure_resolves_bool():
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common.types import _convert
+
+    assert _convert(_bare_conn(port=1, secure=True).secure, bool) is True
+    assert _convert(_bare_conn(port=1, secure=False).secure, bool) is False
 
 
-def test_secure_method_resolves_env_true(monkeypatch):
+def test_secure_resolves_env_true(monkeypatch):
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common.types import _convert
+
     monkeypatch.setenv("CH_SECURE", "true")
-    assert _bare_conn(port=1, secure=Env("CH_SECURE"))._secure() is True
+    assert (
+        _convert(_bare_conn(port=1, secure=Env("CH_SECURE")).secure, bool)
+        is True
+    )
 
 
 @pytest.mark.parametrize("val,expected", [
@@ -182,14 +203,29 @@ def test_secure_method_resolves_env_true(monkeypatch):
     ("0", False),
     ("no", False),
 ])
-def test_secure_method_resolves_env_variants(monkeypatch, val, expected):
+def test_secure_resolves_env_variants(monkeypatch, val, expected):
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common.types import _convert
+
     monkeypatch.setenv("CH_SECURE_X", val)
-    assert _bare_conn(port=1, secure=Env("CH_SECURE_X"))._secure() is expected
+    assert (
+        _convert(_bare_conn(port=1, secure=Env("CH_SECURE_X")).secure, bool)
+        is expected
+    )
 
 
-def test_secure_method_resolves_secret_literal():
-    assert _bare_conn(port=1, secure=Secret.lit("true"))._secure() is True
-    assert _bare_conn(port=1, secure=Secret.lit("false"))._secure() is False
+def test_secure_resolves_secret_literal():
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common.types import _convert
+
+    assert (
+        _convert(_bare_conn(port=1, secure=Secret.lit("true")).secure, bool)
+        is True
+    )
+    assert (
+        _convert(_bare_conn(port=1, secure=Secret.lit("false")).secure, bool)
+        is False
+    )
 
 
 def test_secure_secret_literal_invalid_token_rejected_at_construction():

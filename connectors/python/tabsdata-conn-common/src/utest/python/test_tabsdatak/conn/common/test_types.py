@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import pytest
 
 from tabsdatak.api import Env, Secret
@@ -12,6 +14,9 @@ from tabsdatak.conn.common.types import (
     UserPassword,
 )
 from tabsdatak.conn.common.types import full_path
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.types import _convert
 
 
 # ---------------------------------------------------------------------------
@@ -148,5 +153,84 @@ def testfull_path_result_never_starts_or_ends_with_slash():
             out = full_path(bp, p)
             assert not out.startswith("/"), (bp, p, out)
             assert not out.endswith("/"), (bp, p, out)
+
+
+# ---------------------------------------------------------------------------
+# _convert helper
+# ---------------------------------------------------------------------------
+
+
+def test_convert_passes_through_str():
+    assert _convert("hello", str) == "hello"
+
+
+def test_convert_passes_through_int():
+    assert _convert(42, int) == 42
+
+
+def test_convert_passes_through_float():
+    assert _convert(3.14, float) == 3.14
+
+
+def test_convert_passes_through_bool():
+    assert _convert(True, bool) is True
+    assert _convert(False, bool) is False
+
+
+def test_convert_passes_through_bytes():
+    assert _convert(b"abc", bytes) == b"abc"
+
+
+def test_convert_passes_through_datetime():
+    dt = datetime(2026, 5, 21, 12, 0, tzinfo=timezone.utc)
+    assert _convert(dt, datetime) is dt
+
+
+def test_convert_resolves_secret_literal_to_str():
+    assert _convert(Secret.lit("hello"), str) == "hello"
+
+
+def test_convert_resolves_env_literal_to_str():
+    assert _convert(Env.lit("hello"), str) == "hello"
+
+
+def test_convert_resolves_env_ref_via_environ(monkeypatch):
+    monkeypatch.setenv("TD_TEST_CONVERT_STR", "world")
+    assert _convert(Env(s="TD_TEST_CONVERT_STR"), str) == "world"
+
+
+def test_convert_coerces_secret_to_int():
+    assert _convert(Secret.lit("42"), int) == 42
+
+
+def test_convert_coerces_env_to_int(monkeypatch):
+    monkeypatch.setenv("TD_TEST_CONVERT_INT", "9000")
+    assert _convert(Env(s="TD_TEST_CONVERT_INT"), int) == 9000
+
+
+def test_convert_coerces_secret_to_float():
+    assert _convert(Secret.lit("3.14"), float) == 3.14
+
+
+def test_convert_coerces_secret_to_bool_true():
+    assert _convert(Secret.lit("true"), bool) is True
+
+
+def test_convert_coerces_secret_to_bool_false():
+    assert _convert(Secret.lit("false"), bool) is False
+
+
+def test_convert_coerces_secret_to_bytes():
+    assert _convert(Secret.lit("abc"), bytes) == b"abc"
+
+
+def test_convert_coerces_secret_to_datetime():
+    out = _convert(Secret.lit("2026-05-21T12:00:00+00:00"), datetime)
+    assert out == datetime(2026, 5, 21, 12, 0, tzinfo=timezone.utc)
+
+
+def test_convert_raises_on_uncoercible_secret_to_int():
+    with pytest.raises(Exception):
+        _convert(Secret.lit("not-a-number"), int)
 
 

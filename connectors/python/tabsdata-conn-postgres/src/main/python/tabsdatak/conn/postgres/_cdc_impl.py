@@ -55,6 +55,9 @@ from tabsdatak.conn.common.sql.cdc.constants import (
 )
 from tabsdatak.conn.common.sql.cdc.dialect import CdcIngesterType, Dialect
 from tabsdatak.conn.common.sql.cdc.typing import QualifiedTablesSpec
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.postgres import LsnPosition
 from tabsdatak.conn.postgres.error import PostgresErrorCode
 
@@ -434,12 +437,8 @@ class Wal2JsonIngester(CdcIngester):
     # Connection helpers
     # ------------------------------------------------------------------
 
-    def _resolve_uri(self) -> str:
-        uri = self._conn.uri
-        return uri if isinstance(uri, str) else uri.value()
-
     def _resolve_url(self) -> URL:
-        url = make_url(self._resolve_uri())
+        url = make_url(_convert(self._conn.uri, str))
         creds = self._conn.credentials
         return url.set(
             username=creds.user.value(),

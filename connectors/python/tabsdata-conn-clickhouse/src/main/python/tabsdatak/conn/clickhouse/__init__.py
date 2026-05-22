@@ -6,10 +6,10 @@
   one parquet slot per table. Writes go through a cloud-staged
   bulk loader (S3 / GCS / Azure) rather than row-by-row inserts.
 
-``port`` and ``secure`` accept ``int|bool|Env|Secret``;
-``ClickHouseConn._port()`` / ``._secure()`` resolve to runtime
-``int`` / ``bool`` for the plugin. Iceberg-style schema
-evolution is supported on the dest.
+``port`` and ``secure`` accept ``int|bool|Env|Secret``; call
+``_convert(...)`` from ``tabsdatak.conn.common.types`` at the
+use site to resolve to a concrete ``int`` / ``bool`` for the
+plugin. Iceberg-style schema evolution is supported on the dest.
 """
 
 from __future__ import annotations
@@ -69,8 +69,8 @@ HostSpec: TypeAlias = Union[
 
 # Port: plain int, or an Env / Secret whose resolved value parses as an
 # unsigned integer. The Env / Secret arms carry a digit-only pattern so
-# the value is validated at ``value()`` time. ``ClickHouseConn._port()``
-# does the final cast.
+# the value is validated at ``value()`` time. Call
+# ``_convert(conn.port, int)`` at the use site to do the final cast.
 _PORT_PATTERN = r"[0-9]+"
 PortSpec: TypeAlias = Union[
     int,
@@ -79,8 +79,8 @@ PortSpec: TypeAlias = Union[
 ]
 
 # Secure: plain bool, or an Env / Secret whose resolved value is one of
-# the accepted truthy / falsy tokens. ``ClickHouseConn._secure()`` does
-# the final cast.
+# the accepted truthy / falsy tokens. Call ``_convert(conn.secure, bool)``
+# at the use site to do the final cast.
 _BOOL_PATTERN = r"(?i)(?:true|false|1|0|yes|no)"
 SecureSpec: TypeAlias = Union[
     bool,
@@ -228,13 +228,14 @@ class ClickHouseConn(Conn):
 
     :param host: ClickHouse host.
     :param port: HTTP port; default 8123. Accepts ``int``,
-        ``Env``, or ``Secret`` -- use ``_port()`` to read as int.
+        ``Env``, or ``Secret`` -- resolve at the use site with
+        ``_convert(conn.port, int)``.
     :param credentials: :class:`UserPassword`.
     :param staging: :class:`CloudLocation` (S3 / AzBlob / GCS).
     :param database: Default database; default ``"default"``.
     :param secure: ``True`` for HTTPS, ``False`` for HTTP.
-        Accepts ``bool``, ``Env``, or ``Secret``; use
-        ``_secure()`` to read as bool.
+        Accepts ``bool``, ``Env``, or ``Secret`` -- resolve at the
+        use site with ``_convert(conn.secure, bool)``.
     :param entity_whitelist: Optional regex-based table filter.
     :param conn_cfg: Optional driver-side config dict.
     """
@@ -247,26 +248,6 @@ class ClickHouseConn(Conn):
     secure: SecureSpec = False
     entity_whitelist: EntityWhitelistSpec | None = None
     conn_cfg: CfgSpec | None = None
-
-    def _port(self) -> int:
-        """Resolve :attr:`port` to a concrete ``int``. The field
-        accepts ``int`` / ``Env`` / ``Secret`` so this helper
-        unwraps the referenced value before passing it to the
-        client. Call this rather than reading ``.port`` directly
-        when a real port number is required."""
-        if isinstance(self.port, int):
-            return self.port
-        return int(self.port.value())
-
-    def _secure(self) -> bool:
-        """Resolve :attr:`secure` to a concrete ``bool``. The field
-        accepts ``bool`` / ``Env`` / ``Secret``; this helper unwraps
-        ``Env`` / ``Secret`` string values and parses the standard
-        truthy literals (``"true"`` / ``"1"`` / ``"yes"``, case-
-        insensitive)."""
-        if isinstance(self.secure, bool):
-            return self.secure
-        return self.secure.value().strip().lower() in ("true", "1", "yes")
 
 
 ConnSpec: TypeAlias = Union[NamedConn, ClickHouseConn]

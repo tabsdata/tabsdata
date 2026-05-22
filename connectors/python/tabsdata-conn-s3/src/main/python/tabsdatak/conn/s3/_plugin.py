@@ -3,6 +3,9 @@ from __future__ import annotations
 from typing import Any
 
 from tabsdatak.conn.common.file import _plugin, _transporter
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.s3 import S3Conn, S3Dest, S3Src
 from tabsdatak.conn.s3.error import S3ErrorCode
 from tabsdatak.spi import (
@@ -27,15 +30,9 @@ def _s3_uri(bucket: str, path_entry: str) -> str:
     return f"s3://{bucket}/{key}"
 
 
-def _resolve(value) -> str:
-    """``S3Conn`` fields accept ``str | Secret | Env``; ``str`` values
-    are stored verbatim, Secret/Env resolve through ``.value()``."""
-    return value if isinstance(value, str) else value.value()
-
-
 def build_location(conn: S3Conn, path_entry: str) -> _transporter.TransporterS3:
     return _transporter.TransporterS3(
-        url=_s3_uri(_resolve(conn.bucket), path_entry),
+        url=_s3_uri(_convert(conn.bucket, str), path_entry),
         access_key=_transporter.TransporterEnv(
             _transporter.SERVER_SIDE_AWS_ACCESS_KEY_ID
         ),
@@ -49,11 +46,13 @@ def build_location(conn: S3Conn, path_entry: str) -> _transporter.TransporterS3:
 def run_env(conn: S3Conn) -> dict[str, str]:
     creds = conn.credentials
     return {
-        _transporter.SERVER_SIDE_AWS_ACCESS_KEY_ID: _resolve(creds.access_key_id),
-        _transporter.SERVER_SIDE_AWS_SECRET_ACCESS_KEY: _resolve(
-            creds.secret_access_key
+        _transporter.SERVER_SIDE_AWS_ACCESS_KEY_ID: _convert(
+            creds.access_key_id, str,
         ),
-        _transporter.SERVER_SIDE_AWS_REGION: _resolve(conn.region),
+        _transporter.SERVER_SIDE_AWS_SECRET_ACCESS_KEY: _convert(
+            creds.secret_access_key, str,
+        ),
+        _transporter.SERVER_SIDE_AWS_REGION: _convert(conn.region, str),
     }
 
 

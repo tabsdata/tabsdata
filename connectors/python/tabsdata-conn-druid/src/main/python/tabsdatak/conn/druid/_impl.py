@@ -10,6 +10,9 @@ from urllib.parse import urlparse
 
 from tabsdatak.conn.common.file import _transporter
 from tabsdatak.conn.common.file._output import copy_one as _transporter_copy_one
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.druid import (
     AzBlobLocation,
     CloudLocation,
@@ -42,20 +45,6 @@ DEFAULT_POLL_INTERVAL_S = 2.0
 #: destination. Druid requires a primary timestamp column; this stub keeps
 #: rows in a single time chunk so all data lands together.
 DUMMY_TIME_COLUMN = "__td_dummy_time"
-
-
-# ---------------------------------------------------------------------------
-# Value resolution helpers
-# ---------------------------------------------------------------------------
-
-
-def _resolve(value: Any) -> str:
-    """Resolve a possibly Secret / Env field to its string value.
-
-    Plain ``str`` is returned as-is; everything else is assumed to be a
-    ``Secret`` / ``Env`` descriptor with a ``.value()`` accessor.
-    """
-    return value if isinstance(value, str) else value.value()
 
 
 def _sanitize_url(url: str) -> str:
@@ -103,14 +92,14 @@ def _join_path(base: str, *parts: str) -> str:
 def staged_uri(location: CloudLocation, key: str) -> str:
     """Build the cloud-native URI for a key under ``location``."""
     if isinstance(location, S3Location):
-        bucket = _resolve(location.bucket)
+        bucket = _convert(location.bucket, str)
         return f"s3://{bucket}/{key}"
     if isinstance(location, GCSLocation):
-        bucket = _resolve(location.bucket)
+        bucket = _convert(location.bucket, str)
         return f"gs://{bucket}/{key}"
     if isinstance(location, AzBlobLocation):
-        container = _resolve(location.container)
-        account = _resolve(location.credentials.account_name)
+        container = _convert(location.container, str)
+        account = _convert(location.credentials.account_name, str)
         return f"azureStorage://{account}/{container}/{key}"
     # noinspection PyProtectedMember
     raise DruidErrorCode.DRUID_11.exception(kind=type(location).__name__)
@@ -131,7 +120,7 @@ def _transporter_target(
     target object under ``location``.
     """
     if isinstance(location, S3Location):
-        bucket = _resolve(location.bucket)
+        bucket = _convert(location.bucket, str)
         return _transporter.TransporterS3(
             url=f"s3://{bucket}/{key}",
             access_key=_transporter.TransporterEnv(
@@ -143,7 +132,7 @@ def _transporter_target(
             region=_transporter.TransporterEnv(_transporter.SERVER_SIDE_AWS_REGION),
         )
     if isinstance(location, GCSLocation):
-        bucket = _resolve(location.bucket)
+        bucket = _convert(location.bucket, str)
         return _transporter.TransporterGCS(
             url=f"gs://{bucket}/{key}",
             service_account_key=_transporter.TransporterEnv(
@@ -151,7 +140,7 @@ def _transporter_target(
             ),
         )
     if isinstance(location, AzBlobLocation):
-        container = _resolve(location.container)
+        container = _convert(location.container, str)
         return _transporter.TransporterAzure(
             url=f"az://{container}/{key}",
             account_name=_transporter.TransporterEnv(
@@ -174,23 +163,23 @@ def _transporter_env(location: CloudLocation) -> dict[str, str]:
     if isinstance(location, S3Location):
         creds = location.credentials
         return {
-            _transporter.SERVER_SIDE_AWS_ACCESS_KEY_ID: _resolve(creds.access_key_id),
-            _transporter.SERVER_SIDE_AWS_SECRET_ACCESS_KEY: _resolve(
-                creds.secret_access_key
+            _transporter.SERVER_SIDE_AWS_ACCESS_KEY_ID: _convert(creds.access_key_id, str),
+            _transporter.SERVER_SIDE_AWS_SECRET_ACCESS_KEY: _convert(
+                creds.secret_access_key, str,
             ),
-            _transporter.SERVER_SIDE_AWS_REGION: _resolve(location.region),
+            _transporter.SERVER_SIDE_AWS_REGION: _convert(location.region, str),
         }
     if isinstance(location, GCSLocation):
         return {
-            _transporter.SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON: _resolve(
-                location.credentials.json
+            _transporter.SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON: _convert(
+                location.credentials.json, str,
             ),
         }
     if isinstance(location, AzBlobLocation):
         creds = location.credentials
         return {
-            _transporter.SERVER_SIDE_AZURE_ACCOUNT_NAME: _resolve(creds.account_name),
-            _transporter.SERVER_SIDE_AZURE_ACCOUNT_KEY: _resolve(creds.account_key),
+            _transporter.SERVER_SIDE_AZURE_ACCOUNT_NAME: _convert(creds.account_name, str),
+            _transporter.SERVER_SIDE_AZURE_ACCOUNT_KEY: _convert(creds.account_key, str),
         }
     # noinspection PyProtectedMember
     raise DruidErrorCode.DRUID_11.exception(kind=type(location).__name__)
@@ -256,11 +245,11 @@ def build_input_source(location: CloudLocation, uris: list[str]) -> dict:
             "type": "s3",
             "uris": uris,
             "endpointConfig": {
-                "signingRegion": _resolve(location.region),
+                "signingRegion": _convert(location.region, str),
             },
             "properties": {
-                "accessKeyId": _resolve(creds.access_key_id),
-                "secretAccessKey": _resolve(creds.secret_access_key),
+                "accessKeyId": _convert(creds.access_key_id, str),
+                "secretAccessKey": _convert(creds.secret_access_key, str),
             },
         }
     if isinstance(location, GCSLocation):
@@ -277,7 +266,7 @@ def build_input_source(location: CloudLocation, uris: list[str]) -> dict:
             "type": "azureStorage",
             "uris": uris,
             "properties": {
-                "key": _resolve(creds.account_key),
+                "key": _convert(creds.account_key, str),
             },
         }
     # noinspection PyProtectedMember
@@ -575,9 +564,9 @@ class OverlordClient:
 
 def make_overlord_client(conn: DruidConn) -> OverlordClient:
     creds = conn.credentials
-    auth = (_resolve(creds.user), _resolve(creds.password))
+    auth = (_convert(creds.user, str), _convert(creds.password, str))
     return OverlordClient(
-        base_url=_resolve(conn.overlord_url),
+        base_url=_convert(conn.overlord_url, str),
         auth=auth,
     )
 
@@ -586,9 +575,9 @@ def make_overlord_client_for_dest(conn: DruidConn, dest: DruidDest) -> OverlordC
     """Build an Overlord client whose ``timeout_sec`` reflects the
     destination's ``http_timeout_sec`` knob."""
     creds = conn.credentials
-    auth = (_resolve(creds.user), _resolve(creds.password))
+    auth = (_convert(creds.user, str), _convert(creds.password, str))
     return OverlordClient(
-        base_url=_resolve(conn.overlord_url),
+        base_url=_convert(conn.overlord_url, str),
         auth=auth,
         timeout_sec=dest.http_timeout_sec,
     )

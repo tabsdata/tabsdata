@@ -5,6 +5,9 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 from tabsdatak.conn.common.file import _transporter
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.druid import (
     DestCfgKey,
     DestCfgSpec,
@@ -181,7 +184,7 @@ class DruidDestPlugin(DestPlugin[DruidDest]):
                         datasource=datasource,
                         # noinspection PyProtectedMember
                         url=adapter._sanitize_url(
-                            adapter._resolve(conn.overlord_url),
+                            _convert(conn.overlord_url, str),
                         ),
                     )
 

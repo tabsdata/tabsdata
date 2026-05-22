@@ -226,17 +226,8 @@ def test_qualify_preserves_existing_backtick_quotes():
     assert impl._qualify("d", "`a`.`b`") == "`a`.`b`"
 
 
-# ---------------------------------------------------------------------------
-# _resolve -- str / Secret / Env passthrough
-# ---------------------------------------------------------------------------
-
-
-def test_resolve_passes_through_str():
-    assert impl._resolve("plain") == "plain"
-
-
-def test_resolve_dereferences_secret():
-    assert impl._resolve(Secret.lit("v")) == "v"
+# _resolve -- removed in favour of _convert; covered by
+# test_types.test_convert_* and the per-staging tests below.
 
 
 # ---------------------------------------------------------------------------

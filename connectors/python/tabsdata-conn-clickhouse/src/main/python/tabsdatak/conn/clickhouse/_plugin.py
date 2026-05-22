@@ -11,6 +11,9 @@ from tabsdatak.conn.clickhouse import (
     DestCfgSpec,
 )
 from tabsdatak.conn.clickhouse.error import ClickHouseErrorCode
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.types import _convert
 from tabsdatak.spi import (
     DestContext,
     DestDef,
@@ -114,7 +117,7 @@ class _ClickHouseDestPlugin(DestPlugin[ClickHouseDest]):
                 staging=type(conn.staging).__name__,
             )
         except Exception as e:  # noqa: BLE001 -- runtime wrapper
-            host = conn.host.value() if hasattr(conn.host, "value") else conn.host
+            host = _convert(conn.host, str)
             # Heuristic: connect-class failures from
             # clickhouse-connect raise ``DatabaseError`` or
             # similar; we surface the connection-failure code

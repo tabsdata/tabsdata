@@ -4,6 +4,9 @@ from typing import Any
 
 from tabsdatak.conn.common.file import _plugin, _transporter
 from tabsdatak.conn.common.types import GCPJson
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.gcs import GCSConn, GCSDest, GCSSrc
 from tabsdatak.conn.gcs.error import GcsErrorCode
 from tabsdatak.spi import (
@@ -29,7 +32,7 @@ def _gcs_uri(bucket: str, path_entry: str) -> str:
 
 
 def build_location(conn: GCSConn, path_entry: str) -> _transporter.TransporterGCS:
-    bucket = conn.bucket if isinstance(conn.bucket, str) else conn.bucket.value()
+    bucket = _convert(conn.bucket, str)
     return _transporter.TransporterGCS(
         url=_gcs_uri(bucket, path_entry),
         service_account_key=_transporter.TransporterEnv(

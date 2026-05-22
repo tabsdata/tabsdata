@@ -11,6 +11,9 @@ from tabsdatak.conn.clickhouse import (
     S3Location,
 )
 
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.types import _convert
+
 # All driver-touching imports (boto3 / azure / google-cloud-storage /
 # clickhouse-connect) are made inside the call-sites of the private
 # helper modules below.  The conn-clickhouse package stays cheap to
@@ -28,20 +31,13 @@ def _build_clickhouse_config(conn: ClickHouseConn):
         ClickHouseConfig,
     )
 
-    host = conn.host.value() if hasattr(conn.host, "value") else conn.host
-    database = (
-        conn.database.value() if hasattr(conn.database, "value") else conn.database
-    )
-    user = conn.credentials.user.value()
-    password = conn.credentials.password.value()
-
     return ClickHouseConfig(
-        host=host,
-        port=conn._port(),
-        database=database,
-        username=user,
-        password=password,
-        secure=conn._secure(),
+        host=_convert(conn.host, str),
+        port=_convert(conn.port, int),
+        database=_convert(conn.database, str),
+        username=conn.credentials.user.value(),
+        password=conn.credentials.password.value(),
+        secure=_convert(conn.secure, bool),
     )
 
 

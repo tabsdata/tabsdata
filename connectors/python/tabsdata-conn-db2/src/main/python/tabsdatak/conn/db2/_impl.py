@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any
 
 from sqlalchemy import create_engine, make_url
 from sqlalchemy.engine import Engine
@@ -24,6 +24,9 @@ from tabsdatak.conn.common.sql._engine.reader import SqlReadCfg
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine.writer import SqlWriteCfg
 from tabsdatak.conn.common.types import CfgSpec, UserPassword
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.db2 import Db2Conn, UriSpec
 
 # --- Db2 scheme / driver tables -----------------------------------
@@ -41,9 +44,7 @@ def build_db2_engine(
     credentials: UserPassword,
     connect_args: CfgSpec | None,
 ) -> Engine:
-    if not isinstance(uri, str):
-        uri = uri.value()
-    uri: str = cast(str, uri)
+    uri = _convert(uri, str)
     uri = _engine.sqlalchemy_utils.normalize_scheme(uri, aliases=_SCHEME_ALIASES)
     uri = _engine.sqlalchemy_utils.add_driver_to_uri(uri, drivers=_DRIVERS)
     url = make_url(uri)

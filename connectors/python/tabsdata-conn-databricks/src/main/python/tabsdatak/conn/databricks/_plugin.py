@@ -17,6 +17,9 @@ from tabsdatak.conn.databricks.error import (
     DatabricksErrorCode,
     DatabricksValidateException,
 )
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.types import _convert
 from tabsdatak.spi import (
     DestContext,
     DestDef,
@@ -147,9 +150,7 @@ class _DatabricksSrcPlugin(SrcPlugin[DatabricksSrc]):
                 dict(src.initial_values) if src.initial_values is not None else None
             ),
         )
-        host = (
-            conn.host_url.value() if hasattr(conn.host_url, "value") else conn.host_url
-        )
+        host = _convert(conn.host_url, str)
         try:
             parquet_paths = _impl.read_all_queries(read_cfg, ctx.work_dir)
         except DatabricksValidateException:
@@ -205,9 +206,7 @@ class _DatabricksDestPlugin(DestPlugin[DatabricksDest]):
             if_table_exists=dest.if_table_exists,
             schema_evolution=dest.schema_evolution,
         )
-        host = (
-            conn.host_url.value() if hasattr(conn.host_url, "value") else conn.host_url
-        )
+        host = _convert(conn.host_url, str)
         try:
             # ``tables`` is ``list[TableFileSpec]`` =
             # ``list[ParquetFile]`` (a ``Path`` subclass), so each

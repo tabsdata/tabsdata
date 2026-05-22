@@ -113,7 +113,7 @@ def test_starrocks_dest_fields_wire_expected_specs():
 
 
 # ---------------------------------------------------------------------------
-# StarRocksConn._port() casting helper
+# port resolution via _convert at the use site
 # ---------------------------------------------------------------------------
 
 
@@ -128,24 +128,36 @@ def _conn_with_port(port):
     )
 
 
-def test_port_method_returns_int_when_int():
-    assert _conn_with_port(9031)._port() == 9031
+def test_port_resolves_int():
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common.types import _convert
+
+    assert _convert(_conn_with_port(9031).port, int) == 9031
 
 
-def test_port_method_resolves_env(monkeypatch):
+def test_port_resolves_env(monkeypatch):
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common.types import _convert
+
     monkeypatch.setenv("SR_PORT", "9101")
-    assert _conn_with_port(Env("SR_PORT"))._port() == 9101
+    assert _convert(_conn_with_port(Env("SR_PORT")).port, int) == 9101
 
 
-def test_port_method_resolves_secret_literal():
-    assert _conn_with_port(Secret.lit("9102"))._port() == 9102
+def test_port_resolves_secret_literal():
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common.types import _convert
+
+    assert _convert(_conn_with_port(Secret.lit("9102")).port, int) == 9102
 
 
 def test_port_env_non_numeric_rejected_at_value(monkeypatch):
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common.types import _convert
+
     monkeypatch.setenv("SR_PORT_BAD", "notanumber")
     conn = _conn_with_port(Env("SR_PORT_BAD"))
     with pytest.raises(Exception):
-        conn._port()
+        _convert(conn.port, int)
 
 
 def test_port_secret_literal_non_numeric_rejected_at_construction():

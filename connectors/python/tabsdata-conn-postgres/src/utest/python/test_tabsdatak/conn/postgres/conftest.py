@@ -42,6 +42,7 @@ from test_tabsdata.common.constants import (
     DOCKER_UTEST_CONTAINER_INFIX,
     PYTEST_DEFAULT_ENVIRONMENT_PREFIX,
 )
+from test_tabsdata.common.system import get_free_port as _free_port
 
 # noinspection PyUnusedImports
 from test_tabsdata.conftest import (

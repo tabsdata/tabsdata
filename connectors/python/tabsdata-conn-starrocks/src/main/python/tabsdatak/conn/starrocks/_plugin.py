@@ -12,6 +12,9 @@ from tabsdatak.conn.starrocks import (
     StarRocksDest,
 )
 from tabsdatak.conn.starrocks.error import StarRocksErrorCode
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.types import _convert
 from tabsdatak.spi import (
     DestContext,
     DestDef,
@@ -87,9 +90,9 @@ class StarRocksDestPlugin(DestPlugin[StarRocksDest]):
             )
 
         conn = cast(StarRocksConn, dest.conn)
-        host = adapter._resolve(conn.host)
-        port = conn._port()
-        database = adapter._resolve(conn.database)
+        host = _convert(conn.host, str)
+        port = _convert(conn.port, int)
+        database = _convert(conn.database, str)
 
         write_cfg = adapter.StarRocksWriteCfg(
             host=host,

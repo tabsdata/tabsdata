@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import urllib.parse
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any
 
 from sqlalchemy import create_engine, make_url
 from sqlalchemy.engine import Engine
@@ -25,6 +25,9 @@ from tabsdatak.conn.common.sql._engine.reader import SqlReadCfg
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine.writer import SqlWriteCfg
 from tabsdatak.conn.common.types import CfgSpec, UserPassword
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.mssql import MSSQLConn, UriSpec
 
 # --- MSSQL scheme / driver tables --------------------------------
@@ -49,9 +52,7 @@ def build_mssql_engine(
     credentials: UserPassword,
     connect_args: CfgSpec | None,
 ) -> Engine:
-    if not isinstance(uri, str):
-        uri = uri.value()
-    uri: str = cast(str, uri)
+    uri = _convert(uri, str)
 
     user = credentials.user.value()
     password = credentials.password.value()

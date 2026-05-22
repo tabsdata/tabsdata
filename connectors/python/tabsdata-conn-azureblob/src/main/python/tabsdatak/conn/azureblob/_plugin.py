@@ -10,6 +10,9 @@ from tabsdatak.conn.azureblob import (
 from tabsdatak.conn.azureblob.error import AzureBlobErrorCode
 from tabsdatak.conn.common.file import _plugin, _transporter
 from tabsdatak.conn.common.types import AzureAccountKey
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.types import _convert
 from tabsdatak.spi import (
     DestContext,
     DestDef,
@@ -35,9 +38,7 @@ def _az_uri(container: str, path_entry: str) -> str:
 def build_location(
     conn: AzureBlobConn, path_entry: str
 ) -> _transporter.TransporterAzure:
-    container = (
-        conn.container if isinstance(conn.container, str) else conn.container.value()
-    )
+    container = _convert(conn.container, str)
     return _transporter.TransporterAzure(
         url=_az_uri(container, path_entry),
         account_name=_transporter.TransporterEnv(

@@ -13,16 +13,18 @@ time.
 from __future__ import annotations
 
 from abc import ABC
+from datetime import datetime
 from enum import Enum
-from typing import Annotated, TypeAlias, Union
+from typing import Annotated, TypeAlias, Union, Type
 
-from pydantic import StringConstraints
+from pydantic import StringConstraints, TypeAdapter
 
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
 import tabsdatak.conn.common._validation as _validation
+from tabsdata import Decimal
 from tabsdatak.api import Env, Secret, SecretOrEnvSpec
 from tabsdatak.conn.common.error import ConnErrorCode
 
@@ -141,7 +143,7 @@ def full_path(base_path: BasePathSpec, path: str) -> str:
     may be a ``str`` or a ``Secret`` / ``Env`` whose ``.value()``
     resolves to the path string.
     """
-    resolved: str = base_path if isinstance(base_path, str) else base_path.value()
+    resolved = _convert(base_path, str)
     return (resolved.strip("/") + "/" + path.strip("/")).strip("/")
 
 
@@ -238,3 +240,19 @@ CfgSpec: TypeAlias = Annotated[dict, _validation.CONN_CFG_VALIDATOR]
 EntityWhitelistSpec: TypeAlias = Annotated[
     list[str], _validation.ENTITY_WHITELIST_VALIDATOR
 ]
+
+
+_CoercionTypeSpec: TypeAlias = Union[
+    int,float,str,bool,Decimal,bytes,datetime
+]
+def _convert[T: _CoercionTypeSpec](spec: T|Secret|Env, type_: Type[T]) -> T:
+    """Return the T form of a ``T`` / ``Secret`` / ``Env``
+    spec."""
+    if isinstance(spec, type_):
+        return spec
+    else:
+        # Pydantic coercion to
+        return TypeAdapter(type_).validate_python(spec.value())
+
+
+

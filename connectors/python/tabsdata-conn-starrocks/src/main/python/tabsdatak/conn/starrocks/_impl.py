@@ -7,8 +7,10 @@ from typing import Any
 
 from tenacity import retry, stop_after_delay, wait_fixed
 
-from tabsdatak.api import Env, Secret
 from tabsdatak.conn.common.types import UserPassword
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.starrocks import (
     AzBlobLocation,
     CloudLocation,
@@ -31,18 +33,6 @@ _starrocks_retry = retry(
     wait=wait_fixed(_STARROCKS_QUERY_RETRY_INTERVAL_SECONDS),
     reraise=True,
 )
-
-
-# --- Value-resolution helpers ----------------------------------------
-
-
-def _resolve(value: Any) -> str:
-    """Resolve a field whose annotation is ``str | Secret | Env`` to a
-    bare ``str``. ``str`` values are returned verbatim; ``Secret`` /
-    ``Env`` are dereferenced through ``.value()``."""
-    if isinstance(value, (Secret, Env)):
-        return value.value()
-    return str(value)
 
 
 # --- StarRocks SQL engine (MySQL protocol) ---------------------------
@@ -109,7 +99,7 @@ def build_files_function(staging: CloudLocation, staged_uris: list[str]) -> str:
     :class:`StarRocksConn`).
     """
     if isinstance(staging, S3Location):
-        region = _resolve(staging.region)
+        region = _convert(staging.region, str)
         creds = staging.credentials
         return (
             "FILES("
@@ -164,15 +154,15 @@ def staged_uri(staging: CloudLocation, key: str) -> str:
     """
     rel = staging.full_path(key) if hasattr(staging, "full_path") else key.lstrip("/")
     if isinstance(staging, S3Location):
-        bucket = _resolve(staging.bucket)
+        bucket = _convert(staging.bucket, str)
         return f"s3://{bucket}/{rel}"
     if isinstance(staging, AzBlobLocation):
         creds = staging.credentials
-        container = _resolve(staging.container)
+        container = _convert(staging.container, str)
         account = creds.account_name.value()
         return f"wasbs://{container}@{account}.blob.core.windows.net/{rel}"
     if isinstance(staging, GCSLocation):
-        bucket = _resolve(staging.bucket)
+        bucket = _convert(staging.bucket, str)
         return f"s3a://{bucket}/{rel}"
     from tabsdatak.conn.starrocks.error import StarRocksErrorCode
 
@@ -197,7 +187,7 @@ def transporter_target(staging: CloudLocation, key: str):
 
     rel = staging.full_path(key) if hasattr(staging, "full_path") else key.lstrip("/")
     if isinstance(staging, S3Location):
-        bucket = _resolve(staging.bucket)
+        bucket = _convert(staging.bucket, str)
         return t.TransporterS3(
             url=f"s3://{bucket}/{rel}",
             access_key=t.TransporterEnv(t.SERVER_SIDE_AWS_ACCESS_KEY_ID),
@@ -205,14 +195,14 @@ def transporter_target(staging: CloudLocation, key: str):
             region=t.TransporterEnv(t.SERVER_SIDE_AWS_REGION),
         )
     if isinstance(staging, AzBlobLocation):
-        container = _resolve(staging.container)
+        container = _convert(staging.container, str)
         return t.TransporterAzure(
             url=f"az://{container}/{rel}",
             account_name=t.TransporterEnv(t.SERVER_SIDE_AZURE_ACCOUNT_NAME),
             account_key=t.TransporterEnv(t.SERVER_SIDE_AZURE_ACCOUNT_KEY),
         )
     if isinstance(staging, GCSLocation):
-        bucket = _resolve(staging.bucket)
+        bucket = _convert(staging.bucket, str)
         return t.TransporterGCS(
             url=f"gs://{bucket}/{rel}",
             credentials=t.TransporterEnv(t.SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON),
@@ -234,7 +224,7 @@ def transporter_env(staging: CloudLocation) -> dict[str, str]:
         return {
             t.SERVER_SIDE_AWS_ACCESS_KEY_ID: creds.access_key_id.value(),
             t.SERVER_SIDE_AWS_SECRET_ACCESS_KEY: creds.secret_access_key.value(),
-            t.SERVER_SIDE_AWS_REGION: _resolve(staging.region),
+            t.SERVER_SIDE_AWS_REGION: _convert(staging.region, str),
         }
     if isinstance(staging, AzBlobLocation):
         creds = staging.credentials

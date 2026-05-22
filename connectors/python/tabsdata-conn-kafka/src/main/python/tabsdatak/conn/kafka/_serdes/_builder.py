@@ -13,6 +13,8 @@ import logging
 import os
 from typing import TYPE_CHECKING, Any
 
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.kafka import (
     AwsGlueSchemaRegistry,
     ConfluentSchemaRegistry,
@@ -128,8 +130,8 @@ def build_serde(
 
     if mode == "glue":
         assert isinstance(schema_registry, AwsGlueSchemaRegistry)
-        registry_name = _resolve(schema_registry.registry_name)
-        schema_name = _resolve(schema_registry.schema_name)
+        registry_name = _convert(schema_registry.registry_name, str)
+        schema_name = _convert(schema_registry.schema_name, str)
         if data_format == "json":
             return JsonGlueKafkaSerde(
                 glue_client=sr_client,
@@ -178,7 +180,7 @@ def build_schema_registry_client(
         from confluent_kafka.schema_registry import SchemaRegistryClient
 
         configs: dict[str, Any] = dict(schema_registry.configs or {})
-        configs["url"] = _resolve(schema_registry.url)
+        configs["url"] = _convert(schema_registry.url, str)
         if schema_registry.credentials is not None:
             user = schema_registry.credentials.user.value()
             password = schema_registry.credentials.password.value()
@@ -195,7 +197,7 @@ def build_schema_registry_client(
             schema_registry.credentials.secret_access_key.value()
         )
         boto_kwargs: dict[str, Any] = {
-            "region_name": _resolve(schema_registry.region_name),
+            "region_name": _convert(schema_registry.region_name, str),
         }
         if schema_registry.configs:
             boto_kwargs.update(schema_registry.configs)
@@ -204,9 +206,3 @@ def build_schema_registry_client(
     raise KafkaErrorCode.KAFKA_10.exception(
         sr=type(schema_registry).__name__,
     )
-
-
-def _resolve(spec: Any) -> str:
-    """Return the string form of a ``str`` / ``Secret`` / ``Env``
-    spec."""
-    return spec if isinstance(spec, str) else spec.value()
