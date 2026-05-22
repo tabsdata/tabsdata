@@ -164,16 +164,6 @@ class Emoji:
     CIRCLE_PURPLE_STYLE = "#9060d0"
 
 
-class TestFilePrefix(StrEnum):
-    RUNNING = "1."
-    PASSED = "0.0."
-    ERROR_SETUP = "0.1."
-    ERROR_CALL = "0.2."
-    ERROR_TEARDOWN = "0.3."
-    UNKNOWN = "0.4."
-    SKIPPED = "2."
-
-
 class TestField(StrEnum):
     NODEID = "nodeid"
     FILE = "file"
@@ -221,16 +211,9 @@ PHASE_DURATION_FIELD = {
     TestPhase.TEARDOWN: TestField.DURATION_TEARDOWN,
 }
 
-PREFIXES_FAILED = (
-    TestFilePrefix.ERROR_SETUP,
-    TestFilePrefix.ERROR_CALL,
-    TestFilePrefix.ERROR_TEARDOWN,
-    TestFilePrefix.UNKNOWN,
+FAILED_STATUSES = (
+    TestStatus.FAILED_SETUP,
+    TestStatus.FAILED_EXECUTION,
+    TestStatus.FAILED_TEARDOWN,
+    TestStatus.UNKNOWN,
 )
-
-PREFIX_TO_COUNTER = {
-    TestFilePrefix.ERROR_SETUP: "error_setup",
-    TestFilePrefix.ERROR_CALL: "error_call",
-    TestFilePrefix.ERROR_TEARDOWN: "error_teardown",
-    TestFilePrefix.UNKNOWN: "error_unknown",
-}

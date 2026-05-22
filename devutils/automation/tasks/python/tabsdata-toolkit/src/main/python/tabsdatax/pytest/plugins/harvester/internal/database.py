@@ -68,40 +68,67 @@ def init_db(harvester_folder: str) -> None:
     """Create the database and tables if they don't exist."""
     conn = get_connection(harvester_folder)
     conn.executescript("""
-        CREATE TABLE IF NOT EXISTS fixture_events (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            fixture     TEXT    NOT NULL,
-            scope       TEXT    NOT NULL,
-            event       TEXT    NOT NULL,
-            -- 'setup_start', 'setup_end', 'teardown_end'
-            worker      TEXT    NOT NULL DEFAULT '',
-            pid         INTEGER NOT NULL DEFAULT 0,
-            timestamp   REAL    NOT NULL,
-            duration    REAL
-            -- NULL for setup_start, filled for others
+        create table if not exists fixture_events (
+            id          integer primary key autoincrement,
+            fixture     text    not null,
+            scope       text    not null,
+            event       text    not null,
+            worker      text    not null default '',
+            pid         integer not null default 0,
+            timestamp   real    not null,
+            duration    real
         );
 
-        CREATE INDEX IF NOT EXISTS idx_fixture_events_fixture
-            ON fixture_events (fixture);
+        create index if not exists idx_fixture_events_fixture
+            on fixture_events (fixture);
 
-        CREATE INDEX IF NOT EXISTS idx_fixture_events_event
-            ON fixture_events (event);
+        create index if not exists idx_fixture_events_event
+            on fixture_events (event);
 
-        CREATE TABLE IF NOT EXISTS test_completions (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            nodeid      TEXT    NOT NULL,
-            outcome     TEXT    NOT NULL,   -- 'passed', 'failed', 'skipped'
-            duration    REAL    NOT NULL,
-            worker      TEXT    NOT NULL DEFAULT '',
-            component   TEXT    NOT NULL DEFAULT '',
-            timestamp   REAL    NOT NULL
+        create table if not exists test_completions (
+            id          integer primary key autoincrement,
+            nodeid      text    not null,
+            outcome     text    not null,
+            duration    real    not null,
+            worker      text    not null default '',
+            component   text    not null default '',
+            timestamp   real    not null
         );
 
-        CREATE INDEX IF NOT EXISTS idx_test_completions_outcome
-            ON test_completions (outcome);
+        create index if not exists idx_test_completions_outcome
+            on test_completions (outcome);
 
-        CREATE INDEX IF NOT EXISTS idx_test_completions_component
-            ON test_completions (component);
+        create index if not exists idx_test_completions_component
+            on test_completions (component);
+
+        create table if not exists test_records (
+            nodeid                    text primary key,
+            status                    text not null,
+            phase                     text,
+            file                      text,
+            line                      integer,
+            function                  text,
+            start                     real,
+            stop                      real,
+            worker                    text not null default '',
+            pid                       integer not null default 0,
+            duration_setup            real,
+            duration_call             real,
+            duration_teardown         real,
+            error                     text,
+            error_type                text,
+            traceback                 text,
+            error_location            text,
+            skip_reason               text,
+            teardown_error            text,
+            teardown_error_type       text,
+            teardown_traceback        text,
+            teardown_error_location   text,
+            updated_at                real not null
+        );
+
+        create index if not exists idx_test_records_status
+            on test_records (status);
     """)
     conn.commit()
 
@@ -110,11 +137,37 @@ def reset_db(harvester_folder: str) -> None:
     """Drop and recreate all tables (called at session start)."""
     conn = get_connection(harvester_folder)
     conn.executescript("""
-        DROP TABLE IF EXISTS fixture_events;
-        DROP TABLE IF EXISTS test_completions;
+        drop table if exists fixture_events;
+        drop table if exists test_completions;
+        drop table if exists test_records;
     """)
     conn.commit()
     init_db(harvester_folder)
+
+
+TEST_RECORD_COLUMNS = frozenset({
+    "status",
+    "phase",
+    "file",
+    "line",
+    "function",
+    "start",
+    "stop",
+    "worker",
+    "pid",
+    "duration_setup",
+    "duration_call",
+    "duration_teardown",
+    "error",
+    "error_type",
+    "traceback",
+    "error_location",
+    "skip_reason",
+    "teardown_error",
+    "teardown_error_type",
+    "teardown_traceback",
+    "teardown_error_location",
+})
 
 
 # ---------------------------------------------------------------------------
@@ -131,8 +184,8 @@ def record_fixture_setup_start(
     """Record that a fixture setup has started.  Returns the row ID."""
     conn = get_connection(harvester_folder)
     cursor = conn.execute(
-        "INSERT INTO fixture_events (fixture, scope, event, worker, pid, timestamp)"
-        " VALUES (?, ?, 'setup_start', ?, ?, ?)",
+        "insert into fixture_events (fixture, scope, event, worker, pid, timestamp)"
+        " values (?, ?, 'setup_start', ?, ?, ?)",
         (fixture, scope, worker, os.getpid(), time.time()),
     )
     conn.commit()
@@ -149,10 +202,10 @@ def record_fixture_setup_end(
     """Record that a fixture setup has completed."""
     conn = get_connection(harvester_folder)
     conn.execute(
-        "INSERT INTO fixture_events"
+        "insert into fixture_events"
         " (fixture, scope, event, worker, pid,"
         " timestamp, duration)"
-        " VALUES (?, ?, 'setup_end', ?, ?, ?, ?)",
+        " values (?, ?, 'setup_end', ?, ?, ?, ?)",
         (fixture, scope, worker, os.getpid(), time.time(), duration),
     )
     conn.commit()
@@ -167,8 +220,8 @@ def record_fixture_teardown_end(
     """Record that a fixture teardown has completed."""
     conn = get_connection(harvester_folder)
     conn.execute(
-        "INSERT INTO fixture_events (fixture, scope, event, worker, pid, timestamp)"
-        " VALUES (?, ?, 'teardown_end', ?, ?, ?)",
+        "insert into fixture_events (fixture, scope, event, worker, pid, timestamp)"
+        " values (?, ?, 'teardown_end', ?, ?, ?)",
         (fixture, scope, worker, os.getpid(), time.time()),
     )
     conn.commit()
@@ -185,12 +238,219 @@ def record_test_completion(
     """Record a completed test with its duration and outcome."""
     conn = get_connection(harvester_folder)
     conn.execute(
-        "INSERT INTO test_completions"
+        "insert into test_completions"
         " (nodeid, outcome, duration, worker, component, timestamp)"
-        " VALUES (?, ?, ?, ?, ?, ?)",
+        " values (?, ?, ?, ?, ?, ?)",
         (nodeid, outcome, duration, worker, component, time.time()),
     )
     conn.commit()
+
+
+def record_test_running(
+    harvester_folder: str,
+    nodeid: str,
+    file: str,
+    line: int,
+    function: str,
+    status: str,
+    start: float,
+    worker: str = "",
+) -> None:
+    """Insert or replace a test_records row with status='Running'."""
+    conn = get_connection(harvester_folder)
+    conn.execute(
+        """
+        insert into test_records (
+            nodeid, status, file, line, function, start,
+            worker, pid, updated_at
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        on conflict(nodeid) do update set
+            status     = excluded.status,
+            file       = excluded.file,
+            line       = excluded.line,
+            function   = excluded.function,
+            start      = excluded.start,
+            stop       = null,
+            worker     = excluded.worker,
+            pid        = excluded.pid,
+            phase      = null,
+            duration_setup    = null,
+            duration_call     = null,
+            duration_teardown = null,
+            error             = null,
+            error_type        = null,
+            traceback         = null,
+            error_location    = null,
+            skip_reason       = null,
+            teardown_error             = null,
+            teardown_error_type        = null,
+            teardown_traceback         = null,
+            teardown_error_location    = null,
+            updated_at = excluded.updated_at
+        """,
+        (nodeid, status, file, line, function, start, worker, os.getpid(), time.time()),
+    )
+    conn.commit()
+
+
+def update_test_record(
+    harvester_folder: str,
+    nodeid: str,
+    **fields,
+) -> None:
+    """Apply a partial update to a test_records row by nodeid."""
+    columns = {
+        key: value for key, value in fields.items() if key in TEST_RECORD_COLUMNS
+    }
+    if not columns:
+        return
+    assignments = ", ".join(f"{column} = ?" for column in columns)
+    parameters = list(columns.values()) + [time.time(), nodeid]
+    conn = get_connection(harvester_folder)
+    conn.execute(
+        f"update test_records set {assignments}, updated_at = ? where nodeid = ?",
+        parameters,
+    )
+    conn.commit()
+
+
+def promote_passed_to_teardown_failure(
+    harvester_folder: str,
+    nodeid: str,
+    teardown_error: str,
+    teardown_error_type: str,
+    teardown_traceback: str,
+    teardown_error_location: str | None,
+    failed_teardown_status: str,
+    teardown_phase: str,
+    stop: float,
+    duration_teardown: float | None,
+) -> bool:
+    """Promote a PASSED record to FAILED_TEARDOWN atomically.
+
+    Returns True when the row was promoted (status was previously PASSED).
+    """
+    conn = get_connection(harvester_folder)
+    cursor = conn.execute(
+        """
+        update test_records set
+            status                  = ?,
+            phase                   = ?,
+            stop                    = ?,
+            duration_teardown       = coalesce(?, duration_teardown),
+            teardown_error          = ?,
+            teardown_error_type     = ?,
+            teardown_traceback      = ?,
+            teardown_error_location = ?,
+            updated_at              = ?
+        where nodeid = ? and status = 'Passed'
+        """,
+        (
+            failed_teardown_status,
+            teardown_phase,
+            stop,
+            duration_teardown,
+            teardown_error,
+            teardown_error_type,
+            teardown_traceback,
+            teardown_error_location,
+            time.time(),
+            nodeid,
+        ),
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def record_teardown_error_fields(
+    harvester_folder: str,
+    nodeid: str,
+    teardown_error: str,
+    teardown_error_type: str,
+    teardown_traceback: str,
+    teardown_error_location: str | None,
+    stop: float,
+    duration_teardown: float | None,
+) -> None:
+    """Attach teardown-error fields to a record without changing its status."""
+    conn = get_connection(harvester_folder)
+    conn.execute(
+        """
+        update test_records set
+            stop                    = coalesce(?, stop),
+            duration_teardown       = coalesce(?, duration_teardown),
+            teardown_error          = ?,
+            teardown_error_type     = ?,
+            teardown_traceback      = ?,
+            teardown_error_location = ?,
+            updated_at              = ?
+        where nodeid = ?
+        """,
+        (
+            stop,
+            duration_teardown,
+            teardown_error,
+            teardown_error_type,
+            teardown_traceback,
+            teardown_error_location,
+            time.time(),
+            nodeid,
+        ),
+    )
+    conn.commit()
+
+
+def upsert_test_final(
+    harvester_folder: str,
+    nodeid: str,
+    status: str,
+    **fields,
+) -> None:
+    """Upsert a row with a final status (PASSED/SKIPPED/FAILED_*/UNKNOWN).
+
+    If the row exists, status and provided fields are updated. If it does not
+    exist (e.g. xdist controller synthesis), the row is created with the
+    provided fields and sensible defaults for the rest.
+    """
+    columns = {
+        key: value for key, value in fields.items() if key in TEST_RECORD_COLUMNS
+    }
+    now = time.time()
+    pid = os.getpid()
+    worker = columns.get("worker", "")
+    insert_columns = ["nodeid", "status", "pid", "updated_at"]
+    insert_values = [nodeid, status, pid, now]
+    if "worker" not in columns:
+        insert_columns.append("worker")
+        insert_values.append(worker)
+    for column, value in columns.items():
+        insert_columns.append(column)
+        insert_values.append(value)
+    placeholders = ", ".join("?" for _ in insert_columns)
+    insert_sql = (
+        f"insert into test_records ({', '.join(insert_columns)}) "
+        f"values ({placeholders})"
+    )
+    update_pairs = ["status = excluded.status", "updated_at = excluded.updated_at"]
+    for column in columns:
+        update_pairs.append(f"{column} = excluded.{column}")
+    update_sql = f"on conflict(nodeid) do update set {', '.join(update_pairs)}"
+    conn = get_connection(harvester_folder)
+    conn.execute(f"{insert_sql} {update_sql}", insert_values)
+    conn.commit()
+
+
+def record_exists(harvester_folder: str, nodeid: str) -> bool:
+    """Return True if a test_records row exists for the given nodeid."""
+    path = db_path(harvester_folder)
+    if not os.path.exists(path):
+        return False
+    conn = get_connection(harvester_folder)
+    row = conn.execute(
+        "select 1 from test_records where nodeid = ? limit 1",
+        (nodeid,),
+    ).fetchone()
+    return row is not None
 
 
 # ---------------------------------------------------------------------------
@@ -213,24 +473,24 @@ def query_fixture_stats(harvester_folder: str) -> list[dict]:
     try:
         conn = get_connection(harvester_folder)
         rows = conn.execute("""
-            SELECT
+            select
                 fixture,
                 scope,
-                SUM(CASE WHEN event = 'setup_end' THEN 1 ELSE 0 END) as setup_count,
-                SUM(CASE WHEN event = 'teardown_end'
-                    THEN 1 ELSE 0 END) as teardown_count,
-                AVG(CASE WHEN event = 'setup_end'
-                    THEN duration END) as avg_setup_duration,
-                MAX(CASE WHEN event = 'setup_end'
-                    THEN duration END) as max_setup_duration,
-                SUM(CASE WHEN event = 'setup_end'
-                    THEN duration ELSE 0 END)
+                sum(case when event = 'setup_end' then 1 else 0 end) as setup_count,
+                sum(case when event = 'teardown_end'
+                    then 1 else 0 end) as teardown_count,
+                avg(case when event = 'setup_end'
+                    then duration end) as avg_setup_duration,
+                max(case when event = 'setup_end'
+                    then duration end) as max_setup_duration,
+                sum(case when event = 'setup_end'
+                    then duration else 0 end)
                     as total_setup_duration,
-                SUM(CASE WHEN event = 'setup_start' THEN 1 ELSE 0 END)
-                - SUM(CASE WHEN event = 'setup_end' THEN 1 ELSE 0 END) as active_setups
-            FROM fixture_events
-            GROUP BY fixture, scope
-            ORDER BY fixture
+                sum(case when event = 'setup_start' then 1 else 0 end)
+                - sum(case when event = 'setup_end' then 1 else 0 end) as active_setups
+            from fixture_events
+            group by fixture, scope
+            order by fixture
         """).fetchall()
         return [dict(row) for row in rows]
     except (sqlite3.OperationalError, sqlite3.DatabaseError):
@@ -296,14 +556,14 @@ def query_test_averages(harvester_folder: str) -> dict:
     try:
         conn = get_connection(harvester_folder)
         row = conn.execute("""
-            SELECT
-                AVG(duration) as avg_all,
-                AVG(CASE WHEN outcome = 'passed' THEN duration END) as avg_passed,
-                AVG(CASE WHEN outcome = 'failed' THEN duration END) as avg_failed,
-                SUM(CASE WHEN outcome = 'passed' THEN 1 ELSE 0 END) as count_passed,
-                SUM(CASE WHEN outcome = 'failed' THEN 1 ELSE 0 END) as count_failed
-            FROM test_completions
-            WHERE outcome IN ('passed', 'failed')
+            select
+                avg(duration) as avg_all,
+                avg(case when outcome = 'passed' then duration end) as avg_passed,
+                avg(case when outcome = 'failed' then duration end) as avg_failed,
+                sum(case when outcome = 'passed' then 1 else 0 end) as count_passed,
+                sum(case when outcome = 'failed' then 1 else 0 end) as count_failed
+            from test_completions
+            where outcome in ('passed', 'failed')
         """).fetchone()
         return dict(row) if row else {}
     except (sqlite3.OperationalError, sqlite3.DatabaseError):
@@ -353,9 +613,9 @@ def query_test_durations(harvester_folder: str) -> dict[str, list[float]]:
     try:
         conn = get_connection(harvester_folder)
         rows = conn.execute(
-            "SELECT outcome, duration FROM test_completions"
-            " WHERE outcome IN ('passed', 'failed')"
-            " ORDER BY duration"
+            "select outcome, duration from test_completions"
+            " where outcome in ('passed', 'failed')"
+            " order by duration"
         ).fetchall()
         result: dict[str, list[float]] = {"all": [], "passed": [], "failed": []}
         for outcome, duration in rows:
@@ -364,3 +624,15 @@ def query_test_durations(harvester_folder: str) -> dict[str, list[float]]:
         return result
     except (sqlite3.OperationalError, sqlite3.DatabaseError):
         return {"all": [], "passed": [], "failed": []}
+
+
+def query_test_records(harvester_folder: str) -> list[sqlite3.Row]:
+    """Return every row from test_records."""
+    path = db_path(harvester_folder)
+    if not os.path.exists(path):
+        return []
+    try:
+        conn = get_connection(harvester_folder)
+        return list(conn.execute("select * from test_records").fetchall())
+    except (sqlite3.OperationalError, sqlite3.DatabaseError):
+        return []

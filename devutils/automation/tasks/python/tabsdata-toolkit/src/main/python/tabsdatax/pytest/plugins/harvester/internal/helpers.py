@@ -2,21 +2,23 @@
 #  Copyright 2026 Tabs Data Inc.
 #
 
-import hashlib
 import json
 import os
 import traceback
-import warnings
 
 import pytest
 from tenacity import retry, retry_if_exception_type, stop_after_delay, wait_fixed
 
 from tabsdatax.pytest.plugins.harvester.internal.constants import (
     PYTEST_ATTRIBUTE_REPRCRASH,
-    TestField,
-    TestFilePrefix,
     TestPhase,
     TestStatus,
+)
+from tabsdatax.pytest.plugins.harvester.internal.database import (
+    promote_passed_to_teardown_failure,
+    record_teardown_error_fields,
+    update_test_record,
+    upsert_test_final,
 )
 
 fs_retry = retry(
@@ -33,101 +35,11 @@ def normalize_nodeid(nodeid: str) -> str:
     return nodeid
 
 
-def sanitize(nodeid: str) -> str:
-    base = nodeid.replace("/", "_").replace("::", "__").replace(" ", "_")
-    # Append a short hash to avoid collisions on case-insensitive filesystems
-    # (macOS APFS). Tests like [False-False] and [false-False] would otherwise
-    # map to the same file.
-    digest = hashlib.sha1(nodeid.encode()).hexdigest()[:8]
-    return f"{base}.{digest}"
-
-
-def filepath(
-    harvester_folder: str,
-    prefix: str,
-    nodeid: str,
-) -> str:
-    return os.path.join(harvester_folder, prefix + sanitize(nodeid) + ".json")
-
-
 @fs_retry
 def atomic_write(tmp: str, path: str, data: dict) -> None:
     with open(tmp, "w") as f:
         json.dump(data, f)
     os.replace(tmp, path)
-
-
-def write(
-    path: str,
-    data: dict,
-    *,
-    must_be_new: bool = False,
-) -> None:
-    if must_be_new and os.path.exists(path):
-        warnings.warn(
-            f"Harvester: file already exists (possible collision): {path}",
-            stacklevel=2,
-        )
-    try:
-        atomic_write(path + ".tmp", path, data)
-    except OSError as e:
-        warnings.warn(
-            f"Harvester: failed to write {path}: {e}",
-            stacklevel=2,
-        )
-
-
-@fs_retry
-def atomic_rename(old_path: str, new_path: str) -> None:
-    os.replace(old_path, new_path)
-
-
-def rename(
-    harvester_folder: str,
-    old_prefix: str,
-    new_prefix: str,
-    nodeid: str,
-) -> None:
-    old_path = filepath(harvester_folder, old_prefix, nodeid)
-    new_path = filepath(harvester_folder, new_prefix, nodeid)
-    if not os.path.exists(old_path):
-        warnings.warn(
-            f"Harvester: source file missing for rename: {old_path}",
-            stacklevel=2,
-        )
-        return
-    if os.path.exists(new_path):
-        warnings.warn(
-            f"Harvester: destination already exists (possible collision): {new_path}",
-            stacklevel=2,
-        )
-    try:
-        atomic_rename(old_path, new_path)
-    except OSError as e:
-        warnings.warn(
-            f"Harvester: failed to rename {old_path} -> {new_path}: {e}",
-            stacklevel=2,
-        )
-
-
-def write_and_rename(
-    harvester_folder: str,
-    data_path: str,
-    data: dict,
-    nodeid: str,
-    old_prefix: TestFilePrefix,
-    new_prefix: TestFilePrefix,
-) -> None:
-    write(data_path, data)
-    rename(harvester_folder, old_prefix, new_prefix, nodeid)
-
-
-def find_current_path(harvester_folder: str, nodeid: str) -> str | None:
-    for prefix in TestFilePrefix:
-        path = filepath(harvester_folder, prefix, nodeid)
-        if os.path.exists(path):
-            return path
-    return None
 
 
 def format_traceback(excinfo) -> str:
@@ -155,169 +67,156 @@ def error_location(report: pytest.TestReport) -> str | None:
     return None
 
 
-def record_skip(
-    data: dict,
-    phase: TestPhase,
-    call: pytest.CallInfo,
-) -> None:
-    data[TestField.STATUS] = TestStatus.SKIPPED
-    data[TestField.PHASE] = phase
-    data[TestField.STOP] = call.stop
+def skip_fields(phase: TestPhase, call: pytest.CallInfo) -> dict:
+    fields = {
+        "phase": str(phase),
+        "stop": call.stop,
+    }
     if call.excinfo is not None:
-        data[TestField.SKIP_REASON] = str(call.excinfo.value)
+        fields["skip_reason"] = str(call.excinfo.value)
+    return fields
 
 
-def record_error(
-    data: dict,
-    status: TestStatus,
+def error_fields(
     phase: TestPhase,
     stop: float,
     excinfo: pytest.ExceptionInfo[BaseException],
     report: pytest.TestReport,
-) -> None:
-    data[TestField.STATUS] = status
-    data[TestField.PHASE] = phase
-    data[TestField.STOP] = stop
-    data[TestField.ERROR] = str(excinfo.value)
-    data[TestField.ERROR_TYPE] = excinfo.typename
-    data[TestField.TRACEBACK] = format_traceback(excinfo)
-    data[TestField.ERROR_LOCATION] = error_location(report)
+) -> dict:
+    return {
+        "phase": str(phase),
+        "stop": stop,
+        "error": str(excinfo.value),
+        "error_type": excinfo.typename,
+        "traceback": format_traceback(excinfo),
+        "error_location": error_location(report),
+    }
 
 
 def handle_setup(
     harvester_folder: str,
-    data_path: str,
-    data: dict,
     nodeid: str,
     call: pytest.CallInfo,
     report: pytest.TestReport,
 ) -> None:
+    duration_setup = call.duration
     if report.skipped:
-        record_skip(data, TestPhase.SETUP, call)
-        write_and_rename(
+        fields = skip_fields(TestPhase.SETUP, call)
+        fields["duration_setup"] = duration_setup
+        upsert_test_final(
             harvester_folder,
-            data_path,
-            data,
             nodeid,
-            TestFilePrefix.RUNNING,
-            TestFilePrefix.SKIPPED,
+            str(TestStatus.SKIPPED),
+            **fields,
         )
     elif call.excinfo is not None:
-        record_error(
-            data,
-            TestStatus.FAILED_SETUP,
-            TestPhase.SETUP,
-            call.stop,
-            call.excinfo,
-            report,
-        )
-        write_and_rename(
+        fields = error_fields(TestPhase.SETUP, call.stop, call.excinfo, report)
+        fields["duration_setup"] = duration_setup
+        upsert_test_final(
             harvester_folder,
-            data_path,
-            data,
             nodeid,
-            TestFilePrefix.RUNNING,
-            TestFilePrefix.ERROR_SETUP,
+            str(TestStatus.FAILED_SETUP),
+            **fields,
         )
     else:
-        write(data_path, data)
+        update_test_record(
+            harvester_folder,
+            nodeid,
+            duration_setup=duration_setup,
+        )
 
 
 def handle_call(
     harvester_folder: str,
-    data_path: str,
-    data: dict,
     nodeid: str,
     call: pytest.CallInfo,
     report: pytest.TestReport,
 ) -> None:
-    data[TestField.STOP] = call.stop
+    duration_call = call.duration
     if report.skipped:
-        record_skip(data, TestPhase.CALL, call)
-        write_and_rename(
+        fields = skip_fields(TestPhase.CALL, call)
+        fields["duration_call"] = duration_call
+        upsert_test_final(
             harvester_folder,
-            data_path,
-            data,
             nodeid,
-            TestFilePrefix.RUNNING,
-            TestFilePrefix.SKIPPED,
+            str(TestStatus.SKIPPED),
+            **fields,
         )
     elif call.excinfo is None:
-        data[TestField.STATUS] = TestStatus.PASSED
-        write_and_rename(
+        upsert_test_final(
             harvester_folder,
-            data_path,
-            data,
             nodeid,
-            TestFilePrefix.RUNNING,
-            TestFilePrefix.PASSED,
+            str(TestStatus.PASSED),
+            stop=call.stop,
+            duration_call=duration_call,
         )
     else:
-        record_error(
-            data,
-            TestStatus.FAILED_EXECUTION,
-            TestPhase.CALL,
-            call.stop,
-            call.excinfo,
-            report,
-        )
-        write_and_rename(
+        fields = error_fields(TestPhase.CALL, call.stop, call.excinfo, report)
+        fields["duration_call"] = duration_call
+        upsert_test_final(
             harvester_folder,
-            data_path,
-            data,
             nodeid,
-            TestFilePrefix.RUNNING,
-            TestFilePrefix.ERROR_CALL,
+            str(TestStatus.FAILED_EXECUTION),
+            **fields,
         )
 
 
 def handle_teardown(
     harvester_folder: str,
-    data_path: str,
-    data: dict,
     nodeid: str,
     call: pytest.CallInfo,
     report: pytest.TestReport,
 ) -> None:
-    data.setdefault(TestField.STOP, call.stop)
-    if call.excinfo is not None:
-        data[TestField.TEARDOWN_ERROR] = str(call.excinfo.value)
-        data[TestField.TEARDOWN_ERROR_TYPE] = call.excinfo.typename
-        data[TestField.TEARDOWN_TRACEBACK] = format_traceback(call.excinfo)
-        data[TestField.TEARDOWN_ERROR_LOCATION] = error_location(report)
-        if data.get(TestField.STATUS) == TestStatus.PASSED:
-            data[TestField.STATUS] = TestStatus.FAILED_TEARDOWN
-            data[TestField.PHASE] = TestPhase.TEARDOWN
-            write_and_rename(
-                harvester_folder,
-                data_path,
-                data,
-                nodeid,
-                TestFilePrefix.PASSED,
-                TestFilePrefix.ERROR_TEARDOWN,
-            )
-        else:
-            write(data_path, data)
-    else:
-        write(data_path, data)
+    duration_teardown = call.duration
+    if call.excinfo is None:
+        update_test_record(
+            harvester_folder,
+            nodeid,
+            stop=call.stop,
+            duration_teardown=duration_teardown,
+        )
+        return
+
+    teardown_error = str(call.excinfo.value)
+    teardown_error_type = call.excinfo.typename
+    teardown_traceback = format_traceback(call.excinfo)
+    teardown_error_location = error_location(report)
+
+    promoted = promote_passed_to_teardown_failure(
+        harvester_folder,
+        nodeid,
+        teardown_error=teardown_error,
+        teardown_error_type=teardown_error_type,
+        teardown_traceback=teardown_traceback,
+        teardown_error_location=teardown_error_location,
+        failed_teardown_status=str(TestStatus.FAILED_TEARDOWN),
+        teardown_phase=str(TestPhase.TEARDOWN),
+        stop=call.stop,
+        duration_teardown=duration_teardown,
+    )
+    if not promoted:
+        record_teardown_error_fields(
+            harvester_folder,
+            nodeid,
+            teardown_error=teardown_error,
+            teardown_error_type=teardown_error_type,
+            teardown_traceback=teardown_traceback,
+            teardown_error_location=teardown_error_location,
+            stop=call.stop,
+            duration_teardown=duration_teardown,
+        )
 
 
 def handle_unknown(
     harvester_folder: str,
-    data_path: str,
-    data: dict,
     nodeid: str,
     call: pytest.CallInfo,
     report: pytest.TestReport,
 ) -> None:
-    data.setdefault(TestField.STOP, call.stop)
-    data[TestField.STATUS] = TestStatus.UNKNOWN
-    data[TestField.PHASE] = call.when
-    write_and_rename(
+    upsert_test_final(
         harvester_folder,
-        data_path,
-        data,
         nodeid,
-        TestFilePrefix.RUNNING,
-        TestFilePrefix.UNKNOWN,
+        str(TestStatus.UNKNOWN),
+        phase=str(call.when),
+        stop=call.stop,
     )

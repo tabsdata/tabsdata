@@ -2,9 +2,9 @@
 #  Copyright 2026 Tabs Data Inc.
 #
 
-"""Pytest plugin that monitors test execution by writing per-test JSON files
-and persisting session-level metadata (phases, fixtures, markers, plugins)
-to ``_meta.json`` for the Textual dashboard.
+"""Pytest plugin that monitors test execution by persisting per-test rows in
+SQLite and session-level metadata (phases, fixtures, markers, plugins) to
+``_meta_state.json`` for the Textual dashboard.
 
 This module is a thin hook dispatcher.  Each hook delegates to the
 appropriate tracker in ``internal/``.
@@ -40,21 +40,18 @@ appropriate tracker in ``internal/``.
 
 ───────────
 
-**File transitions per test**::
+**Status transitions per test** (in the ``test_records.status`` column):
 
-    logstart ─> 1.<id>.json (RUNNING)
+    logstart ─> Running
                     │
-        ┌───────────┼─────────────┬───────────┬───────────┐
-        ↓           ↓             ↓           ↓           ↓
-    0.0.<id>    0.1.<id>      0.2.<id>      2.<id>    0.4.<id>
-    (PASSED)  (ERROR_SETUP) (ERROR_CALL)   (SKIPPED)  (UNKNOWN)
+        ┌───────────┼──────────────────┬──────────────┬───────────┐
+        ↓           ↓                  ↓              ↓           ↓
+     Passed   Failed (Setup)    Failed (Execution)  Skipped    Unknown
         │
         ↓ (teardown fails)
-    0.3.<id>
-    (ERROR_TEARDOWN)
+    Failed (Teardown)
 """
 
-import json
 import os
 import shutil
 import time
@@ -63,7 +60,6 @@ import pytest
 
 from tabsdatax.pytest.plugins.harvester.internal.components import ComponentTracker
 from tabsdatax.pytest.plugins.harvester.internal.constants import (
-    PHASE_DURATION_FIELD,
     PYTEST_OPTION_NUMPROCESSES,
     PYTEST_PLUGIN_XDIST,
     PYTEST_WORKERINPUT,
@@ -73,29 +69,26 @@ from tabsdatax.pytest.plugins.harvester.internal.constants import (
     TDX_HARVESTER_FOLDER_ENV,
     TDX_HARVESTER_FOLDER_OPT,
     SessionPhase,
-    TestField,
-    TestFilePrefix,
-    TestPhase,
     TestStatus,
 )
 from tabsdatax.pytest.plugins.harvester.internal.database import (
     init_db,
+    record_exists,
     record_fixture_setup_end,
     record_fixture_setup_start,
     record_fixture_teardown_end,
     record_test_completion,
+    record_test_running,
     reset_db,
+    upsert_test_final,
 )
 from tabsdatax.pytest.plugins.harvester.internal.extensions import PluginTracker
 from tabsdatax.pytest.plugins.harvester.internal.fixtures import FixtureTracker
 from tabsdatax.pytest.plugins.harvester.internal.helpers import (
-    filepath,
-    find_current_path,
     handle_call,
     handle_setup,
     handle_teardown,
     handle_unknown,
-    write,
 )
 from tabsdatax.pytest.plugins.harvester.internal.markers import MarkerTracker
 from tabsdatax.pytest.plugins.harvester.internal.phases import PhaseTracker
@@ -138,7 +131,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         TDX_HARVESTER_FOLDER_OPT,
         dest=TDX_HARVESTER_FOLDER_ARG,
         default=None,
-        help="Folder where per-test harvester files are written. "
+        help="Folder where the harvester database and metadata are written. "
         "Falls back to ${TDX_HARVESTER_FOLDER_ENV}, "
         "then $HOME/.tabsdatax/pytest/harvester.",
     )
@@ -364,8 +357,9 @@ def pytest_fixture_post_finalizer(fixturedef, request) -> None:
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_runtest_logstart(nodeid: str, location: tuple) -> None:
-    """Create a ``RUNNING`` JSON file when a test is about to execute.
-    Skipped on the xdist controller to avoid orphan files — under xdist this
+    """Insert a ``Running`` row in test_records when a test starts.
+
+    Skipped on the xdist controller to avoid orphan rows — under xdist this
     hook fires on the controller for every dispatched test, but only workers
     actually run them.
     """
@@ -375,30 +369,27 @@ def pytest_runtest_logstart(nodeid: str, location: tuple) -> None:
     if not g_harvester_folder:
         return
 
-    path = filepath(g_harvester_folder, TestFilePrefix.RUNNING, nodeid)
     worker = os.environ.get(PYTEST_XDIST_WORKER, "")
-    write(
-        path,
-        {
-            TestField.NODEID: nodeid,
-            TestField.FILE: location[0],
-            TestField.LINE: location[1],
-            TestField.FUNCTION: location[2],
-            TestField.STATUS: TestStatus.RUNNING,
-            TestField.START: time.time(),
-            TestField.WORKER: worker,
-            TestField.PID: os.getpid(),
-        },
-        must_be_new=True,
+    record_test_running(
+        g_harvester_folder,
+        nodeid=nodeid,
+        file=location[0],
+        line=location[1],
+        function=location[2],
+        status=str(TestStatus.RUNNING),
+        start=time.time(),
+        worker=worker,
     )
 
 
 @pytest.hookimpl(wrapper=True)
 def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo):
-    """Update the test's JSON file after each phase (setup / call / teardown).
+    """Update the test's database row after each phase (setup / call / teardown).
+
     Called up to three times per test item.  Each invocation records the phase
-    duration, captures any error or skip information, and renames the file
-    from its current prefix to the outcome prefix (see **TestFilePrefix**).
+    duration, captures any error or skip information, and transitions the row's
+    status column to the outcome status (Passed / Failed (Setup) / Failed
+    (Execution) / Failed (Teardown) / Skipped / Unknown).
     """
     report = yield
 
@@ -407,70 +398,22 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo):
     if not g_harvester_folder:
         return report
 
-    # Ensure we're in RUN phase (only on controller / non-xdist)
     phase_tracker: PhaseTracker | None = _get(item.config, _CFG_PHASE_TRACKER)
     if phase_tracker:
         phase_tracker.ensure(SessionPhase.RUN)
 
     if g_is_xdist_controller:
-        # Controller doesn't write per-test files.
-        # Tracker updates happen in pytest_runtest_logreport.
         return report
-
-    data_path = find_current_path(g_harvester_folder, nodeid)
-    if not data_path:
-        return report
-
-    try:
-        with open(data_path) as f:
-            data = json.load(f)
-    except (OSError, json.JSONDecodeError):
-        data = {
-            TestField.NODEID: nodeid,
-            TestField.STATUS: TestStatus.RUNNING,
-            TestField.START: call.start,
-        }
-
-    data[PHASE_DURATION_FIELD[call.when]] = call.duration
 
     match call.when:
-        case TestPhase.SETUP:
-            handle_setup(
-                g_harvester_folder,
-                data_path,
-                data,
-                nodeid,
-                call,
-                report,
-            )
-        case TestPhase.CALL:
-            handle_call(
-                g_harvester_folder,
-                data_path,
-                data,
-                nodeid,
-                call,
-                report,
-            )
-            # Tracker updates happen in pytest_runtest_logreport
-        case TestPhase.TEARDOWN:
-            handle_teardown(
-                g_harvester_folder,
-                data_path,
-                data,
-                nodeid,
-                call,
-                report,
-            )
+        case "setup":
+            handle_setup(g_harvester_folder, nodeid, call, report)
+        case "call":
+            handle_call(g_harvester_folder, nodeid, call, report)
+        case "teardown":
+            handle_teardown(g_harvester_folder, nodeid, call, report)
         case _:
-            handle_unknown(
-                g_harvester_folder,
-                data_path,
-                data,
-                nodeid,
-                call,
-                report,
-            )
+            handle_unknown(g_harvester_folder, nodeid, call, report)
 
     return report
 
@@ -525,37 +468,26 @@ def _notify_trackers_on_result(
         except Exception:
             pass
 
-        _STATUS_FROM_OUTCOME = {
-            "passed": TestStatus.PASSED,
-            "failed": TestStatus.FAILED_EXECUTION,
-            "skipped": TestStatus.SKIPPED,
+        status_from_outcome = {
+            "passed": str(TestStatus.PASSED),
+            "failed": str(TestStatus.FAILED_EXECUTION),
+            "skipped": str(TestStatus.SKIPPED),
         }
-        _PREFIX_FROM_OUTCOME = {
-            "passed": TestFilePrefix.PASSED,
-            "failed": TestFilePrefix.ERROR_CALL,
-            "skipped": TestFilePrefix.SKIPPED,
-        }
-        if g_is_xdist_controller and not find_current_path(
-            g_harvester_folder,
-            nodeid,
-        ):
+        if g_is_xdist_controller and not record_exists(g_harvester_folder, nodeid):
             try:
-                synthesized = {
-                    TestField.NODEID: nodeid,
-                    TestField.STATUS: _STATUS_FROM_OUTCOME[outcome],
-                    TestField.START: time.time() - (report.duration or 0.0),
-                    TestField.STOP: time.time(),
-                    PHASE_DURATION_FIELD[TestPhase.CALL]: report.duration or 0.0,
+                now = time.time()
+                fields = {
+                    "start": now - (report.duration or 0.0),
+                    "stop": now,
+                    "duration_call": report.duration or 0.0,
                 }
                 if outcome == "skipped" and getattr(report, "longrepr", None):
-                    synthesized[TestField.SKIP_REASON] = str(report.longrepr)
-                write(
-                    filepath(
-                        g_harvester_folder,
-                        _PREFIX_FROM_OUTCOME[outcome],
-                        nodeid,
-                    ),
-                    synthesized,
+                    fields["skip_reason"] = str(report.longrepr)
+                upsert_test_final(
+                    g_harvester_folder,
+                    nodeid,
+                    status_from_outcome[outcome],
+                    **fields,
                 )
             except Exception:
                 pass

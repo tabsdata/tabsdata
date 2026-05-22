@@ -5,7 +5,7 @@
 """Textual-based dashboard for monitoring pytest test execution.
 
 Replaces the previous Rich Live monitor with a scrollable, flicker-free
-Textual application.  Reads ``_meta.json`` (v2) and per-test JSON files
+Textual application.  Reads ``_meta_state.json`` and the SQLite database
 from the harvester folder on a polling interval.
 
 Tables:
@@ -34,14 +34,14 @@ from textual.containers import Horizontal, VerticalScroll
 from textual.widgets import DataTable, Footer, Static
 
 from tabsdatax.pytest.plugins.harvester.internal.constants import (
-    PREFIXES_FAILED,
+    FAILED_STATUSES,
     SESSION_PHASES_ORDERED,
     SUDO_REFRESH_INTERVAL_SECONDS,
     SUDO_REFRESH_TIMEOUT_SECONDS,
     TDX_HARVESTER_FOLDER_DEF,
     TDX_HARVESTER_FOLDER_ENV,
     Emoji,
-    TestFilePrefix,
+    TestStatus,
 )
 from tabsdatax.pytest.plugins.harvester.internal.dashboard import (
     SummaryHeader,
@@ -68,6 +68,7 @@ from tabsdatax.pytest.plugins.harvester.internal.database import (
     query_outcome_counts,
     query_test_averages,
     query_test_durations,
+    query_test_records,
     query_tests_per_minute,
 )
 from tabsdatax.pytest.plugins.harvester.internal.schema import MetaState
@@ -178,7 +179,6 @@ class TestRecord:
     error: str | None
     error_type: str | None
     error_location: str | None
-    json_path: str
     top_frame: StackFrame | None = None
     all_frames: list[StackFrame] = field(default_factory=list)
     stack_depth: int = 0
@@ -219,29 +219,23 @@ def pid_exists(pid: int) -> bool:
         return True
 
 
-def read_record(path: str) -> TestRecord | None:
-    try:
-        with open(path) as f:
-            data = json.load(f)
-    except (OSError, json.JSONDecodeError):
-        return None
+def row_to_record(row) -> TestRecord:
     return TestRecord(
-        nodeid=data.get("nodeid", "?"),
-        file=data.get("file", "?"),
-        line=data.get("line", 0),
-        function=data.get("function", "?"),
-        status=data.get("status", "?"),
-        start=data.get("start", 0),
-        stop=data.get("stop"),
-        worker=data.get("worker", ""),
-        pid=data.get("pid", 0),
-        duration_setup=data.get("duration_setup"),
-        duration_call=data.get("duration_call"),
-        duration_teardown=data.get("duration_teardown"),
-        error=data.get("error"),
-        error_type=data.get("error_type"),
-        error_location=data.get("error_location"),
-        json_path=path,
+        nodeid=row["nodeid"] or "?",
+        file=row["file"] or "?",
+        line=row["line"] if row["line"] is not None else 0,
+        function=row["function"] or "?",
+        status=row["status"] or "?",
+        start=row["start"] if row["start"] is not None else 0,
+        stop=row["stop"],
+        worker=row["worker"] or "",
+        pid=row["pid"] if row["pid"] is not None else 0,
+        duration_setup=row["duration_setup"],
+        duration_call=row["duration_call"],
+        duration_teardown=row["duration_teardown"],
+        error=row["error"],
+        error_type=row["error_type"],
+        error_location=row["error_location"],
     )
 
 
@@ -250,7 +244,7 @@ def scan_test_files(
     use_py_spy: bool = False,
     full_trace: bool = False,
 ) -> tuple[list[TestRecord], list[TestRecord], int, int, int]:
-    """Scan per-test JSON files.
+    """Scan test_records rows from the harvester database.
 
     Returns (running, failed, passed_count, skipped_count,
     orphaned_count).
@@ -264,49 +258,36 @@ def scan_test_files(
     if not os.path.isdir(folder):
         return running, failed, passed, skipped, orphaned
 
-    try:
-        entries = os.listdir(folder)
-    except OSError:
-        return running, failed, passed, skipped, orphaned
+    rows = query_test_records(folder)
 
-    for filename in entries:
-        if not filename.endswith(".json") or filename.startswith("_"):
-            continue
+    running_status = str(TestStatus.RUNNING)
+    passed_status = str(TestStatus.PASSED)
+    skipped_status = str(TestStatus.SKIPPED)
+    failed_status_set = {str(status) for status in FAILED_STATUSES}
 
-        if filename.startswith(TestFilePrefix.PASSED):
+    for row in rows:
+        status = row["status"]
+        if status == passed_status:
             passed += 1
-            continue
-
-        if filename.startswith(TestFilePrefix.SKIPPED):
+        elif status == skipped_status:
             skipped += 1
-            continue
-
-        if filename.startswith(TestFilePrefix.RUNNING):
-            path = os.path.join(folder, filename)
-            record = read_record(path)
-            if record and pid_exists(record.pid):
+        elif status == running_status:
+            record = row_to_record(row)
+            if pid_exists(record.pid):
                 running.append(record)
             else:
                 orphaned += 1
-            continue
+        elif status in failed_status_set:
+            failed.append(row_to_record(row))
 
-        for prefix in PREFIXES_FAILED:
-            if filename.startswith(prefix):
-                path = os.path.join(folder, filename)
-                record = read_record(path)
-                if record:
-                    failed.append(record)
-                break
-
-    # Sort running by worker
-    def worker_sort_key(r: TestRecord) -> tuple:
-        w = r.worker
-        if w.startswith("gw"):
+    def worker_sort_key(record: TestRecord) -> tuple:
+        worker = record.worker
+        if worker.startswith("gw"):
             try:
-                return 0, int(w[2:])
+                return 0, int(worker[2:])
             except ValueError:
                 pass
-        return (1, 0) if not w else (0, 0)
+        return (1, 0) if not worker else (0, 0)
 
     running.sort(key=worker_sort_key)
 
@@ -1234,7 +1215,7 @@ class HarvesterDashboard(App):
                 t(teardown_d),
             ]
             if self._details:
-                row.append(t(test.json_path))
+                row.append(t(test.nodeid))
             dt.add_row(*row, key=test.nodeid)
 
 
@@ -1275,7 +1256,7 @@ class HarvesterDashboard(App):
     "--details",
     is_flag=True,
     default=False,
-    help="Show file path to JSON details for failed tests.",
+    help="Show node id details for failed tests.",
 )
 def main(
     folder: str | None,
