@@ -349,7 +349,7 @@ class _ValuePattern:
 
         if issubclass(source_type, Var):
             literal_cls: type = _LiteralVar
-            field_name = "s"
+            field_name = "_s"
         elif issubclass(source_type, Secret):
             literal_cls: type = _LiteralSecret
             field_name = "_s"
@@ -967,18 +967,22 @@ class DescriptorBase(JsonSerde):
 
 
 class BaseVar(JsonSerde, ABC):
-    """Method-host for ``tabsdatak.api.Var``. The leaf class declares
-    the ``s`` and ``_value_pattern`` fields so pydantic discovers
-    them; methods live here so ``api.py`` stays focused."""
+    """Method-host for ``tabsdatak.api.Var``. Same shape as
+    ``BaseSecret`` -- ``Var()`` carries no user-provided name;
+    the framework infers it from the envelope's jsonpath during
+    dehydration / hydration. ``_value`` raises by default; refs
+    only resolve after the framework runs the matching hydration
+    pass (typically :func:`hydrate_vars_as_envs` in
+    ``tabsdata-common``, which reads ``os.environ``)."""
 
     def _name(self) -> str:
-        return self.s  # type: ignore[attr-defined]
+        return self._s  # type: ignore[attr-defined]
 
     def _value(self) -> str:
-        val = os.environ.get(self.s)  # type: ignore[attr-defined]
-        if val is None:
-            raise ApiErrorCode.API_8.exception(name=self.s)  # type: ignore[attr-defined]
-        return val
+        # No resolver wired up by default: refs only resolve under
+        # a hydration integration that is not part of the API
+        # package (the common helper ``hydrate_vars_as_envs``).
+        raise ApiErrorCode.API_8.exception(name=self._s)  # type: ignore[attr-defined]
 
     def _validate(self, val: str) -> str:
         pattern = self._value_pattern  # type: ignore[attr-defined]
@@ -993,29 +997,54 @@ class BaseVar(JsonSerde, ABC):
     def value(self) -> str:
         return self._validate(self._value())
 
+    @classmethod
+    def _var_key(cls, name: str) -> Any:
+        # ``Var``'s private fields are ``init=False`` so they cannot
+        # be set from the user-visible ``__init__``; route through
+        # the pydantic validator instead, where the dict-input path
+        # re-injects them after the (empty) handler runs.
+        return cls.__pydantic_validator__.validate_python(  # type: ignore[attr-defined]
+            {"_s": name, "_value_pattern": cls._value_pattern}  # type: ignore[attr-defined]
+        )
+
     @model_validator(mode="wrap")
     @classmethod
-    def _reinject_private_from_dict(cls, data: Any, handler) -> Any:
-        # ``Var._value_pattern`` is ``init=False`` so the IDE flags
-        # ``Var(s='X', _value_pattern=...)`` at edit time. But the
-        # framework's wrap-validator (the field-level pattern marker
-        # in ``_ValuePattern``) and envelope round-trips pass it via
-        # the dict path -- pydantic's standard handler would drop it
-        # along with the constructor signature. Stash and re-inject
-        # after the handler runs.
+    def _enforce_empty_user_init(cls, data: Any, handler) -> Any:
+        # Two-way guard wrapping pydantic's standard validation:
         #
-        # ``Var``'s primary field ``s`` is ``init=True``; we only need
-        # to round-trip the private ``_value_pattern``. The literal
-        # subclass redeclares ``_value_pattern`` with ``init=True``,
-        # so the handler picks it up directly there -- no re-inject
-        # needed and this hook is a no-op for it.
+        # 1. ``ArgsKwargs`` arrives only from the user-visible
+        #    ``__init__`` site. On ``Var`` itself it must be empty
+        #    (``Var()``); anything else is a misuse. The literal
+        #    subclass overrides its fields with ``init=True`` and
+        #    is unaffected.
+        #
+        # 2. Dict input arrives from envelope round-trip and the
+        #    ``_var_key`` factory. ``Var``'s private fields are
+        #    ``init=False`` so the standard validator drops them;
+        #    we stash them before the handler runs and
+        #    ``object.__setattr__`` them back afterwards.
         from tabsdatak.api import Var
 
-        if cls is Var and isinstance(data, dict) and "_value_pattern" in data:
-            v = data["_value_pattern"]
+        if isinstance(data, ArgsKwargs):
+            if cls is Var and (data.args or data.kwargs):
+                raise ValueError(
+                    f"{cls.__qualname__}() takes no arguments; "
+                    f"use Var.lit(value) for inline values, or "
+                    f"Var._var_key(name) for a named reference"
+                )
+            return handler(data)
+
+        if cls is Var and isinstance(data, dict):
+            stash = {
+                k: data[k]
+                for k in ("_s", "_value_pattern")
+                if k in data
+            }
             instance = handler(data)
-            object.__setattr__(instance, "_value_pattern", v)
+            for k, v in stash.items():
+                object.__setattr__(instance, k, v)
             return instance
+
         return handler(data)
 
 

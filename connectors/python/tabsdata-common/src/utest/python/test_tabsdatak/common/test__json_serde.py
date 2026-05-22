@@ -8,13 +8,16 @@ from tabsdatak.common._error import CommonErrorCode, CommonRuntimeException
 from tabsdatak.common._json_serde import (
     KeyValue,
     dehydrate_secrets,
+    dehydrate_vars,
     extract_connection_names,
-    extract_vars,
     extract_secrets,
+    extract_vars,
     find_by_kind,
     hydrate_connections,
     hydrate_secrets,
     hydrate_secrets_as_envs,
+    hydrate_vars,
+    hydrate_vars_as_envs,
     replace_at,
 )
 
@@ -197,8 +200,8 @@ def test_replace_at_rejects_unexpected_char_after_root():
 # Realistic envelope shapes:
 #   secretRef:     {"kind": "secretRef",     "spec": {"_s": "<name>", "_value_pattern": "..."}}
 #   secretLiteral: {"kind": "secretLiteral", "spec": {"_s": "<value>", "_value_pattern": "..."}}
-#   varRef:        {"kind": "varRef",        "spec": {"s": "<name>"}}
-#   varLiteral:    {"kind": "varLiteral",    "spec": {"s": "<value>"}}
+#   varRef:        {"kind": "varRef",        "spec": {"_s": "<name>"}}
+#   varLiteral:    {"kind": "varLiteral",    "spec": {"_s": "<value>"}}
 # ---------------------------------------------------------------------------
 
 
@@ -216,7 +219,7 @@ def _secret_literal(value: str, *, pattern: str | None = None) -> dict:
 
 
 def _var_ref(name: str) -> dict:
-    return Var(s=name).to_dict()
+    return Var._var_key(name).to_dict()
 
 
 def _var_literal(value: str) -> dict:
@@ -288,28 +291,6 @@ def test_extract_secrets_ignores_var_envelopes():
     assert result == [KeyValue(key="P", value=None)]
 
 
-# --- extract_vars ----------------------------------------------------------
-
-
-def test_extract_vars_returns_ref_without_value():
-    data = _wrap({"user": _var_ref("DB_USER")})
-    [kv] = extract_vars(data)
-    # No "SECRET_" prefix for envs.
-    assert kv == KeyValue(key="USER", value=None)
-
-
-def test_extract_vars_returns_literal_with_value():
-    data = _wrap({"user": _var_literal("etl")})
-    [kv] = extract_vars(data)
-    assert kv == KeyValue(key="USER", value="etl")
-
-
-def test_extract_vars_ignores_secret_envelopes():
-    data = _wrap({"u": _var_ref("USER"), "p": _secret_ref("PW")})
-    result = extract_vars(data)
-    assert result == [KeyValue(key="U", value=None)]
-
-
 # --- dehydrate_secrets -----------------------------------------------------
 
 
@@ -347,7 +328,7 @@ def test_dehydrate_secrets_ignores_var_envelopes():
     data = _wrap({"user": _var_literal("etl"), "pw": _secret_literal("hunter2")})
     out = dehydrate_secrets(data)
     assert out["spec"]["user"]["kind"] == "varLiteral"
-    assert out["spec"]["user"]["spec"]["s"] == "etl"
+    assert out["spec"]["user"]["spec"]["_s"] == "etl"
     assert out["spec"]["pw"]["kind"] == "secretRef"
 
 
@@ -499,13 +480,13 @@ def test_extract_connection_names_resolves_var_literal_name():
 
 def test_extract_connection_names_resolves_var_ref_name(monkeypatch):
     monkeypatch.setenv("DB_CONN", "prod-pg")
-    data = _wrap({"conn": _conn_ref(Var(s="DB_CONN").to_dict())})
+    data = _wrap({"conn": _conn_ref(Var._var_key("DB_CONN").to_dict())})
     assert extract_connection_names(data) == ["prod-pg"]
 
 
 def test_extract_connection_names_raises_on_unset_var_ref(monkeypatch):
     monkeypatch.delenv("DB_CONN", raising=False)
-    data = _wrap({"conn": _conn_ref(Var(s="DB_CONN").to_dict())})
+    data = _wrap({"conn": _conn_ref(Var._var_key("DB_CONN").to_dict())})
     with pytest.raises(CommonRuntimeException) as exc_info:
         extract_connection_names(data)
     assert exc_info.value.api_error is CommonErrorCode.COMMON_9
@@ -568,7 +549,7 @@ def test_hydrate_connections_replaces_each_ref_independently():
 
 def test_hydrate_connections_resolves_var_named_refs(monkeypatch):
     monkeypatch.setenv("DB_CONN", "prod-pg")
-    data = _wrap({"conn": _conn_ref(Var(s="DB_CONN").to_dict())})
+    data = _wrap({"conn": _conn_ref(Var._var_key("DB_CONN").to_dict())})
     out = hydrate_connections(data, {"prod-pg": _conn_def("prod-pg")})
     assert out["spec"]["conn"]["spec"]["label"] == "prod-pg"
 
@@ -631,3 +612,129 @@ def test_dehydrate_then_hydrate_restores_field_value():
     tk = Secret.from_dict(rehydrated["spec"]["token"])
     assert pw.value() == "hunter2"
     assert tk.value() == "abc"
+
+
+# ---------------------------------------------------------------------------
+# Var pipeline (mirrors the Secret pipeline above): the `Var` class has
+# the same shape as `Secret` -- no user-provided name, refs are
+# anonymous until hydration. `dehydrate_vars` / `hydrate_vars` /
+# `hydrate_vars_as_envs` operate on ``varRef`` / ``varLiteral``
+# envelopes the same way the Secret helpers do for ``secretRef`` /
+# ``secretLiteral``.
+# ---------------------------------------------------------------------------
+
+
+# --- extract_vars / dehydrate_vars / hydrate_vars happy path ----------------
+
+
+def test_extract_vars_returns_ref_without_value():
+    data = _wrap({"user": _var_ref("DB_USER")})
+    [kv] = extract_vars(data)
+    assert kv == KeyValue(key="USER", value=None)
+
+
+def test_extract_vars_returns_literal_with_value():
+    data = _wrap({"user": _var_literal("etl")})
+    [kv] = extract_vars(data)
+    assert kv == KeyValue(key="USER", value="etl")
+
+
+def test_extract_vars_ignores_secret_envelopes():
+    data = _wrap({"u": _var_ref("USER"), "p": _secret_ref("PW")})
+    result = extract_vars(data)
+    assert result == [KeyValue(key="U", value=None)]
+
+
+def test_dehydrate_vars_rewrites_literal_to_ref():
+    data = _wrap({"user": _var_literal("etl")})
+    before = data["spec"]["user"]["kind"]
+    out = dehydrate_vars(data)
+    assert before == "varLiteral"
+    assert out["spec"]["user"]["kind"] == "varRef"
+    assert out["spec"]["user"]["spec"]["_s"] == "<var>"
+    # Hydrated input is not mutated in place.
+    assert data["spec"]["user"]["kind"] == "varLiteral"
+
+
+def test_dehydrate_vars_leaves_refs_alone():
+    data = _wrap({"user": _var_ref("DB_USER")})
+    out = dehydrate_vars(data)
+    assert out["spec"]["user"]["spec"]["_s"] == "DB_USER"
+
+
+def test_dehydrate_vars_ignores_secret_envelopes():
+    data = _wrap({"u": _var_literal("etl"), "pw": _secret_literal("hunter2")})
+    out = dehydrate_vars(data)
+    assert out["spec"]["u"]["kind"] == "varRef"
+    # Secret envelope is left untouched by the var pipeline.
+    assert out["spec"]["pw"]["kind"] == "secretLiteral"
+
+
+def test_hydrate_vars_rewrites_ref_to_literal_with_value():
+    data = _wrap({"user": _var_ref("USER")})
+    out = hydrate_vars(data, [KeyValue(key="USER", value="etl")])
+    inner = out["spec"]["user"]
+    assert inner["kind"] == "varLiteral"
+    assert inner["spec"]["_s"] == "etl"
+
+
+def test_hydrate_vars_missing_value_raises():
+    data = _wrap({"user": _var_ref("USER")})
+    with pytest.raises(CommonRuntimeException) as ei:
+        hydrate_vars(data, [KeyValue(key="USER", value=None)])
+    assert ei.value.api_error is CommonErrorCode.COMMON_6
+
+
+def test_hydrate_vars_keyset_must_match():
+    data = _wrap({"user": _var_ref("USER")})
+    with pytest.raises(CommonRuntimeException) as ei:
+        hydrate_vars(data, [KeyValue(key="USERX", value="etl")])
+    assert ei.value.api_error is CommonErrorCode.COMMON_7
+
+
+def test_dehydrate_then_hydrate_vars_round_trips():
+    data = _wrap({"u": _var_literal("etl"), "h": _var_literal("db")})
+    dehydrated = dehydrate_vars(data)
+    rehydrated = hydrate_vars(
+        dehydrated,
+        [KeyValue(key="U", value="etl"), KeyValue(key="H", value="db")],
+    )
+    assert rehydrated["spec"]["u"]["kind"] == "varLiteral"
+    assert rehydrated["spec"]["u"]["spec"]["_s"] == "etl"
+    assert rehydrated["spec"]["h"]["spec"]["_s"] == "db"
+
+
+# --- hydrate_vars_as_envs --------------------------------------------------
+
+
+def test_hydrate_vars_as_envs_reads_os_environ(monkeypatch):
+    monkeypatch.setenv("USER", "etl-from-env")
+    data = _wrap({"user": _var_ref("USER")})
+    out = hydrate_vars_as_envs(data, prefix="")
+    assert out["spec"]["user"]["kind"] == "varLiteral"
+    assert out["spec"]["user"]["spec"]["_s"] == "etl-from-env"
+
+
+def test_hydrate_vars_as_envs_honours_prefix(monkeypatch):
+    monkeypatch.setenv("TD_USER", "etl-prefixed")
+    data = _wrap({"user": _var_ref("USER")})
+    out = hydrate_vars_as_envs(data, prefix="TD_")
+    assert out["spec"]["user"]["spec"]["_s"] == "etl-prefixed"
+
+
+def test_hydrate_vars_as_envs_missing_env_raises(monkeypatch):
+    monkeypatch.delenv("USER", raising=False)
+    data = _wrap({"user": _var_ref("USER")})
+    with pytest.raises(CommonRuntimeException) as ei:
+        hydrate_vars_as_envs(data, prefix="")
+    assert ei.value.api_error is CommonErrorCode.COMMON_6
+
+
+def test_hydrate_vars_as_envs_ignores_secret_envelopes(monkeypatch):
+    monkeypatch.setenv("U", "etl")
+    data = _wrap({"u": _var_ref("U"), "pw": _secret_ref("PW")})
+    out = hydrate_vars_as_envs(data, prefix="")
+    assert out["spec"]["u"]["kind"] == "varLiteral"
+    assert out["spec"]["u"]["spec"]["_s"] == "etl"
+    # Secret envelope is left as a ref -- only the var pipeline ran.
+    assert out["spec"]["pw"]["kind"] == "secretRef"

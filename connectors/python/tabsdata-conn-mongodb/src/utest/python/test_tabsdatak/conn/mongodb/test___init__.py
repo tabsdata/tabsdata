@@ -103,7 +103,7 @@ def test_mongodb_conn_accepts_secret_uri():
 
 def test_mongodb_conn_accepts_env_uri():
     conn = MongoDBDestConn(
-        uri=Var(s="MONGO_URI"),
+        uri=Var._var_key("MONGO_URI"),
         credentials=UserPassword(
             user=Secret.lit("u"),
             password=Secret.lit("p"),

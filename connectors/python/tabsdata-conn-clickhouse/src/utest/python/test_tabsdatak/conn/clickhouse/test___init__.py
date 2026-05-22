@@ -144,12 +144,6 @@ def test_port_resolves_int():
     assert _convert(_bare_conn(port=8443).port, int) == 8443
 
 
-def test_port_resolves_env(monkeypatch):
-    # noinspection PyProtectedMember
-    from tabsdatak.conn.common.types import _convert
-
-    monkeypatch.setenv("CH_PORT", "9001")
-    assert _convert(_bare_conn(port=Var("CH_PORT")).port, int) == 9001
 
 
 def test_port_resolves_secret_literal():
@@ -164,7 +158,7 @@ def test_port_env_non_numeric_rejected_at_value(monkeypatch):
     from tabsdatak.conn.common.types import _convert
 
     monkeypatch.setenv("CH_PORT_BAD", "notanumber")
-    conn = _bare_conn(port=Var("CH_PORT_BAD"))
+    conn = _bare_conn(port=Var._var_key("CH_PORT_BAD"))
     with pytest.raises(Exception):
         _convert(conn.port, int)
 
@@ -183,35 +177,8 @@ def test_secure_resolves_bool():
     assert _convert(_bare_conn(port=1, secure=False).secure, bool) is False
 
 
-def test_secure_resolves_env_true(monkeypatch):
-    # noinspection PyProtectedMember
-    from tabsdatak.conn.common.types import _convert
-
-    monkeypatch.setenv("CH_SECURE", "true")
-    assert (
-        _convert(_bare_conn(port=1, secure=Var("CH_SECURE")).secure, bool)
-        is True
-    )
 
 
-@pytest.mark.parametrize("val,expected", [
-    ("true", True),
-    ("True", True),
-    ("1", True),
-    ("yes", True),
-    ("false", False),
-    ("0", False),
-    ("no", False),
-])
-def test_secure_resolves_env_variants(monkeypatch, val, expected):
-    # noinspection PyProtectedMember
-    from tabsdatak.conn.common.types import _convert
-
-    monkeypatch.setenv("CH_SECURE_X", val)
-    assert (
-        _convert(_bare_conn(port=1, secure=Var("CH_SECURE_X")).secure, bool)
-        is expected
-    )
 
 
 def test_secure_resolves_secret_literal():

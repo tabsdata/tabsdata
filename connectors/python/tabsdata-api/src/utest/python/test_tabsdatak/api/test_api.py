@@ -1081,20 +1081,26 @@ def test_env_extends_base_env():
     assert issubclass(_LiteralVar, _api.BaseVar)
 
 
-def test_env_attributes(monkeypatch):
-    monkeypatch.setenv("FOO", "foo")
-    e = Var("FOO")
+def test_var_attributes():
+    # ``Var._var_key(name)`` is the named-ref factory, mirroring
+    # ``Secret._secret_key``. Refs do not resolve in-process; the
+    # framework populates values via the hydration pipeline.
+    e = Var._var_key("FOO")
     assert e._name() == "FOO"
     assert isinstance(e, Var)
-    assert e.s == "FOO"
-    assert e._name() == "FOO"
-    assert e._value() == "foo"
+    assert e._s == "FOO"
+    # ``_value()`` is the unresolved-ref hook; without a resolver
+    # wired up it raises API_8.
+    with pytest.raises(ApiException):
+        e._value()
     assert e._value_pattern is None
     assert e._validate("foo") == "foo"
 
+    # ``Var.lit(value)`` is the literal factory -- returns a
+    # ``_LiteralVar`` whose ``_s`` is the literal value.
     e = Var.lit("foo")
-    assert isinstance(e, Var)
-    assert e.s == "foo"
+    assert isinstance(e, _LiteralVar)
+    assert e._s == "foo"
     assert e._name() == "<literal>"
     assert e._value() == "foo"
     assert e._value_pattern is None
@@ -1106,44 +1112,37 @@ class _SrcWithEnv(Src):
 
 
 def test_env_direct_construction():
-    e = Var("DB_PASSWORD")
+    e = Var._var_key("DB_PASSWORD")
     assert isinstance(e, Var)
-    assert e.s == "DB_PASSWORD"
+    assert e._s == "DB_PASSWORD"
 
 
-def test_env_rejects_invalid_name():
-    with pytest.raises(ApiException) as excinfo:
-        Var("1abc")
-    assert excinfo.value.api_error is ApiErrorCode.API_7
 
-
-def test_env_value_resolves_environment_variable(monkeypatch):
-    monkeypatch.setenv("TABSDATA_TEST_ENV", "resolved-value")
-    e = Var("TABSDATA_TEST_ENV")
-    assert e.value() == "resolved-value"
-
-
-def test_env_value_raises_when_unset(monkeypatch):
-    monkeypatch.delenv("TABSDATA_TEST_MISSING", raising=False)
-    e = Var("TABSDATA_TEST_MISSING")
+def test_var_value_raises_without_resolver():
+    # Refs do not resolve in-process: ``Var`` mirrors ``Secret`` --
+    # there is no built-in resolver in the API package, so
+    # ``value()`` on a ref always raises API_8. The framework
+    # populates values via the hydration pipeline (in
+    # ``tabsdata-common``).
+    e = Var._var_key("ANY_NAME")
     with pytest.raises(ApiException) as excinfo:
         e.value()
     assert excinfo.value.api_error is ApiErrorCode.API_8
 
 
 def test_env_round_trips_through_json():
-    e = Var("HOME")
+    e = Var._var_key("HOME")
     back = Var.from_json(e.to_json())
     assert isinstance(back, Var)
-    assert back.s == "HOME"
+    assert back._s == "HOME"
 
 
 def test_env_envelope_kind_and_type_tag():
-    e = Var("HOME")
+    e = Var._var_key("HOME")
     d = e.to_dict()
     assert d["kind"] == "varRef"
     assert d["type"].endswith(":Var")
-    assert d["spec"] == {"s": "HOME", "_value_pattern": None}
+    assert d["spec"] == {"_s": "HOME", "_value_pattern": None}
 
 
 def test_env_field_coerces_bare_string_to_literal_env():
@@ -1151,7 +1150,7 @@ def test_env_field_coerces_bare_string_to_literal_env():
     assert isinstance(s.e, _LiteralVar)
     assert isinstance(s.e, Var)
     assert s.e.value() == "literal-value"
-    assert s.e.s == "literal-value"
+    assert s.e._s == "literal-value"
 
 
 def test_env_field_injects_pattern_into_literal():
@@ -1162,32 +1161,32 @@ def test_env_field_injects_pattern_into_literal():
 
 
 def test_env_field_accepts_explicit_env_instance_and_injects_pattern():
-    s = _SrcWithEnv(Var("HOME"))
+    s = _SrcWithEnv(Var._var_key("HOME"))
     assert isinstance(s.e, Var)
-    assert s.e.s == "HOME"
+    assert s.e._s == "HOME"
     # Field's pattern is reconstructed onto the ref so it survives
     # serialization and gates the resolved value at value() time.
     assert s.e._value_pattern == r".+"
 
 
 def test_literal_env_value_returns_literal():
-    lit = _LiteralVar("hello")
+    lit = _LiteralVar(_s="hello")
     assert lit.value() == "hello"
 
 
 def test_literal_env_round_trips_through_json():
-    lit = _LiteralVar("literal-secret")
+    lit = _LiteralVar(_s="literal-secret")
     back = _LiteralVar.from_json(lit.to_json())
     assert isinstance(back, _LiteralVar)
-    assert back.s == "literal-secret"
+    assert back._s == "literal-secret"
 
 
 def test_literal_env_envelope_kind_and_type_tag():
-    lit = _LiteralVar("x")
+    lit = _LiteralVar(_s="x")
     d = lit.to_dict()
     assert d["kind"] == "varLiteral"
     assert d["type"].endswith(":_LiteralVar")
-    assert d["spec"]["s"] == "x"
+    assert d["spec"]["_s"] == "x"
 
 
 def test_env_field_serializes_literal_env_subclass_completely():
@@ -1195,31 +1194,26 @@ def test_env_field_serializes_literal_env_subclass_completely():
     d = s.to_dict()
     inner = d["spec"]["e"]
     assert inner["kind"] == "varLiteral"
-    assert inner["spec"]["s"] == "from-literal"
+    assert inner["spec"]["_s"] == "from-literal"
 
 
 def test_env_field_round_trips_literal_env_subclass():
     s = _SrcWithEnv(Var.lit("from-literal"))
     back = _SrcWithEnv.from_json(s.to_json())
     assert isinstance(back.e, _LiteralVar)
-    assert back.e.s == "from-literal"
+    assert back.e._s == "from-literal"
 
 
 def test_env_field_round_trips_explicit_env():
-    s = _SrcWithEnv(Var("HOME"))
+    s = _SrcWithEnv(Var._var_key("HOME"))
     back = _SrcWithEnv.from_json(s.to_json())
     assert isinstance(back.e, Var)
-    assert back.e.s == "HOME"
+    assert back.e._s == "HOME"
 
-
-def test_env_value_no_pattern_accepts_anything(monkeypatch):
-    monkeypatch.setenv("TABSDATA_TEST_FREE", "anything-goes!@#")
-    e = Var("TABSDATA_TEST_FREE")
-    assert e.value() == "anything-goes!@#"
 
 
 def test_literal_env_value_pattern_accepts_matching_literal():
-    lit = _LiteralVar(s="42", _value_pattern=r"\d+")
+    lit = _LiteralVar(_s="42", _value_pattern=r"\d+")
     assert lit.value() == "42"
 
 
@@ -1229,23 +1223,23 @@ def test_literal_env_value_pattern_rejects_non_matching_literal_at_construction(
     # (API_6) surfaces directly -- the eager model_validator raises
     # an ApiException that pydantic propagates unwrapped.
     with pytest.raises(ApiException) as excinfo:
-        _LiteralVar("abc", _value_pattern=r"\d+")
+        _LiteralVar(_s="abc", _value_pattern=r"\d+")
     assert excinfo.value.api_error is ApiErrorCode.API_6
 
 
 def test_literal_env_value_pattern_requires_full_match_at_construction():
     with pytest.raises(ApiException) as excinfo:
-        _LiteralVar("42x", _value_pattern=r"\d+")
+        _LiteralVar(_s="42x", _value_pattern=r"\d+")
     assert excinfo.value.api_error is ApiErrorCode.API_6
 
 
 def test_literal_env_no_pattern_accepts_any_literal():
-    lit = _LiteralVar("anything-goes!@#")
+    lit = _LiteralVar(_s="anything-goes!@#")
     assert lit.value() == "anything-goes!@#"
 
 
 def test_literal_env_value_pattern_round_trips_through_json():
-    lit = _LiteralVar("42", _value_pattern=r"\d+")
+    lit = _LiteralVar(_s="42", _value_pattern=r"\d+")
     back = _LiteralVar.from_json(lit.to_json())
     assert back._value_pattern == r"\d+"
     assert back.value() == "42"
@@ -1260,7 +1254,7 @@ def test_literal_env_inconsistent_payload_rejected_on_deserialize():
         "kind": "varLiteral",
         "apiVersion": "1.0",
         "type": "tabsdatak.api:_LiteralVar",
-        "spec": {"s": "abc", "_value_pattern": r"\d+"},
+        "spec": {"_s": "abc", "_value_pattern": r"\d+"},
     }
     with pytest.raises(ApiException) as excinfo:
         _LiteralVar.from_dict(bad)
@@ -1287,12 +1281,12 @@ def test_env_pattern_annotation_str_shortcut_validates_eagerly():
 def test_env_pattern_annotation_str_shortcut_accepts_matching_value():
     s = _SrcWithDigitsField(Var.lit("42"))
     assert isinstance(s.e, _LiteralVar)
-    assert s.e.s == "42"
+    assert s.e._s == "42"
     assert s.e._value_pattern == r"\d+"
 
 
 def test_env_pattern_annotation_injects_into_ref():
-    s = _SrcWithDigitsField(Var("DIGITS"))
+    s = _SrcWithDigitsField(Var._var_key("DIGITS"))
     # Refs do not run the literal validator -- the pattern is just
     # injected so it travels with the instance and gates value().
     assert isinstance(s.e, Var)
@@ -1300,79 +1294,15 @@ def test_env_pattern_annotation_injects_into_ref():
 
 
 def test_env_pattern_annotation_round_trips_pattern():
-    s = _SrcWithDigitsField(Var("DIGITS"))
+    s = _SrcWithDigitsField(Var._var_key("DIGITS"))
     back = _SrcWithDigitsField.from_json(s.to_json())
     assert back.e._value_pattern == r"\d+"
 
 
-def test_pattern_annotation_ref_pattern_fires_on_value(monkeypatch):
-    # With a ``valOrRefPattern`` injected, the resolved var value
-    # is validated against the regex at ``value()`` time.
-    monkeypatch.setenv("TEST_PATTERN_REF", "abc")
-    s = _SrcWithDigitsField(Var("TEST_PATTERN_REF"))
-    with pytest.raises(ApiException) as excinfo:
-        s.e.value()
-    assert excinfo.value.api_error is ApiErrorCode.API_6
-
-    monkeypatch.setenv("TEST_PATTERN_REF", "42")
-    assert s.e.value() == "42"
 
 
-@_api.dataclass(ApiErrorCode.API_7)
-class _MyData(Conn):
-    digits: Annotated[Var, _api.VarValueConstraints(pattern=r"\d+")]
 
 
-def test_env_pattern_in_conn_round_trips_through_json(monkeypatch):
-    # A pattern-bearing Var field nested in a Conn round-trips with the
-    # pattern intact. A resolved var that violates the pattern still
-    # raises API_6 on the reconstructed instance.
-    monkeypatch.setenv("VAL", "42x")
-    data = _MyData(digits=Var("VAL"))
-    back = _MyData.from_json(data.to_json())
-
-    assert isinstance(back.digits, Var)
-    assert back.digits.s == "VAL"
-    assert back.digits._value_pattern == r"\d+"
-
-    with pytest.raises(ApiException) as excinfo:
-        back.digits.value()
-    assert excinfo.value.api_error is ApiErrorCode.API_6
-
-    monkeypatch.setenv("VAL", "42")
-    assert back.digits.value() == "42"
-
-
-def test_env_ref_to_literal_substitution_in_json_round_trip():
-    # Realistic flow: a producer serializes a Conn carrying an Var
-    # *ref*; an intermediary resolves the var and replaces the
-    # inner envelope with a ``literalEnv`` carrying the resolved value;
-    # the consumer deserializes through the same field and gets the
-    # value back without needing the env var to exist at load time.
-    holder = _MyData(digits=Var("VAL"))
-    payload = json.loads(holder.to_json())
-
-    # Confirm starting shape: the field carries an ``varRef`` envelope.
-    assert payload["spec"]["digits"]["kind"] == "varRef"
-
-    # Substitute the ref with a literal carrying the resolved value.
-    # Pattern is preserved so the receiver still validates the literal.
-    pattern = payload["spec"]["digits"]["spec"]["_value_pattern"]
-    payload["spec"]["digits"] = {
-        "kind": "varLiteral",
-        "apiVersion": "1.0",
-        "type": "tabsdatak.api:_LiteralVar",
-        "spec": {"s": "42", "_value_pattern": pattern},
-    }
-
-    back = _MyData.from_json(json.dumps(payload))
-    assert isinstance(back.digits, _LiteralVar)
-    assert back.digits.value() == "42"
-    assert back.digits._value_pattern == r"\d+"
-
-# ===========================================================================
-# Secret / _LiteralSecret (was test_api_secret.py)
-# ===========================================================================
 
 
 def test_secret_extends_base_secret():
@@ -1716,10 +1646,10 @@ class _SrcWithSecretOrEnv(Src):
 
 
 def test_secret_or_env_accepts_env_ref():
-    s = _SrcWithSecretOrEnv(Var("HOME"))
+    s = _SrcWithSecretOrEnv(Var._var_key("HOME"))
     assert isinstance(s.v, Var)
     assert not isinstance(s.v, Secret)
-    assert s.v.s == "HOME"
+    assert s.v._s == "HOME"
 
 
 def test_secret_or_env_accepts_secret_ref():
@@ -1742,11 +1672,11 @@ def test_secret_or_env_accepts_literal_secret():
 
 
 def test_secret_or_env_round_trips_env_branch():
-    s = _SrcWithSecretOrEnv(Var("HOME"))
+    s = _SrcWithSecretOrEnv(Var._var_key("HOME"))
     back = _SrcWithSecretOrEnv.from_json(s.to_json())
     assert isinstance(back.v, Var)
     assert not isinstance(back.v, Secret)
-    assert back.v.s == "HOME"
+    assert back.v._s == "HOME"
 
 
 def test_secret_or_env_round_trips_secret_branch():
@@ -1761,7 +1691,7 @@ def test_secret_or_env_round_trips_literal_env_branch():
     s = _SrcWithSecretOrEnv(Var.lit("hello"))
     back = _SrcWithSecretOrEnv.from_json(s.to_json())
     assert isinstance(back.v, _LiteralVar)
-    assert back.v.s == "hello"
+    assert back.v._s == "hello"
 
 
 def test_secret_or_env_round_trips_literal_secret_branch():
@@ -1786,7 +1716,7 @@ def test_secret_or_env_round_trips_literal_secret_branch():
 
 def test_env_pattern_skips_reconstruction_when_pattern_already_matches():
     # Fast path: literal already carries the field's regex -- return as-is.
-    incoming = _LiteralVar(s="42", _value_pattern=r"\d+")
+    incoming = _LiteralVar(_s="42", _value_pattern=r"\d+")
     s = _SrcWithDigitsField(incoming)
     assert s.e is incoming
 
@@ -1795,11 +1725,11 @@ def test_env_pattern_reconstructs_literal_when_incoming_pattern_differs():
     # Reconstruction: incoming literal carries ``r".+"`` but the field
     # imposes ``r"\d+"``. Value "42" still matches the new pattern, so
     # the rebuilt literal succeeds and carries the field's regex.
-    incoming = _LiteralVar(s="42", _value_pattern=r".+")
+    incoming = _LiteralVar(_s="42", _value_pattern=r".+")
     s = _SrcWithDigitsField(incoming)
     assert isinstance(s.e, _LiteralVar)
     assert s.e._value_pattern == r"\d+"
-    assert s.e.s == "42"
+    assert s.e._s == "42"
     # Reconstruction produces a new instance, not the same identity.
     assert s.e is not incoming
 
@@ -1808,21 +1738,12 @@ def test_env_pattern_reconstructs_and_rejects_literal_failing_new_pattern():
     # Reconstruction triggers the literal's eager validator against
     # the field's regex. "abc" matched the old ``r".+"`` but not
     # ``r"\d+"`` -- the rebuilt literal raises API_6.
-    incoming = _LiteralVar(s="abc", _value_pattern=r".+")
+    incoming = _LiteralVar(_s="abc", _value_pattern=r".+")
     with pytest.raises(ApiException) as excinfo:
         _SrcWithDigitsField(incoming)
     assert excinfo.value.api_error is ApiErrorCode.API_6
 
 
-def test_env_pattern_reconstructs_ref_when_incoming_pattern_differs():
-    # Refs don't run the literal validator, but the field's regex
-    # still replaces the incoming one so it travels with the instance
-    # and gates ``value()`` later.
-    incoming = Var(s="HOME", _value_pattern=r".+")
-    s = _SrcWithDigitsField(incoming)
-    assert isinstance(s.e, Var)
-    assert not isinstance(s.e, _LiteralVar)
-    assert s.e._value_pattern == r"\d+"
 
 
 def test_secret_pattern_skips_reconstruction_when_pattern_already_matches():

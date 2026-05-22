@@ -143,44 +143,51 @@ VarNameSpec: TypeAlias = Annotated[str, _api.VAR_NAME_CONSTRAINTS]
 
 @_api.dataclass(ApiErrorCode.API_7)
 class Var(_api.BaseVar):
-    """Reference to an environment-variable value, resolved lazily
-    at flow run time.
+    """Reference to a variable value resolved at flow run time
+    via the framework's hydration pipeline.
 
-    Use :meth:`lit` to embed a value inline (rejects the var
-    lookup; the literal is the value). Subclasses may set
-    ``_value_pattern`` to constrain the resolved value to a regex.
-
-    :param s: Name of the environment variable.
+    Bare ``Var()`` is the canonical user-facing construction; the
+    name (used to look up the value during hydration) is inferred
+    from the envelope's jsonpath inside the enclosing config, not
+    supplied by the user. Use :meth:`lit` to embed a value inline.
+    Subclasses may set ``_value_pattern`` to constrain the
+    resolved value to a regex.
     """
 
-    s: VarNameSpec
+    # ``init=False`` makes ``Var()`` the only valid construction
+    # shape at the user-facing ``__init__`` site. Mirrors
+    # :class:`Secret`; the runtime guard in
+    # ``BaseVar._enforce_empty_user_init`` enforces the same.
+    _s: str = Field(default="<var>", init=False)
     __kind__ = "varRef"
     _value_pattern: str | None = Field(default=None, init=False)
 
     @classmethod
     def lit(cls, value: str) -> "Var":
         """Wrap ``value`` as an inline literal that bypasses the
-        var lookup. Useful for declarative tests and one-shot
-        scripts that don't want to depend on the environment."""
-        return _LiteralVar(s=value, _value_pattern=cls._value_pattern)
+        hydration lookup. Useful for declarative tests and
+        one-shot scripts."""
+        return _LiteralVar(_s=value, _value_pattern=cls._value_pattern)
 
 
 @_api.dataclass(ApiErrorCode.API_9)
 class _LiteralVar(Var):
-    s: str
-    __kind__ = "varLiteral"
+    # Redeclare both private fields with ``init=True`` to override
+    # ``Var``'s ``init=False``. Mirrors :class:`_LiteralSecret`.
+    _s: str
     _value_pattern: str | None = None
+    __kind__ = "varLiteral"
 
     def _name(self) -> str:
         return "<literal>"
 
     def _value(self) -> str:
-        # Literal: ``s`` is the value verbatim, not an var name.
-        return self.s
+        # Literal: ``_s`` is the value verbatim, not a var name.
+        return self._s
 
     @model_validator(mode="after")
     def _check_literal_pattern(self):
-        self._validate(self.s)
+        self._validate(self._s)
         return self
 
 

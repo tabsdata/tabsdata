@@ -153,12 +153,14 @@ _CONNECTION_NAME_FIELD = "name"
 # matches the envelope ``kind``).
 _SECRET_REF_TYPE = "tabsdatak.api:Secret"
 _SECRET_LITERAL_TYPE = "tabsdatak.api:_LiteralSecret"
+_VAR_REF_TYPE = "tabsdatak.api:Var"
+_VAR_LITERAL_TYPE = "tabsdatak.api:_LiteralVar"
 
-# `Secret` stores the ref name / literal value under ``_s``; `Var`
-# uses ``s``. These match the field names on `tabsdatak.api.Secret`
+# Both `Secret` and `Var` store the ref placeholder / literal value
+# under ``_s``. These match the field names on `tabsdatak.api.Secret`
 # and `tabsdatak.api.Var`.
 _SECRET_VALUE_FIELD = "_s"
-_VAR_VALUE_FIELD = "s"
+_VAR_VALUE_FIELD = "_s"
 
 
 def _to_key(path: JsonPath) -> str:
@@ -312,6 +314,105 @@ def hydrate_secrets_as_envs(
 
 
 # ---------------------------------------------------------------------------
+# Var helpers -- structurally identical to the Secret pipeline above,
+# operating on the ``varRef`` / ``varLiteral`` envelope kinds. The
+# `Var` class mirrors `Secret` in ``tabsdatak.api`` (no user-provided
+# name; the framework infers it from the envelope's jsonpath).
+# ---------------------------------------------------------------------------
+
+
+def dehydrate_vars(hydrated_data: JsonSerdeData) -> JsonSerdeData:
+    """Return a deep copy of ``hydrated_data`` with every ``varLiteral``
+    envelope rewritten as a ``varRef`` envelope.
+
+    The literal value is dropped; ``_value_pattern`` is preserved so
+    the resolved value is still gated downstream.
+    """
+    out = deepcopy(hydrated_data)
+    for _path, env in find_by_kind(out, _VAR_LITERAL_KIND):
+        pattern = env["spec"].get("_value_pattern")
+        env["kind"] = _VAR_REF_KIND
+        env["type"] = _VAR_REF_TYPE
+        env["spec"] = {_VAR_VALUE_FIELD: "<var>", "_value_pattern": pattern}
+    return out
+
+
+def hydrate_vars(
+    dehydrated_data: JsonSerdeData, vars_: list[KeyValue]
+) -> JsonSerdeData:
+    """Return a deep copy of ``dehydrated_data`` with every ``varRef``
+    envelope rewritten as a ``varLiteral`` carrying the matching value.
+
+    Mirrors `hydrate_secrets`: callers `extract_vars` on arrival
+    (capturing literal values), `dehydrate_vars` for storage, then
+    later `hydrate_vars` with the original literal values plus the
+    resolved ref values. Every var in ``dehydrated_data`` is therefore
+    expected to be a ``varRef``.
+
+    Raises:
+        CommonRuntimeException: if any entry in ``vars_`` has
+            ``value is None``, or if the set of keys in ``vars_`` does
+            not exactly match the keys derived from the ``varRef``
+            envelopes in ``dehydrated_data``.
+    """
+    missing_values = sorted(kv.key for kv in vars_ if kv.value is None)
+    if missing_values:
+        raise CommonErrorCode.COMMON_6.exception(keys=missing_values)
+
+    expected = {
+        _to_key(path)
+        for path, _ in find_by_kind(dehydrated_data, _VAR_REF_KIND)
+    }
+    provided = {kv.key for kv in vars_}
+    if expected != provided:
+        raise CommonErrorCode.COMMON_7.exception(
+            missing=sorted(expected - provided),
+            extra=sorted(provided - expected),
+        )
+
+    values: dict[str, str] = {
+        kv.key: kv.value for kv in vars_ if kv.value is not None
+    }
+
+    out = deepcopy(dehydrated_data)
+    for path, env in find_by_kind(out, _VAR_REF_KIND):
+        key = _to_key(path)
+        pattern = env["spec"].get("_value_pattern")
+        env["kind"] = _VAR_LITERAL_KIND
+        env["type"] = _VAR_LITERAL_TYPE
+        env["spec"] = {
+            _VAR_VALUE_FIELD: values[key],
+            "_value_pattern": pattern,
+        }
+    return out
+
+
+def hydrate_vars_as_envs(
+    dehydrated_data: JsonSerdeData, prefix: str
+) -> JsonSerdeData:
+    """Return a deep copy of ``dehydrated_data`` with every ``varRef``
+    envelope rewritten as a ``varLiteral``, taking each value from the
+    process environment under ``prefix + <inferred key>``.
+
+    The inferred key is the env-var form of the envelope's jsonpath
+    (the same key `extract_vars` returns). ``prefix`` is prepended
+    verbatim when reading ``os.environ``; pass ``""`` to read the bare
+    inferred key.
+
+    Raises:
+        CommonRuntimeException: if any expected env var is unset.
+    """
+    vars_ = [
+        KeyValue(
+            key=_to_key(path),
+            value=os.environ.get(prefix + _to_key(path)),
+        )
+        for path, _ in find_by_kind(dehydrated_data, _VAR_REF_KIND)
+    ]
+    return hydrate_vars(dehydrated_data, vars_)
+
+
+# ---------------------------------------------------------------------------
 # Connection helpers
 # ---------------------------------------------------------------------------
 
@@ -319,9 +420,10 @@ def hydrate_secrets_as_envs(
 def _resolve_connection_name(name_val: Any) -> str:
     """Resolve a ``connectionRef``'s ``name`` field to a plain string.
 
-    ``name`` is either a literal string (``NamedConn(name="x")``) or an
-    `Var` envelope (``NamedConn(name=Var(s="VAR"))``). ``varLiteral``
-    returns its inlined ``s``; ``varRef`` reads ``os.environ[s]``.
+    ``name`` is either a literal string (``NamedConn(name="x")``) or a
+    `Var` envelope (``NamedConn(name=Var._var_key("VAR"))``).
+    ``varLiteral`` returns its inlined ``_s``; ``varRef`` reads
+    ``os.environ[_s]``.
     """
     if isinstance(name_val, str):
         return name_val

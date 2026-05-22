@@ -107,7 +107,7 @@ def test_subclass_instance_at_parent_field_dumps_subclass_envelope():
     inner = d["spec"]["e"]
     assert inner["kind"] == "varLiteral"
     assert inner["type"].endswith(":_LiteralVar")
-    assert inner["spec"]["s"] == "my-literal"
+    assert inner["spec"]["_s"] == "my-literal"
 
 
 # ---------------------------------------------------------------------------
@@ -119,7 +119,7 @@ def test_already_instance_at_parent_slot_passes_through_unchanged():
     # Constructing an Var instance, then passing it as the value to a
     # nested field, must not rebuild it -- the wrap-validator returns
     # the existing instance.
-    inner = Var(s="HOME")
+    inner = Var._var_key("HOME")
     s = _SrcWithEnvField(e=inner)
     assert s.e is inner
 
@@ -330,7 +330,7 @@ def test_named_conn_round_trips():
 
 
 def test_env_round_trips():
-    e = m.Var("DB_PASSWORD")
+    e = m.Var._var_key("DB_PASSWORD")
     d = e.to_dict()
     assert d["kind"] == "varRef"
     assert m.Var.from_dict(d) == e
@@ -589,10 +589,10 @@ def test_conn_round_trip_for_each_authoring_style(conn_cls):
 
 
 def test_named_conn_with_env_name_round_trips():
-    nc = m.NamedConn(name=m.Var("MY_CONN_NAME"))
+    nc = m.NamedConn(name=m.Var._var_key("MY_CONN_NAME"))
     back = m.NamedConn.from_json(nc.to_json())
     assert isinstance(back.name, m.Var)
-    assert back.name.s == "MY_CONN_NAME"
+    assert back.name._s == "MY_CONN_NAME"
 
 
 def test_named_conn_with_literal_name_stillvalidates():
@@ -606,26 +606,21 @@ def test_named_conn_with_literal_name_stillvalidates():
 
 
 # ---------------------------------------------------------------------------
-# Var name validator (POSIX-style env var name)
+# Var._var_key: named-ref factory (mirrors Secret._secret_key).
+# ``Var()`` itself takes no args; refs are built via the factory and
+# resolved by the framework at hydration time.
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("name", ["DB_PASSWORD", "_FOO", "x", "MIXED_case_42"])
-def test_env_accepts_valid_env_var_names(name):
-    e = m.Var(name)
-    assert e.s == name
+def test_var_key_accepts_valid_var_names(name):
+    e = m.Var._var_key(name)
+    assert e._s == name
 
 
-@pytest.mark.parametrize("name", [
-    "1starts_with_digit",
-    "has-hyphen",
-    "has space",
-    "has.dot",
-    "",
-])
-def test_env_rejects_invalid_env_var_names(name):
+def test_var_constructor_is_empty_rejects_positional_args():
     with pytest.raises(ApiException) as excinfo:
-        m.Var(name)
+        m.Var("FOO")
     assert excinfo.value.api_error is ApiErrorCode.API_7
 
 
@@ -637,10 +632,10 @@ def test_env_rejects_invalid_env_var_names(name):
 
 
 def test_env_polymorphic_dispatch_round_trips():
-    e = m.Var("DB_PASSWORD")
+    e = m.Var._var_key("DB_PASSWORD")
     back = m.Var.from_json(e.to_json())
     assert isinstance(back, m.Var)
-    assert back.s == "DB_PASSWORD"
+    assert back._s == "DB_PASSWORD"
 
 
 def test_secret_polymorphic_dispatch_round_trips():
