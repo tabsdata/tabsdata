@@ -74,7 +74,7 @@ from tabsdatak.conn.localfile import LocalFileConn, LocalFileSrc
 
 _SRC = LocalFileSrc(
     conn=LocalFileConn(base_path={base_path!r}),
-    path=["*.parquet"],
+    paths=["*.parquet"],
 )
 
 
