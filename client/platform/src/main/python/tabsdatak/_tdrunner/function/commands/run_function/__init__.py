@@ -4,32 +4,41 @@
 
 """run-function command.
 
-The publisher chain's penultimate step. Reads the enriched inputs
-manifest produced by `stamp-inputs`, materialises each input slot as
-a polars `LazyFrame`, invokes the user-decorated publisher function,
-and sinks each returned `LazyFrame` to a parquet under `--out-dir`.
-Emits an outputs manifest at `--outputs-manifest` mapping each
-declared output table to the parquet it produced (or `null` if the
-function returned `None` for that table — "not modified this run").
+The penultimate step of the function-runner chain. Reads the inputs
+manifest, materialises each input slot as a polars `LazyFrame` (or a
+list of LazyFrames for ARRAY-mode slots), invokes the user-decorated
+function, and sinks each returned `LazyFrame` to a parquet under
+`--out-dir`. Emits an outputs manifest at `--outputs-manifest` mapping
+each declared output table to the parquet it produced (or `null` if
+the function returned `None` for that table — "not modified this run").
 
-Currently handles `publisherDef` only. `AutoPublisherInfo`,
-`TransformerInfo`, and `SubscriberInfo` use different input/output
-topologies and will get their own command paths when their flows land
-in the migration plan.
+Kind-agnostic: handles `publisherDef` and `transformerDef`. The input
+slot mode (SINGLE vs ARRAY) is inferred per-parameter from the user
+function's type annotations, so the command does not need to know
+which kind it is running.
 """
 
 from __future__ import annotations
 
+import inspect
 import json
 import sys
+import typing
 from pathlib import Path
+from typing import Any, Callable
 
 import polars as pl
 from pydantic import ValidationError
 
+from tabsdatak._api import _is_array_slot, _is_single_slot
 from tabsdatak._bundle import BUNDLE_MANIFEST_FILENAME, BUNDLE_USER_CODE_DIRNAME
-from tabsdatak._connectors import get_src
-from tabsdatak._info import PublisherInfo, _unwrap_info
+from tabsdatak._info import (
+    KIND_PUBLISHER_DEF,
+    KIND_TRANSFORMER_DEF,
+    PublisherInfo,
+    TransformerInfo,
+    _unwrap_info,
+)
 from tabsdatak._tdrunner.function._lib.cli import build_parser, run_command
 from tabsdatak._tdrunner.function._lib.errors import CommandSpecificError
 from tabsdatak._tdrunner.function._lib.inputs_manifest import (
@@ -50,12 +59,17 @@ from tabsdatak._tdrunner.function._lib.request import (
 from tabsdatak._tdrunner.function.commands import tabsdata_command
 from tabsdatak.spi import TableMode
 
+# The Info classes this command knows how to invoke. The runner is
+# agnostic of *what* the function does — it just needs the call shape
+# (input modes, output names) which is shared across both.
+FunctionInfo = PublisherInfo | TransformerInfo
+
 # TODO: After all commands are done, version will be unified in a single
 #  source of truth file.
 VERSION = "0.1.0"
 INFO = (
-    "run-function — invoke the publisher's decorated function on the "
-    "enriched inputs and sink the returned tables to parquet"
+    "run-function — invoke the decorated function on the prepared inputs "
+    "and sink the returned tables to parquet"
 )
 MAN = (
     "run-function --request <PATH> --bundle-dir <PATH> "
@@ -67,7 +81,8 @@ MAN = (
     "LazyFrames), invokes the user function, and sinks each returned "
     "table to <out-dir>/slot<i>/<table_name>.parquet. Writes an "
     "outputs manifest at --outputs-manifest mapping each output "
-    "table to its parquet (or null if the function returned None)."
+    "table to its parquet (or null if the function returned None). "
+    "Handles both publisherDef and transformerDef bundles."
 )
 
 # Command-specific exit codes (>= 10 per docs/01-CommandBasics.md).
@@ -76,7 +91,6 @@ EXIT_BAD_BUNDLE = 11
 EXIT_BAD_USER_CODE = 12
 EXIT_BAD_MANIFEST = 14
 EXIT_BAD_INPUT_PARQUET = 15
-EXIT_NO_PLUGIN = 16
 EXIT_USER_FUNCTION_FAILED = 17
 EXIT_OUTPUT_SHAPE_MISMATCH = 18
 EXIT_OUTPUT_WRITE_FAILED = 19
@@ -126,9 +140,19 @@ def _load_request_or_fail(path: Path):
         ) from exc
 
 
-def _load_function_def(bundle_dir: Path) -> PublisherInfo:
+_INFO_BY_KIND: dict[str, type[FunctionInfo]] = {
+    KIND_PUBLISHER_DEF: PublisherInfo,
+    KIND_TRANSFORMER_DEF: TransformerInfo,
+}
+
+
+def _load_function_def(bundle_dir: Path) -> FunctionInfo:
     """Same bundle-loading shape as `run-source-plugin`: prepend
-    `<bundle_dir>/user_code/` to `sys.path`, then deserialise."""
+    `<bundle_dir>/user_code/` to `sys.path`, then deserialise.
+
+    The envelope's `kind` field decides which Info class to use; bundles
+    with an unknown or missing kind raise EXIT_BAD_BUNDLE.
+    """
     manifest = bundle_dir / BUNDLE_MANIFEST_FILENAME
     if not manifest.is_file():
         raise CommandSpecificError(
@@ -154,8 +178,17 @@ def _load_function_def(bundle_dir: Path) -> PublisherInfo:
             EXIT_BAD_BUNDLE, f"malformed JSON in {manifest}: {exc}"
         ) from exc
 
+    kind = data.get("kind") if isinstance(data, dict) else None
+    info_cls = _INFO_BY_KIND.get(kind) if kind else None
+    if info_cls is None:
+        raise CommandSpecificError(
+            EXIT_BAD_BUNDLE,
+            f"unsupported function_def kind {kind!r}; expected one of "
+            f"{sorted(_INFO_BY_KIND)}",
+        )
+
     try:
-        info = PublisherInfo.from_dict(data)
+        info = info_cls.from_dict(data)
     except ValidationError as exc:
         raise CommandSpecificError(EXIT_BAD_USER_CODE, str(exc)) from exc
     except Exception as exc:
@@ -171,13 +204,46 @@ def _load_inputs_manifest_or_fail(path: Path) -> list[dict]:
         raise CommandSpecificError(EXIT_BAD_MANIFEST, str(exc)) from exc
 
 
-def _resolve_src_def(info: PublisherInfo):
-    """Look up the SrcDef for this publisher's source, so we know
-    whether each input slot is SINGLE or ARRAY mode."""
+def _infer_table_modes(func: Callable) -> list[TableMode]:
+    """Derive the table-mode (SINGLE / ARRAY) for each of the user
+    function's parameters from its type annotations.
+
+    The count of returned modes equals `len(inspect.signature(func).
+    parameters)` — the function's parameter count *is* the input slot
+    count, by construction. Both `@publisher` and `@transformer`
+    validate at decoration time that the function has exactly the
+    expected number of slot-annotated parameters and nothing else, so
+    iterating all params here is correct for both kinds.
+
+    Each parameter must be annotated as either `TableFrameSpec`
+    (single-mode) or `TableFramesSpec` (array-mode). Because the
+    decorator's `_check_callable_signature` already enforces that, the
+    EXIT_BAD_USER_CODE branches below are defensive fallbacks for
+    runtime invariant violations rather than realistic user errors.
+    """
     try:
-        return get_src(type(info.source))
-    except KeyError as exc:
-        raise CommandSpecificError(EXIT_NO_PLUGIN, str(exc)) from exc
+        hints = typing.get_type_hints(func)
+    except Exception as exc:
+        raise CommandSpecificError(
+            EXIT_BAD_USER_CODE,
+            f"cannot resolve type hints for user function: {exc}",
+        ) from exc
+    params = list(inspect.signature(func).parameters.values())
+    modes: list[TableMode] = []
+    for p in params:
+        hint = hints.get(p.name)
+        if hint is not None and _is_single_slot(hint):
+            modes.append(TableMode.SINGLE)
+        elif hint is not None and _is_array_slot(hint):
+            modes.append(TableMode.ARRAY)
+        else:
+            raise CommandSpecificError(
+                EXIT_BAD_USER_CODE,
+                f"parameter {p.name!r} of user function has an "
+                f"unrecognised slot annotation; expected TableFrameSpec "
+                f"or TableFramesSpec",
+            )
+    return modes
 
 
 def _scan_parquet_or_fail(path: Path) -> pl.LazyFrame:
@@ -323,19 +389,24 @@ def _run() -> int:
         _load_request_or_fail(request_path)  # validates shape, not used otherwise yet
         info = _load_function_def(bundle_dir)
         entries = _load_inputs_manifest_or_fail(inputs_manifest_path)
-        src_def = _resolve_src_def(info)
-        table_mode = src_def.table_mode
+
+        func = _unwrap_info(info.func)
+        table_modes = _infer_table_modes(func)
+        if len(entries) != len(table_modes):
+            raise CommandSpecificError(
+                EXIT_BAD_MANIFEST,
+                f"inputs manifest has {len(entries)} entries but the "
+                f"user function declares {len(table_modes)} input slots",
+            )
 
         # Build the positional args for the user function from the
-        # inputs manifest. Order is the manifest's declaration order
-        # (which mirrors function parameter order, since stamp-inputs
-        # preserved that from run-source-plugin).
-        call_args = []
-        for entry in entries:
+        # inputs manifest. Manifest order mirrors function parameter
+        # order.
+        call_args: list[Any] = []
+        for entry, table_mode in zip(entries, table_modes):
             files = entry.get(MANIFEST_FILES_KEY) or []
             call_args.append(_materialise_input_slot(files, table_mode=table_mode))
 
-        func = _unwrap_info(info.func)
         output_tables = list(info.output_tables)
         result = _invoke_user_function(func, call_args, output_tables)
 

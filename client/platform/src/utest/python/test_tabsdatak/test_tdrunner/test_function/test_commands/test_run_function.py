@@ -6,7 +6,7 @@
 
 Covers:
   * Helper-function unit tests (`_load_function_def`,
-    `_load_inputs_manifest_or_fail`, `_resolve_src_def`,
+    `_load_inputs_manifest_or_fail`, `_infer_table_modes`,
     `_materialise_input_slot`, `_invoke_user_function`,
     `_sink_outputs`).
   * `main()` error paths and end-to-end happy path: bundle a real
@@ -28,6 +28,7 @@ import yaml
 
 from tabsdatak._bundle import BUNDLE_MANIFEST_FILENAME, build_bundle
 from tabsdatak._info import PublisherInfo
+from tabsdatak.api import TableFrameSpec, TableFramesSpec
 from tabsdatak._tdrunner.function._lib.bundle import extract_bundle
 from tabsdatak._tdrunner.function._lib.errors import CommandSpecificError
 from tabsdatak._tdrunner.function._lib.inputs_manifest import (
@@ -41,16 +42,15 @@ from tabsdatak._tdrunner.function.commands.run_function import (
     EXIT_BAD_MANIFEST,
     EXIT_BAD_REQUEST,
     EXIT_BAD_USER_CODE,
-    EXIT_NO_PLUGIN,
     EXIT_OUTPUT_SHAPE_MISMATCH,
     EXIT_OUTPUT_WRITE_FAILED,
     EXIT_OUTPUTS_MANIFEST_WRITE_FAILED,
     EXIT_USER_FUNCTION_FAILED,
+    _infer_table_modes,
     _invoke_user_function,
     _load_function_def,
     _load_inputs_manifest_or_fail,
     _materialise_input_slot,
-    _resolve_src_def,
     _scan_parquet_or_fail,
     _sink_outputs,
     main,
@@ -136,20 +136,177 @@ def built_bundle(tmp_path, user_project, fixture_publisher) -> Path:
     return extracted
 
 
+# A trivial @transformer source used to build a transformer bundle.
+# Just enough to round-trip through `_load_function_def` and verify
+# the kind-dispatch picks TransformerInfo. The body never runs.
+_USER_TRANSFORMER_SRC = """\
+from __future__ import annotations
+
+from tabsdatak.api import TableFrameSpec, transformer
+
+
+@transformer(input_tables=["c1/t_in"], output_tables=["t_out"])
+def my_transformer(in_1: TableFrameSpec) -> tuple[TableFrameSpec]:
+    return (in_1,)
+"""
+
+
+@pytest.fixture
+def transformer_bundle(tmp_path, monkeypatch) -> Path:
+    """Materialise a tiny @transformer-decorated function in a fresh
+    project, build + extract its bundle, return the extracted dir."""
+    project = tmp_path / "tx_project"
+    pkg = project / "tx_pkg"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text("")
+    (pkg / "transformer.py").write_text(_USER_TRANSFORMER_SRC)
+    monkeypatch.syspath_prepend(str(project))
+    importlib.invalidate_caches()
+
+    from tx_pkg.transformer import my_transformer  # noqa: E402
+
+    bundle_path = tmp_path / "tx_bundle.tar.gz"
+    build_bundle(my_transformer, project, bundle_path)
+    extracted = tmp_path / "tx_extracted"
+    extract_bundle(bundle_path, extracted)
+
+    yield extracted
+
+    for name in list(sys.modules):
+        if name == "tx_pkg" or name.startswith("tx_pkg."):
+            del sys.modules[name]
+
+
+# A 2-path publisher (cardinality 2). The source plugin produces one
+# slot per path; the function receives one TableFramesSpec parameter
+# per slot. Concatenates the two inputs into one output.
+_USER_PUBLISHER_MULTI_SRC = """\
+from __future__ import annotations
+
+from tabsdatak.api import TableFrameSpec, TableFramesSpec, publisher
+from tabsdatak.conn.localfile import LocalFileConn, LocalFileSrc
+
+_SRC = LocalFileSrc(
+    conn=LocalFileConn(base_path={base_path!r}),
+    paths=["a.parquet", "b.parquet"],
+)
+
+
+@publisher(source=_SRC, output_tables=["concat"])
+def multi_publisher(
+    in_a: TableFramesSpec, in_b: TableFramesSpec
+) -> tuple[TableFrameSpec]:
+    import polars as pl
+
+    frames = []
+    for slot in (in_a, in_b):
+        if slot:
+            frames.extend(f for f in slot if f is not None)
+    if not frames:
+        return (None,)
+    return (pl.concat(frames, how="vertical_relaxed"),)
+"""
+
+
+@pytest.fixture
+def multi_publisher_bundle(tmp_path, monkeypatch) -> Path:
+    """A publisher whose source has 2 paths → cardinality 2 → user
+    function has 2 input parameters."""
+    srcdata = tmp_path / "mp_srcdata"
+    srcdata.mkdir()
+
+    project = tmp_path / "mp_project"
+    pkg = project / "mp_pkg"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text("")
+    (pkg / "publisher.py").write_text(
+        _USER_PUBLISHER_MULTI_SRC.format(base_path=str(srcdata))
+    )
+    monkeypatch.syspath_prepend(str(project))
+    importlib.invalidate_caches()
+
+    from mp_pkg.publisher import multi_publisher  # noqa: E402
+
+    bundle_path = tmp_path / "mp_bundle.tar.gz"
+    build_bundle(multi_publisher, project, bundle_path)
+    extracted = tmp_path / "mp_extracted"
+    extract_bundle(bundle_path, extracted)
+
+    yield extracted
+
+    for name in list(sys.modules):
+        if name == "mp_pkg" or name.startswith("mp_pkg."):
+            del sys.modules[name]
+
+
+# A 3-input transformer. Mixes SINGLE and ARRAY modes to also exercise
+# the per-slot mode inference. Concatenates everything.
+_USER_TRANSFORMER_MULTI_SRC = """\
+from __future__ import annotations
+
+from tabsdatak.api import TableFrameSpec, TableFramesSpec, transformer
+
+
+@transformer(
+    input_tables=["c1/t_a", "c1/t_b", "c1/t_c"],
+    output_tables=["merged"],
+)
+def multi_transformer(
+    a: TableFrameSpec, b: TableFramesSpec, c: TableFrameSpec
+) -> tuple[TableFrameSpec]:
+    import polars as pl
+
+    frames = []
+    if a is not None:
+        frames.append(a)
+    if b:
+        frames.extend(f for f in b if f is not None)
+    if c is not None:
+        frames.append(c)
+    if not frames:
+        return (None,)
+    return (pl.concat(frames, how="vertical_relaxed"),)
+"""
+
+
+@pytest.fixture
+def multi_transformer_bundle(tmp_path, monkeypatch) -> Path:
+    """A transformer with 3 input_tables → 3 input parameters,
+    mixing SINGLE and ARRAY slot modes."""
+    project = tmp_path / "mtx_project"
+    pkg = project / "mtx_pkg"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text("")
+    (pkg / "transformer.py").write_text(_USER_TRANSFORMER_MULTI_SRC)
+    monkeypatch.syspath_prepend(str(project))
+    importlib.invalidate_caches()
+
+    from mtx_pkg.transformer import multi_transformer  # noqa: E402
+
+    bundle_path = tmp_path / "mtx_bundle.tar.gz"
+    build_bundle(multi_transformer, project, bundle_path)
+    extracted = tmp_path / "mtx_extracted"
+    extract_bundle(bundle_path, extracted)
+
+    yield extracted
+
+    for name in list(sys.modules):
+        if name == "mtx_pkg" or name.startswith("mtx_pkg."):
+            del sys.modules[name]
+
+
 def _write_request(path: Path) -> Path:
     path.write_text(
-        yaml.safe_dump(
-            {
-                "info": {
-                    "collection": "c",
-                    "collection_id": 1,
-                    "execution_id": 42,
-                    "transaction_id": 99,
-                    "function_run_id": 7,
-                    "function_bundle": {"uri": "file:///bundle.tgz"},
-                },
-            }
-        )
+        yaml.safe_dump({
+            "info": {
+                "collection": "c",
+                "collection_id": 1,
+                "execution_id": 42,
+                "transaction_id": 99,
+                "function_run_id": 7,
+                "function_bundle": {"uri": "file:///bundle.tgz"},
+            },
+        })
     )
     return path
 
@@ -223,6 +380,39 @@ def test_load_function_def_unresolvable_func_raises_bad_user_code(built_bundle):
     assert ei.value.exit_code == EXIT_BAD_USER_CODE
 
 
+def test_load_function_def_unknown_kind_raises_bad_bundle(built_bundle):
+    """An envelope with a `kind` the runner doesn't know about is an
+    unsupported bundle, not a user-code error."""
+    manifest = built_bundle / BUNDLE_MANIFEST_FILENAME
+    data = json.loads(manifest.read_text())
+    data["kind"] = "subscriberDef"  # known kind but not handled here
+    manifest.write_text(json.dumps(data))
+    with pytest.raises(CommandSpecificError) as ei:
+        _load_function_def(built_bundle)
+    assert ei.value.exit_code == EXIT_BAD_BUNDLE
+
+
+def test_load_function_def_missing_kind_raises_bad_bundle(built_bundle):
+    manifest = built_bundle / BUNDLE_MANIFEST_FILENAME
+    data = json.loads(manifest.read_text())
+    del data["kind"]
+    manifest.write_text(json.dumps(data))
+    with pytest.raises(CommandSpecificError) as ei:
+        _load_function_def(built_bundle)
+    assert ei.value.exit_code == EXIT_BAD_BUNDLE
+
+
+def test_load_function_def_transformer_kind_loads_transformer_info(
+    transformer_bundle,
+):
+    """A transformerDef bundle deserialises as TransformerInfo."""
+    from tabsdatak._info import TransformerInfo
+
+    info = _load_function_def(transformer_bundle)
+    assert isinstance(info, TransformerInfo)
+    assert list(info.output_tables) == ["t_out"]
+
+
 # --- unit: _load_inputs_manifest_or_fail --------------------------------
 
 
@@ -242,25 +432,64 @@ def test_load_inputs_manifest_missing_maps_to_bad_manifest(tmp_path):
     assert ei.value.exit_code == EXIT_BAD_MANIFEST
 
 
-# --- unit: _resolve_src_def ---------------------------------------------
+# --- unit: _infer_table_modes ------------------------------------------
 
 
-def test_resolve_src_def_happy(fixture_publisher):
-    src_def = _resolve_src_def(fixture_publisher)
-    # LocalFileSrc is configured ARRAY mode in LOCALFILE_SRC.
-    assert src_def.table_mode is TableMode.ARRAY
+def _fn_single(in_1: TableFrameSpec):
+    pass
 
 
-def test_resolve_src_def_unknown_source_raises_no_plugin(
-    fixture_publisher, monkeypatch
-):
-    def _raise(_):
-        raise KeyError("no connector registered")
+def _fn_array(in_1: TableFramesSpec):
+    pass
 
-    monkeypatch.setattr(f"{_MOD}.get_src", _raise)
+
+def _fn_mixed(a: TableFrameSpec, b: TableFramesSpec, c: TableFrameSpec):
+    pass
+
+
+def _fn_no_params():
+    pass
+
+
+def _fn_unannotated(in_1):
+    pass
+
+
+def _fn_wrong_annotation(in_1: int):
+    pass
+
+
+def test_infer_table_modes_single_slot():
+    assert _infer_table_modes(_fn_single) == [TableMode.SINGLE]
+
+
+def test_infer_table_modes_array_slot():
+    assert _infer_table_modes(_fn_array) == [TableMode.ARRAY]
+
+
+def test_infer_table_modes_mixed_slots():
+    """Transformer-style: SINGLE and ARRAY parameters interleaved."""
+    assert _infer_table_modes(_fn_mixed) == [
+        TableMode.SINGLE,
+        TableMode.ARRAY,
+        TableMode.SINGLE,
+    ]
+
+
+def test_infer_table_modes_no_params_returns_empty():
+    assert _infer_table_modes(_fn_no_params) == []
+
+
+def test_infer_table_modes_unannotated_param_raises_bad_user_code():
     with pytest.raises(CommandSpecificError) as ei:
-        _resolve_src_def(fixture_publisher)
-    assert ei.value.exit_code == EXIT_NO_PLUGIN
+        _infer_table_modes(_fn_unannotated)
+    assert ei.value.exit_code == EXIT_BAD_USER_CODE
+
+
+def test_infer_table_modes_wrong_annotation_raises_bad_user_code():
+    with pytest.raises(CommandSpecificError) as ei:
+        _infer_table_modes(_fn_wrong_annotation)
+    assert ei.value.exit_code == EXIT_BAD_USER_CODE
 
 
 # --- unit: _scan_parquet_or_fail ----------------------------------------
@@ -310,9 +539,7 @@ def test_materialise_array_returns_list_of_lazyframes(tmp_path):
     b = tmp_path / "b.parquet"
     _write_sample_parquet(a)
     _write_sample_parquet(b)
-    out = _materialise_input_slot(
-        [str(a), str(b)], table_mode=TableMode.ARRAY
-    )
+    out = _materialise_input_slot([str(a), str(b)], table_mode=TableMode.ARRAY)
     assert isinstance(out, list)
     assert len(out) == 2
     assert all(isinstance(x, pl.LazyFrame) for x in out)
@@ -334,9 +561,7 @@ def test_invoke_user_function_happy():
     def fn(in_1):
         return (in_1, None)
 
-    result = _invoke_user_function(
-        fn, [_fake_lf()], ["t1", "t2"]
-    )
+    result = _invoke_user_function(fn, [_fake_lf()], ["t1", "t2"])
     assert isinstance(result, tuple)
     assert len(result) == 2
     assert isinstance(result[0], pl.LazyFrame)
@@ -405,9 +630,7 @@ def test_sink_outputs_none_value_records_null_file(tmp_path):
     assert (tmp_path / "slot1").is_dir()
 
 
-def test_sink_outputs_write_failure_maps_to_output_write_failed(
-    tmp_path, monkeypatch
-):
+def test_sink_outputs_write_failure_maps_to_output_write_failed(tmp_path, monkeypatch):
     def _broken_sink(self, dest):
         raise RuntimeError("disk full")
 
@@ -539,6 +762,135 @@ def test_main_outputs_manifest_write_failure(tmp_path, built_bundle, monkeypatch
         tmp_path / "live",
     )
     assert main() == EXIT_OUTPUTS_MANIFEST_WRITE_FAILED
+
+
+# --- main: multi-cardinality (regression — see commit history) -----------
+
+
+def test_main_multi_cardinality_publisher_concatenates_two_slots(
+    tmp_path, multi_publisher_bundle, monkeypatch
+):
+    """A publisher whose source has 2 paths produces 2 input slots, and
+    the user function declares 2 parameters. Exercises the full _run()
+    flow with input_count > 1 on the publisher path — guards against
+    the regression where _input_count was hardcoded to 1 for
+    publishers."""
+    request_path = _write_request(tmp_path / "request.yaml")
+
+    # One parquet per slot.
+    a_parquet = tmp_path / "raw" / "a.parquet"
+    b_parquet = tmp_path / "raw" / "b.parquet"
+    a_parquet.parent.mkdir(parents=True, exist_ok=True)
+    pl.DataFrame({"id": [1, 2], "name": ["a1", "a2"]}).write_parquet(a_parquet)
+    pl.DataFrame({"id": [10, 11], "name": ["b1", "b2"]}).write_parquet(b_parquet)
+
+    inputs_manifest = tmp_path / "inputs.yaml"
+    write_inputs_manifest(
+        [
+            {INPUTS_NAME_KEY: "in_a", MANIFEST_FILES_KEY: [str(a_parquet)]},
+            {INPUTS_NAME_KEY: "in_b", MANIFEST_FILES_KEY: [str(b_parquet)]},
+        ],
+        inputs_manifest,
+    )
+
+    out_dir = tmp_path / "fn_out"
+    outputs_manifest = tmp_path / "outputs.yaml"
+    _set_argv(
+        monkeypatch,
+        request_path,
+        multi_publisher_bundle,
+        inputs_manifest,
+        out_dir,
+        outputs_manifest,
+        tmp_path / "live",
+    )
+    rc = main()
+    assert rc == 0, f"main() returned {rc}"
+
+    concat_file = out_dir / "slot0" / "concat.parquet"
+    assert concat_file.is_file()
+    df = pl.read_parquet(concat_file)
+    # Both inputs got concatenated (2 + 2 rows).
+    assert df.height == 4
+    assert sorted(df["id"].to_list()) == [1, 2, 10, 11]
+
+
+def test_main_multi_cardinality_transformer_with_mixed_modes(
+    tmp_path, multi_transformer_bundle, monkeypatch
+):
+    """A transformer with 3 input_tables (mixed SINGLE/ARRAY/SINGLE) and
+    one output. Exercises the full _run() flow with input_count > 1 on
+    the transformer path AND with mixed slot modes — guards against
+    regressions in both per-slot mode inference and the slot count."""
+    request_path = _write_request(tmp_path / "request.yaml")
+
+    # Three input parquets: a (SINGLE), b (ARRAY, one file), c (SINGLE).
+    a = tmp_path / "raw" / "a.parquet"
+    b = tmp_path / "raw" / "b.parquet"
+    c = tmp_path / "raw" / "c.parquet"
+    a.parent.mkdir(parents=True, exist_ok=True)
+    pl.DataFrame({"id": [1], "name": ["a"]}).write_parquet(a)
+    pl.DataFrame({"id": [2], "name": ["b"]}).write_parquet(b)
+    pl.DataFrame({"id": [3], "name": ["c"]}).write_parquet(c)
+
+    inputs_manifest = tmp_path / "inputs.yaml"
+    write_inputs_manifest(
+        [
+            {INPUTS_NAME_KEY: "a", MANIFEST_FILES_KEY: [str(a)]},
+            {INPUTS_NAME_KEY: "b", MANIFEST_FILES_KEY: [str(b)]},
+            {INPUTS_NAME_KEY: "c", MANIFEST_FILES_KEY: [str(c)]},
+        ],
+        inputs_manifest,
+    )
+
+    out_dir = tmp_path / "fn_out"
+    outputs_manifest = tmp_path / "outputs.yaml"
+    _set_argv(
+        monkeypatch,
+        request_path,
+        multi_transformer_bundle,
+        inputs_manifest,
+        out_dir,
+        outputs_manifest,
+        tmp_path / "live",
+    )
+    rc = main()
+    assert rc == 0, f"main() returned {rc}"
+
+    merged_file = out_dir / "slot0" / "merged.parquet"
+    assert merged_file.is_file()
+    df = pl.read_parquet(merged_file)
+    assert df.height == 3
+    assert sorted(df["id"].to_list()) == [1, 2, 3]
+
+
+def test_main_manifest_length_mismatch_returns_bad_manifest(
+    tmp_path, multi_publisher_bundle, monkeypatch
+):
+    """The multi-cardinality publisher declares 2 input slots; feeding
+    it a 1-entry manifest must surface EXIT_BAD_MANIFEST rather than
+    silently dropping the second slot."""
+    request_path = _write_request(tmp_path / "request.yaml")
+    a_parquet = tmp_path / "raw" / "a.parquet"
+    a_parquet.parent.mkdir(parents=True, exist_ok=True)
+    pl.DataFrame({"id": [1]}).write_parquet(a_parquet)
+
+    inputs_manifest = tmp_path / "inputs.yaml"
+    write_inputs_manifest(
+        [{INPUTS_NAME_KEY: "in_a", MANIFEST_FILES_KEY: [str(a_parquet)]}],
+        inputs_manifest,
+    )
+
+    _set_argv(
+        monkeypatch,
+        request_path,
+        multi_publisher_bundle,
+        inputs_manifest,
+        tmp_path / "fn_out",
+        tmp_path / "outputs.yaml",
+        tmp_path / "live",
+    )
+    assert main() == EXIT_BAD_MANIFEST
 
 
 # --- decorator metadata -------------------------------------------------
