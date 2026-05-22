@@ -425,7 +425,6 @@ def _make_src(
     topic: str,
     variant: _Variant,
     group_id: str,
-    table: str | None = None,
     src_cfg: dict | None = None,
 ) -> KafkaStreamSrc:
     return KafkaStreamSrc(
@@ -440,7 +439,6 @@ def _make_src(
         topic=topic,
         data_format=variant.data_format,
         schema=variant.schema_loader(),
-        table=table,
         src_cfg=src_cfg,
     )
 
@@ -548,11 +546,11 @@ def test_plugin_round_trips_each_serde_variant(
 # ---------------------------------------------------------------------------
 
 
-def test_plugin_honours_table_override(
+def test_plugin_output_table_is_topic(
     fresh_kafka_topic, kafka_config, tmp_path,
 ):
-    """``output_table()`` defaults to the topic name; ``table``
-    overrides it. The override surfaces on the staged manifest."""
+    """``output_table()`` is the topic name -- the staged manifest
+    table matches the source topic."""
     work = tmp_path / "work"
     work.mkdir()
     ctx = _KafkaCtx(work, active_polls=12)
@@ -561,13 +559,11 @@ def test_plugin_honours_table_override(
     serde = variant.build_producer_serde(kafka_config, tmp_path)
     _produce(kafka_config, fresh_kafka_topic, serde, variant.messages(3))
 
-    override = f"renamed_{uuid.uuid4().hex[:6]}"
     src = _make_src(
         kafka_config=kafka_config,
         topic=fresh_kafka_topic,
         variant=variant,
         group_id=f"g_{uuid.uuid4().hex[:8]}",
-        table=override,
         src_cfg={
             "kafka.consume_timeout_seconds": 2,
             "kafka.time_rollover_seconds": 1,
@@ -580,8 +576,7 @@ def test_plugin_honours_table_override(
     staged_tables = [
         tm.table for sm in ctx.staged if sm.committed for tm in sm.manifest
     ]
-    assert override in staged_tables
-    assert fresh_kafka_topic not in staged_tables
+    assert fresh_kafka_topic in staged_tables
 
 
 def test_plugin_messages_rollover_creates_multiple_parquet_batches(

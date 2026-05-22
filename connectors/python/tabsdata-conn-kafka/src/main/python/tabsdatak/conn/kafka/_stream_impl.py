@@ -15,13 +15,15 @@ import time
 import uuid
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Type, cast
 
-from tabsdatak.conn.kafka import KafkaConn
+from pydantic import TypeAdapter
+
+from tabsdatak.api import Secret, Env
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.kafka._serdes import KafkaSerde, SchemaIdCompatibles, SchemaIdSpec
-from tabsdatak.conn.kafka.error import KafkaErrorCode
+from tabsdatak.conn.kafka import KafkaConn
 
 if TYPE_CHECKING:  # pragma: no cover -- typing-only
     from confluent_kafka import Consumer, Message, Producer
@@ -295,23 +297,16 @@ class KafkaConsumer:
 # ---------------------------------------------------------------------
 
 
-def build_kafka_configs(
-    *,
-    conn: KafkaConn,
-    group_id: str | None,
-) -> dict:
+def build_kafka_configs(*, conn: KafkaConn) -> dict:
     """Compose the ``confluent_kafka.Consumer`` config dict from
-    the connector's :class:`KafkaConn` + an effective group-id.
+    the connector's :class:`KafkaConn`.
 
-    Resolves ``Secret`` credentials, picks ``enforce_connection_params``
-    to decide whose group-id wins, and forces
+    Resolves ``Env`` / ``Secret`` references on ``servers`` and
+    ``group_id``, resolves ``Secret`` SASL credentials, and forces
     ``auto.offset.reset=earliest`` + ``enable.auto.commit=False``
     (the plugin commits explicitly after each rollover)."""
     cfg: dict = dict(conn.conn_cfg or {})
-    if isinstance(conn.servers, str):
-        cfg[_BOOTSTRAP_SERVERS_KEY] = conn.servers
-    else:
-        cfg[_BOOTSTRAP_SERVERS_KEY] = ",".join(conn.servers)
+    cfg[_BOOTSTRAP_SERVERS_KEY] = _resolve(conn.servers)
     cfg[_AUTO_OFFSET_RESET_KEY] = "earliest"
     cfg[_ENABLE_AUTO_COMMIT_KEY] = False
     if conn.credentials is not None:
@@ -319,12 +314,11 @@ def build_kafka_configs(
         cfg[_SASL_MECHANISM_KEY] = "SCRAM-SHA-256"
         cfg[_SASL_USERNAME_KEY] = conn.credentials.user.value()
         cfg[_SASL_PASSWORD_KEY] = conn.credentials.password.value()
-    effective_group_id = (
-        conn.group_id
-        if (conn.enforce_connection_params and conn.group_id)
-        else group_id
-    )
-    if not effective_group_id:
-        raise KafkaErrorCode.KAFKA_8.exception(group_id=effective_group_id)
-    cfg[_GROUP_ID_KEY] = effective_group_id
+    cfg[_GROUP_ID_KEY] = _resolve(conn.group_id)
     return cfg
+
+
+def _resolve(spec: str|Secret|Env) -> str:
+    """Return the string form of a ``str`` / ``Secret`` / ``Env``
+    spec."""
+    return spec if isinstance(spec, str) else spec.value()

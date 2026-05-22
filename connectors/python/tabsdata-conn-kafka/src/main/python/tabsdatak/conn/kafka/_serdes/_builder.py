@@ -128,8 +128,8 @@ def build_serde(
 
     if mode == "glue":
         assert isinstance(schema_registry, AwsGlueSchemaRegistry)
-        registry_name = schema_registry.registry_name
-        schema_name = schema_registry.schema_name
+        registry_name = _resolve(schema_registry.registry_name)
+        schema_name = _resolve(schema_registry.schema_name)
         if data_format == "json":
             return JsonGlueKafkaSerde(
                 glue_client=sr_client,
@@ -178,7 +178,7 @@ def build_schema_registry_client(
         from confluent_kafka.schema_registry import SchemaRegistryClient
 
         configs: dict[str, Any] = dict(schema_registry.configs or {})
-        configs["url"] = schema_registry.url
+        configs["url"] = _resolve(schema_registry.url)
         if schema_registry.credentials is not None:
             user = schema_registry.credentials.user.value()
             password = schema_registry.credentials.password.value()
@@ -190,11 +190,13 @@ def build_schema_registry_client(
 
         # Glue boto3 client picks credentials off the environment.
         # We populate the standard envvars from the config.
-        os.environ["AWS_ACCESS_KEY_ID"] = schema_registry.credentials.user.value()
+        os.environ["AWS_ACCESS_KEY_ID"] = schema_registry.credentials.access_key_id.value()
         os.environ["AWS_SECRET_ACCESS_KEY"] = (
-            schema_registry.credentials.password.value()
+            schema_registry.credentials.secret_access_key.value()
         )
-        boto_kwargs: dict[str, Any] = {"region_name": schema_registry.region_name}
+        boto_kwargs: dict[str, Any] = {
+            "region_name": _resolve(schema_registry.region_name),
+        }
         if schema_registry.configs:
             boto_kwargs.update(schema_registry.configs)
         return boto3.client("glue", **boto_kwargs)
@@ -202,3 +204,9 @@ def build_schema_registry_client(
     raise KafkaErrorCode.KAFKA_10.exception(
         sr=type(schema_registry).__name__,
     )
+
+
+def _resolve(spec: Any) -> str:
+    """Return the string form of a ``str`` / ``Secret`` / ``Env``
+    spec."""
+    return spec if isinstance(spec, str) else spec.value()

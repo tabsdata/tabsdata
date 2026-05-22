@@ -20,7 +20,6 @@ from __future__ import annotations
 import logging
 import signal
 import time
-from datetime import datetime, timezone
 from typing import Any, cast
 
 from tabsdatak.conn.kafka import (
@@ -133,10 +132,7 @@ class KafkaStreamSrcPlugin(StreamSrcPlugin[KafkaStreamSrc]):
             stream_src.data_format,
         )
 
-        kafka_configs = build_kafka_configs(
-            conn=conn,
-            group_id=stream_src.group_id,
-        )
+        kafka_configs = build_kafka_configs(conn=conn)
         try:
             consumer = Consumer(kafka_configs)
             consumer.list_topics(timeout=cfg["connection_timeout_secs"])
@@ -239,23 +235,12 @@ class KafkaStreamSrcPlugin(StreamSrcPlugin[KafkaStreamSrc]):
     ) -> None:
         """Poll + rollover loop. Stages each completed buffer as a
         single-table :class:`TableManifest`; exits cleanly on
-        ``ctx.is_active() == False`` or when ``stream_src.end`` is
-        reached.
+        ``ctx.is_active() == False``.
         """
         deadline_window_start = time.time()
         reset_on_next_consume = False
         try:
             while ctx.is_active():
-                # Honour the source's end-time gate -- the legacy
-                # connector exits the loop here once we're past it.
-                if stream_src.end is not None and (
-                    datetime.now(timezone.utc) > stream_src.end
-                ):
-                    logger.info(
-                        "kafka-stream: end-time reached, exiting loop (end=%s)",
-                        stream_src.end,
-                    )
-                    break
                 ctx.trigger_monitor()
                 rollover_reason, buffer = kafka_consumer.consume(
                     timeout_secs=cfg["consume_timeout_secs"],

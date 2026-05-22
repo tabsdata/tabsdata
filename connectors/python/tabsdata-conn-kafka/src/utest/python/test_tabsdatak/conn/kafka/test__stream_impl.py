@@ -16,8 +16,6 @@ from tabsdatak.conn.kafka._stream_impl import (
     RolloverReason,
     build_kafka_configs,
 )
-from tabsdatak.conn.kafka.error import KafkaErrorCode
-from tabsdatak.error import TabsdataException
 
 
 pytestmark = pytest.mark.kafka
@@ -81,23 +79,22 @@ def test_messages_buffer_to_parquet_empty_returns_none(tmp_path):
 
 def test_build_kafka_configs_string_servers():
     conn = KafkaConn(servers="a:9092", credentials=_creds(), group_id="g1")
-    cfg = build_kafka_configs(conn=conn, group_id="ignored")
+    cfg = build_kafka_configs(conn=conn)
     assert cfg["bootstrap.servers"] == "a:9092"
-    assert cfg["group.id"] == "g1"  # conn wins (enforce=True default)
+    assert cfg["group.id"] == "g1"
 
 
-def test_build_kafka_configs_list_servers_joined_with_commas():
+def test_build_kafka_configs_comma_separated_servers():
     conn = KafkaConn(
-        servers=["a:9092", "b:9092"], credentials=_creds(),
-        group_id="g1",
+        servers="a:9092,b:9092", credentials=_creds(), group_id="g1",
     )
-    cfg = build_kafka_configs(conn=conn, group_id="ignored")
+    cfg = build_kafka_configs(conn=conn)
     assert cfg["bootstrap.servers"] == "a:9092,b:9092"
 
 
 def test_build_kafka_configs_no_credentials_skips_sasl_keys():
     conn = KafkaConn(servers="a:9092", group_id="g1")
-    cfg = build_kafka_configs(conn=conn, group_id="ignored")
+    cfg = build_kafka_configs(conn=conn)
     assert "sasl.username" not in cfg
     assert "sasl.password" not in cfg
     assert "security.protocol" not in cfg
@@ -105,41 +102,26 @@ def test_build_kafka_configs_no_credentials_skips_sasl_keys():
 
 def test_build_kafka_configs_with_credentials_sets_sasl_keys():
     conn = KafkaConn(servers="a:9092", credentials=_creds(), group_id="g1")
-    cfg = build_kafka_configs(conn=conn, group_id="ignored")
+    cfg = build_kafka_configs(conn=conn)
     assert cfg["security.protocol"] == "sasl_plaintext"
     assert cfg["sasl.mechanism"] == "SCRAM-SHA-256"
     assert cfg["sasl.username"] == "u"
     assert cfg["sasl.password"] == "p"
 
 
-def test_build_kafka_configs_enforce_true_conn_group_wins():
+def test_build_kafka_configs_resolves_secret_servers_and_group_id():
     conn = KafkaConn(
-        servers="a:9092", group_id="conn-group",
-        enforce_connection_params=True,
+        servers=Secret.lit("a:9092"),
+        group_id=Secret.lit("g1"),
     )
-    cfg = build_kafka_configs(conn=conn, group_id="src-group")
-    assert cfg["group.id"] == "conn-group"
-
-
-def test_build_kafka_configs_enforce_false_src_group_wins():
-    conn = KafkaConn(
-        servers="a:9092", group_id="conn-group",
-        enforce_connection_params=False,
-    )
-    cfg = build_kafka_configs(conn=conn, group_id="src-group")
-    assert cfg["group.id"] == "src-group"
-
-
-def test_build_kafka_configs_missing_group_id_raises_kafka_8():
-    conn = KafkaConn(servers="a:9092", enforce_connection_params=False)
-    with pytest.raises(TabsdataException) as ei:
-        build_kafka_configs(conn=conn, group_id=None)
-    assert ei.value.api_error is KafkaErrorCode.KAFKA_8
+    cfg = build_kafka_configs(conn=conn)
+    assert cfg["bootstrap.servers"] == "a:9092"
+    assert cfg["group.id"] == "g1"
 
 
 def test_build_kafka_configs_force_auto_commit_off():
     conn = KafkaConn(servers="a:9092", group_id="g1")
-    cfg = build_kafka_configs(conn=conn, group_id="g1")
+    cfg = build_kafka_configs(conn=conn)
     assert cfg["enable.auto.commit"] is False
     assert cfg["auto.offset.reset"] == "earliest"
 
@@ -150,7 +132,7 @@ def test_build_kafka_configs_conn_cfg_overrides_pass_through():
         group_id="g1",
         conn_cfg={"session.timeout.ms": 30000},
     )
-    cfg = build_kafka_configs(conn=conn, group_id="g1")
+    cfg = build_kafka_configs(conn=conn)
     assert cfg["session.timeout.ms"] == 30000
 
 

@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from tabsdatak.api import Secret
-from tabsdatak.conn.common.types import UserPassword
+from tabsdatak.conn.common.types import AwsAccessSecretKey, UserPassword
 from tabsdatak.conn.kafka import (
     AwsGlueSchemaRegistry,
     ConfluentSchemaRegistry,
@@ -51,6 +51,13 @@ pytestmark = pytest.mark.kafka
 
 def _creds() -> UserPassword:
     return UserPassword(user=Secret.lit("u"), password=Secret.lit("p"))
+
+
+def _aws_creds() -> AwsAccessSecretKey:
+    return AwsAccessSecretKey(
+        access_key_id=Secret.lit("u"),
+        secret_access_key=Secret.lit("p"),
+    )
 
 
 _AVRO_SCHEMA = json.dumps({
@@ -127,7 +134,7 @@ def test_build_serde_confluent_protobuf(tmp_path):
 
 def test_build_serde_glue_json(tmp_path):
     sr = AwsGlueSchemaRegistry(
-        region_name="us-east-1", credentials=_creds(),
+        region_name="us-east-1", credentials=_aws_creds(),
         registry_name="reg", schema_name="sch",
     )
     glue_client = MagicMock()
@@ -147,7 +154,7 @@ def test_build_serde_glue_json(tmp_path):
 
 def test_build_serde_glue_avro(tmp_path):
     sr = AwsGlueSchemaRegistry(
-        region_name="us-east-1", credentials=_creds(),
+        region_name="us-east-1", credentials=_aws_creds(),
         registry_name="reg", schema_name="sch",
     )
     glue_client = MagicMock()
@@ -167,7 +174,7 @@ def test_build_serde_glue_avro(tmp_path):
 
 def test_build_serde_glue_protobuf(tmp_path):
     sr = AwsGlueSchemaRegistry(
-        region_name="us-east-1", credentials=_creds(),
+        region_name="us-east-1", credentials=_aws_creds(),
         registry_name="reg", schema_name="sch",
     )
     glue_client = MagicMock()
@@ -220,7 +227,7 @@ def test_build_sr_client_confluent_with_credentials():
 def test_build_sr_client_glue_populates_aws_envvars_and_calls_boto3():
     import os
     sr = AwsGlueSchemaRegistry(
-        region_name="us-west-2", credentials=_creds(),
+        region_name="us-west-2", credentials=_aws_creds(),
         registry_name="reg", schema_name="sch",
     )
     saved_id = os.environ.get("AWS_ACCESS_KEY_ID")
@@ -249,7 +256,7 @@ def test_build_sr_client_glue_populates_aws_envvars_and_calls_boto3():
 
 def test_build_sr_client_glue_forwards_extra_boto_kwargs():
     sr = AwsGlueSchemaRegistry(
-        region_name="eu-west-1", credentials=_creds(),
+        region_name="eu-west-1", credentials=_aws_creds(),
         registry_name="reg", schema_name="sch",
         configs={"endpoint_url": "https://localstack"},
     )
