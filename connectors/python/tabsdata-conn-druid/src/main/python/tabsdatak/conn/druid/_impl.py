@@ -16,7 +16,7 @@ from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.druid import (
     AzBlobLocation,
     CloudLocation,
-    DruidConn,
+    DruidDestConn,
     DruidDest,
     GCSLocation,
     S3Location,
@@ -562,7 +562,7 @@ class OverlordClient:
 # ---------------------------------------------------------------------------
 
 
-def make_overlord_client(conn: DruidConn) -> OverlordClient:
+def make_overlord_client(conn: DruidDestConn) -> OverlordClient:
     creds = conn.credentials
     auth = (_convert(creds.user, str), _convert(creds.password, str))
     return OverlordClient(
@@ -571,7 +571,7 @@ def make_overlord_client(conn: DruidConn) -> OverlordClient:
     )
 
 
-def make_overlord_client_for_dest(conn: DruidConn, dest: DruidDest) -> OverlordClient:
+def make_overlord_client_for_dest(conn: DruidDestConn, dest: DruidDest) -> OverlordClient:
     """Build an Overlord client whose ``timeout_sec`` reflects the
     destination's ``http_timeout_sec`` knob."""
     creds = conn.credentials

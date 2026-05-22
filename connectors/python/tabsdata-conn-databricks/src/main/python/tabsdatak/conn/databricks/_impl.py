@@ -3,7 +3,7 @@
 
 The legacy :class:`tabsdata.connector.databricks._connector.DatabricksSource`
 and :class:`DatabricksDestination` are ported here, adapted to the
-new-model ``DatabricksConn`` / ``DatabricksSrc`` / ``DatabricksDest``
+new-model ``_AnyDatabricksConn`` / ``DatabricksSrc`` / ``DatabricksDest``
 classes. The library choice matches the legacy: ``databricks.sdk``
 (WorkspaceClient + statement_execution API + Files API) plus
 ``databricks.sql`` (Connection for ``COPY INTO`` / DDL). No SQLAlchemy.
@@ -27,7 +27,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from tabsdatak.conn.common._validation import fqn, unfqn
-from tabsdatak.conn.databricks import DatabricksConn
+from tabsdatak.conn.databricks import DatabricksDestConn, DatabricksSrcConn
+
+# Conn helpers operate on both Src and Dest variants.
+_AnyDatabricksConn = DatabricksSrcConn | DatabricksDestConn
 from tabsdatak.conn.databricks._validation import _DATABRICKS_FQN_DEF
 
 if TYPE_CHECKING:
@@ -56,7 +59,7 @@ _PARQUET_COMPRESSION = "snappy"
 
 @dataclass(kw_only=True)
 class DatabricksReadCfg:
-    conn: DatabricksConn
+    conn: _AnyDatabricksConn
     queries: list[str]
     initial_values: dict | None = None
     poll_interval_seconds: float = _DEFAULT_POLL_INTERVAL_SECONDS
@@ -65,7 +68,7 @@ class DatabricksReadCfg:
 
 @dataclass(kw_only=True)
 class DatabricksWriteCfg:
-    conn: DatabricksConn
+    conn: _AnyDatabricksConn
     target_tables: list[str]  # raw user input -- not yet fqn'd
     if_table_exists: str  # "append" | "replace"
     schema_evolution: str  # "update" | "strict"
@@ -82,16 +85,16 @@ class DatabricksWriteCfg:
 # --- Conn helpers ---------------------------------------------------
 
 
-def _host_value(conn: DatabricksConn) -> str:
+def _host_value(conn: _AnyDatabricksConn) -> str:
     """Resolve ``conn.host_url`` to a plain string."""
     return conn.host_url.value()
 
 
-def _token_value(conn: DatabricksConn) -> str:
+def _token_value(conn: _AnyDatabricksConn) -> str:
     return conn.token.value()
 
 
-def _build_workspace_client(conn: DatabricksConn):
+def _build_workspace_client(conn: _AnyDatabricksConn):
     """Return a :class:`databricks.sdk.WorkspaceClient` bound to the
     connection's PAT."""
     try:
@@ -108,20 +111,20 @@ def _build_workspace_client(conn: DatabricksConn):
 
 
 def _resolve_warehouse_id(
-    ws_client: dbsdk.WorkspaceClient, conn: DatabricksConn
+    ws_client: dbsdk.WorkspaceClient, conn: _AnyDatabricksConn
 ) -> str:
     """Look up the warehouse id from ``conn``.
 
     ``conn.warehouse_id`` wins if set; otherwise ``conn.warehouse``
     (name) is resolved via the workspace's warehouse list. The
-    cross-field check in ``DatabricksConn.validate`` ensures at most
+    cross-field check in ``_AnyDatabricksConn.validate`` ensures at most
     one is set.
     """
     if conn.warehouse_id is not None:
         return conn.warehouse_id.value()
     if conn.warehouse is None:
         raise ValueError(
-            "DatabricksConn requires either ``warehouse`` (name) or"
+            "_AnyDatabricksConn requires either ``warehouse`` (name) or"
             " ``warehouse_id`` for runtime operations"
         )
     target_name = conn.warehouse.value()
@@ -132,7 +135,7 @@ def _resolve_warehouse_id(
 
 
 def _build_sql_connection(
-    ws_client: dbsdk.WorkspaceClient, conn: DatabricksConn
+    ws_client: dbsdk.WorkspaceClient, conn: _AnyDatabricksConn
 ) -> dbsql.Connection:
     """Return a :class:`databricks.sql.Connection` bound to the
     workspace + warehouse identified by ``conn``."""
@@ -402,7 +405,7 @@ def _fq_for_sql(fq_table: str) -> str:
     return fqn(parts, _DATABRICKS_FQN_DEF)
 
 
-def _fully_qualify_table(conn: DatabricksConn, table: str) -> str:
+def _fully_qualify_table(conn: _AnyDatabricksConn, table: str) -> str:
     """Resolve ``table`` to a 3-part bare ``catalog.schema.table`` name,
     drawing from ``conn.catalog`` / ``conn.schema`` to fill in the
     missing leading parts. Accepts parts that are bare or backtick-
@@ -429,7 +432,7 @@ def _fully_qualify_table(conn: DatabricksConn, table: str) -> str:
     return ".".join(parts)
 
 
-def _volume_path(conn: DatabricksConn, fq_table: str) -> str:
+def _volume_path(conn: _AnyDatabricksConn, fq_table: str) -> str:
     """Compute the ``/Volumes/<catalog>/<schema>/<volume>`` prefix
     that ``COPY INTO`` will read from. ``conn.volume`` may itself be
     a 1-, 2-, or 3-part name; the rules match the legacy:
@@ -456,7 +459,7 @@ def _volume_path(conn: DatabricksConn, fq_table: str) -> str:
 
 def upload_file_to_volume(
     ws_client,
-    conn: DatabricksConn,
+    conn: _AnyDatabricksConn,
     fq_table: str,
     local_path: Path,
 ) -> str:

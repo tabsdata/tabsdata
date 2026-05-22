@@ -7,7 +7,7 @@ from tabsdatak.conn.common.types import GCPJson
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert
-from tabsdatak.conn.gcs import GCSConn, GCSDest, GCSSrc
+from tabsdatak.conn.gcs import GCSDestConn, GCSSrcConn, GCSDest, GCSSrc
 from tabsdatak.conn.gcs.error import GcsErrorCode
 from tabsdatak.spi import (
     DestContext,
@@ -21,6 +21,9 @@ from tabsdatak.spi import (
     TableMode,
 )
 
+# Conn helpers operate on both Src and Dest variants.
+_AnyGCSConn = GCSSrcConn | GCSDestConn
+
 # --- URI / location builder ---------------------------------------
 
 
@@ -31,7 +34,7 @@ def _gcs_uri(bucket: str, path_entry: str) -> str:
     return f"gs://{bucket}/{key}"
 
 
-def build_location(conn: GCSConn, path_entry: str) -> _transporter.TransporterGCS:
+def build_location(conn: _AnyGCSConn, path_entry: str) -> _transporter.TransporterGCS:
     bucket = _convert(conn.bucket, str)
     return _transporter.TransporterGCS(
         url=_gcs_uri(bucket, path_entry),
@@ -41,7 +44,7 @@ def build_location(conn: GCSConn, path_entry: str) -> _transporter.TransporterGC
     )
 
 
-def credentials(conn: GCSConn) -> GCPJson:
+def credentials(conn: _AnyGCSConn) -> GCPJson:
     creds = conn.credentials
     if not isinstance(creds, GCPJson):
         raise TypeError(
@@ -52,7 +55,7 @@ def credentials(conn: GCSConn) -> GCPJson:
     return creds
 
 
-def run_env(conn: GCSConn) -> dict[str, str]:
+def run_env(conn: _AnyGCSConn) -> dict[str, str]:
     return {
         _transporter.SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON: credentials(
             conn
@@ -110,12 +113,22 @@ class GCSDestPlugin(DestPlugin[GCSDest]):
 # --- Explorer placeholder ----------------------------------------
 
 
-class GCSExplorer(Explorer[GCSConn]):
-    def metadata(self, conn: GCSConn) -> Any:
+class GCSSrcExplorer(Explorer[GCSSrcConn]):
+    def metadata(self, conn: GCSSrcConn) -> Any:
         # TODO
         pass
 
-    def data(self, conn: GCSConn, query: str) -> Any:
+    def data(self, conn: GCSSrcConn, query: str) -> Any:
+        # TODO
+        pass
+
+
+class GCSDestExplorer(Explorer[GCSDestConn]):
+    def metadata(self, conn: GCSDestConn) -> Any:
+        # TODO
+        pass
+
+    def data(self, conn: GCSDestConn, query: str) -> Any:
         # TODO
         pass
 
@@ -124,23 +137,23 @@ class GCSExplorer(Explorer[GCSConn]):
 
 
 GCS_SRC = SrcDef(
-    conn=GCSConn,
+    conn=GCSSrcConn,
     src_type="gcs",
     src_version="v1",
     src=GCSSrc,
     table_mode=TableMode.ARRAY,
     cardinality=lambda src: len(src.paths),
     plugin=GCSSrcPlugin,
-    explorer=GCSExplorer,
+    explorer=GCSSrcExplorer,
 )
 
 
 GCS_DEST = DestDef(
-    conn=GCSConn,
+    conn=GCSDestConn,
     dest_type="gcs",
     dest_version="v1",
     dest=GCSDest,
     cardinality=lambda dest: len(dest.paths),
     plugin=GCSDestPlugin,
-    explorer=GCSExplorer,
+    explorer=GCSDestExplorer,
 )

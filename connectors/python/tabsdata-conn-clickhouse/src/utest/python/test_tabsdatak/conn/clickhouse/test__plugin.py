@@ -17,7 +17,7 @@ from tabsdatak.conn.common.types import (
 )
 from tabsdatak.conn.clickhouse import (
     AzBlobLocation,
-    ClickHouseConn,
+    ClickHouseDestConn,
     ClickHouseDest,
     GCSLocation,
     S3Location,
@@ -107,8 +107,8 @@ def _gcs_staging() -> GCSLocation:
     )
 
 
-def _bare_conn(staging=None) -> ClickHouseConn:
-    return ClickHouseConn(
+def _bare_conn(staging=None) -> ClickHouseDestConn:
+    return ClickHouseDestConn(
         host="ch.example.invalid",
         staging=staging or _s3_staging(),
         port=8123,
@@ -264,7 +264,7 @@ def test_explorer_methods_are_stubs():
 
 
 def test_clickhouse_dest_def_wires_plugin_and_explorer():
-    assert plugin.CLICKHOUSE_DEST.conn is ClickHouseConn
+    assert plugin.CLICKHOUSE_DEST.conn is ClickHouseDestConn
     assert plugin.CLICKHOUSE_DEST.dest is ClickHouseDest
     assert plugin.CLICKHOUSE_DEST.plugin is plugin._ClickHouseDestPlugin
     assert plugin.CLICKHOUSE_DEST.explorer is plugin._ClickHouseExplorer

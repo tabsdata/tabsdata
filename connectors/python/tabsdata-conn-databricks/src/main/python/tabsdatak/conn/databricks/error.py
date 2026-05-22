@@ -21,12 +21,12 @@ class DatabricksRuntimeException(ConnException):
 class DatabricksErrorCode(ErrorCode):
     DATABRICKS_1 = ErrorDef(
         ConnInitException,
-        "DatabricksConn validation failed",
-    )  # DatabricksConn
+        "Databricks connection validation failed",
+    )  # DatabricksSrcConn / DatabricksDestConn
     DATABRICKS_2 = ErrorDef(
         DatabricksValidateException,
         "Databricks{cls}: {rule}",
-    )  # DatabricksConn.validate()
+    )  # DatabricksSrcConn / DatabricksDestConn validate()
     DATABRICKS_3 = ErrorDef(
         ConnInitException,
         "DatabricksSrc validation failed",

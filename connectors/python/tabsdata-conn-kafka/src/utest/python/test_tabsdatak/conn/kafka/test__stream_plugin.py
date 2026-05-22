@@ -11,7 +11,7 @@ import pytest
 
 from tabsdatak.api import Secret
 from tabsdatak.conn.common.types import UserPassword
-from tabsdatak.conn.kafka import KafkaConn, KafkaStreamSrc
+from tabsdatak.conn.kafka import KafkaStreamSrcConn, KafkaStreamSrc
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.kafka._stream_plugin import (
@@ -32,7 +32,7 @@ def _creds() -> UserPassword:
 
 def _src(**overrides) -> KafkaStreamSrc:
     base = dict(
-        conn=KafkaConn(
+        conn=KafkaStreamSrcConn(
             servers="broker:9092", credentials=_creds(), group_id="g1",
         ),
         topic="events",
@@ -51,7 +51,7 @@ def test_kafka_stream_src_def_shape():
 
     assert KAFKA_STREAM_SRC.src_type == "kafka"
     assert KAFKA_STREAM_SRC.src_version == "v1"
-    assert KAFKA_STREAM_SRC.conn is KafkaConn
+    assert KAFKA_STREAM_SRC.conn is KafkaStreamSrcConn
     assert KAFKA_STREAM_SRC.src is KafkaStreamSrc
     assert KAFKA_STREAM_SRC.plugin is KafkaStreamSrcPlugin
     assert KAFKA_STREAM_SRC.explorer is KafkaExplorer

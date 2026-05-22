@@ -1,6 +1,6 @@
 """Salesforce connector — public API.
 
-* :class:`SalesforceConn` -- per-org connection (token credentials,
+* :class:`SalesforceSrcConn` -- per-org connection (token credentials,
   optional instance URL, optional ``objects`` / ``category`` API
   hints, optional ``entity_whitelist``).
 * :class:`SalesforceSrc` -- SOQL source (1 SOQL query per call).
@@ -128,7 +128,7 @@ SrcCfgSpec: TypeAlias = Annotated[
 
 
 @_api.dataclass(SalesforceErrorCode.SALESFORCE_2, kw_only=True)
-class SalesforceConn(Conn):
+class SalesforceSrcConn(Conn):
     """Salesforce org connection.
 
     :param credentials: :class:`SalesforceTokenCredentials`
@@ -142,6 +142,8 @@ class SalesforceConn(Conn):
     :param conn_cfg: Optional driver-side config dict.
     """
 
+    __kind__ = "salesforceSrcConn"
+
     credentials: CredentialsSpec
     instance_url: InstanceUrlSpec | None = None
     category: str | None = None
@@ -150,7 +152,7 @@ class SalesforceConn(Conn):
     conn_cfg: CfgSpec | None = None
 
 
-ConnSpec: TypeAlias = Union[NamedConn, SalesforceConn]
+ConnSpec: TypeAlias = Union[NamedConn, SalesforceSrcConn]
 
 
 # --- Source: SOQL queries --------------------------------------------
@@ -160,7 +162,7 @@ ConnSpec: TypeAlias = Union[NamedConn, SalesforceConn]
 class SalesforceSrc(Src):
     """Salesforce SOQL source — exactly one SOQL query.
 
-    :param conn: :class:`SalesforceConn` (or :class:`NamedConn`).
+    :param conn: :class:`SalesforceSrcConn` (or :class:`NamedConn`).
     :param queries: SOQL query list (today exactly one; the
         list shape leaves room for future multi-query support).
     :param include_deleted: When ``True``, scan deleted rows
@@ -188,7 +190,7 @@ class SalesforceSrc(Src):
 class SalesforceReportSrc(Src):
     """Salesforce report source — Tabular reports only.
 
-    :param conn: :class:`SalesforceConn` (or :class:`NamedConn`).
+    :param conn: :class:`SalesforceSrcConn` (or :class:`NamedConn`).
     :param reports: Report ids or names; one slot per entry.
     :param column_name_strategy: ``"columnName"`` (default,
         API names) or ``"label"`` (display names).

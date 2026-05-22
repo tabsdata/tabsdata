@@ -3,7 +3,15 @@ from __future__ import annotations
 from typing import Any
 
 from tabsdatak.conn.common.file import _plugin as _file_plugin, _transporter
-from tabsdatak.conn.localfile import LocalFileConn, LocalFileDest, LocalFileSrc
+from tabsdatak.conn.localfile import (
+    LocalFileDest,
+    LocalFileDestConn,
+    LocalFileSrc,
+    LocalFileSrcConn,
+)
+
+# Conn helpers operate on both Src and Dest variants.
+_AnyLocalFileConn = LocalFileSrcConn | LocalFileDestConn
 from tabsdatak.conn.localfile.error import LocalFileErrorCode
 from tabsdatak.spi import (
     DestContext,
@@ -26,7 +34,7 @@ from tabsdatak.spi import (
 
 
 def build_location(
-    conn: LocalFileConn, entry: str
+    conn: _AnyLocalFileConn, entry: str
 ) -> _transporter.TransporterLocalFile:
     resolved = "/" + conn.full_path(entry)
     if "*" in resolved:
@@ -83,12 +91,22 @@ class LocalFileDestPlugin(DestPlugin[LocalFileDest]):
 # --- Explorer placeholder ----------------------------------------
 
 
-class LocalFileExplorer(Explorer[LocalFileConn]):
-    def metadata(self, conn: LocalFileConn) -> Any:
+class LocalFileSrcExplorer(Explorer[LocalFileSrcConn]):
+    def metadata(self, conn: LocalFileSrcConn) -> Any:
         # TODO
         pass
 
-    def data(self, conn: LocalFileConn, query: str) -> Any:
+    def data(self, conn: LocalFileSrcConn, query: str) -> Any:
+        # TODO
+        pass
+
+
+class LocalFileDestExplorer(Explorer[LocalFileDestConn]):
+    def metadata(self, conn: LocalFileDestConn) -> Any:
+        # TODO
+        pass
+
+    def data(self, conn: LocalFileDestConn, query: str) -> Any:
         # TODO
         pass
 
@@ -97,23 +115,23 @@ class LocalFileExplorer(Explorer[LocalFileConn]):
 
 
 LOCALFILE_SRC = SrcDef(
-    conn=LocalFileConn,
+    conn=LocalFileSrcConn,
     src_type="localfile",
     src_version="v1",
     src=LocalFileSrc,
     table_mode=TableMode.ARRAY,
     cardinality=lambda src: len(src.paths),
     plugin=LocalFileSrcPlugin,
-    explorer=LocalFileExplorer,
+    explorer=LocalFileSrcExplorer,
 )
 
 
 LOCALFILE_DEST = DestDef(
-    conn=LocalFileConn,
+    conn=LocalFileDestConn,
     dest_type="localfile",
     dest_version="v1",
     dest=LocalFileDest,
     cardinality=lambda dest: len(dest.paths),
     plugin=LocalFileDestPlugin,
-    explorer=LocalFileExplorer,
+    explorer=LocalFileDestExplorer,
 )

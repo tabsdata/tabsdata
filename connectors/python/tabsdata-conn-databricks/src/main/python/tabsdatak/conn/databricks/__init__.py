@@ -108,27 +108,27 @@ DestCfgSpec: TypeAlias = Annotated[
 # --- Connection ------------------------------------------------------
 
 
-@_api.dataclass(DatabricksErrorCode.DATABRICKS_1, kw_only=True)
-class DatabricksConn(Conn):
-    """Databricks workspace connection.
+def _validate_databricks_conn(conn) -> None:
+    if conn.warehouse is not None and conn.warehouse_id is not None:
+        # noinspection PyProtectedMember
+        raise DatabricksErrorCode.DATABRICKS_2.exception(
+            cls="Conn",
+            rule=f"warehouse={conn.warehouse!r} and "
+            f"warehouse_id={conn.warehouse_id!r} are mutually exclusive",
+        )
+    if conn.schema is not None and conn.catalog is None:
+        # noinspection PyProtectedMember
+        raise DatabricksErrorCode.DATABRICKS_2.exception(
+            cls="Conn",
+            rule=f"schema={conn.schema!r} requires catalog to be set",
+        )
 
-    :param host_url: Workspace URL
-        (e.g. ``https://acme.cloud.databricks.com``).
-    :param token: Personal access token (PAT). Stored as a
-        ``Secret`` / ``Env``.
-    :param volume: Unity Catalog volume used to stage parquet.
-    :param warehouse: SQL warehouse name. The plugin resolves it
-        to an id at connect time via the workspace API. Mutually
-        exclusive with ``warehouse_id`` -- set exactly one.
-    :param warehouse_id: SQL warehouse id (the stable identifier
-        shown in the workspace URL). Skips the name → id lookup
-        ``warehouse`` would do. Mutually exclusive with
-        ``warehouse``.
-    :param catalog: Default catalog.
-    :param schema: Default schema (requires ``catalog``).
-    :param entity_whitelist: Optional regex-based table filter.
-    :param conn_cfg: Optional driver-side config dict.
-    """
+
+@_api.dataclass(DatabricksErrorCode.DATABRICKS_1, kw_only=True)
+class DatabricksSrcConn(Conn):
+    """Databricks workspace connection used by :class:`DatabricksSrc`."""
+
+    __kind__ = "databricksSrcConn"
 
     host_url: HostUrlSpec
     token: CredentialsSpec
@@ -141,22 +141,36 @@ class DatabricksConn(Conn):
     conn_cfg: CfgSpec | None = None
 
     def validate(self) -> None:
-        if self.warehouse is not None and self.warehouse_id is not None:
-            # noinspection PyProtectedMember
-            raise DatabricksErrorCode.DATABRICKS_2.exception(
-                cls="Conn",
-                rule=f"warehouse={self.warehouse!r} and "
-                f"warehouse_id={self.warehouse_id!r} are mutually exclusive",
-            )
-        if self.schema is not None and self.catalog is None:
-            # noinspection PyProtectedMember
-            raise DatabricksErrorCode.DATABRICKS_2.exception(
-                cls="Conn",
-                rule=f"schema={self.schema!r} requires catalog to be set",
-            )
+        _validate_databricks_conn(self)
 
 
-ConnSpec: TypeAlias = Union[NamedConn, DatabricksConn]
+@_api.dataclass(DatabricksErrorCode.DATABRICKS_1, kw_only=True)
+class DatabricksDestConn(Conn):
+    """Databricks workspace connection used by :class:`DatabricksDest`.
+
+    Attribute-identical to :class:`DatabricksSrcConn` but a distinct
+    class so source and destination connections cannot be confused
+    at the wire-format level.
+    """
+
+    __kind__ = "databricksDestConn"
+
+    host_url: HostUrlSpec
+    token: CredentialsSpec
+    volume: VolumeSpec
+    warehouse: WarehouseSpec | None = None
+    warehouse_id: WarehouseIdSpec | None = None
+    catalog: IdentifierSpec | None = None
+    schema: IdentifierSpec | None = None
+    entity_whitelist: EntityWhitelistSpec | None = None
+    conn_cfg: CfgSpec | None = None
+
+    def validate(self) -> None:
+        _validate_databricks_conn(self)
+
+
+SrcConnSpec: TypeAlias = Union[NamedConn, DatabricksSrcConn]
+DestConnSpec: TypeAlias = Union[NamedConn, DatabricksDestConn]
 
 
 # --- Source ----------------------------------------------------------
@@ -166,7 +180,7 @@ ConnSpec: TypeAlias = Union[NamedConn, DatabricksConn]
 class DatabricksSrc(Src):
     """Databricks source — one parquet slot per SQL statement.
 
-    :param conn: :class:`DatabricksConn` (or :class:`NamedConn`).
+    :param conn: :class:`DatabricksSrcConn` (or :class:`NamedConn`).
     :param queries: List of SQL statements.
     :param initial_values: Optional ``{key: value}`` bind dict;
         each occurrence of ``{key}`` in a query is substituted by
@@ -178,7 +192,7 @@ class DatabricksSrc(Src):
         ``databricks.logging_level``.
     """
 
-    conn: ConnSpec
+    conn: SrcConnSpec
     queries: QueriesSpec
     initial_values: dict | None = None
     src_cfg: SrcCfgSpec | None = None
@@ -191,7 +205,7 @@ class DatabricksSrc(Src):
 class DatabricksDest(Dest):
     """Databricks destination — one parquet slot per table.
 
-    :param conn: :class:`DatabricksConn` (or :class:`NamedConn`).
+    :param conn: :class:`DatabricksDestConn` (or :class:`NamedConn`).
     :param tables: Table names ([catalog.][schema.]table).
     :param if_table_exists: ``"append"`` (default) or
         ``"replace"``.
@@ -201,7 +215,7 @@ class DatabricksDest(Dest):
     :param dest_cfg: Optional dest cfg dict.
     """
 
-    conn: ConnSpec
+    conn: DestConnSpec
     tables: DatabricksTableNamesSpec
     if_table_exists: IfTableExistsSpec = "append"
     schema_evolution: SchemaEvolutionSpec = "update"

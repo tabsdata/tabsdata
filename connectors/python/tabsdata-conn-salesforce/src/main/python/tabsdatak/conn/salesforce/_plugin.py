@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 from tabsdatak.conn.salesforce import (
-    SalesforceConn,
+    SalesforceSrcConn,
     SalesforceReportSrc,
     SalesforceSrc,
     SrcCfgKey,
@@ -75,7 +75,7 @@ class _SalesforceSrcPlugin(SrcPlugin[SalesforceSrc]):
         logger.setLevel(cfg.logging_level)
         logger.info("salesforce: read_in starting (%d quer(ies))", len(src.queries))
 
-        conn = cast(SalesforceConn, src.conn)
+        conn = cast(SalesforceSrcConn, src.conn)
         api_version = src.api_version
         sf = _reader.login(conn, api_version=api_version)
         try:
@@ -100,7 +100,7 @@ class _SalesforceReportSrcPlugin(SrcPlugin[SalesforceReportSrc]):
         logger.setLevel(cfg.logging_level)
         logger.info("salesforce: read_in starting (%d report(s))", len(src.reports))
 
-        conn = cast(SalesforceConn, src.conn)
+        conn = cast(SalesforceSrcConn, src.conn)
         sf = _reader.login(conn)
         try:
             return _reader.read_report_src(sf, src, ctx.work_dir)
@@ -108,18 +108,18 @@ class _SalesforceReportSrcPlugin(SrcPlugin[SalesforceReportSrc]):
             logger.info("salesforce: read_in finished (%d report(s))", len(src.reports))
 
 
-class _SalesforceExplorer(Explorer[SalesforceConn]):
-    def metadata(self, conn: SalesforceConn) -> Any:
+class _SalesforceExplorer(Explorer[SalesforceSrcConn]):
+    def metadata(self, conn: SalesforceSrcConn) -> Any:
         # TODO
         pass
 
-    def data(self, conn: SalesforceConn, query: str) -> Any:
+    def data(self, conn: SalesforceSrcConn, query: str) -> Any:
         # TODO
         pass
 
 
 SALESFORCE_SRC = SrcDef(
-    conn=SalesforceConn,
+    conn=SalesforceSrcConn,
     src_type="salesforce",
     src_version="v1",
     src=SalesforceSrc,
@@ -131,7 +131,7 @@ SALESFORCE_SRC = SrcDef(
 
 
 SALESFORCE_REPORT_SRC = SrcDef(
-    conn=SalesforceConn,
+    conn=SalesforceSrcConn,
     src_type="salesforce_report",
     src_version="v1",
     src=SalesforceReportSrc,

@@ -13,7 +13,7 @@ from pathlib import Path
 import polars as pl
 import pyarrow.parquet as pq
 
-from tabsdatak.conn.clickhouse import ClickHouseConn
+from tabsdatak.conn.clickhouse import ClickHouseDestConn
 from tabsdatak.spi import DestContext, SrcPluginCtx
 
 
@@ -127,9 +127,9 @@ def _dest_ctx(work: Path) -> _DestCtx:
 # ---------------------------------------------------------------------------
 
 
-def _conn_from(cfg) -> ClickHouseConn:
-    """Build a ClickHouseConn from a :class:`conftest.CHConfig`."""
-    return ClickHouseConn(
+def _conn_from(cfg) -> ClickHouseDestConn:
+    """Build a ClickHouseDestConn from a :class:`conftest.CHConfig`."""
+    return ClickHouseDestConn(
         host=cfg.host,
         port=cfg.port,
         database=cfg.database,

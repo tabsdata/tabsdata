@@ -3,10 +3,14 @@ from __future__ import annotations
 from typing import Any
 
 from tabsdatak.conn.azureblob import (
-    AzureBlobConn,
     AzureBlobDest,
+    AzureBlobDestConn,
     AzureBlobSrc,
+    AzureBlobSrcConn,
 )
+
+# Conn helpers operate on both Src and Dest variants.
+_AnyAzureBlobConn = AzureBlobSrcConn | AzureBlobDestConn
 from tabsdatak.conn.azureblob.error import AzureBlobErrorCode
 from tabsdatak.conn.common.file import _plugin, _transporter
 from tabsdatak.conn.common.types import AzureAccountKey
@@ -36,7 +40,7 @@ def _az_uri(container: str, path_entry: str) -> str:
 
 
 def build_location(
-    conn: AzureBlobConn, path_entry: str
+    conn: _AnyAzureBlobConn, path_entry: str
 ) -> _transporter.TransporterAzure:
     container = _convert(conn.container, str)
     return _transporter.TransporterAzure(
@@ -50,18 +54,18 @@ def build_location(
     )
 
 
-def credentials(conn: AzureBlobConn) -> AzureAccountKey:
+def credentials(conn: _AnyAzureBlobConn) -> AzureAccountKey:
     creds = conn.credentials
     if not isinstance(creds, AzureAccountKey):
         raise TypeError(
-            f"AzureBlobConn.credentials must be AzureAccountKey; got "
+            f"AzureBlob conn credentials must be AzureAccountKey; got "
             f"{type(creds).__name__}. Other AzureCredentials variants "
             f"are not yet supported by the transporter binary."
         )
     return creds
 
 
-def run_env(conn: AzureBlobConn) -> dict[str, str]:
+def run_env(conn: _AnyAzureBlobConn) -> dict[str, str]:
     c = credentials(conn)
     return {
         _transporter.SERVER_SIDE_AZURE_ACCOUNT_NAME: c.account_name.value(),
@@ -117,12 +121,22 @@ class AzureBlobDestPlugin(DestPlugin[AzureBlobDest]):
 # --- Explorer placeholder ----------------------------------------
 
 
-class AzureBlobExplorer(Explorer[AzureBlobConn]):
-    def metadata(self, conn: AzureBlobConn) -> Any:
+class AzureBlobSrcExplorer(Explorer[AzureBlobSrcConn]):
+    def metadata(self, conn: AzureBlobSrcConn) -> Any:
         # TODO
         pass
 
-    def data(self, conn: AzureBlobConn, query: str) -> Any:
+    def data(self, conn: AzureBlobSrcConn, query: str) -> Any:
+        # TODO
+        pass
+
+
+class AzureBlobDestExplorer(Explorer[AzureBlobDestConn]):
+    def metadata(self, conn: AzureBlobDestConn) -> Any:
+        # TODO
+        pass
+
+    def data(self, conn: AzureBlobDestConn, query: str) -> Any:
         # TODO
         pass
 
@@ -131,22 +145,22 @@ class AzureBlobExplorer(Explorer[AzureBlobConn]):
 
 
 AZURE_BLOB_SRC = SrcDef(
-    conn=AzureBlobConn,
+    conn=AzureBlobSrcConn,
     src_type="azureBlob",
     src_version="v1",
     src=AzureBlobSrc,
     table_mode=TableMode.ARRAY,
     cardinality=lambda src: len(src.paths),
     plugin=AzureBlobSrcPlugin,
-    explorer=AzureBlobExplorer,
+    explorer=AzureBlobSrcExplorer,
 )
 
 AZURE_BLOB_DEST = DestDef(
-    conn=AzureBlobConn,
+    conn=AzureBlobDestConn,
     dest_type="azureBlob",
     dest_version="v1",
     dest=AzureBlobDest,
     cardinality=lambda dest: len(dest.paths),
     plugin=AzureBlobDestPlugin,
-    explorer=AzureBlobExplorer,
+    explorer=AzureBlobDestExplorer,
 )

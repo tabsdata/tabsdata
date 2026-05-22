@@ -25,7 +25,7 @@ import pytest
 
 from tabsdatak.api import Secret
 from tabsdatak.conn.common.types import UserPassword
-from tabsdatak.conn.snowflake import SnowflakeConn, SnowflakeDest
+from tabsdatak.conn.snowflake import SnowflakeDestConn, SnowflakeDest
 
 # noinspection PyProtectedMember
 import tabsdatak.conn.snowflake._plugin as plugin
@@ -135,7 +135,7 @@ class _DestCtx(DestContext):
 
 
 @pytest.fixture
-def conn() -> SnowflakeConn:
+def conn() -> SnowflakeDestConn:
     kwargs: dict = dict(
         account=_ACCOUNT,
         credentials=UserPassword(
@@ -148,7 +148,7 @@ def conn() -> SnowflakeConn:
     )
     if _ROLE:
         kwargs["role"] = _ROLE
-    return SnowflakeConn(**kwargs)
+    return SnowflakeDestConn(**kwargs)
 
 
 @pytest.fixture
@@ -175,7 +175,7 @@ def _make_parquet(path: Path, rows: list[dict]) -> Path:
 # ---------------------------------------------------------------------------
 
 
-def _drop_table(conn: SnowflakeConn, fq_table: str) -> None:
+def _drop_table(conn: SnowflakeDestConn, fq_table: str) -> None:
     # noinspection PyProtectedMember
     from tabsdatak.conn.snowflake._impl import build_snowflake_connection
 
@@ -187,7 +187,7 @@ def _drop_table(conn: SnowflakeConn, fq_table: str) -> None:
         sf_conn.close()
 
 
-def _select_rows(conn: SnowflakeConn, fq_table: str) -> list[tuple]:
+def _select_rows(conn: SnowflakeDestConn, fq_table: str) -> list[tuple]:
     # noinspection PyProtectedMember
     from tabsdatak.conn.snowflake._impl import build_snowflake_connection
 

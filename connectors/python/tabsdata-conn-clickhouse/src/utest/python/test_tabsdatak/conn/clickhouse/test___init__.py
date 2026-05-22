@@ -13,7 +13,7 @@ from tabsdatak.conn.common.types import (
     UserPassword,
 )
 from tabsdatak.conn.clickhouse import (
-    ClickHouseConn,
+    ClickHouseDestConn,
     ClickHouseDest,
     ClickHouseTableNamesSpec,
     CloudLocation,
@@ -48,7 +48,7 @@ def _staging():
 
 
 def _conn():
-    return ClickHouseConn(
+    return ClickHouseDestConn(
         host="ch.example.com",
         staging=_staging(),
         port=8443,
@@ -103,13 +103,13 @@ def _hint(cls: type, field: str) -> object:
 
 
 def test_clickhouse_conn_fields_wire_expected_specs():
-    assert _hint(ClickHouseConn, "host") == HostSpec
-    assert _hint(ClickHouseConn, "staging") == CloudLocation
-    assert _hint(ClickHouseConn, "port") == PortSpec
-    assert _hint(ClickHouseConn, "database") == DatabaseSpec
-    assert _hint(ClickHouseConn, "credentials") == CredentialsSpec
-    assert _hint(ClickHouseConn, "secure") == SecureSpec
-    assert _hint(ClickHouseConn, "conn_cfg") == CfgSpec | None
+    assert _hint(ClickHouseDestConn, "host") == HostSpec
+    assert _hint(ClickHouseDestConn, "staging") == CloudLocation
+    assert _hint(ClickHouseDestConn, "port") == PortSpec
+    assert _hint(ClickHouseDestConn, "database") == DatabaseSpec
+    assert _hint(ClickHouseDestConn, "credentials") == CredentialsSpec
+    assert _hint(ClickHouseDestConn, "secure") == SecureSpec
+    assert _hint(ClickHouseDestConn, "conn_cfg") == CfgSpec | None
 
 
 def test_clickhouse_dest_fields_wire_expected_specs():
@@ -126,7 +126,7 @@ def test_clickhouse_dest_fields_wire_expected_specs():
 
 
 def _bare_conn(*, port, secure=False):
-    return ClickHouseConn(
+    return ClickHouseDestConn(
         host="ch.example.com",
         staging=_staging(),
         port=port,
@@ -311,7 +311,7 @@ def test_clickhouse_conn_rejects_missing_required_fields():
     from tabsdatak.conn.common.error import ConnInitException
 
     with pytest.raises(ConnInitException) as ei:
-        ClickHouseConn(  # type: ignore[call-arg]
+        ClickHouseDestConn(  # type: ignore[call-arg]
             staging=_staging(),
             credentials=UserPassword(
                 user=Secret.lit("u"),

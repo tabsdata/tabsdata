@@ -18,7 +18,7 @@ import polars as pl
 import pytest
 
 from tabsdatak.conn.common.file.typing_ import DestFileFormat, SrcFileFormat
-from tabsdatak.conn.localfile import LocalFileConn, LocalFileDest, LocalFileSrc
+from tabsdatak.conn.localfile import LocalFileDest, LocalFileDestConn, LocalFileSrc, LocalFileSrcConn
 # noinspection PyProtectedMember
 import tabsdatak.conn.localfile._plugin as plugin
 from tabsdatak.spi import DestContext, ParquetFile, SrcPluginCtx
@@ -154,7 +154,7 @@ def test_dest_then_src_round_trip(tmp_path: Path):
         [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}],
     ).write_parquet(in_parquet, use_pyarrow=True)
 
-    conn = LocalFileConn(base_path=str(base))
+    conn = LocalFileDestConn(base_path=str(base))
 
     # 1. Write
     dest = LocalFileDest(conn=conn, paths=["users.parquet"])
@@ -184,7 +184,7 @@ def test_src_treats_absolute_path_as_relative_to_base_path(tmp_path: Path):
     in_parquet = base / "data.parquet"
     pl.DataFrame([{"x": 1}]).write_parquet(in_parquet, use_pyarrow=True)
 
-    conn = LocalFileConn(base_path=str(base))
+    conn = LocalFileSrcConn(base_path=str(base))
     # Note the leading slash on the entry -- the plugin strips it.
     src = LocalFileSrc(conn=conn, paths=["/data.parquet"])
 
@@ -212,7 +212,7 @@ def test_src_wildcard_in_basename_matches_multiple_files(tmp_path: Path):
         base / "skip.csv", use_pyarrow=True,
     )
 
-    conn = LocalFileConn(base_path=str(base))
+    conn = LocalFileSrcConn(base_path=str(base))
     src = LocalFileSrc(conn=conn, paths=["*.parquet"])
 
     work = tmp_path / "work"
@@ -235,7 +235,7 @@ def test_src_wildcard_with_no_matches_returns_empty_slot(tmp_path: Path):
         base / "x.csv", use_pyarrow=True,
     )
 
-    conn = LocalFileConn(base_path=str(base))
+    conn = LocalFileSrcConn(base_path=str(base))
     src = LocalFileSrc(conn=conn, paths=["*.parquet"])
 
     work = tmp_path / "work"
@@ -275,7 +275,7 @@ def test_src_initial_last_modified_filters_out_older_files(tmp_path: Path):
 
     # Cut-off lies between the two: only ``new.parquet`` should be picked up.
     cutoff = datetime(2026, 1, 1, 12, 30, 0, tzinfo=timezone.utc)
-    conn = LocalFileConn(base_path=str(base))
+    conn = LocalFileSrcConn(base_path=str(base))
     src = LocalFileSrc(
         conn=conn,
         paths=["*.parquet"],
@@ -304,7 +304,7 @@ def test_src_initial_last_modified_at_or_before_oldest_returns_all(
     _set_mtime(base / "a.parquet", floor + timedelta(days=1))
     _set_mtime(base / "b.parquet", floor + timedelta(days=2))
 
-    conn = LocalFileConn(base_path=str(base))
+    conn = LocalFileSrcConn(base_path=str(base))
     src = LocalFileSrc(
         conn=conn,
         paths=["*.parquet"],
@@ -338,7 +338,7 @@ def test_src_format_csv_reads_with_default_options(tmp_path: Path):
         [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}],
     ).write_csv(base / "users.csv")
 
-    conn = LocalFileConn(base_path=str(base))
+    conn = LocalFileSrcConn(base_path=str(base))
     src = LocalFileSrc(
         conn=conn,
         paths=["users.csv"],
@@ -369,7 +369,7 @@ def test_src_format_csv_honours_separator_option(tmp_path: Path):
         [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}],
     ).write_csv(base / "users.csv", separator=";")
 
-    conn = LocalFileConn(base_path=str(base))
+    conn = LocalFileSrcConn(base_path=str(base))
     src = LocalFileSrc(
         conn=conn,
         paths=["users.csv"],
@@ -395,7 +395,7 @@ def test_src_format_json_reads_records(tmp_path: Path):
         [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}],
     ).write_ndjson(base / "users.json")
 
-    conn = LocalFileConn(base_path=str(base))
+    conn = LocalFileSrcConn(base_path=str(base))
     src = LocalFileSrc(
         conn=conn,
         paths=["users.json"],
@@ -430,7 +430,7 @@ def test_src_format_avro_reads_records(tmp_path: Path):
         [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}],
     ).write_avro(base / "users.avro")
 
-    conn = LocalFileConn(base_path=str(base))
+    conn = LocalFileSrcConn(base_path=str(base))
     src = LocalFileSrc(
         conn=conn,
         paths=["users.avro"],
@@ -453,7 +453,7 @@ def test_src_format_auto_infers_parquet_from_extension(tmp_path: Path):
         base / "users.parquet", use_pyarrow=True,
     )
 
-    conn = LocalFileConn(base_path=str(base))
+    conn = LocalFileSrcConn(base_path=str(base))
     src = LocalFileSrc(
         conn=conn,
         paths=["users.parquet"],
@@ -497,7 +497,7 @@ def test_dest_format_csv_writes_csv_file(tmp_path: Path):
         tmp_path, [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}],
     )
 
-    conn = LocalFileConn(base_path=str(base))
+    conn = LocalFileSrcConn(base_path=str(base))
     dest = LocalFileDest(
         conn=conn,
         paths=["users.csv"],
@@ -525,7 +525,7 @@ def test_dest_format_csv_honours_separator_option(tmp_path: Path):
         tmp_path, [{"id": 1, "name": "alice"}],
     )
 
-    conn = LocalFileConn(base_path=str(base))
+    conn = LocalFileDestConn(base_path=str(base))
     dest = LocalFileDest(
         conn=conn,
         paths=["users.csv"],
@@ -551,7 +551,7 @@ def test_dest_format_json_writes_json_file(tmp_path: Path):
         tmp_path, [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}],
     )
 
-    conn = LocalFileConn(base_path=str(base))
+    conn = LocalFileDestConn(base_path=str(base))
     dest = LocalFileDest(
         conn=conn,
         paths=["users.json"],
@@ -581,7 +581,7 @@ def test_dest_format_avro_writes_avro_file(tmp_path: Path):
         tmp_path, [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}],
     )
 
-    conn = LocalFileConn(base_path=str(base))
+    conn = LocalFileDestConn(base_path=str(base))
     dest = LocalFileDest(
         conn=conn,
         paths=["users.avro"],
@@ -609,7 +609,7 @@ def test_dest_format_auto_defaults_to_parquet(tmp_path: Path):
         tmp_path, [{"id": 1, "name": "alice"}],
     )
 
-    conn = LocalFileConn(base_path=str(base))
+    conn = LocalFileDestConn(base_path=str(base))
     dest = LocalFileDest(
         conn=conn,
         paths=["users.parquet"],
@@ -649,7 +649,7 @@ def _read_csv_with_cfg(
     (base / "in.csv").write_text(csv_text)
 
     src = LocalFileSrc(
-        conn=LocalFileConn(base_path=str(base)),
+        conn=LocalFileSrcConn(base_path=str(base)),
         paths=["in.csv"],
         format=SrcFileFormat.CSV,
         format_cfg={SrcFileFormat.CSV: cfg},
@@ -909,7 +909,7 @@ def test_csv_src_encoding_utf8(tmp_path: Path):
         "id,name\n1,café\n2,piñata\n".encode("utf-8"),
     )
     src = LocalFileSrc(
-        conn=LocalFileConn(base_path=str(base)),
+        conn=LocalFileSrcConn(base_path=str(base)),
         paths=["in.csv"],
         format=SrcFileFormat.CSV,
         format_cfg={SrcFileFormat.CSV: {"encoding": "utf8"}},

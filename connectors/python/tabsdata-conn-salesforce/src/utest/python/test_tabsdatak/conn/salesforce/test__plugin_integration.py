@@ -28,7 +28,7 @@ import pytest
 
 from tabsdatak.api import Secret
 from tabsdatak.conn.salesforce import (
-    SalesforceConn,
+    SalesforceSrcConn,
     SalesforceSrc,
     SalesforceTokenCredentials,
 )
@@ -122,8 +122,8 @@ def work_dir(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def conn() -> SalesforceConn:
-    return SalesforceConn(
+def conn() -> SalesforceSrcConn:
+    return SalesforceSrcConn(
         credentials=SalesforceTokenCredentials(
             username=Secret.lit(_USERNAME),
             password=Secret.lit(_PASSWORD),

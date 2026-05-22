@@ -8,7 +8,7 @@ import pytest
 
 from tabsdatak.api import Secret
 from tabsdatak.conn.common.types import UserPassword
-from tabsdatak.conn.snowflake import SnowflakeConn, SnowflakeDest
+from tabsdatak.conn.snowflake import SnowflakeDestConn, SnowflakeDest
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.snowflake import _impl as impl
@@ -48,7 +48,7 @@ def _credentials() -> UserPassword:
     )
 
 
-def _conn(**overrides) -> SnowflakeConn:
+def _conn(**overrides) -> SnowflakeDestConn:
     kwargs: dict = dict(
         account="ACME-MAIN",
         credentials=_credentials(),
@@ -59,12 +59,12 @@ def _conn(**overrides) -> SnowflakeConn:
         stage="MY_STAGE",
     )
     kwargs.update(overrides)
-    return SnowflakeConn(**kwargs)
+    return SnowflakeDestConn(**kwargs)
 
 
-def _bare_conn() -> SnowflakeConn:
-    """Minimal SnowflakeConn for error tests."""
-    return SnowflakeConn(
+def _bare_conn() -> SnowflakeDestConn:
+    """Minimal SnowflakeDestConn for error tests."""
+    return SnowflakeDestConn(
         account="ACME-MAIN",
         credentials=_credentials(),
     )
@@ -225,7 +225,7 @@ def test_explorer_methods_are_stubs():
 
 
 def test_snowflake_dest_def_wires_plugin_and_explorer():
-    assert plugin.SNOWFLAKE_DEST.conn is SnowflakeConn
+    assert plugin.SNOWFLAKE_DEST.conn is SnowflakeDestConn
     assert plugin.SNOWFLAKE_DEST.dest is SnowflakeDest
     assert plugin.SNOWFLAKE_DEST.plugin is plugin.SnowflakeDestPlugin
     assert plugin.SNOWFLAKE_DEST.explorer is plugin.SnowflakeExplorer

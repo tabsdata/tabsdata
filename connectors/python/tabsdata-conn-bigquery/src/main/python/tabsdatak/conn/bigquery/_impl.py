@@ -6,7 +6,7 @@ from typing import Any
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.bigquery import (
-    BigQueryConn,
+    BigQueryDestConn,
     BigQueryDest,
     IfTableExistsSpec,
     SchemaEvolutionSpec,
@@ -101,12 +101,12 @@ class BigQueryWriteCfg:
 
     Mirrors :class:`MySQLWriteCfg`'s purpose in the SQL connectors -- a
     plain dataclass holding the already-resolved view of the
-    ``BigQueryDest`` (and its ``BigQueryConn``) plus a couple of derived
+    ``BigQueryDest`` (and its ``BigQueryDestConn``) plus a couple of derived
     fields the plugin needs to drive the staging-upload-then-load-job
     sequence.
     """
 
-    conn: BigQueryConn
+    conn: BigQueryDestConn
     target_tables: list[str]
     if_table_exists: IfTableExistsSpec
     schema_evolution: SchemaEvolutionSpec

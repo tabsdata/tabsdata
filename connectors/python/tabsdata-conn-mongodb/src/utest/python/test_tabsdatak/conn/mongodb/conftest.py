@@ -74,7 +74,7 @@ def pytest_sessionfinish(session, exitstatus):
 # ``create_docker_mongodb_database`` flow: bring up a single ``mongo``
 # container with basic root credentials, expose 27017 on a random host
 # port, and yield a config object the integration tests can hand
-# straight to :class:`MongoDBConn`. Skipped (not failed) if the docker
+# straight to :class:`MongoDBDestConn`. Skipped (not failed) if the docker
 # daemon is unreachable so unit-only runs without docker stay green.
 # ---------------------------------------------------------------------------
 
@@ -104,7 +104,7 @@ class MongoDBContainerConfig:
     def uri(self) -> str:
         """Connection URI WITHOUT credentials.
 
-        :class:`MongoDBConn.credentials` carries the user/password; the
+        :class:`MongoDBDestConn.credentials` carries the user/password; the
         plugin splices them into the URI at write time via
         :func:`_plugin._uri_with_credentials`. Embedding the credentials
         here would double them on the wire.

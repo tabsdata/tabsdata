@@ -15,7 +15,7 @@ from tabsdatak.conn.snowflake import (
     IdentifierSpec,
     IfTableExistsSpec,
     NameSpec,
-    SnowflakeConn,
+    SnowflakeDestConn,
     SnowflakeDest,
     SnowflakeTableNamesSpec,
 )
@@ -28,8 +28,8 @@ from tabsdatak.conn.snowflake.error import (
 pytestmark = pytest.mark.snowflake
 
 
-def _conn() -> SnowflakeConn:
-    return SnowflakeConn(
+def _conn() -> SnowflakeDestConn:
+    return SnowflakeDestConn(
         account="ACME-MAIN",
         credentials=UserPassword(
             user=Secret.lit("etl"),
@@ -45,7 +45,7 @@ def _conn() -> SnowflakeConn:
 
 
 # ---------------------------------------------------------------------------
-# SnowflakeConn / SnowflakeDest round-trip
+# SnowflakeDestConn / SnowflakeDest round-trip
 # ---------------------------------------------------------------------------
 
 
@@ -83,7 +83,7 @@ def test_snowflake_dest_round_trip_with_named_conn():
 
 def test_snowflake_conn_validate_rejects_schema_without_database():
     with pytest.raises(SnowflakeValidateException) as ei:
-        SnowflakeConn(
+        SnowflakeDestConn(
             account="ACME-MAIN",
             credentials=UserPassword(
                 user=Secret.lit("etl"),
@@ -104,14 +104,14 @@ def _hint(cls: type, field: str) -> object:
 
 
 def test_snowflake_conn_fields_wire_expected_specs():
-    assert _hint(SnowflakeConn, "account") == AccountSpec
-    assert _hint(SnowflakeConn, "credentials") == CredentialsSpec
-    assert _hint(SnowflakeConn, "role") == NameSpec | None
-    assert _hint(SnowflakeConn, "database") == NameSpec | None
-    assert _hint(SnowflakeConn, "schema") == NameSpec | None
-    assert _hint(SnowflakeConn, "warehouse") == NameSpec | None
-    assert _hint(SnowflakeConn, "stage") == IdentifierSpec | None
-    assert _hint(SnowflakeConn, "conn_cfg") == CfgSpec | None
+    assert _hint(SnowflakeDestConn, "account") == AccountSpec
+    assert _hint(SnowflakeDestConn, "credentials") == CredentialsSpec
+    assert _hint(SnowflakeDestConn, "role") == NameSpec | None
+    assert _hint(SnowflakeDestConn, "database") == NameSpec | None
+    assert _hint(SnowflakeDestConn, "schema") == NameSpec | None
+    assert _hint(SnowflakeDestConn, "warehouse") == NameSpec | None
+    assert _hint(SnowflakeDestConn, "stage") == IdentifierSpec | None
+    assert _hint(SnowflakeDestConn, "conn_cfg") == CfgSpec | None
 
 
 def test_snowflake_dest_fields_wire_expected_specs():
@@ -147,7 +147,7 @@ def test_snowflake_dest_accepts_known_dest_cfg_keys():
 
 
 # ---------------------------------------------------------------------------
-# SnowflakeConn init validation error code
+# SnowflakeDestConn init validation error code
 # ---------------------------------------------------------------------------
 
 
@@ -155,7 +155,7 @@ def test_snowflake_conn_rejects_missing_account():
     from tabsdatak.conn.common.error import ConnInitException
 
     with pytest.raises(ConnInitException) as ei:
-        SnowflakeConn(  # type: ignore[call-arg]
+        SnowflakeDestConn(  # type: ignore[call-arg]
             credentials=UserPassword(
                 user=Secret.lit("u"),
                 password=Secret.lit("p"),
@@ -169,5 +169,5 @@ def test_snowflake_conn_rejects_missing_credentials():
     from tabsdatak.conn.common.error import ConnInitException
 
     with pytest.raises(ConnInitException) as ei:
-        SnowflakeConn(account="ACME", database="DB")  # type: ignore[call-arg]
+        SnowflakeDestConn(account="ACME", database="DB")  # type: ignore[call-arg]
     assert ei.value.api_error is SnowflakeErrorCode.SNOWFLAKE_1

@@ -8,7 +8,7 @@ from urllib.parse import quote_plus
 from tabsdatak.conn.mongodb import (
     DestCfgKey,
     DestCfgSpec,
-    MongoDBConn,
+    MongoDBDestConn,
     MongoDBDest,
 )
 from tabsdatak.conn.mongodb.error import MongodbErrorCode
@@ -75,7 +75,7 @@ _DUP_KEY_CODE = 11000
 # --- URI / client helpers --------------------------------------------
 
 
-def _uri_with_credentials(conn: MongoDBConn) -> str:
+def _uri_with_credentials(conn: MongoDBDestConn) -> str:
     """Inject the user/password from ``conn.credentials`` into ``conn.uri``.
 
     Mirrors the legacy ``_connector.py`` behaviour: take the first
@@ -89,7 +89,7 @@ def _uri_with_credentials(conn: MongoDBConn) -> str:
     return uri.replace("://", f"://{user}:{password}@", 1)
 
 
-def _pymongo_kwargs(conn: MongoDBConn) -> dict[str, Any]:
+def _pymongo_kwargs(conn: MongoDBDestConn) -> dict[str, Any]:
     """Extract ``pymongo.MongoClient`` kwargs from ``conn.conn_cfg``.
 
     Recognises keys prefixed with ``"pymongo."`` per the connector
@@ -103,7 +103,7 @@ def _pymongo_kwargs(conn: MongoDBConn) -> dict[str, Any]:
     return out
 
 
-def _build_client(conn: MongoDBConn) -> Any:
+def _build_client(conn: MongoDBDestConn) -> Any:
     """Build a ``pymongo.MongoClient`` and verify connectivity.
 
     Wraps every connect / ping failure as ``MONGODB_19`` so the runtime
@@ -204,7 +204,7 @@ class _MongoDBDestPlugin(DestPlugin[MongoDBDest]):
                 slots=len(tables),
             )
 
-        conn = cast(MongoDBConn, dest.conn)
+        conn = cast(MongoDBDestConn, dest.conn)
         logger.debug("mongodb: establishing pymongo client")
         client = _build_client(conn)
         total = len(dest.collections_with_ids)
@@ -395,12 +395,12 @@ def _all_dup_key_errors(e: Any) -> bool:
 # --- Explorer ---------------------------------------------------------
 
 
-class _MongoDBExplorer(Explorer[MongoDBConn]):
-    def metadata(self, conn: MongoDBConn) -> Any:
+class _MongoDBExplorer(Explorer[MongoDBDestConn]):
+    def metadata(self, conn: MongoDBDestConn) -> Any:
         # TODO
         return None
 
-    def data(self, conn: MongoDBConn, query: str) -> Any:
+    def data(self, conn: MongoDBDestConn, query: str) -> Any:
         # TODO
         return None
 
@@ -409,7 +409,7 @@ class _MongoDBExplorer(Explorer[MongoDBConn]):
 
 
 MONGODB_DEST = DestDef(
-    conn=MongoDBConn,
+    conn=MongoDBDestConn,
     dest_type="mongodb",
     dest_version="v1",
     dest=MongoDBDest,

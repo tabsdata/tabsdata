@@ -96,7 +96,7 @@ def build_files_function(staging: CloudLocation, staged_uris: list[str]) -> str:
 
     Per-cloud credential and endpoint settings are pulled from
     *staging* (the user-supplied :class:`CloudLocation` on
-    :class:`StarRocksConn`).
+    :class:`StarRocksDestConn`).
     """
     if isinstance(staging, S3Location):
         region = _convert(staging.region, str)

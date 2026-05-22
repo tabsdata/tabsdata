@@ -21,12 +21,12 @@ class SnowflakeRuntimeException(ConnException):
 class SnowflakeErrorCode(ErrorCode):
     SNOWFLAKE_1 = ErrorDef(
         ConnInitException,
-        "SnowflakeConn validation failed",
-    )  # SnowflakeConn
+        "SnowflakeDestConn validation failed",
+    )  # SnowflakeDestConn
     SNOWFLAKE_2 = ErrorDef(
         SnowflakeValidateException,
-        "SnowflakeConn.schema={schema!r} requires database to be set",
-    )  # SnowflakeConn.validate()
+        "SnowflakeDestConn.schema={schema!r} requires database to be set",
+    )  # SnowflakeDestConn.validate()
     SNOWFLAKE_3 = ErrorDef(
         ConnInitException,
         "SnowflakeDest validation failed",

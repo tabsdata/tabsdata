@@ -1,6 +1,6 @@
 """ClickHouse connector — public API.
 
-* :class:`ClickHouseConn` -- per-cluster ClickHouse connection
+* :class:`ClickHouseDestConn` -- per-cluster ClickHouse connection
   (host, port, credentials, database, cloud staging area).
 * :class:`ClickHouseDest` -- destination: list of table FQNs;
   one parquet slot per table. Writes go through a cloud-staged
@@ -223,7 +223,7 @@ class GCSLocation(CloudLocation):
 
 
 @_api.dataclass(ClickHouseErrorCode.CLICKHOUSE_1, kw_only=True)
-class ClickHouseConn(Conn):
+class ClickHouseDestConn(Conn):
     """ClickHouse connection.
 
     :param host: ClickHouse host.
@@ -240,6 +240,8 @@ class ClickHouseConn(Conn):
     :param conn_cfg: Optional driver-side config dict.
     """
 
+    __kind__ = "clickHouseDestConn"
+
     host: HostSpec
     port: PortSpec = 8123
     credentials: CredentialsSpec
@@ -250,7 +252,7 @@ class ClickHouseConn(Conn):
     conn_cfg: CfgSpec | None = None
 
 
-ConnSpec: TypeAlias = Union[NamedConn, ClickHouseConn]
+ConnSpec: TypeAlias = Union[NamedConn, ClickHouseDestConn]
 
 
 # --- Destination -----------------------------------------------------
@@ -260,7 +262,7 @@ ConnSpec: TypeAlias = Union[NamedConn, ClickHouseConn]
 class ClickHouseDest(Dest):
     """ClickHouse destination — one parquet slot per table.
 
-    :param conn: :class:`ClickHouseConn` (or :class:`NamedConn`).
+    :param conn: :class:`ClickHouseDestConn` (or :class:`NamedConn`).
     :param tables: FQN table names (``[<db>.]<table>``); one
         parquet slot per entry.
     :param if_table_exists: ``"append"`` (default) or

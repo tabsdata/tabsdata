@@ -1,6 +1,6 @@
 """MongoDB connector — public API.
 
-* :class:`MongoDBConn` -- per-cluster MongoDB connection
+* :class:`MongoDBDestConn` -- per-cluster MongoDB connection
   (URI without credentials + a :class:`UserPassword` that the
   plugin splices into the URI at write time).
 * :class:`MongoDBDest` -- destination: list of
@@ -60,7 +60,7 @@ DestCfgSpec: TypeAlias = Annotated[
 
 
 @_api.dataclass(MongodbErrorCode.MONGODB_1, kw_only=True)
-class MongoDBConn(Conn):
+class MongoDBDestConn(Conn):
     """MongoDB connection.
 
     :param uri: MongoDB connection URI WITHOUT credentials
@@ -70,12 +70,14 @@ class MongoDBConn(Conn):
     :param conn_cfg: Optional driver-side config dict.
     """
 
+    __kind__ = "mongoDBDestConn"
+
     uri: UriSpec
     credentials: CredentialsSpec
     conn_cfg: CfgSpec | None = None
 
 
-ConnSpec: TypeAlias = Union[NamedConn, MongoDBConn]
+ConnSpec: TypeAlias = Union[NamedConn, MongoDBDestConn]
 
 
 # --- Destination -----------------------------------------------------
@@ -85,7 +87,7 @@ ConnSpec: TypeAlias = Union[NamedConn, MongoDBConn]
 class MongoDBDest(Dest):
     """MongoDB destination — one parquet slot per collection.
 
-    :param conn: :class:`MongoDBConn` (or :class:`NamedConn`).
+    :param conn: :class:`MongoDBDestConn` (or :class:`NamedConn`).
     :param collections_with_ids: List of
         ``(collection_name, id_field)`` tuples; one slot per
         entry. ``collection_name`` is the destination collection

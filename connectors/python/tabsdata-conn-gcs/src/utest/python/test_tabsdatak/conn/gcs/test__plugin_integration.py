@@ -24,7 +24,7 @@ import pytest
 
 from tabsdatak.api import Secret
 from tabsdatak.conn.common.types import GCPJson
-from tabsdatak.conn.gcs import GCSConn, GCSDest, GCSSrc
+from tabsdatak.conn.gcs import GCSDestConn, GCSSrcConn, GCSDest, GCSSrc
 # noinspection PyProtectedMember
 import tabsdatak.conn.gcs._plugin as plugin
 from tabsdatak.spi import ParquetFile
@@ -107,9 +107,18 @@ def run_prefix() -> str:
 
 
 @pytest.fixture
-def conn() -> GCSConn:
+def src_conn() -> GCSSrcConn:
     bucket, base_path = _parse_uri(_URI)
-    return GCSConn(
+    return GCSSrcConn(
+        bucket=bucket,
+        credentials=GCPJson(json=Secret.lit(_SA_JSON)),
+        base_path=base_path,
+    )
+
+
+def dest_conn() -> GCSDestConn:
+    bucket, base_path = _parse_uri(_URI)
+    return GCSDestConn(
         bucket=bucket,
         credentials=GCPJson(json=Secret.lit(_SA_JSON)),
         base_path=base_path,

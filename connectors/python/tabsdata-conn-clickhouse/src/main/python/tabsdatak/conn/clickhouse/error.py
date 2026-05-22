@@ -21,8 +21,8 @@ class ClickHouseRuntimeException(ConnException):
 class ClickHouseErrorCode(ErrorCode):
     CLICKHOUSE_1 = ErrorDef(
         ConnInitException,
-        "ClickHouseConn validation failed",
-    )  # ClickHouseConn
+        "ClickHouseDestConn validation failed",
+    )  # ClickHouseDestConn
     CLICKHOUSE_2 = ErrorDef(
         ConnInitException,
         "ClickHouseDest validation failed",

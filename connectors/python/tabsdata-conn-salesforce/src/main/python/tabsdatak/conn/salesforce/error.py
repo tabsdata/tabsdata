@@ -25,8 +25,8 @@ class SalesforceErrorCode(ErrorCode):
     )  # SalesforceTokenCredentials
     SALESFORCE_2 = ErrorDef(
         ConnInitException,
-        "SalesforceConn validation failed",
-    )  # SalesforceConn
+        "SalesforceSrcConn validation failed",
+    )  # SalesforceSrcConn
     SALESFORCE_3 = ErrorDef(
         ConnInitException,
         "SalesforceSrc validation failed",

@@ -36,7 +36,7 @@ import polars as pl
 import pytest
 
 from tabsdatak.api import Secret
-from tabsdatak.conn.bigquery import BigQueryConn, BigQueryDest, GCSLocation
+from tabsdatak.conn.bigquery import BigQueryDestConn, BigQueryDest, GCSLocation
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.bigquery import _plugin as plugin
@@ -187,8 +187,8 @@ def fresh_bigquery() -> _BqConfig:
     )
 
 
-def _conn_from(cfg: _BqConfig) -> BigQueryConn:
-    return BigQueryConn(
+def _conn_from(cfg: _BqConfig) -> BigQueryDestConn:
+    return BigQueryDestConn(
         staging=GCSLocation(
             bucket=cfg.bucket,
             credentials=GCPJson(json=Secret.lit(cfg.sa_json)),

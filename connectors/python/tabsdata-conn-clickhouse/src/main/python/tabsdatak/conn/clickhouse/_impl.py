@@ -5,7 +5,7 @@ from pathlib import Path
 
 from tabsdatak.conn.clickhouse import (
     AzBlobLocation,
-    ClickHouseConn,
+    ClickHouseDestConn,
     CloudLocation,
     GCSLocation,
     S3Location,
@@ -23,9 +23,9 @@ from tabsdatak.conn.common.types import _convert
 # --- Conn helpers -------------------------------------------------
 
 
-def _build_clickhouse_config(conn: ClickHouseConn):
+def _build_clickhouse_config(conn: ClickHouseDestConn):
     """Build a private :class:`ClickHouseConfig` from a new-model
-    :class:`ClickHouseConn`."""
+    :class:`ClickHouseDestConn`."""
     # noinspection PyProtectedMember
     from tabsdatak.conn.clickhouse._clickhouse_config import (
         ClickHouseConfig,
@@ -104,7 +104,7 @@ class ClickHouseWriteCfg:
     ``SqlWriteCfg``.
     """
 
-    conn: ClickHouseConn
+    conn: ClickHouseDestConn
     target_tables: list[str]
     if_table_exists: str  # "append" | "replace"
     schema_evolution: str  # "strict" | "iceberg"

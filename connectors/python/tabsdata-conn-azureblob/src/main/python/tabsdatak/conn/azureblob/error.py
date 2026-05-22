@@ -21,8 +21,8 @@ class AzureBlobRuntimeException(ConnException):
 class AzureBlobErrorCode(ErrorCode):
     AZURE_BLOB_1 = ErrorDef(
         ConnInitException,
-        "AzureBlobConn validation failed",
-    )  # AzureBlobConn
+        "AzureBlob connection validation failed",
+    )  # AzureBlobSrcConn / AzureBlobDestConn
     AZURE_BLOB_2 = ErrorDef(
         ConnInitException,
         "AzureBlobSrc validation failed",

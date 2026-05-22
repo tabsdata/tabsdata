@@ -7,7 +7,7 @@ from tabsdatak.api import NamedConn, Secret
 from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.salesforce.error import SalesforceValidateException
 from tabsdatak.conn.salesforce import (
-    SalesforceConn,
+    SalesforceSrcConn,
     SalesforceReportSrc,
     SalesforceSrc,
     SalesforceTokenCredentials,
@@ -27,7 +27,7 @@ def _credentials():
 
 
 def _conn():
-    return SalesforceConn(
+    return SalesforceSrcConn(
         credentials=_credentials(),
         instance_url="https://example.my.salesforce.com",
         objects=["Account", "Contact"],

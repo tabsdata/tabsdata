@@ -10,23 +10,39 @@ from tabsdatak.conn.common.file.typing_ import (
     FileInfo,
     SrcFileFormat,
 )
-from tabsdatak.conn.localfile import LocalFileConn, LocalFileDest, LocalFileSrc
+from tabsdatak.conn.localfile import LocalFileDest, LocalFileDestConn, LocalFileSrc, LocalFileSrcConn
 from tabsdatak.conn.localfile.error import LocalFileErrorCode
 
 
 pytestmark = pytest.mark.localfile
 
 
-def _conn():
-    return LocalFileConn(
+def _src_conn():
+    return LocalFileSrcConn(
         base_path="/data/",
         conn_cfg={"localfile.timeout": 30},
     )
 
 
+def _dest_conn():
+    return LocalFileDestConn(
+        base_path="/data/",
+        conn_cfg={"localfile.timeout": 30},
+    )
+
+
+@pytest.fixture(params=[LocalFileSrcConn, LocalFileDestConn])
+def conn_cls(request):
+    return request.param
+
+
+def test_localfile_src_dest_conn_have_distinct_kinds():
+    assert LocalFileSrcConn.__kind__ != LocalFileDestConn.__kind__
+
+
 def test_localfile_src_full_round_trip():
     src = LocalFileSrc(
-        conn=_conn(),
+        conn=_src_conn(),
         paths=["raw/users.csv", "raw/orders/*.csv"],
         format=SrcFileFormat.CSV,
         format_cfg={SrcFileFormat.CSV: {"separator": ";", "has_header": True}},
@@ -50,7 +66,7 @@ def test_localfile_src_full_round_trip():
 
 def test_localfile_dest_full_round_trip():
     dest = LocalFileDest(
-        conn=_conn(),
+        conn=_dest_conn(),
         paths=["${EXEC_PLAN_ID}/users.csv", "${TRX_ID}/orders.csv"],
         format=DestFileFormat.CSV,
         format_cfg={DestFileFormat.CSV: {"include_header": True, "separator": ","}},
@@ -94,7 +110,7 @@ def test_localfile_dest_round_trip_with_named_conn():
 def test_localfile_validate_rejects_cross_side_format_cfg_keys():
     with pytest.raises(LocalFileValidateException) as ei:
         LocalFileSrc(
-            conn=_conn(),
+            conn=_src_conn(),
             paths=["data.csv"],
             format=SrcFileFormat.CSV,
             format_cfg={SrcFileFormat.CSV: {"include_header": True}},
@@ -103,7 +119,7 @@ def test_localfile_validate_rejects_cross_side_format_cfg_keys():
 
     with pytest.raises(LocalFileValidateException) as ei:
         LocalFileDest(
-            conn=_conn(),
+            conn=_dest_conn(),
             paths=["out.csv"],
             format=DestFileFormat.CSV,
             format_cfg={DestFileFormat.CSV: {"has_header": True}},
@@ -112,24 +128,24 @@ def test_localfile_validate_rejects_cross_side_format_cfg_keys():
 
 
 # ---------------------------------------------------------------------------
-# LocalFileConn.full_path
+# LocalFile{Src,Dest}Conn.full_path
 # ---------------------------------------------------------------------------
 
 
-def test_localfile_conn_default_base_path_is_empty():
-    c = LocalFileConn()
+def test_localfile_conn_default_base_path_is_empty(conn_cls):
+    c = conn_cls()
     assert c.base_path == ""
     assert c.full_path("foo.csv") == "foo.csv"
 
 
-def test_localfile_conn_full_path_treats_absolute_path_as_relative():
-    c = LocalFileConn(base_path="/data/")
+def test_localfile_conn_full_path_treats_absolute_path_as_relative(conn_cls):
+    c = conn_cls(base_path="/data/")
     assert c.full_path("/foo.csv") == "data/foo.csv"
     assert c.full_path("foo.csv") == "data/foo.csv"
 
 
-def test_localfile_conn_full_path_strips_trailing_slashes():
-    c = LocalFileConn(base_path="/data")
+def test_localfile_conn_full_path_strips_trailing_slashes(conn_cls):
+    c = conn_cls(base_path="/data")
     assert c.full_path("sub/foo.csv/") == "data/sub/foo.csv"
     assert c.full_path("/") == "data"
 
@@ -139,11 +155,11 @@ def test_localfile_conn_full_path_strips_trailing_slashes():
 # ---------------------------------------------------------------------------
 
 
-def test_localfile_conn_rejects_bad_base_path_type():
+def test_localfile_conn_rejects_bad_base_path_type(conn_cls):
     from tabsdatak.conn.common.error import ConnInitException
 
     with pytest.raises(ConnInitException) as ei:
-        LocalFileConn(base_path=42)  # type: ignore[arg-type]
+        conn_cls(base_path=42)  # type: ignore[arg-type]
     assert ei.value.api_error is LocalFileErrorCode.LOCALFILE_1
 
 
@@ -152,7 +168,7 @@ def test_localfile_src_rejects_missing_paths():
 
     with pytest.raises(ConnInitException) as ei:
         LocalFileSrc(  # type: ignore[call-arg]
-            conn=_conn(),
+            conn=_src_conn(),
             format=SrcFileFormat.CSV,
         )
     assert ei.value.api_error is LocalFileErrorCode.LOCALFILE_2
@@ -163,7 +179,7 @@ def test_localfile_dest_rejects_missing_paths():
 
     with pytest.raises(ConnInitException) as ei:
         LocalFileDest(  # type: ignore[call-arg]
-            conn=_conn(),
+            conn=_dest_conn(),
             format=DestFileFormat.CSV,
         )
     assert ei.value.api_error is LocalFileErrorCode.LOCALFILE_4

@@ -6,7 +6,7 @@ import pytest
 
 from tabsdatak.api import Secret
 from tabsdatak.conn.common.types import UserPassword
-from tabsdatak.conn.snowflake import SnowflakeConn
+from tabsdatak.conn.snowflake import SnowflakeDestConn
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.snowflake import _impl as impl
@@ -22,7 +22,7 @@ def _credentials() -> UserPassword:
     )
 
 
-def _conn(**overrides) -> SnowflakeConn:
+def _conn(**overrides) -> SnowflakeDestConn:
     kwargs: dict = dict(
         account="ACME-MAIN",
         credentials=_credentials(),
@@ -33,7 +33,7 @@ def _conn(**overrides) -> SnowflakeConn:
         stage="MY_STAGE",
     )
     kwargs.update(overrides)
-    return SnowflakeConn(**kwargs)
+    return SnowflakeDestConn(**kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -58,7 +58,7 @@ def test_connection_parameters_includes_role_db_schema_warehouse():
 
 
 def test_connection_parameters_omits_optional_fields_when_missing():
-    conn = SnowflakeConn(account="ACME-MAIN", credentials=_credentials())
+    conn = SnowflakeDestConn(account="ACME-MAIN", credentials=_credentials())
     params = impl._connection_parameters(conn)
     for k in ("role", "database", "schema", "warehouse"):
         assert k not in params
@@ -125,7 +125,7 @@ def test_stage_uses_conn_stage_as_permanent_when_set():
 
 
 def test_stage_falls_back_to_session_temp_stage_when_unset():
-    conn = SnowflakeConn(account="ACME-MAIN", credentials=_credentials())
+    conn = SnowflakeDestConn(account="ACME-MAIN", credentials=_credentials())
     stage, is_temp = impl._stage(conn)
     assert stage == "tabsdata_temp_stage"
     assert is_temp is True
@@ -250,7 +250,7 @@ def test_write_all_tables_uses_temporary_stage_when_conn_stage_unset(
 ):
     parquet = tmp_path / "in.parquet"
     parquet.write_bytes(b"\x00")
-    conn = SnowflakeConn(
+    conn = SnowflakeDestConn(
         account="ACME-MAIN",
         credentials=_credentials(),
         warehouse="ETL_WH",

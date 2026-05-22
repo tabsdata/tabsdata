@@ -24,8 +24,8 @@ class KafkaErrorCode(ErrorCode):
 
     KAFKA_1 = ErrorDef(
         ConnInitException,
-        "KafkaConn validation failed",
-    )  # KafkaConn
+        "KafkaStreamSrcConn validation failed",
+    )  # KafkaStreamSrcConn
     KAFKA_2 = ErrorDef(
         ConnInitException,
         "ConfluentSchemaRegistry validation failed",

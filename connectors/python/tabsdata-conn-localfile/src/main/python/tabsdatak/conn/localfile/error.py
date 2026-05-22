@@ -21,8 +21,8 @@ class LocalFileRuntimeException(ConnException):
 class LocalFileErrorCode(ErrorCode):
     LOCALFILE_1 = ErrorDef(
         ConnInitException,
-        "LocalFileConn validation failed",
-    )  # LocalFileConn
+        "LocalFile connection validation failed",
+    )  # LocalFileSrcConn / LocalFileDestConn
     LOCALFILE_2 = ErrorDef(
         ConnInitException,
         "LocalFileSrc validation failed",

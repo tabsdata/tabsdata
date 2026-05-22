@@ -8,7 +8,7 @@ import polars as pl
 import pytest
 
 from tabsdatak.api import Secret
-from tabsdatak.conn.bigquery import BigQueryConn, BigQueryDest
+from tabsdatak.conn.bigquery import BigQueryDestConn, BigQueryDest
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.bigquery import _impl as impl
@@ -78,8 +78,8 @@ def _staging() -> GCSLocation:
     )
 
 
-def _bare_conn() -> BigQueryConn:
-    return BigQueryConn(
+def _bare_conn() -> BigQueryDestConn:
+    return BigQueryDestConn(
         staging=_staging(),
         credentials=GCPJson(json=Secret.lit(_gcp_key())),
         project="my-project",
@@ -383,7 +383,7 @@ def test_explorer_methods_are_stubs():
 
 
 def test_bigquery_dest_def_wires_plugin_and_explorer():
-    assert plugin.BIGQUERY_DEST.conn is BigQueryConn
+    assert plugin.BIGQUERY_DEST.conn is BigQueryDestConn
     assert plugin.BIGQUERY_DEST.dest is BigQueryDest
     assert plugin.BIGQUERY_DEST.plugin is plugin._BigQueryDestPlugin
     assert plugin.BIGQUERY_DEST.explorer is plugin._BigQueryExplorer

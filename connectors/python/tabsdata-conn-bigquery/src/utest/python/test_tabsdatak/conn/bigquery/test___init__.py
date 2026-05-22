@@ -6,7 +6,7 @@ import pytest
 
 from tabsdatak.api import NamedConn, Secret
 from tabsdatak.conn.bigquery import (
-    BigQueryConn,
+    BigQueryDestConn,
     BigQueryDest,
     BigQueryTableNamesSpec,
     ConnSpec,
@@ -38,7 +38,7 @@ def _staging():
 
 
 def _conn():
-    return BigQueryConn(
+    return BigQueryDestConn(
         staging=_staging(),
         credentials=GCPJson(json=Secret()),
         project="my-project",
@@ -79,7 +79,7 @@ def test_bigquery_dest_round_trip_with_named_conn():
 
 def test_bigquery_conn_validate_rejects_dataset_without_project():
     with pytest.raises(BigQueryValidateException) as ei:
-        BigQueryConn(
+        BigQueryDestConn(
             staging=_staging(),
             credentials=GCPJson(json=Secret()),
             dataset="analytics",
@@ -97,11 +97,11 @@ def _hint(cls: type, field: str) -> object:
 
 
 def test_bigquery_conn_fields_wire_expected_specs():
-    assert _hint(BigQueryConn, "staging") == GCSLocation
-    assert _hint(BigQueryConn, "credentials") == CredentialsSpec
-    assert _hint(BigQueryConn, "project") == ProjectSpec | None
-    assert _hint(BigQueryConn, "dataset") == DatasetSpec | None
-    assert _hint(BigQueryConn, "conn_cfg") == CfgSpec | None
+    assert _hint(BigQueryDestConn, "staging") == GCSLocation
+    assert _hint(BigQueryDestConn, "credentials") == CredentialsSpec
+    assert _hint(BigQueryDestConn, "project") == ProjectSpec | None
+    assert _hint(BigQueryDestConn, "dataset") == DatasetSpec | None
+    assert _hint(BigQueryDestConn, "conn_cfg") == CfgSpec | None
 
 
 def test_bigquery_dest_fields_wire_expected_specs():
@@ -140,7 +140,7 @@ def test_bigquery_conn_rejects_missing_staging():
     from tabsdatak.conn.common.error import ConnInitException
 
     with pytest.raises(ConnInitException) as ei:
-        BigQueryConn(  # type: ignore[call-arg]
+        BigQueryDestConn(  # type: ignore[call-arg]
             credentials=GCPJson(json=Secret()),
             project="my-project",
             dataset="analytics",

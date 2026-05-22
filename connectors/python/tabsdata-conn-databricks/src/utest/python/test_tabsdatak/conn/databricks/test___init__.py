@@ -8,9 +8,11 @@ from tabsdatak.api import NamedConn, Secret
 from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.common.types import CfgSpec, EntityWhitelistSpec
 from tabsdatak.conn.databricks import (
-    ConnSpec,
+    DestConnSpec,
+    SrcConnSpec,
     CredentialsSpec,
-    DatabricksConn,
+    DatabricksDestConn,
+    DatabricksSrcConn,
     DatabricksDest,
     DatabricksSrc,
     DatabricksTableNamesSpec,
@@ -34,8 +36,21 @@ from tabsdatak.conn.databricks.error import (
 pytestmark = pytest.mark.databricks
 
 
-def _conn():
-    return DatabricksConn(
+def _src_conn() -> DatabricksSrcConn:
+    return DatabricksSrcConn(
+        host_url=Secret.lit("https://my-workspace.cloud.databricks.com"),
+        token=Secret.lit("dapi-secret-token"),
+        volume="main.staging.my_volume",
+        warehouse="MY_WAREHOUSE",
+        catalog="main",
+        schema="analytics",
+        entity_whitelist=["main.analytics.users", "main.analytics.orders"],
+        conn_cfg={"databricks.timeout": 30},
+    )
+
+
+def _dest_conn() -> DatabricksDestConn:
+    return DatabricksDestConn(
         host_url=Secret.lit("https://my-workspace.cloud.databricks.com"),
         token=Secret.lit("dapi-secret-token"),
         volume="main.staging.my_volume",
@@ -49,7 +64,7 @@ def _conn():
 
 def test_databricks_src_full_round_trip():
     src = DatabricksSrc(
-        conn=_conn(),
+        conn=_src_conn(),
         queries=["SELECT * FROM main.analytics.users", "SELECT * FROM main.analytics.orders"],
         initial_values={"x": 1},
         src_cfg={"databricks.logging_level": 20},
@@ -71,7 +86,7 @@ def test_databricks_src_full_round_trip():
 
 def test_databricks_dest_full_round_trip():
     dest = DatabricksDest(
-        conn=_conn(),
+        conn=_dest_conn(),
         tables=["main.analytics.users", "main.analytics.orders"],
         if_table_exists="replace",
         schema_evolution="strict",
@@ -104,9 +119,10 @@ def test_databricks_dest_round_trip_with_named_conn():
     assert loaded.conn.name == "prod_databricks"
 
 
-def test_databricks_conn_validate_rejects_warehouse_and_warehouse_id():
+@pytest.mark.parametrize("cls", [DatabricksSrcConn, DatabricksDestConn])
+def test_databricks_conn_validate_rejects_warehouse_and_warehouse_id(cls):
     with pytest.raises(DatabricksValidateException) as ei:
-        DatabricksConn(
+        cls(
             host_url=Secret.lit("https://my-workspace.cloud.databricks.com"),
             token=Secret.lit("dapi-secret-token"),
             volume="main.staging.my_volume",
@@ -116,15 +132,20 @@ def test_databricks_conn_validate_rejects_warehouse_and_warehouse_id():
     assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_2
 
 
-def test_databricks_conn_validate_rejects_schema_without_catalog():
+@pytest.mark.parametrize("cls", [DatabricksSrcConn, DatabricksDestConn])
+def test_databricks_conn_validate_rejects_schema_without_catalog(cls):
     with pytest.raises(DatabricksValidateException) as ei:
-        DatabricksConn(
+        cls(
             host_url=Secret.lit("https://my-workspace.cloud.databricks.com"),
             token=Secret.lit("dapi-secret-token"),
             volume="main.staging.my_volume",
             schema="analytics",
         )
     assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_2
+
+
+def test_databricks_src_dest_conn_have_distinct_kinds():
+    assert DatabricksSrcConn.__kind__ != DatabricksDestConn.__kind__
 
 
 # ---------------------------------------------------------------------------
@@ -136,27 +157,28 @@ def _hint(cls: type, field: str) -> object:
     return typing.get_type_hints(cls, include_extras=True)[field]
 
 
-def test_databricks_conn_fields_wire_expected_specs():
-    assert _hint(DatabricksConn, "host_url") == HostUrlSpec
-    assert _hint(DatabricksConn, "token") == CredentialsSpec
-    assert _hint(DatabricksConn, "volume") == VolumeSpec
-    assert _hint(DatabricksConn, "warehouse") == WarehouseSpec | None
-    assert _hint(DatabricksConn, "warehouse_id") == WarehouseIdSpec | None
-    assert _hint(DatabricksConn, "catalog") == IdentifierSpec | None
-    assert _hint(DatabricksConn, "schema") == IdentifierSpec | None
-    assert _hint(DatabricksConn, "entity_whitelist") == EntityWhitelistSpec | None
-    assert _hint(DatabricksConn, "conn_cfg") == CfgSpec | None
+@pytest.mark.parametrize("cls", [DatabricksSrcConn, DatabricksDestConn])
+def test_databricks_conn_fields_wire_expected_specs(cls):
+    assert _hint(cls, "host_url") == HostUrlSpec
+    assert _hint(cls, "token") == CredentialsSpec
+    assert _hint(cls, "volume") == VolumeSpec
+    assert _hint(cls, "warehouse") == WarehouseSpec | None
+    assert _hint(cls, "warehouse_id") == WarehouseIdSpec | None
+    assert _hint(cls, "catalog") == IdentifierSpec | None
+    assert _hint(cls, "schema") == IdentifierSpec | None
+    assert _hint(cls, "entity_whitelist") == EntityWhitelistSpec | None
+    assert _hint(cls, "conn_cfg") == CfgSpec | None
 
 
 def test_databricks_src_fields_wire_expected_specs():
-    assert _hint(DatabricksSrc, "conn") == ConnSpec
+    assert _hint(DatabricksSrc, "conn") == SrcConnSpec
     assert _hint(DatabricksSrc, "queries") == QueriesSpec
     assert _hint(DatabricksSrc, "initial_values") == dict | None
     assert _hint(DatabricksSrc, "src_cfg") == SrcCfgSpec | None
 
 
 def test_databricks_dest_fields_wire_expected_specs():
-    assert _hint(DatabricksDest, "conn") == ConnSpec
+    assert _hint(DatabricksDest, "conn") == DestConnSpec
     assert _hint(DatabricksDest, "tables") == DatabricksTableNamesSpec
     assert _hint(DatabricksDest, "if_table_exists") == IfTableExistsSpec
     assert _hint(DatabricksDest, "schema_evolution") == SchemaEvolutionSpec
@@ -171,7 +193,7 @@ def test_databricks_dest_fields_wire_expected_specs():
 def test_databricks_src_rejects_unknown_src_cfg_key():
     with pytest.raises(ConnInitException) as ei:
         DatabricksSrc(
-            conn=_conn(),
+            conn=_src_conn(),
             queries=["SELECT 1"],
             src_cfg={"bogus.key": 1},
         )
@@ -180,7 +202,7 @@ def test_databricks_src_rejects_unknown_src_cfg_key():
 
 def test_databricks_src_accepts_known_src_cfg_keys():
     src = DatabricksSrc(
-        conn=_conn(),
+        conn=_src_conn(),
         queries=["SELECT 1"],
         src_cfg={"databricks.logging_level": 20},
     )
@@ -191,7 +213,7 @@ def test_databricks_src_accepts_known_src_cfg_keys():
 def test_databricks_dest_rejects_unknown_dest_cfg_key():
     with pytest.raises(ConnInitException) as ei:
         DatabricksDest(
-            conn=_conn(),
+            conn=_dest_conn(),
             tables=["main.analytics.users"],
             dest_cfg={"bogus.key": 1},
         )
@@ -200,7 +222,7 @@ def test_databricks_dest_rejects_unknown_dest_cfg_key():
 
 def test_databricks_dest_accepts_known_dest_cfg_keys():
     dest = DatabricksDest(
-        conn=_conn(),
+        conn=_dest_conn(),
         tables=["main.analytics.users"],
         dest_cfg={"databricks.logging_level": 20},
     )
@@ -208,11 +230,12 @@ def test_databricks_dest_accepts_known_dest_cfg_keys():
     assert loaded == dest
 
 
-def test_databricks_conn_rejects_missing_required_fields():
+@pytest.mark.parametrize("cls", [DatabricksSrcConn, DatabricksDestConn])
+def test_databricks_conn_rejects_missing_required_fields(cls):
     from tabsdatak.conn.common.error import ConnInitException
 
     with pytest.raises(ConnInitException) as ei:
-        DatabricksConn(  # type: ignore[call-arg]
+        cls(  # type: ignore[call-arg]
             token=Secret.lit("dapi-..."),
             volume="main.staging.v",
         )

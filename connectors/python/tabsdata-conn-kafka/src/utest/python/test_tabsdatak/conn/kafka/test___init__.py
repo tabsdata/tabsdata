@@ -1,5 +1,5 @@
 """Public SR / Protobuf types on the kafka connector -- shape +
-validation. ``KafkaConn`` / ``KafkaStreamSrc`` coverage lands
+validation. ``KafkaStreamSrcConn`` / ``KafkaStreamSrc`` coverage lands
 alongside the connector module in a follow-up commit."""
 
 from __future__ import annotations
@@ -111,13 +111,13 @@ def test_aws_glue_sr_rejects_missing_registry_name():
     assert ei.value.api_error is KafkaErrorCode.KAFKA_3
 
 
-# --- KafkaConn ------------------------------------------------------
+# --- KafkaStreamSrcConn ------------------------------------------------------
 
 
 def test_kafka_conn_minimal_construction():
-    from tabsdatak.conn.kafka import KafkaConn
+    from tabsdatak.conn.kafka import KafkaStreamSrcConn
 
-    conn = KafkaConn(servers="broker:9092", group_id="g1")
+    conn = KafkaStreamSrcConn(servers="broker:9092", group_id="g1")
     assert conn.servers == "broker:9092"
     assert conn.credentials is None
     assert conn.group_id == "g1"
@@ -126,9 +126,9 @@ def test_kafka_conn_minimal_construction():
 
 
 def test_kafka_conn_with_credentials_and_group():
-    from tabsdatak.conn.kafka import KafkaConn
+    from tabsdatak.conn.kafka import KafkaStreamSrcConn
 
-    conn = KafkaConn(
+    conn = KafkaStreamSrcConn(
         servers="broker:9092",
         credentials=_creds(),
         group_id="my-group",
@@ -138,15 +138,15 @@ def test_kafka_conn_with_credentials_and_group():
 
 
 def test_kafka_conn_accepts_confluent_sr():
-    from tabsdatak.conn.kafka import KafkaConn
+    from tabsdatak.conn.kafka import KafkaStreamSrcConn
 
     sr = ConfluentSchemaRegistry(url="http://sr")
-    conn = KafkaConn(servers="b:9092", group_id="g1", schema_registry=sr)
+    conn = KafkaStreamSrcConn(servers="b:9092", group_id="g1", schema_registry=sr)
     assert isinstance(conn.schema_registry, ConfluentSchemaRegistry)
 
 
 def test_kafka_conn_accepts_glue_sr():
-    from tabsdatak.conn.kafka import KafkaConn
+    from tabsdatak.conn.kafka import KafkaStreamSrcConn
 
     sr = AwsGlueSchemaRegistry(
         region_name="us-east-1",
@@ -154,23 +154,23 @@ def test_kafka_conn_accepts_glue_sr():
         registry_name="reg",
         schema_name="sch",
     )
-    conn = KafkaConn(servers="b:9092", group_id="g1", schema_registry=sr)
+    conn = KafkaStreamSrcConn(servers="b:9092", group_id="g1", schema_registry=sr)
     assert isinstance(conn.schema_registry, AwsGlueSchemaRegistry)
 
 
 def test_kafka_conn_rejects_missing_servers():
-    from tabsdatak.conn.kafka import KafkaConn
+    from tabsdatak.conn.kafka import KafkaStreamSrcConn
 
     with pytest.raises(ConnInitException) as ei:
-        KafkaConn(group_id="g1")  # type: ignore[call-arg]
+        KafkaStreamSrcConn(group_id="g1")  # type: ignore[call-arg]
     assert ei.value.api_error is KafkaErrorCode.KAFKA_1
 
 
 def test_kafka_conn_rejects_missing_group_id():
-    from tabsdatak.conn.kafka import KafkaConn
+    from tabsdatak.conn.kafka import KafkaStreamSrcConn
 
     with pytest.raises(ConnInitException) as ei:
-        KafkaConn(servers="broker:9092")  # type: ignore[call-arg]
+        KafkaStreamSrcConn(servers="broker:9092")  # type: ignore[call-arg]
     assert ei.value.api_error is KafkaErrorCode.KAFKA_1
 
 
@@ -178,9 +178,9 @@ def test_kafka_conn_rejects_missing_group_id():
 
 
 def _kafka_conn():
-    from tabsdatak.conn.kafka import KafkaConn
+    from tabsdatak.conn.kafka import KafkaStreamSrcConn
 
-    return KafkaConn(
+    return KafkaStreamSrcConn(
         servers="broker:9092", credentials=_creds(), group_id="g1",
     )
 

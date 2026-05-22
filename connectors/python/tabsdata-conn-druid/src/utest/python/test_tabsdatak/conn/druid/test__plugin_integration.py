@@ -4,7 +4,7 @@ The Druid pipeline is two-stage:
 
   1. Upload parquet to a cloud staging area (S3 / GCS / Azure) using the
      ``td_transporter`` binary; the staging credentials come from the
-     ``DruidConn.staging`` CloudLocation.
+     ``DruidDestConn.staging`` CloudLocation.
   2. Submit a native batch ``index_parallel`` ingestion task to the
      Druid Overlord and poll until it terminates.
 
@@ -22,7 +22,7 @@ External prerequisites still gated by env vars:
   - ``S30__S3_ACCESS_KEY`` / ``S30__S3_SECRET_KEY``
 
 The staging URI's bucket / path are used as the
-``DruidConn.staging`` base; each test invocation writes under
+``DruidDestConn.staging`` base; each test invocation writes under
 ``<bucket>/<base_path>/td-druid/<trx_id>/<rand>/``. The Druid
 datasource each run targets is suffixed with a random id so parallel
 test runs never overwrite each other.
@@ -44,7 +44,7 @@ from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
     UserPassword,
 )
-from tabsdatak.conn.druid import DruidConn, DruidDest, S3Location
+from tabsdatak.conn.druid import DruidDestConn, DruidDest, S3Location
 
 # noinspection PyProtectedMember
 import tabsdatak.conn.druid._plugin as plugin
@@ -176,11 +176,11 @@ def staging() -> S3Location:
 
 
 @pytest.fixture
-def fresh_druid(overlord_url, staging) -> DruidConn:
-    """Build a fresh ``DruidConn`` whose staging area lives at
+def fresh_druid(overlord_url, staging) -> DruidDestConn:
+    """Build a fresh ``DruidDestConn`` whose staging area lives at
     ``s3://$S30__S3_URI`` and whose Overlord points at the auto-started
     docker compose stack."""
-    return DruidConn(
+    return DruidDestConn(
         overlord_url=overlord_url,
         staging=staging,
         credentials=UserPassword(

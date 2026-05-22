@@ -1,7 +1,7 @@
 """Snowflake adapter: every driver-touching piece used by ``_plugin.py``.
 
 The legacy :class:`tabsdata.connector.snowflake._connector.SnowflakeDestination`
-is ported here, adapted to the new-model ``SnowflakeConn`` /
+is ported here, adapted to the new-model ``SnowflakeDestConn`` /
 ``SnowflakeDest`` classes. Snowflake bulk loads go through the native
 :mod:`snowflake.connector` Python driver -- a stage (temporary by
 default; permanent when ``conn.stage`` is set) + ``PUT`` to upload the
@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING
 
 from tabsdatak.conn.common._validation import fqn, unfqn
 from tabsdatak.conn.common.types import UserPassword
-from tabsdatak.conn.snowflake import SnowflakeConn
+from tabsdatak.conn.snowflake import SnowflakeDestConn
 from tabsdatak.conn.snowflake._validation import _SNOWFLAKE_FQN_DEF
 
 if TYPE_CHECKING:
@@ -52,7 +52,7 @@ _DEFAULT_TEMP_STAGE = "tabsdata_temp_stage"
 
 @dataclass(kw_only=True)
 class SnowflakeWriteCfg:
-    conn: SnowflakeConn
+    conn: SnowflakeDestConn
     target_tables: list[str]  # raw user input -- already FQN-shaped
     if_table_exists: str  # "append" | "replace"
     match_by_column_name: str = _DEFAULT_MATCH_BY_COLUMN_NAME
@@ -62,18 +62,18 @@ class SnowflakeWriteCfg:
 # --- Conn helpers ---------------------------------------------------
 
 
-def _credentials(conn: SnowflakeConn) -> UserPassword:
+def _credentials(conn: SnowflakeDestConn) -> UserPassword:
     creds = conn.credentials
     if not isinstance(creds, UserPassword):
         raise TypeError(
-            f"SnowflakeConn.credentials must be UserPassword, got "
+            f"SnowflakeDestConn.credentials must be UserPassword, got "
             f"{type(creds).__name__}"
         )
     return creds
 
 
-def _connection_parameters(conn: SnowflakeConn) -> dict[str, str]:
-    """Resolve ``SnowflakeConn`` into the ``snowflake.connector.connect``
+def _connection_parameters(conn: SnowflakeDestConn) -> dict[str, str]:
+    """Resolve ``SnowflakeDestConn`` into the ``snowflake.connector.connect``
     kwargs. ``password`` carries either a Snowflake password or a PAT;
     the driver accepts both at the same slot."""
     creds = _credentials(conn)
@@ -93,7 +93,7 @@ def _connection_parameters(conn: SnowflakeConn) -> dict[str, str]:
     return params
 
 
-def build_snowflake_connection(conn: SnowflakeConn) -> sfc.SnowflakeConnection:
+def build_snowflake_connection(conn: SnowflakeDestConn) -> sfc.SnowflakeConnection:
     """Open a :class:`snowflake.connector.SnowflakeConnection` bound
     to ``conn``'s resolved parameters."""
     try:
@@ -127,7 +127,7 @@ def _fq_for_sql(fq_table: str) -> str:
 # --- Stage / upload / load helpers ---------------------------------
 
 
-def _stage(conn: SnowflakeConn) -> tuple[str, bool]:
+def _stage(conn: SnowflakeDestConn) -> tuple[str, bool]:
     """Return ``(stage_name, is_temporary)`` for the connection. When
     ``conn.stage`` is set the stage is treated as permanent (caller
     owns its lifecycle); otherwise a session-scoped TEMPORARY stage

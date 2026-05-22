@@ -1,6 +1,6 @@
 """StarRocks connector — public API.
 
-* :class:`StarRocksConn` -- per-cluster StarRocks connection
+* :class:`StarRocksDestConn` -- per-cluster StarRocks connection
   (host, port, credentials, database, cloud staging area).
 * :class:`StarRocksDest` -- destination: list of table FQNs;
   one parquet slot per table. Writes go through an S3 staging
@@ -177,7 +177,7 @@ class GCSLocation(CloudLocation):
 
 
 @_api.dataclass(StarRocksErrorCode.STARROCKS_1, kw_only=True)
-class StarRocksConn(Conn):
+class StarRocksDestConn(Conn):
     """StarRocks connection.
 
     :param host: StarRocks FE host.
@@ -191,6 +191,8 @@ class StarRocksConn(Conn):
     :param conn_cfg: Optional driver-side config dict.
     """
 
+    __kind__ = "starRocksDestConn"
+
     host: HostSpec
     port: PortSpec = 9030
     credentials: CredentialsSpec
@@ -200,7 +202,7 @@ class StarRocksConn(Conn):
     conn_cfg: CfgSpec | None = None
 
 
-ConnSpec: TypeAlias = Union[NamedConn, StarRocksConn]
+ConnSpec: TypeAlias = Union[NamedConn, StarRocksDestConn]
 
 
 # --- Destination -----------------------------------------------------
@@ -210,7 +212,7 @@ ConnSpec: TypeAlias = Union[NamedConn, StarRocksConn]
 class StarRocksDest(Dest):
     """StarRocks destination — one parquet slot per table.
 
-    :param conn: :class:`StarRocksConn` (or :class:`NamedConn`).
+    :param conn: :class:`StarRocksDestConn` (or :class:`NamedConn`).
     :param tables: FQN table names; one parquet slot per entry.
     :param if_table_exists: ``"append"`` (default) or
         ``"replace"``.

@@ -21,12 +21,12 @@ class BigQueryRuntimeException(ConnException):
 class BigqueryErrorCode(ErrorCode):
     BIGQUERY_1 = ErrorDef(
         ConnInitException,
-        "BigQueryConn validation failed",
-    )  # BigQueryConn
+        "BigQueryDestConn validation failed",
+    )  # BigQueryDestConn
     BIGQUERY_2 = ErrorDef(
         BigQueryValidateException,
-        "BigQueryConn.dataset={dataset!r} requires project to be set",
-    )  # BigQueryConn.validate()
+        "BigQueryDestConn.dataset={dataset!r} requires project to be set",
+    )  # BigQueryDestConn.validate()
     BIGQUERY_3 = ErrorDef(
         ConnInitException,
         "BigQueryDest validation failed",

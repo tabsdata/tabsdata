@@ -6,8 +6,11 @@ from tabsdatak.conn.common.file import _plugin, _transporter
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert
-from tabsdatak.conn.s3 import S3Conn, S3Dest, S3Src
+from tabsdatak.conn.s3 import S3Dest, S3DestConn, S3Src, S3SrcConn
 from tabsdatak.conn.s3.error import S3ErrorCode
+
+# Conn helpers operate on both Src and Dest variants.
+_AnyS3Conn = S3SrcConn | S3DestConn
 from tabsdatak.spi import (
     DestContext,
     DestDef,
@@ -30,7 +33,7 @@ def _s3_uri(bucket: str, path_entry: str) -> str:
     return f"s3://{bucket}/{key}"
 
 
-def build_location(conn: S3Conn, path_entry: str) -> _transporter.TransporterS3:
+def build_location(conn: _AnyS3Conn, path_entry: str) -> _transporter.TransporterS3:
     return _transporter.TransporterS3(
         url=_s3_uri(_convert(conn.bucket, str), path_entry),
         access_key=_transporter.TransporterEnv(
@@ -43,7 +46,7 @@ def build_location(conn: S3Conn, path_entry: str) -> _transporter.TransporterS3:
     )
 
 
-def run_env(conn: S3Conn) -> dict[str, str]:
+def run_env(conn: _AnyS3Conn) -> dict[str, str]:
     creds = conn.credentials
     return {
         _transporter.SERVER_SIDE_AWS_ACCESS_KEY_ID: _convert(
@@ -106,12 +109,22 @@ class S3DestPlugin(DestPlugin[S3Dest]):
 # --- Explorer placeholder ----------------------------------------
 
 
-class S3Explorer(Explorer[S3Conn]):
-    def metadata(self, conn: S3Conn) -> Any:
+class S3SrcExplorer(Explorer[S3SrcConn]):
+    def metadata(self, conn: S3SrcConn) -> Any:
         # TODO
         pass
 
-    def data(self, conn: S3Conn, query: str) -> Any:
+    def data(self, conn: S3SrcConn, query: str) -> Any:
+        # TODO
+        pass
+
+
+class S3DestExplorer(Explorer[S3DestConn]):
+    def metadata(self, conn: S3DestConn) -> Any:
+        # TODO
+        pass
+
+    def data(self, conn: S3DestConn, query: str) -> Any:
         # TODO
         pass
 
@@ -120,23 +133,23 @@ class S3Explorer(Explorer[S3Conn]):
 
 
 S3_SRC = SrcDef(
-    conn=S3Conn,
+    conn=S3SrcConn,
     src_type="s3",
     src_version="v1",
     src=S3Src,
     table_mode=TableMode.ARRAY,
     cardinality=lambda src: len(src.paths),
     plugin=S3SrcPlugin,
-    explorer=S3Explorer,
+    explorer=S3SrcExplorer,
 )
 
 
 S3_DEST = DestDef(
-    conn=S3Conn,
+    conn=S3DestConn,
     dest_type="s3",
     dest_version="v1",
     dest=S3Dest,
     cardinality=lambda dest: len(dest.paths),
     plugin=S3DestPlugin,
-    explorer=S3Explorer,
+    explorer=S3DestExplorer,
 )

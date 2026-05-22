@@ -21,8 +21,8 @@ class S3RuntimeException(ConnException):
 class S3ErrorCode(ErrorCode):
     S3_1 = ErrorDef(
         ConnInitException,
-        "S3Conn validation failed",
-    )  # S3Conn
+        "S3 connection validation failed",
+    )  # S3SrcConn / S3DestConn
     S3_2 = ErrorDef(
         ConnInitException,
         "S3Src validation failed",

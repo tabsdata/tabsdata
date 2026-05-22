@@ -24,7 +24,7 @@ import pytest
 
 from tabsdatak.api import Secret
 from tabsdatak.conn.common.types import AwsAccessSecretKey
-from tabsdatak.conn.s3 import S3Conn, S3Dest, S3Src
+from tabsdatak.conn.s3 import S3Dest, S3DestConn, S3Src, S3SrcConn
 # noinspection PyProtectedMember
 import tabsdatak.conn.s3._plugin as plugin
 from tabsdatak.spi import ParquetFile
@@ -109,9 +109,22 @@ def run_prefix() -> str:
 
 
 @pytest.fixture
-def conn() -> S3Conn:
+def src_conn() -> S3SrcConn:
     bucket, base_path = _parse_uri(_URI)
-    return S3Conn(
+    return S3SrcConn(
+        bucket=bucket,
+        region=_REGION,
+        credentials=AwsAccessSecretKey(
+            access_key_id=Secret.lit(_ACCESS),
+            secret_access_key=Secret.lit(_SECRET),
+        ),
+        base_path=base_path,
+    )
+
+
+def dest_conn() -> S3DestConn:
+    bucket, base_path = _parse_uri(_URI)
+    return S3DestConn(
         bucket=bucket,
         region=_REGION,
         credentials=AwsAccessSecretKey(

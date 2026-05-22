@@ -21,8 +21,8 @@ class GcsRuntimeException(ConnException):
 class GcsErrorCode(ErrorCode):
     GCS_1 = ErrorDef(
         ConnInitException,
-        "GCSConn validation failed",
-    )  # GCSConn
+        "GCS connection validation failed",
+    )  # GCSSrcConn / GCSDestConn
     GCS_2 = ErrorDef(
         ConnInitException,
         "GCSSrc validation failed",

@@ -3,11 +3,11 @@
 Defines the dataclasses a flow author wires onto a publisher,
 subscriber, or transformer to target Snowflake:
 
-* :class:`SnowflakeConn` -- per-account connection (account id,
+* :class:`SnowflakeDestConn` -- per-account connection (account id,
   user/password, optional default role/database/schema/warehouse/
   stage).
 * :class:`SnowflakeDest` -- destination wrapper bound to a
-  :class:`SnowflakeConn` plus a list of target table names. Used
+  :class:`SnowflakeDestConn` plus a list of target table names. Used
   by the destination plugin (``COPY INTO`` via a stage).
 
 Snowflake is dest-only in this connector; there is no
@@ -81,7 +81,7 @@ DestCfgSpec: TypeAlias = Annotated[
 
 
 @_api.dataclass(SnowflakeErrorCode.SNOWFLAKE_1, kw_only=True)
-class SnowflakeConn(Conn):
+class SnowflakeDestConn(Conn):
     """Snowflake account connection.
 
     :param account: Snowflake account locator (e.g. ``ABCDEFG-XY12345``).
@@ -101,6 +101,8 @@ class SnowflakeConn(Conn):
     ``SNOWFLAKE_2``.
     """
 
+    __kind__ = "snowflakeDestConn"
+
     account: AccountSpec
     credentials: CredentialsSpec
     role: NameSpec | None = None
@@ -116,7 +118,7 @@ class SnowflakeConn(Conn):
             raise SnowflakeErrorCode.SNOWFLAKE_2.exception(schema=self.schema)
 
 
-ConnSpec: TypeAlias = Union[NamedConn, SnowflakeConn]
+ConnSpec: TypeAlias = Union[NamedConn, SnowflakeDestConn]
 
 
 # --- Destination -----------------------------------------------------
@@ -126,7 +128,7 @@ ConnSpec: TypeAlias = Union[NamedConn, SnowflakeConn]
 class SnowflakeDest(Dest):
     """Snowflake destination — write one parquet per target table.
 
-    :param conn: :class:`SnowflakeConn` (or :class:`NamedConn`).
+    :param conn: :class:`SnowflakeDestConn` (or :class:`NamedConn`).
     :param tables: Fully-qualified Snowflake table names
         (``[<db>.]<schema>.<table>`` or bare). Identifier parts
         accept double-quoted spelling for case-sensitive / special-

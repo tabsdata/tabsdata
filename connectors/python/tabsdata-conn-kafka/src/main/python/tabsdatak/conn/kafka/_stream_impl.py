@@ -22,7 +22,7 @@ from tabsdatak.conn.common.types import _convert
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.kafka._serdes import KafkaSerde, SchemaIdCompatibles, SchemaIdSpec
-from tabsdatak.conn.kafka import KafkaConn
+from tabsdatak.conn.kafka import KafkaStreamSrcConn
 
 if TYPE_CHECKING:  # pragma: no cover -- typing-only
     from confluent_kafka import Consumer, Message, Producer
@@ -296,9 +296,9 @@ class KafkaConsumer:
 # ---------------------------------------------------------------------
 
 
-def build_kafka_configs(*, conn: KafkaConn) -> dict:
+def build_kafka_configs(*, conn: KafkaStreamSrcConn) -> dict:
     """Compose the ``confluent_kafka.Consumer`` config dict from
-    the connector's :class:`KafkaConn`.
+    the connector's :class:`KafkaStreamSrcConn`.
 
     Resolves ``Env`` / ``Secret`` references on ``servers`` and
     ``group_id``, resolves ``Secret`` SASL credentials, and forces

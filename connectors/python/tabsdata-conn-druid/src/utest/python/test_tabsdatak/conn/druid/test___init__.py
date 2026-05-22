@@ -18,7 +18,7 @@ from tabsdatak.conn.druid import (
     ConnSpec,
     CredentialsSpec,
     DestCfgSpec,
-    DruidConn,
+    DruidDestConn,
     DruidDest,
     DruidTableNamesSpec,
     IfTableExistsSpec,
@@ -45,7 +45,7 @@ def _staging():
 
 
 def _conn():
-    return DruidConn(
+    return DruidDestConn(
         overlord_url="http://druid.example.com:8081",
         staging=_staging(),
         credentials=UserPassword(
@@ -104,10 +104,10 @@ def _hint(cls: type, field: str) -> object:
 
 
 def test_druid_conn_fields_wire_expected_specs():
-    assert _hint(DruidConn, "overlord_url") == UrlSpec
-    assert _hint(DruidConn, "staging") == CloudLocation
-    assert _hint(DruidConn, "credentials") == CredentialsSpec
-    assert _hint(DruidConn, "conn_cfg") == CfgSpec | None
+    assert _hint(DruidDestConn, "overlord_url") == UrlSpec
+    assert _hint(DruidDestConn, "staging") == CloudLocation
+    assert _hint(DruidDestConn, "credentials") == CredentialsSpec
+    assert _hint(DruidDestConn, "conn_cfg") == CfgSpec | None
 
 
 def test_druid_dest_fields_wire_expected_specs():
@@ -159,7 +159,7 @@ def test_druid_dest_accepts_known_dest_cfg_keys():
 
 def test_druid_conn_rejects_missing_overlord_url():
     with pytest.raises(ConnInitException) as ei:
-        DruidConn(  # type: ignore[call-arg]
+        DruidDestConn(  # type: ignore[call-arg]
             staging=_staging(),
             credentials=UserPassword(
                 user=Secret.lit("u"),

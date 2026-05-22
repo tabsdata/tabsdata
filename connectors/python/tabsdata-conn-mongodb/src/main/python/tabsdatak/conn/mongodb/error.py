@@ -21,8 +21,8 @@ class MongoDBRuntimeException(ConnException):
 class MongodbErrorCode(ErrorCode):
     MONGODB_1 = ErrorDef(
         ConnInitException,
-        "MongoDBConn validation failed",
-    )  # MongoDBConn
+        "MongoDBDestConn validation failed",
+    )  # MongoDBDestConn
     MONGODB_2 = ErrorDef(
         ConnInitException,
         "MongoDBDest validation failed",

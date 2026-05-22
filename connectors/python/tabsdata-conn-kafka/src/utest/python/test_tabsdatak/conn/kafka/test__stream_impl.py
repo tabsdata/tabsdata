@@ -8,7 +8,7 @@ import pytest
 
 from tabsdatak.api import Secret
 from tabsdatak.conn.common.types import UserPassword
-from tabsdatak.conn.kafka import KafkaConn
+from tabsdatak.conn.kafka import KafkaStreamSrcConn
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.kafka._stream_impl import (
@@ -78,14 +78,14 @@ def test_messages_buffer_to_parquet_empty_returns_none(tmp_path):
 
 
 def test_build_kafka_configs_string_servers():
-    conn = KafkaConn(servers="a:9092", credentials=_creds(), group_id="g1")
+    conn = KafkaStreamSrcConn(servers="a:9092", credentials=_creds(), group_id="g1")
     cfg = build_kafka_configs(conn=conn)
     assert cfg["bootstrap.servers"] == "a:9092"
     assert cfg["group.id"] == "g1"
 
 
 def test_build_kafka_configs_comma_separated_servers():
-    conn = KafkaConn(
+    conn = KafkaStreamSrcConn(
         servers="a:9092,b:9092", credentials=_creds(), group_id="g1",
     )
     cfg = build_kafka_configs(conn=conn)
@@ -93,7 +93,7 @@ def test_build_kafka_configs_comma_separated_servers():
 
 
 def test_build_kafka_configs_no_credentials_skips_sasl_keys():
-    conn = KafkaConn(servers="a:9092", group_id="g1")
+    conn = KafkaStreamSrcConn(servers="a:9092", group_id="g1")
     cfg = build_kafka_configs(conn=conn)
     assert "sasl.username" not in cfg
     assert "sasl.password" not in cfg
@@ -101,7 +101,7 @@ def test_build_kafka_configs_no_credentials_skips_sasl_keys():
 
 
 def test_build_kafka_configs_with_credentials_sets_sasl_keys():
-    conn = KafkaConn(servers="a:9092", credentials=_creds(), group_id="g1")
+    conn = KafkaStreamSrcConn(servers="a:9092", credentials=_creds(), group_id="g1")
     cfg = build_kafka_configs(conn=conn)
     assert cfg["security.protocol"] == "sasl_plaintext"
     assert cfg["sasl.mechanism"] == "SCRAM-SHA-256"
@@ -110,7 +110,7 @@ def test_build_kafka_configs_with_credentials_sets_sasl_keys():
 
 
 def test_build_kafka_configs_resolves_secret_servers_and_group_id():
-    conn = KafkaConn(
+    conn = KafkaStreamSrcConn(
         servers=Secret.lit("a:9092"),
         group_id=Secret.lit("g1"),
     )
@@ -120,14 +120,14 @@ def test_build_kafka_configs_resolves_secret_servers_and_group_id():
 
 
 def test_build_kafka_configs_force_auto_commit_off():
-    conn = KafkaConn(servers="a:9092", group_id="g1")
+    conn = KafkaStreamSrcConn(servers="a:9092", group_id="g1")
     cfg = build_kafka_configs(conn=conn)
     assert cfg["enable.auto.commit"] is False
     assert cfg["auto.offset.reset"] == "earliest"
 
 
 def test_build_kafka_configs_conn_cfg_overrides_pass_through():
-    conn = KafkaConn(
+    conn = KafkaStreamSrcConn(
         servers="a:9092",
         group_id="g1",
         conn_cfg={"session.timeout.ms": 30000},

@@ -23,7 +23,7 @@ import pytest
 
 from tabsdatak.api import Secret
 from tabsdatak.conn.common.types import AzureAccountKey
-from tabsdatak.conn.azureblob import AzureBlobConn, AzureBlobDest, AzureBlobSrc
+from tabsdatak.conn.azureblob import AzureBlobDest, AzureBlobDestConn, AzureBlobSrc, AzureBlobSrcConn
 # noinspection PyProtectedMember
 import tabsdatak.conn.azureblob._plugin as plugin
 from tabsdatak.spi import ParquetFile
@@ -107,9 +107,21 @@ def run_prefix() -> str:
 
 
 @pytest.fixture
-def conn() -> AzureBlobConn:
+def src_conn() -> AzureBlobSrcConn:
     container, base_path = _parse_uri(_URI)
-    return AzureBlobConn(
+    return AzureBlobSrcConn(
+        container=container,
+        credentials=AzureAccountKey(
+            account_name=Secret.lit(_ACCT_NAME),
+            account_key=Secret.lit(_ACCT_KEY),
+        ),
+        base_path=base_path,
+    )
+
+
+def dest_conn() -> AzureBlobDestConn:
+    container, base_path = _parse_uri(_URI)
+    return AzureBlobDestConn(
         container=container,
         credentials=AzureAccountKey(
             account_name=Secret.lit(_ACCT_NAME),

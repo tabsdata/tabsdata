@@ -1,6 +1,6 @@
 """LocalFile connector — public API.
 
-* :class:`LocalFileConn` -- per-LocalFile connection (base_path, conn_cfg).
+* :class:`LocalFileSrcConn` / :class:`LocalFileDestConn` -- per-LocalFile connection (base_path, conn_cfg).
 * :class:`LocalFileSrc` -- source: list of `paths` (glob-style);
   one parquet slot per path.
 * :class:`LocalFileDest` -- destination: list of `paths`; one
@@ -64,33 +64,38 @@ DestCfgSpec: TypeAlias = Annotated[
 
 
 @_api.dataclass(LocalFileErrorCode.LOCALFILE_1, kw_only=True)
-class LocalFileConn(Conn):
-    """LocalFile connection.
+class LocalFileSrcConn(Conn):
+    """LocalFile connection used by :class:`LocalFileSrc`."""
 
-    Holds the bucket/container/region or base_path and the
-    credentials. The src/dest classes wrap this conn and add
-    the per-flow ``paths`` list. See module docstring for the
-    full field set.
-    """
+    __kind__ = "localFileSrcConn"
 
     base_path: BasePathSpec = ""
     conn_cfg: CfgSpec | None = None
 
     def full_path(self, path: str) -> str:
-        """Resolve ``path`` against ``base_path`` and return the
-        joined result.
-
-        ``path`` is always treated as relative to ``base_path``,
-        even when it starts with ``/`` -- the leading slash is
-        stripped before joining, so ``"/foo"`` and ``"foo"``
-        produce identical output. Trailing slashes on ``path`` /
-        ``base_path`` and on the joined result are also stripped,
-        so the return value never starts or ends with ``/``.
-        """
         return full_path(self.base_path, path)
 
 
-ConnSpec: TypeAlias = Union[NamedConn, LocalFileConn]
+@_api.dataclass(LocalFileErrorCode.LOCALFILE_1, kw_only=True)
+class LocalFileDestConn(Conn):
+    """LocalFile connection used by :class:`LocalFileDest`.
+
+    Attribute-identical to :class:`LocalFileSrcConn` but a
+    distinct class so source and destination connections cannot
+    be confused at the wire-format level.
+    """
+
+    __kind__ = "localFileDestConn"
+
+    base_path: BasePathSpec = ""
+    conn_cfg: CfgSpec | None = None
+
+    def full_path(self, path: str) -> str:
+        return full_path(self.base_path, path)
+
+
+SrcConnSpec: TypeAlias = Union[NamedConn, LocalFileSrcConn]
+DestConnSpec: TypeAlias = Union[NamedConn, LocalFileDestConn]
 
 
 # --- Source ---------------------------------------------------------
@@ -100,7 +105,7 @@ ConnSpec: TypeAlias = Union[NamedConn, LocalFileConn]
 class LocalFileSrc(Src):
     """LocalFile source — one parquet slot per path.
 
-    :param conn: :class:`LocalFileConn` (or :class:`NamedConn`).
+    :param conn: :class:`LocalFileSrcConn` (or :class:`NamedConn`).
     :param paths: List of file paths (or glob patterns) relative
         to the conn's root. One parquet slot per entry.
     :param format: Optional file-format override (default AUTO).
@@ -110,7 +115,7 @@ class LocalFileSrc(Src):
         ``{"tabsdata.file.chunkSize"}``.
     """
 
-    conn: ConnSpec
+    conn: SrcConnSpec
     paths: SrcPathsSpec
     format: SrcFileFormat = SrcFileFormat.AUTO
     format_cfg: SrcFormatCfgSpec | None = None
@@ -132,7 +137,7 @@ class LocalFileSrc(Src):
 class LocalFileDest(Dest):
     """LocalFile destination — write one parquet slot per path.
 
-    :param conn: :class:`LocalFileConn` (or :class:`NamedConn`).
+    :param conn: :class:`LocalFileDestConn` (or :class:`NamedConn`).
     :param paths: List of target file paths relative to the
         conn's root. One parquet slot per entry. Tokens like
         ``${date}`` / ``${trx_id}`` are resolved at write time.
@@ -141,7 +146,7 @@ class LocalFileDest(Dest):
         ``{"tabsdata.file.chunkSize"}``.
     """
 
-    conn: ConnSpec
+    conn: DestConnSpec
     paths: DestPathsSpec
     format: DestFileFormat = DestFileFormat.AUTO
     format_cfg: DestFormatCfgSpec | None = None

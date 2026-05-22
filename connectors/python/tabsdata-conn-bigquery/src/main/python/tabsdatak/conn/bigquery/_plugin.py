@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from tabsdatak.conn.bigquery import (
-    BigQueryConn,
+    BigQueryDestConn,
     BigQueryDest,
     DestCfgKey,
     DestCfgSpec,
@@ -96,7 +96,7 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDest]):
                 slots=len(tables),
             )
 
-        conn = cast(BigQueryConn, write_cfg.conn)
+        conn = cast(BigQueryDestConn, write_cfg.conn)
         project_str = conn.project.value() if conn.project is not None else None
 
         logger.debug("bigquery: establishing BigQuery client (project=%r)", project_str)
@@ -223,18 +223,18 @@ def _load_table_from_uri(
     load_job.result()
 
 
-class _BigQueryExplorer(Explorer[BigQueryConn]):
-    def metadata(self, conn: BigQueryConn) -> Any:
+class _BigQueryExplorer(Explorer[BigQueryDestConn]):
+    def metadata(self, conn: BigQueryDestConn) -> Any:
         # TODO
         pass
 
-    def data(self, conn: BigQueryConn, query: str) -> Any:
+    def data(self, conn: BigQueryDestConn, query: str) -> Any:
         # TODO
         pass
 
 
 BIGQUERY_DEST = DestDef(
-    conn=BigQueryConn,
+    conn=BigQueryDestConn,
     dest_type="bigquery",
     dest_version="v1",
     dest=BigQueryDest,

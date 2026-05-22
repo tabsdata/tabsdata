@@ -13,7 +13,7 @@ from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
     UserPassword,
 )
-from tabsdatak.conn.starrocks import S3Location, StarRocksConn, StarRocksDest
+from tabsdatak.conn.starrocks import S3Location, StarRocksDestConn, StarRocksDest
 # noinspection PyProtectedMember
 from tabsdatak.conn.starrocks import _impl as impl
 # noinspection PyProtectedMember
@@ -58,7 +58,7 @@ def work_dir(tmp_path: Path) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# Fixture builders -- a StarRocksConn / StarRocksDest pointing at a bogus
+# Fixture builders -- a StarRocksDestConn / StarRocksDest pointing at a bogus
 # host. Engine connect is mocked in every test, so the URI never goes
 # through a real driver.
 # ---------------------------------------------------------------------------
@@ -76,8 +76,8 @@ def _staging() -> S3Location:
     )
 
 
-def _bare_conn() -> StarRocksConn:
-    return StarRocksConn(
+def _bare_conn() -> StarRocksDestConn:
+    return StarRocksDestConn(
         host="stub.invalid",
         port=9030,
         database="testdb",
@@ -232,7 +232,7 @@ def test_explorer_methods_are_stubs():
 
 
 def test_starrocks_dest_def_wires_plugin_and_explorer():
-    assert plugin.STARROCKS_DEST.conn is StarRocksConn
+    assert plugin.STARROCKS_DEST.conn is StarRocksDestConn
     assert plugin.STARROCKS_DEST.dest is StarRocksDest
     assert plugin.STARROCKS_DEST.plugin is plugin.StarRocksDestPlugin
     assert plugin.STARROCKS_DEST.explorer is plugin.StarRocksExplorer

@@ -69,7 +69,7 @@ def pytest_sessionfinish(session, exitstatus):
 # full Druid cluster (zookeeper + coordinator + broker + historical +
 # middlemanager + router) declared in :file:`druid-compose.yaml` via
 # ``docker compose -p <project> up -d``, then expose a config object the
-# integration tests can hand straight to ``DruidConn``. Skipped (not
+# integration tests can hand straight to ``DruidDestConn``. Skipped (not
 # failed) if docker isn't reachable so unit-only runs without docker
 # stay green.
 # ---------------------------------------------------------------------------

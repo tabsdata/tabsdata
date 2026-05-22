@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 from tabsdatak.conn.clickhouse import (
-    ClickHouseConn,
+    ClickHouseDestConn,
     ClickHouseDest,
     DestCfgKey,
     DestCfgSpec,
@@ -99,7 +99,7 @@ class _ClickHouseDestPlugin(DestPlugin[ClickHouseDest]):
                 slots=len(tables),
             )
 
-        conn = cast(ClickHouseConn, dest.conn)
+        conn = cast(ClickHouseDestConn, dest.conn)
         write_cfg = _impl.ClickHouseWriteCfg(
             conn=conn,
             target_tables=list(dest.tables),
@@ -151,18 +151,18 @@ def _is_connection_error(exc: BaseException) -> bool:
     }
 
 
-class _ClickHouseExplorer(Explorer[ClickHouseConn]):
-    def metadata(self, conn: ClickHouseConn) -> Any:
+class _ClickHouseExplorer(Explorer[ClickHouseDestConn]):
+    def metadata(self, conn: ClickHouseDestConn) -> Any:
         # TODO
         pass
 
-    def data(self, conn: ClickHouseConn, query: str) -> Any:
+    def data(self, conn: ClickHouseDestConn, query: str) -> Any:
         # TODO
         pass
 
 
 CLICKHOUSE_DEST = DestDef(
-    conn=ClickHouseConn,
+    conn=ClickHouseDestConn,
     dest_type="clickhouse",
     dest_version="v1",
     dest=ClickHouseDest,

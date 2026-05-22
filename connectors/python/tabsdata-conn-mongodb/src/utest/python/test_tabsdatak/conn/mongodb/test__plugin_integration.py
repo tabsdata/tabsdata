@@ -22,7 +22,7 @@ import pytest
 import tabsdatak.conn.mongodb._plugin as plugin
 from tabsdatak.api import Secret
 from tabsdatak.conn.common.types import UserPassword
-from tabsdatak.conn.mongodb import MongoDBConn, MongoDBDest
+from tabsdatak.conn.mongodb import MongoDBDestConn, MongoDBDest
 from tabsdatak.spi import ParquetFile
 
 pytestmark = pytest.mark.mongodb
@@ -59,8 +59,8 @@ class _Ctx:
 
 
 @pytest.fixture
-def conn(mongodb_config) -> MongoDBConn:
-    return MongoDBConn(
+def conn(mongodb_config) -> MongoDBDestConn:
+    return MongoDBDestConn(
         uri=mongodb_config.uri,
         credentials=UserPassword(
             user=Secret.lit(mongodb_config.user),
@@ -94,7 +94,7 @@ def work_dir(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def cleanup(conn: MongoDBConn, database: str, collection_name: str):
+def cleanup(conn: MongoDBDestConn, database: str, collection_name: str):
     """Drop the collection after the test."""
     yield
     import pymongo
@@ -112,7 +112,7 @@ def _make_parquet(path: Path, rows: list[dict]) -> Path:
 
 
 def _read_collection(
-    conn: MongoDBConn, database: str, collection_name: str
+    conn: MongoDBDestConn, database: str, collection_name: str
 ) -> list[dict]:
     import pymongo
 

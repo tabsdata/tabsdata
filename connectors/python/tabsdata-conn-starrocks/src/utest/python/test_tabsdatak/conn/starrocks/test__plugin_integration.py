@@ -23,7 +23,7 @@ import pyarrow.parquet as pq
 import pytest
 from sqlalchemy import create_engine, text
 
-from tabsdatak.conn.starrocks import StarRocksConn, StarRocksDest
+from tabsdatak.conn.starrocks import StarRocksDestConn, StarRocksDest
 # noinspection PyProtectedMember
 from tabsdatak.conn.starrocks import _plugin as plugin
 from tabsdatak.spi import DestContext
@@ -88,10 +88,10 @@ def _dest_ctx(work: Path) -> _DestCtx:
     return _DestCtx(work)
 
 
-def _conn_from(cfg, staging) -> StarRocksConn:
-    """Build a StarRocksConn pointing at the ``fresh_starrocks`` backend
+def _conn_from(cfg, staging) -> StarRocksDestConn:
+    """Build a StarRocksDestConn pointing at the ``fresh_starrocks`` backend
     and the configured S3 staging area."""
-    return StarRocksConn(
+    return StarRocksDestConn(
         host=cfg.host,
         port=cfg.port,
         database=cfg.database,

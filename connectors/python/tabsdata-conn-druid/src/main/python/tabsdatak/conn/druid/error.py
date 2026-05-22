@@ -14,8 +14,8 @@ class DruidRuntimeException(ConnException):
 class DruidErrorCode(ErrorCode):
     DRUID_1 = ErrorDef(
         ConnInitException,
-        "DruidConn validation failed",
-    )  # DruidConn
+        "DruidDestConn validation failed",
+    )  # DruidDestConn
     DRUID_2 = ErrorDef(
         ConnInitException,
         "DruidDest validation failed",

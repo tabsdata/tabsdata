@@ -13,7 +13,7 @@ from pymongo.errors import BulkWriteError, ConnectionFailure, PyMongoError
 import tabsdatak.conn.mongodb._plugin as plugin
 from tabsdatak.api import Secret
 from tabsdatak.conn.common.types import UserPassword
-from tabsdatak.conn.mongodb import MongoDBConn, MongoDBDest
+from tabsdatak.conn.mongodb import MongoDBDestConn, MongoDBDest
 from tabsdatak.conn.mongodb.error import (
     MongodbErrorCode,
     MongoDBRuntimeException,
@@ -47,10 +47,10 @@ class _Ctx:
         return "2026-01-01T00:00:00.000000+00:00"
 
 
-def _bare_conn() -> MongoDBConn:
-    """A MongoDBConn whose URI never reaches a real driver -- the
+def _bare_conn() -> MongoDBDestConn:
+    """A MongoDBDestConn whose URI never reaches a real driver -- the
     pymongo client is monkeypatched in every test."""
-    return MongoDBConn(
+    return MongoDBDestConn(
         uri="mongodb://stub.invalid:27017",
         credentials=UserPassword(
             user=Secret.lit("u"),
@@ -517,7 +517,7 @@ def test_write_out_aborts_transaction_on_failure(monkeypatch, work_dir):
 
 
 def test_uri_with_credentials_inlines_user_pass():
-    conn = MongoDBConn(
+    conn = MongoDBDestConn(
         uri="mongodb://host:27017",
         credentials=UserPassword(
             user=Secret.lit("us er"),
@@ -531,7 +531,7 @@ def test_uri_with_credentials_inlines_user_pass():
 
 
 def test_pymongo_kwargs_strips_prefix():
-    conn = MongoDBConn(
+    conn = MongoDBDestConn(
         uri="mongodb://host:27017",
         credentials=UserPassword(
             user=Secret.lit("u"),
@@ -571,7 +571,7 @@ def test_split_collection_rejects_empty_db():
 
 
 def test_mongodb_dest_def_wires_plugin_and_explorer():
-    assert plugin.MONGODB_DEST.conn is MongoDBConn
+    assert plugin.MONGODB_DEST.conn is MongoDBDestConn
     assert plugin.MONGODB_DEST.dest is MongoDBDest
     assert plugin.MONGODB_DEST.plugin is plugin._MongoDBDestPlugin
     assert plugin.MONGODB_DEST.explorer is plugin._MongoDBExplorer

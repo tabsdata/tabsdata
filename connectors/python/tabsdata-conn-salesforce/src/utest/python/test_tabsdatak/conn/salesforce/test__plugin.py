@@ -11,7 +11,7 @@ import pytest
 
 from tabsdatak.api import Secret
 from tabsdatak.conn.salesforce import (
-    SalesforceConn,
+    SalesforceSrcConn,
     SalesforceReportSrc,
     SalesforceSrc,
     SalesforceTokenCredentials,
@@ -63,8 +63,8 @@ def _credentials() -> SalesforceTokenCredentials:
     )
 
 
-def _conn() -> SalesforceConn:
-    return SalesforceConn(credentials=_credentials())
+def _conn() -> SalesforceSrcConn:
+    return SalesforceSrcConn(credentials=_credentials())
 
 
 # ---------------------------------------------------------------------------
@@ -158,7 +158,7 @@ def test_login_passes_credentials_to_simple_salesforce(monkeypatch):
 def test_login_rejects_unsupported_credentials_type():
     from tabsdatak.conn.salesforce import SalesforceCredentials
 
-    # Build a SalesforceConn through __new__ to bypass the dataclass'
+    # Build a SalesforceSrcConn through __new__ to bypass the dataclass'
     # validator -- we want to exercise the runtime check inside
     # ``_reader.login`` directly.
     class _OtherCreds(SalesforceCredentials):
@@ -333,7 +333,7 @@ def test_explorer_methods_are_stubs():
 
 
 def test_salesforce_src_def_wires_plugin_and_explorer():
-    assert plugin.SALESFORCE_SRC.conn is SalesforceConn
+    assert plugin.SALESFORCE_SRC.conn is SalesforceSrcConn
     assert plugin.SALESFORCE_SRC.src is SalesforceSrc
     assert plugin.SALESFORCE_SRC.plugin is plugin._SalesforceSrcPlugin
     assert plugin.SALESFORCE_SRC.explorer is plugin._SalesforceExplorer
@@ -341,7 +341,7 @@ def test_salesforce_src_def_wires_plugin_and_explorer():
 
 
 def test_salesforce_report_src_def_wires_plugin_and_explorer():
-    assert plugin.SALESFORCE_REPORT_SRC.conn is SalesforceConn
+    assert plugin.SALESFORCE_REPORT_SRC.conn is SalesforceSrcConn
     assert plugin.SALESFORCE_REPORT_SRC.src is SalesforceReportSrc
     assert plugin.SALESFORCE_REPORT_SRC.plugin is plugin._SalesforceReportSrcPlugin
     assert plugin.SALESFORCE_REPORT_SRC.explorer is plugin._SalesforceExplorer

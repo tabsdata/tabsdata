@@ -7,7 +7,7 @@ from typing import Any, cast
 from tabsdatak.conn.snowflake import (
     DestCfgKey,
     DestCfgSpec,
-    SnowflakeConn,
+    SnowflakeDestConn,
     SnowflakeDest,
 )
 from tabsdatak.conn.snowflake.error import SnowflakeErrorCode
@@ -104,7 +104,7 @@ class SnowflakeDestPlugin(DestPlugin[SnowflakeDest]):
                 slots=len(tables),
             )
 
-        conn = cast(SnowflakeConn, dest.conn)
+        conn = cast(SnowflakeDestConn, dest.conn)
         logger.info("snowflake: write_out starting (%d table(s))", len(dest.tables))
         write_cfg = _impl.SnowflakeWriteCfg(
             conn=conn,
@@ -128,18 +128,18 @@ class SnowflakeDestPlugin(DestPlugin[SnowflakeDest]):
         logger.info("snowflake: write_out finished (%d table(s))", len(dest.tables))
 
 
-class SnowflakeExplorer(Explorer[SnowflakeConn]):
-    def metadata(self, conn: SnowflakeConn) -> Any:
+class SnowflakeExplorer(Explorer[SnowflakeDestConn]):
+    def metadata(self, conn: SnowflakeDestConn) -> Any:
         # TODO
         pass
 
-    def data(self, conn: SnowflakeConn, query: str) -> Any:
+    def data(self, conn: SnowflakeDestConn, query: str) -> Any:
         # TODO
         pass
 
 
 SNOWFLAKE_DEST = DestDef(
-    conn=SnowflakeConn,
+    conn=SnowflakeDestConn,
     dest_type="snowflake",
     dest_version="v1",
     dest=SnowflakeDest,

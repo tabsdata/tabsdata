@@ -11,7 +11,7 @@ from typing import Any, Literal
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.salesforce import (
-    SalesforceConn,
+    SalesforceSrcConn,
     SalesforceReportSrc,
     SalesforceSrc,
     SalesforceTokenCredentials,
@@ -77,7 +77,7 @@ _SFR_TYPE_TO_PANDAS_TYPE = {
 # --- Salesforce client login ----------------------------------------------
 
 
-def login(conn: SalesforceConn, api_version: str | None = None) -> Any:
+def login(conn: SalesforceSrcConn, api_version: str | None = None) -> Any:
     """Create a ``simple_salesforce.Salesforce`` client from the conn's
     credentials. Wraps simple-salesforce auth errors as
     ``SalesforceErrorCode.SALESFORCE_10``.

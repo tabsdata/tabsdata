@@ -41,7 +41,7 @@ from tabsdatak.api import Secret
 from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn.kafka import (
     ConfluentSchemaRegistry,
-    KafkaConn,
+    KafkaStreamSrcConn,
     KafkaStreamSrc,
     Protobuf,
 )
@@ -428,7 +428,7 @@ def _make_src(
     src_cfg: dict | None = None,
 ) -> KafkaStreamSrc:
     return KafkaStreamSrc(
-        conn=KafkaConn(
+        conn=KafkaStreamSrcConn(
             servers=kafka_config.bootstrap_servers,
             credentials=_kafka_creds(kafka_config),
             group_id=group_id,

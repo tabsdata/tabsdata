@@ -1,6 +1,6 @@
 """Azure Blob connector — public API.
 
-* :class:`AzureBlobConn` -- per-Azure Blob connection (container,
+* :class:`AzureBlobSrcConn` / :class:`AzureBlobDestConn` -- per-Azure Blob connection (container,
   credentials (AzureAccountKey), base_path, conn_cfg).
 * :class:`AzureBlobSrc` -- source: list of `paths` (glob-style);
   one parquet slot per path.
@@ -80,21 +80,16 @@ DestCfgSpec: TypeAlias = Annotated[
 
 
 @_api.dataclass(AzureBlobErrorCode.AZURE_BLOB_1, kw_only=True)
-class AzureBlobConn(Conn):
-    """Azure Blob Storage connection.
+class AzureBlobSrcConn(Conn):
+    """Azure Blob Storage connection used by :class:`AzureBlobSrc`.
 
-    :param container: Azure Blob container name
-        (e.g. ``"my-container"``).
-    :param credentials: Storage-account key credentials -- a
-        ``UserPassword`` whose ``user`` is the account name and
-        ``password`` is the account key. ``Env`` / ``Secret``
-        references are resolved at session open.
-    :param base_path: Optional path prefix under the container
-        (e.g. ``"datalake/raw/"``); the src/dest ``paths`` are
-        resolved against it. Defaults to the container root.
-    :param conn_cfg: Optional driver-side cfg dict forwarded to
-        the underlying Azure Blob client.
+    :param container: Azure Blob container name.
+    :param credentials: Storage-account key credentials.
+    :param base_path: Optional path prefix under the container.
+    :param conn_cfg: Optional driver-side cfg dict.
     """
+
+    __kind__ = "azureBlobSrcConn"
 
     container: AzContainerSpec
     credentials: CredentialsSpec
@@ -102,20 +97,31 @@ class AzureBlobConn(Conn):
     conn_cfg: CfgSpec | None = None
 
     def full_path(self, path: str) -> str:
-        """Resolve ``path`` against ``base_path`` and return the
-        joined result.
-
-        ``path`` is always treated as relative to ``base_path``,
-        even when it starts with ``/`` -- the leading slash is
-        stripped before joining, so ``"/foo"`` and ``"foo"``
-        produce identical output. Trailing slashes on ``path`` /
-        ``base_path`` and on the joined result are also stripped,
-        so the return value never starts or ends with ``/``.
-        """
         return full_path(self.base_path, path)
 
 
-ConnSpec: TypeAlias = Union[NamedConn, AzureBlobConn]
+@_api.dataclass(AzureBlobErrorCode.AZURE_BLOB_1, kw_only=True)
+class AzureBlobDestConn(Conn):
+    """Azure Blob Storage connection used by :class:`AzureBlobDest`.
+
+    Attribute-identical to :class:`AzureBlobSrcConn` but a distinct
+    class so source and destination connections cannot be confused
+    at the wire-format level.
+    """
+
+    __kind__ = "azureBlobDestConn"
+
+    container: AzContainerSpec
+    credentials: CredentialsSpec
+    base_path: BasePathSpec = ""
+    conn_cfg: CfgSpec | None = None
+
+    def full_path(self, path: str) -> str:
+        return full_path(self.base_path, path)
+
+
+SrcConnSpec: TypeAlias = Union[NamedConn, AzureBlobSrcConn]
+DestConnSpec: TypeAlias = Union[NamedConn, AzureBlobDestConn]
 
 
 # --- Source ----------------------------------------------------------
@@ -125,7 +131,7 @@ ConnSpec: TypeAlias = Union[NamedConn, AzureBlobConn]
 class AzureBlobSrc(Src):
     """Azure Blob source — one parquet slot per path.
 
-    :param conn: :class:`AzureBlobConn` (or :class:`NamedConn`).
+    :param conn: :class:`AzureBlobSrcConn` (or :class:`NamedConn`).
     :param paths: List of file paths (or glob patterns) relative
         to the conn's root. One parquet slot per entry.
     :param format: Optional file-format override (default AUTO).
@@ -135,7 +141,7 @@ class AzureBlobSrc(Src):
         ``{"tabsdata.file.chunkSize"}``.
     """
 
-    conn: ConnSpec
+    conn: SrcConnSpec
     paths: SrcPathsSpec
     format: SrcFileFormat = SrcFileFormat.AUTO
     format_cfg: SrcFormatCfgSpec | None = None
@@ -157,7 +163,7 @@ class AzureBlobSrc(Src):
 class AzureBlobDest(Dest):
     """Azure Blob destination — write one parquet slot per path.
 
-    :param conn: :class:`AzureBlobConn` (or :class:`NamedConn`).
+    :param conn: :class:`AzureBlobDestConn` (or :class:`NamedConn`).
     :param paths: List of target file paths relative to the
         conn's root. One parquet slot per entry. Tokens like
         ``${date}`` / ``${trx_id}`` are resolved at write time.
@@ -166,7 +172,7 @@ class AzureBlobDest(Dest):
         ``{"tabsdata.file.chunkSize"}``.
     """
 
-    conn: ConnSpec
+    conn: DestConnSpec
     paths: DestPathsSpec
     format: DestFileFormat = DestFileFormat.AUTO
     format_cfg: DestFormatCfgSpec | None = None

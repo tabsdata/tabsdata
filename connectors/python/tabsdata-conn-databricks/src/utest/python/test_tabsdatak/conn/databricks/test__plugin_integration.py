@@ -36,7 +36,8 @@ import pytest
 
 from tabsdatak.api import Secret
 from tabsdatak.conn.databricks import (
-    DatabricksConn,
+    DatabricksDestConn,
+    DatabricksSrcConn,
     DatabricksDest,
     DatabricksSrc,
 )
@@ -225,8 +226,19 @@ def databricks_config():
     )
 
 
-def _conn_from(cfg) -> DatabricksConn:
-    return DatabricksConn(
+def _src_conn_from(cfg) -> DatabricksSrcConn:
+    return DatabricksSrcConn(
+        host_url=Secret.lit(cfg.host),
+        token=Secret.lit(cfg.token),
+        volume=Secret.lit(cfg.volume),
+        warehouse=Secret.lit(cfg.warehouse),
+        catalog=Secret.lit(cfg.catalog),
+        schema=Secret.lit(cfg.schema),
+    )
+
+
+def _dest_conn_from(cfg) -> DatabricksDestConn:
+    return DatabricksDestConn(
         host_url=Secret.lit(cfg.host),
         token=Secret.lit(cfg.token),
         volume=Secret.lit(cfg.volume),
@@ -248,9 +260,9 @@ def scratch_table(databricks_config, request):
     # noinspection PyProtectedMember
     from tabsdatak.conn.databricks import _impl
 
-    ws = _impl._build_workspace_client(_conn_from(databricks_config))
+    ws = _impl._build_workspace_client(_src_conn_from(databricks_config))
     sql_conn = _impl._build_sql_connection(
-        ws, _conn_from(databricks_config)
+        ws, _src_conn_from(databricks_config)
     )
     cursor = sql_conn.cursor()
     sql_fq = _impl._fq_for_sql(fq)
@@ -269,9 +281,9 @@ def _count_rows(databricks_config, fq_table: str) -> int:
     # noinspection PyProtectedMember
     from tabsdatak.conn.databricks import _impl
 
-    ws = _impl._build_workspace_client(_conn_from(databricks_config))
+    ws = _impl._build_workspace_client(_src_conn_from(databricks_config))
     sql_conn = _impl._build_sql_connection(
-        ws, _conn_from(databricks_config)
+        ws, _src_conn_from(databricks_config)
     )
     try:
         cursor = sql_conn.cursor()
@@ -294,7 +306,7 @@ def test_dest_plugin_creates_new_table(
         [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}],
     )
     dest = DatabricksDest(
-        conn=_conn_from(databricks_config),
+        conn=_dest_conn_from(databricks_config),
         tables=[scratch_table],
     )
     plugin._DatabricksDestPlugin().write_out(
@@ -314,7 +326,7 @@ def test_dest_plugin_appends_to_existing(
     plugin._DatabricksDestPlugin().write_out(
         _DestCtx(work_dir),
         DatabricksDest(
-            conn=_conn_from(databricks_config),
+            conn=_dest_conn_from(databricks_config),
             tables=[scratch_table],
         ),
         [seed],
@@ -327,7 +339,7 @@ def test_dest_plugin_appends_to_existing(
     plugin._DatabricksDestPlugin().write_out(
         _DestCtx(work_dir),
         DatabricksDest(
-            conn=_conn_from(databricks_config),
+            conn=_dest_conn_from(databricks_config),
             tables=[scratch_table],
         ),
         [add],
@@ -345,7 +357,7 @@ def test_dest_plugin_replace_clears_existing(
     plugin._DatabricksDestPlugin().write_out(
         _DestCtx(work_dir),
         DatabricksDest(
-            conn=_conn_from(databricks_config),
+            conn=_dest_conn_from(databricks_config),
             tables=[scratch_table],
         ),
         [seed],
@@ -357,7 +369,7 @@ def test_dest_plugin_replace_clears_existing(
     plugin._DatabricksDestPlugin().write_out(
         _DestCtx(work_dir),
         DatabricksDest(
-            conn=_conn_from(databricks_config),
+            conn=_dest_conn_from(databricks_config),
             tables=[scratch_table],
             if_table_exists="replace",
         ),
@@ -387,7 +399,7 @@ def _seed(databricks_config, work_dir, scratch_table):
     plugin._DatabricksDestPlugin().write_out(
         _DestCtx(work_dir),
         DatabricksDest(
-            conn=_conn_from(databricks_config),
+            conn=_dest_conn_from(databricks_config),
             tables=[scratch_table],
         ),
         [src],
@@ -408,7 +420,7 @@ def test_fqn_bare_table_uses_conn_defaults(
     plugin._DatabricksDestPlugin().write_out(
         _DestCtx(work_dir),
         DatabricksDest(
-            conn=_conn_from(databricks_config),
+            conn=_dest_conn_from(databricks_config),
             tables=[bare],
         ),
         [add],
@@ -431,7 +443,7 @@ def test_fqn_two_part_uses_conn_catalog(
     plugin._DatabricksDestPlugin().write_out(
         _DestCtx(work_dir),
         DatabricksDest(
-            conn=_conn_from(databricks_config),
+            conn=_dest_conn_from(databricks_config),
             tables=[two_part],
         ),
         [add],
@@ -456,7 +468,7 @@ def test_fqn_quoted_three_part(
     plugin._DatabricksDestPlugin().write_out(
         _DestCtx(work_dir),
         DatabricksDest(
-            conn=_conn_from(databricks_config),
+            conn=_dest_conn_from(databricks_config),
             tables=[quoted],
         ),
         [add],
@@ -483,14 +495,14 @@ def test_src_plugin_round_trip(
     plugin._DatabricksDestPlugin().write_out(
         _DestCtx(work_dir),
         DatabricksDest(
-            conn=_conn_from(databricks_config),
+            conn=_dest_conn_from(databricks_config),
             tables=[scratch_table],
         ),
         [seed],
     )
 
     src = DatabricksSrc(
-        conn=_conn_from(databricks_config),
+        conn=_src_conn_from(databricks_config),
         queries=[
             f"SELECT id, name FROM {_impl._fq_for_sql(scratch_table)} ORDER BY id"
         ],

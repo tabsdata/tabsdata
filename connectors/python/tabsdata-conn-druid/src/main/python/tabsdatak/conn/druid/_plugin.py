@@ -11,7 +11,7 @@ from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.druid import (
     DestCfgKey,
     DestCfgSpec,
-    DruidConn,
+    DruidDestConn,
     DruidDest,
 )
 from tabsdatak.conn.druid.error import DruidErrorCode
@@ -113,7 +113,7 @@ class DruidDestPlugin(DestPlugin[DruidDest]):
                 slots=len(tables),
             )
 
-        conn = cast(DruidConn, dest.conn)
+        conn = cast(DruidDestConn, dest.conn)
         staging = conn.staging
 
         # ---- Stage parquet to the cloud --------------------------
@@ -210,18 +210,18 @@ class DruidDestPlugin(DestPlugin[DruidDest]):
                     raise
 
 
-class DruidExplorer(Explorer[DruidConn]):
-    def metadata(self, conn: DruidConn) -> Any:
+class DruidExplorer(Explorer[DruidDestConn]):
+    def metadata(self, conn: DruidDestConn) -> Any:
         # TODO
         pass
 
-    def data(self, conn: DruidConn, query: str) -> Any:
+    def data(self, conn: DruidDestConn, query: str) -> Any:
         # TODO
         pass
 
 
 DRUID_DEST = DestDef(
-    conn=DruidConn,
+    conn=DruidDestConn,
     dest_type="druid",
     dest_version="v1",
     dest=DruidDest,

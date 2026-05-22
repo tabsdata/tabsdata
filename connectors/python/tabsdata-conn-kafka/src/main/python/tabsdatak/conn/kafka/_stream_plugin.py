@@ -23,7 +23,7 @@ import time
 from typing import Any, cast
 
 from tabsdatak.conn.kafka import (
-    KafkaConn,
+    KafkaStreamSrcConn,
     KafkaStreamSrc,
     SrcCfgKey,
 )
@@ -117,7 +117,7 @@ class KafkaStreamSrcPlugin(StreamSrcPlugin[KafkaStreamSrc]):
     ) -> None:
         from confluent_kafka import Consumer
 
-        conn = cast(KafkaConn, stream_src.conn)
+        conn = cast(KafkaStreamSrcConn, stream_src.conn)
         cfg = _resolve_rollover_cfg(stream_src)
         # Set the level on the whole connector namespace so the
         # plugin, consumer wrapper, serdes and the kafka-config
@@ -326,18 +326,18 @@ class KafkaStreamSrcPlugin(StreamSrcPlugin[KafkaStreamSrc]):
         return time.time()
 
 
-class KafkaExplorer(Explorer[KafkaConn]):
-    def metadata(self, conn: KafkaConn) -> Any:
+class KafkaExplorer(Explorer[KafkaStreamSrcConn]):
+    def metadata(self, conn: KafkaStreamSrcConn) -> Any:
         # TODO
         pass
 
-    def data(self, conn: KafkaConn, query: str) -> Any:
+    def data(self, conn: KafkaStreamSrcConn, query: str) -> Any:
         # TODO
         pass
 
 
 KAFKA_STREAM_SRC = StreamSrcDef(
-    conn=KafkaConn,
+    conn=KafkaStreamSrcConn,
     src_type="kafka",
     src_version="v1",
     src=KafkaStreamSrc,

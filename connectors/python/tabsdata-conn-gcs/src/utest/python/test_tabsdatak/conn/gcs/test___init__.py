@@ -11,15 +11,24 @@ from tabsdatak.conn.common.file.typing_ import (
     FileInfo,
     SrcFileFormat,
 )
-from tabsdatak.conn.gcs import GCSConn, GCSDest, GCSSrc
+from tabsdatak.conn.gcs import GCSDestConn, GCSSrcConn, GCSDest, GCSSrc
 from tabsdatak.conn.gcs.error import GcsErrorCode
 
 
 pytestmark = pytest.mark.gcs
 
 
-def _conn():
-    return GCSConn(
+def _src_conn() -> GCSSrcConn:
+    return GCSSrcConn(
+        bucket="my-bucket",
+        credentials=GCPJson(json=Secret()),
+        project="my-project",
+        conn_cfg={"gcs.timeout": 30},
+    )
+
+
+def _dest_conn() -> GCSDestConn:
+    return GCSDestConn(
         bucket="my-bucket",
         credentials=GCPJson(json=Secret()),
         project="my-project",
@@ -29,7 +38,7 @@ def _conn():
 
 def test_gcs_src_full_round_trip():
     src = GCSSrc(
-        conn=_conn(),
+        conn=_src_conn(),
         paths=["raw/users.csv", "raw/orders/*.csv"],
         format=SrcFileFormat.CSV,
         format_cfg={SrcFileFormat.CSV: {"separator": ";", "has_header": True}},
@@ -54,7 +63,7 @@ def test_gcs_src_full_round_trip():
 
 def test_gcs_dest_full_round_trip():
     dest = GCSDest(
-        conn=_conn(),
+        conn=_dest_conn(),
         paths=["${EXEC_PLAN_ID}/users.csv", "${TRX_ID}/orders.csv"],
         format=DestFileFormat.CSV,
         format_cfg={DestFileFormat.CSV: {"include_header": True, "separator": ","}},
@@ -99,7 +108,7 @@ def test_gcs_dest_round_trip_with_named_conn():
 def test_gcs_validate_rejects_cross_side_format_cfg_keys():
     with pytest.raises(GcsValidateException) as ei:
         GCSSrc(
-            conn=_conn(),
+            conn=_src_conn(),
             paths=["data.csv"],
             format=SrcFileFormat.CSV,
             format_cfg={SrcFileFormat.CSV: {"include_header": True}},
@@ -108,7 +117,7 @@ def test_gcs_validate_rejects_cross_side_format_cfg_keys():
 
     with pytest.raises(GcsValidateException) as ei:
         GCSDest(
-            conn=_conn(),
+            conn=_dest_conn(),
             paths=["out.csv"],
             format=DestFileFormat.CSV,
             format_cfg={DestFileFormat.CSV: {"has_header": True}},
@@ -121,30 +130,39 @@ def test_gcs_validate_rejects_cross_side_format_cfg_keys():
 # ---------------------------------------------------------------------------
 
 
-def _conn_with_base(base_path):
-    return GCSConn(
+@pytest.fixture(params=[GCSSrcConn, GCSDestConn])
+def conn_cls(request):
+    return request.param
+
+
+def _conn_with_base(cls, base_path):
+    return cls(
         bucket="my-bucket",
         credentials=GCPJson(json=Secret()),
         base_path=base_path,
     )
 
 
-def test_gcs_conn_default_base_path_is_empty():
-    c = _conn_with_base("")
+def test_gcs_conn_default_base_path_is_empty(conn_cls):
+    c = _conn_with_base(conn_cls, "")
     assert c.base_path == ""
     assert c.full_path("foo.csv") == "foo.csv"
 
 
-def test_gcs_conn_full_path_treats_absolute_path_as_relative():
-    c = _conn_with_base("/data/")
+def test_gcs_conn_full_path_treats_absolute_path_as_relative(conn_cls):
+    c = _conn_with_base(conn_cls, "/data/")
     assert c.full_path("/foo.csv") == "data/foo.csv"
     assert c.full_path("foo.csv") == "data/foo.csv"
 
 
-def test_gcs_conn_full_path_strips_trailing_slashes():
-    c = _conn_with_base("/data")
+def test_gcs_conn_full_path_strips_trailing_slashes(conn_cls):
+    c = _conn_with_base(conn_cls, "/data")
     assert c.full_path("sub/foo.csv/") == "data/sub/foo.csv"
     assert c.full_path("/") == "data"
+
+
+def test_gcs_src_dest_conn_have_distinct_kinds():
+    assert GCSSrcConn.__kind__ != GCSDestConn.__kind__
 
 
 # ---------------------------------------------------------------------------
@@ -152,19 +170,19 @@ def test_gcs_conn_full_path_strips_trailing_slashes():
 # ---------------------------------------------------------------------------
 
 
-def test_gcs_conn_rejects_missing_bucket():
+def test_gcs_conn_rejects_missing_bucket(conn_cls):
     from tabsdatak.conn.common.error import ConnInitException
 
     with pytest.raises(ConnInitException) as ei:
-        GCSConn(credentials=GCPJson(json=Secret()))  # type: ignore[call-arg]
+        conn_cls(credentials=GCPJson(json=Secret()))  # type: ignore[call-arg]
     assert ei.value.api_error is GcsErrorCode.GCS_1
 
 
-def test_gcs_conn_rejects_missing_credentials():
+def test_gcs_conn_rejects_missing_credentials(conn_cls):
     from tabsdatak.conn.common.error import ConnInitException
 
     with pytest.raises(ConnInitException) as ei:
-        GCSConn(bucket="my-bucket")  # type: ignore[call-arg]
+        conn_cls(bucket="my-bucket")  # type: ignore[call-arg]
     assert ei.value.api_error is GcsErrorCode.GCS_1
 
 
@@ -173,7 +191,7 @@ def test_gcs_src_rejects_missing_paths():
 
     with pytest.raises(ConnInitException) as ei:
         GCSSrc(  # type: ignore[call-arg]
-            conn=_conn(),
+            conn=_src_conn(),
             format=SrcFileFormat.CSV,
         )
     assert ei.value.api_error is GcsErrorCode.GCS_2
@@ -184,7 +202,7 @@ def test_gcs_dest_rejects_missing_paths():
 
     with pytest.raises(ConnInitException) as ei:
         GCSDest(  # type: ignore[call-arg]
-            conn=_conn(),
+            conn=_dest_conn(),
             format=DestFileFormat.CSV,
         )
     assert ei.value.api_error is GcsErrorCode.GCS_4

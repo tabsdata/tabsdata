@@ -19,7 +19,8 @@ import pytest
 
 from tabsdatak.api import Secret
 from tabsdatak.conn.databricks import (
-    DatabricksConn,
+    DatabricksDestConn,
+    DatabricksSrcConn,
     DatabricksDest,
     DatabricksSrc,
 )
@@ -68,8 +69,19 @@ def _ctx(p: Path) -> _Ctx:
 # ---------------------------------------------------------------------------
 
 
-def _conn() -> DatabricksConn:
-    return DatabricksConn(
+def _src_conn() -> DatabricksSrcConn:
+    return DatabricksSrcConn(
+        host_url=Secret.lit("https://example.cloud.databricks.com"),
+        token=Secret.lit("dapi-test"),
+        volume=Secret.lit("my_volume"),
+        warehouse=Secret.lit("MY_WAREHOUSE"),
+        catalog=Secret.lit("main"),
+        schema=Secret.lit("analytics"),
+    )
+
+
+def _dest_conn() -> DatabricksDestConn:
+    return DatabricksDestConn(
         host_url=Secret.lit("https://example.cloud.databricks.com"),
         token=Secret.lit("dapi-test"),
         volume=Secret.lit("my_volume"),
@@ -81,7 +93,7 @@ def _conn() -> DatabricksConn:
 
 def _src() -> DatabricksSrc:
     return DatabricksSrc(
-        conn=_conn(),
+        conn=_src_conn(),
         queries=["SELECT 1"],
     )
 
@@ -90,7 +102,7 @@ def _dest(
     *, tables=("main.analytics.users",), if_table_exists="append"
 ) -> DatabricksDest:
     return DatabricksDest(
-        conn=_conn(),
+        conn=_dest_conn(),
         tables=list(tables),
         if_table_exists=if_table_exists,
     )
@@ -200,7 +212,7 @@ def test_src_plugin_returns_one_parquet_per_query(
     monkeypatch.setattr(impl, "read_all_queries", fake)
 
     src = DatabricksSrc(
-        conn=_conn(),
+        conn=_src_conn(),
         queries=["SELECT 1", "SELECT 2"],
     )
     out = plugin._DatabricksSrcPlugin().read_in(_ctx(work_dir), src)
@@ -326,9 +338,12 @@ def test_dest_plugin_dispatches_to_adapter(monkeypatch, work_dir):
 
 
 def test_explorer_methods_are_stubs():
-    exp = plugin._DatabricksExplorer()
-    assert exp.metadata(_conn()) is None
-    assert exp.data(_conn(), "SELECT 1") is None
+    src_exp = plugin._DatabricksSrcExplorer()
+    assert src_exp.metadata(_src_conn()) is None
+    assert src_exp.data(_src_conn(), "SELECT 1") is None
+    dest_exp = plugin._DatabricksDestExplorer()
+    assert dest_exp.metadata(_dest_conn()) is None
+    assert dest_exp.data(_dest_conn(), "SELECT 1") is None
 
 
 # ---------------------------------------------------------------------------
@@ -337,24 +352,24 @@ def test_explorer_methods_are_stubs():
 
 
 def test_databricks_src_def_wires_plugin_and_explorer():
-    assert plugin.DATABRICKS_SRC.conn is DatabricksConn
+    assert plugin.DATABRICKS_SRC.conn is DatabricksSrcConn
     assert plugin.DATABRICKS_SRC.src is DatabricksSrc
     assert plugin.DATABRICKS_SRC.plugin is plugin._DatabricksSrcPlugin
-    assert plugin.DATABRICKS_SRC.explorer is plugin._DatabricksExplorer
+    assert plugin.DATABRICKS_SRC.explorer is plugin._DatabricksSrcExplorer
     assert plugin.DATABRICKS_SRC.src_type == "databricks"
 
 
 def test_databricks_dest_def_wires_plugin_and_explorer():
-    assert plugin.DATABRICKS_DEST.conn is DatabricksConn
+    assert plugin.DATABRICKS_DEST.conn is DatabricksDestConn
     assert plugin.DATABRICKS_DEST.dest is DatabricksDest
     assert plugin.DATABRICKS_DEST.plugin is plugin._DatabricksDestPlugin
-    assert plugin.DATABRICKS_DEST.explorer is plugin._DatabricksExplorer
+    assert plugin.DATABRICKS_DEST.explorer is plugin._DatabricksDestExplorer
     assert plugin.DATABRICKS_DEST.dest_type == "databricks"
 
 
 def test_databricks_src_cardinality_uses_queries_length():
     src = DatabricksSrc(
-        conn=_conn(),
+        conn=_src_conn(),
         queries=["SELECT 1", "SELECT 2", "SELECT 3"],
     )
     assert plugin.DATABRICKS_SRC.cardinality(src) == 3

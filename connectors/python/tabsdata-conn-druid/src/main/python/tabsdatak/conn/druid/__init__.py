@@ -1,6 +1,6 @@
 """Apache Druid connector — public API.
 
-* :class:`DruidConn` -- per-Druid-Overlord connection.
+* :class:`DruidDestConn` -- per-Druid-Overlord connection.
 * :class:`DruidDest` -- destination: list of datasource names;
   one parquet slot per datasource. Writes go in two stages:
   parquet -> cloud staging (S3 / GCS / Azure), then a native
@@ -179,7 +179,7 @@ class GCSLocation(CloudLocation):
 
 
 @_api.dataclass(DruidErrorCode.DRUID_1, kw_only=True)
-class DruidConn(Conn):
+class DruidDestConn(Conn):
     """Druid Overlord connection.
 
     :param overlord_url: Druid Overlord URL
@@ -193,13 +193,15 @@ class DruidConn(Conn):
     :param conn_cfg: Optional driver-side config dict.
     """
 
+    __kind__ = "druidDestConn"
+
     overlord_url: UrlSpec
     staging: CloudLocation
     credentials: CredentialsSpec
     conn_cfg: CfgSpec | None = None
 
 
-ConnSpec: TypeAlias = Union[NamedConn, DruidConn]
+ConnSpec: TypeAlias = Union[NamedConn, DruidDestConn]
 
 
 # --- Destination -----------------------------------------------------
@@ -209,7 +211,7 @@ ConnSpec: TypeAlias = Union[NamedConn, DruidConn]
 class DruidDest(Dest):
     """Druid destination — one parquet slot per datasource.
 
-    :param conn: :class:`DruidConn` (or :class:`NamedConn`).
+    :param conn: :class:`DruidDestConn` (or :class:`NamedConn`).
     :param tables: Datasource names; one slot per entry.
     :param if_table_exists: ``"append"`` (default) or
         ``"replace"`` (overwrite the datasource).

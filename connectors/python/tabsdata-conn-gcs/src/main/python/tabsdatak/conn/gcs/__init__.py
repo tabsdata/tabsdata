@@ -1,6 +1,6 @@
 """GCS connector — public API.
 
-* :class:`GCSConn` -- per-GCS connection (bucket, credentials (GCPJson),
+* :class:`GCSSrcConn` / :class:`GCSDestConn` -- per-GCS connection (bucket, credentials (GCPJson),
   project, base_path, conn_cfg).
 * :class:`GCSSrc` -- source: list of `paths` (glob-style);
   one parquet slot per path.
@@ -91,24 +91,17 @@ DestCfgSpec: TypeAlias = Annotated[
 
 
 @_api.dataclass(GcsErrorCode.GCS_1, kw_only=True)
-class GCSConn(Conn):
-    """Google Cloud Storage connection.
+class GCSSrcConn(Conn):
+    """GCS connection used by :class:`GCSSrc`.
 
     :param bucket: GCS bucket name (e.g. ``"my-data-bucket"``).
-    :param credentials: GCP service-account credentials. Either
-        :class:`GCPJson` (service-account JSON, native API path,
-        recommended) or HMAC keys for the S3-compatible endpoint.
-        ``Env`` / ``Secret`` references resolved at session open.
-    :param project: Optional GCP project id; required only when the
-        credentials don't carry an embedded project (HMAC keys), or
-        when you want to bill / quota a different project from the
-        one the service account belongs to.
-    :param base_path: Optional object-key prefix under the bucket
-        (e.g. ``"datalake/raw/"``); src/dest ``paths`` resolve
-        against it. Defaults to bucket root.
-    :param conn_cfg: Optional driver-side cfg dict forwarded to
-        the underlying GCS client.
+    :param credentials: :class:`GCPJson` service-account credentials.
+    :param project: Optional GCP project id.
+    :param base_path: Optional object-key prefix under the bucket.
+    :param conn_cfg: Optional driver-side cfg dict.
     """
+
+    __kind__ = "gcsSrcConn"
 
     bucket: GCSBucketSpec
     credentials: CredentialsSpec
@@ -117,20 +110,32 @@ class GCSConn(Conn):
     conn_cfg: CfgSpec | None = None
 
     def full_path(self, path: str) -> str:
-        """Resolve ``path`` against ``base_path`` and return the
-        joined result.
-
-        ``path`` is always treated as relative to ``base_path``,
-        even when it starts with ``/`` -- the leading slash is
-        stripped before joining, so ``"/foo"`` and ``"foo"``
-        produce identical output. Trailing slashes on ``path`` /
-        ``base_path`` and on the joined result are also stripped,
-        so the return value never starts or ends with ``/``.
-        """
         return full_path(self.base_path, path)
 
 
-ConnSpec: TypeAlias = Union[NamedConn, GCSConn]
+@_api.dataclass(GcsErrorCode.GCS_1, kw_only=True)
+class GCSDestConn(Conn):
+    """GCS connection used by :class:`GCSDest`.
+
+    Attribute-identical to :class:`GCSSrcConn` but a distinct
+    class so source and destination connections cannot be
+    confused at the wire-format level.
+    """
+
+    __kind__ = "gcsDestConn"
+
+    bucket: GCSBucketSpec
+    credentials: CredentialsSpec
+    project: ProjectSpec | None = None
+    base_path: BasePathSpec = ""
+    conn_cfg: CfgSpec | None = None
+
+    def full_path(self, path: str) -> str:
+        return full_path(self.base_path, path)
+
+
+SrcConnSpec: TypeAlias = Union[NamedConn, GCSSrcConn]
+DestConnSpec: TypeAlias = Union[NamedConn, GCSDestConn]
 
 
 # --- Source ----------------------------------------------------------
@@ -140,7 +145,7 @@ ConnSpec: TypeAlias = Union[NamedConn, GCSConn]
 class GCSSrc(Src):
     """GCS source — one parquet slot per path.
 
-    :param conn: :class:`GCSConn` (or :class:`NamedConn`).
+    :param conn: :class:`GCSSrcConn` / :class:`GCSDestConn` (or :class:`NamedConn`).
     :param paths: List of file paths (or glob patterns) relative
         to the conn's root. One parquet slot per entry.
     :param format: Optional file-format override (default AUTO).
@@ -150,7 +155,7 @@ class GCSSrc(Src):
         ``{"tabsdata.file.chunkSize"}``.
     """
 
-    conn: ConnSpec
+    conn: SrcConnSpec
     paths: SrcPathsSpec
     format: SrcFileFormat = SrcFileFormat.AUTO
     format_cfg: SrcFormatCfgSpec | None = None
@@ -172,7 +177,7 @@ class GCSSrc(Src):
 class GCSDest(Dest):
     """GCS destination — write one parquet slot per path.
 
-    :param conn: :class:`GCSConn` (or :class:`NamedConn`).
+    :param conn: :class:`GCSSrcConn` / :class:`GCSDestConn` (or :class:`NamedConn`).
     :param paths: List of target file paths relative to the
         conn's root. One parquet slot per entry. Tokens like
         ``${date}`` / ``${trx_id}`` are resolved at write time.
@@ -181,7 +186,7 @@ class GCSDest(Dest):
         ``{"tabsdata.file.chunkSize"}``.
     """
 
-    conn: ConnSpec
+    conn: DestConnSpec
     paths: DestPathsSpec
     format: DestFileFormat = DestFileFormat.AUTO
     format_cfg: DestFormatCfgSpec | None = None

@@ -5,7 +5,8 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 from tabsdatak.conn.databricks import (
-    DatabricksConn,
+    DatabricksDestConn,
+    DatabricksSrcConn,
     DatabricksDest,
     DatabricksSrc,
     DestCfgKey,
@@ -142,7 +143,7 @@ class _DatabricksSrcPlugin(SrcPlugin[DatabricksSrc]):
         # so the SDK doesn't fight us.
         logging.getLogger("databricks").setLevel(cfg.logging_level)
 
-        conn = cast(DatabricksConn, src.conn)
+        conn = cast(DatabricksSrcConn, src.conn)
         read_cfg = _impl.DatabricksReadCfg(
             conn=conn,
             queries=list(src.queries),
@@ -199,7 +200,7 @@ class _DatabricksDestPlugin(DestPlugin[DatabricksDest]):
                 slots=len(tables),
             )
 
-        conn = cast(DatabricksConn, dest.conn)
+        conn = cast(DatabricksDestConn, dest.conn)
         write_cfg = _impl.DatabricksWriteCfg(
             conn=conn,
             target_tables=list(dest.tables),
@@ -228,33 +229,43 @@ class _DatabricksDestPlugin(DestPlugin[DatabricksDest]):
             )
 
 
-class _DatabricksExplorer(Explorer[DatabricksConn]):
-    def metadata(self, conn: DatabricksConn) -> Any:
+class _DatabricksSrcExplorer(Explorer[DatabricksSrcConn]):
+    def metadata(self, conn: DatabricksSrcConn) -> Any:
         # TODO
         pass
 
-    def data(self, conn: DatabricksConn, query: str) -> Any:
+    def data(self, conn: DatabricksSrcConn, query: str) -> Any:
+        # TODO
+        pass
+
+
+class _DatabricksDestExplorer(Explorer[DatabricksDestConn]):
+    def metadata(self, conn: DatabricksDestConn) -> Any:
+        # TODO
+        pass
+
+    def data(self, conn: DatabricksDestConn, query: str) -> Any:
         # TODO
         pass
 
 
 DATABRICKS_SRC = SrcDef(
-    conn=DatabricksConn,
+    conn=DatabricksSrcConn,
     src_type="databricks",
     src_version="v1",
     src=DatabricksSrc,
     table_mode=TableMode.SINGLE,
     cardinality=lambda src: len(src.queries),
     plugin=_DatabricksSrcPlugin,
-    explorer=_DatabricksExplorer,
+    explorer=_DatabricksSrcExplorer,
 )
 
 DATABRICKS_DEST = DestDef(
-    conn=DatabricksConn,
+    conn=DatabricksDestConn,
     dest_type="databricks",
     dest_version="v1",
     dest=DatabricksDest,
     cardinality=lambda dest: len(dest.tables),
     plugin=_DatabricksDestPlugin,
-    explorer=_DatabricksExplorer,
+    explorer=_DatabricksDestExplorer,
 )

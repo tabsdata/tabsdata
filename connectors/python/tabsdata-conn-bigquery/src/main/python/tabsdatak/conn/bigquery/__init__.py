@@ -1,6 +1,6 @@
 """BigQuery connector — public API.
 
-* :class:`BigQueryConn` -- per-project BigQuery connection
+* :class:`BigQueryDestConn` -- per-project BigQuery connection
   (project + GCS staging + GCP credentials).
 * :class:`BigQueryDest` -- destination: list of fully-qualified
   table names (``project.dataset.table``); one parquet slot per
@@ -113,7 +113,7 @@ class GCSLocation(CloudLocation):
 
 
 @_api.dataclass(BigqueryErrorCode.BIGQUERY_1, kw_only=True)
-class BigQueryConn(Conn):
+class BigQueryDestConn(Conn):
     """BigQuery connection.
 
     :param staging: :class:`GCSLocation` used as the parquet
@@ -125,6 +125,8 @@ class BigQueryConn(Conn):
     :param entity_whitelist: Optional regex-based table filter.
     :param conn_cfg: Optional driver-side config dict.
     """
+
+    __kind__ = "bigQueryDestConn"
 
     staging: GCSLocation
     credentials: CredentialsSpec
@@ -139,7 +141,7 @@ class BigQueryConn(Conn):
             raise BigqueryErrorCode.BIGQUERY_2.exception(dataset=self.dataset)
 
 
-ConnSpec: TypeAlias = Union[NamedConn, BigQueryConn]
+ConnSpec: TypeAlias = Union[NamedConn, BigQueryDestConn]
 
 
 # --- Destination -----------------------------------------------------
@@ -149,7 +151,7 @@ ConnSpec: TypeAlias = Union[NamedConn, BigQueryConn]
 class BigQueryDest(Dest):
     """BigQuery destination — one parquet slot per target table.
 
-    :param conn: :class:`BigQueryConn` (or :class:`NamedConn`).
+    :param conn: :class:`BigQueryDestConn` (or :class:`NamedConn`).
     :param tables: Fully-qualified table names
         (``[project.]dataset.table``). One slot per table.
     :param if_table_exists: ``"append"`` (default) or

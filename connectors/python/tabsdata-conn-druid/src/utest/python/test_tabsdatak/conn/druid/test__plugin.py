@@ -23,7 +23,7 @@ from tabsdatak.conn.common.types import (
 )
 from tabsdatak.conn.druid import (
     AzBlobLocation,
-    DruidConn,
+    DruidDestConn,
     DruidDest,
     GCSLocation,
     S3Location,
@@ -122,8 +122,8 @@ def _az_staging() -> AzBlobLocation:
     )
 
 
-def _conn(staging=None) -> DruidConn:
-    return DruidConn(
+def _conn(staging=None) -> DruidDestConn:
+    return DruidDestConn(
         overlord_url="http://druid.example.com:8081",
         staging=staging or _s3_staging(),
         credentials=UserPassword(
@@ -564,7 +564,7 @@ def test_explorer_methods_are_stubs():
 
 
 def test_druid_dest_def_wires_plugin_and_explorer():
-    assert plugin.DRUID_DEST.conn is DruidConn
+    assert plugin.DRUID_DEST.conn is DruidDestConn
     assert plugin.DRUID_DEST.dest is DruidDest
     assert plugin.DRUID_DEST.plugin is plugin.DruidDestPlugin
     assert plugin.DRUID_DEST.explorer is plugin.DruidExplorer

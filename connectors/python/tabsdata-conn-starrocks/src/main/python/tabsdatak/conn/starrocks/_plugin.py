@@ -8,7 +8,7 @@ from typing import Any, cast
 from tabsdatak.conn.starrocks import (
     DestCfgKey,
     DestCfgSpec,
-    StarRocksConn,
+    StarRocksDestConn,
     StarRocksDest,
 )
 from tabsdatak.conn.starrocks.error import StarRocksErrorCode
@@ -89,7 +89,7 @@ class StarRocksDestPlugin(DestPlugin[StarRocksDest]):
                 slots=len(tables),
             )
 
-        conn = cast(StarRocksConn, dest.conn)
+        conn = cast(StarRocksDestConn, dest.conn)
         host = _convert(conn.host, str)
         port = _convert(conn.port, int)
         database = _convert(conn.database, str)
@@ -127,18 +127,18 @@ class StarRocksDestPlugin(DestPlugin[StarRocksDest]):
             )
 
 
-class StarRocksExplorer(Explorer[StarRocksConn]):
-    def metadata(self, conn: StarRocksConn) -> Any:
+class StarRocksExplorer(Explorer[StarRocksDestConn]):
+    def metadata(self, conn: StarRocksDestConn) -> Any:
         # TODO
         pass
 
-    def data(self, conn: StarRocksConn, query: str) -> Any:
+    def data(self, conn: StarRocksDestConn, query: str) -> Any:
         # TODO
         pass
 
 
 STARROCKS_DEST = DestDef(
-    conn=StarRocksConn,
+    conn=StarRocksDestConn,
     dest_type="starrocks",
     dest_version="v1",
     dest=StarRocksDest,

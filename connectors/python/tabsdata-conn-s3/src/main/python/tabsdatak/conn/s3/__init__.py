@@ -1,6 +1,6 @@
 """S3 connector — public API.
 
-* :class:`S3Conn` -- per-S3 connection (bucket, region,
+* :class:`S3SrcConn` / :class:`S3DestConn` -- per-S3 connection (bucket, region,
   credentials (AwsAccessSecretKey), base_path, conn_cfg).
 * :class:`S3Src` -- source: list of `paths` (glob-style);
   one parquet slot per path.
@@ -77,14 +77,14 @@ DestCfgSpec: TypeAlias = Annotated[
 
 
 @_api.dataclass(S3ErrorCode.S3_1, kw_only=True)
-class S3Conn(Conn):
-    """S3 connection.
+class S3SrcConn(Conn):
+    """S3 connection used by :class:`S3Src`.
 
-    Holds the bucket/container/region or base_path and the
-    credentials. The src/dest classes wrap this conn and add
-    the per-flow ``paths`` list. See module docstring for the
-    full field set.
+    Holds the bucket / region / credentials / base_path. The src
+    class wraps this conn and adds the per-flow ``paths`` list.
     """
+
+    __kind__ = "s3SrcConn"
 
     bucket: S3BucketSpec
     region: AwsRegionSpec
@@ -94,19 +94,33 @@ class S3Conn(Conn):
 
     def full_path(self, path: str) -> str:
         """Resolve ``path`` against ``base_path`` and return the
-        joined result.
-
-        ``path`` is always treated as relative to ``base_path``,
-        even when it starts with ``/`` -- the leading slash is
-        stripped before joining, so ``"/foo"`` and ``"foo"``
-        produce identical output. Trailing slashes on ``path`` /
-        ``base_path`` and on the joined result are also stripped,
-        so the return value never starts or ends with ``/``.
-        """
+        joined result."""
         return full_path(self.base_path, path)
 
 
-ConnSpec: TypeAlias = Union[NamedConn, S3Conn]
+@_api.dataclass(S3ErrorCode.S3_1, kw_only=True)
+class S3DestConn(Conn):
+    """S3 connection used by :class:`S3Dest`.
+
+    Attribute-identical to :class:`S3SrcConn` but a distinct class
+    so source and destination connections cannot be confused at
+    the wire-format level.
+    """
+
+    __kind__ = "s3DestConn"
+
+    bucket: S3BucketSpec
+    region: AwsRegionSpec
+    credentials: CredentialsSpec
+    base_path: BasePathSpec = ""
+    conn_cfg: CfgSpec | None = None
+
+    def full_path(self, path: str) -> str:
+        return full_path(self.base_path, path)
+
+
+SrcConnSpec: TypeAlias = Union[NamedConn, S3SrcConn]
+DestConnSpec: TypeAlias = Union[NamedConn, S3DestConn]
 
 
 # --- Source ----------------------------------------------------------
@@ -116,7 +130,7 @@ ConnSpec: TypeAlias = Union[NamedConn, S3Conn]
 class S3Src(Src):
     """S3 source — one parquet slot per path.
 
-    :param conn: :class:`S3Conn` (or :class:`NamedConn`).
+    :param conn: :class:`S3SrcConn` (or :class:`NamedConn`).
     :param paths: List of file paths (or glob patterns) relative
         to the conn's root. One parquet slot per entry.
     :param format: Optional file-format override (default AUTO).
@@ -126,7 +140,7 @@ class S3Src(Src):
         ``{"tabsdata.file.chunkSize"}``.
     """
 
-    conn: ConnSpec
+    conn: SrcConnSpec
     paths: SrcPathsSpec
     format: SrcFileFormat = SrcFileFormat.AUTO
     format_cfg: SrcFormatCfgSpec | None = None
@@ -148,7 +162,7 @@ class S3Src(Src):
 class S3Dest(Dest):
     """S3 destination — write one parquet slot per path.
 
-    :param conn: :class:`S3Conn` (or :class:`NamedConn`).
+    :param conn: :class:`S3DestConn` (or :class:`NamedConn`).
     :param paths: List of target file paths relative to the
         conn's root. One parquet slot per entry. Tokens like
         ``${date}`` / ``${trx_id}`` are resolved at write time.
@@ -157,7 +171,7 @@ class S3Dest(Dest):
         ``{"tabsdata.file.chunkSize"}``.
     """
 
-    conn: ConnSpec
+    conn: DestConnSpec
     paths: DestPathsSpec
     format: DestFileFormat = DestFileFormat.AUTO
     format_cfg: DestFormatCfgSpec | None = None

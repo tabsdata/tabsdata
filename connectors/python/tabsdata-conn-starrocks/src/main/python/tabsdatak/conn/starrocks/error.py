@@ -21,8 +21,8 @@ class StarRocksRuntimeException(ConnException):
 class StarRocksErrorCode(ErrorCode):
     STARROCKS_1 = ErrorDef(
         ConnInitException,
-        "StarRocksConn validation failed",
-    )  # StarRocksConn
+        "StarRocksDestConn validation failed",
+    )  # StarRocksDestConn
     STARROCKS_2 = ErrorDef(
         ConnInitException,
         "StarRocksDest validation failed",

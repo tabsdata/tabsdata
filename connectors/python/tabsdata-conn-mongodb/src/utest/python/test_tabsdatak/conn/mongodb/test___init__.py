@@ -4,7 +4,7 @@ import pytest
 from tabsdatak.api import Env, NamedConn, Secret
 from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.common.types import UserPassword
-from tabsdatak.conn.mongodb import MongoDBConn, MongoDBDest
+from tabsdatak.conn.mongodb import MongoDBDestConn, MongoDBDest
 from tabsdatak.conn.mongodb.error import (
     MongoDBValidateException,
     MongodbErrorCode,
@@ -16,7 +16,7 @@ pytestmark = pytest.mark.mongodb
 
 
 def _conn():
-    return MongoDBConn(
+    return MongoDBDestConn(
         uri="mongodb://mongo.example.com:27017",
         credentials=UserPassword(
             user=Secret.lit("etl"),
@@ -80,7 +80,7 @@ def test_mongodb_dest_round_trip_with_named_conn():
 
 
 def test_mongodb_conn_accepts_plain_str_uri():
-    conn = MongoDBConn(
+    conn = MongoDBDestConn(
         uri="mongodb+srv://cluster.example.com",
         credentials=UserPassword(
             user=Secret.lit("u"),
@@ -91,7 +91,7 @@ def test_mongodb_conn_accepts_plain_str_uri():
 
 
 def test_mongodb_conn_accepts_secret_uri():
-    conn = MongoDBConn(
+    conn = MongoDBDestConn(
         uri=Secret.lit("mongodb://mongo:27017"),
         credentials=UserPassword(
             user=Secret.lit("u"),
@@ -102,7 +102,7 @@ def test_mongodb_conn_accepts_secret_uri():
 
 
 def test_mongodb_conn_accepts_env_uri():
-    conn = MongoDBConn(
+    conn = MongoDBDestConn(
         uri=Env(s="MONGO_URI"),
         credentials=UserPassword(
             user=Secret.lit("u"),
@@ -118,7 +118,7 @@ def test_mongodb_conn_rejects_bad_uri_scheme():
     # Union -- pydantic surfaces whichever raised; assert on the
     # ``TabsdataException`` umbrella rather than the specific code.
     with pytest.raises(TabsdataException):
-        MongoDBConn(
+        MongoDBDestConn(
             uri="mysql://nope",
             credentials=UserPassword(
                 user=Secret.lit("u"),
@@ -183,7 +183,7 @@ def test_mongodb_conn_rejects_missing_uri():
     from tabsdatak.conn.common.error import ConnInitException
 
     with pytest.raises(ConnInitException) as ei:
-        MongoDBConn(  # type: ignore[call-arg]
+        MongoDBDestConn(  # type: ignore[call-arg]
             credentials=UserPassword(
                 user=Secret.lit("u"),
                 password=Secret.lit("p"),

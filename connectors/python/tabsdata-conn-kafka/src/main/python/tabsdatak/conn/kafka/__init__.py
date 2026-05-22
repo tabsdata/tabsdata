@@ -3,7 +3,7 @@
 Streaming only (no batch ``Src`` / ``Dest``). Modelled on the CDC
 connectors (mysql / postgres / db2):
 
-* :class:`KafkaConn` -- per-instance Kafka connection: bootstrap
+* :class:`KafkaStreamSrcConn` -- per-instance Kafka connection: bootstrap
   servers, SASL credentials, consumer group id, optional schema
   registry.
 * :class:`KafkaStreamSrc` -- stream source that pulls from a single
@@ -11,7 +11,7 @@ connectors (mysql / postgres / db2):
   (time / size / message-count thresholds).
 * :class:`ConfluentSchemaRegistry` / :class:`AwsGlueSchemaRegistry`
   -- optional schema-registry configurations attached to
-  :class:`KafkaConn`.
+  :class:`KafkaStreamSrcConn`.
 * :class:`Protobuf` -- :data:`KafkaMessageFormatSpec` variant
   carrying the protobuf message type name.
 
@@ -89,7 +89,7 @@ ConfluentSchemaRegistryUrlNameSpec: TypeAlias = Union[
 @_api.dataclass(KafkaErrorCode.KAFKA_2, kw_only=True)
 class ConfluentSchemaRegistry:
     """Confluent-style schema registry attached to a
-    ``KafkaConn``.
+    ``KafkaStreamSrcConn``.
 
     :param url: Registry HTTP(S) URL.
     :param credentials: Optional basic-auth credentials (resolved
@@ -119,7 +119,7 @@ SchemaNameSpec: TypeAlias = Union[
 
 @_api.dataclass(KafkaErrorCode.KAFKA_3, kw_only=True)
 class AwsGlueSchemaRegistry:
-    """AWS Glue schema registry attached to a ``KafkaConn``.
+    """AWS Glue schema registry attached to a ``KafkaStreamSrcConn``.
 
     :param region_name: AWS region the registry lives in
         (e.g. ``"us-east-1"``).
@@ -139,7 +139,7 @@ class AwsGlueSchemaRegistry:
 
 
 # Discriminated union of supported schema-registry types. ``None``
-# (the default on :class:`KafkaConn`) means schema-less ingest.
+# (the default on :class:`KafkaStreamSrcConn`) means schema-less ingest.
 SchemaRegistrySpec: TypeAlias = Union[
     ConfluentSchemaRegistry,
     AwsGlueSchemaRegistry,
@@ -180,11 +180,11 @@ KafkaTopicSpec: TypeAlias = Union[
 ]
 
 
-# --- KafkaConn ------------------------------------------------------
+# --- KafkaStreamSrcConn ------------------------------------------------------
 
 
 @_api.dataclass(KafkaErrorCode.KAFKA_1, kw_only=True)
-class KafkaConn(Conn):
+class KafkaStreamSrcConn(Conn):
     """Kafka connection.
 
     :param servers: Bootstrap-server list -- a single
@@ -200,6 +200,8 @@ class KafkaConn(Conn):
         consumer ``configs`` to ``confluent_kafka.Consumer``).
     """
 
+    __kind__ = "kafkaStreamSrcConn"
+
     servers: KafkaServersSpec
     credentials: KafkaCredentialsSpec | None = None
     group_id: KafkaGroupSpec
@@ -207,7 +209,7 @@ class KafkaConn(Conn):
     conn_cfg: CfgSpec | None = None
 
 
-ConnSpec: TypeAlias = Union[NamedConn, KafkaConn]
+ConnSpec: TypeAlias = Union[NamedConn, KafkaStreamSrcConn]
 
 
 # --- KafkaStreamSrc.src_cfg keys ------------------------------------
@@ -240,7 +242,7 @@ class KafkaStreamSrc(StreamSrc):
     sources use. Each rollover yields one :class:`TableManifest`
     pointing at the parquet file the buffer flushed to.
 
-    :param conn: :class:`KafkaConn` (or :class:`NamedConn`).
+    :param conn: :class:`KafkaStreamSrcConn` (or :class:`NamedConn`).
     :param data_format: Wire format -- ``"avro"`` / ``"json"`` or
         :class:`Protobuf`.
     :param schema: Schema definition string for the data format

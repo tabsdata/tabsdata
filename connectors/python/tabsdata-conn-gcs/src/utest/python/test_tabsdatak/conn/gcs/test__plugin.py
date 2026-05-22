@@ -11,7 +11,7 @@ from tabsdatak.conn.common.file import _plugin as _file_plugin
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.file import _transporter
 from tabsdatak.conn.common.types import GCPJson
-from tabsdatak.conn.gcs import GCSConn, GCSDest, GCSSrc
+from tabsdatak.conn.gcs import GCSDestConn, GCSSrcConn, GCSDest, GCSSrc
 # noinspection PyProtectedMember
 import tabsdatak.conn.gcs._plugin as plugin
 from tabsdatak.spi import ParquetFile
@@ -24,13 +24,22 @@ def _gcp_creds() -> GCPJson:
     return GCPJson(json=Secret.lit('{"type":"service_account"}'))
 
 
-def _conn(**overrides) -> GCSConn:
+def _src_conn(**overrides) -> GCSSrcConn:
     kw = dict(
         bucket="my-bucket",
         credentials=_gcp_creds(),
     )
     kw.update(overrides)
-    return GCSConn(**kw)
+    return GCSSrcConn(**kw)
+
+
+def _dest_conn(**overrides) -> GCSDestConn:
+    kw = dict(
+        bucket="my-bucket",
+        credentials=_gcp_creds(),
+    )
+    kw.update(overrides)
+    return GCSDestConn(**kw)
 
 
 # ---------------------------------------------------------------------------
@@ -39,7 +48,7 @@ def _conn(**overrides) -> GCSConn:
 
 
 def test_build_location_emits_transporter_gcs_with_env_credentials():
-    loc = plugin.build_location(_conn(), "raw/users.parquet")
+    loc = plugin.build_location(_src_conn(), "raw/users.parquet")
     assert isinstance(loc, _transporter.TransporterGCS)
     assert loc.url == "gs://my-bucket/raw/users.parquet"
     assert loc.service_account_key == _transporter.TransporterEnv(
@@ -48,12 +57,12 @@ def test_build_location_emits_transporter_gcs_with_env_credentials():
 
 
 def test_build_location_strips_leading_slash_on_path_entry():
-    loc = plugin.build_location(_conn(), "/raw/users.parquet")
+    loc = plugin.build_location(_src_conn(), "/raw/users.parquet")
     assert loc.url == "gs://my-bucket/raw/users.parquet"
 
 
 def test_build_location_preserves_explicit_gs_uri():
-    loc = plugin.build_location(_conn(), "gs://other-bucket/x/y.parquet")
+    loc = plugin.build_location(_src_conn(), "gs://other-bucket/x/y.parquet")
     assert loc.url == "gs://other-bucket/x/y.parquet"
 
 
@@ -63,7 +72,7 @@ def test_build_location_preserves_explicit_gs_uri():
 
 
 def test_run_env_resolves_credentials_to_server_side_env_var_names():
-    env = plugin.run_env(_conn())
+    env = plugin.run_env(_src_conn())
     assert env == {
         _transporter.SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON: '{"type":"service_account"}',
     }
@@ -73,7 +82,7 @@ def test_credentials_rejects_non_gcpjson(monkeypatch):
     class _OtherCreds:
         pass
 
-    conn = MagicMock(spec=GCSConn)
+    conn = MagicMock(spec=GCSSrcConn)
     conn.credentials = _OtherCreds()
     with pytest.raises(TypeError, match="must be GCPJson"):
         plugin.credentials(conn)
@@ -108,7 +117,7 @@ def test_src_plugin_passes_build_location_run_env_and_errors(monkeypatch, tmp_pa
 
     monkeypatch.setattr(_file_plugin, "import_files", fake)
 
-    src = GCSSrc(conn=_conn(), paths=["a/b.parquet"])
+    src = GCSSrc(conn=_src_conn(), paths=["a/b.parquet"])
     out = plugin.GCSSrcPlugin().read_in(_src_ctx(tmp_path), src)
 
     assert out == [[ParquetFile(tmp_path / "ok.parquet")]]
@@ -129,7 +138,7 @@ def test_dest_plugin_passes_build_location_run_env_and_errors(monkeypatch, tmp_p
 
     monkeypatch.setattr(_file_plugin, "copy_out", fake)
 
-    dest = GCSDest(conn=_conn(), paths=["out/x.parquet"])
+    dest = GCSDest(conn=_dest_conn(), paths=["out/x.parquet"])
     parquet = ParquetFile(tmp_path / "in.parquet")
     plugin.GCSDestPlugin().write_out(_dest_ctx(tmp_path), dest, [parquet])
 
@@ -146,9 +155,12 @@ def test_dest_plugin_passes_build_location_run_env_and_errors(monkeypatch, tmp_p
 
 
 def test_explorer_methods_are_stubs():
-    exp = plugin.GCSExplorer()
-    assert exp.metadata(_conn()) is None
-    assert exp.data(_conn(), "SELECT 1") is None
+    src_exp = plugin.GCSSrcExplorer()
+    assert src_exp.metadata(_src_conn()) is None
+    assert src_exp.data(_src_conn(), "SELECT 1") is None
+    dest_exp = plugin.GCSDestExplorer()
+    assert dest_exp.metadata(_dest_conn()) is None
+    assert dest_exp.data(_dest_conn(), "SELECT 1") is None
 
 
 # ---------------------------------------------------------------------------
@@ -157,23 +169,23 @@ def test_explorer_methods_are_stubs():
 
 
 def test_gcs_src_def_wires_plugin_and_explorer():
-    assert plugin.GCS_SRC.conn is GCSConn
+    assert plugin.GCS_SRC.conn is GCSSrcConn
     assert plugin.GCS_SRC.src is GCSSrc
     assert plugin.GCS_SRC.plugin is plugin.GCSSrcPlugin
-    assert plugin.GCS_SRC.explorer is plugin.GCSExplorer
+    assert plugin.GCS_SRC.explorer is plugin.GCSSrcExplorer
     assert plugin.GCS_SRC.src_type == "gcs"
 
 
 def test_gcs_dest_def_wires_plugin_and_explorer():
-    assert plugin.GCS_DEST.conn is GCSConn
+    assert plugin.GCS_DEST.conn is GCSDestConn
     assert plugin.GCS_DEST.dest is GCSDest
     assert plugin.GCS_DEST.plugin is plugin.GCSDestPlugin
-    assert plugin.GCS_DEST.explorer is plugin.GCSExplorer
+    assert plugin.GCS_DEST.explorer is plugin.GCSDestExplorer
     assert plugin.GCS_DEST.dest_type == "gcs"
 
 
 def test_gcs_cardinality_uses_paths_length():
-    src = GCSSrc(conn=_conn(), paths=["a", "b", "c"])
+    src = GCSSrc(conn=_src_conn(), paths=["a", "b", "c"])
     assert plugin.GCS_SRC.cardinality(src) == 3
-    dest = GCSDest(conn=_conn(), paths=["a", "b"])
+    dest = GCSDest(conn=_dest_conn(), paths=["a", "b"])
     assert plugin.GCS_DEST.cardinality(dest) == 2

@@ -20,7 +20,7 @@ from tabsdatak.conn.starrocks import (
     S3Location,
     PortSpec,
     SchemaEvolutionSpec,
-    StarRocksConn,
+    StarRocksDestConn,
     StarRocksDest,
     StarRocksTableNamesSpec,
 )
@@ -44,7 +44,7 @@ def _staging():
 
 
 def _conn():
-    return StarRocksConn(
+    return StarRocksDestConn(
         host="starrocks.example.com",
         staging=_staging(),
         port=9031,
@@ -97,11 +97,11 @@ def _hint(cls: type, field: str) -> object:
 
 
 def test_starrocks_conn_fields_wire_expected_specs():
-    assert _hint(StarRocksConn, "host") == HostSpec
-    assert _hint(StarRocksConn, "port") == PortSpec
-    assert _hint(StarRocksConn, "database") == DatabaseSpec
-    assert _hint(StarRocksConn, "credentials") == CredentialsSpec
-    assert _hint(StarRocksConn, "conn_cfg") == CfgSpec | None
+    assert _hint(StarRocksDestConn, "host") == HostSpec
+    assert _hint(StarRocksDestConn, "port") == PortSpec
+    assert _hint(StarRocksDestConn, "database") == DatabaseSpec
+    assert _hint(StarRocksDestConn, "credentials") == CredentialsSpec
+    assert _hint(StarRocksDestConn, "conn_cfg") == CfgSpec | None
 
 
 def test_starrocks_dest_fields_wire_expected_specs():
@@ -118,7 +118,7 @@ def test_starrocks_dest_fields_wire_expected_specs():
 
 
 def _conn_with_port(port):
-    return StarRocksConn(
+    return StarRocksDestConn(
         host="sr.example.com",
         staging=_staging(),
         port=port,
@@ -171,7 +171,7 @@ def test_port_secret_literal_non_numeric_rejected_at_construction():
 
 
 def _bare_conn():
-    return StarRocksConn(
+    return StarRocksDestConn(
         host=Secret.lit("sr.example.com"),
         staging=S3Location(
             bucket="staging",
@@ -210,7 +210,7 @@ def test_starrocks_dest_accepts_known_dest_cfg_keys():
 
 def test_starrocks_conn_rejects_missing_required_fields():
     with pytest.raises(ConnInitException) as ei:
-        StarRocksConn(  # type: ignore[call-arg]
+        StarRocksDestConn(  # type: ignore[call-arg]
             staging=_staging(),
             credentials=UserPassword(
                 user=Secret.lit("u"),
