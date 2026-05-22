@@ -46,6 +46,7 @@ import sys
 import threading
 from pathlib import Path
 
+import polars as pl
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
@@ -134,6 +135,87 @@ def bundle_path(tmp_path, user_project) -> Path:
     return path
 
 
+# --- multi-input publisher (cardinality 2 in / cardinality 3 out) --------
+
+# A second publisher used by the multi-input e2e test. Source has TWO
+# distinct paths (cardinality 2 → 2 input slots → 2 function params)
+# and the function declares THREE outputs (cardinality 3 ≠ 2 ≠ 1
+# matters: input ≠ output, neither side is the default 1).
+#
+# Output mix:
+#   * `concat_all` — vertical concat of all rows from both slots
+#   * `first_only` — just the first row from slot A
+#   * `skipped`    — None (exercises file: null in the outputs manifest)
+_USER_PUBLISHER_MULTI_SRC = """\
+from __future__ import annotations
+
+from tabsdatak.api import TableFrameSpec, TableFramesSpec, publisher
+from tabsdatak.conn.localfile import LocalFileConn, LocalFileSrc
+
+_SRC = LocalFileSrc(
+    conn=LocalFileConn(base_path={base_path!r}),
+    paths=["a.parquet", "b.parquet"],
+)
+
+
+@publisher(
+    source=_SRC,
+    output_tables=["concat_all", "first_only", "skipped"],
+)
+def multi_publisher(
+    in_a: TableFramesSpec, in_b: TableFramesSpec
+) -> tuple[TableFrameSpec, TableFrameSpec, TableFrameSpec]:
+    import polars as pl
+
+    a_frames = [f for f in (in_a or []) if f is not None]
+    b_frames = [f for f in (in_b or []) if f is not None]
+    all_frames = a_frames + b_frames
+
+    concat = (
+        pl.concat(all_frames, how="vertical_relaxed") if all_frames else None
+    )
+    first = a_frames[0] if a_frames else None
+    return (concat, first, None)
+"""
+
+
+@pytest.fixture
+def multi_user_project(tmp_path, monkeypatch) -> Path:
+    """User project with a 2-path publisher reading from two distinct
+    parquet files in the source dir."""
+    srcdata = tmp_path / "multi_srcdata"
+    srcdata.mkdir()
+    pl.DataFrame({"id": [1, 2], "name": ["a1", "a2"]}).write_parquet(
+        srcdata / "a.parquet"
+    )
+    pl.DataFrame({"id": [10, 11, 12], "name": ["b1", "b2", "b3"]}).write_parquet(
+        srcdata / "b.parquet"
+    )
+
+    project = tmp_path / "multi_project"
+    pkg = project / "multi_pkg"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text("")
+    (pkg / "publisher.py").write_text(
+        _USER_PUBLISHER_MULTI_SRC.format(base_path=str(srcdata))
+    )
+    monkeypatch.syspath_prepend(str(project))
+    importlib.invalidate_caches()
+    yield project
+    for name in list(sys.modules):
+        if name == "multi_pkg" or name.startswith("multi_pkg."):
+            del sys.modules[name]
+
+
+@pytest.fixture
+def multi_bundle_path(tmp_path, multi_user_project) -> Path:
+    from multi_pkg.publisher import multi_publisher  # noqa: E402
+
+    path = tmp_path / "multi_bundle.tar.gz"
+    build_bundle(multi_publisher, multi_user_project, path)
+    return path
+
+
 @pytest.fixture
 def mock_apiserver():
     """Tiny HTTP server in a thread. Yields (base_url, requests_log)."""
@@ -198,6 +280,34 @@ def _write_request(path: Path, *, bundle_uri: str, uploaded_dir: Path) -> Path:
                     "uri": (uploaded_dir / "my_table2.parquet").as_uri(),
                 },
             },
+        ],
+        "system_input": [],
+        "system_output": [],
+    }
+    path.write_text(yaml.safe_dump(body))
+    return path
+
+
+def _write_multi_request(path: Path, *, bundle_uri: str, uploaded_dir: Path) -> Path:
+    """request.yaml for the multi-input publisher — 3 output tables."""
+    body = {
+        "info": {
+            "collection": "smoke",
+            "collection_id": 1,
+            "execution_id": 1,
+            "transaction_id": 1,
+            "function_run_id": 1,
+            "function_bundle": {"uri": bundle_uri},
+        },
+        "input": [],
+        "output": [
+            {
+                "name": name,
+                "location": {
+                    "uri": (uploaded_dir / f"{name}.parquet").as_uri(),
+                },
+            }
+            for name in ("concat_all", "first_only", "skipped")
         ],
         "system_input": [],
         "system_output": [],
@@ -277,6 +387,8 @@ def test_publisher_full_chain(tmp_path, bundle_path, mock_apiserver, monkeypatch
         main as prep_loc_main,
     )
 
+    prep_loc_inputs_manifest = tmp_path / "prep_loc_inputs.yaml"
+    prep_loc_state_manifest = tmp_path / "prep_loc_state.yaml"
     rc = _invoke(
         monkeypatch,
         prep_loc_main,
@@ -290,6 +402,10 @@ def test_publisher_full_chain(tmp_path, bundle_path, mock_apiserver, monkeypatch
             str(state_dir),
             "--out",
             str(localize_state_req),
+            "--inputs-manifest",
+            str(prep_loc_inputs_manifest),
+            "--state-manifest",
+            str(prep_loc_state_manifest),
             "--liveness",
             str(tmp_path / "liveness-prep-loc-state"),
         ],
@@ -297,6 +413,10 @@ def test_publisher_full_chain(tmp_path, bundle_path, mock_apiserver, monkeypatch
     assert rc == 0
     # Empty pairs — no inputs and no system_input declared.
     assert "source_target_pairs: []" in localize_state_req.read_text()
+    # Both manifests are empty (publishers have no request.input or
+    # request.system_input).
+    assert yaml.safe_load(prep_loc_inputs_manifest.read_text()) == {"inputs": []}
+    assert yaml.safe_load(prep_loc_state_manifest.read_text()) == {"state": []}
 
     # --- 3. run-transporter (localize-state, empty) --------------------
     from tabsdatak._tdrunner.function.commands.run_transporter import (
@@ -563,3 +683,338 @@ def test_publisher_full_chain(tmp_path, bundle_path, mock_apiserver, monkeypatch
     assert posted["headers"]["Authorization"] == "Bearer mock-bearer-token"
     assert posted["headers"]["Content-Type"] == "application/x-yaml"
     assert posted["body"] == response_yaml.read_bytes()
+
+
+def test_publisher_full_chain_multi_input_path(
+    tmp_path, multi_bundle_path, mock_apiserver, monkeypatch
+):
+    """End-to-end with a publisher whose source has 2 paths
+    (cardinality 2 → 2 input slots / 2 function parameters) and
+    3 output tables (cardinality 3 ≠ 2). Exercises:
+
+      * `_input_count` must come from the function signature
+        (regression coverage for the publisher-hardcoded-1 bug).
+      * cardinality on input ≠ cardinality on output.
+      * mixed output shapes (full concat, partial, None) across the
+        upload + report-completion path.
+    """
+    base_url, requests_log = mock_apiserver
+
+    extracted = tmp_path / "extracted"
+    in_dir = tmp_path / "in"
+    state_dir = tmp_path / "state"
+    out_dir = tmp_path / "out"
+    enriched_dir = tmp_path / "enriched"
+    fn_out_dir = tmp_path / "fn_out"
+    uploaded_dir = tmp_path / "uploaded"
+    in_dir.mkdir()
+    state_dir.mkdir()
+    out_dir.mkdir()
+    uploaded_dir.mkdir()
+
+    inputs_manifest = tmp_path / "inputs_manifest.yaml"
+    enriched_inputs_manifest = tmp_path / "enriched_inputs_manifest.yaml"
+    outputs_manifest = tmp_path / "outputs_manifest.yaml"
+    localize_state_req = tmp_path / "localize_state_req.yaml"
+    upload_tables_req = tmp_path / "upload_tables_req.yaml"
+    upload_state_req = tmp_path / "upload_state_req.yaml"
+    response_yaml = tmp_path / "response.yaml"
+
+    request_yaml = _write_multi_request(
+        tmp_path / "request.yaml",
+        bundle_uri=multi_bundle_path.as_uri(),
+        uploaded_dir=uploaded_dir,
+    )
+
+    # --- 1. localize-fn-bundle ------------------------------------------
+    from tabsdatak._tdrunner.function.commands.localize_fn_bundle import (
+        main as localize_main,
+    )
+
+    rc = _invoke(
+        monkeypatch,
+        localize_main,
+        [
+            "localize-fn-bundle",
+            "--request",
+            str(request_yaml),
+            "--bundle-dir",
+            str(extracted),
+            "--liveness",
+            str(tmp_path / "liveness-localize"),
+        ],
+    )
+    assert rc == 0
+
+    # --- 2. prep-localize-state ----------------------------------------
+    from tabsdatak._tdrunner.function.commands.prep_localize_state import (
+        main as prep_loc_main,
+    )
+
+    rc = _invoke(
+        monkeypatch,
+        prep_loc_main,
+        [
+            "prep-localize-state",
+            "--request",
+            str(request_yaml),
+            "--in-dir",
+            str(in_dir),
+            "--state-dir",
+            str(state_dir),
+            "--out",
+            str(localize_state_req),
+            "--inputs-manifest",
+            str(tmp_path / "prep_loc_inputs.yaml"),
+            "--state-manifest",
+            str(tmp_path / "prep_loc_state.yaml"),
+            "--liveness",
+            str(tmp_path / "liveness-prep-loc-state"),
+        ],
+    )
+    assert rc == 0
+
+    # --- 3. run-transporter (localize, empty) --------------------------
+    from tabsdatak._tdrunner.function.commands.run_transporter import (
+        main as run_transporter_main,
+    )
+
+    rc = _invoke(
+        monkeypatch,
+        run_transporter_main,
+        [
+            "run-transporter",
+            "--request",
+            str(localize_state_req),
+            "--report",
+            str(tmp_path / "transporter-report-loc.yaml"),
+            "--liveness",
+            str(tmp_path / "liveness-rt-loc"),
+        ],
+    )
+    assert rc == 0
+
+    # --- 4. run-source-plugin ------------------------------------------
+    from tabsdatak._tdrunner.function.commands.run_source_plugin import (
+        main as rsp_main,
+    )
+
+    rc = _invoke(
+        monkeypatch,
+        rsp_main,
+        [
+            "run-source-plugin",
+            "--request",
+            str(request_yaml),
+            "--bundle-dir",
+            str(extracted),
+            "--out-dir",
+            str(out_dir),
+            "--inputs-manifest",
+            str(inputs_manifest),
+            "--liveness",
+            str(tmp_path / "liveness-rsp"),
+        ],
+    )
+    assert rc == 0
+    # Two slots in the inputs manifest (one per source path).
+    inputs = yaml.safe_load(inputs_manifest.read_text())
+    assert len(inputs["inputs"]) == 2
+
+    # --- 5. stamp-inputs -----------------------------------------------
+    from tabsdatak._tdrunner.function.commands.stamp_inputs import (
+        main as stamp_main,
+    )
+
+    rc = _invoke(
+        monkeypatch,
+        stamp_main,
+        [
+            "stamp-inputs",
+            "--request",
+            str(request_yaml),
+            "--inputs-manifest",
+            str(inputs_manifest),
+            "--enriched-dir",
+            str(enriched_dir),
+            "--enriched-inputs-manifest",
+            str(enriched_inputs_manifest),
+            "--liveness",
+            str(tmp_path / "liveness-stamp"),
+        ],
+    )
+    assert rc == 0
+
+    # --- 6. run-function -----------------------------------------------
+    from tabsdatak._tdrunner.function.commands.run_function import (
+        main as rf_main,
+    )
+
+    rc = _invoke(
+        monkeypatch,
+        rf_main,
+        [
+            "run-function",
+            "--request",
+            str(request_yaml),
+            "--bundle-dir",
+            str(extracted),
+            "--inputs-manifest",
+            str(enriched_inputs_manifest),
+            "--out-dir",
+            str(fn_out_dir),
+            "--outputs-manifest",
+            str(outputs_manifest),
+            "--liveness",
+            str(tmp_path / "liveness-fn"),
+        ],
+    )
+    assert rc == 0
+
+    # Two of three output slots produced parquet, one returned None.
+    fn_parquets = sorted(fn_out_dir.rglob("*.parquet"))
+    assert [p.name for p in fn_parquets] == [
+        "concat_all.parquet",
+        "first_only.parquet",
+    ]
+    outputs = yaml.safe_load(outputs_manifest.read_text())
+    by_name = {e["name"]: e for e in outputs["outputs"]}
+    assert set(by_name) == {"concat_all", "first_only", "skipped"}
+    assert by_name["concat_all"]["file"] is not None
+    assert by_name["first_only"]["file"] is not None
+    assert by_name["skipped"]["file"] is None
+
+    # Content checks. concat_all should have 2 + 3 = 5 rows (slot a +
+    # slot b); first_only should have only slot a's first row.
+    concat_df = pl.read_parquet(by_name["concat_all"]["file"])
+    assert concat_df.height == 5
+    assert sorted(concat_df["id"].to_list()) == [1, 2, 10, 11, 12]
+
+    first_df = pl.read_parquet(by_name["first_only"]["file"])
+    assert first_df.height == 2  # slot a is a single file with 2 rows
+    assert first_df["id"].to_list() == [1, 2]
+
+    # --- 7. prep-upload-tables -----------------------------------------
+    from tabsdatak._tdrunner.function.commands.prep_upload_tables import (
+        main as prep_up_tables_main,
+    )
+
+    rc = _invoke(
+        monkeypatch,
+        prep_up_tables_main,
+        [
+            "prep-upload-tables",
+            "--request",
+            str(request_yaml),
+            "--outputs-manifest",
+            str(outputs_manifest),
+            "--out",
+            str(upload_tables_req),
+            "--liveness",
+            str(tmp_path / "liveness-prep-up-tbl"),
+        ],
+    )
+    assert rc == 0
+    upload_text = upload_tables_req.read_text()
+    # Two CopyPairs (concat_all + first_only). `skipped` is file:null
+    # in the manifest → omitted.
+    assert upload_text.count("- - !LocalFile") == 2
+    assert "concat_all.parquet" in upload_text
+    assert "first_only.parquet" in upload_text
+    assert "skipped.parquet" not in upload_text
+
+    # --- 8. run-transporter (upload-tables) ----------------------------
+    rc = _invoke(
+        monkeypatch,
+        run_transporter_main,
+        [
+            "run-transporter",
+            "--request",
+            str(upload_tables_req),
+            "--report",
+            str(tmp_path / "transporter-report-up-tbl.yaml"),
+            "--liveness",
+            str(tmp_path / "liveness-rt-up-tbl"),
+        ],
+    )
+    assert rc == 0
+    assert (uploaded_dir / "concat_all.parquet").is_file()
+    assert (uploaded_dir / "first_only.parquet").is_file()
+    assert not (uploaded_dir / "skipped.parquet").exists()
+
+    # --- 9. prep-upload-state ------------------------------------------
+    from tabsdatak._tdrunner.function.commands.prep_upload_state import (
+        main as prep_up_state_main,
+    )
+
+    rc = _invoke(
+        monkeypatch,
+        prep_up_state_main,
+        [
+            "prep-upload-state",
+            "--request",
+            str(request_yaml),
+            "--state-dir",
+            str(state_dir),
+            "--out",
+            str(upload_state_req),
+            "--liveness",
+            str(tmp_path / "liveness-prep-up-state"),
+        ],
+    )
+    assert rc == 0
+
+    # --- 10. run-transporter (upload-state, empty) ---------------------
+    rc = _invoke(
+        monkeypatch,
+        run_transporter_main,
+        [
+            "run-transporter",
+            "--request",
+            str(upload_state_req),
+            "--report",
+            str(tmp_path / "transporter-report-up-state.yaml"),
+            "--liveness",
+            str(tmp_path / "liveness-rt-up-state"),
+        ],
+    )
+    assert rc == 0
+
+    # --- 11. report-completion -----------------------------------------
+    from tabsdatak._tdrunner.function.commands.report_completion import (
+        main as report_main,
+    )
+
+    rc = _invoke(
+        monkeypatch,
+        report_main,
+        [
+            "report-completion",
+            "--url",
+            f"val:{base_url}/api/v1/done",
+            "--token",
+            "val:mock-bearer-token",
+            "--request",
+            str(request_yaml),
+            "--outputs-manifest",
+            str(outputs_manifest),
+            "--state-dir",
+            str(state_dir),
+            "--out",
+            str(response_yaml),
+            "--liveness",
+            str(tmp_path / "liveness-rc"),
+        ],
+    )
+    assert rc == 0
+
+    response = yaml.safe_load(response_yaml.read_text())
+    entries = {e["table"]: e for e in response["output"]}
+    assert set(entries) == {"concat_all", "first_only", "skipped"}
+    assert entries["concat_all"]["info"]["row_count"] == 5
+    assert entries["first_only"]["info"]["row_count"] == 2
+    # NoData entry: just the `table` key.
+    assert "info" not in entries["skipped"]
+    assert set(entries["skipped"]) == {"table"}
+
+    assert len(requests_log) == 1
