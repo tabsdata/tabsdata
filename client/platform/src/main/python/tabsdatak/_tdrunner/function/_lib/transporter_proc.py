@@ -6,8 +6,13 @@
 
 Per Q8 of the migration plan, `td_transporter` is on `PATH` and is a
 black box. This module just exec's it with `--request <PATH>` and
-forwards stdout/stderr; the caller decides what to do with the returned
-exit code.
+`--report <PATH>` and forwards stdout/stderr; the caller decides what
+to do with the returned exit code.
+
+The binary refuses to overwrite an existing `--report` file (per its
+`non_existing_file` value parser), so `report` must not already exist.
+Each caller threads its own report path through — typically a fresh
+file in the same temp / state directory it controls.
 
 Used by the `run-transporter` command (steps 4b and 7b of the publisher
 chain) to actually copy parquet files.
@@ -37,19 +42,29 @@ class TransporterNotFoundError(FileNotFoundError):
 
 def run_transporter(
     request_yaml: Path,
+    report: Path,
     liveness: ContextManager[object] | None = None,
 ) -> int:
-    """Exec `td_transporter --request <request_yaml>` and return its exit code.
+    """Exec `td_transporter --request <request_yaml> --report <report>`.
+
+    Returns the binary's exit code.
 
     The binary is expected on `PATH`. stdout/stderr are inherited by the
-    parent. If `liveness` is provided, it's used as a context manager
-    around the subprocess call (started before, stopped after — including
-    on exception).
+    parent. `report` is a file path the binary writes its execution
+    report to; it must not already exist. If `liveness` is provided,
+    it's used as a context manager around the subprocess call (started
+    before, stopped after — including on exception).
 
     Raises:
         TransporterNotFoundError: if `td_transporter` is not on `PATH`.
     """
-    cmd = [TRANSPORTER_BINARY, "--request", str(request_yaml)]
+    cmd = [
+        TRANSPORTER_BINARY,
+        "--request",
+        str(request_yaml),
+        "--report",
+        str(report),
+    ]
     if liveness is None:
         return _run(cmd)
     with liveness:

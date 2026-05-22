@@ -85,11 +85,13 @@ def _load_request(path: Path):
         ) from exc
 
 
-def _fetch_via_transporter(request, target: Path, transporter_yaml: Path) -> None:
+def _fetch_via_transporter(
+    request, target: Path, transporter_yaml: Path, report: Path
+) -> None:
     copy_req = build_bundle_fetch_request(request, target)
     write_transporter_request(copy_req, transporter_yaml)
     try:
-        rc = run_transporter(transporter_yaml)
+        rc = run_transporter(transporter_yaml, report)
     except TransporterNotFoundError as exc:
         raise CommandSpecificError(
             EXIT_TRANSPORTER_FAILED, f"td_transporter not found: {exc}"
@@ -122,7 +124,10 @@ def _run() -> int:
             tmp_dir = Path(tmp)
             bundle_local = tmp_dir / "bundle.tar.gz"
             transporter_yaml = tmp_dir / "transporter.yaml"
-            _fetch_via_transporter(request, bundle_local, transporter_yaml)
+            transporter_report = tmp_dir / "transporter-report.yaml"
+            _fetch_via_transporter(
+                request, bundle_local, transporter_yaml, transporter_report
+            )
             _extract(bundle_local, dest_dir)
     return 0
 

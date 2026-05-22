@@ -24,9 +24,11 @@ from tabsdatak._tdrunner.function.commands import tabsdata_command
 VERSION = "0.1.0"
 INFO = "run-transporter — exec td_transporter with the given request YAML"
 MAN = (
-    "run-transporter --request <PATH> --liveness <PATH>\n\n"
-    "Exec's `td_transporter --request <PATH>` with stdout/stderr "
-    "inherited; returns whatever exit code the binary returned."
+    "run-transporter --request <PATH> --report <PATH> --liveness <PATH>\n\n"
+    "Exec's `td_transporter --request <PATH> --report <PATH>` with "
+    "stdout/stderr inherited; returns whatever exit code the binary "
+    "returned. The report file must not already exist; the binary "
+    "writes its execution report there."
 )
 
 EXIT_BINARY_MISSING = 10
@@ -45,15 +47,23 @@ def _build_parser():
         required=True,
         help="Path to the transporter request YAML",
     )
+    parser.add_argument(
+        "--report",
+        required=True,
+        help=(
+            "Path to write the transporter execution report. Must not already exist."
+        ),
+    )
     return parser
 
 
 def _run() -> int:
     args = _build_parser().parse_args()
     request_yaml = Path(args.request)
+    report = Path(args.report)
     liveness = Liveness(Path(args.liveness))
     try:
-        return run_transporter(request_yaml, liveness=liveness)
+        return run_transporter(request_yaml, report, liveness=liveness)
     except TransporterNotFoundError as exc:
         raise CommandSpecificError(
             EXIT_BINARY_MISSING, f"td_transporter not found: {exc}"

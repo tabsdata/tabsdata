@@ -78,7 +78,7 @@ def _stub_transporter_returns(monkeypatch, tar_target_files=None, returncode=0):
     """
     import re
 
-    def fake(transporter_yaml, liveness=None):
+    def fake(transporter_yaml, report, liveness=None):
         text = transporter_yaml.read_text()
         # Find the LocalFileEndpoint target's url. The transporter YAML has
         # custom tags so safe_load won't parse it; pull out the second
@@ -134,7 +134,7 @@ def test_main_malformed_request_returns_bad_request(monkeypatch, tmp_path):
 def test_main_transporter_not_found_returns_transporter_failed(monkeypatch, tmp_path):
     request_yaml = _write_request(tmp_path / "request.yaml")
 
-    def fake(yaml_path, liveness=None):
+    def fake(yaml_path, report, liveness=None):
         raise TransporterNotFoundError("no binary")
 
     monkeypatch.setattr(f"{_MOD}.run_transporter", fake)
@@ -144,7 +144,9 @@ def test_main_transporter_not_found_returns_transporter_failed(monkeypatch, tmp_
 
 def test_main_transporter_nonzero_returns_transporter_failed(monkeypatch, tmp_path):
     request_yaml = _write_request(tmp_path / "request.yaml")
-    monkeypatch.setattr(f"{_MOD}.run_transporter", lambda yaml_path, liveness=None: 7)
+    monkeypatch.setattr(
+        f"{_MOD}.run_transporter", lambda yaml_path, report, liveness=None: 7
+    )
     _set_argv(monkeypatch, request_yaml, tmp_path / "bundle", tmp_path / "live")
     assert main() == EXIT_TRANSPORTER_FAILED
 
@@ -152,7 +154,7 @@ def test_main_transporter_nonzero_returns_transporter_failed(monkeypatch, tmp_pa
 def test_main_corrupt_bundle_returns_extract_failed(monkeypatch, tmp_path):
     request_yaml = _write_request(tmp_path / "request.yaml")
 
-    def fake(transporter_yaml, liveness=None):
+    def fake(transporter_yaml, report, liveness=None):
         # Find the target path and write garbage instead of a real tar.
         import re
 
@@ -173,7 +175,9 @@ def test_main_missing_bundle_after_transporter_returns_extract_failed(
 ):
     """Transporter says success but doesn't actually create the file."""
     request_yaml = _write_request(tmp_path / "request.yaml")
-    monkeypatch.setattr(f"{_MOD}.run_transporter", lambda yaml_path, liveness=None: 0)
+    monkeypatch.setattr(
+        f"{_MOD}.run_transporter", lambda yaml_path, report, liveness=None: 0
+    )
     _set_argv(monkeypatch, request_yaml, tmp_path / "bundle", tmp_path / "live")
     assert main() == EXIT_EXTRACT_FAILED
 
