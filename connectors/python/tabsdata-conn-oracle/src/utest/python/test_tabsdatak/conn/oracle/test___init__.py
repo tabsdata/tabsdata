@@ -10,11 +10,13 @@ from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
 from tabsdatak.conn.common.types import CfgSpec, UserPassword
 from tabsdatak.conn.oracle import (
-    ConnSpec,
+    DestConnSpec,
+    SrcConnSpec,
     CredentialsSpec,
     DestCfgSpec,
     IfTableExistsSpec,
-    OracleConn,
+    OracleDestConn,
+    OracleSrcConn,
     OracleDest,
     OracleSrc,
     OracleTableNamesSpec,
@@ -32,8 +34,19 @@ from tabsdatak.conn.oracle.error import (
 pytestmark = pytest.mark.oracle
 
 
-def _conn() -> OracleConn:
-    return OracleConn(
+def _src_conn() -> OracleSrcConn:
+    return OracleSrcConn(
+        uri="oracle://oracle.example.com:1521/orcl",
+        credentials=UserPassword(
+            user=Secret.lit("etl"),
+            password=Secret.lit("hunter2"),
+        ),
+        conn_cfg={"oracle.timeout": 30},
+    )
+
+
+def _dest_conn() -> OracleDestConn:
+    return OracleDestConn(
         uri="oracle://oracle.example.com:1521/orcl",
         credentials=UserPassword(
             user=Secret.lit("etl"),
@@ -48,21 +61,34 @@ def _conn() -> OracleConn:
 # ---------------------------------------------------------------------------
 
 
-def test_oracle_conn_round_trip():
-    c = _conn()
-    loaded = OracleConn.from_json(c.to_json())
+@pytest.mark.parametrize("cls", [OracleSrcConn, OracleDestConn])
+def test_oracle_conn_round_trip(cls):
+    c = cls(
+        uri="oracle://oracle.example.com:1521/orcl",
+        credentials=UserPassword(
+            user=Secret.lit("etl"),
+            password=Secret.lit("hunter2"),
+        ),
+        conn_cfg={"oracle.timeout": 30},
+    )
+    loaded = cls.from_json(c.to_json())
     assert loaded == c
     assert loaded.uri == "oracle://oracle.example.com:1521/orcl"
     assert loaded.conn_cfg == {"oracle.timeout": 30}
 
 
-def test_oracle_conn_rejects_bad_uri():
+def test_oracle_src_dest_conn_have_distinct_kinds():
+    assert OracleSrcConn.__kind__ != OracleDestConn.__kind__
+
+
+@pytest.mark.parametrize("cls", [OracleSrcConn, OracleDestConn])
+def test_oracle_conn_rejects_bad_uri(cls):
     # The ``uri`` field is a Union of ``str | Secret | Env``, each
     # carrying the same regex. A bad value fails *every* branch of the
     # Union -- pydantic surfaces whichever raised; assert on the
     # ``TabsdataException`` umbrella rather than the specific code.
     with pytest.raises(TabsdataException):
-        OracleConn(
+        cls(
             uri="ftp://host/db",
             credentials=UserPassword(
                 user=Secret.lit("u"),
@@ -78,7 +104,7 @@ def test_oracle_conn_rejects_bad_uri():
 
 def test_oracle_src_full_round_trip():
     src = OracleSrc(
-        conn=_conn(),
+        conn=_src_conn(),
         queries=["SELECT * FROM users", "SELECT * FROM orders"],
         transactional=False,
         schema_overrides=[None, None],
@@ -105,7 +131,7 @@ def test_oracle_src_round_trip_with_named_conn():
 def test_oracle_src_validate_rejects_schema_overrides_length_mismatch():
     with pytest.raises(OracleValidateException) as ei:
         OracleSrc(
-            conn=_conn(),
+            conn=_src_conn(),
             queries=["SELECT 1", "SELECT 2"],
             schema_overrides=[None],
         )
@@ -114,7 +140,7 @@ def test_oracle_src_validate_rejects_schema_overrides_length_mismatch():
 
 def test_oracle_src_validate_accepts_matching_schema_overrides_length():
     src = OracleSrc(
-        conn=_conn(),
+        conn=_src_conn(),
         queries=["SELECT 1", "SELECT 2"],
         schema_overrides=[None, None],
     )
@@ -128,7 +154,7 @@ def test_oracle_src_validate_accepts_matching_schema_overrides_length():
 
 def test_oracle_dest_full_round_trip():
     dest = OracleDest(
-        conn=_conn(),
+        conn=_dest_conn(),
         tables=["analytics.users", "analytics.orders"],
         if_table_exists="replace",
         transactional=False,
@@ -151,7 +177,7 @@ def test_oracle_dest_round_trip_with_named_conn():
 
 
 def test_oracle_dest_defaults_if_table_exists_to_append():
-    dest = OracleDest(conn=_conn(), tables=["analytics.users"])
+    dest = OracleDest(conn=_dest_conn(), tables=["analytics.users"])
     assert dest.if_table_exists == "append"
     assert dest.transactional is True
     assert dest.dest_cfg is None
@@ -166,14 +192,15 @@ def _hint(cls: type, field: str) -> object:
     return typing.get_type_hints(cls, include_extras=True)[field]
 
 
-def test_oracle_conn_fields_wire_expected_specs():
-    assert _hint(OracleConn, "uri") == UriSpec
-    assert _hint(OracleConn, "credentials") == CredentialsSpec
-    assert _hint(OracleConn, "conn_cfg") == CfgSpec | None
+@pytest.mark.parametrize("cls", [OracleSrcConn, OracleDestConn])
+def test_oracle_conn_fields_wire_expected_specs(cls):
+    assert _hint(cls, "uri") == UriSpec
+    assert _hint(cls, "credentials") == CredentialsSpec
+    assert _hint(cls, "conn_cfg") == CfgSpec | None
 
 
 def test_oracle_src_fields_wire_expected_specs():
-    assert _hint(OracleSrc, "conn") == ConnSpec
+    assert _hint(OracleSrc, "conn") == SrcConnSpec
     assert _hint(OracleSrc, "queries") == QueriesSpec
     assert _hint(OracleSrc, "transactional") is bool
     assert _hint(OracleSrc, "schema_overrides") == SchemaOverrideSpec | None
@@ -181,7 +208,7 @@ def test_oracle_src_fields_wire_expected_specs():
 
 
 def test_oracle_dest_fields_wire_expected_specs():
-    assert _hint(OracleDest, "conn") == ConnSpec
+    assert _hint(OracleDest, "conn") == DestConnSpec
     assert _hint(OracleDest, "tables") == OracleTableNamesSpec
     assert _hint(OracleDest, "if_table_exists") == IfTableExistsSpec
     assert _hint(OracleDest, "transactional") is bool
@@ -196,7 +223,7 @@ def test_oracle_dest_fields_wire_expected_specs():
 def test_oracle_src_rejects_unknown_src_cfg_key():
     with pytest.raises(ConnInitException) as ei:
         OracleSrc(
-            conn=_conn(),
+            conn=_src_conn(),
             queries=["SELECT 1"],
             src_cfg={"bogus.key": 1},
         )
@@ -205,7 +232,7 @@ def test_oracle_src_rejects_unknown_src_cfg_key():
 
 def test_oracle_src_accepts_known_src_cfg_keys():
     src = OracleSrc(
-        conn=_conn(),
+        conn=_src_conn(),
         queries=["SELECT 1"],
         src_cfg={
             "oracle.logging_level": 20,
@@ -220,7 +247,7 @@ def test_oracle_src_accepts_known_src_cfg_keys():
 def test_oracle_dest_rejects_unknown_dest_cfg_key():
     with pytest.raises(ConnInitException) as ei:
         OracleDest(
-            conn=_conn(),
+            conn=_dest_conn(),
             tables=["analytics.users"],
             dest_cfg={"bogus.key": 1},
         )
@@ -229,7 +256,7 @@ def test_oracle_dest_rejects_unknown_dest_cfg_key():
 
 def test_oracle_dest_accepts_known_dest_cfg_keys():
     dest = OracleDest(
-        conn=_conn(),
+        conn=_dest_conn(),
         tables=["analytics.users"],
         dest_cfg={
             "oracle.logging_level": 20,
@@ -246,11 +273,12 @@ def test_oracle_dest_accepts_known_dest_cfg_keys():
 # ---------------------------------------------------------------------------
 
 
-def test_oracle_conn_rejects_missing_uri():
+@pytest.mark.parametrize("cls", [OracleSrcConn, OracleDestConn])
+def test_oracle_conn_rejects_missing_uri(cls):
     from tabsdatak.conn.common.error import ConnInitException
 
     with pytest.raises(ConnInitException) as ei:
-        OracleConn(  # type: ignore[call-arg]
+        cls(  # type: ignore[call-arg]
             credentials=UserPassword(
                 user=Secret.lit("u"),
                 password=Secret.lit("p"),
@@ -259,9 +287,10 @@ def test_oracle_conn_rejects_missing_uri():
     assert ei.value.api_error is OracleErrorCode.ORACLE_1
 
 
-def test_oracle_conn_rejects_missing_credentials():
+@pytest.mark.parametrize("cls", [OracleSrcConn, OracleDestConn])
+def test_oracle_conn_rejects_missing_credentials(cls):
     from tabsdatak.conn.common.error import ConnInitException
 
     with pytest.raises(ConnInitException) as ei:
-        OracleConn(uri="oracle+oracledb://h:1521/db")  # type: ignore[call-arg]
+        cls(uri="oracle+oracledb://h:1521/db")  # type: ignore[call-arg]
     assert ei.value.api_error is OracleErrorCode.ORACLE_1

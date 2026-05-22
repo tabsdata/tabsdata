@@ -5,9 +5,10 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 from tabsdatak.conn.db2 import (
-    Db2Conn,
     Db2Dest,
+    Db2DestConn,
     Db2Src,
+    Db2SrcConn,
     DestCfgKey,
     DestCfgSpec,
     SrcCfgKey,
@@ -129,7 +130,7 @@ class Db2SrcPlugin(SrcPlugin[Db2Src]):
         logger.info("db2: read_in starting (%d queries)", len(src.queries or []))
 
         read_cfg = Db2ReadCfg(
-            conn=cast(Db2Conn, src.conn),
+            conn=cast(Db2SrcConn, src.conn),
             queries=src.queries,
             transactional=src.transactional,
             schema_overrides=src.schema_overrides,
@@ -191,7 +192,7 @@ class Db2DestPlugin(DestPlugin[Db2Dest]):
             )
 
         write_cfg = Db2WriteCfg(
-            conn=cast(Db2Conn, dest.conn),
+            conn=cast(Db2DestConn, dest.conn),
             target_tables=list(dest.tables),
             if_table_exists=dest.if_table_exists,
             transactional=dest.transactional,
@@ -219,33 +220,43 @@ class Db2DestPlugin(DestPlugin[Db2Dest]):
             )
 
 
-class Db2Explorer(Explorer[Db2Conn]):
-    def metadata(self, conn: Db2Conn) -> Any:
+class Db2SrcExplorer(Explorer[Db2SrcConn]):
+    def metadata(self, conn: Db2SrcConn) -> Any:
         # TODO
         pass
 
-    def data(self, conn: Db2Conn, query: str) -> Any:
+    def data(self, conn: Db2SrcConn, query: str) -> Any:
+        # TODO
+        pass
+
+
+class Db2DestExplorer(Explorer[Db2DestConn]):
+    def metadata(self, conn: Db2DestConn) -> Any:
+        # TODO
+        pass
+
+    def data(self, conn: Db2DestConn, query: str) -> Any:
         # TODO
         pass
 
 
 DB2_SRC = SrcDef(
-    conn=Db2Conn,
+    conn=Db2SrcConn,
     src_type="db2",
     src_version="v1",
     src=Db2Src,
     table_mode=TableMode.SINGLE,
     cardinality=lambda src: len(src.queries),
     plugin=Db2SrcPlugin,
-    explorer=Db2Explorer,
+    explorer=Db2SrcExplorer,
 )
 
 DB2_DEST = DestDef(
-    conn=Db2Conn,
+    conn=Db2DestConn,
     dest_type="db2",
     dest_version="v1",
     dest=Db2Dest,
     cardinality=lambda dest: len(dest.tables),
     plugin=Db2DestPlugin,
-    explorer=Db2Explorer,
+    explorer=Db2DestExplorer,
 )

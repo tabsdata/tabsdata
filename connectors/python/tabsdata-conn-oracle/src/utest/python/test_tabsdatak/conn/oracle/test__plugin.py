@@ -14,7 +14,7 @@ from tabsdatak.conn.common.sql._engine import (
     sqlalchemy_reader as saw_reader,
     sqlalchemy_writer as saw_writer,
 )
-from tabsdatak.conn.oracle import OracleConn, OracleDest, OracleSrc
+from tabsdatak.conn.oracle import OracleDestConn, OracleSrcConn, OracleDest, OracleSrc
 # noinspection PyProtectedMember
 from tabsdatak.conn.oracle import _impl as impl
 # noinspection PyProtectedMember
@@ -79,11 +79,24 @@ def _fast_retry(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def _bare_conn() -> OracleConn:
-    """Minimal OracleConn for error tests -- the URI/creds never see
+def _bare_src_conn() -> OracleSrcConn:
+    """Minimal OracleSrcConn for error tests -- the URI/creds never see
     a real driver (the engine is mocked)."""
     from tabsdatak.api import Secret
-    return OracleConn(
+    return OracleSrcConn(
+        uri="oracle://stub.invalid:1521/orcl",
+        credentials=UserPassword(
+            user=Secret.lit("u"),
+            password=Secret.lit("p"),
+        ),
+    )
+
+
+def _bare_dest_conn() -> OracleDestConn:
+    """Minimal OracleDestConn for error tests -- the URI/creds never see
+    a real driver (the engine is mocked)."""
+    from tabsdatak.api import Secret
+    return OracleDestConn(
         uri="oracle://stub.invalid:1521/orcl",
         credentials=UserPassword(
             user=Secret.lit("u"),
@@ -96,7 +109,7 @@ def test_src_plugin_wraps_operational_error_as_oracle_5(monkeypatch, work_dir):
     fake = MagicMock()
     fake.connect.side_effect = OperationalError("conn fail", {}, BaseException("c"))
     monkeypatch.setattr(impl, "build_oracle_engine", lambda *a, **kw: fake)
-    src = OracleSrc(conn=_bare_conn(), queries=["SELECT 1 FROM DUAL"])
+    src = OracleSrc(conn=_bare_src_conn(), queries=["SELECT 1 FROM DUAL"])
     with pytest.raises(OracleRuntimeException) as ei:
         plugin.OracleSrcPlugin().read_in(_src_ctx(work_dir), src)
     assert ei.value.api_error is OracleErrorCode.ORACLE_5
@@ -109,7 +122,7 @@ def test_src_plugin_wraps_other_sqlalchemy_error_as_oracle_6(
     fake = MagicMock()
     fake.connect.side_effect = ProgrammingError("bad sql", {}, BaseException("p"))
     monkeypatch.setattr(impl, "build_oracle_engine", lambda *a, **kw: fake)
-    src = OracleSrc(conn=_bare_conn(), queries=["SELECT 1 FROM DUAL"])
+    src = OracleSrc(conn=_bare_src_conn(), queries=["SELECT 1 FROM DUAL"])
     with pytest.raises(OracleRuntimeException) as ei:
         plugin.OracleSrcPlugin().read_in(_src_ctx(work_dir), src)
     assert ei.value.api_error is OracleErrorCode.ORACLE_6
@@ -121,7 +134,7 @@ def test_src_plugin_wraps_other_sqlalchemy_error_as_oracle_6(
 
 
 def test_dest_plugin_raises_oracle_7_on_tables_slots_mismatch(work_dir):
-    dest = OracleDest(conn=_bare_conn(), tables=["users", "orders"])
+    dest = OracleDest(conn=_bare_dest_conn(), tables=["users", "orders"])
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     with pytest.raises(OracleRuntimeException) as ei:
         plugin.OracleDestPlugin().write_out(
@@ -135,7 +148,7 @@ def test_dest_plugin_wraps_operational_error_as_oracle_8(monkeypatch, work_dir):
     fake.connect.side_effect = OperationalError("conn fail", {}, BaseException("c"))
     monkeypatch.setattr(impl, "build_oracle_engine", lambda *a, **kw: fake)
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
-    dest = OracleDest(conn=_bare_conn(), tables=["users"])
+    dest = OracleDest(conn=_bare_dest_conn(), tables=["users"])
     with pytest.raises(OracleRuntimeException) as ei:
         plugin.OracleDestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
     assert ei.value.api_error is OracleErrorCode.ORACLE_8
@@ -149,7 +162,7 @@ def test_dest_plugin_wraps_other_sqlalchemy_error_as_oracle_9(
     fake.connect.side_effect = ProgrammingError("bad sql", {}, BaseException("p"))
     monkeypatch.setattr(impl, "build_oracle_engine", lambda *a, **kw: fake)
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
-    dest = OracleDest(conn=_bare_conn(), tables=["users"])
+    dest = OracleDest(conn=_bare_dest_conn(), tables=["users"])
     with pytest.raises(OracleRuntimeException) as ei:
         plugin.OracleDestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
     assert ei.value.api_error is OracleErrorCode.ORACLE_9
@@ -161,9 +174,12 @@ def test_dest_plugin_wraps_other_sqlalchemy_error_as_oracle_9(
 
 
 def test_explorer_methods_are_stubs():
-    exp = plugin.OracleExplorer()
-    assert exp.metadata(_bare_conn()) is None
-    assert exp.data(_bare_conn(), "SELECT 1 FROM DUAL") is None
+    src_exp = plugin.OracleSrcExplorer()
+    assert src_exp.metadata(_bare_src_conn()) is None
+    assert src_exp.data(_bare_src_conn(), "SELECT 1 FROM DUAL") is None
+    dest_exp = plugin.OracleDestExplorer()
+    assert dest_exp.metadata(_bare_dest_conn()) is None
+    assert dest_exp.data(_bare_dest_conn(), "SELECT 1 FROM DUAL") is None
 
 
 # ---------------------------------------------------------------------------
@@ -172,31 +188,31 @@ def test_explorer_methods_are_stubs():
 
 
 def test_oracle_src_def_wires_plugin_and_explorer():
-    assert plugin.ORACLE_SRC.conn is OracleConn
+    assert plugin.ORACLE_SRC.conn is OracleSrcConn
     assert plugin.ORACLE_SRC.src is OracleSrc
     assert plugin.ORACLE_SRC.plugin is plugin.OracleSrcPlugin
-    assert plugin.ORACLE_SRC.explorer is plugin.OracleExplorer
+    assert plugin.ORACLE_SRC.explorer is plugin.OracleSrcExplorer
     assert plugin.ORACLE_SRC.src_type == "oracle"
 
 
 def test_oracle_dest_def_wires_plugin_and_explorer():
-    assert plugin.ORACLE_DEST.conn is OracleConn
+    assert plugin.ORACLE_DEST.conn is OracleDestConn
     assert plugin.ORACLE_DEST.dest is OracleDest
     assert plugin.ORACLE_DEST.plugin is plugin.OracleDestPlugin
-    assert plugin.ORACLE_DEST.explorer is plugin.OracleExplorer
+    assert plugin.ORACLE_DEST.explorer is plugin.OracleDestExplorer
     assert plugin.ORACLE_DEST.dest_type == "oracle"
 
 
 def test_oracle_src_cardinality_uses_queries_length():
     src = OracleSrc(
-        conn=_bare_conn(),
+        conn=_bare_src_conn(),
         queries=["SELECT 1 FROM DUAL", "SELECT 2 FROM DUAL", "SELECT 3 FROM DUAL"],
     )
     assert plugin.ORACLE_SRC.cardinality(src) == 3
 
 
 def test_oracle_dest_cardinality_uses_tables_length():
-    dest = OracleDest(conn=_bare_conn(), tables=["users", "orders"])
+    dest = OracleDest(conn=_bare_dest_conn(), tables=["users", "orders"])
     assert plugin.ORACLE_DEST.cardinality(dest) == 2
 
 

@@ -40,7 +40,7 @@ from tabsdatak.conn.common.sql.cdc.typing import (
 )
 from tabsdatak.conn.mysql import (
     CdcSrcCfgKey,
-    MySQLCdcConn,
+    MySQLCdcStreamSrcConn,
     MySQLCdcStartFromSpec,
     MySQLCdcStreamSrc,
     TimestampPosition,
@@ -118,7 +118,7 @@ class MySQLCdcStreamSrcPlugin(StreamSrcPlugin[MySQLCdcStreamSrc]):
         ctx: StreamSrcPluginCtx,
         stream_src: MySQLCdcStreamSrc,
     ):
-        conn = cast(MySQLCdcConn, stream_src.conn)
+        conn = cast(MySQLCdcStreamSrcConn, stream_src.conn)
         cfg = _build_cdc_run_config(stream_src)
         # Sync this connector's logger level with the runner +
         # sentinels (``run_cdc`` handles the common-sql namespace).
@@ -144,18 +144,18 @@ class MySQLCdcStreamSrcPlugin(StreamSrcPlugin[MySQLCdcStreamSrc]):
             logger.info("mysql-cdc: stopped")
 
 
-class MySQLCdcExplorer(Explorer[MySQLCdcConn]):
-    def metadata(self, conn: MySQLCdcConn) -> Any:
+class MySQLCdcExplorer(Explorer[MySQLCdcStreamSrcConn]):
+    def metadata(self, conn: MySQLCdcStreamSrcConn) -> Any:
         # TODO
         pass
 
-    def data(self, conn: MySQLCdcConn, query: str) -> Any:
+    def data(self, conn: MySQLCdcStreamSrcConn, query: str) -> Any:
         # TODO
         pass
 
 
 MYSQL_CDC_STREAM_SRC = StreamSrcDef(
-    conn=MySQLCdcConn,
+    conn=MySQLCdcStreamSrcConn,
     src_type="mysql-cdc",
     src_version="v1",
     src=MySQLCdcStreamSrc,

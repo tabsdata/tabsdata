@@ -11,7 +11,7 @@ from tabsdatak.conn.common.sql._engine import constants as const
 from tabsdatak.conn.common.sql._engine.reader import SqlReadCfg
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine.writer import SqlWriteCfg
-from tabsdatak.conn.oracle import OracleConn
+from tabsdatak.conn.oracle import OracleDestConn, OracleSrcConn
 # noinspection PyProtectedMember
 from tabsdatak.conn.oracle import _impl as impl
 
@@ -45,8 +45,16 @@ def _credentials() -> UserPassword:
     )
 
 
-def _conn() -> OracleConn:
-    return OracleConn(
+def _src_conn() -> OracleSrcConn:
+    return OracleSrcConn(
+        uri="oracle://oracle.example.com:1521/orcl",
+        credentials=_credentials(),
+        conn_cfg={"connect_timeout": 5},
+    )
+
+
+def _dest_conn() -> OracleDestConn:
+    return OracleDestConn(
         uri="oracle://oracle.example.com:1521/orcl",
         credentials=_credentials(),
         conn_cfg={"connect_timeout": 5},
@@ -128,7 +136,7 @@ def test_oracle_read_cfg_subclasses_sql_read_cfg():
 
 def test_oracle_read_cfg_creates_engine_from_conn(captured):
     cfg = impl.OracleReadCfg(
-        conn=_conn(),
+        conn=_src_conn(),
         queries=["SELECT 1 FROM DUAL"],
         transactional=True,
         schema_overrides=None,
@@ -147,7 +155,7 @@ def test_oracle_write_cfg_subclasses_sql_write_cfg():
 
 def test_oracle_write_cfg_creates_engine_from_conn(captured):
     cfg = impl.OracleWriteCfg(
-        conn=_conn(),
+        conn=_dest_conn(),
         target_tables=["t"],
         if_table_exists="append",
         transactional=True,
@@ -159,7 +167,7 @@ def test_oracle_write_cfg_creates_engine_from_conn(captured):
 
 
 def test_oracle_read_cfg_no_conn_cfg_forwards_empty_connect_args(captured):
-    conn = OracleConn(
+    conn = OracleSrcConn(
         uri="oracle://host/orcl",
         credentials=_credentials(),
     )

@@ -14,7 +14,12 @@ from tabsdatak.conn.common.sql._engine import (
     sqlalchemy_reader as saw_reader,
     sqlalchemy_writer as saw_writer,
 )
-from tabsdatak.conn.mysql import MySQLConn, MySQLDest, MySQLSrc
+from tabsdatak.conn.mysql import (
+    MySQLDest,
+    MySQLDestConn,
+    MySQLSrc,
+    MySQLSrcConn,
+)
 # noinspection PyProtectedMember
 from tabsdatak.conn.mysql import _impl as impl
 # noinspection PyProtectedMember
@@ -83,11 +88,23 @@ def _fast_retry(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def _bare_conn() -> MySQLConn:
-    """Minimal MySQLConn for error tests -- the URI/creds never see
-    a real driver (the engine is mocked)."""
+def _bare_src_conn() -> MySQLSrcConn:
+    """Minimal MySQLSrcConn for error tests -- the URI/creds never
+    see a real driver (the engine is mocked)."""
     from tabsdatak.api import Secret
-    return MySQLConn(
+    return MySQLSrcConn(
+        uri="mysql://stub.invalid:3306/db",
+        credentials=UserPassword(
+            user=Secret.lit("u"),
+            password=Secret.lit("p"),
+        ),
+    )
+
+
+def _bare_dest_conn() -> MySQLDestConn:
+    """Minimal MySQLDestConn for error tests."""
+    from tabsdatak.api import Secret
+    return MySQLDestConn(
         uri="mysql://stub.invalid:3306/db",
         credentials=UserPassword(
             user=Secret.lit("u"),
@@ -100,7 +117,7 @@ def test_src_plugin_wraps_operational_error_as_mysql_5(monkeypatch, work_dir):
     fake = MagicMock()
     fake.connect.side_effect = OperationalError("conn fail", {}, BaseException("c"))
     monkeypatch.setattr(impl, "build_mysql_engine", lambda *a, **kw: fake)
-    src = MySQLSrc(conn=_bare_conn(), queries=["SELECT 1"])
+    src = MySQLSrc(conn=_bare_src_conn(), queries=["SELECT 1"])
     with pytest.raises(MySQLRuntimeException) as ei:
         plugin.MySQLSrcPlugin().read_in(_src_ctx(work_dir), src)
     assert ei.value.api_error is MysqlErrorCode.MYSQL_5
@@ -113,7 +130,7 @@ def test_src_plugin_wraps_other_sqlalchemy_error_as_mysql_6(
     fake = MagicMock()
     fake.connect.side_effect = ProgrammingError("bad sql", {}, BaseException("p"))
     monkeypatch.setattr(impl, "build_mysql_engine", lambda *a, **kw: fake)
-    src = MySQLSrc(conn=_bare_conn(), queries=["SELECT 1"])
+    src = MySQLSrc(conn=_bare_src_conn(), queries=["SELECT 1"])
     with pytest.raises(MySQLRuntimeException) as ei:
         plugin.MySQLSrcPlugin().read_in(_src_ctx(work_dir), src)
     assert ei.value.api_error is MysqlErrorCode.MYSQL_6
@@ -125,7 +142,7 @@ def test_src_plugin_wraps_other_sqlalchemy_error_as_mysql_6(
 
 
 def test_dest_plugin_raises_mysql_7_on_tables_slots_mismatch(work_dir):
-    dest = MySQLDest(conn=_bare_conn(), tables=["users", "orders"])
+    dest = MySQLDest(conn=_bare_dest_conn(), tables=["users", "orders"])
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     with pytest.raises(MySQLRuntimeException) as ei:
         plugin.MySQLDestPlugin().write_out(
@@ -139,7 +156,7 @@ def test_dest_plugin_wraps_operational_error_as_mysql_8(monkeypatch, work_dir):
     fake.connect.side_effect = OperationalError("conn fail", {}, BaseException("c"))
     monkeypatch.setattr(impl, "build_mysql_engine", lambda *a, **kw: fake)
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
-    dest = MySQLDest(conn=_bare_conn(), tables=["users"])
+    dest = MySQLDest(conn=_bare_dest_conn(), tables=["users"])
     with pytest.raises(MySQLRuntimeException) as ei:
         plugin.MySQLDestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
     assert ei.value.api_error is MysqlErrorCode.MYSQL_8
@@ -153,7 +170,7 @@ def test_dest_plugin_wraps_other_sqlalchemy_error_as_mysql_9(
     fake.connect.side_effect = ProgrammingError("bad sql", {}, BaseException("p"))
     monkeypatch.setattr(impl, "build_mysql_engine", lambda *a, **kw: fake)
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
-    dest = MySQLDest(conn=_bare_conn(), tables=["users"])
+    dest = MySQLDest(conn=_bare_dest_conn(), tables=["users"])
     with pytest.raises(MySQLRuntimeException) as ei:
         plugin.MySQLDestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
     assert ei.value.api_error is MysqlErrorCode.MYSQL_9
@@ -165,9 +182,12 @@ def test_dest_plugin_wraps_other_sqlalchemy_error_as_mysql_9(
 
 
 def test_explorer_methods_are_stubs():
-    exp = plugin.MySQLExplorer()
-    assert exp.metadata(_bare_conn()) is None
-    assert exp.data(_bare_conn(), "SELECT 1") is None
+    src_exp = plugin.MySQLSrcExplorer()
+    assert src_exp.metadata(_bare_src_conn()) is None
+    assert src_exp.data(_bare_src_conn(), "SELECT 1") is None
+    dest_exp = plugin.MySQLDestExplorer()
+    assert dest_exp.metadata(_bare_dest_conn()) is None
+    assert dest_exp.data(_bare_dest_conn(), "SELECT 1") is None
 
 
 # ---------------------------------------------------------------------------
@@ -176,28 +196,28 @@ def test_explorer_methods_are_stubs():
 
 
 def test_mysql_src_def_wires_plugin_and_explorer():
-    assert plugin.MYSQL_SRC.conn is MySQLConn
+    assert plugin.MYSQL_SRC.conn is MySQLSrcConn
     assert plugin.MYSQL_SRC.src is MySQLSrc
     assert plugin.MYSQL_SRC.plugin is plugin.MySQLSrcPlugin
-    assert plugin.MYSQL_SRC.explorer is plugin.MySQLExplorer
+    assert plugin.MYSQL_SRC.explorer is plugin.MySQLSrcExplorer
     assert plugin.MYSQL_SRC.src_type == "mysql"
 
 
 def test_mysql_dest_def_wires_plugin_and_explorer():
-    assert plugin.MYSQL_DEST.conn is MySQLConn
+    assert plugin.MYSQL_DEST.conn is MySQLDestConn
     assert plugin.MYSQL_DEST.dest is MySQLDest
     assert plugin.MYSQL_DEST.plugin is plugin.MySQLDestPlugin
-    assert plugin.MYSQL_DEST.explorer is plugin.MySQLExplorer
+    assert plugin.MYSQL_DEST.explorer is plugin.MySQLDestExplorer
     assert plugin.MYSQL_DEST.dest_type == "mysql"
 
 
 def test_mysql_src_cardinality_uses_queries_length():
-    src = MySQLSrc(conn=_bare_conn(), queries=["SELECT 1", "SELECT 2", "SELECT 3"])
+    src = MySQLSrc(conn=_bare_src_conn(), queries=["SELECT 1", "SELECT 2", "SELECT 3"])
     assert plugin.MYSQL_SRC.cardinality(src) == 3
 
 
 def test_mysql_dest_cardinality_uses_tables_length():
-    dest = MySQLDest(conn=_bare_conn(), tables=["users", "orders"])
+    dest = MySQLDest(conn=_bare_dest_conn(), tables=["users", "orders"])
     assert plugin.MYSQL_DEST.cardinality(dest) == 2
 
 

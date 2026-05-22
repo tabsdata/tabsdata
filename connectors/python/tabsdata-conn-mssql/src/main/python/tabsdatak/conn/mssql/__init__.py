@@ -1,6 +1,6 @@
 """MSSQL connector — public API.
 
-* :class:`MSSQLConn` -- per-instance MSSQL connection.
+* :class:`MSSQLSrcConn` / :class:`MSSQLDestConn` -- per-instance MSSQL connection.
 * :class:`MSSQLSrc` -- source: list of SELECT queries; produces
   one parquet slot per query.
 * :class:`MSSQLDest` -- destination: list of target table names;
@@ -89,20 +89,27 @@ DestCfgSpec: TypeAlias = Annotated[
 
 
 @_api.dataclass(MssqlErrorCode.MSSQL_1, kw_only=True)
-class MSSQLConn(Conn):
-    """MSSQL connection.
-
-    :param uri: SQLAlchemy-style URI
-        (``mssql+pyodbc://host:port/db?driver=ODBC+Driver``). Accepts a plain str,
-        ``Env``, or ``Secret``.
-    :param credentials: :class:`UserPassword` -- user + password
-        spliced into the URI by the engine factory.
-    :param entity_whitelist: Optional list of regex patterns; the
-        runtime uses these to narrow which tables this conn
-        contributes to discovery.
-    :param conn_cfg: Optional driver-side config (forwarded as
-        ``connect_args`` to SQLAlchemy).
+class MSSQLSrcConn(Conn):
+    """MSSQL connection used by :class:`MSSQLSrc`.
     """
+
+    __kind__ = "mSSQLSrcConn"
+
+    uri: UriSpec
+    credentials: CredentialsSpec
+    entity_whitelist: EntityWhitelistSpec | None = None
+    conn_cfg: CfgSpec | None = None
+
+@_api.dataclass(MssqlErrorCode.MSSQL_1, kw_only=True)
+class MSSQLDestConn(Conn):
+    """MSSQL connection used by :class:`MSSQLDest`.
+
+    Attribute-identical to :class:`MSSQLSrcConn` but a distinct
+    class so source and destination connections cannot be
+    confused at the wire-format level.
+    """
+
+    __kind__ = "mSSQLDestConn"
 
     uri: UriSpec
     credentials: CredentialsSpec
@@ -110,7 +117,8 @@ class MSSQLConn(Conn):
     conn_cfg: CfgSpec | None = None
 
 
-ConnSpec: TypeAlias = Union[NamedConn, MSSQLConn]
+SrcConnSpec: TypeAlias = Union[NamedConn, MSSQLSrcConn]
+DestConnSpec: TypeAlias = Union[NamedConn, MSSQLDestConn]
 
 
 # --- Source ----------------------------------------------------------
@@ -120,7 +128,7 @@ ConnSpec: TypeAlias = Union[NamedConn, MSSQLConn]
 class MSSQLSrc(Src):
     """MSSQL source — one parquet slot per SELECT query.
 
-    :param conn: :class:`MSSQLConn` (or :class:`NamedConn`).
+    :param conn: :class:`MSSQLSrcConn` / :class:`MSSQLDestConn` (or :class:`NamedConn`).
     :param queries: List of SELECT statements; one slot per query.
     :param transactional: When ``True`` (default), run all queries
         inside one transactional session.
@@ -131,7 +139,7 @@ class MSSQLSrc(Src):
         set (logging_level, readEngine, chunkSize).
     """
 
-    conn: ConnSpec
+    conn: SrcConnSpec
     queries: QueriesSpec
     transactional: bool = True
     schema_overrides: SchemaOverrideSpec | None = None
@@ -155,7 +163,7 @@ class MSSQLSrc(Src):
 class MSSQLDest(Dest):
     """MSSQL destination — write one parquet slot per target table.
 
-    :param conn: :class:`MSSQLConn` (or :class:`NamedConn`).
+    :param conn: :class:`MSSQLSrcConn` / :class:`MSSQLDestConn` (or :class:`NamedConn`).
     :param tables: Target table names (FQN or bare); one parquet
         slot per table.
     :param if_table_exists: ``"append"`` (default) or ``"replace"``
@@ -166,7 +174,7 @@ class MSSQLDest(Dest):
         set (logging_level, writeEngine, chunkSize).
     """
 
-    conn: ConnSpec
+    conn: DestConnSpec
     tables: MSSQLTableNamesSpec
     if_table_exists: IfTableExistsSpec = "append"
     transactional: bool = True

@@ -11,7 +11,7 @@ from tabsdatak.conn.common.sql._engine import constants as const
 from tabsdatak.conn.common.sql._engine.reader import SqlReadCfg
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine.writer import SqlWriteCfg
-from tabsdatak.conn.mysql import MySQLConn
+from tabsdatak.conn.mysql import MySQLDestConn, MySQLSrcConn
 # noinspection PyProtectedMember
 from tabsdatak.conn.mysql import _impl as impl
 
@@ -45,8 +45,16 @@ def _credentials() -> UserPassword:
     )
 
 
-def _conn() -> MySQLConn:
-    return MySQLConn(
+def _src_conn() -> MySQLSrcConn:
+    return MySQLSrcConn(
+        uri="mysql://mysql.example.com:3306/analytics",
+        credentials=_credentials(),
+        conn_cfg={"connect_timeout": 5},
+    )
+
+
+def _dest_conn() -> MySQLDestConn:
+    return MySQLDestConn(
         uri="mysql://mysql.example.com:3306/analytics",
         credentials=_credentials(),
         conn_cfg={"connect_timeout": 5},
@@ -138,7 +146,7 @@ def test_mysql_read_cfg_subclasses_sql_read_cfg():
 
 def test_mysql_read_cfg_creates_engine_from_conn(captured):
     cfg = impl.MySQLReadCfg(
-        conn=_conn(),
+        conn=_src_conn(),
         queries=["SELECT 1"],
         transactional=True,
         schema_overrides=None,
@@ -157,7 +165,7 @@ def test_mysql_write_cfg_subclasses_sql_write_cfg():
 
 def test_mysql_write_cfg_creates_engine_from_conn(captured):
     cfg = impl.MySQLWriteCfg(
-        conn=_conn(),
+        conn=_dest_conn(),
         target_tables=["t"],
         if_table_exists="append",
         transactional=True,
@@ -169,7 +177,7 @@ def test_mysql_write_cfg_creates_engine_from_conn(captured):
 
 
 def test_mysql_read_cfg_no_conn_cfg_forwards_empty_connect_args(captured):
-    conn = MySQLConn(
+    conn = MySQLSrcConn(
         uri="mysql://host/db",
         credentials=_credentials(),
     )

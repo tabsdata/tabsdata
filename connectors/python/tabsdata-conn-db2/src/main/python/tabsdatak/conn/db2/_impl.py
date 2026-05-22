@@ -27,7 +27,7 @@ from tabsdatak.conn.common.types import CfgSpec, UserPassword
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert
-from tabsdatak.conn.db2 import Db2Conn, UriSpec
+from tabsdatak.conn.db2 import Db2DestConn, Db2SrcConn, UriSpec
 
 # --- Db2 scheme / driver tables -----------------------------------
 
@@ -60,7 +60,7 @@ def build_db2_engine(
 
 
 @dataclass(kw_only=True)
-class Db2ReadCfg(SqlReadCfg[Db2Conn]):
+class Db2ReadCfg(SqlReadCfg[Db2SrcConn]):
     def create_sql_alchemy_engine(self) -> Engine:
         return build_db2_engine(
             self.conn.uri,
@@ -82,7 +82,7 @@ DB2_READ_DEFAULTS: dict[str, Any] = {
 
 
 @dataclass(kw_only=True)
-class Db2WriteCfg(SqlWriteCfg[Db2Conn]):
+class Db2WriteCfg(SqlWriteCfg[Db2DestConn]):
     def create_sql_alchemy_engine(self) -> Engine:
         return build_db2_engine(
             self.conn.uri,

@@ -17,7 +17,7 @@ import pyarrow.parquet as pq
 import pytest
 from sqlalchemy import create_engine, text
 
-from tabsdatak.conn.db2 import Db2Conn, Db2Dest, Db2Src
+from tabsdatak.conn.db2 import Db2SrcConn, Db2DestConn, Db2Dest, Db2Src
 # noinspection PyProtectedMember
 from tabsdatak.conn.db2 import _plugin as plugin
 from tabsdatak.spi import DestContext, SrcPluginCtx
@@ -130,11 +130,21 @@ def _dest_ctx(work: Path) -> _DestCtx:
     return _DestCtx(work)
 
 
-def _conn_from(cfg) -> Db2Conn:
-    """Build a Db2Conn pointing at the ``fresh_db2`` backend. The URI
+def _src_conn_from(cfg) -> Db2SrcConn:
+    """Build a Db2SrcConn pointing at the ``fresh_db2`` backend. The URI
     is ``db2+ibm_db://`` so the impl's ``add_driver_to_uri`` is a
     no-op and ibm_db (which IS installed in the dev env) is used."""
-    return Db2Conn(
+    return Db2SrcConn(
+        uri=cfg.uri,
+        credentials=cfg.credentials,
+    )
+
+
+def _dest_conn_from(cfg) -> Db2DestConn:
+    """Build a Db2DestConn pointing at the ``fresh_db2`` backend. The URI
+    is ``db2+ibm_db://`` so the impl's ``add_driver_to_uri`` is a
+    no-op and ibm_db (which IS installed in the dev env) is used."""
+    return Db2DestConn(
         uri=cfg.uri,
         credentials=cfg.credentials,
     )
@@ -165,7 +175,7 @@ def work_dir(tmp_path: Path) -> Path:
 @pytest.mark.xdist_group("db2_seq")
 def test_src_plugin_read_in_returns_parquet_files(fresh_db2, work_dir):
     src = Db2Src(
-        conn=_conn_from(fresh_db2),
+        conn=_src_conn_from(fresh_db2),
         queries=["SELECT id, name FROM users ORDER BY id"],
     )
     out = plugin.Db2SrcPlugin().read_in(_src_ctx(work_dir), src)
@@ -180,7 +190,7 @@ def test_src_plugin_read_in_returns_parquet_files(fresh_db2, work_dir):
 @pytest.mark.xdist_group("db2_seq")
 def test_src_plugin_read_in_multiple_queries(fresh_db2, work_dir):
     src = Db2Src(
-        conn=_conn_from(fresh_db2),
+        conn=_src_conn_from(fresh_db2),
         queries=[
             "SELECT id FROM users WHERE age >= :cut ORDER BY id",
             "SELECT id FROM orders ORDER BY id",
@@ -210,7 +220,7 @@ def test_dest_plugin_write_out_appends_rows(fresh_db2, work_dir):
         [{"id": 100, "name": "dave", "age": 50}],
     )
     dest = Db2Dest(
-        conn=_conn_from(fresh_db2),
+        conn=_dest_conn_from(fresh_db2),
         tables=["users"],
     )
     plugin.Db2DestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
@@ -238,7 +248,7 @@ def test_dest_plugin_write_out_replace_clears_existing(fresh_db2, work_dir):
         [{"id": 1, "name": "only", "age": 1}],
     )
     dest = Db2Dest(
-        conn=_conn_from(fresh_db2),
+        conn=_dest_conn_from(fresh_db2),
         tables=["users"],
         if_table_exists="replace",
     )

@@ -2,7 +2,11 @@
 
 Batch:
 
-* :class:`Db2Conn` -- per-instance Db2 connection.
+* :class:`Db2SrcConn` / :class:`Db2DestConn` -- per-instance Db2
+  connections for :class:`Db2Src` / :class:`Db2Dest`.
+  Attribute-identical but distinct classes so source and
+  destination connections cannot be confused at the wire-format
+  level.
 * :class:`Db2Src` -- source: list of SELECT queries; produces
   one parquet slot per query.
 * :class:`Db2Dest` -- destination: list of target table names;
@@ -10,8 +14,8 @@ Batch:
 
 CDC (change-data capture):
 
-* :class:`Db2CdcConn` -- per-instance Db2 CDC connection.
-  Sibling of :class:`Db2Conn`; expects the IBM SQL Replication
+* :class:`Db2CdcStreamSrcConn` -- per-instance Db2 CDC connection.
+  Sibling of the batch Db2 conns; expects the IBM SQL Replication
   apparatus (``ASN.IBMSNAP_*`` control tables + ``asncap``
   capture program) to be in place in the same database.
 * :class:`Db2CdcStreamSrc` -- stream source that polls the IBM
@@ -108,8 +112,8 @@ DestCfgSpec: TypeAlias = Annotated[
 
 
 @_api.dataclass(Db2ErrorCode.DB2_1, kw_only=True)
-class Db2Conn(Conn):
-    """Db2 connection.
+class Db2SrcConn(Conn):
+    """Db2 connection used by :class:`Db2Src`.
 
     :param uri: SQLAlchemy-style URI
         (``db2+ibm_db://host:port/db``). Accepts a plain str,
@@ -123,13 +127,33 @@ class Db2Conn(Conn):
         ``connect_args`` to SQLAlchemy).
     """
 
+    __kind__ = "db2SrcConn"
+
     uri: UriSpec
     credentials: CredentialsSpec
     entity_whitelist: EntityWhitelistSpec | None = None
     conn_cfg: CfgSpec | None = None
 
 
-ConnSpec: TypeAlias = Union[NamedConn, Db2Conn]
+@_api.dataclass(Db2ErrorCode.DB2_1, kw_only=True)
+class Db2DestConn(Conn):
+    """Db2 connection used by :class:`Db2Dest`.
+
+    Attribute-identical to :class:`Db2SrcConn` but a distinct class
+    so source and destination connections cannot be confused at
+    the wire-format level (the ``__kind__`` differs).
+    """
+
+    __kind__ = "db2DestConn"
+
+    uri: UriSpec
+    credentials: CredentialsSpec
+    entity_whitelist: EntityWhitelistSpec | None = None
+    conn_cfg: CfgSpec | None = None
+
+
+SrcConnSpec: TypeAlias = Union[NamedConn, Db2SrcConn]
+DestConnSpec: TypeAlias = Union[NamedConn, Db2DestConn]
 
 
 # --- Source ----------------------------------------------------------
@@ -139,7 +163,7 @@ ConnSpec: TypeAlias = Union[NamedConn, Db2Conn]
 class Db2Src(Src):
     """Db2 source — one parquet slot per SELECT query.
 
-    :param conn: :class:`Db2Conn` (or :class:`NamedConn`).
+    :param conn: :class:`Db2SrcConn` (or :class:`NamedConn`).
     :param queries: List of SELECT statements; one slot per query.
     :param transactional: When ``True`` (default), run all queries
         inside one transactional session.
@@ -150,7 +174,7 @@ class Db2Src(Src):
         set (logging_level, readEngine, chunkSize).
     """
 
-    conn: ConnSpec
+    conn: SrcConnSpec
     queries: QueriesSpec
     transactional: bool = True
     schema_overrides: SchemaOverrideSpec | None = None
@@ -174,7 +198,7 @@ class Db2Src(Src):
 class Db2Dest(Dest):
     """Db2 destination — write one parquet slot per target table.
 
-    :param conn: :class:`Db2Conn` (or :class:`NamedConn`).
+    :param conn: :class:`Db2DestConn` (or :class:`NamedConn`).
     :param tables: Target table names (FQN or bare); one parquet
         slot per table.
     :param if_table_exists: ``"append"`` (default) or ``"replace"``
@@ -185,7 +209,7 @@ class Db2Dest(Dest):
         set (logging_level, writeEngine, chunkSize).
     """
 
-    conn: ConnSpec
+    conn: DestConnSpec
     tables: Db2TableNamesSpec
     if_table_exists: IfTableExistsSpec = "append"
     transactional: bool = True
@@ -281,10 +305,10 @@ CdcSrcCfgSpec: TypeAlias = Annotated[
 
 
 @_api.dataclass(Db2ErrorCode.DB2_10, kw_only=True)
-class Db2CdcConn(Conn):
-    """Db2 CDC connection.
+class Db2CdcStreamSrcConn(Conn):
+    """Db2 CDC connection used by :class:`Db2CdcStreamSrc`.
 
-    Mirrors :class:`Db2Conn` for the SQLAlchemy / catalog
+    Mirrors :class:`Db2SrcConn` for the SQLAlchemy / catalog
     introspection side. SQL Replication does not require a
     distinct replica identifier on the connection: the CD tables
     + the ``ASN.IBMSNAP_*`` capture tables live in the same
@@ -292,7 +316,7 @@ class Db2CdcConn(Conn):
     role with SELECT on the CD tables and ``ASN.IBMSNAP_REGISTER``
     is sufficient.
 
-    Not a subclass of :class:`Db2Conn`: CDC and batch SQL have
+    Not a subclass of :class:`Db2SrcConn`: CDC and batch SQL have
     different operational guarantees (the capture / apply schema
     has to be in place, the connecting role typically needs
     different grants) and a divergent attribute set is expected
@@ -307,13 +331,15 @@ class Db2CdcConn(Conn):
         ``connect_args``.
     """
 
+    __kind__ = "db2CdcStreamSrcConn"
+
     uri: UriSpec
     credentials: CredentialsSpec
     entity_whitelist: EntityWhitelistSpec | None = None
     conn_cfg: CfgSpec | None = None
 
 
-CdcConnSpec: TypeAlias = Union[NamedConn, Db2CdcConn]
+CdcStreamSrcConnSpec: TypeAlias = Union[NamedConn, Db2CdcStreamSrcConn]
 
 
 @_api.dataclass(Db2ErrorCode.DB2_11, kw_only=True)
@@ -330,7 +356,7 @@ class Db2CdcStreamSrc(StreamSrc):
     columns to discover the operation / commit sequence /
     intent sequence / before-image prefix.
 
-    :param conn: :class:`Db2CdcConn` (or :class:`NamedConn`).
+    :param conn: :class:`Db2CdcStreamSrcConn` (or :class:`NamedConn`).
     :param tables: Qualified ``cd_schema.cd_table`` CD table names.
     :param start_from: ``"head"`` (every tracked CD table replayed
         from the origin), ``"tail"`` (each table's current
@@ -349,7 +375,7 @@ class Db2CdcStreamSrc(StreamSrc):
         polling cadence, server-side fetch size.
     """
 
-    conn: CdcConnSpec
+    conn: CdcStreamSrcConnSpec
     tables: list[Db2TableNameSpec]
     start_from: Db2CdcStartFromSpec
     columns_format: CdcColumnsFormatSpec = "columns"

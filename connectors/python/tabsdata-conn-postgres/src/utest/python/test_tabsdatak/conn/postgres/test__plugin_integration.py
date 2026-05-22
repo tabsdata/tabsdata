@@ -17,7 +17,7 @@ import pyarrow.parquet as pq
 import pytest
 from sqlalchemy import create_engine, text
 
-from tabsdatak.conn.postgres import PostgresConn, PostgresDest, PostgresSrc
+from tabsdatak.conn.postgres import PostgresSrcConn, PostgresDestConn, PostgresDest, PostgresSrc
 # noinspection PyProtectedMember
 from tabsdatak.conn.postgres import _plugin as plugin
 from tabsdatak.spi import DestContext, SrcPluginCtx
@@ -129,9 +129,17 @@ def _dest_ctx(work: Path) -> _DestCtx:
     return _DestCtx(work)
 
 
-def _conn_from(cfg) -> PostgresConn:
-    """Build a PostgresConn pointing at the ``fresh_postgres`` backend."""
-    return PostgresConn(
+def _src_conn_from(cfg) -> PostgresSrcConn:
+    """Build a PostgresSrcConn pointing at the ``fresh_postgres`` backend."""
+    return PostgresSrcConn(
+        uri=cfg.uri,
+        credentials=cfg.credentials,
+    )
+
+
+def _dest_conn_from(cfg) -> PostgresDestConn:
+    """Build a PostgresDestConn pointing at the ``fresh_postgres`` backend."""
+    return PostgresDestConn(
         uri=cfg.uri,
         credentials=cfg.credentials,
     )
@@ -160,7 +168,7 @@ def work_dir(tmp_path: Path) -> Path:
 
 def test_src_plugin_read_in_returns_parquet_files(fresh_postgres, work_dir):
     src = PostgresSrc(
-        conn=_conn_from(fresh_postgres),
+        conn=_src_conn_from(fresh_postgres),
         queries=["SELECT id, name FROM users ORDER BY id"],
     )
     out = plugin.PostgresSrcPlugin().read_in(_src_ctx(work_dir), src)
@@ -171,7 +179,7 @@ def test_src_plugin_read_in_returns_parquet_files(fresh_postgres, work_dir):
 
 def test_src_plugin_read_in_multiple_queries(fresh_postgres, work_dir):
     src = PostgresSrc(
-        conn=_conn_from(fresh_postgres),
+        conn=_src_conn_from(fresh_postgres),
         queries=[
             "SELECT id FROM users WHERE age >= :cut ORDER BY id",
             "SELECT id FROM orders ORDER BY id",
@@ -197,7 +205,7 @@ def test_dest_plugin_write_out_appends_rows(fresh_postgres, work_dir):
         [{"id": 100, "name": "dave", "age": 50}],
     )
     dest = PostgresDest(
-        conn=_conn_from(fresh_postgres),
+        conn=_dest_conn_from(fresh_postgres),
         tables=["users"],
     )
     plugin.PostgresDestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
@@ -220,7 +228,7 @@ def test_dest_plugin_write_out_replace_clears_existing(fresh_postgres, work_dir)
         [{"id": 1, "name": "only", "age": 1}],
     )
     dest = PostgresDest(
-        conn=_conn_from(fresh_postgres),
+        conn=_dest_conn_from(fresh_postgres),
         tables=["users"],
         if_table_exists="replace",
     )

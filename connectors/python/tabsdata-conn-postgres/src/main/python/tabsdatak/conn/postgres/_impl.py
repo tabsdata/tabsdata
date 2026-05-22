@@ -27,7 +27,7 @@ from tabsdatak.conn.common.types import CfgSpec, UserPassword
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert
-from tabsdatak.conn.postgres import PostgresConn, UriSpec
+from tabsdatak.conn.postgres import PostgresDestConn, PostgresSrcConn, UriSpec
 
 # --- Postgres scheme / driver tables --------------------------------
 
@@ -62,7 +62,7 @@ def build_postgres_engine(
 
 
 @dataclass(kw_only=True)
-class PostgresReadCfg(SqlReadCfg[PostgresConn]):
+class PostgresReadCfg(SqlReadCfg[PostgresSrcConn]):
     def create_sql_alchemy_engine(self) -> Engine:
         return build_postgres_engine(
             self.conn.uri,
@@ -84,7 +84,7 @@ POSTGRES_READ_DEFAULTS: dict[str, Any] = {
 
 
 @dataclass(kw_only=True)
-class PostgresWriteCfg(SqlWriteCfg[PostgresConn]):
+class PostgresWriteCfg(SqlWriteCfg[PostgresDestConn]):
     def create_sql_alchemy_engine(self) -> Engine:
         return build_postgres_engine(
             self.conn.uri,

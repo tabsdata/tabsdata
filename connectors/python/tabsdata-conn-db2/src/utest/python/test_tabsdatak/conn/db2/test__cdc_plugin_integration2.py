@@ -40,7 +40,7 @@ from test_tabsdatak.conn.db2._cdc_docker import (
 
 from tabsdatak.conn.db2 import (
     CommitSeqPosition,
-    Db2CdcConn,
+    Db2CdcStreamSrcConn,
     Db2CdcStreamSrc,
 )
 from tabsdatak.conn.db2._cdc_plugin import Db2CdcStreamSrcPlugin
@@ -174,11 +174,11 @@ def _engine(cfg):
     )
 
 
-def _make_cdc_conn(cfg) -> Db2CdcConn:
+def _make_cdc_conn(cfg) -> Db2CdcStreamSrcConn:
     from tabsdatak.api import Secret
     from tabsdatak.conn.common.types import UserPassword
     import urllib.parse
-    return Db2CdcConn(
+    return Db2CdcStreamSrcConn(
         uri=(
             f"db2+ibm_db://"
             f"{urllib.parse.quote(cfg.root_user, safe='')}:"

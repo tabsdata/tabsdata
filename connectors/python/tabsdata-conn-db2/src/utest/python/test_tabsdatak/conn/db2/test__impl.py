@@ -11,7 +11,7 @@ from tabsdatak.conn.common.sql._engine import constants as const
 from tabsdatak.conn.common.sql._engine.reader import SqlReadCfg
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine.writer import SqlWriteCfg
-from tabsdatak.conn.db2 import Db2Conn
+from tabsdatak.conn.db2 import Db2SrcConn, Db2DestConn
 # noinspection PyProtectedMember
 from tabsdatak.conn.db2 import _impl as impl
 
@@ -45,8 +45,16 @@ def _credentials() -> UserPassword:
     )
 
 
-def _conn() -> Db2Conn:
-    return Db2Conn(
+def _src_conn() -> Db2SrcConn:
+    return Db2SrcConn(
+        uri="db2://db2.example.com:50000/SAMPLE",
+        credentials=_credentials(),
+        conn_cfg={"connect_timeout": 5},
+    )
+
+
+def _dest_conn() -> Db2DestConn:
+    return Db2DestConn(
         uri="db2://db2.example.com:50000/SAMPLE",
         credentials=_credentials(),
         conn_cfg={"connect_timeout": 5},
@@ -138,7 +146,7 @@ def test_db2_read_cfg_subclasses_sql_read_cfg():
 
 def test_db2_read_cfg_creates_engine_from_conn(captured):
     cfg = impl.Db2ReadCfg(
-        conn=_conn(),
+        conn=_src_conn(),
         queries=["SELECT 1 FROM SYSIBM.SYSDUMMY1"],
         transactional=True,
         schema_overrides=None,
@@ -157,7 +165,7 @@ def test_db2_write_cfg_subclasses_sql_write_cfg():
 
 def test_db2_write_cfg_creates_engine_from_conn(captured):
     cfg = impl.Db2WriteCfg(
-        conn=_conn(),
+        conn=_dest_conn(),
         target_tables=["t"],
         if_table_exists="append",
         transactional=True,
@@ -169,7 +177,7 @@ def test_db2_write_cfg_creates_engine_from_conn(captured):
 
 
 def test_db2_read_cfg_no_conn_cfg_forwards_empty_connect_args(captured):
-    conn = Db2Conn(
+    conn = Db2SrcConn(
         uri="db2://host/db",
         credentials=_credentials(),
     )

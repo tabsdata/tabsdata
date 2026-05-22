@@ -21,8 +21,8 @@ class MSSQLRuntimeException(ConnException):
 class MssqlErrorCode(ErrorCode):
     MSSQL_1 = ErrorDef(
         ConnInitException,
-        "MSSQLConn validation failed",
-    )  # MSSQLConn
+        "MSSQL connection validation failed",
+    )  # MSSQLSrcConn / MSSQLDestConn
     MSSQL_2 = ErrorDef(
         ConnInitException,
         "MSSQLSrc validation failed",

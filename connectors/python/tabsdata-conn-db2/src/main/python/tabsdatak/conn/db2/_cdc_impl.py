@@ -1,7 +1,7 @@
 """Db2 CDC implementation -- dialect + SQL Replication ingester.
 
 Mirrors the layering of the batch side (``_impl.py``): the
-connector front (``Db2CdcConn`` / ``Db2CdcStreamSrc`` in
+connector front (``Db2CdcStreamSrcConn`` / ``Db2CdcStreamSrc`` in
 ``__init__.py``) and the plugin glue (``_cdc_plugin.py``) sit above
 this module; this is where the sqlalchemy + IBM SQL Replication
 machinery lives.
@@ -403,7 +403,7 @@ class SqlReplicaIngester(CdcIngester):
 
     def __init__(
         self,
-        # Db2CdcConn duck-typed (the ingester only reads
+        # Db2CdcStreamSrcConn duck-typed (the ingester only reads
         # ``uri`` / ``credentials`` / ``conn_cfg``); avoids the
         # __init__.py -> _cdc_impl.py cycle.
         conn: Any,

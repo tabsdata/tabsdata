@@ -7,9 +7,10 @@ from typing import Any, cast
 from tabsdatak.conn.mysql import (
     DestCfgKey,
     DestCfgSpec,
-    MySQLConn,
     MySQLDest,
+    MySQLDestConn,
     MySQLSrc,
+    MySQLSrcConn,
     SrcCfgKey,
     SrcCfgSpec,
 )
@@ -144,7 +145,7 @@ class MySQLSrcPlugin(SrcPlugin[MySQLSrc]):
         logger.info("mysql: read_in starting (%d queries)", len(src.queries or []))
 
         read_cfg = MySQLReadCfg(
-            conn=cast(MySQLConn, src.conn),
+            conn=cast(MySQLSrcConn, src.conn),
             queries=src.queries,
             transactional=src.transactional,
             schema_overrides=src.schema_overrides,
@@ -206,7 +207,7 @@ class MySQLDestPlugin(DestPlugin[MySQLDest]):
             )
 
         write_cfg = MySQLWriteCfg(
-            conn=cast(MySQLConn, dest.conn),
+            conn=cast(MySQLDestConn, dest.conn),
             target_tables=list(dest.tables),
             if_table_exists=dest.if_table_exists,
             transactional=dest.transactional,
@@ -234,33 +235,43 @@ class MySQLDestPlugin(DestPlugin[MySQLDest]):
             )
 
 
-class MySQLExplorer(Explorer[MySQLConn]):
-    def metadata(self, conn: MySQLConn) -> Any:
+class MySQLSrcExplorer(Explorer[MySQLSrcConn]):
+    def metadata(self, conn: MySQLSrcConn) -> Any:
         # TODO
         pass
 
-    def data(self, conn: MySQLConn, query: str) -> Any:
+    def data(self, conn: MySQLSrcConn, query: str) -> Any:
+        # TODO
+        pass
+
+
+class MySQLDestExplorer(Explorer[MySQLDestConn]):
+    def metadata(self, conn: MySQLDestConn) -> Any:
+        # TODO
+        pass
+
+    def data(self, conn: MySQLDestConn, query: str) -> Any:
         # TODO
         pass
 
 
 MYSQL_SRC = SrcDef(
-    conn=MySQLConn,
+    conn=MySQLSrcConn,
     src_type="mysql",
     src_version="v1",
     src=MySQLSrc,
     table_mode=TableMode.SINGLE,
     cardinality=lambda src: len(src.queries),
     plugin=MySQLSrcPlugin,
-    explorer=MySQLExplorer,
+    explorer=MySQLSrcExplorer,
 )
 
 MYSQL_DEST = DestDef(
-    conn=MySQLConn,
+    conn=MySQLDestConn,
     dest_type="mysql",
     dest_version="v1",
     dest=MySQLDest,
     cardinality=lambda dest: len(dest.tables),
     plugin=MySQLDestPlugin,
-    explorer=MySQLExplorer,
+    explorer=MySQLDestExplorer,
 )

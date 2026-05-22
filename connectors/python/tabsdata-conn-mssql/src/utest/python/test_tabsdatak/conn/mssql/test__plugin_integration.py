@@ -17,7 +17,7 @@ import pyarrow.parquet as pq
 import pytest
 from sqlalchemy import create_engine, text
 
-from tabsdatak.conn.mssql import MSSQLConn, MSSQLDest, MSSQLSrc
+from tabsdatak.conn.mssql import MSSQLDestConn, MSSQLSrcConn, MSSQLDest, MSSQLSrc
 # noinspection PyProtectedMember
 from tabsdatak.conn.mssql import _plugin as plugin
 from tabsdatak.spi import DestContext, SrcPluginCtx
@@ -129,11 +129,21 @@ def _dest_ctx(work: Path) -> _DestCtx:
     return _DestCtx(work)
 
 
-def _conn_from(cfg) -> MSSQLConn:
-    """Build an MSSQLConn pointing at the ``fresh_mssql`` backend. The
+def _src_conn_from(cfg) -> MSSQLSrcConn:
+    """Build an MSSQLSrcConn pointing at the ``fresh_mssql`` backend. The
     fixture's URI is the driver-qualified ``mssql+pyodbc://`` form so
     the impl's ``add_driver_to_uri`` is a no-op."""
-    return MSSQLConn(
+    return MSSQLSrcConn(
+        uri=cfg.uri,
+        credentials=cfg.credentials,
+    )
+
+
+def _dest_conn_from(cfg) -> MSSQLDestConn:
+    """Build an MSSQLDestConn pointing at the ``fresh_mssql`` backend. The
+    fixture's URI is the driver-qualified ``mssql+pyodbc://`` form so
+    the impl's ``add_driver_to_uri`` is a no-op."""
+    return MSSQLDestConn(
         uri=cfg.uri,
         credentials=cfg.credentials,
     )
@@ -162,7 +172,7 @@ def work_dir(tmp_path: Path) -> Path:
 
 def test_src_plugin_read_in_returns_parquet_files(fresh_mssql, work_dir):
     src = MSSQLSrc(
-        conn=_conn_from(fresh_mssql),
+        conn=_src_conn_from(fresh_mssql),
         queries=["SELECT id, name FROM users ORDER BY id"],
     )
     out = plugin.MSSQLSrcPlugin().read_in(_src_ctx(work_dir), src)
@@ -173,7 +183,7 @@ def test_src_plugin_read_in_returns_parquet_files(fresh_mssql, work_dir):
 
 def test_src_plugin_read_in_multiple_queries(fresh_mssql, work_dir):
     src = MSSQLSrc(
-        conn=_conn_from(fresh_mssql),
+        conn=_src_conn_from(fresh_mssql),
         queries=[
             "SELECT id FROM users WHERE age >= :cut ORDER BY id",
             "SELECT id FROM orders ORDER BY id",
@@ -199,7 +209,7 @@ def test_dest_plugin_write_out_appends_rows(fresh_mssql, work_dir):
         [{"id": 100, "name": "dave", "age": 50}],
     )
     dest = MSSQLDest(
-        conn=_conn_from(fresh_mssql),
+        conn=_dest_conn_from(fresh_mssql),
         tables=["users"],
     )
     plugin.MSSQLDestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
@@ -222,7 +232,7 @@ def test_dest_plugin_write_out_replace_clears_existing(fresh_mssql, work_dir):
         [{"id": 1, "name": "only", "age": 1}],
     )
     dest = MSSQLDest(
-        conn=_conn_from(fresh_mssql),
+        conn=_dest_conn_from(fresh_mssql),
         tables=["users"],
         if_table_exists="replace",
     )

@@ -35,7 +35,7 @@ from sqlalchemy import create_engine, text
 
 from tabsdatak.conn.postgres import (
     LsnPosition,
-    PostgresCdcConn,
+    PostgresCdcStreamSrcConn,
     PostgresCdcStreamSrc,
 )
 from tabsdatak.conn.postgres._cdc_plugin import PostgresCdcStreamSrcPlugin
@@ -161,8 +161,8 @@ class _CdcCtx(StreamSrcPluginCtx):
 # ---------------------------------------------------------------------------
 
 
-def _make_cdc_conn(cfg) -> PostgresCdcConn:
-    return PostgresCdcConn(uri=cfg.uri, credentials=cfg.credentials)
+def _make_cdc_conn(cfg) -> PostgresCdcStreamSrcConn:
+    return PostgresCdcStreamSrcConn(uri=cfg.uri, credentials=cfg.credentials)
 
 
 def _drop_replication_slot(cfg) -> None:

@@ -2,7 +2,13 @@
 
 Batch:
 
-* :class:`MySQLConn` -- per-instance MySQL connection.
+* :class:`MySQLSrcConn` -- per-instance MySQL connection for
+  :class:`MySQLSrc`.
+* :class:`MySQLDestConn` -- per-instance MySQL connection for
+  :class:`MySQLDest`. Attribute-identical to
+  :class:`MySQLSrcConn` but a distinct class so source and
+  destination connections cannot be confused at the wire level
+  (the ``__kind__`` discriminator differs).
 * :class:`MySQLSrc` -- source: list of SOQL/SELECT queries; produces
   one parquet slot per query.
 * :class:`MySQLDest` -- destination: list of target table names;
@@ -10,9 +16,9 @@ Batch:
 
 CDC (change-data capture):
 
-* :class:`MySQLCdcConn` -- per-instance MySQL CDC connection.
-  Sibling of :class:`MySQLConn`; adds ``server_id`` for the binlog
-  replication identity.
+* :class:`MySQLCdcStreamSrcConn` -- per-instance MySQL CDC
+  connection. Adds ``server_id`` for the binlog replication
+  identity.
 * :class:`MySQLCdcStreamSrc` -- stream source that emits one
   tableframe-batch per binlog flush across the tracked tables.
 * :class:`GtidPosition` / :class:`BinlogPosition` /
@@ -182,8 +188,8 @@ DestCfgSpec: TypeAlias = Annotated[
 
 
 @_api.dataclass(MysqlErrorCode.MYSQL_1, kw_only=True)
-class MySQLConn(Conn):
-    """MySQL connection.
+class MySQLSrcConn(Conn):
+    """MySQL connection used by :class:`MySQLSrc`.
 
     :param uri: SQLAlchemy-style URI
         (``mysql+mysqlconnector://host:port/db``). Accepts a plain
@@ -197,13 +203,33 @@ class MySQLConn(Conn):
         ``connect_args`` to SQLAlchemy).
     """
 
+    __kind__ = "mysqlSrcConn"
+
     uri: UriSpec
     credentials: CredentialsSpec
     entity_whitelist: EntityWhitelistSpec | None = None
     conn_cfg: CfgSpec | None = None
 
 
-ConnSpec: TypeAlias = Union[NamedConn, MySQLConn]
+@_api.dataclass(MysqlErrorCode.MYSQL_1, kw_only=True)
+class MySQLDestConn(Conn):
+    """MySQL connection used by :class:`MySQLDest`.
+
+    Attribute-identical to :class:`MySQLSrcConn` but a distinct
+    class so source and destination connections cannot be confused
+    at the wire-format level (the ``__kind__`` differs).
+    """
+
+    __kind__ = "mysqlDestConn"
+
+    uri: UriSpec
+    credentials: CredentialsSpec
+    entity_whitelist: EntityWhitelistSpec | None = None
+    conn_cfg: CfgSpec | None = None
+
+
+SrcConnSpec: TypeAlias = Union[NamedConn, MySQLSrcConn]
+DestConnSpec: TypeAlias = Union[NamedConn, MySQLDestConn]
 
 
 # --- Source ----------------------------------------------------------
@@ -213,7 +239,7 @@ ConnSpec: TypeAlias = Union[NamedConn, MySQLConn]
 class MySQLSrc(Src):
     """MySQL source — one parquet slot per SELECT query.
 
-    :param conn: :class:`MySQLConn` (or :class:`NamedConn`).
+    :param conn: :class:`MySQLSrcConn` (or :class:`NamedConn`).
     :param queries: List of SELECT statements; one slot per query.
     :param transactional: When ``True`` (default), run all queries
         inside one transactional session; ``False`` opens a fresh
@@ -227,7 +253,7 @@ class MySQLSrc(Src):
         ``tabsdata.sql.chunkSize``).
     """
 
-    conn: ConnSpec
+    conn: SrcConnSpec
     queries: QueriesSpec
     transactional: bool = True
     schema_overrides: SchemaOverrideSpec | None = None
@@ -251,7 +277,7 @@ class MySQLSrc(Src):
 class MySQLDest(Dest):
     """MySQL destination — write one parquet slot per target table.
 
-    :param conn: :class:`MySQLConn` (or :class:`NamedConn`).
+    :param conn: :class:`MySQLDestConn` (or :class:`NamedConn`).
     :param tables: Target table names (FQN or bare); one parquet
         slot per table.
     :param if_table_exists: ``"append"`` (default) or ``"replace"``
@@ -263,7 +289,7 @@ class MySQLDest(Dest):
         ``tabsdata.sql.sql.writeEngine``, ``tabsdata.sql.chunkSize``).
     """
 
-    conn: ConnSpec
+    conn: DestConnSpec
     tables: MySQLTableNamesSpec
     if_table_exists: IfTableExistsSpec = "append"
     transactional: bool = True
@@ -294,17 +320,17 @@ CdcSrcCfgSpec: TypeAlias = Annotated[
 
 
 @_api.dataclass(MysqlErrorCode.MYSQL_10, kw_only=True)
-class MySQLCdcConn(Conn):
-    """MySQL CDC connection.
+class MySQLCdcStreamSrcConn(Conn):
+    """MySQL CDC connection used by :class:`MySQLCdcStreamSrc`.
 
-    Mirrors :class:`MySQLConn` for the SQLAlchemy / catalog
+    Mirrors :class:`MySQLSrcConn` for the SQLAlchemy / catalog
     introspection side and adds ``server_id`` -- the unique replica
     identifier the source uses for binlog replication. Each
     concurrent CDC connection against the same MySQL must declare a
     distinct ``server_id``; collisions cause the source to disconnect
     one of the replicas.
 
-    Not a subclass of :class:`MySQLConn`: CDC and batch SQL have
+    Not a subclass of :class:`MySQLSrcConn`: CDC and batch SQL have
     different operational guarantees (replication grants vs query
     permissions, replica id reservation) and a divergent attribute
     set is expected over time.
@@ -320,6 +346,8 @@ class MySQLCdcConn(Conn):
         ``connect_args``.
     """
 
+    __kind__ = "mysqlCdcStreamSrcConn"
+
     uri: UriSpec
     credentials: CredentialsSpec
     server_id: int = DEFAULT_SERVER_ID
@@ -327,7 +355,7 @@ class MySQLCdcConn(Conn):
     conn_cfg: CfgSpec | None = None
 
 
-CdcConnSpec: TypeAlias = Union[NamedConn, MySQLCdcConn]
+CdcStreamSrcConnSpec: TypeAlias = Union[NamedConn, MySQLCdcStreamSrcConn]
 
 
 @_api.dataclass(MysqlErrorCode.MYSQL_11, kw_only=True)
@@ -335,7 +363,7 @@ class MySQLCdcStreamSrc(StreamSrc):
     """MySQL CDC stream source -- emits one tableframe-batch per
     binlog flush across the tracked tables.
 
-    :param conn: :class:`MySQLCdcConn` (or :class:`NamedConn`).
+    :param conn: :class:`MySQLCdcStreamSrcConn` (or :class:`NamedConn`).
     :param tables: Qualified ``schema.table`` names to track.
     :param start_from: Where to begin reading the binlog when no
         prior offset has been persisted on the trx context --
@@ -354,7 +382,7 @@ class MySQLCdcStreamSrc(StreamSrc):
         defaults for missing keys.
     """
 
-    conn: CdcConnSpec
+    conn: CdcStreamSrcConnSpec
     tables: list[MySQLTableNameSpec]
     start_from: MySQLCdcStartFromSpec
     columns_format: CdcColumnsFormatSpec = "columns"

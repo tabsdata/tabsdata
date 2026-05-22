@@ -11,18 +11,20 @@ from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
 from tabsdatak.conn.common.types import CfgSpec, UserPassword
 from tabsdatak.conn.db2 import (
     CommitSeqPosition,
-    ConnSpec,
     CredentialsSpec,
-    Db2CdcConn,
     Db2CdcStreamSrc,
-    Db2Conn,
+    Db2CdcStreamSrcConn,
     Db2Dest,
+    Db2DestConn,
     Db2Src,
+    Db2SrcConn,
     Db2TableNamesSpec,
     DestCfgSpec,
+    DestConnSpec,
     IfTableExistsSpec,
     QueriesSpec,
     SrcCfgSpec,
+    SrcConnSpec,
     TableCommitSeqPosition,
     TimestampPosition,
     UriSpec,
@@ -37,8 +39,19 @@ from tabsdatak.conn.db2.error import (
 pytestmark = pytest.mark.db2
 
 
-def _conn() -> Db2Conn:
-    return Db2Conn(
+def _src_conn() -> Db2SrcConn:
+    return Db2SrcConn(
+        uri="db2://db2.example.com:50000/SAMPLE",
+        credentials=UserPassword(
+            user=Secret.lit("etl"),
+            password=Secret.lit("hunter2"),
+        ),
+        conn_cfg={"db2.timeout": 30},
+    )
+
+
+def _dest_conn() -> Db2DestConn:
+    return Db2DestConn(
         uri="db2://db2.example.com:50000/SAMPLE",
         credentials=UserPassword(
             user=Secret.lit("etl"),
@@ -49,31 +62,42 @@ def _conn() -> Db2Conn:
 
 
 # ---------------------------------------------------------------------------
-# Db2Conn
+# Db2SrcConn / Db2DestConn
 # ---------------------------------------------------------------------------
 
 
-def test_db2_conn_round_trip():
-    c = _conn()
-    loaded = Db2Conn.from_json(c.to_json())
+@pytest.mark.parametrize("cls", [Db2SrcConn, Db2DestConn])
+def test_db2_conn_round_trip(cls):
+    c = cls(
+        uri="db2://db2.example.com:50000/SAMPLE",
+        credentials=UserPassword(
+            user=Secret.lit("etl"),
+            password=Secret.lit("hunter2"),
+        ),
+        conn_cfg={"db2.timeout": 30},
+    )
+    loaded = cls.from_json(c.to_json())
     assert loaded == c
     assert loaded.uri == "db2://db2.example.com:50000/SAMPLE"
     assert loaded.conn_cfg == {"db2.timeout": 30}
 
 
-def test_db2_conn_rejects_bad_uri():
-    # The ``uri`` field is a Union of ``str | Secret | Env``, each
-    # carrying the same regex. A bad value fails *every* branch of the
-    # Union -- pydantic surfaces whichever raised; assert on the
-    # ``TabsdataException`` umbrella rather than the specific code.
+@pytest.mark.parametrize("cls", [Db2SrcConn, Db2DestConn])
+def test_db2_conn_rejects_bad_uri(cls):
     with pytest.raises(TabsdataException):
-        Db2Conn(
+        cls(
             uri="ftp://host/db",
             credentials=UserPassword(
                 user=Secret.lit("u"),
                 password=Secret.lit("p"),
             ),
         )
+
+
+def test_db2_src_dest_conn_have_distinct_kinds():
+    assert Db2SrcConn.__kind__ != Db2DestConn.__kind__
+    assert "Src" in Db2SrcConn.__kind__
+    assert "Dest" in Db2DestConn.__kind__
 
 
 # ---------------------------------------------------------------------------
@@ -83,7 +107,7 @@ def test_db2_conn_rejects_bad_uri():
 
 def test_db2_src_full_round_trip():
     src = Db2Src(
-        conn=_conn(),
+        conn=_src_conn(),
         queries=["SELECT * FROM USERS", "SELECT * FROM ORDERS"],
         transactional=False,
         schema_overrides=[None, None],
@@ -113,7 +137,7 @@ def test_db2_src_round_trip_with_named_conn():
 def test_db2_src_validate_rejects_schema_overrides_length_mismatch():
     with pytest.raises(Db2ValidateException) as ei:
         Db2Src(
-            conn=_conn(),
+            conn=_src_conn(),
             queries=[
                 "SELECT 1 FROM SYSIBM.SYSDUMMY1",
                 "SELECT 2 FROM SYSIBM.SYSDUMMY1",
@@ -125,7 +149,7 @@ def test_db2_src_validate_rejects_schema_overrides_length_mismatch():
 
 def test_db2_src_validate_accepts_matching_schema_overrides_length():
     src = Db2Src(
-        conn=_conn(),
+        conn=_src_conn(),
         queries=[
             "SELECT 1 FROM SYSIBM.SYSDUMMY1",
             "SELECT 2 FROM SYSIBM.SYSDUMMY1",
@@ -142,7 +166,7 @@ def test_db2_src_validate_accepts_matching_schema_overrides_length():
 
 def test_db2_dest_full_round_trip():
     dest = Db2Dest(
-        conn=_conn(),
+        conn=_dest_conn(),
         tables=["ANALYTICS.USERS", "ANALYTICS.ORDERS"],
         if_table_exists="replace",
         transactional=False,
@@ -168,7 +192,7 @@ def test_db2_dest_round_trip_with_named_conn():
 
 
 def test_db2_dest_defaults_if_table_exists_to_append():
-    dest = Db2Dest(conn=_conn(), tables=["ANALYTICS.USERS"])
+    dest = Db2Dest(conn=_dest_conn(), tables=["ANALYTICS.USERS"])
     assert dest.if_table_exists == "append"
     assert dest.transactional is True
     assert dest.dest_cfg is None
@@ -183,14 +207,15 @@ def _hint(cls: type, field: str) -> object:
     return typing.get_type_hints(cls, include_extras=True)[field]
 
 
-def test_db2_conn_fields_wire_expected_specs():
-    assert _hint(Db2Conn, "uri") == UriSpec
-    assert _hint(Db2Conn, "credentials") == CredentialsSpec
-    assert _hint(Db2Conn, "conn_cfg") == CfgSpec | None
+@pytest.mark.parametrize("cls", [Db2SrcConn, Db2DestConn])
+def test_db2_conn_fields_wire_expected_specs(cls):
+    assert _hint(cls, "uri") == UriSpec
+    assert _hint(cls, "credentials") == CredentialsSpec
+    assert _hint(cls, "conn_cfg") == CfgSpec | None
 
 
 def test_db2_src_fields_wire_expected_specs():
-    assert _hint(Db2Src, "conn") == ConnSpec
+    assert _hint(Db2Src, "conn") == SrcConnSpec
     assert _hint(Db2Src, "queries") == QueriesSpec
     assert _hint(Db2Src, "transactional") is bool
     assert _hint(Db2Src, "schema_overrides") == SchemaOverrideSpec | None
@@ -198,7 +223,7 @@ def test_db2_src_fields_wire_expected_specs():
 
 
 def test_db2_dest_fields_wire_expected_specs():
-    assert _hint(Db2Dest, "conn") == ConnSpec
+    assert _hint(Db2Dest, "conn") == DestConnSpec
     assert _hint(Db2Dest, "tables") == Db2TableNamesSpec
     assert _hint(Db2Dest, "if_table_exists") == IfTableExistsSpec
     assert _hint(Db2Dest, "transactional") is bool
@@ -213,7 +238,7 @@ def test_db2_dest_fields_wire_expected_specs():
 def test_db2_src_rejects_unknown_src_cfg_key():
     with pytest.raises(ConnInitException) as ei:
         Db2Src(
-            conn=_conn(),
+            conn=_src_conn(),
             queries=["SELECT 1"],
             src_cfg={"bogus.key": 1},
         )
@@ -222,7 +247,7 @@ def test_db2_src_rejects_unknown_src_cfg_key():
 
 def test_db2_src_accepts_known_src_cfg_keys():
     src = Db2Src(
-        conn=_conn(),
+        conn=_src_conn(),
         queries=["SELECT 1"],
         src_cfg={
             "db2.logging_level": 20,
@@ -237,7 +262,7 @@ def test_db2_src_accepts_known_src_cfg_keys():
 def test_db2_dest_rejects_unknown_dest_cfg_key():
     with pytest.raises(ConnInitException) as ei:
         Db2Dest(
-            conn=_conn(),
+            conn=_dest_conn(),
             tables=["analytics.users"],
             dest_cfg={"bogus.key": 1},
         )
@@ -246,7 +271,7 @@ def test_db2_dest_rejects_unknown_dest_cfg_key():
 
 def test_db2_dest_accepts_known_dest_cfg_keys():
     dest = Db2Dest(
-        conn=_conn(),
+        conn=_dest_conn(),
         tables=["analytics.users"],
         dest_cfg={
             "db2.logging_level": 20,
@@ -260,7 +285,7 @@ def test_db2_dest_accepts_known_dest_cfg_keys():
 
 # =====================================================================
 # CDC public primitives -- CommitSeqPosition / TableCommitSeqPosition /
-# TimestampPosition / Db2CdcConn / Db2CdcStreamSrc
+# TimestampPosition / Db2CdcStreamSrcConn / Db2CdcStreamSrc
 # =====================================================================
 #
 # These types live on the public db2 surface (``__init__.py``)
@@ -322,11 +347,11 @@ def test_cdc_typing_classes_are_db2_local_not_common_reexports():
     assert TimestampPosition is not _CommonTimestampPosition
 
 
-# --- Db2CdcConn -----------------------------------------------------
+# --- Db2CdcStreamSrcConn -----------------------------------------------------
 
 
 def test_db2_cdc_conn_minimal_construction():
-    conn = Db2CdcConn(
+    conn = Db2CdcStreamSrcConn(
         uri="db2+ibm_db://host:50000/sample",
         credentials=_cdc_creds(),
     )
@@ -334,9 +359,11 @@ def test_db2_cdc_conn_minimal_construction():
 
 
 def test_db2_cdc_conn_is_not_a_db2_conn_subclass():
-    # Db2CdcConn deliberately does not subclass Db2Conn.
-    assert not issubclass(Db2CdcConn, Db2Conn)
-    assert not issubclass(Db2Conn, Db2CdcConn)
+    # Db2CdcStreamSrcConn deliberately does not subclass the batch Db2 conns.
+    assert not issubclass(Db2CdcStreamSrcConn, Db2SrcConn)
+    assert not issubclass(Db2CdcStreamSrcConn, Db2DestConn)
+    assert not issubclass(Db2SrcConn, Db2CdcStreamSrcConn)
+    assert not issubclass(Db2DestConn, Db2CdcStreamSrcConn)
 
 
 # --- Db2CdcStreamSrc ------------------------------------------------
@@ -344,7 +371,7 @@ def test_db2_cdc_conn_is_not_a_db2_conn_subclass():
 
 def _cdc_stream_src(**overrides) -> Db2CdcStreamSrc:
     kw = dict(
-        conn=Db2CdcConn(
+        conn=Db2CdcStreamSrcConn(
             uri="db2+ibm_db://h:50000/sample",
             credentials=_cdc_creds(),
         ),
@@ -432,11 +459,12 @@ def test_db2_cdc_stream_src_json_round_trip():
 # ---------------------------------------------------------------------------
 
 
-def test_db2_conn_rejects_missing_uri():
+@pytest.mark.parametrize("cls", [Db2SrcConn, Db2DestConn])
+def test_db2_conn_rejects_missing_uri(cls):
     from tabsdatak.conn.common.error import ConnInitException
 
     with pytest.raises(ConnInitException) as ei:
-        Db2Conn(  # type: ignore[call-arg]
+        cls(  # type: ignore[call-arg]
             credentials=UserPassword(
                 user=Secret.lit("u"),
                 password=Secret.lit("p"),
@@ -445,9 +473,10 @@ def test_db2_conn_rejects_missing_uri():
     assert ei.value.api_error is Db2ErrorCode.DB2_1
 
 
-def test_db2_conn_rejects_missing_credentials():
+@pytest.mark.parametrize("cls", [Db2SrcConn, Db2DestConn])
+def test_db2_conn_rejects_missing_credentials(cls):
     from tabsdatak.conn.common.error import ConnInitException
 
     with pytest.raises(ConnInitException) as ei:
-        Db2Conn(uri="db2+ibm_db://h:50000/db")  # type: ignore[call-arg]
+        cls(uri="db2+ibm_db://h:50000/db")  # type: ignore[call-arg]
     assert ei.value.api_error is Db2ErrorCode.DB2_1

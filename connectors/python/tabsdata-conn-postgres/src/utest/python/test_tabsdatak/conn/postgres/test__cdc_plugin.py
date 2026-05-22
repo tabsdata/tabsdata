@@ -13,7 +13,7 @@ from tabsdatak.conn.common.sql.cdc._runner import CdcRunConfig
 from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn.postgres import (
     LsnPosition,
-    PostgresCdcConn,
+    PostgresCdcStreamSrcConn,
     PostgresCdcStreamSrc,
 )
 from tabsdatak.conn.postgres._cdc_plugin import (
@@ -30,7 +30,7 @@ def _creds() -> UserPassword:
 
 def _src(**overrides) -> PostgresCdcStreamSrc:
     kw = dict(
-        conn=PostgresCdcConn(
+        conn=PostgresCdcStreamSrcConn(
             uri="postgresql://h:5432/d",
             credentials=_creds(),
         ),
@@ -46,7 +46,7 @@ def _src(**overrides) -> PostgresCdcStreamSrc:
 
 
 def test_stream_src_def_is_for_postgres_cdc():
-    assert POSTGRES_CDC_STREAM_SRC.conn is PostgresCdcConn
+    assert POSTGRES_CDC_STREAM_SRC.conn is PostgresCdcStreamSrcConn
     assert POSTGRES_CDC_STREAM_SRC.src is PostgresCdcStreamSrc
     assert POSTGRES_CDC_STREAM_SRC.plugin is PostgresCdcStreamSrcPlugin
     assert POSTGRES_CDC_STREAM_SRC.src_type == "postgres-cdc"

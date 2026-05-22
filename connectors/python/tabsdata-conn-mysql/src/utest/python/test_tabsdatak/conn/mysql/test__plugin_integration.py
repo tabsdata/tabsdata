@@ -17,7 +17,12 @@ import pyarrow.parquet as pq
 import pytest
 from sqlalchemy import create_engine, text
 
-from tabsdatak.conn.mysql import MySQLConn, MySQLDest, MySQLSrc
+from tabsdatak.conn.mysql import (
+    MySQLDest,
+    MySQLDestConn,
+    MySQLSrc,
+    MySQLSrcConn,
+)
 # noinspection PyProtectedMember
 from tabsdatak.conn.mysql import _plugin as plugin
 from tabsdatak.spi import DestContext, SrcPluginCtx
@@ -131,15 +136,12 @@ def _dest_ctx(work: Path) -> _DestCtx:
     return _DestCtx(work)
 
 
-def _conn_from(cfg) -> MySQLConn:
-    """Build a MySQLConn pointing at the ``fresh_mysql`` backend. The
-    URI's driver suffix (or lack of it) controls which DBAPI driver
-    pymysql / mysqlclient / ... the engine factory picks; ``fresh_mysql``
-    hands us a URI the dev environment can connect to as-is."""
-    return MySQLConn(
-        uri=cfg.uri,
-        credentials=cfg.credentials,
-    )
+def _src_conn_from(cfg) -> MySQLSrcConn:
+    return MySQLSrcConn(uri=cfg.uri, credentials=cfg.credentials)
+
+
+def _dest_conn_from(cfg) -> MySQLDestConn:
+    return MySQLDestConn(uri=cfg.uri, credentials=cfg.credentials)
 
 
 def _read_parquet(p: Path) -> pl.DataFrame:
@@ -165,7 +167,7 @@ def work_dir(tmp_path: Path) -> Path:
 
 def test_src_plugin_read_in_returns_parquet_files(fresh_mysql, work_dir):
     src = MySQLSrc(
-        conn=_conn_from(fresh_mysql),
+        conn=_src_conn_from(fresh_mysql),
         queries=["SELECT id, name FROM users ORDER BY id"],
     )
     out = plugin.MySQLSrcPlugin().read_in(_src_ctx(work_dir), src)
@@ -176,7 +178,7 @@ def test_src_plugin_read_in_returns_parquet_files(fresh_mysql, work_dir):
 
 def test_src_plugin_read_in_multiple_queries(fresh_mysql, work_dir):
     src = MySQLSrc(
-        conn=_conn_from(fresh_mysql),
+        conn=_src_conn_from(fresh_mysql),
         queries=[
             "SELECT id FROM users WHERE age >= :cut ORDER BY id",
             "SELECT id FROM orders ORDER BY id",
@@ -202,7 +204,7 @@ def test_dest_plugin_write_out_appends_rows(fresh_mysql, work_dir):
         [{"id": 100, "name": "dave", "age": 50}],
     )
     dest = MySQLDest(
-        conn=_conn_from(fresh_mysql),
+        conn=_dest_conn_from(fresh_mysql),
         tables=["users"],
     )
     plugin.MySQLDestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
@@ -225,7 +227,7 @@ def test_dest_plugin_write_out_replace_clears_existing(fresh_mysql, work_dir):
         [{"id": 1, "name": "only", "age": 1}],
     )
     dest = MySQLDest(
-        conn=_conn_from(fresh_mysql),
+        conn=_dest_conn_from(fresh_mysql),
         tables=["users"],
         if_table_exists="replace",
     )

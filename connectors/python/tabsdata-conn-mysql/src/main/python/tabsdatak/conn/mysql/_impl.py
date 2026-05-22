@@ -27,7 +27,7 @@ from tabsdatak.conn.common.types import CfgSpec, UserPassword
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert
-from tabsdatak.conn.mysql import MySQLConn, UriSpec
+from tabsdatak.conn.mysql import MySQLDestConn, MySQLSrcConn, UriSpec
 
 # --- MySQL scheme / driver tables --------------------------------
 
@@ -60,7 +60,7 @@ def build_mysql_engine(
 
 
 @dataclass(kw_only=True)
-class MySQLReadCfg(SqlReadCfg[MySQLConn]):
+class MySQLReadCfg(SqlReadCfg[MySQLSrcConn]):
     def create_sql_alchemy_engine(self) -> Engine:
         return build_mysql_engine(
             self.conn.uri,
@@ -82,7 +82,7 @@ MYSQL_READ_DEFAULTS: dict[str, Any] = {
 
 
 @dataclass(kw_only=True)
-class MySQLWriteCfg(SqlWriteCfg[MySQLConn]):
+class MySQLWriteCfg(SqlWriteCfg[MySQLDestConn]):
     def create_sql_alchemy_engine(self) -> Engine:
         return build_mysql_engine(
             self.conn.uri,

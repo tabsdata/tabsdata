@@ -27,7 +27,7 @@ from tabsdatak.conn.common.types import CfgSpec, UserPassword
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert
-from tabsdatak.conn.oracle import OracleConn, UriSpec
+from tabsdatak.conn.oracle import OracleDestConn, OracleSrcConn, UriSpec
 
 # --- Oracle scheme / driver tables -------------------------------
 
@@ -60,7 +60,7 @@ def build_oracle_engine(
 
 
 @dataclass(kw_only=True)
-class OracleReadCfg(SqlReadCfg[OracleConn]):
+class OracleReadCfg(SqlReadCfg[OracleSrcConn]):
     def create_sql_alchemy_engine(self) -> Engine:
         return build_oracle_engine(
             self.conn.uri,
@@ -82,7 +82,7 @@ ORACLE_READ_DEFAULTS: dict[str, Any] = {
 
 
 @dataclass(kw_only=True)
-class OracleWriteCfg(SqlWriteCfg[OracleConn]):
+class OracleWriteCfg(SqlWriteCfg[OracleDestConn]):
     def create_sql_alchemy_engine(self) -> Engine:
         return build_oracle_engine(
             self.conn.uri,

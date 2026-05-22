@@ -12,7 +12,7 @@ from tabsdatak.api import Secret
 from tabsdatak.conn.common.sql.cdc._runner import CdcRunConfig
 from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn.mysql import (
-    MySQLCdcConn,
+    MySQLCdcStreamSrcConn,
     MySQLCdcStreamSrc,
 )
 from tabsdatak.conn.mysql._cdc_plugin import (
@@ -29,7 +29,7 @@ def _creds() -> UserPassword:
 
 def _src(**overrides) -> MySQLCdcStreamSrc:
     kw = dict(
-        conn=MySQLCdcConn(
+        conn=MySQLCdcStreamSrcConn(
             uri="mysql://h:3306/d",
             credentials=_creds(),
             server_id=777,
@@ -45,7 +45,7 @@ def _src(**overrides) -> MySQLCdcStreamSrc:
 
 
 def test_stream_src_def_is_for_mysql_cdc():
-    assert MYSQL_CDC_STREAM_SRC.conn is MySQLCdcConn
+    assert MYSQL_CDC_STREAM_SRC.conn is MySQLCdcStreamSrcConn
     assert MYSQL_CDC_STREAM_SRC.src is MySQLCdcStreamSrc
     assert MYSQL_CDC_STREAM_SRC.plugin is MySQLCdcStreamSrcPlugin
     assert MYSQL_CDC_STREAM_SRC.src_type == "mysql-cdc"

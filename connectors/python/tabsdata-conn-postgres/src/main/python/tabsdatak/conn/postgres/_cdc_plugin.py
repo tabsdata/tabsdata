@@ -38,7 +38,7 @@ from tabsdatak.conn.common.sql.cdc.typing import (
 )
 from tabsdatak.conn.postgres import (
     CdcSrcCfgKey,
-    PostgresCdcConn,
+    PostgresCdcStreamSrcConn,
     PostgresCdcStartFromSpec,
     PostgresCdcStreamSrc,
 )
@@ -119,7 +119,7 @@ class PostgresCdcStreamSrcPlugin(StreamSrcPlugin[PostgresCdcStreamSrc]):
         ctx: StreamSrcPluginCtx,
         stream_src: PostgresCdcStreamSrc,
     ):
-        conn = cast(PostgresCdcConn, stream_src.conn)
+        conn = cast(PostgresCdcStreamSrcConn, stream_src.conn)
         cfg = _build_cdc_run_config(stream_src)
         # Sync this connector's logger level with the runner +
         # sentinels (``run_cdc`` handles the common-sql namespace).
@@ -155,18 +155,18 @@ class PostgresCdcStreamSrcPlugin(StreamSrcPlugin[PostgresCdcStreamSrc]):
             logger.info("postgres-cdc: stopped")
 
 
-class PostgresCdcExplorer(Explorer[PostgresCdcConn]):
-    def metadata(self, conn: PostgresCdcConn) -> Any:
+class PostgresCdcExplorer(Explorer[PostgresCdcStreamSrcConn]):
+    def metadata(self, conn: PostgresCdcStreamSrcConn) -> Any:
         # TODO
         pass
 
-    def data(self, conn: PostgresCdcConn, query: str) -> Any:
+    def data(self, conn: PostgresCdcStreamSrcConn, query: str) -> Any:
         # TODO
         pass
 
 
 POSTGRES_CDC_STREAM_SRC = StreamSrcDef(
-    conn=PostgresCdcConn,
+    conn=PostgresCdcStreamSrcConn,
     src_type="postgres-cdc",
     src_version="v1",
     src=PostgresCdcStreamSrc,

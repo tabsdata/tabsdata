@@ -7,9 +7,10 @@ from typing import Any, cast
 from tabsdatak.conn.postgres import (
     DestCfgKey,
     DestCfgSpec,
-    PostgresConn,
     PostgresDest,
+    PostgresDestConn,
     PostgresSrc,
+    PostgresSrcConn,
     SrcCfgKey,
     SrcCfgSpec,
 )
@@ -132,7 +133,7 @@ class PostgresSrcPlugin(SrcPlugin[PostgresSrc]):
         logger.info("postgres: read_in starting (%d queries)", len(src.queries or []))
 
         read_cfg = PostgresReadCfg(
-            conn=cast(PostgresConn, src.conn),
+            conn=cast(PostgresSrcConn, src.conn),
             queries=src.queries,
             transactional=src.transactional,
             schema_overrides=src.schema_overrides,
@@ -196,7 +197,7 @@ class PostgresDestPlugin(DestPlugin[PostgresDest]):
             )
 
         write_cfg = PostgresWriteCfg(
-            conn=cast(PostgresConn, dest.conn),
+            conn=cast(PostgresDestConn, dest.conn),
             target_tables=list(dest.tables),
             if_table_exists=dest.if_table_exists,
             transactional=dest.transactional,
@@ -224,33 +225,43 @@ class PostgresDestPlugin(DestPlugin[PostgresDest]):
             )
 
 
-class PostgresExplorer(Explorer[PostgresConn]):
-    def metadata(self, conn: PostgresConn) -> Any:
+class PostgresSrcExplorer(Explorer[PostgresSrcConn]):
+    def metadata(self, conn: PostgresSrcConn) -> Any:
         # TODO
         pass
 
-    def data(self, conn: PostgresConn, query: str) -> Any:
+    def data(self, conn: PostgresSrcConn, query: str) -> Any:
+        # TODO
+        pass
+
+
+class PostgresDestExplorer(Explorer[PostgresDestConn]):
+    def metadata(self, conn: PostgresDestConn) -> Any:
+        # TODO
+        pass
+
+    def data(self, conn: PostgresDestConn, query: str) -> Any:
         # TODO
         pass
 
 
 POSTGRES_SRC = SrcDef(
-    conn=PostgresConn,
+    conn=PostgresSrcConn,
     src_type="postgres",
     src_version="v1",
     src=PostgresSrc,
     table_mode=TableMode.SINGLE,
     cardinality=lambda src: len(src.queries),
     plugin=PostgresSrcPlugin,
-    explorer=PostgresExplorer,
+    explorer=PostgresSrcExplorer,
 )
 
 POSTGRES_DEST = DestDef(
-    conn=PostgresConn,
+    conn=PostgresDestConn,
     dest_type="postgres",
     dest_version="v1",
     dest=PostgresDest,
     cardinality=lambda dest: len(dest.tables),
     plugin=PostgresDestPlugin,
-    explorer=PostgresExplorer,
+    explorer=PostgresDestExplorer,
 )

@@ -38,7 +38,7 @@ from tabsdatak.conn.common.sql.cdc.typing import (
 )
 from tabsdatak.conn.db2 import (
     CdcSrcCfgKey,
-    Db2CdcConn,
+    Db2CdcStreamSrcConn,
     Db2CdcStartFromSpec,
     Db2CdcStreamSrc,
     TimestampPosition,
@@ -118,7 +118,7 @@ class Db2CdcStreamSrcPlugin(StreamSrcPlugin[Db2CdcStreamSrc]):
         ctx: StreamSrcPluginCtx,
         stream_src: Db2CdcStreamSrc,
     ):
-        conn = cast(Db2CdcConn, stream_src.conn)
+        conn = cast(Db2CdcStreamSrcConn, stream_src.conn)
         cfg = _build_cdc_run_config(stream_src)
         # Sync this connector's logger level with the runner +
         # sentinels (``run_cdc`` handles the common-sql namespace).
@@ -147,18 +147,18 @@ class Db2CdcStreamSrcPlugin(StreamSrcPlugin[Db2CdcStreamSrc]):
             logger.info("db2-cdc: stopped")
 
 
-class Db2CdcExplorer(Explorer[Db2CdcConn]):
-    def metadata(self, conn: Db2CdcConn) -> Any:
+class Db2CdcExplorer(Explorer[Db2CdcStreamSrcConn]):
+    def metadata(self, conn: Db2CdcStreamSrcConn) -> Any:
         # TODO
         pass
 
-    def data(self, conn: Db2CdcConn, query: str) -> Any:
+    def data(self, conn: Db2CdcStreamSrcConn, query: str) -> Any:
         # TODO
         pass
 
 
 DB2_CDC_STREAM_SRC = StreamSrcDef(
-    conn=Db2CdcConn,
+    conn=Db2CdcStreamSrcConn,
     src_type="db2-cdc",
     src_version="v1",
     src=Db2CdcStreamSrc,

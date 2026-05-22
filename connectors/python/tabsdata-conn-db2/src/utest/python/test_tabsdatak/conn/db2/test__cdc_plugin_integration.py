@@ -34,7 +34,7 @@ from sqlalchemy import create_engine, text
 
 from tabsdatak.conn.db2 import (
     CommitSeqPosition,
-    Db2CdcConn,
+    Db2CdcStreamSrcConn,
     Db2CdcStreamSrc,
 )
 from tabsdatak.conn.db2._cdc_plugin import Db2CdcStreamSrcPlugin
@@ -155,8 +155,8 @@ class _CdcCtx(StreamSrcPluginCtx):
 # ---------------------------------------------------------------------------
 
 
-def _make_cdc_conn(cfg) -> Db2CdcConn:
-    return Db2CdcConn(uri=cfg.uri, credentials=cfg.credentials)
+def _make_cdc_conn(cfg) -> Db2CdcStreamSrcConn:
+    return Db2CdcStreamSrcConn(uri=cfg.uri, credentials=cfg.credentials)
 
 
 def _commitseq(value: int) -> bytes:

@@ -2,7 +2,11 @@
 
 Batch:
 
-* :class:`PostgresConn` -- per-instance Postgres connection.
+* :class:`PostgresSrcConn` / :class:`PostgresDestConn` --
+  per-instance Postgres connections for :class:`PostgresSrc` /
+  :class:`PostgresDest`. Attribute-identical but distinct classes
+  so source and destination connections cannot be confused at the
+  wire-format level.
 * :class:`PostgresSrc` -- source: list of SELECT queries; produces
   one parquet slot per query.
 * :class:`PostgresDest` -- destination: list of target table names;
@@ -10,9 +14,9 @@ Batch:
 
 CDC (change-data capture):
 
-* :class:`PostgresCdcConn` -- per-instance Postgres CDC connection.
-  Sibling of :class:`PostgresConn`; the connecting role must hold
-  the ``REPLICATION`` attribute.
+* :class:`PostgresCdcStreamSrcConn` -- per-instance Postgres CDC
+  connection. The connecting role must hold the ``REPLICATION``
+  attribute.
 * :class:`PostgresCdcStreamSrc` -- stream source that emits one
   tableframe-batch per WAL flush across the tracked tables. The
   source attaches to a *logical replication slot* (named on the
@@ -105,8 +109,8 @@ DestCfgSpec: TypeAlias = Annotated[
 
 
 @_api.dataclass(PostgresErrorCode.POSTGRES_1, kw_only=True)
-class PostgresConn(Conn):
-    """Postgres connection.
+class PostgresSrcConn(Conn):
+    """Postgres connection used by :class:`PostgresSrc`.
 
     :param uri: SQLAlchemy-style URI
         (``postgres+psycopg2://host:port/db``). Accepts a plain str,
@@ -120,13 +124,33 @@ class PostgresConn(Conn):
         ``connect_args`` to SQLAlchemy).
     """
 
+    __kind__ = "postgresSrcConn"
+
     uri: UriSpec
     credentials: CredentialsSpec
     entity_whitelist: EntityWhitelistSpec | None = None
     conn_cfg: CfgSpec | None = None
 
 
-ConnSpec: TypeAlias = Union[NamedConn, PostgresConn]
+@_api.dataclass(PostgresErrorCode.POSTGRES_1, kw_only=True)
+class PostgresDestConn(Conn):
+    """Postgres connection used by :class:`PostgresDest`.
+
+    Attribute-identical to :class:`PostgresSrcConn` but a distinct
+    class so source and destination connections cannot be confused
+    at the wire-format level (the ``__kind__`` differs).
+    """
+
+    __kind__ = "postgresDestConn"
+
+    uri: UriSpec
+    credentials: CredentialsSpec
+    entity_whitelist: EntityWhitelistSpec | None = None
+    conn_cfg: CfgSpec | None = None
+
+
+SrcConnSpec: TypeAlias = Union[NamedConn, PostgresSrcConn]
+DestConnSpec: TypeAlias = Union[NamedConn, PostgresDestConn]
 
 
 # --- Source ----------------------------------------------------------
@@ -136,7 +160,7 @@ ConnSpec: TypeAlias = Union[NamedConn, PostgresConn]
 class PostgresSrc(Src):
     """Postgres source — one parquet slot per SELECT query.
 
-    :param conn: :class:`PostgresConn` (or :class:`NamedConn`).
+    :param conn: :class:`PostgresSrcConn` (or :class:`NamedConn`).
     :param queries: List of SELECT statements; one slot per query.
     :param transactional: When ``True`` (default), run all queries
         inside one transactional session.
@@ -147,7 +171,7 @@ class PostgresSrc(Src):
         set (logging_level, readEngine, chunkSize).
     """
 
-    conn: ConnSpec
+    conn: SrcConnSpec
     queries: QueriesSpec
     transactional: bool = True
     schema_overrides: SchemaOverrideSpec | None = None
@@ -171,7 +195,7 @@ class PostgresSrc(Src):
 class PostgresDest(Dest):
     """Postgres destination — write one parquet slot per target table.
 
-    :param conn: :class:`PostgresConn` (or :class:`NamedConn`).
+    :param conn: :class:`PostgresDestConn` (or :class:`NamedConn`).
     :param tables: Target table names (FQN or bare); one parquet
         slot per table.
     :param if_table_exists: ``"append"`` (default) or ``"replace"``
@@ -182,7 +206,7 @@ class PostgresDest(Dest):
         set (logging_level, writeEngine, chunkSize).
     """
 
-    conn: ConnSpec
+    conn: DestConnSpec
     tables: PostgresTableNamesSpec
     if_table_exists: IfTableExistsSpec = "append"
     transactional: bool = True
@@ -259,19 +283,19 @@ CdcSrcCfgSpec: TypeAlias = Annotated[
 
 
 @_api.dataclass(PostgresErrorCode.POSTGRES_10, kw_only=True)
-class PostgresCdcConn(Conn):
-    """Postgres CDC connection.
+class PostgresCdcStreamSrcConn(Conn):
+    """Postgres CDC connection used by :class:`PostgresCdcStreamSrc`.
 
-    Mirrors :class:`PostgresConn` for the SQLAlchemy / catalog
+    Mirrors :class:`PostgresSrcConn` for the SQLAlchemy / catalog
     introspection side. The replication slot + publication live on
     :class:`PostgresCdcStreamSrc` instead -- one connection can
     front multiple sources if they each use a distinct slot.
 
-    Not a subclass of :class:`PostgresConn`: CDC and batch SQL have
-    different operational guarantees (the connecting role needs the
-    ``REPLICATION`` attribute; the slot retention model is separate
-    from query permissions) and a divergent attribute set is
-    expected over time.
+    Not a subclass of :class:`PostgresSrcConn`: CDC and batch SQL
+    have different operational guarantees (the connecting role
+    needs the ``REPLICATION`` attribute; the slot retention model
+    is separate from query permissions) and a divergent attribute
+    set is expected over time.
 
     :param uri: SQLAlchemy-style URI; accepts ``str`` / ``Env`` /
         ``Secret`` per :data:`UriSpec`.
@@ -283,13 +307,15 @@ class PostgresCdcConn(Conn):
         ``connect_args``.
     """
 
+    __kind__ = "postgresCdcStreamSrcConn"
+
     uri: UriSpec
     credentials: CredentialsSpec
     entity_whitelist: EntityWhitelistSpec | None = None
     conn_cfg: CfgSpec | None = None
 
 
-CdcConnSpec: TypeAlias = Union[NamedConn, PostgresCdcConn]
+CdcStreamSrcConnSpec: TypeAlias = Union[NamedConn, PostgresCdcStreamSrcConn]
 
 
 @_api.dataclass(PostgresErrorCode.POSTGRES_11, kw_only=True)
@@ -305,7 +331,8 @@ class PostgresCdcStreamSrc(StreamSrc):
     creates it (``"create"``, no-op if it already exists) or
     requires it to exist (``"reuse"``, default).
 
-    :param conn: :class:`PostgresCdcConn` (or :class:`NamedConn`).
+    :param conn: :class:`PostgresCdcStreamSrcConn` (or
+        :class:`NamedConn`).
     :param tables: Qualified ``schema.table`` names to track.
     :param replication_slot: Logical replication slot to attach to.
     :param replication_slot_behavior: ``"reuse"`` (default) or
@@ -324,7 +351,7 @@ class PostgresCdcStreamSrc(StreamSrc):
         polling cadence, wal2json format version.
     """
 
-    conn: CdcConnSpec
+    conn: CdcStreamSrcConnSpec
     tables: list[PostgresTableNameSpec]
     replication_slot: str
     start_from: PostgresCdcStartFromSpec

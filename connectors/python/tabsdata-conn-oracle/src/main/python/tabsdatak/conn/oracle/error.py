@@ -21,8 +21,8 @@ class OracleRuntimeException(ConnException):
 class OracleErrorCode(ErrorCode):
     ORACLE_1 = ErrorDef(
         ConnInitException,
-        "OracleConn validation failed",
-    )  # OracleConn
+        "Oracle connection validation failed",
+    )  # OracleSrcConn / OracleDestConn
     ORACLE_2 = ErrorDef(
         ConnInitException,
         "OracleSrc validation failed",

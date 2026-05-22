@@ -21,8 +21,8 @@ class MySQLRuntimeException(ConnException):
 class MysqlErrorCode(ErrorCode):
     MYSQL_1 = ErrorDef(
         ConnInitException,
-        "MySQLConn validation failed",
-    )  # MySQLConn
+        "MySQL connection validation failed",
+    )  # MySQLSrcConn / MySQLDestConn
     MYSQL_2 = ErrorDef(
         ConnInitException,
         "MySQLSrc validation failed",
@@ -61,8 +61,8 @@ class MysqlErrorCode(ErrorCode):
 
     MYSQL_10 = ErrorDef(
         ConnInitException,
-        "MySQLCdcConn validation failed",
-    )  # MySQLCdcConn dataclass tag
+        "MySQLCdcStreamSrcConn validation failed",
+    )  # MySQLCdcStreamSrcConn dataclass tag
     MYSQL_11 = ErrorDef(
         ConnInitException,
         "MySQLCdcStreamSrc validation failed",

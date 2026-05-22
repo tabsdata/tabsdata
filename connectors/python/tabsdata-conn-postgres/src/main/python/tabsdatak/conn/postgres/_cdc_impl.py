@@ -2,7 +2,7 @@
 ingester.
 
 Mirrors the layering of the batch side (``_impl.py``): the connector
-front (``PostgresCdcConn`` / ``PostgresCdcStreamSrc`` in
+front (``PostgresCdcStreamSrcConn`` / ``PostgresCdcStreamSrc`` in
 ``__init__.py``) and the plugin glue (``_cdc_plugin.py``) sit above
 this module; this is where the psycopg2 logical-decoding + sqlalchemy
 machinery lives.
@@ -369,7 +369,7 @@ class Wal2JsonIngester(CdcIngester):
         self,
         # The ``Conn`` is duck-typed: the ingester only reads
         # ``uri`` / ``credentials`` / ``conn_cfg``. Concrete type is
-        # PostgresCdcConn but we don't import it here to avoid the
+        # PostgresCdcStreamSrcConn but we don't import it here to avoid the
         # __init__.py -> _cdc_impl.py cycle.
         conn: Any,
         tables: QualifiedTablesSpec,

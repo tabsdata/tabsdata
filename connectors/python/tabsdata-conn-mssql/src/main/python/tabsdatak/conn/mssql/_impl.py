@@ -28,7 +28,7 @@ from tabsdatak.conn.common.types import CfgSpec, UserPassword
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert
-from tabsdatak.conn.mssql import MSSQLConn, UriSpec
+from tabsdatak.conn.mssql import MSSQLDestConn, MSSQLSrcConn, UriSpec
 
 # --- MSSQL scheme / driver tables --------------------------------
 
@@ -80,7 +80,7 @@ def build_mssql_engine(
 
 
 @dataclass(kw_only=True)
-class MSSQLReadCfg(SqlReadCfg[MSSQLConn]):
+class MSSQLReadCfg(SqlReadCfg[MSSQLSrcConn]):
     def create_sql_alchemy_engine(self) -> Engine:
         return build_mssql_engine(
             self.conn.uri,
@@ -102,7 +102,7 @@ MSSQL_READ_DEFAULTS: dict[str, Any] = {
 
 
 @dataclass(kw_only=True)
-class MSSQLWriteCfg(SqlWriteCfg[MSSQLConn]):
+class MSSQLWriteCfg(SqlWriteCfg[MSSQLDestConn]):
     def create_sql_alchemy_engine(self) -> Engine:
         return build_mssql_engine(
             self.conn.uri,

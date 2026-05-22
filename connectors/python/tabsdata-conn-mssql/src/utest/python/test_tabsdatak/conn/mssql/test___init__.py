@@ -10,11 +10,13 @@ from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
 from tabsdatak.conn.common.types import CfgSpec, UserPassword
 from tabsdatak.conn.mssql import (
-    ConnSpec,
+    DestConnSpec,
+    SrcConnSpec,
     CredentialsSpec,
     DestCfgSpec,
     IfTableExistsSpec,
-    MSSQLConn,
+    MSSQLDestConn,
+    MSSQLSrcConn,
     MSSQLDest,
     MSSQLSrc,
     MSSQLTableNamesSpec,
@@ -32,8 +34,19 @@ from tabsdatak.conn.mssql.error import (
 pytestmark = pytest.mark.mssql
 
 
-def _conn() -> MSSQLConn:
-    return MSSQLConn(
+def _src_conn() -> MSSQLSrcConn:
+    return MSSQLSrcConn(
+        uri="mssql://mssql.example.com:1433/analytics",
+        credentials=UserPassword(
+            user=Secret.lit("etl"),
+            password=Secret.lit("hunter2"),
+        ),
+        conn_cfg={"mssql.timeout": 30},
+    )
+
+
+def _dest_conn() -> MSSQLDestConn:
+    return MSSQLDestConn(
         uri="mssql://mssql.example.com:1433/analytics",
         credentials=UserPassword(
             user=Secret.lit("etl"),
@@ -48,50 +61,63 @@ def _conn() -> MSSQLConn:
 # ---------------------------------------------------------------------------
 
 
-def test_mssql_conn_round_trip():
-    c = _conn()
-    loaded = MSSQLConn.from_json(c.to_json())
+@pytest.mark.parametrize("cls", [MSSQLSrcConn, MSSQLDestConn])
+def test_mssql_conn_round_trip(cls):
+    c = cls(
+        uri="mssql://mssql.example.com:1433/analytics",
+        credentials=UserPassword(
+            user=Secret.lit("etl"),
+            password=Secret.lit("hunter2"),
+        ),
+        conn_cfg={"mssql.timeout": 30},
+    )
+    loaded = cls.from_json(c.to_json())
     assert loaded == c
     assert loaded.uri == "mssql://mssql.example.com:1433/analytics"
     assert loaded.conn_cfg == {"mssql.timeout": 30}
 
 
+def test_mssql_src_dest_conn_have_distinct_kinds():
+    assert MSSQLSrcConn.__kind__ != MSSQLDestConn.__kind__
+
+
 def test_mssql_conn_accepts_odbc_connection_string_and_round_trips():
-    # The ``uri`` field accepts an ODBC ``KEY=value;…`` string as the
-    # alternative to ``mssql://`` URLs (handled by ``build_mssql_engine``
-    # via ``odbc_connect=<encoded>``). Verify it round-trips through
-    # JSON unchanged on a Conn, a Src, and a Dest.
     odbc_uri = (
         "DRIVER=ODBC Driver 18 for SQL Server;"
         "SERVER=db.example.com,1433;"
         "Database=analytics;"
         "TrustServerCertificate=yes"
     )
-    conn = MSSQLConn(
+    conn = MSSQLSrcConn(
         uri=odbc_uri,
         credentials=UserPassword(
             user=Secret.lit("etl"),
             password=Secret.lit("hunter2"),
         ),
     )
-    loaded = MSSQLConn.from_json(conn.to_json())
+    loaded = MSSQLSrcConn.from_json(conn.to_json())
     assert loaded == conn
     assert loaded.uri == odbc_uri
 
     src = MSSQLSrc(conn=conn, queries=["SELECT 1"])
     assert MSSQLSrc.from_json(src.to_json()) == src
 
-    dest = MSSQLDest(conn=conn, tables=["dbo.users"])
+    dest_conn = MSSQLDestConn(
+        uri=odbc_uri,
+        credentials=conn.credentials,
+    )
+    dest = MSSQLDest(conn=dest_conn, tables=["dbo.users"])
     assert MSSQLDest.from_json(dest.to_json()) == dest
 
 
-def test_mssql_conn_rejects_bad_uri():
+@pytest.mark.parametrize("cls", [MSSQLSrcConn, MSSQLDestConn])
+def test_mssql_conn_rejects_bad_uri(cls):
     # The ``uri`` field is a Union of ``str | Secret | Env``, each
     # carrying the same regex. A bad value fails *every* branch of the
     # Union -- pydantic surfaces whichever raised; assert on the
     # ``TabsdataException`` umbrella rather than the specific code.
     with pytest.raises(TabsdataException):
-        MSSQLConn(
+        cls(
             uri="ftp://host/db",
             credentials=UserPassword(
                 user=Secret.lit("u"),
@@ -107,7 +133,7 @@ def test_mssql_conn_rejects_bad_uri():
 
 def test_mssql_src_full_round_trip():
     src = MSSQLSrc(
-        conn=_conn(),
+        conn=_src_conn(),
         queries=["SELECT * FROM users", "SELECT * FROM orders"],
         transactional=False,
         schema_overrides=[None, None],
@@ -134,7 +160,7 @@ def test_mssql_src_round_trip_with_named_conn():
 def test_mssql_src_validate_rejects_schema_overrides_length_mismatch():
     with pytest.raises(MSSQLValidateException) as ei:
         MSSQLSrc(
-            conn=_conn(),
+            conn=_src_conn(),
             queries=["SELECT 1", "SELECT 2"],
             schema_overrides=[None],
         )
@@ -143,7 +169,7 @@ def test_mssql_src_validate_rejects_schema_overrides_length_mismatch():
 
 def test_mssql_src_validate_accepts_matching_schema_overrides_length():
     src = MSSQLSrc(
-        conn=_conn(),
+        conn=_src_conn(),
         queries=["SELECT 1", "SELECT 2"],
         schema_overrides=[None, None],
     )
@@ -157,7 +183,7 @@ def test_mssql_src_validate_accepts_matching_schema_overrides_length():
 
 def test_mssql_dest_full_round_trip():
     dest = MSSQLDest(
-        conn=_conn(),
+        conn=_dest_conn(),
         tables=["dbo.users", "dbo.orders"],
         if_table_exists="replace",
         transactional=False,
@@ -180,7 +206,7 @@ def test_mssql_dest_round_trip_with_named_conn():
 
 
 def test_mssql_dest_defaults_if_table_exists_to_append():
-    dest = MSSQLDest(conn=_conn(), tables=["dbo.users"])
+    dest = MSSQLDest(conn=_dest_conn(), tables=["dbo.users"])
     assert dest.if_table_exists == "append"
     assert dest.transactional is True
     assert dest.dest_cfg is None
@@ -195,14 +221,15 @@ def _hint(cls: type, field: str) -> object:
     return typing.get_type_hints(cls, include_extras=True)[field]
 
 
-def test_mssql_conn_fields_wire_expected_specs():
-    assert _hint(MSSQLConn, "uri") == UriSpec
-    assert _hint(MSSQLConn, "credentials") == CredentialsSpec
-    assert _hint(MSSQLConn, "conn_cfg") == CfgSpec | None
+@pytest.mark.parametrize("cls", [MSSQLSrcConn, MSSQLDestConn])
+def test_mssql_conn_fields_wire_expected_specs(cls):
+    assert _hint(cls, "uri") == UriSpec
+    assert _hint(cls, "credentials") == CredentialsSpec
+    assert _hint(cls, "conn_cfg") == CfgSpec | None
 
 
 def test_mssql_src_fields_wire_expected_specs():
-    assert _hint(MSSQLSrc, "conn") == ConnSpec
+    assert _hint(MSSQLSrc, "conn") == SrcConnSpec
     assert _hint(MSSQLSrc, "queries") == QueriesSpec
     assert _hint(MSSQLSrc, "transactional") is bool
     assert _hint(MSSQLSrc, "schema_overrides") == SchemaOverrideSpec | None
@@ -210,7 +237,7 @@ def test_mssql_src_fields_wire_expected_specs():
 
 
 def test_mssql_dest_fields_wire_expected_specs():
-    assert _hint(MSSQLDest, "conn") == ConnSpec
+    assert _hint(MSSQLDest, "conn") == DestConnSpec
     assert _hint(MSSQLDest, "tables") == MSSQLTableNamesSpec
     assert _hint(MSSQLDest, "if_table_exists") == IfTableExistsSpec
     assert _hint(MSSQLDest, "transactional") is bool
@@ -225,7 +252,7 @@ def test_mssql_dest_fields_wire_expected_specs():
 def test_mssql_src_rejects_unknown_src_cfg_key():
     with pytest.raises(ConnInitException) as ei:
         MSSQLSrc(
-            conn=_conn(),
+            conn=_src_conn(),
             queries=["SELECT 1"],
             src_cfg={"bogus.key": 1},
         )
@@ -234,7 +261,7 @@ def test_mssql_src_rejects_unknown_src_cfg_key():
 
 def test_mssql_src_accepts_known_src_cfg_keys():
     src = MSSQLSrc(
-        conn=_conn(),
+        conn=_src_conn(),
         queries=["SELECT 1"],
         src_cfg={
             "mssql.logging_level": 20,
@@ -249,7 +276,7 @@ def test_mssql_src_accepts_known_src_cfg_keys():
 def test_mssql_dest_rejects_unknown_dest_cfg_key():
     with pytest.raises(ConnInitException) as ei:
         MSSQLDest(
-            conn=_conn(),
+            conn=_dest_conn(),
             tables=["dbo.users"],
             dest_cfg={"bogus.key": 1},
         )
@@ -258,7 +285,7 @@ def test_mssql_dest_rejects_unknown_dest_cfg_key():
 
 def test_mssql_dest_accepts_known_dest_cfg_keys():
     dest = MSSQLDest(
-        conn=_conn(),
+        conn=_dest_conn(),
         tables=["dbo.users"],
         dest_cfg={
             "mssql.logging_level": 20,
@@ -275,11 +302,12 @@ def test_mssql_dest_accepts_known_dest_cfg_keys():
 # ---------------------------------------------------------------------------
 
 
-def test_mssql_conn_rejects_missing_uri():
+@pytest.mark.parametrize("cls", [MSSQLSrcConn, MSSQLDestConn])
+def test_mssql_conn_rejects_missing_uri(cls):
     from tabsdatak.conn.common.error import ConnInitException
 
     with pytest.raises(ConnInitException) as ei:
-        MSSQLConn(  # type: ignore[call-arg]
+        cls(  # type: ignore[call-arg]
             credentials=UserPassword(
                 user=Secret.lit("u"),
                 password=Secret.lit("p"),
@@ -288,9 +316,10 @@ def test_mssql_conn_rejects_missing_uri():
     assert ei.value.api_error is MssqlErrorCode.MSSQL_1
 
 
-def test_mssql_conn_rejects_missing_credentials():
+@pytest.mark.parametrize("cls", [MSSQLSrcConn, MSSQLDestConn])
+def test_mssql_conn_rejects_missing_credentials(cls):
     from tabsdatak.conn.common.error import ConnInitException
 
     with pytest.raises(ConnInitException) as ei:
-        MSSQLConn(uri="mssql+pyodbc://h/d")  # type: ignore[call-arg]
+        cls(uri="mssql+pyodbc://h/d")  # type: ignore[call-arg]
     assert ei.value.api_error is MssqlErrorCode.MSSQL_1

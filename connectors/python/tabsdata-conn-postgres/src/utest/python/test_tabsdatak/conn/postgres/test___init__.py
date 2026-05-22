@@ -10,14 +10,16 @@ from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
 from tabsdatak.conn.common.types import CfgSpec, UserPassword
 from tabsdatak.conn.postgres import (
-    ConnSpec,
+    DestConnSpec,
+    SrcConnSpec,
     CredentialsSpec,
     DestCfgSpec,
     IfTableExistsSpec,
     LsnPosition,
-    PostgresCdcConn,
+    PostgresCdcStreamSrcConn,
     PostgresCdcStreamSrc,
-    PostgresConn,
+    PostgresDestConn,
+    PostgresSrcConn,
     PostgresDest,
     PostgresSrc,
     PostgresTableNamesSpec,
@@ -35,8 +37,19 @@ from tabsdatak.conn.postgres.error import (
 pytestmark = pytest.mark.postgres
 
 
-def _conn() -> PostgresConn:
-    return PostgresConn(
+def _src_conn() -> PostgresSrcConn:
+    return PostgresSrcConn(
+        uri="postgresql://pg.example.com:5432/analytics",
+        credentials=UserPassword(
+            user=Secret.lit("etl"),
+            password=Secret.lit("hunter2"),
+        ),
+        conn_cfg={"postgres.timeout": 30},
+    )
+
+
+def _dest_conn() -> PostgresDestConn:
+    return PostgresDestConn(
         uri="postgresql://pg.example.com:5432/analytics",
         credentials=UserPassword(
             user=Secret.lit("etl"),
@@ -47,25 +60,40 @@ def _conn() -> PostgresConn:
 
 
 # ---------------------------------------------------------------------------
-# PostgresConn
+# PostgresSrcConn / PostgresDestConn
 # ---------------------------------------------------------------------------
 
 
-def test_postgres_conn_round_trip():
-    c = _conn()
-    loaded = PostgresConn.from_json(c.to_json())
+@pytest.mark.parametrize("cls", [PostgresSrcConn, PostgresDestConn])
+def test_postgres_conn_round_trip(cls):
+    c = cls(
+        uri="postgresql://pg.example.com:5432/analytics",
+        credentials=UserPassword(
+            user=Secret.lit("etl"),
+            password=Secret.lit("hunter2"),
+        ),
+        conn_cfg={"postgres.timeout": 30},
+    )
+    loaded = cls.from_json(c.to_json())
     assert loaded == c
     assert loaded.uri == "postgresql://pg.example.com:5432/analytics"
     assert loaded.conn_cfg == {"postgres.timeout": 30}
 
 
-def test_postgres_conn_rejects_bad_uri():
+def test_postgres_src_dest_conn_have_distinct_kinds():
+    assert PostgresSrcConn.__kind__ != PostgresDestConn.__kind__
+    assert "Src" in PostgresSrcConn.__kind__
+    assert "Dest" in PostgresDestConn.__kind__
+
+
+@pytest.mark.parametrize("cls", [PostgresSrcConn, PostgresDestConn])
+def test_postgres_conn_rejects_bad_uri(cls):
     # The ``uri`` field is a Union of ``str | Secret | Env``, each
     # carrying the same regex. A bad value fails *every* branch of the
     # Union -- pydantic surfaces whichever raised; assert on the
     # ``TabsdataException`` umbrella rather than the specific code.
     with pytest.raises(TabsdataException):
-        PostgresConn(
+        cls(
             uri="ftp://host/db",
             credentials=UserPassword(
                 user=Secret.lit("u"),
@@ -81,7 +109,7 @@ def test_postgres_conn_rejects_bad_uri():
 
 def test_postgres_src_full_round_trip():
     src = PostgresSrc(
-        conn=_conn(),
+        conn=_src_conn(),
         queries=["SELECT * FROM users", "SELECT * FROM orders"],
         transactional=False,
         schema_overrides=[None, None],
@@ -108,7 +136,7 @@ def test_postgres_src_round_trip_with_named_conn():
 def test_postgres_src_validate_rejects_schema_overrides_length_mismatch():
     with pytest.raises(PostgresValidateException) as ei:
         PostgresSrc(
-            conn=_conn(),
+            conn=_src_conn(),
             queries=["SELECT 1", "SELECT 2"],
             schema_overrides=[None],
         )
@@ -117,7 +145,7 @@ def test_postgres_src_validate_rejects_schema_overrides_length_mismatch():
 
 def test_postgres_src_validate_accepts_matching_schema_overrides_length():
     src = PostgresSrc(
-        conn=_conn(),
+        conn=_src_conn(),
         queries=["SELECT 1", "SELECT 2"],
         schema_overrides=[None, None],
     )
@@ -131,7 +159,7 @@ def test_postgres_src_validate_accepts_matching_schema_overrides_length():
 
 def test_postgres_dest_full_round_trip():
     dest = PostgresDest(
-        conn=_conn(),
+        conn=_dest_conn(),
         tables=["analytics.users", "analytics.orders"],
         if_table_exists="replace",
         transactional=False,
@@ -154,7 +182,7 @@ def test_postgres_dest_round_trip_with_named_conn():
 
 
 def test_postgres_dest_defaults_if_table_exists_to_append():
-    dest = PostgresDest(conn=_conn(), tables=["analytics.users"])
+    dest = PostgresDest(conn=_dest_conn(), tables=["analytics.users"])
     assert dest.if_table_exists == "append"
     assert dest.transactional is True
     assert dest.dest_cfg is None
@@ -169,14 +197,15 @@ def _hint(cls: type, field: str) -> object:
     return typing.get_type_hints(cls, include_extras=True)[field]
 
 
-def test_postgres_conn_fields_wire_expected_specs():
-    assert _hint(PostgresConn, "uri") == UriSpec
-    assert _hint(PostgresConn, "credentials") == CredentialsSpec
-    assert _hint(PostgresConn, "conn_cfg") == CfgSpec | None
+@pytest.mark.parametrize("cls", [PostgresSrcConn, PostgresDestConn])
+def test_postgres_conn_fields_wire_expected_specs(cls):
+    assert _hint(cls, "uri") == UriSpec
+    assert _hint(cls, "credentials") == CredentialsSpec
+    assert _hint(cls, "conn_cfg") == CfgSpec | None
 
 
 def test_postgres_src_fields_wire_expected_specs():
-    assert _hint(PostgresSrc, "conn") == ConnSpec
+    assert _hint(PostgresSrc, "conn") == SrcConnSpec
     assert _hint(PostgresSrc, "queries") == QueriesSpec
     assert _hint(PostgresSrc, "transactional") is bool
     assert _hint(PostgresSrc, "schema_overrides") == SchemaOverrideSpec | None
@@ -184,7 +213,7 @@ def test_postgres_src_fields_wire_expected_specs():
 
 
 def test_postgres_dest_fields_wire_expected_specs():
-    assert _hint(PostgresDest, "conn") == ConnSpec
+    assert _hint(PostgresDest, "conn") == DestConnSpec
     assert _hint(PostgresDest, "tables") == PostgresTableNamesSpec
     assert _hint(PostgresDest, "if_table_exists") == IfTableExistsSpec
     assert _hint(PostgresDest, "transactional") is bool
@@ -199,7 +228,7 @@ def test_postgres_dest_fields_wire_expected_specs():
 def test_postgres_src_rejects_unknown_src_cfg_key():
     with pytest.raises(ConnInitException) as ei:
         PostgresSrc(
-            conn=_conn(),
+            conn=_src_conn(),
             queries=["SELECT 1"],
             src_cfg={"bogus.key": 1},
         )
@@ -208,7 +237,7 @@ def test_postgres_src_rejects_unknown_src_cfg_key():
 
 def test_postgres_src_accepts_known_src_cfg_keys():
     src = PostgresSrc(
-        conn=_conn(),
+        conn=_src_conn(),
         queries=["SELECT 1"],
         src_cfg={
             "postgres.logging_level": 20,
@@ -223,7 +252,7 @@ def test_postgres_src_accepts_known_src_cfg_keys():
 def test_postgres_dest_rejects_unknown_dest_cfg_key():
     with pytest.raises(ConnInitException) as ei:
         PostgresDest(
-            conn=_conn(),
+            conn=_dest_conn(),
             tables=["analytics.users"],
             dest_cfg={"bogus.key": 1},
         )
@@ -232,7 +261,7 @@ def test_postgres_dest_rejects_unknown_dest_cfg_key():
 
 def test_postgres_dest_accepts_known_dest_cfg_keys():
     dest = PostgresDest(
-        conn=_conn(),
+        conn=_dest_conn(),
         tables=["analytics.users"],
         dest_cfg={
             "postgres.logging_level": 20,
@@ -245,7 +274,7 @@ def test_postgres_dest_accepts_known_dest_cfg_keys():
 
 
 # =====================================================================
-# CDC public primitives -- LsnPosition / PostgresCdcConn /
+# CDC public primitives -- LsnPosition / PostgresCdcStreamSrcConn /
 # PostgresCdcStreamSrc
 # =====================================================================
 #
@@ -281,11 +310,11 @@ def test_lsn_position_negative_is_lenient():
     assert p.lsn == -1
 
 
-# --- PostgresCdcConn ------------------------------------------------
+# --- PostgresCdcStreamSrcConn ------------------------------------------------
 
 
 def test_postgres_cdc_conn_minimal_construction():
-    conn = PostgresCdcConn(
+    conn = PostgresCdcStreamSrcConn(
         uri="postgresql://host:5432/db",
         credentials=_cdc_creds(),
     )
@@ -293,9 +322,12 @@ def test_postgres_cdc_conn_minimal_construction():
 
 
 def test_postgres_cdc_conn_is_not_a_postgres_conn_subclass():
-    # PostgresCdcConn deliberately does not subclass PostgresConn.
-    assert not issubclass(PostgresCdcConn, PostgresConn)
-    assert not issubclass(PostgresConn, PostgresCdcConn)
+    # PostgresCdcStreamSrcConn deliberately does not subclass the batch
+    # SQL conns; siblings with overlapping fields.
+    assert not issubclass(PostgresCdcStreamSrcConn, PostgresSrcConn)
+    assert not issubclass(PostgresCdcStreamSrcConn, PostgresDestConn)
+    assert not issubclass(PostgresSrcConn, PostgresCdcStreamSrcConn)
+    assert not issubclass(PostgresDestConn, PostgresCdcStreamSrcConn)
 
 
 # --- PostgresCdcStreamSrc -------------------------------------------
@@ -303,7 +335,7 @@ def test_postgres_cdc_conn_is_not_a_postgres_conn_subclass():
 
 def _cdc_stream_src(**overrides) -> PostgresCdcStreamSrc:
     kw = dict(
-        conn=PostgresCdcConn(uri="postgresql://h/d", credentials=_cdc_creds()),
+        conn=PostgresCdcStreamSrcConn(uri="postgresql://h/d", credentials=_cdc_creds()),
         tables=["public.users"],
         replication_slot="tdcdc_slot",
         start_from="tail",
@@ -402,11 +434,12 @@ def test_postgres_cdc_stream_src_json_round_trip():
 # ---------------------------------------------------------------------------
 
 
-def test_postgres_conn_rejects_missing_uri():
+@pytest.mark.parametrize("cls", [PostgresSrcConn, PostgresDestConn])
+def test_postgres_conn_rejects_missing_uri(cls):
     from tabsdatak.conn.common.error import ConnInitException
 
     with pytest.raises(ConnInitException) as ei:
-        PostgresConn(  # type: ignore[call-arg]
+        cls(  # type: ignore[call-arg]
             credentials=UserPassword(
                 user=Secret.lit("u"),
                 password=Secret.lit("p"),
@@ -415,9 +448,10 @@ def test_postgres_conn_rejects_missing_uri():
     assert ei.value.api_error is PostgresErrorCode.POSTGRES_1
 
 
-def test_postgres_conn_rejects_missing_credentials():
+@pytest.mark.parametrize("cls", [PostgresSrcConn, PostgresDestConn])
+def test_postgres_conn_rejects_missing_credentials(cls):
     from tabsdatak.conn.common.error import ConnInitException
 
     with pytest.raises(ConnInitException) as ei:
-        PostgresConn(uri="postgresql://h:5432/d")  # type: ignore[call-arg]
+        cls(uri="postgresql://h:5432/d")  # type: ignore[call-arg]
     assert ei.value.api_error is PostgresErrorCode.POSTGRES_1

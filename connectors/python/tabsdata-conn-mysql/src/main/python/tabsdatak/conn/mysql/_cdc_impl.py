@@ -1,7 +1,7 @@
 """MySQL CDC implementation -- dialect + binlog ingester.
 
 Mirrors the layering of the batch side (``_impl.py``): the connector
-front (``MySQLCdcConn`` / ``MySQLCdcStreamSrc`` in ``__init__.py``)
+front (``MySQLCdcStreamSrcConn`` / ``MySQLCdcStreamSrc`` in ``__init__.py``)
 and the plugin glue (``_cdc_plugin.py``) sit above this module;
 this is where the pymysqlreplication + sqlalchemy machinery lives.
 
@@ -388,7 +388,7 @@ class BinlogIngester(CdcIngester):
         self,
         # The ``Conn`` is duck-typed: the ingester only reads
         # ``uri`` / ``credentials`` / ``conn_cfg``. Concrete type is
-        # MySQLCdcConn but we don't import it here to avoid the
+        # MySQLCdcStreamSrcConn but we don't import it here to avoid the
         # __init__.py -> _cdc_impl.py cycle.
         conn: Any,
         tables: QualifiedTablesSpec,

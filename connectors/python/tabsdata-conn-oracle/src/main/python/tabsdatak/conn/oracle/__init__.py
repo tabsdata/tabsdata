@@ -1,6 +1,6 @@
 """Oracle connector — public API.
 
-* :class:`OracleConn` -- per-instance Oracle connection.
+* :class:`OracleSrcConn` / :class:`OracleDestConn` -- per-instance Oracle connection.
 * :class:`OracleSrc` -- source: list of SELECT queries; produces
   one parquet slot per query.
 * :class:`OracleDest` -- destination: list of target table names;
@@ -87,20 +87,27 @@ DestCfgSpec: TypeAlias = Annotated[
 
 
 @_api.dataclass(OracleErrorCode.ORACLE_1, kw_only=True)
-class OracleConn(Conn):
-    """Oracle connection.
-
-    :param uri: SQLAlchemy-style URI
-        (``oracle+oracledb://host:port/?service_name=...``). Accepts a plain str,
-        ``Env``, or ``Secret``.
-    :param credentials: :class:`UserPassword` -- user + password
-        spliced into the URI by the engine factory.
-    :param entity_whitelist: Optional list of regex patterns; the
-        runtime uses these to narrow which tables this conn
-        contributes to discovery.
-    :param conn_cfg: Optional driver-side config (forwarded as
-        ``connect_args`` to SQLAlchemy).
+class OracleSrcConn(Conn):
+    """Oracle connection used by :class:`OracleSrc`.
     """
+
+    __kind__ = "oracleSrcConn"
+
+    uri: UriSpec
+    credentials: CredentialsSpec
+    entity_whitelist: EntityWhitelistSpec | None = None
+    conn_cfg: CfgSpec | None = None
+
+@_api.dataclass(OracleErrorCode.ORACLE_1, kw_only=True)
+class OracleDestConn(Conn):
+    """Oracle connection used by :class:`OracleDest`.
+
+    Attribute-identical to :class:`OracleSrcConn` but a distinct
+    class so source and destination connections cannot be
+    confused at the wire-format level.
+    """
+
+    __kind__ = "oracleDestConn"
 
     uri: UriSpec
     credentials: CredentialsSpec
@@ -108,7 +115,8 @@ class OracleConn(Conn):
     conn_cfg: CfgSpec | None = None
 
 
-ConnSpec: TypeAlias = Union[NamedConn, OracleConn]
+SrcConnSpec: TypeAlias = Union[NamedConn, OracleSrcConn]
+DestConnSpec: TypeAlias = Union[NamedConn, OracleDestConn]
 
 
 # --- Source ----------------------------------------------------------
@@ -118,7 +126,7 @@ ConnSpec: TypeAlias = Union[NamedConn, OracleConn]
 class OracleSrc(Src):
     """Oracle source — one parquet slot per SELECT query.
 
-    :param conn: :class:`OracleConn` (or :class:`NamedConn`).
+    :param conn: :class:`OracleSrcConn` / :class:`OracleDestConn` (or :class:`NamedConn`).
     :param queries: List of SELECT statements; one slot per query.
     :param transactional: When ``True`` (default), run all queries
         inside one transactional session.
@@ -129,7 +137,7 @@ class OracleSrc(Src):
         set (logging_level, readEngine, chunkSize).
     """
 
-    conn: ConnSpec
+    conn: SrcConnSpec
     queries: QueriesSpec
     transactional: bool = True
     schema_overrides: SchemaOverrideSpec | None = None
@@ -153,7 +161,7 @@ class OracleSrc(Src):
 class OracleDest(Dest):
     """Oracle destination — write one parquet slot per target table.
 
-    :param conn: :class:`OracleConn` (or :class:`NamedConn`).
+    :param conn: :class:`OracleSrcConn` / :class:`OracleDestConn` (or :class:`NamedConn`).
     :param tables: Target table names (FQN or bare); one parquet
         slot per table.
     :param if_table_exists: ``"append"`` (default) or ``"replace"``
@@ -164,7 +172,7 @@ class OracleDest(Dest):
         set (logging_level, writeEngine, chunkSize).
     """
 
-    conn: ConnSpec
+    conn: DestConnSpec
     tables: OracleTableNamesSpec
     if_table_exists: IfTableExistsSpec = "append"
     transactional: bool = True

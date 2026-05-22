@@ -11,7 +11,7 @@ from tabsdatak.conn.common.sql._engine import constants as const
 from tabsdatak.conn.common.sql._engine.reader import SqlReadCfg
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine.writer import SqlWriteCfg
-from tabsdatak.conn.postgres import PostgresConn
+from tabsdatak.conn.postgres import PostgresSrcConn, PostgresDestConn
 # noinspection PyProtectedMember
 from tabsdatak.conn.postgres import _impl as impl
 
@@ -45,8 +45,16 @@ def _credentials() -> UserPassword:
     )
 
 
-def _conn() -> PostgresConn:
-    return PostgresConn(
+def _src_conn() -> PostgresSrcConn:
+    return PostgresSrcConn(
+        uri="postgresql://pg.example.com:5432/analytics",
+        credentials=_credentials(),
+        conn_cfg={"connect_timeout": 5},
+    )
+
+
+def _dest_conn() -> PostgresDestConn:
+    return PostgresDestConn(
         uri="postgresql://pg.example.com:5432/analytics",
         credentials=_credentials(),
         conn_cfg={"connect_timeout": 5},
@@ -149,7 +157,7 @@ def test_postgres_read_cfg_subclasses_sql_read_cfg():
 
 def test_postgres_read_cfg_creates_engine_from_conn(captured):
     cfg = impl.PostgresReadCfg(
-        conn=_conn(),
+        conn=_src_conn(),
         queries=["SELECT 1"],
         transactional=True,
         schema_overrides=None,
@@ -168,7 +176,7 @@ def test_postgres_write_cfg_subclasses_sql_write_cfg():
 
 def test_postgres_write_cfg_creates_engine_from_conn(captured):
     cfg = impl.PostgresWriteCfg(
-        conn=_conn(),
+        conn=_dest_conn(),
         target_tables=["t"],
         if_table_exists="append",
         transactional=True,
@@ -180,7 +188,7 @@ def test_postgres_write_cfg_creates_engine_from_conn(captured):
 
 
 def test_postgres_read_cfg_no_conn_cfg_forwards_empty_connect_args(captured):
-    conn = PostgresConn(
+    conn = PostgresSrcConn(
         uri="postgresql://host/db",
         credentials=_credentials(),
     )

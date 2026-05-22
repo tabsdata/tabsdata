@@ -7,7 +7,8 @@ from typing import Any, cast
 from tabsdatak.conn.mssql import (
     DestCfgKey,
     DestCfgSpec,
-    MSSQLConn,
+    MSSQLDestConn,
+    MSSQLSrcConn,
     MSSQLDest,
     MSSQLSrc,
     SrcCfgKey,
@@ -129,7 +130,7 @@ class MSSQLSrcPlugin(SrcPlugin[MSSQLSrc]):
         logger.info("mssql: read_in starting (%d queries)", len(src.queries or []))
 
         read_cfg = MSSQLReadCfg(
-            conn=cast(MSSQLConn, src.conn),
+            conn=cast(MSSQLSrcConn, src.conn),
             queries=src.queries,
             transactional=src.transactional,
             schema_overrides=src.schema_overrides,
@@ -191,7 +192,7 @@ class MSSQLDestPlugin(DestPlugin[MSSQLDest]):
             )
 
         write_cfg = MSSQLWriteCfg(
-            conn=cast(MSSQLConn, dest.conn),
+            conn=cast(MSSQLDestConn, dest.conn),
             target_tables=list(dest.tables),
             if_table_exists=dest.if_table_exists,
             transactional=dest.transactional,
@@ -219,33 +220,43 @@ class MSSQLDestPlugin(DestPlugin[MSSQLDest]):
             )
 
 
-class MSSQLExplorer(Explorer[MSSQLConn]):
-    def metadata(self, conn: MSSQLConn) -> Any:
+class MSSQLSrcExplorer(Explorer[MSSQLSrcConn]):
+    def metadata(self, conn: MSSQLSrcConn) -> Any:
         # TODO
         pass
 
-    def data(self, conn: MSSQLConn, query: str) -> Any:
+    def data(self, conn: MSSQLSrcConn, query: str) -> Any:
+        # TODO
+        pass
+
+
+class MSSQLDestExplorer(Explorer[MSSQLDestConn]):
+    def metadata(self, conn: MSSQLDestConn) -> Any:
+        # TODO
+        pass
+
+    def data(self, conn: MSSQLDestConn, query: str) -> Any:
         # TODO
         pass
 
 
 MSSQL_SRC = SrcDef(
-    conn=MSSQLConn,
+    conn=MSSQLSrcConn,
     src_type="mssql",
     src_version="v1",
     src=MSSQLSrc,
     table_mode=TableMode.SINGLE,
     cardinality=lambda src: len(src.queries),
     plugin=MSSQLSrcPlugin,
-    explorer=MSSQLExplorer,
+    explorer=MSSQLSrcExplorer,
 )
 
 MSSQL_DEST = DestDef(
-    conn=MSSQLConn,
+    conn=MSSQLDestConn,
     dest_type="mssql",
     dest_version="v1",
     dest=MSSQLDest,
     cardinality=lambda dest: len(dest.tables),
     plugin=MSSQLDestPlugin,
-    explorer=MSSQLExplorer,
+    explorer=MSSQLDestExplorer,
 )

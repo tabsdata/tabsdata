@@ -21,8 +21,8 @@ class Db2RuntimeException(ConnException):
 class Db2ErrorCode(ErrorCode):
     DB2_1 = ErrorDef(
         ConnInitException,
-        "Db2Conn validation failed",
-    )  # Db2Conn
+        "Db2 connection validation failed",
+    )  # Db2SrcConn / Db2DestConn
     DB2_2 = ErrorDef(
         ConnInitException,
         "Db2Src validation failed",
@@ -61,8 +61,8 @@ class Db2ErrorCode(ErrorCode):
 
     DB2_10 = ErrorDef(
         ConnInitException,
-        "Db2CdcConn validation failed",
-    )  # Db2CdcConn dataclass tag
+        "Db2CdcStreamSrcConn validation failed",
+    )  # Db2CdcStreamSrcConn dataclass tag
     DB2_11 = ErrorDef(
         ConnInitException,
         "Db2CdcStreamSrc validation failed",

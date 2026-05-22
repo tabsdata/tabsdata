@@ -33,7 +33,7 @@ import pytest
 from sqlalchemy import create_engine, text
 
 from tabsdatak.conn.mysql import (
-    MySQLCdcConn,
+    MySQLCdcStreamSrcConn,
     MySQLCdcStreamSrc,
 )
 from tabsdatak.conn.mysql._cdc_plugin import MySQLCdcStreamSrcPlugin
@@ -161,12 +161,12 @@ class _CdcCtx(StreamSrcPluginCtx):
 # ---------------------------------------------------------------------------
 
 
-def _make_cdc_conn(cfg) -> MySQLCdcConn:
-    """``MySQLCdcConn`` for the fresh MySQL CDC backend. ``server_id``
+def _make_cdc_conn(cfg) -> MySQLCdcStreamSrcConn:
+    """``MySQLCdcStreamSrcConn`` for the fresh MySQL CDC backend. ``server_id``
     must be unique against any other replica connected to this MySQL
     -- the docker MySQL itself is server_id=1, so 512 (the connector
     default) is safe."""
-    return MySQLCdcConn(uri=cfg.uri, credentials=cfg.credentials)
+    return MySQLCdcStreamSrcConn(uri=cfg.uri, credentials=cfg.credentials)
 
 
 def _insert_users(cfg, rows: list[dict]) -> None:

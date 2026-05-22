@@ -11,20 +11,22 @@ from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
 from tabsdatak.conn.common.types import CfgSpec, EntityWhitelistSpec, UserPassword
 from tabsdatak.conn.mysql import (
     BinlogPosition,
-    ConnSpec,
     CredentialsSpec,
     DEFAULT_SERVER_ID,
     DestCfgSpec,
+    DestConnSpec,
     GtidPosition,
     IfTableExistsSpec,
-    MySQLCdcConn,
     MySQLCdcStreamSrc,
-    MySQLConn,
+    MySQLCdcStreamSrcConn,
     MySQLDest,
+    MySQLDestConn,
     MySQLSrc,
+    MySQLSrcConn,
     MySQLTableNamesSpec,
     QueriesSpec,
     SrcCfgSpec,
+    SrcConnSpec,
     TimestampPosition,
     UriSpec,
 )
@@ -38,8 +40,19 @@ from tabsdatak.conn.mysql.error import (
 pytestmark = pytest.mark.mysql
 
 
-def _conn() -> MySQLConn:
-    return MySQLConn(
+def _src_conn() -> MySQLSrcConn:
+    return MySQLSrcConn(
+        uri="mysql://mysql.example.com:3306/analytics",
+        credentials=UserPassword(
+            user=Secret.lit("etl"),
+            password=Secret.lit("hunter2"),
+        ),
+        conn_cfg={"mysql.timeout": 30},
+    )
+
+
+def _dest_conn() -> MySQLDestConn:
+    return MySQLDestConn(
         uri="mysql://mysql.example.com:3306/analytics",
         credentials=UserPassword(
             user=Secret.lit("etl"),
@@ -50,31 +63,46 @@ def _conn() -> MySQLConn:
 
 
 # ---------------------------------------------------------------------------
-# MySQLConn
+# MySQLSrcConn / MySQLDestConn
 # ---------------------------------------------------------------------------
 
 
-def test_mysql_conn_round_trip():
-    c = _conn()
-    loaded = MySQLConn.from_json(c.to_json())
+@pytest.mark.parametrize("cls", [MySQLSrcConn, MySQLDestConn])
+def test_mysql_conn_round_trip(cls):
+    c = cls(
+        uri="mysql://mysql.example.com:3306/analytics",
+        credentials=UserPassword(
+            user=Secret.lit("etl"),
+            password=Secret.lit("hunter2"),
+        ),
+        conn_cfg={"mysql.timeout": 30},
+    )
+    loaded = cls.from_json(c.to_json())
     assert loaded == c
     assert loaded.uri == "mysql://mysql.example.com:3306/analytics"
     assert loaded.conn_cfg == {"mysql.timeout": 30}
 
 
-def test_mysql_conn_rejects_bad_uri():
+@pytest.mark.parametrize("cls", [MySQLSrcConn, MySQLDestConn])
+def test_mysql_conn_rejects_bad_uri(cls):
     # The ``uri`` field is a Union of ``str | Secret | Env``, each
     # carrying the same regex. A bad value fails *every* branch of the
     # Union -- pydantic surfaces whichever raised; assert on the
     # ``TabsdataException`` umbrella rather than the specific code.
     with pytest.raises(TabsdataException):
-        MySQLConn(
+        cls(
             uri="ftp://host/db",
             credentials=UserPassword(
                 user=Secret.lit("u"),
                 password=Secret.lit("p"),
             ),
         )
+
+
+def test_mysql_src_dest_conn_have_distinct_kinds():
+    assert MySQLSrcConn.__kind__ != MySQLDestConn.__kind__
+    assert "Src" in MySQLSrcConn.__kind__
+    assert "Dest" in MySQLDestConn.__kind__
 
 
 # ---------------------------------------------------------------------------
@@ -84,7 +112,7 @@ def test_mysql_conn_rejects_bad_uri():
 
 def test_mysql_src_full_round_trip():
     src = MySQLSrc(
-        conn=_conn(),
+        conn=_src_conn(),
         queries=["SELECT * FROM users", "SELECT * FROM orders"],
         transactional=False,
         schema_overrides=[None, None],
@@ -111,7 +139,7 @@ def test_mysql_src_round_trip_with_named_conn():
 def test_mysql_src_validate_rejects_schema_overrides_length_mismatch():
     with pytest.raises(MySQLValidateException) as ei:
         MySQLSrc(
-            conn=_conn(),
+            conn=_src_conn(),
             queries=["SELECT 1", "SELECT 2"],
             schema_overrides=[None],
         )
@@ -120,7 +148,7 @@ def test_mysql_src_validate_rejects_schema_overrides_length_mismatch():
 
 def test_mysql_src_validate_accepts_matching_schema_overrides_length():
     src = MySQLSrc(
-        conn=_conn(),
+        conn=_src_conn(),
         queries=["SELECT 1", "SELECT 2"],
         schema_overrides=[None, None],
     )
@@ -134,7 +162,7 @@ def test_mysql_src_validate_accepts_matching_schema_overrides_length():
 
 def test_mysql_dest_full_round_trip():
     dest = MySQLDest(
-        conn=_conn(),
+        conn=_dest_conn(),
         tables=["analytics.users", "analytics.orders"],
         if_table_exists="replace",
         transactional=False,
@@ -157,7 +185,7 @@ def test_mysql_dest_round_trip_with_named_conn():
 
 
 def test_mysql_dest_defaults_if_table_exists_to_append():
-    dest = MySQLDest(conn=_conn(), tables=["analytics.users"])
+    dest = MySQLDest(conn=_dest_conn(), tables=["analytics.users"])
     assert dest.if_table_exists == "append"
     assert dest.transactional is True
     assert dest.dest_cfg is None
@@ -176,15 +204,16 @@ def _hint(cls: type, field: str) -> object:
     return typing.get_type_hints(cls, include_extras=True)[field]
 
 
-def test_mysql_conn_fields_wire_expected_specs():
-    assert _hint(MySQLConn, "uri") == UriSpec
-    assert _hint(MySQLConn, "credentials") == CredentialsSpec
-    assert _hint(MySQLConn, "entity_whitelist") == EntityWhitelistSpec | None
-    assert _hint(MySQLConn, "conn_cfg") == CfgSpec | None
+@pytest.mark.parametrize("cls", [MySQLSrcConn, MySQLDestConn])
+def test_mysql_conn_fields_wire_expected_specs(cls):
+    assert _hint(cls, "uri") == UriSpec
+    assert _hint(cls, "credentials") == CredentialsSpec
+    assert _hint(cls, "entity_whitelist") == EntityWhitelistSpec | None
+    assert _hint(cls, "conn_cfg") == CfgSpec | None
 
 
 def test_mysql_src_fields_wire_expected_specs():
-    assert _hint(MySQLSrc, "conn") == ConnSpec
+    assert _hint(MySQLSrc, "conn") == SrcConnSpec
     assert _hint(MySQLSrc, "queries") == QueriesSpec
     assert _hint(MySQLSrc, "transactional") is bool
     assert _hint(MySQLSrc, "schema_overrides") == SchemaOverrideSpec | None
@@ -192,7 +221,7 @@ def test_mysql_src_fields_wire_expected_specs():
 
 
 def test_mysql_dest_fields_wire_expected_specs():
-    assert _hint(MySQLDest, "conn") == ConnSpec
+    assert _hint(MySQLDest, "conn") == DestConnSpec
     assert _hint(MySQLDest, "tables") == MySQLTableNamesSpec
     assert _hint(MySQLDest, "if_table_exists") == IfTableExistsSpec
     assert _hint(MySQLDest, "transactional") is bool
@@ -207,7 +236,7 @@ def test_mysql_dest_fields_wire_expected_specs():
 def test_mysql_src_rejects_unknown_src_cfg_key():
     with pytest.raises(ConnInitException) as ei:
         MySQLSrc(
-            conn=_conn(),
+            conn=_src_conn(),
             queries=["SELECT 1"],
             src_cfg={"bogus.key": 1},
         )
@@ -216,7 +245,7 @@ def test_mysql_src_rejects_unknown_src_cfg_key():
 
 def test_mysql_src_accepts_known_src_cfg_keys():
     src = MySQLSrc(
-        conn=_conn(),
+        conn=_src_conn(),
         queries=["SELECT 1"],
         src_cfg={
             "mysql.logging_level": 20,
@@ -236,7 +265,7 @@ def test_mysql_src_accepts_known_src_cfg_keys():
 def test_mysql_dest_rejects_unknown_dest_cfg_key():
     with pytest.raises(ConnInitException) as ei:
         MySQLDest(
-            conn=_conn(),
+            conn=_dest_conn(),
             tables=["analytics.users"],
             dest_cfg={"bogus.key": 1},
         )
@@ -245,7 +274,7 @@ def test_mysql_dest_rejects_unknown_dest_cfg_key():
 
 def test_mysql_dest_accepts_known_dest_cfg_keys():
     dest = MySQLDest(
-        conn=_conn(),
+        conn=_dest_conn(),
         tables=["analytics.users"],
         dest_cfg={
             "mysql.logging_level": 20,
@@ -264,7 +293,7 @@ def test_mysql_dest_accepts_known_dest_cfg_keys():
 
 # =====================================================================
 # CDC public primitives -- GtidPosition / BinlogPosition /
-# TimestampPosition / MySQLCdcConn / MySQLCdcStreamSrc
+# TimestampPosition / MySQLCdcStreamSrcConn / MySQLCdcStreamSrc
 # =====================================================================
 #
 # These types live on the public mysql surface (``__init__.py``)
@@ -318,7 +347,7 @@ def test_cdc_typing_classes_are_mysql_local_not_common_reexports():
     assert TimestampPosition is not _CommonTimestampPosition
 
 
-# --- MySQLCdcConn ---------------------------------------------------
+# --- MySQLCdcStreamSrcConn ---------------------------------------------------
 
 
 def _cdc_creds():
@@ -326,7 +355,7 @@ def _cdc_creds():
 
 
 def test_mysql_cdc_conn_default_server_id():
-    conn = MySQLCdcConn(
+    conn = MySQLCdcStreamSrcConn(
         uri="mysql://host:3306/db",
         credentials=_cdc_creds(),
     )
@@ -335,7 +364,7 @@ def test_mysql_cdc_conn_default_server_id():
 
 
 def test_mysql_cdc_conn_explicit_server_id():
-    conn = MySQLCdcConn(
+    conn = MySQLCdcStreamSrcConn(
         uri="mysql://host/db",
         credentials=_cdc_creds(),
         server_id=999,
@@ -344,10 +373,13 @@ def test_mysql_cdc_conn_explicit_server_id():
 
 
 def test_mysql_cdc_conn_is_not_a_mysql_conn_subclass():
-    # MySQLCdcConn deliberately does not subclass MySQLConn; the
-    # connector treats them as siblings with overlapping fields.
-    assert not issubclass(MySQLCdcConn, MySQLConn)
-    assert not issubclass(MySQLConn, MySQLCdcConn)
+    # MySQLCdcStreamSrcConn deliberately does not subclass the batch
+    # SQL conns; the connector treats them as siblings with overlapping
+    # fields.
+    assert not issubclass(MySQLCdcStreamSrcConn, MySQLSrcConn)
+    assert not issubclass(MySQLCdcStreamSrcConn, MySQLDestConn)
+    assert not issubclass(MySQLSrcConn, MySQLCdcStreamSrcConn)
+    assert not issubclass(MySQLDestConn, MySQLCdcStreamSrcConn)
 
 
 # --- MySQLCdcStreamSrc ----------------------------------------------
@@ -355,7 +387,7 @@ def test_mysql_cdc_conn_is_not_a_mysql_conn_subclass():
 
 def test_mysql_cdc_stream_src_minimal_construction():
     src = MySQLCdcStreamSrc(
-        conn=MySQLCdcConn(uri="mysql://h/d", credentials=_cdc_creds()),
+        conn=MySQLCdcStreamSrcConn(uri="mysql://h/d", credentials=_cdc_creds()),
         tables=["app.users"],
         start_from="tail",
     )
@@ -367,7 +399,7 @@ def test_mysql_cdc_stream_src_minimal_construction():
 
 def test_mysql_cdc_stream_src_accepts_explicit_format_fields():
     src = MySQLCdcStreamSrc(
-        conn=MySQLCdcConn(uri="mysql://h/d", credentials=_cdc_creds()),
+        conn=MySQLCdcStreamSrcConn(uri="mysql://h/d", credentials=_cdc_creds()),
         tables=["app.users"],
         start_from="head",
         columns_format="map",
@@ -380,7 +412,7 @@ def test_mysql_cdc_stream_src_accepts_explicit_format_fields():
 def test_mysql_cdc_stream_src_rejects_unknown_columns_format():
     with pytest.raises(ConnInitException) as ei:
         MySQLCdcStreamSrc(
-            conn=MySQLCdcConn(uri="mysql://h/d", credentials=_cdc_creds()),
+            conn=MySQLCdcStreamSrcConn(uri="mysql://h/d", credentials=_cdc_creds()),
             tables=["app.users"],
             start_from="tail",
             columns_format="bogus",  # type: ignore[arg-type]
@@ -390,7 +422,7 @@ def test_mysql_cdc_stream_src_rejects_unknown_columns_format():
 
 def test_mysql_cdc_stream_src_accepts_gtid_start_from():
     src = MySQLCdcStreamSrc(
-        conn=MySQLCdcConn(uri="mysql://h/d", credentials=_cdc_creds()),
+        conn=MySQLCdcStreamSrcConn(uri="mysql://h/d", credentials=_cdc_creds()),
         tables=["app.users"],
         start_from=GtidPosition(gtid="uuid:1"),
     )
@@ -399,7 +431,7 @@ def test_mysql_cdc_stream_src_accepts_gtid_start_from():
 
 def test_mysql_cdc_stream_src_accepts_binlog_start_from():
     src = MySQLCdcStreamSrc(
-        conn=MySQLCdcConn(uri="mysql://h/d", credentials=_cdc_creds()),
+        conn=MySQLCdcStreamSrcConn(uri="mysql://h/d", credentials=_cdc_creds()),
         tables=["app.users"],
         start_from=BinlogPosition(file="bin.000001", pos=4),
     )
@@ -409,7 +441,7 @@ def test_mysql_cdc_stream_src_accepts_binlog_start_from():
 def test_mysql_cdc_stream_src_accepts_timestamp_start_from():
     ts = datetime(2026, 1, 1, tzinfo=timezone.utc)
     src = MySQLCdcStreamSrc(
-        conn=MySQLCdcConn(uri="mysql://h/d", credentials=_cdc_creds()),
+        conn=MySQLCdcStreamSrcConn(uri="mysql://h/d", credentials=_cdc_creds()),
         tables=["app.users"],
         start_from=TimestampPosition(ts=ts),
     )
@@ -420,7 +452,7 @@ def test_mysql_cdc_stream_src_accepts_timestamp_start_from():
 def test_mysql_cdc_stream_src_rejects_unknown_src_cfg_key():
     with pytest.raises(ConnInitException) as ei:
         MySQLCdcStreamSrc(
-            conn=MySQLCdcConn(uri="mysql://h/d", credentials=_cdc_creds()),
+            conn=MySQLCdcStreamSrcConn(uri="mysql://h/d", credentials=_cdc_creds()),
             tables=["app.users"],
             start_from="tail",
             src_cfg={"bogus.key": 1},  # type: ignore[dict-item]
@@ -430,7 +462,7 @@ def test_mysql_cdc_stream_src_rejects_unknown_src_cfg_key():
 
 def test_mysql_cdc_stream_src_accepts_known_src_cfg_keys():
     src = MySQLCdcStreamSrc(
-        conn=MySQLCdcConn(uri="mysql://h/d", credentials=_cdc_creds()),
+        conn=MySQLCdcStreamSrcConn(uri="mysql://h/d", credentials=_cdc_creds()),
         tables=["app.users"],
         start_from="head",
         src_cfg={
@@ -446,7 +478,7 @@ def test_mysql_cdc_stream_src_accepts_known_src_cfg_keys():
 
 def test_mysql_cdc_stream_src_json_round_trip():
     src = MySQLCdcStreamSrc(
-        conn=MySQLCdcConn(
+        conn=MySQLCdcStreamSrcConn(
             uri="mysql://h/d",
             credentials=_cdc_creds(),
             server_id=777,
@@ -465,11 +497,12 @@ def test_mysql_cdc_stream_src_json_round_trip():
 # ---------------------------------------------------------------------------
 
 
-def test_mysql_conn_rejects_missing_uri():
+@pytest.mark.parametrize("cls", [MySQLSrcConn, MySQLDestConn])
+def test_mysql_conn_rejects_missing_uri(cls):
     from tabsdatak.conn.common.error import ConnInitException
 
     with pytest.raises(ConnInitException) as ei:
-        MySQLConn(  # type: ignore[call-arg]
+        cls(  # type: ignore[call-arg]
             credentials=UserPassword(
                 user=Secret.lit("etl"),
                 password=Secret.lit("hunter2"),
@@ -478,9 +511,10 @@ def test_mysql_conn_rejects_missing_uri():
     assert ei.value.api_error is MysqlErrorCode.MYSQL_1
 
 
-def test_mysql_conn_rejects_missing_credentials():
+@pytest.mark.parametrize("cls", [MySQLSrcConn, MySQLDestConn])
+def test_mysql_conn_rejects_missing_credentials(cls):
     from tabsdatak.conn.common.error import ConnInitException
 
     with pytest.raises(ConnInitException) as ei:
-        MySQLConn(uri="mysql://h:3306/d")  # type: ignore[call-arg]
+        cls(uri="mysql://h:3306/d")  # type: ignore[call-arg]
     assert ei.value.api_error is MysqlErrorCode.MYSQL_1

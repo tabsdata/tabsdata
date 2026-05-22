@@ -7,7 +7,8 @@ from typing import Any, cast
 from tabsdatak.conn.oracle import (
     DestCfgKey,
     DestCfgSpec,
-    OracleConn,
+    OracleDestConn,
+    OracleSrcConn,
     OracleDest,
     OracleSrc,
     SrcCfgKey,
@@ -129,7 +130,7 @@ class OracleSrcPlugin(SrcPlugin[OracleSrc]):
         logger.info("oracle: read_in starting (%d queries)", len(src.queries or []))
 
         read_cfg = OracleReadCfg(
-            conn=cast(OracleConn, src.conn),
+            conn=cast(OracleSrcConn, src.conn),
             queries=src.queries,
             transactional=src.transactional,
             schema_overrides=src.schema_overrides,
@@ -182,7 +183,7 @@ class OracleDestPlugin(DestPlugin[OracleDest]):
             )
 
         write_cfg = OracleWriteCfg(
-            conn=cast(OracleConn, dest.conn),
+            conn=cast(OracleDestConn, dest.conn),
             target_tables=list(dest.tables),
             if_table_exists=dest.if_table_exists,
             transactional=dest.transactional,
@@ -207,33 +208,43 @@ class OracleDestPlugin(DestPlugin[OracleDest]):
             )
 
 
-class OracleExplorer(Explorer[OracleConn]):
-    def metadata(self, conn: OracleConn) -> Any:
+class OracleSrcExplorer(Explorer[OracleSrcConn]):
+    def metadata(self, conn: OracleSrcConn) -> Any:
         # TODO
         pass
 
-    def data(self, conn: OracleConn, query: str) -> Any:
+    def data(self, conn: OracleSrcConn, query: str) -> Any:
+        # TODO
+        pass
+
+
+class OracleDestExplorer(Explorer[OracleDestConn]):
+    def metadata(self, conn: OracleDestConn) -> Any:
+        # TODO
+        pass
+
+    def data(self, conn: OracleDestConn, query: str) -> Any:
         # TODO
         pass
 
 
 ORACLE_SRC = SrcDef(
-    conn=OracleConn,
+    conn=OracleSrcConn,
     src_type="oracle",
     src_version="v1",
     src=OracleSrc,
     table_mode=TableMode.SINGLE,
     cardinality=lambda src: len(src.queries),
     plugin=OracleSrcPlugin,
-    explorer=OracleExplorer,
+    explorer=OracleSrcExplorer,
 )
 
 ORACLE_DEST = DestDef(
-    conn=OracleConn,
+    conn=OracleDestConn,
     dest_type="oracle",
     dest_version="v1",
     dest=OracleDest,
     cardinality=lambda dest: len(dest.tables),
     plugin=OracleDestPlugin,
-    explorer=OracleExplorer,
+    explorer=OracleDestExplorer,
 )

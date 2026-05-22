@@ -21,8 +21,8 @@ class PostgresRuntimeException(ConnException):
 class PostgresErrorCode(ErrorCode):
     POSTGRES_1 = ErrorDef(
         ConnInitException,
-        "PostgresConn validation failed",
-    )  # PostgresConn
+        "Postgres connection validation failed",
+    )  # PostgresSrcConn / PostgresDestConn
     POSTGRES_2 = ErrorDef(
         ConnInitException,
         "PostgresSrc validation failed",
@@ -61,8 +61,8 @@ class PostgresErrorCode(ErrorCode):
 
     POSTGRES_10 = ErrorDef(
         ConnInitException,
-        "PostgresCdcConn validation failed",
-    )  # PostgresCdcConn dataclass tag
+        "PostgresCdcStreamSrcConn validation failed",
+    )  # PostgresCdcStreamSrcConn dataclass tag
     POSTGRES_11 = ErrorDef(
         ConnInitException,
         "PostgresCdcStreamSrc validation failed",
