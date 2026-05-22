@@ -76,7 +76,7 @@ def pytest_sessionfinish(session, exitstatus):
     clean_everything()
 
 
-# --- Env var gates --------------------------------------------------
+# --- Var var gates --------------------------------------------------
 
 TRUE_VALUES = frozenset({"1", "true", "yes", "y", "on"})
 TD_DOCKER_DONT_KILL = "TD_DOCKER_DONT_KILL"
@@ -336,7 +336,7 @@ def _remove_container(name: str) -> None:
         )
 
 
-# --- External-DB env-var path ---------------------------------------
+# --- External-DB var path ---------------------------------------
 
 _HOST_PORT_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://([^:/?#]+):(\d+)/[^?#]+")
 

@@ -77,7 +77,7 @@ def pytest_sessionfinish(session, exitstatus):
     clean_everything()
 
 
-# --- Env var gates --------------------------------------------------
+# --- Var var gates --------------------------------------------------
 
 # Anything in TRUE_VALUES (case-insensitive) opts out of teardown.
 TRUE_VALUES = frozenset({"1", "true", "yes", "y", "on"})
@@ -89,7 +89,7 @@ TD_DOCKER_DONT_KILL = "TD_DOCKER_DONT_KILL"
 # laptop without docker.
 SKIP_ON_DOCKER_FAIL = "SKIP_ON_DOCKER_FAIL"
 
-# External-DB env-var prefixes. ``{prefix}__{backend}_ENVS`` truthy
+# External-DB var prefixes. ``{prefix}__{backend}_ENVS`` truthy
 # switches the fixture from docker mode to external mode.
 _DB2_PREFIX = "DB20"
 _DB2_BACKEND = "DB2"
@@ -426,7 +426,7 @@ def _remove_container(name: str) -> None:
         )
 
 
-# --- External-DB env-var path ---------------------------------------
+# --- External-DB var path ---------------------------------------
 
 _HOST_PORT_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+._-]*://([^:/?#]+):(\d+)/[^?#]+")
 

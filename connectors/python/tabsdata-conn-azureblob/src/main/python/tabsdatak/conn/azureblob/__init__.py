@@ -9,7 +9,7 @@
   in dest paths are resolved at write time.
 
 File transport goes through the shared ``td_transporter`` binary.
-String, ``Env``, and ``Secret`` are accepted on credential and
+String, ``Var``, and ``Secret`` are accepted on credential and
 identifier fields.
 """
 

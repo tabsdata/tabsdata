@@ -16,12 +16,12 @@ packages import as ``tabsdatak._api`` are:
   for polymorphic loading.
 * :class:`DescriptorBase` -- :class:`JsonSerde` plus the tagging
   the runtime relies on.
-* :class:`BaseEnv` / :class:`BaseSecret` -- shared machinery for
-  :class:`~tabsdatak.api.Env` / :class:`~tabsdatak.api.Secret`.
-* :class:`EnvValueConstraints` / :class:`SecretValueConstraints` --
+* :class:`BaseVar` / :class:`BaseSecret` -- shared machinery for
+  :class:`~tabsdatak.api.Var` / :class:`~tabsdatak.api.Secret`.
+* :class:`VarValueConstraints` / :class:`SecretValueConstraints` --
   field-site value-pattern constraints.
 * ``*_CONSTRAINTS`` validators -- per-domain name patterns
-  (table, env-var, cron mask, ...).
+  (table, var, cron mask, ...).
 * :func:`callable_to_str` / :func:`callable_from_str` /
   :func:`qualified_class` / :func:`resolve_class` --
   ``*Info``-side helpers for JSON round-trip of functions /
@@ -198,12 +198,12 @@ def _validate_named_connection(value: str) -> str:
 
 # --- Environment variable name. POSIX-style: must start with a letter or
 # --- underscore, followed by letters / digits / underscores. Empty rejected.
-_ENV_VAR_NAME_RE_STR = r"^[A-Za-z_][A-Za-z0-9_]*$"
-_ENV_VAR_NAME_RE = re.compile(_ENV_VAR_NAME_RE_STR)
+_VAR_NAME_RE_STR = r"^[A-Za-z_][A-Za-z0-9_]*$"
+_VAR_NAME_RE = re.compile(_VAR_NAME_RE_STR)
 
 
-def _validate_env_name(value: str) -> str:
-    if not _ENV_VAR_NAME_RE.fullmatch(value):
+def _validate_var_name(value: str) -> str:
+    if not _VAR_NAME_RE.fullmatch(value):
         raise ValueError(
             f"not a valid environment variable name (must start with a letter "
             f"or underscore, then letters/digits/underscores): {value!r}"
@@ -222,7 +222,7 @@ def _validate_env_name(value: str) -> str:
 # combination of alphanumeric (case-insensitive), '-', '_', '.'. This is
 # why a typical reference looks like `db-password#DB_PASSWORD` -- the
 # secret name is lowercase-DNS, but the key inside it is conventionally
-# uppercase to match shell env-var conventions.
+# uppercase to match shell var conventions.
 _SECRET_REF_SEP = "#"
 _DNS_1123_LABEL_RE_STR = r"[a-z0-9]([-a-z0-9]*[a-z0-9])?"
 _DNS_1123_SUBDOMAIN_RE = re.compile(
@@ -270,7 +270,7 @@ TABLE_NAME_CONSTRAINTS = AfterValidator(_validate_table_name)
 COLL_TABLE_NAME_CONSTRAINTS = AfterValidator(_validate_coll_table_name)
 CRON_MASK_CONSTRAINTS = AfterValidator(_validate_cron_mask)
 NAMED_CONN_CONSTRAINTS = AfterValidator(_validate_named_connection)
-ENV_NAME_CONSTRAINTS = AfterValidator(_validate_env_name)
+VAR_NAME_CONSTRAINTS = AfterValidator(_validate_var_name)
 SECRET_NAME_CONSTRAINTS = AfterValidator(_validate_secret_name)
 
 NON_EMPTY_LIST_CONSTRAINTS = Field(min_length=1)
@@ -284,9 +284,9 @@ CONTEXT_KEY_RE_STR = (
 
 
 # ---------------------------------------------------------------------------
-# Pattern annotation marker for Env / Secret fields.
+# Pattern annotation marker for Var / Secret fields.
 #
-# Use as ``Annotated[Secret, pattern(USER_PATTERN)]`` (or with Env). The
+# Use as ``Annotated[Secret, pattern(USER_PATTERN)]`` (or with Var). The
 # regex string is injected into the validated instance's
 # ``_value_pattern`` so it travels through serialization and is enforced
 # at ``value()`` time. For ``LiteralEnv`` / ``LiteralSecret`` (literal
@@ -302,14 +302,14 @@ CONTEXT_KEY_RE_STR = (
 
 class _ValuePattern:
     """Base for the :class:`AfterValidator` adapters that pin a
-    regex to the *resolved* value of an :class:`Env` /
+    regex to the *resolved* value of an :class:`Var` /
     :class:`Secret` field.
 
-    Subclasses (:class:`EnvValueConstraints`,
+    Subclasses (:class:`VarValueConstraints`,
     :class:`SecretValueConstraints`) override :meth:`_on_class` to
     declare which value-reference family they cover. The validator
     runs at pydantic schema time -- when a bare string is passed
-    where the field expects an Env / Secret, it is auto-wrapped as
+    where the field expects an Var / Secret, it is auto-wrapped as
     the matching literal subclass with the pattern injected.
     """
 
@@ -338,17 +338,17 @@ class _ValuePattern:
             isinstance(source_type, type) and issubclass(source_type, self._on_class())
         ):
             raise TypeError(
-                f"pattern() can only annotate Env or Secret subclasses "
+                f"pattern() can only annotate Var or Secret subclasses "
                 f"(got {source_type!r})"
             )
 
         # Late import: api.py imports from _api at module load, and these
         # classes are defined there.
         # noinspection PyProtectedMember
-        from tabsdatak.api import Env, Secret, _LiteralEnv, _LiteralSecret
+        from tabsdatak.api import Var, Secret, _LiteralVar, _LiteralSecret
 
-        if issubclass(source_type, Env):
-            literal_cls: type = _LiteralEnv
+        if issubclass(source_type, Var):
+            literal_cls: type = _LiteralVar
             field_name = "s"
         elif issubclass(source_type, Secret):
             literal_cls: type = _LiteralSecret
@@ -373,7 +373,7 @@ class _ValuePattern:
             # so `h(value)` rebuilds an instance with it already set),
             # or when the caller explicitly built the instance with the
             # matching regex. False -- and we reconstruct -- in the
-            # common case: a fresh `Env(s=...)` at the call site,
+            # common case: a fresh `Var(s=...)` at the call site,
             # cross-field reuse with a different regex, or legacy
             # payloads that lack `_value_pattern`.
             if getattr(instance, "_value_pattern", None) == regex:
@@ -392,19 +392,19 @@ class _ValuePattern:
         return core_schema.no_info_wrap_validator_function(wrap, base)
 
 
-class EnvValueConstraints(_ValuePattern):
+class VarValueConstraints(_ValuePattern):
     """Field-site value-pattern check for
-    :class:`~tabsdatak.api.Env` references. Use as
-    ``Annotated[Env, EnvValueConstraints(pattern=...)]`` on a
+    :class:`~tabsdatak.api.Var` references. Use as
+    ``Annotated[Var, VarValueConstraints(pattern=...)]`` on a
     per-connector ``UriSpec`` / credential alias."""
 
     def _on_class(self) -> Type:
-        from tabsdatak.api import Env
+        from tabsdatak.api import Var
 
-        return Env
+        return Var
 
 
-ENV_VALUE_NAMED_CONN_CONSTRAINTS = EnvValueConstraints(pattern=_ENV_VAR_NAME_RE_STR)
+VAR_VALUE_NAMED_CONN_CONSTRAINTS = VarValueConstraints(pattern=_VAR_NAME_RE_STR)
 
 
 class SecretValueConstraints(_ValuePattern):
@@ -908,7 +908,7 @@ class JsonSerde:
             # If the instance is a subclass / different concrete type than
             # the declared field type, pydantic's default chain runs through
             # the *declared* type's schema and silently drops fields the
-            # subclass added (e.g. LiteralEnv.val at an Env field). Re-route
+            # subclass added (e.g. LiteralEnv.val at an Var field). Re-route
             # through the actual class's TypeAdapter so its full schema fires
             # and the result includes every subclass-declared field.
             if actual_cls is not cls:
@@ -950,7 +950,7 @@ class DescriptorBase(JsonSerde):
 
 
 # ---------------------------------------------------------------------------
-# Bases for `tabsdatak.api.Env` and `tabsdatak.api.Secret`.
+# Bases for `tabsdatak.api.Var` and `tabsdatak.api.Secret`.
 #
 # These bases host the underscore-prefixed methods (``_name`` /
 # ``_value`` / ``_validate`` / ``value``) plus, for ``BaseSecret``,
@@ -959,15 +959,15 @@ class DescriptorBase(JsonSerde):
 # ``__kind__``, and their public ``lit`` factory -- keeping the
 # public surface small and readable.
 #
-# These are NOT a shared base -- ``BaseEnv`` and ``BaseSecret`` are
+# These are NOT a shared base -- ``BaseVar`` and ``BaseSecret`` are
 # independent per-class machinery layers that happen to look
 # similar. Each extends ``JsonSerde`` so the leaf classes in
 # ``api.py`` need only one base.
 # ---------------------------------------------------------------------------
 
 
-class BaseEnv(JsonSerde, ABC):
-    """Method-host for ``tabsdatak.api.Env``. The leaf class declares
+class BaseVar(JsonSerde, ABC):
+    """Method-host for ``tabsdatak.api.Var``. The leaf class declares
     the ``s`` and ``_value_pattern`` fields so pydantic discovers
     them; methods live here so ``api.py`` stays focused."""
 
@@ -996,22 +996,22 @@ class BaseEnv(JsonSerde, ABC):
     @model_validator(mode="wrap")
     @classmethod
     def _reinject_private_from_dict(cls, data: Any, handler) -> Any:
-        # ``Env._value_pattern`` is ``init=False`` so the IDE flags
-        # ``Env(s='X', _value_pattern=...)`` at edit time. But the
+        # ``Var._value_pattern`` is ``init=False`` so the IDE flags
+        # ``Var(s='X', _value_pattern=...)`` at edit time. But the
         # framework's wrap-validator (the field-level pattern marker
         # in ``_ValuePattern``) and envelope round-trips pass it via
         # the dict path -- pydantic's standard handler would drop it
         # along with the constructor signature. Stash and re-inject
         # after the handler runs.
         #
-        # ``Env``'s primary field ``s`` is ``init=True``; we only need
+        # ``Var``'s primary field ``s`` is ``init=True``; we only need
         # to round-trip the private ``_value_pattern``. The literal
         # subclass redeclares ``_value_pattern`` with ``init=True``,
         # so the handler picks it up directly there -- no re-inject
         # needed and this hook is a no-op for it.
-        from tabsdatak.api import Env
+        from tabsdatak.api import Var
 
-        if cls is Env and isinstance(data, dict) and "_value_pattern" in data:
+        if cls is Var and isinstance(data, dict) and "_value_pattern" in data:
             v = data["_value_pattern"]
             instance = handler(data)
             object.__setattr__(instance, "_value_pattern", v)
@@ -1021,7 +1021,7 @@ class BaseEnv(JsonSerde, ABC):
 
 class BaseSecret(JsonSerde, ABC):
     """Method-host for ``tabsdatak.api.Secret``. Same shape as
-    ``BaseEnv`` -- methods live here, fields stay on the leaf. Also
+    ``BaseVar`` -- methods live here, fields stay on the leaf. Also
     hosts the empty-init guard: user code may only write
     ``Secret()``; named refs go through ``Secret._secret_key`` and
     inline values through ``Secret.lit``. Envelope round-trip and

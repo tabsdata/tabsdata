@@ -8,7 +8,7 @@ class S3Config:
     """Configuration for staging files in Amazon S3.
 
     Credentials are passed as raw strings (the new-model connector resolves
-    Secret/Env into plain values before constructing the config).
+    Secret/Var into plain values before constructing the config).
     """
 
     bucket: str

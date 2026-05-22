@@ -6,7 +6,7 @@
 * :class:`MSSQLDest` -- destination: list of target table names;
   consumes one parquet slot per table.
 
-URI and credential fields accept ``Env`` / ``Secret`` references.
+URI and credential fields accept ``Var`` / ``Secret`` references.
 Cross-cutting cfg keys live in ``src_cfg`` / ``dest_cfg`` (chunk
 size, read/write engine selection).
 """
@@ -25,7 +25,7 @@ import tabsdatak._api as _api
 from tabsdatak.api import (
     Conn,
     Dest,
-    Env,
+    Var,
     NamedConn,
     Secret,
     Src,
@@ -50,7 +50,7 @@ UriSpec: TypeAlias = Union[
     Annotated[
         Secret, _api.SecretValueConstraints(pattern=_validation.MSSQL_URI_PATTERN)
     ],
-    Annotated[Env, _api.EnvValueConstraints(pattern=_validation.MSSQL_URI_PATTERN)],
+    Annotated[Var, _api.VarValueConstraints(pattern=_validation.MSSQL_URI_PATTERN)],
 ]
 QueriesSpec: TypeAlias = list[str]
 MSSQLTableNameSpec: TypeAlias = Annotated[

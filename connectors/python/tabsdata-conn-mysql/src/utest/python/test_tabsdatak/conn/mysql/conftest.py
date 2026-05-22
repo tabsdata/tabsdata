@@ -76,7 +76,7 @@ def pytest_sessionfinish(session, exitstatus):
     clean_everything()
 
 
-# --- Env var gates --------------------------------------------------
+# --- Var var gates --------------------------------------------------
 
 # Anything in TRUE_VALUES (case-insensitive) opts out of teardown.
 TRUE_VALUES = frozenset({"1", "true", "yes", "y", "on"})
@@ -88,7 +88,7 @@ TD_DOCKER_DONT_KILL = "TD_DOCKER_DONT_KILL"
 # laptop without docker.
 SKIP_ON_DOCKER_FAIL = "SKIP_ON_DOCKER_FAIL"
 
-# External-DB env-var prefixes. ``{prefix}__{backend}_ENVS`` truthy
+# External-DB var prefixes. ``{prefix}__{backend}_ENVS`` truthy
 # switches the fixture from docker mode to external mode.
 _MYSQL_PREFIX = "MYSQL0"
 _MYSQL_BACKEND = "MYSQL"
@@ -355,7 +355,7 @@ def _remove_container(name: str) -> None:
         )
 
 
-# --- External-DB env-var path ---------------------------------------
+# --- External-DB var path ---------------------------------------
 
 _HOST_PORT_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://([^:/?#]+):(\d+)/[^?#]+")
 
@@ -631,7 +631,7 @@ def _build_cdc_config() -> "DBConfig":
 def mysql_cdc_config(tmp_path_factory, worker_id) -> Iterator[DBConfig]:
     """Session-scoped binlog-enabled MySQL container for CDC
     integration tests."""
-    # External-DB env-var path mirrors ``mysql_config``: opt out of
+    # External-DB var path mirrors ``mysql_config``: opt out of
     # docker by setting ``MYSQLCDC0__MYSQLCDC_ENVS=true`` and
     # providing URI / USER / PASSWORD / DATABASE.
     external = _external_config(

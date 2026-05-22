@@ -4,7 +4,7 @@ workspace.
 Databricks is a managed cloud platform -- there's no docker fallback
 the way there is for MySQL / Postgres / ClickHouse. The fixture
 expects an externally-configured workspace and Personal Access Token
-exposed via the same env-var convention the legacy
+exposed via the same var convention the legacy
 ``tabsdata-databricks`` test suite uses (see
 ``connectors/python/tabsdata-databricks/.../conftest.py``):
 
@@ -50,7 +50,7 @@ pytestmark = pytest.mark.databricks
 
 
 # ---------------------------------------------------------------------------
-# Env gate -- skip the whole module unless an external Databricks
+# Var gate -- skip the whole module unless an external Databricks
 # workspace is configured (DBX0__* prefix, same as the legacy
 # ``tabsdata-databricks`` conftest).
 # ---------------------------------------------------------------------------
@@ -201,7 +201,7 @@ def work_dir(tmp_path):
 
 @pytest.fixture(scope="session")
 def databricks_config():
-    """Pin the env-var-derived config once per session.
+    """Pin the var-derived config once per session.
 
     Same env vars the legacy ``tabsdata-databricks`` suite reads --
     ``DBX0__{HOST,TOKEN,CATALOG,SCHEMA,VOLUME,WAREHOUSE_NAME}``.

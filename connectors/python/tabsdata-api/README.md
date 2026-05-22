@@ -62,7 +62,7 @@ import from higher ones.
 
 | Module                  | Audience                                                     | Exports                                                                                                                                                                                                                                                                                                                       |
 | ----------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tabsdatak.api`        | **End users** — publisher / transformer / subscriber authors | `@publisher`, `@auto_publisher`, `@transformer`, `@subscriber`; `Src`, `AutoSrc`, `Dest`, `OnTablesAction` abstract bases; `Conn`, `NamedConn`; `ValRef`, `Env`, `Secret`; `Trigger` / `CronTrigger` / `TablesTrigger` / `AllTablesTrigger`; `TableFrame`; type aliases (see "Type aliases" below). **No** error / exception re-exports. |
+| `tabsdatak.api`        | **End users** — publisher / transformer / subscriber authors | `@publisher`, `@auto_publisher`, `@transformer`, `@subscriber`; `Src`, `AutoSrc`, `Dest`, `OnTablesAction` abstract bases; `Conn`, `NamedConn`; `ValRef`, `Var`, `Secret`; `Trigger` / `CronTrigger` / `TablesTrigger` / `AllTablesTrigger`; `TableFrame`; type aliases (see "Type aliases" below). **No** error / exception re-exports. |
 | `tabsdatak.api_error`  | **Anyone reacting to errors**                                | `ErrorCategory`, `ErrorDef`, `ErrorCode`, `ApiErrorCode`, `TabsdataException`, `ApiException`, `ApiParamTypeException`, `ApiValidateException`. Imported directly when callers need to catch / branch on errors.                                                                                                              |
 | `tabsdatak.spi`        | **Connector implementers**                                   | `TableMode`; `SrcDef` / `AutoSrcDef` / `DestDef` (pydantic dataclasses generic over `(<Conn>, <Config>)`); `SrcPlugin` / `AutoSrcPlugin` / `DestPlugin` (generic ABCs with abstract `read_in` / `write_out`); `Explorer`; `SrcContext` / `AutoSrcContext` / `DestContext`; `ParquetFile` / `TableFileSpec` / `ManifestFileSpec`. |
 | `tabsdatak.connectors` | **Framework + tooling**                                      | `avail_srcs()`, `avail_auto_srcs()`, `avail_dests()` — entry-point-driven discovery functions, each returning a fresh `dict[str, <Def>]` keyed by `*_type`. Internal helpers `_get_src` / `_get_auto_src` / `_get_dest` resolve a concrete config class to its def. |
@@ -78,10 +78,10 @@ import from higher ones.
 | `CollTableNameSpec`         | `Annotated[str, COLL_TABLE_NAME_VALIDATOR]`                 | `<name>` or `<collection>/<name>`. |
 | `CollTableNamesSpec`            | `Annotated[list[CollTableNameSpec], min_length=1]`          | A non-empty list of collection-qualified names. |
 | `CronMaskSpec`              | `Annotated[str, CRON_MASK_VALIDATOR]`                       | A K8s CronJob schedule. |
-| `EnvVarNameSpec`            | `Annotated[str, ENV_VAR_NAME_VALIDATOR]`                    | A POSIX env-var name (`[A-Za-z_][A-Za-z0-9_]*`). |
+| `VarNameSpec`            | `Annotated[str, ENV_VAR_NAME_VALIDATOR]`                    | A POSIX var name (`[A-Za-z_][A-Za-z0-9_]*`). |
 | `SecretRefSpec`             | `Annotated[str, SECRET_REF_VALIDATOR]`                      | A K8s secret reference: `<secret>#<key>`. |
 | `ValOrRefSpec`       | `Union[str, ValRef]`                                        | A value that may be inline or sourced from any `ValRef`. |
-| `InlineConnectionNameSpec`  | `Annotated[str, NAMED_CONNECTION_VALIDATOR]`                | A bare connection identifier (1-64 chars, `[A-Za-z][A-Za-z0-9_]*`). The `NamedConn.name` field is typed `InlineConnectionNameSpec \| Env` -- the union is spelled out at the use site rather than aliased, since a `*NameSpec` alias would falsely promise a single-string shape. |
+| `InlineConnectionNameSpec`  | `Annotated[str, NAMED_CONNECTION_VALIDATOR]`                | A bare connection identifier (1-64 chars, `[A-Za-z][A-Za-z0-9_]*`). The `NamedConn.name` field is typed `InlineConnectionNameSpec \| Var` -- the union is spelled out at the use site rather than aliased, since a `*NameSpec` alias would falsely promise a single-string shape. |
 | `*TriggerBySpec`            | Unions of `Trigger` subclasses (`CronTrigger` / `TablesTrigger` / `AllTablesTrigger`); publishers do not accept `AllTablesTrigger`. | Per-decorator firing conditions. |
 | `OnTablesActionSpec`        | `Annotated[list[OnTablesAction], min_length=1]`             | Optional hooks attached to a publisher / transformer. |
 
@@ -230,7 +230,7 @@ envelope is:
 | `Dest`               | `destinationDef`   |
 | `OnTablesAction`     | `onTablesAction`   |
 | `ValRef`             | `valueRef`         |
-| `Env`                | `envRef`           |
+| `Var`                | `varRef`           |
 | `Secret`             | `secretRef`        |
 | `PublisherInfo`      | `publisherDef`     |
 | `AutoPublisherInfo`  | `autoPublisherDef` |

@@ -32,6 +32,6 @@ DATASOURCE_VALIDATOR = AfterValidator(_validate_datasource)
 
 # --- Broker URL -----------------------------------------------------
 
-# Pure-regex form used as ``value_pattern`` on the ``UrlSpec``'s Env /
+# Pure-regex form used as ``value_pattern`` on the ``UrlSpec``'s Var /
 # Secret branches.
 URL_PATTERN = r"(?i)https?://[^/\s]+(?:/.*)?"

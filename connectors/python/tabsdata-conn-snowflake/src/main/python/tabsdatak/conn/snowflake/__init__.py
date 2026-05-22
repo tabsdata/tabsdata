@@ -11,7 +11,7 @@ subscriber, or transformer to target Snowflake:
   by the destination plugin (``COPY INTO`` via a stage).
 
 Snowflake is dest-only in this connector; there is no
-``SnowflakeSrc``. Identifier and account fields accept ``Env`` /
+``SnowflakeSrc``. Identifier and account fields accept ``Var`` /
 ``Secret`` references so values can be injected from the runtime
 environment rather than hard-coded.
 """
@@ -25,7 +25,7 @@ from typing import Annotated, Any, Literal, TypeAlias, Union
 import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
-from tabsdatak.api import Conn, Dest, Env, NamedConn, Secret
+from tabsdatak.api import Conn, Dest, Var, NamedConn, Secret
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation
@@ -44,7 +44,7 @@ CredentialsSpec: TypeAlias = UserPassword
 
 AccountSpec: TypeAlias = Union[
     Annotated[Secret, _api.SecretValueConstraints(pattern=_validation.ACCOUNT_PATTERN)],
-    Annotated[Env, _api.EnvValueConstraints(pattern=_validation.ACCOUNT_PATTERN)],
+    Annotated[Var, _api.VarValueConstraints(pattern=_validation.ACCOUNT_PATTERN)],
 ]
 
 
@@ -57,7 +57,7 @@ IdentifierSpec: TypeAlias = Union[
     Annotated[
         Secret, _api.SecretValueConstraints(pattern=_validation.IDENTIFIER_PATTERN)
     ],
-    Annotated[Env, _api.EnvValueConstraints(pattern=_validation.IDENTIFIER_PATTERN)],
+    Annotated[Var, _api.VarValueConstraints(pattern=_validation.IDENTIFIER_PATTERN)],
 ]
 
 NameSpec: TypeAlias = IdentifierSpec
@@ -85,7 +85,7 @@ class SnowflakeDestConn(Conn):
     """Snowflake account connection.
 
     :param account: Snowflake account locator (e.g. ``ABCDEFG-XY12345``).
-        Accepts a plain str, ``Env``, or ``Secret``.
+        Accepts a plain str, ``Var``, or ``Secret``.
     :param credentials: :class:`UserPassword` (user + password / PAT).
     :param role: Default Snowflake role. Optional.
     :param database: Default database. Required if ``schema`` is set.

@@ -280,21 +280,21 @@ class ApiErrorCode(ErrorCode):
     # AllTablesTrigger (fire on any upstream table change)
 
     # --- Value references (tabsdatak.api) ---------------------------
-    # The value-reference family (`_ValOrRef` / `Env` / `Secret` and their
+    # The value-reference family (`_ValOrRef` / `Var` / `Secret` and their
     # `LiteralEnv` / `LiteralSecret` literal siblings) maps to a fixed
     # cluster of codes, one per validation site.
     API_5 = ErrorDef(ApiInternalException, "Cannot create _ValOrRef")
-    # `_ValOrRef` dataclass decorator (abstract base for Env / Secret)
+    # `_ValOrRef` dataclass decorator (abstract base for Var / Secret)
     API_6 = ErrorDef(
         ApiRuntimeException,
-        "Env var {name} value `{value!r}` does not match pattern `{pattern!r}`",
+        "Var var {name} value `{value!r}` does not match pattern `{pattern!r}`",
     )
     # `_ValOrRef._validate()` -- shared pattern-mismatch raise for both
-    # `Env` / `Secret` subclasses with a `_value_pattern` ClassVar.
-    API_7 = ErrorDef(ApiInitException, "Cannot create Env")
-    # `Env` dataclass decorator
-    API_8 = ErrorDef(ApiRuntimeException, "Env var {name} not defined")
-    # `Env._value()` -- env var unset at resolve time
+    # `Var` / `Secret` subclasses with a `_value_pattern` ClassVar.
+    API_7 = ErrorDef(ApiInitException, "Cannot create Var")
+    # `Var` dataclass decorator
+    API_8 = ErrorDef(ApiRuntimeException, "Var var {name} not defined")
+    # `Var._value()` -- env var unset at resolve time
     API_9 = ErrorDef(ApiInitException, "Invalid inline env var value")
     # `LiteralEnv` dataclass decorator
     API_10 = ErrorDef(ApiInitException, "Cannot create Secret")

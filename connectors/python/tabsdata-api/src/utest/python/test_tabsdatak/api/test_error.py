@@ -88,7 +88,7 @@ def test_exception_picks_class_from_variant(monkeypatch):
 def test_exception_format_map_interpolates_kwargs(monkeypatch):
     monkeypatch.setenv(DEBUG_FRAMES_ENV_VAR, "0")
     exc = ApiErrorCode.API_8.exception(name="MY_VAR")
-    assert "Env var MY_VAR not defined" in str(exc)
+    assert "Var var MY_VAR not defined" in str(exc)
 
 
 def test_exception_safe_format_keeps_unknown_placeholders(monkeypatch):
@@ -243,7 +243,7 @@ def test_tabsdata_exception_renders_with_cause_no_source(monkeypatch):
     exc = ApiErrorCode.API_8.exception(name="MY_VAR", cause=RuntimeError("oops"))
     rendered = str(exc)
     # Format: "<code>: <message>: <cause>"
-    assert rendered.startswith("API_8: Env var MY_VAR not defined")
+    assert rendered.startswith("API_8: Var var MY_VAR not defined")
     assert "oops" in rendered
     # Source is disabled, so no " at " suffix.
     assert " at " not in rendered

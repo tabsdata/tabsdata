@@ -5,7 +5,7 @@ from tabsdatak.conn.common._validation import FqnDef, name_validate
 
 # --- Identifier / warehouse patterns --------------------------------
 
-# Pure-regex forms used as ``value_pattern`` on the Env / Secret
+# Pure-regex forms used as ``value_pattern`` on the Var / Secret
 # subclasses for the Databricks identifier-shaped fields
 # (``catalog`` / ``schema`` / ``volume`` / ``warehouse`` /
 # ``warehouse_id``). They are enforced via

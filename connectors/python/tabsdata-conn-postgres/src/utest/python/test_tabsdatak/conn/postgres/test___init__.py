@@ -88,7 +88,7 @@ def test_postgres_src_dest_conn_have_distinct_kinds():
 
 @pytest.mark.parametrize("cls", [PostgresSrcConn, PostgresDestConn])
 def test_postgres_conn_rejects_bad_uri(cls):
-    # The ``uri`` field is a Union of ``str | Secret | Env``, each
+    # The ``uri`` field is a Union of ``str | Secret | Var``, each
     # carrying the same regex. A bad value fails *every* branch of the
     # Union -- pydantic surfaces whichever raised; assert on the
     # ``TabsdataException`` umbrella rather than the specific code.

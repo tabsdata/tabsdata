@@ -5,7 +5,7 @@ from tabsdatak.conn.common._validation import FqnDef, name_validate
 
 # --- Identifier / Account patterns ----------------------------------
 
-# Pure-regex form used as ``value_pattern`` on Env / Secret subclasses
+# Pure-regex form used as ``value_pattern`` on Var / Secret subclasses
 # for the Snowflake identifier-shaped fields (``role`` / ``database`` /
 # ``schema`` / ``warehouse`` / ``stage``). Accepts an unquoted
 # identifier or a double-quoted identifier honoring the doubled-quote

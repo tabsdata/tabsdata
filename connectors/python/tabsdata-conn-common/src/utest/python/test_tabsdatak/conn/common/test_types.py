@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from tabsdatak.api import Env, Secret
+from tabsdatak.api import Var, Secret
 from tabsdatak.conn.common.error import ConnErrorCode, ConnInitException
 from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
@@ -31,15 +31,15 @@ def test_user_password_round_trip_with_inline_strings():
 
 
 def test_user_password_round_trip_with_env_refs():
-    c = UserPassword(user=Env("DB_USER"), password=Secret())
+    c = UserPassword(user=Var("DB_USER"), password=Secret())
     back = UserPassword.from_json(c.to_json())
-    assert isinstance(back.user, Env)
+    assert isinstance(back.user, Var)
     assert isinstance(back.password, Secret)
 
 
 def test_aws_access_secret_key_round_trips():
     c = AwsAccessSecretKey(
-        access_key_id=Env("AWS_ACCESS_KEY_ID"),
+        access_key_id=Var("AWS_ACCESS_KEY_ID"),
         secret_access_key=Secret(),
     )
     back = AwsAccessSecretKey.from_json(c.to_json())
@@ -65,7 +65,7 @@ def test_polymorphic_load_via_credentials_base():
     c = UserPassword(user=Secret.lit("u"), password=Secret.lit("p"))
     back = Credentials.from_json(c.to_json())
     assert isinstance(back, UserPassword)
-    # Credential fields are typed `SecretOrEnvSpec`; bare strings coerce
+    # Credential fields are typed `SecretOrVarSpec`; bare strings coerce
     # to a `_LiteralSecret`. The literal payload is reachable via `value()`.
     assert back.user.value() == "u"
 
@@ -90,7 +90,7 @@ def test_gcp_json_missing_field_raises_conn_2():
 
 def test_aws_access_secret_key_missing_field_raises_conn_3():
     with pytest.raises(ConnInitException) as ei:
-        AwsAccessSecretKey(access_key_id=Env("AWS_ACCESS_KEY_ID"))  # type: ignore[call-arg]
+        AwsAccessSecretKey(access_key_id=Var("AWS_ACCESS_KEY_ID"))  # type: ignore[call-arg]
     assert ei.value.api_error is ConnErrorCode.CONN_3
 
 
@@ -140,7 +140,7 @@ def testfull_path_normalizes_str_base_path(base_path, path, expected):
 
 def testfull_path_resolves_env_base_path(monkeypatch):
     monkeypatch.setenv("BP", "/data/prod/")
-    assert full_path(Env(s="BP"), "foo.csv") == "data/prod/foo.csv"
+    assert full_path(Var(s="BP"), "foo.csv") == "data/prod/foo.csv"
 
 
 def testfull_path_resolves_secret_base_path():
@@ -191,12 +191,12 @@ def test_convert_resolves_secret_literal_to_str():
 
 
 def test_convert_resolves_env_literal_to_str():
-    assert _convert(Env.lit("hello"), str) == "hello"
+    assert _convert(Var.lit("hello"), str) == "hello"
 
 
 def test_convert_resolves_env_ref_via_environ(monkeypatch):
     monkeypatch.setenv("TD_TEST_CONVERT_STR", "world")
-    assert _convert(Env(s="TD_TEST_CONVERT_STR"), str) == "world"
+    assert _convert(Var(s="TD_TEST_CONVERT_STR"), str) == "world"
 
 
 def test_convert_coerces_secret_to_int():
@@ -205,7 +205,7 @@ def test_convert_coerces_secret_to_int():
 
 def test_convert_coerces_env_to_int(monkeypatch):
     monkeypatch.setenv("TD_TEST_CONVERT_INT", "9000")
-    assert _convert(Env(s="TD_TEST_CONVERT_INT"), int) == 9000
+    assert _convert(Var(s="TD_TEST_CONVERT_INT"), int) == 9000
 
 
 def test_convert_coerces_secret_to_float():

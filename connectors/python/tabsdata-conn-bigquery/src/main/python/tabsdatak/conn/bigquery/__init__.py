@@ -7,7 +7,7 @@
   table. Writes go via a GCS staging bucket and a
   ``load_table_from_uri`` load job.
 
-No ``BigQuerySrc`` today. Credential fields accept ``Env`` /
+No ``BigQuerySrc`` today. Credential fields accept ``Var`` /
 ``Secret`` references.
 """
 
@@ -21,7 +21,7 @@ from typing import Annotated, Any, Literal, TypeAlias, Union
 import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
-from tabsdatak.api import Conn, Dest, Env, NamedConn, Secret
+from tabsdatak.api import Conn, Dest, Var, NamedConn, Secret
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.bigquery import _validation
@@ -48,12 +48,12 @@ CredentialsSpec: TypeAlias = GCPJson
 
 ProjectSpec: TypeAlias = Union[
     Annotated[Secret, _api.SecretValueConstraints(pattern=_validation.PROJECT_PATTERN)],
-    Annotated[Env, _api.EnvValueConstraints(pattern=_validation.PROJECT_PATTERN)],
+    Annotated[Var, _api.VarValueConstraints(pattern=_validation.PROJECT_PATTERN)],
 ]
 
 DatasetSpec: TypeAlias = Union[
     Annotated[Secret, _api.SecretValueConstraints(pattern=_validation.DATASET_PATTERN)],
-    Annotated[Env, _api.EnvValueConstraints(pattern=_validation.DATASET_PATTERN)],
+    Annotated[Var, _api.VarValueConstraints(pattern=_validation.DATASET_PATTERN)],
 ]
 
 BigQueryTableNameSpec: TypeAlias = Annotated[

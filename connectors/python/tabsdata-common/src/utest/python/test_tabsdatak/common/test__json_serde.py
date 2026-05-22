@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from tabsdatak.api import Env, Secret, _LiteralSecret
+from tabsdatak.api import Var, Secret, _LiteralSecret
 from tabsdatak.error import ApiInternalException
 from tabsdatak.common._error import CommonErrorCode, CommonRuntimeException
 from tabsdatak.common._json_serde import (
     KeyValue,
     dehydrate_secrets,
     extract_connection_names,
-    extract_envs,
+    extract_vars,
     extract_secrets,
     find_by_kind,
     hydrate_connections,
@@ -192,13 +192,13 @@ def test_replace_at_rejects_unexpected_char_after_root():
 
 
 # ---------------------------------------------------------------------------
-# Secret / env envelope helpers
+# Secret / var envelope helpers
 #
 # Realistic envelope shapes:
 #   secretRef:     {"kind": "secretRef",     "spec": {"_s": "<name>", "_value_pattern": "..."}}
 #   secretLiteral: {"kind": "secretLiteral", "spec": {"_s": "<value>", "_value_pattern": "..."}}
-#   envRef:        {"kind": "envRef",        "spec": {"s": "<name>"}}
-#   envLiteral:    {"kind": "envLiteral",    "spec": {"s": "<value>"}}
+#   varRef:        {"kind": "varRef",        "spec": {"s": "<name>"}}
+#   varLiteral:    {"kind": "varLiteral",    "spec": {"s": "<value>"}}
 # ---------------------------------------------------------------------------
 
 
@@ -215,17 +215,17 @@ def _secret_literal(value: str, *, pattern: str | None = None) -> dict:
     return _LiteralSecret(_s=value, _value_pattern=pattern).to_dict()
 
 
-def _env_ref(name: str) -> dict:
-    return Env(s=name).to_dict()
+def _var_ref(name: str) -> dict:
+    return Var(s=name).to_dict()
 
 
-def _env_literal(value: str) -> dict:
-    return Env.lit(value).to_dict()
+def _var_literal(value: str) -> dict:
+    return Var.lit(value).to_dict()
 
 
 def _wrap(spec: dict) -> dict:
     """Top-level envelope -- mimics a serialized SrcDef / DestDef so its
-    ``spec`` provides the ``$.spec.`` prefix that ``_to_env_name`` strips."""
+    ``spec`` provides the ``$.spec.`` prefix that ``_to_key`` strips."""
     return {"kind": "outer", "apiVersion": "1.0", "type": "Outer", "spec": spec}
 
 
@@ -282,31 +282,31 @@ def test_extract_secrets_handles_list_paths():
     ]
 
 
-def test_extract_secrets_ignores_env_envelopes():
-    data = _wrap({"u": _env_ref("USER"), "p": _secret_ref("PW")})
+def test_extract_secrets_ignores_var_envelopes():
+    data = _wrap({"u": _var_ref("USER"), "p": _secret_ref("PW")})
     result = extract_secrets(data)
     assert result == [KeyValue(key="P", value=None)]
 
 
-# --- extract_envs ----------------------------------------------------------
+# --- extract_vars ----------------------------------------------------------
 
 
-def test_extract_envs_returns_ref_without_value():
-    data = _wrap({"user": _env_ref("DB_USER")})
-    [kv] = extract_envs(data)
+def test_extract_vars_returns_ref_without_value():
+    data = _wrap({"user": _var_ref("DB_USER")})
+    [kv] = extract_vars(data)
     # No "SECRET_" prefix for envs.
     assert kv == KeyValue(key="USER", value=None)
 
 
-def test_extract_envs_returns_literal_with_value():
-    data = _wrap({"user": _env_literal("etl")})
-    [kv] = extract_envs(data)
+def test_extract_vars_returns_literal_with_value():
+    data = _wrap({"user": _var_literal("etl")})
+    [kv] = extract_vars(data)
     assert kv == KeyValue(key="USER", value="etl")
 
 
-def test_extract_envs_ignores_secret_envelopes():
-    data = _wrap({"u": _env_ref("USER"), "p": _secret_ref("PW")})
-    result = extract_envs(data)
+def test_extract_vars_ignores_secret_envelopes():
+    data = _wrap({"u": _var_ref("USER"), "p": _secret_ref("PW")})
+    result = extract_vars(data)
     assert result == [KeyValue(key="U", value=None)]
 
 
@@ -343,10 +343,10 @@ def test_dehydrate_secrets_leaves_refs_alone():
     assert out["spec"]["password"]["spec"]["_s"] == "PW"
 
 
-def test_dehydrate_secrets_ignores_env_envelopes():
-    data = _wrap({"user": _env_literal("etl"), "pw": _secret_literal("hunter2")})
+def test_dehydrate_secrets_ignores_var_envelopes():
+    data = _wrap({"user": _var_literal("etl"), "pw": _secret_literal("hunter2")})
     out = dehydrate_secrets(data)
-    assert out["spec"]["user"]["kind"] == "envLiteral"
+    assert out["spec"]["user"]["kind"] == "varLiteral"
     assert out["spec"]["user"]["spec"]["s"] == "etl"
     assert out["spec"]["pw"]["kind"] == "secretRef"
 
@@ -458,7 +458,7 @@ def test_hydrate_secrets_as_envs_raises_on_missing_env(monkeypatch):
 
 def _conn_ref(name: str | dict) -> dict:
     """Serialized ``NamedConn`` envelope. ``name`` may be a literal string
-    or an ``envRef`` / ``envLiteral`` envelope dict."""
+    or an ``varRef`` / ``varLiteral`` envelope dict."""
     return {
         "kind": "connectionRef",
         "apiVersion": "1.0",
@@ -491,28 +491,28 @@ def test_extract_connection_names_returns_literal_string_name():
     assert extract_connection_names(data) == ["prod-pg"]
 
 
-def test_extract_connection_names_resolves_env_literal_name():
-    # name is an Env literal -- value is the inlined string.
-    data = _wrap({"conn": _conn_ref(Env.lit("staging-mysql").to_dict())})
+def test_extract_connection_names_resolves_var_literal_name():
+    # name is an Var literal -- value is the inlined string.
+    data = _wrap({"conn": _conn_ref(Var.lit("staging-mysql").to_dict())})
     assert extract_connection_names(data) == ["staging-mysql"]
 
 
-def test_extract_connection_names_resolves_env_ref_name(monkeypatch):
+def test_extract_connection_names_resolves_var_ref_name(monkeypatch):
     monkeypatch.setenv("DB_CONN", "prod-pg")
-    data = _wrap({"conn": _conn_ref(Env(s="DB_CONN").to_dict())})
+    data = _wrap({"conn": _conn_ref(Var(s="DB_CONN").to_dict())})
     assert extract_connection_names(data) == ["prod-pg"]
 
 
-def test_extract_connection_names_raises_on_unset_env_ref(monkeypatch):
+def test_extract_connection_names_raises_on_unset_var_ref(monkeypatch):
     monkeypatch.delenv("DB_CONN", raising=False)
-    data = _wrap({"conn": _conn_ref(Env(s="DB_CONN").to_dict())})
+    data = _wrap({"conn": _conn_ref(Var(s="DB_CONN").to_dict())})
     with pytest.raises(CommonRuntimeException) as exc_info:
         extract_connection_names(data)
     assert exc_info.value.api_error is CommonErrorCode.COMMON_9
 
 
 def test_extract_connection_names_raises_on_unsupported_name_shape():
-    # ``name`` is neither a string nor an env envelope.
+    # ``name`` is neither a string nor a var envelope.
     data = _wrap({"conn": _conn_ref({"kind": "something-else", "spec": {}})})
     with pytest.raises(CommonRuntimeException) as exc_info:
         extract_connection_names(data)
@@ -566,9 +566,9 @@ def test_hydrate_connections_replaces_each_ref_independently():
     assert conn_by_name["x"]["spec"]["label"] == "x"
 
 
-def test_hydrate_connections_resolves_env_named_refs(monkeypatch):
+def test_hydrate_connections_resolves_var_named_refs(monkeypatch):
     monkeypatch.setenv("DB_CONN", "prod-pg")
-    data = _wrap({"conn": _conn_ref(Env(s="DB_CONN").to_dict())})
+    data = _wrap({"conn": _conn_ref(Var(s="DB_CONN").to_dict())})
     out = hydrate_connections(data, {"prod-pg": _conn_def("prod-pg")})
     assert out["spec"]["conn"]["spec"]["label"] == "prod-pg"
 

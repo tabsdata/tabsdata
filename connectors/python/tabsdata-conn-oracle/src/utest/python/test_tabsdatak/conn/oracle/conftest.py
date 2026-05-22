@@ -75,7 +75,7 @@ def pytest_sessionfinish(session, exitstatus):
     clean_everything()
 
 
-# --- Env var gates --------------------------------------------------
+# --- Var var gates --------------------------------------------------
 
 # Anything in TRUE_VALUES (case-insensitive) opts out of teardown.
 TRUE_VALUES = frozenset({"1", "true", "yes", "y", "on"})
@@ -360,7 +360,7 @@ def _remove_container(name: str) -> None:
         )
 
 
-# --- External-DB env-var path ---------------------------------------
+# --- External-DB var path ---------------------------------------
 
 # Permissive host:port matcher: requires only the trailing slash,
 # not a non-empty path component (Oracle URIs put the service name

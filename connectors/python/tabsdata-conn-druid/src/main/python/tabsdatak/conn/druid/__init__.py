@@ -7,7 +7,7 @@
   batch ``index_parallel`` task to the Overlord with polling
   until completion.
 
-No ``DruidSrc``. URL and credential fields accept ``Env`` /
+No ``DruidSrc``. URL and credential fields accept ``Var`` /
 ``Secret`` references.
 """
 
@@ -24,7 +24,7 @@ import tabsdatak._api as _api
 from tabsdatak.api import (
     Conn,
     Dest,
-    Env,
+    Var,
     NamedConn,
     Secret,
 )
@@ -55,7 +55,7 @@ CredentialsSpec: TypeAlias = UserPassword
 
 UrlSpec: TypeAlias = Union[
     Annotated[Secret, _api.SecretValueConstraints(pattern=_validation.URL_PATTERN)],
-    Annotated[Env, _api.EnvValueConstraints(pattern=_validation.URL_PATTERN)],
+    Annotated[Var, _api.VarValueConstraints(pattern=_validation.URL_PATTERN)],
 ]
 DatasourceSpec: TypeAlias = Annotated[str, _validation.DATASOURCE_VALIDATOR]
 DruidTableNameSpec: TypeAlias = DatasourceSpec
@@ -183,7 +183,7 @@ class DruidDestConn(Conn):
     """Druid Overlord connection.
 
     :param overlord_url: Druid Overlord URL
-        (e.g. ``http://druid.example:8081``). ``Env`` / ``Secret``
+        (e.g. ``http://druid.example:8081``). ``Var`` / ``Secret``
         accepted.
     :param staging: :class:`S3Location` / :class:`AzBlobLocation`
         / :class:`GCSLocation` -- the cloud staging area for

@@ -86,7 +86,7 @@ def pytest_sessionfinish(session, exitstatus):
     clean_everything()
 
 
-# --- Env var gates ---------------------------------------------------
+# --- Var var gates ---------------------------------------------------
 
 TRUE_VALUES = frozenset({"1", "true", "yes", "y", "on"})
 TD_DOCKER_DONT_KILL = "TD_DOCKER_DONT_KILL"

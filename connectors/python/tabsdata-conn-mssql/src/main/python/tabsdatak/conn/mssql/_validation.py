@@ -14,7 +14,7 @@ from tabsdatak.conn.common._validation import FqnDef, name_validate
 #   ``DRIVER={...};SERVER=...;DATABASE=...``. The adapter wraps it
 #   as ``mssql+pyodbc:///?odbc_connect=<urlencoded>``.
 #
-# Pure-regex form used as ``value_pattern`` on Env / Secret subclasses
+# Pure-regex form used as ``value_pattern`` on Var / Secret subclasses
 # and as ``StringConstraints`` on the bare-str branch of ``UriSpec``.
 MSSQL_URI_PATTERN = r"(?i)(?:mssql(?:\+[a-z0-9]+)?://.*|[A-Za-z][A-Za-z0-9 ]*=.+)"
 

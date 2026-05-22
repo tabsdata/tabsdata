@@ -324,6 +324,9 @@ def _v1_copy_to_dict(env: V1CopyFormat) -> dict:
 
 
 def _env_repr(dumper: yaml.SafeDumper, env: TransporterEnv) -> yaml.nodes.ScalarNode:
+    # The ``!Env`` tag is the contract with the Rust ``td_transporter``
+    # binary -- it must stay ``!Env`` regardless of how the Python-side
+    # ``Env`` class was renamed.
     return dumper.represent_scalar("!Env", env.name)
 
 

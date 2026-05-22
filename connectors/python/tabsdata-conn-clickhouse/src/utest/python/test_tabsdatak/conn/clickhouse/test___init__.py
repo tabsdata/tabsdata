@@ -4,7 +4,7 @@ import typing
 
 import pytest
 
-from tabsdatak.api import Env, NamedConn, Secret
+from tabsdatak.api import Var, NamedConn, Secret
 from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
     CfgSpec,
@@ -149,7 +149,7 @@ def test_port_resolves_env(monkeypatch):
     from tabsdatak.conn.common.types import _convert
 
     monkeypatch.setenv("CH_PORT", "9001")
-    assert _convert(_bare_conn(port=Env("CH_PORT")).port, int) == 9001
+    assert _convert(_bare_conn(port=Var("CH_PORT")).port, int) == 9001
 
 
 def test_port_resolves_secret_literal():
@@ -164,7 +164,7 @@ def test_port_env_non_numeric_rejected_at_value(monkeypatch):
     from tabsdatak.conn.common.types import _convert
 
     monkeypatch.setenv("CH_PORT_BAD", "notanumber")
-    conn = _bare_conn(port=Env("CH_PORT_BAD"))
+    conn = _bare_conn(port=Var("CH_PORT_BAD"))
     with pytest.raises(Exception):
         _convert(conn.port, int)
 
@@ -189,7 +189,7 @@ def test_secure_resolves_env_true(monkeypatch):
 
     monkeypatch.setenv("CH_SECURE", "true")
     assert (
-        _convert(_bare_conn(port=1, secure=Env("CH_SECURE")).secure, bool)
+        _convert(_bare_conn(port=1, secure=Var("CH_SECURE")).secure, bool)
         is True
     )
 
@@ -209,7 +209,7 @@ def test_secure_resolves_env_variants(monkeypatch, val, expected):
 
     monkeypatch.setenv("CH_SECURE_X", val)
     assert (
-        _convert(_bare_conn(port=1, secure=Env("CH_SECURE_X")).secure, bool)
+        _convert(_bare_conn(port=1, secure=Var("CH_SECURE_X")).secure, bool)
         is expected
     )
 

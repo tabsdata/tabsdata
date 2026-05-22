@@ -6,7 +6,7 @@
   one parquet slot per table. Writes go through a cloud-staged
   bulk loader (S3 / GCS / Azure) rather than row-by-row inserts.
 
-``port`` and ``secure`` accept ``int|bool|Env|Secret``; call
+``port`` and ``secure`` accept ``int|bool|Var|Secret``; call
 ``_convert(...)`` from ``tabsdatak.conn.common.types`` at the
 use site to resolve to a concrete ``int`` / ``bool`` for the
 plugin. Iceberg-style schema evolution is supported on the dest.
@@ -25,7 +25,7 @@ import tabsdatak._api as _api
 from tabsdatak.api import (
     Conn,
     Dest,
-    Env,
+    Var,
     NamedConn,
     Secret,
 )
@@ -61,30 +61,30 @@ CredentialsSpec: TypeAlias = UserPassword
 # ``.+`` pattern is what enables the bare-string shortcut at the field
 # site (the ``EnvValuePattern`` / ``SecretValuePattern`` wrapper promotes
 # a plain str to a literal); without it, callers would have to spell
-# ``Env.lit("ch.example")`` themselves.
+# ``Var.lit("ch.example")`` themselves.
 HostSpec: TypeAlias = Union[
     Annotated[Secret, _api.SecretValueConstraints(pattern=r".+")],
-    Annotated[Env, _api.EnvValueConstraints(pattern=r".+")],
+    Annotated[Var, _api.VarValueConstraints(pattern=r".+")],
 ]
 
-# Port: plain int, or an Env / Secret whose resolved value parses as an
-# unsigned integer. The Env / Secret arms carry a digit-only pattern so
+# Port: plain int, or an Var / Secret whose resolved value parses as an
+# unsigned integer. The Var / Secret arms carry a digit-only pattern so
 # the value is validated at ``value()`` time. Call
 # ``_convert(conn.port, int)`` at the use site to do the final cast.
 _PORT_PATTERN = r"[0-9]+"
 PortSpec: TypeAlias = Union[
     int,
-    Annotated[Env, _api.EnvValueConstraints(pattern=_PORT_PATTERN)],
+    Annotated[Var, _api.VarValueConstraints(pattern=_PORT_PATTERN)],
     Annotated[Secret, _api.SecretValueConstraints(pattern=_PORT_PATTERN)],
 ]
 
-# Secure: plain bool, or an Env / Secret whose resolved value is one of
+# Secure: plain bool, or an Var / Secret whose resolved value is one of
 # the accepted truthy / falsy tokens. Call ``_convert(conn.secure, bool)``
 # at the use site to do the final cast.
 _BOOL_PATTERN = r"(?i)(?:true|false|1|0|yes|no)"
 SecureSpec: TypeAlias = Union[
     bool,
-    Annotated[Env, _api.EnvValueConstraints(pattern=_BOOL_PATTERN)],
+    Annotated[Var, _api.VarValueConstraints(pattern=_BOOL_PATTERN)],
     Annotated[Secret, _api.SecretValueConstraints(pattern=_BOOL_PATTERN)],
 ]
 
@@ -94,7 +94,7 @@ _IDENTIFIER_PATTERN = r"[A-Za-z_][A-Za-z0-9_]*"
 
 DatabaseSpec: TypeAlias = Union[
     Annotated[Secret, _api.SecretValueConstraints(pattern=_IDENTIFIER_PATTERN)],
-    Annotated[Env, _api.EnvValueConstraints(pattern=_IDENTIFIER_PATTERN)],
+    Annotated[Var, _api.VarValueConstraints(pattern=_IDENTIFIER_PATTERN)],
 ]
 ClickHouseTableNameSpec: TypeAlias = Annotated[
     str,
@@ -228,13 +228,13 @@ class ClickHouseDestConn(Conn):
 
     :param host: ClickHouse host.
     :param port: HTTP port; default 8123. Accepts ``int``,
-        ``Env``, or ``Secret`` -- resolve at the use site with
+        ``Var``, or ``Secret`` -- resolve at the use site with
         ``_convert(conn.port, int)``.
     :param credentials: :class:`UserPassword`.
     :param staging: :class:`CloudLocation` (S3 / AzBlob / GCS).
     :param database: Default database; default ``"default"``.
     :param secure: ``True`` for HTTPS, ``False`` for HTTP.
-        Accepts ``bool``, ``Env``, or ``Secret`` -- resolve at the
+        Accepts ``bool``, ``Var``, or ``Secret`` -- resolve at the
         use site with ``_convert(conn.secure, bool)``.
     :param entity_whitelist: Optional regex-based table filter.
     :param conn_cfg: Optional driver-side config dict.

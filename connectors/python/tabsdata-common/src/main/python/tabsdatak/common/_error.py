@@ -57,8 +57,8 @@ class CommonErrorCode(ErrorCode):
     COMMON_9 = ErrorDef(
         CommonRuntimeException,
         "connectionRef name env var {var!r} is not set",
-    )  # _resolve_connection_name: envRef-typed name references an unset var
+    )  # _resolve_connection_name: varRef-typed name references an unset var
     COMMON_10 = ErrorDef(
         CommonRuntimeException,
         "connectionRef name has unsupported shape: {name!r}",
-    )  # _resolve_connection_name: name is neither str nor envRef/envLiteral envelope
+    )  # _resolve_connection_name: name is neither str nor varRef/varLiteral envelope

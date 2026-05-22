@@ -75,7 +75,7 @@ def pytest_sessionfinish(session, exitstatus):
     clean_everything()
 
 
-# --- Env var gates --------------------------------------------------
+# --- Var var gates --------------------------------------------------
 
 # Anything in TRUE_VALUES (case-insensitive) opts out of teardown.
 TRUE_VALUES = frozenset({"1", "true", "yes", "y", "on"})
@@ -87,7 +87,7 @@ TD_DOCKER_DONT_KILL = "TD_DOCKER_DONT_KILL"
 # laptop without docker or without the Microsoft ODBC driver.
 SKIP_ON_DOCKER_FAIL = "SKIP_ON_DOCKER_FAIL"
 
-# External-DB env-var prefix. ``{prefix}__{backend}_ENVS`` truthy
+# External-DB var prefix. ``{prefix}__{backend}_ENVS`` truthy
 # switches the fixture from docker mode to external mode. The
 # (typo'd) ``MSSSQL0`` prefix is kept verbatim for cross-repo
 # compatibility with tabsdata-os.
@@ -383,7 +383,7 @@ def _remove_container(name: str) -> None:
         )
 
 
-# --- External-DB env-var path ---------------------------------------
+# --- External-DB var path ---------------------------------------
 
 _HOST_PORT_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+._-]*://([^:/?#]+):(\d+)/")
 

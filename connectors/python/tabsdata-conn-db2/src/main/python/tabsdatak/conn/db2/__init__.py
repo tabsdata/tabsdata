@@ -27,7 +27,7 @@ CDC (change-data capture):
   :class:`TimestampPosition` -- ``start_from`` primitives for
   resuming CD-table ingestion at a specific commit sequence.
 
-URI and credential fields accept ``Env`` / ``Secret`` references.
+URI and credential fields accept ``Var`` / ``Secret`` references.
 Cross-cutting cfg keys live in ``src_cfg`` / ``dest_cfg`` (chunk
 size, read/write engine selection); CDC tuning lives in
 ``Db2CdcStreamSrc.src_cfg`` (buffer / trigger thresholds, polling
@@ -49,7 +49,7 @@ import tabsdatak._api as _api
 from tabsdatak.api import (
     Conn,
     Dest,
-    Env,
+    Var,
     NamedConn,
     Secret,
     Src,
@@ -73,7 +73,7 @@ CredentialsSpec: TypeAlias = UserPassword
 UriSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_validation.URI_PATTERN)],
     Annotated[Secret, _api.SecretValueConstraints(pattern=_validation.URI_PATTERN)],
-    Annotated[Env, _api.EnvValueConstraints(pattern=_validation.URI_PATTERN)],
+    Annotated[Var, _api.VarValueConstraints(pattern=_validation.URI_PATTERN)],
 ]
 QueriesSpec: TypeAlias = list[str]
 Db2TableNameSpec: TypeAlias = Annotated[
@@ -117,7 +117,7 @@ class Db2SrcConn(Conn):
 
     :param uri: SQLAlchemy-style URI
         (``db2+ibm_db://host:port/db``). Accepts a plain str,
-        ``Env``, or ``Secret``.
+        ``Var``, or ``Secret``.
     :param credentials: :class:`UserPassword` -- user + password
         spliced into the URI by the engine factory.
     :param entity_whitelist: Optional list of regex patterns; the
@@ -322,7 +322,7 @@ class Db2CdcStreamSrcConn(Conn):
     different grants) and a divergent attribute set is expected
     over time.
 
-    :param uri: SQLAlchemy-style URI; accepts ``str`` / ``Env`` /
+    :param uri: SQLAlchemy-style URI; accepts ``str`` / ``Var`` /
         ``Secret`` per :data:`UriSpec`.
     :param credentials: :class:`UserPassword`.
     :param entity_whitelist: Optional regex patterns narrowing

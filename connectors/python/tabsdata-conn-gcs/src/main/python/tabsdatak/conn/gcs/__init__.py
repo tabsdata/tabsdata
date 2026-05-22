@@ -9,7 +9,7 @@
   in dest paths are resolved at write time.
 
 File transport goes through the shared ``td_transporter`` binary.
-String, ``Env``, and ``Secret`` are accepted on credential and
+String, ``Var``, and ``Secret`` are accepted on credential and
 identifier fields.
 """
 
@@ -24,7 +24,7 @@ import tabsdatak._api as _api
 from tabsdatak.api import (
     Conn,
     Dest,
-    Env,
+    Var,
     NamedConn,
     Secret,
     Src,
@@ -67,7 +67,7 @@ CredentialsSpec: TypeAlias = GCPJson
 # bare-string shortcut at the field site.
 ProjectSpec: TypeAlias = Union[
     Annotated[Secret, _api.SecretValueConstraints(pattern=r".+")],
-    Annotated[Env, _api.EnvValueConstraints(pattern=r".+")],
+    Annotated[Var, _api.VarValueConstraints(pattern=r".+")],
 ]
 
 

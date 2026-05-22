@@ -17,7 +17,7 @@ Each decorator wraps the user function in an ``*Info`` descriptor
 during flow registration. Triggers (``CronTrigger`` /
 ``TablesTrigger`` / ``AllTablesTrigger``) declare *when* a function
 fires; connections (:class:`Conn` / :class:`NamedConn`) and value
-references (:class:`Env` / :class:`Secret`) declare the *where*
+references (:class:`Var` / :class:`Secret`) declare the *where*
 and the *credentials*.
 
 The :class:`TrxCtx` interface is what the runtime hands to every
@@ -138,44 +138,44 @@ SubscriberTriggerBySpec: TypeAlias = Union[
 FlushIntervalSpec: TypeAlias = Annotated[int, Field(ge=1)]
 
 
-EnvVarNameSpec: TypeAlias = Annotated[str, _api.ENV_NAME_CONSTRAINTS]
+VarNameSpec: TypeAlias = Annotated[str, _api.VAR_NAME_CONSTRAINTS]
 
 
 @_api.dataclass(ApiErrorCode.API_7)
-class Env(_api.BaseEnv):
+class Var(_api.BaseVar):
     """Reference to an environment-variable value, resolved lazily
     at flow run time.
 
-    Use :meth:`lit` to embed a value inline (rejects the env-var
+    Use :meth:`lit` to embed a value inline (rejects the var
     lookup; the literal is the value). Subclasses may set
     ``_value_pattern`` to constrain the resolved value to a regex.
 
     :param s: Name of the environment variable.
     """
 
-    s: EnvVarNameSpec
-    __kind__ = "envRef"
+    s: VarNameSpec
+    __kind__ = "varRef"
     _value_pattern: str | None = Field(default=None, init=False)
 
     @classmethod
-    def lit(cls, value: str) -> "Env":
+    def lit(cls, value: str) -> "Var":
         """Wrap ``value`` as an inline literal that bypasses the
-        env-var lookup. Useful for declarative tests and one-shot
+        var lookup. Useful for declarative tests and one-shot
         scripts that don't want to depend on the environment."""
-        return _LiteralEnv(s=value, _value_pattern=cls._value_pattern)
+        return _LiteralVar(s=value, _value_pattern=cls._value_pattern)
 
 
 @_api.dataclass(ApiErrorCode.API_9)
-class _LiteralEnv(Env):
+class _LiteralVar(Var):
     s: str
-    __kind__ = "envLiteral"
+    __kind__ = "varLiteral"
     _value_pattern: str | None = None
 
     def _name(self) -> str:
         return "<literal>"
 
     def _value(self) -> str:
-        # Literal: ``s`` is the value verbatim, not an env-var name.
+        # Literal: ``s`` is the value verbatim, not an var name.
         return self.s
 
     @model_validator(mode="after")
@@ -242,7 +242,7 @@ class _LiteralSecret(Secret):
         return self
 
 
-SecretOrEnvSpec: TypeAlias = Union[Secret, Env]
+SecretOrVarSpec: TypeAlias = Union[Secret, Var]
 
 
 class _Conn(ABC, _api.DescriptorBase):
@@ -261,10 +261,10 @@ class Conn(_Conn, ABC):
 
 # A connection slot resolved by *name* (looked up in the flow's
 # named-connection registry). Accepts either the raw name as a
-# string or an :class:`Env` reference that yields the name.
+# string or an :class:`Var` reference that yields the name.
 ConnectionNameSpec: TypeAlias = Union[
     Annotated[str, _api.NAMED_CONN_CONSTRAINTS],
-    Annotated[Env, _api.ENV_VALUE_NAMED_CONN_CONSTRAINTS],
+    Annotated[Var, _api.VAR_VALUE_NAMED_CONN_CONSTRAINTS],
 ]
 
 
@@ -274,7 +274,7 @@ class NamedConn(Conn):
     name to a concrete :class:`Conn` at flow run time.
 
     :param name: Connection identifier registered with the
-        runtime. Accepts a plain string or an :class:`Env`
+        runtime. Accepts a plain string or an :class:`Var`
         reference.
     """
 

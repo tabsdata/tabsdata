@@ -40,9 +40,9 @@ and must not be imported.
 | Decorators  | `publisher`, `auto_publisher`, `transformer`, `subscriber` |
 | Triggers    | `Trigger` (abstract), `CronTrigger`, `TablesTrigger`, `AllTablesTrigger` |
 | Connections | `Conn` (abstract), `NamedConn` |
-| Value refs  | `ValRef` (abstract), `Env`, `Secret` |
+| Value refs  | `ValRef` (abstract), `Var`, `Secret` |
 | Bases       | `Src` (abstract), `AutoSrc` (abstract), `Dest` (abstract), `OnTablesAction` (abstract), `TableFrame` |
-| Specs (validated string types) | `TableNameSpec`, `TableNamesSpec`, `CollTableNameSpec`, `CollTableNamesSpec`, `CronMaskSpec`, `EnvVarNameSpec`, `SecretRefSpec`, `InlineConnectionNameSpec` |
+| Specs (validated string types) | `TableNameSpec`, `TableNamesSpec`, `CollTableNameSpec`, `CollTableNamesSpec`, `CronMaskSpec`, `VarNameSpec`, `SecretRefSpec`, `InlineConnectionNameSpec` |
 | Specs (composed) | `ValOrRefSpec` (`str \| ValRef`), `PublisherTriggerBySpec`, `TransformerTriggerBySpec`, `SubscriberTriggerBySpec`, `OnTablesActionSpec`, `FallbackRolloverMinsSpec` (`Annotated[int, ge=1]`) |
 
 `ErrorCategory`, `ErrorDef`, `ErrorCode`, `ApiErrorCode`,
@@ -144,7 +144,7 @@ s3 / gcs / azureblob connectors).
 ## How to author code (end user)
 
 ```python
-from tabsdatak.api import publisher, CronTrigger, Env
+from tabsdatak.api import publisher, CronTrigger, Var
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn.mysql import MySQLSrc, MySQLConn
@@ -154,7 +154,7 @@ src = MySQLSrc(
         uri="mysql://db.example.com/app",
         credentials=UserPassword(
             user="etl",
-            password=Env(name="DB_PASSWORD"),  # value from env var
+            password=Var(name="DB_PASSWORD"),  # value from env var
         ),
     ),
     queries=["SELECT * FROM users"],
@@ -357,7 +357,7 @@ Key decisions:
   code. The single `code.exception(...)` factory dispatches via
   `<Name>ErrorCode.exception_classes()`.
 - `ValOrRefSpec` is `Union[str, ValRef]`: a literal string or any
-  `ValRef` subclass (currently `Env` for env vars, `Secret` for K8s
+  `ValRef` subclass (currently `Var` for env vars, `Secret` for K8s
   secrets). New `ValRef` subclasses don't require touching the spec.
 - Polymorphic field types (`source: Src`, `destination: Dest`,
   `conn: Conn`) "just work" — no `SerializeAsAny` annotation

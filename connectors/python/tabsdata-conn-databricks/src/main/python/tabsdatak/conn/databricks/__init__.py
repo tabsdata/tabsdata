@@ -8,7 +8,7 @@
 * :class:`DatabricksDest` -- destination: list of table FQNs;
   one parquet slot per table. Uses Volumes + ``COPY INTO``.
 
-Token, host, identifier fields accept ``Env`` / ``Secret``.
+Token, host, identifier fields accept ``Var`` / ``Secret``.
 """
 
 from __future__ import annotations
@@ -23,10 +23,10 @@ import tabsdatak._api as _api
 from tabsdatak.api import (
     Conn,
     Dest,
-    Env,
+    Var,
     NamedConn,
     Secret,
-    SecretOrEnvSpec,
+    SecretOrVarSpec,
     Src,
 )
 
@@ -43,8 +43,8 @@ from tabsdatak.conn.databricks.error import DatabricksErrorCode
 # --- Type aliases ----------------------------------------------------
 
 
-HostUrlSpec: TypeAlias = SecretOrEnvSpec
-DatabricksTokenSpec: TypeAlias = SecretOrEnvSpec
+HostUrlSpec: TypeAlias = SecretOrVarSpec
+DatabricksTokenSpec: TypeAlias = SecretOrVarSpec
 CredentialsSpec: TypeAlias = DatabricksTokenSpec
 
 
@@ -52,7 +52,7 @@ IdentifierSpec: TypeAlias = Union[
     Annotated[
         Secret, _api.SecretValueConstraints(pattern=_validation.IDENTIFIER_PATTERN)
     ],
-    Annotated[Env, _api.EnvValueConstraints(pattern=_validation.IDENTIFIER_PATTERN)],
+    Annotated[Var, _api.VarValueConstraints(pattern=_validation.IDENTIFIER_PATTERN)],
 ]
 
 WarehouseSpec: TypeAlias = Union[
@@ -60,7 +60,7 @@ WarehouseSpec: TypeAlias = Union[
         Secret, _api.SecretValueConstraints(pattern=_validation.WAREHOUSE_NAME_PATTERN)
     ],
     Annotated[
-        Env, _api.EnvValueConstraints(pattern=_validation.WAREHOUSE_NAME_PATTERN)
+        Var, _api.VarValueConstraints(pattern=_validation.WAREHOUSE_NAME_PATTERN)
     ],
 ]
 
@@ -68,7 +68,7 @@ WarehouseIdSpec: TypeAlias = Union[
     Annotated[
         Secret, _api.SecretValueConstraints(pattern=_validation.WAREHOUSE_ID_PATTERN)
     ],
-    Annotated[Env, _api.EnvValueConstraints(pattern=_validation.WAREHOUSE_ID_PATTERN)],
+    Annotated[Var, _api.VarValueConstraints(pattern=_validation.WAREHOUSE_ID_PATTERN)],
 ]
 
 VolumeSpec: TypeAlias = Union[
@@ -76,7 +76,7 @@ VolumeSpec: TypeAlias = Union[
         Secret, _api.SecretValueConstraints(pattern=_validation.QUALIFIED_NAME_PATTERN)
     ],
     Annotated[
-        Env, _api.EnvValueConstraints(pattern=_validation.QUALIFIED_NAME_PATTERN)
+        Var, _api.VarValueConstraints(pattern=_validation.QUALIFIED_NAME_PATTERN)
     ],
 ]
 QueriesSpec: TypeAlias = list[str]

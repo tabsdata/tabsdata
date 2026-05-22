@@ -300,7 +300,7 @@ def build_kafka_configs(*, conn: KafkaStreamSrcConn) -> dict:
     """Compose the ``confluent_kafka.Consumer`` config dict from
     the connector's :class:`KafkaStreamSrcConn`.
 
-    Resolves ``Env`` / ``Secret`` references on ``servers`` and
+    Resolves ``Var`` / ``Secret`` references on ``servers`` and
     ``group_id``, resolves ``Secret`` SASL credentials, and forces
     ``auto.offset.reset=earliest`` + ``enable.auto.commit=False``
     (the plugin commits explicitly after each rollover)."""

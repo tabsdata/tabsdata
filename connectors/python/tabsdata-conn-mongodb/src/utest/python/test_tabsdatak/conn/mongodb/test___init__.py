@@ -1,7 +1,7 @@
 
 import pytest
 
-from tabsdatak.api import Env, NamedConn, Secret
+from tabsdatak.api import Var, NamedConn, Secret
 from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn.mongodb import MongoDBDestConn, MongoDBDest
@@ -103,17 +103,17 @@ def test_mongodb_conn_accepts_secret_uri():
 
 def test_mongodb_conn_accepts_env_uri():
     conn = MongoDBDestConn(
-        uri=Env(s="MONGO_URI"),
+        uri=Var(s="MONGO_URI"),
         credentials=UserPassword(
             user=Secret.lit("u"),
             password=Secret.lit("p"),
         ),
     )
-    assert isinstance(conn.uri, Env)
+    assert isinstance(conn.uri, Var)
 
 
 def test_mongodb_conn_rejects_bad_uri_scheme():
-    # The ``uri`` field is a Union of ``str | Secret | Env``, each
+    # The ``uri`` field is a Union of ``str | Secret | Var``, each
     # carrying the same regex. A bad value fails *every* branch of the
     # Union -- pydantic surfaces whichever raised; assert on the
     # ``TabsdataException`` umbrella rather than the specific code.

@@ -22,7 +22,7 @@ from pydantic import StringConstraints
 import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
-from tabsdatak.api import Conn, Dest, Env, NamedConn, Secret
+from tabsdatak.api import Conn, Dest, Var, NamedConn, Secret
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation
@@ -40,7 +40,7 @@ CredentialsSpec: TypeAlias = UserPassword
 UriSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_validation.URI_PATTERN)],
     Annotated[Secret, _api.SecretValueConstraints(pattern=_validation.URI_PATTERN)],
-    Annotated[Env, _api.EnvValueConstraints(pattern=_validation.URI_PATTERN)],
+    Annotated[Var, _api.VarValueConstraints(pattern=_validation.URI_PATTERN)],
 ]
 CollectionSpec: TypeAlias = Annotated[str, _validation.COLLECTION_NAME_VALIDATOR]
 ColumnNameSpec: TypeAlias = Annotated[str, _validation.FIELD_NAME_VALIDATOR]

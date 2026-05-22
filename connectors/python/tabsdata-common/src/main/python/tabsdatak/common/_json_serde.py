@@ -1,5 +1,5 @@
 """Visitor helpers for the dict-representation of a `_JsonSerde` subclass,
-plus the secret/env extract/dehydrate/hydrate pipeline built on top.
+plus the secret/var extract/dehydrate/hydrate pipeline built on top.
 
 A serialized `_JsonSerde` subclass is a tree of *envelopes*:
 
@@ -11,14 +11,14 @@ A serialized `_JsonSerde` subclass is a tree of *envelopes*:
 envelope whose `kind` matches; `replace_at` writes a new value at a
 path returned by the walker.
 
-The secret/env helpers (`extract_secrets`, `extract_envs`,
+The secret/var helpers (`extract_secrets`, `extract_vars`,
 `dehydrate_secrets`, `hydrate_secrets`) target a fixed set of envelope
 kinds: a serialized `tabsdatak.api.Secret` is an envelope of kind
 ``secretRef`` (opaque, value resolved later by a secret store) or
-``secretLiteral`` (value carried inline). `Env` works the same way
-with ``envRef`` / ``envLiteral``. Each such envelope lives at some
+``secretLiteral`` (value carried inline). `Var` works the same way
+with ``varRef`` / ``varLiteral``. Each such envelope lives at some
 jsonpath inside the parent tree's ``spec``; the helpers use that
-jsonpath as the stable identity of the secret -- the env-var-style key
+jsonpath as the stable identity of the secret -- the var-style key
 derived from the path is what the resolver matches on, *not* the ref's
 ``_s`` name.
 """
@@ -38,13 +38,13 @@ type Envelope = dict[str, Any]
 
 JsonSerdeData = Union[dict, list]
 
-# Valid env-var-style name (uppercase, no spaces).
-EnvNameSpec: TypeAlias = str
+# Valid var-style name (uppercase, no spaces).
+VarNameSpec: TypeAlias = str
 
 
 @dataclass
 class KeyValue:
-    key: EnvNameSpec
+    key: VarNameSpec
     value: str | None = None
 
 
@@ -130,7 +130,7 @@ def replace_at(
 
 
 # ---------------------------------------------------------------------------
-# Secret / env helpers
+# Secret / var helpers
 # ---------------------------------------------------------------------------
 
 # On purpose, we don't use constants for the __kind__ attributes.
@@ -140,8 +140,8 @@ def replace_at(
 # but it would break things outside.
 _SECRET_REF_KIND = "secretRef"
 _SECRET_LITERAL_KIND = "secretLiteral"
-_ENV_REF_KIND = "envRef"
-_ENV_LITERAL_KIND = "envLiteral"
+_VAR_REF_KIND = "varRef"
+_VAR_LITERAL_KIND = "varLiteral"
 _CONNECTION_REF_KIND = "connectionRef"
 _CONNECTION_NAME_FIELD = "name"
 
@@ -154,14 +154,14 @@ _CONNECTION_NAME_FIELD = "name"
 _SECRET_REF_TYPE = "tabsdatak.api:Secret"
 _SECRET_LITERAL_TYPE = "tabsdatak.api:_LiteralSecret"
 
-# `Secret` stores the ref name / literal value under ``_s``; `Env` uses
-# ``s``. These match the field names on `tabsdatak.api.Secret` and
-# `tabsdatak.api.Env`.
+# `Secret` stores the ref name / literal value under ``_s``; `Var`
+# uses ``s``. These match the field names on `tabsdatak.api.Secret`
+# and `tabsdatak.api.Var`.
 _SECRET_VALUE_FIELD = "_s"
-_ENV_VALUE_FIELD = "s"
+_VAR_VALUE_FIELD = "s"
 
 
-def _to_env_name(path: JsonPath) -> str:
+def _to_key(path: JsonPath) -> str:
     """Convert a jsonpath into an env-var-style suffix.
 
     Strips the leading ``$.spec.`` (if present), maps ``.``, ``[``, ``]``
@@ -181,11 +181,11 @@ def _harvest(
 ) -> list[KeyValue]:
     out: list[KeyValue] = []
     for path, _env in find_by_kind(data, ref_kind):
-        out.append(KeyValue(key=_to_env_name(path)))
+        out.append(KeyValue(key=_to_key(path)))
     for path, env in find_by_kind(data, literal_kind):
         out.append(
             KeyValue(
-                key=_to_env_name(path),
+                key=_to_key(path),
                 value=env["spec"][value_field],
             )
         )
@@ -196,7 +196,7 @@ def extract_secrets(data: JsonSerdeData) -> list[KeyValue]:
     """Harvest every secret envelope under ``data``.
 
     Returns one `KeyValue` per ``secretRef`` / ``secretLiteral`` envelope.
-    The key is the env-var form of the envelope's jsonpath (no prefix).
+    The key is the var form of the envelope's jsonpath (no prefix).
     The value is the literal value for ``secretLiteral`` envelopes and
     ``None`` for ``secretRef`` envelopes (the resolver fills it in).
     """
@@ -208,14 +208,14 @@ def extract_secrets(data: JsonSerdeData) -> list[KeyValue]:
     )
 
 
-def extract_envs(data: JsonSerdeData) -> list[KeyValue]:
-    """Same as `extract_secrets`, but for ``envRef`` / ``envLiteral``
+def extract_vars(data: JsonSerdeData) -> list[KeyValue]:
+    """Same as `extract_secrets`, but for ``varRef`` / ``varLiteral``
     envelopes."""
     return _harvest(
         data,
-        _ENV_REF_KIND,
-        _ENV_LITERAL_KIND,
-        _ENV_VALUE_FIELD,
+        _VAR_REF_KIND,
+        _VAR_LITERAL_KIND,
+        _VAR_VALUE_FIELD,
     )
 
 
@@ -258,7 +258,7 @@ def hydrate_secrets(
         raise CommonErrorCode.COMMON_6.exception(keys=missing_values)
 
     expected = {
-        _to_env_name(path)
+        _to_key(path)
         for path, _ in find_by_kind(dehydrated_data, _SECRET_REF_KIND)
     }
     provided = {kv.key for kv in secrets}
@@ -274,7 +274,7 @@ def hydrate_secrets(
 
     out = deepcopy(dehydrated_data)
     for path, env in find_by_kind(out, _SECRET_REF_KIND):
-        key = _to_env_name(path)
+        key = _to_key(path)
         pattern = env["spec"].get("_value_pattern")
         env["kind"] = _SECRET_LITERAL_KIND
         env["type"] = _SECRET_LITERAL_TYPE
@@ -292,7 +292,7 @@ def hydrate_secrets_as_envs(
     envelope rewritten as a ``secretLiteral``, taking each value from the
     process environment under ``prefix + <inferred key>``.
 
-    The inferred key is the env-var form of the envelope's jsonpath (the
+    The inferred key is the var form of the envelope's jsonpath (the
     same key `extract_secrets` returns). ``prefix`` is prepended verbatim
     when reading ``os.environ``; pass ``""`` to read the bare inferred
     key.
@@ -304,7 +304,7 @@ def hydrate_secrets_as_envs(
     """
     secrets = [
         KeyValue(
-            key=_to_env_name(path), value=os.environ.get(prefix + _to_env_name(path))
+            key=_to_key(path), value=os.environ.get(prefix + _to_key(path))
         )
         for path, _ in find_by_kind(dehydrated_data, _SECRET_REF_KIND)
     ]
@@ -320,17 +320,17 @@ def _resolve_connection_name(name_val: Any) -> str:
     """Resolve a ``connectionRef``'s ``name`` field to a plain string.
 
     ``name`` is either a literal string (``NamedConn(name="x")``) or an
-    `Env` envelope (``NamedConn(name=Env(s="VAR"))``). ``envLiteral``
-    returns its inlined ``s``; ``envRef`` reads ``os.environ[s]``.
+    `Var` envelope (``NamedConn(name=Var(s="VAR"))``). ``varLiteral``
+    returns its inlined ``s``; ``varRef`` reads ``os.environ[s]``.
     """
     if isinstance(name_val, str):
         return name_val
     if isinstance(name_val, dict):
         kind = name_val.get("kind")
-        if kind == _ENV_LITERAL_KIND:
-            return name_val["spec"][_ENV_VALUE_FIELD]
-        if kind == _ENV_REF_KIND:
-            var = name_val["spec"][_ENV_VALUE_FIELD]
+        if kind == _VAR_LITERAL_KIND:
+            return name_val["spec"][_VAR_VALUE_FIELD]
+        if kind == _VAR_REF_KIND:
+            var = name_val["spec"][_VAR_VALUE_FIELD]
             val = os.environ.get(var)
             if val is None:
                 raise CommonErrorCode.COMMON_9.exception(var=var)
@@ -343,8 +343,8 @@ def extract_connection_names(data: JsonSerdeData) -> list[str]:
     by every ``connectionRef`` envelope under ``data``.
 
     A ``connectionRef``'s ``name`` field is either a literal string or an
-    `Env` envelope; ``Env`` names are resolved against ``os.environ`` at
-    call time (same semantics as `Env.value()`).
+    `Var` envelope; ``Var`` names are resolved against ``os.environ`` at
+    call time (same semantics as `Var.value()`).
     """
     seen: dict[str, None] = {}
     for _path, env in find_by_kind(data, _CONNECTION_REF_KIND):

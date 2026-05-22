@@ -25,7 +25,7 @@ CDC (change-data capture):
   :class:`TimestampPosition` -- ``start_from`` primitives for
   resuming binlog replication at a specific position.
 
-URI and credential fields accept ``Env`` / ``Secret`` references.
+URI and credential fields accept ``Var`` / ``Secret`` references.
 Cross-cutting cfg keys live in ``src_cfg`` / ``dest_cfg`` (chunk
 size, read/write engine selection); CDC tuning lives in
 ``MySQLCdcStreamSrc.src_cfg`` (buffer / trigger thresholds, polling
@@ -47,7 +47,7 @@ import tabsdatak._api as _api
 from tabsdatak.api import (
     Conn,
     Dest,
-    Env,
+    Var,
     NamedConn,
     Secret,
     Src,
@@ -145,7 +145,7 @@ UriSpec: TypeAlias = Union[
     Annotated[
         Secret, _api.SecretValueConstraints(pattern=_validation.MSYQL_URI_PATTERN)
     ],
-    Annotated[Env, _api.EnvValueConstraints(pattern=_validation.MSYQL_URI_PATTERN)],
+    Annotated[Var, _api.VarValueConstraints(pattern=_validation.MSYQL_URI_PATTERN)],
 ]
 QueriesSpec: TypeAlias = list[str]
 MySQLTableNameSpec: TypeAlias = Annotated[str, _validation.MYSQL_TABLE_FQN_VALIDATOR]
@@ -193,7 +193,7 @@ class MySQLSrcConn(Conn):
 
     :param uri: SQLAlchemy-style URI
         (``mysql+mysqlconnector://host:port/db``). Accepts a plain
-        str, ``Env``, or ``Secret``.
+        str, ``Var``, or ``Secret``.
     :param credentials: :class:`UserPassword` -- user + password
         spliced into the URI by the engine factory.
     :param entity_whitelist: Optional list of regex patterns; the
@@ -335,7 +335,7 @@ class MySQLCdcStreamSrcConn(Conn):
     permissions, replica id reservation) and a divergent attribute
     set is expected over time.
 
-    :param uri: SQLAlchemy-style URI; accepts ``str`` / ``Env`` /
+    :param uri: SQLAlchemy-style URI; accepts ``str`` / ``Var`` /
         ``Secret`` per :data:`UriSpec`.
     :param credentials: :class:`UserPassword`.
     :param server_id: MySQL replica id for the binlog stream.

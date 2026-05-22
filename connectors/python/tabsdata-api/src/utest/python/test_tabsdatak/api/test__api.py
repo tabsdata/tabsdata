@@ -9,7 +9,7 @@ from pydantic import ValidationError
 # noinspection PyProtectedMember
 from tabsdatak import _api
 from tabsdatak.api import (
-    Env,
+    Var,
     Secret,
     Src,
 )
@@ -94,19 +94,19 @@ def test_dataclass_does_not_wrap_construction_errors_unrelated_to_validation():
 
 @_api.dataclass(ApiErrorCode.API_14)
 class _SrcWithEnvField(Src):
-    e: Env
+    e: Var
 
 
 def test_subclass_instance_at_parent_field_dumps_subclass_envelope():
-    # ``e: Env`` slot, but populated with a ``_LiteralEnv`` (a subclass
-    # built via ``Env.lit``). The wrap-serializer must re-route through
-    # the subclass schema so the dump carries ``kind="envLiteral"`` (not
-    # the parent's ``"envRef"``) and the subclass field ``s`` is present.
-    s = _SrcWithEnvField(e=Env.lit("my-literal"))
+    # ``e: Var`` slot, but populated with a ``_LiteralVar`` (a subclass
+    # built via ``Var.lit``). The wrap-serializer must re-route through
+    # the subclass schema so the dump carries ``kind="varLiteral"`` (not
+    # the parent's ``"varRef"``) and the subclass field ``s`` is present.
+    s = _SrcWithEnvField(e=Var.lit("my-literal"))
     d = s.to_dict()
     inner = d["spec"]["e"]
-    assert inner["kind"] == "envLiteral"
-    assert inner["type"].endswith(":_LiteralEnv")
+    assert inner["kind"] == "varLiteral"
+    assert inner["type"].endswith(":_LiteralVar")
     assert inner["spec"]["s"] == "my-literal"
 
 
@@ -116,10 +116,10 @@ def test_subclass_instance_at_parent_field_dumps_subclass_envelope():
 
 
 def test_already_instance_at_parent_slot_passes_through_unchanged():
-    # Constructing an Env instance, then passing it as the value to a
+    # Constructing an Var instance, then passing it as the value to a
     # nested field, must not rebuild it -- the wrap-validator returns
     # the existing instance.
-    inner = Env(s="HOME")
+    inner = Var(s="HOME")
     s = _SrcWithEnvField(e=inner)
     assert s.e is inner
 
@@ -130,7 +130,7 @@ def test_already_instance_via_pydantic_validator(monkeypatch):
     monkeypatch.setenv(DEBUG_FRAMES_ENV_VAR, "0")
     inner = Secret()
     # Round-trip: building a Src that holds the secret, then accessing
-    # ``.e`` on a nested Env-typed field is the standard path; here we
+    # ``.e`` on a nested Var-typed field is the standard path; here we
     # just confirm the instance path through the schema's wrap-validator.
     @_api.dataclass(ApiErrorCode.API_14)
     class _SrcWithSecretField(Src):
@@ -330,10 +330,10 @@ def test_named_conn_round_trips():
 
 
 def test_env_round_trips():
-    e = m.Env("DB_PASSWORD")
+    e = m.Var("DB_PASSWORD")
     d = e.to_dict()
-    assert d["kind"] == "envRef"
-    assert m.Env.from_dict(d) == e
+    assert d["kind"] == "varRef"
+    assert m.Var.from_dict(d) == e
 
 
 def test_cron_trigger_round_trips():
@@ -373,12 +373,12 @@ def test_kind_mismatch_rejected():
 
 
 def test_subclass_check_rejects_unrelated_class():
-    # Type points at NamedConn, but we're loading via Env.from_dict
+    # Type points at NamedConn, but we're loading via Var.from_dict
     # (different hierarchy). Must reject.
     nc = m.NamedConn(name="prod")
     d = nc.to_dict()
     with pytest.raises(Exception, match="not a subclass"):
-        m.Env.from_dict(d)
+        m.Var.from_dict(d)
 
 
 # ---------------------------------------------------------------------------
@@ -584,21 +584,21 @@ def test_conn_round_trip_for_each_authoring_style(conn_cls):
 
 
 # ---------------------------------------------------------------------------
-# NamedConn name field accepts either a literal string or an Env reference
+# NamedConn name field accepts either a literal string or an Var reference
 # ---------------------------------------------------------------------------
 
 
 def test_named_conn_with_env_name_round_trips():
-    nc = m.NamedConn(name=m.Env("MY_CONN_NAME"))
+    nc = m.NamedConn(name=m.Var("MY_CONN_NAME"))
     back = m.NamedConn.from_json(nc.to_json())
-    assert isinstance(back.name, m.Env)
+    assert isinstance(back.name, m.Var)
     assert back.name.s == "MY_CONN_NAME"
 
 
 def test_named_conn_with_literal_name_stillvalidates():
     # Leading-digit identifier still rejected -- both union arms fail
     # ("1bad" is not a valid named connection identifier and is not a
-    # POSIX env-var name either). The pattern validator on the Env arm
+    # POSIX var name either). The pattern validator on the Var arm
     # surfaces API_6 directly.
     with pytest.raises(ApiException) as excinfo:
         m.NamedConn(name="1bad")
@@ -606,13 +606,13 @@ def test_named_conn_with_literal_name_stillvalidates():
 
 
 # ---------------------------------------------------------------------------
-# Env name validator (POSIX-style env var name)
+# Var name validator (POSIX-style env var name)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("name", ["DB_PASSWORD", "_FOO", "x", "MIXED_case_42"])
 def test_env_accepts_valid_env_var_names(name):
-    e = m.Env(name)
+    e = m.Var(name)
     assert e.s == name
 
 
@@ -625,7 +625,7 @@ def test_env_accepts_valid_env_var_names(name):
 ])
 def test_env_rejects_invalid_env_var_names(name):
     with pytest.raises(ApiException) as excinfo:
-        m.Env(name)
+        m.Var(name)
     assert excinfo.value.api_error is ApiErrorCode.API_7
 
 
@@ -637,9 +637,9 @@ def test_env_rejects_invalid_env_var_names(name):
 
 
 def test_env_polymorphic_dispatch_round_trips():
-    e = m.Env("DB_PASSWORD")
-    back = m.Env.from_json(e.to_json())
-    assert isinstance(back, m.Env)
+    e = m.Var("DB_PASSWORD")
+    back = m.Var.from_json(e.to_json())
+    assert isinstance(back, m.Var)
     assert back.s == "DB_PASSWORD"
 
 
@@ -651,10 +651,10 @@ def test_secret_polymorphic_dispatch_round_trips():
 
 
 def test_env_rejects_unrelated_envelope():
-    # Loading a NamedConn envelope via Env must fail the issubclass check.
+    # Loading a NamedConn envelope via Var must fail the issubclass check.
     nc = m.NamedConn(name="prod_db")
     with pytest.raises(Exception, match="not a subclass"):
-        m.Env.from_json(nc.to_json())
+        m.Var.from_json(nc.to_json())
 
 
 # ---------------------------------------------------------------------------

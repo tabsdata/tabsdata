@@ -26,7 +26,7 @@ from tabsdatak.api import (
     publisher, stream_publisher, transformer, subscriber,  # entry points
     CronTrigger,  # firing rule
     NamedConn,  # ref by name
-    Env, Secret,  # ValRef subclasses
+    Var, Secret,  # ValRef subclasses
     # function-signature slot
 )
 from tabsdatak.tableframe import TableFrame
@@ -103,7 +103,7 @@ Source-only or dest-only connectors omit the missing `Src`/`Dest`.
 ### Canonical user code
 
 ```python
-from tabsdatak.api import publisher, CronTrigger, Env
+from tabsdatak.api import publisher, CronTrigger, Var
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn.mysql import MySQLSrc, MySQLConn
@@ -113,7 +113,7 @@ src = MySQLSrc(
     uri="mysql://db.example.com/app",
     credentials=UserPassword(
       user="etl",
-      password=Env(name="DB_PASSWORD"),
+      password=Var(name="DB_PASSWORD"),
     ),
   ),
   queries=["SELECT id, email FROM users"],
@@ -166,23 +166,23 @@ on both src and dest sides.
 
 ### 3. Type aliases are descriptive
 
-`TableNameSpec`, `TableNamesSpec`, `CronMaskSpec`, `EnvVarNameSpec`,
+`TableNameSpec`, `TableNamesSpec`, `CronMaskSpec`, `VarNameSpec`,
 `UriSpec`, `IdentifierSpec`. The shape *is* the name. When a field
 is typed `UriSpec`, you know it's a string + a URI validator.
 
-### 4. `Env` / `Secret` work everywhere a string does
+### 4. `Var` / `Secret` work everywhere a string does
 
 Anywhere a field accepts `ValOrRefSpec` (the `str | ValRef` union),
 you can pass either:
 
 ```python
 password="literal-pw"                        # literal string
-password=Env(name="DB_PASSWORD")             # env var lookup at runtime
+password=Var(name="DB_PASSWORD")             # env var lookup at runtime
 password=Secret(name="db-creds#PASSWORD")    # K8s secret lookup
 ```
 
 No special syntax per call site. You don't have to know which
-connectors support `Env` / `Secret`; they all do, because the field
+connectors support `Var` / `Secret`; they all do, because the field
 type is the union.
 
 ### 5. Errors are named, not numbered
@@ -637,7 +637,7 @@ Connector packages follow the same convention (``UriSpec``,
 ``MySQLTableNamesSpec``, ...). The single legacy offender
 (``ConnectionNameSpec`` -- a Union despite the ``*Name*`` suffix)
 was removed; ``NamedConn.name`` now spells the union out at the
-use site as ``InlineConnectionNameSpec | Env``.
+use site as ``InlineConnectionNameSpec | Var``.
 
 #### Diagnosis 4: `NamedConn(name="prod_mysql")` vs `"prod_mysql"`  **[Implemented]**
 
@@ -775,7 +775,7 @@ example often omits `credentials` or invents a field like
 ```python
 from tabsdatak.conn.mysql.quickstart import mysql_src
 
-src = mysql_src(uri="mysql://...", user="etl", password=Env(...),
+src = mysql_src(uri="mysql://...", user="etl", password=Var(...),
                 queries=["SELECT 1"])
 ```
 
