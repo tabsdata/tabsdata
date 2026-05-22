@@ -367,7 +367,7 @@ def test_conn_base_resolves_to_concrete_subclass():
 def test_kind_mismatch_rejected():
     nc = m.NamedConn(name="prod")
     d = nc.to_dict()
-    d["kind"] = "sourceDef"  # tampered
+    d["kind"] = m.KIND_SOURCE_DEF  # tampered
     with pytest.raises(Exception, match="kind"):
         m.Conn.from_dict(d)
 
@@ -396,11 +396,11 @@ def test_publisher_round_trips_with_named_conn():
         on_tables=None,
     )
     d = p.to_dict()
-    assert d["kind"] == "publisherDef"
+    assert d["kind"] == _info.KIND_PUBLISHER_DEF
     # Spec carries func as module:qualname.
     assert d["spec"]["func"].endswith(":serde_pub_func")
     # Source is wrapped in its own envelope.
-    assert d["spec"]["source"]["kind"] == "sourceDef"
+    assert d["spec"]["source"]["kind"] == m.KIND_SOURCE_DEF
     assert d["spec"]["source"]["spec"]["name"] == "src1"
 
     p2 = _info.PublisherInfo.from_dict(d)
@@ -442,7 +442,7 @@ def test_transformer_round_trips():
         on_tables=None,
     )
     d = t.to_dict()
-    assert d["kind"] == "transformerDef"
+    assert d["kind"] == _info.KIND_TRANSFORMER_DEF
     t2 = _info.TransformerInfo.from_dict(d)
     assert t2.func is serde_xform_func
     assert t2.input_tables == ["in"]
@@ -456,8 +456,8 @@ def test_subscriber_round_trips():
         trigger_by=None,
     )
     d = s.to_dict()
-    assert d["kind"] == "subscriberDef"
-    assert d["spec"]["destination"]["kind"] == "destinationDef"
+    assert d["kind"] == _info.KIND_SUBSCRIBER_DEF
+    assert d["spec"]["destination"]["kind"] == m.KIND_DESTINATION_DEF
     s2 = _info.SubscriberInfo.from_dict(d)
     assert s2.func is serde_sub_func
     assert s2.destination.name == "dest1"
@@ -472,7 +472,7 @@ def test_migration_chain_walked_to_current_version():
     # 1.0 spec ({"a": 1}) -> walk migrations -> 1.2 spec with all
     # three fields populated.
     envelope = {
-        "kind": "sourceDef",
+        "kind": m.KIND_SOURCE_DEF,
         "apiVersion": "1.0",
         "type": _api.qualified_class(_MigratingSrc),
         "spec": {"a": 1},
@@ -485,7 +485,7 @@ def test_migration_chain_walked_to_current_version():
 
 def test_migration_missing_step_raises():
     envelope = {
-        "kind": "sourceDef",
+        "kind": m.KIND_SOURCE_DEF,
         "apiVersion": "1.0",
         "type": _api.qualified_class(_MissingStepSrc),
         "spec": {"a": 1},
@@ -510,7 +510,7 @@ _CycleSrc.__migrations__ = {
 
 def test_migration_cycle_detected():
     envelope = {
-        "kind": "sourceDef",
+        "kind": m.KIND_SOURCE_DEF,
         "apiVersion": "1.0",
         "type": _api.qualified_class(_CycleSrc),
         "spec": {"a": 1},

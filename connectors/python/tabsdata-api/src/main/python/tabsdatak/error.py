@@ -335,3 +335,18 @@ class ApiErrorCode(ErrorCode):
     # SubscriberInfo dataclass (covers @subscriber factory args + sig)
     API_21 = ErrorDef(ApiInitException, "Cannot create StageManifestEntry")
     # StageManifestEntry
+
+    # --- Bundle production (tabsdatak._bundle) ----------------------
+    # Raised by `build_bundle` and its helpers at registration time
+    # when filesystem or environment preconditions aren't met. These
+    # are runtime conditions (path doesn't exist, version mismatch),
+    # not type / value bugs at object construction.
+    API_22 = ErrorDef(ApiRuntimeException, "project_root is not a directory: {path}")
+    # `build_bundle` -- project_root argument doesn't resolve to a directory.
+    API_23 = ErrorDef(ApiRuntimeException, "local package is not a directory: {path}")
+    # `collect_local_packages` -- entry in `local_packages` isn't a directory.
+    API_24 = ErrorDef(
+        ApiRuntimeException,
+        "python {version} not in allowed set: {allowed}",
+    )
+    # `validate_python_version` -- producer's interpreter not whitelisted.

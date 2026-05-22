@@ -33,6 +33,16 @@ from tabsdatak.spi import TableMode
 _ARBITRARY = ConfigDict(arbitrary_types_allowed=True)
 
 
+# `__kind__` discriminator values for the four flow-descriptor
+# envelopes. Centralised here so consumers (server-side dispatch,
+# tdrunner commands, tests) compare against named constants instead
+# of repeating string literals.
+KIND_PUBLISHER_DEF = "publisherDef"
+KIND_STREAM_PUBLISHER_DEF = "streamPublisherDef"
+KIND_SUBSCRIBER_DEF = "subscriberDef"
+KIND_TRANSFORMER_DEF = "transformerDef"
+
+
 # `func` is a Callable -- on dump it is encoded as `"module:qualname"`,
 # on load resolved via importlib. Reused across PublisherInfo /
 # TransformerInfo / SubscriberInfo. Only top-level (importable)
@@ -48,6 +58,30 @@ def _val_func(v):
     return v
 
 
+def _unwrap_info(func: Callable) -> Callable:
+    """Descend through ``(Publisher|Transformer|Subscriber|StreamPublisher)Info``
+    wrappers to reach the underlying user callable.
+
+    The ``@publisher`` / ``@transformer`` / ``@subscriber`` /
+    ``@stream_publisher`` decorators replace the user's function with
+    an ``*Info`` instance at the module attribute. At decoration time
+    ``info.func`` is the bare function, so signature checks see the
+    function directly. After a JSON round-trip, ``_val_func`` resolves
+    the stored ``"module:qualname"`` via ``importlib`` + ``getattr`` --
+    which returns the wrapper at the module attribute (since that's
+    what the decorator put there), not the bare function inside it.
+    Validators must unwrap before introspecting type hints or
+    signatures, otherwise they'd try to inspect the wrapper's
+    ``__init__`` instead of the user's function.
+    """
+    while isinstance(
+        func,
+        (PublisherInfo, StreamPublisherInfo, TransformerInfo, SubscriberInfo),
+    ):
+        func = func.func
+    return func
+
+
 @_api.dataclass(ApiErrorCode.API_17, config=_ARBITRARY)
 class PublisherInfo(_api.JsonSerde):
     """Descriptor for a ``@publisher``-decorated function.
@@ -58,7 +92,7 @@ class PublisherInfo(_api.JsonSerde):
     the function signature against the source's slot count /
     mode and the declared outputs."""
 
-    __kind__ = "publisherDef"
+    __kind__ = KIND_PUBLISHER_DEF
 
     func: Callable
     source: api.Src
@@ -84,7 +118,7 @@ class PublisherInfo(_api.JsonSerde):
         definition = _connectors.get_src(type(self.source))
         input_mode = "single" if definition.table_mode is TableMode.SINGLE else "array"
         _api.check_callable_signature(
-            self.func,
+            _unwrap_info(self.func),
             input_count=definition.cardinality(self.source),
             input_mode=input_mode,
             output_count=len(self.output_tables),
@@ -101,7 +135,7 @@ class StreamPublisherInfo(_api.JsonSerde):
     batching window, and the output-table contract. Stream-publisher
     inputs are always array-mode (one event fans out across rows)."""
 
-    __kind__ = "streamPublisherDef"
+    __kind__ = KIND_STREAM_PUBLISHER_DEF
 
     func: Callable
     source: api.StreamSrc
@@ -134,7 +168,7 @@ class StreamPublisherInfo(_api.JsonSerde):
         # runtime's long-lived stream-plugin loop, not per-trx, so
         # there is no ``TrxCtx`` at the call boundary.
         _api.check_callable_signature(
-            self.func,
+            _unwrap_info(self.func),
             input_count=definition.cardinality(self.source),
             input_mode="array",
             output_count=len(self.output_tables),
@@ -151,7 +185,7 @@ class TransformerInfo(_api.JsonSerde):
     Inputs are cross-collection ``"collection/table"`` references;
     outputs are local table names."""
 
-    __kind__ = "transformerDef"
+    __kind__ = KIND_TRANSFORMER_DEF
 
     func: Callable
     input_tables: api.CollTableNamesSpec
@@ -176,7 +210,7 @@ class TransformerInfo(_api.JsonSerde):
         # the framework does not yet enforce a mode here. Outputs are
         # always single-mode TableFrame.
         _api.check_callable_signature(
-            self.func,
+            _unwrap_info(self.func),
             input_count=len(self.input_tables),
             input_mode="any",
             output_count=len(self.output_tables),
@@ -194,7 +228,7 @@ class SubscriberInfo(_api.JsonSerde):
     function receives one tableframe per input slot and returns
     nothing -- the destination plugin handles the actual write."""
 
-    __kind__ = "subscriberDef"
+    __kind__ = KIND_SUBSCRIBER_DEF
 
     func: Callable
     destination: api.Dest
@@ -222,7 +256,7 @@ class SubscriberInfo(_api.JsonSerde):
 
         definition = _connectors.get_dest(type(self.destination))
         _api.check_callable_signature(
-            self.func,
+            _unwrap_info(self.func),
             input_count=len(self.input_tables),
             input_mode="any",
             output_count=definition.cardinality(self.destination),

@@ -289,6 +289,16 @@ class NamedConn(Conn):
     name: ConnectionNameSpec
 
 
+# `__kind__` discriminator values for the descriptor-base JsonSerde
+# envelopes. Centralised here so consumers (server-side dispatch,
+# tests, migration tooling) compare against named constants instead
+# of repeating string literals.
+KIND_SOURCE_DEF = "sourceDef"
+KIND_STREAM_SOURCE_DEF = "streamSourceDef"
+KIND_DESTINATION_DEF = "destinationDef"
+KIND_ON_TABLES_ACTION = "onTablesAction"
+
+
 # Src / Dest / OnTablesAction stay as pure abstract classes (no dataclass
 # decoration). Concrete fields live only on implementer subclasses, which
 # carry their impl-layer wiring via a `SrcDef` / `streamSrcDef` / `DestDef`
@@ -307,7 +317,7 @@ class Src[C: Conn](ABC, _api.DescriptorBase):
     is registered via :class:`tabsdatak.spi.SrcDef`.
     """
 
-    __kind__ = "sourceDef"
+    __kind__ = KIND_SOURCE_DEF
     # Abstract field-style annotation: subclasses bind `conn` to their
     # concrete connection union. Advertises the contract; pydantic does
     # not enforce it on the ABC itself -- the SrcDef does.
@@ -325,7 +335,7 @@ class StreamSrc[C: Conn](ABC, _api.DescriptorBase):
     :class:`tabsdatak.spi.StreamSrcDef`.
     """
 
-    __kind__ = "streamSourceDef"
+    __kind__ = KIND_STREAM_SOURCE_DEF
     # Abstract field-style annotation: subclasses bind `conn` to their
     # concrete connection union. Advertises the contract; pydantic does
     # not enforce it on the ABC itself -- the streamSrcDef does.
@@ -342,7 +352,7 @@ class Dest[C: Conn](ABC, _api.DescriptorBase):
     :class:`tabsdatak.spi.DestDef`.
     """
 
-    __kind__ = "destinationDef"
+    __kind__ = KIND_DESTINATION_DEF
     conn: C
 
 
@@ -352,7 +362,7 @@ class OnTablesAction(ABC, _api.JsonSerde):
     notification, write an audit row). The runtime executes the
     action only when the function's primary output succeeds."""
 
-    __kind__ = "onTablesAction"
+    __kind__ = KIND_ON_TABLES_ACTION
 
 
 OnTablesActionSpec: TypeAlias = Annotated[
