@@ -12,10 +12,17 @@ function, and sinks each returned `LazyFrame` to a parquet under
 each declared output table to the parquet it produced (or `null` if
 the function returned `None` for that table — "not modified this run").
 
-Kind-agnostic: handles `publisherDef` and `transformerDef`. The input
-slot mode (SINGLE vs ARRAY) is inferred per-parameter from the user
-function's type annotations, so the command does not need to know
-which kind it is running.
+Kind-agnostic: handles `publisherDef`, `transformerDef`, and
+`subscriberDef`. The input slot mode (SINGLE vs ARRAY) is inferred
+per-parameter from the user function's type annotations.
+
+For publishers and transformers, output table names come from
+`info.output_tables`. Subscribers do not declare output table names
+— the count is `dest.cardinality(info.destination)` and the names
+are synthesised as `["out_0", "out_1", ...]`. Those synthetic names
+are only used internally (parquet filenames + outputs-manifest
+entry keys); the destination plugin downstream consumes the
+parquets positionally.
 """
 
 from __future__ import annotations
@@ -32,10 +39,13 @@ from pydantic import ValidationError
 
 from tabsdatak._api import _is_array_slot, _is_single_slot
 from tabsdatak._bundle import BUNDLE_MANIFEST_FILENAME, BUNDLE_USER_CODE_DIRNAME
+from tabsdatak._connectors import get_dest
 from tabsdatak._info import (
     KIND_PUBLISHER_DEF,
+    KIND_SUBSCRIBER_DEF,
     KIND_TRANSFORMER_DEF,
     PublisherInfo,
+    SubscriberInfo,
     TransformerInfo,
     _unwrap_info,
 )
@@ -61,8 +71,9 @@ from tabsdatak.spi import TableMode
 
 # The Info classes this command knows how to invoke. The runner is
 # agnostic of *what* the function does — it just needs the call shape
-# (input modes, output names) which is shared across both.
-FunctionInfo = PublisherInfo | TransformerInfo
+# (input modes, output names/count) which it derives uniformly from
+# each Info shape via `_output_table_names`.
+FunctionInfo = PublisherInfo | TransformerInfo | SubscriberInfo
 
 # TODO: After all commands are done, version will be unified in a single
 #  source of truth file.
@@ -82,7 +93,7 @@ MAN = (
     "table to <out-dir>/slot<i>/<table_name>.parquet. Writes an "
     "outputs manifest at --outputs-manifest mapping each output "
     "table to its parquet (or null if the function returned None). "
-    "Handles both publisherDef and transformerDef bundles."
+    "Handles publisherDef, transformerDef, and subscriberDef bundles."
 )
 
 # Command-specific exit codes (>= 10 per docs/01-CommandBasics.md).
@@ -91,6 +102,7 @@ EXIT_BAD_BUNDLE = 11
 EXIT_BAD_USER_CODE = 12
 EXIT_BAD_MANIFEST = 14
 EXIT_BAD_INPUT_PARQUET = 15
+EXIT_NO_PLUGIN = 16
 EXIT_USER_FUNCTION_FAILED = 17
 EXIT_OUTPUT_SHAPE_MISMATCH = 18
 EXIT_OUTPUT_WRITE_FAILED = 19
@@ -143,6 +155,7 @@ def _load_request_or_fail(path: Path):
 _INFO_BY_KIND: dict[str, type[FunctionInfo]] = {
     KIND_PUBLISHER_DEF: PublisherInfo,
     KIND_TRANSFORMER_DEF: TransformerInfo,
+    KIND_SUBSCRIBER_DEF: SubscriberInfo,
 }
 
 
@@ -244,6 +257,32 @@ def _infer_table_modes(func: Callable) -> list[TableMode]:
                 f"or TableFramesSpec",
             )
     return modes
+
+
+def _output_table_names(info: FunctionInfo) -> list[str]:
+    """Return the output table names for this function.
+
+    Publishers and transformers declare these explicitly via
+    `info.output_tables`. Subscribers don't declare names — output
+    count is `dest.cardinality(info.destination)` and names are
+    synthesised as `["out_0", "out_1", ...]`. The synthetic names
+    only flow through internal artifacts (parquet filenames and the
+    outputs manifest); the destination plugin downstream consumes
+    the parquet list positionally and doesn't depend on the names.
+
+    Raises:
+        CommandSpecificError(EXIT_NO_PLUGIN): the subscriber's
+            destination class has no registered DestDef (the
+            connector package isn't installed in the runtime).
+    """
+    if isinstance(info, SubscriberInfo):
+        try:
+            dest_def = get_dest(type(info.destination))
+        except KeyError as exc:
+            raise CommandSpecificError(EXIT_NO_PLUGIN, str(exc)) from exc
+        n = dest_def.cardinality(info.destination)
+        return [f"out_{i}" for i in range(n)]
+    return list(info.output_tables)
 
 
 def _scan_parquet_or_fail(path: Path) -> pl.LazyFrame:
@@ -407,7 +446,7 @@ def _run() -> int:
             files = entry.get(MANIFEST_FILES_KEY) or []
             call_args.append(_materialise_input_slot(files, table_mode=table_mode))
 
-        output_tables = list(info.output_tables)
+        output_tables = _output_table_names(info)
         result = _invoke_user_function(func, call_args, output_tables)
 
         out_dir.mkdir(parents=True, exist_ok=True)

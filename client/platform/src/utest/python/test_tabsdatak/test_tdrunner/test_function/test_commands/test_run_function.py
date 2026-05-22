@@ -42,6 +42,7 @@ from tabsdatak._tdrunner.function.commands.run_function import (
     EXIT_BAD_MANIFEST,
     EXIT_BAD_REQUEST,
     EXIT_BAD_USER_CODE,
+    EXIT_NO_PLUGIN,
     EXIT_OUTPUT_SHAPE_MISMATCH,
     EXIT_OUTPUT_WRITE_FAILED,
     EXIT_OUTPUTS_MANIFEST_WRITE_FAILED,
@@ -51,6 +52,7 @@ from tabsdatak._tdrunner.function.commands.run_function import (
     _load_function_def,
     _load_inputs_manifest_or_fail,
     _materialise_input_slot,
+    _output_table_names,
     _scan_parquet_or_fail,
     _sink_outputs,
     main,
@@ -174,6 +176,54 @@ def transformer_bundle(tmp_path, monkeypatch) -> Path:
 
     for name in list(sys.modules):
         if name == "tx_pkg" or name.startswith("tx_pkg."):
+            del sys.modules[name]
+
+
+# A trivial @subscriber-decorated function used to verify kind dispatch
+# routes correctly to SubscriberInfo and that output table names are
+# synthesised (LocalFileDest with one path → cardinality 1 → one
+# synthetic `out_0`).
+_USER_SUBSCRIBER_SRC = """\
+from __future__ import annotations
+
+from tabsdatak.api import TableFrameSpec, subscriber
+from tabsdatak.conn.localfile import LocalFileConn, LocalFileDest
+
+_DEST = LocalFileDest(
+    conn=LocalFileConn(base_path="/tmp/sub_out"),
+    paths=["sink.parquet"],
+)
+
+
+@subscriber(destination=_DEST, input_tables=["c1/t_in"])
+def my_subscriber(in_1: TableFrameSpec) -> tuple[TableFrameSpec]:
+    return (in_1,)
+"""
+
+
+@pytest.fixture
+def subscriber_bundle(tmp_path, monkeypatch) -> Path:
+    """Materialise a tiny @subscriber-decorated function in a fresh
+    project, build + extract its bundle, return the extracted dir."""
+    project = tmp_path / "sub_project"
+    pkg = project / "sub_pkg"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text("")
+    (pkg / "subscriber.py").write_text(_USER_SUBSCRIBER_SRC)
+    monkeypatch.syspath_prepend(str(project))
+    importlib.invalidate_caches()
+
+    from sub_pkg.subscriber import my_subscriber  # noqa: E402
+
+    bundle_path = tmp_path / "sub_bundle.tar.gz"
+    build_bundle(my_subscriber, project, bundle_path)
+    extracted = tmp_path / "sub_extracted"
+    extract_bundle(bundle_path, extracted)
+
+    yield extracted
+
+    for name in list(sys.modules):
+        if name == "sub_pkg" or name.startswith("sub_pkg."):
             del sys.modules[name]
 
 
@@ -385,7 +435,7 @@ def test_load_function_def_unknown_kind_raises_bad_bundle(built_bundle):
     unsupported bundle, not a user-code error."""
     manifest = built_bundle / BUNDLE_MANIFEST_FILENAME
     data = json.loads(manifest.read_text())
-    data["kind"] = "subscriberDef"  # known kind but not handled here
+    data["kind"] = "autoPublisherDef"  # not yet handled here
     manifest.write_text(json.dumps(data))
     with pytest.raises(CommandSpecificError) as ei:
         _load_function_def(built_bundle)
@@ -411,6 +461,53 @@ def test_load_function_def_transformer_kind_loads_transformer_info(
     info = _load_function_def(transformer_bundle)
     assert isinstance(info, TransformerInfo)
     assert list(info.output_tables) == ["t_out"]
+
+
+def test_load_function_def_subscriber_kind_loads_subscriber_info(
+    subscriber_bundle,
+):
+    """A subscriberDef bundle deserialises as SubscriberInfo."""
+    from tabsdatak._info import SubscriberInfo
+
+    info = _load_function_def(subscriber_bundle)
+    assert isinstance(info, SubscriberInfo)
+    # SubscriberInfo has no `output_tables` attribute — names get
+    # synthesised by `_output_table_names`.
+    assert not hasattr(info, "output_tables")
+
+
+# --- unit: _output_table_names -----------------------------------------
+
+
+def test_output_table_names_publisher_returns_declared_names(fixture_publisher):
+    # Publisher fixture declares ["my_table", "untouched"].
+    assert _output_table_names(fixture_publisher) == ["my_table", "untouched"]
+
+
+def test_output_table_names_subscriber_synthesises_indexed_names(
+    subscriber_bundle,
+):
+    """Subscribers don't declare output table names — they're
+    synthesised as `out_0, out_1, ...` from the destination's
+    cardinality. LocalFileDest with one path → cardinality 1."""
+    info = _load_function_def(subscriber_bundle)
+    assert _output_table_names(info) == ["out_0"]
+
+
+def test_output_table_names_subscriber_unregistered_dest_raises_no_plugin(
+    subscriber_bundle, monkeypatch
+):
+    """If the destination class has no registered DestDef, surface
+    EXIT_NO_PLUGIN rather than letting the bare KeyError bubble."""
+    info = _load_function_def(subscriber_bundle)
+
+    def _raise(_cls):
+        raise KeyError("no DestDef registered")
+
+    monkeypatch.setattr(f"{_MOD}.get_dest", _raise)
+    with pytest.raises(CommandSpecificError) as ei:
+        _output_table_names(info)
+    assert ei.value.exit_code == EXIT_NO_PLUGIN
 
 
 # --- unit: _load_inputs_manifest_or_fail --------------------------------
