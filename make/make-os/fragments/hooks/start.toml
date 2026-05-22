@@ -112,10 +112,13 @@ script = [
     end
 
     make_task = get_env CARGO_MAKE_TASK
+    is_permit_task = starts_with ${make_task} "permit"
     if eq ${make_task} "docs"
         noop
     elseif eq ${make_task} "setup"
         noop
+    elseif ${is_permit_task}
+        debug "✈️ Skipping proactive permit; '${make_task}' is itself a permit task."
     elseif ${no_permit}
         warn "✈️ Skipping permit (--no-permit)"
         if is_warn

@@ -39,6 +39,21 @@ script = [
         assert_fail
     end
 
+    pg_script = set "${PROJECT_TABSDATA_ROOT_FOLDER}devutils/automation/tasks/makers/td-scripts/cache_postgresql.py"
+    pg_marker_dir = set "${PROJECT_TABSDATA_ROOT_FOLDER}target"
+    mkdir ${pg_marker_dir}
+    pg_version_marker = set "${pg_marker_dir}/.tdpostgresql.version"
+    exec python ${pg_script} ${pg_version_marker}
+    pg_version_exists = is_file ${pg_version_marker}
+    if ${pg_version_exists}
+        pg_version_raw = readfile ${pg_version_marker}
+        pg_version = trim ${pg_version_raw}
+        pg_version_empty = is_empty ${pg_version}
+        if not ${pg_version_empty}
+            set_env POSTGRESQL_VERSION "=${pg_version}"
+        end
+    end
+
     on_ga = get_env TD_ON_GA
     on_ga_true = eq ${on_ga} "true"
     if ${on_ga_true}
