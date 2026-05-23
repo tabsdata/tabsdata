@@ -7,7 +7,6 @@ import importlib.util
 import json
 import os
 import shlex
-import shutil
 import ssl
 import subprocess
 import sys
@@ -17,6 +16,17 @@ import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
+
+from rich.progress import (
+    BarColumn,
+    DownloadColumn,
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    TimeElapsedColumn,
+    TimeRemainingColumn,
+    TransferSpeedColumn,
+)
 
 
 # noinspection DuplicatedCode
@@ -48,6 +58,7 @@ RELEASE_DOWNLOAD = (
 
 DOWNLOAD_ATTEMPTS = 8
 DOWNLOAD_BACKOFF_SECONDS = 4
+DOWNLOAD_CHUNK_BYTES = 64 * 1024
 CONNECT_TIMEOUT_SECONDS = 32
 REQUEST_TIMEOUT_SECONDS = 128
 
@@ -240,27 +251,48 @@ def fetch_latest_version(report: Report) -> str:
 
     logger.debug(f"Resolving latest PostgreSQL version from: {RELEASES_API}")
     last_error: Exception | None = None
-    for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
-        try:
-            with open_url(
-                RELEASES_API, accept="application/vnd.github+json"
-            ) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-            tag = payload.get("tag_name")
-            if not tag:
-                raise RuntimeError("GitHub API response missing tag_name.")
-            report.version = tag
-            report.version_source = f"theseus-rs latest release ({RELEASES_API})"
-            logger.debug(f"Resolved latest theseus-rs PostgreSQL release: {tag}")
-            return tag
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
-            last_error = error
-            report.warn(
-                f"version resolution attempt {attempt}/{DOWNLOAD_ATTEMPTS} failed:"
-                f" {error}"
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[bold blue]{task.description}"),
+        TimeElapsedColumn(),
+        transient=False,
+    ) as progress:
+        for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
+            description = (
+                f"resolve latest version attempt {attempt}/{DOWNLOAD_ATTEMPTS}"
             )
-            if attempt < DOWNLOAD_ATTEMPTS:
-                time.sleep(DOWNLOAD_BACKOFF_SECONDS * attempt)
+            task = progress.add_task(description, total=None)
+            try:
+                with open_url(
+                    RELEASES_API, accept="application/vnd.github+json"
+                ) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+                tag = payload.get("tag_name")
+                if not tag:
+                    raise RuntimeError("GitHub API response missing tag_name.")
+                progress.update(task, description=f"{description} ok ({tag})")
+                progress.stop_task(task)
+                report.version = tag
+                report.version_source = (
+                    f"theseus-rs latest release ({RELEASES_API})"
+                )
+                logger.debug(f"Resolved latest theseus-rs PostgreSQL release: {tag}")
+                return tag
+            except (
+                urllib.error.URLError,
+                TimeoutError,
+                json.JSONDecodeError,
+                RuntimeError,
+            ) as error:
+                last_error = error
+                progress.update(task, description=f"{description} FAILED")
+                progress.stop_task(task)
+                report.warn(
+                    f"version resolution attempt {attempt}/{DOWNLOAD_ATTEMPTS}"
+                    f" failed: {error}"
+                )
+                if attempt < DOWNLOAD_ATTEMPTS:
+                    time.sleep(DOWNLOAD_BACKOFF_SECONDS * attempt)
     report.warn(
         "equivalent command to reproduce version-resolution failure:"
         f" {equivalent_curl(RELEASES_API, accept='application/vnd.github+json')}"
@@ -277,28 +309,56 @@ def download(url: str, destination: Path, report: Report) -> None:
         temporary.unlink()
 
     last_error: Exception | None = None
-    for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
-        report.download_attempts_used = attempt
-        try:
+    with Progress(
+        TextColumn("[bold blue]{task.description}"),
+        BarColumn(),
+        DownloadColumn(),
+        TransferSpeedColumn(),
+        TimeRemainingColumn(),
+        transient=False,
+    ) as progress:
+        for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
+            report.download_attempts_used = attempt
+            description = f"download attempt {attempt}/{DOWNLOAD_ATTEMPTS}"
+            task = progress.add_task(description, total=None)
             logger.debug(
                 "Downloading PostgreSQL archive"
                 f" (attempt {attempt}/{DOWNLOAD_ATTEMPTS}): {url}"
             )
-            with open_url(url) as response, open(temporary, "wb") as output_file:
-                shutil.copyfileobj(response, output_file)
-            temporary.replace(destination)
-            report.archive_size_bytes = destination.stat().st_size
-            logger.debug(f"PostgreSQL archive cached at: {destination}")
-            return
-        except (urllib.error.URLError, TimeoutError, OSError) as error:
-            last_error = error
-            report.warn(
-                f"download attempt {attempt}/{DOWNLOAD_ATTEMPTS} failed: {error}"
-            )
-            if temporary.exists():
-                temporary.unlink()
-            if attempt < DOWNLOAD_ATTEMPTS:
-                time.sleep(DOWNLOAD_BACKOFF_SECONDS * attempt)
+            try:
+                with open_url(url) as response, open(
+                    temporary, "wb"
+                ) as output_file:
+                    content_length = response.headers.get("Content-Length")
+                    if content_length:
+                        try:
+                            progress.update(task, total=int(content_length))
+                        except ValueError:
+                            pass
+                    while True:
+                        chunk = response.read(DOWNLOAD_CHUNK_BYTES)
+                        if not chunk:
+                            break
+                        output_file.write(chunk)
+                        progress.update(task, advance=len(chunk))
+                progress.update(task, description=f"{description} ok")
+                progress.stop_task(task)
+                temporary.replace(destination)
+                report.archive_size_bytes = destination.stat().st_size
+                logger.debug(f"PostgreSQL archive cached at: {destination}")
+                return
+            except (urllib.error.URLError, TimeoutError, OSError) as error:
+                last_error = error
+                progress.update(task, description=f"{description} FAILED")
+                progress.stop_task(task)
+                report.warn(
+                    f"download attempt {attempt}/{DOWNLOAD_ATTEMPTS} failed:"
+                    f" {error}"
+                )
+                if temporary.exists():
+                    temporary.unlink()
+                if attempt < DOWNLOAD_ATTEMPTS:
+                    time.sleep(DOWNLOAD_BACKOFF_SECONDS * attempt)
 
     report.warn(
         "equivalent command to reproduce download failure:"
