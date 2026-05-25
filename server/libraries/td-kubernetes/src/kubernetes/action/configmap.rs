@@ -64,6 +64,20 @@ pub async fn read_configmap(
     }
 }
 
+pub async fn require_configmap(
+    client: &Client,
+    namespace: &str,
+    name: &str,
+) -> Result<BTreeMap<String, String>> {
+    match read_configmap(client, namespace, name).await? {
+        Some(data) => Ok(data),
+        None => {
+            cerror!("ConfigMap '{name}' not found in namespace '{namespace}'.");
+            abort(GeneralError)
+        }
+    }
+}
+
 pub async fn delete_configmap(client: &Client, namespace: &str, name: &str) -> Result {
     let api: Api<ConfigMap> = Api::namespaced(client.clone(), namespace);
     if let Err(error) = api.delete(name, &DeleteParams::default()).await {

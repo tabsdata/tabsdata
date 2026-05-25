@@ -11,7 +11,7 @@ use crate::client::tdkcontext::TdkContext;
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::gateway::resolver::SystemValues;
 use crate::provider::{
-    ClusterProvider, CloudProvider, ContainerProvider, HostedProvider, Provider, Transaction,
+    CloudProvider, ClusterProvider, ContainerProvider, HostedProvider, Provider, Transaction,
 };
 use crate::system::exit::{Result, abort};
 

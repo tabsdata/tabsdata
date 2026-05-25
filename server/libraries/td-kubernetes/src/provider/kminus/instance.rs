@@ -6,14 +6,15 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use td_common::status::ExitStatus::GeneralError;
+use td_common::status::ExitStatus::{GeneralError, TabsDataError};
 use tracing::info;
-use walkdir::WalkDir;
 
 use crate::cerror;
-use crate::constants::{CONFIGMAP_TABSDATA, FOLDER_PROFILE};
-use crate::instance::manifest::MANIFEST_FILE;
-use crate::instance::profile::encode_path;
+use crate::constants::{
+    CONFIGMAP_TABSDATA_CONFIGS, CONFIGMAP_TABSDATA_GLOBALS, CONFIGMAP_TABSDATA_PODS,
+    FOLDER_PROFILE, KPROFILE_CONFIGS_FOLDER, KPROFILE_GLOBALS_FOLDER, KPROFILE_PODS_FOLDER,
+};
+use crate::instance::profile::RenderedConfigmap;
 use crate::kubernetes::action::{configmap_exists, create_configmap, delete_configmap};
 use crate::kubernetes::client::build_kube_client;
 use crate::kubernetes::kubeconfig::build_kubeconfig;
@@ -37,89 +38,123 @@ impl KminusInstance {
         self.staging_path.join(FOLDER_PROFILE)
     }
 
-    fn read_staged_profile(&self) -> Result<Option<BTreeMap<String, String>>> {
+    fn read_staged_profile(&self) -> Result<Option<StagedConfigmaps>> {
         let staged_folder = self.staging_profile_path();
         if !staged_folder.is_dir() {
             return Ok(None);
         }
-        let mut data = BTreeMap::new();
-        let walker = WalkDir::new(&staged_folder)
-            .follow_links(false)
-            .into_iter()
-            .filter_entry(|entry| {
-                entry.depth() == 0
-                    || entry
-                        .file_name()
-                        .to_str()
-                        .is_none_or(|name| !name.starts_with('.'))
-            });
-        for entry in walker {
-            let entry = match entry {
-                Ok(entry) => entry,
-                Err(error) => {
-                    let path = error
-                        .path()
-                        .map(Path::to_path_buf)
-                        .unwrap_or_else(|| staged_folder.clone());
-                    cerror!("Failed to walk '{}': {error}", path.display());
-                    return abort(GeneralError);
-                }
-            };
-            if !entry.file_type().is_file() {
-                continue;
-            }
-            let path = entry.path();
-            if is_hidden(path) {
-                continue;
-            }
-            let relative = path.strip_prefix(&staged_folder).unwrap_or(path);
-            let relative_string = relative.to_string_lossy().replace('\\', "/");
-            let contents = match fs::read_to_string(path) {
-                Ok(contents) => contents,
-                Err(error) if error.kind() == std::io::ErrorKind::InvalidData => {
-                    info!(
-                        "Skipping non-UTF-8 file in staging folder: '{}'",
-                        path.display()
-                    );
-                    continue;
-                }
-                Err(error) => {
-                    cerror!("Failed to read '{}': {error}", path.display());
-                    return abort(GeneralError);
-                }
-            };
-            let key = if relative_string == MANIFEST_FILE {
-                MANIFEST_FILE.to_owned()
-            } else {
-                encode_path(&relative_string)
-            };
-            data.insert(key, contents);
-        }
-        if data.is_empty() {
+        let globals = read_staged_folder(&staged_folder, KPROFILE_GLOBALS_FOLDER)?;
+        let pods = read_staged_folder(&staged_folder, KPROFILE_PODS_FOLDER)?;
+        let configs = read_staged_folder(&staged_folder, KPROFILE_CONFIGS_FOLDER)?;
+        if globals.is_empty() && pods.is_empty() && configs.is_empty() {
             Ok(None)
         } else {
-            Ok(Some(data))
+            Ok(Some(StagedConfigmaps {
+                globals,
+                pods,
+                configs,
+            }))
         }
     }
 
-    async fn replace_configmap(&self, data: BTreeMap<String, String>) -> Result {
+    async fn replace_configmaps(&self, staged: StagedConfigmaps) -> Result {
         let kminus_config = build_kubeconfig(Some(&self.kubefile), None, None).await?;
         let client = build_kube_client(&kminus_config)?;
         let namespace = &kminus_config.default_namespace;
-        if configmap_exists(&client, namespace, CONFIGMAP_TABSDATA).await? {
-            delete_configmap(&client, namespace, CONFIGMAP_TABSDATA).await?;
+        for (name, data) in [
+            (CONFIGMAP_TABSDATA_GLOBALS, staged.globals),
+            (CONFIGMAP_TABSDATA_PODS, staged.pods),
+            (CONFIGMAP_TABSDATA_CONFIGS, staged.configs),
+        ] {
+            if configmap_exists(&client, namespace, name).await? {
+                delete_configmap(&client, namespace, name).await?;
+            }
+            create_configmap(&client, namespace, name, data).await?;
         }
-        create_configmap(&client, namespace, CONFIGMAP_TABSDATA, data).await
+        Ok(())
     }
+}
+
+struct StagedConfigmaps {
+    globals: RenderedConfigmap,
+    pods: RenderedConfigmap,
+    configs: RenderedConfigmap,
+}
+
+fn read_staged_folder(staged_folder: &Path, folder: &str) -> Result<RenderedConfigmap> {
+    let folder_path = staged_folder.join(folder);
+    let mut data = BTreeMap::new();
+    if !folder_path.is_dir() {
+        return Ok(data);
+    }
+    let read = match fs::read_dir(&folder_path) {
+        Ok(entries) => entries,
+        Err(error) => {
+            cerror!(
+                "Failed to read staged folder '{}': {error}",
+                folder_path.display()
+            );
+            return abort(GeneralError);
+        }
+    };
+    for entry in read {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(error) => {
+                cerror!("Failed to enumerate '{}': {error}", folder_path.display());
+                return abort(GeneralError);
+            }
+        };
+        let path = entry.path();
+        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        if name.starts_with('.') || is_hidden(&path) {
+            continue;
+        }
+        let file_type = match entry.file_type() {
+            Ok(file_type) => file_type,
+            Err(error) => {
+                cerror!("Failed to stat '{}': {error}", path.display());
+                return abort(GeneralError);
+            }
+        };
+        if file_type.is_dir() {
+            cerror!(
+                "Staged profile folder '{folder}' must be flat, but contains the \
+                 subfolder '{name}'."
+            );
+            return abort(TabsDataError);
+        }
+        if !file_type.is_file() {
+            continue;
+        }
+        let contents = match fs::read_to_string(&path) {
+            Ok(contents) => contents,
+            Err(error) if error.kind() == std::io::ErrorKind::InvalidData => {
+                info!(
+                    "Skipping non-UTF-8 file in staging folder: '{}'",
+                    path.display()
+                );
+                continue;
+            }
+            Err(error) => {
+                cerror!("Failed to read '{}': {error}", path.display());
+                return abort(GeneralError);
+            }
+        };
+        data.insert(name.to_owned(), contents);
+    }
+    Ok(data)
 }
 
 impl Instance for KminusInstance {
     async fn start(&self) -> Result {
         let staged = self.read_staged_profile()?;
-        let Some(data) = staged else {
+        let Some(staged) = staged else {
             return Ok(());
         };
-        self.replace_configmap(data).await?;
+        self.replace_configmaps(staged).await?;
         if let Err(error) = fs::remove_dir_all(&self.staging_path) {
             cerror!(
                 "Failed to remove staging folder '{}': {error}",
@@ -144,7 +179,7 @@ fn is_hidden(path: &Path) -> bool {
     use std::os::windows::fs::MetadataExt;
     const FILE_ATTRIBUTE_HIDDEN: u32 = 0x2;
     fs::metadata(path)
-        .map(|m| m.file_attributes() & FILE_ATTRIBUTE_HIDDEN != 0)
+        .map(|metadata| metadata.file_attributes() & FILE_ATTRIBUTE_HIDDEN != 0)
         .unwrap_or(false)
 }
 

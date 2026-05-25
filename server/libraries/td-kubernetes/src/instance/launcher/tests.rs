@@ -2,15 +2,16 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-use std::io::Write;
+use std::collections::BTreeMap;
 
 use chrono::Utc;
-use k8s_openapi::api::batch::v1::{JobCondition, JobStatus};
-use k8s_openapi::api::core::v1::{PodCondition, PodStatus};
+use k8s_openapi::api::batch::v1::{Job, JobCondition, JobStatus};
+use k8s_openapi::api::core::v1::{Pod, PodCondition, PodStatus};
 use kube::runtime::wait::Condition;
-use vfs::{MemoryFS, VfsPath};
 
 use crate::instance::manifest::Manifest;
+use crate::instance::profile::Profile;
+use crate::instance::tier::Tier;
 
 use super::*;
 
@@ -50,27 +51,52 @@ fn pod_with_status(phase: Option<&str>, ready: Option<&str>) -> Pod {
     }
 }
 
-fn profile_with_file(path: &str, contents: &str) -> Profile {
-    let tree: VfsPath = MemoryFS::new().into();
-    let target = tree.join(path).expect("join virtual path");
-    target.parent().create_dir_all().expect("create dirs");
-    let mut writer = target.create_file().expect("create file");
-    writer
-        .write_all(contents.as_bytes())
-        .expect("write contents");
-    drop(writer);
-    let manifest = Manifest::initial_install(
-        "1.0.0",
-        Utc::now(),
-        std::iter::once((path.to_owned(), path.to_owned())),
-    );
-    Profile { tree, manifest }
+fn profile_with_pods(entries: &[(&str, &str)]) -> Profile {
+    let mut pods = BTreeMap::new();
+    for (key, yaml) in entries {
+        pods.insert((*key).to_owned(), (*yaml).to_owned());
+    }
+    Profile {
+        globals: BTreeMap::new(),
+        pods,
+        configs: BTreeMap::new(),
+        manifest: Manifest::initial_install("1.0.0", Utc::now(), std::iter::empty()),
+    }
 }
 
-#[test]
-fn phase_prefixes_match_documented_paths() {
-    assert_eq!(INIT_PHASE_PREFIX, "pods/init/");
-    assert_eq!(REGULAR_PHASE_PREFIX, "pods/regular/");
+fn job_yaml(name: &str, tier: &str) -> String {
+    format!(
+        "apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {name}
+  labels:
+    tabsdata.com/worker-tier: {tier}
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: bootstrap
+          image: busybox
+"
+    )
+}
+
+fn pod_yaml(name: &str, tier: &str) -> String {
+    format!(
+        "apiVersion: v1
+kind: Pod
+metadata:
+  name: {name}
+  labels:
+    tabsdata.com/worker-tier: {tier}
+spec:
+  containers:
+    - name: apiserver
+      image: tabsdata/apiserver
+"
+    )
 }
 
 #[test]
@@ -174,63 +200,92 @@ fn has_failed_phase_false_when_status_missing() {
 }
 
 #[test]
-fn deserialize_init_job_returns_job_for_valid_yaml() {
-    let yaml = "\
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: init-bootstrap
-spec:
-  template:
-    spec:
-      restartPolicy: Never
-      containers:
-        - name: bootstrap
-          image: busybox
-";
-    let job = deserialize_init_job("pods/init/bootstrap.yaml", yaml).expect("valid Job");
-    assert_eq!(job.metadata.name.as_deref(), Some("init-bootstrap"));
+fn pods_for_tier_returns_only_matching_entries() {
+    let profile = profile_with_pods(&[
+        ("inspector.yaml", &job_yaml("inspector", "init")),
+        ("apiserver.yaml", &pod_yaml("apiserver", "regular")),
+    ]);
+    let init: Vec<&str> = pods_for_tier(&profile, Tier::Init)
+        .expect("filter init")
+        .into_iter()
+        .map(|(key, _)| key)
+        .collect();
+    assert_eq!(init, vec!["inspector.yaml"]);
+    let regular: Vec<&str> = pods_for_tier(&profile, Tier::Regular)
+        .expect("filter regular")
+        .into_iter()
+        .map(|(key, _)| key)
+        .collect();
+    assert_eq!(regular, vec!["apiserver.yaml"]);
 }
 
 #[test]
-fn deserialize_init_job_aborts_for_invalid_yaml() {
-    let result = deserialize_init_job("pods/init/broken.yaml", "::: not yaml :::");
-    assert!(result.is_err());
-}
-
-#[test]
-fn deserialize_regular_pod_returns_pod_for_valid_yaml() {
+fn pods_for_tier_rejects_missing_tier_label() {
     let yaml = "\
 apiVersion: v1
 kind: Pod
 metadata:
-  name: apiserver
+  name: nameless
 spec:
   containers:
-    - name: apiserver
-      image: tabsdata/apiserver
+    - name: c
+      image: busybox
 ";
-    let pod = deserialize_regular_pod("pods/regular/apiserver.yaml", yaml).expect("valid Pod");
+    let profile = profile_with_pods(&[("nameless.yaml", yaml)]);
+    let result = pods_for_tier(&profile, Tier::Init);
+    assert!(result.is_err());
+}
+
+#[test]
+fn pods_for_tier_rejects_unknown_tier_label() {
+    let yaml = "\
+apiVersion: v1
+kind: Pod
+metadata:
+  name: garbage
+  labels:
+    tabsdata.com/worker-tier: bogus
+spec:
+  containers:
+    - name: c
+      image: busybox
+";
+    let profile = profile_with_pods(&[("garbage.yaml", yaml)]);
+    let result = pods_for_tier(&profile, Tier::Init);
+    assert!(result.is_err());
+}
+
+#[test]
+fn pods_for_tier_returns_ephemeral_entries() {
+    let profile = profile_with_pods(&[
+        ("inspector.yaml", &job_yaml("inspector", "init")),
+        ("function.yaml", &job_yaml("function", "ephemeral")),
+    ]);
+    let ephemeral: Vec<&str> = pods_for_tier(&profile, Tier::Ephemeral)
+        .expect("filter ephemeral")
+        .into_iter()
+        .map(|(key, _)| key)
+        .collect();
+    assert_eq!(ephemeral, vec!["function.yaml"]);
+}
+
+#[test]
+fn deserialize_pod_entry_parses_valid_job() {
+    let yaml = job_yaml("init-bootstrap", "init");
+    let job: Job = deserialize_pod_entry("bootstrap.yaml", &yaml, Tier::Init).expect("valid Job");
+    assert_eq!(job.metadata.name.as_deref(), Some("init-bootstrap"));
+}
+
+#[test]
+fn deserialize_pod_entry_aborts_for_invalid_yaml() {
+    let result: Result<Job> = deserialize_pod_entry("broken.yaml", "::: not yaml :::", Tier::Init);
+    assert!(result.is_err());
+}
+
+#[test]
+fn deserialize_pod_entry_parses_valid_pod() {
+    let yaml = pod_yaml("apiserver", "regular");
+    let pod: Pod =
+        deserialize_pod_entry("apiserver.yaml", &yaml, Tier::Regular).expect("valid Pod");
     assert_eq!(pod.metadata.name.as_deref(), Some("apiserver"));
-}
-
-#[test]
-fn deserialize_regular_pod_aborts_for_invalid_yaml() {
-    let result = deserialize_regular_pod("pods/regular/broken.yaml", "::: not yaml :::");
-    assert!(result.is_err());
-}
-
-#[test]
-fn read_pod_manifest_returns_file_contents() {
-    let contents = "kind: Job\nmetadata:\n  name: x\n";
-    let profile = profile_with_file("pods/init/x.yaml", contents);
-    let read = read_pod_manifest(&profile, "pods/init/x.yaml").expect("read");
-    assert_eq!(read, contents);
-}
-
-#[test]
-fn read_pod_manifest_aborts_when_path_missing() {
-    let profile = profile_with_file("pods/init/x.yaml", "kind: Job\n");
-    let result = read_pod_manifest(&profile, "pods/init/missing.yaml");
-    assert!(result.is_err());
 }

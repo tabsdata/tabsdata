@@ -2,26 +2,12 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+use std::collections::BTreeMap;
+
+use chrono::Utc;
+
 use super::*;
-
-#[test]
-fn encode_path_replaces_slash_with_double_underscore() {
-    assert_eq!(encode_path("pods/init/foo.yaml"), "pods__init__foo.yaml");
-    assert_eq!(encode_path("config.yaml"), "config.yaml");
-    assert_eq!(encode_path(""), "");
-}
-
-#[test]
-fn encode_path_replaces_backslash_with_double_underscore() {
-    assert_eq!(encode_path("pods\\init\\foo.yaml"), "pods__init__foo.yaml");
-}
-
-#[test]
-fn encode_path_drops_colon_and_question_mark() {
-    assert_eq!(encode_path("C:/pods/foo.yaml"), "C__pods__foo.yaml");
-    assert_eq!(encode_path("pods/?/foo.yaml"), "pods____foo.yaml");
-    assert_eq!(encode_path("a:b?c"), "abc");
-}
+use crate::instance::manifest::Manifest;
 
 #[test]
 fn is_valid_path_component_accepts_alphanumerics_dash_dot() {
@@ -57,20 +43,59 @@ fn is_valid_path_component_rejects_special_characters() {
 }
 
 #[test]
-fn validate_path_components_accepts_full_valid_path() {
-    assert!(validate_path_components("pods/init/foo.yaml").is_ok());
-    assert!(validate_path_components("config.yaml").is_ok());
-    assert!(validate_path_components("pods/regular/application/application.pod.yaml").is_ok());
-}
-
-#[test]
-fn validate_path_components_reports_first_bad_component() {
-    let bad = validate_path_components("pods/init/foo_bar.yaml").expect_err("expected error");
+fn validate_path_component_returns_offender_for_invalid() {
+    let bad = validate_path_component("foo_bar.yaml").expect_err("expected error");
     assert_eq!(bad, "foo_bar.yaml");
 }
 
 #[test]
-fn validate_path_components_rejects_underscore_anywhere_in_path() {
-    assert!(validate_path_components("pods/in_it/foo.yaml").is_err());
-    assert!(validate_path_components("po_ds/init/foo.yaml").is_err());
+fn validate_path_component_accepts_valid_filename() {
+    assert!(validate_path_component("apiserver.yaml").is_ok());
+    assert!(validate_path_component("config.yaml").is_ok());
+}
+
+fn profile_with_configs(configs: &[(&str, &str)]) -> Profile {
+    let mut map = BTreeMap::new();
+    for (key, value) in configs {
+        map.insert((*key).to_owned(), (*value).to_owned());
+    }
+    Profile {
+        globals: BTreeMap::new(),
+        pods: BTreeMap::new(),
+        configs: map,
+        manifest: Manifest::initial_install("1.0.0", Utc::now(), std::iter::empty()),
+    }
+}
+
+#[test]
+fn configs_for_worker_matches_name_up_to_first_dot() {
+    let profile = profile_with_configs(&[
+        ("apiserver.yaml", "a"),
+        ("apiserver.tracing.yaml", "b"),
+        ("worker.yaml", "c"),
+    ]);
+    let mut found: Vec<&str> = configs_for_worker(&profile, "apiserver")
+        .map(|(key, _)| key)
+        .collect();
+    found.sort();
+    assert_eq!(found, vec!["apiserver.tracing.yaml", "apiserver.yaml"]);
+}
+
+#[test]
+fn configs_for_worker_does_not_match_prefix_substring() {
+    let profile = profile_with_configs(&[("apiserver.yaml", "a"), ("apiserver-extra.yaml", "b")]);
+    let found: Vec<&str> = configs_for_worker(&profile, "apiserver")
+        .map(|(key, _)| key)
+        .collect();
+    assert_eq!(found, vec!["apiserver.yaml"]);
+}
+
+#[test]
+fn configs_for_worker_matches_extensionless_only_when_exact() {
+    let profile = profile_with_configs(&[("apiserver", "a"), ("apiserver.yaml", "b")]);
+    let mut found: Vec<&str> = configs_for_worker(&profile, "apiserver")
+        .map(|(key, _)| key)
+        .collect();
+    found.sort();
+    assert_eq!(found, vec!["apiserver", "apiserver.yaml"]);
 }

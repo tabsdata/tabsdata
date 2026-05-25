@@ -162,10 +162,7 @@ impl TdkContext {
             }
             TdkContext::Docker {
                 context, namespace, ..
-            } => format!(
-                "{}:{context}/{namespace}",
-                ClusterProvider::Docker.as_str()
-            ),
+            } => format!("{}:{context}/{namespace}", ClusterProvider::Docker.as_str()),
             TdkContext::Eks { .. } => ClusterProvider::Eks.as_str().to_string(),
             TdkContext::Fargate { .. } => ClusterProvider::Fargate.as_str().to_string(),
         }

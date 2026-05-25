@@ -3,10 +3,10 @@
 //
 
 pub(crate) mod axes;
-pub mod kminus;
 pub mod docker;
 pub mod eks;
 pub mod fargate;
+pub mod kminus;
 
 use std::future::Future;
 

@@ -72,6 +72,7 @@ chrono = { workspace = true, features = ["serde"] }
 clap = { workspace = true, features = ["derive"] }
 clap_derive = { workspace = true }
 colored = { workspace = true }
+const_format = { workspace = true }
 dirs = { workspace = true }
 futures = { workspace = true }
 humantime = { workspace = true }
@@ -99,8 +100,6 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 tempfile = { workspace = true }
 url = { workspace = true }
-vfs = { workspace = true }
-walkdir = { workspace = true }
 
 [dev-dependencies]
 td-kubernetes = { workspace = true, features = ["td-test"] }

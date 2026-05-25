@@ -2,6 +2,8 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+use const_format::concatcp;
+
 pub const ENV_KUBECONFIG: &str = "KUBECONFIG";
 
 pub const FOLDER_CLUSTER: &str = "cluster";
@@ -23,7 +25,21 @@ pub const RESOURCE_KPROFILE: &str = "resources/kprofile";
 
 pub const PROGRAM_TD_RESOURCE: &str = "td_resource";
 
-pub const CONFIGMAP_TABSDATA: &str = "tabsdata";
+pub const KPROFILE_CONFIGMAPS_FOLDER: &str = "configmaps";
+pub const KPROFILE_GLOBALS_FOLDER: &str = "globals";
+pub const KPROFILE_PODS_FOLDER: &str = "pods";
+pub const KPROFILE_CONFIGS_FOLDER: &str = "configs";
+
+pub const TABSDATA_CONFIGMAP_PREFIX: &str = "tabsdata-";
+
+pub const CONFIGMAP_TABSDATA_GLOBALS: &str =
+    concatcp!(TABSDATA_CONFIGMAP_PREFIX, KPROFILE_GLOBALS_FOLDER);
+pub const CONFIGMAP_TABSDATA_PODS: &str =
+    concatcp!(TABSDATA_CONFIGMAP_PREFIX, KPROFILE_PODS_FOLDER);
+pub const CONFIGMAP_TABSDATA_CONFIGS: &str =
+    concatcp!(TABSDATA_CONFIGMAP_PREFIX, KPROFILE_CONFIGS_FOLDER);
+
+pub const TIER_LABEL: &str = "tabsdata.com/worker-tier";
 
 pub const VALUE_Y: &str = "y";
 pub const VALUE_YES: &str = "yes";

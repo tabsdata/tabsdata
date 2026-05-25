@@ -6,7 +6,7 @@ pub mod cluster;
 pub mod instance;
 
 use std::fs;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::PathBuf;
 
 use async_trait::async_trait;
@@ -14,7 +14,7 @@ use indicatif::MultiProgress;
 use td_common::env::TABSDATA_HOME_DIR;
 use td_common::os::name_program;
 use td_common::server::{DEFAULT_INSTANCE, INSTANCES_FOLDER};
-use td_common::status::ExitStatus::{GeneralError, NoAction, TabsDataError};
+use td_common::status::ExitStatus::{GeneralError, NoAction};
 use td_python::python::{get_python_scripts_folder, resolve_python_binary};
 use tracing::info;
 
@@ -24,15 +24,19 @@ use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::validate_instance_name;
 use crate::client::tdkserver::widgets::spinner;
 use crate::constants::{
-    CONFIGMAP_TABSDATA, FOLDER_CLUSTER, FOLDER_DATABASE, FOLDER_PYENV_AG, FOLDER_PYENV_TD,
-    FOLDER_PYTHON, FOLDER_REPOSITORY, FOLDER_RUNTIMES, FOLDER_STORAGE,
+    CONFIGMAP_TABSDATA_CONFIGS, CONFIGMAP_TABSDATA_GLOBALS, CONFIGMAP_TABSDATA_PODS,
+    FOLDER_CLUSTER, FOLDER_DATABASE, FOLDER_PYENV_AG, FOLDER_PYENV_TD, FOLDER_PYTHON,
+    FOLDER_REPOSITORY, FOLDER_RUNTIMES, FOLDER_STORAGE, KPROFILE_CONFIGS_FOLDER,
+    KPROFILE_GLOBALS_FOLDER, KPROFILE_PODS_FOLDER,
 };
 use crate::gateway::resolver::{ConfigurationResolver, SystemValues};
 use crate::instance::launcher::{start_workload, stop_workload};
 use crate::instance::manifest::MANIFEST_FILE;
-use crate::instance::profile::{decode_from_configmap, load_profile, resolve_profile_entry};
+use crate::instance::profile::{
+    parse_from_configmaps, render_for_configmaps, load_profile, resolve_profile_entry,
+};
 use crate::instance::verify_manifest_compatibility;
-use crate::kubernetes::action::configmap::read_configmap;
+use crate::kubernetes::action::require_configmap;
 use crate::kubernetes::client::build_kube_client;
 use crate::kubernetes::kubeconfig::{
     build_kubeconfig, resolve_cluster_name, resolve_cluster_url, resolve_current_context,
@@ -50,7 +54,7 @@ use crate::system::subprocess::apply_detached_flags;
 
 const APISERVER_BINARY: &str = "td_apiserver";
 const PYVENV_BINARY: &str = "td_pyvenv";
-const APISERVER_CONFIG_PATH: &str = "pods/regular/apiserver/apiserver.yaml";
+const APISERVER_CONFIG_KEY: &str = "apiserver.yaml";
 
 pub struct KminusProvider {
     name: String,
@@ -387,8 +391,13 @@ impl Provider for KminusProvider {
     async fn create_database(&self) -> Result {
         let loaded = load_profile(self.cluster_provider(), self.verbose)?;
         let resolver = ConfigurationResolver::new(self.system_values()?);
-        let apiserver_config =
-            resolve_profile_entry(&loaded, &resolver, APISERVER_CONFIG_PATH).await?;
+        let apiserver_config = resolve_profile_entry(
+            &loaded,
+            &resolver,
+            KPROFILE_CONFIGS_FOLDER,
+            APISERVER_CONFIG_KEY,
+        )
+        .await?;
         let mut config_file = match tempfile::Builder::new()
             .prefix("td-apiserver-")
             .suffix(".yaml")
@@ -644,71 +653,27 @@ impl KminusProvider {
             return abort(GeneralError);
         }
         let resolver = ConfigurationResolver::new(self.system_values()?);
-        for decoded_path in loaded.manifest.entries.keys() {
-            let virtual_target = match loaded.tree.join(decoded_path) {
-                Ok(target) => target,
-                Err(error) => {
-                    cerror!("Failed to resolve virtual path '{decoded_path}': {error}");
-                    return abort(GeneralError);
-                }
-            };
-            let mut reader = match virtual_target.open_file() {
-                Ok(reader) => reader,
-                Err(error) => {
-                    cerror!(
-                        "Failed to open virtual file '{}': {error}",
-                        virtual_target.as_str()
-                    );
-                    return abort(GeneralError);
-                }
-            };
-            let mut content = String::new();
-            if let Err(error) = reader.read_to_string(&mut content) {
+        let encoded = render_for_configmaps(&loaded, &resolver).await?;
+        for (folder, data) in [
+            (KPROFILE_GLOBALS_FOLDER, encoded.globals),
+            (KPROFILE_PODS_FOLDER, encoded.pods),
+            (KPROFILE_CONFIGS_FOLDER, encoded.configs),
+        ] {
+            let folder_path = staging_profile.join(folder);
+            if let Err(error) = fs::create_dir_all(&folder_path) {
                 cerror!(
-                    "Failed to read virtual file '{}' as UTF-8: {error}",
-                    virtual_target.as_str()
+                    "Failed to create staging folder '{}': {error}",
+                    folder_path.display()
                 );
                 return abort(GeneralError);
             }
-            let resolved = match resolver.resolve_sys(&content).await {
-                Ok(resolved) => resolved,
-                Err(error) => {
-                    cerror!(
-                        "Failed to resolve placeholders in '{}': {error}",
-                        virtual_target.as_str()
-                    );
-                    return abort(TabsDataError);
+            for (key, value) in data {
+                let file_path = folder_path.join(&key);
+                if let Err(error) = fs::write(&file_path, value.as_bytes()) {
+                    cerror!("Failed to write '{}': {error}", file_path.display());
+                    return abort(GeneralError);
                 }
-            };
-            let disk_path = staging_profile.join(decoded_path);
-            if let Some(parent) = disk_path.parent()
-                && let Err(error) = fs::create_dir_all(parent)
-            {
-                cerror!(
-                    "Failed to create staging directory '{}': {error}",
-                    parent.display()
-                );
-                return abort(GeneralError);
             }
-            if let Err(error) = fs::write(&disk_path, resolved.as_bytes()) {
-                cerror!("Failed to write '{}': {error}", disk_path.display());
-                return abort(GeneralError);
-            }
-        }
-        let manifest_yaml = match serde_yaml::to_string(&loaded.manifest) {
-            Ok(yaml) => yaml,
-            Err(error) => {
-                cerror!("Failed to serialize the profile manifest: {error}");
-                return abort(GeneralError);
-            }
-        };
-        let manifest_path = staging_profile.join(MANIFEST_FILE);
-        if let Err(error) = fs::write(&manifest_path, manifest_yaml) {
-            cerror!(
-                "Failed to write manifest '{}': {error}",
-                manifest_path.display()
-            );
-            return abort(GeneralError);
         }
         Ok(())
     }
@@ -717,18 +682,11 @@ impl KminusProvider {
         self.instance.start().await?;
         let config = self.kube_config().await?;
         let client = build_kube_client(&config)?;
-        let data =
-            match read_configmap(&client, &config.default_namespace, CONFIGMAP_TABSDATA).await? {
-                Some(data) => data,
-                None => {
-                    cerror!(
-                        "ConfigMap '{CONFIGMAP_TABSDATA}' not found in namespace '{}'.",
-                        config.default_namespace,
-                    );
-                    return abort(GeneralError);
-                }
-            };
-        let profile = decode_from_configmap(&data)?;
+        let namespace = &config.default_namespace;
+        let globals = require_configmap(&client, namespace, CONFIGMAP_TABSDATA_GLOBALS).await?;
+        let pods = require_configmap(&client, namespace, CONFIGMAP_TABSDATA_PODS).await?;
+        let configs = require_configmap(&client, namespace, CONFIGMAP_TABSDATA_CONFIGS).await?;
+        let profile = parse_from_configmaps(&globals, &pods, &configs)?;
         start_workload(self, &profile, multi).await
     }
 

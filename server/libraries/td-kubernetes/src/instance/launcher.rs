@@ -2,28 +2,25 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-use std::io::Read;
-
 use indicatif::MultiProgress;
 use k8s_openapi::api::batch::v1::Job;
 use k8s_openapi::api::core::v1::Pod;
 use kube::Api;
 use kube::api::{DeleteParams, ListParams, PostParams, PropagationPolicy};
 use kube::runtime::wait::{Condition, await_condition};
+use serde::de::DeserializeOwned;
 use td_common::status::ExitStatus::{GeneralError, TabsDataError};
 
 use crate::cerror;
 use crate::client::tdkserver::widgets::{phase_spinner_in, spinner};
+use crate::constants::TIER_LABEL;
 use crate::instance::profile::Profile;
+use crate::instance::tier::Tier;
 use crate::kubernetes::client::build_kube_client;
 use crate::pod::ValidationError;
 use crate::provider::Provider;
 use crate::system::exit::{Result, abort};
 
-const POD_MANIFEST_SUFFIX: &str = ".pod.yaml";
-
-const INIT_PHASE_PREFIX: &str = "pods/init/";
-const REGULAR_PHASE_PREFIX: &str = "pods/regular/";
 const JOB_CONDITION_COMPLETE: &str = "Complete";
 const JOB_CONDITION_FAILED: &str = "Failed";
 const JOB_CONDITION_STATUS_TRUE: &str = "True";
@@ -60,40 +57,36 @@ pub async fn apply_init_phase(
     multi: &MultiProgress,
 ) -> Result<Vec<String>> {
     let config = provider.kube_config().await?;
-    let provider = provider.cluster_provider();
+    let cluster_provider = provider.cluster_provider();
     let client = build_kube_client(&config)?;
     let api: Api<Job> = Api::namespaced(client, &config.default_namespace);
     let mut prepared: Vec<(String, Job)> = Vec::new();
-    for path in profile.manifest.entries.keys() {
-        if !path.starts_with(INIT_PHASE_PREFIX) || !is_pod_manifest(path) {
-            continue;
-        }
-        let yaml = read_pod_manifest(profile, path)?;
-        let mut job = deserialize_init_job(path, &yaml)?;
-        provider.enrich_init_job(&mut job)?;
-        report_validation(path, provider.validate_init_job(&job))?;
-        prepared.push((path.clone(), job));
+    for (key, yaml) in pods_for_tier(profile, Tier::Init)? {
+        let mut job = deserialize_pod_entry::<Job>(key, yaml, Tier::Init)?;
+        cluster_provider.enrich_init_job(&mut job)?;
+        report_validation(key, cluster_provider.validate_init_job(&job))?;
+        prepared.push((key.to_owned(), job));
     }
     let phase = phase_spinner_in(multi, &format!("Applying {} init job(s)", prepared.len()));
     let mut applied: Vec<String> = Vec::new();
-    for (path, job) in prepared {
-        let bar = phase.add_resource(&path);
+    for (key, job) in prepared {
+        let bar = phase.add_resource(&key);
         let created = match api.create(&PostParams::default(), &job).await {
             Ok(created) => {
-                bar.finish_with_message(format!("{path} (applied)"));
+                bar.finish_with_message(format!("{key} (applied)"));
                 created
             }
             Err(error) => {
-                bar.finish_with_message(format!("{path} (failed)"));
+                bar.finish_with_message(format!("{key} (failed)"));
                 cerror!(
-                    "Failed to apply init job from '{path}' to namespace '{}': {error}",
+                    "Failed to apply init job from '{key}' to namespace '{}': {error}",
                     config.default_namespace
                 );
                 return abort(GeneralError);
             }
         };
         let Some(name) = created.metadata.name else {
-            cerror!("Init job from '{path}' was created without a metadata.name.");
+            cerror!("Init job from '{key}' was created without a metadata.name.");
             return abort(GeneralError);
         };
         applied.push(name);
@@ -162,54 +155,64 @@ fn has_failed_condition(job: &Job) -> bool {
     })
 }
 
-fn is_pod_manifest(path: &str) -> bool {
-    path.rsplit('/')
-        .next()
-        .is_some_and(|name| name.ends_with(POD_MANIFEST_SUFFIX))
-}
-
-fn report_validation(path: &str, errors: Vec<ValidationError>) -> Result {
+fn report_validation(key: &str, errors: Vec<ValidationError>) -> Result {
     if errors.is_empty() {
         return Ok(());
     }
-    cerror!("Init pod manifest at '{path}' failed provider validation:");
+    cerror!("Pod manifest 'pods/{key}' failed provider validation:");
     for error in &errors {
         cerror!("  - {}: {}", error.path, error.message);
     }
     abort(TabsDataError)
 }
 
-fn read_pod_manifest(profile: &Profile, path: &str) -> Result<String> {
-    let target = match profile.tree.join(path) {
-        Ok(target) => target,
-        Err(error) => {
-            cerror!("Failed to resolve virtual path '{path}': {error}");
-            return abort(GeneralError);
+fn pods_for_tier(profile: &Profile, tier: Tier) -> Result<Vec<(&str, &str)>> {
+    let mut matched = Vec::new();
+    for (key, yaml) in &profile.pods {
+        let value: serde_yaml::Value = match serde_yaml::from_str(yaml) {
+            Ok(value) => value,
+            Err(error) => {
+                cerror!("Failed to parse pod manifest 'pods/{key}' as YAML: {error}");
+                return abort(TabsDataError);
+            }
+        };
+        let label_value = value
+            .get("metadata")
+            .and_then(|metadata| metadata.get("labels"))
+            .and_then(|labels| labels.get(TIER_LABEL))
+            .and_then(|value| value.as_str());
+        let Some(label_value) = label_value else {
+            cerror!(
+                "Pod manifest 'pods/{key}' is missing the required label \
+                 '{TIER_LABEL}'."
+            );
+            return abort(TabsDataError);
+        };
+        let entry_tier = match Tier::from_label(label_value) {
+            Some(tier) => tier,
+            None => {
+                cerror!(
+                    "Pod manifest 'pods/{key}' has unknown tier label \
+                     '{TIER_LABEL}: {label_value}'."
+                );
+                return abort(TabsDataError);
+            }
+        };
+        if entry_tier == tier {
+            matched.push((key.as_str(), yaml.as_str()));
         }
-    };
-    let mut reader = match target.open_file() {
-        Ok(reader) => reader,
-        Err(error) => {
-            cerror!("Failed to open virtual file '{}': {error}", target.as_str());
-            return abort(GeneralError);
-        }
-    };
-    let mut yaml = String::new();
-    if let Err(error) = reader.read_to_string(&mut yaml) {
-        cerror!(
-            "Failed to read virtual file '{}' as UTF-8: {error}",
-            target.as_str()
-        );
-        return abort(GeneralError);
     }
-    Ok(yaml)
+    Ok(matched)
 }
 
-fn deserialize_init_job(path: &str, yaml: &str) -> Result<Job> {
+fn deserialize_pod_entry<T: DeserializeOwned>(key: &str, yaml: &str, tier: Tier) -> Result<T> {
     match serde_yaml::from_str(yaml) {
-        Ok(job) => Ok(job),
+        Ok(value) => Ok(value),
         Err(error) => {
-            cerror!("Failed to deserialize init pod manifest at '{path}' as Job: {error}");
+            cerror!(
+                "Failed to deserialize pod manifest 'pods/{key}' as the {tier} tier's \
+                 expected kind: {error}"
+            );
             abort(TabsDataError)
         }
     }
@@ -221,47 +224,43 @@ pub async fn apply_regular_phase(
     multi: &MultiProgress,
 ) -> Result<Vec<String>> {
     let config = provider.kube_config().await?;
-    let provider = provider.cluster_provider();
+    let provider_kind = provider.cluster_provider();
     let client = build_kube_client(&config)?;
     let api: Api<Pod> = Api::namespaced(client, &config.default_namespace);
     let mut prepared: Vec<(String, Pod)> = Vec::new();
-    for path in profile.manifest.entries.keys() {
-        if !path.starts_with(REGULAR_PHASE_PREFIX) || !is_pod_manifest(path) {
-            continue;
-        }
-        let yaml = read_pod_manifest(profile, path)?;
-        let mut pod = deserialize_regular_pod(path, &yaml)?;
-        provider.enrich_regular_pod(&mut pod)?;
-        report_validation(path, provider.validate_regular_pod(&pod))?;
-        prepared.push((path.clone(), pod));
+    for (key, yaml) in pods_for_tier(profile, Tier::Regular)? {
+        let mut pod = deserialize_pod_entry::<Pod>(key, yaml, Tier::Regular)?;
+        provider_kind.enrich_regular_pod(&mut pod)?;
+        report_validation(key, provider_kind.validate_regular_pod(&pod))?;
+        prepared.push((key.to_owned(), pod));
     }
     let phase = phase_spinner_in(
         multi,
         &format!("Applying {} regular pod(s)", prepared.len()),
     );
-    let creates = prepared.into_iter().map(|(path, pod)| {
+    let creates = prepared.into_iter().map(|(key, pod)| {
         let api = api.clone();
         let namespace = config.default_namespace.clone();
-        let bar = phase.add_resource(&path);
+        let bar = phase.add_resource(&key);
         async move {
             let created = match api.create(&PostParams::default(), &pod).await {
                 Ok(created) => created,
                 Err(error) => {
-                    bar.finish_with_message(format!("{path} (failed)"));
+                    bar.finish_with_message(format!("{key} (failed)"));
                     cerror!(
-                        "Failed to apply regular pod from '{path}' to namespace '{namespace}': {error}"
+                        "Failed to apply regular pod from '{key}' to namespace '{namespace}': {error}"
                     );
                     return abort::<String>(GeneralError);
                 }
             };
             match created.metadata.name {
                 Some(name) => {
-                    bar.finish_with_message(format!("{path} (applied)"));
+                    bar.finish_with_message(format!("{key} (applied)"));
                     Ok(name)
                 }
                 None => {
-                    bar.finish_with_message(format!("{path} (no name)"));
-                    cerror!("Regular pod from '{path}' was created without a metadata.name.");
+                    bar.finish_with_message(format!("{key} (no name)"));
+                    cerror!("Regular pod from '{key}' was created without a metadata.name.");
                     abort::<String>(GeneralError)
                 }
             }
@@ -311,16 +310,6 @@ pub async fn wait_regular_phase(
     drop(phase);
     result?;
     Ok(())
-}
-
-fn deserialize_regular_pod(path: &str, yaml: &str) -> Result<Pod> {
-    match serde_yaml::from_str(yaml) {
-        Ok(pod) => Ok(pod),
-        Err(error) => {
-            cerror!("Failed to deserialize regular pod manifest at '{path}' as Pod: {error}");
-            abort(TabsDataError)
-        }
-    }
 }
 
 fn is_pod_settled() -> impl Condition<Pod> {

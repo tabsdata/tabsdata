@@ -206,10 +206,7 @@ fn display_name_for_kminus_falls_back_when_path_has_no_filename() {
 #[test]
 fn to_args_for_docker_preserves_cluster_arguments() {
     let (cluster, instance) = sample_docker().to_args();
-    assert!(matches!(
-        cluster.provider,
-        Some(ClusterProvider::Docker)
-    ));
+    assert!(matches!(cluster.provider, Some(ClusterProvider::Docker)));
     assert_eq!(cluster.context.as_deref(), Some("dev"));
     assert_eq!(
         cluster.kubeconfig,
