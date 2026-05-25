@@ -18,12 +18,12 @@ pytestmark = pytest.mark.druid
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("value", ["events", "metrics_v1", "a" * 128])
+@pytest.mark.parametrize("value", ["events", "metrics_v1", pytest.param("a" * 128, id="a128")])
 def test_validate_datasource_accepts_valid(value):
     assert _validation._validate_datasource(value) == value
 
 
-@pytest.mark.parametrize("value", ["", "a" * 129])
+@pytest.mark.parametrize("value", ["", pytest.param("a" * 129, id="a129")])
 def test_validate_datasource_rejects_bad_length(value):
     with pytest.raises(ConnInitException) as ei:
         _validation._validate_datasource(value)

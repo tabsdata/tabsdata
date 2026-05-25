@@ -41,7 +41,7 @@ def test_validate_database_name_rejects_forbidden_char(value):
     assert ei.value.api_error is MongodbErrorCode.MONGODB_9
 
 
-@pytest.mark.parametrize("value", ["users", "users.events", "a" * 235])
+@pytest.mark.parametrize("value", ["users", "users.events", pytest.param("a" * 235, id="a35")])
 def test_validate_collection_name_accepts_valid(value):
     assert _validation._validate_collection_name(value) == value
 

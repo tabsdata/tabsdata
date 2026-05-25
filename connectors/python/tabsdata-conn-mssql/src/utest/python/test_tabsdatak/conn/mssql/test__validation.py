@@ -28,7 +28,7 @@ pytestmark = pytest.mark.mssql
         "TrustServerCertificate=yes",
         "DRIVER=ODBC Driver 17 for SQL Server;SERVER=host;Database=db",
         "Server=host;Database=db;",
-        "Driver=ODBC Driver 18 for SQL Server;Server=host\\instance;Database=db",
+        pytest.param("Driver=ODBC Driver 18 for SQL Server;Server=host\\instance;Database=db", id="Driver"),
     ],
 )
 def test_mssql_uri_pattern_accepts_valid(value):

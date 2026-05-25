@@ -80,7 +80,7 @@ def test_qualified_name_pattern_rejects_invalid(value):
     [
         "MY_WAREHOUSE",
         "abc",
-        "a" * 100,
+        pytest.param("a" * 100, id="100as"),
     ],
 )
 def test_warehouse_name_pattern_accepts_valid(value):
@@ -91,7 +91,7 @@ def test_warehouse_name_pattern_accepts_valid(value):
     "value",
     [
         "",
-        "a" * 101,
+        pytest.param("a" * 101, id="101as"),
         " leading",
         "trailing ",
         "with\x00null",

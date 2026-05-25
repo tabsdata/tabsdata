@@ -16,7 +16,7 @@ def test_validate_api_name_accepts_valid(value):
     assert _validation._validate_api_name(value) == value
 
 
-@pytest.mark.parametrize("value", ["", "a" * 81])
+@pytest.mark.parametrize("value", ["", pytest.param("a" * 81, id="a81")])
 def test_validate_api_name_rejects_bad_length(value):
     with pytest.raises(ConnInitException) as ei:
         _validation._validate_api_name(value)
