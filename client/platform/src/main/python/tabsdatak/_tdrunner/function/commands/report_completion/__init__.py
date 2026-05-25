@@ -59,6 +59,7 @@ from tabsdatak._tdrunner.function._lib.response import (
     write_response,
 )
 from tabsdatak._tdrunner.function.commands import tabsdata_command
+from tabsdatak._logging import setup_logging
 
 VERSION = "0.1.0"
 INFO = "report-completion — submit the function-run response to the API server"
@@ -192,6 +193,7 @@ def _post(url: str, token: str, body: bytes) -> None:
 
 def _run() -> int:
     args = _build_parser().parse_args()
+    setup_logging(args.log_config)
     url = resolve_value(args.url)
     token = resolve_value(args.token)
     request_path = Path(args.request)

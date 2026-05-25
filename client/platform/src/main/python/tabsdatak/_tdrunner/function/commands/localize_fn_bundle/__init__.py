@@ -40,6 +40,7 @@ from tabsdatak._tdrunner.function._lib.transporter_request import (
     write_transporter_request,
 )
 from tabsdatak._tdrunner.function.commands import tabsdata_command
+from tabsdatak._logging import setup_logging
 
 VERSION = "0.1.0"
 INFO = (
@@ -126,6 +127,7 @@ def _extract(archive: Path, dest_dir: Path) -> None:
 
 def _run() -> int:
     args = _build_parser().parse_args()
+    setup_logging(args.log_config)
     request_path = Path(args.request)
     dest_dir = Path(args.bundle_dir)
     scratch_dir = Path(args.scratch_dir)

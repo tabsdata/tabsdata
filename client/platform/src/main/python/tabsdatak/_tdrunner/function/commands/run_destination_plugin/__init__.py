@@ -44,6 +44,7 @@ from tabsdatak._tdrunner.function._lib.request import (
     load_request,
 )
 from tabsdatak._tdrunner.function.commands import tabsdata_command
+from tabsdatak._logging import setup_logging
 from tabsdatak.api import ContextKeySpec, ContextValueSpec
 from tabsdatak.spi import DestContext, ParquetFile
 
@@ -295,6 +296,7 @@ def _invoke_write_out(plugin, ctx: DestContext, dest, tables) -> None:
 
 def _run() -> int:
     args = _build_parser().parse_args()
+    setup_logging(args.log_config)
     request_path = Path(args.request)
     bundle_dir = Path(args.bundle_dir)
     outputs_manifest_path = Path(args.outputs_manifest)

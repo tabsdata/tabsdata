@@ -23,6 +23,7 @@ from tabsdatak._tdrunner.function._lib.cli import (
 from tabsdatak._tdrunner.function._lib.errors import CommandSpecificError
 from tabsdatak._tdrunner.function._lib.liveness import install_liveness_handler
 from tabsdatak._tdrunner.function.commands import tabsdata_command
+from tabsdatak._logging import setup_logging
 
 VERSION = "0.1.0"
 INFO = (
@@ -59,6 +60,7 @@ def _build_parser():
 
 def _run() -> int:
     args = _build_parser().parse_args()
+    setup_logging(args.log_config)
     url = resolve_value(args.url)
     token = resolve_value(args.token)
     out_path = Path(args.out)

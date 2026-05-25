@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 from setuptools import find_namespace_packages, setup
 
@@ -68,6 +69,20 @@ def build(setup_file: str) -> None:
 
     datafiles = create_empty_datafiles()
     ensure_egg_folder()
+
+    python_source_root = Path("src") / "main" / "python"
+
+    def collect_yaml_files(namespace: str) -> list[str]:
+        namespace_root = python_source_root / namespace
+        if not namespace_root.is_dir():
+            return []
+        return [
+            str(path.relative_to(namespace_root))
+            for path in namespace_root.rglob("*.yaml")
+        ]
+
+    yaml_files_tabsdata = collect_yaml_files(descriptor.namespace("tabsdata"))
+    yaml_files_tabsdatak = collect_yaml_files(descriptor.namespace("tabsdatak"))
 
     # noinspection PyBroadException
     try:
@@ -138,6 +153,7 @@ def build(setup_file: str) -> None:
                         "manifest",
                         "*",
                     ),
+                    *yaml_files_tabsdata,
                 ],
                 descriptor.namespace("tabsdatak"): [
                     "py.typed",
@@ -146,6 +162,7 @@ def build(setup_file: str) -> None:
                         "manifest",
                         "*",
                     ),
+                    *yaml_files_tabsdatak,
                 ],
             },
             data_files=datafiles,

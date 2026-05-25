@@ -48,6 +48,7 @@ from tabsdatak._tdrunner.function._lib.transporter_request import (
     write_transporter_request,
 )
 from tabsdatak._tdrunner.function.commands import tabsdata_command
+from tabsdatak._logging import setup_logging
 
 VERSION = "0.1.0"
 INFO = (
@@ -159,6 +160,7 @@ def _build_state_manifest_entries(request: Request, state_dir: Path) -> list[dic
 
 def _run() -> int:
     args = _build_parser().parse_args()
+    setup_logging(args.log_config)
     request_path = Path(args.request)
     in_dir = Path(args.in_dir)
     state_dir = Path(args.state_dir)

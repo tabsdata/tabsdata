@@ -9,6 +9,8 @@ use td_process::launcher::hooks;
 use tracing::info;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+const LOG_CONFIG_LONG: &str = "--log-config";
+const LOG_CONFIG_SHORT: &str = "-c";
 
 #[attach(signal = "td_apiserver")]
 fn main() {
@@ -19,11 +21,31 @@ fn main() {
         process::exit(0);
     }
 
-    logging::start();
+    match log_config_arg() {
+        Some(path) => logging::start_with_config_file(&path),
+        None => logging::start(),
+    }
 
     let arguments: Vec<String> = env::args().collect();
     let command = arguments.join(" ");
     info!("Running apiserver with command: \n{}", command);
 
     td_apiserver::run();
+}
+
+fn log_config_arg() -> Option<String> {
+    let args: Vec<String> = env::args().collect();
+    let mut iter = args.iter().skip(1);
+    while let Some(arg) = iter.next() {
+        if arg == LOG_CONFIG_LONG || arg == LOG_CONFIG_SHORT {
+            return iter.next().cloned();
+        }
+        if let Some(value) = arg.strip_prefix(&format!("{LOG_CONFIG_LONG}=")) {
+            return Some(value.to_owned());
+        }
+        if let Some(value) = arg.strip_prefix(&format!("{LOG_CONFIG_SHORT}=")) {
+            return Some(value.to_owned());
+        }
+    }
+    None
 }

@@ -44,6 +44,7 @@ from tabsdatak._tdrunner.function._lib.transporter_request import (
     write_transporter_request,
 )
 from tabsdatak._tdrunner.function.commands import tabsdata_command
+from tabsdatak._logging import setup_logging
 
 VERSION = "0.1.0"
 INFO = (
@@ -93,6 +94,7 @@ def _build_parser():
 
 def _run() -> int:
     args = _build_parser().parse_args()
+    setup_logging(args.log_config)
     request_path = Path(args.request)
     outputs_manifest_path = Path(args.outputs_manifest)
     out_path = Path(args.out)

@@ -67,6 +67,7 @@ from tabsdatak._tdrunner.function._lib.request import (
     load_request,
 )
 from tabsdatak._tdrunner.function.commands import tabsdata_command
+from tabsdatak._logging import setup_logging
 from tabsdatak.spi import TableMode
 
 # The Info classes this command knows how to invoke. The runner is
@@ -417,6 +418,7 @@ def _sink_outputs(
 
 def _run() -> int:
     args = _build_parser().parse_args()
+    setup_logging(args.log_config)
     request_path = Path(args.request)
     bundle_dir = Path(args.bundle_dir)
     inputs_manifest_path = Path(args.inputs_manifest)

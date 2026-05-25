@@ -65,6 +65,7 @@ from tabsdatak._tdrunner.function._lib.system_columns import (
     stamp_system_columns,
 )
 from tabsdatak._tdrunner.function.commands import tabsdata_command
+from tabsdatak._logging import setup_logging
 
 # TODO: After all commands are done, version will be unified in a single
 #  source of truth file.
@@ -188,6 +189,7 @@ def _stamp_file(
 
 def _run() -> int:
     args = _build_parser().parse_args()
+    setup_logging(args.log_config)
     request_path = Path(args.request)
     inputs_manifest = Path(args.inputs_manifest)
     enriched_dir = Path(args.enriched_dir)

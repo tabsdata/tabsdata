@@ -37,6 +37,7 @@ from tabsdatak._tdrunner.function._lib.request import (
     load_request,
 )
 from tabsdatak._tdrunner.function.commands import tabsdata_command
+from tabsdatak._logging import setup_logging
 from tabsdatak.api import ContextKeySpec, ContextValueSpec
 from tabsdatak.spi import SrcPluginCtx
 
@@ -372,6 +373,7 @@ def _write_inputs_manifest(
 
 def _run() -> int:
     args = _build_parser().parse_args()
+    setup_logging(args.log_config)
     request_path = Path(args.request)
     bundle_dir = Path(args.bundle_dir)
     out_dir = Path(args.out_dir)

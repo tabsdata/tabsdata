@@ -73,7 +73,8 @@ pub const DEFAULT_LOG_LEVEL: Level = Level::DEBUG;
 
 pub const WORK_ENV: &str = "TD_URI_WORK";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum LogFormat {
     #[default]
     Full,
@@ -81,6 +82,7 @@ pub enum LogFormat {
     CompactColored,
     CompactSpinner,
     CompactColoredSpinner,
+    Cri,
 }
 
 impl LogFormat {
@@ -97,6 +99,30 @@ impl LogFormat {
             self,
             LogFormat::CompactSpinner | LogFormat::CompactColoredSpinner
         )
+    }
+}
+
+struct CriFormat;
+
+impl<S, N> FormatEvent<S, N> for CriFormat
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+    N: for<'a> FormatFields<'a> + 'static,
+{
+    fn format_event(
+        &self,
+        context: &FmtContext<'_, S, N>,
+        mut writer: Writer<'_>,
+        event: &Event<'_>,
+    ) -> std::fmt::Result {
+        let timestamp = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.9fZ");
+        let stream = match *event.metadata().level() {
+            Level::ERROR | Level::WARN => "stderr",
+            _ => "stdout",
+        };
+        write!(writer, "{timestamp} {stream} F ")?;
+        context.format_fields(writer.by_ref(), event)?;
+        writeln!(writer)
     }
 }
 
@@ -158,17 +184,23 @@ fn build_base_layer<S, W>(
     log_with_ansi: bool,
     base_filter: EnvFilter,
     format: LogFormat,
+    without_time: bool,
 ) -> BoxedLayer<S>
 where
     S: Subscriber + for<'a> LookupSpan<'a>,
     W: for<'a> MakeWriter<'a> + Send + Sync + 'static,
 {
     match format.formatter() {
-        LogFormat::Full => tracing_subscriber::fmt::layer()
-            .with_ansi(log_with_ansi)
-            .with_writer(writer)
-            .with_filter(base_filter)
-            .boxed(),
+        LogFormat::Full => {
+            let layer = tracing_subscriber::fmt::layer()
+                .with_ansi(log_with_ansi)
+                .with_writer(writer);
+            if without_time {
+                layer.without_time().with_filter(base_filter).boxed()
+            } else {
+                layer.with_filter(base_filter).boxed()
+            }
+        }
         LogFormat::Compact => tracing_subscriber::fmt::layer()
             .event_format(CompactFormat)
             .with_ansi(log_with_ansi)
@@ -178,6 +210,12 @@ where
         LogFormat::CompactColored => tracing_subscriber::fmt::layer()
             .event_format(CompactColoredFormat)
             .with_ansi(true)
+            .with_writer(writer)
+            .with_filter(base_filter)
+            .boxed(),
+        LogFormat::Cri => tracing_subscriber::fmt::layer()
+            .event_format(CriFormat)
+            .with_ansi(false)
             .with_writer(writer)
             .with_filter(base_filter)
             .boxed(),
@@ -191,15 +229,22 @@ fn build_sink_layer<S>(
     writer: BoxMakeWriter,
     log_with_ansi: bool,
     format: LogFormat,
+    without_time: bool,
 ) -> BoxedLayer<S>
 where
     S: Subscriber + for<'a> LookupSpan<'a>,
 {
     match format.formatter() {
-        LogFormat::Full => tracing_subscriber::fmt::layer()
-            .with_ansi(log_with_ansi)
-            .with_writer(writer)
-            .boxed(),
+        LogFormat::Full => {
+            let layer = tracing_subscriber::fmt::layer()
+                .with_ansi(log_with_ansi)
+                .with_writer(writer);
+            if without_time {
+                layer.without_time().boxed()
+            } else {
+                layer.boxed()
+            }
+        }
         LogFormat::Compact => tracing_subscriber::fmt::layer()
             .event_format(CompactFormat)
             .with_ansi(log_with_ansi)
@@ -208,6 +253,11 @@ where
         LogFormat::CompactColored => tracing_subscriber::fmt::layer()
             .event_format(CompactColoredFormat)
             .with_ansi(true)
+            .with_writer(writer)
+            .boxed(),
+        LogFormat::Cri => tracing_subscriber::fmt::layer()
+            .event_format(CriFormat)
+            .with_ansi(false)
             .with_writer(writer)
             .boxed(),
         LogFormat::CompactSpinner | LogFormat::CompactColoredSpinner => {
@@ -280,6 +330,7 @@ fn init<W: for<'a> MakeWriter<'a> + Send + Sync + 'static>(
     log_dir: Option<PathBuf>,
     profile: Option<LogProfile>,
     format: LogFormat,
+    without_time: bool,
 ) -> LoggerGuard {
     let log_with_ansi = MANAGER.get(LOG_WITH_ANSI).as_deref() == Some(TRUE);
 
@@ -297,7 +348,13 @@ fn init<W: for<'a> MakeWriter<'a> + Send + Sync + 'static>(
     } else {
         BoxMakeWriter::new(writer)
     };
-    let base_layer = build_base_layer(base_writer, log_with_ansi, base_filter, format);
+    let base_layer = build_base_layer(
+        base_writer,
+        log_with_ansi,
+        base_filter,
+        format,
+        without_time,
+    );
 
     let (filter, sinks) = match profile {
         Some(profile) => (build_profile_filter(&profile), profile.sinks.clone()),
@@ -328,7 +385,7 @@ fn init<W: for<'a> MakeWriter<'a> + Send + Sync + 'static>(
             },
         };
         let filter = build_sink_filter(&sink.directives);
-        let layer = build_sink_layer(writer, log_with_ansi, format);
+        let layer = build_sink_layer(writer, log_with_ansi, format, without_time);
         sink_layers.push(SinkLayer { layer, filter });
     }
     let tabsdata_layers = MultiWriterLayer::new(base_layer, sink_layers);
@@ -380,6 +437,54 @@ pub fn start() {
     start_with(LoggingOptions::default());
 }
 
+pub fn start_with_config_file(config_path: &str) {
+    BOOTSTRAP_NOTICE_ENABLED.get_or_init(|| true);
+
+    let path = PathBuf::from(config_path);
+    let log_config = match load_from_path(&path) {
+        Some(cfg) => Some(cfg),
+        None => {
+            bootstrap_notice(format!(
+                "Failed to load log config from '{}'; falling back to defaults.",
+                path.display()
+            ));
+            None
+        }
+    };
+
+    let active_profile_name = determine_profile_name(None, log_config.as_ref());
+    let active_profile = log_config
+        .as_ref()
+        .and_then(|cfg| cfg.profiles.get(&active_profile_name).cloned());
+    let log_dir = resolve_log_directory(PathBuf::from(CURRENT_DIR));
+    let writer = select_primary_writer(active_profile.as_ref(), log_dir.as_deref());
+
+    let effective_level = active_profile
+        .as_ref()
+        .and_then(|profile| Level::from_str(&profile.level).ok())
+        .unwrap_or(DEFAULT_LOG_LEVEL);
+
+    let effective_format = active_profile
+        .as_ref()
+        .and_then(|profile| profile.format)
+        .unwrap_or_default();
+
+    LOGGER_PROVIDER.get_or_init(|| {
+        init(
+            effective_level,
+            writer,
+            vec![],
+            false,
+            log_dir.clone(),
+            active_profile.clone(),
+            effective_format,
+            true,
+        )
+    });
+
+    std::panic::set_hook(Box::new(tracing_panic::panic_hook));
+}
+
 // Start the logger with the given options.
 // Option 'with_tokio_console' enabled requires also binaries with feature 'tokio_console'.
 // Otherwise, flag will be ignored defaulting to standard behavior.
@@ -409,6 +514,11 @@ pub fn start_with(options: LoggingOptions) {
             .unwrap_or(DEFAULT_LOG_LEVEL)
     });
 
+    let effective_format = active_profile
+        .as_ref()
+        .and_then(|profile| profile.format)
+        .unwrap_or(format);
+
     LOGGER_PROVIDER.get_or_init(|| {
         init(
             effective_level,
@@ -417,7 +527,8 @@ pub fn start_with(options: LoggingOptions) {
             with_tokio_console,
             log_dir.clone(),
             active_profile.clone(),
-            format,
+            effective_format,
+            false,
         )
     });
 
@@ -958,6 +1069,8 @@ pub struct LogProfile {
     pub sinks: Vec<LogSinkConfig>,
     #[serde(default)]
     pub output: LogProfileOutput,
+    #[serde(default)]
+    pub format: Option<LogFormat>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -969,7 +1082,11 @@ pub struct LogConfig {
 pub fn load() -> Option<LogConfig> {
     let config_folder = obtain_config_folder()?;
     let config_path = config_folder.join(LOG_CONFIG_FILE);
-    let content = match read_to_string(&config_path) {
+    load_from_path(&config_path)
+}
+
+pub fn load_from_path(config_path: &Path) -> Option<LogConfig> {
+    let content = match read_to_string(config_path) {
         Ok(content) => content,
         Err(err) if err.kind() == ErrorKind::NotFound => {
             return None;
@@ -1227,6 +1344,7 @@ mod tests {
             None,
             None,
             LogFormat::Full,
+            false,
         );
         Mutex::new((sender, receiver, logger_provider))
     });

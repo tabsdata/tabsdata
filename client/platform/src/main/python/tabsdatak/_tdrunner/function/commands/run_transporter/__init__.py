@@ -20,6 +20,7 @@ from tabsdatak._tdrunner.function._lib.transporter_proc import (
     run_transporter,
 )
 from tabsdatak._tdrunner.function.commands import tabsdata_command
+from tabsdatak._logging import setup_logging
 
 VERSION = "0.1.0"
 INFO = "run-transporter — exec td_transporter with the given request YAML"
@@ -59,6 +60,7 @@ def _build_parser():
 
 def _run() -> int:
     args = _build_parser().parse_args()
+    setup_logging(args.log_config)
     request_yaml = Path(args.request)
     report = Path(args.report)
     install_liveness_handler(Path(args.liveness))

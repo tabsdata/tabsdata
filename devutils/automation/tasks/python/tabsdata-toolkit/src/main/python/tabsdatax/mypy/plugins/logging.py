@@ -21,7 +21,7 @@ using glob patterns matched against the checked file path::
 
     [tabsdatax.logging]
     allowlist =
-        **/tabsdatak/_tdrunner/function/_lib/logging.py
+        **/tabsdatak/_logging.py
 
 The allowlist is empty by default so the rule fails loudly on its first real target;
 known offenders should be added deliberately.

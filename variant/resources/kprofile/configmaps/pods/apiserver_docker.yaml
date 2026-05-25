@@ -39,6 +39,8 @@ spec:
       args:
         - --config-file
         - /tabsdata/configmaps/configs/apiserver.yaml
+        - --log-config
+        - /tabsdata/configmaps/configs/apiserver.log.yaml
       ports:
         - name: public-http
           containerPort: 2457

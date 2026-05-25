@@ -137,6 +137,13 @@ def build_parser(
             "liveness to the framework."
         ),
     )
+    parser.add_argument(
+        "--log-config",
+        "-c",
+        default=None,
+        metavar="PATH",
+        help="Path to a logging config YAML. When omitted, the bundled default is used.",
+    )
     return parser
 
 
