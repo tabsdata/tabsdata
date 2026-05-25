@@ -10,6 +10,3 @@ pub fn validate(pod: &Pod) -> Vec<ValidationError> {
     let _ = pod;
     Vec::new()
 }
-
-#[cfg(test)]
-mod tests;

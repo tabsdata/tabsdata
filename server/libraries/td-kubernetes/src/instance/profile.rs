@@ -21,9 +21,9 @@ use crate::constants::{PROGRAM_TD_RESOURCE, RESOURCE_KPROFILE};
 use crate::gateway::resolver::ConfigurationResolver;
 use crate::instance::manifest::{MANIFEST_FILE, Manifest, deserialize_manifest};
 use crate::instance::profile::bundle::{ParsedFileName, parse_filename, pick_winner};
+use crate::provider::ClusterProvider;
 use crate::system::exit::{Result, abort};
 use crate::system::subprocess::apply_detached_flags;
-use crate::topology::Topology;
 
 pub const PATH_SEPARATOR: &str = "__";
 
@@ -91,7 +91,7 @@ struct DiscoveryFile {
     content: Vec<u8>,
 }
 
-pub fn load_profile(topology: &dyn Topology) -> Result<Profile> {
+pub fn load_profile(provider: ClusterProvider) -> Result<Profile> {
     let root = resolve_kprofile_path()?;
     let tabsdata_version = match tabsdata_version() {
         Ok(version) => version,
@@ -100,7 +100,8 @@ pub fn load_profile(topology: &dyn Topology) -> Result<Profile> {
             return abort(TabsDataError);
         }
     };
-    let axes = topology.axes();
+    let axes = provider.axes();
+    let preferred = provider.preferred_values();
     let memory: VfsPath = MemoryFS::new().into();
     let mut entries: Vec<(String, String)> = Vec::new();
     let mut discoveries: Vec<DiscoveryFile> = Vec::new();
@@ -169,7 +170,7 @@ pub fn load_profile(topology: &dyn Topology) -> Result<Profile> {
             .iter()
             .map(|index| discoveries[*index].parsed.clone())
             .collect();
-        let Some(group_winner) = pick_winner(&group_parsed, axes) else {
+        let Some(group_winner) = pick_winner(&group_parsed, axes, preferred) else {
             continue;
         };
         let winner_index = indices[group_winner];

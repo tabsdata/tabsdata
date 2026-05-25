@@ -18,7 +18,7 @@ use crate::cerror;
 use crate::client::tdkcontext::{KubernetesInputs, TdkContext};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::widgets::spinner;
-use crate::constants::{CONFIGMAP_TABSDATA, PROVIDER_KUBERNETES};
+use crate::constants::CONFIGMAP_TABSDATA;
 use crate::gateway::resolver::{ConfigurationResolver, SystemValues};
 use crate::instance::launcher::{start_workload, stop_workload};
 use crate::instance::manifest::MANIFEST_FILE;
@@ -34,9 +34,11 @@ use crate::kubernetes::kubeconfig::{
 };
 use crate::provider::kubernetes::cluster::KubernetesCluster;
 use crate::provider::kubernetes::instance::KubernetesInstance;
-use crate::provider::{Cluster, Instance, Provider, Transaction};
+use crate::provider::{
+    Cluster, ClusterProvider, ContainerProvider, HostedProvider, Instance, LocalProvider, Provider,
+    Transaction,
+};
 use crate::system::exit::{Result, abort};
-use crate::topology::{Topology, topology_for};
 
 pub struct KubernetesProvider {
     kubefile: PathBuf,
@@ -45,7 +47,6 @@ pub struct KubernetesProvider {
     config: Config,
     cluster: KubernetesCluster,
     instance: KubernetesInstance,
-    topology: &'static dyn Topology,
     inputs: KubernetesInputs,
 }
 
@@ -62,11 +63,17 @@ impl KubernetesProvider {
             return abort(GeneralError);
         }
         if instance.name.is_some() {
-            cerror!("Argument --name is not valid for the '{PROVIDER_KUBERNETES}' provider.");
+            cerror!(
+                "Argument --name is not valid for the '{}' provider.",
+                ClusterProvider::Kubernetes.as_str()
+            );
             return abort(GeneralError);
         }
         if instance.path.is_some() {
-            cerror!("Argument --path is not valid for the '{PROVIDER_KUBERNETES}' provider.");
+            cerror!(
+                "Argument --path is not valid for the '{}' provider.",
+                ClusterProvider::Kubernetes.as_str()
+            );
             return abort(GeneralError);
         }
 
@@ -111,8 +118,6 @@ impl KubernetesProvider {
             config.default_namespace = DEFAULT_INSTANCE.to_string();
         }
 
-        let topology = topology_for(crate::provider::ClusterProvider::Kubernetes);
-
         let cluster = KubernetesCluster::new(config.clone());
         let instance = KubernetesInstance::new();
 
@@ -123,7 +128,6 @@ impl KubernetesProvider {
             config,
             cluster,
             instance,
-            topology,
             inputs,
         })
     }
@@ -132,13 +136,15 @@ impl KubernetesProvider {
 #[async_trait]
 impl Provider for KubernetesProvider {
     fn name(&self) -> &'static str {
-        PROVIDER_KUBERNETES
+        ClusterProvider::Kubernetes.as_str()
     }
 
     fn display_name(&self) -> String {
         format!(
-            "{PROVIDER_KUBERNETES}:{}/{}",
-            self.context, self.config.default_namespace
+            "{}:{}/{}",
+            ClusterProvider::Kubernetes.as_str(),
+            self.context,
+            self.config.default_namespace
         )
     }
 
@@ -168,7 +174,7 @@ impl Provider for KubernetesProvider {
 
     fn preview_create_runtime_summary(&self) {
         info!("About to create tabsdata instance:");
-        info!("  - provider.....: {PROVIDER_KUBERNETES}");
+        info!("  - provider.....: {}", ClusterProvider::Kubernetes.as_str());
         info!("  - kubeconfig...: {}", self.kubefile.display());
         info!("  - context......: {}", self.context);
         info!("  - cluster url..: {}", self.config.cluster_url);
@@ -199,7 +205,7 @@ impl Provider for KubernetesProvider {
 
     fn preview_use_runtime_summary(&self) {
         info!("About to use tabsdata instance:");
-        info!("  - provider.....: {PROVIDER_KUBERNETES}");
+        info!("  - provider.....: {}", ClusterProvider::Kubernetes.as_str());
         info!("  - kubeconfig...: {}", self.kubefile.display());
         info!("  - context......: {}", self.context);
         info!("  - cluster url..: {}", self.config.cluster_url);
@@ -229,7 +235,7 @@ impl Provider for KubernetesProvider {
 
     fn preview_start_runtime_summary(&self) {
         info!("About to start tabsdata instance:");
-        info!("  - provider.....: {PROVIDER_KUBERNETES}");
+        info!("  - provider.....: {}", ClusterProvider::Kubernetes.as_str());
         info!("  - kubeconfig...: {}", self.kubefile.display());
         info!("  - context......: {}", self.context);
         info!("  - namespace....: {}", self.config.default_namespace);
@@ -250,7 +256,7 @@ impl Provider for KubernetesProvider {
 
     fn preview_stop_runtime_summary(&self) {
         info!("About to stop tabsdata instance:");
-        info!("  - provider.....: {PROVIDER_KUBERNETES}");
+        info!("  - provider.....: {}", ClusterProvider::Kubernetes.as_str());
         info!("  - kubeconfig...: {}", self.kubefile.display());
         info!("  - context......: {}", self.context);
         info!("  - namespace....: {}", self.config.default_namespace);
@@ -325,8 +331,8 @@ impl Provider for KubernetesProvider {
         result
     }
 
-    fn topology(&self) -> &'static dyn Topology {
-        self.topology
+    fn cluster_provider(&self) -> ClusterProvider {
+        ClusterProvider::Kubernetes
     }
 
     async fn kube_config(&self) -> Result<kube::Config> {
@@ -346,9 +352,15 @@ impl Provider for KubernetesProvider {
     }
 }
 
+impl ContainerProvider for KubernetesProvider {}
+
+impl HostedProvider for KubernetesProvider {}
+
+impl LocalProvider for KubernetesProvider {}
+
 impl KubernetesProvider {
     async fn store_configmap_inner(&self) -> Result {
-        let loaded = load_profile(self.topology)?;
+        let loaded = load_profile(self.cluster_provider())?;
         let resolver = ConfigurationResolver::new(self.system_values()?);
         let configmap_data = encode_for_configmap(&loaded, &resolver).await?;
         let client = build_kube_client(&self.config)?;

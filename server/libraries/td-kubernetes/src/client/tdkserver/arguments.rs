@@ -62,8 +62,10 @@ pub struct ClusterArguments {
         required = false,
         value_enum,
         long_help = "Provider of the cluster: \
-                     'kubernetes' for a standard kubernetes cluster, \
-                     'kminus' for a development kminus cluster. \
+                     'kubernetes' for a local kubernetes cluster, \
+                     'kminus' for a development kminus cluster, \
+                     'eks' for AWS EKS, \
+                     'fargate' for AWS EKS-on-Fargate. \
                      When unspecified, the value from the active context is taken; \
                      when no active context is set, this argument is required."
     )]

@@ -12,7 +12,6 @@ use tracing::info;
 
 use crate::cerror;
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
-use crate::constants::{PROVIDER_KMINUS, PROVIDER_KUBERNETES};
 use crate::provider::ClusterProvider;
 use crate::system::exit::{Result, abort};
 
@@ -38,6 +37,12 @@ pub struct KminusInputs {
     pub path: Option<PathBuf>,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct EksInputs {}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct FargateInputs {}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "provider", rename_all = "lowercase")]
 pub enum TdkContext {
@@ -57,6 +62,14 @@ pub enum TdkContext {
         namespace: String,
         #[serde(default)]
         inputs: KminusInputs,
+    },
+    Eks {
+        #[serde(default)]
+        inputs: EksInputs,
+    },
+    Fargate {
+        #[serde(default)]
+        inputs: FargateInputs,
     },
 }
 
@@ -136,6 +149,8 @@ impl TdkContext {
         match self {
             TdkContext::Kubernetes { .. } => ClusterProvider::Kubernetes,
             TdkContext::Kminus { .. } => ClusterProvider::Kminus,
+            TdkContext::Eks { .. } => ClusterProvider::Eks,
+            TdkContext::Fargate { .. } => ClusterProvider::Fargate,
         }
     }
 
@@ -143,11 +158,16 @@ impl TdkContext {
         match self {
             TdkContext::Kubernetes {
                 context, namespace, ..
-            } => format!("kubernetes:{context}/{namespace}"),
+            } => format!(
+                "{}:{context}/{namespace}",
+                ClusterProvider::Kubernetes.as_str()
+            ),
             TdkContext::Kminus { path, .. } => {
                 let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("?");
-                format!("kminus:{name}")
+                format!("{}:{name}", ClusterProvider::Kminus.as_str())
             }
+            TdkContext::Eks { .. } => ClusterProvider::Eks.as_str().to_string(),
+            TdkContext::Fargate { .. } => ClusterProvider::Fargate.as_str().to_string(),
         }
     }
 
@@ -161,7 +181,7 @@ impl TdkContext {
                 namespace,
                 ..
             } => {
-                info!("  - provider.....: {PROVIDER_KUBERNETES}");
+                info!("  - provider.....: {}", ClusterProvider::Kubernetes.as_str());
                 info!("  - kubeconfig...: {}", kubeconfig.display());
                 info!("  - context......: {context}");
                 info!("  - cluster......: {cluster}");
@@ -179,13 +199,19 @@ impl TdkContext {
                     .file_name()
                     .and_then(|component| component.to_str())
                     .unwrap_or("?");
-                info!("  - provider.....: {PROVIDER_KMINUS}");
+                info!("  - provider.....: {}", ClusterProvider::Kminus.as_str());
                 info!("  - instance name: {name}");
                 info!("  - instance path: {}", path.display());
                 info!("  - kubeconfig...: {}", kubeconfig.display());
                 info!("  - context......: {context}");
                 info!("  - cluster......: {cluster}");
                 info!("  - namespace....: {namespace}");
+            }
+            TdkContext::Eks { .. } => {
+                info!("  - provider.....: {}", ClusterProvider::Eks.as_str());
+            }
+            TdkContext::Fargate { .. } => {
+                info!("  - provider.....: {}", ClusterProvider::Fargate.as_str());
             }
         }
     }
@@ -210,6 +236,14 @@ impl TdkContext {
             TdkContext::Kminus { path, .. } => (
                 ClusterArguments::new(Some(ClusterProvider::Kminus), None, None, false, None),
                 InstanceArguments::new(None, Some(path.clone())),
+            ),
+            TdkContext::Eks { .. } => (
+                ClusterArguments::new(Some(ClusterProvider::Eks), None, None, false, None),
+                InstanceArguments::new(None, None),
+            ),
+            TdkContext::Fargate { .. } => (
+                ClusterArguments::new(Some(ClusterProvider::Fargate), None, None, false, None),
+                InstanceArguments::new(None, None),
             ),
         }
     }

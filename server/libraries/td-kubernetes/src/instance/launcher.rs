@@ -59,8 +59,8 @@ pub async fn apply_init_phase(
     profile: &Profile,
     multi: &MultiProgress,
 ) -> Result<Vec<String>> {
-    let topology = provider.topology();
     let config = provider.kube_config().await?;
+    let provider = provider.cluster_provider();
     let client = build_kube_client(&config)?;
     let api: Api<Job> = Api::namespaced(client, &config.default_namespace);
     let mut prepared: Vec<(String, Job)> = Vec::new();
@@ -70,8 +70,8 @@ pub async fn apply_init_phase(
         }
         let yaml = read_pod_manifest(profile, path)?;
         let mut job = deserialize_init_job(path, &yaml)?;
-        topology.enrich_init_job(&mut job)?;
-        report_validation(path, topology.validate_init_job(&job))?;
+        provider.enrich_init_job(&mut job)?;
+        report_validation(path, provider.validate_init_job(&job))?;
         prepared.push((path.clone(), job));
     }
     let phase = phase_spinner_in(multi, &format!("Applying {} init job(s)", prepared.len()));
@@ -172,7 +172,7 @@ fn report_validation(path: &str, errors: Vec<ValidationError>) -> Result {
     if errors.is_empty() {
         return Ok(());
     }
-    cerror!("Init pod manifest at '{path}' failed topology validation:");
+    cerror!("Init pod manifest at '{path}' failed provider validation:");
     for error in &errors {
         cerror!("  - {}: {}", error.path, error.message);
     }
@@ -220,8 +220,8 @@ pub async fn apply_regular_phase(
     profile: &Profile,
     multi: &MultiProgress,
 ) -> Result<Vec<String>> {
-    let topology = provider.topology();
     let config = provider.kube_config().await?;
+    let provider = provider.cluster_provider();
     let client = build_kube_client(&config)?;
     let api: Api<Pod> = Api::namespaced(client, &config.default_namespace);
     let mut prepared: Vec<(String, Pod)> = Vec::new();
@@ -231,8 +231,8 @@ pub async fn apply_regular_phase(
         }
         let yaml = read_pod_manifest(profile, path)?;
         let mut pod = deserialize_regular_pod(path, &yaml)?;
-        topology.enrich_regular_pod(&mut pod)?;
-        report_validation(path, topology.validate_regular_pod(&pod))?;
+        provider.enrich_regular_pod(&mut pod)?;
+        report_validation(path, provider.validate_regular_pod(&pod))?;
         prepared.push((path.clone(), pod));
     }
     let phase = phase_spinner_in(

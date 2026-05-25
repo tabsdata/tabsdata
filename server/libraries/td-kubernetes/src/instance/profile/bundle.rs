@@ -57,14 +57,17 @@ pub fn parse_filename(filename: &str) -> ParsedFileName {
 #[derive(Clone, Copy, Debug)]
 pub struct Axis {
     pub name: &'static str,
-    pub preferred: &'static str,
     pub known: &'static [&'static str],
 }
 
-pub fn pick_winner(candidates: &[ParsedFileName], axes: &[Axis]) -> Option<usize> {
+pub fn pick_winner(
+    candidates: &[ParsedFileName],
+    axes: &[Axis],
+    preferred: &[&'static str],
+) -> Option<usize> {
     let mut best: Option<(usize, usize)> = None;
     for (index, candidate) in candidates.iter().enumerate() {
-        let Some(specificity) = score_candidate(candidate, axes) else {
+        let Some(specificity) = score_candidate(candidate, axes, preferred) else {
             continue;
         };
         match best {
@@ -75,16 +78,18 @@ pub fn pick_winner(candidates: &[ParsedFileName], axes: &[Axis]) -> Option<usize
     best.map(|(index, _)| index)
 }
 
-fn score_candidate(candidate: &ParsedFileName, axes: &[Axis]) -> Option<usize> {
+fn score_candidate(
+    candidate: &ParsedFileName,
+    axes: &[Axis],
+    preferred: &[&'static str],
+) -> Option<usize> {
     if candidate.tokens.len() > axes.len() {
         return None;
     }
     for (position, token) in candidate.tokens.iter().enumerate() {
-        let axis = &axes[position];
-        if token == axis.preferred {
-            continue;
+        if token != preferred[position] {
+            return None;
         }
-        return None;
     }
     Some(candidate.tokens.len())
 }

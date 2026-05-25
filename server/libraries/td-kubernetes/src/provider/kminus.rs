@@ -25,7 +25,7 @@ use crate::client::tdkserver::common::validate_instance_name;
 use crate::client::tdkserver::widgets::spinner;
 use crate::constants::{
     CONFIGMAP_TABSDATA, FOLDER_CLUSTER, FOLDER_DATABASE, FOLDER_PYENV_AG, FOLDER_PYENV_TD,
-    FOLDER_PYTHON, FOLDER_REPOSITORY, FOLDER_RUNTIMES, FOLDER_STORAGE, PROVIDER_KMINUS,
+    FOLDER_PYTHON, FOLDER_REPOSITORY, FOLDER_RUNTIMES, FOLDER_STORAGE,
 };
 use crate::gateway::resolver::{ConfigurationResolver, SystemValues};
 use crate::instance::launcher::{start_workload, stop_workload};
@@ -40,10 +40,12 @@ use crate::kubernetes::kubeconfig::{
 };
 use crate::provider::kminus::cluster::{InstanceFolderGuard, KminusCluster};
 use crate::provider::kminus::instance::KminusInstance;
-use crate::provider::{Cluster, Instance, Provider, Transaction};
+use crate::provider::{
+    Cluster, ClusterProvider, HostedProvider, Instance, LocalProvider, ProcessProvider, Provider,
+    Transaction,
+};
 use crate::system::exit::{Result, abort};
 use crate::system::subprocess::apply_detached_flags;
-use crate::topology::{Topology, topology_for};
 
 const APISERVER_BINARY: &str = "td_apiserver";
 const PYVENV_BINARY: &str = "td_pyvenv";
@@ -53,7 +55,6 @@ pub struct KminusProvider {
     folder: PathBuf,
     cluster: KminusCluster,
     instance: KminusInstance,
-    topology: &'static dyn Topology,
     inputs: KminusInputs,
 }
 
@@ -65,7 +66,8 @@ impl KminusProvider {
             || cluster.namespace.is_some()
         {
             cerror!(
-                "Arguments --context, --kubeconfig, --current, and --namespace are not valid for the '{PROVIDER_KMINUS}' provider."
+                "Arguments --context, --kubeconfig, --current, and --namespace are not valid for the '{}' provider.",
+                ClusterProvider::Kminus.as_str()
             );
             return abort(GeneralError);
         }
@@ -120,14 +122,12 @@ impl KminusProvider {
         let kminus_cluster = KminusCluster::new(folder.join(FOLDER_CLUSTER));
         let kminus_instance =
             KminusInstance::new(kminus_cluster.kubefile(), kminus_cluster.staging_path());
-        let topology = topology_for(crate::provider::ClusterProvider::Kminus);
 
         Ok(Self {
             name,
             folder,
             cluster: kminus_cluster,
             instance: kminus_instance,
-            topology,
             inputs,
         })
     }
@@ -187,11 +187,11 @@ struct KubeSummary {
 #[async_trait]
 impl Provider for KminusProvider {
     fn name(&self) -> &'static str {
-        PROVIDER_KMINUS
+        ClusterProvider::Kminus.as_str()
     }
 
     fn display_name(&self) -> String {
-        format!("{PROVIDER_KMINUS}:{}", self.name)
+        format!("{}:{}", ClusterProvider::Kminus.as_str(), self.name)
     }
 
     fn to_tdkcontext(&self) -> TdkContext {
@@ -216,7 +216,7 @@ impl Provider for KminusProvider {
 
     fn preview_create_runtime_summary(&self) {
         info!("About to create tabsdata instance:");
-        info!("  - provider.....: {PROVIDER_KMINUS}");
+        info!("  - provider.....: {}", ClusterProvider::Kminus.as_str());
         info!("  - instance name: {}", self.name);
         info!("  - instance path: {}", self.folder.display());
     }
@@ -251,7 +251,7 @@ impl Provider for KminusProvider {
     fn preview_use_runtime_summary(&self) {
         let summary = self.kube_summary();
         info!("About to use tabsdata instance:");
-        info!("  - provider.....: {PROVIDER_KMINUS}");
+        info!("  - provider.....: {}", ClusterProvider::Kminus.as_str());
         info!("  - instance name: {}", self.name);
         info!("  - instance path: {}", self.folder.display());
         info!("  - kubeconfig...: {}", summary.kubefile.display());
@@ -304,7 +304,7 @@ impl Provider for KminusProvider {
     fn preview_start_runtime_summary(&self) {
         let summary = self.kube_summary();
         info!("About to start tabsdata instance:");
-        info!("  - provider.....: {PROVIDER_KMINUS}");
+        info!("  - provider.....: {}", ClusterProvider::Kminus.as_str());
         info!("  - instance name: {}", self.name);
         info!("  - instance path: {}", self.folder.display());
         info!("  - kubeconfig...: {}", summary.kubefile.display());
@@ -343,7 +343,7 @@ impl Provider for KminusProvider {
     fn preview_stop_runtime_summary(&self) {
         let summary = self.kube_summary();
         info!("About to stop tabsdata instance:");
-        info!("  - provider.....: {PROVIDER_KMINUS}");
+        info!("  - provider.....: {}", ClusterProvider::Kminus.as_str());
         info!("  - instance name: {}", self.name);
         info!("  - instance path: {}", self.folder.display());
         info!("  - kubeconfig...: {}", summary.kubefile.display());
@@ -532,8 +532,8 @@ impl Provider for KminusProvider {
         result
     }
 
-    fn topology(&self) -> &'static dyn Topology {
-        self.topology
+    fn cluster_provider(&self) -> ClusterProvider {
+        ClusterProvider::Kminus
     }
 
     async fn kube_config(&self) -> Result<kube::Config> {
@@ -584,9 +584,15 @@ impl Provider for KminusProvider {
     }
 }
 
+impl ProcessProvider for KminusProvider {}
+
+impl HostedProvider for KminusProvider {}
+
+impl LocalProvider for KminusProvider {}
+
 impl KminusProvider {
     async fn stage_configmap_inner(&self) -> Result {
-        let loaded = load_profile(self.topology)?;
+        let loaded = load_profile(self.cluster_provider())?;
         let staging_profile = self.cluster.staging_profile_path();
         if let Err(error) = fs::create_dir_all(&staging_profile) {
             cerror!(

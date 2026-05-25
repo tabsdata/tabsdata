@@ -2,6 +2,9 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+pub(crate) mod axes;
+pub mod eks;
+pub mod fargate;
 pub mod kminus;
 pub mod kubernetes;
 
@@ -9,6 +12,8 @@ use std::future::Future;
 
 use async_trait::async_trait;
 use clap_derive::ValueEnum;
+use k8s_openapi::api::batch::v1::Job;
+use k8s_openapi::api::core::v1::Pod;
 use kube::Config;
 use td_common::status::ExitStatus::GeneralError;
 
@@ -17,15 +22,115 @@ use crate::client::tdkcontext::TdkContext;
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::constants::KMINUS_MIN_NOFILE;
 use crate::gateway::resolver::SystemValues;
+use crate::instance::profile::bundle::Axis;
+use crate::pod::{ValidationError, container as container_pod, process as process_pod};
+use crate::provider::axes::{Lifecycle, Location, Platform, Workload};
+use crate::provider::eks::EksProvider;
+use crate::provider::fargate::FargateProvider;
 use crate::provider::kminus::KminusProvider;
 use crate::provider::kubernetes::KubernetesProvider;
 use crate::system::exit::{Result, abort};
-use crate::topology::Topology;
+
+pub const PROVIDER_AXIS_NAME: &str = "provider";
+
+const PROVIDER_VALUES: &[&str] = &[
+    ClusterProvider::Kubernetes.as_str(),
+    ClusterProvider::Kminus.as_str(),
+    ClusterProvider::Eks.as_str(),
+    ClusterProvider::Fargate.as_str(),
+];
+
+const PREFERRED_KUBERNETES: &[&str] = &[ClusterProvider::Kubernetes.as_str()];
+const PREFERRED_KMINUS: &[&str] = &[ClusterProvider::Kminus.as_str()];
+const PREFERRED_EKS: &[&str] = &[ClusterProvider::Eks.as_str()];
+const PREFERRED_FARGATE: &[&str] = &[ClusterProvider::Fargate.as_str()];
+
+const AXES: &[Axis] = &[Axis {
+    name: PROVIDER_AXIS_NAME,
+    known: PROVIDER_VALUES,
+}];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum ClusterProvider {
     Kubernetes,
     Kminus,
+    Eks,
+    Fargate,
+}
+
+#[allow(dead_code)]
+impl ClusterProvider {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Kubernetes => "kubernetes",
+            Self::Kminus => "kminus",
+            Self::Eks => "eks",
+            Self::Fargate => "fargate",
+        }
+    }
+
+    pub(crate) fn location(self) -> Location {
+        match self {
+            Self::Kubernetes | Self::Kminus => Location::Local,
+            Self::Eks | Self::Fargate => Location::Cloud,
+        }
+    }
+
+    pub(crate) fn workload(self) -> Workload {
+        match self {
+            Self::Kminus => Workload::Process,
+            Self::Kubernetes | Self::Eks | Self::Fargate => Workload::Container,
+        }
+    }
+
+    pub(crate) fn lifecycle(self) -> Lifecycle {
+        match self {
+            Self::Kubernetes | Self::Kminus | Self::Eks => Lifecycle::Hosted,
+            Self::Fargate => Lifecycle::Serverless,
+        }
+    }
+
+    pub(crate) fn platform(self) -> Platform {
+        match self {
+            Self::Kubernetes | Self::Kminus => Platform::Host,
+            Self::Eks | Self::Fargate => Platform::Aws,
+        }
+    }
+
+    pub fn axes(self) -> &'static [Axis] {
+        AXES
+    }
+
+    pub fn preferred_values(self) -> &'static [&'static str] {
+        match self {
+            Self::Kubernetes => PREFERRED_KUBERNETES,
+            Self::Kminus => PREFERRED_KMINUS,
+            Self::Eks => PREFERRED_EKS,
+            Self::Fargate => PREFERRED_FARGATE,
+        }
+    }
+
+    pub fn validate_regular_pod(self, pod: &Pod) -> Vec<ValidationError> {
+        match self.workload() {
+            Workload::Process => process_pod::validate(pod),
+            Workload::Container => container_pod::validate(pod),
+        }
+    }
+
+    pub fn enrich_regular_pod(self, pod: &mut Pod) -> Result {
+        let _ = pod;
+        Ok(())
+    }
+
+    pub fn validate_init_job(self, job: &Job) -> Vec<ValidationError> {
+        let _ = job;
+        Vec::new()
+    }
+
+    pub fn enrich_init_job(self, job: &mut Job) -> Result {
+        let _ = job;
+        Ok(())
+    }
 }
 
 pub trait Transaction: Send {
@@ -116,11 +221,25 @@ pub trait Provider: Send + Sync {
     async fn start_instance(&self) -> Result;
     async fn stop_instance(&self) -> Result<bool>;
 
-    fn topology(&self) -> &'static dyn Topology;
+    fn cluster_provider(&self) -> ClusterProvider;
     async fn kube_config(&self) -> Result<Config>;
 
     fn system_values(&self) -> Result<SystemValues>;
 }
+
+pub(crate) trait ProcessProvider: Provider {}
+
+pub(crate) trait ContainerProvider: Provider {}
+
+pub(crate) trait HostedProvider: Provider {}
+
+#[allow(dead_code)]
+pub(crate) trait ServerlessProvider: Provider {}
+
+pub(crate) trait LocalProvider: Provider {}
+
+#[allow(dead_code)]
+pub(crate) trait CloudProvider: Provider {}
 
 pub async fn provider_for(
     cluster: ClusterArguments,
@@ -141,6 +260,14 @@ pub async fn provider_for(
         ClusterProvider::Kminus => {
             check_kminus_ulimit()?;
             let provider = KminusProvider::build(cluster, instance)?;
+            Ok(Box::new(provider))
+        }
+        ClusterProvider::Eks => {
+            let provider = EksProvider::build(cluster, instance).await?;
+            Ok(Box::new(provider))
+        }
+        ClusterProvider::Fargate => {
+            let provider = FargateProvider::build(cluster, instance).await?;
             Ok(Box::new(provider))
         }
     }
