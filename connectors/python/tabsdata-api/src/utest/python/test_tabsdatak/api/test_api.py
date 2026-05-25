@@ -1072,13 +1072,13 @@ def test_auto_src_def_rejects_missing_conn_field():
 
 
 def test_env_extends_base_env():
-    # ``BaseVar`` in ``_api`` is the method-host for the public
-    # ``Var`` -- `_name`, `_value`, `_validate`, `value` live there.
-    # Asserting the inheritance keeps the base from being silently
-    # dropped (which would re-introduce method duplication in
-    # ``api.py``).
-    assert issubclass(Var, _api.BaseVar)
-    assert issubclass(_LiteralVar, _api.BaseVar)
+    # ``BaseRef`` in ``_api`` is the shared method-host for the
+    # public ``Var`` (and ``Secret``) -- `_name`, `_value`,
+    # `_validate`, `value` live there. Asserting the inheritance
+    # keeps the base from being silently dropped (which would
+    # re-introduce method duplication in ``api.py``).
+    assert issubclass(Var, _api.BaseRef)
+    assert issubclass(_LiteralVar, _api.BaseRef)
 
 
 def test_var_attributes():
@@ -1306,12 +1306,13 @@ def test_env_pattern_annotation_round_trips_pattern():
 
 
 def test_secret_extends_base_secret():
-    # ``BaseSecret`` in ``_api`` is the method-host for the public
-    # ``Secret`` -- `_name`, `_value`, `_validate`, `value`,
-    # `_secret_key`, and the empty-init guard live there. Asserting
-    # the inheritance keeps the base from being silently dropped.
-    assert issubclass(Secret, _api.BaseSecret)
-    assert issubclass(_LiteralSecret, _api.BaseSecret)
+    # ``BaseRef`` in ``_api`` is the shared method-host for the
+    # public ``Secret`` (and ``Var``) -- `_name`, `_value`,
+    # `_validate`, `value`, the named-ref factory, and the
+    # empty-init guard live there. Asserting the inheritance keeps
+    # the base from being silently dropped.
+    assert issubclass(Secret, _api.BaseRef)
+    assert issubclass(_LiteralSecret, _api.BaseRef)
 
 
 def test_secret_attributes():

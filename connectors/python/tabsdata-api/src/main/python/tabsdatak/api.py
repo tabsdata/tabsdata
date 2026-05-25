@@ -142,7 +142,7 @@ VarNameSpec: TypeAlias = Annotated[str, _api.VAR_NAME_CONSTRAINTS]
 
 
 @_api.dataclass(ApiErrorCode.API_7)
-class Var(_api.BaseVar):
+class Var(_api.BaseRef):
     """Reference to a variable value resolved at flow run time
     via the framework's hydration pipeline.
 
@@ -157,10 +157,15 @@ class Var(_api.BaseVar):
     # ``init=False`` makes ``Var()`` the only valid construction
     # shape at the user-facing ``__init__`` site. Mirrors
     # :class:`Secret`; the runtime guard in
-    # ``BaseVar._enforce_empty_user_init`` enforces the same.
+    # ``BaseRef._enforce_empty_user_init`` enforces the same.
     _s: str = Field(default="<var>", init=False)
     __kind__ = "varRef"
     _value_pattern: str | None = Field(default=None, init=False)
+
+    # Leaf-specific knobs read by ``BaseRef``.
+    _no_resolver_error = ApiErrorCode.API_8
+    _is_ref_root = True
+    _role = "_var_key"
 
     @classmethod
     def lit(cls, value: str) -> "Var":
@@ -168,6 +173,13 @@ class Var(_api.BaseVar):
         hydration lookup. Useful for declarative tests and
         one-shot scripts."""
         return _LiteralVar(_s=value, _value_pattern=cls._value_pattern)
+
+    @classmethod
+    def _var_key(cls, name: str) -> "Var":
+        # Role-specific alias of ``BaseRef._key`` -- kept so
+        # callers that grep for the role-specific name still find
+        # the factory.
+        return cls._key(name)
 
 
 @_api.dataclass(ApiErrorCode.API_9)
@@ -177,6 +189,11 @@ class _LiteralVar(Var):
     _s: str
     _value_pattern: str | None = None
     __kind__ = "varLiteral"
+
+    # The literal subclass takes a value through its ``__init__``;
+    # the empty-init guard / dict-input re-injection on ``BaseRef``
+    # do not apply.
+    _is_ref_root = False
 
     def _name(self) -> str:
         return "<literal>"
@@ -192,7 +209,7 @@ class _LiteralVar(Var):
 
 
 @_api.dataclass(ApiErrorCode.API_10)
-class Secret(_api.BaseSecret):
+class Secret(_api.BaseRef):
     """Reference to a secret value resolved by the runtime's
     secret store (per-flow scope).
 
@@ -207,7 +224,7 @@ class Secret(_api.BaseSecret):
     # shape at the user-facing ``__init__`` site -- IDEs and type
     # checkers surface ``Secret('foo')`` and ``Secret(_s='foo')`` as
     # errors at edit time, layered on top of the runtime guard in
-    # ``BaseSecret._enforce_empty_user_init``. Envelope round-trips
+    # ``BaseRef._enforce_empty_user_init``. Envelope round-trips
     # and the ``_secret_key`` factory go through the dict-input path,
     # where the wrap-validator re-injects these fields after pydantic
     # runs (since ``init=False`` would otherwise drop them).
@@ -215,12 +232,24 @@ class Secret(_api.BaseSecret):
     __kind__ = "secretRef"
     _value_pattern: str | None = Field(default=None, init=False)
 
+    # Leaf-specific knobs read by ``BaseRef``.
+    _no_resolver_error = ApiErrorCode.API_11
+    _is_ref_root = True
+    _role = "_secret_key"
+
     @classmethod
     def lit(cls, value: str) -> "Secret":
         """Wrap ``value`` as an inline literal that bypasses the
         secret-store lookup. Useful for declarative tests and
         one-shot scripts."""
         return _LiteralSecret(_s=value, _value_pattern=cls._value_pattern)
+
+    @classmethod
+    def _secret_key(cls, name: str) -> "Secret":
+        # Role-specific alias of ``BaseRef._key`` -- kept so
+        # callers that grep for the role-specific name still find
+        # the factory.
+        return cls._key(name)
 
 
 @_api.dataclass(ApiErrorCode.API_12)
@@ -235,6 +264,11 @@ class _LiteralSecret(Secret):
     _s: str
     _value_pattern: str | None = None
     __kind__ = "secretLiteral"
+
+    # The literal subclass takes a value through its ``__init__``;
+    # the empty-init guard / dict-input re-injection on ``BaseRef``
+    # do not apply.
+    _is_ref_root = False
 
     def _name(self) -> str:
         return "<literal>"
