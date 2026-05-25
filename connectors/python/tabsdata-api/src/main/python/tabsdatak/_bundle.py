@@ -6,7 +6,8 @@
 
 Pairs with the consumer side at
 `tabsdatak._tdrunner.function._lib.bundle.extract_bundle`: this module
-*builds* the `.tar.gz` that the runner later unpacks.
+*builds* the `.tar.zst` (zstandard-compressed tar) that the runner
+later unpacks.
 
 Bundle layout (all paths relative to the bundle root):
 
@@ -46,6 +47,8 @@ from pathlib import Path
 from typing import Union
 
 import yaml
+import zstandard
+from packaging.utils import canonicalize_name
 
 from tabsdatak._info import (
     PublisherInfo,
@@ -53,6 +56,8 @@ from tabsdatak._info import (
     TransformerInfo,
     _unwrap_info,
 )
+from tabsdatak._tdruntime.python.package import Package
+from tabsdatak._tdruntime.python.recipe import InstallRecipe
 from tabsdatak.error import ApiErrorCode
 
 log = logging.getLogger(__name__)
@@ -63,6 +68,15 @@ BUNDLE_LOCAL_PACKAGES_DIRNAME = "local_packages"
 BUNDLE_MANIFEST_FILENAME = "function_def.json"
 BUNDLE_REQUIREMENTS_FILENAME = "requirements.yaml"
 BUNDLE_USER_CODE_DIRNAME = "user_code"
+
+# zstd compression knobs. Matches the values used in
+# ``_tdruntime.python.venv.archive``; defined locally rather than
+# imported to keep ``tabsdata-api`` from depending on the runtime
+# subpackage. Level 3 is the upstream default (good balance of
+# ratio vs CPU); threads=-1 lets zstandard use every core available
+# at runtime.
+_ZSTD_COMPRESSION_LEVEL = 3
+_ZSTD_COMPRESSION_THREADS = -1
 
 # requirements.yaml schema keys (legacy-compatible).
 _IGNORE_UNAVAILABLE_KEY = "ignoreUnavailablePackages"
@@ -135,21 +149,41 @@ def capture_source_snippet(info: FunctionInfo) -> str:
 
 
 def synthesise_requirements() -> tuple[list[str], str]:
-    """Snapshot the producer's installed packages.
+    """Snapshot the producer's PyPI-registry packages as a pip-installable list.
+
+    Only packages installed from a PyPI-like index are emitted. Editable
+    installs, local wheels and frozen folders are skipped — they have
+    no PyPI presence so the target machine couldn't resolve them
+    anyway, and a stale `name==version` line in the requirements file
+    would just fail to install. Install-method detection is delegated
+    to :class:`tabsdatak._tdruntime.python.package.Package`, which
+    reads ``direct_url.json`` from each dist-info.
+
+    Names are PEP 503-canonicalised (lowercase, ``[-_.]+`` → ``-``) via
+    :func:`packaging.utils.canonicalize_name` so the output is stable
+    across producers that recorded the same package under different
+    casings or separators (``tabsdata_api``, ``Tabsdata-Api``, …).
 
     Returns:
-        `(requirements, python_version)`. `requirements` is a sorted
-        list of pip-style `name==version` strings (deduplicated,
-        case-insensitive sort). `python_version` is `"X.Y.Z"`.
+        ``(requirements, python_version)``. ``requirements`` is a
+        sorted, deduplicated, case-insensitive-ordered list of pip-style
+        ``<canonical-name>==<version>`` strings. ``python_version`` is
+        the producer's ``"X.Y.Z"``.
     """
     requirements: set[str] = set()
     for dist in importlib_metadata.distributions():
         name = dist.metadata["Name"]
         if not name:
             continue
-        version = dist.version
-        if version:
-            requirements.add(f"{name}=={version}")
+        recipe = Package(name).recipe()
+        # Skip installs that can't round-trip via pip on the target.
+        # `Package.recipe()` returns None for unresolvable names (the
+        # mandatory=False default suppresses PackageNotInstalledError).
+        if recipe is None or recipe.recipe != InstallRecipe.REGISTRY:
+            continue
+        if recipe.version is None:
+            continue
+        requirements.add(f"{canonicalize_name(name)}=={recipe.version}")
     ordered = sorted(requirements, key=str.casefold)
     python_version = (
         f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
@@ -257,7 +291,7 @@ def build_bundle(
         project_root: directory containing the user's package tree.
             Every non-ignored top-level entry is bundled under
             `user_code/`, unless `include` restricts the set.
-        output_path: where to write the `.tar.gz`. Parent directories
+        output_path: where to write the `.tar.zst`. Parent directories
             are created if missing.
         local_packages: optional list of local-package directories to
             stage under `local_packages/<n>/`.
@@ -305,8 +339,21 @@ def build_bundle(
             local_packages=local_packages,
         )
 
-        with tarfile.open(output_path, "w:gz") as tar:
-            tar.add(staging, arcname=".")
+        # zstd-compressed tar stream. Same shape as
+        # ``_tdruntime.python.venv.archive``: write the raw zstd stream
+        # through a ``stream_writer`` and feed it to a streaming-mode
+        # tarfile. ``closefd=False`` keeps the outer file handle
+        # owned by the outer ``with``, so the stream is flushed on
+        # close but the file is closed exactly once.
+        params = zstandard.ZstdCompressionParameters.from_level(
+            _ZSTD_COMPRESSION_LEVEL,
+            threads=_ZSTD_COMPRESSION_THREADS,
+        )
+        compressor = zstandard.ZstdCompressor(compression_params=params)
+        with open(output_path, "wb") as raw:
+            with compressor.stream_writer(raw, closefd=False) as stream:
+                with tarfile.open(fileobj=stream, mode="w|") as tar:
+                    tar.add(staging, arcname=".")
 
     return output_path
 

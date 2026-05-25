@@ -48,9 +48,7 @@ def test_load_happy_path(tmp_path):
         tmp_path / "m.yaml",
         {"outputs": [{"name": "t1", "file": "/a.parquet"}]},
     )
-    assert load_outputs_manifest(p) == [
-        {"name": "t1", "file": "/a.parquet"}
-    ]
+    assert load_outputs_manifest(p) == [{"name": "t1", "file": "/a.parquet"}]
 
 
 def test_load_null_file_means_not_modified(tmp_path):
@@ -89,15 +87,34 @@ def test_load_malformed_yaml(tmp_path):
 
 
 def test_load_top_level_not_mapping(tmp_path):
+    """A YAML document whose root isn't a mapping (e.g. a list)
+    surfaces the 'top-level must be a mapping' error, not the
+    'missing outputs key' one. The two cases are reported separately
+    so failures point at the actual shape problem."""
     p = tmp_path / "m.yaml"
     p.write_text("- a\n- b\n")
-    with pytest.raises(InvalidOutputsManifestError, match="outputs"):
+    with pytest.raises(
+        InvalidOutputsManifestError, match="top-level must be a mapping"
+    ):
+        load_outputs_manifest(p)
+
+
+def test_load_top_level_null(tmp_path):
+    """An empty YAML file parses to None -- that's a top-level shape
+    failure (None is not a mapping), distinct from missing-key."""
+    p = tmp_path / "m.yaml"
+    p.write_text("")
+    with pytest.raises(
+        InvalidOutputsManifestError, match="top-level must be a mapping"
+    ):
         load_outputs_manifest(p)
 
 
 def test_load_missing_outputs_key(tmp_path):
+    """A mapping that doesn't contain ``outputs`` surfaces the
+    missing-key error specifically (not the top-level one)."""
     p = _write_yaml(tmp_path / "m.yaml", {"other": []})
-    with pytest.raises(InvalidOutputsManifestError, match="outputs"):
+    with pytest.raises(InvalidOutputsManifestError, match="missing 'outputs' key"):
         load_outputs_manifest(p)
 
 

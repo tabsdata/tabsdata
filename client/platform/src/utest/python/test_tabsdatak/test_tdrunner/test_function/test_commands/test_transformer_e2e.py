@@ -106,7 +106,7 @@ def bundle_path(tmp_path, user_project) -> Path:
     extracts it during the test."""
     from tx_pkg.transformer import my_transformer  # noqa: E402  (lazy)
 
-    path = tmp_path / "bundle.tar.gz"
+    path = tmp_path / "bundle.tar.zst"
     build_bundle(my_transformer, user_project, path)
     return path
 
@@ -178,7 +178,7 @@ def diff_card_user_project(tmp_path, monkeypatch) -> Path:
 def diff_card_bundle_path(tmp_path, diff_card_user_project) -> Path:
     from diff_pkg.transformer import my_transformer  # noqa: E402
 
-    path = tmp_path / "diff_bundle.tar.gz"
+    path = tmp_path / "diff_bundle.tar.zst"
     build_bundle(my_transformer, diff_card_user_project, path)
     return path
 

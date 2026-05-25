@@ -23,6 +23,8 @@ from __future__ import annotations
 import tarfile
 from pathlib import Path
 
+import zstandard
+
 from tabsdatak._tdrunner.function._lib.bundle import extract_bundle
 from tabsdatak._tdrunner.function._lib.cli import build_parser, run_command
 from tabsdatak._tdrunner.function._lib.errors import CommandSpecificError
@@ -119,7 +121,11 @@ def _fetch_via_transporter(
 def _extract(archive: Path, dest_dir: Path) -> None:
     try:
         extract_bundle(archive, dest_dir)
-    except (tarfile.TarError, FileNotFoundError) as exc:
+    except (
+        tarfile.TarError,
+        FileNotFoundError,
+        zstandard.ZstdError,
+    ) as exc:
         raise CommandSpecificError(
             EXIT_EXTRACT_FAILED, f"failed to extract bundle: {exc}"
         ) from exc
@@ -135,7 +141,7 @@ def _run() -> int:
 
     request = _load_request(request_path)
     scratch_dir.mkdir(parents=True, exist_ok=True)
-    bundle_local = scratch_dir / "bundle.tar.gz"
+    bundle_local = scratch_dir / "bundle.tar.zst"
     transporter_yaml = scratch_dir / "transporter.yaml"
     transporter_report = scratch_dir / "transporter-report.yaml"
     _fetch_via_transporter(request, bundle_local, transporter_yaml, transporter_report)

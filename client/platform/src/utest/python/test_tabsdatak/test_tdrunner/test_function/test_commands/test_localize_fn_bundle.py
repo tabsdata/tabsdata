@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+import zstandard
 
 from tabsdatak._tdrunner.function._lib.transporter_proc import (
     TransporterNotFoundError,
@@ -63,19 +64,24 @@ def _write_request(path: Path, bundle_uri: str = "file:///bundle.tgz") -> Path:
 
 
 def _make_tarball(path: Path, files: dict[str, bytes] | None = None) -> None:
+    """Write a `.tar.zst` (zstandard-compressed tar) containing `files`,
+    matching the bundle wire format produced by ``build_bundle``."""
     files = files or {"hello.txt": b"hi"}
-    with tarfile.open(path, "w:gz") as tar:
-        for name, content in files.items():
-            info = tarfile.TarInfo(name=name)
-            info.size = len(content)
-            tar.addfile(info, io.BytesIO(content))
+    compressor = zstandard.ZstdCompressor()
+    with open(path, "wb") as raw:
+        with compressor.stream_writer(raw, closefd=False) as stream:
+            with tarfile.open(fileobj=stream, mode="w|") as tar:
+                for name, content in files.items():
+                    info = tarfile.TarInfo(name=name)
+                    info.size = len(content)
+                    tar.addfile(info, io.BytesIO(content))
 
 
 def _stub_transporter_returns(monkeypatch, tar_target_files=None, returncode=0):
     """Replace run_transporter so it pretends to download a bundle.
 
     Reads the transporter request YAML to find the target's local URL
-    (it's a `file://...` URL we generated), then writes a real .tar.gz
+    (it's a `file://...` URL we generated), then writes a real .tar.zst
     there before returning `returncode`.
     """
     import re
@@ -114,7 +120,7 @@ def test_main_happy_path(monkeypatch, tmp_path):
     assert liveness.exists()
     # The command stages its intermediates under --scratch-dir and does
     # not clean up — caller controls lifecycle.
-    assert (scratch / "bundle.tar.gz").exists()
+    assert (scratch / "bundle.tar.zst").exists()
     assert (scratch / "transporter.yaml").exists()
 
 

@@ -121,7 +121,7 @@ def user_project(tmp_path, monkeypatch) -> Path:
 def bundle_path(tmp_path, user_project) -> Path:
     from sub_pkg.subscriber import my_subscriber  # noqa: E402
 
-    path = tmp_path / "bundle.tar.gz"
+    path = tmp_path / "bundle.tar.zst"
     build_bundle(my_subscriber, user_project, path)
     return path
 

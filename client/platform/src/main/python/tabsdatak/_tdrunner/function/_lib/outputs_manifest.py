@@ -67,7 +67,12 @@ def load_outputs_manifest(path: Path) -> list[dict[str, Any]]:
         raise InvalidOutputsManifestError(
             f"malformed YAML in outputs manifest {path}: {exc}"
         ) from exc
-    if not isinstance(data, dict) or _MANIFEST_OUTPUTS_KEY not in data:
+    if not isinstance(data, dict):
+        raise InvalidOutputsManifestError(
+            f"outputs manifest {path} top-level must be a mapping, "
+            f"got {type(data).__name__}"
+        )
+    if _MANIFEST_OUTPUTS_KEY not in data:
         raise InvalidOutputsManifestError(
             f"outputs manifest {path} missing {_MANIFEST_OUTPUTS_KEY!r} key"
         )

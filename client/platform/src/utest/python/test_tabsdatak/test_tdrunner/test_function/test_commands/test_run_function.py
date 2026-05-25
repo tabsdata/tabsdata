@@ -131,7 +131,7 @@ def fixture_publisher(user_project) -> PublisherInfo:
 
 @pytest.fixture
 def built_bundle(tmp_path, user_project, fixture_publisher) -> Path:
-    bundle_path = tmp_path / "bundle.tar.gz"
+    bundle_path = tmp_path / "bundle.tar.zst"
     build_bundle(fixture_publisher, user_project, bundle_path)
     extracted = tmp_path / "extracted"
     extract_bundle(bundle_path, extracted)
@@ -167,7 +167,7 @@ def transformer_bundle(tmp_path, monkeypatch) -> Path:
 
     from tx_pkg.transformer import my_transformer  # noqa: E402
 
-    bundle_path = tmp_path / "tx_bundle.tar.gz"
+    bundle_path = tmp_path / "tx_bundle.tar.zst"
     build_bundle(my_transformer, project, bundle_path)
     extracted = tmp_path / "tx_extracted"
     extract_bundle(bundle_path, extracted)
@@ -215,7 +215,7 @@ def subscriber_bundle(tmp_path, monkeypatch) -> Path:
 
     from sub_pkg.subscriber import my_subscriber  # noqa: E402
 
-    bundle_path = tmp_path / "sub_bundle.tar.gz"
+    bundle_path = tmp_path / "sub_bundle.tar.zst"
     build_bundle(my_subscriber, project, bundle_path)
     extracted = tmp_path / "sub_extracted"
     extract_bundle(bundle_path, extracted)
@@ -277,7 +277,7 @@ def multi_publisher_bundle(tmp_path, monkeypatch) -> Path:
 
     from mp_pkg.publisher import multi_publisher  # noqa: E402
 
-    bundle_path = tmp_path / "mp_bundle.tar.gz"
+    bundle_path = tmp_path / "mp_bundle.tar.zst"
     build_bundle(multi_publisher, project, bundle_path)
     extracted = tmp_path / "mp_extracted"
     extract_bundle(bundle_path, extracted)
@@ -333,7 +333,7 @@ def multi_transformer_bundle(tmp_path, monkeypatch) -> Path:
 
     from mtx_pkg.transformer import multi_transformer  # noqa: E402
 
-    bundle_path = tmp_path / "mtx_bundle.tar.gz"
+    bundle_path = tmp_path / "mtx_bundle.tar.zst"
     build_bundle(multi_transformer, project, bundle_path)
     extracted = tmp_path / "mtx_extracted"
     extract_bundle(bundle_path, extracted)

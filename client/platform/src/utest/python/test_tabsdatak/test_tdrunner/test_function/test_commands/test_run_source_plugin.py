@@ -126,7 +126,7 @@ def fixture_publisher(user_project) -> PublisherInfo:
 @pytest.fixture
 def built_bundle(tmp_path, user_project, fixture_publisher) -> Path:
     """Build and extract the bundle. Returns the extracted directory."""
-    bundle_path = tmp_path / "bundle.tar.gz"
+    bundle_path = tmp_path / "bundle.tar.zst"
     build_bundle(fixture_publisher, user_project, bundle_path)
     extracted = tmp_path / "extracted"
     extract_bundle(bundle_path, extracted)

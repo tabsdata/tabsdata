@@ -12,6 +12,7 @@ import pytest
 from tabsdatak._tdruntime.python.binary import (
     Binary,
     binaries_from_setup_toml,
+    current_scripts_dir,
     default_scripts_prefix,
 )
 
@@ -24,6 +25,26 @@ def test_binary_exe_appends_platform_extension():
     assert binary.exe() == expected
 
 
+def test_binary_exe_unchanged_on_posix(monkeypatch):
+    """On POSIX, sysconfig's EXE config var is empty so ``exe()``
+    returns the bare name."""
+    monkeypatch.setattr(sysconfig, "get_config_var", lambda key: "")
+    binary = Binary(name="td_apiserver", prefix="bin")
+    assert binary.exe() == "td_apiserver"
+
+
+def test_binary_exe_adds_dot_exe_on_windows(monkeypatch):
+    """On Windows, sysconfig's EXE config var is ``.exe`` so ``exe()``
+    appends it."""
+    monkeypatch.setattr(
+        sysconfig,
+        "get_config_var",
+        lambda key: ".exe" if key == "EXE" else None,
+    )
+    binary = Binary(name="td_apiserver", prefix="bin")
+    assert binary.exe() == "td_apiserver.exe"
+
+
 def test_binary_is_frozen_dataclass():
     binary = Binary(name="td_apiserver", prefix="bin")
     with pytest.raises((AttributeError, Exception)):
@@ -34,6 +55,17 @@ def test_default_scripts_prefix_is_a_relative_path():
     prefix = default_scripts_prefix()
     assert prefix
     assert not Path(prefix).is_absolute()
+
+
+def test_current_scripts_dir_is_absolute():
+    assert current_scripts_dir().is_absolute()
+
+
+def test_current_scripts_dir_matches_sysconfig_scripts_path():
+    """The helper is a thin wrapper around ``sysconfig.get_path("scripts")``,
+    documented as the source of truth for "where pip installs CLI tools
+    in the active interpreter"."""
+    assert current_scripts_dir() == Path(sysconfig.get_path("scripts"))
 
 
 def test_binaries_from_setup_toml_returns_empty_when_file_missing(tmp_path: Path):

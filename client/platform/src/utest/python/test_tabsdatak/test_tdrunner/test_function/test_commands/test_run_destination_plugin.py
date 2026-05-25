@@ -109,7 +109,7 @@ def fixture_subscriber(user_project) -> SubscriberInfo:
 
 @pytest.fixture
 def built_bundle(tmp_path, user_project, fixture_subscriber) -> Path:
-    bundle_path = tmp_path / "bundle.tar.gz"
+    bundle_path = tmp_path / "bundle.tar.zst"
     build_bundle(fixture_subscriber, user_project, bundle_path)
     extracted = tmp_path / "extracted"
     extract_bundle(bundle_path, extracted)

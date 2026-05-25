@@ -130,7 +130,7 @@ def bundle_path(tmp_path, user_project) -> Path:
     is what extracts it during the test."""
     from my_pkg.publisher import my_publisher  # noqa: E402  (lazy)
 
-    path = tmp_path / "bundle.tar.gz"
+    path = tmp_path / "bundle.tar.zst"
     build_bundle(my_publisher, user_project, path)
     return path
 
@@ -211,7 +211,7 @@ def multi_user_project(tmp_path, monkeypatch) -> Path:
 def multi_bundle_path(tmp_path, multi_user_project) -> Path:
     from multi_pkg.publisher import multi_publisher  # noqa: E402
 
-    path = tmp_path / "multi_bundle.tar.gz"
+    path = tmp_path / "multi_bundle.tar.zst"
     build_bundle(multi_publisher, multi_user_project, path)
     return path
 
