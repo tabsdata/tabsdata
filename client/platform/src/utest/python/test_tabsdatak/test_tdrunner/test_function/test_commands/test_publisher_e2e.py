@@ -64,10 +64,10 @@ _USER_PUBLISHER_SRC = """\
 from __future__ import annotations
 
 from tabsdatak.api import TableFrameSpec, TableFramesSpec, publisher
-from tabsdatak.conn.localfile import LocalFileConn, LocalFileSrc
+from tabsdatak.conn.localfile import LocalFileSrcConn, LocalFileSrc
 
 _SRC = LocalFileSrc(
-    conn=LocalFileConn(base_path={base_path!r}),
+    conn=LocalFileSrcConn(base_path={base_path!r}),
     paths=["*.parquet"],
 )
 
@@ -150,10 +150,10 @@ _USER_PUBLISHER_MULTI_SRC = """\
 from __future__ import annotations
 
 from tabsdatak.api import TableFrameSpec, TableFramesSpec, publisher
-from tabsdatak.conn.localfile import LocalFileConn, LocalFileSrc
+from tabsdatak.conn.localfile import LocalFileSrcConn, LocalFileSrc
 
 _SRC = LocalFileSrc(
-    conn=LocalFileConn(base_path={base_path!r}),
+    conn=LocalFileSrcConn(base_path={base_path!r}),
     paths=["a.parquet", "b.parquet"],
 )
 

@@ -64,10 +64,10 @@ _USER_SUBSCRIBER_SRC = """\
 from __future__ import annotations
 
 from tabsdatak.api import TableFrameSpec, subscriber
-from tabsdatak.conn.localfile import LocalFileConn, LocalFileDest
+from tabsdatak.conn.localfile import LocalFileDestConn, LocalFileDest
 
 _DEST = LocalFileDest(
-    conn=LocalFileConn(base_path={base_path!r}),
+    conn=LocalFileDestConn(base_path={base_path!r}),
     paths=["sink.parquet"],
 )
 
