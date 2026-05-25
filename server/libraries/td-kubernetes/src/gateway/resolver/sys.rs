@@ -23,6 +23,14 @@ pub enum SystemKey {
     RepositoryUrl,
     #[strum(serialize = "TDK_REPOSITORY_PATH")]
     RepositoryPath,
+    #[strum(serialize = "TDK_DATABASE_URL")]
+    DatabaseUrl,
+    #[strum(serialize = "TDK_DATABASE_PATH")]
+    DatabasePath,
+    #[strum(serialize = "TDK_STORAGE_URL")]
+    StorageUrl,
+    #[strum(serialize = "TDK_STORAGE_PATH")]
+    StoragePath,
     #[strum(serialize = "TDK_PYENV_TD_ROOT")]
     PyenvTdRoot,
     #[strum(serialize = "TDK_PYENV_AG_ROOT")]
@@ -44,6 +52,10 @@ impl SystemKey {
 pub struct SystemValues {
     pub repository_url: Option<String>,
     pub repository_path: Option<String>,
+    pub database_url: Option<String>,
+    pub database_path: Option<String>,
+    pub storage_url: Option<String>,
+    pub storage_path: Option<String>,
     pub pyenv_td_root: Option<String>,
     pub pyenv_ag_root: Option<String>,
     pub pyenv_scripts_folder: Option<String>,
@@ -54,6 +66,10 @@ impl SystemValues {
         match key {
             SystemKey::RepositoryUrl => self.repository_url.as_deref(),
             SystemKey::RepositoryPath => self.repository_path.as_deref(),
+            SystemKey::DatabaseUrl => self.database_url.as_deref(),
+            SystemKey::DatabasePath => self.database_path.as_deref(),
+            SystemKey::StorageUrl => self.storage_url.as_deref(),
+            SystemKey::StoragePath => self.storage_path.as_deref(),
             SystemKey::PyenvTdRoot => self.pyenv_td_root.as_deref(),
             SystemKey::PyenvAgRoot => self.pyenv_ag_root.as_deref(),
             SystemKey::PyenvScriptsFolder => self.pyenv_scripts_folder.as_deref(),

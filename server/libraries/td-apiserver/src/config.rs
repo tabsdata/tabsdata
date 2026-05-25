@@ -215,19 +215,45 @@ impl Params {
                     None => BackendConfig::from_url(url.clone())?,
                 });
             }
-            // Embedded fallback when no URL is configured. `TD_URI_REPOSITORY`
-            // is exported by the supervisor and seeds the default data dir.
+            // Embedded-postgres knob resolution:
+            //   - If the config file declared `EmbeddedPostgres` (data_dir /
+            //     port / persistent fields), keep those values and only
+            //     overlay them with CLI flags that were explicitly passed.
+            //   - If no backend is configured at all, fall back to a fresh
+            //     `EmbeddedPostgres` rooted at the CLI flag or, failing that,
+            //     `<repository_uri>/<DATABASE_FOLDER>` from `TD_URI_REPOSITORY`.
+            //
+            // The previous shape replaced the whole `db.conn` whenever
+            // `db.url().is_none()`, which silently dropped any data_dir set
+            // through the config file (an EmbeddedPostgres backend has
+            // `url() == None`, so the guard always fired).
             #[cfg(feature = "embedded-postgres")]
-            if db.url().is_none() {
-                let data_dir = self.embedded_postgres_data_dir.clone().or_else(|| {
-                    self.repository_uri
-                        .as_deref()
-                        .map(|r| PathBuf::from(r).join(DATABASE_FOLDER))
-                });
-                db.conn = Some(BackendConfig::embedded_postgres_persistent(
-                    data_dir,
-                    self.embedded_postgres_port,
-                ));
+            {
+                match db.conn {
+                    Some(BackendConfig::EmbeddedPostgres(mut embedded)) => {
+                        if let Some(data_dir) = self.embedded_postgres_data_dir.clone() {
+                            embedded.data_dir = Some(data_dir);
+                        }
+                        if let Some(port) = self.embedded_postgres_port {
+                            embedded.port = Some(port);
+                        }
+                        db.conn = Some(BackendConfig::EmbeddedPostgres(embedded));
+                    }
+                    None => {
+                        let data_dir = self.embedded_postgres_data_dir.clone().or_else(|| {
+                            self.repository_uri
+                                .as_deref()
+                                .map(|r| PathBuf::from(r).join(DATABASE_FOLDER))
+                        });
+                        db.conn = Some(BackendConfig::embedded_postgres_persistent(
+                            data_dir,
+                            self.embedded_postgres_port,
+                        ));
+                    }
+                    Some(other) => {
+                        db.conn = Some(other);
+                    }
+                }
             }
             if let Some(log_level) = self.database_log_level {
                 db.pool.log_level = log_level;

@@ -17,11 +17,18 @@ jwt:
   access_token_expiration: 3600
 request_timeout: 60
 database:
-  # If omitted, the apiserver boots an in-process embedded Postgres rooted
-  # at ${TD_URI_REPOSITORY}/database/. To point at an external server,
-  # uncomment and set `url`. SQLite is supported when built with the
-  # `sqlite` feature (`url: file:///path/to/tabsdata.db`).
+  # Embedded Postgres rooted at <instance>/repository/database/. Both
+  # `tdkserver create` (host-side schema creation) and the runtime apiserver
+  # pod must agree on this path; if it's left to postgresql_embedded's
+  # default ($HOME/.theseus/...), the two sides diverge and the pod fails
+  # with DatabaseSchemaDoesNotExist.
+  #
+  # To point at an external server instead, comment out data_dir/persistent
+  # and set `url`. SQLite is supported when built with the `sqlite` feature
+  # (`url: file:///path/to/tabsdata.db`).
   # url: postgres://user:pass@host:5432/tabsdata
+  data_dir: ${sys:TDK_DATABASE_PATH}
+  persistent: true
   min_connections: 1
   max_connections: 10
   acquire_timeout: 30
@@ -33,15 +40,15 @@ storage:
   mounts:
     - id: ROOT
       path: /
-      uri: ${sys:TDK_REPOSITORY_URL}/storage/data/
+      uri: ${sys:TDK_STORAGE_URL}data/
     # IMPORTANT: /bundles must be a local mount.
     - id: BUNDLES
       path: /bundles
-      uri: ${sys:TDK_REPOSITORY_URL}/storage/bundles/
+      uri: ${sys:TDK_STORAGE_URL}bundles/
 #    # Mount configuration sample:
 #    - id: PREFIX
 #      path: /foo
-#      uri: ${sys:TDK_REPOSITORY_URL}/storage/storage/data/
+#      uri: ${sys:TDK_STORAGE_URL}data/
 #      options:
 #        - option_1: value1
 #          option_2: value2

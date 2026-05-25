@@ -6,7 +6,7 @@ pub mod cluster;
 pub mod instance;
 
 use std::fs;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::PathBuf;
 
 use async_trait::async_trait;
@@ -30,7 +30,7 @@ use crate::constants::{
 use crate::gateway::resolver::{ConfigurationResolver, SystemValues};
 use crate::instance::launcher::{start_workload, stop_workload};
 use crate::instance::manifest::MANIFEST_FILE;
-use crate::instance::profile::{decode_from_configmap, load_profile};
+use crate::instance::profile::{decode_from_configmap, load_profile, resolve_profile_entry};
 use crate::instance::verify_manifest_compatibility;
 use crate::kubernetes::action::configmap::read_configmap;
 use crate::kubernetes::client::build_kube_client;
@@ -49,6 +49,7 @@ use crate::system::subprocess::apply_detached_flags;
 
 const APISERVER_BINARY: &str = "td_apiserver";
 const PYVENV_BINARY: &str = "td_pyvenv";
+const APISERVER_CONFIG_PATH: &str = "pods/regular/apiserver/apiserver.yaml";
 
 pub struct KminusProvider {
     name: String,
@@ -377,38 +378,65 @@ impl Provider for KminusProvider {
     }
 
     async fn create_database(&self) -> Result {
-        let repository = self.folder.join(FOLDER_REPOSITORY);
-        let storage_path = repository.join(FOLDER_STORAGE);
-        let storage_url = match url::Url::from_directory_path(&storage_path) {
-            Ok(url) => url,
-            Err(_) => {
-                cerror!(
-                    "Failed to convert storage path '{}' to file:// URL",
-                    storage_path.display()
-                );
+        let loaded = load_profile(self.cluster_provider())?;
+        let resolver = ConfigurationResolver::new(self.system_values()?);
+        let apiserver_config =
+            resolve_profile_entry(&loaded, &resolver, APISERVER_CONFIG_PATH).await?;
+        let mut config_file = match tempfile::Builder::new()
+            .prefix("td-apiserver-")
+            .suffix(".yaml")
+            .tempfile()
+        {
+            Ok(file) => file,
+            Err(error) => {
+                cerror!("Failed to create temporary apiserver config file: {error}");
                 return abort(GeneralError);
             }
         };
+        if let Err(error) = config_file.write_all(apiserver_config.as_bytes()) {
+            cerror!(
+                "Failed to write temporary apiserver config '{}': {error}",
+                config_file.path().display()
+            );
+            return abort(GeneralError);
+        }
+        if let Err(error) = config_file.flush() {
+            cerror!(
+                "Failed to flush temporary apiserver config '{}': {error}",
+                config_file.path().display()
+            );
+            return abort(GeneralError);
+        }
         let apiserver = name_program(&PathBuf::from(APISERVER_BINARY));
         let bar = spinner("Creating tabsdata database schema");
         let mut command = std::process::Command::new(&apiserver);
         command
-            .arg("--storage-url")
-            .arg(storage_url.as_str())
+            .arg("--config-file")
+            .arg(config_file.path())
             .arg("--db-schema")
             .arg("create");
         apply_detached_flags(&mut command);
         let result = command.output();
         match result {
             Ok(output) => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                if !stdout.trim().is_empty() {
+                    for line in stdout.lines() {
+                        info!("  [td_apiserver stdout] {line}");
+                    }
+                }
+                if !stderr.trim().is_empty() {
+                    for line in stderr.lines() {
+                        info!("  [td_apiserver stderr] {line}");
+                    }
+                }
                 if !output.status.success() {
                     bar.finish_and_clear();
-                    let stderr = String::from_utf8_lossy(&output.stderr);
                     cerror!(
-                        "'{} --db-schema create' failed with status {}: {}",
+                        "'{} --db-schema create' failed with status {}",
                         apiserver.display(),
                         output.status,
-                        stderr.trim()
                     );
                     return abort(GeneralError);
                 }
@@ -542,10 +570,20 @@ impl Provider for KminusProvider {
 
     fn system_values(&self) -> Result<SystemValues> {
         let repository_folder = self.folder.join(FOLDER_REPOSITORY);
-        let repository_url = url::Url::from_file_path(&repository_folder)
+        let repository_url = url::Url::from_directory_path(&repository_folder)
             .ok()
             .map(|url| url.to_string());
         let repository_path = Some(repository_folder.to_string_lossy().to_string());
+        let database_folder = repository_folder.join(FOLDER_DATABASE);
+        let database_url = url::Url::from_directory_path(&database_folder)
+            .ok()
+            .map(|url| url.to_string());
+        let database_path = Some(database_folder.to_string_lossy().to_string());
+        let storage_folder = repository_folder.join(FOLDER_STORAGE);
+        let storage_url = url::Url::from_directory_path(&storage_folder)
+            .ok()
+            .map(|url| url.to_string());
+        let storage_path = Some(storage_folder.to_string_lossy().to_string());
         let runtimes_python = self.folder.join(FOLDER_RUNTIMES).join(FOLDER_PYTHON);
         let pyenv_td_root = Some(
             runtimes_python
@@ -577,6 +615,10 @@ impl Provider for KminusProvider {
         Ok(SystemValues {
             repository_url,
             repository_path,
+            database_url,
+            database_path,
+            storage_url,
+            storage_path,
             pyenv_td_root,
             pyenv_ag_root,
             pyenv_scripts_folder,

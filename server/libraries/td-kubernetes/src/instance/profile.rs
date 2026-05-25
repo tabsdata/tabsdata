@@ -296,6 +296,46 @@ pub async fn encode_for_configmap(
     Ok(data)
 }
 
+pub async fn resolve_profile_entry(
+    loaded: &Profile,
+    resolver: &ConfigurationResolver,
+    decoded_path: &str,
+) -> Result<String> {
+    if !loaded.manifest.entries.contains_key(decoded_path) {
+        cerror!("Profile is missing the '{decoded_path}' entry.");
+        return abort(TabsDataError);
+    }
+    let target = match loaded.tree.join(decoded_path) {
+        Ok(target) => target,
+        Err(error) => {
+            cerror!("Failed to resolve virtual path '{decoded_path}': {error}");
+            return abort(GeneralError);
+        }
+    };
+    let mut reader = match target.open_file() {
+        Ok(reader) => reader,
+        Err(error) => {
+            cerror!("Failed to open virtual file '{}': {error}", target.as_str());
+            return abort(GeneralError);
+        }
+    };
+    let mut content = String::new();
+    if let Err(error) = reader.read_to_string(&mut content) {
+        cerror!(
+            "Failed to read virtual file '{}' as UTF-8: {error}",
+            target.as_str()
+        );
+        return abort(GeneralError);
+    }
+    match resolver.resolve_sys(&content).await {
+        Ok(resolved) => Ok(resolved),
+        Err(error) => {
+            cerror!("Failed to resolve placeholders in '{decoded_path}': {error}");
+            abort(TabsDataError)
+        }
+    }
+}
+
 pub fn decode_from_configmap(data: &BTreeMap<String, String>) -> Result<Profile> {
     let manifest_yaml = match data.get(MANIFEST_FILE) {
         Some(yaml) => yaml,
