@@ -5,7 +5,7 @@
 use clap_derive::Args;
 use tracing::info;
 
-use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
+use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
 use crate::client::tdkserver::common::prompt_yes_no;
 use crate::cwarn;
 use crate::provider::provider_for_or_tdkcontext;
@@ -44,7 +44,7 @@ pub struct StopArguments {
     pub yes: bool,
 }
 
-pub async fn command_stop(arguments: StopArguments) -> Result {
+pub async fn command_stop(arguments: StopArguments, globals: &GlobalArguments) -> Result {
     let StopArguments {
         cluster,
         instance,
@@ -52,7 +52,7 @@ pub async fn command_stop(arguments: StopArguments) -> Result {
         yes,
     } = arguments;
 
-    let provider = provider_for_or_tdkcontext(cluster, instance).await?;
+    let provider = provider_for_or_tdkcontext(cluster, instance, globals.verbose).await?;
     provider.ensure_stoppable_runtime().await?;
 
     if preview {

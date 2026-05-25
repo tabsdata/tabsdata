@@ -48,10 +48,15 @@ pub struct DockerProvider {
     cluster: DockerCluster,
     instance: DockerInstance,
     inputs: DockerInputs,
+    verbose: bool,
 }
 
 impl DockerProvider {
-    pub async fn build(cluster: ClusterArguments, instance: InstanceArguments) -> Result<Self> {
+    pub async fn build(
+        cluster: ClusterArguments,
+        instance: InstanceArguments,
+        verbose: bool,
+    ) -> Result<Self> {
         if cluster.kubeconfig.is_none() && cluster.context.is_none() && !cluster.current {
             cerror!(
                 "Specify --kubeconfig, --context, or --current to identify the target cluster."
@@ -129,6 +134,7 @@ impl DockerProvider {
             cluster,
             instance,
             inputs,
+            verbose,
         })
     }
 }
@@ -360,7 +366,7 @@ impl LocalProvider for DockerProvider {}
 
 impl DockerProvider {
     async fn store_configmap_inner(&self) -> Result {
-        let loaded = load_profile(self.cluster_provider())?;
+        let loaded = load_profile(self.cluster_provider(), self.verbose)?;
         let resolver = ConfigurationResolver::new(self.system_values()?);
         let configmap_data = encode_for_configmap(&loaded, &resolver).await?;
         let client = build_kube_client(&self.config)?;

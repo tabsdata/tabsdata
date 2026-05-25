@@ -23,6 +23,15 @@ use crate::provider::ClusterProvider;
     long_about = "Manage tabsdata instances on kubernetes clusters."
 )]
 pub struct Arguments {
+    #[command(flatten)]
+    pub globals: GlobalArguments,
+
+    #[command(subcommand)]
+    pub command: Option<Commands>,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct GlobalArguments {
     #[arg(
         long,
         name = "accept-terms",
@@ -32,8 +41,15 @@ pub struct Arguments {
     )]
     pub accept_terms: Option<String>,
 
-    #[command(subcommand)]
-    pub command: Option<Commands>,
+    #[arg(
+        long,
+        name = "verbose",
+        required = false,
+        global = true,
+        default_value_t = false,
+        long_help = "Show the output of each step that this command runs."
+    )]
+    pub verbose: bool,
 }
 
 #[derive(Debug, Clone, Subcommand)]

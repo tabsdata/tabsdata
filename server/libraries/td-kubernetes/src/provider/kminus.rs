@@ -45,6 +45,7 @@ use crate::provider::{
     Transaction,
 };
 use crate::system::exit::{Result, abort};
+use crate::system::subprocess;
 use crate::system::subprocess::apply_detached_flags;
 
 const APISERVER_BINARY: &str = "td_apiserver";
@@ -57,10 +58,15 @@ pub struct KminusProvider {
     cluster: KminusCluster,
     instance: KminusInstance,
     inputs: KminusInputs,
+    verbose: bool,
 }
 
 impl KminusProvider {
-    pub fn build(cluster: ClusterArguments, instance: InstanceArguments) -> Result<Self> {
+    pub fn build(
+        cluster: ClusterArguments,
+        instance: InstanceArguments,
+        verbose: bool,
+    ) -> Result<Self> {
         if cluster.context.is_some()
             || cluster.kubeconfig.is_some()
             || cluster.current
@@ -120,7 +126,7 @@ impl KminusProvider {
             return abort(GeneralError);
         }
 
-        let kminus_cluster = KminusCluster::new(folder.join(FOLDER_CLUSTER));
+        let kminus_cluster = KminusCluster::new(folder.join(FOLDER_CLUSTER), verbose);
         let kminus_instance =
             KminusInstance::new(kminus_cluster.kubefile(), kminus_cluster.staging_path());
 
@@ -130,6 +136,7 @@ impl KminusProvider {
             cluster: kminus_cluster,
             instance: kminus_instance,
             inputs,
+            verbose,
         })
     }
 
@@ -378,7 +385,7 @@ impl Provider for KminusProvider {
     }
 
     async fn create_database(&self) -> Result {
-        let loaded = load_profile(self.cluster_provider())?;
+        let loaded = load_profile(self.cluster_provider(), self.verbose)?;
         let resolver = ConfigurationResolver::new(self.system_values()?);
         let apiserver_config =
             resolve_profile_entry(&loaded, &resolver, APISERVER_CONFIG_PATH).await?;
@@ -416,27 +423,17 @@ impl Provider for KminusProvider {
             .arg("--db-schema")
             .arg("create");
         apply_detached_flags(&mut command);
-        let result = command.output();
+        let result = subprocess::run(&mut command, APISERVER_BINARY, self.verbose);
         match result {
             Ok(output) => {
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                if !stdout.trim().is_empty() {
-                    for line in stdout.lines() {
-                        info!("  [td_apiserver stdout] {line}");
-                    }
-                }
-                if !stderr.trim().is_empty() {
-                    for line in stderr.lines() {
-                        info!("  [td_apiserver stderr] {line}");
-                    }
-                }
                 if !output.status.success() {
                     bar.finish_and_clear();
+                    let stderr = String::from_utf8_lossy(&output.stderr);
                     cerror!(
-                        "'{} --db-schema create' failed with status {}",
+                        "'{} --db-schema create' failed with status {}: {}",
                         apiserver.display(),
                         output.status,
+                        stderr.trim()
                     );
                     return abort(GeneralError);
                 }
@@ -472,9 +469,12 @@ impl Provider for KminusProvider {
         };
         let bar = spinner("Creating Python virtual environment templates");
         let mut command = std::process::Command::new(&pyvenv);
+        if self.verbose {
+            command.arg("--verbose");
+        }
         command.arg("create").arg("--target").arg(&runtimes_python);
         apply_detached_flags(&mut command);
-        let result = command.output();
+        let result = subprocess::run(&mut command, PYVENV_BINARY, self.verbose);
         match result {
             Ok(output) => {
                 if !output.status.success() {
@@ -634,7 +634,7 @@ impl LocalProvider for KminusProvider {}
 
 impl KminusProvider {
     async fn stage_configmap_inner(&self) -> Result {
-        let loaded = load_profile(self.cluster_provider())?;
+        let loaded = load_profile(self.cluster_provider(), self.verbose)?;
         let staging_profile = self.cluster.staging_profile_path();
         if let Err(error) = fs::create_dir_all(&staging_profile) {
             cerror!(

@@ -18,7 +18,8 @@ use crate::provider::{Cluster, Transaction};
 use crate::system::exit::{Result, abort};
 use crate::system::stream::Silencer;
 use crate::system::subprocess::{
-    apply_detached_flags, apply_subprocess_flags, is_alive as process_is_alive, terminate_process,
+    self, apply_detached_flags, apply_subprocess_flags, is_alive as process_is_alive,
+    terminate_process,
 };
 
 const KM_BINARY: &str = "km";
@@ -39,11 +40,15 @@ const KM_TERMINATE_GRACE: Duration = Duration::from_secs(10);
 
 pub struct KminusCluster {
     path: PathBuf,
+    verbose: bool,
 }
 
 impl KminusCluster {
-    pub fn new(path: impl Into<PathBuf>) -> Self {
-        Self { path: path.into() }
+    pub fn new(path: impl Into<PathBuf>, verbose: bool) -> Self {
+        Self {
+            path: path.into(),
+            verbose,
+        }
     }
 
     pub fn path(&self) -> &Path {
@@ -86,9 +91,12 @@ impl KminusCluster {
             .arg(KM_START_SUBCOMMAND)
             .arg(KM_WORKDIR_ARGUMENT)
             .arg(self.path())
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null());
+            .stdin(Stdio::null());
+        if self.verbose {
+            command.stdout(Stdio::inherit()).stderr(Stdio::inherit());
+        } else {
+            command.stdout(Stdio::null()).stderr(Stdio::null());
+        }
         apply_subprocess_flags(&mut command);
         if let Err(error) = command.spawn() {
             cerror!(
@@ -133,12 +141,10 @@ impl Cluster for KminusCluster {
             .arg(KM_CREATE_SUBCOMMAND)
             .arg(KM_WORKDIR_ARGUMENT)
             .arg(self.path())
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null());
+            .stdin(Stdio::null());
         apply_detached_flags(&mut command);
-        let status = match command.status() {
-            Ok(status) => status,
+        let output = match subprocess::run(&mut command, KM_BINARY, self.verbose) {
+            Ok(output) => output,
             Err(error) => {
                 cerror!(
                     "Failed to run '{} {KM_CREATE_SUBCOMMAND}': {error}",
@@ -147,10 +153,13 @@ impl Cluster for KminusCluster {
                 return abort(GeneralError);
             }
         };
-        if !status.success() {
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
             cerror!(
-                "'{} {KM_CREATE_SUBCOMMAND}' failed with status {status}.",
-                km.display()
+                "'{} {KM_CREATE_SUBCOMMAND}' failed with status {}: {}",
+                km.display(),
+                output.status,
+                stderr.trim()
             );
             return abort(GeneralError);
         }

@@ -5,7 +5,7 @@
 use clap_derive::Args;
 use tracing::info;
 
-use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
+use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
 use crate::client::tdkserver::common::prompt_yes_no;
 use crate::provider::provider_for;
 use crate::system::exit::Result;
@@ -43,7 +43,7 @@ pub struct UseArguments {
     pub yes: bool,
 }
 
-pub async fn command_use(arguments: UseArguments) -> Result {
+pub async fn command_use(arguments: UseArguments, globals: &GlobalArguments) -> Result {
     let UseArguments {
         cluster,
         instance,
@@ -51,7 +51,7 @@ pub async fn command_use(arguments: UseArguments) -> Result {
         yes,
     } = arguments;
 
-    let provider = provider_for(cluster, instance).await?;
+    let provider = provider_for(cluster, instance, globals.verbose).await?;
     provider.ensure_usable_runtime().await?;
 
     if preview {

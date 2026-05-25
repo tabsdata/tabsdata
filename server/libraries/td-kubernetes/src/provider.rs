@@ -244,6 +244,7 @@ pub(crate) trait CloudProvider: Provider {}
 pub async fn provider_for(
     cluster: ClusterArguments,
     instance: InstanceArguments,
+    verbose: bool,
 ) -> Result<Box<dyn Provider>> {
     let provider = match cluster.provider {
         Some(provider) => provider,
@@ -255,19 +256,19 @@ pub async fn provider_for(
     match provider {
         ClusterProvider::Kminus => {
             check_kminus_ulimit()?;
-            let provider = KminusProvider::build(cluster, instance)?;
+            let provider = KminusProvider::build(cluster, instance, verbose)?;
             Ok(Box::new(provider))
         }
         ClusterProvider::Docker => {
-            let provider = DockerProvider::build(cluster, instance).await?;
+            let provider = DockerProvider::build(cluster, instance, verbose).await?;
             Ok(Box::new(provider))
         }
         ClusterProvider::Eks => {
-            let provider = EksProvider::build(cluster, instance).await?;
+            let provider = EksProvider::build(cluster, instance, verbose).await?;
             Ok(Box::new(provider))
         }
         ClusterProvider::Fargate => {
-            let provider = FargateProvider::build(cluster, instance).await?;
+            let provider = FargateProvider::build(cluster, instance, verbose).await?;
             Ok(Box::new(provider))
         }
     }
@@ -305,14 +306,15 @@ fn check_kminus_ulimit() -> Result {
 pub async fn provider_for_or_tdkcontext(
     cluster: ClusterArguments,
     instance: InstanceArguments,
+    verbose: bool,
 ) -> Result<Box<dyn Provider>> {
     if cluster.provider.is_some() {
-        return provider_for(cluster, instance).await;
+        return provider_for(cluster, instance, verbose).await;
     }
     match TdkContext::load()? {
         Some(tdkcontext) => {
             let (cluster, instance) = tdkcontext.to_args();
-            provider_for(cluster, instance).await
+            provider_for(cluster, instance, verbose).await
         }
         None => {
             cerror!(

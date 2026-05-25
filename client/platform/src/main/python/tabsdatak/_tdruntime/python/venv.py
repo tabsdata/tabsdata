@@ -156,15 +156,21 @@ class PythonEnvironment:
             if recipe is not None
         )
 
-    def create(self, recipe: VenvRecipe, *, python_version: str) -> None:
-        self.install_venv(python_version)
-        self.upgrade_pip()
-        self.install_requirements_dev(recipe.packages)
+    def create(
+        self,
+        recipe: VenvRecipe,
+        *,
+        python_version: str,
+        verbose: bool = False,
+    ) -> None:
+        self.install_venv(python_version, verbose=verbose)
+        self.upgrade_pip(verbose=verbose)
+        self.install_requirements_dev(recipe.packages, verbose=verbose)
         toolkit, others = self.split_packages(recipe.packages)
         if toolkit:
-            self.install_tabsdata_packages(toolkit)
+            self.install_tabsdata_packages(toolkit, verbose=verbose)
         if others:
-            self.install_tabsdata_packages(others)
+            self.install_tabsdata_packages(others, verbose=verbose)
         source_root = Path(sys.prefix)
         for package in recipe.packages:
             for binary in package.binaries:
@@ -198,7 +204,12 @@ class PythonEnvironment:
                         f"Failed to link libexec launcher '{entry.name}': {error}"
                     )
 
-    def install_requirements_dev(self, packages: tuple[PackageRecipe, ...]) -> None:
+    def install_requirements_dev(
+        self,
+        packages: tuple[PackageRecipe, ...],
+        *,
+        verbose: bool = False,
+    ) -> None:
         tabsdata = next(
             (package for package in packages if package.name == TABSDATA_PACKAGE),
             None,
@@ -219,10 +230,10 @@ class PythonEnvironment:
             raise VenvCreationError(
                 detail=f"Constraints file '{constraints}' not found",
             )
-        self.uv([
-            "pip",
-            "install",
-            "--quiet",
+        command = ["pip", "install"]
+        if not verbose:
+            command.append("--quiet")
+        command.extend([
             "--python",
             str(self.python()),
             "-r",
@@ -230,6 +241,7 @@ class PythonEnvironment:
             "-c",
             str(constraints),
         ])
+        self.uv(command, verbose=verbose)
 
     @staticmethod
     def split_packages(
@@ -243,36 +255,44 @@ class PythonEnvironment:
         )
         return toolkit, product
 
-    def install_venv(self, python_version: str) -> None:
-        self.uv([
-            "venv",
-            "--quiet",
+    def install_venv(self, python_version: str, *, verbose: bool = False) -> None:
+        command = ["venv"]
+        if not verbose:
+            command.append("--quiet")
+        command.extend([
             "--seed",
             "--relocatable",
             "--python",
             python_version,
             str(self.root),
         ])
+        self.uv(command, verbose=verbose)
 
-    def upgrade_pip(self) -> None:
-        self.uv([
-            "pip",
-            "install",
-            "--quiet",
+    def upgrade_pip(self, *, verbose: bool = False) -> None:
+        command = ["pip", "install"]
+        if not verbose:
+            command.append("--quiet")
+        command.extend([
             "--python",
             str(self.python()),
             "--upgrade",
             "pip",
         ])
+        self.uv(command, verbose=verbose)
 
-    def install_tabsdata_packages(self, packages: tuple[PackageRecipe, ...]) -> None:
-        command = [
-            "pip",
-            "install",
-            "--quiet",
+    def install_tabsdata_packages(
+        self,
+        packages: tuple[PackageRecipe, ...],
+        *,
+        verbose: bool = False,
+    ) -> None:
+        command = ["pip", "install"]
+        if not verbose:
+            command.append("--quiet")
+        command.extend([
             "--python",
             str(self.python()),
-        ]
+        ])
         if any(package.recipe == InstallRecipe.EDITABLE for package in packages):
             command.extend([
                 "--config-settings",
@@ -281,7 +301,7 @@ class PythonEnvironment:
             ])
         for package in packages:
             command.extend(self.install_tabsdata_packages_arguments(package))
-        self.uv(command)
+        self.uv(command, verbose=verbose)
 
     @staticmethod
     def install_tabsdata_packages_arguments(package: PackageRecipe) -> list[str]:
@@ -329,12 +349,12 @@ class PythonEnvironment:
                     tar.add(self.root, arcname=self.root.name)
 
     @staticmethod
-    def uv(arguments: list[str]) -> None:
+    def uv(arguments: list[str], *, verbose: bool = False) -> None:
         try:
             result = subprocess.run(
                 ["uv", *arguments],
                 check=False,
-                capture_output=True,
+                capture_output=not verbose,
                 text=True,
             )
         except FileNotFoundError as error:
@@ -342,10 +362,14 @@ class PythonEnvironment:
                 detail=f"Binary 'uv' not found: {error}",
             ) from error
         if result.returncode != 0:
+            captured = (
+                f": {result.stderr.strip() or result.stdout.strip()}"
+                if not verbose
+                else ""
+            )
             raise VenvCreationError(
                 detail=(
                     f"Command 'uv {arguments[0]}' failed"
-                    f" (exit {result.returncode}):"
-                    f" {result.stderr.strip() or result.stdout.strip()}"
+                    f" (exit {result.returncode}){captured}"
                 ),
             )

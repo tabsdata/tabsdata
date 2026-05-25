@@ -18,7 +18,11 @@ use crate::system::exit::{Result, abort};
 pub struct EksProvider {}
 
 impl EksProvider {
-    pub async fn build(_cluster: ClusterArguments, _instance: InstanceArguments) -> Result<Self> {
+    pub async fn build(
+        _cluster: ClusterArguments,
+        _instance: InstanceArguments,
+        _verbose: bool,
+    ) -> Result<Self> {
         cerror!(
             "Provider '{}' is not yet implemented.",
             ClusterProvider::Eks.as_str()

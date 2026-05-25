@@ -52,7 +52,7 @@ def main() -> int:
     for line in render(profile):
         print(line)
     if arguments.command == COMMAND_CREATE:
-        return create(profile, arguments.target)
+        return create(profile, arguments.target, verbose=arguments.verbose)
     return 0
 
 
@@ -78,6 +78,12 @@ def scripts(target: Path) -> int:
 
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="td_pyvenv")
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        default=False,
+        help="Show the output of every subprocess this command runs.",
+    )
     subparsers = parser.add_subparsers(dest="command")
     subparsers.add_parser(
         COMMAND_RESOLVE,
@@ -125,13 +131,18 @@ def parse_arguments() -> argparse.Namespace:
     return arguments
 
 
-def create(profile: EnvironmentProfile, target: Path) -> int:
+def create(
+    profile: EnvironmentProfile,
+    target: Path,
+    *,
+    verbose: bool = False,
+) -> int:
     try:
         target.mkdir(parents=True, exist_ok=True)
         recipes = build_recipes(profile)
         with ThreadPoolExecutor(max_workers=len(recipes)) as executor:
             futures = [
-                executor.submit(create_recipe, recipe, profile, target)
+                executor.submit(create_recipe, recipe, profile, target, verbose=verbose)
                 for recipe in recipes
             ]
             for future in futures:
@@ -143,10 +154,14 @@ def create(profile: EnvironmentProfile, target: Path) -> int:
 
 
 def create_recipe(
-    recipe: VenvRecipe, profile: EnvironmentProfile, target: Path
+    recipe: VenvRecipe,
+    profile: EnvironmentProfile,
+    target: Path,
+    *,
+    verbose: bool = False,
 ) -> None:
     environment = PythonEnvironment(target / recipe.name)
-    environment.create(recipe, python_version=profile.python_version)
+    environment.create(recipe, python_version=profile.python_version, verbose=verbose)
     environment.archive(target / f"{recipe.name}.tar.zst")
 
 

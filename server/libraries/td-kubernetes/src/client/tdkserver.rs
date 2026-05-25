@@ -25,19 +25,20 @@ pub struct TabsDataKubernetesClient;
 impl TabsDataKubernetesClient {
     async fn run(&self) -> Result {
         let arguments = Arguments::parse();
+        let globals = arguments.globals;
         match arguments.command {
             None => {
                 Arguments::command().print_help().ok();
                 println!();
                 Ok(())
             }
-            Some(Commands::Shell) => command_shell().await,
-            Some(Commands::Create(arguments)) => command_create(arguments).await,
-            Some(Commands::Use(arguments)) => command_use(arguments).await,
+            Some(Commands::Shell) => command_shell(&globals).await,
+            Some(Commands::Create(arguments)) => command_create(arguments, &globals).await,
+            Some(Commands::Use(arguments)) => command_use(arguments, &globals).await,
             Some(Commands::Using(arguments)) => command_using(arguments).await,
             Some(Commands::Unuse(arguments)) => command_unuse(arguments).await,
-            Some(Commands::Start(arguments)) => command_start(arguments).await,
-            Some(Commands::Stop(arguments)) => command_stop(arguments).await,
+            Some(Commands::Start(arguments)) => command_start(arguments, &globals).await,
+            Some(Commands::Stop(arguments)) => command_stop(arguments, &globals).await,
         }
     }
 }

@@ -23,6 +23,7 @@ use crate::instance::manifest::{MANIFEST_FILE, Manifest, deserialize_manifest};
 use crate::instance::profile::bundle::{ParsedFileName, parse_filename, pick_winner};
 use crate::provider::ClusterProvider;
 use crate::system::exit::{Result, abort};
+use crate::system::subprocess;
 use crate::system::subprocess::apply_detached_flags;
 
 pub const PATH_SEPARATOR: &str = "__";
@@ -32,7 +33,7 @@ pub struct Profile {
     pub manifest: Manifest,
 }
 
-pub fn resolve_kprofile_path() -> Result<PathBuf> {
+pub fn resolve_kprofile_path(verbose: bool) -> Result<PathBuf> {
     let resolver = match resolve_python_binary(PROGRAM_TD_RESOURCE) {
         Ok(path) => path,
         Err(error) => {
@@ -43,7 +44,7 @@ pub fn resolve_kprofile_path() -> Result<PathBuf> {
     let mut command = SystemCommand::new(&resolver);
     command.arg(RESOURCE_KPROFILE);
     apply_detached_flags(&mut command);
-    let output = match command.output() {
+    let output = match subprocess::run(&mut command, PROGRAM_TD_RESOURCE, verbose) {
         Ok(output) => output,
         Err(error) => {
             cerror!(
@@ -91,8 +92,8 @@ struct DiscoveryFile {
     content: Vec<u8>,
 }
 
-pub fn load_profile(provider: ClusterProvider) -> Result<Profile> {
-    let root = resolve_kprofile_path()?;
+pub fn load_profile(provider: ClusterProvider, verbose: bool) -> Result<Profile> {
+    let root = resolve_kprofile_path(verbose)?;
     let tabsdata_version = match tabsdata_version() {
         Ok(version) => version,
         Err(error) => {

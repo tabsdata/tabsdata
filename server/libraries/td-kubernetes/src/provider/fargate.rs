@@ -18,7 +18,11 @@ use crate::system::exit::{Result, abort};
 pub struct FargateProvider {}
 
 impl FargateProvider {
-    pub async fn build(_cluster: ClusterArguments, _instance: InstanceArguments) -> Result<Self> {
+    pub async fn build(
+        _cluster: ClusterArguments,
+        _instance: InstanceArguments,
+        _verbose: bool,
+    ) -> Result<Self> {
         cerror!(
             "Provider '{}' is not yet implemented.",
             ClusterProvider::Fargate.as_str()

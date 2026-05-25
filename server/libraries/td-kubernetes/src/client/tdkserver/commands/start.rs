@@ -5,7 +5,7 @@
 use clap_derive::Args;
 use td_common::status::ExitStatus::Cancelled;
 
-use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
+use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
 use crate::client::tdkserver::common::prompt_yes_no;
 use crate::provider::provider_for_or_tdkcontext;
 use crate::system::exit::{Result, abort};
@@ -43,7 +43,7 @@ pub struct StartArguments {
     pub yes: bool,
 }
 
-pub async fn command_start(arguments: StartArguments) -> Result {
+pub async fn command_start(arguments: StartArguments, globals: &GlobalArguments) -> Result {
     let StartArguments {
         cluster,
         instance,
@@ -51,7 +51,7 @@ pub async fn command_start(arguments: StartArguments) -> Result {
         yes,
     } = arguments;
 
-    let provider = provider_for_or_tdkcontext(cluster, instance).await?;
+    let provider = provider_for_or_tdkcontext(cluster, instance, globals.verbose).await?;
     provider.ensure_startable_runtime().await?;
 
     if preview {

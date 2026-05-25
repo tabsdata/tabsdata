@@ -2,10 +2,59 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-use std::process::Command as SystemCommand;
+use std::io::{self, BufRead, BufReader, Read};
+use std::process::{Command as SystemCommand, Output, Stdio};
+use std::thread;
 use std::time::{Duration, Instant};
 
 use sysinfo::{Pid, System};
+use tracing::info;
+
+pub fn run(command: &mut SystemCommand, label: &str, verbose: bool) -> io::Result<Output> {
+    if !verbose {
+        return command.output();
+    }
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = command.spawn()?;
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+    let stdout_handle = stdout.map(|pipe| {
+        let label = label.to_owned();
+        thread::spawn(move || stream_lines(pipe, &label, "stdout"))
+    });
+    let stderr_handle = stderr.map(|pipe| {
+        let label = label.to_owned();
+        thread::spawn(move || stream_lines(pipe, &label, "stderr"))
+    });
+    let status = child.wait()?;
+    let captured_stdout = stdout_handle
+        .map(|h| h.join().unwrap_or_default())
+        .unwrap_or_default();
+    let captured_stderr = stderr_handle
+        .map(|h| h.join().unwrap_or_default())
+        .unwrap_or_default();
+    Ok(Output {
+        status,
+        stdout: captured_stdout,
+        stderr: captured_stderr,
+    })
+}
+
+fn stream_lines<R: Read>(pipe: R, label: &str, stream: &str) -> Vec<u8> {
+    let mut buffer = Vec::new();
+    let reader = BufReader::new(pipe);
+    for line in reader.lines() {
+        match line {
+            Ok(text) => {
+                info!("  [{label} {stream}] {text}");
+                buffer.extend_from_slice(text.as_bytes());
+                buffer.push(b'\n');
+            }
+            Err(_) => break,
+        }
+    }
+    buffer
+}
 
 pub fn apply_detached_flags(command: &mut SystemCommand) {
     #[cfg(target_os = "windows")]

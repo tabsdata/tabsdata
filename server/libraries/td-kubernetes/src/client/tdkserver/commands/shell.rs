@@ -16,6 +16,8 @@ use reedline::{
 use td_common::env::TABSDATA_HOME_DIR;
 use tracing::info;
 
+use crate::client::tdkserver::arguments::GlobalArguments;
+
 use super::create::{CreateArguments, command_create};
 use super::start::{StartArguments, command_start};
 use super::stop::{StopArguments, command_stop};
@@ -57,7 +59,7 @@ struct ShellInput {
     command: ShellCommand,
 }
 
-pub async fn command_shell() -> Result {
+pub async fn command_shell(globals: &GlobalArguments) -> Result {
     show_quick_reference();
     show_initial_active_context();
 
@@ -123,10 +125,10 @@ pub async fn command_shell() -> Result {
         match ShellInput::try_parse_from(tokens) {
             Ok(input) => match input.command {
                 ShellCommand::Create(arguments) => {
-                    let _ = command_create(arguments).await;
+                    let _ = command_create(arguments, globals).await;
                 }
                 ShellCommand::Use(arguments) => {
-                    let _ = command_use(arguments).await;
+                    let _ = command_use(arguments, globals).await;
                 }
                 ShellCommand::Using(arguments) => {
                     let _ = command_using(arguments).await;
@@ -135,10 +137,10 @@ pub async fn command_shell() -> Result {
                     let _ = command_unuse(arguments).await;
                 }
                 ShellCommand::Start(arguments) => {
-                    let _ = command_start(arguments).await;
+                    let _ = command_start(arguments, globals).await;
                 }
                 ShellCommand::Stop(arguments) => {
-                    let _ = command_stop(arguments).await;
+                    let _ = command_stop(arguments, globals).await;
                 }
                 ShellCommand::Exit | ShellCommand::Quit => break,
             },
