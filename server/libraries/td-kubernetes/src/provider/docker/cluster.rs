@@ -7,17 +7,17 @@ use kube::{Client, Config};
 use crate::provider::Cluster;
 use crate::system::exit::Result;
 
-pub struct KubernetesCluster {
+pub struct DockerCluster {
     config: Config,
 }
 
-impl KubernetesCluster {
+impl DockerCluster {
     pub fn new(config: Config) -> Self {
         Self { config }
     }
 }
 
-impl Cluster for KubernetesCluster {
+impl Cluster for DockerCluster {
     fn create(&self) -> Result {
         Ok(())
     }

@@ -6,15 +6,15 @@ use crate::provider::Instance;
 use crate::system::exit::Result;
 
 #[derive(Default)]
-pub struct KubernetesInstance;
+pub struct DockerInstance;
 
-impl KubernetesInstance {
+impl DockerInstance {
     pub fn new() -> Self {
         Self
     }
 }
 
-impl Instance for KubernetesInstance {
+impl Instance for DockerInstance {
     async fn start(&self) -> Result {
         Ok(())
     }

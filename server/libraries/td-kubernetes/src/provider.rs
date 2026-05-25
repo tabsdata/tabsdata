@@ -3,10 +3,10 @@
 //
 
 pub(crate) mod axes;
+pub mod kminus;
+pub mod docker;
 pub mod eks;
 pub mod fargate;
-pub mod kminus;
-pub mod kubernetes;
 
 use std::future::Future;
 
@@ -25,23 +25,23 @@ use crate::gateway::resolver::SystemValues;
 use crate::instance::profile::bundle::Axis;
 use crate::pod::{ValidationError, container as container_pod, process as process_pod};
 use crate::provider::axes::{Lifecycle, Location, Platform, Workload};
+use crate::provider::docker::DockerProvider;
 use crate::provider::eks::EksProvider;
 use crate::provider::fargate::FargateProvider;
 use crate::provider::kminus::KminusProvider;
-use crate::provider::kubernetes::KubernetesProvider;
 use crate::system::exit::{Result, abort};
 
 pub const PROVIDER_AXIS_NAME: &str = "provider";
 
 const PROVIDER_VALUES: &[&str] = &[
-    ClusterProvider::Kubernetes.as_str(),
     ClusterProvider::Kminus.as_str(),
+    ClusterProvider::Docker.as_str(),
     ClusterProvider::Eks.as_str(),
     ClusterProvider::Fargate.as_str(),
 ];
 
-const PREFERRED_KUBERNETES: &[&str] = &[ClusterProvider::Kubernetes.as_str()];
 const PREFERRED_KMINUS: &[&str] = &[ClusterProvider::Kminus.as_str()];
+const PREFERRED_DOCKER: &[&str] = &[ClusterProvider::Docker.as_str()];
 const PREFERRED_EKS: &[&str] = &[ClusterProvider::Eks.as_str()];
 const PREFERRED_FARGATE: &[&str] = &[ClusterProvider::Fargate.as_str()];
 
@@ -52,8 +52,8 @@ const AXES: &[Axis] = &[Axis {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum ClusterProvider {
-    Kubernetes,
     Kminus,
+    Docker,
     Eks,
     Fargate,
 }
@@ -62,8 +62,8 @@ pub enum ClusterProvider {
 impl ClusterProvider {
     pub const fn as_str(self) -> &'static str {
         match self {
-            Self::Kubernetes => "kubernetes",
             Self::Kminus => "kminus",
+            Self::Docker => "docker",
             Self::Eks => "eks",
             Self::Fargate => "fargate",
         }
@@ -71,7 +71,7 @@ impl ClusterProvider {
 
     pub(crate) fn location(self) -> Location {
         match self {
-            Self::Kubernetes | Self::Kminus => Location::Local,
+            Self::Kminus | Self::Docker => Location::Local,
             Self::Eks | Self::Fargate => Location::Cloud,
         }
     }
@@ -79,20 +79,20 @@ impl ClusterProvider {
     pub(crate) fn workload(self) -> Workload {
         match self {
             Self::Kminus => Workload::Process,
-            Self::Kubernetes | Self::Eks | Self::Fargate => Workload::Container,
+            Self::Docker | Self::Eks | Self::Fargate => Workload::Container,
         }
     }
 
     pub(crate) fn lifecycle(self) -> Lifecycle {
         match self {
-            Self::Kubernetes | Self::Kminus | Self::Eks => Lifecycle::Hosted,
+            Self::Kminus | Self::Docker | Self::Eks => Lifecycle::Hosted,
             Self::Fargate => Lifecycle::Serverless,
         }
     }
 
     pub(crate) fn platform(self) -> Platform {
         match self {
-            Self::Kubernetes | Self::Kminus => Platform::Host,
+            Self::Kminus | Self::Docker => Platform::Host,
             Self::Eks | Self::Fargate => Platform::Aws,
         }
     }
@@ -103,8 +103,8 @@ impl ClusterProvider {
 
     pub fn preferred_values(self) -> &'static [&'static str] {
         match self {
-            Self::Kubernetes => PREFERRED_KUBERNETES,
             Self::Kminus => PREFERRED_KMINUS,
+            Self::Docker => PREFERRED_DOCKER,
             Self::Eks => PREFERRED_EKS,
             Self::Fargate => PREFERRED_FARGATE,
         }
@@ -253,13 +253,13 @@ pub async fn provider_for(
         }
     };
     match provider {
-        ClusterProvider::Kubernetes => {
-            let provider = KubernetesProvider::build(cluster, instance).await?;
-            Ok(Box::new(provider))
-        }
         ClusterProvider::Kminus => {
             check_kminus_ulimit()?;
             let provider = KminusProvider::build(cluster, instance)?;
+            Ok(Box::new(provider))
+        }
+        ClusterProvider::Docker => {
+            let provider = DockerProvider::build(cluster, instance).await?;
             Ok(Box::new(provider))
         }
         ClusterProvider::Eks => {

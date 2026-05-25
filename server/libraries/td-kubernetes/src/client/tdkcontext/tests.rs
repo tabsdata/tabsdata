@@ -6,13 +6,13 @@ use std::path::PathBuf;
 
 use super::*;
 
-fn sample_kubernetes() -> TdkContext {
-    TdkContext::Kubernetes {
+fn sample_docker() -> TdkContext {
+    TdkContext::Docker {
         kubeconfig: PathBuf::from("/home/user/.kube/config"),
         context: "dev".to_owned(),
         cluster: "dev-cluster".to_owned(),
         namespace: "dev-ns".to_owned(),
-        inputs: KubernetesInputs {
+        inputs: DockerInputs {
             kubeconfig: Some(PathBuf::from("/home/user/.kube/config")),
             context: Some("dev".to_owned()),
             current: false,
@@ -55,11 +55,11 @@ fn tdkcontext_path_lives_under_tabsdata_home_dir() {
 }
 
 #[test]
-fn kubernetes_serializes_with_lowercase_provider_tag() {
-    let context = sample_kubernetes();
+fn docker_serializes_with_lowercase_provider_tag() {
+    let context = sample_docker();
     let json = serde_json::to_string(&context).expect("serialize kubernetes");
     assert!(
-        json.contains("\"provider\":\"kubernetes\""),
+        json.contains("\"provider\":\"docker\""),
         "missing lowercase provider tag in: {json}"
     );
 }
@@ -75,11 +75,11 @@ fn kminus_serializes_with_lowercase_provider_tag() {
 }
 
 #[test]
-fn kubernetes_round_trips_through_json() {
-    let original = sample_kubernetes();
+fn docker_round_trips_through_json() {
+    let original = sample_docker();
     let json = serde_json::to_string(&original).expect("serialize");
     let parsed: TdkContext = serde_json::from_str(&json).expect("deserialize");
-    let TdkContext::Kubernetes {
+    let TdkContext::Docker {
         kubeconfig,
         context,
         cluster,
@@ -87,7 +87,7 @@ fn kubernetes_round_trips_through_json() {
         inputs,
     } = parsed
     else {
-        panic!("expected Kubernetes variant after round trip");
+        panic!("expected Docker variant after round trip");
     };
     assert_eq!(kubeconfig, PathBuf::from("/home/user/.kube/config"));
     assert_eq!(context, "dev");
@@ -130,16 +130,16 @@ fn kminus_round_trips_through_json() {
 }
 
 #[test]
-fn kubernetes_inputs_with_default_values_skips_optional_fields_in_json() {
-    let context = TdkContext::Kubernetes {
+fn docker_inputs_with_default_values_skips_optional_fields_in_json() {
+    let context = TdkContext::Docker {
         kubeconfig: PathBuf::from("/k"),
         context: "c".to_owned(),
         cluster: "cl".to_owned(),
         namespace: "n".to_owned(),
-        inputs: KubernetesInputs::default(),
+        inputs: DockerInputs::default(),
     };
     let json = serde_json::to_string(&context).expect("serialize");
-    // KubernetesInputs::default has every field at None / false; these are
+    // DockerInputs::default has every field at None / false; these are
     // marked skip_serializing_if so the serialized inputs object is empty.
     assert!(!json.contains("\"current\""), "current not skipped: {json}");
     assert!(
@@ -149,8 +149,8 @@ fn kubernetes_inputs_with_default_values_skips_optional_fields_in_json() {
 }
 
 #[test]
-fn kubernetes_inputs_default_has_all_optional_fields_unset() {
-    let inputs = KubernetesInputs::default();
+fn docker_inputs_default_has_all_optional_fields_unset() {
+    let inputs = DockerInputs::default();
     assert!(inputs.kubeconfig.is_none());
     assert!(inputs.context.is_none());
     assert!(!inputs.current);
@@ -165,10 +165,10 @@ fn kminus_inputs_default_has_all_optional_fields_unset() {
 }
 
 #[test]
-fn provider_returns_kubernetes_for_kubernetes_variant() {
+fn provider_returns_docker_for_docker_variant() {
     assert!(matches!(
-        sample_kubernetes().provider(),
-        ClusterProvider::Kubernetes
+        sample_docker().provider(),
+        ClusterProvider::Docker
     ));
 }
 
@@ -181,8 +181,8 @@ fn provider_returns_kminus_for_kminus_variant() {
 }
 
 #[test]
-fn display_name_for_kubernetes_is_context_slash_namespace() {
-    assert_eq!(sample_kubernetes().display_name(), "kubernetes:dev/dev-ns");
+fn display_name_for_docker_is_context_slash_namespace() {
+    assert_eq!(sample_docker().display_name(), "docker:dev/dev-ns");
 }
 
 #[test]
@@ -204,11 +204,11 @@ fn display_name_for_kminus_falls_back_when_path_has_no_filename() {
 }
 
 #[test]
-fn to_args_for_kubernetes_preserves_cluster_arguments() {
-    let (cluster, instance) = sample_kubernetes().to_args();
+fn to_args_for_docker_preserves_cluster_arguments() {
+    let (cluster, instance) = sample_docker().to_args();
     assert!(matches!(
         cluster.provider,
-        Some(ClusterProvider::Kubernetes)
+        Some(ClusterProvider::Docker)
     ));
     assert_eq!(cluster.context.as_deref(), Some("dev"));
     assert_eq!(

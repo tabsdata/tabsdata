@@ -11,7 +11,7 @@ fn every_variant_reports_provider_error_as_domain() {
     let cases: [Box<dyn TdDomainError>; 6] = [
         Box::new(ProviderError::ArgumentRequired {
             argument: "provider".to_owned(),
-            provider: "kubernetes".to_owned(),
+            provider: "docker".to_owned(),
         }),
         Box::new(ProviderError::MutuallyExclusiveArguments {
             first: "name".to_owned(),
@@ -34,11 +34,11 @@ fn every_variant_reports_provider_error_as_domain() {
 fn struct_variant_display_carries_named_fields() {
     let error = ProviderError::ArgumentRequired {
         argument: "provider".to_owned(),
-        provider: "kubernetes".to_owned(),
+        provider: "docker".to_owned(),
     };
     let display = error.to_string();
     assert!(display.contains("--provider"));
-    assert!(display.contains("kubernetes"));
+    assert!(display.contains("docker"));
 
     let error = ProviderError::InvalidKminusInstance {
         folder: "/tmp/td".to_owned(),

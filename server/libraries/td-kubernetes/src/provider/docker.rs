@@ -15,7 +15,7 @@ use td_common::status::ExitStatus::{GeneralError, NoAction};
 use tracing::info;
 
 use crate::cerror;
-use crate::client::tdkcontext::{KubernetesInputs, TdkContext};
+use crate::client::tdkcontext::{DockerInputs, TdkContext};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::widgets::spinner;
 use crate::constants::CONFIGMAP_TABSDATA;
@@ -32,25 +32,25 @@ use crate::kubernetes::client::build_kube_client;
 use crate::kubernetes::kubeconfig::{
     build_kubeconfig, resolve_cluster_name, resolve_current_context, resolve_kubefile,
 };
-use crate::provider::kubernetes::cluster::KubernetesCluster;
-use crate::provider::kubernetes::instance::KubernetesInstance;
+use crate::provider::docker::cluster::DockerCluster;
+use crate::provider::docker::instance::DockerInstance;
 use crate::provider::{
     Cluster, ClusterProvider, ContainerProvider, HostedProvider, Instance, LocalProvider, Provider,
     Transaction,
 };
 use crate::system::exit::{Result, abort};
 
-pub struct KubernetesProvider {
+pub struct DockerProvider {
     kubefile: PathBuf,
     context: String,
     cluster_name: String,
     config: Config,
-    cluster: KubernetesCluster,
-    instance: KubernetesInstance,
-    inputs: KubernetesInputs,
+    cluster: DockerCluster,
+    instance: DockerInstance,
+    inputs: DockerInputs,
 }
 
-impl KubernetesProvider {
+impl DockerProvider {
     pub async fn build(cluster: ClusterArguments, instance: InstanceArguments) -> Result<Self> {
         if cluster.kubeconfig.is_none() && cluster.context.is_none() && !cluster.current {
             cerror!(
@@ -65,19 +65,19 @@ impl KubernetesProvider {
         if instance.name.is_some() {
             cerror!(
                 "Argument --name is not valid for the '{}' provider.",
-                ClusterProvider::Kubernetes.as_str()
+                ClusterProvider::Docker.as_str()
             );
             return abort(GeneralError);
         }
         if instance.path.is_some() {
             cerror!(
                 "Argument --path is not valid for the '{}' provider.",
-                ClusterProvider::Kubernetes.as_str()
+                ClusterProvider::Docker.as_str()
             );
             return abort(GeneralError);
         }
 
-        let inputs = KubernetesInputs {
+        let inputs = DockerInputs {
             kubeconfig: cluster.kubeconfig.clone(),
             context: cluster.context.clone(),
             current: cluster.current,
@@ -118,8 +118,8 @@ impl KubernetesProvider {
             config.default_namespace = DEFAULT_INSTANCE.to_string();
         }
 
-        let cluster = KubernetesCluster::new(config.clone());
-        let instance = KubernetesInstance::new();
+        let cluster = DockerCluster::new(config.clone());
+        let instance = DockerInstance::new();
 
         Ok(Self {
             kubefile,
@@ -134,22 +134,22 @@ impl KubernetesProvider {
 }
 
 #[async_trait]
-impl Provider for KubernetesProvider {
+impl Provider for DockerProvider {
     fn name(&self) -> &'static str {
-        ClusterProvider::Kubernetes.as_str()
+        ClusterProvider::Docker.as_str()
     }
 
     fn display_name(&self) -> String {
         format!(
             "{}:{}/{}",
-            ClusterProvider::Kubernetes.as_str(),
+            ClusterProvider::Docker.as_str(),
             self.context,
             self.config.default_namespace
         )
     }
 
     fn to_tdkcontext(&self) -> TdkContext {
-        TdkContext::Kubernetes {
+        TdkContext::Docker {
             kubeconfig: self.kubefile.clone(),
             context: self.context.clone(),
             cluster: self.cluster_name.clone(),
@@ -174,7 +174,7 @@ impl Provider for KubernetesProvider {
 
     fn preview_create_runtime_summary(&self) {
         info!("About to create tabsdata instance:");
-        info!("  - provider.....: {}", ClusterProvider::Kubernetes.as_str());
+        info!("  - provider.....: {}", ClusterProvider::Docker.as_str());
         info!("  - kubeconfig...: {}", self.kubefile.display());
         info!("  - context......: {}", self.context);
         info!("  - cluster url..: {}", self.config.cluster_url);
@@ -205,7 +205,7 @@ impl Provider for KubernetesProvider {
 
     fn preview_use_runtime_summary(&self) {
         info!("About to use tabsdata instance:");
-        info!("  - provider.....: {}", ClusterProvider::Kubernetes.as_str());
+        info!("  - provider.....: {}", ClusterProvider::Docker.as_str());
         info!("  - kubeconfig...: {}", self.kubefile.display());
         info!("  - context......: {}", self.context);
         info!("  - cluster url..: {}", self.config.cluster_url);
@@ -235,7 +235,7 @@ impl Provider for KubernetesProvider {
 
     fn preview_start_runtime_summary(&self) {
         info!("About to start tabsdata instance:");
-        info!("  - provider.....: {}", ClusterProvider::Kubernetes.as_str());
+        info!("  - provider.....: {}", ClusterProvider::Docker.as_str());
         info!("  - kubeconfig...: {}", self.kubefile.display());
         info!("  - context......: {}", self.context);
         info!("  - namespace....: {}", self.config.default_namespace);
@@ -256,7 +256,7 @@ impl Provider for KubernetesProvider {
 
     fn preview_stop_runtime_summary(&self) {
         info!("About to stop tabsdata instance:");
-        info!("  - provider.....: {}", ClusterProvider::Kubernetes.as_str());
+        info!("  - provider.....: {}", ClusterProvider::Docker.as_str());
         info!("  - kubeconfig...: {}", self.kubefile.display());
         info!("  - context......: {}", self.context);
         info!("  - namespace....: {}", self.config.default_namespace);
@@ -332,7 +332,7 @@ impl Provider for KubernetesProvider {
     }
 
     fn cluster_provider(&self) -> ClusterProvider {
-        ClusterProvider::Kubernetes
+        ClusterProvider::Docker
     }
 
     async fn kube_config(&self) -> Result<kube::Config> {
@@ -352,13 +352,13 @@ impl Provider for KubernetesProvider {
     }
 }
 
-impl ContainerProvider for KubernetesProvider {}
+impl ContainerProvider for DockerProvider {}
 
-impl HostedProvider for KubernetesProvider {}
+impl HostedProvider for DockerProvider {}
 
-impl LocalProvider for KubernetesProvider {}
+impl LocalProvider for DockerProvider {}
 
-impl KubernetesProvider {
+impl DockerProvider {
     async fn store_configmap_inner(&self) -> Result {
         let loaded = load_profile(self.cluster_provider())?;
         let resolver = ConfigurationResolver::new(self.system_values()?);

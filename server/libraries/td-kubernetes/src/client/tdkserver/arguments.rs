@@ -62,8 +62,8 @@ pub struct ClusterArguments {
         required = false,
         value_enum,
         long_help = "Provider of the cluster: \
-                     'kubernetes' for a local kubernetes cluster, \
                      'kminus' for a development kminus cluster, \
+                     'docker' for the Kubernetes cluster bundled with Docker Desktop on macOS/Windows, \
                      'eks' for AWS EKS, \
                      'fargate' for AWS EKS-on-Fargate. \
                      When unspecified, the value from the active context is taken; \
@@ -76,7 +76,7 @@ pub struct ClusterArguments {
         name = "context",
         required = false,
         long_help = "Name of the kubeconfig context to use. \
-                     Valid only for the 'kubernetes' provider. \
+                     Valid only for the 'docker' provider. \
                      Mutually exclusive with --current. \
                      Composes with --kubeconfig."
     )]
@@ -88,7 +88,7 @@ pub struct ClusterArguments {
         required = false,
         value_parser = clap::value_parser!(PathBuf),
         long_help = "Path to a kubeconfig file. \
-                     Valid only for the 'kubernetes' provider. \
+                     Valid only for the 'docker' provider. \
                      When unspecified, the file pointed to by the KUBECONFIG environment variable, or ~/.kube/config, is used. \
                      Composes with --context and --current."
     )]
@@ -100,7 +100,7 @@ pub struct ClusterArguments {
         required = false,
         default_value_t = false,
         long_help = "Use the current-context entry of the kubeconfig file. \
-                     Valid only for the 'kubernetes' provider. \
+                     Valid only for the 'docker' provider. \
                      Mutually exclusive with --context. \
                      Composes with --kubeconfig."
     )]
@@ -111,7 +111,7 @@ pub struct ClusterArguments {
         name = "namespace",
         required = false,
         long_help = "Namespace for the instance. \
-                     Valid only for the 'kubernetes' provider. \
+                     Valid only for the 'docker' provider. \
                      Overrides the namespace defined in the kubeconfig context. \
                      When neither is set, the kubernetes default namespace is used."
     )]

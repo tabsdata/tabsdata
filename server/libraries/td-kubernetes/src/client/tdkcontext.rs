@@ -18,7 +18,15 @@ use crate::system::exit::{Result, abort};
 const TDKCONTEXT_FILE: &str = "tdkcontext.json";
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct KubernetesInputs {
+pub struct KminusInputs {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct DockerInputs {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kubeconfig: Option<PathBuf>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -30,14 +38,6 @@ pub struct KubernetesInputs {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct KminusInputs {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub path: Option<PathBuf>,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct EksInputs {}
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -46,14 +46,6 @@ pub struct FargateInputs {}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "provider", rename_all = "lowercase")]
 pub enum TdkContext {
-    Kubernetes {
-        kubeconfig: PathBuf,
-        context: String,
-        cluster: String,
-        namespace: String,
-        #[serde(default)]
-        inputs: KubernetesInputs,
-    },
     Kminus {
         path: PathBuf,
         kubeconfig: PathBuf,
@@ -62,6 +54,14 @@ pub enum TdkContext {
         namespace: String,
         #[serde(default)]
         inputs: KminusInputs,
+    },
+    Docker {
+        kubeconfig: PathBuf,
+        context: String,
+        cluster: String,
+        namespace: String,
+        #[serde(default)]
+        inputs: DockerInputs,
     },
     Eks {
         #[serde(default)]
@@ -147,8 +147,8 @@ impl TdkContext {
 
     pub fn provider(&self) -> ClusterProvider {
         match self {
-            TdkContext::Kubernetes { .. } => ClusterProvider::Kubernetes,
             TdkContext::Kminus { .. } => ClusterProvider::Kminus,
+            TdkContext::Docker { .. } => ClusterProvider::Docker,
             TdkContext::Eks { .. } => ClusterProvider::Eks,
             TdkContext::Fargate { .. } => ClusterProvider::Fargate,
         }
@@ -156,16 +156,16 @@ impl TdkContext {
 
     pub fn display_name(&self) -> String {
         match self {
-            TdkContext::Kubernetes {
-                context, namespace, ..
-            } => format!(
-                "{}:{context}/{namespace}",
-                ClusterProvider::Kubernetes.as_str()
-            ),
             TdkContext::Kminus { path, .. } => {
                 let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("?");
                 format!("{}:{name}", ClusterProvider::Kminus.as_str())
             }
+            TdkContext::Docker {
+                context, namespace, ..
+            } => format!(
+                "{}:{context}/{namespace}",
+                ClusterProvider::Docker.as_str()
+            ),
             TdkContext::Eks { .. } => ClusterProvider::Eks.as_str().to_string(),
             TdkContext::Fargate { .. } => ClusterProvider::Fargate.as_str().to_string(),
         }
@@ -174,19 +174,6 @@ impl TdkContext {
     pub fn report_using(&self) {
         info!("Active context:");
         match self {
-            TdkContext::Kubernetes {
-                kubeconfig,
-                context,
-                cluster,
-                namespace,
-                ..
-            } => {
-                info!("  - provider.....: {}", ClusterProvider::Kubernetes.as_str());
-                info!("  - kubeconfig...: {}", kubeconfig.display());
-                info!("  - context......: {context}");
-                info!("  - cluster......: {cluster}");
-                info!("  - namespace....: {namespace}");
-            }
             TdkContext::Kminus {
                 path,
                 kubeconfig,
@@ -207,6 +194,19 @@ impl TdkContext {
                 info!("  - cluster......: {cluster}");
                 info!("  - namespace....: {namespace}");
             }
+            TdkContext::Docker {
+                kubeconfig,
+                context,
+                cluster,
+                namespace,
+                ..
+            } => {
+                info!("  - provider.....: {}", ClusterProvider::Docker.as_str());
+                info!("  - kubeconfig...: {}", kubeconfig.display());
+                info!("  - context......: {context}");
+                info!("  - cluster......: {cluster}");
+                info!("  - namespace....: {namespace}");
+            }
             TdkContext::Eks { .. } => {
                 info!("  - provider.....: {}", ClusterProvider::Eks.as_str());
             }
@@ -218,24 +218,24 @@ impl TdkContext {
 
     pub fn to_args(&self) -> (ClusterArguments, InstanceArguments) {
         match self {
-            TdkContext::Kubernetes {
+            TdkContext::Kminus { path, .. } => (
+                ClusterArguments::new(Some(ClusterProvider::Kminus), None, None, false, None),
+                InstanceArguments::new(None, Some(path.clone())),
+            ),
+            TdkContext::Docker {
                 kubeconfig,
                 context,
                 namespace,
                 ..
             } => (
                 ClusterArguments::new(
-                    Some(ClusterProvider::Kubernetes),
+                    Some(ClusterProvider::Docker),
                     Some(context.clone()),
                     Some(kubeconfig.clone()),
                     false,
                     Some(namespace.clone()),
                 ),
                 InstanceArguments::new(None, None),
-            ),
-            TdkContext::Kminus { path, .. } => (
-                ClusterArguments::new(Some(ClusterProvider::Kminus), None, None, false, None),
-                InstanceArguments::new(None, Some(path.clone())),
             ),
             TdkContext::Eks { .. } => (
                 ClusterArguments::new(Some(ClusterProvider::Eks), None, None, false, None),

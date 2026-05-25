@@ -6,7 +6,7 @@ use super::*;
 
 const PROVIDER_AXIS: Axis = Axis {
     name: "provider",
-    known: &["kubernetes", "kminus"],
+    known: &["docker", "kminus"],
 };
 
 const COUNTRY_AXIS: Axis = Axis {
@@ -14,9 +14,9 @@ const COUNTRY_AXIS: Axis = Axis {
     known: &["us", "es"],
 };
 
-const PREFER_KUBERNETES: &[&str] = &["kubernetes"];
+const PREFER_DOCKER: &[&str] = &["docker"];
 const PREFER_KMINUS: &[&str] = &["kminus"];
-const PREFER_KUBERNETES_US: &[&str] = &["kubernetes", "us"];
+const PREFER_DOCKER_US: &[&str] = &["docker", "us"];
 
 #[test]
 fn parse_filename_with_no_separators() {
@@ -36,9 +36,9 @@ fn parse_filename_with_only_extensions() {
 
 #[test]
 fn parse_filename_with_one_token() {
-    let parsed = parse_filename("apiserver_kubernetes.pod.yaml");
+    let parsed = parse_filename("apiserver_docker.pod.yaml");
     assert_eq!(parsed.name, "apiserver");
-    assert_eq!(parsed.tokens, vec!["kubernetes".to_owned()]);
+    assert_eq!(parsed.tokens, vec!["docker".to_owned()]);
     assert_eq!(parsed.extensions, ".pod.yaml");
 }
 
@@ -52,17 +52,17 @@ fn parse_filename_with_multiple_tokens() {
 
 #[test]
 fn parse_filename_with_token_and_no_extensions() {
-    let parsed = parse_filename("apiserver_kubernetes");
+    let parsed = parse_filename("apiserver_docker");
     assert_eq!(parsed.name, "apiserver");
-    assert_eq!(parsed.tokens, vec!["kubernetes".to_owned()]);
+    assert_eq!(parsed.tokens, vec!["docker".to_owned()]);
     assert_eq!(parsed.extensions, "");
 }
 
 #[test]
 fn parse_filename_with_dash_in_name() {
-    let parsed = parse_filename("api-server_kubernetes.pod.yaml");
+    let parsed = parse_filename("api-server_docker.pod.yaml");
     assert_eq!(parsed.name, "api-server");
-    assert_eq!(parsed.tokens, vec!["kubernetes".to_owned()]);
+    assert_eq!(parsed.tokens, vec!["docker".to_owned()]);
     assert_eq!(parsed.extensions, ".pod.yaml");
 }
 
@@ -79,9 +79,9 @@ fn render_round_trip() {
     let cases = [
         "runner",
         "apiserver.pod.yaml",
-        "apiserver_kubernetes.pod.yaml",
+        "apiserver_docker.pod.yaml",
         "apiserver_kminus_us.pod.yaml",
-        "apiserver_kubernetes",
+        "apiserver_docker",
     ];
     for case in cases {
         let parsed = parse_filename(case);
@@ -103,7 +103,7 @@ fn pick_winner_prefers_unprefixed_when_no_axes() {
 
 #[test]
 fn pick_winner_rejects_candidate_when_no_axes_but_tokens_present() {
-    let candidates = vec![parse_filename("apiserver_kubernetes.pod.yaml")];
+    let candidates = vec![parse_filename("apiserver_docker.pod.yaml")];
     assert_eq!(pick_winner(&candidates, &[], &[]), None);
 }
 
@@ -111,10 +111,10 @@ fn pick_winner_rejects_candidate_when_no_axes_but_tokens_present() {
 fn pick_winner_picks_matching_provider_over_plain() {
     let candidates = vec![
         parse_filename("apiserver.pod.yaml"),
-        parse_filename("apiserver_kubernetes.pod.yaml"),
+        parse_filename("apiserver_docker.pod.yaml"),
     ];
     assert_eq!(
-        pick_winner(&candidates, &[PROVIDER_AXIS], PREFER_KUBERNETES),
+        pick_winner(&candidates, &[PROVIDER_AXIS], PREFER_DOCKER),
         Some(1)
     );
 }
@@ -126,7 +126,7 @@ fn pick_winner_falls_back_to_tokenless_when_provider_does_not_match() {
         parse_filename("apiserver_kminus.pod.yaml"),
     ];
     assert_eq!(
-        pick_winner(&candidates, &[PROVIDER_AXIS], PREFER_KUBERNETES),
+        pick_winner(&candidates, &[PROVIDER_AXIS], PREFER_DOCKER),
         Some(0)
     );
 }
@@ -135,14 +135,14 @@ fn pick_winner_falls_back_to_tokenless_when_provider_does_not_match() {
 fn pick_winner_picks_longest_prefix() {
     let candidates = vec![
         parse_filename("apiserver.pod.yaml"),
-        parse_filename("apiserver_kubernetes.pod.yaml"),
-        parse_filename("apiserver_kubernetes_us.pod.yaml"),
+        parse_filename("apiserver_docker.pod.yaml"),
+        parse_filename("apiserver_docker_us.pod.yaml"),
     ];
     assert_eq!(
         pick_winner(
             &candidates,
             &[PROVIDER_AXIS, COUNTRY_AXIS],
-            PREFER_KUBERNETES_US
+            PREFER_DOCKER_US
         ),
         Some(2)
     );
@@ -152,14 +152,14 @@ fn pick_winner_picks_longest_prefix() {
 fn pick_winner_falls_back_when_country_does_not_match() {
     let candidates = vec![
         parse_filename("apiserver.pod.yaml"),
-        parse_filename("apiserver_kubernetes.pod.yaml"),
-        parse_filename("apiserver_kubernetes_es.pod.yaml"),
+        parse_filename("apiserver_docker.pod.yaml"),
+        parse_filename("apiserver_docker_es.pod.yaml"),
     ];
     assert_eq!(
         pick_winner(
             &candidates,
             &[PROVIDER_AXIS, COUNTRY_AXIS],
-            PREFER_KUBERNETES_US
+            PREFER_DOCKER_US
         ),
         Some(1)
     );
@@ -167,12 +167,12 @@ fn pick_winner_falls_back_when_country_does_not_match() {
 
 #[test]
 fn pick_winner_rejects_excess_tokens() {
-    let candidates = vec![parse_filename("apiserver_kubernetes_us_extra.pod.yaml")];
+    let candidates = vec![parse_filename("apiserver_docker_us_extra.pod.yaml")];
     assert_eq!(
         pick_winner(
             &candidates,
             &[PROVIDER_AXIS, COUNTRY_AXIS],
-            PREFER_KUBERNETES_US
+            PREFER_DOCKER_US
         ),
         None
     );
@@ -185,7 +185,7 @@ fn pick_winner_falls_back_to_tokenless_when_no_specific_match() {
         parse_filename("apiserver_kminus.pod.yaml"),
     ];
     assert_eq!(
-        pick_winner(&candidates, &[PROVIDER_AXIS], PREFER_KUBERNETES),
+        pick_winner(&candidates, &[PROVIDER_AXIS], PREFER_DOCKER),
         Some(0)
     );
 }
@@ -197,7 +197,7 @@ fn pick_winner_returns_none_when_no_candidate_eligible() {
         parse_filename("apiserver_kminus_us.pod.yaml"),
     ];
     assert_eq!(
-        pick_winner(&candidates, &[PROVIDER_AXIS], PREFER_KUBERNETES),
+        pick_winner(&candidates, &[PROVIDER_AXIS], PREFER_DOCKER),
         None
     );
 }
@@ -209,7 +209,7 @@ fn pick_winner_treats_misplaced_token_as_no_match() {
         pick_winner(
             &candidates,
             &[PROVIDER_AXIS, COUNTRY_AXIS],
-            PREFER_KUBERNETES_US
+            PREFER_DOCKER_US
         ),
         None
     );
@@ -219,7 +219,7 @@ fn pick_winner_treats_misplaced_token_as_no_match() {
 fn pick_winner_tokenless_is_universal_fallback_for_any_provider() {
     let candidates = vec![parse_filename("apiserver.pod.yaml")];
     assert_eq!(
-        pick_winner(&candidates, &[PROVIDER_AXIS], PREFER_KUBERNETES),
+        pick_winner(&candidates, &[PROVIDER_AXIS], PREFER_DOCKER),
         Some(0)
     );
     assert_eq!(
@@ -232,9 +232,9 @@ fn pick_winner_tokenless_is_universal_fallback_for_any_provider() {
 fn group_by_key_groups_variants_together() {
     let filenames = vec![
         "apiserver.pod.yaml".to_owned(),
-        "apiserver_kubernetes.pod.yaml".to_owned(),
+        "apiserver_docker.pod.yaml".to_owned(),
         "apiserver_kminus.pod.yaml".to_owned(),
-        "inspector_kubernetes.pod.yaml".to_owned(),
+        "inspector_docker.pod.yaml".to_owned(),
     ];
     let groups = group_by_key(&filenames);
     let apiserver_key = ("apiserver".to_owned(), ".pod.yaml".to_owned());
