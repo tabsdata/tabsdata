@@ -43,6 +43,9 @@ spec:
         - name: public-http
           containerPort: 2457
           protocol: TCP
+        - name: private-http
+          containerPort: 2458
+          protocol: TCP	  
       resources:
         requests:
           cpu: "100m"

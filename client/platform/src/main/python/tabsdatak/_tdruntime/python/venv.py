@@ -262,6 +262,8 @@ class PythonEnvironment:
         command.extend([
             "--seed",
             "--relocatable",
+            "--python-preference",
+            "only-managed",
             "--python",
             python_version,
             str(self.root),
