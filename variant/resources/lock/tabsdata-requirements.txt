@@ -14,7 +14,7 @@ base32hex==1.0.2
 boto3==1.42.73
 boto3-stubs==1.42.73
 botocore==1.42.97
-botocore-stubs==1.42.41
+botocore-stubs==1.43.14
 build==1.5.0
 cachetools==6.2.6
 certifi==2026.5.20
@@ -141,7 +141,7 @@ strictyaml==1.7.3
 tenacity==9.1.4
 thrift==0.20.0
 tomlkit==0.15.0
-types-awscrt==0.31.3
+types-awscrt==0.33.0
 types-pyyaml==6.0.3
 types-s3transfer==0.16.0
 typing-extensions==4.15.0
