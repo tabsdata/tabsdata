@@ -38,9 +38,9 @@ from tabsdatak.conn.common.sql.cdc.typing import (
 )
 from tabsdatak.conn.postgres import (
     CdcSrcCfgKey,
-    PostgresCdcStreamSrcConn,
     PostgresCdcStartFromSpec,
     PostgresCdcStreamSrc,
+    PostgresCdcStreamSrcConn,
 )
 
 # noinspection PyProtectedMember

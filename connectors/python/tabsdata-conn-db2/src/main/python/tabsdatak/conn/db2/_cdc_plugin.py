@@ -38,9 +38,9 @@ from tabsdatak.conn.common.sql.cdc.typing import (
 )
 from tabsdatak.conn.db2 import (
     CdcSrcCfgKey,
-    Db2CdcStreamSrcConn,
     Db2CdcStartFromSpec,
     Db2CdcStreamSrc,
+    Db2CdcStreamSrcConn,
     TimestampPosition,
 )
 

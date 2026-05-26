@@ -21,7 +21,7 @@ def create_main_custom_build_hook(_root: str):
 
 
 def create_custom_build_py_class(
-    package_resources: dict[Path, Path] | None = None,
+    package_resources: dict[Path, list[Path]] | None = None,
 ) -> type:
     if package_resources is None:
         package_resources = {}
@@ -29,27 +29,29 @@ def create_custom_build_py_class(
     class CustomBuildPy(_build_py):
         def run(self) -> None:
             package_root = Path(self.build_lib)
-            for source, target in package_resources.items():
+            for source, targets in package_resources.items():
                 if not source.exists():
                     logger.warning(
                         f"External resource {source} does not exist. Skipping."
                     )
                     continue
-                destination = package_root / target
-                if source.is_dir():
-                    shutil.copytree(
-                        source,
-                        destination,
-                        dirs_exist_ok=True,
-                        ignore=shutil.ignore_patterns(".gitkeep"),
-                    )
-                elif source.is_file():
-                    destination.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(source, destination)
-                else:
-                    logger.warning(
-                        f"External resource {source} has unsupported type. Skipping."
-                    )
+                for target in targets:
+                    destination = package_root / target
+                    if source.is_dir():
+                        shutil.copytree(
+                            source,
+                            destination,
+                            dirs_exist_ok=True,
+                            ignore=shutil.ignore_patterns(".gitkeep"),
+                        )
+                    elif source.is_file():
+                        destination.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(source, destination)
+                    else:
+                        logger.warning(
+                            f"External resource {source} has unsupported type. "
+                            "Skipping."
+                        )
             super().run()
 
     return CustomBuildPy

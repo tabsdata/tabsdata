@@ -9,9 +9,6 @@ from tabsdatak.conn.localfile import (
     LocalFileSrc,
     LocalFileSrcConn,
 )
-
-# Conn helpers operate on both Src and Dest variants.
-_AnyLocalFileConn = LocalFileSrcConn | LocalFileDestConn
 from tabsdatak.conn.localfile.error import LocalFileErrorCode
 from tabsdatak.spi import (
     DestContext,
@@ -24,6 +21,9 @@ from tabsdatak.spi import (
     TableFileSpec,
     TableMode,
 )
+
+# Conn helpers operate on both Src and Dest variants.
+_AnyLocalFileConn = LocalFileSrcConn | LocalFileDestConn
 
 # --- Path resolution + location builder ----------------------------
 

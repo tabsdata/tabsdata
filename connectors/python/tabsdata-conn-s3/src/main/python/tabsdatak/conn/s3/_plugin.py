@@ -8,9 +8,6 @@ from tabsdatak.conn.common.file import _plugin, _transporter
 from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.s3 import S3Dest, S3DestConn, S3Src, S3SrcConn
 from tabsdatak.conn.s3.error import S3ErrorCode
-
-# Conn helpers operate on both Src and Dest variants.
-_AnyS3Conn = S3SrcConn | S3DestConn
 from tabsdatak.spi import (
     DestContext,
     DestDef,
@@ -22,6 +19,9 @@ from tabsdatak.spi import (
     TableFileSpec,
     TableMode,
 )
+
+# Conn helpers operate on both Src and Dest variants.
+_AnyS3Conn = S3SrcConn | S3DestConn
 
 # --- URI / location builder ---------------------------------------
 
@@ -50,10 +50,12 @@ def run_env(conn: _AnyS3Conn) -> dict[str, str]:
     creds = conn.credentials
     return {
         _transporter.SERVER_SIDE_AWS_ACCESS_KEY_ID: _convert(
-            creds.access_key_id, str,
+            creds.access_key_id,
+            str,
         ),
         _transporter.SERVER_SIDE_AWS_SECRET_ACCESS_KEY: _convert(
-            creds.secret_access_key, str,
+            creds.secret_access_key,
+            str,
         ),
         _transporter.SERVER_SIDE_AWS_REGION: _convert(conn.region, str),
     }

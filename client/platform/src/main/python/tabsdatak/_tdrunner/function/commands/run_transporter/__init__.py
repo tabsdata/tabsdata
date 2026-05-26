@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from tabsdatak._logging import setup_logging
 from tabsdatak._tdrunner.function._lib.cli import build_parser, run_command
 from tabsdatak._tdrunner.function._lib.errors import CommandSpecificError
 from tabsdatak._tdrunner.function._lib.liveness import install_liveness_handler
@@ -20,7 +21,6 @@ from tabsdatak._tdrunner.function._lib.transporter_proc import (
     run_transporter,
 )
 from tabsdatak._tdrunner.function.commands import tabsdata_command
-from tabsdatak._logging import setup_logging
 
 VERSION = "0.1.0"
 INFO = "run-transporter — exec td_transporter with the given request YAML"

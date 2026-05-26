@@ -23,11 +23,11 @@ import tabsdatak._api as _api
 from tabsdatak.api import (
     Conn,
     Dest,
-    Var,
     NamedConn,
     Secret,
     SecretOrVarSpec,
     Src,
+    Var,
 )
 
 # noinspection PyProtectedMember

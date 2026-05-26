@@ -21,7 +21,7 @@ from typing import Annotated, Any, Literal, TypeAlias, Union
 import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
-from tabsdatak.api import Conn, Dest, Var, NamedConn, Secret
+from tabsdatak.api import Conn, Dest, NamedConn, Secret, Var
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.bigquery import _validation

@@ -41,3 +41,13 @@ class VenvCreationError(RuntimeError):
 
     def __init__(self, *, detail: str) -> None:
         super().__init__(self.message.format(detail=detail))
+
+
+class BinaryNotFoundError(FileNotFoundError):
+    message = (
+        "Binary '{name}' not found in the active environment's scripts"
+        " folder ({scripts})."
+    )
+
+    def __init__(self, *, name: str, scripts) -> None:
+        super().__init__(self.message.format(name=name, scripts=scripts))

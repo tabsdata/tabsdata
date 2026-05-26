@@ -77,7 +77,11 @@ struct CliParser<P: Params> {
                 YAML source (after the discovered files, before env vars and stdin)."
     )]
     config_file: Option<PathBuf>,
-    #[arg(long = "log-config", short = 'c', help = "Path to a logging config YAML.")]
+    #[arg(
+        long = "log-config",
+        short = 'c',
+        help = "Path to a logging config YAML."
+    )]
     log_config: Option<PathBuf>,
 }
 

@@ -4,11 +4,13 @@ import logging
 from dataclasses import dataclass
 from typing import Any, cast
 
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.databricks import (
-    DatabricksDestConn,
-    DatabricksSrcConn,
     DatabricksDest,
+    DatabricksDestConn,
     DatabricksSrc,
+    DatabricksSrcConn,
     DestCfgKey,
     DestCfgSpec,
     SrcCfgKey,
@@ -18,9 +20,6 @@ from tabsdatak.conn.databricks.error import (
     DatabricksErrorCode,
     DatabricksValidateException,
 )
-
-# noinspection PyProtectedMember
-from tabsdatak.conn.common.types import _convert
 from tabsdatak.spi import (
     DestContext,
     DestDef,

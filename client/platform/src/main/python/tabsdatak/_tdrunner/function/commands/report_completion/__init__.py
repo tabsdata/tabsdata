@@ -34,6 +34,7 @@ from pathlib import Path
 
 import pyarrow.parquet as pq
 
+from tabsdatak._logging import setup_logging
 from tabsdatak._tdrunner.function._lib.cli import (
     build_parser,
     resolve_value,
@@ -59,7 +60,6 @@ from tabsdatak._tdrunner.function._lib.response import (
     write_response,
 )
 from tabsdatak._tdrunner.function.commands import tabsdata_command
-from tabsdatak._logging import setup_logging
 
 VERSION = "0.1.0"
 INFO = "report-completion — submit the function-run response to the API server"

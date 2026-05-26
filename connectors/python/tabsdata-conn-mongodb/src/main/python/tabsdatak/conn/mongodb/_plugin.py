@@ -5,16 +5,15 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import quote_plus
 
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.mongodb import (
     DestCfgKey,
     DestCfgSpec,
-    MongoDBDestConn,
     MongoDBDest,
+    MongoDBDestConn,
 )
 from tabsdatak.conn.mongodb.error import MongodbErrorCode
-
-# noinspection PyProtectedMember
-from tabsdatak.conn.common.types import _convert
 from tabsdatak.spi import (
     DestContext,
     DestDef,

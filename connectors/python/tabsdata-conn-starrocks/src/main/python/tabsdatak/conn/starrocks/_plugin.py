@@ -5,16 +5,15 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, cast
 
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.starrocks import (
     DestCfgKey,
     DestCfgSpec,
-    StarRocksDestConn,
     StarRocksDest,
+    StarRocksDestConn,
 )
 from tabsdatak.conn.starrocks.error import StarRocksErrorCode
-
-# noinspection PyProtectedMember
-from tabsdatak.conn.common.types import _convert
 from tabsdatak.spi import (
     DestContext,
     DestDef,

@@ -227,15 +227,19 @@ pub trait Provider: Send + Sync {
     fn system_values(&self) -> Result<SystemValues>;
 }
 
+#[allow(dead_code)]
 pub(crate) trait ProcessProvider: Provider {}
 
+#[allow(dead_code)]
 pub(crate) trait ContainerProvider: Provider {}
 
+#[allow(dead_code)]
 pub(crate) trait HostedProvider: Provider {}
 
 #[allow(dead_code)]
 pub(crate) trait ServerlessProvider: Provider {}
 
+#[allow(dead_code)]
 pub(crate) trait LocalProvider: Provider {}
 
 #[allow(dead_code)]

@@ -38,17 +38,14 @@ from __future__ import annotations
 import inspect
 import logging
 import shutil
-import sys
 import tarfile
 import tempfile
 from collections.abc import Iterable
-from importlib import metadata as importlib_metadata
 from pathlib import Path
 from typing import Union
 
 import yaml
 import zstandard
-from packaging.utils import canonicalize_name
 
 from tabsdatak._info import (
     PublisherInfo,
@@ -56,8 +53,7 @@ from tabsdatak._info import (
     TransformerInfo,
     _unwrap_info,
 )
-from tabsdatak._tdruntime.python.package import Package
-from tabsdatak._tdruntime.python.recipe import InstallRecipe
+from tabsdatak._tdruntime.python.venv import PythonEnvironment
 from tabsdatak.error import ApiErrorCode
 
 log = logging.getLogger(__name__)
@@ -69,13 +65,10 @@ BUNDLE_MANIFEST_FILENAME = "function_def.json"
 BUNDLE_REQUIREMENTS_FILENAME = "requirements.yaml"
 BUNDLE_USER_CODE_DIRNAME = "user_code"
 
-# zstd compression knobs. Matches the values used in
-# ``_tdruntime.python.venv.archive``; defined locally rather than
-# imported to keep ``tabsdata-api`` from depending on the runtime
-# subpackage. Level 3 is the upstream default (good balance of
-# ratio vs CPU); threads=-1 lets zstandard use every core available
-# at runtime.
-_ZSTD_COMPRESSION_LEVEL = 3
+# Archive compression knobs. Level 10 is a sweet spot for the
+# text-heavy, small-payload function bundle (~ms of extra CPU vs L3
+# for a meaningfully smaller artifact to upload).
+_ZSTD_COMPRESSION_LEVEL = 10
 _ZSTD_COMPRESSION_THREADS = -1
 
 # requirements.yaml schema keys (legacy-compatible).
@@ -146,49 +139,6 @@ def capture_source_snippet(info: FunctionInfo) -> str:
 
 
 # --- requirements snapshot + python version ------------------------------
-
-
-def synthesise_requirements() -> tuple[list[str], str]:
-    """Snapshot the producer's PyPI-registry packages as a pip-installable list.
-
-    Only packages installed from a PyPI-like index are emitted. Editable
-    installs, local wheels and frozen folders are skipped — they have
-    no PyPI presence so the target machine couldn't resolve them
-    anyway, and a stale `name==version` line in the requirements file
-    would just fail to install. Install-method detection is delegated
-    to :class:`tabsdatak._tdruntime.python.package.Package`, which
-    reads ``direct_url.json`` from each dist-info.
-
-    Names are PEP 503-canonicalised (lowercase, ``[-_.]+`` → ``-``) via
-    :func:`packaging.utils.canonicalize_name` so the output is stable
-    across producers that recorded the same package under different
-    casings or separators (``tabsdata_api``, ``Tabsdata-Api``, …).
-
-    Returns:
-        ``(requirements, python_version)``. ``requirements`` is a
-        sorted, deduplicated, case-insensitive-ordered list of pip-style
-        ``<canonical-name>==<version>`` strings. ``python_version`` is
-        the producer's ``"X.Y.Z"``.
-    """
-    requirements: set[str] = set()
-    for dist in importlib_metadata.distributions():
-        name = dist.metadata["Name"]
-        if not name:
-            continue
-        recipe = Package(name).recipe()
-        # Skip installs that can't round-trip via pip on the target.
-        # `Package.recipe()` returns None for unresolvable names (the
-        # mandatory=False default suppresses PackageNotInstalledError).
-        if recipe is None or recipe.recipe != InstallRecipe.REGISTRY:
-            continue
-        if recipe.version is None:
-            continue
-        requirements.add(f"{canonicalize_name(name)}=={recipe.version}")
-    ordered = sorted(requirements, key=str.casefold)
-    python_version = (
-        f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
-    )
-    return ordered, python_version
 
 
 def write_requirements(
@@ -314,7 +264,7 @@ def build_bundle(
         raise ApiErrorCode.API_22.exception(path=project_root)
     include_list = list(include) if include is not None else None
 
-    requirements, python_version = synthesise_requirements()
+    requirements, python_version = PythonEnvironment.synthesise()
     if valid_python_versions is not None:
         validate_python_version(python_version, valid_python_versions)
 
@@ -348,6 +298,7 @@ def build_bundle(
         params = zstandard.ZstdCompressionParameters.from_level(
             _ZSTD_COMPRESSION_LEVEL,
             threads=_ZSTD_COMPRESSION_THREADS,
+            write_content_size=True,
         )
         compressor = zstandard.ZstdCompressor(compression_params=params)
         with open(output_path, "wb") as raw:

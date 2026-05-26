@@ -1,6 +1,7 @@
 """LocalFile connector — public API.
 
-* :class:`LocalFileSrcConn` / :class:`LocalFileDestConn` -- per-LocalFile connection (base_path, conn_cfg).
+* :class:`LocalFileSrcConn` / :class:`LocalFileDestConn` -- per-LocalFile
+  connection (base_path, conn_cfg).
 * :class:`LocalFileSrc` -- source: list of `paths` (glob-style);
   one parquet slot per path.
 * :class:`LocalFileDest` -- destination: list of `paths`; one

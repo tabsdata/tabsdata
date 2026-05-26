@@ -21,13 +21,11 @@ from tabsdatak._bundle import (
     build_bundle,
     capture_source_snippet,
     collect_local_packages,
-    synthesise_requirements,
     validate_python_version,
     write_function_def,
     write_requirements,
 )
 from tabsdatak._info import KIND_PUBLISHER_DEF, PublisherInfo
-from tabsdatak._tdruntime.python.recipe import InstallRecipe
 from tabsdatak.api import TableFrameSpec, TableFramesSpec, publisher
 from tabsdatak.conn.localfile import LocalFileSrcConn, LocalFileSrc
 from tabsdatak.error import ApiErrorCode, ApiRuntimeException
@@ -119,172 +117,6 @@ def test_capture_source_snippet_returns_placeholder_on_failure():
     object.__setattr__(fake, "func", len)  # builtin → no Python source
     snippet = capture_source_snippet(fake)
     assert snippet.startswith("# source unavailable")
-
-
-# --- requirements + python version --------------------------------------
-
-
-def test_synthesise_requirements_returns_sorted_unique():
-    reqs, pyv = synthesise_requirements()
-    assert reqs == sorted(set(reqs), key=str.casefold)
-
-
-def test_synthesise_requirements_python_version_is_dotted_triple():
-    _, pyv = synthesise_requirements()
-    parts = pyv.split(".")
-    assert len(parts) == 3
-    assert all(p.isdigit() for p in parts)
-
-
-# --- synthesise_requirements: install-method filter ----------------------
-#
-# `synthesise_requirements` only emits packages installed from a
-# PyPI-like registry. The four cases below cover each `InstallRecipe`
-# value plus the "name resolves but `Package.recipe()` returns None"
-# case (uninstalled / unknown). Detection is delegated to
-# `Package(name).recipe()`; we monkeypatch it at the bundle module's
-# import site so the test doesn't depend on the producer's actual
-# installed-package layout.
-
-
-def _stub_dist(name: str):
-    class _Dist:
-        metadata = {"Name": name}
-        version = "9.9.9"
-
-    return _Dist()
-
-
-def _stub_recipe(recipe_value, *, version: str | None = "1.2.3"):
-    # mirrors the PackageRecipe surface synthesise_requirements touches:
-    # `.recipe` (InstallRecipe enum) and `.version` (str|None). Built as
-    # an instance with __dict__ assignment rather than a class body so
-    # the function-scoped `version` argument actually closes over.
-    stub = type("_StubRecipe", (), {})()
-    stub.recipe = recipe_value
-    stub.version = version
-    return stub
-
-
-def _patch_recipes(monkeypatch, by_name: dict[str, object]):
-    """Override `Package(name).recipe()` lookup via the bundle module.
-
-    `by_name[name]` is the value returned for that name (a stub or None
-    to simulate uninstalled). Unknown names raise to surface unexpected
-    lookups during the test.
-    """
-
-    class _PkgStub:
-        def __init__(self, name):
-            self.name = name
-
-        def recipe(self):
-            if self.name not in by_name:
-                raise AssertionError(f"unexpected Package lookup: {self.name}")
-            return by_name[self.name]
-
-    monkeypatch.setattr("tabsdatak._bundle.Package", _PkgStub)
-
-    monkeypatch.setattr(
-        "tabsdatak._bundle.importlib_metadata.distributions",
-        lambda: [_stub_dist(n) for n in by_name],
-    )
-
-
-def test_synthesise_requirements_emits_registry_installs(monkeypatch):
-    _patch_recipes(monkeypatch, {"polars": _stub_recipe(InstallRecipe.REGISTRY)})
-    reqs, _ = synthesise_requirements()
-    assert reqs == ["polars==1.2.3"]
-
-
-def test_synthesise_requirements_drops_editable_installs(monkeypatch):
-    _patch_recipes(monkeypatch, {"my-local-pkg": _stub_recipe(InstallRecipe.EDITABLE)})
-    reqs, _ = synthesise_requirements()
-    assert reqs == []
-
-
-def test_synthesise_requirements_drops_local_wheel_installs(monkeypatch):
-    _patch_recipes(monkeypatch, {"wheel-pkg": _stub_recipe(InstallRecipe.WHEEL)})
-    reqs, _ = synthesise_requirements()
-    assert reqs == []
-
-
-def test_synthesise_requirements_drops_frozen_folder_installs(monkeypatch):
-    _patch_recipes(monkeypatch, {"frozen-pkg": _stub_recipe(InstallRecipe.FROZEN)})
-    reqs, _ = synthesise_requirements()
-    assert reqs == []
-
-
-def test_synthesise_requirements_drops_unresolvable_packages(monkeypatch):
-    """Package.recipe() returns None when distribution metadata can't
-    be found -- e.g. the entry was uninstalled mid-snapshot."""
-    _patch_recipes(monkeypatch, {"ghost-pkg": None})
-    reqs, _ = synthesise_requirements()
-    assert reqs == []
-
-
-def test_synthesise_requirements_drops_versionless_recipes(monkeypatch):
-    """A registry install with no version is dropped (pip would refuse
-    the unpinned constraint and we'd rather skip than emit it bare)."""
-    _patch_recipes(
-        monkeypatch,
-        {"versionless": _stub_recipe(InstallRecipe.REGISTRY, version=None)},
-    )
-    reqs, _ = synthesise_requirements()
-    assert reqs == []
-
-
-def test_synthesise_requirements_mixes_kinds_keeping_only_registry(monkeypatch):
-    _patch_recipes(
-        monkeypatch,
-        {
-            "polars": _stub_recipe(InstallRecipe.REGISTRY),
-            "my-local-pkg": _stub_recipe(InstallRecipe.EDITABLE),
-            "wheel-pkg": _stub_recipe(InstallRecipe.WHEEL),
-            "boto3": _stub_recipe(InstallRecipe.REGISTRY),
-        },
-    )
-    reqs, _ = synthesise_requirements()
-    assert reqs == ["boto3==1.2.3", "polars==1.2.3"]
-
-
-# --- synthesise_requirements: PEP 503 name canonicalisation --------------
-
-
-def test_synthesise_requirements_canonicalises_underscores_to_dashes(monkeypatch):
-    """PEP 503: `_` and `.` collapse to `-`. `tabsdata_api` and
-    `tabsdata.api` both come out as `tabsdata-api`."""
-    _patch_recipes(
-        monkeypatch,
-        {"tabsdata_api": _stub_recipe(InstallRecipe.REGISTRY, version="1.0")},
-    )
-    reqs, _ = synthesise_requirements()
-    assert reqs == ["tabsdata-api==1.0"]
-
-
-def test_synthesise_requirements_canonicalises_to_lowercase(monkeypatch):
-    """PEP 503: names are lowercased."""
-    _patch_recipes(
-        monkeypatch,
-        {"Tabsdata-API": _stub_recipe(InstallRecipe.REGISTRY, version="1.0")},
-    )
-    reqs, _ = synthesise_requirements()
-    assert reqs == ["tabsdata-api==1.0"]
-
-
-def test_synthesise_requirements_dedupes_after_canonicalisation(monkeypatch):
-    """Two distributions whose names canonicalise to the same string
-    are deduped to one entry (and the value is whichever pinned
-    version landed last; both produce the same line here)."""
-    _patch_recipes(
-        monkeypatch,
-        {
-            "Tabsdata_API": _stub_recipe(InstallRecipe.REGISTRY, version="1.0"),
-            "tabsdata-api": _stub_recipe(InstallRecipe.REGISTRY, version="1.0"),
-        },
-    )
-    reqs, _ = synthesise_requirements()
-    assert reqs == ["tabsdata-api==1.0"]
 
 
 def test_write_requirements_yaml_minimal_schema(tmp_path):

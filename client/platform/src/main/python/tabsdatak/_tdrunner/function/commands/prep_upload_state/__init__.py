@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from tabsdatak._logging import setup_logging
 from tabsdatak._tdrunner.function._lib.cli import build_parser, run_command
 from tabsdatak._tdrunner.function._lib.endpoint import UnsupportedSchemeError
 from tabsdatak._tdrunner.function._lib.errors import CommandSpecificError
@@ -27,7 +28,6 @@ from tabsdatak._tdrunner.function._lib.transporter_request import (
     write_transporter_request,
 )
 from tabsdatak._tdrunner.function.commands import tabsdata_command
-from tabsdatak._logging import setup_logging
 
 VERSION = "0.1.0"
 INFO = (

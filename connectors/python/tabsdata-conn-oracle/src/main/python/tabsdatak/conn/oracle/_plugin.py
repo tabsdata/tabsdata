@@ -7,10 +7,10 @@ from typing import Any, cast
 from tabsdatak.conn.oracle import (
     DestCfgKey,
     DestCfgSpec,
-    OracleDestConn,
-    OracleSrcConn,
     OracleDest,
+    OracleDestConn,
     OracleSrc,
+    OracleSrcConn,
     SrcCfgKey,
     SrcCfgSpec,
 )

@@ -5,9 +5,9 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 from tabsdatak.conn.salesforce import (
-    SalesforceSrcConn,
     SalesforceReportSrc,
     SalesforceSrc,
+    SalesforceSrcConn,
     SrcCfgKey,
     SrcCfgSpec,
 )

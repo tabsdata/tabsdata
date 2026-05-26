@@ -24,7 +24,7 @@ use crate::constants::{
 use crate::gateway::resolver::{ConfigurationResolver, SystemValues};
 use crate::instance::launcher::{start_workload, stop_workload};
 use crate::instance::manifest::MANIFEST_FILE;
-use crate::instance::profile::{parse_from_configmaps, render_for_configmaps, load_profile};
+use crate::instance::profile::{load_profile, parse_from_configmaps, render_for_configmaps};
 use crate::instance::verify_manifest_compatibility;
 use crate::kubernetes::action::configmap::read_configmap;
 use crate::kubernetes::action::{

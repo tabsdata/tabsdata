@@ -6,8 +6,8 @@ from typing import Any
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.bigquery import (
-    BigQueryDestConn,
     BigQueryDest,
+    BigQueryDestConn,
     IfTableExistsSpec,
     SchemaEvolutionSpec,
 )

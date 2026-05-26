@@ -23,10 +23,9 @@ from tabsdatak.conn.common.sql._engine.reader import SqlReadCfg
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine.writer import SqlWriteCfg
-from tabsdatak.conn.common.types import CfgSpec, UserPassword
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.types import _convert
+from tabsdatak.conn.common.types import CfgSpec, UserPassword, _convert
 from tabsdatak.conn.db2 import Db2DestConn, Db2SrcConn, UriSpec
 
 # --- Db2 scheme / driver tables -----------------------------------

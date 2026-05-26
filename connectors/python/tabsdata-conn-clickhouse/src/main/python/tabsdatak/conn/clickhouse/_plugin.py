@@ -5,8 +5,8 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 from tabsdatak.conn.clickhouse import (
-    ClickHouseDestConn,
     ClickHouseDest,
+    ClickHouseDestConn,
     DestCfgKey,
     DestCfgSpec,
 )

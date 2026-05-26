@@ -6,18 +6,17 @@ from __future__ import annotations
 
 import logging
 import subprocess
-import sysconfig
 from pathlib import Path
 
 import pytest
 
 from tabsdatak._tdrunner.function._lib import transporter_proc
 from tabsdatak._tdrunner.function._lib.transporter_proc import (
-    TRANSPORTER_BINARY,
+    TRANSPORTER_BINARY_NAME,
     TransporterNotFoundError,
-    _resolve_binary,
     run_transporter,
 )
+from tabsdatak._tdruntime.python.error import BinaryNotFoundError
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
@@ -67,7 +66,7 @@ _FAKE_BINARY_PATH = Path("/fake/scripts/td_transporter")
 
 
 def _install_fake_popen(monkeypatch, *, stdout_lines=(), stderr_lines=(), returncode=0):
-    """Stub subprocess.Popen with _FakePopen and stub _resolve_binary
+    """Stub subprocess.Popen with _FakePopen and stub PythonEnvironment.binary
     so tests exercising the run-path don't need a real td_transporter
     on disk. Argv assertions can then compare against _FAKE_BINARY_PATH.
     """
@@ -83,53 +82,21 @@ def _install_fake_popen(monkeypatch, *, stdout_lines=(), stderr_lines=(), return
         )
 
     monkeypatch.setattr(subprocess, "Popen", _factory)
-    monkeypatch.setattr(transporter_proc, "_resolve_binary", lambda: _FAKE_BINARY_PATH)
+    monkeypatch.setattr(
+        transporter_proc.PythonEnvironment,
+        "binary",
+        lambda self, name: _FAKE_BINARY_PATH,
+    )
 
 
-# --- platform-aware binary name ------------------------------------------
+# --- binary name constant ------------------------------------------------
 
 
-def test_module_constant_matches_current_platform():
-    """The platform suffix comes from ``Binary.exe()``, which reads
-    ``sysconfig.get_config_var('EXE')``. We assert the resulting
-    basename matches what the stdlib reports for the current
-    interpreter -- the underlying ``Binary.exe`` mechanism is
-    covered in ``test_binary.py``."""
-    expected = "td_transporter" + sysconfig.get_config_var("EXE")
-    assert TRANSPORTER_BINARY == expected
-
-
-# --- binary resolution ---------------------------------------------------
-
-
-def test_resolve_binary_returns_absolute_path_in_scripts_dir(monkeypatch, tmp_path):
-    """_resolve_binary looks under the active interpreter's scripts dir
-    (sysconfig's `scripts` path) and returns the absolute Path."""
-    (tmp_path / TRANSPORTER_BINARY).write_text("")  # fake binary
-    monkeypatch.setattr(transporter_proc, "current_scripts_dir", lambda: tmp_path)
-    assert _resolve_binary() == tmp_path / TRANSPORTER_BINARY
-
-
-def test_resolve_binary_missing_raises_typed_error_naming_dir(monkeypatch, tmp_path):
-    """When the binary isn't in the scripts dir, the error names the
-    directory we checked so the operator can verify the venv contents
-    without reconstructing the lookup logic."""
-    monkeypatch.setattr(transporter_proc, "current_scripts_dir", lambda: tmp_path)
-    with pytest.raises(TransporterNotFoundError, match=str(tmp_path)):
-        _resolve_binary()
-
-
-def test_resolve_binary_uses_real_scripts_dir_when_unstubbed():
-    """End-to-end sanity: in the test runner's actual env, the binary
-    resolves under the real ``sysconfig.get_path('scripts')`` dir.
-    Skipped if td_transporter isn't installed in this venv (smoke
-    scripts cover the integrated path)."""
-    from tabsdatak._tdruntime.python.binary import current_scripts_dir
-
-    expected = current_scripts_dir() / TRANSPORTER_BINARY
-    if not expected.is_file():
-        pytest.skip(f"td_transporter not present at {expected}")
-    assert _resolve_binary() == expected
+def test_binary_name_constant():
+    """The module-level constant carries just the basename; the platform
+    suffix is appended by ``PythonEnvironment.binary`` via sysconfig
+    (covered in ``test_venv.py``)."""
+    assert TRANSPORTER_BINARY_NAME == "td_transporter"
 
 
 # --- command shape -------------------------------------------------------
@@ -182,11 +149,16 @@ def test_returns_nonzero_exit_code(monkeypatch, tmp_path, rc):
 
 
 def test_missing_binary_raises_typed_error_before_popen(monkeypatch, tmp_path):
-    """The binary-not-found check is up-front (in _resolve_binary), so
-    if the venv lacks td_transporter we raise *before* Popen is ever
-    invoked -- argv[0] never gets constructed and there's no chance
-    of a PATH-lookup picking up an unrelated binary."""
-    monkeypatch.setattr(transporter_proc, "current_scripts_dir", lambda: tmp_path)
+    """The binary-not-found check is up-front (PythonEnvironment.binary
+    raises before we ever reach Popen), so if the venv lacks
+    td_transporter we raise *before* Popen is ever invoked -- argv[0]
+    never gets constructed and there's no chance of a PATH-lookup
+    picking up an unrelated binary."""
+
+    def _missing(self, name):
+        raise BinaryNotFoundError(name=name, scripts=tmp_path)
+
+    monkeypatch.setattr(transporter_proc.PythonEnvironment, "binary", _missing)
 
     popen_invocations: list = []
 
@@ -196,9 +168,11 @@ def test_missing_binary_raises_typed_error_before_popen(monkeypatch, tmp_path):
 
     monkeypatch.setattr(subprocess, "Popen", _spy_popen)
 
-    with pytest.raises(TransporterNotFoundError):
+    with pytest.raises(TransporterNotFoundError) as exc_info:
         run_transporter(tmp_path / "x.yaml", tmp_path / "r.yaml")
     assert popen_invocations == []
+    # the original BinaryNotFoundError is chained as __cause__
+    assert isinstance(exc_info.value.__cause__, BinaryNotFoundError)
 
 
 def test_typed_error_inherits_filenotfound():

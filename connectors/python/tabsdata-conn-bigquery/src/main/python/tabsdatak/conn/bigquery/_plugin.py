@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import Any, cast
 
 from tabsdatak.conn.bigquery import (
-    BigQueryDestConn,
     BigQueryDest,
+    BigQueryDestConn,
     DestCfgKey,
     DestCfgSpec,
 )

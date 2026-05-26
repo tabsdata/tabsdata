@@ -14,8 +14,9 @@ from __future__ import annotations
 
 from abc import ABC
 from datetime import datetime
+from decimal import Decimal
 from enum import Enum
-from typing import Annotated, TypeAlias, Union, Type
+from typing import Annotated, Type, TypeAlias, Union
 
 from pydantic import StringConstraints, TypeAdapter
 
@@ -24,8 +25,7 @@ import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
 import tabsdatak.conn.common._validation as _validation
-from tabsdata import Decimal
-from tabsdatak.api import Var, Secret, SecretOrVarSpec
+from tabsdatak.api import Secret, SecretOrVarSpec, Var
 from tabsdatak.conn.common.error import ConnErrorCode
 
 # --- Credentials -----------------------------------------------------
@@ -242,10 +242,10 @@ EntityWhitelistSpec: TypeAlias = Annotated[
 ]
 
 
-_CoercionTypeSpec: TypeAlias = Union[
-    int,float,str,bool,Decimal,bytes,datetime
-]
-def _convert[T: _CoercionTypeSpec](spec: T|Secret|Var, type_: Type[T]) -> T:
+_CoercionTypeSpec: TypeAlias = Union[int, float, str, bool, Decimal, bytes, datetime]
+
+
+def _convert[T: _CoercionTypeSpec](spec: T | Secret | Var, type_: Type[T]) -> T:
     """Return the T form of a ``T`` / ``Secret`` / ``Var``
     spec."""
     if isinstance(spec, type_):
@@ -253,6 +253,3 @@ def _convert[T: _CoercionTypeSpec](spec: T|Secret|Var, type_: Type[T]) -> T:
     else:
         # Pydantic coercion to
         return TypeAdapter(type_).validate_python(spec.value())
-
-
-

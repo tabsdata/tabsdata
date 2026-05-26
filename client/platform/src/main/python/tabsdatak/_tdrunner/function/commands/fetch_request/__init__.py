@@ -15,6 +15,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from tabsdatak._logging import setup_logging
 from tabsdatak._tdrunner.function._lib.cli import (
     build_parser,
     resolve_value,
@@ -23,7 +24,6 @@ from tabsdatak._tdrunner.function._lib.cli import (
 from tabsdatak._tdrunner.function._lib.errors import CommandSpecificError
 from tabsdatak._tdrunner.function._lib.liveness import install_liveness_handler
 from tabsdatak._tdrunner.function.commands import tabsdata_command
-from tabsdatak._logging import setup_logging
 
 VERSION = "0.1.0"
 INFO = (

@@ -8,15 +8,11 @@ from tabsdatak.conn.azureblob import (
     AzureBlobSrc,
     AzureBlobSrcConn,
 )
-
-# Conn helpers operate on both Src and Dest variants.
-_AnyAzureBlobConn = AzureBlobSrcConn | AzureBlobDestConn
 from tabsdatak.conn.azureblob.error import AzureBlobErrorCode
 from tabsdatak.conn.common.file import _plugin, _transporter
-from tabsdatak.conn.common.types import AzureAccountKey
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.types import _convert
+from tabsdatak.conn.common.types import AzureAccountKey, _convert
 from tabsdatak.spi import (
     DestContext,
     DestDef,
@@ -28,6 +24,9 @@ from tabsdatak.spi import (
     TableFileSpec,
     TableMode,
 )
+
+# Conn helpers operate on both Src and Dest variants.
+_AnyAzureBlobConn = AzureBlobSrcConn | AzureBlobDestConn
 
 # --- URI / location builder ---------------------------------------
 

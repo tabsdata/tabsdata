@@ -3,14 +3,11 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from tenacity import retry, stop_after_delay, wait_fixed
 
-from tabsdatak.conn.common.types import UserPassword
-
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.types import _convert
+from tabsdatak.conn.common.types import UserPassword, _convert
 from tabsdatak.conn.starrocks import (
     AzBlobLocation,
     CloudLocation,

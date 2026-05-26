@@ -23,8 +23,8 @@ import time
 from typing import Any, cast
 
 from tabsdatak.conn.kafka import (
-    KafkaStreamSrcConn,
     KafkaStreamSrc,
+    KafkaStreamSrcConn,
     SrcCfgKey,
 )
 

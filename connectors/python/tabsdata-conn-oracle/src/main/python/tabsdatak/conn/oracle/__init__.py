@@ -25,10 +25,10 @@ import tabsdatak._api as _api
 from tabsdatak.api import (
     Conn,
     Dest,
-    Var,
     NamedConn,
     Secret,
     Src,
+    Var,
 )
 
 # noinspection PyProtectedMember
@@ -88,8 +88,7 @@ DestCfgSpec: TypeAlias = Annotated[
 
 @_api.dataclass(OracleErrorCode.ORACLE_1, kw_only=True)
 class OracleSrcConn(Conn):
-    """Oracle connection used by :class:`OracleSrc`.
-    """
+    """Oracle connection used by :class:`OracleSrc`."""
 
     __kind__ = "oracleSrcConn"
 
@@ -97,6 +96,7 @@ class OracleSrcConn(Conn):
     credentials: CredentialsSpec
     entity_whitelist: EntityWhitelistSpec | None = None
     conn_cfg: CfgSpec | None = None
+
 
 @_api.dataclass(OracleErrorCode.ORACLE_1, kw_only=True)
 class OracleDestConn(Conn):
@@ -126,7 +126,8 @@ DestConnSpec: TypeAlias = Union[NamedConn, OracleDestConn]
 class OracleSrc(Src):
     """Oracle source — one parquet slot per SELECT query.
 
-    :param conn: :class:`OracleSrcConn` / :class:`OracleDestConn` (or :class:`NamedConn`).
+    :param conn: :class:`OracleSrcConn` / :class:`OracleDestConn`
+        (or :class:`NamedConn`).
     :param queries: List of SELECT statements; one slot per query.
     :param transactional: When ``True`` (default), run all queries
         inside one transactional session.
@@ -161,7 +162,8 @@ class OracleSrc(Src):
 class OracleDest(Dest):
     """Oracle destination — write one parquet slot per target table.
 
-    :param conn: :class:`OracleSrcConn` / :class:`OracleDestConn` (or :class:`NamedConn`).
+    :param conn: :class:`OracleSrcConn` / :class:`OracleDestConn`
+        (or :class:`NamedConn`).
     :param tables: Target table names (FQN or bare); one parquet
         slot per table.
     :param if_table_exists: ``"append"`` (default) or ``"replace"``

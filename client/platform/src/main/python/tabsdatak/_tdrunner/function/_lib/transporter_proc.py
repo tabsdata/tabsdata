@@ -46,44 +46,16 @@ import threading
 from pathlib import Path
 from typing import IO, Sequence
 
-from tabsdatak._tdruntime.python.binary import Binary, current_scripts_dir
+from tabsdatak._tdruntime.python.error import BinaryNotFoundError
+from tabsdatak._tdruntime.python.venv import PythonEnvironment
 
 logger = logging.getLogger(__name__)
 
-# Platform-aware basename ("td_transporter" on POSIX,
-# "td_transporter.exe" on Windows). We piggyback on ``Binary.exe()``
-# rather than hand-rolling a sys.platform check; the dataclass reads
-# sysconfig's EXE config var which is the canonical source for the
-# platform suffix. ``prefix`` is irrelevant here -- we only use the
-# instance to derive the executable name; the link()-time prefix is
-# what the venv-builder uses to relocate binaries.
-TRANSPORTER_BINARY = Binary(name="td_transporter", prefix="").exe()
+TRANSPORTER_BINARY_NAME = "td_transporter"
 
 
 class TransporterNotFoundError(FileNotFoundError):
     """The ``td_transporter`` binary is not in the active venv's scripts dir."""
-
-
-def _resolve_binary() -> Path:
-    """Return the absolute path to ``td_transporter`` inside the active
-    interpreter's scripts dir.
-
-    Raises:
-        TransporterNotFoundError: if no file exists at the resolved
-            path. The error message names the directory we checked,
-            so the operator can verify the venv contents directly
-            without having to reconstruct the lookup logic.
-    """
-    scripts = current_scripts_dir()
-    candidate = scripts / TRANSPORTER_BINARY
-    if not candidate.is_file():
-        raise TransporterNotFoundError(
-            f"{TRANSPORTER_BINARY!r} not found at {candidate} "
-            f"(active interpreter's scripts dir: {scripts}). Ensure "
-            f"the function-runner venv is activated and that "
-            f"tabsdata-transporter is installed inside it."
-        )
-    return candidate
 
 
 def run_transporter(request_yaml: Path, report: Path) -> int:
@@ -101,7 +73,10 @@ def run_transporter(request_yaml: Path, report: Path) -> int:
         TransporterNotFoundError: if ``td_transporter`` is not in the
             active interpreter's scripts dir.
     """
-    binary = _resolve_binary()
+    try:
+        binary = PythonEnvironment().binary(TRANSPORTER_BINARY_NAME)
+    except BinaryNotFoundError as error:
+        raise TransporterNotFoundError() from error
     cmd = [
         str(binary),
         "--request",

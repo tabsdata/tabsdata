@@ -1,7 +1,8 @@
 """Azure Blob connector — public API.
 
-* :class:`AzureBlobSrcConn` / :class:`AzureBlobDestConn` -- per-Azure Blob connection (container,
-  credentials (AzureAccountKey), base_path, conn_cfg).
+* :class:`AzureBlobSrcConn` / :class:`AzureBlobDestConn` -- per-Azure
+  Blob connection (container, credentials (AzureAccountKey), base_path,
+  conn_cfg).
 * :class:`AzureBlobSrc` -- source: list of `paths` (glob-style);
   one parquet slot per path.
 * :class:`AzureBlobDest` -- destination: list of `paths`; one

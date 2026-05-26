@@ -6,16 +6,24 @@ from __future__ import annotations
 
 import logging
 import platform
+import site
 import subprocess
 import sys
 import sysconfig
 import tarfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import zstandard
+from packaging.requirements import InvalidRequirement, Requirement
+from packaging.utils import canonicalize_name
 
-from tabsdatak._tdruntime.python.error import FeatureDetectionError, VenvCreationError
+from tabsdatak._tdruntime.python.binary import SYSCONFIG_VAR_EXE
+from tabsdatak._tdruntime.python.error import (
+    BinaryNotFoundError,
+    FeatureDetectionError,
+    VenvCreationError,
+)
 from tabsdatak._tdruntime.python.package import Package
 from tabsdatak._tdruntime.python.recipe import (
     InstallRecipe,
@@ -23,6 +31,7 @@ from tabsdatak._tdruntime.python.recipe import (
     TabsdataEdition,
     VenvRecipe,
 )
+from tabsdatak.common._resources import td_resource
 
 logger = logging.getLogger(__name__)
 
@@ -84,12 +93,15 @@ BUILD_MANIFEST_KEY_ENTERPRISE = "X-Enterprise"
 BUILD_MANIFEST_VALUE_TRUE = "true"
 
 REQUIREMENTS_DEV_FILE = "requirements-dev.txt"
-CONSTRAINTS_DEV_RELATIVE_PATH = (
-    Path("variant") / "resources" / "lock" / "tabsdata-requirements-dev.txt"
-)
+CONSTRAINTS_RESOURCE = "resources/lock/tabsdata-requirements.txt"
+CONSTRAINTS_DEV_RESOURCE = "resources/lock/tabsdata-requirements-dev.txt"
 
+# Archive compression knobs. Level 3 keeps build-time CPU low; long=27
+# (128 MB window) catches cross-wheel repetition the default window
+# misses.
 ARCHIVE_COMPRESSION_LEVEL = 3
 ARCHIVE_COMPRESSION_THREADS = -1
+ARCHIVE_LONG_DISTANCE_WINDOW_LOG = 27
 
 LIBEXEC_BUILD_RELATIVE_PATH = Path("target") / "python" / "libexec" / "tabsdata"
 LIBEXEC_INSTALL_RELATIVE_PATH = Path("libexec") / "tabsdata"
@@ -105,7 +117,7 @@ class EnvironmentProfile:
 
 @dataclass(frozen=True)
 class PythonEnvironment:
-    root: Path
+    root: Path = field(default_factory=lambda: Path(sys.prefix))
 
     def resolve(self) -> EnvironmentProfile:
         packages = self.tdpackages()
@@ -155,6 +167,103 @@ class PythonEnvironment:
             for recipe in (package.recipe() for package in TABSDATA_CORE_PACKAGES)
             if recipe is not None
         )
+
+    @staticmethod
+    def synthesise() -> tuple[list[str], str]:
+        python_version = (
+            f"{sys.version_info.major}."
+            f"{sys.version_info.minor}."
+            f"{sys.version_info.micro}"
+        )
+        tabsdata_dependencies = PythonEnvironment.locked_packages()
+        extra_dependencies: set[str] = set()
+        for canonical in PythonEnvironment.installed_packages():
+            if (
+                canonical.startswith(TABSDATA_PACKAGE)
+                or canonical in tabsdata_dependencies
+            ):
+                continue
+            recipe = Package(canonical).recipe()
+            if recipe is None or recipe.recipe != InstallRecipe.REGISTRY:
+                continue
+            if recipe.version is None:
+                continue
+            extra_dependencies.add(f"{canonical}=={recipe.version}")
+        if not extra_dependencies:
+            return [], python_version
+        sorted_extra_dependencies = sorted(extra_dependencies, key=str.casefold)
+        constraints = "\n".join(sorted_extra_dependencies) + "\n"
+        arguments = [
+            "pip",
+            "compile",
+            "--universal",
+            "--quiet",
+            "--no-progress",
+            "--no-header",
+            "--no-annotate",
+            "--python-version",
+            f"{sys.version_info.major}.{sys.version_info.minor}",
+            "-",
+        ]
+        try:
+            stdout = PythonEnvironment.uv(
+                [
+                    *arguments,
+                    "--offline",
+                ],
+                stdin=constraints,
+            )
+        except VenvCreationError:
+            stdout = PythonEnvironment.uv(arguments, stdin=constraints)
+        resolved_requirements = [
+            line.strip()
+            for line in stdout.splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+        return resolved_requirements, python_version
+
+    @staticmethod
+    def installed_packages() -> frozenset[str]:
+        roots: list[str] = list(site.getsitepackages())
+        user_site = site.getusersitepackages()
+        if user_site:
+            roots.append(user_site)
+        names: set[str] = set()
+        for entry in roots:
+            root = Path(entry)
+            if not root.is_dir():
+                continue
+            try:
+                children = root.iterdir()
+            except OSError:
+                continue
+            for child in children:
+                name = child.name
+                if name.endswith(".dist-info") or name.endswith(".egg-info"):
+                    stem = name.rpartition(".")[0]
+                    package_name = stem.partition("-")[0]
+                    if package_name:
+                        names.add(canonicalize_name(package_name))
+        return frozenset(names)
+
+    @staticmethod
+    def locked_packages() -> frozenset[str]:
+        resources = [CONSTRAINTS_RESOURCE]
+        recipe = Package(TABSDATA_PACKAGE).recipe()
+        if recipe is not None and recipe.recipe == InstallRecipe.EDITABLE:
+            resources.append(CONSTRAINTS_DEV_RESOURCE)
+        names: set[str] = set()
+        for resource in resources:
+            lock_path = td_resource(resource)
+            for raw in lock_path.read_text(encoding="utf-8").splitlines():
+                line = raw.strip()
+                if not line or line.startswith("#"):
+                    continue
+                try:
+                    names.add(canonicalize_name(Requirement(line).name))
+                except InvalidRequirement:
+                    continue
+        return frozenset(names)
 
     def create(
         self,
@@ -225,11 +334,10 @@ class PythonEnvironment:
             raise VenvCreationError(
                 detail=f"Requirements file '{requirements}' not found",
             )
-        constraints = tabsdata.location / CONSTRAINTS_DEV_RELATIVE_PATH
-        if not constraints.is_file():
-            raise VenvCreationError(
-                detail=f"Constraints file '{constraints}' not found",
-            )
+        try:
+            constraints = td_resource(CONSTRAINTS_DEV_RESOURCE)
+        except FileNotFoundError as error:
+            raise VenvCreationError(detail=str(error)) from error
         command = ["pip", "install"]
         if not verbose:
             command.append("--quiet")
@@ -335,7 +443,15 @@ class PythonEnvironment:
 
     def python(self) -> Path:
         # noinspection PyDeprecation
-        return self.scripts() / ("python" + sysconfig.get_config_var("EXE"))
+        return self.scripts() / ("python" + sysconfig.get_config_var(SYSCONFIG_VAR_EXE))
+
+    def binary(self, name: str) -> Path:
+        scripts = self.scripts()
+        # noinspection PyDeprecation
+        candidate = scripts / (name + sysconfig.get_config_var(SYSCONFIG_VAR_EXE))
+        if not candidate.is_file():
+            raise BinaryNotFoundError(name=name, scripts=scripts)
+        return candidate
 
     def archive(self, archive_path: Path) -> None:
         if archive_path.exists():
@@ -343,6 +459,8 @@ class PythonEnvironment:
         parameters = zstandard.ZstdCompressionParameters.from_level(
             ARCHIVE_COMPRESSION_LEVEL,
             threads=ARCHIVE_COMPRESSION_THREADS,
+            window_log=ARCHIVE_LONG_DISTANCE_WINDOW_LOG,
+            write_content_size=True,
         )
         compressor = zstandard.ZstdCompressor(compression_params=parameters)
         with open(archive_path, "wb") as raw:
@@ -351,13 +469,22 @@ class PythonEnvironment:
                     tar.add(self.root, arcname=self.root.name)
 
     @staticmethod
-    def uv(arguments: list[str], *, verbose: bool = False) -> None:
+    def uv(
+        arguments: list[str],
+        *,
+        stdin: str | None = None,
+        verbose: bool = False,
+    ) -> str:
         try:
             result = subprocess.run(
-                ["uv", *arguments],
+                [
+                    "uv",
+                    *arguments,
+                ],
                 check=False,
                 capture_output=not verbose,
                 text=True,
+                input=stdin,
             )
         except FileNotFoundError as error:
             raise VenvCreationError(
@@ -375,3 +502,4 @@ class PythonEnvironment:
                     f" (exit {result.returncode}){captured}"
                 ),
             )
+        return result.stdout

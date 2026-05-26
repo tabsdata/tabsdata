@@ -25,10 +25,10 @@ import tabsdatak._api as _api
 from tabsdatak.api import (
     Conn,
     Dest,
-    Var,
     NamedConn,
     Secret,
     Src,
+    Var,
 )
 
 # noinspection PyProtectedMember
@@ -90,8 +90,7 @@ DestCfgSpec: TypeAlias = Annotated[
 
 @_api.dataclass(MssqlErrorCode.MSSQL_1, kw_only=True)
 class MSSQLSrcConn(Conn):
-    """MSSQL connection used by :class:`MSSQLSrc`.
-    """
+    """MSSQL connection used by :class:`MSSQLSrc`."""
 
     __kind__ = "mSSQLSrcConn"
 
@@ -99,6 +98,7 @@ class MSSQLSrcConn(Conn):
     credentials: CredentialsSpec
     entity_whitelist: EntityWhitelistSpec | None = None
     conn_cfg: CfgSpec | None = None
+
 
 @_api.dataclass(MssqlErrorCode.MSSQL_1, kw_only=True)
 class MSSQLDestConn(Conn):

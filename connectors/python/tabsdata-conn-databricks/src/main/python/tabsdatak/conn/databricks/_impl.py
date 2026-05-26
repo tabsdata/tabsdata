@@ -28,10 +28,10 @@ from typing import TYPE_CHECKING, Any
 
 from tabsdatak.conn.common._validation import fqn, unfqn
 from tabsdatak.conn.databricks import DatabricksDestConn, DatabricksSrcConn
+from tabsdatak.conn.databricks._validation import _DATABRICKS_FQN_DEF
 
 # Conn helpers operate on both Src and Dest variants.
 _AnyDatabricksConn = DatabricksSrcConn | DatabricksDestConn
-from tabsdatak.conn.databricks._validation import _DATABRICKS_FQN_DEF
 
 if TYPE_CHECKING:
     import pyarrow as pa

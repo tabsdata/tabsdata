@@ -53,13 +53,14 @@ from tabsdatak.conn.common.sql.cdc.constants import (
     DOT,
     CdcOperation,
 )
-# noinspection PyProtectedMember
-from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.common.sql.cdc.dialect import CdcIngesterType, Dialect
 from tabsdatak.conn.common.sql.cdc.typing import (
     QualifiedTablesSpec,
     TimestampPosition as _CommonTimestampPosition,
 )
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.db2 import (
     CommitSeqPosition,
     TableCommitSeqPosition,

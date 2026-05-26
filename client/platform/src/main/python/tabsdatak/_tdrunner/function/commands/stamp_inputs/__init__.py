@@ -45,6 +45,7 @@ from pathlib import Path
 
 import polars as pl
 
+from tabsdatak._logging import setup_logging
 from tabsdatak._tdrunner.function._lib.cli import build_parser, run_command
 from tabsdatak._tdrunner.function._lib.errors import CommandSpecificError
 from tabsdatak._tdrunner.function._lib.inputs_manifest import (
@@ -65,7 +66,6 @@ from tabsdatak._tdrunner.function._lib.system_columns import (
     stamp_system_columns,
 )
 from tabsdatak._tdrunner.function.commands import tabsdata_command
-from tabsdatak._logging import setup_logging
 
 # TODO: After all commands are done, version will be unified in a single
 #  source of truth file.

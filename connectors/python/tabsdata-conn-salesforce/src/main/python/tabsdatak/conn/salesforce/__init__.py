@@ -24,7 +24,7 @@ from pydantic import Field
 import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
-from tabsdatak.api import Conn, Var, NamedConn, Secret, SecretOrVarSpec, Src
+from tabsdatak.api import Conn, NamedConn, Secret, SecretOrVarSpec, Src, Var
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation

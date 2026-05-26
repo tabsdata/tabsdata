@@ -30,7 +30,7 @@ from pydantic import StringConstraints
 
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
-from tabsdatak.api import Conn, NamedConn, StreamSrc, Secret, Var
+from tabsdatak.api import Conn, NamedConn, Secret, StreamSrc, Var
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation
@@ -80,9 +80,17 @@ KafkaMessageFormatSpec: TypeAlias = Union[Literal["avro", "json"], Protobuf]
 
 _CONFLUENT_SCHEMA_REGISTRY_URL_NAME_RE_STR = r".*"
 ConfluentSchemaRegistryUrlNameSpec: TypeAlias = Union[
-    Annotated[str, StringConstraints(pattern=_CONFLUENT_SCHEMA_REGISTRY_URL_NAME_RE_STR)],
-    Annotated[Var, _api.VarValueConstraints(pattern=_CONFLUENT_SCHEMA_REGISTRY_URL_NAME_RE_STR)],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_CONFLUENT_SCHEMA_REGISTRY_URL_NAME_RE_STR)],
+    Annotated[
+        str, StringConstraints(pattern=_CONFLUENT_SCHEMA_REGISTRY_URL_NAME_RE_STR)
+    ],
+    Annotated[
+        Var,
+        _api.VarValueConstraints(pattern=_CONFLUENT_SCHEMA_REGISTRY_URL_NAME_RE_STR),
+    ],
+    Annotated[
+        Secret,
+        _api.SecretValueConstraints(pattern=_CONFLUENT_SCHEMA_REGISTRY_URL_NAME_RE_STR),
+    ],
 ]
 
 
@@ -103,6 +111,7 @@ class ConfluentSchemaRegistry:
     credentials: ConfluentSchemaRegistryCredentialsSpec | None = None
     configs: CfgSpec | None = None
 
+
 _REGISTRY_NAME_RE_STR = r".*"
 RegistryNameSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_REGISTRY_NAME_RE_STR)],
@@ -116,6 +125,7 @@ SchemaNameSpec: TypeAlias = Union[
     Annotated[Var, _api.VarValueConstraints(pattern=_SCHEMA_NAME_RE_STR)],
     Annotated[Secret, _api.SecretValueConstraints(pattern=_SCHEMA_NAME_RE_STR)],
 ]
+
 
 @_api.dataclass(KafkaErrorCode.KAFKA_3, kw_only=True)
 class AwsGlueSchemaRegistry:

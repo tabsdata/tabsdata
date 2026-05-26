@@ -1,7 +1,7 @@
 """GCS connector — public API.
 
-* :class:`GCSSrcConn` / :class:`GCSDestConn` -- per-GCS connection (bucket, credentials (GCPJson),
-  project, base_path, conn_cfg).
+* :class:`GCSSrcConn` / :class:`GCSDestConn` -- per-GCS connection
+  (bucket, credentials (GCPJson), project, base_path, conn_cfg).
 * :class:`GCSSrc` -- source: list of `paths` (glob-style);
   one parquet slot per path.
 * :class:`GCSDest` -- destination: list of `paths`; one
@@ -24,10 +24,10 @@ import tabsdatak._api as _api
 from tabsdatak.api import (
     Conn,
     Dest,
-    Var,
     NamedConn,
     Secret,
     Src,
+    Var,
 )
 
 # noinspection PyProtectedMember

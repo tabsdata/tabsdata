@@ -19,10 +19,10 @@ from typing import TYPE_CHECKING, Any
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert
+from tabsdatak.conn.kafka import KafkaStreamSrcConn
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.kafka._serdes import KafkaSerde, SchemaIdCompatibles, SchemaIdSpec
-from tabsdatak.conn.kafka import KafkaStreamSrcConn
 
 if TYPE_CHECKING:  # pragma: no cover -- typing-only
     from confluent_kafka import Consumer, Message, Producer

@@ -273,9 +273,7 @@ def fetch_latest_version(report: Report) -> str:
                 progress.update(task, description=f"{description} ok ({tag})")
                 progress.stop_task(task)
                 report.version = tag
-                report.version_source = (
-                    f"theseus-rs latest release ({RELEASES_API})"
-                )
+                report.version_source = f"theseus-rs latest release ({RELEASES_API})"
                 logger.debug(f"Resolved latest theseus-rs PostgreSQL release: {tag}")
                 return tag
             except (
@@ -326,9 +324,7 @@ def download(url: str, destination: Path, report: Report) -> None:
                 f" (attempt {attempt}/{DOWNLOAD_ATTEMPTS}): {url}"
             )
             try:
-                with open_url(url) as response, open(
-                    temporary, "wb"
-                ) as output_file:
+                with open_url(url) as response, open(temporary, "wb") as output_file:
                     content_length = response.headers.get("Content-Length")
                     if content_length:
                         try:
@@ -352,8 +348,7 @@ def download(url: str, destination: Path, report: Report) -> None:
                 progress.update(task, description=f"{description} FAILED")
                 progress.stop_task(task)
                 report.warn(
-                    f"download attempt {attempt}/{DOWNLOAD_ATTEMPTS} failed:"
-                    f" {error}"
+                    f"download attempt {attempt}/{DOWNLOAD_ATTEMPTS} failed: {error}"
                 )
                 if temporary.exists():
                     temporary.unlink()

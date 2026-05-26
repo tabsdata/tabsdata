@@ -11,8 +11,8 @@ from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.druid import (
     DestCfgKey,
     DestCfgSpec,
-    DruidDestConn,
     DruidDest,
+    DruidDestConn,
 )
 from tabsdatak.conn.druid.error import DruidErrorCode
 from tabsdatak.error import TabsdataException

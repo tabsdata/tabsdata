@@ -142,7 +142,9 @@ def build_parser(
         "-c",
         default=None,
         metavar="PATH",
-        help="Path to a logging config YAML. When omitted, the bundled default is used.",
+        help=(
+            "Path to a logging config YAML. When omitted, the bundled default is used."
+        ),
     )
     return parser
 

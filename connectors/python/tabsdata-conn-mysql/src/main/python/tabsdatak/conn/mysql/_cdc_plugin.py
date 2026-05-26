@@ -40,9 +40,9 @@ from tabsdatak.conn.common.sql.cdc.typing import (
 )
 from tabsdatak.conn.mysql import (
     CdcSrcCfgKey,
-    MySQLCdcStreamSrcConn,
     MySQLCdcStartFromSpec,
     MySQLCdcStreamSrc,
+    MySQLCdcStreamSrcConn,
     TimestampPosition,
 )
 

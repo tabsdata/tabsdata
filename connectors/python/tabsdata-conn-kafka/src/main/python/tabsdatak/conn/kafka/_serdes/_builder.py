@@ -192,7 +192,9 @@ def build_schema_registry_client(
 
         # Glue boto3 client picks credentials off the environment.
         # We populate the standard envvars from the config.
-        os.environ["AWS_ACCESS_KEY_ID"] = schema_registry.credentials.access_key_id.value()
+        os.environ["AWS_ACCESS_KEY_ID"] = (
+            schema_registry.credentials.access_key_id.value()
+        )
         os.environ["AWS_SECRET_ACCESS_KEY"] = (
             schema_registry.credentials.secret_access_key.value()
         )

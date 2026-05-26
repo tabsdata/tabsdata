@@ -16,8 +16,8 @@ from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.druid import (
     AzBlobLocation,
     CloudLocation,
-    DruidDestConn,
     DruidDest,
+    DruidDestConn,
     GCSLocation,
     S3Location,
 )
@@ -163,23 +163,31 @@ def _transporter_env(location: CloudLocation) -> dict[str, str]:
     if isinstance(location, S3Location):
         creds = location.credentials
         return {
-            _transporter.SERVER_SIDE_AWS_ACCESS_KEY_ID: _convert(creds.access_key_id, str),
+            _transporter.SERVER_SIDE_AWS_ACCESS_KEY_ID: _convert(
+                creds.access_key_id, str
+            ),
             _transporter.SERVER_SIDE_AWS_SECRET_ACCESS_KEY: _convert(
-                creds.secret_access_key, str,
+                creds.secret_access_key,
+                str,
             ),
             _transporter.SERVER_SIDE_AWS_REGION: _convert(location.region, str),
         }
     if isinstance(location, GCSLocation):
         return {
             _transporter.SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON: _convert(
-                location.credentials.json, str,
+                location.credentials.json,
+                str,
             ),
         }
     if isinstance(location, AzBlobLocation):
         creds = location.credentials
         return {
-            _transporter.SERVER_SIDE_AZURE_ACCOUNT_NAME: _convert(creds.account_name, str),
-            _transporter.SERVER_SIDE_AZURE_ACCOUNT_KEY: _convert(creds.account_key, str),
+            _transporter.SERVER_SIDE_AZURE_ACCOUNT_NAME: _convert(
+                creds.account_name, str
+            ),
+            _transporter.SERVER_SIDE_AZURE_ACCOUNT_KEY: _convert(
+                creds.account_key, str
+            ),
         }
     # noinspection PyProtectedMember
     raise DruidErrorCode.DRUID_11.exception(kind=type(location).__name__)
@@ -571,7 +579,9 @@ def make_overlord_client(conn: DruidDestConn) -> OverlordClient:
     )
 
 
-def make_overlord_client_for_dest(conn: DruidDestConn, dest: DruidDest) -> OverlordClient:
+def make_overlord_client_for_dest(
+    conn: DruidDestConn, dest: DruidDest
+) -> OverlordClient:
     """Build an Overlord client whose ``timeout_sec`` reflects the
     destination's ``http_timeout_sec`` knob."""
     creds = conn.credentials

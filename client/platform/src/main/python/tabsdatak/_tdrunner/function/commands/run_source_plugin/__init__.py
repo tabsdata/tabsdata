@@ -24,6 +24,7 @@ from pydantic import ValidationError
 from tabsdatak._bundle import BUNDLE_MANIFEST_FILENAME, BUNDLE_USER_CODE_DIRNAME
 from tabsdatak._connectors import get_src
 from tabsdatak._info import KIND_PUBLISHER_DEF, PublisherInfo, _unwrap_info
+from tabsdatak._logging import setup_logging
 from tabsdatak._tdrunner.function._lib.cli import build_parser, run_command
 from tabsdatak._tdrunner.function._lib.errors import CommandSpecificError
 from tabsdatak._tdrunner.function._lib.inputs_manifest import (
@@ -37,7 +38,6 @@ from tabsdatak._tdrunner.function._lib.request import (
     load_request,
 )
 from tabsdatak._tdrunner.function.commands import tabsdata_command
-from tabsdatak._logging import setup_logging
 from tabsdatak.api import ContextKeySpec, ContextValueSpec
 from tabsdatak.spi import SrcPluginCtx
 

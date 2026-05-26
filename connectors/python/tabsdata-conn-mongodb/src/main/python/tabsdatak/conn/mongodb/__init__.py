@@ -22,7 +22,7 @@ from pydantic import StringConstraints
 import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
-from tabsdatak.api import Conn, Dest, Var, NamedConn, Secret
+from tabsdatak.api import Conn, Dest, NamedConn, Secret, Var
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation

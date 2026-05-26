@@ -60,17 +60,4 @@ def default_scripts_prefix() -> str:
 
 
 def current_scripts_dir() -> Path:
-    """Absolute scripts dir of the currently-running interpreter.
-
-    This is where pip installs CLI tools when invoked against the
-    active interpreter -- ``<sys.prefix>/bin`` on Unix venvs,
-    ``<sys.prefix>/Scripts`` on Windows.
-
-    Prefer this over relying on ``PATH`` when locating CLI tools the
-    active venv ships (e.g. ``td_transporter``). PATH may not contain
-    the active venv's bin dir if activation was skipped (e.g. some
-    CI runners, subprocesses spawned without inheriting PATH), and
-    even when it does, a same-named binary elsewhere on PATH could
-    shadow the one we actually mean.
-    """
     return Path(sysconfig.get_path(SYSCONFIG_PATH_SCRIPTS))

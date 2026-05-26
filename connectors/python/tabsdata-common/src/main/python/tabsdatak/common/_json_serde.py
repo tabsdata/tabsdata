@@ -260,8 +260,7 @@ def hydrate_secrets(
         raise CommonErrorCode.COMMON_6.exception(keys=missing_values)
 
     expected = {
-        _to_key(path)
-        for path, _ in find_by_kind(dehydrated_data, _SECRET_REF_KIND)
+        _to_key(path) for path, _ in find_by_kind(dehydrated_data, _SECRET_REF_KIND)
     }
     provided = {kv.key for kv in secrets}
     if expected != provided:
@@ -305,9 +304,7 @@ def hydrate_secrets_as_envs(
             the inferred keys).
     """
     secrets = [
-        KeyValue(
-            key=_to_key(path), value=os.environ.get(prefix + _to_key(path))
-        )
+        KeyValue(key=_to_key(path), value=os.environ.get(prefix + _to_key(path)))
         for path, _ in find_by_kind(dehydrated_data, _SECRET_REF_KIND)
     ]
     return hydrate_secrets(dehydrated_data, secrets)
@@ -360,8 +357,7 @@ def hydrate_vars(
         raise CommonErrorCode.COMMON_6.exception(keys=missing_values)
 
     expected = {
-        _to_key(path)
-        for path, _ in find_by_kind(dehydrated_data, _VAR_REF_KIND)
+        _to_key(path) for path, _ in find_by_kind(dehydrated_data, _VAR_REF_KIND)
     }
     provided = {kv.key for kv in vars_}
     if expected != provided:
@@ -370,9 +366,7 @@ def hydrate_vars(
             extra=sorted(provided - expected),
         )
 
-    values: dict[str, str] = {
-        kv.key: kv.value for kv in vars_ if kv.value is not None
-    }
+    values: dict[str, str] = {kv.key: kv.value for kv in vars_ if kv.value is not None}
 
     out = deepcopy(dehydrated_data)
     for path, env in find_by_kind(out, _VAR_REF_KIND):
@@ -387,9 +381,7 @@ def hydrate_vars(
     return out
 
 
-def hydrate_vars_as_envs(
-    dehydrated_data: JsonSerdeData, prefix: str
-) -> JsonSerdeData:
+def hydrate_vars_as_envs(dehydrated_data: JsonSerdeData, prefix: str) -> JsonSerdeData:
     """Return a deep copy of ``dehydrated_data`` with every ``varRef``
     envelope rewritten as a ``varLiteral``, taking each value from the
     process environment under ``prefix + <inferred key>``.

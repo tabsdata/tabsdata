@@ -320,18 +320,38 @@ where
     }
 }
 
-// Initialize the logger.
+struct LoggingStyle {
+    profile: Option<LogProfile>,
+    directives: Vec<String>,
+    without_time: bool,
+}
+
+struct LoggingEngine<W> {
+    log_dir: Option<PathBuf>,
+    writer: W,
+}
+
 #[allow(unused_variables)]
 fn init<W: for<'a> MakeWriter<'a> + Send + Sync + 'static>(
-    max_level: Level,
-    writer: W,
-    directives: Vec<String>,
-    with_tokio_console: bool,
-    log_dir: Option<PathBuf>,
-    profile: Option<LogProfile>,
-    format: LogFormat,
-    without_time: bool,
+    options: LoggingOptions,
+    style: LoggingStyle,
+    engine: LoggingEngine<W>,
 ) -> LoggerGuard {
+    let LoggingStyle {
+        profile,
+        directives,
+        without_time,
+    } = style;
+    let LoggingEngine { log_dir, writer } = engine;
+    let max_level = options.max_level.unwrap_or_else(|| {
+        profile
+            .as_ref()
+            .and_then(|profile| Level::from_str(&profile.level).ok())
+            .unwrap_or(DEFAULT_LOG_LEVEL)
+    });
+    let format = options.format;
+    let with_tokio_console = options.with_tokio_console;
+
     let log_with_ansi = MANAGER.get(LOG_WITH_ANSI).as_deref() == Some(TRUE);
 
     let base_filter = match &profile {
@@ -413,18 +433,18 @@ fn init<W: for<'a> MakeWriter<'a> + Send + Sync + 'static>(
 
 #[derive(Debug, Clone)]
 pub struct LoggingOptions {
-    pub max_level: Option<Level>,
     pub profile: Option<String>,
+    pub max_level: Option<Level>,
+    pub format: LogFormat,
     pub with_tokio_console: bool,
     pub enable_bootstrap_notice: bool,
-    pub format: LogFormat,
 }
 
 impl Default for LoggingOptions {
     fn default() -> Self {
         Self {
-            max_level: None,
             profile: None,
+            max_level: None,
             with_tokio_console: false,
             enable_bootstrap_notice: true,
             format: LogFormat::default(),
@@ -459,11 +479,6 @@ pub fn start_with_config_file(config_path: &str) {
     let log_dir = resolve_log_directory(PathBuf::from(CURRENT_DIR));
     let writer = select_primary_writer(active_profile.as_ref(), log_dir.as_deref());
 
-    let effective_level = active_profile
-        .as_ref()
-        .and_then(|profile| Level::from_str(&profile.level).ok())
-        .unwrap_or(DEFAULT_LOG_LEVEL);
-
     let effective_format = active_profile
         .as_ref()
         .and_then(|profile| profile.format)
@@ -471,14 +486,19 @@ pub fn start_with_config_file(config_path: &str) {
 
     LOGGER_PROVIDER.get_or_init(|| {
         init(
-            effective_level,
-            writer,
-            vec![],
-            false,
-            log_dir.clone(),
-            active_profile.clone(),
-            effective_format,
-            true,
+            LoggingOptions {
+                format: effective_format,
+                ..LoggingOptions::default()
+            },
+            LoggingStyle {
+                profile: active_profile.clone(),
+                directives: vec![],
+                without_time: true,
+            },
+            LoggingEngine {
+                log_dir: log_dir.clone(),
+                writer,
+            },
         )
     });
 
@@ -507,13 +527,6 @@ pub fn start_with(options: LoggingOptions) {
     let log_dir = resolve_log_directory(PathBuf::from(CURRENT_DIR));
     let writer = select_primary_writer(active_profile.as_ref(), log_dir.as_deref());
 
-    let effective_level = max_level.unwrap_or_else(|| {
-        active_profile
-            .as_ref()
-            .and_then(|profile| Level::from_str(&profile.level).ok())
-            .unwrap_or(DEFAULT_LOG_LEVEL)
-    });
-
     let effective_format = active_profile
         .as_ref()
         .and_then(|profile| profile.format)
@@ -521,14 +534,22 @@ pub fn start_with(options: LoggingOptions) {
 
     LOGGER_PROVIDER.get_or_init(|| {
         init(
-            effective_level,
-            writer,
-            vec![],
-            with_tokio_console,
-            log_dir.clone(),
-            active_profile.clone(),
-            effective_format,
-            false,
+            LoggingOptions {
+                profile: None,
+                max_level,
+                format: effective_format,
+                with_tokio_console,
+                enable_bootstrap_notice,
+            },
+            LoggingStyle {
+                profile: active_profile.clone(),
+                directives: vec![],
+                without_time: false,
+            },
+            LoggingEngine {
+                log_dir: log_dir.clone(),
+                writer,
+            },
         )
     });
 
@@ -1337,14 +1358,22 @@ mod tests {
             sender: sender.clone(),
         };
         let logger_provider = init(
-            Level::DEBUG,
-            writer,
-            vec!["opentelemetry_sdk=error".to_string()],
-            false,
-            None,
-            None,
-            LogFormat::Full,
-            false,
+            LoggingOptions {
+                profile: None,
+                max_level: Some(Level::DEBUG),
+                format: LogFormat::Full,
+                with_tokio_console: false,
+                enable_bootstrap_notice: true,
+            },
+            LoggingStyle {
+                profile: None,
+                directives: vec!["opentelemetry_sdk=error".to_string()],
+                without_time: false,
+            },
+            LoggingEngine {
+                log_dir: None,
+                writer,
+            },
         );
         Mutex::new((sender, receiver, logger_provider))
     });

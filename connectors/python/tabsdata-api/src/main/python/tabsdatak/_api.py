@@ -37,7 +37,6 @@ import dataclasses
 import functools
 import importlib
 import inspect
-import os
 import re
 import typing
 from abc import ABC
@@ -348,7 +347,7 @@ class _ValuePattern:
         # Late import: api.py imports from _api at module load, and these
         # classes are defined there.
         # noinspection PyProtectedMember
-        from tabsdatak.api import Var, Secret, _LiteralVar, _LiteralSecret
+        from tabsdatak.api import Secret, Var, _LiteralSecret, _LiteralVar
 
         if issubclass(source_type, Var):
             literal_cls: type = _LiteralVar
@@ -1053,11 +1052,7 @@ class BaseRef(JsonSerde, ABC):
             return handler(data)
 
         if cls._is_ref_root and isinstance(data, dict):
-            stash = {
-                k: data[k]
-                for k in ("_s", "_value_pattern")
-                if k in data
-            }
+            stash = {k: data[k] for k in ("_s", "_value_pattern") if k in data}
             instance = handler(data)
             for k, v in stash.items():
                 object.__setattr__(instance, k, v)

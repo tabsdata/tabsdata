@@ -7,8 +7,8 @@ from typing import Any, cast
 from tabsdatak.conn.snowflake import (
     DestCfgKey,
     DestCfgSpec,
-    SnowflakeDestConn,
     SnowflakeDest,
+    SnowflakeDestConn,
 )
 from tabsdatak.conn.snowflake.error import SnowflakeErrorCode
 from tabsdatak.spi import (

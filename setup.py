@@ -218,7 +218,10 @@ TABSDATA_LICENSE = read_file(
     base_path=".",
 )
 PACKAGE_RESOURCES = {
-    Path(ROOT) / "variant" / "resources": Path(".") / "tabsdata" / "resources",
+    Path(ROOT) / "variant" / "resources": [
+        Path(".") / "tabsdata" / "resources",
+        Path(".") / "tabsdatak" / "resources",
+    ],
 }
 
 with global_spinner("Building package 'tabsdata' (TabsData)..."):
