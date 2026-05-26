@@ -5,7 +5,7 @@
 use td_error::td_error;
 
 #[td_error]
-pub enum PodError {
+pub enum PodYamlError {
     #[error("Could not parse pod YAML: {0}")]
     ParseFailed(String) = 5000,
     #[error("Could not serialize pod YAML: {0}")]

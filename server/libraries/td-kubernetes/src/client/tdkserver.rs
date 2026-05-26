@@ -17,8 +17,10 @@ use crate::client::tdkserver::commands::stop::command_stop;
 use crate::client::tdkserver::commands::unuse::command_unuse;
 use crate::client::tdkserver::commands::r#use::command_use;
 use crate::client::tdkserver::commands::using::command_using;
-use crate::kube::client::install_crypto_provider;
+use crate::cerror;
 use crate::core::system::exit::Result;
+use crate::kube::api::client::install_crypto_provider;
+use td_common::status::ExitStatus;
 
 pub struct TabsDataKubernetesClient;
 
@@ -46,6 +48,15 @@ impl TabsDataKubernetesClient {
 pub async fn start() {
     install_crypto_provider();
     if let Err(error) = TabsDataKubernetesClient.run().await {
+        report_command_termination(&error);
         std::process::exit(error.status().code());
+    }
+}
+
+fn report_command_termination(error: &crate::core::system::exit::CommandError) {
+    match error.status() {
+        ExitStatus::Cancelled => tracing::info!("Operation cancelled."),
+        ExitStatus::NoAction => {}
+        _ => cerror!("Command aborted."),
     }
 }

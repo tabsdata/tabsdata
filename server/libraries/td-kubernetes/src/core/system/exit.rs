@@ -36,6 +36,18 @@ impl CommandError {
     }
 }
 
+impl From<TdError> for CommandError {
+    fn from(error: TdError) -> Self {
+        CommandError::with(ExitStatus::GeneralError, error)
+    }
+}
+
+impl From<crate::base::error::kubernetes::KubernetesError> for CommandError {
+    fn from(error: crate::base::error::kubernetes::KubernetesError) -> Self {
+        CommandError::with(ExitStatus::GeneralError, TdError::from(error))
+    }
+}
+
 pub type Result<T = ()> = std::result::Result<T, CommandError>;
 
 pub fn abort<T>(status: ExitStatus) -> Result<T> {

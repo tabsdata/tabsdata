@@ -43,14 +43,14 @@ fn deserialize_pod_manifest_extracts_container_image_and_command() {
 #[test]
 fn deserialize_pod_manifest_returns_err_for_malformed_yaml() {
     let outcome = deserialize_pod_manifest("not: : : valid: yaml");
-    assert!(matches!(outcome, Err(PodError::ParseFailed(_))));
+    assert!(matches!(outcome, Err(PodYamlError::ParseFailed(_))));
 }
 
 #[test]
 fn deserialize_pod_manifest_returns_err_for_wrong_type() {
     // A plain scalar is not a Pod struct.
     let outcome = deserialize_pod_manifest("just a string");
-    assert!(matches!(outcome, Err(PodError::ParseFailed(_))));
+    assert!(matches!(outcome, Err(PodYamlError::ParseFailed(_))));
 }
 
 #[test]

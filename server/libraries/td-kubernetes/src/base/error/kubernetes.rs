@@ -2,31 +2,60 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-use td_error::td_error;
+//! Kubernetes error taxonomy.
+//!
+//! The umbrella [`KubernetesError`] enum groups scope-specific error enums
+//! (`Kube*Error`) defined under `base::error::kubernetes::*`. Scope enums are
+//! the only errors constructible from `kube::api::*`; other modules consume
+//! them through this umbrella or through `td_error::TdError`.
 
-#[td_error]
+pub mod client;
+pub mod cluster;
+pub mod configmap;
+pub mod job;
+pub mod kubeconfig;
+pub mod namespace;
+pub mod pod;
+
+use td_error::TdError;
+use thiserror::Error;
+
+pub use client::KubeClientError;
+pub use cluster::KubeClusterError;
+pub use configmap::KubeConfigMapError;
+pub use job::KubeJobError;
+pub use kubeconfig::KubeconfigError;
+pub use namespace::KubeNamespaceError;
+pub use pod::KubePodError;
+
+#[derive(Debug, Error)]
 pub enum KubernetesError {
-    #[error("Namespace '{0}' does not exist in the cluster")]
-    NamespaceNotFound(String) = 1000,
-    #[error("Kubernetes cluster is not reachable: {0}")]
-    ClusterUnreachable(String) = 5000,
-    #[error("Could not build the Kubernetes client: {0}")]
-    ClientBuildFailed(String) = 5001,
-    #[error("Could not load Kubernetes configuration: {0}")]
-    ConfigLoadFailed(String) = 5002,
-    #[error("Could not read kubeconfig at '{0}': {1}")]
-    KubeconfigReadFailed(String, String) = 5003,
-    #[error("Could not parse kubeconfig: {0}")]
-    KubeconfigParseFailed(String) = 5004,
-    #[error("Could not verify namespace '{0}': {1}")]
-    NamespaceQueryFailed(String, String) = 5005,
-    #[error("Could not serialize the active context: {0}")]
-    ContextSerializeFailed(String) = 5006,
-    #[error("Could not write kubeconfig at '{0}': {1}")]
-    KubeconfigWriteFailed(String, String) = 5007,
-    #[error("Could not delete kubeconfig at '{0}': {1}")]
-    KubeconfigDeleteFailed(String, String) = 5008,
+    #[error(transparent)]
+    Client(#[from] KubeClientError),
+    #[error(transparent)]
+    Cluster(#[from] KubeClusterError),
+    #[error(transparent)]
+    ConfigMap(#[from] KubeConfigMapError),
+    #[error(transparent)]
+    Job(#[from] KubeJobError),
+    #[error(transparent)]
+    Kubeconfig(#[from] KubeconfigError),
+    #[error(transparent)]
+    Namespace(#[from] KubeNamespaceError),
+    #[error(transparent)]
+    Pod(#[from] KubePodError),
 }
 
-#[cfg(test)]
-mod tests;
+impl From<KubernetesError> for TdError {
+    fn from(error: KubernetesError) -> Self {
+        match error {
+            KubernetesError::Client(inner) => TdError::new(inner),
+            KubernetesError::Cluster(inner) => TdError::new(inner),
+            KubernetesError::ConfigMap(inner) => TdError::new(inner),
+            KubernetesError::Job(inner) => TdError::new(inner),
+            KubernetesError::Kubeconfig(inner) => TdError::new(inner),
+            KubernetesError::Namespace(inner) => TdError::new(inner),
+            KubernetesError::Pod(inner) => TdError::new(inner),
+        }
+    }
+}

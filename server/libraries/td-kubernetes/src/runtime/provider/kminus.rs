@@ -36,8 +36,8 @@ use crate::runtime::instance::profile::{
     load_profile, parse_from_configmaps, render_for_configmaps, resolve_profile_entry,
 };
 use crate::runtime::instance::verify_manifest_compatibility;
-use crate::kube::action::require_configmap;
-use crate::kube::client::build_kube_client;
+use crate::kube::api::require_configmap;
+use crate::runtime::reporting::build_kube_client;
 use crate::kube::kubeconfig::{
     build_kubeconfig, resolve_cluster_name, resolve_cluster_url, resolve_current_context,
     resolve_namespace,

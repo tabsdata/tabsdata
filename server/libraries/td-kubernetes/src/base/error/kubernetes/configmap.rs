@@ -5,7 +5,7 @@
 use td_error::td_error;
 
 #[td_error]
-pub enum ConfigMapError {
+pub enum KubeConfigMapError {
     #[error("ConfigMap '{name}' already exists in namespace '{namespace}'")]
     AlreadyExists { namespace: String, name: String } = 100,
     #[error("ConfigMap '{name}' not found in namespace '{namespace}'")]
@@ -22,12 +22,18 @@ pub enum ConfigMapError {
         name: String,
         cause: String,
     } = 5001,
+    #[error("Could not read ConfigMap '{name}' in namespace '{namespace}': {cause}")]
+    ReadFailed {
+        namespace: String,
+        name: String,
+        cause: String,
+    } = 5002,
     #[error("Could not delete ConfigMap '{name}' in namespace '{namespace}': {cause}")]
     DeleteFailed {
         namespace: String,
         name: String,
         cause: String,
-    } = 5002,
+    } = 5003,
 }
 
 #[cfg(test)]

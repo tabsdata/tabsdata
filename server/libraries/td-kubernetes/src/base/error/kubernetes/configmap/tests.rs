@@ -9,38 +9,38 @@ use super::*;
 #[test]
 fn every_variant_reports_configmap_error_as_domain() {
     let cases: [Box<dyn TdDomainError>; 5] = [
-        Box::new(ConfigMapError::AlreadyExists {
+        Box::new(KubeConfigMapError::AlreadyExists {
             namespace: "default".to_owned(),
             name: "tabsdata".to_owned(),
         }),
-        Box::new(ConfigMapError::NotFound {
+        Box::new(KubeConfigMapError::NotFound {
             namespace: "default".to_owned(),
             name: "tabsdata".to_owned(),
         }),
-        Box::new(ConfigMapError::QueryFailed {
+        Box::new(KubeConfigMapError::QueryFailed {
             namespace: "default".to_owned(),
             name: "tabsdata".to_owned(),
             cause: "401 Unauthorized".to_owned(),
         }),
-        Box::new(ConfigMapError::CreateFailed {
+        Box::new(KubeConfigMapError::CreateFailed {
             namespace: "default".to_owned(),
             name: "tabsdata".to_owned(),
             cause: "conflict".to_owned(),
         }),
-        Box::new(ConfigMapError::DeleteFailed {
+        Box::new(KubeConfigMapError::DeleteFailed {
             namespace: "default".to_owned(),
             name: "tabsdata".to_owned(),
             cause: "not found".to_owned(),
         }),
     ];
     for error in cases {
-        assert_eq!(error.domain(), "ConfigMapError");
+        assert_eq!(error.domain(), "KubeConfigMapError");
     }
 }
 
 #[test]
 fn display_messages_carry_namespace_name_and_cause() {
-    let error = ConfigMapError::QueryFailed {
+    let error = KubeConfigMapError::QueryFailed {
         namespace: "tabsdata-ns".to_owned(),
         name: "td-config".to_owned(),
         cause: "boom".to_owned(),
@@ -50,7 +50,7 @@ fn display_messages_carry_namespace_name_and_cause() {
     assert!(display.contains("td-config"));
     assert!(display.contains("boom"));
 
-    let error = ConfigMapError::AlreadyExists {
+    let error = KubeConfigMapError::AlreadyExists {
         namespace: "ns".to_owned(),
         name: "td".to_owned(),
     };
@@ -63,37 +63,37 @@ fn display_messages_carry_namespace_name_and_cause() {
 #[test]
 fn variant_codes_track_assigned_discriminants() {
     assert_eq!(
-        ConfigMapError::AlreadyExists {
+        KubeConfigMapError::AlreadyExists {
             namespace: "ns".to_owned(),
             name: "td".to_owned(),
         }
         .code(),
-        "ConfigMapError::0100"
+        "KubeConfigMapError::0100"
     );
     assert_eq!(
-        ConfigMapError::NotFound {
+        KubeConfigMapError::NotFound {
             namespace: "ns".to_owned(),
             name: "td".to_owned(),
         }
         .code(),
-        "ConfigMapError::1000"
+        "KubeConfigMapError::1000"
     );
     assert_eq!(
-        ConfigMapError::QueryFailed {
+        KubeConfigMapError::QueryFailed {
             namespace: "ns".to_owned(),
             name: "td".to_owned(),
             cause: "x".to_owned(),
         }
         .code(),
-        "ConfigMapError::5000"
+        "KubeConfigMapError::5000"
     );
     assert_eq!(
-        ConfigMapError::DeleteFailed {
+        KubeConfigMapError::DeleteFailed {
             namespace: "ns".to_owned(),
             name: "td".to_owned(),
             cause: "x".to_owned(),
         }
         .code(),
-        "ConfigMapError::5002"
+        "KubeConfigMapError::5003"
     );
 }

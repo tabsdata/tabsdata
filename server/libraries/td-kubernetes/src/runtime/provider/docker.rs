@@ -26,12 +26,12 @@ use crate::runtime::instance::launcher::{start_workload, stop_workload};
 use crate::runtime::instance::manifest::MANIFEST_FILE;
 use crate::runtime::instance::profile::{load_profile, parse_from_configmaps, render_for_configmaps};
 use crate::runtime::instance::verify_manifest_compatibility;
-use crate::kube::action::configmap::read_configmap;
-use crate::kube::action::{
+use crate::kube::api::configmap::read_configmap;
+use crate::kube::api::{
     configmap_exists, create_configmap, ensure_cluster_reachable, ensure_namespace_exists,
     require_configmap,
 };
-use crate::kube::client::build_kube_client;
+use crate::runtime::reporting::build_kube_client;
 use crate::kube::kubeconfig::{
     build_kubeconfig, resolve_cluster_name, resolve_current_context, resolve_kubefile,
 };

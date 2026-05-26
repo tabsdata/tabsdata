@@ -5,21 +5,21 @@
 use indicatif::MultiProgress;
 use k8s_openapi::api::batch::v1::Job;
 use k8s_openapi::api::core::v1::Pod;
-use kube::Api;
-use kube::api::{DeleteParams, ListParams, PostParams, PropagationPolicy};
-use kube::runtime::wait::{Condition, await_condition};
+use kube::runtime::wait::Condition;
 use serde::de::DeserializeOwned;
 use td_common::status::ExitStatus::{GeneralError, TabsDataError};
 
+use crate::base::constants::TIER_LABEL;
+use crate::base::error::kubernetes::KubernetesError;
 use crate::cerror;
 use crate::client::tdkserver::widgets::{phase_spinner_in, spinner};
-use crate::base::constants::TIER_LABEL;
+use crate::core::pod::ValidationError;
+use crate::core::system::exit::{CommandError, Result, abort};
+use crate::runtime::reporting::build_kube_client;
+use crate::kube::api::{job as job_api, pod as pod_api};
 use crate::runtime::instance::profile::Profile;
 use crate::runtime::instance::tier::Tier;
-use crate::kube::client::build_kube_client;
-use crate::core::pod::ValidationError;
 use crate::runtime::provider::Provider;
-use crate::core::system::exit::{Result, abort};
 
 const JOB_CONDITION_COMPLETE: &str = "Complete";
 const JOB_CONDITION_FAILED: &str = "Failed";
@@ -59,7 +59,7 @@ pub async fn apply_init_phase(
     let config = provider.kube_config().await?;
     let cluster_provider = provider.cluster_provider();
     let client = build_kube_client(&config)?;
-    let api: Api<Job> = Api::namespaced(client, &config.default_namespace);
+    let namespace = &config.default_namespace;
     let mut prepared: Vec<(String, Job)> = Vec::new();
     for (key, yaml) in pods_for_tier(profile, Tier::Init)? {
         let mut job = deserialize_pod_entry::<Job>(key, yaml, Tier::Init)?;
@@ -71,18 +71,15 @@ pub async fn apply_init_phase(
     let mut applied: Vec<String> = Vec::new();
     for (key, job) in prepared {
         let bar = phase.add_resource(&key);
-        let created = match api.create(&PostParams::default(), &job).await {
+        let created = match job_api::create_job(&client, namespace, &job).await {
             Ok(created) => {
                 bar.finish_with_message(format!("{key} (applied)"));
                 created
             }
             Err(error) => {
                 bar.finish_with_message(format!("{key} (failed)"));
-                cerror!(
-                    "Failed to apply init job from '{key}' to namespace '{}': {error}",
-                    config.default_namespace
-                );
-                return abort(GeneralError);
+                cerror!("Failed to apply init job from '{key}': {error}");
+                return Err(error.into());
             }
         };
         let Some(name) = created.metadata.name else {
@@ -101,11 +98,18 @@ pub async fn wait_init_phase(
 ) -> Result {
     let config = provider.kube_config().await?;
     let client = build_kube_client(&config)?;
-    let api: Api<Job> = Api::namespaced(client, &config.default_namespace);
+    let namespace = &config.default_namespace;
     let phase = phase_spinner_in(multi, &format!("Waiting for {} init job(s)", jobs.len()));
     for name in jobs {
         let bar = phase.add_resource(name);
-        let settled = match await_condition(api.clone(), name, is_job_settled()).await {
+        let settled = match job_api::await_job_condition(
+            &client,
+            namespace,
+            name,
+            is_job_settled(),
+        )
+        .await
+        {
             Ok(Some(job)) => job,
             Ok(None) => {
                 bar.finish_with_message(format!("{name} (deleted)"));
@@ -115,7 +119,7 @@ pub async fn wait_init_phase(
             Err(error) => {
                 bar.finish_with_message(format!("{name} (errored)"));
                 cerror!("Failed to await init job '{name}': {error}");
-                return abort(GeneralError);
+                return Err(error.into());
             }
         };
         if has_failed_condition(&settled) {
@@ -226,7 +230,6 @@ pub async fn apply_regular_phase(
     let config = provider.kube_config().await?;
     let provider_kind = provider.cluster_provider();
     let client = build_kube_client(&config)?;
-    let api: Api<Pod> = Api::namespaced(client, &config.default_namespace);
     let mut prepared: Vec<(String, Pod)> = Vec::new();
     for (key, yaml) in pods_for_tier(profile, Tier::Regular)? {
         let mut pod = deserialize_pod_entry::<Pod>(key, yaml, Tier::Regular)?;
@@ -239,18 +242,18 @@ pub async fn apply_regular_phase(
         &format!("Applying {} regular pod(s)", prepared.len()),
     );
     let creates = prepared.into_iter().map(|(key, pod)| {
-        let api = api.clone();
+        let client = client.clone();
         let namespace = config.default_namespace.clone();
         let bar = phase.add_resource(&key);
         async move {
-            let created = match api.create(&PostParams::default(), &pod).await {
+            let created = match pod_api::create_pod(&client, &namespace, &pod).await {
                 Ok(created) => created,
                 Err(error) => {
                     bar.finish_with_message(format!("{key} (failed)"));
                     cerror!(
                         "Failed to apply regular pod from '{key}' to namespace '{namespace}': {error}"
                     );
-                    return abort::<String>(GeneralError);
+                    return Err::<String, CommandError>(error.into());
                 }
             };
             match created.metadata.name {
@@ -278,13 +281,20 @@ pub async fn wait_regular_phase(
 ) -> Result {
     let config = provider.kube_config().await?;
     let client = build_kube_client(&config)?;
-    let api: Api<Pod> = Api::namespaced(client, &config.default_namespace);
     let phase = phase_spinner_in(multi, &format!("Waiting for {} regular pod(s)", pods.len()));
     let waits = pods.iter().map(|name| {
-        let api = api.clone();
+        let client = client.clone();
+        let namespace = config.default_namespace.clone();
         let bar = phase.add_resource(name);
         async move {
-            let settled = match await_condition(api, name, is_pod_settled()).await {
+            let settled = match pod_api::await_pod_condition(
+                &client,
+                &namespace,
+                name,
+                is_pod_settled(),
+            )
+            .await
+            {
                 Ok(Some(pod)) => pod,
                 Ok(None) => {
                     bar.finish_with_message(format!("{name} (deleted)"));
@@ -294,7 +304,7 @@ pub async fn wait_regular_phase(
                 Err(error) => {
                     bar.finish_with_message(format!("{name} (errored)"));
                     cerror!("Failed to await regular pod '{name}': {error}");
-                    return abort::<()>(GeneralError);
+                    return Err(error.into());
                 }
             };
             if has_failed_phase(&settled) {
@@ -342,42 +352,37 @@ mod tests;
 async fn delete_workload(provider: &dyn Provider, multi: &MultiProgress) -> Result {
     let config = provider.kube_config().await?;
     let client = build_kube_client(&config)?;
-    let pods_api: Api<Pod> = Api::namespaced(client.clone(), &config.default_namespace);
-    let jobs_api: Api<Job> = Api::namespaced(client, &config.default_namespace);
-    let list_params = ListParams::default().labels(WORKLOAD_LABEL_SELECTOR);
-    let delete_params = DeleteParams {
-        propagation_policy: Some(PropagationPolicy::Background),
-        ..DeleteParams::default()
-    };
     let namespace = config.default_namespace.clone();
-    let pods_namespace = namespace.clone();
-    let jobs_namespace = namespace;
     let phase = phase_spinner_in(multi, "Deleting tabsdata workload");
     let pods_bar = phase.add_resource("Pods");
     let jobs_bar = phase.add_resource("Jobs");
+    let pods_namespace = namespace.clone();
+    let jobs_namespace = namespace.clone();
     let pods_delete = async {
-        if let Err(error) = pods_api
-            .delete_collection(&delete_params, &list_params)
-            .await
-        {
-            pods_bar.finish_with_message("Pods (failed)");
-            cerror!("Failed to delete pods in namespace '{pods_namespace}': {error}");
-            return abort::<()>(GeneralError);
+        match pod_api::delete_pods_by_labels(&client, &namespace, WORKLOAD_LABEL_SELECTOR).await {
+            Ok(()) => {
+                pods_bar.finish_with_message("Pods (deleted)");
+                Ok(())
+            }
+            Err(error) => {
+                pods_bar.finish_with_message("Pods (failed)");
+                cerror!("Failed to delete pods in namespace '{pods_namespace}': {error}");
+                Err(error)
+            }
         }
-        pods_bar.finish_with_message("Pods (deleted)");
-        Ok(())
     };
     let jobs_delete = async {
-        if let Err(error) = jobs_api
-            .delete_collection(&delete_params, &list_params)
-            .await
-        {
-            jobs_bar.finish_with_message("Jobs (failed)");
-            cerror!("Failed to delete jobs in namespace '{jobs_namespace}': {error}");
-            return abort::<()>(GeneralError);
+        match job_api::delete_jobs_by_labels(&client, &namespace, WORKLOAD_LABEL_SELECTOR).await {
+            Ok(()) => {
+                jobs_bar.finish_with_message("Jobs (deleted)");
+                Ok(())
+            }
+            Err(error) => {
+                jobs_bar.finish_with_message("Jobs (failed)");
+                cerror!("Failed to delete jobs in namespace '{jobs_namespace}': {error}");
+                Err(error)
+            }
         }
-        jobs_bar.finish_with_message("Jobs (deleted)");
-        Ok(())
     };
     let result = futures::future::try_join(pods_delete, jobs_delete).await;
     drop(phase);
@@ -398,27 +403,24 @@ async fn workload_exists(provider: &dyn Provider) -> Result<bool> {
 async fn workload_exists_inner(provider: &dyn Provider) -> Result<bool> {
     let config = provider.kube_config().await?;
     let client = build_kube_client(&config)?;
-    let pods_api: Api<Pod> = Api::namespaced(client.clone(), &config.default_namespace);
-    let jobs_api: Api<Job> = Api::namespaced(client, &config.default_namespace);
-    let list_params = ListParams::default().labels(WORKLOAD_LABEL_SELECTOR);
     let namespace = config.default_namespace.clone();
     let pods_namespace = namespace.clone();
-    let jobs_namespace = namespace;
+    let jobs_namespace = namespace.clone();
     let pods_list = async {
-        match pods_api.list(&list_params).await {
-            Ok(list) => Ok(!list.items.is_empty()),
+        match pod_api::list_pods_by_labels(&client, &namespace, WORKLOAD_LABEL_SELECTOR).await {
+            Ok(pods) => Ok::<bool, KubernetesError>(!pods.is_empty()),
             Err(error) => {
                 cerror!("Failed to list pods in namespace '{pods_namespace}': {error}");
-                abort::<bool>(GeneralError)
+                Err(error)
             }
         }
     };
     let jobs_list = async {
-        match jobs_api.list(&list_params).await {
-            Ok(list) => Ok(!list.items.is_empty()),
+        match job_api::list_jobs_by_labels(&client, &namespace, WORKLOAD_LABEL_SELECTOR).await {
+            Ok(jobs) => Ok::<bool, KubernetesError>(!jobs.is_empty()),
             Err(error) => {
                 cerror!("Failed to list jobs in namespace '{jobs_namespace}': {error}");
-                abort::<bool>(GeneralError)
+                Err(error)
             }
         }
     };
