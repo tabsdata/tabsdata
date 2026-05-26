@@ -639,6 +639,51 @@ impl Default for FileSupervisorMessageQueue {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, EnumString, AsRefStr)]
+#[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
+pub enum Orchestrator {
+    Supervisor,
+    Kubernetes,
+}
+
+impl Default for Orchestrator {
+    fn default() -> Self {
+        Self::Supervisor
+    }
+}
+
+#[async_trait]
+pub trait OrchestratorMessagingProvider: Send + Sync {
+    async fn orchestrator_message_queue(
+        &self,
+    ) -> Result<OrchestratorMessageQueueHandle, QueueError>;
+}
+
+pub struct SupervisorMessagingProvider;
+
+impl SupervisorMessagingProvider {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for SupervisorMessagingProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl OrchestratorMessagingProvider for SupervisorMessagingProvider {
+    async fn orchestrator_message_queue(
+        &self,
+    ) -> Result<OrchestratorMessageQueueHandle, QueueError> {
+        let queue = FileSupervisorMessageQueue::new().await?;
+        Ok(OrchestratorMessageQueueHandle::new(Arc::new(queue)))
+    }
+}
+
 #[derive(Clone)]
 pub struct OrchestratorMessageQueueHandle(Arc<dyn OrchestratorMessageQueue>);
 

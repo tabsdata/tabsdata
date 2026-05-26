@@ -8,7 +8,9 @@ use crate::config::{Config, DbSchema, Params};
 use crate::scheduler::{FunctionDispatcher, FunctionRequester, SchedulerCtx};
 use std::sync::Arc;
 use std::time::Duration;
-use td_common::server::{FileSupervisorMessageQueue, OrchestratorMessageQueueHandle};
+use td_common::server::{
+    Orchestrator, OrchestratorMessagingProvider, SupervisorMessagingProvider,
+};
 use td_common::server_runner::ServerRunner;
 use td_common::status::ExitStatus;
 use td_database::error::DbError;
@@ -156,15 +158,21 @@ pub fn run() {
             })?;
             let storage = Arc::new(storage);
 
-            // Create worker message queue
-            let file_orchestrator_message_queue =
-                FileSupervisorMessageQueue::new().await.map_err(|e| {
-                    error!("Error creating worker message queue: {e:#?}");
-                    ExitStatus::GeneralError
-                })?;
-            let orchestrator_message_queue = Arc::new(OrchestratorMessageQueueHandle::new(Arc::new(
-                file_orchestrator_message_queue,
-            )));
+            // Create orchestrator messaging provider and its message queue
+            let messaging_provider: Box<dyn OrchestratorMessagingProvider> =
+                match Orchestrator::default() {
+                    Orchestrator::Supervisor => Box::new(SupervisorMessagingProvider::new()),
+                    Orchestrator::Kubernetes => todo!("Kubernetes orchestrator not yet wired"),
+                };
+            let orchestrator_message_queue = Arc::new(
+                messaging_provider
+                    .orchestrator_message_queue()
+                    .await
+                    .map_err(|e| {
+                        error!("Error creating orchestrator message queue: {e:#?}");
+                        ExitStatus::GeneralError
+                    })?,
+            );
 
             // Create runtime context
             let runtime_context = RuntimeContext::new().await.map_err(|e| {
