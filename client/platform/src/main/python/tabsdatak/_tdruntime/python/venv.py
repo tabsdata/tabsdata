@@ -23,6 +23,7 @@ from tabsdatak._tdruntime.python.error import (
     BinaryNotFoundError,
     FeatureDetectionError,
     VenvCreationError,
+    WheelFileMissingError,
 )
 from tabsdatak._tdruntime.python.package import Package
 from tabsdatak._tdruntime.python.recipe import (
@@ -427,6 +428,17 @@ class PythonEnvironment:
                 if package.version
                 else package.name
             ]
+        if package.recipe == InstallRecipe.WHEEL:
+            if package.location is None:
+                raise VenvCreationError(
+                    detail=f"Wheel package '{package.name}' is missing a location",
+                )
+            if not package.location.exists():
+                raise WheelFileMissingError(
+                    package=package.name,
+                    location=package.location,
+                )
+            return [str(package.location)]
         raise VenvCreationError(
             detail=(
                 f"Install method '{package.recipe.name}' for package"

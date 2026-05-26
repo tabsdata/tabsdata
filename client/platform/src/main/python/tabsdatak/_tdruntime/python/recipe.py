@@ -26,6 +26,7 @@ class InstallRecipe(str, Enum):
 SUPPORTED_INSTALL_RECIPES: frozenset[InstallRecipe] = frozenset({
     InstallRecipe.REGISTRY,
     InstallRecipe.EDITABLE,
+    InstallRecipe.WHEEL,
 })
 
 

@@ -38,6 +38,9 @@ class VenvCreationError(PyenvRuntimeException): ...
 class BinaryNotFoundError(PyenvRuntimeException): ...
 
 
+class WheelFileMissingError(PyenvRuntimeException): ...
+
+
 class PyenvErrorCode(ErrorCode):
     PYENV_1 = ErrorDef(
         UnsupportedInstallMethodError,
@@ -61,4 +64,11 @@ class PyenvErrorCode(ErrorCode):
         BinaryNotFoundError,
         "Binary {name!r} not found in the active environment's scripts folder "
         "({scripts}).",
+    )
+    PYENV_6 = ErrorDef(
+        WheelFileMissingError,
+        "Wheel file for package {package!r} is no longer present at {location} "
+        "(the host environment installed it from a wheel that has since been "
+        "deleted). Reinstall {package!r} in the host environment to repopulate "
+        "the wheel, or switch to an editable / registry install.",
     )
