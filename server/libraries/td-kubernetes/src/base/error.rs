@@ -3,6 +3,7 @@
 //
 
 pub mod cli;
+pub mod codec;
 pub mod gateway;
 pub mod kubernetes;
 pub mod manifest;
