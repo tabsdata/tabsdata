@@ -377,3 +377,124 @@ def test_direct_construction_also_captures(env_unset):
     e = TabsdataException(api_error=ApiErrorCode.API_1, message="hi")
     assert e.source is not None
     assert __file__ in e.source
+
+
+# ---------------------------------------------------------------------------
+# 8. Direct-construction via the bound exception class
+# ---------------------------------------------------------------------------
+
+
+def test_metaclass_backlinks_exception_class_to_enum_member():
+    class _Codes(ErrorCode):
+        X = ErrorDef(ApiInitException, "x")
+
+    assert ApiInitException._api_error is _Codes.X
+
+
+def test_direct_construction_renders_template_from_bound_code(monkeypatch):
+    monkeypatch.setenv(DEBUG_FRAMES_ENV_VAR, "0")
+
+    class _BoomError(TabsdataException):
+        pass
+
+    class _Codes(ErrorCode):
+        BOOM = ErrorDef(_BoomError, "value {value!r} hit pattern {pattern!r}")
+
+    exc = _BoomError(value=42, pattern="^foo$")
+    assert isinstance(exc, _BoomError)
+    assert exc.api_error is _Codes.BOOM
+    assert exc.extra == {"value": 42, "pattern": "^foo$"}
+    rendered = str(exc)
+    assert "BOOM" in rendered
+    assert "value 42 hit pattern '^foo$'" in rendered
+
+
+def test_direct_construction_chains_cause(monkeypatch):
+    monkeypatch.setenv(DEBUG_FRAMES_ENV_VAR, "0")
+
+    class _BoomError(TabsdataException):
+        pass
+
+    class _Codes(ErrorCode):
+        BOOM = ErrorDef(_BoomError, "boom {what}")
+
+    cause = RuntimeError("inner")
+    exc = _BoomError(what="things", cause=cause)
+    assert exc.cause is cause
+    assert exc.__cause__ is cause
+    assert exc.__suppress_context__ is True
+    assert "inner" in str(exc)
+
+
+def test_direct_construction_unknown_kwargs_left_as_placeholders(monkeypatch):
+    monkeypatch.setenv(DEBUG_FRAMES_ENV_VAR, "0")
+
+    class _BoomError(TabsdataException):
+        pass
+
+    class _Codes(ErrorCode):
+        BOOM = ErrorDef(_BoomError, "want {present} and {missing}")
+
+    exc = _BoomError(present="here")
+    rendered = str(exc)
+    assert "here" in rendered
+    assert "{missing}" in rendered
+    assert exc.extra == {"present": "here"}
+
+
+def test_direct_construction_without_binding_raises_typeerror():
+    class _Orphan(TabsdataException):
+        pass
+
+    # No ErrorDef references _Orphan, so _api_error is never set.
+    with pytest.raises(TypeError, match="not bound to an ErrorCode"):
+        _Orphan(some="kwarg")
+
+
+def test_direct_construction_with_explicit_api_error_overrides_binding(monkeypatch):
+    monkeypatch.setenv(DEBUG_FRAMES_ENV_VAR, "0")
+
+    class _BoomError(TabsdataException):
+        pass
+
+    class _Codes(ErrorCode):
+        BOOM = ErrorDef(_BoomError, "default-template {x}")
+        OTHER = ErrorDef(_BoomError, "alt-template")
+
+    exc = _BoomError(api_error=_Codes.OTHER, message="custom")
+    assert exc.api_error is _Codes.OTHER
+    assert "custom" in str(exc)
+    assert "default-template" not in str(exc)
+
+
+def test_factory_and_direct_paths_produce_equivalent_exceptions(monkeypatch):
+    monkeypatch.setenv(DEBUG_FRAMES_ENV_VAR, "0")
+
+    class _BoomError(TabsdataException):
+        pass
+
+    class _Codes(ErrorCode):
+        BOOM = ErrorDef(_BoomError, "value {value}")
+
+    from_factory = _Codes.BOOM.exception(value=42)
+    from_direct = _BoomError(value=42)
+    assert type(from_factory) is type(from_direct)
+    assert from_factory.api_error is from_direct.api_error
+    assert from_factory.extra == from_direct.extra
+    # Strings differ only by the captured source frame; with source
+    # disabled the rendered messages are identical.
+    assert str(from_factory) == str(from_direct)
+
+
+def test_isinstance_with_bound_subclass_after_factory(monkeypatch):
+    monkeypatch.setenv(DEBUG_FRAMES_ENV_VAR, "0")
+
+    class _BoomError(TabsdataException):
+        pass
+
+    class _Codes(ErrorCode):
+        BOOM = ErrorDef(_BoomError, "x")
+
+    exc = _Codes.BOOM.exception()
+    assert isinstance(exc, _BoomError)
+    assert type(exc) is _BoomError

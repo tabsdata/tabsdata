@@ -337,7 +337,7 @@ class PythonEnvironment:
         try:
             constraints = td_resource(CONSTRAINTS_DEV_RESOURCE)
         except FileNotFoundError as error:
-            raise VenvCreationError(detail=str(error)) from error
+            raise VenvCreationError(detail=str(error), cause=error)
         command = ["pip", "install"]
         if not verbose:
             command.append("--quiet")
@@ -489,7 +489,8 @@ class PythonEnvironment:
         except FileNotFoundError as error:
             raise VenvCreationError(
                 detail=f"Binary 'uv' not found: {error}",
-            ) from error
+                cause=error,
+            )
         if result.returncode != 0:
             captured = (
                 f": {result.stderr.strip() or result.stdout.strip()}"

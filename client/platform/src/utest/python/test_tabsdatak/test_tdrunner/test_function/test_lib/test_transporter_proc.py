@@ -171,7 +171,6 @@ def test_missing_binary_raises_typed_error_before_popen(monkeypatch, tmp_path):
     with pytest.raises(TransporterNotFoundError) as exc_info:
         run_transporter(tmp_path / "x.yaml", tmp_path / "r.yaml")
     assert popen_invocations == []
-    # the original BinaryNotFoundError is chained as __cause__
     assert isinstance(exc_info.value.__cause__, BinaryNotFoundError)
 
 

@@ -134,6 +134,7 @@ class _ErrorCodeMeta(EnumMeta, ABCMeta):
                         f"must be a TabsdataException subclass "
                         f"(got {exc!r})"
                     )
+                exc._api_error = member
         return enum_class
 
 
@@ -193,11 +194,23 @@ class TabsdataException(Exception):
 
     def __init__(
         self,
-        api_error: ErrorCode,
+        api_error: ErrorCode | None = None,
         message: str = "",
         cause: Exception | None = None,
         extra: dict[str, Any] | None = None,
+        **kwargs: Any,
     ) -> None:
+        if api_error is None:
+            api_error = getattr(type(self), "_api_error", None)
+            if api_error is None:
+                raise TypeError(
+                    f"{type(self).__name__} is not bound to an ErrorCode; "
+                    f"either pass api_error= explicitly or declare an "
+                    f"ErrorDef(...) variant referencing it."
+                )
+            template = api_error.value.message_template
+            message = template.format_map(_SafeFormatDict(kwargs))
+            extra = dict(kwargs)
         self.api_error = api_error
         self.cause = cause
         self.extra = dict(extra or {})
