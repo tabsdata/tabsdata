@@ -8,7 +8,7 @@ use strum::{AsRefStr, EnumIter, EnumString};
 use td_common::env::{EnvironmentError, to_absolute};
 use td_common::server::{
     BIN_FOLDER, INPUT_FOLDER, LOCK_FOLDER, LOG_FOLDER, OUTPUT_FOLDER, REQUEST_FOLDER,
-    RESPONSE_FOLDER, RequestMessagePayload, SupervisorMessage, base, counter,
+    RESPONSE_FOLDER, RequestMessagePayload, OrchestratorMessage, base, counter,
 };
 use td_objects::dxo::yaml::WorkerInput;
 use thiserror::Error;
@@ -137,7 +137,7 @@ impl ArgumentKey {
 impl MarkerKey {
     pub fn produce<T>(
         &self,
-        message: &SupervisorMessage<T>,
+        message: &OrchestratorMessage<T>,
         pyload: &RequestMessagePayload<T>,
     ) -> Result<String, ArgumentError>
     where
@@ -178,7 +178,7 @@ impl MarkerKey {
         }
     }
 
-    fn worker<T: Clone>(message: &SupervisorMessage<T>) -> Result<String, ArgumentError> {
+    fn worker<T: Clone>(message: &OrchestratorMessage<T>) -> Result<String, ArgumentError> {
         if let Some(file_stem) = message.file.file_stem() {
             Ok(base(file_stem.to_string_lossy().to_string().as_str()))
         } else {
@@ -186,7 +186,7 @@ impl MarkerKey {
         }
     }
 
-    fn attempt<T: Clone>(message: &SupervisorMessage<T>) -> Result<String, ArgumentError> {
+    fn attempt<T: Clone>(message: &OrchestratorMessage<T>) -> Result<String, ArgumentError> {
         Ok(counter(&message.file))
     }
 }

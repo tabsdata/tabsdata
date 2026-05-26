@@ -16,7 +16,7 @@ use std::ops::Deref;
 use td_common::id;
 use td_common::server::{
     Callback, HttpCallback, HttpRequest, MessageAction, RequestMessagePayload, WorkerClass,
-    WorkerMessageQueueHandle, WorkerName,
+    OrchestratorMessageQueueHandle, WorkerName,
 };
 use td_database::dynamic::DynamicConnection;
 use td_error::{ApiError, TdError, api_error, td_error};
@@ -291,7 +291,7 @@ pub async fn pfr_ids_from_minted_dispatch(
     err(Debug)
 )]
 pub async fn create_locked_function_runner_workers_start_request(
-    message_queue: Ref<WorkerMessageQueueHandle>,
+    message_queue: Ref<OrchestratorMessageQueueHandle>,
     storage: Ref<Storage>,
     server_addresses: Ref<InternalServerAddresses>,
     mut conn: MutRef<DynamicConnection<'static>>,
@@ -809,7 +809,7 @@ pub async fn create_locked_function_runner_workers_start_request(
     err(Debug)
 )]
 pub async fn create_locked_cron_trigger_workers_start_request(
-    message_queue: Ref<WorkerMessageQueueHandle>,
+    message_queue: Ref<OrchestratorMessageQueueHandle>,
     server_addresses: Ref<InternalServerAddresses>,
     cron_trigger_workers: Ref<Vec<WorkerDBWithNames>>,
 ) -> Result<(), TdError> {
@@ -888,7 +888,7 @@ pub async fn create_locked_cron_trigger_workers_start_request(
     err(Debug)
 )]
 pub async fn create_locked_cron_trigger_workers_stop_request(
-    message_queue: Ref<WorkerMessageQueueHandle>,
+    message_queue: Ref<OrchestratorMessageQueueHandle>,
     server_addresses: Ref<InternalServerAddresses>,
     cron_trigger_workers: Ref<Vec<WorkerDBWithNames>>,
 ) -> Result<(), TdError> {
@@ -935,7 +935,7 @@ pub async fn create_locked_cron_trigger_workers_stop_request(
     err(Debug)
 )]
 pub async fn create_locked_stage_trigger_workers_start_request(
-    message_queue: Ref<WorkerMessageQueueHandle>,
+    message_queue: Ref<OrchestratorMessageQueueHandle>,
     storage: Ref<Storage>,
     server_addresses: Ref<InternalServerAddresses>,
     mut conn: MutRef<DynamicConnection<'static>>,
@@ -1087,7 +1087,7 @@ pub async fn create_locked_stage_trigger_workers_start_request(
     err(Debug)
 )]
 pub async fn create_locked_stage_trigger_workers_stop_request(
-    message_queue: Ref<WorkerMessageQueueHandle>,
+    message_queue: Ref<OrchestratorMessageQueueHandle>,
     server_addresses: Ref<InternalServerAddresses>,
     stage_trigger_workers: Ref<Vec<WorkerDBWithNames>>,
 ) -> Result<(), TdError> {

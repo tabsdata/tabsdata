@@ -14,7 +14,7 @@ use crate::scheduler::layers::request::{
     materialize_replay_dispatch, pfr_ids_from_minted_dispatch,
 };
 use ta_services::factory::service_factory;
-use td_common::server::WorkerMessageQueueHandle;
+use td_common::server::OrchestratorMessageQueueHandle;
 use td_execution::SchedulerNotify;
 use td_objects::dxo::logical::{LogicalFunctionRunDB, UpdateLogicalFunctionRunDB};
 use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, UpdatePhysicalFunctionRunDB};
@@ -37,7 +37,7 @@ use td_tower::{layer, layers};
     response = (),
     connection = TransactionProvider,
     context = Storage,
-    context = WorkerMessageQueueHandle,
+    context = OrchestratorMessageQueueHandle,
     context = InternalServerAddresses,
     context = SchedulerNotify,
 )]
@@ -249,7 +249,7 @@ mod tests {
     use std::str::FromStr;
     use ta_services::factory::ServiceFactory;
     use ta_services::service::TdService;
-    use td_common::server::SupervisorMessagePayload;
+    use td_common::server::OrchestratorMessagePayload;
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::Buildable;
@@ -450,15 +450,15 @@ mod tests {
             .oneshot(())
             .await?;
 
-        let created_message = context.worker_queue.locked_messages().await;
+        let created_message = context.orchestrator_queue.locked_messages().await;
         assert_eq!(created_message.len(), 1);
 
         let created_message = &created_message[0].payload;
         let created_message = match created_message {
-            SupervisorMessagePayload::SupervisorRequestMessagePayload(message) => &message.context,
-            SupervisorMessagePayload::SupervisorResponseMessagePayload(_)
-            | SupervisorMessagePayload::SupervisorExceptionMessagePayload(_) => {
-                panic!("Unexpected SupervisorMessagePayload")
+            OrchestratorMessagePayload::OrchestratorRequestMessagePayload(message) => &message.context,
+            OrchestratorMessagePayload::OrchestratorResponseMessagePayload(_)
+            | OrchestratorMessagePayload::OrchestratorExceptionMessagePayload(_) => {
+                panic!("Unexpected OrchestratorMessagePayload")
             }
         };
         let created_message: Option<WorkerInput> = created_message
@@ -685,7 +685,7 @@ mod tests {
             .oneshot(())
             .await?;
 
-        let messages = context.worker_queue.locked_messages().await;
+        let messages = context.orchestrator_queue.locked_messages().await;
         assert_eq!(
             messages.len(),
             1,
@@ -695,7 +695,7 @@ mod tests {
         // The worker message references the new PFR.
         let payload = &messages[0].payload;
         let context_yaml = match payload {
-            SupervisorMessagePayload::SupervisorRequestMessagePayload(m) => &m.context,
+            OrchestratorMessagePayload::OrchestratorRequestMessagePayload(m) => &m.context,
             _ => panic!("unexpected payload kind"),
         };
         let context_yaml: Option<WorkerInput> = context_yaml
@@ -751,7 +751,7 @@ mod tests {
             .oneshot(())
             .await?;
         let messages_after = context
-            .worker_queue
+            .orchestrator_queue
             .locked_messages()
             .await;
         assert_eq!(

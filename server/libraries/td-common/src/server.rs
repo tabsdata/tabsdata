@@ -14,9 +14,9 @@ use crate::server::EtcError::EtcStoreLocationCreationError;
 use crate::server::QueueError::{
     MessageAlreadyExisting, MessageNonExisting, QueuePlannedCreationError, QueueRootCreationError,
 };
-use crate::server::SupervisorMessagePayload::{
-    SupervisorExceptionMessagePayload, SupervisorRequestMessagePayload,
-    SupervisorResponseMessagePayload,
+use crate::server::OrchestratorMessagePayload::{
+    OrchestratorExceptionMessagePayload, OrchestratorRequestMessagePayload,
+    OrchestratorResponseMessagePayload,
 };
 use crate::status::ExitStatus;
 use async_trait::async_trait;
@@ -211,24 +211,24 @@ pub enum MessageAction {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, new, Serialize, Deserialize)]
-pub struct SupervisorMessage<T = Value>
+pub struct OrchestratorMessage<T = Value>
 where
     T: Clone,
 {
     pub id: String,
     pub work: String,
     pub file: PathBuf,
-    pub payload: SupervisorMessagePayload<T>,
+    pub payload: OrchestratorMessagePayload<T>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub enum SupervisorMessagePayload<T = Value>
+pub enum OrchestratorMessagePayload<T = Value>
 where
     T: Clone,
 {
-    SupervisorRequestMessagePayload(RequestMessagePayload<T>),
-    SupervisorResponseMessagePayload(ResponseMessagePayload<T>),
-    SupervisorExceptionMessagePayload(ExceptionMessagePayload<T>),
+    OrchestratorRequestMessagePayload(RequestMessagePayload<T>),
+    OrchestratorResponseMessagePayload(ResponseMessagePayload<T>),
+    OrchestratorExceptionMessagePayload(ExceptionMessagePayload<T>),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -432,7 +432,7 @@ where
 }
 
 #[derive(Debug)]
-pub struct FileWorkerMessageQueue {
+pub struct FileSupervisorMessageQueue {
     pub location: PathBuf,
 }
 
@@ -442,7 +442,7 @@ pub enum PayloadType {
     Exception,
 }
 
-impl<T> TryFrom<(PathBuf, PayloadType)> for SupervisorMessage<T>
+impl<T> TryFrom<(PathBuf, PayloadType)> for OrchestratorMessage<T>
 where
     T: Clone + DeserializeOwned,
 {
@@ -489,7 +489,7 @@ where
                     action = %request_payload.action,
                     "queue.get"
                 );
-                SupervisorRequestMessagePayload(request_payload)
+                OrchestratorRequestMessagePayload(request_payload)
             }
             PayloadType::Response => {
                 let response_context_value: Value =
@@ -512,7 +512,7 @@ where
                     ..Default::default()
                 };
                 debug!(variant = "Response", "queue.get");
-                SupervisorResponseMessagePayload(response_payload)
+                OrchestratorResponseMessagePayload(response_payload)
             }
             PayloadType::Exception => {
                 let exception_payload: ExceptionMessagePayload<T> = serde_yaml::from_reader(&file)
@@ -527,7 +527,7 @@ where
                     exit_status = exception_payload.exit_status,
                     "queue.get"
                 );
-                SupervisorExceptionMessagePayload(exception_payload)
+                OrchestratorExceptionMessagePayload(exception_payload)
             }
         };
         let work = if let Some(file_stem) = message.file_stem() {
@@ -536,11 +536,11 @@ where
             return Err(Error::new(io::ErrorKind::InvalidInput, "Invalid file name"));
         };
         let id = base(&work);
-        Ok(SupervisorMessage::new(id, work, message, payload))
+        Ok(OrchestratorMessage::new(id, work, message, payload))
     }
 }
 
-impl FileWorkerMessageQueue {
+impl FileSupervisorMessageQueue {
     /// Creates a queue instance to send processing message to the supervisor.
     /// This queue is thread-safe and reusable.
     pub async fn new() -> Result<Self, QueueError> {
@@ -632,7 +632,7 @@ impl FileWorkerMessageQueue {
 }
 
 #[cfg(feature = "test-utils")]
-impl Default for FileWorkerMessageQueue {
+impl Default for FileSupervisorMessageQueue {
     fn default() -> Self {
         let test_dir = crate::tdtestdir!();
         Self::with_location(test_dir).unwrap()
@@ -640,39 +640,39 @@ impl Default for FileWorkerMessageQueue {
 }
 
 #[derive(Clone)]
-pub struct WorkerMessageQueueHandle(Arc<dyn WorkerMessageQueue>);
+pub struct OrchestratorMessageQueueHandle(Arc<dyn OrchestratorMessageQueue>);
 
-impl WorkerMessageQueueHandle {
-    pub fn new(queue: Arc<dyn WorkerMessageQueue>) -> Self {
+impl OrchestratorMessageQueueHandle {
+    pub fn new(queue: Arc<dyn OrchestratorMessageQueue>) -> Self {
         Self(queue)
     }
 
-    pub fn into_arc(self) -> Arc<dyn WorkerMessageQueue> {
+    pub fn into_arc(self) -> Arc<dyn OrchestratorMessageQueue> {
         self.0
     }
 }
 
-impl std::ops::Deref for WorkerMessageQueueHandle {
-    type Target = dyn WorkerMessageQueue;
+impl std::ops::Deref for OrchestratorMessageQueueHandle {
+    type Target = dyn OrchestratorMessageQueue;
     fn deref(&self) -> &Self::Target {
         &*self.0
     }
 }
 
 #[cfg(feature = "test-utils")]
-impl Default for WorkerMessageQueueHandle {
+impl Default for OrchestratorMessageQueueHandle {
     fn default() -> Self {
-        Self::new(Arc::new(FileWorkerMessageQueue::default()))
+        Self::new(Arc::new(FileSupervisorMessageQueue::default()))
     }
 }
 
 #[async_trait]
-impl WorkerMessageQueue for WorkerMessageQueueHandle {
+impl OrchestratorMessageQueue for OrchestratorMessageQueueHandle {
     async fn put(
         &self,
         id: String,
         payload: RequestMessagePayload<Value>,
-    ) -> Result<SupervisorMessage<Value>, QueueError> {
+    ) -> Result<OrchestratorMessage<Value>, QueueError> {
         self.0.put(id, payload).await
     }
 
@@ -684,19 +684,19 @@ impl WorkerMessageQueue for WorkerMessageQueueHandle {
         self.0.rollback(id).await
     }
 
-    async fn locked_messages(&self) -> Vec<SupervisorMessage<Value>> {
+    async fn locked_messages(&self) -> Vec<OrchestratorMessage<Value>> {
         self.0.locked_messages().await
     }
 }
 
 #[async_trait]
-pub trait WorkerMessageQueue: Send + Sync {
+pub trait OrchestratorMessageQueue: Send + Sync {
     /// Puts a message in the queue.
     async fn put(
         &self,
         id: String,
         payload: RequestMessagePayload<Value>,
-    ) -> Result<SupervisorMessage<Value>, QueueError>;
+    ) -> Result<OrchestratorMessage<Value>, QueueError>;
 
     /// Commits a message in the queue.
     async fn commit(&self, id: &str) -> Result<(), QueueError>;
@@ -704,16 +704,16 @@ pub trait WorkerMessageQueue: Send + Sync {
     /// Rollbacks a message in the queue.
     async fn rollback(&self, id: &str) -> Result<(), QueueError>;
 
-    async fn locked_messages(&self) -> Vec<SupervisorMessage<Value>>;
+    async fn locked_messages(&self) -> Vec<OrchestratorMessage<Value>>;
 }
 
 #[async_trait]
-impl WorkerMessageQueue for FileWorkerMessageQueue {
+impl OrchestratorMessageQueue for FileSupervisorMessageQueue {
     async fn put(
         &self,
         id: String,
         payload: RequestMessagePayload<Value>,
-    ) -> Result<SupervisorMessage<Value>, QueueError> {
+    ) -> Result<OrchestratorMessage<Value>, QueueError> {
         if self.check(&id) {
             return Err(MessageAlreadyExisting { id });
         };
@@ -733,11 +733,11 @@ impl WorkerMessageQueue for FileWorkerMessageQueue {
             "queue.put"
         );
         trace!(id = %id, body = %message_yaml, "queue.put: body");
-        let message = SupervisorMessage::new(
+        let message = OrchestratorMessage::new(
             id,
             work,
             message_path,
-            SupervisorRequestMessagePayload(payload),
+            OrchestratorRequestMessagePayload(payload),
         );
         Ok(message)
     }
@@ -767,12 +767,12 @@ impl WorkerMessageQueue for FileWorkerMessageQueue {
         Ok(())
     }
 
-    async fn locked_messages(&self) -> Vec<SupervisorMessage<Value>> {
+    async fn locked_messages(&self) -> Vec<OrchestratorMessage<Value>> {
         get_files_in_folder_sorted_by_name(&self.location, Some(LOCK_EXTENSION))
             .unwrap_or_else(|_| Vec::new())
             .into_iter()
             .filter_map(|file| {
-                match SupervisorMessage::<Value>::try_from((file.clone(), PayloadType::Request)) {
+                match OrchestratorMessage::<Value>::try_from((file.clone(), PayloadType::Request)) {
                     Ok(msg) => Some(msg),
                     Err(e) => {
                         error!("Failed to extract message from file {:?}: {:?}", file, e);
@@ -811,7 +811,7 @@ mod tests_queue {
 
     #[tokio::test]
     async fn test_put_and_commit_message() {
-        let queue = FileWorkerMessageQueue::new().await.unwrap();
+        let queue = FileSupervisorMessageQueue::new().await.unwrap();
 
         let id = "test_message1";
         let payload = RequestMessagePayload::<Value> {
@@ -865,7 +865,7 @@ mod tests_queue {
 
     #[tokio::test]
     async fn test_put_and_rollback_message() {
-        let queue = FileWorkerMessageQueue::new().await.unwrap();
+        let queue = FileSupervisorMessageQueue::new().await.unwrap();
 
         let id = "test_message2";
         let payload = RequestMessagePayload::<Value> {
@@ -919,7 +919,7 @@ mod tests_queue {
 
     #[tokio::test]
     async fn test_put_existing_message() {
-        let queue = FileWorkerMessageQueue::new().await.unwrap();
+        let queue = FileSupervisorMessageQueue::new().await.unwrap();
 
         let id = "test_message3";
         let payload = RequestMessagePayload::<Value> {
@@ -941,7 +941,7 @@ mod tests_queue {
 
     #[tokio::test]
     async fn test_commit_non_existing_message() {
-        let queue = FileWorkerMessageQueue::new().await.unwrap();
+        let queue = FileSupervisorMessageQueue::new().await.unwrap();
         let message = "test_message4";
         let result = queue.commit(message).await;
         assert!(matches!(result, Err(MessageNonExisting { .. })));
@@ -949,7 +949,7 @@ mod tests_queue {
 
     #[tokio::test]
     async fn test_rollback_non_existing_message() {
-        let queue = FileWorkerMessageQueue::new().await.unwrap();
+        let queue = FileSupervisorMessageQueue::new().await.unwrap();
         let message = "test_message5";
         let result = queue.commit(message).await;
         assert!(matches!(result, Err(MessageNonExisting { .. })));

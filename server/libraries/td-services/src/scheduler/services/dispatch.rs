@@ -4,7 +4,7 @@
 
 use crate::scheduler::layers::dispatch::unlock_workers_request;
 use ta_services::factory::service_factory;
-use td_common::server::WorkerMessageQueueHandle;
+use td_common::server::OrchestratorMessageQueueHandle;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::{layer, layers};
@@ -14,7 +14,7 @@ use td_tower::{layer, layers};
     request = (),
     response = (),
     connection = TransactionProvider,
-    context = WorkerMessageQueueHandle,
+    context = OrchestratorMessageQueueHandle,
 )]
 fn service() {
     layers!(commit())
@@ -22,7 +22,7 @@ fn service() {
 
 // Requires:
 // - Transaction connection
-// - WorkerMessageQueueHandle (extracted via Ref)
+// - OrchestratorMessageQueueHandle (extracted via Ref)
 #[layer]
 pub fn commit() {
     layers!(from_fn(unlock_workers_request))
@@ -40,7 +40,7 @@ mod tests {
     use td_common::files::{YAML_EXTENSION, get_files_in_folder_sorted_by_name};
     use std::sync::Arc;
     use td_common::server::{
-        FileWorkerMessageQueue, PayloadType, SupervisorMessage, WorkerMessageQueueHandle,
+        FileSupervisorMessageQueue, PayloadType, OrchestratorMessage, OrchestratorMessageQueueHandle,
     };
     use td_database::pool::TdPool;
     use td_error::TdError;
@@ -114,17 +114,17 @@ mod tests {
         let service = ExecuteFunctionService::with_defaults(db.clone()).service();
         let _ = service.raw_oneshot(request).await?;
 
-        let file_worker_queue = Arc::new(FileWorkerMessageQueue::default());
+        let file_orchestrator_queue = Arc::new(FileSupervisorMessageQueue::default());
         let mut context = SchedulerContext::with_defaults(db.clone());
-        context.worker_queue =
-            Arc::new(WorkerMessageQueueHandle::new(file_worker_queue.clone()));
+        context.orchestrator_queue =
+            Arc::new(OrchestratorMessageQueueHandle::new(file_orchestrator_queue.clone()));
         RequestService::build(&context)
             .service()
             .oneshot(())
             .await?;
 
         let created_messages = context
-            .worker_queue
+            .orchestrator_queue
             .locked_messages()
             .await;
         assert_eq!(created_messages.len(), 1);
@@ -137,13 +137,13 @@ mod tests {
             .await?;
 
         let locked_messages = context
-            .worker_queue
+            .orchestrator_queue
             .locked_messages()
             .await;
         assert_eq!(locked_messages.len(), 0);
 
         let files = get_files_in_folder_sorted_by_name(
-            &file_worker_queue.location,
+            &file_orchestrator_queue.location,
             Some(YAML_EXTENSION),
         )
         .unwrap();
@@ -151,7 +151,7 @@ mod tests {
         let unlocked_file = &files[0];
 
         let unlocked_message =
-            SupervisorMessage::try_from((unlocked_file.clone(), PayloadType::Request)).unwrap();
+            OrchestratorMessage::try_from((unlocked_file.clone(), PayloadType::Request)).unwrap();
 
         // The file will be the same, it is just renamed.
         assert_eq!(created_message.id, unlocked_message.id);

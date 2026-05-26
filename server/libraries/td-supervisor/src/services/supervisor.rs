@@ -60,16 +60,16 @@ use td_common::files::YAML_EXTENSION;
 use td_common::id::id;
 use td_common::os::terminate_process;
 use td_common::server::MessageAction;
-use td_common::server::SupervisorMessagePayload::{
-    SupervisorExceptionMessagePayload, SupervisorRequestMessagePayload,
-    SupervisorResponseMessagePayload,
+use td_common::server::OrchestratorMessagePayload::{
+    OrchestratorExceptionMessagePayload, OrchestratorRequestMessagePayload,
+    OrchestratorResponseMessagePayload,
 };
 use td_common::server::WorkerClass::{Ephemeral, Init, Regular};
 use td_common::server::{
     CAST_FOLDER, CONFIG_FILE, CONFIG_FOLDER, CONFIG_NAMESPACE, CONFIG_PATH_ENV, CONFIG_URI_ENV,
     ETC_FOLDER, EXTENSION_DELIMITER, INSTANCE_PATH_ENV, INSTANCE_URI_ENV, MOLD_FOLDER, MSG_FOLDER,
     ONGOING_FOLDER, PARENT_FOLDER, PLANNED_FOLDER, PROC_FOLDER, QUEUED_FOLDER, REPOSITORY_PATH_ENV,
-    REPOSITORY_URI_ENV, REQUEST_MESSAGE_FILE_PATTERN, RETRIES_DELIMITER, SupervisorMessage,
+    REPOSITORY_URI_ENV, REQUEST_MESSAGE_FILE_PATTERN, RETRIES_DELIMITER, OrchestratorMessage,
     WORK_FOLDER, WORK_PATH_ENV, WORK_URI_ENV, WORKSPACE_FOLDER, WORKSPACE_PATH_ENV,
     WORKSPACE_URI_ENV, WorkerClass,
 };
@@ -537,7 +537,7 @@ struct RunInfo {
     intentionally_stopped: Arc<AtomicBool>,
     shutdown_in_progress: Arc<AtomicBool>,
     pid: Option<u32>,
-    interceptor: Option<SupervisorMessage>,
+    interceptor: Option<OrchestratorMessage>,
 }
 
 type RunningTasksMap = HashMap<String, HashMap<String, RunInfo>>;
@@ -719,7 +719,7 @@ impl Supervisor {
         }
     }
 
-    async fn poll(&self, sender: Sender<SupervisorMessage>) -> Result<(), RuntimeError> {
+    async fn poll(&self, sender: Sender<OrchestratorMessage>) -> Result<(), RuntimeError> {
         let queue = SupervisorMessageQueue::new(self.params.clone().work().join(MSG_FOLDER));
         info!("Created message queue: {:?}", queue);
         loop {
@@ -744,7 +744,7 @@ impl Supervisor {
         Ok(())
     }
 
-    fn retry(&self, message: SupervisorMessage) -> Result<(), RuntimeError> {
+    fn retry(&self, message: OrchestratorMessage) -> Result<(), RuntimeError> {
         let regex = Regex::new(REQUEST_MESSAGE_FILE_PATTERN).unwrap();
         if let Some(file_name) = message.file.file_name().and_then(|f| f.to_str())
             && let Some(captures) = regex.captures(file_name)
@@ -761,8 +761,8 @@ impl Supervisor {
             }
             if let Ok(retry) = parsed {
                 let payload = match &message.payload {
-                    SupervisorRequestMessagePayload(payload) => payload,
-                    SupervisorResponseMessagePayload(_) | SupervisorExceptionMessagePayload(_) => {
+                    OrchestratorRequestMessagePayload(payload) => payload,
+                    OrchestratorResponseMessagePayload(_) | OrchestratorExceptionMessagePayload(_) => {
                         return Err(RuntimeError::new(
                             "Unexpected response message received".to_string(),
                         ));
@@ -805,7 +805,7 @@ impl Supervisor {
     async fn poll_planned(
         &self,
         queue: &SupervisorMessageQueue,
-        sender: &Sender<SupervisorMessage>,
+        sender: &Sender<OrchestratorMessage>,
     ) -> Result<(), RuntimeError> {
         let mut messages = queue.planned_messages();
         trace!(
@@ -822,7 +822,7 @@ impl Supervisor {
         let mut stop_messages = Vec::new();
 
         for message in messages.drain(..) {
-            if let SupervisorRequestMessagePayload(payload) = &message.payload
+            if let OrchestratorRequestMessagePayload(payload) = &message.payload
                 && matches!(payload.action, MessageAction::Stop)
             {
                 stop_messages.push(message);
@@ -854,7 +854,7 @@ impl Supervisor {
         }
 
         for message in stop_messages {
-            if let SupervisorRequestMessagePayload(payload) = &message.payload {
+            if let OrchestratorRequestMessagePayload(payload) = &message.payload {
                 let run_id = payload.run_id.clone();
                 let worker_name = payload.worker.clone();
 
@@ -966,17 +966,17 @@ impl Supervisor {
 
     async fn dispatch(
         &self,
-        mut receiver: Receiver<SupervisorMessage>,
+        mut receiver: Receiver<OrchestratorMessage>,
     ) -> Result<(), RuntimeError> {
-        let (sender_init, receiver_init): (Sender<SupervisorMessage>, Receiver<SupervisorMessage>) =
+        let (sender_init, receiver_init): (Sender<OrchestratorMessage>, Receiver<OrchestratorMessage>) =
             mpsc::channel(DISPATCH_INIT_CHANNEL_SIZE);
         let (sender_regular, receiver_regular): (
-            Sender<SupervisorMessage>,
-            Receiver<SupervisorMessage>,
+            Sender<OrchestratorMessage>,
+            Receiver<OrchestratorMessage>,
         ) = mpsc::channel(DISPATCH_REGULAR_CHANNEL_SIZE);
         let (sender_ephemeral, receiver_ephemeral): (
-            Sender<SupervisorMessage>,
-            Receiver<SupervisorMessage>,
+            Sender<OrchestratorMessage>,
+            Receiver<OrchestratorMessage>,
         ) = mpsc::channel(DISPATCH_EPHEMERAL_CHANNEL_SIZE);
 
         info!("supervisor: spawning controllers task");
@@ -1014,9 +1014,9 @@ impl Supervisor {
                 Some(message) = receiver.recv() => {
                     debug!("Received message '{:?}", message);
                     let payload = match &message.payload {
-                        SupervisorRequestMessagePayload(payload) => {payload},
-                        SupervisorResponseMessagePayload(_) |
-                        SupervisorExceptionMessagePayload(_) => {
+                        OrchestratorRequestMessagePayload(payload) => {payload},
+                        OrchestratorResponseMessagePayload(_) |
+                        OrchestratorExceptionMessagePayload(_) => {
                             return Err(RuntimeError::new("Unexpected response message received".to_string()));
                         }
                     };
@@ -1045,9 +1045,9 @@ impl Supervisor {
 
     async fn start_controllers(
         &self,
-        receiver_init: Receiver<SupervisorMessage>,
-        receiver_regular: Receiver<SupervisorMessage>,
-        receiver_ephemeral: Receiver<SupervisorMessage>,
+        receiver_init: Receiver<OrchestratorMessage>,
+        receiver_regular: Receiver<OrchestratorMessage>,
+        receiver_ephemeral: Receiver<OrchestratorMessage>,
     ) -> Result<(), RuntimeError> {
         let self_arc = Arc::new(self.clone());
 
@@ -1135,7 +1135,7 @@ impl Supervisor {
 
     async fn start_init_controller(
         &self,
-        receiver: Receiver<SupervisorMessage>,
+        receiver: Receiver<OrchestratorMessage>,
     ) -> Result<(), RuntimeError> {
         let result = self
             .start_controller(
@@ -1159,7 +1159,7 @@ impl Supervisor {
 
     async fn start_regular_controller(
         &self,
-        receiver: Receiver<SupervisorMessage>,
+        receiver: Receiver<OrchestratorMessage>,
     ) -> Result<(), RuntimeError> {
         let result = self
             .start_controller(
@@ -1183,7 +1183,7 @@ impl Supervisor {
 
     async fn start_ephemeral_controller(
         &self,
-        receiver: Receiver<SupervisorMessage>,
+        receiver: Receiver<OrchestratorMessage>,
     ) -> Result<(), RuntimeError> {
         let result = self
             .start_controller(
@@ -1228,7 +1228,7 @@ impl Supervisor {
 
     async fn start_init_workers(
         self: Arc<Self>,
-        receiver: Receiver<SupervisorMessage>,
+        receiver: Receiver<OrchestratorMessage>,
     ) -> Result<(), RuntimeError> {
         let controller = &self.config.controllers.init.clone();
         let mark = self.init_mark.clone();
@@ -1249,7 +1249,7 @@ impl Supervisor {
 
     async fn start_regular_workers(
         self: Arc<Self>,
-        receiver: Receiver<SupervisorMessage>,
+        receiver: Receiver<OrchestratorMessage>,
     ) -> Result<(), RuntimeError> {
         for (name, _) in self.config.controllers.regular.workers.iter() {
             let ctl_path = self
@@ -1288,7 +1288,7 @@ impl Supervisor {
 
     async fn start_ephemeral_workers(
         self: Arc<Self>,
-        receiver: Receiver<SupervisorMessage>,
+        receiver: Receiver<OrchestratorMessage>,
     ) -> Result<(), RuntimeError> {
         // ToDo: this is a temporary workaround until we implement a proper way to check regular workers initialization state.
         // Wait 30 seconds before starting ephemeral workers
@@ -1317,13 +1317,13 @@ impl Supervisor {
     async fn start_workers<F, Fut>(
         self: Arc<Self>,
         controller: &ControllerConfig,
-        mut receiver: Receiver<SupervisorMessage>,
+        mut receiver: Receiver<OrchestratorMessage>,
         mark: Arc<AtomicControllerState>,
         start_worker_function: F,
         controller_class: String,
     ) -> Result<(), RuntimeError>
     where
-        F: Fn(Arc<Self>, WorkerConfig, Option<SupervisorMessage>) -> Fut
+        F: Fn(Arc<Self>, WorkerConfig, Option<OrchestratorMessage>) -> Fut
             + Copy
             + Send
             + Sync
@@ -1635,9 +1635,9 @@ impl Supervisor {
                 }
                 Some(message) = receiver.recv(), if !can_spawn_worker && can_spawn_task => {
                     let payload = match &message.payload {
-                        SupervisorRequestMessagePayload(payload) => {payload},
-                        SupervisorResponseMessagePayload(_) |
-                        SupervisorExceptionMessagePayload(_) => {
+                        OrchestratorRequestMessagePayload(payload) => {payload},
+                        OrchestratorResponseMessagePayload(_) |
+                        OrchestratorExceptionMessagePayload(_) => {
                             return Err(RuntimeError::new("Unexpected response message received".to_string()));
                         }
                     };
@@ -1704,7 +1704,7 @@ impl Supervisor {
                             let mut task_found = false;
                             let mut run_pid = None;
                             let mut stop_already_requested = false;
-                            let mut interceptor: Option<SupervisorMessage> = None;
+                            let mut interceptor: Option<OrchestratorMessage> = None;
 
                             if let Some(run_info) = map
                                 .get(&worker_name)
@@ -1750,7 +1750,7 @@ impl Supervisor {
     async fn start_init_worker(
         &self,
         worker: WorkerConfig,
-        message: Option<SupervisorMessage>,
+        message: Option<OrchestratorMessage>,
     ) -> Result<(), RunnerError> {
         let (_, result) = self
             .start_worker(worker, message, None, Init, None, None)
@@ -1762,7 +1762,7 @@ impl Supervisor {
     async fn start_regular_worker(
         &self,
         worker: WorkerConfig,
-        message: Option<SupervisorMessage>,
+        message: Option<OrchestratorMessage>,
     ) -> Result<(), RunnerError> {
         let (_, result) = self
             .start_worker(worker, message, None, Regular, None, None)
@@ -1774,7 +1774,7 @@ impl Supervisor {
     async fn start_ephemeral_worker(
         &self,
         worker: WorkerConfig,
-        message: Option<SupervisorMessage>,
+        message: Option<OrchestratorMessage>,
     ) -> Result<(), RunnerError> {
         let message = message.ok_or_else(|| {
             let error = "Received void message for ephemeral controller. Ignoring request.";
@@ -1785,7 +1785,7 @@ impl Supervisor {
         let start = Utc::now().timestamp_millis();
 
         let (worker_name, run_id) = match &message.payload {
-            SupervisorRequestMessagePayload(payload) => {
+            OrchestratorRequestMessagePayload(payload) => {
                 (Some(payload.worker.clone()), Some(payload.run_id.clone()))
             }
             _ => (None, None),
@@ -1809,7 +1809,7 @@ impl Supervisor {
 
     async fn notify_start(
         &self,
-        message: SupervisorMessage,
+        message: OrchestratorMessage,
         start: i64,
         worker_run: Option<&TabsDataWorker>,
     ) -> Result<(), RunnerError> {
@@ -1848,7 +1848,7 @@ impl Supervisor {
     async fn notify_end(
         &self,
         worker: WorkerConfig,
-        message: SupervisorMessage,
+        message: OrchestratorMessage,
         start: i64,
         worker_run: Option<&TabsDataWorker>,
         result: Result<(), RunnerError>,
@@ -1858,7 +1858,7 @@ impl Supervisor {
         let limit = worker.retries;
 
         let (intentionally_stopped, shutdown_in_progress, interceptor) =
-            if let SupervisorRequestMessagePayload(payload) = &message.payload {
+            if let OrchestratorRequestMessagePayload(payload) = &message.payload {
                 let map = self.running_tasks_map.lock().await;
                 let info = map
                     .get(&payload.worker)
@@ -1881,7 +1881,7 @@ impl Supervisor {
             info!(
                 "Worker '{}' run '{}' completed during shutdown; skipping notification and message handling",
                 worker.name(),
-                if let SupervisorRequestMessagePayload(payload) = &message.payload {
+                if let OrchestratorRequestMessagePayload(payload) = &message.payload {
                     payload.run_id.as_str()
                 } else {
                     "<no payload>"
@@ -1894,7 +1894,7 @@ impl Supervisor {
             info!(
                 "Worker '{}' run '{}' intentionally stopped via stop request (interceptor: {:?})",
                 worker.name(),
-                if let SupervisorRequestMessagePayload(payload) = &message.payload {
+                if let OrchestratorRequestMessagePayload(payload) = &message.payload {
                     payload.run_id.as_str()
                 } else {
                     ""
@@ -1994,7 +1994,7 @@ impl Supervisor {
     async fn start_worker(
         &self,
         worker: WorkerConfig,
-        message: Option<SupervisorMessage>,
+        message: Option<OrchestratorMessage>,
         start: Option<i64>,
         class: WorkerClass,
         worker_name: Option<String>,
@@ -2291,7 +2291,7 @@ impl Supervisor {
     fn obtain_worker_folders(
         &self,
         worker: WorkerConfig,
-        message: Option<SupervisorMessage>,
+        message: Option<OrchestratorMessage>,
         class: WorkerClass,
     ) -> Result<(PathBuf, PathBuf), RunnerError> {
         let config_folder = match class {
@@ -2491,7 +2491,7 @@ impl Supervisor {
     fn obtain_worker_command(
         &self,
         worker: WorkerConfig,
-        message: Option<SupervisorMessage>,
+        message: Option<OrchestratorMessage>,
         class: WorkerClass,
         _config_folder: PathBuf,
         work_folder: PathBuf,
@@ -2539,8 +2539,8 @@ impl Supervisor {
                 );
                 let message = message.unwrap();
                 let payload = match &message.payload {
-                    SupervisorRequestMessagePayload(payload) => payload,
-                    SupervisorResponseMessagePayload(_) | SupervisorExceptionMessagePayload(_) => {
+                    OrchestratorRequestMessagePayload(payload) => payload,
+                    OrchestratorResponseMessagePayload(_) | OrchestratorExceptionMessagePayload(_) => {
                         return Err(InvalidMessageType);
                     }
                 };

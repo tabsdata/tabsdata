@@ -12,7 +12,7 @@ use std::io::Write;
 use std::{fmt, io};
 use td_common::logging::LOG_LOCATION;
 use td_common::manifest::{Inf, WORKER_INF_FILE};
-use td_common::server::SupervisorMessagePayload::SupervisorRequestMessagePayload;
+use td_common::server::OrchestratorMessagePayload::OrchestratorRequestMessagePayload;
 use td_common::server::{REQUEST_FILE, REQUEST_FOLDER};
 use thiserror::Error;
 
@@ -74,7 +74,7 @@ impl WorkerSupplier for TabsDataWorkerSupplier {
             let mut request_context_file = File::create(request_context_path)?;
             let message = worker.describer().message().clone().unwrap();
             let request_context_yaml =
-                if let SupervisorRequestMessagePayload(payload) = &message.payload {
+                if let OrchestratorRequestMessagePayload(payload) = &message.payload {
                     serde_yaml::to_string(&payload.context)?
                 } else {
                     return Err(InvalidMessageType);

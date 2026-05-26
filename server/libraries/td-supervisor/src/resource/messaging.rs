@@ -9,7 +9,7 @@ use td_common::files::{
 };
 use td_common::server::{
     COMPLETE_FOLDER, ERROR_FOLDER, EXTENSION_DELIMITER, FAIL_FOLDER, INITIAL_RUN, ONGOING_FOLDER,
-    PLANNED_FOLDER, PayloadType, QUEUED_FOLDER, RETRIES_DELIMITER, STOP_FOLDER, SupervisorMessage,
+    PLANNED_FOLDER, PayloadType, QUEUED_FOLDER, RETRIES_DELIMITER, STOP_FOLDER, OrchestratorMessage,
 };
 use tracing::{debug, error};
 
@@ -63,7 +63,7 @@ impl SupervisorMessageQueue {
 
         let mut recovered_count = 0;
         for file in messages {
-            match SupervisorMessage::try_from((file.clone(), PayloadType::Request)) {
+            match OrchestratorMessage::try_from((file.clone(), PayloadType::Request)) {
                 Ok(message) => {
                     let original_name = match message
                         .file
@@ -136,12 +136,12 @@ impl SupervisorMessageQueue {
         recovered_count
     }
 
-    pub fn planned_messages(&self) -> Vec<SupervisorMessage> {
+    pub fn planned_messages(&self) -> Vec<OrchestratorMessage> {
         get_files_in_folder_sorted_by_name(self.root.join(PLANNED_FOLDER), Some(YAML_EXTENSION))
             .unwrap_or_else(|_| Vec::new())
             .into_iter()
             .filter_map(|file| {
-                match SupervisorMessage::try_from((file.clone(), PayloadType::Request)) {
+                match OrchestratorMessage::try_from((file.clone(), PayloadType::Request)) {
                     Ok(msg) => Some(msg),
                     Err(e) => {
                         error!("Failed to extract message from file {:?}: {:?}", file, e);
@@ -152,7 +152,7 @@ impl SupervisorMessageQueue {
             .collect()
     }
 
-    pub fn error_messages(&self) -> Vec<SupervisorMessage> {
+    pub fn error_messages(&self) -> Vec<OrchestratorMessage> {
         get_files_in_subfolders_sorted_by_name(
             &self.root,
             ERROR_FOLDER.to_string(),
@@ -161,7 +161,7 @@ impl SupervisorMessageQueue {
         .unwrap_or_else(|_| Vec::new())
         .into_iter()
         .filter_map(|file| {
-            match SupervisorMessage::try_from((file.clone(), PayloadType::Request)) {
+            match OrchestratorMessage::try_from((file.clone(), PayloadType::Request)) {
                 Ok(msg) => Some(msg),
                 Err(e) => {
                     error!(
@@ -175,19 +175,19 @@ impl SupervisorMessageQueue {
         .collect()
     }
 
-    pub fn at_queued(message: SupervisorMessage) -> std::io::Result<SupervisorMessage> {
+    pub fn at_queued(message: OrchestratorMessage) -> std::io::Result<OrchestratorMessage> {
         Self::change_to(message, QUEUED_FOLDER.to_string())
     }
 
-    pub fn at_ongoing(message: SupervisorMessage) -> std::io::Result<SupervisorMessage> {
+    pub fn at_ongoing(message: OrchestratorMessage) -> std::io::Result<OrchestratorMessage> {
         Self::change_to(message, ONGOING_FOLDER.to_string())
     }
 
-    pub fn at_complete(message: SupervisorMessage) -> std::io::Result<SupervisorMessage> {
+    pub fn at_complete(message: OrchestratorMessage) -> std::io::Result<OrchestratorMessage> {
         Self::change_to(message, COMPLETE_FOLDER.to_string())
     }
 
-    pub fn planned_from_error(message: SupervisorMessage, name: String) -> std::io::Result<()> {
+    pub fn planned_from_error(message: OrchestratorMessage, name: String) -> std::io::Result<()> {
         let source = &message.file;
         let root = message
             .file
@@ -235,7 +235,7 @@ impl SupervisorMessageQueue {
         }
     }
 
-    pub fn planned_from_leftover(message: SupervisorMessage, name: String) -> std::io::Result<()> {
+    pub fn planned_from_leftover(message: OrchestratorMessage, name: String) -> std::io::Result<()> {
         let source = &message.file;
         let root = message
             .file
@@ -279,7 +279,7 @@ impl SupervisorMessageQueue {
         }
     }
 
-    pub fn queued(message: SupervisorMessage) -> std::io::Result<SupervisorMessage> {
+    pub fn queued(message: OrchestratorMessage) -> std::io::Result<OrchestratorMessage> {
         Self::move_to(
             message,
             PLANNED_FOLDER.to_string(),
@@ -287,7 +287,7 @@ impl SupervisorMessageQueue {
         )
     }
 
-    pub fn ongoing(message: SupervisorMessage) -> std::io::Result<SupervisorMessage> {
+    pub fn ongoing(message: OrchestratorMessage) -> std::io::Result<OrchestratorMessage> {
         Self::move_to(
             message,
             QUEUED_FOLDER.to_string(),
@@ -295,7 +295,7 @@ impl SupervisorMessageQueue {
         )
     }
 
-    pub fn complete(message: SupervisorMessage) -> std::io::Result<SupervisorMessage> {
+    pub fn complete(message: OrchestratorMessage) -> std::io::Result<OrchestratorMessage> {
         Self::move_to(
             message,
             ONGOING_FOLDER.to_string(),
@@ -303,7 +303,7 @@ impl SupervisorMessageQueue {
         )
     }
 
-    pub fn finalize(message: SupervisorMessage) -> std::io::Result<SupervisorMessage> {
+    pub fn finalize(message: OrchestratorMessage) -> std::io::Result<OrchestratorMessage> {
         Self::move_to(
             message,
             PLANNED_FOLDER.to_string(),
@@ -312,7 +312,7 @@ impl SupervisorMessageQueue {
     }
 
     //noinspection DuplicatedCode
-    pub fn stop(message: SupervisorMessage) -> std::io::Result<SupervisorMessage> {
+    pub fn stop(message: OrchestratorMessage) -> std::io::Result<OrchestratorMessage> {
         for folder in FOLDERS {
             let source = Self::locate_at(message.clone(), folder.to_string())?;
             if let Some(source) = source {
@@ -361,7 +361,7 @@ impl SupervisorMessageQueue {
     }
 
     //noinspection DuplicatedCode
-    pub fn error(message: SupervisorMessage) -> std::io::Result<SupervisorMessage> {
+    pub fn error(message: OrchestratorMessage) -> std::io::Result<OrchestratorMessage> {
         for folder in FOLDERS {
             let source = Self::locate_at(message.clone(), folder.to_string())?;
             if let Some(source) = source {
@@ -391,7 +391,7 @@ impl SupervisorMessageQueue {
         ))
     }
 
-    pub fn fail(message: SupervisorMessage) -> std::io::Result<()> {
+    pub fn fail(message: OrchestratorMessage) -> std::io::Result<()> {
         let source = &message.file;
         let root = message
             .file
@@ -433,7 +433,7 @@ impl SupervisorMessageQueue {
         }
     }
 
-    fn change_to(message: SupervisorMessage, vault: String) -> std::io::Result<SupervisorMessage> {
+    fn change_to(message: OrchestratorMessage, vault: String) -> std::io::Result<OrchestratorMessage> {
         let root = message
             .file
             .parent()
@@ -464,9 +464,9 @@ impl SupervisorMessageQueue {
     }
 
     fn locate_at(
-        message: SupervisorMessage,
+        message: OrchestratorMessage,
         vault: String,
-    ) -> std::io::Result<Option<SupervisorMessage>> {
+    ) -> std::io::Result<Option<OrchestratorMessage>> {
         let located_message = Self::change_to(message, vault)?;
         Ok(if located_message.file.exists() {
             Some(located_message)
@@ -476,7 +476,7 @@ impl SupervisorMessageQueue {
     }
 
     //noinspection DuplicatedCode
-    fn at_stop(message: SupervisorMessage) -> std::io::Result<SupervisorMessage> {
+    fn at_stop(message: OrchestratorMessage) -> std::io::Result<OrchestratorMessage> {
         if let Some(folder) = &message.file.parent()
             && let Some(file) = &message.file.file_name()
         {
@@ -494,7 +494,7 @@ impl SupervisorMessageQueue {
     }
 
     //noinspection DuplicatedCode
-    fn at_error(message: SupervisorMessage) -> std::io::Result<SupervisorMessage> {
+    fn at_error(message: OrchestratorMessage) -> std::io::Result<OrchestratorMessage> {
         if let Some(folder) = &message.file.parent()
             && let Some(file) = &message.file.file_name()
         {
@@ -512,10 +512,10 @@ impl SupervisorMessageQueue {
     }
 
     fn move_to(
-        message: SupervisorMessage,
+        message: OrchestratorMessage,
         source_vault: String,
         target_vault: String,
-    ) -> std::io::Result<SupervisorMessage> {
+    ) -> std::io::Result<OrchestratorMessage> {
         let source = Self::change_to(message.clone(), source_vault.clone())?;
         let target = Self::change_to(message.clone(), target_vault.clone())?;
         debug!(

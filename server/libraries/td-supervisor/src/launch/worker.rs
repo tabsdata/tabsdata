@@ -15,10 +15,10 @@ use std::fmt::Debug;
 use std::path::PathBuf;
 use std::sync::RwLock;
 use td_common::execution_status::WorkerCallbackStatus;
-use td_common::server::SupervisorMessage;
-use td_common::server::SupervisorMessagePayload::{
-    SupervisorExceptionMessagePayload, SupervisorRequestMessagePayload,
-    SupervisorResponseMessagePayload,
+use td_common::server::OrchestratorMessage;
+use td_common::server::OrchestratorMessagePayload::{
+    OrchestratorExceptionMessagePayload, OrchestratorRequestMessagePayload,
+    OrchestratorResponseMessagePayload,
 };
 use thiserror::Error;
 use tokio::process::Child;
@@ -113,7 +113,7 @@ impl Worker for TabsDataWorker {
 #[allow(clippy::too_many_arguments)]
 pub async fn notify(
     worker: Option<&TabsDataWorker>,
-    request_message: SupervisorMessage,
+    request_message: OrchestratorMessage,
     start: i64,
     end: Option<i64>,
     status: WorkerCallbackStatus,
@@ -123,8 +123,8 @@ pub async fn notify(
 ) -> Result<bool, RunnerError> {
     let mut failed = false;
     let payload = match &request_message.payload {
-        SupervisorRequestMessagePayload(payload) => payload,
-        SupervisorResponseMessagePayload(_) | SupervisorExceptionMessagePayload(_) => {
+        OrchestratorRequestMessagePayload(payload) => payload,
+        OrchestratorResponseMessagePayload(_) | OrchestratorExceptionMessagePayload(_) => {
             return Err(InvalidMessageType);
         }
     };

@@ -8,7 +8,7 @@ use crate::config::{Config, DbSchema, Params};
 use crate::scheduler::{FunctionDispatcher, FunctionRequester, SchedulerCtx};
 use std::sync::Arc;
 use std::time::Duration;
-use td_common::server::{FileWorkerMessageQueue, WorkerMessageQueueHandle};
+use td_common::server::{FileSupervisorMessageQueue, OrchestratorMessageQueueHandle};
 use td_common::server_runner::ServerRunner;
 use td_common::status::ExitStatus;
 use td_database::error::DbError;
@@ -157,13 +157,13 @@ pub fn run() {
             let storage = Arc::new(storage);
 
             // Create worker message queue
-            let file_worker_message_queue =
-                FileWorkerMessageQueue::new().await.map_err(|e| {
+            let file_orchestrator_message_queue =
+                FileSupervisorMessageQueue::new().await.map_err(|e| {
                     error!("Error creating worker message queue: {e:#?}");
                     ExitStatus::GeneralError
                 })?;
-            let worker_message_queue = Arc::new(WorkerMessageQueueHandle::new(Arc::new(
-                file_worker_message_queue,
+            let orchestrator_message_queue = Arc::new(OrchestratorMessageQueueHandle::new(Arc::new(
+                file_orchestrator_message_queue,
             )));
 
             // Create runtime context
@@ -205,7 +205,7 @@ pub fn run() {
             let scheduler_context = SchedulerCtx::new(
                 db.clone(),
                 storage.clone(),
-                worker_message_queue.clone(),
+                orchestrator_message_queue.clone(),
                 internal_addresses.clone(),
                 scheduler_notify,
             );

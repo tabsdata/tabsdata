@@ -12,7 +12,7 @@ use getset::{Getters, Setters};
 use std::fmt::{Debug, Display, Formatter};
 use std::path::PathBuf;
 use td_common::env::{EnvironmentError, to_absolute};
-use td_common::server::{SupervisorMessage, WorkerClass};
+use td_common::server::{OrchestratorMessage, WorkerClass};
 use thiserror::Error;
 
 /// Describes a worker that can be run under the Tabsdata system.
@@ -28,7 +28,7 @@ pub trait WorkerDescriber: Display + Debug {
     fn set_state(&self) -> &Option<SetState>;
     fn get_states(&self) -> &Vec<GetState>;
     fn config(&self) -> &PathBuf;
-    fn message(&self) -> &Option<SupervisorMessage>;
+    fn message(&self) -> &Option<OrchestratorMessage>;
     fn work(&self) -> &PathBuf;
     fn queue(&self) -> &PathBuf;
     fn etc(&self) -> &PathBuf;
@@ -91,7 +91,7 @@ pub struct TabsDataWorkerDescriber {
 
     /// Messages that triggers the worker to run execution.
     #[builder(default)]
-    message: Option<SupervisorMessage>,
+    message: Option<OrchestratorMessage>,
 }
 
 impl TabsDataWorkerDescriberBuilder {
@@ -186,7 +186,7 @@ impl TabsDataWorkerDescriberBuilder {
         self.etc.as_ref()
     }
 
-    pub fn get_message(&self) -> Option<&Option<SupervisorMessage>> {
+    pub fn get_message(&self) -> Option<&Option<OrchestratorMessage>> {
         self.message.as_ref()
     }
 
@@ -251,7 +251,7 @@ impl WorkerDescriber for TabsDataWorkerDescriber {
         &self.config
     }
 
-    fn message(&self) -> &Option<SupervisorMessage> {
+    fn message(&self) -> &Option<OrchestratorMessage> {
         &self.message
     }
 

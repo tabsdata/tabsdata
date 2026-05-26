@@ -18,13 +18,13 @@ use std::fmt::Debug;
 use std::str::FromStr;
 use td_common::execution_status::WorkerCallbackStatus;
 use td_common::server::MessageAction::Notify;
-use td_common::server::SupervisorMessagePayload::{
-    SupervisorExceptionMessagePayload, SupervisorRequestMessagePayload,
-    SupervisorResponseMessagePayload,
+use td_common::server::OrchestratorMessagePayload::{
+    OrchestratorExceptionMessagePayload, OrchestratorRequestMessagePayload,
+    OrchestratorResponseMessagePayload,
 };
 use td_common::server::{
     Callback, EXCEPTION_FILE, ExceptionMessagePayload, PayloadType, REQUEST_MESSAGE_FILE_PATTERN,
-    RESPONSE_FILE, RESPONSE_FOLDER, ResponseMessagePayload, SupervisorMessage, UNKNOWN_RUN,
+    RESPONSE_FILE, RESPONSE_FOLDER, ResponseMessagePayload, OrchestratorMessage, UNKNOWN_RUN,
 };
 use td_common::status::ExitStatus;
 use tracing::{debug, info};
@@ -36,7 +36,7 @@ pub trait WorkerNotifier: Debug {
     async fn notify(
         &self,
         worker: Option<&TabsDataWorker>,
-        request_message: SupervisorMessage,
+        request_message: OrchestratorMessage,
         start: i64,
         end: Option<i64>,
         status: WorkerCallbackStatus,
@@ -51,7 +51,7 @@ impl WorkerNotifier for Callback {
     async fn notify(
         &self,
         worker: Option<&TabsDataWorker>,
-        request_message: SupervisorMessage,
+        request_message: OrchestratorMessage,
         start: i64,
         end: Option<i64>,
         status: WorkerCallbackStatus,
@@ -111,8 +111,8 @@ impl WorkerNotifier for Callback {
         match self {
             Callback::Http(callback) => {
                 let request_payload = match request_message.payload {
-                    SupervisorRequestMessagePayload(payload) => payload,
-                    SupervisorResponseMessagePayload(_) | SupervisorExceptionMessagePayload(_) => {
+                    OrchestratorRequestMessagePayload(payload) => payload,
+                    OrchestratorResponseMessagePayload(_) | OrchestratorExceptionMessagePayload(_) => {
                         return Err(InvalidMessageType);
                     }
                 };
@@ -129,17 +129,17 @@ impl WorkerNotifier for Callback {
                                 .join(RESPONSE_FOLDER)
                                 .join(EXCEPTION_FILE);
                             if exception_file.exists() {
-                                let exception_message = SupervisorMessage::try_from((
+                                let exception_message = OrchestratorMessage::try_from((
                                     exception_file.clone(),
                                     PayloadType::Exception,
                                 ))?;
                                 let exception_payload: &ExceptionMessagePayload<Value> =
                                     match &exception_message.payload {
-                                        SupervisorRequestMessagePayload(_)
-                                        | SupervisorResponseMessagePayload(_) => {
+                                        OrchestratorRequestMessagePayload(_)
+                                        | OrchestratorResponseMessagePayload(_) => {
                                             return Err(InvalidMessageType);
                                         }
-                                        SupervisorExceptionMessagePayload(payload) => payload,
+                                        OrchestratorExceptionMessagePayload(payload) => payload,
                                     };
                                 exception_payload.clone()
                             } else {
@@ -161,17 +161,17 @@ impl WorkerNotifier for Callback {
                                 .join(RESPONSE_FOLDER)
                                 .join(RESPONSE_FILE);
                             if response_file.exists() {
-                                let response_message = SupervisorMessage::try_from((
+                                let response_message = OrchestratorMessage::try_from((
                                     response_file.clone(),
                                     PayloadType::Response,
                                 ))?;
                                 let response_payload: &ResponseMessagePayload<Value> =
                                     match &response_message.payload {
-                                        SupervisorRequestMessagePayload(_)
-                                        | SupervisorExceptionMessagePayload(_) => {
+                                        OrchestratorRequestMessagePayload(_)
+                                        | OrchestratorExceptionMessagePayload(_) => {
                                             return Err(InvalidMessageType);
                                         }
-                                        SupervisorResponseMessagePayload(payload) => payload,
+                                        OrchestratorResponseMessagePayload(payload) => payload,
                                     };
                                 response_payload.clone()
                             } else {
@@ -260,7 +260,7 @@ impl WorkerNotifier for Callback {
     }
 }
 
-pub fn execution(message: &SupervisorMessage) -> u16 {
+pub fn execution(message: &OrchestratorMessage) -> u16 {
     let regex = match Regex::new(REQUEST_MESSAGE_FILE_PATTERN) {
         Ok(re) => re,
         Err(_) => return UNKNOWN_RUN,

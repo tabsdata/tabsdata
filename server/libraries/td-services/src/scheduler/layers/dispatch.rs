@@ -8,8 +8,8 @@
 use std::ops::Deref;
 use std::str::FromStr;
 use td_common::server::{
-    MessageAction, RequestMessagePayload, SupervisorMessagePayload, WorkerMessageQueue,
-    WorkerMessageQueueHandle, WorkerName,
+    MessageAction, RequestMessagePayload, OrchestratorMessagePayload, OrchestratorMessageQueue,
+    OrchestratorMessageQueueHandle, WorkerName,
 };
 use td_database::dynamic::DynamicConnection;
 use td_error::{ApiError, TdError, api_error};
@@ -39,7 +39,7 @@ pub async fn notify_dispatcher(notify: Ref<SchedulerNotify>) -> Result<(), TdErr
     err(Debug)
 )]
 pub async fn unlock_workers_request(
-    message_queue: Ref<WorkerMessageQueueHandle>,
+    message_queue: Ref<OrchestratorMessageQueueHandle>,
     mut conn: MutRef<DynamicConnection<'static>>,
 ) -> Result<(), TdError> {
     unlock_workers_request_infallible(message_queue, &mut conn).await;
@@ -47,7 +47,7 @@ pub async fn unlock_workers_request(
 }
 
 async fn unlock_workers_request_infallible(
-    message_queue: Ref<WorkerMessageQueueHandle>,
+    message_queue: Ref<OrchestratorMessageQueueHandle>,
     conn: &mut DynamicConnection<'_>,
 ) {
     let messages = message_queue.locked_messages().await;
@@ -63,7 +63,7 @@ async fn unlock_workers_request_infallible(
 
     for message in messages {
         if let Ok(worker_id) = WorkerId::try_from(&message.id)
-            && let SupervisorMessagePayload::SupervisorRequestMessagePayload(payload) =
+            && let OrchestratorMessagePayload::OrchestratorRequestMessagePayload(payload) =
                 &message.payload
         {
             let res = match WorkerName::from_str(&payload.worker) {
@@ -117,7 +117,7 @@ async fn unlock_workers_request_infallible(
             }
         } else {
             warn!(
-                "Scheduled locked message [{}] is not a SupervisorRequestMessagePayload: {:?}",
+                "Scheduled locked message [{}] is not a OrchestratorRequestMessagePayload: {:?}",
                 message.id, message.payload
             );
         };
@@ -141,7 +141,7 @@ async fn unlock_workers_request_infallible(
 )]
 pub async fn unlock_function_runner_worker(
     conn: &mut DynamicConnection<'_>,
-    message_queue: &dyn WorkerMessageQueue,
+    message_queue: &dyn OrchestratorMessageQueue,
     worker_id: WorkerId,
     payload: &RequestMessagePayload,
 ) -> Result<(), TdError> {
@@ -227,7 +227,7 @@ impl DispatchBranch {
 
 async fn commit_unlock(
     conn: &mut DynamicConnection<'_>,
-    message_queue: &dyn WorkerMessageQueue,
+    message_queue: &dyn OrchestratorMessageQueue,
     worker_id: &WorkerId,
     lfr_id: &LogicalFunctionRunId,
     pfr_id: &PhysicalFunctionRunId,
@@ -322,7 +322,7 @@ async fn rollback_initial_function_run(
 )]
 pub async fn unlock_cron_trigger_workers(
     conn: &mut DynamicConnection<'_>,
-    message_queue: &dyn WorkerMessageQueue,
+    message_queue: &dyn OrchestratorMessageQueue,
     worker_id: WorkerId,
     _payload: &RequestMessagePayload,
 ) -> Result<(), TdError> {
@@ -345,7 +345,7 @@ pub async fn unlock_cron_trigger_workers(
 )]
 pub async fn unlock_stage_trigger_workers(
     conn: &mut DynamicConnection<'_>,
-    message_queue: &dyn WorkerMessageQueue,
+    message_queue: &dyn OrchestratorMessageQueue,
     worker_id: WorkerId,
     _payload: &RequestMessagePayload,
 ) -> Result<(), TdError> {
@@ -361,7 +361,7 @@ pub async fn unlock_stage_trigger_workers(
 
 async fn unlock_simple_worker(
     conn: &mut DynamicConnection<'_>,
-    message_queue: &dyn WorkerMessageQueue,
+    message_queue: &dyn OrchestratorMessageQueue,
     worker_id: WorkerId,
     error_label: &str,
     log_kind: &str,
