@@ -14,6 +14,7 @@ use ta_services::factory::FieldAccessors;
 use td_authz::jwt::JwtConfig;
 #[cfg(feature = "embedded-postgres")]
 use td_common::server::DATABASE_FOLDER;
+use td_common::server::Orchestrator;
 use td_database::config::{BackendConfig, DatabaseConfig};
 use td_error::{TdError, td_error};
 use td_execution::TransactionBy;
@@ -41,6 +42,8 @@ pub struct Config {
     pub storage: Option<StorageConfig>,
     #[serde(default)]
     pub transaction_by: TransactionBy,
+    #[serde(default)]
+    pub orchestrator: Orchestrator,
     #[serde(flatten)]
     pub extended_config: ExtendedConfig,
 }
@@ -88,6 +91,7 @@ impl Default for Config {
             database: DatabaseConfig::default(),
             storage: Some(StorageConfig::default()),
             transaction_by: TransactionBy::default(),
+            orchestrator: Orchestrator::default(),
             extended_config: ExtendedConfig::default(),
         }
     }
@@ -190,6 +194,9 @@ pub struct Params {
     #[clap(long)]
     /// The supervisor message queue directory
     msg: Option<String>, // not used via clap. Added for queue_service to work correctly with CLI option
+    #[clap(long, value_parser = parse_orchestrator)]
+    /// Orchestrator backend the apiserver dispatches workloads to.
+    orchestrator: Option<Orchestrator>,
     #[clap(flatten)]
     extended_params: ExtendedParams,
 }
@@ -298,6 +305,7 @@ impl Params {
                 .transaction_by
                 .clone()
                 .unwrap_or_else(|| config.transaction_by.clone()),
+            orchestrator: self.orchestrator.unwrap_or(config.orchestrator),
             extended_config: self
                 .extended_params
                 .resolve(config.extended_config.clone())?,
@@ -320,6 +328,11 @@ fn parse_socket_addr(addr: &str) -> Result<SocketAddr, AddrParseError> {
 
 fn parse_transaction_by(transaction_by: &str) -> Result<TransactionBy, ParseError> {
     TransactionBy::try_from(transaction_by)
+}
+
+fn parse_orchestrator(orchestrator: &str) -> Result<Orchestrator, ParseError> {
+    use std::str::FromStr;
+    Orchestrator::from_str(orchestrator)
 }
 
 #[td_error]
@@ -394,6 +407,7 @@ mod tests {
             db_schema: None,
             etc: None,
             msg: None,
+            orchestrator: None,
             extended_params: ExtendedParams::default(),
         };
 
@@ -453,6 +467,7 @@ mod tests {
             db_schema: None,
             etc: None,
             msg: None,
+            orchestrator: None,
             extended_params: ExtendedParams::default(),
         };
 

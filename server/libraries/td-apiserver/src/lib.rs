@@ -159,8 +159,9 @@ pub fn run() {
             let storage = Arc::new(storage);
 
             // Create orchestrator messaging provider and its message queue
+            info!("Orchestrator: {}", config.orchestrator);
             let messaging_provider: Box<dyn OrchestratorMessagingProvider> =
-                match Orchestrator::default() {
+                match config.orchestrator {
                     Orchestrator::Supervisor => Box::new(SupervisorMessagingProvider::new()),
                     Orchestrator::Kubernetes => todo!("Kubernetes orchestrator not yet wired"),
                 };

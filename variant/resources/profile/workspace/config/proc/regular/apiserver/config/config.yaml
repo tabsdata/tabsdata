@@ -17,6 +17,7 @@ jwt:
   #secret: null # by default an UUID is generated
   access_token_expiration: 3600
 request_timeout: 60
+orchestrator: supervisor
 database:
   # If omitted, the apiserver boots an in-process embedded Postgres rooted
   # at ${TD_URI_REPOSITORY}/database/. To point at an external server,

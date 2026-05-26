@@ -16,6 +16,7 @@ jwt:
   # secret: null # by default a UUID is generated
   access_token_expiration: 3600
 request_timeout: 60
+orchestrator: kubernetes
 database:
   # Embedded Postgres rooted at <instance>/repository/database/. Both
   # `tdkserver create` (host-side schema creation) and the runtime apiserver
