@@ -621,6 +621,11 @@ impl Provider for KminusProvider {
             return abort(GeneralError);
         };
         let pyenv_scripts_folder = Some(scripts_name.to_string());
+        let instance_name = self
+            .folder
+            .file_name()
+            .and_then(|name| name.to_str())
+            .map(|name| name.to_owned());
         Ok(SystemValues {
             repository_url,
             repository_path,
@@ -631,6 +636,7 @@ impl Provider for KminusProvider {
             pyenv_td_root,
             pyenv_ag_root,
             pyenv_scripts_folder,
+            instance_name,
         })
     }
 }

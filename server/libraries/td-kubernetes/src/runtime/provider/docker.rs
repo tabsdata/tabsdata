@@ -20,6 +20,7 @@ use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::widgets::spinner;
 use crate::base::constants::{
     CONFIGMAP_TABSDATA_CONFIGS, CONFIGMAP_TABSDATA_GLOBALS, CONFIGMAP_TABSDATA_PODS,
+    DEFAULT_INSTANCE_NAME,
 };
 use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues};
 use crate::runtime::instance::launcher::{start_workload, stop_workload};
@@ -365,7 +366,10 @@ impl Provider for DockerProvider {
     }
 
     fn system_values(&self) -> Result<SystemValues> {
-        Ok(SystemValues::default())
+        Ok(SystemValues {
+            instance_name: Some(DEFAULT_INSTANCE_NAME.to_owned()),
+            ..SystemValues::default()
+        })
     }
 
     async fn create_database(&self) -> Result {

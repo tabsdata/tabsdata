@@ -30,6 +30,8 @@ pub const KPROFILE_GLOBALS_FOLDER: &str = "globals";
 pub const KPROFILE_PODS_FOLDER: &str = "pods";
 pub const KPROFILE_CONFIGS_FOLDER: &str = "configs";
 
+pub const DEFAULT_INSTANCE_NAME: &str = "tabsdata";
+
 pub const TABSDATA_CONFIGMAP_PREFIX: &str = "tabsdata-";
 
 pub const CONFIGMAP_TABSDATA_GLOBALS: &str =

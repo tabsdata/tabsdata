@@ -16,6 +16,7 @@ pub mod job;
 pub mod kubeconfig;
 pub mod namespace;
 pub mod pod;
+pub mod podcontext;
 
 use td_error::TdError;
 use thiserror::Error;
@@ -27,6 +28,7 @@ pub use job::KubeJobError;
 pub use kubeconfig::KubeconfigError;
 pub use namespace::KubeNamespaceError;
 pub use pod::KubePodError;
+pub use podcontext::KubePodContextError;
 
 #[derive(Debug, Error)]
 pub enum KubernetesError {
@@ -44,6 +46,8 @@ pub enum KubernetesError {
     Namespace(#[from] KubeNamespaceError),
     #[error(transparent)]
     Pod(#[from] KubePodError),
+    #[error(transparent)]
+    PodContext(#[from] KubePodContextError),
 }
 
 impl From<KubernetesError> for TdError {
@@ -56,6 +60,7 @@ impl From<KubernetesError> for TdError {
             KubernetesError::Kubeconfig(inner) => TdError::new(inner),
             KubernetesError::Namespace(inner) => TdError::new(inner),
             KubernetesError::Pod(inner) => TdError::new(inner),
+            KubernetesError::PodContext(inner) => TdError::new(inner),
         }
     }
 }
