@@ -13,6 +13,7 @@ use crate::runtime::gateway::resolver::SystemValues;
 use crate::runtime::provider::{
     CloudProvider, ClusterProvider, ContainerProvider, Provider, ServerlessProvider, Transaction,
 };
+use crate::runtime::secrets::{SecretGenerator, SecretPhase};
 use crate::core::system::exit::{Result, abort};
 
 pub struct FargateProvider {}
@@ -138,6 +139,10 @@ impl Provider for FargateProvider {
     }
 
     fn system_values(&self) -> Result<SystemValues> {
+        unreachable!("fargate provider not yet implemented")
+    }
+
+    fn secret_generators(&self, _phase: SecretPhase) -> Vec<Box<dyn SecretGenerator>> {
         unreachable!("fargate provider not yet implemented")
     }
 }

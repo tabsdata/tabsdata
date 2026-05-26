@@ -41,7 +41,16 @@ pub const CONFIGMAP_TABSDATA_PODS: &str =
 pub const CONFIGMAP_TABSDATA_CONFIGS: &str =
     concatcp!(TABSDATA_CONFIGMAP_PREFIX, KPROFILE_CONFIGS_FOLDER);
 
+pub const TABSDATA_SECRET_PREFIX: &str = "tabsdata-";
+
+pub const SECRET_TABSDATA_KUBECONFIG: &str =
+    concatcp!(TABSDATA_SECRET_PREFIX, "kubeconfig");
+
+pub const SECRET_KEY_KUBECONFIG: &str = "kubeconfig";
+
 pub const TIER_LABEL: &str = "tabsdata.com/worker-tier";
+
+pub const KUBE_IDENTIFIER_PREFIX: &str = "td-";
 
 pub const POD_YAML_COMPONENT_LABEL: &str = "app.kubernetes.io/component";
 

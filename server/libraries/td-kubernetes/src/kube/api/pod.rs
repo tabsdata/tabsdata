@@ -3,23 +3,20 @@
 //
 
 use k8s_openapi::api::core::v1::Pod;
+use kube::Api;
 use kube::api::{DeleteParams, ListParams, PostParams, PropagationPolicy};
 use kube::runtime::wait::{Condition, await_condition};
-use kube::{Api, Client};
 
 use crate::base::error::kubernetes::{KubePodError, KubernetesError};
+use crate::kube::context::KubeContext;
 
-pub async fn create_pod(
-    client: &Client,
-    namespace: &str,
-    pod: &Pod,
-) -> Result<Pod, KubernetesError> {
-    let api: Api<Pod> = Api::namespaced(client.clone(), namespace);
+pub async fn create_pod(context: &KubeContext, pod: &Pod) -> Result<Pod, KubernetesError> {
+    let api: Api<Pod> = Api::namespaced(context.client().clone(), context.namespace());
     api.create(&PostParams::default(), pod)
         .await
         .map_err(|error| {
             KubePodError::ApplyFailed {
-                namespace: namespace.to_owned(),
+                namespace: context.namespace().to_owned(),
                 cause: error.to_string(),
             }
             .into()
@@ -27,17 +24,16 @@ pub async fn create_pod(
 }
 
 pub async fn await_pod_condition(
-    client: &Client,
-    namespace: &str,
+    context: &KubeContext,
     name: &str,
     condition: impl Condition<Pod> + Send + Sync + 'static,
 ) -> Result<Option<Pod>, KubernetesError> {
-    let api: Api<Pod> = Api::namespaced(client.clone(), namespace);
+    let api: Api<Pod> = Api::namespaced(context.client().clone(), context.namespace());
     await_condition(api, name, condition)
         .await
         .map_err(|error| {
             KubePodError::AwaitFailed {
-                namespace: namespace.to_owned(),
+                namespace: context.namespace().to_owned(),
                 name: name.to_owned(),
                 cause: error.to_string(),
             }
@@ -45,18 +41,14 @@ pub async fn await_pod_condition(
         })
 }
 
-pub async fn delete_pod(
-    client: &Client,
-    namespace: &str,
-    name: &str,
-) -> Result<(), KubernetesError> {
-    let api: Api<Pod> = Api::namespaced(client.clone(), namespace);
+pub async fn delete_pod(context: &KubeContext, name: &str) -> Result<(), KubernetesError> {
+    let api: Api<Pod> = Api::namespaced(context.client().clone(), context.namespace());
     api.delete(name, &DeleteParams::default())
         .await
         .map(|_| ())
         .map_err(|error| {
             KubePodError::DeleteFailed {
-                namespace: namespace.to_owned(),
+                namespace: context.namespace().to_owned(),
                 name: name.to_owned(),
                 cause: error.to_string(),
             }
@@ -65,11 +57,10 @@ pub async fn delete_pod(
 }
 
 pub async fn delete_pods_by_labels(
-    client: &Client,
-    namespace: &str,
+    context: &KubeContext,
     label_selector: &str,
 ) -> Result<(), KubernetesError> {
-    let api: Api<Pod> = Api::namespaced(client.clone(), namespace);
+    let api: Api<Pod> = Api::namespaced(context.client().clone(), context.namespace());
     let list_params = ListParams::default().labels(label_selector);
     let delete_params = DeleteParams {
         propagation_policy: Some(PropagationPolicy::Background),
@@ -80,7 +71,7 @@ pub async fn delete_pods_by_labels(
         .map(|_| ())
         .map_err(|error| {
             KubePodError::DeleteCollectionFailed {
-                namespace: namespace.to_owned(),
+                namespace: context.namespace().to_owned(),
                 label_selector: label_selector.to_owned(),
                 cause: error.to_string(),
             }
@@ -89,18 +80,17 @@ pub async fn delete_pods_by_labels(
 }
 
 pub async fn list_pods_by_labels(
-    client: &Client,
-    namespace: &str,
+    context: &KubeContext,
     label_selector: &str,
 ) -> Result<Vec<Pod>, KubernetesError> {
-    let api: Api<Pod> = Api::namespaced(client.clone(), namespace);
+    let api: Api<Pod> = Api::namespaced(context.client().clone(), context.namespace());
     let list_params = ListParams::default().labels(label_selector);
     api.list(&list_params)
         .await
         .map(|list| list.items)
         .map_err(|error| {
             KubePodError::ListFailed {
-                namespace: namespace.to_owned(),
+                namespace: context.namespace().to_owned(),
                 label_selector: label_selector.to_owned(),
                 cause: error.to_string(),
             }

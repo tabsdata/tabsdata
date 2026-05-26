@@ -18,7 +18,7 @@ use crate::client::tdkserver::commands::unuse::command_unuse;
 use crate::client::tdkserver::commands::r#use::command_use;
 use crate::client::tdkserver::commands::using::command_using;
 use crate::cerror;
-use crate::core::system::exit::Result;
+use crate::core::system::exit::{CommandError, Result};
 use crate::kube::api::client::install_crypto_provider;
 use td_common::status::ExitStatus;
 
@@ -53,7 +53,7 @@ pub async fn start() {
     }
 }
 
-fn report_command_termination(error: &crate::core::system::exit::CommandError) {
+fn report_command_termination(error: &CommandError) {
     match error.status() {
         ExitStatus::Cancelled => tracing::info!("Operation cancelled."),
         ExitStatus::NoAction => {}

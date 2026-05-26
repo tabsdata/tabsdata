@@ -30,3 +30,11 @@ pub async fn build_incluster_kube_client() -> Result<Client, KubernetesError> {
             cerror!("Failed to build in-cluster kubernetes client: {error}");
         })
 }
+
+pub async fn build_pod_kube_client() -> Result<Client, KubernetesError> {
+    api::client::build_pod_kube_client()
+        .await
+        .inspect_err(|error| {
+            cerror!("Failed to build pod kubernetes client: {error}");
+        })
+}

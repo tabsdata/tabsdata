@@ -32,7 +32,6 @@ use crate::kube::api::{
     create_configmap, ensure_cluster_reachable, ensure_namespace_exists, exists_configmap,
     require_configmap,
 };
-use crate::runtime::reporting::build_kube_client;
 use crate::kube::kubeconfig::{
     build_kubeconfig, resolve_cluster_name, resolve_current_context, resolve_kubefile,
 };
@@ -42,6 +41,7 @@ use crate::runtime::provider::{
     Cluster, ClusterProvider, ContainerProvider, HostedProvider, Instance, LocalProvider, Provider,
     Transaction,
 };
+use crate::runtime::secrets::{SecretGenerator, SecretPhase};
 use crate::core::system::exit::{Result, abort};
 
 pub struct DockerProvider {
@@ -141,6 +141,7 @@ impl DockerProvider {
             verbose,
         })
     }
+
 }
 
 #[async_trait]
@@ -169,16 +170,10 @@ impl Provider for DockerProvider {
     }
 
     async fn ensure_creatable_runtime(&self) -> Result {
-        let client = build_kube_client(&self.config)?;
-        ensure_cluster_reachable(&client).await?;
-        ensure_namespace_exists(&client, &self.config.default_namespace).await?;
-        if exists_configmap(
-            &client,
-            &self.config.default_namespace,
-            CONFIGMAP_TABSDATA_GLOBALS,
-        )
-        .await?
-        {
+        let context = self.kube_context().await?;
+        ensure_cluster_reachable(context.client()).await?;
+        ensure_namespace_exists(&context).await?;
+        if exists_configmap(&context, CONFIGMAP_TABSDATA_GLOBALS).await? {
             info!(
                 "A tabsdata instance already exists in namespace '{}'.",
                 self.config.default_namespace
@@ -206,16 +201,10 @@ impl Provider for DockerProvider {
     }
 
     async fn ensure_usable_runtime(&self) -> Result {
-        let client = build_kube_client(&self.config)?;
-        ensure_cluster_reachable(&client).await?;
-        ensure_namespace_exists(&client, &self.config.default_namespace).await?;
-        if !exists_configmap(
-            &client,
-            &self.config.default_namespace,
-            CONFIGMAP_TABSDATA_GLOBALS,
-        )
-        .await?
-        {
+        let context = self.kube_context().await?;
+        ensure_cluster_reachable(context.client()).await?;
+        ensure_namespace_exists(&context).await?;
+        if !exists_configmap(&context, CONFIGMAP_TABSDATA_GLOBALS).await? {
             cerror!(
                 "No tabsdata instance found in namespace '{}'. Run 'tdkserver create ...' first.",
                 self.config.default_namespace
@@ -244,13 +233,8 @@ impl Provider for DockerProvider {
 
     async fn ensure_startable_runtime(&self) -> Result {
         if cfg!(td_k8s_development) {
-            let client = build_kube_client(&self.config)?;
-            if let Some(data) = get_configmap(
-                &client,
-                &self.config.default_namespace,
-                CONFIGMAP_TABSDATA_GLOBALS,
-            )
-            .await?
+            let context = self.kube_context().await?;
+            if let Some(data) = get_configmap(&context, CONFIGMAP_TABSDATA_GLOBALS).await?
                 && let Some(yaml) = data.get(MANIFEST_FILE)
             {
                 verify_manifest_compatibility(yaml)?;
@@ -379,6 +363,10 @@ impl Provider for DockerProvider {
     async fn create_runtimes(&self) -> Result {
         Ok(())
     }
+
+    fn secret_generators(&self, _phase: SecretPhase) -> Vec<Box<dyn SecretGenerator>> {
+        Vec::new()
+    }
 }
 
 impl ContainerProvider for DockerProvider {}
@@ -391,21 +379,20 @@ impl DockerProvider {
     async fn store_configmap_inner(&self) -> Result {
         let loaded = load_profile(self.cluster_provider(), self.verbose)?;
         let resolver = ConfigurationResolver::new(self.system_values()?);
-        let encoded = render_for_configmaps(&loaded, &resolver).await?;
-        let client = build_kube_client(&self.config)?;
-        for (name, data) in encoded.into_named() {
-            create_configmap(&client, &self.config.default_namespace, name, data).await?;
+        let rendered = render_for_configmaps(&loaded, &resolver).await?;
+        let context = self.kube_context().await?;
+        for (name, data) in rendered.into_named() {
+            create_configmap(&context, name, data).await?;
         }
         Ok(())
     }
 
     async fn start_instance_inner(&self, multi: &MultiProgress) -> Result {
         self.instance.start().await?;
-        let client = build_kube_client(&self.config)?;
-        let namespace = &self.config.default_namespace;
-        let globals = require_configmap(&client, namespace, CONFIGMAP_TABSDATA_GLOBALS).await?;
-        let pods = require_configmap(&client, namespace, CONFIGMAP_TABSDATA_PODS).await?;
-        let configs = require_configmap(&client, namespace, CONFIGMAP_TABSDATA_CONFIGS).await?;
+        let context = self.kube_context().await?;
+        let globals = require_configmap(&context, CONFIGMAP_TABSDATA_GLOBALS).await?;
+        let pods = require_configmap(&context, CONFIGMAP_TABSDATA_PODS).await?;
+        let configs = require_configmap(&context, CONFIGMAP_TABSDATA_CONFIGS).await?;
         let profile = parse_from_configmaps(&globals, &pods, &configs)?;
         start_workload(self, &profile, multi).await
     }

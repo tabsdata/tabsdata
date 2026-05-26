@@ -3,12 +3,10 @@
 //
 
 use std::path::PathBuf;
-use std::sync::Arc;
 
 use async_trait::async_trait;
 use k8s_openapi::api::batch::v1::Job;
 use k8s_openapi::api::core::v1::Pod;
-use kube::Client;
 use serde_yaml::Value;
 use td_common::server::{
     OrchestratorMessage, OrchestratorMessagePayload, OrchestratorMessageQueue, QueueError,
@@ -16,38 +14,35 @@ use td_common::server::{
 };
 use tracing::warn;
 
+use crate::base::naming::to_kube_identifier;
 use crate::kube::api::job::{create_job, delete_job};
 use crate::kube::api::pod::{create_pod, delete_pod};
+use crate::kube::context::KubeContext;
 use crate::runtime::gateway::messaging::template::{
     PodTemplate, PodTemplateIndex, TemplateKind,
 };
 
 pub struct KubernetesOrchestratorMessageQueue {
-    client: Arc<Client>,
-    namespace: String,
+    context: KubeContext,
     templates: PodTemplateIndex,
 }
 
 impl KubernetesOrchestratorMessageQueue {
-    pub fn new(client: Arc<Client>, namespace: String, templates: PodTemplateIndex) -> Self {
-        Self {
-            client,
-            namespace,
-            templates,
-        }
+    pub fn new(context: KubeContext, templates: PodTemplateIndex) -> Self {
+        Self { context, templates }
     }
 
-    fn manifest_pod(&self, template: &PodTemplate, id: &str) -> Result<Pod, QueueError> {
+    fn manifest_pod(&self, template: &PodTemplate, name: &str) -> Result<Pod, QueueError> {
         let mut pod: Pod = serde_yaml::from_str(&template.manifest)?;
-        pod.metadata.name = Some(id.to_owned());
-        pod.metadata.namespace = Some(self.namespace.clone());
+        pod.metadata.name = Some(name.to_owned());
+        pod.metadata.namespace = Some(self.context.namespace().to_owned());
         Ok(pod)
     }
 
-    fn manifest_job(&self, template: &PodTemplate, id: &str) -> Result<Job, QueueError> {
+    fn manifest_job(&self, template: &PodTemplate, name: &str) -> Result<Job, QueueError> {
         let mut job: Job = serde_yaml::from_str(&template.manifest)?;
-        job.metadata.name = Some(id.to_owned());
-        job.metadata.namespace = Some(self.namespace.clone());
+        job.metadata.name = Some(name.to_owned());
+        job.metadata.namespace = Some(self.context.namespace().to_owned());
         Ok(job)
     }
 }
@@ -65,18 +60,21 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
             .map_err(|error| QueueError::BackendError {
                 cause: error.to_string(),
             })?;
+        let name = to_kube_identifier(&id).map_err(|error| QueueError::BackendError {
+            cause: error.to_string(),
+        })?;
         match template.kind {
             TemplateKind::Pod => {
-                let pod = self.manifest_pod(template, &id)?;
-                create_pod(&self.client, &self.namespace, &pod)
+                let pod = self.manifest_pod(template, &name)?;
+                create_pod(&self.context, &pod)
                     .await
                     .map_err(|error| QueueError::BackendError {
                         cause: error.to_string(),
                     })?;
             }
             TemplateKind::Job => {
-                let job = self.manifest_job(template, &id)?;
-                create_job(&self.client, &self.namespace, &job)
+                let job = self.manifest_job(template, &name)?;
+                create_job(&self.context, &job)
                     .await
                     .map_err(|error| QueueError::BackendError {
                         cause: error.to_string(),
@@ -115,9 +113,21 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                 return Ok(());
             }
         };
+        let name = match to_kube_identifier(&message.id) {
+            Ok(name) => name,
+            Err(error) => {
+                warn!(
+                    id = %message.id,
+                    worker = %worker,
+                    error = %error,
+                    "orchestrator.rollback: cannot derive kube name, skipping delete"
+                );
+                return Ok(());
+            }
+        };
         let outcome = match template.kind {
-            TemplateKind::Pod => delete_pod(&self.client, &self.namespace, &message.id).await,
-            TemplateKind::Job => delete_job(&self.client, &self.namespace, &message.id).await,
+            TemplateKind::Pod => delete_pod(&self.context, &name).await,
+            TemplateKind::Job => delete_job(&self.context, &name).await,
         };
         if let Err(error) = outcome {
             warn!(

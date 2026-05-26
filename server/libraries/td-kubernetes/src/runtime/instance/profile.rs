@@ -15,6 +15,7 @@ use tracing::info;
 
 use crate::cerror;
 use crate::base::constants::{
+    CONFIGMAP_TABSDATA_CONFIGS, CONFIGMAP_TABSDATA_GLOBALS, CONFIGMAP_TABSDATA_PODS,
     KPROFILE_CONFIGMAPS_FOLDER, KPROFILE_CONFIGS_FOLDER, KPROFILE_GLOBALS_FOLDER,
     KPROFILE_PODS_FOLDER, PROGRAM_TD_RESOURCE, RESOURCE_KPROFILE,
 };
@@ -298,9 +299,9 @@ pub struct RenderedConfigmaps {
 impl RenderedConfigmaps {
     pub fn into_named(self) -> [(&'static str, RenderedConfigmap); 3] {
         [
-            (crate::base::constants::CONFIGMAP_TABSDATA_GLOBALS, self.globals),
-            (crate::base::constants::CONFIGMAP_TABSDATA_PODS, self.pods),
-            (crate::base::constants::CONFIGMAP_TABSDATA_CONFIGS, self.configs),
+            (CONFIGMAP_TABSDATA_GLOBALS, self.globals),
+            (CONFIGMAP_TABSDATA_PODS, self.pods),
+            (CONFIGMAP_TABSDATA_CONFIGS, self.configs),
         ]
     }
 }

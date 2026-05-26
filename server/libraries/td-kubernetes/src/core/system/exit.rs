@@ -6,6 +6,8 @@ use td_common::status::ExitStatus;
 use td_error::{TdDomainError, TdError};
 use tracing::{error, info};
 
+use crate::base::error::kubernetes::KubernetesError;
+
 #[derive(Debug)]
 pub struct CommandError {
     status: ExitStatus,
@@ -42,8 +44,8 @@ impl From<TdError> for CommandError {
     }
 }
 
-impl From<crate::base::error::kubernetes::KubernetesError> for CommandError {
-    fn from(error: crate::base::error::kubernetes::KubernetesError) -> Self {
+impl From<KubernetesError> for CommandError {
+    fn from(error: KubernetesError) -> Self {
         CommandError::with(ExitStatus::GeneralError, TdError::from(error))
     }
 }

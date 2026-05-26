@@ -14,8 +14,11 @@ use crate::base::constants::{
     CONFIGMAP_TABSDATA_CONFIGS, CONFIGMAP_TABSDATA_GLOBALS, CONFIGMAP_TABSDATA_PODS,
     FOLDER_PROFILE, KPROFILE_CONFIGS_FOLDER, KPROFILE_GLOBALS_FOLDER, KPROFILE_PODS_FOLDER,
 };
+use std::sync::Arc;
+
 use crate::runtime::instance::profile::RenderedConfigmap;
 use crate::kube::api::{create_configmap, delete_configmap, exists_configmap};
+use crate::kube::context::KubeContext;
 use crate::runtime::reporting::build_kube_client;
 use crate::kube::kubeconfig::build_kubeconfig;
 use crate::runtime::provider::Instance;
@@ -59,17 +62,18 @@ impl KminusInstance {
 
     async fn replace_configmaps(&self, staged: StagedConfigmaps) -> Result {
         let kminus_config = build_kubeconfig(Some(&self.kubefile), None, None).await?;
+        let namespace = kminus_config.default_namespace.clone();
         let client = build_kube_client(&kminus_config)?;
-        let namespace = &kminus_config.default_namespace;
+        let context = KubeContext::new(Arc::new(client), namespace);
         for (name, data) in [
             (CONFIGMAP_TABSDATA_GLOBALS, staged.globals),
             (CONFIGMAP_TABSDATA_PODS, staged.pods),
             (CONFIGMAP_TABSDATA_CONFIGS, staged.configs),
         ] {
-            if exists_configmap(&client, namespace, name).await? {
-                delete_configmap(&client, namespace, name).await?;
+            if exists_configmap(&context, name).await? {
+                delete_configmap(&context, name).await?;
             }
-            create_configmap(&client, namespace, name, data).await?;
+            create_configmap(&context, name, data).await?;
         }
         Ok(())
     }

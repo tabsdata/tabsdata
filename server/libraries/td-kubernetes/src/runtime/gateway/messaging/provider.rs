@@ -5,31 +5,35 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use kube::Client;
 use td_common::server::{
     OrchestratorMessageQueueHandle, OrchestratorMessagingProvider, QueueError,
 };
 
 use crate::base::error::kubernetes::KubernetesError;
 use crate::client::tdkpodcontext::TdkPodContext;
+use crate::kube::api::client::install_crypto_provider;
+use crate::kube::context::KubeContext;
 use crate::runtime::gateway::messaging::queue::KubernetesOrchestratorMessageQueue;
 use crate::runtime::gateway::messaging::template::PodTemplateIndex;
-use crate::runtime::reporting::build_incluster_kube_client;
+use crate::runtime::reporting::build_pod_kube_client;
 
 pub struct KubernetesOrchestratorMessagingProvider {
-    client: Arc<Client>,
-    namespace: String,
+    context: KubeContext,
 }
 
 impl KubernetesOrchestratorMessagingProvider {
-    pub fn new(client: Arc<Client>, namespace: String) -> Self {
-        Self { client, namespace }
+    pub fn new(context: KubeContext) -> Self {
+        Self { context }
     }
 
     pub async fn from_pod_environment() -> Result<Self, KubernetesError> {
+        install_crypto_provider();
         let pod_context = TdkPodContext::from_environment()?;
-        let client = build_incluster_kube_client().await?;
-        Ok(Self::new(Arc::new(client), pod_context.namespace))
+        let client = build_pod_kube_client().await?;
+        Ok(Self::new(KubeContext::new(
+            Arc::new(client),
+            pod_context.namespace,
+        )))
     }
 }
 
@@ -38,16 +42,12 @@ impl OrchestratorMessagingProvider for KubernetesOrchestratorMessagingProvider {
     async fn orchestrator_message_queue(
         &self,
     ) -> Result<OrchestratorMessageQueueHandle, QueueError> {
-        let templates = PodTemplateIndex::load(&self.client, &self.namespace)
+        let templates = PodTemplateIndex::load(&self.context)
             .await
             .map_err(|error| QueueError::BackendError {
                 cause: error.to_string(),
             })?;
-        let queue = KubernetesOrchestratorMessageQueue::new(
-            Arc::clone(&self.client),
-            self.namespace.clone(),
-            templates,
-        );
+        let queue = KubernetesOrchestratorMessageQueue::new(self.context.clone(), templates);
         Ok(OrchestratorMessageQueueHandle::new(Arc::new(queue)))
     }
 }

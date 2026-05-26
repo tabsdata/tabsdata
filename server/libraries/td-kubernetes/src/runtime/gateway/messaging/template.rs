@@ -4,7 +4,6 @@
 
 use std::collections::HashMap;
 
-use kube::Client;
 use serde_yaml::Value;
 
 use crate::base::constants::{
@@ -13,6 +12,7 @@ use crate::base::constants::{
 };
 use crate::base::error::kubernetes::{KubeMessagingError, KubernetesError};
 use crate::kube::api::configmap::require_configmap;
+use crate::kube::context::KubeContext;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TemplateKind {
@@ -33,8 +33,8 @@ pub struct PodTemplateIndex {
 }
 
 impl PodTemplateIndex {
-    pub async fn load(client: &Client, namespace: &str) -> Result<Self, KubernetesError> {
-        let entries = require_configmap(client, namespace, CONFIGMAP_TABSDATA_PODS).await?;
+    pub async fn load(context: &KubeContext) -> Result<Self, KubernetesError> {
+        let entries = require_configmap(context, CONFIGMAP_TABSDATA_PODS).await?;
         let mut by_worker: HashMap<String, PodTemplate> = HashMap::new();
         for (_, manifest) in entries {
             let Some(template) = parse_template(&manifest)? else {

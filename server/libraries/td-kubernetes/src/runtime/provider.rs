@@ -21,8 +21,13 @@ use crate::cerror;
 use crate::client::tdkcontext::TdkContext;
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::base::constants::KMINUS_MIN_NOFILE;
+use std::sync::Arc;
+
+use crate::kube::context::KubeContext;
 use crate::runtime::gateway::resolver::SystemValues;
 use crate::runtime::instance::profile::bundle::Axis;
+use crate::runtime::reporting::build_kube_client;
+use crate::runtime::secrets::{SecretGenerator, SecretHandler, SecretPhase};
 use crate::core::pod::{ValidationError, container as container_pod, process as process_pod};
 use crate::runtime::provider::axes::{Lifecycle, Location, Platform, Workload};
 use crate::runtime::provider::docker::DockerProvider;
@@ -192,6 +197,7 @@ pub trait Provider: Send + Sync {
     fn preview_start_runtime_summary(&self);
     async fn start_runtime(&self) -> Result {
         self.start_cluster().await?;
+        handle_phase_secrets(self, SecretPhase::Start).await?;
         self.start_instance().await?;
         Ok(())
     }
@@ -224,7 +230,29 @@ pub trait Provider: Send + Sync {
     fn cluster_provider(&self) -> ClusterProvider;
     async fn kube_config(&self) -> Result<Config>;
 
+    async fn kube_context(&self) -> Result<KubeContext> {
+        let config = self.kube_config().await?;
+        let namespace = config.default_namespace.clone();
+        let client = build_kube_client(&config)?;
+        Ok(KubeContext::new(Arc::new(client), namespace))
+    }
+
     fn system_values(&self) -> Result<SystemValues>;
+
+    fn secret_generators(&self, phase: SecretPhase) -> Vec<Box<dyn SecretGenerator>>;
+}
+
+async fn handle_phase_secrets(provider: &(impl Provider + ?Sized), phase: SecretPhase) -> Result {
+    let generators = provider.secret_generators(phase);
+    if generators.is_empty() {
+        return Ok(());
+    }
+    let context = provider.kube_context().await?;
+    if let Err(error) = SecretHandler::handle(&context, phase, &generators).await {
+        cerror!("Failed to handle {phase} secrets: {error}");
+        return abort(GeneralError);
+    }
+    Ok(())
 }
 
 #[allow(dead_code)]

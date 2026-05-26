@@ -7,6 +7,7 @@ pub mod codec;
 pub mod gateway;
 pub mod kubernetes;
 pub mod manifest;
+pub mod naming;
 pub mod pod;
 pub mod profile;
 pub mod provider;

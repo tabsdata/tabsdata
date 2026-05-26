@@ -15,7 +15,6 @@ use crate::cerror;
 use crate::client::tdkserver::widgets::{phase_spinner_in, spinner};
 use crate::core::pod::ValidationError;
 use crate::core::system::exit::{CommandError, Result, abort};
-use crate::runtime::reporting::build_kube_client;
 use crate::kube::api::{job as job_api, pod as pod_api};
 use crate::runtime::instance::profile::Profile;
 use crate::runtime::instance::tier::Tier;
@@ -56,10 +55,8 @@ pub async fn apply_init_phase(
     profile: &Profile,
     multi: &MultiProgress,
 ) -> Result<Vec<String>> {
-    let config = provider.kube_config().await?;
+    let context = provider.kube_context().await?;
     let cluster_provider = provider.cluster_provider();
-    let client = build_kube_client(&config)?;
-    let namespace = &config.default_namespace;
     let mut prepared: Vec<(String, Job)> = Vec::new();
     for (key, yaml) in pods_for_tier(profile, Tier::Init)? {
         let mut job = deserialize_pod_entry::<Job>(key, yaml, Tier::Init)?;
@@ -71,7 +68,7 @@ pub async fn apply_init_phase(
     let mut applied: Vec<String> = Vec::new();
     for (key, job) in prepared {
         let bar = phase.add_resource(&key);
-        let created = match job_api::create_job(&client, namespace, &job).await {
+        let created = match job_api::create_job(&context, &job).await {
             Ok(created) => {
                 bar.finish_with_message(format!("{key} (applied)"));
                 created
@@ -96,19 +93,11 @@ pub async fn wait_init_phase(
     jobs: &[String],
     multi: &MultiProgress,
 ) -> Result {
-    let config = provider.kube_config().await?;
-    let client = build_kube_client(&config)?;
-    let namespace = &config.default_namespace;
+    let context = provider.kube_context().await?;
     let phase = phase_spinner_in(multi, &format!("Waiting for {} init job(s)", jobs.len()));
     for name in jobs {
         let bar = phase.add_resource(name);
-        let settled = match job_api::await_job_condition(
-            &client,
-            namespace,
-            name,
-            is_job_settled(),
-        )
-        .await
+        let settled = match job_api::await_job_condition(&context, name, is_job_settled()).await
         {
             Ok(Some(job)) => job,
             Ok(None) => {
@@ -227,9 +216,8 @@ pub async fn apply_regular_phase(
     profile: &Profile,
     multi: &MultiProgress,
 ) -> Result<Vec<String>> {
-    let config = provider.kube_config().await?;
+    let context = provider.kube_context().await?;
     let provider_kind = provider.cluster_provider();
-    let client = build_kube_client(&config)?;
     let mut prepared: Vec<(String, Pod)> = Vec::new();
     for (key, yaml) in pods_for_tier(profile, Tier::Regular)? {
         let mut pod = deserialize_pod_entry::<Pod>(key, yaml, Tier::Regular)?;
@@ -242,11 +230,11 @@ pub async fn apply_regular_phase(
         &format!("Applying {} regular pod(s)", prepared.len()),
     );
     let creates = prepared.into_iter().map(|(key, pod)| {
-        let client = client.clone();
-        let namespace = config.default_namespace.clone();
+        let context = context.clone();
         let bar = phase.add_resource(&key);
         async move {
-            let created = match pod_api::create_pod(&client, &namespace, &pod).await {
+            let namespace = context.namespace().to_owned();
+            let created = match pod_api::create_pod(&context, &pod).await {
                 Ok(created) => created,
                 Err(error) => {
                     bar.finish_with_message(format!("{key} (failed)"));
@@ -279,21 +267,13 @@ pub async fn wait_regular_phase(
     pods: &[String],
     multi: &MultiProgress,
 ) -> Result {
-    let config = provider.kube_config().await?;
-    let client = build_kube_client(&config)?;
+    let context = provider.kube_context().await?;
     let phase = phase_spinner_in(multi, &format!("Waiting for {} regular pod(s)", pods.len()));
     let waits = pods.iter().map(|name| {
-        let client = client.clone();
-        let namespace = config.default_namespace.clone();
+        let context = context.clone();
         let bar = phase.add_resource(name);
         async move {
-            let settled = match pod_api::await_pod_condition(
-                &client,
-                &namespace,
-                name,
-                is_pod_settled(),
-            )
-            .await
+            let settled = match pod_api::await_pod_condition(&context, name, is_pod_settled()).await
             {
                 Ok(Some(pod)) => pod,
                 Ok(None) => {
@@ -350,16 +330,15 @@ fn has_failed_phase(pod: &Pod) -> bool {
 mod tests;
 
 async fn delete_workload(provider: &dyn Provider, multi: &MultiProgress) -> Result {
-    let config = provider.kube_config().await?;
-    let client = build_kube_client(&config)?;
-    let namespace = config.default_namespace.clone();
+    let context = provider.kube_context().await?;
+    let namespace = context.namespace().to_owned();
     let phase = phase_spinner_in(multi, "Deleting tabsdata workload");
     let pods_bar = phase.add_resource("Pods");
     let jobs_bar = phase.add_resource("Jobs");
     let pods_namespace = namespace.clone();
     let jobs_namespace = namespace.clone();
     let pods_delete = async {
-        match pod_api::delete_pods_by_labels(&client, &namespace, WORKLOAD_LABEL_SELECTOR).await {
+        match pod_api::delete_pods_by_labels(&context, WORKLOAD_LABEL_SELECTOR).await {
             Ok(()) => {
                 pods_bar.finish_with_message("Pods (deleted)");
                 Ok(())
@@ -372,7 +351,7 @@ async fn delete_workload(provider: &dyn Provider, multi: &MultiProgress) -> Resu
         }
     };
     let jobs_delete = async {
-        match job_api::delete_jobs_by_labels(&client, &namespace, WORKLOAD_LABEL_SELECTOR).await {
+        match job_api::delete_jobs_by_labels(&context, WORKLOAD_LABEL_SELECTOR).await {
             Ok(()) => {
                 jobs_bar.finish_with_message("Jobs (deleted)");
                 Ok(())
@@ -401,13 +380,11 @@ async fn workload_exists(provider: &dyn Provider) -> Result<bool> {
 }
 
 async fn workload_exists_inner(provider: &dyn Provider) -> Result<bool> {
-    let config = provider.kube_config().await?;
-    let client = build_kube_client(&config)?;
-    let namespace = config.default_namespace.clone();
-    let pods_namespace = namespace.clone();
-    let jobs_namespace = namespace.clone();
+    let context = provider.kube_context().await?;
+    let pods_namespace = context.namespace().to_owned();
+    let jobs_namespace = context.namespace().to_owned();
     let pods_list = async {
-        match pod_api::list_pods_by_labels(&client, &namespace, WORKLOAD_LABEL_SELECTOR).await {
+        match pod_api::list_pods_by_labels(&context, WORKLOAD_LABEL_SELECTOR).await {
             Ok(pods) => Ok::<bool, KubernetesError>(!pods.is_empty()),
             Err(error) => {
                 cerror!("Failed to list pods in namespace '{pods_namespace}': {error}");
@@ -416,7 +393,7 @@ async fn workload_exists_inner(provider: &dyn Provider) -> Result<bool> {
         }
     };
     let jobs_list = async {
-        match job_api::list_jobs_by_labels(&client, &namespace, WORKLOAD_LABEL_SELECTOR).await {
+        match job_api::list_jobs_by_labels(&context, WORKLOAD_LABEL_SELECTOR).await {
             Ok(jobs) => Ok::<bool, KubernetesError>(!jobs.is_empty()),
             Err(error) => {
                 cerror!("Failed to list jobs in namespace '{jobs_namespace}': {error}");

@@ -7,22 +7,19 @@ use std::collections::BTreeMap;
 use k8s_openapi::ByteString;
 use k8s_openapi::api::core::v1::Secret;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
+use kube::Api;
 use kube::api::{DeleteParams, PostParams};
-use kube::{Api, Client};
 
 use crate::base::error::kubernetes::{KubeSecretError, KubernetesError};
+use crate::kube::context::KubeContext;
 
-pub async fn exists_secret(
-    client: &Client,
-    namespace: &str,
-    name: &str,
-) -> Result<bool, KubernetesError> {
-    let api: Api<Secret> = Api::namespaced(client.clone(), namespace);
+pub async fn exists_secret(context: &KubeContext, name: &str) -> Result<bool, KubernetesError> {
+    let api: Api<Secret> = Api::namespaced(context.client().clone(), context.namespace());
     match api.get_opt(name).await {
         Ok(Some(_)) => Ok(true),
         Ok(None) => Ok(false),
         Err(error) => Err(KubeSecretError::QueryFailed {
-            namespace: namespace.to_owned(),
+            namespace: context.namespace().to_owned(),
             name: name.to_owned(),
             cause: error.to_string(),
         }
@@ -31,21 +28,20 @@ pub async fn exists_secret(
 }
 
 pub async fn upsert_secret(
-    client: &Client,
-    namespace: &str,
+    context: &KubeContext,
     name: &str,
-    data: BTreeMap<String, Vec<u8>>,
+    data: BTreeMap<String, String>,
 ) -> Result<(), KubernetesError> {
-    let api: Api<Secret> = Api::namespaced(client.clone(), namespace);
+    let api: Api<Secret> = Api::namespaced(context.client().clone(), context.namespace());
     let body = Secret {
         metadata: ObjectMeta {
             name: Some(name.to_owned()),
-            namespace: Some(namespace.to_owned()),
+            namespace: Some(context.namespace().to_owned()),
             ..Default::default()
         },
         data: Some(
             data.into_iter()
-                .map(|(key, value)| (key, ByteString(value)))
+                .map(|(key, value)| (key, ByteString(value.into_bytes())))
                 .collect(),
         ),
         ..Default::default()
@@ -59,7 +55,7 @@ pub async fn upsert_secret(
                 .map(|_| ())
                 .map_err(|error| {
                     KubeSecretError::ReplaceFailed {
-                        namespace: namespace.to_owned(),
+                        namespace: context.namespace().to_owned(),
                         name: name.to_owned(),
                         cause: error.to_string(),
                     }
@@ -72,14 +68,14 @@ pub async fn upsert_secret(
             .map(|_| ())
             .map_err(|error| {
                 KubeSecretError::CreateFailed {
-                    namespace: namespace.to_owned(),
+                    namespace: context.namespace().to_owned(),
                     name: name.to_owned(),
                     cause: error.to_string(),
                 }
                 .into()
             }),
         Err(error) => Err(KubeSecretError::QueryFailed {
-            namespace: namespace.to_owned(),
+            namespace: context.namespace().to_owned(),
             name: name.to_owned(),
             cause: error.to_string(),
         }
@@ -87,18 +83,14 @@ pub async fn upsert_secret(
     }
 }
 
-pub async fn delete_secret(
-    client: &Client,
-    namespace: &str,
-    name: &str,
-) -> Result<(), KubernetesError> {
-    let api: Api<Secret> = Api::namespaced(client.clone(), namespace);
+pub async fn delete_secret(context: &KubeContext, name: &str) -> Result<(), KubernetesError> {
+    let api: Api<Secret> = Api::namespaced(context.client().clone(), context.namespace());
     api.delete(name, &DeleteParams::default())
         .await
         .map(|_| ())
         .map_err(|error| {
             KubeSecretError::DeleteFailed {
-                namespace: namespace.to_owned(),
+                namespace: context.namespace().to_owned(),
                 name: name.to_owned(),
                 cause: error.to_string(),
             }

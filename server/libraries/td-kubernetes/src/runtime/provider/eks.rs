@@ -13,6 +13,7 @@ use crate::runtime::gateway::resolver::SystemValues;
 use crate::runtime::provider::{
     CloudProvider, ClusterProvider, ContainerProvider, HostedProvider, Provider, Transaction,
 };
+use crate::runtime::secrets::{SecretGenerator, SecretPhase};
 use crate::core::system::exit::{Result, abort};
 
 pub struct EksProvider {}
@@ -138,6 +139,10 @@ impl Provider for EksProvider {
     }
 
     fn system_values(&self) -> Result<SystemValues> {
+        unreachable!("eks provider not yet implemented")
+    }
+
+    fn secret_generators(&self, _phase: SecretPhase) -> Vec<Box<dyn SecretGenerator>> {
         unreachable!("eks provider not yet implemented")
     }
 }

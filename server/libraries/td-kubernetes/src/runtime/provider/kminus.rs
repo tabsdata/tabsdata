@@ -37,7 +37,6 @@ use crate::runtime::instance::profile::{
 };
 use crate::runtime::instance::verify_manifest_compatibility;
 use crate::kube::api::require_configmap;
-use crate::runtime::reporting::build_kube_client;
 use crate::kube::kubeconfig::{
     build_kubeconfig, resolve_cluster_name, resolve_cluster_url, resolve_current_context,
     resolve_namespace,
@@ -48,6 +47,7 @@ use crate::runtime::provider::{
     Cluster, ClusterProvider, HostedProvider, Instance, LocalProvider, ProcessProvider, Provider,
     Transaction,
 };
+use crate::runtime::secrets::{KubeconfigSecretGenerator, SecretGenerator, SecretPhase};
 use crate::core::system::exit::{Result, abort};
 use crate::core::system::subprocess;
 use crate::core::system::subprocess::apply_detached_flags;
@@ -639,6 +639,15 @@ impl Provider for KminusProvider {
             instance_name,
         })
     }
+
+    fn secret_generators(&self, phase: SecretPhase) -> Vec<Box<dyn SecretGenerator>> {
+        match phase {
+            SecretPhase::Start => vec![Box::new(KubeconfigSecretGenerator::new(
+                self.cluster.kubefile(),
+            ))],
+            SecretPhase::Create => Vec::new(),
+        }
+    }
 }
 
 impl ProcessProvider for KminusProvider {}
@@ -659,11 +668,11 @@ impl KminusProvider {
             return abort(GeneralError);
         }
         let resolver = ConfigurationResolver::new(self.system_values()?);
-        let encoded = render_for_configmaps(&loaded, &resolver).await?;
+        let rendered = render_for_configmaps(&loaded, &resolver).await?;
         for (folder, data) in [
-            (KPROFILE_GLOBALS_FOLDER, encoded.globals),
-            (KPROFILE_PODS_FOLDER, encoded.pods),
-            (KPROFILE_CONFIGS_FOLDER, encoded.configs),
+            (KPROFILE_GLOBALS_FOLDER, rendered.globals),
+            (KPROFILE_PODS_FOLDER, rendered.pods),
+            (KPROFILE_CONFIGS_FOLDER, rendered.configs),
         ] {
             let folder_path = staging_profile.join(folder);
             if let Err(error) = fs::create_dir_all(&folder_path) {
@@ -686,12 +695,10 @@ impl KminusProvider {
 
     async fn start_instance_inner(&self, multi: &MultiProgress) -> Result {
         self.instance.start().await?;
-        let config = self.kube_config().await?;
-        let client = build_kube_client(&config)?;
-        let namespace = &config.default_namespace;
-        let globals = require_configmap(&client, namespace, CONFIGMAP_TABSDATA_GLOBALS).await?;
-        let pods = require_configmap(&client, namespace, CONFIGMAP_TABSDATA_PODS).await?;
-        let configs = require_configmap(&client, namespace, CONFIGMAP_TABSDATA_CONFIGS).await?;
+        let context = self.kube_context().await?;
+        let globals = require_configmap(&context, CONFIGMAP_TABSDATA_GLOBALS).await?;
+        let pods = require_configmap(&context, CONFIGMAP_TABSDATA_PODS).await?;
+        let configs = require_configmap(&context, CONFIGMAP_TABSDATA_CONFIGS).await?;
         let profile = parse_from_configmaps(&globals, &pods, &configs)?;
         start_workload(self, &profile, multi).await
     }
