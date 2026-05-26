@@ -36,4 +36,10 @@ pub enum KubePodError {
     DeletedBeforeReady { name: String } = 5005,
     #[error("Pod '{name}' failed")]
     Failed { name: String } = 5006,
+    #[error("Could not delete pod '{name}' in namespace '{namespace}': {cause}")]
+    DeleteFailed {
+        namespace: String,
+        name: String,
+        cause: String,
+    } = 5007,
 }

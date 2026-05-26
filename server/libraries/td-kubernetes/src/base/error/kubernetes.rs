@@ -14,6 +14,7 @@ pub mod cluster;
 pub mod configmap;
 pub mod job;
 pub mod kubeconfig;
+pub mod messaging;
 pub mod namespace;
 pub mod pod;
 pub mod podcontext;
@@ -26,6 +27,7 @@ pub use cluster::KubeClusterError;
 pub use configmap::KubeConfigMapError;
 pub use job::KubeJobError;
 pub use kubeconfig::KubeconfigError;
+pub use messaging::KubeMessagingError;
 pub use namespace::KubeNamespaceError;
 pub use pod::KubePodError;
 pub use podcontext::KubePodContextError;
@@ -43,6 +45,8 @@ pub enum KubernetesError {
     #[error(transparent)]
     Kubeconfig(#[from] KubeconfigError),
     #[error(transparent)]
+    Messaging(#[from] KubeMessagingError),
+    #[error(transparent)]
     Namespace(#[from] KubeNamespaceError),
     #[error(transparent)]
     Pod(#[from] KubePodError),
@@ -58,6 +62,7 @@ impl From<KubernetesError> for TdError {
             KubernetesError::ConfigMap(inner) => TdError::new(inner),
             KubernetesError::Job(inner) => TdError::new(inner),
             KubernetesError::Kubeconfig(inner) => TdError::new(inner),
+            KubernetesError::Messaging(inner) => TdError::new(inner),
             KubernetesError::Namespace(inner) => TdError::new(inner),
             KubernetesError::Pod(inner) => TdError::new(inner),
             KubernetesError::PodContext(inner) => TdError::new(inner),

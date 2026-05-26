@@ -45,6 +45,25 @@ pub async fn await_job_condition(
         })
 }
 
+pub async fn delete_job(
+    client: &Client,
+    namespace: &str,
+    name: &str,
+) -> Result<(), KubernetesError> {
+    let api: Api<Job> = Api::namespaced(client.clone(), namespace);
+    api.delete(name, &DeleteParams::default())
+        .await
+        .map(|_| ())
+        .map_err(|error| {
+            KubeJobError::DeleteFailed {
+                namespace: namespace.to_owned(),
+                name: name.to_owned(),
+                cause: error.to_string(),
+            }
+            .into()
+        })
+}
+
 pub async fn delete_jobs_by_labels(
     client: &Client,
     namespace: &str,

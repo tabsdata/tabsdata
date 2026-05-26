@@ -165,6 +165,8 @@ pub enum QueueError {
     SerdeError(#[from] serde_yaml::Error),
     #[error("An IO error occurred generating the message file: {0}")]
     IOError(#[from] Error),
+    #[error("Orchestrator backend error: {cause}")]
+    BackendError { cause: String },
 }
 
 #[derive(

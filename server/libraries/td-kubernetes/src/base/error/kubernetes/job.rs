@@ -36,4 +36,10 @@ pub enum KubeJobError {
     DeletedBeforeCompletion { name: String } = 5005,
     #[error("Job '{name}' failed")]
     Failed { name: String } = 5006,
+    #[error("Could not delete job '{name}' in namespace '{namespace}': {cause}")]
+    DeleteFailed {
+        namespace: String,
+        name: String,
+        cause: String,
+    } = 5007,
 }

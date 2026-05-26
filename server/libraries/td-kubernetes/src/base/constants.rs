@@ -43,6 +43,15 @@ pub const CONFIGMAP_TABSDATA_CONFIGS: &str =
 
 pub const TIER_LABEL: &str = "tabsdata.com/worker-tier";
 
+pub const POD_YAML_COMPONENT_LABEL: &str = "app.kubernetes.io/component";
+
+pub const POD_YAML_KIND_POD: &str = "Pod";
+pub const POD_YAML_KIND_JOB: &str = "Job";
+
+pub const POD_YAML_FIELD_KIND: &str = "kind";
+pub const POD_YAML_FIELD_METADATA: &str = "metadata";
+pub const POD_YAML_FIELD_LABELS: &str = "labels";
+
 pub const VALUE_Y: &str = "y";
 pub const VALUE_YES: &str = "yes";
 pub const VALUE_N: &str = "n";

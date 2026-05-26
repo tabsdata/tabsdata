@@ -45,6 +45,25 @@ pub async fn await_pod_condition(
         })
 }
 
+pub async fn delete_pod(
+    client: &Client,
+    namespace: &str,
+    name: &str,
+) -> Result<(), KubernetesError> {
+    let api: Api<Pod> = Api::namespaced(client.clone(), namespace);
+    api.delete(name, &DeleteParams::default())
+        .await
+        .map(|_| ())
+        .map_err(|error| {
+            KubePodError::DeleteFailed {
+                namespace: namespace.to_owned(),
+                name: name.to_owned(),
+                cause: error.to_string(),
+            }
+            .into()
+        })
+}
+
 pub async fn delete_pods_by_labels(
     client: &Client,
     namespace: &str,
