@@ -28,3 +28,10 @@ pub fn build_kube_client(config: &Config) -> Result<Client, KubernetesError> {
     Client::try_from(config.clone())
         .map_err(|error| KubeClientError::BuildFailed(error.to_string()).into())
 }
+
+pub async fn build_incluster_kube_client() -> Result<Client, KubernetesError> {
+    let config = Config::incluster_env()
+        .map_err(|error| KubeClientError::InclusterConfigFailed(error.to_string()))?;
+    Client::try_from(config)
+        .map_err(|error| KubeClientError::BuildFailed(error.to_string()).into())
+}

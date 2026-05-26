@@ -9,7 +9,7 @@ pub mod job;
 pub mod namespace;
 pub mod pod;
 
-pub use client::{build_kube_client, install_crypto_provider};
+pub use client::{build_incluster_kube_client, build_kube_client, install_crypto_provider};
 pub use cluster::ensure_cluster_reachable;
 pub use configmap::{configmap_exists, create_configmap, delete_configmap, require_configmap};
 pub use namespace::ensure_namespace_exists;

@@ -8747,6 +8747,7 @@ dependencies = [
  "td-database",
  "td-error",
  "td-execution",
+ "td-kubernetes",
  "td-objects",
  "td-process",
  "td-queries",

@@ -10,4 +10,6 @@ pub enum KubeClientError {
     BuildFailed(String) = 5000,
     #[error("Could not serialize the active context: {0}")]
     ContextSerializeFailed(String) = 5001,
+    #[error("Could not load in-cluster Kubernetes config: {0}")]
+    InclusterConfigFailed(String) = 5002,
 }

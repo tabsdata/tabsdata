@@ -11,6 +11,7 @@ use std::time::Duration;
 use td_common::server::{
     Orchestrator, OrchestratorMessagingProvider, SupervisorMessagingProvider,
 };
+use td_kubernetes::runtime::gateway::messaging::KubernetesOrchestratorMessagingProvider;
 use td_common::server_runner::ServerRunner;
 use td_common::status::ExitStatus;
 use td_database::error::DbError;
@@ -163,7 +164,15 @@ pub fn run() {
             let messaging_provider: Box<dyn OrchestratorMessagingProvider> =
                 match config.orchestrator {
                     Orchestrator::Supervisor => Box::new(SupervisorMessagingProvider::new()),
-                    Orchestrator::Kubernetes => todo!("Kubernetes orchestrator not yet wired"),
+                    Orchestrator::Kubernetes => {
+                        let provider = KubernetesOrchestratorMessagingProvider::from_pod_environment()
+                            .await
+                            .map_err(|e| {
+                                error!("Error creating kubernetes messaging provider: {e:#?}");
+                                ExitStatus::GeneralError
+                            })?;
+                        Box::new(provider)
+                    }
                 };
             let orchestrator_message_queue = Arc::new(
                 messaging_provider
