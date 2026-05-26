@@ -7,9 +7,10 @@
 
 use std::ops::Deref;
 use std::str::FromStr;
+use serde_yaml::Value;
 use td_common::server::{
-    MessageAction, RequestMessagePayload, OrchestratorMessagePayload, OrchestratorMessageQueue,
-    OrchestratorMessageQueueHandle, WorkerName,
+    MessageAction, OrchestratorMessage, OrchestratorMessagePayload, OrchestratorMessageQueue,
+    OrchestratorMessageQueueHandle, RequestMessagePayload, WorkerName,
 };
 use td_database::dynamic::DynamicConnection;
 use td_error::{ApiError, TdError, api_error};
@@ -71,6 +72,7 @@ async fn unlock_workers_request_infallible(
                     unlock_function_runner_worker(
                         &mut *conn,
                         message_queue.deref(),
+                        &message,
                         worker_id,
                         payload,
                     )
@@ -80,6 +82,7 @@ async fn unlock_workers_request_infallible(
                     unlock_cron_trigger_workers(
                         &mut *conn,
                         message_queue.deref(),
+                        &message,
                         worker_id,
                         payload,
                     )
@@ -89,6 +92,7 @@ async fn unlock_workers_request_infallible(
                     unlock_stage_trigger_workers(
                         &mut *conn,
                         message_queue.deref(),
+                        &message,
                         worker_id,
                         payload,
                     )
@@ -109,7 +113,7 @@ async fn unlock_workers_request_infallible(
                 );
                 rollback_count += 1;
                 message_queue
-                    .rollback(&worker_id.to_string())
+                    .rollback(&message)
                     .await
                     .unwrap_or_else(
                         |e| error!(worker_id = %worker_id, "dispatch: rollback failed: {e:#?}"),
@@ -142,6 +146,7 @@ async fn unlock_workers_request_infallible(
 pub async fn unlock_function_runner_worker(
     conn: &mut DynamicConnection<'_>,
     message_queue: &dyn OrchestratorMessageQueue,
+    message: &OrchestratorMessage<Value>,
     worker_id: WorkerId,
     payload: &RequestMessagePayload,
 ) -> Result<(), TdError> {
@@ -204,7 +209,7 @@ pub async fn unlock_function_runner_worker(
         }
     };
 
-    commit_unlock(conn, message_queue, &worker_id, &lfr.id, &pfr.id, branch).await
+    commit_unlock(conn, message_queue, message, &worker_id, &lfr.id, &pfr.id, branch).await
 }
 
 /// Which dispatch path this worker is on. Decides rollback semantics on
@@ -228,6 +233,7 @@ impl DispatchBranch {
 async fn commit_unlock(
     conn: &mut DynamicConnection<'_>,
     message_queue: &dyn OrchestratorMessageQueue,
+    message: &OrchestratorMessage<Value>,
     worker_id: &WorkerId,
     lfr_id: &LogicalFunctionRunId,
     pfr_id: &PhysicalFunctionRunId,
@@ -240,7 +246,7 @@ async fn commit_unlock(
             .await
             .map_err(|e| e.to_string())?;
         message_queue
-            .commit(&worker_id.to_string())
+            .commit(message)
             .await
             .map_err(|e| e.to_string())?;
         Ok(())
@@ -323,12 +329,14 @@ async fn rollback_initial_function_run(
 pub async fn unlock_cron_trigger_workers(
     conn: &mut DynamicConnection<'_>,
     message_queue: &dyn OrchestratorMessageQueue,
+    message: &OrchestratorMessage<Value>,
     worker_id: WorkerId,
     _payload: &RequestMessagePayload,
 ) -> Result<(), TdError> {
     unlock_simple_worker(
         conn,
         message_queue,
+        message,
         worker_id,
         "CronTrigger",
         "cron_trigger",
@@ -346,12 +354,14 @@ pub async fn unlock_cron_trigger_workers(
 pub async fn unlock_stage_trigger_workers(
     conn: &mut DynamicConnection<'_>,
     message_queue: &dyn OrchestratorMessageQueue,
+    message: &OrchestratorMessage<Value>,
     worker_id: WorkerId,
     _payload: &RequestMessagePayload,
 ) -> Result<(), TdError> {
     unlock_simple_worker(
         conn,
         message_queue,
+        message,
         worker_id,
         "StageTrigger",
         "stage_trigger",
@@ -362,6 +372,7 @@ pub async fn unlock_stage_trigger_workers(
 async fn unlock_simple_worker(
     conn: &mut DynamicConnection<'_>,
     message_queue: &dyn OrchestratorMessageQueue,
+    message: &OrchestratorMessage<Value>,
     worker_id: WorkerId,
     error_label: &str,
     log_kind: &str,
@@ -377,7 +388,7 @@ async fn unlock_simple_worker(
             )
         })?;
     message_queue
-        .commit(&worker_id.to_string())
+        .commit(message)
         .await
         .map_err(|e| {
             api_error!(

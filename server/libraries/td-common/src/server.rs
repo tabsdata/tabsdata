@@ -721,12 +721,12 @@ impl OrchestratorMessageQueue for OrchestratorMessageQueueHandle {
         self.0.put(id, payload).await
     }
 
-    async fn commit(&self, id: &str) -> Result<(), QueueError> {
-        self.0.commit(id).await
+    async fn commit(&self, message: &OrchestratorMessage<Value>) -> Result<(), QueueError> {
+        self.0.commit(message).await
     }
 
-    async fn rollback(&self, id: &str) -> Result<(), QueueError> {
-        self.0.rollback(id).await
+    async fn rollback(&self, message: &OrchestratorMessage<Value>) -> Result<(), QueueError> {
+        self.0.rollback(message).await
     }
 
     async fn locked_messages(&self) -> Vec<OrchestratorMessage<Value>> {
@@ -744,10 +744,10 @@ pub trait OrchestratorMessageQueue: Send + Sync {
     ) -> Result<OrchestratorMessage<Value>, QueueError>;
 
     /// Commits a message in the queue.
-    async fn commit(&self, id: &str) -> Result<(), QueueError>;
+    async fn commit(&self, message: &OrchestratorMessage<Value>) -> Result<(), QueueError>;
 
     /// Rollbacks a message in the queue.
-    async fn rollback(&self, id: &str) -> Result<(), QueueError>;
+    async fn rollback(&self, message: &OrchestratorMessage<Value>) -> Result<(), QueueError>;
 
     async fn locked_messages(&self) -> Vec<OrchestratorMessage<Value>>;
 }
@@ -787,7 +787,8 @@ impl OrchestratorMessageQueue for FileSupervisorMessageQueue {
         Ok(message)
     }
 
-    async fn commit(&self, id: &str) -> Result<(), QueueError> {
+    async fn commit(&self, message: &OrchestratorMessage<Value>) -> Result<(), QueueError> {
+        let id = message.id.as_str();
         if !self.check(id) {
             return Err(MessageNonExisting { id: id.to_string() });
         };
@@ -801,7 +802,8 @@ impl OrchestratorMessageQueue for FileSupervisorMessageQueue {
         Ok(())
     }
 
-    async fn rollback(&self, id: &str) -> Result<(), QueueError> {
+    async fn rollback(&self, message: &OrchestratorMessage<Value>) -> Result<(), QueueError> {
+        let id = message.id.as_str();
         if !self.check(id) {
             return Err(MessageNonExisting { id: id.to_string() });
         };
@@ -896,7 +898,7 @@ mod tests_queue {
             "File '.yaml' exists and it shouldn't"
         );
 
-        queue.commit(&message.id).await.unwrap();
+        queue.commit(&message).await.unwrap();
 
         assert!(
             !lock_message_path.exists(),
@@ -950,7 +952,7 @@ mod tests_queue {
             "File '.yaml' exists and it shouldn't"
         );
 
-        queue.rollback(&message.id).await.unwrap();
+        queue.rollback(&message).await.unwrap();
 
         assert!(
             !lock_message_path.exists(),
@@ -987,17 +989,35 @@ mod tests_queue {
     #[tokio::test]
     async fn test_commit_non_existing_message() {
         let queue = FileSupervisorMessageQueue::new().await.unwrap();
-        let message = "test_message4";
-        let result = queue.commit(message).await;
+        let message = synthetic_request_message("test_message4");
+        let result = queue.commit(&message).await;
         assert!(matches!(result, Err(MessageNonExisting { .. })));
     }
 
     #[tokio::test]
     async fn test_rollback_non_existing_message() {
         let queue = FileSupervisorMessageQueue::new().await.unwrap();
-        let message = "test_message5";
-        let result = queue.commit(message).await;
+        let message = synthetic_request_message("test_message5");
+        let result = queue.commit(&message).await;
         assert!(matches!(result, Err(MessageNonExisting { .. })));
+    }
+
+    fn synthetic_request_message(id: &str) -> OrchestratorMessage<Value> {
+        let payload = RequestMessagePayload::<Value> {
+            class: WorkerClass::default(),
+            worker: String::new(),
+            run_id: id.to_string(),
+            action: MessageAction::default(),
+            arguments: Vec::new(),
+            callback: None,
+            context: None,
+        };
+        OrchestratorMessage::new(
+            id.to_string(),
+            format!("{id}{INITIAL_CALL}"),
+            PathBuf::new(),
+            OrchestratorRequestMessagePayload(payload),
+        )
     }
 
     #[test]
