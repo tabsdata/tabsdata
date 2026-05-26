@@ -4,7 +4,7 @@
 
 use crate::scheduler::layers::dispatch::unlock_workers_request;
 use ta_services::factory::service_factory;
-use td_common::server::{FileWorkerMessageQueue, WorkerMessageQueue};
+use td_common::server::WorkerMessageQueueHandle;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::{layer, layers};
@@ -14,21 +14,18 @@ use td_tower::{layer, layers};
     request = (),
     response = (),
     connection = TransactionProvider,
-    context = FileWorkerMessageQueue,
+    context = WorkerMessageQueueHandle,
 )]
 fn service() {
-    layers!(commit::<_, FileWorkerMessageQueue>())
+    layers!(commit())
 }
 
 // Requires:
 // - Transaction connection
-// - T(MessageQueue)
+// - WorkerMessageQueueHandle (extracted via Ref)
 #[layer]
-pub fn commit<T>()
-where
-    T: WorkerMessageQueue,
-{
-    layers!(from_fn(unlock_workers_request::<T>))
+pub fn commit() {
+    layers!(from_fn(unlock_workers_request))
 }
 
 #[cfg(test)]
@@ -41,7 +38,10 @@ mod tests {
     use ta_services::factory::ServiceFactory;
     use ta_services::service::TdService;
     use td_common::files::{YAML_EXTENSION, get_files_in_folder_sorted_by_name};
-    use td_common::server::{PayloadType, SupervisorMessage};
+    use std::sync::Arc;
+    use td_common::server::{
+        FileWorkerMessageQueue, PayloadType, SupervisorMessage, WorkerMessageQueueHandle,
+    };
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::Buildable;
@@ -69,9 +69,7 @@ mod tests {
         DispatchService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<(), ()>(&[type_of_val(
-                &unlock_workers_request::<FileWorkerMessageQueue>,
-            )]);
+            .assert_service::<(), ()>(&[type_of_val(&unlock_workers_request)]);
         Ok(())
     }
 
@@ -116,7 +114,10 @@ mod tests {
         let service = ExecuteFunctionService::with_defaults(db.clone()).service();
         let _ = service.raw_oneshot(request).await?;
 
-        let context = SchedulerContext::with_defaults(db.clone());
+        let file_worker_queue = Arc::new(FileWorkerMessageQueue::default());
+        let mut context = SchedulerContext::with_defaults(db.clone());
+        context.worker_queue =
+            Arc::new(WorkerMessageQueueHandle::new(file_worker_queue.clone()));
         RequestService::build(&context)
             .service()
             .oneshot(())
@@ -124,7 +125,7 @@ mod tests {
 
         let created_messages = context
             .worker_queue
-            .locked_messages::<serde_yaml::Value>()
+            .locked_messages()
             .await;
         assert_eq!(created_messages.len(), 1);
         let created_message = &created_messages[0];
@@ -137,12 +138,12 @@ mod tests {
 
         let locked_messages = context
             .worker_queue
-            .locked_messages::<serde_yaml::Value>()
+            .locked_messages()
             .await;
         assert_eq!(locked_messages.len(), 0);
 
         let files = get_files_in_folder_sorted_by_name(
-            &context.worker_queue.location,
+            &file_worker_queue.location,
             Some(YAML_EXTENSION),
         )
         .unwrap();

@@ -39,6 +39,7 @@ use std::marker::PhantomData;
 use std::option::Option;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::sync::Arc;
 use strum::{AsRefStr, Display, EnumString};
 use td_error::td_error;
 use tokio::{fs, io};
@@ -638,14 +639,64 @@ impl Default for FileWorkerMessageQueue {
     }
 }
 
+#[derive(Clone)]
+pub struct WorkerMessageQueueHandle(Arc<dyn WorkerMessageQueue>);
+
+impl WorkerMessageQueueHandle {
+    pub fn new(queue: Arc<dyn WorkerMessageQueue>) -> Self {
+        Self(queue)
+    }
+
+    pub fn into_arc(self) -> Arc<dyn WorkerMessageQueue> {
+        self.0
+    }
+}
+
+impl std::ops::Deref for WorkerMessageQueueHandle {
+    type Target = dyn WorkerMessageQueue;
+    fn deref(&self) -> &Self::Target {
+        &*self.0
+    }
+}
+
+#[cfg(feature = "test-utils")]
+impl Default for WorkerMessageQueueHandle {
+    fn default() -> Self {
+        Self::new(Arc::new(FileWorkerMessageQueue::default()))
+    }
+}
+
 #[async_trait]
-pub trait WorkerMessageQueue: Send + Sync + Sized + 'static {
-    /// Puts a message in the queue.
-    async fn put<T: Serialize + Clone + Send + Sync>(
+impl WorkerMessageQueue for WorkerMessageQueueHandle {
+    async fn put(
         &self,
         id: String,
-        payload: RequestMessagePayload<T>,
-    ) -> Result<SupervisorMessage<T>, QueueError>;
+        payload: RequestMessagePayload<Value>,
+    ) -> Result<SupervisorMessage<Value>, QueueError> {
+        self.0.put(id, payload).await
+    }
+
+    async fn commit(&self, id: &str) -> Result<(), QueueError> {
+        self.0.commit(id).await
+    }
+
+    async fn rollback(&self, id: &str) -> Result<(), QueueError> {
+        self.0.rollback(id).await
+    }
+
+    async fn locked_messages(&self) -> Vec<SupervisorMessage<Value>> {
+        self.0.locked_messages().await
+    }
+}
+
+#[async_trait]
+pub trait WorkerMessageQueue: Send + Sync {
+    /// Puts a message in the queue.
+    async fn put(
+        &self,
+        id: String,
+        payload: RequestMessagePayload<Value>,
+    ) -> Result<SupervisorMessage<Value>, QueueError>;
 
     /// Commits a message in the queue.
     async fn commit(&self, id: &str) -> Result<(), QueueError>;
@@ -653,18 +704,16 @@ pub trait WorkerMessageQueue: Send + Sync + Sized + 'static {
     /// Rollbacks a message in the queue.
     async fn rollback(&self, id: &str) -> Result<(), QueueError>;
 
-    async fn locked_messages<T: DeserializeOwned + Clone + Send + Sync>(
-        &self,
-    ) -> Vec<SupervisorMessage<T>>;
+    async fn locked_messages(&self) -> Vec<SupervisorMessage<Value>>;
 }
 
 #[async_trait]
 impl WorkerMessageQueue for FileWorkerMessageQueue {
-    async fn put<T: Serialize + Clone + Send + Sync>(
+    async fn put(
         &self,
         id: String,
-        payload: RequestMessagePayload<T>,
-    ) -> Result<SupervisorMessage<T>, QueueError> {
+        payload: RequestMessagePayload<Value>,
+    ) -> Result<SupervisorMessage<Value>, QueueError> {
         if self.check(&id) {
             return Err(MessageAlreadyExisting { id });
         };
@@ -718,14 +767,12 @@ impl WorkerMessageQueue for FileWorkerMessageQueue {
         Ok(())
     }
 
-    async fn locked_messages<T: DeserializeOwned + Clone + Send + Sync>(
-        &self,
-    ) -> Vec<SupervisorMessage<T>> {
+    async fn locked_messages(&self) -> Vec<SupervisorMessage<Value>> {
         get_files_in_folder_sorted_by_name(&self.location, Some(LOCK_EXTENSION))
             .unwrap_or_else(|_| Vec::new())
             .into_iter()
             .filter_map(|file| {
-                match SupervisorMessage::<T>::try_from((file.clone(), PayloadType::Request)) {
+                match SupervisorMessage::<Value>::try_from((file.clone(), PayloadType::Request)) {
                     Ok(msg) => Some(msg),
                     Err(e) => {
                         error!("Failed to extract message from file {:?}: {:?}", file, e);

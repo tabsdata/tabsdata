@@ -8,7 +8,8 @@
 use std::ops::Deref;
 use std::str::FromStr;
 use td_common::server::{
-    MessageAction, RequestMessagePayload, SupervisorMessagePayload, WorkerMessageQueue, WorkerName,
+    MessageAction, RequestMessagePayload, SupervisorMessagePayload, WorkerMessageQueue,
+    WorkerMessageQueueHandle, WorkerName,
 };
 use td_database::dynamic::DynamicConnection;
 use td_error::{ApiError, TdError, api_error};
@@ -37,19 +38,19 @@ pub async fn notify_dispatcher(notify: Ref<SchedulerNotify>) -> Result<(), TdErr
     level = "debug",
     err(Debug)
 )]
-pub async fn unlock_workers_request<T: WorkerMessageQueue>(
-    message_queue: Ref<T>,
+pub async fn unlock_workers_request(
+    message_queue: Ref<WorkerMessageQueueHandle>,
     mut conn: MutRef<DynamicConnection<'static>>,
 ) -> Result<(), TdError> {
     unlock_workers_request_infallible(message_queue, &mut conn).await;
     Ok(())
 }
 
-async fn unlock_workers_request_infallible<T: WorkerMessageQueue>(
-    message_queue: Ref<T>,
+async fn unlock_workers_request_infallible(
+    message_queue: Ref<WorkerMessageQueueHandle>,
     conn: &mut DynamicConnection<'_>,
 ) {
-    let messages = message_queue.locked_messages::<serde_yaml::Value>().await;
+    let messages = message_queue.locked_messages().await;
 
     let message_count = messages.len();
     if message_count > 0 {
@@ -138,9 +139,9 @@ async fn unlock_workers_request_infallible<T: WorkerMessageQueue>(
     level = "debug",
     err(Debug)
 )]
-pub async fn unlock_function_runner_worker<T: WorkerMessageQueue>(
+pub async fn unlock_function_runner_worker(
     conn: &mut DynamicConnection<'_>,
-    message_queue: &T,
+    message_queue: &dyn WorkerMessageQueue,
     worker_id: WorkerId,
     payload: &RequestMessagePayload,
 ) -> Result<(), TdError> {
@@ -224,9 +225,9 @@ impl DispatchBranch {
     }
 }
 
-async fn commit_unlock<T: WorkerMessageQueue>(
+async fn commit_unlock(
     conn: &mut DynamicConnection<'_>,
-    message_queue: &T,
+    message_queue: &dyn WorkerMessageQueue,
     worker_id: &WorkerId,
     lfr_id: &LogicalFunctionRunId,
     pfr_id: &PhysicalFunctionRunId,
@@ -319,9 +320,9 @@ async fn rollback_initial_function_run(
     level = "debug",
     err(Debug)
 )]
-pub async fn unlock_cron_trigger_workers<T: WorkerMessageQueue>(
+pub async fn unlock_cron_trigger_workers(
     conn: &mut DynamicConnection<'_>,
-    message_queue: &T,
+    message_queue: &dyn WorkerMessageQueue,
     worker_id: WorkerId,
     _payload: &RequestMessagePayload,
 ) -> Result<(), TdError> {
@@ -342,9 +343,9 @@ pub async fn unlock_cron_trigger_workers<T: WorkerMessageQueue>(
     level = "debug",
     err(Debug)
 )]
-pub async fn unlock_stage_trigger_workers<T: WorkerMessageQueue>(
+pub async fn unlock_stage_trigger_workers(
     conn: &mut DynamicConnection<'_>,
-    message_queue: &T,
+    message_queue: &dyn WorkerMessageQueue,
     worker_id: WorkerId,
     _payload: &RequestMessagePayload,
 ) -> Result<(), TdError> {
@@ -358,9 +359,9 @@ pub async fn unlock_stage_trigger_workers<T: WorkerMessageQueue>(
     .await
 }
 
-async fn unlock_simple_worker<T: WorkerMessageQueue>(
+async fn unlock_simple_worker(
     conn: &mut DynamicConnection<'_>,
-    message_queue: &T,
+    message_queue: &dyn WorkerMessageQueue,
     worker_id: WorkerId,
     error_label: &str,
     log_kind: &str,

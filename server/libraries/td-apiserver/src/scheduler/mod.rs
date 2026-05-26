@@ -5,7 +5,7 @@
 use crate::scheduler::v1::{FunctionDispatcherV1, FunctionRequesterV1};
 use async_trait::async_trait;
 use std::sync::Arc;
-use td_common::server::FileWorkerMessageQueue;
+use td_common::server::WorkerMessageQueueHandle;
 use td_common::server_runner::ServerRunnable;
 use td_database::pool::TdPool;
 use td_execution::SchedulerNotify;
@@ -24,7 +24,7 @@ impl SchedulerCtx {
     pub fn new(
         db: TdPool,
         storage: Arc<Storage>,
-        worker_queue: Arc<FileWorkerMessageQueue>,
+        worker_queue: Arc<WorkerMessageQueueHandle>,
         internal_addresses: Arc<InternalServerAddresses>,
         scheduler_notify: SchedulerNotify,
     ) -> Self {

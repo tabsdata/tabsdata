@@ -16,7 +16,7 @@ use std::ops::Deref;
 use td_common::id;
 use td_common::server::{
     Callback, HttpCallback, HttpRequest, MessageAction, RequestMessagePayload, WorkerClass,
-    WorkerMessageQueue, WorkerName,
+    WorkerMessageQueueHandle, WorkerName,
 };
 use td_database::dynamic::DynamicConnection;
 use td_error::{ApiError, TdError, api_error, td_error};
@@ -290,8 +290,8 @@ pub async fn pfr_ids_from_minted_dispatch(
     level = "debug",
     err(Debug)
 )]
-pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessageQueue>(
-    message_queue: Ref<T>,
+pub async fn create_locked_function_runner_workers_start_request(
+    message_queue: Ref<WorkerMessageQueueHandle>,
     storage: Ref<Storage>,
     server_addresses: Ref<InternalServerAddresses>,
     mut conn: MutRef<DynamicConnection<'static>>,
@@ -756,14 +756,16 @@ pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessag
 
         // Build message payload
         // TODO ADD get_states to states
-        let message_payload = RequestMessagePayload {
+        let message_payload = RequestMessagePayload::<serde_yaml::Value> {
             class: WorkerClass::Ephemeral,
             worker: WorkerName::Function.as_ref().to_string(),
             run_id: worker_id.to_string(),
             action: MessageAction::Start,
             arguments: Vec::new(),
             callback: Some(callback),
-            context: Some(function_input),
+            context: Some(serde_yaml::to_value(&function_input).map_err(|e| {
+                api_error!(ApiError::InternalError, "Failed to serialize function input: {e}")
+            })?),
         };
 
         // Create worker message
@@ -806,8 +808,8 @@ pub async fn create_locked_function_runner_workers_start_request<T: WorkerMessag
     level = "debug",
     err(Debug)
 )]
-pub async fn create_locked_cron_trigger_workers_start_request<T: WorkerMessageQueue>(
-    message_queue: Ref<T>,
+pub async fn create_locked_cron_trigger_workers_start_request(
+    message_queue: Ref<WorkerMessageQueueHandle>,
     server_addresses: Ref<InternalServerAddresses>,
     cron_trigger_workers: Ref<Vec<WorkerDBWithNames>>,
 ) -> Result<(), TdError> {
@@ -857,14 +859,16 @@ pub async fn create_locked_cron_trigger_workers_start_request<T: WorkerMessageQu
 
                 // Build message payload
                 // TODO ADD get_states to states
-                let message_payload = RequestMessagePayload {
+                let message_payload = RequestMessagePayload::<serde_yaml::Value> {
                     class: WorkerClass::Ephemeral,
                     worker: WorkerName::CronTrigger.as_ref().to_string(),
                     run_id: worker_id.clone(),
                     action: MessageAction::Start,
                     arguments: Vec::new(),
                     callback: Some(callback),
-                    context: Some(context),
+                    context: Some(serde_yaml::to_value(&context).map_err(|e| {
+                        api_error!(ApiError::InternalError, "Failed to serialize cron trigger input: {e}")
+                    })?),
                 };
 
                 // Add it to the queue
@@ -883,8 +887,8 @@ pub async fn create_locked_cron_trigger_workers_start_request<T: WorkerMessageQu
     level = "debug",
     err(Debug)
 )]
-pub async fn create_locked_cron_trigger_workers_stop_request<T: WorkerMessageQueue>(
-    message_queue: Ref<T>,
+pub async fn create_locked_cron_trigger_workers_stop_request(
+    message_queue: Ref<WorkerMessageQueueHandle>,
     server_addresses: Ref<InternalServerAddresses>,
     cron_trigger_workers: Ref<Vec<WorkerDBWithNames>>,
 ) -> Result<(), TdError> {
@@ -930,8 +934,8 @@ pub async fn create_locked_cron_trigger_workers_stop_request<T: WorkerMessageQue
     level = "debug",
     err(Debug)
 )]
-pub async fn create_locked_stage_trigger_workers_start_request<T: WorkerMessageQueue>(
-    message_queue: Ref<T>,
+pub async fn create_locked_stage_trigger_workers_start_request(
+    message_queue: Ref<WorkerMessageQueueHandle>,
     storage: Ref<Storage>,
     server_addresses: Ref<InternalServerAddresses>,
     mut conn: MutRef<DynamicConnection<'static>>,
@@ -1058,14 +1062,16 @@ pub async fn create_locked_stage_trigger_workers_start_request<T: WorkerMessageQ
 
         // Build message payload
         // TODO ADD get_states to states
-        let message_payload = RequestMessagePayload {
+        let message_payload = RequestMessagePayload::<serde_yaml::Value> {
             class: WorkerClass::Ephemeral,
             worker: WorkerName::StageTrigger.as_ref().to_string(),
             run_id: worker_id.clone(),
             action: MessageAction::Start,
             arguments: Vec::new(),
             callback: Some(callback),
-            context: Some(context),
+            context: Some(serde_yaml::to_value(&context).map_err(|e| {
+                api_error!(ApiError::InternalError, "Failed to serialize stage trigger input: {e}")
+            })?),
         };
 
         // Add it to the queue
@@ -1080,8 +1086,8 @@ pub async fn create_locked_stage_trigger_workers_start_request<T: WorkerMessageQ
     level = "debug",
     err(Debug)
 )]
-pub async fn create_locked_stage_trigger_workers_stop_request<T: WorkerMessageQueue>(
-    message_queue: Ref<T>,
+pub async fn create_locked_stage_trigger_workers_stop_request(
+    message_queue: Ref<WorkerMessageQueueHandle>,
     server_addresses: Ref<InternalServerAddresses>,
     stage_trigger_workers: Ref<Vec<WorkerDBWithNames>>,
 ) -> Result<(), TdError> {

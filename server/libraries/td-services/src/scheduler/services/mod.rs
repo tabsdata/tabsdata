@@ -7,6 +7,8 @@ use crate::scheduler::services::request::RequestService;
 use axum::extract::FromRef;
 use std::sync::Arc;
 use ta_services::factory::{FieldAccessors, ServiceFactory};
+use td_common::server::WorkerMessageQueueHandle;
+#[cfg(feature = "test-utils")]
 use td_common::server::FileWorkerMessageQueue;
 use td_database::pool::TdPool;
 use td_execution::SchedulerNotify;
@@ -26,7 +28,7 @@ pub struct FunctionSchedulerServices {
 pub struct SchedulerContext {
     pub db: TdPool,
     pub storage: Arc<Storage>,
-    pub worker_queue: Arc<FileWorkerMessageQueue>,
+    pub worker_queue: Arc<WorkerMessageQueueHandle>,
     pub internal_addresses: Arc<InternalServerAddresses>,
     pub scheduler_notify: Arc<SchedulerNotify>,
 }
@@ -37,7 +39,9 @@ impl SchedulerContext {
         Self {
             db,
             storage: Arc::new(Storage::default()),
-            worker_queue: Arc::new(FileWorkerMessageQueue::default()),
+            worker_queue: Arc::new(WorkerMessageQueueHandle::new(Arc::new(
+                FileWorkerMessageQueue::default(),
+            ))),
             internal_addresses: Arc::new(InternalServerAddresses::default()),
             scheduler_notify: Arc::new(SchedulerNotify::new()),
         }

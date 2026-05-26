@@ -8,7 +8,7 @@ use crate::config::{Config, DbSchema, Params};
 use crate::scheduler::{FunctionDispatcher, FunctionRequester, SchedulerCtx};
 use std::sync::Arc;
 use std::time::Duration;
-use td_common::server::FileWorkerMessageQueue;
+use td_common::server::{FileWorkerMessageQueue, WorkerMessageQueueHandle};
 use td_common::server_runner::ServerRunner;
 use td_common::status::ExitStatus;
 use td_database::error::DbError;
@@ -157,11 +157,14 @@ pub fn run() {
             let storage = Arc::new(storage);
 
             // Create worker message queue
-            let worker_message_queue = FileWorkerMessageQueue::new().await.map_err(|e| {
-                error!("Error creating worker message queue: {e:#?}");
-                ExitStatus::GeneralError
-            })?;
-            let worker_message_queue = Arc::new(worker_message_queue);
+            let file_worker_message_queue =
+                FileWorkerMessageQueue::new().await.map_err(|e| {
+                    error!("Error creating worker message queue: {e:#?}");
+                    ExitStatus::GeneralError
+                })?;
+            let worker_message_queue = Arc::new(WorkerMessageQueueHandle::new(Arc::new(
+                file_worker_message_queue,
+            )));
 
             // Create runtime context
             let runtime_context = RuntimeContext::new().await.map_err(|e| {

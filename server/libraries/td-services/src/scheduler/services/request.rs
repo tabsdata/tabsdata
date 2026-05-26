@@ -14,7 +14,7 @@ use crate::scheduler::layers::request::{
     materialize_replay_dispatch, pfr_ids_from_minted_dispatch,
 };
 use ta_services::factory::service_factory;
-use td_common::server::{FileWorkerMessageQueue, WorkerMessageQueue};
+use td_common::server::WorkerMessageQueueHandle;
 use td_execution::SchedulerNotify;
 use td_objects::dxo::logical::{LogicalFunctionRunDB, UpdateLogicalFunctionRunDB};
 use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, UpdatePhysicalFunctionRunDB};
@@ -37,7 +37,7 @@ use td_tower::{layer, layers};
     response = (),
     connection = TransactionProvider,
     context = Storage,
-    context = FileWorkerMessageQueue,
+    context = WorkerMessageQueueHandle,
     context = InternalServerAddresses,
     context = SchedulerNotify,
 )]
@@ -51,19 +51,19 @@ fn service() {
         // Request function runners that need to be started — initial
         // dispatch path (Scheduled/ReScheduled LFRs, mint + bind + flip
         // LFR.status to Requested).
-        request_function_runners::<_, FileWorkerMessageQueue>(),
+        request_function_runners(),
         // Request function runners for replay attempts — sticky LFRs
         // whose pointer was flipped to Requested by the replay
         // endpoint. No mint, no bind, no LFR.status flip.
-        request_replay_function_runners::<_, FileWorkerMessageQueue>(),
+        request_replay_function_runners(),
         // Stop cron trigger runners that need to be stopped
-        stop_cron_trigger_runners::<_, FileWorkerMessageQueue>(),
+        stop_cron_trigger_runners(),
         // Request cron trigger runners that need to be started
-        request_cron_trigger_runners::<_, FileWorkerMessageQueue>(),
+        request_cron_trigger_runners(),
         // Stop stage trigger runners that need to be stopped
-        stop_stage_trigger_runners::<_, FileWorkerMessageQueue>(),
+        stop_stage_trigger_runners(),
         // Request stage trigger runners that need to be started
-        request_stage_trigger_runners::<_, FileWorkerMessageQueue>(),
+        request_stage_trigger_runners(),
         from_fn(notify_dispatcher),
     )
 }
@@ -74,9 +74,7 @@ fn service() {
 // - T(MessageQueue)
 // - ServerUrl
 #[layer]
-pub fn request_function_runners<T>()
-where
-    T: WorkerMessageQueue,
+pub fn request_function_runners()
 {
     layers!(
         // LFR-rooted readiness — Pending/ReScheduled LFRs whose logical
@@ -91,7 +89,7 @@ where
         // builder consumes (one round-trip; reuses the readiness projection).
         from_fn(enrich_minted_dispatch),
         // Create a locked message for each minted FR.
-        from_fn(create_locked_function_runner_workers_start_request::<T>),
+        from_fn(create_locked_function_runner_workers_start_request),
         // And insert generated messages.
         from_fn(insert_vec::<WorkerDB>),
         // Flip LFR.status Scheduled/ReScheduled → Requested.
@@ -129,9 +127,7 @@ where
 // - T(MessageQueue)
 // - ServerUrl
 #[layer]
-pub fn request_replay_function_runners<T>()
-where
-    T: WorkerMessageQueue,
+pub fn request_replay_function_runners()
 {
     layers!(
         // Physical-side readiness — PFRs in `Requested` with no WorkerDB.
@@ -139,7 +135,7 @@ where
         // Build the MintedDispatch shape from rows that already exist.
         from_fn(materialize_replay_dispatch),
         from_fn(enrich_minted_dispatch),
-        from_fn(create_locked_function_runner_workers_start_request::<T>),
+        from_fn(create_locked_function_runner_workers_start_request),
         from_fn(insert_vec::<WorkerDB>),
         // Flip PFR.status Requested → Dispatched. No LFR.status flip
         // (sticky terminal stays put).
@@ -159,9 +155,7 @@ where
 // - T(MessageQueue)
 // - ServerUrl
 #[layer]
-pub fn request_cron_trigger_runners<T>()
-where
-    T: WorkerMessageQueue,
+pub fn request_cron_trigger_runners()
 {
     layers!(
         from_fn(
@@ -170,7 +164,7 @@ where
                 WorkerDBWithNames,
             >
         ),
-        from_fn(create_locked_cron_trigger_workers_start_request::<T>),
+        from_fn(create_locked_cron_trigger_workers_start_request),
         // Update statuses.
         from_fn(With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
         from_fn(UpdateWorkerDB::requested),
@@ -185,15 +179,13 @@ where
 // - T(MessageQueue)
 // - ServerUrl
 #[layer]
-pub fn stop_cron_trigger_runners<T>()
-where
-    T: WorkerMessageQueue,
+pub fn stop_cron_trigger_runners()
 {
     layers!(
         from_fn(
             By::<()>::fetch_all_in::<{ WorkerDBWithNames::CronTriggersToStop }, WorkerDBWithNames>
         ),
-        from_fn(create_locked_cron_trigger_workers_stop_request::<T>),
+        from_fn(create_locked_cron_trigger_workers_stop_request),
         // Update statuses.
         from_fn(With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
         from_fn(UpdateWorkerDB::stop_requested),
@@ -209,9 +201,7 @@ where
 // - T(MessageQueue)
 // - ServerUrl
 #[layer]
-pub fn request_stage_trigger_runners<T>()
-where
-    T: WorkerMessageQueue,
+pub fn request_stage_trigger_runners()
 {
     layers!(
         from_fn(
@@ -220,7 +210,7 @@ where
                 WorkerDBWithNames,
             >
         ),
-        from_fn(create_locked_stage_trigger_workers_start_request::<T>),
+        from_fn(create_locked_stage_trigger_workers_start_request),
         // Update statuses.
         from_fn(With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
         from_fn(UpdateWorkerDB::requested),
@@ -235,15 +225,13 @@ where
 // - T(MessageQueue)
 // - ServerUrl
 #[layer]
-pub fn stop_stage_trigger_runners<T>()
-where
-    T: WorkerMessageQueue,
+pub fn stop_stage_trigger_runners()
 {
     layers!(
         from_fn(
             By::<()>::fetch_all_in::<{ WorkerDBWithNames::StageTriggersToStop }, WorkerDBWithNames>
         ),
-        from_fn(create_locked_stage_trigger_workers_stop_request::<T>),
+        from_fn(create_locked_stage_trigger_workers_stop_request),
         // Update statuses.
         from_fn(With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
         from_fn(UpdateWorkerDB::stop_requested),
@@ -300,7 +288,7 @@ mod tests {
                 type_of_val(&mint_function_runs_on_dispatch),
                 type_of_val(&enrich_minted_dispatch),
                 type_of_val(
-                    &create_locked_function_runner_workers_start_request::<FileWorkerMessageQueue>,
+                    &create_locked_function_runner_workers_start_request,
                 ),
                 type_of_val(&insert_vec::<WorkerDB>),
                 type_of_val(&lfr_ids_from_minted_dispatch),
@@ -324,7 +312,7 @@ mod tests {
                 type_of_val(&materialize_replay_dispatch),
                 type_of_val(&enrich_minted_dispatch),
                 type_of_val(
-                    &create_locked_function_runner_workers_start_request::<FileWorkerMessageQueue>,
+                    &create_locked_function_runner_workers_start_request,
                 ),
                 type_of_val(&insert_vec::<WorkerDB>),
                 type_of_val(&pfr_ids_from_minted_dispatch),
@@ -344,7 +332,7 @@ mod tests {
                     >,
                 ),
                 type_of_val(
-                    &create_locked_cron_trigger_workers_stop_request::<FileWorkerMessageQueue>,
+                    &create_locked_cron_trigger_workers_stop_request,
                 ),
                 // Update statuses.
                 type_of_val(&With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
@@ -362,7 +350,7 @@ mod tests {
                     >,
                 ),
                 type_of_val(
-                    &create_locked_cron_trigger_workers_start_request::<FileWorkerMessageQueue>,
+                    &create_locked_cron_trigger_workers_start_request,
                 ),
                 // Update statuses.
                 type_of_val(&With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
@@ -381,7 +369,7 @@ mod tests {
                     >,
                 ),
                 type_of_val(
-                    &create_locked_stage_trigger_workers_stop_request::<FileWorkerMessageQueue>,
+                    &create_locked_stage_trigger_workers_stop_request,
                 ),
                 // Update statuses.
                 type_of_val(&With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
@@ -399,7 +387,7 @@ mod tests {
                     >,
                 ),
                 type_of_val(
-                    &create_locked_stage_trigger_workers_start_request::<FileWorkerMessageQueue>,
+                    &create_locked_stage_trigger_workers_start_request,
                 ),
                 // Update statuses.
                 type_of_val(&With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
@@ -473,6 +461,9 @@ mod tests {
                 panic!("Unexpected SupervisorMessagePayload")
             }
         };
+        let created_message: Option<WorkerInput> = created_message
+            .as_ref()
+            .map(|value| serde_yaml::from_value(value.clone()).expect("WorkerInput"));
         let Some(WorkerInput::FunctionV2(message)) = created_message else {
             panic!("Unexpected WorkerInput version")
         };
@@ -707,6 +698,9 @@ mod tests {
             SupervisorMessagePayload::SupervisorRequestMessagePayload(m) => &m.context,
             _ => panic!("unexpected payload kind"),
         };
+        let context_yaml: Option<WorkerInput> = context_yaml
+            .as_ref()
+            .map(|value| serde_yaml::from_value(value.clone()).expect("WorkerInput"));
         let Some(WorkerInput::FunctionV2(msg)) = context_yaml else {
             panic!("unexpected WorkerInput version");
         };
@@ -758,7 +752,7 @@ mod tests {
             .await?;
         let messages_after = context
             .worker_queue
-            .locked_messages::<serde_yaml::Value>()
+            .locked_messages()
             .await;
         assert_eq!(
             messages_after.len(),
