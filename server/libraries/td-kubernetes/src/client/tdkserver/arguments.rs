@@ -13,7 +13,7 @@ use crate::client::tdkserver::commands::stop::StopArguments;
 use crate::client::tdkserver::commands::unuse::UnuseArguments;
 use crate::client::tdkserver::commands::r#use::UseArguments;
 use crate::client::tdkserver::commands::using::UsingArguments;
-use crate::provider::ClusterProvider;
+use crate::runtime::provider::ClusterProvider;
 
 #[derive(Debug, Clone, Parser)]
 #[command(

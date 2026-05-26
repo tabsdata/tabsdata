@@ -4,7 +4,7 @@
 
 use std::io::{self, BufRead, Write};
 
-use crate::constants::{VALUE_N, VALUE_NO, VALUE_Y, VALUE_YES};
+use crate::base::constants::{VALUE_N, VALUE_NO, VALUE_Y, VALUE_YES};
 
 const MAX_INSTANCE_NAME_LENGTH: usize = 256;
 

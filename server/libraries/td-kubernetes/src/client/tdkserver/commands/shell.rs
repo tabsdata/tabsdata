@@ -26,7 +26,7 @@ use super::r#use::{UseArguments, command_use};
 use super::using::{UsingArguments, command_using};
 use crate::cerror;
 use crate::client::tdkcontext::{TdkContext, tdkcontext_path};
-use crate::system::exit::Result;
+use crate::core::system::exit::Result;
 
 const TOOL_NAME: &str = "tdkserver";
 const HISTORY_FILE: &str = ".tdkserver.history";

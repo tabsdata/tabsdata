@@ -7,8 +7,8 @@ use td_common::status::ExitStatus::Cancelled;
 
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
 use crate::client::tdkserver::common::prompt_yes_no;
-use crate::provider::provider_for_or_tdkcontext;
-use crate::system::exit::{Result, abort};
+use crate::runtime::provider::provider_for_or_tdkcontext;
+use crate::core::system::exit::{Result, abort};
 
 #[derive(Debug, Clone, Args)]
 pub struct StartArguments {

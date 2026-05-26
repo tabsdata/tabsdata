@@ -17,8 +17,8 @@ use crate::client::tdkserver::commands::stop::command_stop;
 use crate::client::tdkserver::commands::unuse::command_unuse;
 use crate::client::tdkserver::commands::r#use::command_use;
 use crate::client::tdkserver::commands::using::command_using;
-use crate::kubernetes::client::install_crypto_provider;
-use crate::system::exit::Result;
+use crate::kube::client::install_crypto_provider;
+use crate::core::system::exit::Result;
 
 pub struct TabsDataKubernetesClient;
 
