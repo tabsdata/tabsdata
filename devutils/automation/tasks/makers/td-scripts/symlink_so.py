@@ -97,7 +97,7 @@ def symlink(source: Path, target: Path):
             source_relative = (root_path / file).relative_to(source_absolute)
             target_file = (
                 target_absolute / source_relative.parent / tag_native_library_name(file)
-            ).resolve()
+            )
             source_file = (root_path / file).resolve()
             target_file.parent.mkdir(parents=True, exist_ok=True)
             try:

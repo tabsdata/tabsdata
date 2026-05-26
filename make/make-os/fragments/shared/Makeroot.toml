@@ -93,6 +93,7 @@ SCAN_VERSION_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automa
 CLEAN_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/clean.py", normalize = true }
 COPY_ASSETS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/copy_assets.py", normalize = true }
 LOCK_REQUIREMENTS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/lock_requirements.py", normalize = true }
+MYPY_PLUGIN_GATE_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/mypy_plugin_gate.py", normalize = true }
 PS_SUPERVISORS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/ps_supervisors.py", normalize = true }
 REPORT_LICENSES_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/report_licenses.py", normalize = true }
 REPORT_LICENSES_PY_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/report_licenses_py.py", normalize = true }

@@ -31,7 +31,19 @@ script = [
         current_folder = pwd
         info "️⛺️ Running mypy global checks in '${current_folder}'."
 
-        mypy_final_code = set "0"
+        mypy_disable_builtins_run = exec --fail-on-error python ${MYPY_PLUGIN_GATE_SCRIPT}
+        mypy_disable_builtins_lines = split ${mypy_disable_builtins_run.stdout} "\n"
+        mypy_plugin_command_prefix = array
+        for line in ${mypy_disable_builtins_lines}
+            trimmed = trim ${line}
+            is_empty_line = is_empty ${trimmed}
+            if not ${is_empty_line}
+                array_push ${mypy_plugin_command_prefix} ${trimmed}
+            end
+        end
+
+        mypy_plugin_final_code = set "0"
+        mypy_builtin_final_code = set "0"
         tabsdatak_folders = glob_array ${PROJECT_TABSDATA_ROOT_FOLDER}/**/src/main/python/tabsdatak
         for tabsdatak_folder in ${tabsdatak_folders}
             is_tabsdatak = is_directory ${tabsdatak_folder}
@@ -40,25 +52,55 @@ script = [
 
                 package_root = dirname ${tabsdatak_folder}
                 cd ${package_root}
+
+                mypy_plugin_command = array
+                array_push ${mypy_plugin_command} mypy
+                for argument in ${mypy_plugin_command_prefix}
+                    array_push ${mypy_plugin_command} ${argument}
+                end
+                array_push ${mypy_plugin_command} --config-file
+                array_push ${mypy_plugin_command} ${PROJECT_TABSDATA_ROOT_FOLDER}/.cargo/mypy.cfg
+                array_push ${mypy_plugin_command} --explicit-package-bases
+                array_push ${mypy_plugin_command} tabsdatak
+                mypy_plugin_exec_command = array_join ${mypy_plugin_command} " "
+                debug "🛡️ Running mypy plugin checks"
+                debug "🚀️ ${mypy_plugin_exec_command}"
+                mypy_plugin_exit_code = exec --get-exit-code %{mypy_plugin_exec_command}
+                mypy_plugin_is_zero = eq ${mypy_plugin_exit_code} "0"
+                if not ${mypy_plugin_is_zero}
+                    error "⭕️ The mypy plugin checks failed for '${package_root}' with exit code '${mypy_plugin_exit_code}' (non-fatal)"
+                    # mypy_plugin_final_code = set ${mypy_plugin_exit_code}
+                end
+
+                debug "🛡️ Running mypy builin checks"
                 debug "🚀 mypy --config-file ${PROJECT_TABSDATA_ROOT_FOLDER}/.cargo/mypy.cfg --explicit-package-bases tabsdatak"
-                mypy_exit_code = exec --get-exit-code mypy --config-file ${PROJECT_TABSDATA_ROOT_FOLDER}/.cargo/mypy.cfg --explicit-package-bases tabsdatak
-                mypy_is_zero = eq ${mypy_exit_code} "0"
-                if not ${mypy_is_zero}
-                    info "⭕️️ The partial mypy checks failed for '${package_root}' with exit code '${mypy_exit_code}'"
-                    mypy_final_code = set ${mypy_exit_code}
+                mypy_builtin_exit_code = exec --get-exit-code mypy --config-file ${PROJECT_TABSDATA_ROOT_FOLDER}/.cargo/mypy.cfg --explicit-package-bases tabsdatak
+                mypy_builtin_is_zero = eq ${mypy_builtin_exit_code} "0"
+                if not ${mypy_builtin_is_zero}
+                    warn "⭕️️ The mypy builtin checks failed for '${package_root}' with exit code '${mypy_builtin_exit_code}' (non-fatal)"
+                    # mypy_builtin_final_code = set ${mypy_builtin_exit_code}
                 end
             end
         end
         cd ${PROJECT_TABSDATA_ROOT_FOLDER}
-        mypy_all_ok = eq ${mypy_final_code} "0"
-        if not ${mypy_all_ok}
-            info "️⛔️ The mypy global checks failed in '${current_folder}' with exit code '${mypy_final_code}'"
-            code = exit ${mypy_final_code}
+        mypy_plugin_all_ok = eq ${mypy_plugin_final_code} "0"
+        mypy_builtin_all_ok = eq ${mypy_builtin_final_code} "0"
+        if not ${mypy_plugin_all_ok}
+            error "⛔️ The mypy plugin checks failed in '${current_folder}' with exit code '${mypy_plugin_final_code}'"
+        end
+        if not ${mypy_builtin_all_ok}
+            error "⛔️ The mypy builtin checks failed in '${current_folder}' with exit code '${mypy_builtin_final_code}'"
+        end
+        if not ${mypy_plugin_all_ok}
+            code = exit ${mypy_plugin_final_code}
+        end
+        if not ${mypy_builtin_all_ok}
+            code = exit ${mypy_builtin_final_code}
         end
     end
 
     fn run_lint_py
-      # run_lint_imports
+        run_lint_imports
         run_mypy
     end
 

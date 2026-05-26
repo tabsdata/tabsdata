@@ -66,7 +66,7 @@ def test_recipe_from_registry_when_direct_url_is_non_file(monkeypatch):
     assert recipe.recipe == InstallRecipe.REGISTRY
 
 
-def test_recipe_from_wheel_is_unsupported(monkeypatch, tmp_path):
+def test_recipe_from_wheel(monkeypatch, tmp_path):
     package = Package("tabsdata")
     wheel = tmp_path / "tabsdata-2.0.0-py3-none-any.whl"
     wheel.write_bytes(b"")
@@ -74,8 +74,11 @@ def test_recipe_from_wheel_is_unsupported(monkeypatch, tmp_path):
     monkeypatch.setattr(
         Package, "distribution", lambda self: make_distribution("2.0.0", direct_url)
     )
-    with pytest.raises(UnsupportedInstallMethodError):
-        package.recipe()
+    recipe = package.recipe()
+    assert recipe is not None
+    assert recipe.recipe == InstallRecipe.WHEEL
+    assert recipe.version == "2.0.0"
+    assert recipe.location == wheel
 
 
 def test_recipe_from_editable(monkeypatch, tmp_path):

@@ -32,9 +32,9 @@ def test_install_recipe_values_are_human_readable():
     assert InstallRecipe.EDITABLE.value == "Editable"
 
 
-def test_supported_install_recipes_are_registry_and_editable():
+def test_supported_install_recipes_are_registry_and_editable_and_wheel():
     assert SUPPORTED_INSTALL_RECIPES == frozenset(
-        {InstallRecipe.REGISTRY, InstallRecipe.EDITABLE}
+        {InstallRecipe.REGISTRY, InstallRecipe.EDITABLE, InstallRecipe.WHEEL}
     )
 
 
