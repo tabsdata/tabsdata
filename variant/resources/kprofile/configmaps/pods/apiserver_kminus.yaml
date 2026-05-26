@@ -105,6 +105,11 @@ spec:
               fieldPath: spec.serviceAccountName
         - name: POD_TABSDATA_INSTANCE
           value: "${sys:TDK_INSTANCE_NAME}"
+        - name: TDK_KUBECONFIG
+          valueFrom:
+            secretKeyRef:
+              name: tabsdata-kubeconfig
+              key: kubeconfig
   volumes:
     - name: configmap-configs
       configMap:
