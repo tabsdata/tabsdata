@@ -18,6 +18,7 @@ pub mod messaging;
 pub mod namespace;
 pub mod pod;
 pub mod podcontext;
+pub mod secret;
 
 use td_error::TdError;
 use thiserror::Error;
@@ -31,6 +32,7 @@ pub use messaging::KubeMessagingError;
 pub use namespace::KubeNamespaceError;
 pub use pod::KubePodError;
 pub use podcontext::KubePodContextError;
+pub use secret::KubeSecretError;
 
 #[derive(Debug, Error)]
 pub enum KubernetesError {
@@ -52,6 +54,8 @@ pub enum KubernetesError {
     Pod(#[from] KubePodError),
     #[error(transparent)]
     PodContext(#[from] KubePodContextError),
+    #[error(transparent)]
+    Secret(#[from] KubeSecretError),
 }
 
 impl From<KubernetesError> for TdError {
@@ -66,6 +70,7 @@ impl From<KubernetesError> for TdError {
             KubernetesError::Namespace(inner) => TdError::new(inner),
             KubernetesError::Pod(inner) => TdError::new(inner),
             KubernetesError::PodContext(inner) => TdError::new(inner),
+            KubernetesError::Secret(inner) => TdError::new(inner),
         }
     }
 }

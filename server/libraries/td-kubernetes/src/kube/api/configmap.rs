@@ -11,7 +11,7 @@ use kube::{Api, Client};
 
 use crate::base::error::kubernetes::{KubeConfigMapError, KubernetesError};
 
-pub async fn configmap_exists(
+pub async fn exists_configmap(
     client: &Client,
     namespace: &str,
     name: &str,
@@ -58,7 +58,7 @@ pub async fn create_configmap(
         })
 }
 
-pub async fn read_configmap(
+pub async fn get_configmap(
     client: &Client,
     namespace: &str,
     name: &str,
@@ -81,7 +81,7 @@ pub async fn require_configmap(
     namespace: &str,
     name: &str,
 ) -> Result<BTreeMap<String, String>, KubernetesError> {
-    match read_configmap(client, namespace, name).await? {
+    match get_configmap(client, namespace, name).await? {
         Some(data) => Ok(data),
         None => Err(KubeConfigMapError::NotFound {
             namespace: namespace.to_owned(),

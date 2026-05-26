@@ -15,7 +15,7 @@ use crate::base::constants::{
     FOLDER_PROFILE, KPROFILE_CONFIGS_FOLDER, KPROFILE_GLOBALS_FOLDER, KPROFILE_PODS_FOLDER,
 };
 use crate::runtime::instance::profile::RenderedConfigmap;
-use crate::kube::api::{configmap_exists, create_configmap, delete_configmap};
+use crate::kube::api::{create_configmap, delete_configmap, exists_configmap};
 use crate::runtime::reporting::build_kube_client;
 use crate::kube::kubeconfig::build_kubeconfig;
 use crate::runtime::provider::Instance;
@@ -66,7 +66,7 @@ impl KminusInstance {
             (CONFIGMAP_TABSDATA_PODS, staged.pods),
             (CONFIGMAP_TABSDATA_CONFIGS, staged.configs),
         ] {
-            if configmap_exists(&client, namespace, name).await? {
+            if exists_configmap(&client, namespace, name).await? {
                 delete_configmap(&client, namespace, name).await?;
             }
             create_configmap(&client, namespace, name, data).await?;

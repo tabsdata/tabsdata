@@ -27,9 +27,9 @@ use crate::runtime::instance::launcher::{start_workload, stop_workload};
 use crate::runtime::instance::manifest::MANIFEST_FILE;
 use crate::runtime::instance::profile::{load_profile, parse_from_configmaps, render_for_configmaps};
 use crate::runtime::instance::verify_manifest_compatibility;
-use crate::kube::api::configmap::read_configmap;
+use crate::kube::api::configmap::get_configmap;
 use crate::kube::api::{
-    configmap_exists, create_configmap, ensure_cluster_reachable, ensure_namespace_exists,
+    create_configmap, ensure_cluster_reachable, ensure_namespace_exists, exists_configmap,
     require_configmap,
 };
 use crate::runtime::reporting::build_kube_client;
@@ -172,7 +172,7 @@ impl Provider for DockerProvider {
         let client = build_kube_client(&self.config)?;
         ensure_cluster_reachable(&client).await?;
         ensure_namespace_exists(&client, &self.config.default_namespace).await?;
-        if configmap_exists(
+        if exists_configmap(
             &client,
             &self.config.default_namespace,
             CONFIGMAP_TABSDATA_GLOBALS,
@@ -209,7 +209,7 @@ impl Provider for DockerProvider {
         let client = build_kube_client(&self.config)?;
         ensure_cluster_reachable(&client).await?;
         ensure_namespace_exists(&client, &self.config.default_namespace).await?;
-        if !configmap_exists(
+        if !exists_configmap(
             &client,
             &self.config.default_namespace,
             CONFIGMAP_TABSDATA_GLOBALS,
@@ -245,7 +245,7 @@ impl Provider for DockerProvider {
     async fn ensure_startable_runtime(&self) -> Result {
         if cfg!(td_k8s_development) {
             let client = build_kube_client(&self.config)?;
-            if let Some(data) = read_configmap(
+            if let Some(data) = get_configmap(
                 &client,
                 &self.config.default_namespace,
                 CONFIGMAP_TABSDATA_GLOBALS,
