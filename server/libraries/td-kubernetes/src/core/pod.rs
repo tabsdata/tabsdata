@@ -22,4 +22,7 @@ impl ValidationError {
 }
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    use super::*;
+    mod pod;
+}

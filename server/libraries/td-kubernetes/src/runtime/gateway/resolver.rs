@@ -22,7 +22,10 @@ mod env;
 mod sys;
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    use super::*;
+    mod resolver;
+}
 
 use td_error::TdError;
 

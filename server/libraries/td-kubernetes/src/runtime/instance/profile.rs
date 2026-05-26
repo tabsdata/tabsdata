@@ -417,4 +417,7 @@ fn is_valid_path_component(name: &str) -> bool {
 pub mod bundle;
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    use super::*;
+    mod profile;
+}
