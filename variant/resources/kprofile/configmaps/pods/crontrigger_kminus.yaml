@@ -1,0 +1,77 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: td-crontrigger
+  namespace: default
+  annotations:
+    tabsdata.com/description: "Tabsdata cron trigger worker (placeholder)"
+    kubernetes.io/change-cause: ""
+  labels:
+    app.kubernetes.io/name: tabsdata
+    app.kubernetes.io/instance: tabsdata
+    app.kubernetes.io/version: "2.0.0"
+    app.kubernetes.io/component: crontrigger
+    app.kubernetes.io/part-of: tabsdata
+    app.kubernetes.io/managed-by: tdkserver
+    tabsdata.com/worker-tier: ephemeral
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tabsdata
+        app.kubernetes.io/instance: tabsdata
+        app.kubernetes.io/version: "2.0.0"
+        app.kubernetes.io/component: crontrigger
+        app.kubernetes.io/part-of: tabsdata
+        app.kubernetes.io/managed-by: tdkserver
+        tabsdata.com/worker-tier: ephemeral
+    spec:
+      restartPolicy: Never
+      serviceAccountName: default
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: ClusterFirst
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: crontrigger
+          image: /dev/null
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh"]
+          args:
+            - -c
+            - |
+              echo "pod=$POD_NAME namespace=$POD_NAMESPACE worker=crontrigger instance=$POD_TABSDATA_INSTANCE"
+              sleep 60
+              echo "done"
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_SERVICE_ACCOUNT
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.serviceAccountName
+            - name: POD_TABSDATA_INSTANCE
+              value: "${sys:TDK_INSTANCE_NAME}"
