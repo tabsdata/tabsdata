@@ -50,33 +50,40 @@ fn spinner_finish_marks_bar_as_finished() {
 
 #[test]
 fn show_box_does_not_panic_on_short_text() {
-    show_box("hello", 80);
+    let outcome = std::panic::catch_unwind(|| show_box("hello", 80));
+    assert!(outcome.is_ok(), "show_box panicked on short text");
 }
 
 #[test]
 fn show_box_does_not_panic_on_multiline_text() {
-    show_box("first line\nsecond line\nthird line", 80);
+    let outcome =
+        std::panic::catch_unwind(|| show_box("first line\nsecond line\nthird line", 80));
+    assert!(outcome.is_ok(), "show_box panicked on multiline text");
 }
 
 #[test]
 fn show_box_does_not_panic_on_unicode_text() {
-    show_box("café — instância — λ", 80);
+    let outcome = std::panic::catch_unwind(|| show_box("café — instância — λ", 80));
+    assert!(outcome.is_ok(), "show_box panicked on unicode text");
 }
 
 #[test]
 fn show_box_does_not_panic_on_long_single_line() {
     let text: String = "lorem ipsum dolor sit amet ".repeat(20);
-    show_box(&text, 80);
+    let outcome = std::panic::catch_unwind(|| show_box(&text, 80));
+    assert!(outcome.is_ok(), "show_box panicked on long single line");
 }
 
 #[test]
 fn show_box_does_not_panic_on_zero_min_width() {
-    show_box("hello", 0);
+    let outcome = std::panic::catch_unwind(|| show_box("hello", 0));
+    assert!(outcome.is_ok(), "show_box panicked on zero min width");
 }
 
 #[test]
 fn show_banner_does_not_panic() {
-    show_banner();
+    let outcome = std::panic::catch_unwind(show_banner);
+    assert!(outcome.is_ok(), "show_banner panicked");
 }
 
 #[test]
@@ -108,7 +115,10 @@ fn phase_spinner_drop_finishes_header() {
 fn spinner_exposes_its_multi_progress() {
     let bar = spinner("running");
     let multi = bar.multi();
-    let _phase = phase_spinner_in(multi, "nested");
+    let phase = phase_spinner_in(multi, "nested");
+    assert_eq!(phase.header.message(), "nested");
+    assert!(!phase.header.is_finished());
+    drop(phase);
     bar.finish_and_clear();
 }
 
@@ -135,11 +145,22 @@ fn standalone_phase_spinner_still_works() {
 #[test]
 fn nested_phase_drop_does_not_panic_when_parent_is_alive() {
     let bar = spinner("outer");
+    let outer_inner = bar.bar.clone();
     {
         let phase = phase_spinner_in(bar.multi(), "inner");
         let _resource = phase.add_resource("x");
     }
+    assert!(
+        !outer_inner.is_finished(),
+        "parent bar must outlive the first nested phase"
+    );
     let phase2 = phase_spinner_in(bar.multi(), "another");
+    assert_eq!(phase2.header.message(), "another");
     drop(phase2);
+    assert!(
+        !outer_inner.is_finished(),
+        "parent bar must outlive the second nested phase"
+    );
     bar.finish_and_clear();
+    assert!(outer_inner.is_finished(), "parent finish must complete");
 }
