@@ -121,8 +121,7 @@ class Collection:
             name (str): The name of the collection.
             description (str, optional): The description of the collection.
             group (str, optional): The name of the group to assign at
-                creation time. Resolved to a group_id before sending.
-                Ignored when reading an existing collection.
+                creation time. Ignored when reading an existing collection.
             **kwargs: Additional keyword arguments.
         """
         created_on = kwargs.get("created_on")
@@ -166,11 +165,10 @@ class Collection:
 
     def create(self, raise_for_status: bool = True) -> Collection:
         description = self._description or self.name
-        group_id = Group(self.connection, self._group).id if self._group else None
         response = self.connection.collection_create(
             self.name,
             description,
-            group_id=group_id,
+            group=self._group,
             raise_for_status=raise_for_status,
         )
         self.refresh()
@@ -2372,8 +2370,10 @@ class Group:
             new_description=description,
             raise_for_status=raise_for_status,
         )
+        data = response.json().get("data")
         self.refresh()
-        self.name = response.json().get("data").get("name")
+        self.name = data.get("name")
+        self._data = data
         return self
 
     def __eq__(self, other):

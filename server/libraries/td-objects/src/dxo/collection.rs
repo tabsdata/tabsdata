@@ -34,7 +34,8 @@ mod definitions {
         pub modified_by_id: UserId,
         #[builder(default)]
         pub name_when_deleted: Option<CollectionName>,
-        #[dxo(builder(include))]
+        // Resolved from `CollectionCreate::group` (id-or-name) by the create service.
+        #[dxo(setter)]
         pub group_id: GroupId,
     }
 
@@ -91,9 +92,11 @@ mod definitions {
     pub struct CollectionCreate {
         pub name: CollectionName,
         pub description: Description,
-        #[serde(default = "GroupId::default_group")]
-        #[builder(default = "GroupId::default_group()")]
-        pub group_id: GroupId,
+        // Name of the group to assign. Defaults to the default group.
+        #[dxo(extractor)]
+        #[serde(default = "GroupName::default_group")]
+        #[builder(default = "GroupName::default_group()")]
+        pub group: GroupName,
     }
 
     #[ta_objects::Dto]

@@ -484,13 +484,13 @@ class APIServer:
         self,
         name: str,
         description: str,
-        group_id: str | None = None,
+        group: str | None = None,
         raise_for_status: bool = True,
     ):
         endpoint = "/collections"
         data = {"name": name, "description": description}
-        if group_id is not None:
-            data["group_id"] = group_id
+        if group is not None:
+            data["group"] = group
         response = self.post(endpoint, json=data)
         return self.raise_for_status_or_return(raise_for_status, response)
 

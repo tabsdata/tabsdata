@@ -602,7 +602,6 @@ def update(
         or get_currently_pinned_object(ctx, "role")
         or logical_prompt(ctx, "Name of the role to update")
     )
-    description = description or ""
     click.echo(f"Updating role: {name}")
     click.echo("-" * 10)
     try:

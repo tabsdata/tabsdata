@@ -370,7 +370,6 @@ def update(
         or get_currently_pinned_object(ctx, "collection")
         or logical_prompt(ctx, "Name of the collection to update")
     )
-    description = description or ""
     click.echo(f"Updating collection: {name}")
     click.echo("-" * 10)
     try:

@@ -686,7 +686,6 @@ def update(
 ):
     """Update a function"""
     verify_login_or_prompt(ctx)
-    description = description or ""
     if local_pkg:
         local_pkg = [element for element in local_pkg]
     else:
@@ -884,7 +883,6 @@ def patch(
         "Path to the function file. Must be of the form "
         "'/path/to/file.py::function_name'",
     )
-    description = description or ""
     local_pkg = [p for p in local_pkg] if local_pkg else None
     click.echo(
         f"Patching function '{name}' in collection '{coll}' (patch_of={patch_of})"

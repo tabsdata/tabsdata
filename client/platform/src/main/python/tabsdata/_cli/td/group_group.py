@@ -151,7 +151,6 @@ def update(
     """Update a group by name. System groups cannot be updated."""
     verify_login_or_prompt(ctx)
     name = name or logical_prompt(ctx, "Name of the group to update")
-    description = description or ""
     click.echo(f"Updating group: {name}")
     click.echo("-" * 10)
     try:

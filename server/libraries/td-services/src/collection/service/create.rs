@@ -10,8 +10,9 @@ use td_objects::dxo::collection::{
     CollectionRead, CollectionReadBuilder,
 };
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
+use td_objects::dxo::group::GroupDB;
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::CollectionId;
+use td_objects::types::basic::{CollectionId, GroupId, GroupName};
 use td_queries::By;
 use td_queries::insert;
 use td_tower::default_services::TransactionProvider;
@@ -31,8 +32,13 @@ fn service() {
         from_fn(AuthzOn::<System>::set),
         from_fn(Authz::<SysAdmin>::check),
         from_fn(With::<CreateRequest<(), CollectionCreate>>::extract_data::<CollectionCreate>),
+        // resolve the group name to its GroupId
+        from_fn(With::<CollectionCreate>::extract::<GroupName>),
+        from_fn(By::<GroupName>::fetch_one::<GroupDB>),
+        from_fn(With::<GroupDB>::extract::<GroupId>),
         from_fn(With::<CollectionCreate>::try_convert_to::<CollectionCreateDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<CollectionCreateDBBuilder, _>),
+        from_fn(With::<GroupId>::set::<CollectionCreateDBBuilder>),
         from_fn(With::<CollectionCreateDBBuilder>::build::<CollectionCreateDB>),
         from_fn(insert::<CollectionCreateDB>),
         from_fn(With::<CollectionCreateDB>::extract::<CollectionId>),
@@ -50,9 +56,10 @@ mod tests {
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::types::basic::{
-        AccessTokenId, AtTime, CollectionName, Description, RoleId, UserId, UserName,
+        AccessTokenId, AtTime, CollectionName, Description, GroupName, RoleId, UserId, UserName,
     };
     use td_queries::LiveEntry;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -72,10 +79,14 @@ mod tests {
                 type_of_val(
                     &With::<CreateRequest<(), CollectionCreate>>::extract_data::<CollectionCreate>,
                 ),
+                type_of_val(&With::<CollectionCreate>::extract::<GroupName>),
+                type_of_val(&By::<GroupName>::fetch_one::<GroupDB>),
+                type_of_val(&With::<GroupDB>::extract::<GroupId>),
                 type_of_val(
                     &With::<CollectionCreate>::try_convert_to::<CollectionCreateDBBuilder, _>,
                 ),
                 type_of_val(&With::<RequestContext>::update::<CollectionCreateDBBuilder, _>),
+                type_of_val(&With::<GroupId>::set::<CollectionCreateDBBuilder>),
                 type_of_val(&With::<CollectionCreateDBBuilder>::build::<CollectionCreateDB>),
                 type_of_val(&insert::<CollectionCreateDB>),
                 type_of_val(&With::<CollectionCreateDB>::extract::<CollectionId>),
@@ -113,6 +124,7 @@ mod tests {
 
         assert_eq!(created.name, name);
         assert_eq!(created.description, description);
+        assert_eq!(created.group, GroupName::default_group());
         assert!(created.created_on >= before);
         assert_eq!(created.created_by_id, UserId::admin());
         assert_eq!(created.created_by, UserName::admin());
@@ -126,5 +138,44 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(found.len(), 1);
+    }
+
+    #[td_test::test(db)]
+    async fn test_create_collection_resolves_group_by_name(db: TdPool) {
+        let group = db
+            .seed()
+            .group(
+                GroupName::try_from("analytics").unwrap(),
+                Description::try_from("Analytics group").unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let name = CollectionName::try_from("ds_grp").unwrap();
+        let create = CollectionCreate::builder()
+            .name(&name)
+            .description(&Description::try_from("DS").unwrap())
+            .group(GroupName::try_from("analytics").unwrap())
+            .build()
+            .unwrap();
+
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::sys_admin(),
+        )
+        .create((), create);
+
+        let service = CreateCollectionService::with_defaults(db.clone()).service();
+        service.raw_oneshot(request).await.unwrap();
+
+        let found = db
+            .live()
+            .fetch_one::<CollectionDBWithNames>(&name)
+            .await
+            .unwrap();
+        assert_eq!(found.group_id, group.id);
+        assert_eq!(found.group, group.name);
+        let _: GroupDB = db.live().fetch_one::<GroupDB>(&group.id).await.unwrap();
     }
 }
