@@ -28,8 +28,8 @@ from tabsdatak._tdrunner.function._lib.inputs_manifest import (
     MANIFEST_NAME_KEY,
     write_inputs_manifest,
 )
+from tabsdatak._tdrunner.function._lib.plugin_ctx import FromRequestPluginCtx
 from tabsdatak._tdrunner.function._lib.request import load_request_or_fail
-from tabsdatak.api import ContextKeySpec, ContextValueSpec
 from tabsdatak.spi import SrcPluginCtx
 
 # TODO: After all commands are done, version will be unified in a single source of
@@ -103,103 +103,13 @@ def _load_function_def(bundle_dir: Path) -> PublisherInfo:
     )
 
 
-class _SrcContext(SrcPluginCtx):
+class _SrcContext(FromRequestPluginCtx, SrcPluginCtx):
     """Concrete :class:`SrcPluginCtx` for the run-source-plugin command.
 
-    Populated from ``request.yaml`` -- ``collection_id`` /
-    ``collection_name`` / ``exec_plan_id`` / ``trx_id`` come straight
-    off ``request.info``. ``function_id`` borrows ``function_run_id``
-    from the same block (closest available identifier today).
-
-    Surfaces not yet plumbed through:
-      * ``function_name`` and ``exec_plan_ts`` raise
-        ``NotImplementedError`` -- they're missing from ``request.yaml``
-        and plugins that touch them should surface the gap loudly
-        rather than silently consume a placeholder.
-      * ``get_attr`` returns ``None`` and ``store_attr`` /
-        ``add_metadata`` are no-ops -- the per-flow scratch store and
-        the observability sink aren't wired through tdrunner yet, but
-        plugins that use them (e.g. progress-marker writes) shouldn't
-        crash. Values just don't persist across trx invocations.
+    All behaviour comes from :class:`FromRequestPluginCtx`; this class
+    only fixes the abstract base so ``isinstance(ctx, SrcPluginCtx)``
+    holds at the call boundary.
     """
-
-    def __init__(
-        self,
-        work_dir: Path,
-        exec_plan_id: str,
-        trx_id: str,
-        collection_id: str,
-        collection_name: str,
-        function_id: str,
-    ):
-        self._work_dir = work_dir
-        self._exec_plan_id = exec_plan_id
-        self._trx_id = trx_id
-        self._collection_id = collection_id
-        self._collection_name = collection_name
-        self._function_id = function_id
-
-    @property
-    def work_dir(self) -> Path:
-        return self._work_dir
-
-    @property
-    def collection_id(self) -> str:
-        return self._collection_id
-
-    @property
-    def collection_name(self) -> str:
-        return self._collection_name
-
-    @property
-    def function_id(self) -> str:
-        return self._function_id
-
-    @property
-    def function_name(self) -> str:
-        # TODO: thread function_name through request.yaml's info block
-        # and populate at construction. Raising rather than returning
-        # a placeholder so consumers surface the gap.
-        raise NotImplementedError(
-            "function_name is not yet plumbed through request.yaml; "
-            "see run_source_plugin._SrcContext"
-        )
-
-    @property
-    def exec_plan_id(self) -> str:
-        return self._exec_plan_id
-
-    @property
-    def trx_id(self) -> str:
-        return self._trx_id
-
-    @property
-    def exec_plan_ts(self) -> str:
-        # TODO: add `exec_plan_ts` to request.yaml's `info` block and
-        # plumb it through here. Raising rather than returning a
-        # placeholder so any consumer reading it gets pointed at the gap.
-        raise NotImplementedError(
-            "exec_plan_ts is not yet plumbed through request.yaml; "
-            "see run_source_plugin._SrcContext"
-        )
-
-    def get_attr(self, attr: ContextKeySpec) -> ContextValueSpec | None:
-        # TODO: wire the per-flow attribute store through the runner.
-        # Until then we honour the documented "returns None if unset"
-        # contract -- plugins that touch get_attr on a cold runtime
-        # see no prior state, which is the same surface they'd see
-        # on the first call of a brand-new flow anyway.
-        return None
-
-    def store_attr(self, attr: ContextKeySpec, val: ContextValueSpec | None):
-        # TODO: wire the per-flow attribute store. No-op for now so
-        # plugins that store progress markers don't crash; the values
-        # simply don't persist across trx invocations.
-        pass
-
-    def add_metadata(self, attr: ContextKeySpec, val: ContextValueSpec | None):
-        # TODO: wire the trx-level observability sink. No-op for now.
-        pass
 
 
 def _resolve_plugin(info: PublisherInfo):

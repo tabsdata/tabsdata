@@ -34,8 +34,8 @@ from tabsdatak._tdrunner.function._lib.outputs_manifest import (
     MANIFEST_NAME_KEY,
     load_outputs_manifest_or_fail,
 )
+from tabsdatak._tdrunner.function._lib.plugin_ctx import FromRequestPluginCtx
 from tabsdatak._tdrunner.function._lib.request import load_request_or_fail
-from tabsdatak.api import ContextKeySpec, ContextValueSpec
 from tabsdatak.spi import DestContext, ParquetFile
 
 VERSION = "0.1.0"
@@ -101,95 +101,13 @@ def _load_function_def(bundle_dir: Path) -> SubscriberInfo:
     )
 
 
-class _DestContext(DestContext):
+class _DestContext(FromRequestPluginCtx, DestContext):
     """Concrete :class:`DestContext` for the run-destination-plugin command.
 
-    Populated from ``request.yaml`` -- ``collection_id`` /
-    ``collection_name`` / ``exec_plan_id`` / ``trx_id`` come straight
-    off ``request.info``. ``function_id`` borrows ``function_run_id``
-    from the same block (closest available identifier today).
-
-    Mirrors :class:`run_source_plugin._SrcContext` for what's not yet
-    plumbed through: ``function_name`` / ``exec_plan_ts`` raise
-    ``NotImplementedError`` (missing from ``request.yaml``);
-    ``get_attr`` returns ``None`` and ``store_attr`` / ``add_metadata``
-    are no-ops (the state store and observability sink aren't wired
-    through tdrunner yet, but plugins shouldn't crash on touch).
+    All behaviour comes from :class:`FromRequestPluginCtx`; this class
+    only fixes the abstract base so ``isinstance(ctx, DestContext)``
+    holds at the call boundary.
     """
-
-    def __init__(
-        self,
-        work_dir: Path,
-        exec_plan_id: str,
-        trx_id: str,
-        collection_id: str,
-        collection_name: str,
-        function_id: str,
-    ):
-        self._work_dir = work_dir
-        self._exec_plan_id = exec_plan_id
-        self._trx_id = trx_id
-        self._collection_id = collection_id
-        self._collection_name = collection_name
-        self._function_id = function_id
-
-    @property
-    def work_dir(self) -> Path:
-        return self._work_dir
-
-    @property
-    def collection_id(self) -> str:
-        return self._collection_id
-
-    @property
-    def collection_name(self) -> str:
-        return self._collection_name
-
-    @property
-    def function_id(self) -> str:
-        return self._function_id
-
-    @property
-    def function_name(self) -> str:
-        # TODO: thread function_name through request.yaml's info block
-        # and populate at construction.
-        raise NotImplementedError(
-            "function_name is not yet plumbed through request.yaml; "
-            "see run_destination_plugin._DestContext"
-        )
-
-    @property
-    def exec_plan_id(self) -> str:
-        return self._exec_plan_id
-
-    @property
-    def trx_id(self) -> str:
-        return self._trx_id
-
-    @property
-    def exec_plan_ts(self) -> str:
-        # Mirrors the gap in `run_source_plugin._SrcContext`: until
-        # `request.yaml` carries an explicit `triggered_on`, this
-        # raises rather than returning a placeholder so plugins that
-        # touch it surface the gap loudly.
-        raise NotImplementedError(
-            "exec_plan_ts is not yet plumbed through request.yaml; "
-            "see run_destination_plugin._DestContext"
-        )
-
-    def get_attr(self, attr: ContextKeySpec) -> ContextValueSpec | None:
-        # TODO: wire the per-flow attribute store through the runner.
-        # Returning None mirrors the documented "returns None if unset"
-        # contract, so plugins that probe for scratch state don't crash.
-        return None
-
-    def store_attr(self, attr: ContextKeySpec, val: ContextValueSpec | None):
-        # TODO: wire the per-flow attribute store. No-op for now.
-        pass
-
-    def add_metadata(self, attr: ContextKeySpec, val: ContextValueSpec | None):
-        # TODO: wire the trx-level observability sink. No-op for now.
-        pass
 
 
 def _resolve_plugin(info: SubscriberInfo):
