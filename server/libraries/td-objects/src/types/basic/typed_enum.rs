@@ -76,7 +76,7 @@ pub enum ExecutionStatus {
 ///     Committed --> Yanked
 /// ```
 #[ta_objects::typed_enum]
-#[derive(Eq, PartialEq, Hash)]
+#[derive(Eq, PartialEq, Hash, Copy)]
 pub enum LogicalFunctionRunStatus {
     #[typed_enum(rename = "S")]
     Scheduled,
@@ -100,6 +100,38 @@ pub enum LogicalFunctionRunStatus {
     Canceled,
     #[typed_enum(rename = "Y")]
     Yanked,
+}
+
+impl LogicalFunctionRunStatus {
+    /// Statuses that imply `ended_on IS NOT NULL` on the bound PFR —
+    /// the set `/metrics` aggregates over. `IN_FLIGHT` is the
+    /// complement, the set `/inflight` returns.
+    ///
+    /// Note: "ended" is not the same as state-machine terminal. Per the
+    /// transition diagram, `Done` can move to `Committed`/`Canceled`,
+    /// `Error` back to `Running`, `Failed` to `ReScheduled` — so only
+    /// `Committed`/`Canceled`/`Yanked` are truly no-transitions-out
+    /// terminals.
+    pub const ENDED: &'static [LogicalFunctionRunStatus] = &[
+        LogicalFunctionRunStatus::Committed,
+        LogicalFunctionRunStatus::Done,
+        LogicalFunctionRunStatus::Error,
+        LogicalFunctionRunStatus::Failed,
+        LogicalFunctionRunStatus::Canceled,
+        LogicalFunctionRunStatus::Yanked,
+    ];
+
+    pub const IN_FLIGHT: &'static [LogicalFunctionRunStatus] = &[
+        LogicalFunctionRunStatus::Scheduled,
+        LogicalFunctionRunStatus::Requested,
+        LogicalFunctionRunStatus::ReScheduled,
+        LogicalFunctionRunStatus::Running,
+        LogicalFunctionRunStatus::OnHold,
+    ];
+
+    pub fn is_ended(&self) -> bool {
+        Self::ENDED.contains(self)
+    }
 }
 
 impl TryFrom<WorkerCallbackStatus> for LogicalFunctionRunStatus {
@@ -182,7 +214,7 @@ pub enum LogicalPointerReason {
 ///   Failed    ─► Requested                       (operator recover)
 /// ```
 #[ta_objects::typed_enum]
-#[derive(Eq, PartialEq, Hash)]
+#[derive(Eq, PartialEq, Hash, Copy)]
 pub enum PhysicalFunctionRunStatus {
     #[typed_enum(rename = "RR")]
     Requested,
@@ -196,6 +228,26 @@ pub enum PhysicalFunctionRunStatus {
     Error,
     #[typed_enum(rename = "F")]
     Failed,
+}
+
+impl PhysicalFunctionRunStatus {
+    /// Statuses where the attempt has finished and `ended_on` plus the
+    /// bucket columns are populated.
+    pub const ENDED: &'static [PhysicalFunctionRunStatus] = &[
+        PhysicalFunctionRunStatus::Done,
+        PhysicalFunctionRunStatus::Error,
+        PhysicalFunctionRunStatus::Failed,
+    ];
+
+    pub const IN_FLIGHT: &'static [PhysicalFunctionRunStatus] = &[
+        PhysicalFunctionRunStatus::Requested,
+        PhysicalFunctionRunStatus::Dispatched,
+        PhysicalFunctionRunStatus::Running,
+    ];
+
+    pub fn is_ended(&self) -> bool {
+        Self::ENDED.contains(self)
+    }
 }
 
 impl TryFrom<WorkerCallbackStatus> for PhysicalFunctionRunStatus {
@@ -247,7 +299,7 @@ impl From<LogicalFunctionRunStatus> for PhysicalFunctionRunStatus {
 
 impl From<&LogicalFunctionRunStatus> for PhysicalFunctionRunStatus {
     fn from(s: &LogicalFunctionRunStatus) -> Self {
-        s.clone().into()
+        (*s).into()
     }
 }
 
@@ -537,5 +589,40 @@ mod tests {
         assert_eq!(LogicalFunctionRunStatus::Committed.to_string(), "C");
         assert_eq!(LogicalFunctionRunStatus::Canceled.to_string(), "X");
         assert_eq!(LogicalFunctionRunStatus::Yanked.to_string(), "Y");
+    }
+
+    /// Every LFR variant must land in exactly one of ENDED / IN_FLIGHT.
+    /// Catches the "added a variant but forgot to classify it" drift
+    /// that a manual array enumeration would miss.
+    #[test]
+    fn lfr_ended_and_in_flight_partition_all_variants() {
+        use strum::IntoEnumIterator;
+        assert_eq!(LogicalFunctionRunStatus::ENDED.len(), 6);
+        assert_eq!(LogicalFunctionRunStatus::IN_FLIGHT.len(), 5);
+        for s in LogicalFunctionRunStatus::iter() {
+            let ended = LogicalFunctionRunStatus::ENDED.contains(&s);
+            let in_flight = LogicalFunctionRunStatus::IN_FLIGHT.contains(&s);
+            assert!(
+                ended ^ in_flight,
+                "{s} must be in exactly one of ENDED / IN_FLIGHT"
+            );
+            assert_eq!(s.is_ended(), ended);
+        }
+    }
+
+    #[test]
+    fn pfr_ended_and_in_flight_partition_all_variants() {
+        use strum::IntoEnumIterator;
+        assert_eq!(PhysicalFunctionRunStatus::ENDED.len(), 3);
+        assert_eq!(PhysicalFunctionRunStatus::IN_FLIGHT.len(), 3);
+        for s in PhysicalFunctionRunStatus::iter() {
+            let ended = PhysicalFunctionRunStatus::ENDED.contains(&s);
+            let in_flight = PhysicalFunctionRunStatus::IN_FLIGHT.contains(&s);
+            assert!(
+                ended ^ in_flight,
+                "{s} must be in exactly one of ENDED / IN_FLIGHT"
+            );
+            assert_eq!(s.is_ended(), ended);
+        }
     }
 }

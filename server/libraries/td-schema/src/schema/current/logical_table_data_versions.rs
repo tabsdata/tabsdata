@@ -17,6 +17,7 @@ use sea_query::{
 use super::collections::Collections;
 use super::executions::Executions;
 use super::functions::Functions;
+use super::groups::Groups;
 use super::logical_function_runs::LogicalFunctionRuns;
 use super::logical_table_data_version_pointers::LogicalTableDataVersionPointers;
 use super::physical_function_runs::PhysicalFunctionRuns;
@@ -43,6 +44,10 @@ pub enum LogicalTableDataVersions {
     FunctionParamPos,
     TriggeredOn,
     TriggeredById,
+    // Group snapshot, copied from collections.group_id at LTDV mint.
+    // Immutable thereafter. Equal by construction to the producing
+    // LFR's group_id (both stamped in the same plan-build pass).
+    GroupId,
 }
 
 pub(super) struct Defs;
@@ -66,10 +71,18 @@ impl Entity for Defs {
                 .col(ColumnDef::new(LogicalTableDataVersions::FunctionParamPos).integer().null())
                 .col(ColumnDef::new(LogicalTableDataVersions::TriggeredOn).timestamp_with_time_zone().not_null())
                 .col(ColumnDef::new(LogicalTableDataVersions::TriggeredById).text().not_null())
+                .col(ColumnDef::new(LogicalTableDataVersions::GroupId).text().not_null())
                 .foreign_key(
                     ForeignKey::create()
                         .from(LogicalTableDataVersions::Table, LogicalTableDataVersions::CollectionId)
                         .to(Collections::Table, Collections::Id)
+                        .on_delete(ForeignKeyAction::Restrict)
+                        .on_update(ForeignKeyAction::Restrict),
+                )
+                .foreign_key(
+                    ForeignKey::create()
+                        .from(LogicalTableDataVersions::Table, LogicalTableDataVersions::GroupId)
+                        .to(Groups::Table, Groups::Id)
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
@@ -127,6 +140,12 @@ impl Entity for Defs {
                 .table(LogicalTableDataVersions::Table)
                 .col(LogicalTableDataVersions::ProducerLogicalFunctionRunId)
                 .to_owned(),
+            // Group-filtered metrics / Sankey hot path.
+            Index::create()
+                .name("logical_table_data_versions___group_id___idx")
+                .table(LogicalTableDataVersions::Table)
+                .col(LogicalTableDataVersions::GroupId)
+                .to_owned(),
         ]
     }
 
@@ -148,6 +167,7 @@ impl Entity for Defs {
         }
         .into_subquery();
 
+        let groups_alias = Alias::new("groups_for_ltdv");
         vec![ViewDef::new(
             TableDataVersionsWithNames,
             Query::select()
@@ -158,6 +178,7 @@ impl Entity for Defs {
                     b.name_or_id((Users::Table, Users::Name), (LogicalTableDataVersions::Table, LogicalTableDataVersions::TriggeredById)),
                     Alias::new("triggered_by"),
                 )
+                .expr_as(Expr::col((groups_alias.clone(), Groups::Name)), Alias::new("group"))
                 // PTDV-derived columns (bound pointer → PTDV).
                 .expr_as(
                     Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::Id)),
@@ -183,6 +204,7 @@ impl Entity for Defs {
                 )
                 .expr_as(Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::ColumnCount)), Alias::new("column_count"))
                 .expr_as(Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::RowCount)), Alias::new("row_count"))
+                .expr_as(Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::DataBytes)), Alias::new("data_bytes"))
                 .expr_as(Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::SchemaHash)), Alias::new("schema_hash"))
                 .expr_as(
                     Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::WithDataTableDataVersionId)),
@@ -247,6 +269,12 @@ impl Entity for Defs {
                     Functions::Table,
                     Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::FunctionVersionId))
                         .equals((Functions::Table, Functions::Id)),
+                )
+                .join_as(
+                    JoinType::LeftJoin,
+                    Groups::Table,
+                    groups_alias.clone(),
+                    Expr::col((LogicalTableDataVersions::Table, LogicalTableDataVersions::GroupId)).equals((groups_alias, Groups::Id)),
                 )
                 .to_owned(),
         )]

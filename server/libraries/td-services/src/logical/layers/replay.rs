@@ -100,7 +100,7 @@ pub async fn assert_no_concurrent_replay(
         Err(ReplayError::AttemptInFlight(
             lfr.id.clone(),
             pfr.id.clone(),
-            pfr.status.clone(),
+            pfr.status,
         ))?
     }
     Ok(())
@@ -125,7 +125,7 @@ pub async fn assert_lfr_terminal(lfr: Ref<LogicalFunctionRunDB>) -> Result<(), T
         | LogicalFunctionRunStatus::Failed
         | LogicalFunctionRunStatus::Canceled
         | LogicalFunctionRunStatus::Yanked => Ok(()),
-        _ => Err(ReplayError::NotTerminal(lfr.id.clone(), lfr.status.clone()))?,
+        _ => Err(ReplayError::NotTerminal(lfr.id.clone(), lfr.status))?,
     }
 }
 

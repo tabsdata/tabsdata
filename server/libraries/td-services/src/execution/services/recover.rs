@@ -425,7 +425,7 @@ mod tests {
                                     name: FunctionName::try_from("f_1")?,
                                     dependencies: vec![],
                                     tables: vec![TableNameDto::try_from("t_1")?],
-                                    initial_status: initial.clone(),
+                                    initial_status: initial,
                                     expected_status: initial,
                                 },
                             ],

@@ -4,10 +4,11 @@
 
 use crate::dxo::yaml::location::{Location, Locations};
 use crate::types::basic::{
-    AtTime, CollectionId, CollectionName, ColumnCount, DependencyPos, ExecutionId, ExecutionName,
-    FunctionName, FunctionVersionId, InputIdx, IsEmptyVersions, PartitionFileName, PartitionName,
-    PhysicalFunctionRunId, PhysicalTableDataVersionId, RowCount, SchemaHash, TableFunctionParamPos,
-    TableId, TableName, TableVersionId, TransactionId, TriggeredOn, VersionPos,
+    AtTime, ByteCount, CollectionId, CollectionName, ColumnCount, DependencyPos, ExecutionId,
+    ExecutionName, FunctionName, FunctionVersionId, InputIdx, IsEmptyVersions, PartitionFileName,
+    PartitionName, PhysicalFunctionRunId, PhysicalTableDataVersionId, RowCount, SchemaHash,
+    TableFunctionParamPos, TableId, TableName, TableVersionId, TransactionId, TriggeredOn,
+    VersionPos,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -213,6 +214,9 @@ pub struct TableInfo {
     pub column_count: ColumnCount,
     pub row_count: RowCount,
     pub schema_hash: SchemaHash,
+    #[serde(default)]
+    #[builder(default)]
+    pub data_bytes: Option<ByteCount>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, ToSchema)]
@@ -634,6 +638,7 @@ output:
                         column_count: ColumnCount::try_from(1i64)?,
                         row_count: RowCount::try_from(2i64)?,
                         schema_hash: SchemaHash::try_from("hash")?,
+                        data_bytes: None,
                     },
                 },
                 WrittenTable::NoData {

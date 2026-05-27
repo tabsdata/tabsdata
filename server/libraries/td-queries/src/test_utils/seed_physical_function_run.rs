@@ -44,14 +44,14 @@ pub(crate) async fn seed_physical_function_run(
         Some(existing) => {
             if &existing.status != status {
                 let update = UpdateLogicalFunctionRunDB::builder()
-                    .status(status.clone())
+                    .status(status)
                     .build()?;
                 db.live()
                     .update::<_, LogicalFunctionRunDB>(&update, &existing.id)
                     .await?;
             }
             LogicalFunctionRunDB {
-                status: status.clone(),
+                status: *status,
                 ..existing
             }
         }
@@ -65,7 +65,7 @@ pub(crate) async fn seed_physical_function_run(
                 .trigger(Trigger::Manual)
                 .triggered_on(transaction.triggered_on)
                 .triggered_by_id(transaction.triggered_by_id)
-                .status(status.clone())
+                .status(status)
                 .build()?;
             db.live().insert::<LogicalFunctionRunDB>(&lfr).await?;
             lfr

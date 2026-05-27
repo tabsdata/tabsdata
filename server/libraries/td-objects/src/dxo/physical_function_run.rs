@@ -7,10 +7,10 @@ mod definitions {
     use crate::dxo::execution::ExecutionDB;
     use crate::dxo::worker::UpdateWorkerExecution;
     use crate::types::basic::{
-        AtTime, BundleId, CollectionId, CollectionName, DataLocation, ExecutionId, ExecutionName,
-        FunctionId, FunctionName, FunctionVersionId, PhysicalFunctionRunId,
-        PhysicalFunctionRunStatus, StorageVersion, TransactionId, Trigger, TriggeredOn, UserId,
-        UserName,
+        AtTime, BundleId, ByteCount, CollectionId, CollectionName, DataLocation, EpochMs,
+        ExecutionId, ExecutionName, FunctionId, FunctionName, FunctionVersionId,
+        PhysicalFunctionRunId, PhysicalFunctionRunStatus, RowCount, StorageVersion,
+        TableVersionCount, TransactionId, Trigger, TriggeredOn, UserId, UserName,
     };
 
     #[ta_objects::Dao]
@@ -50,6 +50,28 @@ mod definitions {
         // Patch resolved at mint, if any. NULL → head ran verbatim.
         #[builder(default)]
         pub function_version_patch_id: Option<FunctionVersionId>,
+
+        // UTC epoch-ms bucket floors derived from `ended_on` at
+        // terminalization. Written atomically with `status` + `ended_on`
+        // by the worker callback. NULL until the attempt terminates.
+        #[builder(default)]
+        pub ended_on_hour_ms: Option<EpochMs>,
+        #[builder(default)]
+        pub ended_on_day_ms: Option<EpochMs>,
+        #[builder(default)]
+        pub ended_on_week_ms: Option<EpochMs>,
+        #[builder(default)]
+        pub ended_on_month_ms: Option<EpochMs>,
+
+        // Aggregated per-attempt outcome from the worker callback's
+        // `RunMetrics`. Populated only on `Done` terminalization;
+        // NULL for `Error` / `Failed` and for not-yet-terminal rows.
+        #[builder(default)]
+        pub metric_table_versions: Option<TableVersionCount>,
+        #[builder(default)]
+        pub metric_rows: Option<RowCount>,
+        #[builder(default)]
+        pub metric_data_bytes: Option<ByteCount>,
     }
 
     #[ta_objects::Dao]
@@ -119,6 +141,12 @@ mod definitions {
     // writes both via UpdateWorkerExecution → builder. The LFR's
     // canonical status is updated separately via UpdateLogicalFunctionRunDB
     // (sticky-Committed gate applies there, not here).
+    //
+    // At terminalization, the same UPDATE also writes the four
+    // `ended_on_*_ms` bucket floors (computed in Rust from `ended_on`
+    // via `td_common::bucket::BucketFloors::from_utc`) and — when the
+    // attempt produced output — the three `metric_*` aggregates from
+    // the callback's `RunMetrics`. Single atomic write.
     #[ta_objects::Dao]
     #[dao(update, sql_table = "physical_function_runs")]
     #[dxo(builder(try_from = UpdateWorkerExecution))]
@@ -129,6 +157,22 @@ mod definitions {
         #[builder(default)]
         pub ended_on: Option<AtTime>,
         pub status: PhysicalFunctionRunStatus,
+
+        #[builder(default)]
+        pub ended_on_hour_ms: Option<EpochMs>,
+        #[builder(default)]
+        pub ended_on_day_ms: Option<EpochMs>,
+        #[builder(default)]
+        pub ended_on_week_ms: Option<EpochMs>,
+        #[builder(default)]
+        pub ended_on_month_ms: Option<EpochMs>,
+
+        #[builder(default)]
+        pub metric_table_versions: Option<TableVersionCount>,
+        #[builder(default)]
+        pub metric_rows: Option<RowCount>,
+        #[builder(default)]
+        pub metric_data_bytes: Option<ByteCount>,
     }
 
     impl UpdatePhysicalFunctionRunDB {
@@ -141,6 +185,13 @@ mod definitions {
                 started_on: None,
                 ended_on: None,
                 status: PhysicalFunctionRunStatus::Dispatched,
+                ended_on_hour_ms: None,
+                ended_on_day_ms: None,
+                ended_on_week_ms: None,
+                ended_on_month_ms: None,
+                metric_table_versions: None,
+                metric_rows: None,
+                metric_data_bytes: None,
             })
         }
     }

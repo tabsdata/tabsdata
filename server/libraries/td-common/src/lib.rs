@@ -5,6 +5,7 @@
 pub mod about;
 pub mod absolute_path;
 pub mod attach;
+pub mod bucket;
 pub mod constants;
 pub mod datetime;
 pub mod env;

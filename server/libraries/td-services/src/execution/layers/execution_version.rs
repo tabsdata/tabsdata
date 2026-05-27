@@ -10,9 +10,7 @@ use td_objects::dxo::execution::{ExecutionDB, ExecutionResponse, ExecutionRespon
 use td_objects::dxo::function::FunctionDBWithNames;
 use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
-use td_objects::types::basic::{
-    AtTime, FunctionVersionId, PhysicalFunctionRunStatus, SkipIfRunning,
-};
+use td_objects::types::basic::{AtTime, FunctionVersionId, SkipIfRunning};
 use td_queries::{LfrEntry, LiveEntry};
 use td_tower::default_services::Condition;
 use td_tower::extractors::{MutRef, Ref};
@@ -68,26 +66,22 @@ pub async fn skip_if_running(
                 None => None,
             };
             match physical_function_run {
-                Some(fr) => match fr.status {
-                    PhysicalFunctionRunStatus::Done
-                    | PhysicalFunctionRunStatus::Failed
-                    | PhysicalFunctionRunStatus::Error => {
-                        debug!(
-                            physical_function_run_id = %fr.id,
-                            status = ?fr.status,
-                            "Latest function run not running"
-                        );
-                        false
-                    }
-                    _ => {
-                        debug!(
-                            physical_function_run_id = %fr.id,
-                            status = ?fr.status,
-                            "Latest function run running"
-                        );
-                        true
-                    }
-                },
+                Some(fr) if fr.status.is_ended() => {
+                    debug!(
+                        physical_function_run_id = %fr.id,
+                        status = ?fr.status,
+                        "Latest function run not running"
+                    );
+                    false
+                }
+                Some(fr) => {
+                    debug!(
+                        physical_function_run_id = %fr.id,
+                        status = ?fr.status,
+                        "Latest function run running"
+                    );
+                    true
+                }
                 None => {
                     debug!("No bound FR for latest execution");
                     false

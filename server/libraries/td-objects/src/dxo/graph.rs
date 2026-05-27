@@ -19,6 +19,8 @@ use td_error::TdError;
 use utoipa::ToSchema;
 
 /// Represents a function version to perform graph resolution.
+/// Identity only — per-collection metadata is looked up at use sites,
+/// not threaded through the node.
 #[ta_objects::Dto]
 #[derive(Eq, PartialEq, Hash)]
 #[dxo(builder(try_from = FunctionDBWithNames))]

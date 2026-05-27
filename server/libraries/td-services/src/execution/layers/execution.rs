@@ -157,6 +157,7 @@ pub async fn build_logical_function_runs(
     transaction_map: Ref<TransactionMap<TransactionBy>>,
     execution_plan: Ref<ExecutionPlan>,
     execution: Ref<ExecutionDB>,
+    all_functions_map: Ref<HashMap<FunctionId, FunctionDBWithNames>>,
 ) -> Result<Vec<LogicalFunctionRunDB>, TdError> {
     let main_trigger = execution_plan.main_trigger();
     execution_plan
@@ -169,6 +170,17 @@ pub async fn build_logical_function_runs(
             } else {
                 Trigger::Dependency
             };
+            // Group snapshot from the planner's `all_functions_map`
+            // (view-joined `collections.group_id`). Map was populated
+            // upstream from these same function_ids — missing entry is
+            // an internal invariant violation.
+            let function = all_functions_map.get(&f.function_id).ok_or_else(|| {
+                api_error!(
+                    ApiError::InternalError,
+                    "Function {} missing from all_functions_map while stamping LFR group_id",
+                    f.function_id
+                )
+            })?;
             LogicalFunctionRunDB::builder()
                 .collection_id(f.collection_id)
                 .execution_id(execution.id.clone())
@@ -178,6 +190,7 @@ pub async fn build_logical_function_runs(
                 .trigger(trigger)
                 .triggered_on(execution.triggered_on)
                 .triggered_by_id(execution.triggered_by_id)
+                .group_id(function.group_id)
                 .build()
                 .map_err(TdError::from)
         })
@@ -224,10 +237,12 @@ pub async fn build_logical_table_data_versions(
     logical_function_runs: Ref<Vec<LogicalFunctionRunDB>>,
 ) -> Result<Vec<LogicalTableDataVersionDB>, TdError> {
     // Producer LFR lookup is keyed by function_id (logical identity), not
-    // function_version_id — see `build_function_runs` for why.
+    // function_version_id — see `build_function_runs` for why. The map
+    // also carries `group_id` so the LTDV snapshot stays equal-by-
+    // construction to the LFR's, with no second `all_functions_map` lookup.
     let ffr_by_function: HashMap<_, _> = logical_function_runs
         .iter()
-        .map(|lfr| (lfr.function_id, lfr.id.clone()))
+        .map(|lfr| (lfr.function_id, (lfr.id.clone(), lfr.group_id)))
         .collect();
 
     execution_plan
@@ -235,7 +250,7 @@ pub async fn build_logical_table_data_versions(
         .iter()
         .map(|(t, f, edge)| {
             let transaction = transaction_map.get(&transaction_by.key(f)?)?;
-            let producer = ffr_by_function.get(&f.function_id).ok_or_else(|| {
+            let (producer, group_id) = ffr_by_function.get(&f.function_id).ok_or_else(|| {
                 api_error!(
                     ApiError::InternalError,
                     "Producer LFR not found for function_id {} while building LTDVs",
@@ -251,6 +266,7 @@ pub async fn build_logical_table_data_versions(
                 .function_param_pos(edge.output_pos().cloned())
                 .triggered_on(execution.triggered_on)
                 .triggered_by_id(execution.triggered_by_id)
+                .group_id(*group_id)
                 .build()
                 .map_err(TdError::from)
         })

@@ -46,7 +46,6 @@ use td_tower::layers;
 async fn resolve_logical_function_runs(
     mut conn: MutRef<DynamicConnection<'static>>,
     physical_function_runs: Ref<Vec<PhysicalFunctionRunDB>>,
-    _at: Ref<AtTime>,
 ) -> Result<Vec<LogicalFunctionRunDB>, TdError> {
     if physical_function_runs.is_empty() {
         return Ok(Vec::new());
@@ -65,12 +64,7 @@ async fn resolve_logical_function_runs(
     Ok(physical_function_runs
         .iter()
         .filter_map(|fr| {
-            if !matches!(
-                fr.status,
-                PhysicalFunctionRunStatus::Requested
-                    | PhysicalFunctionRunStatus::Dispatched
-                    | PhysicalFunctionRunStatus::Running
-            ) {
+            if !PhysicalFunctionRunStatus::IN_FLIGHT.contains(&fr.status) {
                 return None;
             }
             let lfr = lfr_by_exec_fn

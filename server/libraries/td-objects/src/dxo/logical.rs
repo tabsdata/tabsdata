@@ -104,15 +104,15 @@ pub trait LogicalPointerDao:
 mod definitions {
     use crate::dxo::worker::UpdateWorkerExecution;
     use crate::types::basic::{
-        AtTime, CollectionId, CollectionName, ColumnCount, DataChanged, DataLocation,
-        DependencyPos, ExecutionId, ExecutionName, FunctionId, FunctionName, FunctionVersionId,
-        HasData, InputIdx, LogicalFunctionRunId, LogicalFunctionRunInputId,
-        LogicalFunctionRunPointerId, LogicalFunctionRunStatus, LogicalPointerReason,
-        LogicalPointerStatus, LogicalTableDataVersionId, LogicalTableDataVersionPointerId,
-        PhysicalFunctionRunId, PhysicalFunctionRunStatus, PhysicalTableDataVersionId, RowCount,
-        SchemaChanged, SchemaDataChanged, SchemaHash, StorageVersion, TableFunctionParamPos,
-        TableId, TableName, TableVersionId, TransactionId, Trigger, TriggeredOn, UserId, UserName,
-        VersionPos,
+        AtTime, ByteCount, CollectionId, CollectionName, ColumnCount, DataChanged, DataLocation,
+        DependencyPos, EpochMs, ExecutionId, ExecutionName, FunctionId, FunctionName,
+        FunctionVersionId, GroupId, GroupName, HasData, InputIdx, LogicalFunctionRunId,
+        LogicalFunctionRunInputId, LogicalFunctionRunPointerId, LogicalFunctionRunStatus,
+        LogicalPointerReason, LogicalPointerStatus, LogicalTableDataVersionId,
+        LogicalTableDataVersionPointerId, PhysicalFunctionRunId, PhysicalFunctionRunStatus,
+        PhysicalTableDataVersionId, RowCount, SchemaChanged, SchemaDataChanged, SchemaHash,
+        StorageVersion, TableFunctionParamPos, TableId, TableName, TableVersionCount,
+        TableVersionId, TransactionId, Trigger, TriggeredOn, UserId, UserName, VersionPos,
     };
     use td_error::TdError;
 
@@ -176,6 +176,11 @@ mod definitions {
         // Committed LFR.
         #[builder(default = LogicalFunctionRunStatus::Scheduled)]
         pub status: LogicalFunctionRunStatus,
+        // Group snapshot copied from collections.group_id at LFR mint;
+        // immutable thereafter so a collection's later group reassignment
+        // doesn't shift historical runs.
+        #[builder(default = "GroupId::default_group()")]
+        pub group_id: GroupId,
     }
 
     // Names-joined view of the LFR identity row, merged with the
@@ -193,16 +198,27 @@ mod definitions {
         pub collection: CollectionName,
         pub execution: Option<ExecutionName>,
         pub triggered_by: UserName,
+        pub group: Option<GroupName>,
         // PFR id currently bound to this LFR (resolved from the pointer
         // event log); NULL while Pending/Voided.
         pub physical_function_run_id: Option<PhysicalFunctionRunId>,
         pub started_on: Option<AtTime>,
         pub ended_on: Option<AtTime>,
-        // Per-attempt audit status from the bound PFR (Running, Done,
-        // Error, …). The canonical sticky-Committed `status` field lives
-        // on the LFR side (already inherited via `LogicalFunctionRunDB`).
+        // Per-attempt audit status from the bound PFR. The canonical
+        // sticky-Committed `status` field lives on the LFR side
+        // (inherited via `LogicalFunctionRunDB`).
         pub physical_status: Option<PhysicalFunctionRunStatus>,
         pub function_version_patch_id: Option<FunctionVersionId>,
+        // Bucket floors / aggregated metrics from the bound PFR. NULL
+        // until the attempt terminates; metric_* additionally NULL for
+        // non-output statuses (E/F/X/Y).
+        pub ended_on_hour_ms: Option<EpochMs>,
+        pub ended_on_day_ms: Option<EpochMs>,
+        pub ended_on_week_ms: Option<EpochMs>,
+        pub ended_on_month_ms: Option<EpochMs>,
+        pub metric_table_versions: Option<TableVersionCount>,
+        pub metric_rows: Option<RowCount>,
+        pub metric_data_bytes: Option<ByteCount>,
     }
 
     /// Public DTO for a function run — one row per
@@ -377,6 +393,10 @@ mod definitions {
         // schema between attempts).
         pub triggered_on: TriggeredOn,
         pub triggered_by_id: UserId,
+        // Equal by construction to the producing LFR's group_id (both
+        // copied off the same FunctionNode at plan-build).
+        #[builder(default = "GroupId::default_group()")]
+        pub group_id: GroupId,
     }
 
     // Names-joined view of the LTDV identity row, merged with the
@@ -390,6 +410,8 @@ mod definitions {
         pub collection: CollectionName,
         pub execution: Option<ExecutionName>,
         pub triggered_by: UserName,
+        // Resolved group display name from the joined groups row.
+        pub group: Option<GroupName>,
         // PTDV id currently bound to this LTDV (resolved from the pointer
         // event log); NULL while Pending/Voided.
         pub physical_table_data_version_id: Option<PhysicalTableDataVersionId>,
@@ -401,6 +423,7 @@ mod definitions {
         pub schema_changed: Option<SchemaChanged>,
         pub column_count: Option<ColumnCount>,
         pub row_count: Option<RowCount>,
+        pub data_bytes: Option<ByteCount>,
         pub schema_hash: Option<SchemaHash>,
         pub with_data_table_data_version_id: Option<PhysicalTableDataVersionId>,
         pub physical_function_run_id: Option<PhysicalFunctionRunId>,
@@ -471,6 +494,7 @@ mod definitions {
         pub schema_data_changed: SchemaDataChanged,
         pub column_count: Option<ColumnCount>,
         pub row_count: Option<RowCount>,
+        pub data_bytes: Option<ByteCount>,
         #[dto(list(filter))]
         pub schema_hash: Option<SchemaHash>,
         pub with_data_table_data_version_id: Option<PhysicalTableDataVersionId>,

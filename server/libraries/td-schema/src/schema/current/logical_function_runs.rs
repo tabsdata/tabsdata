@@ -22,6 +22,7 @@ use sea_query::{
 use super::collections::Collections;
 use super::executions::Executions;
 use super::functions::Functions;
+use super::groups::Groups;
 use super::logical_function_run_pointers::LogicalFunctionRunPointers;
 use super::physical_function_runs::PhysicalFunctionRuns;
 use super::transactions::Transactions;
@@ -58,6 +59,10 @@ pub enum LogicalFunctionRuns {
     TriggeredOn,
     TriggeredById,
     Status,
+    // Group snapshot, copied from collections.group_id at LFR mint.
+    // Immutable thereafter — collection-group reassignment does not
+    // mutate already-minted runs.
+    GroupId,
 }
 
 pub(super) struct Defs;
@@ -80,10 +85,18 @@ impl Entity for Defs {
                 .col(ColumnDef::new(LogicalFunctionRuns::TriggeredOn).timestamp_with_time_zone().not_null())
                 .col(ColumnDef::new(LogicalFunctionRuns::TriggeredById).text().not_null())
                 .col(ColumnDef::new(LogicalFunctionRuns::Status).text().not_null())
+                .col(ColumnDef::new(LogicalFunctionRuns::GroupId).text().not_null())
                 .foreign_key(
                     ForeignKey::create()
                         .from(LogicalFunctionRuns::Table, LogicalFunctionRuns::CollectionId)
                         .to(Collections::Table, Collections::Id)
+                        .on_delete(ForeignKeyAction::Restrict)
+                        .on_update(ForeignKeyAction::Restrict),
+                )
+                .foreign_key(
+                    ForeignKey::create()
+                        .from(LogicalFunctionRuns::Table, LogicalFunctionRuns::GroupId)
+                        .to(Groups::Table, Groups::Id)
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
@@ -157,6 +170,15 @@ impl Entity for Defs {
                 .table(LogicalFunctionRuns::Table)
                 .col(LogicalFunctionRuns::Status)
                 .to_owned(),
+            // Group-filtered metrics / Sankey hot path: covers
+            // `(group_id, collection_id)` to support both group-level
+            // aggregations and per-collection drill-downs.
+            Index::create()
+                .name("logical_function_runs___group_id__collection_id___idx")
+                .table(LogicalFunctionRuns::Table)
+                .col(LogicalFunctionRuns::GroupId)
+                .col(LogicalFunctionRuns::CollectionId)
+                .to_owned(),
         ]
     }
 
@@ -174,6 +196,7 @@ impl Entity for Defs {
         // row. Backs the listing endpoint that powers the execution-plan
         // graph — `status` here is the canonical (sticky-Committed)
         // flow-control status, not the per-attempt audit on the PFR.
+        let groups_alias = Alias::new("groups_for_lfr");
         let function_runs_with_names = ViewDef::new(
             FunctionRunsWithNames,
             Query::select()
@@ -185,6 +208,7 @@ impl Entity for Defs {
                     b.name_or_id((Users::Table, Users::Name), (LogicalFunctionRuns::Table, LogicalFunctionRuns::TriggeredById)),
                     Alias::new("triggered_by"),
                 )
+                .expr_as(Expr::col((groups_alias.clone(), Groups::Name)), Alias::new("group"))
                 .expr_as(Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::Id)), Alias::new("physical_function_run_id"))
                 .expr_as(Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::StartedOn)), Alias::new("started_on"))
                 .expr_as(Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::EndedOn)), Alias::new("ended_on"))
@@ -193,12 +217,28 @@ impl Entity for Defs {
                     Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::FunctionVersionPatchId)),
                     Alias::new("function_version_patch_id"),
                 )
+                .expr_as(Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::EndedOnHourMs)), Alias::new("ended_on_hour_ms"))
+                .expr_as(Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::EndedOnDayMs)), Alias::new("ended_on_day_ms"))
+                .expr_as(Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::EndedOnWeekMs)), Alias::new("ended_on_week_ms"))
+                .expr_as(Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::EndedOnMonthMs)), Alias::new("ended_on_month_ms"))
+                .expr_as(
+                    Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::MetricTableVersions)),
+                    Alias::new("metric_table_versions"),
+                )
+                .expr_as(Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::MetricRows)), Alias::new("metric_rows"))
+                .expr_as(Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::MetricDataBytes)), Alias::new("metric_data_bytes"))
                 .from(LogicalFunctionRuns::Table)
                 .join(
                     JoinType::LeftJoin,
                     Collections::Table,
                     Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::CollectionId))
                         .equals((Collections::Table, Collections::Id)),
+                )
+                .join_as(
+                    JoinType::LeftJoin,
+                    Groups::Table,
+                    groups_alias.clone(),
+                    Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::GroupId)).equals((groups_alias, Groups::Id)),
                 )
                 .join(
                     JoinType::LeftJoin,

@@ -42,6 +42,7 @@ pub mod permission;
 pub mod physical_function_run;
 pub mod physical_table_data_version;
 pub mod role;
+pub mod run_metrics;
 pub mod runtime_info;
 pub mod synchrotron;
 pub mod system;

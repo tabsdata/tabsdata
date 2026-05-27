@@ -40,6 +40,18 @@ pub enum PhysicalFunctionRuns {
     // Per-attempt audit status. Canonical flow-control status lives on
     // `logical_function_runs.status` — the two are independent.
     Status,
+    // UTC epoch-ms bucket floors derived from `ended_on` at terminalization.
+    // NULL until the attempt reaches a terminal status.
+    EndedOnHourMs,
+    EndedOnDayMs,
+    EndedOnWeekMs,
+    EndedOnMonthMs,
+    // Aggregated per-attempt metrics. NULL except when the attempt
+    // reached `Done` (i.e. produced output). Populated atomically with
+    // `status` and `ended_on` from the worker callback's `RunMetrics`.
+    MetricTableVersions,
+    MetricRows,
+    MetricDataBytes,
 }
 
 pub(super) struct Defs;
@@ -70,6 +82,17 @@ impl Entity for Defs {
                 // every transition. The LFR row carries the canonical
                 // (sticky-Committed) flow-control status — independent.
                 .col(ColumnDef::new(PhysicalFunctionRuns::Status).text().not_null())
+                // Bucket + metric columns. All nullable — written
+                // atomically with status/ended_on at terminalization. The
+                // metric columns are populated only when the attempt
+                // produced output (status = Done).
+                .col(ColumnDef::new(PhysicalFunctionRuns::EndedOnHourMs).big_integer().null())
+                .col(ColumnDef::new(PhysicalFunctionRuns::EndedOnDayMs).big_integer().null())
+                .col(ColumnDef::new(PhysicalFunctionRuns::EndedOnWeekMs).big_integer().null())
+                .col(ColumnDef::new(PhysicalFunctionRuns::EndedOnMonthMs).big_integer().null())
+                .col(ColumnDef::new(PhysicalFunctionRuns::MetricTableVersions).big_integer().null())
+                .col(ColumnDef::new(PhysicalFunctionRuns::MetricRows).big_integer().null())
+                .col(ColumnDef::new(PhysicalFunctionRuns::MetricDataBytes).big_integer().null())
                 .foreign_key(
                     ForeignKey::create()
                         .from(PhysicalFunctionRuns::Table, PhysicalFunctionRuns::CollectionId)
@@ -131,6 +154,27 @@ impl Entity for Defs {
                 .name("function_runs___status___idx")
                 .table(PhysicalFunctionRuns::Table)
                 .col(PhysicalFunctionRuns::Status)
+                .to_owned(),
+            // Metrics / Sankey time-window composites. WHERE filters
+            // on raw `ended_on`; GROUP BY uses the precomputed bucket-
+            // floor columns but doesn't need an index for that.
+            Index::create()
+                .name("function_runs___collection_id__ended_on___idx")
+                .table(PhysicalFunctionRuns::Table)
+                .col(PhysicalFunctionRuns::CollectionId)
+                .col(PhysicalFunctionRuns::EndedOn)
+                .to_owned(),
+            Index::create()
+                .name("function_runs___status__ended_on___idx")
+                .table(PhysicalFunctionRuns::Table)
+                .col(PhysicalFunctionRuns::Status)
+                .col(PhysicalFunctionRuns::EndedOn)
+                .to_owned(),
+            Index::create()
+                .name("function_runs___function_version_id__ended_on___idx")
+                .table(PhysicalFunctionRuns::Table)
+                .col(PhysicalFunctionRuns::FunctionVersionId)
+                .col(PhysicalFunctionRuns::EndedOn)
                 .to_owned(),
         ]
     }

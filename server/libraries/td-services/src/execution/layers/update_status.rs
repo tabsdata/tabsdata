@@ -101,7 +101,7 @@ pub async fn update_function_run_status(
                 ) => {
                     ctx.warning(UpdateStatusRunError::StickyFinalStatus(
                         current.id.clone(),
-                        s.clone(),
+                        *s,
                     ));
                     None
                 }
@@ -112,7 +112,7 @@ pub async fn update_function_run_status(
                 ) if s == &update.status => {
                     ctx.warning(UpdateStatusRunError::StickyFinalStatus(
                         current.id.clone(),
-                        s.clone(),
+                        *s,
                     ));
                     None
                 }
@@ -123,7 +123,7 @@ pub async fn update_function_run_status(
                     _,
                 ) => Some(Err(UpdateStatusRunError::StickyFinalStatus(
                     current.id.clone(),
-                    s.clone(),
+                    *s,
                 ))),
 
                 // Non-sticky terminals (Failed, Done) under an in-flight
@@ -140,7 +140,7 @@ pub async fn update_function_run_status(
                 | (LogicalFunctionRunStatus::Done, LogicalFunctionRunStatus::Done) => {
                     ctx.warning(UpdateStatusRunError::ReplayCallbackAbsorbed(
                         current.id.clone(),
-                        current.status.clone(),
+                        current.status,
                     ));
                     None
                 }
@@ -187,8 +187,8 @@ pub async fn update_function_run_status(
                 _ => Some(Err(
                     UpdateStatusRunError::UnexpectedFunctionRunStatusTransition(
                         current.id.clone(),
-                        current.status.clone(),
-                        update.status.clone(),
+                        current.status,
+                        update.status,
                     ),
                 )),
             }
@@ -258,7 +258,7 @@ pub async fn update_function_run_status(
 
         if !downstream_lfr_ids.is_empty() {
             let downstream_update = UpdateLogicalFunctionRunDB::builder()
-                .status(downstream_status.clone())
+                .status(downstream_status)
                 .build()?;
             let _ = conn
                 .update_chunked::<_, LogicalFunctionRunDB, _>(
@@ -362,6 +362,7 @@ pub async fn update_table_data_version_status(
                     schema_changed: Some(schema_changed),
                     column_count: Some(table_info.column_count),
                     row_count: Some(table_info.row_count),
+                    data_bytes: table_info.data_bytes,
                     schema_hash: Some(table_info.schema_hash.clone()),
                     with_data_table_data_version_id: Some(data_version.id.clone()),
                 }
@@ -371,6 +372,7 @@ pub async fn update_table_data_version_status(
                     schema_changed: Some(SchemaChanged::FALSE),
                     column_count: latest_version_with_data.column_count,
                     row_count: latest_version_with_data.row_count,
+                    data_bytes: latest_version_with_data.data_bytes,
                     schema_hash: latest_version_with_data.schema_hash.clone(),
                     with_data_table_data_version_id: Some(latest_version_with_data.id),
                 }
@@ -380,6 +382,7 @@ pub async fn update_table_data_version_status(
                     schema_changed: Some(SchemaChanged::FALSE),
                     column_count: None,
                     row_count: None,
+                    data_bytes: None,
                     schema_hash: None,
                     with_data_table_data_version_id: None,
                 }

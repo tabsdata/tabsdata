@@ -88,6 +88,7 @@ impl Entity for Defs {
             Query::select()
                 .expr(Expr::col((FunctionsCurrent::Table, Asterisk)))
                 .expr_as(Expr::col((Collections::Table, Collections::Name)), Alias::new("collection"))
+                .expr_as(Expr::col((Collections::Table, Collections::GroupId)), Alias::new("group_id"))
                 .expr_as(
                     b.name_or_id((Users::Table, Users::Name), (FunctionsCurrent::Table, FunctionsCurrent::DefinedById)),
                     Alias::new("defined_by"),

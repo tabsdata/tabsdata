@@ -8,7 +8,7 @@ mod definitions {
     use crate::types::basic::{
         AtTime, BundleId, CollectionId, CollectionName, Connector, DataLocation, Decorator,
         Description, Enabled, FunctionId, FunctionName, FunctionRuntimeValues, FunctionStatus,
-        FunctionVersionId, ReuseFrozen, Snippet, StorageVersion, TableName, TableNameDto,
+        FunctionVersionId, GroupId, ReuseFrozen, Snippet, StorageVersion, TableName, TableNameDto,
         TableType, UserId, UserName, WorkerConfig, WorkerId, WorkerTypeDto,
     };
     use crate::types::composed::{
@@ -259,6 +259,11 @@ mod definitions {
         pub enabled: Enabled, //  added in v4
 
         pub collection: CollectionName,
+        /// Group snapshot of the function's collection at view-query time.
+        /// Threaded into LFR/LTDV stamping via FunctionNode at plan-build.
+        /// Test builders default to `Default`.
+        #[builder(default = "GroupId::default_group()")]
+        pub group_id: GroupId,
         pub defined_by: UserName,
     }
 

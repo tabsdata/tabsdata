@@ -6,10 +6,12 @@
 mod definitions {
     use crate::dxo::function::FunctionDB;
     use crate::dxo::yaml::WorkerOutput;
+    use crate::dxo::yaml::function_runner::v2::WrittenTable;
     use crate::types::basic::{
-        AtTime, CollectionId, CollectionName, CronMask, Enabled, ExecutionId, ExecutionName,
-        FunctionName, FunctionVersionId, PhysicalFunctionRunId, SizeThreshold, TimeoutThresholdMin,
-        TransactionId, WorkerConfig, WorkerId, WorkerMessageStatus, WorkerStatus, WorkerType,
+        AtTime, ByteCount, CollectionId, CollectionName, CronMask, Enabled, ExecutionId,
+        ExecutionName, FunctionName, FunctionVersionId, PhysicalFunctionRunId, RowCount,
+        SizeThreshold, TableVersionCount, TimeoutThresholdMin, TransactionId, WorkerConfig,
+        WorkerId, WorkerMessageStatus, WorkerStatus, WorkerType,
     };
     use chrono::{DateTime, Utc};
     use ta_objects::Buildable;
@@ -114,24 +116,114 @@ mod definitions {
         pub started_on: AtTime,
         pub ended_on: Option<AtTime>,
         pub status: WorkerCallbackStatus,
+        // Bucket floors derived from `ended_on`. NULL while still
+        // running (no `ended_on` yet); populated at terminalization
+        // via td_common::bucket::BucketFloors::from_utc.
+        #[builder(default)]
+        pub ended_on_hour_ms: Option<crate::types::basic::EpochMs>,
+        #[builder(default)]
+        pub ended_on_day_ms: Option<crate::types::basic::EpochMs>,
+        #[builder(default)]
+        pub ended_on_week_ms: Option<crate::types::basic::EpochMs>,
+        #[builder(default)]
+        pub ended_on_month_ms: Option<crate::types::basic::EpochMs>,
+        // Per-attempt metrics aggregated from the worker callback's
+        // FunctionV2 output. `metric_data_bytes` stays None when the
+        // worker yaml omits `data_bytes` on every written table.
+        #[builder(default)]
+        pub metric_table_versions: Option<TableVersionCount>,
+        #[builder(default)]
+        pub metric_rows: Option<RowCount>,
+        #[builder(default)]
+        pub metric_data_bytes: Option<ByteCount>,
     }
 
     impl TryFrom<&CallbackRequest> for UpdateWorkerExecution {
         type Error = TdError;
 
         fn try_from(value: &CallbackRequest) -> Result<Self, Self::Error> {
+            let ended_on = value
+                .end
+                .map(|v| {
+                    let ts = Timestamp::try_from(v)?;
+                    AtTime::try_from(ts)
+                })
+                .transpose()?;
+
+            // Compute bucket floors from `ended_on` if present. Single
+            // atomic site for derivation: every PFR row whose `ended_on`
+            // is set also gets its four bucket-floor columns set.
+            let floors = ended_on.as_ref().map(|t| {
+                let dt: DateTime<Utc> = ***t;
+                td_common::bucket::BucketFloors::from_utc(dt)
+            });
+
+            // Aggregate per-attempt metrics from the worker's FunctionV2
+            // output into a single RunMetrics. `None` = no output payload
+            // (E/F/X/Y/U); `Some(_)` = output, with `data_bytes` itself
+            // optional for the older-worker-yaml case.
+            let metrics: Option<crate::dxo::run_metrics::RunMetrics> = match &value.context {
+                Some(WorkerOutput::V2(o) | WorkerOutput::FunctionV2(o)) => {
+                    let mut tables: i64 = 0;
+                    let mut rows: i64 = 0;
+                    let mut bytes: Option<i64> = None;
+                    for w in &o.output {
+                        let info = match w {
+                            WrittenTable::Data { info, .. }
+                            | WrittenTable::Partitions { info, .. } => info,
+                            WrittenTable::NoData { .. } => continue,
+                        };
+                        tables += 1;
+                        rows += *info.row_count;
+                        if let Some(b) = &info.data_bytes {
+                            bytes = Some(bytes.unwrap_or(0) + **b);
+                        }
+                    }
+                    Some(crate::dxo::run_metrics::RunMetrics {
+                        table_versions: TableVersionCount::try_from(tables)?,
+                        rows: RowCount::try_from(rows)?,
+                        data_bytes: bytes.map(ByteCount::try_from).transpose()?,
+                    })
+                }
+                _ => None,
+            };
+
+            // Flatten RunMetrics into the three nullable DAO fields. The
+            // SQL boundary is column-per-metric, so we expand here at
+            // the in-memory → DAO seam (rather than carrying an
+            // `Option<RunMetrics>` field into a struct sea-query maps
+            // 1:1 to columns).
+            let metric_table_versions = metrics.as_ref().map(|m| m.table_versions);
+            let metric_rows = metrics.as_ref().map(|m| m.rows);
+            let metric_data_bytes = metrics.as_ref().and_then(|m| m.data_bytes);
+
             Ok(UpdateWorkerExecution::builder()
                 .try_started_on(Timestamp::try_from(value.start)?)?
-                .ended_on(
-                    value
-                        .end
-                        .map(|v| {
-                            let ts = Timestamp::try_from(v)?;
-                            AtTime::try_from(ts)
-                        })
+                .ended_on(ended_on)
+                .status(value.status.clone())
+                .ended_on_hour_ms(
+                    floors
+                        .map(|f| crate::types::basic::EpochMs::try_from(f.hour_ms))
                         .transpose()?,
                 )
-                .status(value.status.clone())
+                .ended_on_day_ms(
+                    floors
+                        .map(|f| crate::types::basic::EpochMs::try_from(f.day_ms))
+                        .transpose()?,
+                )
+                .ended_on_week_ms(
+                    floors
+                        .map(|f| crate::types::basic::EpochMs::try_from(f.week_ms))
+                        .transpose()?,
+                )
+                .ended_on_month_ms(
+                    floors
+                        .map(|f| crate::types::basic::EpochMs::try_from(f.month_ms))
+                        .transpose()?,
+                )
+                .metric_table_versions(metric_table_versions)
+                .metric_rows(metric_rows)
+                .metric_data_bytes(metric_data_bytes)
                 .build()?)
         }
     }

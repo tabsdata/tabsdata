@@ -45,6 +45,7 @@ pub enum PhysicalTableDataVersions {
     SchemaChanged,
     ColumnCount,
     RowCount,
+    DataBytes,
     SchemaHash,
     ExecutionId,
     TransactionId,
@@ -78,6 +79,10 @@ impl Entity for Defs {
                 // width consistency across all backends.
                 .col(ColumnDef::new(PhysicalTableDataVersions::ColumnCount).big_integer().null())
                 .col(ColumnDef::new(PhysicalTableDataVersions::RowCount).big_integer().null())
+                // Output-table byte count reported by the worker yaml's
+                // `TableInfo.data_bytes` (Option<i64>). NULL when the worker
+                // omits it (e.g., older Python worker yamls).
+                .col(ColumnDef::new(PhysicalTableDataVersions::DataBytes).big_integer().null())
                 .col(ColumnDef::new(PhysicalTableDataVersions::SchemaHash).text().null())
                 .col(ColumnDef::new(PhysicalTableDataVersions::ExecutionId).text().not_null())
                 .col(ColumnDef::new(PhysicalTableDataVersions::TransactionId).text().not_null())

@@ -5,11 +5,11 @@
 #[ta_objects::dxo]
 mod definitions {
     use crate::types::basic::{
-        AtTime, CollectionId, CollectionName, ColumnCount, DataChanged, DataLocation, ExecutionId,
-        FunctionName, FunctionVersionId, HasData, PhysicalFunctionRunId, PhysicalFunctionRunStatus,
-        PhysicalTableDataVersionId, RowCount, SchemaChanged, SchemaDataChanged, SchemaHash,
-        StorageVersion, TableFunctionParamPos, TableId, TableName, TableVersionId, TransactionId,
-        TriggeredOn, UserId, UserName,
+        AtTime, ByteCount, CollectionId, CollectionName, ColumnCount, DataChanged, DataLocation,
+        ExecutionId, FunctionName, FunctionVersionId, HasData, PhysicalFunctionRunId,
+        PhysicalFunctionRunStatus, PhysicalTableDataVersionId, RowCount, SchemaChanged,
+        SchemaDataChanged, SchemaHash, StorageVersion, TableFunctionParamPos, TableId, TableName,
+        TableVersionId, TransactionId, TriggeredOn, UserId, UserName,
     };
     use ta_objects::and;
 
@@ -55,6 +55,10 @@ mod definitions {
         pub column_count: Option<ColumnCount>,
         #[builder(default)]
         pub row_count: Option<RowCount>,
+        // Byte count from the worker yaml's `TableInfo.data_bytes`. NULL
+        // when the worker omits it (older Python workers).
+        #[builder(default)]
+        pub data_bytes: Option<ByteCount>,
         #[builder(default)]
         pub schema_hash: Option<SchemaHash>,
 
@@ -161,6 +165,7 @@ mod definitions {
 
         pub column_count: Option<ColumnCount>,
         pub row_count: Option<RowCount>,
+        pub data_bytes: Option<ByteCount>,
         #[dto(list(filter))]
         pub schema_hash: Option<SchemaHash>,
         pub with_data_table_data_version_id: Option<PhysicalTableDataVersionId>,
@@ -181,6 +186,9 @@ mod definitions {
         #[dao(immutable)]
         #[builder(default)]
         pub row_count: Option<RowCount>,
+        #[dao(immutable)]
+        #[builder(default)]
+        pub data_bytes: Option<ByteCount>,
         #[dao(immutable)]
         #[builder(default)]
         pub schema_hash: Option<SchemaHash>,
