@@ -12,6 +12,7 @@ materialise parquet files in --out-dir.
 
 from __future__ import annotations
 
+import argparse
 import inspect
 import json
 import sys
@@ -24,20 +25,14 @@ from pydantic import ValidationError
 from tabsdatak._bundle import BUNDLE_MANIFEST_FILENAME, BUNDLE_USER_CODE_DIRNAME
 from tabsdatak._connectors import get_src
 from tabsdatak._info import KIND_PUBLISHER_DEF, PublisherInfo, _unwrap_info
-from tabsdatak._logging import setup_logging
-from tabsdatak._tdrunner.function._lib.cli import build_parser, run_command
+from tabsdatak._tdrunner.function._lib.cli import build_parser, command
 from tabsdatak._tdrunner.function._lib.errors import CommandSpecificError
 from tabsdatak._tdrunner.function._lib.inputs_manifest import (
     MANIFEST_FILES_KEY,
     MANIFEST_NAME_KEY,
     write_inputs_manifest,
 )
-from tabsdatak._tdrunner.function._lib.liveness import install_liveness_handler
-from tabsdatak._tdrunner.function._lib.request import (
-    InvalidRequestError,
-    load_request,
-)
-from tabsdatak._tdrunner.function.commands import tabsdata_command
+from tabsdatak._tdrunner.function._lib.request import load_request_or_fail
 from tabsdatak.api import ContextKeySpec, ContextValueSpec
 from tabsdatak.spi import SrcPluginCtx
 
@@ -97,15 +92,6 @@ def _build_parser():
         ),
     )
     return parser
-
-
-def _load_request(path: Path):
-    try:
-        return load_request(path)
-    except (FileNotFoundError, InvalidRequestError) as exc:
-        raise CommandSpecificError(
-            EXIT_BAD_REQUEST, f"unreadable request.yaml: {exc}"
-        ) from exc
 
 
 def _load_function_def(bundle_dir: Path) -> PublisherInfo:
@@ -371,16 +357,14 @@ def _write_inputs_manifest(
         ) from exc
 
 
-def _run() -> int:
-    args = _build_parser().parse_args()
-    setup_logging(args.log_config)
+@command(name="td_run_source_plugin", parser=_build_parser)
+def main(args: argparse.Namespace) -> int:
     request_path = Path(args.request)
     bundle_dir = Path(args.bundle_dir)
     out_dir = Path(args.out_dir)
     inputs_manifest = Path(args.inputs_manifest)
-    install_liveness_handler(Path(args.liveness))
 
-    request = _load_request(request_path)
+    request = load_request_or_fail(request_path, EXIT_BAD_REQUEST)
     info = _load_function_def(bundle_dir)
     plugin = _resolve_plugin(info)
     ctx = _SrcContext(
@@ -394,11 +378,6 @@ def _run() -> int:
     produced = _invoke_read_in(plugin, ctx, info.source)
     _write_inputs_manifest(info, produced, inputs_manifest)
     return 0
-
-
-@tabsdata_command(name="td_run_source_plugin")
-def main() -> int:
-    return run_command(_run)
 
 
 if __name__ == "__main__":  # pragma: no cover

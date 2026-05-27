@@ -20,20 +20,16 @@ parse run-env.yaml, and does not spawn any subprocess of the venv itself.
 
 from __future__ import annotations
 
+import argparse
 import tarfile
 from pathlib import Path
 
 import zstandard
 
-from tabsdatak._logging import setup_logging
 from tabsdatak._tdrunner.function._lib.bundle import extract_bundle
-from tabsdatak._tdrunner.function._lib.cli import build_parser, run_command
+from tabsdatak._tdrunner.function._lib.cli import build_parser, command
 from tabsdatak._tdrunner.function._lib.errors import CommandSpecificError
-from tabsdatak._tdrunner.function._lib.liveness import install_liveness_handler
-from tabsdatak._tdrunner.function._lib.request import (
-    InvalidRequestError,
-    load_request,
-)
+from tabsdatak._tdrunner.function._lib.request import load_request_or_fail
 from tabsdatak._tdrunner.function._lib.transporter_proc import (
     TransporterNotFoundError,
     run_transporter,
@@ -42,7 +38,6 @@ from tabsdatak._tdrunner.function._lib.transporter_request import (
     build_bundle_fetch_request,
     write_transporter_request,
 )
-from tabsdatak._tdrunner.function.commands import tabsdata_command
 
 VERSION = "0.1.0"
 INFO = (
@@ -91,15 +86,6 @@ def _build_parser():
     return parser
 
 
-def _load_request(path: Path):
-    try:
-        return load_request(path)
-    except (FileNotFoundError, InvalidRequestError) as exc:
-        raise CommandSpecificError(
-            EXIT_BAD_REQUEST, f"unreadable request.yaml: {exc}"
-        ) from exc
-
-
 def _fetch_via_transporter(
     request, target: Path, transporter_yaml: Path, report: Path
 ) -> None:
@@ -131,15 +117,13 @@ def _extract(archive: Path, dest_dir: Path) -> None:
         ) from exc
 
 
-def _run() -> int:
-    args = _build_parser().parse_args()
-    setup_logging(args.log_config)
+@command(name="td_localize_fn_bundle", parser=_build_parser)
+def main(args: argparse.Namespace) -> int:
     request_path = Path(args.request)
     dest_dir = Path(args.bundle_dir)
     scratch_dir = Path(args.scratch_dir)
-    install_liveness_handler(Path(args.liveness))
 
-    request = _load_request(request_path)
+    request = load_request_or_fail(request_path, EXIT_BAD_REQUEST)
     scratch_dir.mkdir(parents=True, exist_ok=True)
     bundle_local = scratch_dir / "bundle.tar.zst"
     transporter_yaml = scratch_dir / "transporter.yaml"
@@ -147,11 +131,6 @@ def _run() -> int:
     _fetch_via_transporter(request, bundle_local, transporter_yaml, transporter_report)
     _extract(bundle_local, dest_dir)
     return 0
-
-
-@tabsdata_command(name="td_localize_fn_bundle")
-def main() -> int:
-    return run_command(_run)
 
 
 if __name__ == "__main__":  # pragma: no cover

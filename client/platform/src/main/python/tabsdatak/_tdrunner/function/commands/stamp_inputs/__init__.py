@@ -40,32 +40,26 @@ When the request schema is extended to carry the trigger timestamp:
 
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
 import polars as pl
 
-from tabsdatak._logging import setup_logging
-from tabsdatak._tdrunner.function._lib.cli import build_parser, run_command
+from tabsdatak._tdrunner.function._lib.cli import build_parser, command
 from tabsdatak._tdrunner.function._lib.errors import CommandSpecificError
 from tabsdatak._tdrunner.function._lib.inputs_manifest import (
     MANIFEST_FILES_KEY,
     MANIFEST_NAME_KEY,
-    InvalidManifestError,
-    load_inputs_manifest,
+    load_inputs_manifest_or_fail,
     write_inputs_manifest,
 )
-from tabsdatak._tdrunner.function._lib.liveness import install_liveness_handler
-from tabsdatak._tdrunner.function._lib.request import (
-    InvalidRequestError,
-    load_request,
-)
+from tabsdatak._tdrunner.function._lib.request import load_request_or_fail
 from tabsdatak._tdrunner.function._lib.system_columns import (
     EMPTY_TIMESTAMP,
     EMPTY_VERSION,
     stamp_system_columns,
 )
-from tabsdatak._tdrunner.function.commands import tabsdata_command
 
 # TODO: After all commands are done, version will be unified in a single
 #  source of truth file.
@@ -127,24 +121,6 @@ def _build_parser():
     return parser
 
 
-def _load_request_or_fail(path: Path):
-    try:
-        return load_request(path)
-    except (FileNotFoundError, InvalidRequestError) as exc:
-        raise CommandSpecificError(
-            EXIT_BAD_REQUEST, f"unreadable request.yaml: {exc}"
-        ) from exc
-
-
-def _load_inputs_manifest_or_fail(path: Path) -> list[dict]:
-    """Wrap the shared `load_inputs_manifest` to map its exceptions to
-    this command's `EXIT_BAD_MANIFEST` code."""
-    try:
-        return load_inputs_manifest(path)
-    except (FileNotFoundError, InvalidManifestError) as exc:
-        raise CommandSpecificError(EXIT_BAD_MANIFEST, str(exc)) from exc
-
-
 def _stamp_file(
     src_path: Path,
     dest_path: Path,
@@ -187,17 +163,15 @@ def _stamp_file(
         ) from exc
 
 
-def _run() -> int:
-    args = _build_parser().parse_args()
-    setup_logging(args.log_config)
+@command(name="td_stamp_inputs", parser=_build_parser)
+def main(args: argparse.Namespace) -> int:
     request_path = Path(args.request)
     inputs_manifest = Path(args.inputs_manifest)
     enriched_dir = Path(args.enriched_dir)
     enriched_manifest = Path(args.enriched_inputs_manifest)
-    install_liveness_handler(Path(args.liveness))
 
-    request = _load_request_or_fail(request_path)
-    entries = _load_inputs_manifest_or_fail(inputs_manifest)
+    request = load_request_or_fail(request_path, EXIT_BAD_REQUEST)
+    entries = load_inputs_manifest_or_fail(inputs_manifest, EXIT_BAD_MANIFEST)
 
     execution = str(request.info.execution_id)
     transaction = str(request.info.transaction_id)
@@ -240,11 +214,6 @@ def _run() -> int:
             f"failed to write enriched inputs manifest {enriched_manifest}: {exc}",
         ) from exc
     return 0
-
-
-@tabsdata_command(name="td_stamp_inputs")
-def main() -> int:
-    return run_command(_run)
 
 
 if __name__ == "__main__":  # pragma: no cover

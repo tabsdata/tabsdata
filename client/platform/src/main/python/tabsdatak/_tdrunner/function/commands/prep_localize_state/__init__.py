@@ -24,10 +24,10 @@ Also writes two manifests describing what was localized:
 
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
-from tabsdatak._logging import setup_logging
-from tabsdatak._tdrunner.function._lib.cli import build_parser, run_command
+from tabsdatak._tdrunner.function._lib.cli import build_parser, command
 from tabsdatak._tdrunner.function._lib.endpoint import UnsupportedSchemeError
 from tabsdatak._tdrunner.function._lib.errors import CommandSpecificError
 from tabsdatak._tdrunner.function._lib.inputs_manifest import (
@@ -35,20 +35,12 @@ from tabsdatak._tdrunner.function._lib.inputs_manifest import (
     MANIFEST_NAME_KEY,
     write_inputs_manifest,
 )
-from tabsdatak._tdrunner.function._lib.liveness import install_liveness_handler
-from tabsdatak._tdrunner.function._lib.request import (
-    InvalidRequestError,
-    Request,
-    load_request,
-)
-from tabsdatak._tdrunner.function._lib.state_manifest import (
-    write_state_manifest,
-)
+from tabsdatak._tdrunner.function._lib.request import Request, load_request_or_fail
+from tabsdatak._tdrunner.function._lib.state_manifest import write_state_manifest
 from tabsdatak._tdrunner.function._lib.transporter_request import (
     build_localize_state_request,
     write_transporter_request,
 )
-from tabsdatak._tdrunner.function.commands import tabsdata_command
 
 VERSION = "0.1.0"
 INFO = (
@@ -158,23 +150,16 @@ def _build_state_manifest_entries(request: Request, state_dir: Path) -> list[dic
     return _build_table_manifest_entries(request.system_input, state_dir)
 
 
-def _run() -> int:
-    args = _build_parser().parse_args()
-    setup_logging(args.log_config)
+@command(name="td_prep_localize_state", parser=_build_parser)
+def main(args: argparse.Namespace) -> int:
     request_path = Path(args.request)
     in_dir = Path(args.in_dir)
     state_dir = Path(args.state_dir)
     out_path = Path(args.out)
     inputs_manifest_path = Path(args.inputs_manifest)
     state_manifest_path = Path(args.state_manifest)
-    install_liveness_handler(Path(args.liveness))
 
-    try:
-        request = load_request(request_path)
-    except (FileNotFoundError, InvalidRequestError) as exc:
-        raise CommandSpecificError(
-            EXIT_BAD_REQUEST, f"unreadable request.yaml: {exc}"
-        ) from exc
+    request = load_request_or_fail(request_path, EXIT_BAD_REQUEST)
 
     try:
         copy_req = build_localize_state_request(request, in_dir, state_dir)
@@ -206,11 +191,6 @@ def _run() -> int:
             f"failed to write {state_manifest_path}: {exc}",
         ) from exc
     return 0
-
-
-@tabsdata_command(name="td_prep_localize_state")
-def main() -> int:
-    return run_command(_run)
 
 
 if __name__ == "__main__":  # pragma: no cover

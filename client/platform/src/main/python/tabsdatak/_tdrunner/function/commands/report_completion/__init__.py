@@ -27,6 +27,7 @@ outputs than the request expects) and surfaces `EXIT_MANIFEST_MISMATCH`.
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import urllib.error
 import urllib.request
@@ -34,32 +35,24 @@ from pathlib import Path
 
 import pyarrow.parquet as pq
 
-from tabsdatak._logging import setup_logging
 from tabsdatak._tdrunner.function._lib.cli import (
     build_parser,
+    command,
     resolve_value,
-    run_command,
 )
 from tabsdatak._tdrunner.function._lib.errors import CommandSpecificError
-from tabsdatak._tdrunner.function._lib.liveness import install_liveness_handler
 from tabsdatak._tdrunner.function._lib.outputs_manifest import (
     MANIFEST_FILE_KEY,
     MANIFEST_NAME_KEY,
-    InvalidOutputsManifestError,
-    load_outputs_manifest,
+    load_outputs_manifest_or_fail,
 )
-from tabsdatak._tdrunner.function._lib.request import (
-    InvalidRequestError,
-    Request,
-    load_request,
-)
+from tabsdatak._tdrunner.function._lib.request import Request, load_request_or_fail
 from tabsdatak._tdrunner.function._lib.response import (
     Response,
     TableEntry,
     TableInfo,
     write_response,
 )
-from tabsdatak._tdrunner.function.commands import tabsdata_command
 
 VERSION = "0.1.0"
 INFO = "report-completion — submit the function-run response to the API server"
@@ -191,31 +184,19 @@ def _post(url: str, token: str, body: bytes) -> None:
         ) from exc
 
 
-def _run() -> int:
-    args = _build_parser().parse_args()
-    setup_logging(args.log_config)
+@command(name="td_report_completion", parser=_build_parser)
+def main(args: argparse.Namespace) -> int:
     url = resolve_value(args.url)
     token = resolve_value(args.token)
     request_path = Path(args.request)
     outputs_manifest_path = Path(args.outputs_manifest)
     state_dir = Path(args.state_dir)
     out_path = Path(args.out)
-    install_liveness_handler(Path(args.liveness))
 
-    try:
-        request = load_request(request_path)
-    except (FileNotFoundError, InvalidRequestError) as exc:
-        raise CommandSpecificError(
-            EXIT_BAD_REQUEST, f"unreadable request.yaml: {exc}"
-        ) from exc
-
-    try:
-        manifest_entries = load_outputs_manifest(outputs_manifest_path)
-    except (FileNotFoundError, InvalidOutputsManifestError) as exc:
-        raise CommandSpecificError(
-            EXIT_BAD_MANIFEST,
-            f"unreadable outputs manifest: {exc}",
-        ) from exc
+    request = load_request_or_fail(request_path, EXIT_BAD_REQUEST)
+    manifest_entries = load_outputs_manifest_or_fail(
+        outputs_manifest_path, EXIT_BAD_MANIFEST
+    )
 
     response = _build_response_payload(request, manifest_entries, state_dir)
 
@@ -231,11 +212,6 @@ def _run() -> int:
     body = out_path.read_bytes()
     _post(url, token, body)
     return 0
-
-
-@tabsdata_command(name="td_report_completion")
-def main() -> int:
-    return run_command(_run)
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -27,6 +27,7 @@ parquets positionally.
 
 from __future__ import annotations
 
+import argparse
 import inspect
 import json
 import sys
@@ -49,25 +50,18 @@ from tabsdatak._info import (
     TransformerInfo,
     _unwrap_info,
 )
-from tabsdatak._logging import setup_logging
-from tabsdatak._tdrunner.function._lib.cli import build_parser, run_command
+from tabsdatak._tdrunner.function._lib.cli import build_parser, command
 from tabsdatak._tdrunner.function._lib.errors import CommandSpecificError
 from tabsdatak._tdrunner.function._lib.inputs_manifest import (
     MANIFEST_FILES_KEY,
-    InvalidManifestError,
-    load_inputs_manifest,
+    load_inputs_manifest_or_fail,
 )
-from tabsdatak._tdrunner.function._lib.liveness import install_liveness_handler
 from tabsdatak._tdrunner.function._lib.outputs_manifest import (
     MANIFEST_FILE_KEY,
     MANIFEST_NAME_KEY,
     write_outputs_manifest,
 )
-from tabsdatak._tdrunner.function._lib.request import (
-    InvalidRequestError,
-    load_request,
-)
-from tabsdatak._tdrunner.function.commands import tabsdata_command
+from tabsdatak._tdrunner.function._lib.request import load_request_or_fail
 from tabsdatak.spi import TableMode
 
 # The Info classes this command knows how to invoke. The runner is
@@ -144,15 +138,6 @@ def _build_parser():
     return parser
 
 
-def _load_request_or_fail(path: Path):
-    try:
-        return load_request(path)
-    except (FileNotFoundError, InvalidRequestError) as exc:
-        raise CommandSpecificError(
-            EXIT_BAD_REQUEST, f"unreadable request.yaml: {exc}"
-        ) from exc
-
-
 _INFO_BY_KIND: dict[str, type[FunctionInfo]] = {
     KIND_PUBLISHER_DEF: PublisherInfo,
     KIND_TRANSFORMER_DEF: TransformerInfo,
@@ -209,13 +194,6 @@ def _load_function_def(bundle_dir: Path) -> FunctionInfo:
         raise CommandSpecificError(EXIT_BAD_BUNDLE, str(exc)) from exc
 
     return info
-
-
-def _load_inputs_manifest_or_fail(path: Path) -> list[dict]:
-    try:
-        return load_inputs_manifest(path)
-    except (FileNotFoundError, InvalidManifestError) as exc:
-        raise CommandSpecificError(EXIT_BAD_MANIFEST, str(exc)) from exc
 
 
 def _infer_table_modes(func: Callable) -> list[TableMode]:
@@ -416,19 +394,17 @@ def _sink_outputs(
     return entries
 
 
-def _run() -> int:
-    args = _build_parser().parse_args()
-    setup_logging(args.log_config)
+@command(name="td_run_function", parser=_build_parser)
+def main(args: argparse.Namespace) -> int:
     request_path = Path(args.request)
     bundle_dir = Path(args.bundle_dir)
     inputs_manifest_path = Path(args.inputs_manifest)
     out_dir = Path(args.out_dir)
     outputs_manifest_path = Path(args.outputs_manifest)
-    install_liveness_handler(Path(args.liveness))
 
-    _load_request_or_fail(request_path)  # validates shape, not used otherwise yet
+    load_request_or_fail(request_path, EXIT_BAD_REQUEST)  # validates shape only
     info = _load_function_def(bundle_dir)
-    entries = _load_inputs_manifest_or_fail(inputs_manifest_path)
+    entries = load_inputs_manifest_or_fail(inputs_manifest_path, EXIT_BAD_MANIFEST)
 
     func = _unwrap_info(info.func)
     table_modes = _infer_table_modes(func)
@@ -462,11 +438,6 @@ def _run() -> int:
         ) from exc
 
     return 0
-
-
-@tabsdata_command(name="td_run_function")
-def main() -> int:
-    return run_command(_run)
 
 
 if __name__ == "__main__":  # pragma: no cover

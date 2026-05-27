@@ -16,6 +16,8 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError
 
+from tabsdatak._tdrunner.function._lib.errors import CommandSpecificError
+
 
 class InvalidRequestError(ValueError):
     """The request.yaml is malformed or fails schema validation."""
@@ -76,4 +78,26 @@ def load_request(path: Path) -> Request:
     except ValidationError as exc:
         raise InvalidRequestError(
             f"invalid request structure in {path}: {exc}"
+        ) from exc
+
+
+def load_request_or_fail(path: Path, exit_code: int) -> Request:
+    """:func:`load_request` with the canonical command-side error wrap.
+
+    Every command that takes a ``--request`` flag has the same try/except
+    boilerplate around :func:`load_request`: catch ``FileNotFoundError``
+    and :class:`InvalidRequestError`, and re-raise as
+    :class:`~tabsdatak._tdrunner.function._lib.errors.CommandSpecificError`
+    so :func:`~tabsdatak._tdrunner.function._lib.cli.run_command` can map
+    it to an exit code. This helper folds that boilerplate into one call.
+
+    ``exit_code`` is passed by the caller so each command keeps its own
+    numbering scheme (the convention is ``EXIT_BAD_REQUEST = 10``, but
+    the helper doesn't enforce it).
+    """
+    try:
+        return load_request(path)
+    except (FileNotFoundError, InvalidRequestError) as exc:
+        raise CommandSpecificError(
+            exit_code, f"unreadable request.yaml: {exc}"
         ) from exc

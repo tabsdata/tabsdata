@@ -11,19 +11,17 @@ See `docs/02-PublisherInitContainers.md` for the chain context.
 
 from __future__ import annotations
 
+import argparse
 import urllib.error
 import urllib.request
 from pathlib import Path
 
-from tabsdatak._logging import setup_logging
 from tabsdatak._tdrunner.function._lib.cli import (
     build_parser,
+    command,
     resolve_value,
-    run_command,
 )
 from tabsdatak._tdrunner.function._lib.errors import CommandSpecificError
-from tabsdatak._tdrunner.function._lib.liveness import install_liveness_handler
-from tabsdatak._tdrunner.function.commands import tabsdata_command
 
 VERSION = "0.1.0"
 INFO = (
@@ -58,24 +56,6 @@ def _build_parser():
     return parser
 
 
-def _run() -> int:
-    args = _build_parser().parse_args()
-    setup_logging(args.log_config)
-    url = resolve_value(args.url)
-    token = resolve_value(args.token)
-    out_path = Path(args.out)
-    install_liveness_handler(Path(args.liveness))
-
-    body = _fetch(url, token)
-    try:
-        out_path.write_bytes(body)
-    except OSError as exc:
-        raise CommandSpecificError(
-            EXIT_WRITE_ERROR, f"failed to write {out_path}: {exc}"
-        ) from exc
-    return 0
-
-
 def _fetch(url: str, token: str) -> bytes:
     req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
     try:
@@ -92,9 +72,20 @@ def _fetch(url: str, token: str) -> bytes:
         ) from exc
 
 
-@tabsdata_command(name="td_fetch_request")
-def main() -> int:
-    return run_command(_run)
+@command(name="td_fetch_request", parser=_build_parser)
+def main(args: argparse.Namespace) -> int:
+    url = resolve_value(args.url)
+    token = resolve_value(args.token)
+    out_path = Path(args.out)
+
+    body = _fetch(url, token)
+    try:
+        out_path.write_bytes(body)
+    except OSError as exc:
+        raise CommandSpecificError(
+            EXIT_WRITE_ERROR, f"failed to write {out_path}: {exc}"
+        ) from exc
+    return 0
 
 
 if __name__ == "__main__":  # pragma: no cover

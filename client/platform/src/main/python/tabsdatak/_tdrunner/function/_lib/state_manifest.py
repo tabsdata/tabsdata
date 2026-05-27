@@ -39,6 +39,8 @@ from typing import Any
 
 import yaml
 
+from tabsdatak._tdrunner.function._lib.errors import CommandSpecificError
+
 # Per-entry keys are intentionally the same names as in
 # `inputs_manifest.py` — callers building dicts use whichever
 # constants are nearest their import site. The wire shape lines up
@@ -84,6 +86,16 @@ def load_state_manifest(path: Path) -> list[dict[str, Any]]:
             f"{_MANIFEST_STATE_KEY!r} must be a list, got {type(entries).__name__}"
         )
     return entries
+
+
+def load_state_manifest_or_fail(path: Path, exit_code: int) -> list[dict[str, Any]]:
+    """:func:`load_state_manifest` with the canonical command-side
+    error wrap. Mirrors :func:`load_inputs_manifest_or_fail` /
+    :func:`load_outputs_manifest_or_fail`."""
+    try:
+        return load_state_manifest(path)
+    except (FileNotFoundError, InvalidStateManifestError) as exc:
+        raise CommandSpecificError(exit_code, str(exc)) from exc
 
 
 def write_state_manifest(entries: list[dict[str, Any]], path: Path) -> None:

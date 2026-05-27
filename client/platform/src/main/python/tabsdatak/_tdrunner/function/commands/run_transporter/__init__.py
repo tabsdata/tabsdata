@@ -10,17 +10,15 @@ exec's `td_transporter --request <PATH>` while running a liveness ticker.
 
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
-from tabsdatak._logging import setup_logging
-from tabsdatak._tdrunner.function._lib.cli import build_parser, run_command
+from tabsdatak._tdrunner.function._lib.cli import build_parser, command
 from tabsdatak._tdrunner.function._lib.errors import CommandSpecificError
-from tabsdatak._tdrunner.function._lib.liveness import install_liveness_handler
 from tabsdatak._tdrunner.function._lib.transporter_proc import (
     TransporterNotFoundError,
     run_transporter,
 )
-from tabsdatak._tdrunner.function.commands import tabsdata_command
 
 VERSION = "0.1.0"
 INFO = "run-transporter — exec td_transporter with the given request YAML"
@@ -58,23 +56,16 @@ def _build_parser():
     return parser
 
 
-def _run() -> int:
-    args = _build_parser().parse_args()
-    setup_logging(args.log_config)
+@command(name="td_run_transporter", parser=_build_parser)
+def main(args: argparse.Namespace) -> int:
     request_yaml = Path(args.request)
     report = Path(args.report)
-    install_liveness_handler(Path(args.liveness))
     try:
         return run_transporter(request_yaml, report)
     except TransporterNotFoundError as exc:
         raise CommandSpecificError(
             EXIT_BINARY_MISSING, f"td_transporter not found: {exc}"
         ) from exc
-
-
-@tabsdata_command(name="td_run_transporter")
-def main() -> int:
-    return run_command(_run)
 
 
 if __name__ == "__main__":  # pragma: no cover

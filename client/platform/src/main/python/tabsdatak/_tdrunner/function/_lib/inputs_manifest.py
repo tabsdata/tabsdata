@@ -36,6 +36,8 @@ from typing import Any
 
 import yaml
 
+from tabsdatak._tdrunner.function._lib.errors import CommandSpecificError
+
 
 class InvalidManifestError(ValueError):
     """The inputs manifest is malformed or fails shape validation."""
@@ -82,6 +84,22 @@ def load_inputs_manifest(path: Path) -> list[dict[str, Any]]:
             f"{_MANIFEST_INPUTS_KEY!r} must be a list, got {type(entries).__name__}"
         )
     return entries
+
+
+def load_inputs_manifest_or_fail(path: Path, exit_code: int) -> list[dict[str, Any]]:
+    """:func:`load_inputs_manifest` with the canonical command-side error wrap.
+
+    Every command that takes ``--inputs-manifest`` had the same try/except
+    boilerplate around :func:`load_inputs_manifest`. This helper folds it
+    into one call; ``exit_code`` is passed by the caller so each command
+    keeps its own exit-code numbering (the convention is some
+    ``EXIT_BAD_MANIFEST`` value, but the helper doesn't enforce a
+    specific number).
+    """
+    try:
+        return load_inputs_manifest(path)
+    except (FileNotFoundError, InvalidManifestError) as exc:
+        raise CommandSpecificError(exit_code, str(exc)) from exc
 
 
 def write_inputs_manifest(entries: list[dict[str, Any]], path: Path) -> None:

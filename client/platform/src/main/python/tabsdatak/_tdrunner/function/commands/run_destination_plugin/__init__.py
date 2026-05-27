@@ -21,6 +21,7 @@ concrete frames for every output slot.
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -30,21 +31,14 @@ from pydantic import ValidationError
 from tabsdatak._bundle import BUNDLE_MANIFEST_FILENAME, BUNDLE_USER_CODE_DIRNAME
 from tabsdatak._connectors import get_dest
 from tabsdatak._info import KIND_SUBSCRIBER_DEF, SubscriberInfo
-from tabsdatak._logging import setup_logging
-from tabsdatak._tdrunner.function._lib.cli import build_parser, run_command
+from tabsdatak._tdrunner.function._lib.cli import build_parser, command
 from tabsdatak._tdrunner.function._lib.errors import CommandSpecificError
-from tabsdatak._tdrunner.function._lib.liveness import install_liveness_handler
 from tabsdatak._tdrunner.function._lib.outputs_manifest import (
     MANIFEST_FILE_KEY,
     MANIFEST_NAME_KEY,
-    InvalidOutputsManifestError,
-    load_outputs_manifest,
+    load_outputs_manifest_or_fail,
 )
-from tabsdatak._tdrunner.function._lib.request import (
-    InvalidRequestError,
-    load_request,
-)
-from tabsdatak._tdrunner.function.commands import tabsdata_command
+from tabsdatak._tdrunner.function._lib.request import load_request_or_fail
 from tabsdatak.api import ContextKeySpec, ContextValueSpec
 from tabsdatak.spi import DestContext, ParquetFile
 
@@ -96,15 +90,6 @@ def _build_parser():
         ),
     )
     return parser
-
-
-def _load_request_or_fail(path: Path):
-    try:
-        return load_request(path)
-    except (FileNotFoundError, InvalidRequestError) as exc:
-        raise CommandSpecificError(
-            EXIT_BAD_REQUEST, f"unreadable request.yaml: {exc}"
-        ) from exc
 
 
 def _load_function_def(bundle_dir: Path) -> SubscriberInfo:
@@ -254,13 +239,6 @@ def _resolve_plugin(info: SubscriberInfo):
     return dest_def.plugin()
 
 
-def _load_outputs_manifest_or_fail(path: Path) -> list[dict]:
-    try:
-        return load_outputs_manifest(path)
-    except (FileNotFoundError, InvalidOutputsManifestError) as exc:
-        raise CommandSpecificError(EXIT_BAD_MANIFEST, str(exc)) from exc
-
-
 def _tables_from_manifest(entries: list[dict]) -> list[ParquetFile]:
     """Convert outputs-manifest entries to a positional list of
     `TableFileSpec` (parquet) paths for `DestPlugin.write_out`.
@@ -294,19 +272,17 @@ def _invoke_write_out(plugin, ctx: DestContext, dest, tables) -> None:
         ) from exc
 
 
-def _run() -> int:
-    args = _build_parser().parse_args()
-    setup_logging(args.log_config)
+@command(name="td_run_destination_plugin", parser=_build_parser)
+def main(args: argparse.Namespace) -> int:
     request_path = Path(args.request)
     bundle_dir = Path(args.bundle_dir)
     outputs_manifest_path = Path(args.outputs_manifest)
-    install_liveness_handler(Path(args.liveness))
 
-    request = _load_request_or_fail(request_path)
+    request = load_request_or_fail(request_path, EXIT_BAD_REQUEST)
     info = _load_function_def(bundle_dir)
     plugin = _resolve_plugin(info)
 
-    entries = _load_outputs_manifest_or_fail(outputs_manifest_path)
+    entries = load_outputs_manifest_or_fail(outputs_manifest_path, EXIT_BAD_MANIFEST)
     tables = _tables_from_manifest(entries)
 
     ctx = _DestContext(
@@ -319,11 +295,6 @@ def _run() -> int:
     )
     _invoke_write_out(plugin, ctx, info.destination, tables)
     return 0
-
-
-@tabsdata_command(name="td_run_destination_plugin")
-def main() -> int:
-    return run_command(_run)
 
 
 if __name__ == "__main__":  # pragma: no cover

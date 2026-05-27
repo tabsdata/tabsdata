@@ -15,13 +15,17 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from pathlib import Path
 from typing import Callable, NoReturn
 
+from tabsdatak._logging import setup_logging
 from tabsdatak._tdrunner.function._lib.errors import (
     CommandError,
     InvalidOptionsError,
     UndefinedEnvError,
 )
+from tabsdatak._tdrunner.function._lib.liveness import install_liveness_handler
+from tabsdatak._tdrunner.function.commands import tabsdata_command
 
 _ENV_PREFIX = "env:"
 _VAL_PREFIX = "val:"
@@ -163,3 +167,62 @@ def run_command(main_fn: Callable[[], int | None]) -> int:
     if result is None:
         return 0
     return int(result)
+
+
+def command(
+    *,
+    name: str,
+    parser: Callable[[], argparse.ArgumentParser],
+) -> Callable[[Callable[[argparse.Namespace], int | None]], Callable[[], int]]:
+    """Decorator that wires a command body to the standard prologue.
+
+    Every command in ``_tdrunner/function/commands/`` repeats the same
+    five lines at the top of its ``_run()``:
+
+      1. parse argv via the command's parser,
+      2. configure logging from ``--log-config``,
+      3. install the liveness logging handler from ``--liveness``,
+      4. invoke the command body,
+      5. wrap the whole thing in :func:`run_command` so
+         ``CommandError`` maps to an exit code,
+      6. and decorates the resulting ``main`` with :func:`tabsdata_command`
+         so the SDK packager picks it up.
+
+    This decorator folds all of that into a single declaration. The
+    decorated body receives the parsed ``args`` and returns an
+    ``int | None``::
+
+        @command(name="td_fetch_request", parser=_build_parser)
+        def main(args: argparse.Namespace) -> int:
+            url = resolve_value(args.url)
+            ...
+            return 0
+
+    The decorated ``main`` is a zero-arg callable returning ``int``,
+    so it remains drop-in compatible with the previous shape
+    (``main()`` is what tests call after ``monkeypatch.setattr(sys,
+    "argv", [...])``).
+    """
+
+    def wrap(
+        body: Callable[[argparse.Namespace], int | None],
+    ) -> Callable[[], int]:
+        @tabsdata_command(name=name)
+        def main() -> int:
+            def _run() -> int | None:
+                args = parser().parse_args()
+                setup_logging(args.log_config)
+                install_liveness_handler(Path(args.liveness))
+                return body(args)
+                # TODO: Eventually, this will also do:
+                # - Enrich environment
+                # - Try/except/finally
+                # - Get and process callback endpoint and token
+                # - Resolve environment variables (similar to config resolver) for
+                # parameters that represent configuration files
+
+            return run_command(_run)
+
+        return main
+
+    return wrap
