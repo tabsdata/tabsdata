@@ -27,6 +27,12 @@ pub mod namespace;
 pub mod pod;
 pub mod secret;
 
+use std::collections::BTreeMap;
+
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
+
+use crate::base::constants::{PART_OF_LABEL, PART_OF_TABSDATA};
+
 pub use client::{build_incluster_kube_client, build_kube_client, install_crypto_provider};
 pub use cluster::ensure_cluster_reachable;
 pub use configmap::{
@@ -34,3 +40,10 @@ pub use configmap::{
 };
 pub use namespace::ensure_namespace_exists;
 pub use secret::{delete_secret, exists_secret, upsert_secret};
+
+pub fn label_tabsdata(metadata: &mut ObjectMeta) {
+    metadata
+        .labels
+        .get_or_insert_with(BTreeMap::new)
+        .insert(PART_OF_LABEL.to_owned(), PART_OF_TABSDATA.to_owned());
+}

@@ -11,6 +11,7 @@ use kube::Api;
 use kube::api::{DeleteParams, PostParams};
 
 use crate::base::error::kubernetes::{KubeSecretError, KubernetesError};
+use crate::kube::api::label_tabsdata;
 use crate::kube::context::KubeContext;
 
 pub async fn exists_secret(context: &KubeContext, name: &str) -> Result<bool, KubernetesError> {
@@ -33,12 +34,14 @@ pub async fn upsert_secret(
     data: BTreeMap<String, String>,
 ) -> Result<(), KubernetesError> {
     let api: Api<Secret> = Api::namespaced(context.client().clone(), context.namespace());
+    let mut metadata = ObjectMeta {
+        name: Some(name.to_owned()),
+        namespace: Some(context.namespace().to_owned()),
+        ..Default::default()
+    };
+    label_tabsdata(&mut metadata);
     let body = Secret {
-        metadata: ObjectMeta {
-            name: Some(name.to_owned()),
-            namespace: Some(context.namespace().to_owned()),
-            ..Default::default()
-        },
+        metadata,
         data: Some(
             data.into_iter()
                 .map(|(key, value)| (key, ByteString(value.into_bytes())))

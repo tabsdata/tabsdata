@@ -49,6 +49,10 @@ pub const SECRET_KEY_KUBECONFIG: &str = "kubeconfig";
 
 pub const TIER_LABEL: &str = "tabsdata.com/worker-tier";
 
+pub const PART_OF_LABEL: &str = "app.kubernetes.io/part-of";
+pub const PART_OF_TABSDATA: &str = "tabsdata";
+pub const PART_OF_TABSDATA_SELECTOR: &str = concatcp!(PART_OF_LABEL, "=", PART_OF_TABSDATA);
+
 pub const KUBE_IDENTIFIER_PREFIX: &str = "td-";
 
 pub const POD_YAML_COMPONENT_LABEL: &str = "app.kubernetes.io/component";

@@ -8,11 +8,14 @@ use kube::api::{DeleteParams, ListParams, PostParams, PropagationPolicy};
 use kube::runtime::wait::{Condition, await_condition};
 
 use crate::base::error::kubernetes::{KubeJobError, KubernetesError};
+use crate::kube::api::label_tabsdata;
 use crate::kube::context::KubeContext;
 
 pub async fn create_job(context: &KubeContext, job: &Job) -> Result<Job, KubernetesError> {
     let api: Api<Job> = Api::namespaced(context.client().clone(), context.namespace());
-    api.create(&PostParams::default(), job)
+    let mut job = job.clone();
+    label_tabsdata(&mut job.metadata);
+    api.create(&PostParams::default(), &job)
         .await
         .map_err(|error| {
             KubeJobError::ApplyFailed {

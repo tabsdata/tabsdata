@@ -8,11 +8,14 @@ use kube::api::{DeleteParams, ListParams, PostParams, PropagationPolicy};
 use kube::runtime::wait::{Condition, await_condition};
 
 use crate::base::error::kubernetes::{KubePodError, KubernetesError};
+use crate::kube::api::label_tabsdata;
 use crate::kube::context::KubeContext;
 
 pub async fn create_pod(context: &KubeContext, pod: &Pod) -> Result<Pod, KubernetesError> {
     let api: Api<Pod> = Api::namespaced(context.client().clone(), context.namespace());
-    api.create(&PostParams::default(), pod)
+    let mut pod = pod.clone();
+    label_tabsdata(&mut pod.metadata);
+    api.create(&PostParams::default(), &pod)
         .await
         .map_err(|error| {
             KubePodError::ApplyFailed {

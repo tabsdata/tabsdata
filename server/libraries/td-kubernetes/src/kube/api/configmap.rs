@@ -10,6 +10,7 @@ use kube::Api;
 use kube::api::{DeleteParams, PostParams};
 
 use crate::base::error::kubernetes::{KubeConfigMapError, KubernetesError};
+use crate::kube::api::label_tabsdata;
 use crate::kube::context::KubeContext;
 
 pub async fn exists_configmap(context: &KubeContext, name: &str) -> Result<bool, KubernetesError> {
@@ -32,12 +33,14 @@ pub async fn create_configmap(
     data: BTreeMap<String, String>,
 ) -> Result<(), KubernetesError> {
     let api: Api<ConfigMap> = Api::namespaced(context.client().clone(), context.namespace());
+    let mut metadata = ObjectMeta {
+        name: Some(name.to_owned()),
+        namespace: Some(context.namespace().to_owned()),
+        ..Default::default()
+    };
+    label_tabsdata(&mut metadata);
     let configmap = ConfigMap {
-        metadata: ObjectMeta {
-            name: Some(name.to_owned()),
-            namespace: Some(context.namespace().to_owned()),
-            ..Default::default()
-        },
+        metadata,
         data: Some(data),
         ..Default::default()
     };
