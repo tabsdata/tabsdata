@@ -77,7 +77,7 @@
 //!
 //! Startup sequence (kminus)::
 //!
-//!     tdkserver start --provider kminus
+//!     tdkserver server start --provider kminus
 //!             ↓
 //!     Provider::start_runtime
 //!             ↓

@@ -201,13 +201,13 @@ impl Provider for DockerProvider {
         );
     }
 
-    async fn ensure_usable_runtime(&self) -> Result {
+    async fn ensure_pinnable_runtime(&self) -> Result {
         let context = self.kube_context().await?;
         ensure_cluster_reachable(context.client()).await?;
         ensure_namespace_exists(&context).await?;
         if !exists_configmap(&context, CONFIGMAP_TABSDATA_GLOBALS).await? {
             cerror!(
-                "No tabsdata instance found in namespace '{}'. Run 'tdkserver create ...' first.",
+                "No tabsdata instance found in namespace '{}'. Run 'tdkserver server create ...' first.",
                 self.config.default_namespace
             );
             return abort(GeneralError);
@@ -215,8 +215,8 @@ impl Provider for DockerProvider {
         Ok(())
     }
 
-    fn preview_use_runtime_summary(&self) {
-        info!("About to use tabsdata instance:");
+    fn preview_pin_runtime_summary(&self) {
+        info!("About to pin tabsdata session:");
         info!("  - provider.....: {}", ClusterProvider::Docker.as_str());
         info!("  - kubeconfig...: {}", self.kubefile.display());
         info!("  - context......: {}", self.context);
@@ -225,9 +225,9 @@ impl Provider for DockerProvider {
         info!("  - namespace....: {}", self.config.default_namespace);
     }
 
-    fn report_used_runtime(&self) {
+    fn report_pinned_runtime(&self) {
         info!(
-            "Now using tabsdata instance in namespace '{}'.",
+            "Pinned tabsdata session in namespace '{}'.",
             self.config.default_namespace
         );
     }

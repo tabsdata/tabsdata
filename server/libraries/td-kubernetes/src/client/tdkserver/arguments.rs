@@ -7,12 +7,8 @@ use std::path::PathBuf;
 use clap::Parser;
 use clap_derive::{Args, Subcommand};
 
-use crate::client::tdkserver::commands::create::CreateArguments;
-use crate::client::tdkserver::commands::start::StartArguments;
-use crate::client::tdkserver::commands::stop::StopArguments;
-use crate::client::tdkserver::commands::unuse::UnuseArguments;
-use crate::client::tdkserver::commands::r#use::UseArguments;
-use crate::client::tdkserver::commands::using::UsingArguments;
+use crate::client::tdkserver::commands::server::ServerCommands;
+use crate::client::tdkserver::commands::session::SessionCommands;
 use crate::runtime::provider::ClusterProvider;
 
 #[derive(Debug, Clone, Parser)]
@@ -54,20 +50,12 @@ pub struct GlobalArguments {
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum Commands {
+    #[command(subcommand, about = "Manage tabsdata instances")]
+    Server(ServerCommands),
+    #[command(subcommand, about = "Manage the active tabsdata session")]
+    Session(SessionCommands),
     #[command(about = "Open an interactive shell")]
     Shell,
-    #[command(about = "Create a tabsdata instance")]
-    Create(CreateArguments),
-    #[command(about = "Use an existing tabsdata instance as the active context")]
-    Use(UseArguments),
-    #[command(about = "Show the active context")]
-    Using(UsingArguments),
-    #[command(about = "Clear the active context")]
-    Unuse(UnuseArguments),
-    #[command(about = "Start a tabsdata instance")]
-    Start(StartArguments),
-    #[command(about = "Stop a tabsdata instance")]
-    Stop(StopArguments),
 }
 
 #[derive(Debug, Clone, Args)]
@@ -82,8 +70,8 @@ pub struct ClusterArguments {
                      'docker' for the Kubernetes cluster bundled with Docker Desktop on macOS/Windows, \
                      'eks' for AWS EKS, \
                      'fargate' for AWS EKS-on-Fargate. \
-                     When unspecified, the value from the active context is taken; \
-                     when no active context is set, this argument is required."
+                     When unspecified, the value from the active tabsdata session is taken; \
+                     when no active tabsdata session is set, this argument is required."
     )]
     pub provider: Option<ClusterProvider>,
 

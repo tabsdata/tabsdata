@@ -241,10 +241,10 @@ impl Provider for KminusProvider {
         );
     }
 
-    async fn ensure_usable_runtime(&self) -> Result {
+    async fn ensure_pinnable_runtime(&self) -> Result {
         if !self.folder.exists() {
             cerror!(
-                "Instance folder '{}' does not exist. Run 'tdkserver create ...' first.",
+                "Instance folder '{}' does not exist. Run 'tdkserver server create ...' first.",
                 self.folder.display()
             );
             return abort(GeneralError);
@@ -260,9 +260,9 @@ impl Provider for KminusProvider {
         Ok(())
     }
 
-    fn preview_use_runtime_summary(&self) {
+    fn preview_pin_runtime_summary(&self) {
         let summary = self.kube_summary();
-        info!("About to use tabsdata instance:");
+        info!("About to pin tabsdata session:");
         info!("  - provider.....: {}", ClusterProvider::Kminus.as_str());
         info!("  - instance name: {}", self.name);
         info!("  - instance path: {}", self.folder.display());
@@ -273,10 +273,10 @@ impl Provider for KminusProvider {
         info!("  - namespace....: {}", summary.namespace);
     }
 
-    fn report_used_runtime(&self) {
+    fn report_pinned_runtime(&self) {
         let summary = self.kube_summary();
         info!(
-            "Now using tabsdata instance '{}' at {}.",
+            "Pinned tabsdata session '{}' at {}.",
             self.name,
             self.folder.display()
         );

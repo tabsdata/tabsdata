@@ -18,12 +18,8 @@ use tracing::info;
 
 use crate::client::tdkserver::arguments::GlobalArguments;
 
-use super::create::{CreateArguments, command_create};
-use super::start::{StartArguments, command_start};
-use super::stop::{StopArguments, command_stop};
-use super::unuse::{UnuseArguments, command_unuse};
-use super::r#use::{UseArguments, command_use};
-use super::using::{UsingArguments, command_using};
+use super::server::{ServerCommands, command_server};
+use super::session::{SessionCommands, command_session};
 use crate::cerror;
 use crate::client::tdkcontext::{TdkContext, tdkcontext_path};
 use crate::core::system::exit::Result;
@@ -34,22 +30,16 @@ const HISTORY_CAPACITY: usize = 10_000;
 
 #[derive(Debug, Clone, Subcommand)]
 enum ShellCommand {
-    /// Create a Tabsdata instance
-    Create(CreateArguments),
-    /// Use an existing Tabsdata instance as the active context
-    Use(UseArguments),
-    /// Show the active context
-    Using(UsingArguments),
-    /// Clear the active context
-    Unuse(UnuseArguments),
-    /// Start a Tabsdata instance
-    Start(StartArguments),
-    /// Stop a Tabsdata instance
-    Stop(StopArguments),
     /// Exit the shell
     Exit,
     /// Exit the shell
     Quit,
+    /// Manage Tabsdata instances
+    #[command(subcommand)]
+    Server(ServerCommands),
+    /// Manage the active tabsdata session
+    #[command(subcommand)]
+    Session(SessionCommands),
 }
 
 #[derive(Debug, Parser)]
@@ -124,25 +114,13 @@ pub async fn command_shell(globals: &GlobalArguments) -> Result {
 
         match ShellInput::try_parse_from(tokens) {
             Ok(input) => match input.command {
-                ShellCommand::Create(arguments) => {
-                    let _ = command_create(arguments, globals).await;
-                }
-                ShellCommand::Use(arguments) => {
-                    let _ = command_use(arguments, globals).await;
-                }
-                ShellCommand::Using(arguments) => {
-                    let _ = command_using(arguments).await;
-                }
-                ShellCommand::Unuse(arguments) => {
-                    let _ = command_unuse(arguments).await;
-                }
-                ShellCommand::Start(arguments) => {
-                    let _ = command_start(arguments, globals).await;
-                }
-                ShellCommand::Stop(arguments) => {
-                    let _ = command_stop(arguments, globals).await;
-                }
                 ShellCommand::Exit | ShellCommand::Quit => break,
+                ShellCommand::Server(command) => {
+                    let _ = command_server(command, globals).await;
+                }
+                ShellCommand::Session(command) => {
+                    let _ = command_session(command, globals).await;
+                }
             },
             Err(error) => {
                 let _ = error.print();
@@ -156,13 +134,13 @@ fn show_initial_active_context() {
     match TdkContext::load() {
         Ok(Some(tdkcontext)) => {
             info!(
-                "Active context: {} (from {}).",
+                "Active tabsdata session: {} (from {}).",
                 tdkcontext.display_name(),
                 tdkcontext_path().display()
             );
         }
         Ok(None) => {
-            info!("No active context is set.");
+            info!("No active tabsdata session is set.");
         }
         Err(_) => {}
     }
@@ -332,7 +310,7 @@ impl Prompt for ShellPrompt {
             Some(tdkcontext) => format!("[{}]", tdkcontext.display_name())
                 .truecolor(0xCC, 0xB2, 0x33)
                 .to_string(),
-            None => "[no context]".dimmed().to_string(),
+            None => "[no tabsdata session]".dimmed().to_string(),
         };
         Cow::Owned(format!("{label} {tool} "))
     }

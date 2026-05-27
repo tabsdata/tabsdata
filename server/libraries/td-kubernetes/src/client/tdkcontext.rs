@@ -97,7 +97,7 @@ impl TdkContext {
             Ok(tdkcontext) => Ok(Some(tdkcontext)),
             Err(error) => {
                 cerror!(
-                    "Failed to parse '{}': {error}. Run 'tdkserver unuse' to clear the active context.",
+                    "Failed to parse '{}': {error}. Run 'tdkserver session unpin' to clear the active tabsdata session.",
                     path.display()
                 );
                 abort(GeneralError)
@@ -122,7 +122,7 @@ impl TdkContext {
         let data = match serde_json::to_string_pretty(self) {
             Ok(data) => data,
             Err(error) => {
-                cerror!("Failed to serialize the active context: {error}");
+                cerror!("Failed to serialize the active tabsdata session: {error}");
                 return abort(GeneralError);
             }
         };
@@ -168,8 +168,8 @@ impl TdkContext {
         }
     }
 
-    pub fn report_using(&self) {
-        info!("Active context:");
+    pub fn report_active(&self) {
+        info!("Active tabsdata session:");
         match self {
             TdkContext::Kminus {
                 path,

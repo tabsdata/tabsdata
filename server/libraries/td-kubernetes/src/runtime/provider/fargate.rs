@@ -58,15 +58,15 @@ impl Provider for FargateProvider {
         unreachable!("fargate provider not yet implemented")
     }
 
-    async fn ensure_usable_runtime(&self) -> Result {
+    async fn ensure_pinnable_runtime(&self) -> Result {
         unreachable!("fargate provider not yet implemented")
     }
 
-    fn preview_use_runtime_summary(&self) {
+    fn preview_pin_runtime_summary(&self) {
         unreachable!("fargate provider not yet implemented")
     }
 
-    fn report_used_runtime(&self) {
+    fn report_pinned_runtime(&self) {
         unreachable!("fargate provider not yet implemented")
     }
 

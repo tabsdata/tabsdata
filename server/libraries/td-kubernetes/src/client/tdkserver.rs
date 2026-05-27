@@ -11,13 +11,9 @@ use clap::{CommandFactory, Parser};
 
 use crate::cerror;
 use crate::client::tdkserver::arguments::{Arguments, Commands};
-use crate::client::tdkserver::commands::create::command_create;
+use crate::client::tdkserver::commands::server::command_server;
+use crate::client::tdkserver::commands::session::command_session;
 use crate::client::tdkserver::commands::shell::command_shell;
-use crate::client::tdkserver::commands::start::command_start;
-use crate::client::tdkserver::commands::stop::command_stop;
-use crate::client::tdkserver::commands::unuse::command_unuse;
-use crate::client::tdkserver::commands::r#use::command_use;
-use crate::client::tdkserver::commands::using::command_using;
 use crate::core::system::exit::{CommandError, Result};
 use crate::kube::api::client::install_crypto_provider;
 use td_common::status::ExitStatus;
@@ -34,13 +30,9 @@ impl TabsDataKubernetesClient {
                 println!();
                 Ok(())
             }
+            Some(Commands::Server(command)) => command_server(command, &globals).await,
+            Some(Commands::Session(command)) => command_session(command, &globals).await,
             Some(Commands::Shell) => command_shell(&globals).await,
-            Some(Commands::Create(arguments)) => command_create(arguments, &globals).await,
-            Some(Commands::Use(arguments)) => command_use(arguments, &globals).await,
-            Some(Commands::Using(arguments)) => command_using(arguments).await,
-            Some(Commands::Unuse(arguments)) => command_unuse(arguments).await,
-            Some(Commands::Start(arguments)) => command_start(arguments, &globals).await,
-            Some(Commands::Stop(arguments)) => command_stop(arguments, &globals).await,
         }
     }
 }

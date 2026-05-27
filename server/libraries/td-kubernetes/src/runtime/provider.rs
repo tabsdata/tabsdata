@@ -189,9 +189,9 @@ pub trait Provider: Send + Sync {
     fn preview_create_runtime_summary(&self);
     fn report_created_runtime(&self);
 
-    async fn ensure_usable_runtime(&self) -> Result;
-    fn preview_use_runtime_summary(&self);
-    fn report_used_runtime(&self);
+    async fn ensure_pinnable_runtime(&self) -> Result;
+    fn preview_pin_runtime_summary(&self);
+    fn report_pinned_runtime(&self);
 
     async fn ensure_startable_runtime(&self) -> Result;
     fn preview_start_runtime_summary(&self);
@@ -351,7 +351,7 @@ pub async fn provider_for_or_tdkcontext(
         None => {
             cerror!(
                 "No cluster specification supplied and no active context is set. \
-                 Pass the required arguments, or run 'tdkserver use ...' first."
+                 Pass the required arguments, or run 'tdkserver session pin ...' first."
             );
             abort(GeneralError)
         }
