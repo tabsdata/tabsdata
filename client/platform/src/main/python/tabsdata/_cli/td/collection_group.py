@@ -65,11 +65,19 @@ def add_perm(ctx: click.Context, name: str, to_coll: str):
 @collection.command()
 @click.option("--name", "-n", help="Name of the collection to create.")
 @click.option("--description", help="Description of the collection.")
+@click.option(
+    "--group",
+    help=(
+        "Name of the group to assign. Defaults to 'default' when omitted. "
+        "Use 'td group list' to see available groups."
+    ),
+)
 @click.pass_context
 def create(
     ctx: click.Context,
     name: str,
     description: str,
+    group: str,
 ):
     """Create a new collection"""
     verify_login_or_prompt(ctx)
@@ -83,7 +91,7 @@ def create(
     click.echo("-" * 10)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        server.create_collection(name, description)
+        server.create_collection(name, description, group=group)
         click.echo("Collection created successfully")
     except Exception as e:
         hint_common_solutions(ctx, e)

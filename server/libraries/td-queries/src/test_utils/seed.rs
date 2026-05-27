@@ -15,7 +15,7 @@
 //! cannot reach it.
 
 use crate::QueryExecutor;
-use crate::test_utils::seed_collection::seed_collection;
+use crate::test_utils::seed_collection::{seed_collection, seed_collection_in_group};
 use crate::test_utils::seed_execution::{seed_cron_execution, seed_execution};
 use crate::test_utils::seed_function::seed_function;
 use crate::test_utils::seed_group::seed_group;
@@ -79,6 +79,15 @@ where
         created_by: &UserId,
     ) -> Result<CollectionDB, TdError> {
         seed_collection(self.executor, collection_name, created_by).await
+    }
+
+    pub async fn collection_in_group(
+        self,
+        collection_name: &CollectionName,
+        created_by: &UserId,
+        group_id: GroupId,
+    ) -> Result<CollectionDB, TdError> {
+        seed_collection_in_group(self.executor, collection_name, created_by, group_id).await
     }
 
     pub async fn execution(self, function_version: &FunctionDB) -> Result<ExecutionDB, TdError> {

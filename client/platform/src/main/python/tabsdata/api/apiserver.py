@@ -481,10 +481,16 @@ class APIServer:
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def collection_create(
-        self, name: str, description: str, raise_for_status: bool = True
+        self,
+        name: str,
+        description: str,
+        group_id: str | None = None,
+        raise_for_status: bool = True,
     ):
         endpoint = "/collections"
         data = {"name": name, "description": description}
+        if group_id is not None:
+            data["group_id"] = group_id
         response = self.post(endpoint, json=data)
         return self.raise_for_status_or_return(raise_for_status, response)
 

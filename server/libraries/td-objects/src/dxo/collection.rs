@@ -6,7 +6,7 @@
 mod definitions {
     use crate::dxo::crudl::RequestContext;
     use crate::types::basic::{
-        AtTime, CollectionId, CollectionName, Description, UserId, UserName,
+        AtTime, CollectionId, CollectionName, Description, GroupId, GroupName, UserId, UserName,
     };
     use td_common::id::Id;
 
@@ -34,6 +34,8 @@ mod definitions {
         pub modified_by_id: UserId,
         #[builder(default)]
         pub name_when_deleted: Option<CollectionName>,
+        #[dxo(builder(include))]
+        pub group_id: GroupId,
     }
 
     #[ta_objects::Dao]
@@ -49,6 +51,7 @@ mod definitions {
         pub created_by_id: UserId,
         pub modified_on: AtTime,
         pub modified_by_id: UserId,
+        pub group_id: GroupId,
     }
 
     #[ta_objects::Dao]
@@ -80,12 +83,17 @@ mod definitions {
     pub struct CollectionDBWithNames {
         pub created_by: UserName,
         pub modified_by: UserName,
+        // Resolved group display name from the joined groups row.
+        pub group: GroupName,
     }
 
     #[ta_objects::Dto]
     pub struct CollectionCreate {
         pub name: CollectionName,
         pub description: Description,
+        #[serde(default = "GroupId::default_group")]
+        #[builder(default = "GroupId::default_group()")]
+        pub group_id: GroupId,
     }
 
     #[ta_objects::Dto]
@@ -119,5 +127,7 @@ mod definitions {
         pub name: CollectionName,
         #[dto(list(filter, filter_like, order_by))]
         pub description: Description,
+        #[dto(list(filter, filter_like, order_by))]
+        pub group: GroupName,
     }
 }

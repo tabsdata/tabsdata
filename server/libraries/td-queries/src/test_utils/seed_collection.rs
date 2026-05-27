@@ -6,12 +6,23 @@ use crate::{LiveEntry, QueryExecutor};
 use ta_objects::Buildable;
 use td_error::TdError;
 use td_objects::dxo::collection::{CollectionCreateDB, CollectionDB, CollectionDBBuilder};
-use td_objects::types::basic::{AtTime, CollectionName, Description, UserId};
+use td_objects::types::basic::{AtTime, CollectionName, Description, GroupId, UserId};
 
 pub(crate) async fn seed_collection(
     db: impl QueryExecutor,
     collection_name: &CollectionName,
     created_by: &UserId,
+) -> Result<CollectionDB, TdError> {
+    seed_collection_in_group(db, collection_name, created_by, GroupId::default_group()).await
+}
+
+/// Seed a collection assigned to a specific group. The plain
+/// [`seed_collection`] entrypoint delegates here with the `default` group.
+pub(crate) async fn seed_collection_in_group(
+    db: impl QueryExecutor,
+    collection_name: &CollectionName,
+    created_by: &UserId,
+    group_id: GroupId,
 ) -> Result<CollectionDB, TdError> {
     let created_on = AtTime::now();
     let collection = CollectionCreateDB::builder()
@@ -21,6 +32,7 @@ pub(crate) async fn seed_collection(
         .created_by_id(created_by)
         .modified_on(created_on)
         .modified_by_id(created_by)
+        .group_id(group_id)
         .build()?;
 
     db.live().insert(&collection).await?;

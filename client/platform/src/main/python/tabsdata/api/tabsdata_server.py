@@ -110,6 +110,7 @@ class Collection:
         connection: APIServer,
         name: str,
         description: str | None = None,
+        group: str | None = None,
         **kwargs,
     ):
         """
@@ -119,6 +120,9 @@ class Collection:
             connection (APIServer): The connection to the server.
             name (str): The name of the collection.
             description (str, optional): The description of the collection.
+            group (str, optional): The name of the group to assign at
+                creation time. Resolved to a group_id before sending.
+                Ignored when reading an existing collection.
             **kwargs: Additional keyword arguments.
         """
         created_on = kwargs.get("created_on")
@@ -126,6 +130,7 @@ class Collection:
         self.connection = connection
         self.name = name
         self.description = description
+        self._group = group
         self.created_on = created_on
         if created_on:
             self.created_on_str = _convert_timestamp_to_string(created_on)
@@ -161,8 +166,12 @@ class Collection:
 
     def create(self, raise_for_status: bool = True) -> Collection:
         description = self._description or self.name
+        group_id = Group(self.connection, self._group).id if self._group else None
         response = self.connection.collection_create(
-            self.name, description, raise_for_status=raise_for_status
+            self.name,
+            description,
+            group_id=group_id,
+            raise_for_status=raise_for_status,
         )
         self.refresh()
         self._data = response.json().get("data")
