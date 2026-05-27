@@ -22,9 +22,7 @@ pub enum KubePodError {
         label_selector: String,
         cause: String,
     } = 5002,
-    #[error(
-        "Could not list pods matching '{label_selector}' in namespace '{namespace}': {cause}"
-    )]
+    #[error("Could not list pods matching '{label_selector}' in namespace '{namespace}': {cause}")]
     ListFailed {
         namespace: String,
         label_selector: String,

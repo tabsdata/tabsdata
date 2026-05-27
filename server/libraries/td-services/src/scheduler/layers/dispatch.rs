@@ -5,9 +5,9 @@
 //! These layers should not fail for single messages errors, only for wider errors (system, connection, etc.).
 //! All errors parsing or processing messages should be logged and the message should be removed from the queue.
 
+use serde_yaml::Value;
 use std::ops::Deref;
 use std::str::FromStr;
-use serde_yaml::Value;
 use td_common::server::{
     MessageAction, OrchestratorMessage, OrchestratorMessagePayload, OrchestratorMessageQueue,
     OrchestratorMessageQueueHandle, RequestMessagePayload, WorkerName,
@@ -112,12 +112,9 @@ async fn unlock_workers_request_infallible(
                     "dispatch: rolling back worker"
                 );
                 rollback_count += 1;
-                message_queue
-                    .rollback(&message)
-                    .await
-                    .unwrap_or_else(
-                        |e| error!(worker_id = %worker_id, "dispatch: rollback failed: {e:#?}"),
-                    )
+                message_queue.rollback(&message).await.unwrap_or_else(
+                    |e| error!(worker_id = %worker_id, "dispatch: rollback failed: {e:#?}"),
+                )
             }
         } else {
             warn!(
@@ -209,7 +206,16 @@ pub async fn unlock_function_runner_worker(
         }
     };
 
-    commit_unlock(conn, message_queue, message, &worker_id, &lfr.id, &pfr.id, branch).await
+    commit_unlock(
+        conn,
+        message_queue,
+        message,
+        &worker_id,
+        &lfr.id,
+        &pfr.id,
+        branch,
+    )
+    .await
 }
 
 /// Which dispatch path this worker is on. Decides rollback semantics on
@@ -387,15 +393,12 @@ async fn unlock_simple_worker(
                 "{error_label} locked message [{worker_id}] dispatch failed: {e}"
             )
         })?;
-    message_queue
-        .commit(message)
-        .await
-        .map_err(|e| {
-            api_error!(
-                ApiError::InternalError,
-                "{error_label} locked message [{worker_id}] dispatch failed: {e}"
-            )
-        })?;
+    message_queue.commit(message).await.map_err(|e| {
+        api_error!(
+            ApiError::InternalError,
+            "{error_label} locked message [{worker_id}] dispatch failed: {e}"
+        )
+    })?;
     debug!(worker_id = %worker_id, "dispatch: {log_kind} dispatched");
     Ok(())
 }

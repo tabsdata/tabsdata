@@ -74,8 +74,7 @@ fn service() {
 // - T(MessageQueue)
 // - ServerUrl
 #[layer]
-pub fn request_function_runners()
-{
+pub fn request_function_runners() {
     layers!(
         // LFR-rooted readiness — Pending/ReScheduled LFRs whose logical
         // chain has no blocked input. Patch resolution happens at mint,
@@ -127,8 +126,7 @@ pub fn request_function_runners()
 // - T(MessageQueue)
 // - ServerUrl
 #[layer]
-pub fn request_replay_function_runners()
-{
+pub fn request_replay_function_runners() {
     layers!(
         // Physical-side readiness — PFRs in `Requested` with no WorkerDB.
         from_fn(fetch_pfrs_to_dispatch),
@@ -155,8 +153,7 @@ pub fn request_replay_function_runners()
 // - T(MessageQueue)
 // - ServerUrl
 #[layer]
-pub fn request_cron_trigger_runners()
-{
+pub fn request_cron_trigger_runners() {
     layers!(
         from_fn(
             By::<()>::fetch_all_in::<
@@ -179,8 +176,7 @@ pub fn request_cron_trigger_runners()
 // - T(MessageQueue)
 // - ServerUrl
 #[layer]
-pub fn stop_cron_trigger_runners()
-{
+pub fn stop_cron_trigger_runners() {
     layers!(
         from_fn(
             By::<()>::fetch_all_in::<{ WorkerDBWithNames::CronTriggersToStop }, WorkerDBWithNames>
@@ -201,8 +197,7 @@ pub fn stop_cron_trigger_runners()
 // - T(MessageQueue)
 // - ServerUrl
 #[layer]
-pub fn request_stage_trigger_runners()
-{
+pub fn request_stage_trigger_runners() {
     layers!(
         from_fn(
             By::<()>::fetch_all_in::<
@@ -225,8 +220,7 @@ pub fn request_stage_trigger_runners()
 // - T(MessageQueue)
 // - ServerUrl
 #[layer]
-pub fn stop_stage_trigger_runners()
-{
+pub fn stop_stage_trigger_runners() {
     layers!(
         from_fn(
             By::<()>::fetch_all_in::<{ WorkerDBWithNames::StageTriggersToStop }, WorkerDBWithNames>
@@ -287,9 +281,7 @@ mod tests {
                 type_of_val(&fetch_lfr_to_dispatch),
                 type_of_val(&mint_function_runs_on_dispatch),
                 type_of_val(&enrich_minted_dispatch),
-                type_of_val(
-                    &create_locked_function_runner_workers_start_request,
-                ),
+                type_of_val(&create_locked_function_runner_workers_start_request),
                 type_of_val(&insert_vec::<WorkerDB>),
                 type_of_val(&lfr_ids_from_minted_dispatch),
                 type_of_val(&UpdateLogicalFunctionRunDB::requested),
@@ -311,9 +303,7 @@ mod tests {
                 type_of_val(&fetch_pfrs_to_dispatch),
                 type_of_val(&materialize_replay_dispatch),
                 type_of_val(&enrich_minted_dispatch),
-                type_of_val(
-                    &create_locked_function_runner_workers_start_request,
-                ),
+                type_of_val(&create_locked_function_runner_workers_start_request),
                 type_of_val(&insert_vec::<WorkerDB>),
                 type_of_val(&pfr_ids_from_minted_dispatch),
                 type_of_val(&UpdatePhysicalFunctionRunDB::dispatched),
@@ -331,9 +321,7 @@ mod tests {
                         WorkerDBWithNames,
                     >,
                 ),
-                type_of_val(
-                    &create_locked_cron_trigger_workers_stop_request,
-                ),
+                type_of_val(&create_locked_cron_trigger_workers_stop_request),
                 // Update statuses.
                 type_of_val(&With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
                 type_of_val(&UpdateWorkerDB::stop_requested),
@@ -349,9 +337,7 @@ mod tests {
                         WorkerDBWithNames,
                     >,
                 ),
-                type_of_val(
-                    &create_locked_cron_trigger_workers_start_request,
-                ),
+                type_of_val(&create_locked_cron_trigger_workers_start_request),
                 // Update statuses.
                 type_of_val(&With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
                 type_of_val(&UpdateWorkerDB::requested),
@@ -368,9 +354,7 @@ mod tests {
                         WorkerDBWithNames,
                     >,
                 ),
-                type_of_val(
-                    &create_locked_stage_trigger_workers_stop_request,
-                ),
+                type_of_val(&create_locked_stage_trigger_workers_stop_request),
                 // Update statuses.
                 type_of_val(&With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
                 type_of_val(&UpdateWorkerDB::stop_requested),
@@ -386,9 +370,7 @@ mod tests {
                         WorkerDBWithNames,
                     >,
                 ),
-                type_of_val(
-                    &create_locked_stage_trigger_workers_start_request,
-                ),
+                type_of_val(&create_locked_stage_trigger_workers_start_request),
                 // Update statuses.
                 type_of_val(&With::<Vec<WorkerDBWithNames>>::extract::<Vec<WorkerId>>),
                 type_of_val(&UpdateWorkerDB::requested),
@@ -455,7 +437,9 @@ mod tests {
 
         let created_message = &created_message[0].payload;
         let created_message = match created_message {
-            OrchestratorMessagePayload::OrchestratorRequestMessagePayload(message) => &message.context,
+            OrchestratorMessagePayload::OrchestratorRequestMessagePayload(message) => {
+                &message.context
+            }
             OrchestratorMessagePayload::OrchestratorResponseMessagePayload(_)
             | OrchestratorMessagePayload::OrchestratorExceptionMessagePayload(_) => {
                 panic!("Unexpected OrchestratorMessagePayload")
@@ -750,10 +734,7 @@ mod tests {
             .service()
             .oneshot(())
             .await?;
-        let messages_after = context
-            .orchestrator_queue
-            .locked_messages()
-            .await;
+        let messages_after = context.orchestrator_queue.locked_messages().await;
         assert_eq!(
             messages_after.len(),
             prior_messages_count,

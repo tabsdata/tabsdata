@@ -8,14 +8,12 @@ use crate::config::{Config, DbSchema, Params};
 use crate::scheduler::{FunctionDispatcher, FunctionRequester, SchedulerCtx};
 use std::sync::Arc;
 use std::time::Duration;
-use td_common::server::{
-    Orchestrator, OrchestratorMessagingProvider, SupervisorMessagingProvider,
-};
-use td_kubernetes::runtime::gateway::messaging::KubernetesOrchestratorMessagingProvider;
+use td_common::server::{Orchestrator, OrchestratorMessagingProvider, SupervisorMessagingProvider};
 use td_common::server_runner::ServerRunner;
 use td_common::status::ExitStatus;
 use td_database::error::DbError;
 use td_execution::SchedulerNotify;
+use td_kubernetes::runtime::gateway::messaging::KubernetesOrchestratorMessagingProvider;
 use td_process::launcher::cli::Cli;
 use td_queries::initialize_logical_ids;
 use td_services::execution::services::runtime_info::RuntimeContext;
@@ -161,19 +159,20 @@ pub fn run() {
 
             // Create orchestrator messaging provider and its message queue
             info!("Orchestrator: {}", config.orchestrator);
-            let messaging_provider: Box<dyn OrchestratorMessagingProvider> =
-                match config.orchestrator {
-                    Orchestrator::Supervisor => Box::new(SupervisorMessagingProvider::new()),
-                    Orchestrator::Kubernetes => {
-                        let provider = KubernetesOrchestratorMessagingProvider::from_pod_environment()
-                            .await
-                            .map_err(|e| {
-                                error!("Error creating kubernetes messaging provider: {e:#?}");
-                                ExitStatus::GeneralError
-                            })?;
-                        Box::new(provider)
-                    }
-                };
+            let messaging_provider: Box<dyn OrchestratorMessagingProvider> = match config
+                .orchestrator
+            {
+                Orchestrator::Supervisor => Box::new(SupervisorMessagingProvider::new()),
+                Orchestrator::Kubernetes => {
+                    let provider = KubernetesOrchestratorMessagingProvider::from_pod_environment()
+                        .await
+                        .map_err(|e| {
+                            error!("Error creating kubernetes messaging provider: {e:#?}");
+                            ExitStatus::GeneralError
+                        })?;
+                    Box::new(provider)
+                }
+            };
             let orchestrator_message_queue = Arc::new(
                 messaging_provider
                     .orchestrator_message_queue()

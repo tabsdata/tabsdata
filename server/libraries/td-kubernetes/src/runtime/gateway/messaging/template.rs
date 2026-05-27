@@ -7,8 +7,8 @@ use std::collections::HashMap;
 use serde_yaml::Value;
 
 use crate::base::constants::{
-    CONFIGMAP_TABSDATA_PODS, POD_YAML_COMPONENT_LABEL, POD_YAML_FIELD_KIND,
-    POD_YAML_FIELD_LABELS, POD_YAML_FIELD_METADATA, POD_YAML_KIND_JOB, POD_YAML_KIND_POD,
+    CONFIGMAP_TABSDATA_PODS, POD_YAML_COMPONENT_LABEL, POD_YAML_FIELD_KIND, POD_YAML_FIELD_LABELS,
+    POD_YAML_FIELD_METADATA, POD_YAML_KIND_JOB, POD_YAML_KIND_POD,
 };
 use crate::base::error::kubernetes::{KubeMessagingError, KubernetesError};
 use crate::kube::api::configmap::require_configmap;

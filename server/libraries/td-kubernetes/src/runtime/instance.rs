@@ -11,8 +11,8 @@ use td_common::status::ExitStatus::TabsDataError;
 use td_python::tabsdata::tabsdata_version;
 
 use crate::cerror;
-use crate::runtime::instance::manifest::{VersionMismatch, check_versions, deserialize_manifest};
 use crate::core::system::exit::{Result, abort};
+use crate::runtime::instance::manifest::{VersionMismatch, check_versions, deserialize_manifest};
 
 pub fn verify_manifest_compatibility(manifest_yaml: &str) -> Result {
     let manifest = match deserialize_manifest(manifest_yaml) {

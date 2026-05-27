@@ -15,8 +15,8 @@ use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
 use td_common::id;
 use td_common::server::{
-    Callback, HttpCallback, HttpRequest, MessageAction, RequestMessagePayload, WorkerClass,
-    OrchestratorMessageQueueHandle, WorkerName,
+    Callback, HttpCallback, HttpRequest, MessageAction, OrchestratorMessageQueueHandle,
+    RequestMessagePayload, WorkerClass, WorkerName,
 };
 use td_database::dynamic::DynamicConnection;
 use td_error::{ApiError, TdError, api_error, td_error};
@@ -764,7 +764,10 @@ pub async fn create_locked_function_runner_workers_start_request(
             arguments: Vec::new(),
             callback: Some(callback),
             context: Some(serde_yaml::to_value(&function_input).map_err(|e| {
-                api_error!(ApiError::InternalError, "Failed to serialize function input: {e}")
+                api_error!(
+                    ApiError::InternalError,
+                    "Failed to serialize function input: {e}"
+                )
             })?),
         };
 
@@ -867,7 +870,10 @@ pub async fn create_locked_cron_trigger_workers_start_request(
                     arguments: Vec::new(),
                     callback: Some(callback),
                     context: Some(serde_yaml::to_value(&context).map_err(|e| {
-                        api_error!(ApiError::InternalError, "Failed to serialize cron trigger input: {e}")
+                        api_error!(
+                            ApiError::InternalError,
+                            "Failed to serialize cron trigger input: {e}"
+                        )
                     })?),
                 };
 
@@ -1070,7 +1076,10 @@ pub async fn create_locked_stage_trigger_workers_start_request(
             arguments: Vec::new(),
             callback: Some(callback),
             context: Some(serde_yaml::to_value(&context).map_err(|e| {
-                api_error!(ApiError::InternalError, "Failed to serialize stage trigger input: {e}")
+                api_error!(
+                    ApiError::InternalError,
+                    "Failed to serialize stage trigger input: {e}"
+                )
             })?),
         };
 

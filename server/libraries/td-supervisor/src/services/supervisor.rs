@@ -68,8 +68,8 @@ use td_common::server::WorkerClass::{Ephemeral, Init, Regular};
 use td_common::server::{
     CAST_FOLDER, CONFIG_FILE, CONFIG_FOLDER, CONFIG_NAMESPACE, CONFIG_PATH_ENV, CONFIG_URI_ENV,
     ETC_FOLDER, EXTENSION_DELIMITER, INSTANCE_PATH_ENV, INSTANCE_URI_ENV, MOLD_FOLDER, MSG_FOLDER,
-    ONGOING_FOLDER, PARENT_FOLDER, PLANNED_FOLDER, PROC_FOLDER, QUEUED_FOLDER, REPOSITORY_PATH_ENV,
-    REPOSITORY_URI_ENV, REQUEST_MESSAGE_FILE_PATTERN, RETRIES_DELIMITER, OrchestratorMessage,
+    ONGOING_FOLDER, OrchestratorMessage, PARENT_FOLDER, PLANNED_FOLDER, PROC_FOLDER, QUEUED_FOLDER,
+    REPOSITORY_PATH_ENV, REPOSITORY_URI_ENV, REQUEST_MESSAGE_FILE_PATTERN, RETRIES_DELIMITER,
     WORK_FOLDER, WORK_PATH_ENV, WORK_URI_ENV, WORKSPACE_FOLDER, WORKSPACE_PATH_ENV,
     WORKSPACE_URI_ENV, WorkerClass,
 };
@@ -762,7 +762,8 @@ impl Supervisor {
             if let Ok(retry) = parsed {
                 let payload = match &message.payload {
                     OrchestratorRequestMessagePayload(payload) => payload,
-                    OrchestratorResponseMessagePayload(_) | OrchestratorExceptionMessagePayload(_) => {
+                    OrchestratorResponseMessagePayload(_)
+                    | OrchestratorExceptionMessagePayload(_) => {
                         return Err(RuntimeError::new(
                             "Unexpected response message received".to_string(),
                         ));
@@ -968,8 +969,10 @@ impl Supervisor {
         &self,
         mut receiver: Receiver<OrchestratorMessage>,
     ) -> Result<(), RuntimeError> {
-        let (sender_init, receiver_init): (Sender<OrchestratorMessage>, Receiver<OrchestratorMessage>) =
-            mpsc::channel(DISPATCH_INIT_CHANNEL_SIZE);
+        let (sender_init, receiver_init): (
+            Sender<OrchestratorMessage>,
+            Receiver<OrchestratorMessage>,
+        ) = mpsc::channel(DISPATCH_INIT_CHANNEL_SIZE);
         let (sender_regular, receiver_regular): (
             Sender<OrchestratorMessage>,
             Receiver<OrchestratorMessage>,
@@ -2540,7 +2543,8 @@ impl Supervisor {
                 let message = message.unwrap();
                 let payload = match &message.payload {
                     OrchestratorRequestMessagePayload(payload) => payload,
-                    OrchestratorResponseMessagePayload(_) | OrchestratorExceptionMessagePayload(_) => {
+                    OrchestratorResponseMessagePayload(_)
+                    | OrchestratorExceptionMessagePayload(_) => {
                         return Err(InvalidMessageType);
                     }
                 };

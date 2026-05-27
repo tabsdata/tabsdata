@@ -12,8 +12,8 @@ use tracing::info;
 
 use crate::cerror;
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
-use crate::runtime::provider::ClusterProvider;
 use crate::core::system::exit::{Result, abort};
+use crate::runtime::provider::ClusterProvider;
 
 const TDKCONTEXT_FILE: &str = "tdkcontext.json";
 

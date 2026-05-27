@@ -481,10 +481,7 @@ fn edge_real_branch(req: &MetricsRequest) -> SelectStatement {
             Alias::new("source"),
         )
         .expr_as(
-            Expr::col((
-                TableDataVersionDBWithNamesIden::Table,
-                source_dim_name_iden,
-            )),
+            Expr::col((TableDataVersionDBWithNamesIden::Table, source_dim_name_iden)),
             Alias::new("source_name"),
         )
         .expr_as(

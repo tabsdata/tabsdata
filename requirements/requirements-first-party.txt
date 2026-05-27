@@ -8,6 +8,7 @@ tabsdata-cdc-common==2.0.0
 tabsdata-cdc-db2==2.0.0
 tabsdata-cdc-mysql==2.0.0
 tabsdata-cdc-postgres==2.0.0
+tabsdata-cli==2.0.0
 tabsdata-common==2.0.0
 tabsdata-conn-azureblob==2.0.0
 tabsdata-conn-bigquery==2.0.0
@@ -36,5 +37,7 @@ tabsdata-mongodb==2.0.0
 tabsdata-mssql==2.0.0
 tabsdata-salesforce==2.0.0
 tabsdata-schema-evolution==2.0.0
+tabsdata-sdk==2.0.0
+tabsdata-server==2.0.0
 tabsdata-snowflake==2.0.0
 tabsdata-sql-common==2.0.0

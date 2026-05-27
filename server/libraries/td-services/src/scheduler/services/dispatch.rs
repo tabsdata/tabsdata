@@ -35,12 +35,13 @@ mod tests {
     use crate::scheduler::services::SchedulerContext;
     use crate::scheduler::services::request::RequestService;
     use std::str::FromStr;
+    use std::sync::Arc;
     use ta_services::factory::ServiceFactory;
     use ta_services::service::TdService;
     use td_common::files::{YAML_EXTENSION, get_files_in_folder_sorted_by_name};
-    use std::sync::Arc;
     use td_common::server::{
-        FileSupervisorMessageQueue, PayloadType, OrchestratorMessage, OrchestratorMessageQueueHandle,
+        FileSupervisorMessageQueue, OrchestratorMessage, OrchestratorMessageQueueHandle,
+        PayloadType,
     };
     use td_database::pool::TdPool;
     use td_error::TdError;
@@ -116,17 +117,15 @@ mod tests {
 
         let file_orchestrator_queue = Arc::new(FileSupervisorMessageQueue::default());
         let mut context = SchedulerContext::with_defaults(db.clone());
-        context.orchestrator_queue =
-            Arc::new(OrchestratorMessageQueueHandle::new(file_orchestrator_queue.clone()));
+        context.orchestrator_queue = Arc::new(OrchestratorMessageQueueHandle::new(
+            file_orchestrator_queue.clone(),
+        ));
         RequestService::build(&context)
             .service()
             .oneshot(())
             .await?;
 
-        let created_messages = context
-            .orchestrator_queue
-            .locked_messages()
-            .await;
+        let created_messages = context.orchestrator_queue.locked_messages().await;
         assert_eq!(created_messages.len(), 1);
         let created_message = &created_messages[0];
 
@@ -136,10 +135,7 @@ mod tests {
             .oneshot(())
             .await?;
 
-        let locked_messages = context
-            .orchestrator_queue
-            .locked_messages()
-            .await;
+        let locked_messages = context.orchestrator_queue.locked_messages().await;
         assert_eq!(locked_messages.len(), 0);
 
         let files = get_files_in_folder_sorted_by_name(

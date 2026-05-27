@@ -11,12 +11,12 @@ use crate::files::{LOCK_EXTENSION, YAML_EXTENSION, get_files_in_folder_sorted_by
 use crate::logging::LOG_LOCATION;
 use crate::manifest::{Inf, WORKER_INF_FILE};
 use crate::server::EtcError::EtcStoreLocationCreationError;
-use crate::server::QueueError::{
-    MessageAlreadyExisting, MessageNonExisting, QueuePlannedCreationError, QueueRootCreationError,
-};
 use crate::server::OrchestratorMessagePayload::{
     OrchestratorExceptionMessagePayload, OrchestratorRequestMessagePayload,
     OrchestratorResponseMessagePayload,
+};
+use crate::server::QueueError::{
+    MessageAlreadyExisting, MessageNonExisting, QueuePlannedCreationError, QueueRootCreationError,
 };
 use crate::status::ExitStatus;
 use async_trait::async_trait;
@@ -641,7 +641,9 @@ impl Default for FileSupervisorMessageQueue {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, EnumString, AsRefStr, Display)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, EnumString, AsRefStr, Display,
+)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum Orchestrator {

@@ -97,8 +97,7 @@ pub async fn wait_init_phase(
     let phase = phase_spinner_in(multi, &format!("Waiting for {} init job(s)", jobs.len()));
     for name in jobs {
         let bar = phase.add_resource(name);
-        let settled = match job_api::await_job_condition(&context, name, is_job_settled()).await
-        {
+        let settled = match job_api::await_job_condition(&context, name, is_job_settled()).await {
             Ok(Some(job)) => job,
             Ok(None) => {
                 bar.finish_with_message(format!("{name} (deleted)"));

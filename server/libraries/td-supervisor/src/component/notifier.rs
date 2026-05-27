@@ -23,8 +23,9 @@ use td_common::server::OrchestratorMessagePayload::{
     OrchestratorResponseMessagePayload,
 };
 use td_common::server::{
-    Callback, EXCEPTION_FILE, ExceptionMessagePayload, PayloadType, REQUEST_MESSAGE_FILE_PATTERN,
-    RESPONSE_FILE, RESPONSE_FOLDER, ResponseMessagePayload, OrchestratorMessage, UNKNOWN_RUN,
+    Callback, EXCEPTION_FILE, ExceptionMessagePayload, OrchestratorMessage, PayloadType,
+    REQUEST_MESSAGE_FILE_PATTERN, RESPONSE_FILE, RESPONSE_FOLDER, ResponseMessagePayload,
+    UNKNOWN_RUN,
 };
 use td_common::status::ExitStatus;
 use tracing::{debug, info};
@@ -112,7 +113,8 @@ impl WorkerNotifier for Callback {
             Callback::Http(callback) => {
                 let request_payload = match request_message.payload {
                     OrchestratorRequestMessagePayload(payload) => payload,
-                    OrchestratorResponseMessagePayload(_) | OrchestratorExceptionMessagePayload(_) => {
+                    OrchestratorResponseMessagePayload(_)
+                    | OrchestratorExceptionMessagePayload(_) => {
                         return Err(InvalidMessageType);
                     }
                 };

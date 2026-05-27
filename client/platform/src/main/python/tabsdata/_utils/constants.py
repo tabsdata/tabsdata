@@ -17,6 +17,7 @@ TABSDATA_CONNECTORS_NAMES = [
     "cdc-db2",
     "cdc-mysql",
     "cdc-postgres",
+    "cli",
     "common",
     "conn-azureblob",
     "conn-bigquery",
@@ -45,6 +46,8 @@ TABSDATA_CONNECTORS_NAMES = [
     "mssql",
     "salesforce",
     "schema-evolution",
+    "sdk",
+    "server",
     "snowflake",
     "sql-common",
 ]

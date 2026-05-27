@@ -7,9 +7,9 @@ use crate::scheduler::services::request::RequestService;
 use axum::extract::FromRef;
 use std::sync::Arc;
 use ta_services::factory::{FieldAccessors, ServiceFactory};
-use td_common::server::OrchestratorMessageQueueHandle;
 #[cfg(feature = "test-utils")]
 use td_common::server::FileSupervisorMessageQueue;
+use td_common::server::OrchestratorMessageQueueHandle;
 use td_database::pool::TdPool;
 use td_execution::SchedulerNotify;
 use td_objects::types::addresses::InternalServerAddresses;

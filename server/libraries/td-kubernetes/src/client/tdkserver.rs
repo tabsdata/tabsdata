@@ -9,6 +9,7 @@ pub mod widgets;
 
 use clap::{CommandFactory, Parser};
 
+use crate::cerror;
 use crate::client::tdkserver::arguments::{Arguments, Commands};
 use crate::client::tdkserver::commands::create::command_create;
 use crate::client::tdkserver::commands::shell::command_shell;
@@ -17,7 +18,6 @@ use crate::client::tdkserver::commands::stop::command_stop;
 use crate::client::tdkserver::commands::unuse::command_unuse;
 use crate::client::tdkserver::commands::r#use::command_use;
 use crate::client::tdkserver::commands::using::command_using;
-use crate::cerror;
 use crate::core::system::exit::{CommandError, Result};
 use crate::kube::api::client::install_crypto_provider;
 use td_common::status::ExitStatus;

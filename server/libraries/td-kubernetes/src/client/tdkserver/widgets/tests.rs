@@ -56,8 +56,7 @@ fn show_box_does_not_panic_on_short_text() {
 
 #[test]
 fn show_box_does_not_panic_on_multiline_text() {
-    let outcome =
-        std::panic::catch_unwind(|| show_box("first line\nsecond line\nthird line", 80));
+    let outcome = std::panic::catch_unwind(|| show_box("first line\nsecond line\nthird line", 80));
     assert!(outcome.is_ok(), "show_box panicked on multiline text");
 }
 

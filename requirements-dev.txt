@@ -13,6 +13,7 @@
 -r connectors/python/tabsdata-cdc-db2/requirements/requirements-dev-third-party.txt
 -r connectors/python/tabsdata-cdc-mysql/requirements/requirements-dev-third-party.txt
 -r connectors/python/tabsdata-cdc-postgres/requirements/requirements-dev-third-party.txt
+-r connectors/python/tabsdata-cli/requirements/requirements-dev-third-party.txt
 -r connectors/python/tabsdata-common/requirements/requirements-dev-third-party.txt
 -r connectors/python/tabsdata-conn-azureblob/requirements/requirements-dev-third-party.txt
 -r connectors/python/tabsdata-conn-bigquery/requirements/requirements-dev-third-party.txt
@@ -41,6 +42,8 @@
 -r connectors/python/tabsdata-mssql/requirements/requirements-dev-third-party.txt
 -r connectors/python/tabsdata-salesforce/requirements/requirements-dev-third-party.txt
 -r connectors/python/tabsdata-schema-evolution/requirements/requirements-dev-third-party.txt
+-r connectors/python/tabsdata-sdk/requirements/requirements-dev-third-party.txt
+-r connectors/python/tabsdata-server/requirements/requirements-dev-third-party.txt
 -r connectors/python/tabsdata-snowflake/requirements/requirements-dev-third-party.txt
 -r connectors/python/tabsdata-sql-common/requirements/requirements-dev-third-party.txt
 
@@ -53,6 +56,7 @@
 -r connectors/python/tabsdata-cdc-db2/requirements/requirements-third-party.txt
 -r connectors/python/tabsdata-cdc-mysql/requirements/requirements-third-party.txt
 -r connectors/python/tabsdata-cdc-postgres/requirements/requirements-third-party.txt
+-r connectors/python/tabsdata-cli/requirements/requirements-third-party.txt
 -r connectors/python/tabsdata-common/requirements/requirements-third-party.txt
 -r connectors/python/tabsdata-conn-azureblob/requirements/requirements-third-party.txt
 -r connectors/python/tabsdata-conn-bigquery/requirements/requirements-third-party.txt
@@ -81,5 +85,7 @@
 -r connectors/python/tabsdata-mssql/requirements/requirements-third-party.txt
 -r connectors/python/tabsdata-salesforce/requirements/requirements-third-party.txt
 -r connectors/python/tabsdata-schema-evolution/requirements/requirements-third-party.txt
+-r connectors/python/tabsdata-sdk/requirements/requirements-third-party.txt
+-r connectors/python/tabsdata-server/requirements/requirements-third-party.txt
 -r connectors/python/tabsdata-snowflake/requirements/requirements-third-party.txt
 -r connectors/python/tabsdata-sql-common/requirements/requirements-third-party.txt

@@ -9,7 +9,8 @@ use td_common::files::{
 };
 use td_common::server::{
     COMPLETE_FOLDER, ERROR_FOLDER, EXTENSION_DELIMITER, FAIL_FOLDER, INITIAL_RUN, ONGOING_FOLDER,
-    PLANNED_FOLDER, PayloadType, QUEUED_FOLDER, RETRIES_DELIMITER, STOP_FOLDER, OrchestratorMessage,
+    OrchestratorMessage, PLANNED_FOLDER, PayloadType, QUEUED_FOLDER, RETRIES_DELIMITER,
+    STOP_FOLDER,
 };
 use tracing::{debug, error};
 
@@ -235,7 +236,10 @@ impl SupervisorMessageQueue {
         }
     }
 
-    pub fn planned_from_leftover(message: OrchestratorMessage, name: String) -> std::io::Result<()> {
+    pub fn planned_from_leftover(
+        message: OrchestratorMessage,
+        name: String,
+    ) -> std::io::Result<()> {
         let source = &message.file;
         let root = message
             .file
@@ -433,7 +437,10 @@ impl SupervisorMessageQueue {
         }
     }
 
-    fn change_to(message: OrchestratorMessage, vault: String) -> std::io::Result<OrchestratorMessage> {
+    fn change_to(
+        message: OrchestratorMessage,
+        vault: String,
+    ) -> std::io::Result<OrchestratorMessage> {
         let root = message
             .file
             .parent()

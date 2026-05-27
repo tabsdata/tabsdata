@@ -2323,9 +2323,7 @@ class Group:
     @property
     def _data(self) -> dict:
         if self._data_dict is None:
-            self._data = (
-                self.connection.group_get_by_name(self.name).json().get("data")
-            )
+            self._data = self.connection.group_get_by_name(self.name).json().get("data")
         return self._data_dict
 
     @_data.setter

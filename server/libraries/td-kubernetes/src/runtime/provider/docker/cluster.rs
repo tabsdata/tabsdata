@@ -4,8 +4,8 @@
 
 use kube::{Client, Config};
 
-use crate::runtime::provider::Cluster;
 use crate::core::system::exit::Result;
+use crate::runtime::provider::Cluster;
 
 pub struct DockerCluster {
     config: Config,

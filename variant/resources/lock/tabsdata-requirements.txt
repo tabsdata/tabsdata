@@ -64,7 +64,7 @@ ijson==3.5.0
 importlib-metadata==8.7.1
 isodate==0.7.2
 jmespath==1.1.0
-joserfc==1.6.7
+joserfc==1.6.8
 jsonschema==4.26.0
 jsonschema-specifications==2025.9.1
 lxml==6.1.1

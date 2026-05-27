@@ -2,8 +2,8 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-use crate::runtime::provider::Instance;
 use crate::core::system::exit::Result;
+use crate::runtime::provider::Instance;
 
 #[derive(Default)]
 pub struct DockerInstance;

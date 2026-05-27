@@ -14,19 +14,15 @@ use td_common::server::DEFAULT_INSTANCE;
 use td_common::status::ExitStatus::{GeneralError, NoAction};
 use tracing::info;
 
-use crate::cerror;
-use crate::client::tdkcontext::{DockerInputs, TdkContext};
-use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
-use crate::client::tdkserver::widgets::spinner;
 use crate::base::constants::{
     CONFIGMAP_TABSDATA_CONFIGS, CONFIGMAP_TABSDATA_GLOBALS, CONFIGMAP_TABSDATA_PODS,
     DEFAULT_INSTANCE_NAME,
 };
-use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues};
-use crate::runtime::instance::launcher::{start_workload, stop_workload};
-use crate::runtime::instance::manifest::MANIFEST_FILE;
-use crate::runtime::instance::profile::{load_profile, parse_from_configmaps, render_for_configmaps};
-use crate::runtime::instance::verify_manifest_compatibility;
+use crate::cerror;
+use crate::client::tdkcontext::{DockerInputs, TdkContext};
+use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
+use crate::client::tdkserver::widgets::spinner;
+use crate::core::system::exit::{Result, abort};
 use crate::kube::api::configmap::get_configmap;
 use crate::kube::api::{
     create_configmap, ensure_cluster_reachable, ensure_namespace_exists, exists_configmap,
@@ -35,6 +31,13 @@ use crate::kube::api::{
 use crate::kube::kubeconfig::{
     build_kubeconfig, resolve_cluster_name, resolve_current_context, resolve_kubefile,
 };
+use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues};
+use crate::runtime::instance::launcher::{start_workload, stop_workload};
+use crate::runtime::instance::manifest::MANIFEST_FILE;
+use crate::runtime::instance::profile::{
+    load_profile, parse_from_configmaps, render_for_configmaps,
+};
+use crate::runtime::instance::verify_manifest_compatibility;
 use crate::runtime::provider::docker::cluster::DockerCluster;
 use crate::runtime::provider::docker::instance::DockerInstance;
 use crate::runtime::provider::{
@@ -42,7 +45,6 @@ use crate::runtime::provider::{
     Transaction,
 };
 use crate::runtime::secrets::{SecretGenerator, SecretPhase};
-use crate::core::system::exit::{Result, abort};
 
 pub struct DockerProvider {
     kubefile: PathBuf,
@@ -141,7 +143,6 @@ impl DockerProvider {
             verbose,
         })
     }
-
 }
 
 #[async_trait]

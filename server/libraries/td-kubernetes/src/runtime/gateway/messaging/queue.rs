@@ -18,9 +18,7 @@ use crate::base::naming::to_kube_identifier;
 use crate::kube::api::job::{create_job, delete_job};
 use crate::kube::api::pod::{create_pod, delete_pod};
 use crate::kube::context::KubeContext;
-use crate::runtime::gateway::messaging::template::{
-    PodTemplate, PodTemplateIndex, TemplateKind,
-};
+use crate::runtime::gateway::messaging::template::{PodTemplate, PodTemplateIndex, TemplateKind};
 
 pub struct KubernetesOrchestratorMessageQueue {
     context: KubeContext,
@@ -54,31 +52,31 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
         id: String,
         payload: RequestMessagePayload<Value>,
     ) -> Result<OrchestratorMessage<Value>, QueueError> {
-        let template = self
-            .templates
-            .lookup(&payload.worker)
-            .map_err(|error| QueueError::BackendError {
-                cause: error.to_string(),
-            })?;
+        let template =
+            self.templates
+                .lookup(&payload.worker)
+                .map_err(|error| QueueError::BackendError {
+                    cause: error.to_string(),
+                })?;
         let name = to_kube_identifier(&id).map_err(|error| QueueError::BackendError {
             cause: error.to_string(),
         })?;
         match template.kind {
             TemplateKind::Pod => {
                 let pod = self.manifest_pod(template, &name)?;
-                create_pod(&self.context, &pod)
-                    .await
-                    .map_err(|error| QueueError::BackendError {
+                create_pod(&self.context, &pod).await.map_err(|error| {
+                    QueueError::BackendError {
                         cause: error.to_string(),
-                    })?;
+                    }
+                })?;
             }
             TemplateKind::Job => {
                 let job = self.manifest_job(template, &name)?;
-                create_job(&self.context, &job)
-                    .await
-                    .map_err(|error| QueueError::BackendError {
+                create_job(&self.context, &job).await.map_err(|error| {
+                    QueueError::BackendError {
                         cause: error.to_string(),
-                    })?;
+                    }
+                })?;
             }
         }
         let message = OrchestratorMessage::new(

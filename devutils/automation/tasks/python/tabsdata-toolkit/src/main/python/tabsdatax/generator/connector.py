@@ -26,6 +26,10 @@ PLACEHOLDER_MODULE = "{c.module}"
 PLACEHOLDER_ALIAS = "{c.alias}"
 PLACEHOLDER_VERSION = "{c.version}"
 PLACEHOLDER_YEAR = "{c.year}"
+PLACEHOLDER_BOOTEST_PARENTS = "{c.bootest_parents}"
+PLACEHOLDER_BOOTEST_RESOURCES = "{c.bootest_resources}"
+
+PLACEHOLDERS_HIDDEN = {PLACEHOLDER_BOOTEST_PARENTS, PLACEHOLDER_BOOTEST_RESOURCES}
 
 VALID_PROJECT_NAMES = {"tabsdata", "tabsdata-os"}
 
@@ -58,6 +62,17 @@ class Placeholder:
 
 
 Placeholders = dict[str, Placeholder]
+
+
+def bootest_parents(module: str) -> str:
+    segments = module.split(".")
+    lines = [f"    .parent  # {segment}/" for segment in reversed(segments)]
+    return "\n".join(lines) + "\n"
+
+
+def bootest_resources(module: str) -> str:
+    segments = module.split(".")
+    return "\n".join(f'    / "{segment}"' for segment in segments)
 
 
 def build_placeholders(package: str, backend: str, root: Path) -> Placeholders:
@@ -99,6 +114,16 @@ def build_placeholders(package: str, backend: str, root: Path) -> Placeholders:
             caption="Year",
             value=year,
         ),
+        Placeholder(
+            key=PLACEHOLDER_BOOTEST_PARENTS,
+            caption="Bootest parents",
+            compute=lambda ps: bootest_parents(ps[PLACEHOLDER_MODULE].value),
+        ),
+        Placeholder(
+            key=PLACEHOLDER_BOOTEST_RESOURCES,
+            caption="Bootest resources",
+            compute=lambda ps: bootest_resources(ps[PLACEHOLDER_MODULE].value),
+        ),
     ]
 
     placeholders: Placeholders = {}
@@ -127,6 +152,8 @@ def show_settings(placeholders: Placeholders, root: Path) -> None:
     settings.add_column("Key", style=STYLE_DIM)
     settings.add_column("Value", style=STYLE_HIGHLIGHT)
     for placeholder in placeholders.values():
+        if placeholder.key in PLACEHOLDERS_HIDDEN:
+            continue
         settings.add_row(placeholder.caption, placeholder.value)
     settings.add_row("Root", str(root))
     console.print(settings)
@@ -156,10 +183,12 @@ def show_report(
         summary.add_column("Path/Value", style=STYLE_INFO)
         summary.add_row("Connector", result)
         for placeholder in placeholders.values():
+            if placeholder.key in PLACEHOLDERS_HIDDEN:
+                continue
             summary.add_row(placeholder.caption, placeholder.value)
         summary.add_row(
             "pyproject.toml",
-            f"Added test_tabsdata_{alias} to known-first-party",
+            "Added test_tabsdatak to known-first-party",
         )
         summary.add_row("pytest.ini", f"Added {alias} marker")
         console.print(summary)
@@ -361,7 +390,7 @@ def process_template(
             if old_path != new_path:
                 new_path.parent.mkdir(parents=True, exist_ok=True)
                 old_path.rename(new_path)
-                if is_dir and f"{os.sep}src{os.sep}main{os.sep}" in str(old_path):
+                if is_dir:
                     add_namespace_inits(old_path.parent, new_path)
 
 
@@ -378,14 +407,13 @@ def is_binary_file(file: Path) -> bool:
 def update_main_pyproject_toml(
     root: Path, placeholders: Placeholders
 ) -> tuple[bool, str]:
-    alias = placeholders[PLACEHOLDER_ALIAS].value
     pyproject_toml_path = root / ROOT_PYPROJECT
     if not pyproject_toml_path.exists():
         return False, f"pyproject.toml not found at {pyproject_toml_path}"
 
     try:
         content = pyproject_toml_path.read_text(encoding="utf-8")
-        new_entry = f"test_tabsdata_{alias}"
+        new_entry = "test_tabsdatak"
 
         if f'"{new_entry}"' in content:
             return True, f"Entry '{new_entry}' already exists in pyproject.toml"

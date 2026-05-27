@@ -54,6 +54,7 @@ TABSDATA_CONNECTORS_NAMES: tuple[str, ...] = (
     "tabsdata-cdc-db2",
     "tabsdata-cdc-mysql",
     "tabsdata-cdc-postgres",
+    "tabsdata-cli",
     "tabsdata-common",
     "tabsdata-conn-azureblob",
     "tabsdata-conn-bigquery",
@@ -82,6 +83,8 @@ TABSDATA_CONNECTORS_NAMES: tuple[str, ...] = (
     "tabsdata-mssql",
     "tabsdata-salesforce",
     "tabsdata-schema-evolution",
+    "tabsdata-sdk",
+    "tabsdata-server",
     "tabsdata-snowflake",
     "tabsdata-sql-common",
 )

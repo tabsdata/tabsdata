@@ -43,8 +43,7 @@ pub const CONFIGMAP_TABSDATA_CONFIGS: &str =
 
 pub const TABSDATA_SECRET_PREFIX: &str = "tabsdata-";
 
-pub const SECRET_TABSDATA_KUBECONFIG: &str =
-    concatcp!(TABSDATA_SECRET_PREFIX, "kubeconfig");
+pub const SECRET_TABSDATA_KUBECONFIG: &str = concatcp!(TABSDATA_SECRET_PREFIX, "kubeconfig");
 
 pub const SECRET_KEY_KUBECONFIG: &str = "kubeconfig";
 

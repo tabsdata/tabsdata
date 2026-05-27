@@ -30,9 +30,7 @@ def _render_summary(data: dict) -> None:
     unit = data.get("unit", "?")
     start_ms = data.get("start_ms")
     end_ms = data.get("end_ms")
-    click.echo(
-        f"dim={dim or '?'}  unit={unit}  window=[{start_ms}, {end_ms})"
-    )
+    click.echo(f"dim={dim or '?'}  unit={unit}  window=[{start_ms}, {end_ms})")
 
     nodes = data.get("nodes") or []
     if not nodes:
@@ -74,9 +72,7 @@ def _render_summary(data: dict) -> None:
         row["rows_out"] += int(n.get("row_count_out") or 0)
         row["bytes_out"] += int(n.get("data_bytes_out") or 0)
 
-    show_bytes = any(
-        r["bytes_in"] or r["bytes_out"] for r in agg.values()
-    )
+    show_bytes = any(r["bytes_in"] or r["bytes_out"] for r in agg.values())
 
     table = Table(title=None, show_lines=False)
     if is_collection_dim:
@@ -106,15 +102,13 @@ def _render_summary(data: dict) -> None:
             cells.append(r["group_name"] or grp_id)
         else:
             cells.append(r["group_name"] or dim_key)
-        cells.extend(
-            [
-                status,
-                str(r["fn_runs"]),
-                str(r["transactions"]),
-                str(r["tables_in"]),
-                str(r["rows_in"]),
-            ]
-        )
+        cells.extend([
+            status,
+            str(r["fn_runs"]),
+            str(r["transactions"]),
+            str(r["tables_in"]),
+            str(r["rows_in"]),
+        ])
         if show_bytes:
             cells.append(str(r["bytes_in"]))
         cells.extend([str(r["tables_out"]), str(r["rows_out"])])
@@ -271,8 +265,7 @@ def show(
 @click.option(
     "--status",
     default=None,
-    help="Comma-separated non-terminal LFR statuses to include "
-    "(e.g. `S,R,H`).",
+    help="Comma-separated non-terminal LFR statuses to include (e.g. `S,R,H`).",
 )
 @click.option(
     "--json",
