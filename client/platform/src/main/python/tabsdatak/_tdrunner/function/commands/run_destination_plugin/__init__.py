@@ -22,17 +22,13 @@ concrete frames for every output slot.
 from __future__ import annotations
 
 import argparse
-import json
-import sys
 from pathlib import Path
 
-from pydantic import ValidationError
-
-from tabsdatak._bundle import BUNDLE_MANIFEST_FILENAME, BUNDLE_USER_CODE_DIRNAME
 from tabsdatak._connectors import get_dest
 from tabsdatak._info import KIND_SUBSCRIBER_DEF, SubscriberInfo
 from tabsdatak._tdrunner.function._lib.cli import build_parser, command
 from tabsdatak._tdrunner.function._lib.errors import CommandSpecificError
+from tabsdatak._tdrunner.function._lib.function_def import load_function_def
 from tabsdatak._tdrunner.function._lib.outputs_manifest import (
     MANIFEST_FILE_KEY,
     MANIFEST_NAME_KEY,
@@ -93,51 +89,16 @@ def _build_parser():
 
 
 def _load_function_def(bundle_dir: Path) -> SubscriberInfo:
-    """Load `function_def.json` from `bundle_dir` and return a
-    `SubscriberInfo`. Other kinds raise `EXIT_WRONG_KIND`.
-
-    Mirrors the bundle-load shape used by `run-source-plugin` and
-    `run-function`: prepend `<bundle_dir>/user_code/` to `sys.path`,
-    then deserialise.
-    """
-    manifest = bundle_dir / BUNDLE_MANIFEST_FILENAME
-    if not manifest.is_file():
-        raise CommandSpecificError(
-            EXIT_BAD_BUNDLE,
-            f"{BUNDLE_MANIFEST_FILENAME} not found in {bundle_dir}",
-        )
-
-    user_code_path = str((bundle_dir / BUNDLE_USER_CODE_DIRNAME).resolve())
-    if user_code_path not in sys.path:
-        sys.path.insert(0, user_code_path)
-
-    try:
-        text = manifest.read_text(encoding="utf-8")
-    except OSError as exc:
-        raise CommandSpecificError(
-            EXIT_BAD_BUNDLE, f"unreadable {manifest}: {exc}"
-        ) from exc
-
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise CommandSpecificError(
-            EXIT_BAD_BUNDLE, f"malformed JSON in {manifest}: {exc}"
-        ) from exc
-
-    kind = data.get("kind") if isinstance(data, dict) else None
-    if kind != KIND_SUBSCRIBER_DEF:
-        raise CommandSpecificError(
-            EXIT_WRONG_KIND,
-            f"expected {KIND_SUBSCRIBER_DEF} in {manifest}, got {kind!r}",
-        )
-
-    try:
-        return SubscriberInfo.from_dict(data)
-    except ValidationError as exc:
-        raise CommandSpecificError(EXIT_BAD_USER_CODE, str(exc)) from exc
-    except Exception as exc:
-        raise CommandSpecificError(EXIT_BAD_BUNDLE, str(exc)) from exc
+    """Load the subscriber's ``function_def.json`` -- thin wrapper over
+    :func:`load_function_def` pinning the accepted kind set and the
+    command's exit codes."""
+    return load_function_def(
+        bundle_dir,
+        allowed_kinds={KIND_SUBSCRIBER_DEF: SubscriberInfo},
+        exit_bad_bundle=EXIT_BAD_BUNDLE,
+        exit_bad_user_code=EXIT_BAD_USER_CODE,
+        exit_wrong_kind=EXIT_WRONG_KIND,
+    )
 
 
 class _DestContext(DestContext):
@@ -298,4 +259,6 @@ def main(args: argparse.Namespace) -> int:
 
 
 if __name__ == "__main__":  # pragma: no cover
+    import sys
+
     sys.exit(main())

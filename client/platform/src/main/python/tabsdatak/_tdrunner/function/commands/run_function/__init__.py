@@ -29,17 +29,13 @@ from __future__ import annotations
 
 import argparse
 import inspect
-import json
-import sys
 import typing
 from pathlib import Path
 from typing import Any, Callable
 
 import polars as pl
-from pydantic import ValidationError
 
 from tabsdatak._api import _is_array_slot, _is_single_slot
-from tabsdatak._bundle import BUNDLE_MANIFEST_FILENAME, BUNDLE_USER_CODE_DIRNAME
 from tabsdatak._connectors import get_dest
 from tabsdatak._info import (
     KIND_PUBLISHER_DEF,
@@ -52,6 +48,7 @@ from tabsdatak._info import (
 )
 from tabsdatak._tdrunner.function._lib.cli import build_parser, command
 from tabsdatak._tdrunner.function._lib.errors import CommandSpecificError
+from tabsdatak._tdrunner.function._lib.function_def import load_function_def
 from tabsdatak._tdrunner.function._lib.inputs_manifest import (
     MANIFEST_FILES_KEY,
     load_inputs_manifest_or_fail,
@@ -146,54 +143,20 @@ _INFO_BY_KIND: dict[str, type[FunctionInfo]] = {
 
 
 def _load_function_def(bundle_dir: Path) -> FunctionInfo:
-    """Same bundle-loading shape as `run-source-plugin`: prepend
-    `<bundle_dir>/user_code/` to `sys.path`, then deserialise.
+    """Load the bundle's ``function_def.json`` -- thin wrapper over
+    :func:`load_function_def` accepting the three kinds run-function
+    dispatches on.
 
-    The envelope's `kind` field decides which Info class to use; bundles
-    with an unknown or missing kind raise EXIT_BAD_BUNDLE.
-    """
-    manifest = bundle_dir / BUNDLE_MANIFEST_FILENAME
-    if not manifest.is_file():
-        raise CommandSpecificError(
-            EXIT_BAD_BUNDLE,
-            f"{BUNDLE_MANIFEST_FILENAME} not found in {bundle_dir}",
-        )
-
-    user_code_path = str((bundle_dir / BUNDLE_USER_CODE_DIRNAME).resolve())
-    if user_code_path not in sys.path:
-        sys.path.insert(0, user_code_path)
-
-    try:
-        text = manifest.read_text(encoding="utf-8")
-    except OSError as exc:
-        raise CommandSpecificError(
-            EXIT_BAD_BUNDLE, f"unreadable {manifest}: {exc}"
-        ) from exc
-
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise CommandSpecificError(
-            EXIT_BAD_BUNDLE, f"malformed JSON in {manifest}: {exc}"
-        ) from exc
-
-    kind = data.get("kind") if isinstance(data, dict) else None
-    info_cls = _INFO_BY_KIND.get(kind) if kind else None
-    if info_cls is None:
-        raise CommandSpecificError(
-            EXIT_BAD_BUNDLE,
-            f"unsupported function_def kind {kind!r}; expected one of "
-            f"{sorted(_INFO_BY_KIND)}",
-        )
-
-    try:
-        info = info_cls.from_dict(data)
-    except ValidationError as exc:
-        raise CommandSpecificError(EXIT_BAD_USER_CODE, str(exc)) from exc
-    except Exception as exc:
-        raise CommandSpecificError(EXIT_BAD_BUNDLE, str(exc)) from exc
-
-    return info
+    Both bundle-shape failures and unknown-kind failures land on
+    ``EXIT_BAD_BUNDLE`` to preserve the pre-refactor mapping (the
+    test suite expects that)."""
+    return load_function_def(
+        bundle_dir,
+        allowed_kinds=_INFO_BY_KIND,
+        exit_bad_bundle=EXIT_BAD_BUNDLE,
+        exit_bad_user_code=EXIT_BAD_USER_CODE,
+        exit_wrong_kind=EXIT_BAD_BUNDLE,
+    )
 
 
 def _infer_table_modes(func: Callable) -> list[TableMode]:
@@ -441,4 +404,6 @@ def main(args: argparse.Namespace) -> int:
 
 
 if __name__ == "__main__":  # pragma: no cover
+    import sys
+
     sys.exit(main())

@@ -14,19 +14,15 @@ from __future__ import annotations
 
 import argparse
 import inspect
-import json
-import sys
 from pathlib import Path
 from urllib.parse import urlparse
 from urllib.request import url2pathname
 
-from pydantic import ValidationError
-
-from tabsdatak._bundle import BUNDLE_MANIFEST_FILENAME, BUNDLE_USER_CODE_DIRNAME
 from tabsdatak._connectors import get_src
 from tabsdatak._info import KIND_PUBLISHER_DEF, PublisherInfo, _unwrap_info
 from tabsdatak._tdrunner.function._lib.cli import build_parser, command
 from tabsdatak._tdrunner.function._lib.errors import CommandSpecificError
+from tabsdatak._tdrunner.function._lib.function_def import load_function_def
 from tabsdatak._tdrunner.function._lib.inputs_manifest import (
     MANIFEST_FILES_KEY,
     MANIFEST_NAME_KEY,
@@ -95,63 +91,16 @@ def _build_parser():
 
 
 def _load_function_def(bundle_dir: Path) -> PublisherInfo:
-    """Load `function_def.json` from `bundle_dir` and return the
-    deserialised `PublisherInfo`.
-
-    `<bundle_dir>/user_code/` is prepended to `sys.path` *before*
-    deserialisation — `PublisherInfo`'s `func` validator (`_val_func`
-    in `tabsdatak._info`) calls `callable_from_str`, which does an
-    `importlib.import_module` against the user's package. The bundle
-    producer (`tabsdatak._bundle.build_bundle`) stages the user's
-    project tree under that subdir, so it's the predictable sys.path
-    entry that makes `info.func` importable.
-    """
-    manifest = bundle_dir / BUNDLE_MANIFEST_FILENAME
-    if not manifest.is_file():
-        raise CommandSpecificError(
-            EXIT_BAD_BUNDLE,
-            f"{BUNDLE_MANIFEST_FILENAME} not found in {bundle_dir}",
-        )
-
-    user_code_path = str((bundle_dir / BUNDLE_USER_CODE_DIRNAME).resolve())
-    if user_code_path not in sys.path:
-        sys.path.insert(0, user_code_path)
-
-    try:
-        text = manifest.read_text(encoding="utf-8")
-    except OSError as exc:
-        raise CommandSpecificError(
-            EXIT_BAD_BUNDLE, f"unreadable {manifest}: {exc}"
-        ) from exc
-
-    # JSON parsing is a bundle concern (producer wrote garbage);
-    # schema validation is a separate failure mode below. Pydantic's
-    # `validate_json` collapses both into `ValidationError`, so we
-    # split them by pre-parsing here.
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise CommandSpecificError(
-            EXIT_BAD_BUNDLE, f"malformed JSON in {manifest}: {exc}"
-        ) from exc
-
-    try:
-        info = PublisherInfo.from_dict(data)
-    except ValidationError as exc:
-        # ImportError / AttributeError from callable_from_str surface
-        # here as ValidationError; user-code failure, not bundle shape.
-        raise CommandSpecificError(EXIT_BAD_USER_CODE, str(exc)) from exc
-    except Exception as exc:
-        # Anything else (unexpected pydantic internals, IO oddities)
-        # — surface as a bundle problem.
-        raise CommandSpecificError(EXIT_BAD_BUNDLE, str(exc)) from exc
-
-    if info.__kind__ != KIND_PUBLISHER_DEF:
-        raise CommandSpecificError(
-            EXIT_WRONG_KIND,
-            f"expected {KIND_PUBLISHER_DEF} in {manifest}, got {info.__kind__!r}",
-        )
-    return info
+    """Load the publisher's ``function_def.json`` -- thin wrapper over
+    :func:`load_function_def` pinning the accepted kind set and the
+    command's exit codes."""
+    return load_function_def(
+        bundle_dir,
+        allowed_kinds={KIND_PUBLISHER_DEF: PublisherInfo},
+        exit_bad_bundle=EXIT_BAD_BUNDLE,
+        exit_bad_user_code=EXIT_BAD_USER_CODE,
+        exit_wrong_kind=EXIT_WRONG_KIND,
+    )
 
 
 class _SrcContext(SrcPluginCtx):
@@ -381,4 +330,6 @@ def main(args: argparse.Namespace) -> int:
 
 
 if __name__ == "__main__":  # pragma: no cover
+    import sys
+
     sys.exit(main())
