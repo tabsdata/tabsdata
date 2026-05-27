@@ -65,6 +65,7 @@ td-tower = { workspace = true }
 
 aquamarine = { workspace = true }
 axum = { workspace = true }
+axum-extra = { workspace = true, features = ["typed-header"] }
 bytes = { workspace = true }
 constcat = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
@@ -72,6 +73,7 @@ croner = { workspace = true }
 derive_builder = { workspace = true }
 derive-new = { workspace = true }
 futures = { workspace = true }
+headers = { workspace = true }
 http = { workspace = true }
 itertools = { workspace = true }
 nonempty = { workspace = true }

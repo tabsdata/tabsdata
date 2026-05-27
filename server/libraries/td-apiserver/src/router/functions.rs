@@ -8,7 +8,9 @@ use td_apiforge::router_ext;
 mod routes {
     use axum::Extension;
     use axum::extract::{Path, Request, State};
+    use axum_extra::TypedHeader;
     use axum_extra::extract::Query;
+    use headers::IfNoneMatch;
     use std::sync::Arc;
     use ta_apiserver::status::error_status::ErrorStatus;
     use ta_apiserver::status::extractors::Json;
@@ -19,18 +21,21 @@ mod routes {
     use td_apiforge::apiserver_path;
     use td_objects::dxo::bundle::Bundle;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
+    use td_objects::dxo::file::DownloadResponse;
     use td_objects::dxo::function::{
         Function, FunctionEnable, FunctionPatch, FunctionPatchRecord, FunctionRegister,
         FunctionUpdate, FunctionWithTables,
     };
     use td_objects::dxo::function_upload::FunctionUpload;
-    use td_objects::rest_urls::params::FunctionAtIdName;
+    use td_objects::rest_urls::params::{FunctionAtIdName, FunctionMaybeAtIdName};
     use td_objects::rest_urls::{
-        AtTimeParam, CollectionParam, FUNCTION_CREATE, FUNCTION_DELETE, FUNCTION_ENABLE,
-        FUNCTION_GET, FUNCTION_HISTORY, FUNCTION_LIST, FUNCTION_LIST_BY_COLL, FUNCTION_PATCH,
-        FUNCTION_PATCHES, FUNCTION_UPDATE, FUNCTION_UPLOAD, FunctionParam,
+        AtTimeParam, CollectionParam, FUNCTION_BUNDLE_DOWNLOAD, FUNCTION_CREATE, FUNCTION_DELETE,
+        FUNCTION_ENABLE, FUNCTION_GET, FUNCTION_HISTORY, FUNCTION_LIST, FUNCTION_LIST_BY_COLL,
+        FUNCTION_PATCH, FUNCTION_PATCHES, FUNCTION_UPDATE, FUNCTION_UPLOAD, FunctionParam,
+        OptionalAtTimeParam,
     };
     use td_services::function::services::FunctionServices;
+    use td_tower::ctx_service::RawOneshot;
     use tower::ServiceExt;
 
     const FUNCTIONS_TAG: &str = "Functions";
@@ -180,5 +185,34 @@ mod routes {
         let request = request_context.create(param, request);
         let response = state.upload.service().oneshot(request).await?;
         Ok(CreateStatus::CREATED(response))
+    }
+
+    #[apiserver_path(
+        method = get,
+        path = FUNCTION_BUNDLE_DOWNLOAD,
+        tag = FUNCTIONS_TAG,
+        content_type = "application/octet-stream",
+    )]
+    #[doc = "Download the bundle for a function version (current when `at` \
+            is omitted). Only Active or Frozen versions are exposed. The \
+            bundle's id is exposed as a strong `ETag`."]
+    pub async fn download_bundle(
+        State(state): State<Arc<FunctionServices>>,
+        Extension(context): Extension<RequestContext>,
+        Path(function_param): Path<FunctionParam>,
+        Query(at_param): Query<OptionalAtTimeParam>,
+        if_none_match: Option<TypedHeader<IfNoneMatch>>,
+    ) -> Result<DownloadResponse, ErrorStatus> {
+        let request = FunctionMaybeAtIdName::new(function_param, at_param);
+        let request = context.read(request);
+        let d = state.download_bundle.service().raw_oneshot(request).await?;
+        Ok(DownloadResponse::octet_stream(d.stream)
+            .attachment(format_args!(
+                "{}-{}.tgz",
+                d.function_name, d.function_version_id
+            ))
+            .etag(d.bundle_id)
+            .immutable()
+            .with_if_none_match(if_none_match.map(|TypedHeader(v)| v)))
     }
 }

@@ -223,6 +223,7 @@ pub const FUNCTION_HISTORY: &str = url!(FUNCTION, "/history");
 pub const FUNCTION_EXECUTE: &str = url!(FUNCTION, "/execute");
 pub const FUNCTION_PATCH: &str = url!(FUNCTION, "/patch");
 pub const FUNCTION_PATCHES: &str = url!(FUNCTION, "/patches");
+pub const FUNCTION_BUNDLE_DOWNLOAD: &str = url!(FUNCTION, "/bundle");
 
 // Logical function runs (LFR) — operator-driven endpoints.
 pub const LOGICAL_FUNCTION_RUNS: &str = url!(COLLECTION, "/logical-function-runs");
@@ -243,6 +244,13 @@ pub struct AtTimeParam {
     #[dxo(extractor)]
     #[serde(default)]
     pub at: AtTime,
+}
+
+/// Like [`AtTimeParam`] but preserves the omitted-vs-now distinction.
+#[ta_objects::QueryParam]
+pub struct OptionalAtTimeParam {
+    #[serde(default)]
+    pub at: Option<AtTime>,
 }
 
 #[ta_objects::QueryParam]

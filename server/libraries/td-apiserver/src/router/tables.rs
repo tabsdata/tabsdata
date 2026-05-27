@@ -15,7 +15,7 @@ mod routes {
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
-    use td_objects::dxo::file::{CsvFile, ParquetFile};
+    use td_objects::dxo::file::DownloadResponse;
     use td_objects::dxo::logical::TableDataVersion;
     use td_objects::dxo::table::{Table, TableFlowGraphResponse};
     use td_objects::rest_urls::params::{
@@ -44,7 +44,12 @@ mod routes {
         Ok(DeleteStatus::OK(response))
     }
 
-    #[apiserver_path(method = get, path = DOWNLOAD_TABLE, tag = TABLES_TAG)]
+    #[apiserver_path(
+        method = get,
+        path = DOWNLOAD_TABLE,
+        tag = TABLES_TAG,
+        content_type = "application/vnd.apache.parquet",
+    )]
     #[doc = "Download a table as a parquet file"]
     pub async fn download(
         State(tables): State<Arc<TableServices>>,
@@ -52,11 +57,11 @@ mod routes {
         Path(table_param): Path<TableParam>,
         Query(at_param): Query<AtTimeParam>,
         Query(uncommitted_status): Query<UncommittedParam>,
-    ) -> Result<ParquetFile, ErrorStatus> {
+    ) -> Result<DownloadResponse, ErrorStatus> {
         let name = TableAtIdName::new(table_param, at_param, uncommitted_status);
         let request = context.read(name);
-        let response = tables.download.service().raw_oneshot(request).await?;
-        Ok(ParquetFile(response))
+        let stream = tables.download.service().raw_oneshot(request).await?;
+        Ok(DownloadResponse::parquet(stream))
     }
 
     #[apiserver_path(method = get, path = LIST_TABLES, tag = TABLES_TAG)]
@@ -105,7 +110,12 @@ mod routes {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[apiserver_path(method = get, path = SAMPLE_TABLE, tag = TABLES_TAG)]
+    #[apiserver_path(
+        method = get,
+        path = SAMPLE_TABLE,
+        tag = TABLES_TAG,
+        content_type = "text/csv",
+    )]
     #[doc = "Get a sample of a table"]
     pub async fn sample(
         State(tables): State<Arc<TableServices>>,
@@ -116,7 +126,7 @@ mod routes {
         Query(file_format_param): Query<FileFormatParam>,
         Query(sql_param): Query<SqlParam>,
         Query(uncommitted_status): Query<UncommittedParam>,
-    ) -> Result<CsvFile, ErrorStatus> {
+    ) -> Result<DownloadResponse, ErrorStatus> {
         let name = TableSampleAtName::new(
             table_param,
             at_param,
@@ -127,7 +137,7 @@ mod routes {
         );
         let request = context.read(name);
         let stream = tables.sample.service().raw_oneshot(request).await?;
-        Ok(CsvFile(stream))
+        Ok(DownloadResponse::csv(stream))
     }
 
     #[apiserver_path(method = get, path = SCHEMA_TABLE, tag = TABLES_TAG)]

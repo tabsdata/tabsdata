@@ -3,6 +3,7 @@
 //
 
 use crate::function::services::delete::DeleteFunctionService;
+use crate::function::services::download_bundle::DownloadBundleService;
 use crate::function::services::enable::EnableFunctionService;
 use crate::function::services::history::FunctionHistoryService;
 use crate::function::services::list::FunctionListService;
@@ -19,6 +20,7 @@ use getset::Getters;
 use ta_services::factory::ServiceFactory;
 
 pub(crate) mod delete;
+pub mod download_bundle;
 pub(crate) mod enable;
 pub(crate) mod history;
 pub(crate) mod list;
@@ -48,6 +50,7 @@ pub struct FunctionServices {
     pub history: FunctionHistoryService,
     pub patch: CreateFunctionPatchService,
     pub list_patches: ListFunctionPatchesService,
+    pub download_bundle: DownloadBundleService,
 }
 
 #[cfg(test)]

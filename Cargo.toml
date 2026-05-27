@@ -405,6 +405,9 @@ version = "0.83.0"
 [workspace.dependencies.glob]
 version = "0.3.3"
 
+[workspace.dependencies.headers]
+version = "0.4.1"
+
 [workspace.dependencies.hex]
 version = "0.4.3"
 

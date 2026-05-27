@@ -83,7 +83,7 @@ mod unsecure_routes {
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
     use td_objects::dxo::auth::{Login, PasswordChange, TokenResponseX};
-    use td_objects::dxo::file::PemFile;
+    use td_objects::dxo::file::DownloadResponse;
     use td_objects::rest_urls::{AUTH_LOGIN, AUTH_PASSWORD_CHANGE, CERT_DOWNLOAD};
     use td_services::auth::services::AuthServices;
     use td_tower::ctx_service::RawOneshot;
@@ -115,12 +115,17 @@ mod unsecure_routes {
         Ok(UpdateStatus::OK(response))
     }
 
-    #[apiserver_path(method = get, path = CERT_DOWNLOAD, tag = AUTH_TAG)]
+    #[apiserver_path(
+        method = get,
+        path = CERT_DOWNLOAD,
+        tag = AUTH_TAG,
+        content_type = "application/x-pem-file",
+    )]
     #[doc = "PEM certificate download"]
     pub async fn cert_download(
         State(state): State<Arc<AuthServices>>,
-    ) -> Result<PemFile, ErrorStatus> {
+    ) -> Result<DownloadResponse, ErrorStatus> {
         let response = state.cert_download.service().raw_oneshot(()).await?;
-        Ok(PemFile(response))
+        Ok(DownloadResponse::pem(response).attachment("tabsdata.pem"))
     }
 }

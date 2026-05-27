@@ -17,7 +17,7 @@ mod routes {
     use td_apiforge::apiserver_path;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::execution::{ExecutionRequestInternal, ExecutionResponseInternal};
-    use td_objects::dxo::file::ParquetFile;
+    use td_objects::dxo::file::DownloadResponse;
     use td_objects::dxo::physical_function_run::PhysicalFunctionRun;
     use td_objects::dxo::worker::CallbackRequest;
     use td_objects::rest_urls::AtTimeParam;
@@ -96,20 +96,25 @@ mod routes {
         Ok(GetStatus::OK(response))
     }
 
-    #[apiserver_path(method = get, path = DOWNLOAD_FUNCTION_STATE, tag = INTERNAL_TAG)]
+    #[apiserver_path(
+        method = get,
+        path = DOWNLOAD_FUNCTION_STATE,
+        tag = INTERNAL_TAG,
+        content_type = "application/vnd.apache.parquet",
+    )]
     #[doc = "Download function state"]
     pub async fn download_state(
         State(state): State<Arc<TableServices>>,
         Extension(context): Extension<RequestContext>,
         Path(function_param): Path<FunctionVersionIdParam>,
         Query(at_param): Query<AtTimeParam>,
-    ) -> Result<ParquetFile, ErrorStatus> {
+    ) -> Result<DownloadResponse, ErrorStatus> {
         let param = FunctionVersionAtId {
             function_version_id: function_param.function_version_id,
             at: at_param.at,
         };
         let request = context.read(param);
         let response = state.download_state.service().raw_oneshot(request).await?;
-        Ok(ParquetFile(response))
+        Ok(DownloadResponse::parquet(response))
     }
 }

@@ -15,7 +15,7 @@ mod routes {
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
-    use td_objects::dxo::file::LogsFile;
+    use td_objects::dxo::file::DownloadResponse;
     use td_objects::dxo::worker::Worker;
     use td_objects::rest_urls::{
         WORKER_LOGS, WORKERS_LIST, WorkerLogsParams, WorkerLogsQueryParams, WorkerParam,
@@ -38,17 +38,22 @@ mod routes {
         Ok(ListStatus::OK(response))
     }
 
-    #[apiserver_path(method = get, path = WORKER_LOGS, tag = WORKERS_TAG)]
+    #[apiserver_path(
+        method = get,
+        path = WORKER_LOGS,
+        tag = WORKERS_TAG,
+        content_type = "application/octet-stream",
+    )]
     #[doc = "Read worker message logs"]
     pub async fn logs(
         State(messages): State<Arc<WorkerServices>>,
         Extension(context): Extension<RequestContext>,
         Path(path_params): Path<WorkerParam>,
         Query(query_params): Query<WorkerLogsQueryParams>,
-    ) -> Result<LogsFile, ErrorStatus> {
+    ) -> Result<DownloadResponse, ErrorStatus> {
         let params = WorkerLogsParams::new(path_params, query_params);
         let request = context.read(params);
         let response = messages.logs.service().raw_oneshot(request).await?;
-        Ok(LogsFile(response))
+        Ok(DownloadResponse::octet_stream(response))
     }
 }

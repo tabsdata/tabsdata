@@ -3,8 +3,8 @@
 //
 
 use crate::rest_urls::{
-    AtTimeParam, CollectionParam, FileFormat, FileFormatParam, FunctionParam, SampleOffsetLenParam,
-    SqlParam, TableParam, UncommittedParam,
+    AtTimeParam, CollectionParam, FileFormat, FileFormatParam, FunctionParam, OptionalAtTimeParam,
+    SampleOffsetLenParam, SqlParam, TableParam, UncommittedParam,
 };
 use crate::types::basic::{
     AtTime, CollectionIdName, FunctionIdName, SampleLen, SampleOffset, SchemaFieldName,
@@ -43,6 +43,28 @@ pub struct FunctionAtIdName {
 
 impl FunctionAtIdName {
     pub fn new(function: FunctionParam, at: AtTimeParam) -> Self {
+        Self {
+            collection: function.collection,
+            function: function.function,
+            at: at.at,
+        }
+    }
+}
+
+/// Like [`FunctionAtIdName`] but with an optional `at` — current version
+/// when omitted, historical version when supplied.
+#[ta_objects::Dlo]
+pub struct FunctionMaybeAtIdName {
+    #[dxo(extractor)]
+    collection: CollectionIdName,
+    #[dxo(extractor)]
+    function: FunctionIdName,
+    #[dxo(extractor)]
+    at: Option<AtTime>,
+}
+
+impl FunctionMaybeAtIdName {
+    pub fn new(function: FunctionParam, at: OptionalAtTimeParam) -> Self {
         Self {
             collection: function.collection,
             function: function.function,

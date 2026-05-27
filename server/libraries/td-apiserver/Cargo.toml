@@ -104,11 +104,12 @@ te-services = { workspace = true }
 
 async-trait = { workspace = true }
 axum = { workspace = true, features = ["macros"] }
-axum-extra = { workspace = true, features = ["query"] }
+axum-extra = { workspace = true, features = ["query", "typed-header"] }
 axum-server = { workspace = true, features = ["tls-rustls"] }
 chrono = { workspace = true }
 clap = { workspace = true }
 futures = { workspace = true }
+headers = { workspace = true }
 http = { workspace = true }
 nonempty = { workspace = true, features = ["serialize"] }
 reqwest = { workspace = true, features = ["json", "stream"] }

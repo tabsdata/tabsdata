@@ -20,6 +20,11 @@ pub struct UtoipaPathArguments {
     path: Option<Ident>,
     #[darling(default)]
     tag: Option<Ident>,
+    /// Document the OK response inline with this content type instead of
+    /// using the OK return type's `IntoResponses` impl. The body schema is
+    /// `Vec<u8>` (opaque bytes).
+    #[darling(default)]
+    content_type: Option<String>,
 }
 
 /// Utoipa path attribute macro generator. It takes the Axum fn as an argument, as well as
@@ -110,10 +115,20 @@ pub fn utoipa_path(args: TokenStream, item: TokenStream) -> TokenStream {
         };
     }
 
-    utoipa_attr = quote! {
-        #utoipa_attr
-        responses(#ok_response, #err_response),
-    };
+    if let Some(ct) = parsed_args.content_type.as_deref() {
+        utoipa_attr = quote! {
+            #utoipa_attr
+            responses(
+                (status = 200, description = "OK", body = Vec<u8>, content_type = #ct),
+                #err_response
+            ),
+        };
+    } else {
+        utoipa_attr = quote! {
+            #utoipa_attr
+            responses(#ok_response, #err_response),
+        };
+    }
 
     utoipa_attr = quote! {
         #utoipa_attr
