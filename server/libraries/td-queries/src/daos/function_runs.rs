@@ -11,7 +11,7 @@
 //!   checks. No pointer event log on the physical side.
 
 use crate::QueryExecutor;
-use crate::daos::pointers::{LogicalPointers, Lp, ProducerLfr};
+use crate::daos::pointers::{LogicalPointers, ProducerLfr};
 use sea_query::{
     Asterisk, CommonTableExpression, Expr, ExprTrait, Func, Iden, JoinType, Order, Query,
     SelectStatement, SimpleExpr, SubQueryStatement, WithClause,
@@ -67,7 +67,7 @@ query_handle! {
 /// conn.lfr().to_execute(&at).await?;
 /// conn.lfr().to_commit(&execution_ids).await?;
 /// conn.lfr().for_dispatch(&fr_ids).await?;
-/// conn.lfr().pointers().concrete_at(&lfr_id, &at).await?;
+/// conn.lfr().pointers().at(&at).concrete(&lfr_id).await?;
 /// ```
 pub struct Lfr<E> {
     pub(crate) executor: E,
@@ -234,6 +234,10 @@ where
         Ok(result)
     }
 }
+
+/// Joined-with-AS alias for the latest LTDV pointer event row.
+#[derive(Iden, Clone, Copy)]
+struct Lp;
 
 /// One BFS hop: LFRs consuming any output LTDV whose producer is in
 /// `producer_lfrs`, excluding any consumer already in `exclude_consumers`.

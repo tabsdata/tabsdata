@@ -9,9 +9,9 @@ mod definitions {
     use crate::dxo::yaml::function_runner::v2::WrittenTable;
     use crate::types::basic::{
         AtTime, ByteCount, CollectionId, CollectionName, CronMask, Enabled, ExecutionId,
-        ExecutionName, FunctionName, FunctionVersionId, PhysicalFunctionRunId, RowCount,
-        SizeThreshold, TableVersionCount, TimeoutThresholdMin, TransactionId, WorkerConfig,
-        WorkerId, WorkerMessageStatus, WorkerStatus, WorkerType,
+        ExecutionName, FunctionName, FunctionVersionId, LogicalFunctionRunId,
+        PhysicalFunctionRunId, RowCount, SizeThreshold, TableVersionCount, TimeoutThresholdMin,
+        TransactionId, WorkerConfig, WorkerId, WorkerMessageStatus, WorkerStatus, WorkerType,
     };
     use chrono::{DateTime, Utc};
     use ta_objects::Buildable;
@@ -68,6 +68,8 @@ mod definitions {
         #[dxo(extractor)]
         pub id: WorkerId,
 
+        pub logical_function_run_id: Option<LogicalFunctionRunId>,
+
         pub collection: CollectionName,
         pub execution: Option<ExecutionName>,
         pub function: FunctionName,
@@ -98,6 +100,9 @@ mod definitions {
         pub ended_on: Option<AtTime>,
         #[dto(list(filter, order_by))]
         pub status: WorkerStatus,
+
+        #[dto(list(filter, order_by))]
+        pub logical_function_run_id: Option<LogicalFunctionRunId>,
 
         #[dto(list(filter, filter_like, order_by))]
         pub collection: CollectionName,

@@ -7,6 +7,7 @@ use sea_query::{Alias, Asterisk, ColumnDef, Expr, ExprTrait, Iden, JoinType, Que
 use super::collections::Collections;
 use super::executions::Executions;
 use super::functions::Functions;
+use super::logical_function_runs::LogicalFunctionRuns;
 use crate::schema::Entity;
 use crate::schema::backend::Backend;
 use crate::schema::sql::ViewDef;
@@ -66,6 +67,7 @@ impl Entity for Defs {
             WorkersWithNames,
             Query::select()
                 .expr(Expr::col((Workers::Table, Asterisk)))
+                .expr_as(Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::Id)), Alias::new("logical_function_run_id"))
                 .expr_as(Expr::col((Collections::Table, Collections::Name)), Alias::new("collection"))
                 .expr_as(Expr::col((Executions::Table, Executions::Name)), Alias::new("execution"))
                 .expr_as(Expr::col((Functions::Table, Functions::Name)), Alias::new("function"))
@@ -85,6 +87,20 @@ impl Entity for Defs {
                     JoinType::LeftJoin,
                     Functions::Table,
                     Expr::col((Workers::Table, Workers::FunctionVersionId)).equals((Functions::Table, Functions::Id)),
+                )
+                // LFR resolved directly from (Workers.execution_id,
+                // Functions.function_id) — the LFR's natural key. No
+                // PFR detour needed; the only thing PFR added was the
+                // function_id, which Functions already carries.
+                .join(
+                    JoinType::LeftJoin,
+                    LogicalFunctionRuns::Table,
+                    Expr::col((Workers::Table, Workers::ExecutionId))
+                        .equals((LogicalFunctionRuns::Table, LogicalFunctionRuns::ExecutionId))
+                        .and(
+                            Expr::col((Functions::Table, Functions::FunctionId))
+                                .equals((LogicalFunctionRuns::Table, LogicalFunctionRuns::FunctionId)),
+                        ),
                 )
                 .and_where(Expr::col((Workers::Table, Workers::WorkerEnabled)).eq(true))
                 .to_owned(),

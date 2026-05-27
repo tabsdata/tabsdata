@@ -1208,7 +1208,7 @@ class TestObtainListWorkerFilters:
         assert "execution:lk:my_exec" in result
         assert "execution_id:eq:exec-123" in result
         assert "function:eq:my_fn" in result
-        assert "physical_function_run_id:eq:run-789" in result
+        assert "logical_function_run_id:eq:run-789" in result
         assert "collection:eq:my_coll" in result
         assert "transaction_id:eq:trx-456" in result
         assert "worker_type:eq:runner" in result

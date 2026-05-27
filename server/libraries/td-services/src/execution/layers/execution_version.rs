@@ -10,7 +10,7 @@ use td_objects::dxo::execution::{ExecutionDB, ExecutionResponse, ExecutionRespon
 use td_objects::dxo::function::FunctionDBWithNames;
 use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
-use td_objects::types::basic::{AtTime, FunctionVersionId, SkipIfRunning};
+use td_objects::types::basic::{FunctionVersionId, SkipIfRunning};
 use td_queries::{LfrEntry, LiveEntry};
 use td_tower::default_services::Condition;
 use td_tower::extractors::{MutRef, Ref};
@@ -51,13 +51,12 @@ pub async fn skip_if_running(
     // (and this gate) should follow.
     let running = match latest_execution.as_ref() {
         Some(latest_execution) => {
-            let at = AtTime::now();
             let lfr: Option<LogicalFunctionRunDB> = conn
                 .live()
                 .fetch_optional(and!(&latest_execution.id, function_version_id.deref()))
                 .await?;
             let bound_fr_id = if let Some(lfr) = lfr {
-                conn.lfr().pointers().concrete_at(&lfr.id, &at).await?
+                conn.lfr().pointers().concrete(&lfr.id).await?
             } else {
                 None
             };

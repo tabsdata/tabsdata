@@ -76,7 +76,8 @@ pub async fn redirect_pointers_at_finish(
     let latest_lfr_by_id: HashMap<LogicalFunctionRunId, LogicalFunctionRunPointerDB> = conn
         .lfr()
         .pointers()
-        .latest_pointers_chunked(&lfr_ids, at.deref())
+        .at(at.deref())
+        .latest_chunked(&lfr_ids)
         .await?;
 
     // Early out: if no reporting PFR is a replay attempt (i.e. its
@@ -134,7 +135,8 @@ pub async fn redirect_pointers_at_finish(
     let latest_ltdv_by_id: HashMap<LogicalTableDataVersionId, LogicalTableDataVersionPointerDB> =
         conn.ltdv()
             .pointers()
-            .latest_pointers_chunked(&ltdv_ids, at.deref())
+            .at(at.deref())
+            .latest_chunked(&ltdv_ids)
             .await?;
 
     for fr in physical_function_runs.iter() {

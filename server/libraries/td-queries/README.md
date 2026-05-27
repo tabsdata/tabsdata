@@ -371,10 +371,11 @@ db.ltdv().latest_bound_tdv_with_data_for_table(&table_id, &triggered_on, true).a
 
 // Pointer event logs reached via the entity handle's `.pointers()`.
 // The type parameter is bound by which entity you came from — no
-// turbofish at the call site.
-db.lfr().pointers().concrete_at(&lfr_id, &at).await?;
+// turbofish at the call site. At-time reads chain through `.at(&at)`
+// mirroring the `versioned(&at).fetch_*` surface.
+db.lfr().pointers().at(&at).concrete(&lfr_id).await?;
 db.lfr().pointers().bind_with_known_state(&lfr_id, &fr_id, &latest, &set_on, &by).await?;
-db.ltdv().pointers().concrete_at(&ltdv_id, &at).await?;
+db.ltdv().pointers().at(&at).concrete(&ltdv_id).await?;
 ```
 
 Each module owns its own entry trait (`SessionsEntry`, `DependenciesEntry`,

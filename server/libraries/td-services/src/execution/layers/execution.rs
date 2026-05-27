@@ -369,9 +369,7 @@ pub async fn resolve_execution_plan_versions(
     // Pass 2 — translate every LTDV referenced anywhere in the plan to
     // its currently-bound `ActiveTableDataVersionDB` in two batched
     // queries: latest pointer event per LTDV at `at_time`, then the TDV
-    // rows for every distinct bound id. Replaces the per-edge per-LTDV
-    // `concrete_at` + `fetch_optional` pair the cache only deduped at
-    // the (table, versions) granularity.
+    // rows for every distinct bound id.
     let all_ftdv_ids: Vec<LogicalTableDataVersionId> = ltdv_cache
         .values()
         .flat_map(|ltdvs| {

@@ -457,6 +457,7 @@ mod tests {
     use td_objects::dxo::collection::CollectionDB;
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
     use td_objects::dxo::logical::LogicalFunctionRunDB;
+    use td_objects::dxo::logical::LogicalPointerDao;
     use td_objects::dxo::logical::LogicalTableDataVersionPointerDB;
     use td_objects::dxo::table::TableDB;
     use td_objects::types::basic::LogicalFunctionRunStatus;
@@ -466,8 +467,8 @@ mod tests {
         LogicalPointerStatus, PhysicalTableDataVersionId, TableName, TableNameDto, TransactionId,
         TransactionKey, UserId,
     };
-    use td_queries::CurrentEntry;
     use td_queries::test_utils::SeedEntry;
+    use td_queries::{CurrentEntry, LtdvEntry};
 
     /// Insert an LTDV identity row plus a `Bound` `InitialMaterialization`
     /// pointer event (mirroring lazy-mint, but without back-pointer side
@@ -982,10 +983,6 @@ mod tests {
     /// status; the gate against running on Voided inputs lives at dispatch.
     #[td_test::test(db)]
     async fn test_resolve_logical_voided_visible(db: TdPool) -> Result<(), TdError> {
-        use td_objects::dxo::logical::LogicalPointerDao;
-        use td_objects::types::basic::{LogicalPointerReason, LogicalPointerStatus};
-        use td_queries::LtdvEntry;
-
         let (_collection, _function, table_id, ltdvs) = seed_ftdv_timeline(&db, 2).await;
 
         // Void the most recent LTDV by directly appending a Voided
@@ -1020,11 +1017,7 @@ mod tests {
         assert_eq!(ltdv.id, ltdvs[1].id);
         // Confirm the latest pointer event for this LTDV is Voided (no
         // concrete TDV id reachable via the temporal view).
-        let latest = conn
-            .ltdv()
-            .pointers()
-            .concrete_at(&ltdv.id, &AtTime::now())
-            .await?;
+        let latest = conn.ltdv().pointers().concrete(&ltdv.id).await?;
         assert!(latest.is_none());
         Ok(())
     }

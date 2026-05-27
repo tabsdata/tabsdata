@@ -800,7 +800,7 @@ def obtain_list_worker_filters(
     if fn:
         request_filter.append(f"function:eq:{fn}")
     if fn_run:
-        request_filter.append(f"physical_function_run_id:eq:{fn_run}")
+        request_filter.append(f"logical_function_run_id:eq:{fn_run}")
     if collection:
         request_filter.append(f"collection:eq:{collection}")
     if trx:
