@@ -118,6 +118,7 @@ class Collection:
         Args:
             connection (APIServer): The connection to the server.
             name (str): The name of the collection.
+            description (str, optional): The description of the collection.
             **kwargs: Additional keyword arguments.
         """
         created_on = kwargs.get("created_on")
@@ -2268,6 +2269,118 @@ class Role:
         return string_representation
 
 
+class Group:
+    """A group on the Tabsdata server.
+
+    Groups are a lightweight tag attached to collections. System-seeded
+    rows (`default`, `source`, `destination`) carry ``system = True``
+    and reject update / delete.
+    """
+
+    created_by = _LazyProperty("created_by")
+    created_on = _LazyProperty("created_on")
+    created_on_str = _LazyProperty("created_on_str", subordinate_time_string=True)
+    description = _LazyProperty("description")
+    id = _LazyProperty("id")
+    modified_by = _LazyProperty("modified_by")
+    modified_by_id = _LazyProperty("modified_by_id")
+    modified_on = _LazyProperty("modified_on")
+    modified_on_str = _LazyProperty("modified_on_str", subordinate_time_string=True)
+    system = _LazyProperty("system")
+
+    def __init__(
+        self,
+        connection: APIServer,
+        name: str,
+        **kwargs,
+    ):
+        self.connection = connection
+        self.name = name
+
+        self.created_by = kwargs.get("created_by")
+        self.created_on = kwargs.get("created_on")
+        self.created_on_str = None
+        self.description = kwargs.get("description")
+        self.id = kwargs.get("id")
+        self.modified_by = kwargs.get("modified_by")
+        self.modified_by_id = kwargs.get("modified_by_id")
+        self.modified_on = kwargs.get("modified_on")
+        self.modified_on_str = None
+        self.system = kwargs.get("system")
+
+        self.kwargs = kwargs
+        self._data = None
+
+    @property
+    def _data(self) -> dict:
+        if self._data_dict is None:
+            self._data = (
+                self.connection.group_get_by_name(self.name).json().get("data")
+            )
+        return self._data_dict
+
+    @_data.setter
+    def _data(self, data_dict: dict | None):
+        self._data_dict = data_dict
+
+    def create(self, raise_for_status: bool = True) -> Group:
+        name = self.name
+        description = self._description
+        response = self.connection.group_create(
+            name,
+            description,
+            raise_for_status=raise_for_status,
+        )
+        self.refresh()
+        self._data = response.json().get("data")
+        return self
+
+    def delete(self, raise_for_status: bool = True) -> None:
+        self.connection.group_delete(self.name, raise_for_status=raise_for_status)
+
+    def refresh(self) -> Group:
+        self.created_by = None
+        self.created_on = None
+        self.created_on_str = None
+        self.description = None
+        self.id = None
+        self.modified_by = None
+        self.modified_by_id = None
+        self.modified_on = None
+        self.modified_on_str = None
+        self.system = None
+        self.kwargs = None
+        self._data = None
+        return self
+
+    def update(
+        self,
+        name: str = None,
+        description: str = None,
+        raise_for_status: bool = True,
+    ) -> Group:
+        response = self.connection.group_update(
+            self.name,
+            new_name=name,
+            new_description=description,
+            raise_for_status=raise_for_status,
+        )
+        self.refresh()
+        self.name = response.json().get("data").get("name")
+        return self
+
+    def __eq__(self, other):
+        if not isinstance(other, Group):
+            return False
+        return self.name == other.name
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(name={self.name!r})"
+
+    def __str__(self) -> str:
+        return f"Name: {self.name!s}"
+
+
 class RolePermissionTypes(Enum):
     """
     Enum for permission types.
@@ -3415,6 +3528,18 @@ class TabsdataServer:
         return self.list_executions()
 
     @property
+    def groups(self) -> List[Group]:
+        """
+        Get the list of groups in the server. This list is obtained every time the
+            property is accessed, so sequential accesses to this property in the same
+            object might yield different results.
+
+        Returns:
+            List[Group]: The list of groups in the server.
+        """
+        return self.list_groups()
+
+    @property
     def roles(self) -> List[Role]:
         """
         Get the list of roles in the server. This list is obtained every time the
@@ -3491,7 +3616,11 @@ class TabsdataServer:
         return self.list_workers()
 
     def create_collection(
-        self, name: str, description: str = None, raise_for_status: bool = True
+        self,
+        name: str,
+        description: str = None,
+        group: str | None = None,
+        raise_for_status: bool = True,
     ) -> Collection:
         """
         Create a collection in the server.
@@ -3499,13 +3628,17 @@ class TabsdataServer:
         Args:
             name (str): The name of the collection.
             description (str, optional): The description of the collection.
+            group (str, optional): The name of the group to assign. If
+                omitted, the server assigns the default group.
             raise_for_status (bool, optional): Whether to raise an exception if the
                 request was not successful. Defaults to True.
 
         Raises:
             APIServerError: If the collection could not be created.
         """
-        collection = Collection(self.connection, name, description=description)
+        collection = Collection(
+            self.connection, name, description=description, group=group
+        )
         collection.create(raise_for_status=raise_for_status)
         return collection
 
@@ -4218,6 +4351,84 @@ class TabsdataServer:
             "roles": roles_by_name,
         }
         return info
+
+    def create_group(
+        self, name: str, description: str = None, raise_for_status: bool = True
+    ) -> Group:
+        """
+        Create a group in the server.
+
+        Args:
+            name (str): The name of the group.
+            description (str, optional): The description of the group.
+            raise_for_status (bool, optional): Whether to raise on a non-2xx response.
+
+        Returns:
+            Group: The created group.
+        """
+        group = Group(self.connection, name, description=description)
+        group.create(raise_for_status=raise_for_status)
+        return group
+
+    def delete_group(self, name: str, raise_for_status: bool = True) -> None:
+        """Delete a group by name."""
+        Group(self.connection, name).delete(raise_for_status=raise_for_status)
+
+    def get_group(self, name: str) -> Group:
+        """Get a group by name."""
+        group_definition = self.connection.group_get_by_name(name)
+        return Group(
+            self.connection,
+            **group_definition.json().get("data"),
+        )
+
+    def list_groups(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> List[Group]:
+        """List groups in the server."""
+        return list(self.list_groups_generator(filter, order_by, raise_for_status))
+
+    def list_groups_generator(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> Generator[Group]:
+        first_page = True
+        next_pagination_id = None
+        next_step = None
+        while first_page or (next_pagination_id and next_step):
+            response = self.connection.group_list(
+                request_filter=filter,
+                order_by=order_by,
+                pagination_id=next_pagination_id,
+                next_step=next_step,
+                raise_for_status=raise_for_status,
+            )
+            data = response.json().get("data")
+            next_pagination_id = data.get("next_pagination_id")
+            next_step = data.get("next")
+            raw_groups = data.get("data") or []
+            for raw_group in raw_groups:
+                yield Group(self.connection, **raw_group)
+            first_page = False
+
+    def update_group(
+        self,
+        name: str,
+        new_name: str = None,
+        new_description: str = None,
+        raise_for_status: bool = True,
+    ) -> Group:
+        """Update a group's name and/or description."""
+        return Group(self.connection, name).update(
+            name=new_name,
+            description=new_description,
+            raise_for_status=raise_for_status,
+        )
 
     def create_role(
         self, name: str, description: str = None, raise_for_status: bool = True

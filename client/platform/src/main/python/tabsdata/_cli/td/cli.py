@@ -33,6 +33,7 @@ from tabsdata._cli.td.config_utils import execute_actions_for_command
 from tabsdata._cli.td.cron_group import cron
 from tabsdata._cli.td.exe_group import exe
 from tabsdata._cli.td.fn_group import fn
+from tabsdata._cli.td.group_group import group
 from tabsdata._cli.td.role_group import role
 from tabsdata._cli.td.stage_group import stage
 from tabsdata._cli.td.table_group import table
@@ -91,6 +92,7 @@ cli.add_command(collection)
 cli.add_command(cron)
 cli.add_command(exe)
 cli.add_command(fn)
+cli.add_command(group)
 cli.add_command(role)
 cli.add_command(stage)
 cli.add_command(table)
