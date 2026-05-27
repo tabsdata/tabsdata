@@ -5,11 +5,14 @@
 use crate::dxo::table::TableDBWithNames;
 use crate::parse::{
     DATA_LOCATION_REGEX, parse_collection, parse_email, parse_entity, parse_execution,
-    parse_function, parse_role, parse_table, parse_user,
+    parse_function, parse_group, parse_role, parse_table, parse_user,
 };
 use std::fmt::Debug;
 use td_error::{ApiError, api_error};
-use td_security::{ADMIN_USER, SEC_ADMIN_ROLE, SYS_ADMIN_ROLE, USER_ROLE};
+use td_security::{
+    ADMIN_USER, DEFAULT_GROUP, DESTINATION_GROUP, SEC_ADMIN_ROLE, SOURCE_GROUP, SYS_ADMIN_ROLE,
+    USER_ROLE,
+};
 
 #[ta_objects::typed(string(secret))]
 pub struct AccessToken;
@@ -155,6 +158,24 @@ impl RoleName {
 
     pub fn user() -> Self {
         Self(USER_ROLE.to_string())
+    }
+}
+
+#[ta_objects::typed(string(parser = parse_group))]
+#[derive(Eq, PartialEq, Hash)]
+pub struct GroupName;
+
+impl GroupName {
+    pub fn default_group() -> Self {
+        Self(DEFAULT_GROUP.to_string())
+    }
+
+    pub fn source() -> Self {
+        Self(SOURCE_GROUP.to_string())
+    }
+
+    pub fn destination() -> Self {
+        Self(DESTINATION_GROUP.to_string())
     }
 }
 

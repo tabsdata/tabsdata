@@ -18,6 +18,7 @@ use crate::QueryExecutor;
 use crate::test_utils::seed_collection::seed_collection;
 use crate::test_utils::seed_execution::{seed_cron_execution, seed_execution};
 use crate::test_utils::seed_function::seed_function;
+use crate::test_utils::seed_group::seed_group;
 use crate::test_utils::seed_inter_collection_permission::seed_inter_collection_permission;
 use crate::test_utils::seed_logical_input::seed_logical_input;
 use crate::test_utils::seed_permission::seed_permission;
@@ -35,6 +36,7 @@ use td_error::TdError;
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::function::{FunctionDB, FunctionRegister};
+use td_objects::dxo::group::GroupDB;
 use td_objects::dxo::inter_collection_permission::InterCollectionPermissionDB;
 use td_objects::dxo::logical::LogicalFunctionRunInputDB;
 use td_objects::dxo::permission::PermissionDB;
@@ -47,9 +49,10 @@ use td_objects::dxo::user::UserDB;
 use td_objects::dxo::user_role::UserRoleDB;
 use td_objects::dxo::worker::WorkerDB;
 use td_objects::types::basic::{
-    CollectionId, CollectionName, DependencyPos, Description, EntityId, EntityName,
-    LogicalFunctionRunStatus, PermissionType, RoleId, RoleName, ToCollectionId, TransactionKey,
-    UserEnabled, UserId, UserName, VersionPos, WorkerMessageStatus, WorkerStatus, WorkerType,
+    CollectionId, CollectionName, DependencyPos, Description, EntityId, EntityName, GroupId,
+    GroupName, LogicalFunctionRunStatus, PermissionType, RoleId, RoleName, ToCollectionId,
+    TransactionKey, UserEnabled, UserId, UserName, VersionPos, WorkerMessageStatus, WorkerStatus,
+    WorkerType,
 };
 
 query_handle! {
@@ -171,6 +174,14 @@ where
 
     pub async fn role(self, name: RoleName, description: Description) -> Result<RoleDB, TdError> {
         seed_role(self.executor, name, description).await
+    }
+
+    pub async fn group(
+        self,
+        name: GroupName,
+        description: Description,
+    ) -> Result<GroupDB, TdError> {
+        seed_group(self.executor, name, description).await
     }
 
     pub async fn system_tables(self, function: &FunctionDB) -> Result<Vec<TableDB>, TdError> {

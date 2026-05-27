@@ -31,8 +31,8 @@ pub enum Permissions {
     Fixed,
 }
 
-const SYSTEM_USER_ID: &str = "00000000000000000000000000";
-const ALL_ENTITY_ID: &str = "00000000000000000000000204";
+use td_security::ENCODED_ID_ALL_ENTITIES as ALL_ENTITY_ID;
+use td_security::ENCODED_ID_SYSTEM as SYSTEM_USER_ID;
 
 pub(super) struct Defs;
 

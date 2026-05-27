@@ -29,7 +29,7 @@ pub enum Roles {
     Fixed,
 }
 
-const SYSTEM_USER_ID: &str = "00000000000000000000000000";
+use td_security::ENCODED_ID_SYSTEM as SYSTEM_USER_ID;
 
 pub(super) struct Defs;
 

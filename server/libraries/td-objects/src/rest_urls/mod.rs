@@ -6,9 +6,10 @@ pub mod params;
 
 use crate::types::basic::{
     AllowDisabled, AtTime, CollectionIdName, ExecutionIdName, FunctionIdName, FunctionVersionId,
-    InterCollectionPermissionIdName, LogicalFunctionRunId, LogsCastNumber, PermissionIdName,
-    PhysicalFunctionRunId, PhysicalTableDataVersionId, RoleIdName, SampleLen, SampleOffset, Sql,
-    TableIdName, TransactionIdName, UncommittedStatus, UserIdName, WorkerId, WorkerIdName,
+    GroupIdName, InterCollectionPermissionIdName, LogicalFunctionRunId, LogsCastNumber,
+    PermissionIdName, PhysicalFunctionRunId, PhysicalTableDataVersionId, RoleIdName, SampleLen,
+    SampleOffset, Sql, TableIdName, TransactionIdName, UncommittedStatus, UserIdName, WorkerId,
+    WorkerIdName,
 };
 use td_common::logging::LOG_EXTENSION;
 use td_common::server::{ERR_LOG_FILE_NAME, FN_LOG_FILE_NAME, OUT_LOG_FILE_NAME, TD_LOG_FILE_NAME};
@@ -133,6 +134,22 @@ pub const GET_ROLE: &str = url!(ROLE);
 pub const CREATE_ROLE: &str = url!(ROLES);
 pub const UPDATE_ROLE: &str = url!(ROLE);
 pub const DELETE_ROLE: &str = url!(ROLE);
+
+// Groups
+pub const GROUPS: &str = url!("/groups");
+pub const GROUP: &str = url!(GROUPS, "/{group}");
+
+#[ta_objects::UrlParam]
+pub struct GroupParam {
+    #[dxo(extractor)]
+    group: GroupIdName,
+}
+
+pub const LIST_GROUPS: &str = url!(GROUPS);
+pub const GET_GROUP: &str = url!(GROUP);
+pub const CREATE_GROUP: &str = url!(GROUPS);
+pub const UPDATE_GROUP: &str = url!(GROUP);
+pub const DELETE_GROUP: &str = url!(GROUP);
 
 // Permissions
 pub const PERMISSIONS: &str = url!(ROLE, "/permissions");

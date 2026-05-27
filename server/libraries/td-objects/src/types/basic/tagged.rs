@@ -3,7 +3,7 @@
 //
 
 use crate::types::basic::{
-    CollectionId, CollectionName, ExecutionId, FunctionId, FunctionName,
+    CollectionId, CollectionName, ExecutionId, FunctionId, FunctionName, GroupId, GroupName,
     InterCollectionPermissionId, PermissionId, RoleId, RoleName, TableId, TableName, TransactionId,
     UserId, UserName, WorkerId,
 };
@@ -31,6 +31,14 @@ pub enum FunctionIdName {
     Id(FunctionId),
     #[tag("")]
     Name(FunctionName),
+}
+
+#[ta_objects::typed_tag]
+pub enum GroupIdName {
+    #[tag("~")]
+    Id(GroupId),
+    #[tag("")]
+    Name(GroupName),
 }
 
 #[ta_objects::typed_tag]

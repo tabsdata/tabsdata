@@ -10,6 +10,7 @@ mod seed;
 mod seed_collection;
 mod seed_execution;
 mod seed_function;
+mod seed_group;
 mod seed_inter_collection_permission;
 mod seed_logical_input;
 mod seed_permission;

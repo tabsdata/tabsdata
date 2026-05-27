@@ -34,6 +34,7 @@ pub mod function;
 pub mod function_upload;
 pub mod global_status;
 pub mod graph;
+pub mod group;
 pub mod inter_collection_access;
 pub mod inter_collection_permission;
 pub mod logical;

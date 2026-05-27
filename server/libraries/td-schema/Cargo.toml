@@ -46,6 +46,8 @@ ignored = ["openssl", "td-build", "td-schema", "toml"]
 
 ## Libraries
 
+td-security = { workspace = true }
+
 # External dependencies
 
 sea-query = { workspace = true, features = ["derive"] }

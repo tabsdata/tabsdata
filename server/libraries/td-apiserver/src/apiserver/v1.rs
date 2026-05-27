@@ -42,6 +42,7 @@ use crate::router::collections::CollectionsRouter;
 use crate::router::executions::ExecutionsRouter;
 use crate::router::function_runs::FunctionRunsRouter;
 use crate::router::functions::FunctionsRouter;
+use crate::router::groups::GroupsRouter;
 use crate::router::inter_collection_permissions::InterCollectionPermissionsRouter;
 use crate::router::logical_versions::LogicalVersionsRouter;
 use crate::router::permissions::PermissionsRouter;
@@ -87,6 +88,7 @@ impl ApiServerV1 {
                         .merge(ExecutionsRouter::router(context.services.clone()))
                         .merge(FunctionsRouter::router(context.services.clone()))
                         .merge(FunctionRunsRouter::router(context.services.clone()))
+                        .merge(GroupsRouter::router(context.services.clone()))
                         .merge(LogicalVersionsRouter::router(context.services.clone()))
                         .merge(InterCollectionPermissionsRouter::router(
                             context.services.clone(),

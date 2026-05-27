@@ -8,6 +8,7 @@ use crate::execution::services::ExecutionServices;
 use crate::execution::services::runtime_info::RuntimeContext;
 use crate::function::services::FunctionServices;
 use crate::function_run::services::FunctionRunServices;
+use crate::group::services::GroupServices;
 use crate::inter_coll_permission::services::InterCollectionPermissionServices;
 use crate::logical::services::LogicalServices;
 use crate::permission::services::PermissionServices;
@@ -38,6 +39,7 @@ pub mod execution;
 pub mod function;
 pub mod function_run;
 pub mod graph;
+pub mod group;
 pub mod inter_coll_permission;
 pub mod logical;
 pub mod permission;
@@ -60,6 +62,7 @@ pub struct Services {
     logical: Arc<LogicalServices>,
     function: Arc<FunctionServices>,
     function_run: Arc<FunctionRunServices>,
+    group: Arc<GroupServices>,
     inter_coll_permission: Arc<InterCollectionPermissionServices>,
     permission: Arc<PermissionServices>,
     role: Arc<RoleServices>,

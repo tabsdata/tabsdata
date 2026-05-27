@@ -11,6 +11,7 @@ mod function_patches;
 mod function_patches_current;
 mod functions;
 mod functions_current;
+mod groups;
 mod inter_collection_permissions;
 mod logical_function_run_inputs;
 mod logical_function_run_pointers;
@@ -57,6 +58,7 @@ pub struct Schema;
 pub(crate) const ENTITIES: &[&dyn Entity] = &[
     &system::Defs,
     &users::Defs,
+    &groups::Defs,
     &collections::Defs,
     &roles::Defs,
     &users_roles::Defs,
@@ -94,9 +96,9 @@ impl SchemaVersion for Schema {
     // Refresh via `cargo test -p td-schema --lib print_schema_fingerprints --
     // --ignored --nocapture` after any intentional change to current/.
     const FINGERPRINTS: [&'static str; 3] = [
-        "a9f082999d8e8892de905f179213306d142391ad7ce7ff998e9538592c866c33", // Sqlite
-        "48326b22639be0f48dd52194271201a4d1b7141a9dc95b1a868c284257d54de4", // Postgres
-        "3f588ae98b3f1de50572df93d9683996f2c0bbcaff0127df41f6b9d600b699db", // MySql
+        "de4654f4ac7c313254bafb6bed3aa2c795653e37377e56882104b44d1af8cb00", // Sqlite
+        "8d76e5c2de73684d1750d26f0345979c66910a58a5987f76431010c13307f9b9", // Postgres
+        "184c0021e088474004da38ede409635143ae2ca23809b105369fa0f121df9b4f", // MySql
     ];
 
     fn build(backend: impl Into<Backend>) -> Vec<String> {

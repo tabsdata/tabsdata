@@ -275,6 +275,10 @@ pub fn parse_role(s: impl Into<String>) -> Result<String, TdError> {
     parse_name(s, "Role name")
 }
 
+pub fn parse_group(s: impl Into<String>) -> Result<String, TdError> {
+    parse_name(s, "Group name")
+}
+
 pub fn parse_user(s: impl Into<String>) -> Result<String, TdError> {
     parse_name(s, "User name")
 }
