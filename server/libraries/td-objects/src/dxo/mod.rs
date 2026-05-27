@@ -38,6 +38,7 @@ pub mod group;
 pub mod inter_collection_access;
 pub mod inter_collection_permission;
 pub mod logical;
+pub mod metrics;
 pub mod permission;
 pub mod physical_function_run;
 pub mod physical_table_data_version;

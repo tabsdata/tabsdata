@@ -69,6 +69,7 @@ td-tower = { workspace = true }
 
 # External dependencies
 
+chrono = { workspace = true }
 derive_builder = { workspace = true }
 sea-query = { workspace = true, features = ["sqlx-utils"] }
 strum = { workspace = true, features = ["derive"] }

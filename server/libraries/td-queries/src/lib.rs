@@ -18,6 +18,7 @@ mod tower;
 pub use daos::dependency::{Dependencies, DependenciesEntry};
 pub use daos::execution::{Executions, ExecutionsEntry};
 pub use daos::function_runs::{Lfr, LfrEntry, Pfr, PfrEntry};
+pub use daos::metrics::{Metrics, MetricsEntry};
 pub use daos::pointers::{
     LogicalPointers, ptdv_is_canonical_committed, redirect_event, void_event,
 };
@@ -44,7 +45,7 @@ pub use tower::by::{By, insert, insert_vec};
 pub mod prelude {
     pub use super::{
         ChunkedQueries, CurrentEntry, DependenciesEntry, ExecutionsEntry, HistoricEntry, LfrEntry,
-        LiveEntry, LtdvEntry, PfrEntry, QueryExecutor, RecursiveEntry, SessionsEntry,
+        LiveEntry, LtdvEntry, MetricsEntry, PfrEntry, QueryExecutor, RecursiveEntry, SessionsEntry,
         VersionedEntry,
     };
 }

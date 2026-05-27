@@ -18,6 +18,7 @@
 pub mod dependency;
 pub mod execution;
 pub mod function_runs;
+pub mod metrics;
 pub mod pointers;
 pub mod session;
 pub mod table_data_versions;
