@@ -454,12 +454,14 @@ def lock_connectors_constants(root: str, connectors: list[tuple[str, str]]) -> N
 def lock_connectors_venv(root: str, connectors: list[tuple[str, str]]) -> None:
     venv_py_file = os.path.join(
         root,
-        "client",
-        "platform",
+        "connectors",
+        "python",
+        "tabsdata-server",
         "src",
         "main",
         "python",
         "tabsdatak",
+        "server",
         "_tdruntime",
         "python",
         "venv.py",

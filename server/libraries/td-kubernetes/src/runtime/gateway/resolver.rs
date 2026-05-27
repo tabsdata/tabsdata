@@ -21,11 +21,6 @@
 mod env;
 mod sys;
 
-#[cfg(test)]
-mod tests {
-    mod resolver;
-}
-
 use td_error::TdError;
 
 pub use sys::{SystemKey, SystemValues};
@@ -46,4 +41,9 @@ impl ConfigurationResolver {
     pub async fn resolve_env(&self, content: &str) -> Result<String, TdError> {
         env::resolve(content)
     }
+}
+
+#[cfg(test)]
+mod tests {
+    mod resolver;
 }

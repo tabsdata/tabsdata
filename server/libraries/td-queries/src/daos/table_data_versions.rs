@@ -67,10 +67,10 @@ where
     /// LTDV-rooted: ranges over LTDVs with `triggered_on <= ?` (replay-
     /// stable since replays don't move LTDV.triggered_on), then resolves
     /// each LTDV's *current* `Bound` pointer (no `set_on` upper bound,
-    /// so post-`triggered_on` rebinds are reflected). `has_data = TRUE`
-    /// + `ORDER BY ltdv.triggered_on DESC LIMIT 1` gives chase-back for
-    /// free: a current PTDV without data is dropped and the next-newest
-    /// LTDV wins.
+    /// so post-`triggered_on` rebinds are reflected). The `has_data =
+    /// TRUE` + `ORDER BY ltdv.triggered_on DESC LIMIT 1` clause gives
+    /// chase-back for free — a current PTDV without data is dropped and
+    /// the next-newest LTDV wins.
     ///
     /// When `committed_only`, also LEFT-JOINs the producer LFR and
     /// keeps rows whose producer is sticky-`Committed` *or* NULL

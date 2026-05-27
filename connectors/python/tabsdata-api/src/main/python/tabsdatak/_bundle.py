@@ -5,7 +5,7 @@
 """tabsdatak function-bundle producer.
 
 Pairs with the consumer side at
-`tabsdatak._tdrunner.function._lib.bundle.extract_bundle`: this module
+`tabsdatak.server._tdrunner.function._lib.bundle.extract_bundle`: this module
 *builds* the `.tar.zst` (zstandard-compressed tar) that the runner
 later unpacks.
 
@@ -53,8 +53,8 @@ from tabsdatak._info import (
     TransformerInfo,
     _unwrap_info,
 )
-from tabsdatak._tdruntime.python.venv import PythonEnvironment
 from tabsdatak.error import ApiErrorCode
+from tabsdatak.server._tdruntime.python.venv import PythonEnvironment
 
 log = logging.getLogger(__name__)
 

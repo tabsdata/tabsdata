@@ -4,13 +4,13 @@
 `client/platform/src/main/python/tabsdata/_tabsserver/`
 
 **Target:**
-`client/platform/src/main/python/tabsdatak/_tdrunner/function/`
+`connectors/python/tabsdata-server/src/main/python/tabsdatak/server/_tdrunner/function/`
 
 **Tests:**
-`client/platform/src/utest/python/test_tabsdatak/test_tdrunner/`
+`connectors/python/tabsdata-server/src/utest/python/test_tabsdatak/server/test_tdrunner/`
 
 **Coverage requirement:** 100% line + branch on every new file under
-`tabsdatak/_tdrunner/`. Existing `test_tabsdata/test_tabsserver` tests must
+`tabsdatak/server/_tdrunner/`. Existing `test_tabsdata/test_tabsserver` tests must
 keep passing.
 
 **Standalone rule (revised 2026-05-08):** `tabsdatak/` must never import
@@ -120,14 +120,14 @@ dev tooling for tabsdatak.
   `run-transporter`, `run-source-plugin`, `run-function`,
   `run-destination-plugin`, `report-completion`, `run-trigger-plugin`).
 * `[tool.coverage.run]` `branch = true`,
-  `source = ["tabsdatak._tdrunner"]`.
+  `source = ["tabsdatak.server._tdrunner"]`.
 * `[tool.coverage.report]` `fail_under = 100`, `show_missing = true`.
 * `[tool.pytest.ini_options]` test paths under
   `utest/python/test_tabsdatak`.
 
-**Tests:** smoke test that `python -m tabsdatak._tdrunner.function.commands.fetch_request`
+**Tests:** smoke test that `python -m tabsdatak.server._tdrunner.function.commands.fetch_request`
 and `fetch-request --help` both run after editable install. Lives in
-`test_tabsdatak/test_tdrunner/test_packaging.py`.
+`test_tabsdatak/server/test_tdrunner/test_packaging.py`.
 
 **Depends on:** nothing.
 
@@ -138,14 +138,14 @@ pyproject already, or shares the one with tabsdata.
 
 **Status:** Done (2026-05-07). `test_tabsdatak/conftest.py` was refactored
 under option (c) to drop all `tabsdata` and `test_tabsdata` imports
-(778 → 45 lines); `test_tabsdatak/test_tdrunner/` tree created with
+(778 → 45 lines); `test_tabsdatak/server/test_tdrunner/` tree created with
 `tmp_mount` and `make_request_yaml` fixtures. Existing
 `test_example/test_dummy.py` continues to pass.
 
 **Scope:** mirror the `test_tabsdata` layout for the new runner.
 
 **Code:** create `__init__.py` files at
-`test_tabsdatak/test_tdrunner/`,
+`test_tabsdatak/server/test_tdrunner/`,
 `test_tdrunner/test_function/`,
 `test_tdrunner/test_function/test_lib/`,
 `test_tdrunner/test_function/test_commands/`,
@@ -161,8 +161,8 @@ apply to test code itself.
 
 ## Phase 1 — Shared `_lib/`
 
-All modules below live under `tabsdatak/_tdrunner/function/_lib/` with
-mirrored tests under `test_tabsdatak/test_tdrunner/test_function/test_lib/`.
+All modules below live under `tabsdatak/server/_tdrunner/function/_lib/` with
+mirrored tests under `test_tabsdatak/server/test_tdrunner/test_function/test_lib/`.
 Copies from `_tabsserver` are minimal cherry-picks per Q1.
 
 ### 1.1 — `cli.py` — `--<opt> <V> | env:<VAR> | val:<V>` parser ✅
@@ -183,7 +183,7 @@ Copies from `_tabsserver` are minimal cherry-picks per Q1.
 **Scope:** the spec heart of `01-CommandBasics.md`. Wraps argparse and
 resolves arguments uniformly.
 
-**Code:** `tabsdatak/_tdrunner/function/_lib/cli.py`
+**Code:** `tabsdatak/server/_tdrunner/function/_lib/cli.py`
 
 * `resolve_value(arg: str) -> str` — handles `<V>`, `env:<VAR>` (raises
   `UndefinedEnvError` mapped to exit 2), `val:<V>`.
@@ -214,7 +214,7 @@ promptly without sleeping the full interval.
 **Scope:** context manager / background-thread helper that updates the
 liveness file's mtime at least once per minute while a step runs.
 
-**Code:** `tabsdatak/_tdrunner/function/_lib/liveness.py`
+**Code:** `tabsdatak/server/_tdrunner/function/_lib/liveness.py`
 
 * `class Liveness(path, interval=30.0)` with `start()` / `stop()` and
   context-manager protocol; daemon thread + `Event`.
@@ -237,7 +237,7 @@ existing handlers on the same logger name so it's safe to call twice;
 **Scope:** per `01-CommandBasics.md`: INFO/DEBUG/TRACE → stdout;
 WARN/ERROR → stderr.
 
-**Code:** `tabsdatak/_tdrunner/function/_lib/logging.py`
+**Code:** `tabsdatak/server/_tdrunner/function/_lib/logging.py`
 
 * `setup_logging(name, level=logging.INFO) -> logging.Logger` — installs
   two `StreamHandler`s with level filters.
@@ -259,7 +259,7 @@ import them. `CommandSpecificError` implemented as a class taking
 **Scope:** small exception hierarchy whose subclasses map to documented
 exit codes (1, 2, 10+).
 
-**Code:** `tabsdatak/_tdrunner/function/_lib/errors.py`
+**Code:** `tabsdatak/server/_tdrunner/function/_lib/errors.py`
 
 * `class CommandError(Exception)` with `exit_code: int`.
 * `InvalidOptionsError` (1), `UndefinedEnvError` (2),
@@ -320,7 +320,7 @@ existing implementation note below remains valid up to that point.
 `FunctionYaml`. Refactor as plain dataclasses exposing only the fields
 publisher commands actually read.
 
-**Code:** `tabsdatak/_tdrunner/function/_lib/request.py`
+**Code:** `tabsdatak/server/_tdrunner/function/_lib/request.py`
 
 * `load_request(path) -> Request`.
 * `Request` dataclass — bundle URI, requirements info, source/destination
@@ -328,7 +328,7 @@ publisher commands actually read.
 
 **Tests:** load minimal sample fixture; missing file, malformed YAML,
 missing required fields each raise expected errors. Fixture YAMLs live
-under `test_tabsdatak/test_tdrunner/test_function/test_lib/resources/`.
+under `test_tabsdatak/server/test_tdrunner/test_function/test_lib/resources/`.
 
 **Depends on:** 1.4.
 
@@ -350,7 +350,7 @@ under `test_tabsdatak/test_tdrunner/test_function/test_lib/resources/`.
 
 **Scope:** cherry-pick from `_tabsserver/function/response_utils.py`.
 
-**Code:** `tabsdatak/_tdrunner/function/_lib/response.py`
+**Code:** `tabsdatak/server/_tdrunner/function/_lib/response.py`
 
 * `Response` dataclass.
 * `write_response(resp, path)`.
@@ -379,7 +379,7 @@ branches). 8 tests passing. Implementation choices:
 **Scope:** cherry-pick `extract_bundle_folder` from
 `_tabsserver/utils.py`. Pure stdlib.
 
-**Code:** `tabsdatak/_tdrunner/function/_lib/bundle.py`
+**Code:** `tabsdatak/server/_tdrunner/function/_lib/bundle.py`
 
 * `extract_bundle(archive, dest_dir)` using `tarfile.open(...)` with the
   `data` filter.
@@ -395,7 +395,7 @@ corrupt file raises.
 `get_path_to_environment_bin` from `_tabsserver/pyenv_creation.py`. Drop
 tabsdata-specific paths.
 
-**Code:** `tabsdatak/_tdrunner/function/_lib/pyenv.py`
+**Code:** `tabsdatak/server/_tdrunner/function/_lib/pyenv.py`
 
 * `create_virtual_environment(requirements, dest_dir) -> VirtualEnv`
   returning a dataclass with `python_bin`, `venv_dir`,
@@ -430,7 +430,7 @@ extra_env:
   PYTHONPATH: ""
 ```
 
-**Code:** `tabsdatak/_tdrunner/function/_lib/run_env.py` — `RunEnv`
+**Code:** `tabsdatak/server/_tdrunner/function/_lib/run_env.py` — `RunEnv`
 dataclass + `load_run_env(path)` / `write_run_env(env, path)`.
 
 **Tests:** roundtrip; missing required fields error; `extra_env` defaults
@@ -480,7 +480,7 @@ V1WildCardCopyFormat dataclasses + builder logic from
 `_tabsserver/function/native_tables_utils.py`. Two builder functions for
 publisher use.
 
-**Code:** `tabsdatak/_tdrunner/function/_lib/transporter_request.py`
+**Code:** `tabsdatak/server/_tdrunner/function/_lib/transporter_request.py`
 
 * `build_localize_state_request(req, in_dir, state_dir) -> dict`
 * `build_upload_state_request(req, state_dir) -> dict`
@@ -511,7 +511,7 @@ coverage on a single platform via `monkeypatch.setattr(sys, "platform",
 **Scope:** per Q8 the binary is in PATH and a black box. This wrapper just
 exec's it.
 
-**Code:** `tabsdatak/_tdrunner/function/_lib/transporter_proc.py`
+**Code:** `tabsdatak/server/_tdrunner/function/_lib/transporter_proc.py`
 
 * `run_transporter(request_yaml, liveness) -> int` →
   `subprocess.run(["td_transporter", "--request", str(request_yaml)])`
@@ -563,8 +563,8 @@ passing. Implementation choices:
 themselves are tabsdata-defined — copy the **minimal** Protocol/ABC for
 `_run` so we don't import tabsdata.
 
-**Code:** `tabsdatak/_tdrunner/function/_lib/plugin_loader.py` plus
-`tabsdatak/_tdrunner/function/_lib/plugin_protocol.py`.
+**Code:** `tabsdatak/server/_tdrunner/function/_lib/plugin_loader.py` plus
+`tabsdatak/server/_tdrunner/function/_lib/plugin_protocol.py`.
 
 **Tests:** load a fake cloudpickled plugin from `tmp_path`; missing
 plugin → typed error; protocol mismatch → typed error.
@@ -700,8 +700,8 @@ fields unchanged.
 ## Phase 2 — Pure-disk leaf commands
 
 Each command is a thin `main()` in
-`tabsdatak/_tdrunner/function/commands/<name>/__init__.py`. Tests live at
-`test_tabsdatak/test_tdrunner/test_function/test_commands/test_<name>.py`.
+`tabsdatak/server/_tdrunner/function/commands/<name>/__init__.py`. Tests live at
+`test_tabsdatak/server/test_tdrunner/test_function/test_commands/test_<name>.py`.
 Every command:
 
 * builds its parser via `_lib.cli.build_parser`,
@@ -717,14 +717,14 @@ passing. Stdlib `urllib.request` for the HTTP GET; bearer auth via
 `Authorization` header. Command-specific exit codes: 10 = HTTP/network
 error, 11 = output write error. Fixed the broken stub import (was
 `from tabsdatak._commands import tabsdata_command` → now imports from
-`tabsdatak._tdrunner.function.commands` where the decorator actually
+`tabsdatak.server._tdrunner.function.commands` where the decorator actually
 lives). Decorator metadata (`tabsdata_command_name = "td_fetch_request"`)
 preserved.
 
 **Scope:** HTTP GET `--url` with `Authorization: Bearer <token>`, write
 body to `--out`.
 
-**Code:** `tabsdatak/_tdrunner/function/commands/fetch_request/__init__.py`
+**Code:** `tabsdatak/server/_tdrunner/function/commands/fetch_request/__init__.py`
 
 * Args: `--url`, `--token`, `--out`, `--liveness`.
 * Uses `urllib.request` with bearer header.
@@ -740,7 +740,7 @@ error → typed error.
 **Scope:** read `--request`, locate requirements, call
 `_lib.pyenv.create_virtual_environment`, write `--out` as run-env.yaml.
 
-**Code:** `tabsdatak/_tdrunner/function/commands/prepare_py_env/__init__.py`
+**Code:** `tabsdatak/server/_tdrunner/function/commands/prepare_py_env/__init__.py`
 
 * Args: `--request`, `--out`, `--liveness`.
 
@@ -768,7 +768,7 @@ happen first.**
 **Scope:** read bundle URI from `--request`, download via storage
 credentials in env, extract to `--dir`.
 
-**Code:** `tabsdatak/_tdrunner/function/commands/localize_fn_bundle/__init__.py`
+**Code:** `tabsdatak/server/_tdrunner/function/commands/localize_fn_bundle/__init__.py`
 
 * Args: `--request`, `--run-env`, `--dir`, `--liveness`.
 
@@ -794,7 +794,7 @@ request.yaml, 11 = unsupported URI scheme, 12 = write failed.
 
 **Scope:** build the transporter request YAML for state-in localisation.
 
-**Code:** `tabsdatak/_tdrunner/function/commands/prep_localize_state/__init__.py`
+**Code:** `tabsdatak/server/_tdrunner/function/commands/prep_localize_state/__init__.py`
 
 * Args: `--request`, `--in-dir`, `--state-dir`, `--out`, `--liveness`.
 
@@ -810,7 +810,7 @@ passing. Mirror of 2.4 for the upload direction. Same exit-code scheme.
 
 **Scope:** build the transporter request YAML for state-out upload.
 
-**Code:** `tabsdatak/_tdrunner/function/commands/prep_upload_state/__init__.py`
+**Code:** `tabsdatak/server/_tdrunner/function/commands/prep_upload_state/__init__.py`
 
 * Args: `--request`, `--state-dir`, `--out`, `--liveness`.
 
@@ -830,7 +830,7 @@ found.
 **Scope:** pure wrapper — exec `td_transporter --request <PATH>` and
 propagate exit code, while running a Liveness.
 
-**Code:** `tabsdatak/_tdrunner/function/commands/run_transporter/__init__.py`
+**Code:** `tabsdatak/server/_tdrunner/function/commands/run_transporter/__init__.py`
 
 * Args: `--request`, `--liveness`.
 
@@ -853,7 +853,7 @@ thread.
 **Scope:** read `--request`, scan `--out-dir` and `--state-dir`, build
 response, POST to `--url` with bearer token, write a copy to `--out`.
 
-**Code:** `tabsdatak/_tdrunner/function/commands/report_completion/__init__.py`
+**Code:** `tabsdatak/server/_tdrunner/function/commands/report_completion/__init__.py`
 
 * Args: `--url`, `--token`, `--request`, `--out-dir`, `--state-dir`,
   `--out`, `--liveness`.
@@ -903,7 +903,7 @@ in the registry (1B.6) by `type(info.source)` / `type(info.destination)`
 `--out-dir`.
 
 **Code:**
-`tabsdatak/_tdrunner/function/commands/run_source_plugin/__init__.py`
+`tabsdatak/server/_tdrunner/function/commands/run_source_plugin/__init__.py`
 
 * Args: `--request`, `--bundle`, `--out-dir`, `--liveness`.
 * Flow: load Request → deserialise `PublisherInfo` from
@@ -927,7 +927,7 @@ pod-runner has placed the bundle's code on `sys.path` (or installed it as
 a wheel) and we're already in the venv where `tabsdatak` and the user's
 deps both exist.
 
-**Code:** `tabsdatak/_tdrunner/function/commands/run_function/__init__.py`
+**Code:** `tabsdatak/server/_tdrunner/function/commands/run_function/__init__.py`
 
 * Args: `--request`, `--bundle`, `--in-dir`, `--state-in`, `--out-dir`,
   `--state-out`, `--liveness`.
@@ -958,7 +958,7 @@ TableFrame stub).
 `--out-dir` and writes them to the destination described by `info.destination`.
 
 **Code:**
-`tabsdatak/_tdrunner/function/commands/run_destination_plugin/__init__.py`
+`tabsdatak/server/_tdrunner/function/commands/run_destination_plugin/__init__.py`
 
 * Args: `--request`, `--bundle`, `--out-dir`, `--liveness`.
 * Flow: load Request → deserialise `SubscriberInfo` → registry lookup
@@ -984,7 +984,7 @@ exists already (Q9) — we just need to compose well with it.
 
 **Code:** test only — no production code (unless k- needs an adapter).
 
-**Tests:** `test_tabsdatak/test_tdrunner/test_e2e/test_publisher_chain.py`.
+**Tests:** `test_tabsdatak/server/test_tdrunner/test_e2e/test_publisher_chain.py`.
 A single `@pytest.mark.slow` test that:
 
 1. seeds a tmp `mount/td/` skeleton + `request.yaml` + a tiny prebuilt
@@ -1002,7 +1002,7 @@ A single `@pytest.mark.slow` test that:
 non-empty stdout. Catches regressions in common-options handling.
 
 **Tests:**
-`test_tabsdatak/test_tdrunner/test_function/test_commands/test_common_options.py`.
+`test_tabsdatak/server/test_tdrunner/test_function/test_commands/test_common_options.py`.
 
 **Depends on:** all Phase-2 + Phase-3 tasks.
 
@@ -1048,7 +1048,7 @@ the user signs off on it.
 prepare-py-env, localize-fn-bundle, report-completion.
 
 **Code:** flesh out
-`tabsdatak/_tdrunner/function/commands/run_trigger_plugin/__init__.py`.
+`tabsdatak/server/_tdrunner/function/commands/run_trigger_plugin/__init__.py`.
 Lift from `_tabsserver`'s stage-trigger path (`StageTriggerYaml` branch in
 `execute_function_from_bundle_path.py`).
 
@@ -1070,11 +1070,11 @@ function trigger. Probably fits under a new `trigger_function/` command.
 
 ### 6.1 — `tabsdatak` standalone gate
 
-**Scope:** verify nothing under `tabsdatak/_tdrunner/` imports from
+**Scope:** verify nothing under `tabsdatak/server/_tdrunner/` imports from
 `tabsdata` *or* `tabsdataai`. CI-enforced.
 
 **Code:**
-`test_tabsdatak/test_tdrunner/test_no_legacy_imports.py` — walks
+`test_tabsdatak/server/test_tdrunner/test_no_legacy_imports.py` — walks
 `_tdrunner/` and asserts every `import` and `from` line resolves outside
 both `tabsdata` and `tabsdataai`.
 
@@ -1097,9 +1097,9 @@ For every task above:
 
 1. **Branch coverage gate is enforced**, not just line. CI runs
    `pytest --cov --cov-branch --cov-fail-under=100` against
-   `tabsdatak._tdrunner`.
+   `tabsdatak.server._tdrunner`.
 2. **Fixture bundles** built in
-   `test_tabsdatak/test_tdrunner/conftest.py` (a `bundle_archive` factory
+   `test_tabsdatak/server/test_tdrunner/conftest.py` (a `bundle_archive` factory
    similar to the one in `test_tabsdata`, but freshly written — no
    imports across).
 3. **No imports from `tabsdata` or `test_tabsdata`** anywhere — verified

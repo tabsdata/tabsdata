@@ -2,6 +2,7 @@
 # Copyright 2024 Tabs Data Inc.
 #
 
+import fnmatch
 import glob
 import importlib
 import importlib.util
@@ -97,7 +98,10 @@ def clean(project_folder, inclusion_patterns, exclusion_patterns):
                 rmtree_with_retry(full_path)
             elif os.path.isfile(full_path):
                 basename = os.path.basename(path)
-                if basename in exclusion_patterns:
+                if any(
+                    fnmatch.fnmatch(basename, exclusion_pattern)
+                    for exclusion_pattern in exclusion_patterns
+                ):
                     logger.debug(f"✏️    - Skipping removal of file: {full_path}")
                 else:
                     logger.debug(f"✏️    - Removing file: {full_path}")
@@ -203,6 +207,7 @@ def clean_py(project_folder):
         "data.log",
         "source_1.log",
         "source_2.log",
+        "*.log.yaml",
     ]
 
     clean(project_folder, inclusion_patterns, exclusion_patterns)
@@ -225,6 +230,7 @@ def clean_rs(project_folder):
         "data.log",
         "source_1.log",
         "source_2.log",
+        "*.log.yaml",
     ]
 
     clean(project_folder, inclusion_patterns, exclusion_patterns)
@@ -247,6 +253,7 @@ def clean_ts(project_folder):
         "data.log",
         "source_1.log",
         "source_2.log",
+        "*.log.yaml",
     ]
 
     clean(project_folder, inclusion_patterns, exclusion_patterns)

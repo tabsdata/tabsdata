@@ -646,16 +646,13 @@ impl Default for FileSupervisorMessageQueue {
 )]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
+#[derive(Default)]
 pub enum Orchestrator {
+    #[default]
     Supervisor,
     Kubernetes,
 }
 
-impl Default for Orchestrator {
-    fn default() -> Self {
-        Self::Supervisor
-    }
-}
 
 #[async_trait]
 pub trait OrchestratorMessagingProvider: Send + Sync {

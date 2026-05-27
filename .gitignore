@@ -5,6 +5,7 @@
 __pycache__/
 __pypackages__/
 # build/
+.attic/
 .cache
 .cache/
 .coverage
@@ -95,6 +96,7 @@ connectors.ee/python/**/assets/manifest/SOURCETRACK.yaml
 build/
 **/build/
 !.github/**/build/
+!docker/kube/ubuntu/arm/images/build/
 celerybeat-schedule
 celerybeat.pid
 changelog.config.js
@@ -114,6 +116,7 @@ env.bak/
 env/
 ENV/
 htmlcov/
+instance/
 ipython_config.py
 lib64/
 licenses.json
@@ -151,7 +154,8 @@ wheels/
 client/platform/src/main/python/tabsdata/assets
 src/main/python/tabsdata_agent/assets
 test-results
-
+books/dguide/src/chapters/teds/README.md
+books/dguide/src/chapters/teds/SUMMARY.md
 # Local-only smoke-test harnesses for the publisher / transformer chains
 # (donotmerge.py, donotmergetransformer.py, and their workspace folders).
 # Kept on disk for manual chain verification; never committed.

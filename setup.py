@@ -5,6 +5,7 @@
 import logging
 import os
 import tomllib
+from dataclasses import dataclass
 from pathlib import Path
 
 from setuptools import find_namespace_packages, setup
@@ -130,20 +131,56 @@ PYTHON_SOURCE_ROOT = os.path.join(
     "main",
     "python",
 )
-LIBEXEC_COMMANDS_FOLDER = os.path.join(
-    PYTHON_SOURCE_ROOT,
-    "tabsdatak",
-    "_tdrunner",
-    "function",
-    "commands",
-)
+
+
+@dataclass(frozen=True)
+class LibexecCommandsSource:
+    source_code_root: str
+    root_module_path: str
+
+
+LIBEXEC_COMMANDS_SOURCES: list[LibexecCommandsSource] = [
+    LibexecCommandsSource(
+        source_code_root=os.path.join(
+            ROOT,
+            "connectors",
+            "python",
+            "tabsdata-server",
+            "src",
+            "main",
+            "python",
+        ),
+        root_module_path=os.path.join(
+            "tabsdatak",
+            "server",
+            "_tdrunner",
+            "function",
+            "commands",
+        ),
+    ),
+]
 LIBEXEC_BUILD_FOLDER = os.path.join("target", "python", "libexec", "tabsdata")
 LIBEXEC_INSTALL_FOLDER = os.path.join("libexec", "tabsdata")
 
-libexec_specs = discover_tabsdata_commands(
-    LIBEXEC_COMMANDS_FOLDER,
-    PYTHON_SOURCE_ROOT,
-)
+
+def discover_libexec_specs(
+    commands_sources: list[LibexecCommandsSource],
+) -> list[tuple[str, str]]:
+    specs: list[tuple[str, str]] = []
+    for commands_source in commands_sources:
+        specs.extend(
+            discover_tabsdata_commands(
+                os.path.join(
+                    commands_source.source_code_root,
+                    commands_source.root_module_path,
+                ),
+                commands_source.source_code_root,
+            )
+        )
+    return sorted(specs)
+
+
+libexec_specs = discover_libexec_specs(LIBEXEC_COMMANDS_SOURCES)
 libexec_launchers = build_launchers(libexec_specs, LIBEXEC_BUILD_FOLDER)
 libexec_datafiles: list[tuple[str, list[str]]] = (
     [(LIBEXEC_INSTALL_FOLDER, libexec_launchers)] if libexec_launchers else []
@@ -190,7 +227,7 @@ console_scripts: list[str] = [
     "td_resource = tabsdata._utils.internal._resources:main",
     "td_srvinf = tabsdata._tabsserver.tools.server_info:main",
     "td_stagetrigger = tabsdata._tabsserver.invoker:main",
-    "td_pyvenv = tabsdatak._tdruntime.python.pyvenv:main",
+    "td_pyvenv = tabsdatak.server._tdruntime.python.pyvenv:main",
     "td_upgrader = tabsdata._tabsserver.server.upgrader.upgrader:main",
     "td_venv = tabsdata._tabsserver.pyenv_creation:main",
     "tdconn = tabsdata._cli.tdconn.cli:cli",
