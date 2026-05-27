@@ -9156,6 +9156,7 @@ dependencies = [
  "sha2",
  "strum 0.28.0",
  "td-schema",
+ "td-security",
  "tracing",
 ]
 

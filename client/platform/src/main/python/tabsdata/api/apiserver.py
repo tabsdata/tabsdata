@@ -922,6 +922,32 @@ class APIServer:
         response = self.post(endpoint, json=data)
         return self.raise_for_status_or_return(raise_for_status, response)
 
+    def metrics_get(
+        self,
+        params: dict | None = None,
+        raise_for_status: bool = True,
+    ):
+        """Consolidated `/metrics` endpoint — returns `(nodes, edges)`
+        over a window, parameterised by `dim`.
+
+        `params` is a flat dict matching the URL query string (e.g.
+        ``{"dim": "collection", "unit": "day", "status": ["C", "F"]}``).
+        Repeated params (collection, group, status) accept lists.
+        """
+        response = self.get("/metrics", params=params or {})
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def inflight_get(
+        self,
+        params: dict | None = None,
+        raise_for_status: bool = True,
+    ):
+        """Point-in-time `/inflight` — per-(collection, group, status)
+        count of non-terminal runs.
+        """
+        response = self.get("/inflight", params=params or {})
+        return self.raise_for_status_or_return(raise_for_status, response)
+
     def role_create(
         self, name: str, description: str = None, raise_for_status: bool = True
     ):

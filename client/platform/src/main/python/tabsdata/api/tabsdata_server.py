@@ -4439,6 +4439,99 @@ class TabsdataServer:
             raise_for_status=raise_for_status,
         )
 
+    def metrics(
+        self,
+        dim: str | None = None,
+        unit: str | None = None,
+        align: str | None = None,
+        from_ms: int | None = None,
+        span: int | None = None,
+        collection: List[str] | None = None,
+        collection_exclude: List[str] | None = None,
+        group: List[str] | None = None,
+        group_exclude: List[str] | None = None,
+        status: List[str] | None = None,
+        raise_for_status: bool = True,
+    ) -> dict:
+        """Consolidated `/metrics` endpoint.
+
+        Returns the raw response data (``{dim, unit, start_ms, end_ms,
+        nodes, edges}``). All parameters are optional; the server
+        defaults to ``dim=collection, unit=day, span=1, align=calendar``.
+
+        Args:
+            dim: ``"collection"`` (default) or ``"group"``.
+            unit: window unit and GROUP BY grain
+                (``hour|day|week|month|quarter|year``).
+            align: ``"calendar"`` (default) snaps the start of the
+                window to the calendar-unit boundary containing
+                ``from``; ``"rolling"`` produces a ``span*unit``-long
+                window ending exactly at ``from``.
+            from_ms: right edge of the window (UTC epoch ms, exclusive).
+                Defaults to server-now. Sent on the wire as ``from``.
+            span: window width in ``unit``s — also the number of rows
+                returned (``unit=hour&span=24`` → 24 rows).
+            collection: include filter on collection ids.
+            collection_exclude: exclude filter on collection ids.
+            group: include filter on group ids.
+            group_exclude: exclude filter on group ids.
+            status: narrow to specific run statuses.
+        """
+        params: dict = {}
+        if dim is not None:
+            params["dim"] = dim
+        if unit is not None:
+            params["unit"] = unit
+        if align is not None:
+            params["align"] = align
+        if from_ms is not None:
+            params["from"] = from_ms
+        if span is not None:
+            params["span"] = span
+        if collection:
+            params["collection"] = collection
+        if collection_exclude:
+            params["collection_exclude"] = collection_exclude
+        if group:
+            params["group"] = group
+        if group_exclude:
+            params["group_exclude"] = group_exclude
+        if status:
+            params["status"] = status
+        response = self.connection.metrics_get(
+            params=params, raise_for_status=raise_for_status
+        )
+        return response.json().get("data") or {}
+
+    def inflight(
+        self,
+        collection: List[str] | None = None,
+        collection_exclude: List[str] | None = None,
+        group: List[str] | None = None,
+        group_exclude: List[str] | None = None,
+        status: List[str] | None = None,
+        raise_for_status: bool = True,
+    ) -> dict:
+        """Point-in-time `/inflight` — returns the raw response
+        ``{rows}`` with non-terminal LFR counts per
+        ``(collection, group, status)``.
+        """
+        params: dict = {}
+        if collection:
+            params["collection"] = collection
+        if collection_exclude:
+            params["collection_exclude"] = collection_exclude
+        if group:
+            params["group"] = group
+        if group_exclude:
+            params["group_exclude"] = group_exclude
+        if status:
+            params["status"] = status
+        response = self.connection.inflight_get(
+            params=params, raise_for_status=raise_for_status
+        )
+        return response.json().get("data") or {}
+
     def create_role(
         self, name: str, description: str = None, raise_for_status: bool = True
     ) -> Role:
