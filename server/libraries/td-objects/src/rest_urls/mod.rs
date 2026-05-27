@@ -151,6 +151,12 @@ pub const CREATE_GROUP: &str = url!(GROUPS);
 pub const UPDATE_GROUP: &str = url!(GROUP);
 pub const DELETE_GROUP: &str = url!(GROUP);
 
+// Operational metrics. `/metrics` is the consolidated nodes+edges
+// endpoint, parameterised by `dim=collection|group`. `/inflight` is
+// the point-in-time complement (no window).
+pub const METRICS: &str = url!("/metrics");
+pub const INFLIGHT: &str = url!("/inflight");
+
 // Permissions
 pub const PERMISSIONS: &str = url!(ROLE, "/permissions");
 pub const PERMISSION: &str = url!(PERMISSIONS, "/{permission}");

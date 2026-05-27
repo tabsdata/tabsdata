@@ -11,6 +11,7 @@ pub(crate) mod groups;
 pub(crate) mod inter_collection_permissions;
 pub(crate) mod internal;
 pub(crate) mod logical_versions;
+pub(crate) mod metrics;
 pub(crate) mod permissions;
 pub(crate) mod roles;
 pub(crate) mod server_status;

@@ -11,6 +11,7 @@ use crate::function_run::services::FunctionRunServices;
 use crate::group::services::GroupServices;
 use crate::inter_coll_permission::services::InterCollectionPermissionServices;
 use crate::logical::services::LogicalServices;
+use crate::metrics::services::OperationalMetricsServices;
 use crate::permission::services::PermissionServices;
 use crate::role::services::RoleServices;
 use crate::system::services::SystemServices;
@@ -42,6 +43,7 @@ pub mod graph;
 pub mod group;
 pub mod inter_coll_permission;
 pub mod logical;
+pub mod metrics;
 pub mod permission;
 pub mod role;
 pub mod scheduler;
@@ -64,6 +66,7 @@ pub struct Services {
     function_run: Arc<FunctionRunServices>,
     group: Arc<GroupServices>,
     inter_coll_permission: Arc<InterCollectionPermissionServices>,
+    operational_metrics: Arc<OperationalMetricsServices>,
     permission: Arc<PermissionServices>,
     role: Arc<RoleServices>,
     system: Arc<SystemServices>,
