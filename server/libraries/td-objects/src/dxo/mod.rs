@@ -41,6 +41,7 @@ pub mod logical;
 pub mod permission;
 pub mod physical_function_run;
 pub mod physical_table_data_version;
+pub mod query_filters;
 pub mod role;
 pub mod run_metrics;
 pub mod runtime_info;

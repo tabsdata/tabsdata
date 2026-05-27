@@ -1338,6 +1338,27 @@ pub fn typed_enum(args: TokenStream, item: TokenStream) -> TokenStream {
             variant.attrs.push(syn::parse_quote!(#[serde(rename = #r)]));
         }
         variant.attrs.retain(|a| !a.path().is_ident("typed_enum"));
+
+        // Case-insensitive ergonomics for URL/JSON deserialization:
+        // accept the variant ident lowercased (`year`, `calendar`,
+        // `done`) and the lowercased rename tag (`d`, `rr`) in
+        // addition to their canonical forms. Serialization always
+        // emits the canonical form.
+        let ident_str = variant.ident.to_string();
+        let mut aliases: Vec<String> = Vec::new();
+        let ident_lower = ident_str.to_lowercase();
+        if ident_lower != ident_str {
+            aliases.push(ident_lower);
+        }
+        for r in &renames {
+            let r_lower = r.to_lowercase();
+            if r_lower != *r && !aliases.contains(&r_lower) {
+                aliases.push(r_lower);
+            }
+        }
+        for a in aliases {
+            variant.attrs.push(syn::parse_quote!(#[serde(alias = #a)]));
+        }
     }
 
     quote! {
