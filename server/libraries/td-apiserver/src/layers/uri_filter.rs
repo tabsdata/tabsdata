@@ -22,11 +22,9 @@ impl LoopbackIpFilterService {
         next: Next,
     ) -> Result<Response, ErrorStatus> {
         if addr.ip().is_loopback() {
-            // TODO create internal user and role
-            // Insert the context into the request extensions.
             let request_context = RequestContext::with(
                 AccessTokenId::default(),
-                UserId::admin(),
+                UserId::system(),
                 RoleId::sys_admin(),
             );
             request.extensions_mut().insert(request_context);

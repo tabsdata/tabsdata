@@ -92,23 +92,42 @@ impl Entity for Defs {
     }
 
     fn seeds(&self) -> Vec<InsertStatement> {
+        let user_columns = [
+            Users::Id,
+            Users::Name,
+            Users::FullName,
+            Users::Email,
+            Users::CreatedOn,
+            Users::CreatedById,
+            Users::ModifiedOn,
+            Users::ModifiedById,
+            Users::PasswordHash,
+            Users::PasswordSetOn,
+            Users::PasswordMustChange,
+            Users::Enabled,
+        ];
         vec![
             Query::insert()
                 .into_table(Users::Table)
-                .columns([
-                    Users::Id,
-                    Users::Name,
-                    Users::FullName,
-                    Users::Email,
-                    Users::CreatedOn,
-                    Users::CreatedById,
-                    Users::ModifiedOn,
-                    Users::ModifiedById,
-                    Users::PasswordHash,
-                    Users::PasswordSetOn,
-                    Users::PasswordMustChange,
-                    Users::Enabled,
+                .columns(user_columns)
+                .values_panic([
+                    "00000000000000000000000000".into(),
+                    "system".into(),
+                    "System".into(),
+                    Keyword::Null.into(),
+                    Keyword::CurrentTimestamp.into(),
+                    "00000000000000000000000000".into(),
+                    Keyword::CurrentTimestamp.into(),
+                    "00000000000000000000000000".into(),
+                    "!".into(),
+                    Keyword::CurrentTimestamp.into(),
+                    false.into(),
+                    false.into(),
                 ])
+                .to_owned(),
+            Query::insert()
+                .into_table(Users::Table)
+                .columns(user_columns)
                 .values_panic([
                     "00000000000000000000000004".into(),
                     "admin".into(),

@@ -81,13 +81,20 @@ mod tests {
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let list = response.unwrap();
-        assert_eq!(list.len, 3);
+        assert_eq!(list.len, 4);
+        let system = list
+            .data
+            .iter()
+            .find(|u| u.name == UserName::system())
+            .expect("system user should be present");
+        assert_eq!(system.enabled, UserEnabled::from(false));
         let users = list
             .data
             .into_iter()
             .map(|u| u.name)
             .collect::<HashSet<_>>();
         let expected = HashSet::from([
+            UserName::system(),
             UserName::admin(),
             UserName::try_from("u0").unwrap(),
             UserName::try_from("u1").unwrap(),

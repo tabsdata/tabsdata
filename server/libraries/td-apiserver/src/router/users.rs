@@ -120,7 +120,7 @@ mod tests {
     async fn test_users_lifecycle(db: TdPool) {
         let router = UsersRouter::router(Services::build(&Context::with_defaults(db)));
 
-        // List empty users (only sysadmin will be there)
+        // List users — only the seeded `admin` and `system` rows.
         let response = to_route(&router)
             .await
             .oneshot(
@@ -136,7 +136,7 @@ mod tests {
 
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body["data"]["len"], 1);
+        assert_eq!(body["data"]["len"], 2);
 
         // Create a new user
         let user_create = json!(
@@ -168,7 +168,7 @@ mod tests {
         assert_eq!(body["data"]["full_name"], "Joaquin");
         assert_eq!(body["data"]["email"], "joaquin@tabsdata.com");
 
-        // List again and assert we have 2 users
+        // List again and assert we have 3 users (admin + system + joaquin).
         let response = to_route(&router)
             .await
             .oneshot(
@@ -184,7 +184,7 @@ mod tests {
 
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body["data"]["len"], 2);
+        assert_eq!(body["data"]["len"], 3);
 
         // Get the new user
         let response = to_route(&router)
@@ -248,7 +248,7 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        // List again and assert we are back to 1 user
+        // List again and assert we are back to 2 (admin + system).
         let response = to_route(&router)
             .await
             .oneshot(
@@ -264,6 +264,6 @@ mod tests {
 
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body["data"]["len"], 1);
+        assert_eq!(body["data"]["len"], 2);
     }
 }

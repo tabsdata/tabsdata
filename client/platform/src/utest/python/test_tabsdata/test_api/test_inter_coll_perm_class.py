@@ -80,8 +80,8 @@ def test_inter_coll_perm_class_lazy_properties(tabsserver_connection):
 
 @pytest.mark.integration
 def test_inter_coll_perm_class_delete(tabsserver_connection):
-    coll_a_name = "test_inter_coll_perm_class_lazy_properties_coll_a"
-    coll_b_name = "test_inter_coll_perm_class_lazy_properties_coll_b"
+    coll_a_name = "test_inter_coll_perm_class_delete_coll_a"
+    coll_b_name = "test_inter_coll_perm_class_delete_coll_b"
     try:
         coll_a = tabsserver_connection.create_collection(
             coll_a_name,

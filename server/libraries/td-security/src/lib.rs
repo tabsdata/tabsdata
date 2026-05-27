@@ -5,6 +5,9 @@
 pub mod config;
 pub mod password;
 
+/// Predefined username for the system user.
+pub const SYSTEM_USER: &str = "system";
+
 /// Predefined username for the admin user.
 pub const ADMIN_USER: &str = "admin";
 

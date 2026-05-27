@@ -5,7 +5,7 @@
 use td_common::id::{ID_LENGTH, Id};
 use td_security::{
     ID_ALL_ENTITIES, ID_GROUP_DEFAULT, ID_GROUP_DESTINATION, ID_GROUP_SOURCE, ID_ROLE_SEC_ADMIN,
-    ID_ROLE_SYS_ADMIN, ID_ROLE_USER, ID_USER_ADMIN,
+    ID_ROLE_SYS_ADMIN, ID_ROLE_USER, ID_SYSTEM, ID_USER_ADMIN,
 };
 
 #[ta_objects::typed(id)]
@@ -158,6 +158,10 @@ pub struct UserId;
 impl UserId {
     pub fn admin() -> Self {
         Self(Id::_new(ID_USER_ADMIN))
+    }
+
+    pub fn system() -> Self {
+        Self(Id::_new(ID_SYSTEM))
     }
 }
 

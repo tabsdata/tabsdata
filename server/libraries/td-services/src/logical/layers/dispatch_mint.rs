@@ -54,7 +54,11 @@ pub async fn mint_function_runs_on_dispatch(
         return Ok(Vec::new());
     }
 
-    let by = UserId::admin();
+    // InitialDispatch is system-class (scheduler auto-binds the
+    // freshly-minted PFR/PTDV to its identity); attribute to SYSTEM,
+    // not to the operator who happened to trigger the original
+    // execution.
+    let by = UserId::system();
 
     let lfr_ids: Vec<LogicalFunctionRunId> = ready_lfrs.iter().map(|f| f.id.clone()).collect();
     let producer_filters: Vec<Option<LogicalFunctionRunId>> =

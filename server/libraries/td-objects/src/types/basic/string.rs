@@ -11,7 +11,7 @@ use std::fmt::Debug;
 use td_error::{ApiError, api_error};
 use td_security::{
     ADMIN_USER, DEFAULT_GROUP, DESTINATION_GROUP, SEC_ADMIN_ROLE, SOURCE_GROUP, SYS_ADMIN_ROLE,
-    USER_ROLE,
+    SYSTEM_USER, USER_ROLE,
 };
 
 #[ta_objects::typed(string(secret))]
@@ -250,6 +250,10 @@ pub struct UserName;
 impl UserName {
     pub fn admin() -> Self {
         Self(ADMIN_USER.to_string())
+    }
+
+    pub fn system() -> Self {
+        Self(SYSTEM_USER.to_string())
     }
 }
 
