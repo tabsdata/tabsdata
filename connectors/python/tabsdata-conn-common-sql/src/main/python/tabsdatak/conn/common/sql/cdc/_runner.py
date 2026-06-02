@@ -11,14 +11,18 @@ hooks: :meth:`CdcPlugin.build_run_config` (translate the user-facing
 :class:`~tabsdatak.conn.common.sql.cdc._ingester.CdcIngester`, e.g.
 ``Wal2JsonIngester`` / ``BinlogIngester``). :meth:`CdcPlugin.run` owns
 everything that is the same across connectors: log-level wiring, signal
-handling, the buffer / disk sentinels, the poll loop, the two-phase
-``stage`` / ``commit`` publish, offset commit + per-flow state
-persistence, and downstream-trigger backpressure.
+handling, the buffer / disk sentinels, the poll loop (honouring
+``ctx.flush_interval_mins``), and the single-shot ``ctx.stage`` publish
+that commits each batch's resume offset via the ingester's
+:meth:`~CdcIngester.commit_state`.
 
 The ingester provides the database-specific surface
 (``open_session`` / ``harvest_tables`` / ``base_offset`` /
-``commit_offset`` / ``poll_changes`` / ``close_session``); the loop never
-reaches into a particular replication protocol.
+``commit_offset`` / ``poll_changes`` / ``close_session``) and owns the
+offset policy -- Tabsdata-persisted (``stream_state``) or external
+(source-managed) -- via :meth:`~CdcIngester.resume_offset` /
+:meth:`~CdcIngester.commit_state`. The loop never reaches into a
+particular replication protocol.
 """
 
 from __future__ import annotations
@@ -78,7 +82,7 @@ class CdcRunConfig:
 def _setup_signal_handlers() -> threading.Event:
     """Install SIGINT / SIGTERM (and SIGBREAK on Windows) handlers that
     set a stop event, so the poll loop unwinds cleanly. No-op off the
-    main thread (the runtime / tests drive shutdown via ``is_active``)."""
+    main thread (the runtime / tests drive shutdown via ``ctx.active``)."""
     stop_event = threading.Event()
 
     if threading.current_thread() is not threading.main_thread():

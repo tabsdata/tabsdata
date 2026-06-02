@@ -100,7 +100,7 @@ def _setup_sigterm_handler() -> None:
         signal.signal(signal.SIGTERM, _handler)
     except ValueError:
         # Off the main thread -- no-op, the test ctx is expected
-        # to drive shutdown via ``is_active()`` instead.
+        # to drive shutdown via ``ctx.active`` instead.
         pass
 
 

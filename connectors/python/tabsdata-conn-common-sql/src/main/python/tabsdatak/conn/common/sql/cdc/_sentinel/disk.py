@@ -123,9 +123,8 @@ class DiskSentinel:
 
         Triggers on ``force`` (shutdown flush) or any of the row / byte /
         time thresholds. Staging itself is driven by the plugin, which
-        pulls :meth:`build_manifest` and publishes through the
-        :class:`~tabsdatak.spi.StreamSrcPluginCtx` two-phase
-        ``stage`` / ``commit`` contract.
+        pulls :meth:`build_manifest` and publishes it through
+        :meth:`~tabsdatak.spi.StreamSrcPluginCtx.stage`.
         """
         rows_hit = self._max_rows is not None and self._total_rows >= self._max_rows
         bytes_hit = self._max_bytes is not None and self._total_bytes >= self._max_bytes
