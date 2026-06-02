@@ -7,6 +7,8 @@ use std::path::PathBuf;
 use clap::Parser;
 use clap_derive::{Args, Subcommand};
 
+use crate::client::tdkserver::commands::config::ConfigCommands;
+use crate::client::tdkserver::commands::secret::SecretCommands;
 use crate::client::tdkserver::commands::server::ServerCommands;
 use crate::client::tdkserver::commands::session::SessionCommands;
 use crate::runtime::provider::ClusterProvider;
@@ -50,9 +52,13 @@ pub struct GlobalArguments {
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum Commands {
-    #[command(subcommand, about = "Manage tabsdata instances")]
+    #[command(subcommand, about = "Manage tabsdata configs")]
+    Config(ConfigCommands),
+    #[command(subcommand, about = "Manage tabsdata secrets")]
+    Secret(SecretCommands),
+    #[command(subcommand, about = "Manage tabsdata servers")]
     Server(ServerCommands),
-    #[command(subcommand, about = "Manage the active tabsdata session")]
+    #[command(subcommand, about = "Manage tabsdata sessions")]
     Session(SessionCommands),
     #[command(about = "Open an interactive shell")]
     Shell,

@@ -32,4 +32,10 @@ pub enum KubeSecretError {
         name: String,
         cause: String,
     } = 5003,
+    #[error("Could not list Secrets in namespace '{namespace}': {cause}")]
+    ListFailed {
+        namespace: String,
+        label_selector: String,
+        cause: String,
+    } = 5004,
 }

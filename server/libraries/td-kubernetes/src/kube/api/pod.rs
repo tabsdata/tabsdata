@@ -8,7 +8,7 @@ use kube::api::{DeleteParams, ListParams, PostParams, PropagationPolicy};
 use kube::runtime::wait::{Condition, await_condition};
 
 use crate::base::error::kubernetes::{KubePodError, KubernetesError};
-use crate::kube::api::label_tabsdata;
+use crate::kube::api::{label_tabsdata, part_of_tabsdata};
 use crate::kube::context::KubeContext;
 
 pub async fn create_pod(context: &KubeContext, pod: &Pod) -> Result<Pod, KubernetesError> {
@@ -59,12 +59,10 @@ pub async fn delete_pod(context: &KubeContext, name: &str) -> Result<(), Kuberne
         })
 }
 
-pub async fn delete_pods_by_labels(
-    context: &KubeContext,
-    label_selector: &str,
-) -> Result<(), KubernetesError> {
+pub async fn delete_pods(context: &KubeContext) -> Result<(), KubernetesError> {
     let api: Api<Pod> = Api::namespaced(context.client().clone(), context.namespace());
-    let list_params = ListParams::default().labels(label_selector);
+    let selector = part_of_tabsdata();
+    let list_params = ListParams::default().labels_from(&selector);
     let delete_params = DeleteParams {
         propagation_policy: Some(PropagationPolicy::Background),
         ..DeleteParams::default()
@@ -75,26 +73,24 @@ pub async fn delete_pods_by_labels(
         .map_err(|error| {
             KubePodError::DeleteCollectionFailed {
                 namespace: context.namespace().to_owned(),
-                label_selector: label_selector.to_owned(),
+                label_selector: selector.to_string(),
                 cause: error.to_string(),
             }
             .into()
         })
 }
 
-pub async fn list_pods_by_labels(
-    context: &KubeContext,
-    label_selector: &str,
-) -> Result<Vec<Pod>, KubernetesError> {
+pub async fn list_pods(context: &KubeContext) -> Result<Vec<Pod>, KubernetesError> {
     let api: Api<Pod> = Api::namespaced(context.client().clone(), context.namespace());
-    let list_params = ListParams::default().labels(label_selector);
+    let selector = part_of_tabsdata();
+    let list_params = ListParams::default().labels_from(&selector);
     api.list(&list_params)
         .await
         .map(|list| list.items)
         .map_err(|error| {
             KubePodError::ListFailed {
                 namespace: context.namespace().to_owned(),
-                label_selector: label_selector.to_owned(),
+                label_selector: selector.to_string(),
                 cause: error.to_string(),
             }
             .into()

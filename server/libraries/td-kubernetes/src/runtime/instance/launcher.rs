@@ -9,7 +9,7 @@ use kube::runtime::wait::Condition;
 use serde::de::DeserializeOwned;
 use td_common::status::ExitStatus::{GeneralError, TabsDataError};
 
-use crate::base::constants::{PART_OF_TABSDATA_SELECTOR, TIER_LABEL};
+use crate::base::constants::TIER_LABEL;
 use crate::base::error::kubernetes::KubernetesError;
 use crate::cerror;
 use crate::client::tdkserver::widgets::{phase_spinner_in, spinner};
@@ -335,7 +335,7 @@ async fn delete_workload(provider: &dyn Provider, multi: &MultiProgress) -> Resu
     let pods_namespace = namespace.clone();
     let jobs_namespace = namespace.clone();
     let pods_delete = async {
-        match pod_api::delete_pods_by_labels(&context, PART_OF_TABSDATA_SELECTOR).await {
+        match pod_api::delete_pods(&context).await {
             Ok(()) => {
                 pods_bar.finish_with_message("Pods (deleted)");
                 Ok(())
@@ -348,7 +348,7 @@ async fn delete_workload(provider: &dyn Provider, multi: &MultiProgress) -> Resu
         }
     };
     let jobs_delete = async {
-        match job_api::delete_jobs_by_labels(&context, PART_OF_TABSDATA_SELECTOR).await {
+        match job_api::delete_jobs(&context).await {
             Ok(()) => {
                 jobs_bar.finish_with_message("Jobs (deleted)");
                 Ok(())
@@ -381,7 +381,7 @@ async fn workload_exists_inner(provider: &dyn Provider) -> Result<bool> {
     let pods_namespace = context.namespace().to_owned();
     let jobs_namespace = context.namespace().to_owned();
     let pods_list = async {
-        match pod_api::list_pods_by_labels(&context, PART_OF_TABSDATA_SELECTOR).await {
+        match pod_api::list_pods(&context).await {
             Ok(pods) => Ok::<bool, KubernetesError>(!pods.is_empty()),
             Err(error) => {
                 cerror!("Failed to list pods in namespace '{pods_namespace}': {error}");
@@ -390,7 +390,7 @@ async fn workload_exists_inner(provider: &dyn Provider) -> Result<bool> {
         }
     };
     let jobs_list = async {
-        match job_api::list_jobs_by_labels(&context, PART_OF_TABSDATA_SELECTOR).await {
+        match job_api::list_jobs(&context).await {
             Ok(jobs) => Ok::<bool, KubernetesError>(!jobs.is_empty()),
             Err(error) => {
                 cerror!("Failed to list jobs in namespace '{jobs_namespace}': {error}");

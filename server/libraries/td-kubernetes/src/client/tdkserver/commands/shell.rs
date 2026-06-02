@@ -18,6 +18,8 @@ use tracing::info;
 
 use crate::client::tdkserver::arguments::GlobalArguments;
 
+use super::config::{ConfigCommands, command_config};
+use super::secret::{SecretCommands, command_secret};
 use super::server::{ServerCommands, command_server};
 use super::session::{SessionCommands, command_session};
 use crate::cerror;
@@ -34,7 +36,13 @@ enum ShellCommand {
     Exit,
     /// Exit the shell
     Quit,
-    /// Manage Tabsdata instances
+    /// Manage tabsdata configs
+    #[command(subcommand)]
+    Config(ConfigCommands),
+    /// Manage tabsdata secrets
+    #[command(subcommand)]
+    Secret(SecretCommands),
+    /// Manage tabsdata servers
     #[command(subcommand)]
     Server(ServerCommands),
     /// Manage the active tabsdata session
@@ -115,6 +123,12 @@ pub async fn command_shell(globals: &GlobalArguments) -> Result {
         match ShellInput::try_parse_from(tokens) {
             Ok(input) => match input.command {
                 ShellCommand::Exit | ShellCommand::Quit => break,
+                ShellCommand::Config(command) => {
+                    let _ = command_config(command, globals).await;
+                }
+                ShellCommand::Secret(command) => {
+                    let _ = command_secret(command, globals).await;
+                }
                 ShellCommand::Server(command) => {
                     let _ = command_server(command, globals).await;
                 }

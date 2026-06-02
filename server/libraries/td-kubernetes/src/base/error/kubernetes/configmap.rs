@@ -34,6 +34,12 @@ pub enum KubeConfigMapError {
         name: String,
         cause: String,
     } = 5003,
+    #[error("Could not list ConfigMaps in namespace '{namespace}': {cause}")]
+    ListFailed {
+        namespace: String,
+        label_selector: String,
+        cause: String,
+    } = 5004,
 }
 
 #[cfg(test)]
