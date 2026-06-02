@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, Any, Union
+from typing import Any
 
 import pytest
 
@@ -29,9 +29,7 @@ from tabsdatak.spi import (
     SrcPlugin,
     TableFileSpec,
     TableMode,
-    check_conn_field,
     check_plugin_param_type,
-    flatten_union,
 )
 
 
@@ -47,176 +45,52 @@ class _OtherConn(Conn):
 
 
 # ---------------------------------------------------------------------------
-# 1. ``flatten_union`` shapes
-# ---------------------------------------------------------------------------
-
-
-def testflatten_union_plain_type_returns_singleton_tuple():
-    assert flatten_union(int) == (int,)
-
-
-def testflatten_union_simple_union():
-    out = flatten_union(Union[int, str])
-    assert set(out) == {int, str}
-
-
-def testflatten_union_strips_outer_annotated():
-    out = flatten_union(Annotated[int, "marker"])
-    assert out == (int,)
-
-
-def testflatten_union_strips_annotated_inside_union():
-    # ``Annotated`` on each arm is unwrapped recursively.
-    out = flatten_union(Union[Annotated[int, "m1"], Annotated[str, "m2"]])
-    assert set(out) == {int, str}
-
-
-def testflatten_union_nested_union_is_flattened_by_python_normalisation():
-    # Python normalises ``Union[Union[A, B], C]`` to ``Union[A, B, C]``;
-    # the helper still produces the flat tuple.
-    out = flatten_union(Union[Union[int, str], float])
-    assert set(out) == {int, str, float}
-
-
-def testflatten_union_collapses_typevar_to_its_bound():
-    # PEP 695 type parameters that reach a non-parametrised subclass
-    # surface as TypeVars at ``get_type_hints`` time. The helper
-    # collapses them to their bound so the rest of the validator can
-    # reason in terms of concrete classes.
-    from typing import TypeVar
-
-    T = TypeVar("T", bound=Conn)
-    assert flatten_union(T) == (Conn,)
-
-
-def testflatten_union_typevar_without_bound_round_trips():
-    from typing import TypeVar
-
-    T = TypeVar("T")
-    out = flatten_union(T)
-    assert out == (T,)
-
-
-# ---------------------------------------------------------------------------
-# 2. ``check_conn_field`` error paths
-# ---------------------------------------------------------------------------
-
-
-@_api.dataclass(ApiErrorCode.API_14)
-class _SrcWithBadConn(Src):
-    conn: int  # type: ignore[assignment]
-
-
-@_api.dataclass(ApiErrorCode.API_14)
-class _SrcWithMixedUnion(Src):
-    # Half-valid union: one arm is a Conn subclass, the other isn't.
-    conn: Union[Conn, int]  # type: ignore[assignment]
-
-
-@_api.dataclass(ApiErrorCode.API_14)
-class _SrcWithAnnotatedNonConn(Src):
-    conn: Annotated[int, "marker"]  # type: ignore[assignment]
-
-
-def testcheck_conn_field_rejects_non_conn_member():
-    with pytest.raises(ValueError, match="must be a subclass of Conn"):
-        check_conn_field(_SrcWithBadConn, "source", Conn)
-
-
-def testcheck_conn_field_rejects_mixed_union():
-    with pytest.raises(ValueError, match="must be a subclass of Conn"):
-        check_conn_field(_SrcWithMixedUnion, "source", Conn)
-
-
-def testcheck_conn_field_rejects_annotated_non_conn():
-    with pytest.raises(ValueError, match="must be a subclass of Conn"):
-        check_conn_field(_SrcWithAnnotatedNonConn, "source", Conn)
-
-
-def testcheck_conn_field_accepts_valid_subclass():
-    @_api.dataclass(ApiErrorCode.API_14)
-    class _GoodSrc(Src):
-        conn: Conn
-
-    check_conn_field(_GoodSrc, "source", Conn)  # no raise
-
-
-def testcheck_conn_field_unknown_class_cannot_resolve_hints():
-    class _NotADataclass:
-        # Annotation referencing a name that won't resolve.
-        conn: "NoSuchType"  # type: ignore[name-defined]  # noqa: F821
-
-    with pytest.raises(ValueError, match="cannot resolve type hints"):
-        check_conn_field(_NotADataclass, "source", Conn)
-
-
-def testcheck_conn_field_rejects_when_expected_not_assignable():
-    # ``conn`` annotation is a concrete subclass _OtherConn, the binding
-    # declares ``_Conn``: a ``_Conn`` value is NOT assignable to a slot
-    # typed ``_OtherConn``, so the check fails.
-    @_api.dataclass(ApiErrorCode.API_14)
-    class _SrcOtherConn(Src):
-        conn: _OtherConn  # type: ignore[assignment]
-
-    with pytest.raises(ValueError, match=r"must accept _Conn"):
-        check_conn_field(_SrcOtherConn, "source", _Conn)
-
-
-def testcheck_conn_field_accepts_when_expected_subclass_of_member():
-    # ``conn: Conn`` accepts any Conn subclass, so a binding declaring
-    # ``_Conn`` (a Conn subclass) is fine.
-    @_api.dataclass(ApiErrorCode.API_14)
-    class _SrcAnyConn(Src):
-        conn: Conn
-
-    check_conn_field(_SrcAnyConn, "source", _Conn)  # no raise
-
-
-def testcheck_conn_field_accepts_unparametrised_generic_inheritance():
-    # ``class _Src(Src)`` (no PEP 695 binding) inherits ``Src.conn: C``
-    # where ``C`` is the TypeVar bound by ``Conn``. ``flatten_union``
-    # collapses the TypeVar to ``Conn`` so the check passes.
-    @_api.dataclass(ApiErrorCode.API_14)
-    class _Inherited(Src):
-        pass
-
-    check_conn_field(_Inherited, "source", _Conn)  # no raise
-
-
-# ---------------------------------------------------------------------------
-# 3. ``check_plugin_param_type``
+# Src / StreamSrc / Dest no longer carry a ``conn`` field: ``conn`` is passed
+# to the decorators (``@publisher`` ...) and to the plugin entry methods
+# (``read_in`` / ``run`` / ``write_out``). The concrete config classes are
+# plain abstract subclasses with their own per-source knobs.
 # ---------------------------------------------------------------------------
 
 
 @_api.dataclass(ApiErrorCode.API_14)
 class _CheckSrc(Src):
-    conn: _Conn
+    pass
 
 
 @_api.dataclass(ApiErrorCode.API_14)
 class _CheckOtherSrc(Src):
-    conn: _Conn
+    pass
 
 
-class _GoodSrcPlugin(SrcPlugin[_CheckSrc]):
-    def read_in(self, ctx: SrcPluginCtx, src: _CheckSrc) -> list[list[TableFileSpec]]:
-        return [[]]
-
-
-class _PluginNoAnnotation(SrcPlugin[_CheckSrc]):
-    def read_in(self, ctx, src):  # type: ignore[no-untyped-def]
-        return [[]]
-
-
-class _PluginWrongType(SrcPlugin[_CheckSrc]):
+class _GoodSrcPlugin(SrcPlugin[_Conn, _CheckSrc]):
     def read_in(
-        self, ctx: SrcPluginCtx, src: _CheckOtherSrc
+        self, ctx: SrcPluginCtx, conn: _Conn, src: _CheckSrc
+    ) -> list[list[TableFileSpec]]:
+        return [[]]
+
+
+class _PluginNoAnnotation(SrcPlugin[_Conn, _CheckSrc]):
+    def read_in(self, ctx, conn, src):  # type: ignore[no-untyped-def]
+        return [[]]
+
+
+class _PluginWrongSrcType(SrcPlugin[_Conn, _CheckSrc]):
+    def read_in(
+        self, ctx: SrcPluginCtx, conn: _Conn, src: _CheckOtherSrc
+    ) -> list[list[TableFileSpec]]:
+        return [[]]
+
+
+class _PluginWrongConnType(SrcPlugin[_Conn, _CheckSrc]):
+    def read_in(
+        self, ctx: SrcPluginCtx, conn: _OtherConn, src: _CheckSrc
     ) -> list[list[TableFileSpec]]:
         return [[]]
 
 
 def testcheck_plugin_param_type_accepts_concrete_match():
     check_plugin_param_type(_GoodSrcPlugin, "read_in", "src", _CheckSrc)  # no raise
+    check_plugin_param_type(_GoodSrcPlugin, "read_in", "conn", _Conn)  # no raise
 
 
 def testcheck_plugin_param_type_accepts_subclass_of_declared():
@@ -232,11 +106,17 @@ def testcheck_plugin_param_type_accepts_subclass_of_declared():
 def testcheck_plugin_param_type_skips_when_no_annotation():
     # No annotation on the parameter -> skip silently.
     check_plugin_param_type(_PluginNoAnnotation, "read_in", "src", _CheckSrc)
+    check_plugin_param_type(_PluginNoAnnotation, "read_in", "conn", _Conn)
 
 
-def testcheck_plugin_param_type_rejects_incompatible_annotation():
+def testcheck_plugin_param_type_rejects_incompatible_src_annotation():
     with pytest.raises(ValueError, match="`src` parameter is typed as"):
-        check_plugin_param_type(_PluginWrongType, "read_in", "src", _CheckSrc)
+        check_plugin_param_type(_PluginWrongSrcType, "read_in", "src", _CheckSrc)
+
+
+def testcheck_plugin_param_type_rejects_incompatible_conn_annotation():
+    with pytest.raises(ValueError, match="`conn` parameter is typed as"):
+        check_plugin_param_type(_PluginWrongConnType, "read_in", "conn", _Conn)
 
 
 def testcheck_plugin_param_type_missing_method_raises():
@@ -255,47 +135,49 @@ def testcheck_plugin_param_type_skips_when_param_unbound_typevar():
         pass
 
     check_plugin_param_type(_NotOverridden, "read_in", "src", _CheckSrc)
+    check_plugin_param_type(_NotOverridden, "read_in", "conn", _Conn)
 
 
 # ---------------------------------------------------------------------------
-# 4. ``SrcDef`` / ``AutoSrcDef`` / ``DestDef`` validators
+# ``SrcDef`` / ``StreamSrcDef`` / ``DestDef`` validators
 # ---------------------------------------------------------------------------
 
 
 @_api.dataclass(ApiErrorCode.API_14)
 class _SDSrc(Src):
-    conn: _Conn
+    pass
 
 
 @_api.dataclass(ApiErrorCode.API_14)
 class _SDStreamSrc(StreamSrc):
-    conn: _Conn
+    pass
 
 
 @_api.dataclass(ApiErrorCode.API_14)
 class _SDDest(Dest):
-    conn: _Conn
+    pass
 
 
-class _SDSrcPlugin(SrcPlugin[_SDSrc]):
-    def read_in(self, ctx: SrcPluginCtx, src: _SDSrc) -> list[list[TableFileSpec]]:
+class _SDSrcPlugin(SrcPlugin[_Conn, _SDSrc]):
+    def read_in(
+        self, ctx: SrcPluginCtx, conn: _Conn, src: _SDSrc
+    ) -> list[list[TableFileSpec]]:
         return [[]]
 
 
-class _SDStreamSrcPlugin(StreamSrcPlugin[_SDStreamSrc]):
+class _SDStreamSrcPlugin(StreamSrcPlugin[_Conn, _SDStreamSrc]):
     def run(
         self,
         ctx: StreamSrcPluginCtx,
-        src: _SDStreamSrc,
-    ) -> tuple[ManifestFileSpec, list[list[TableFileSpec]]]:
-        from pathlib import Path
+        conn: _Conn,
+        stream_src: _SDStreamSrc,
+    ) -> None:
+        return None
 
-        return (Path("/dev/null"), [[]])
 
-
-class _SDDestPlugin(DestPlugin[_SDDest]):
+class _SDDestPlugin(DestPlugin[_Conn, _SDDest]):
     def write_out(
-        self, ctx: DestContext, dest: _SDDest, tables: list[TableFileSpec]
+        self, ctx: DestContext, conn: _Conn, dest: _SDDest, tables: list[TableFileSpec]
     ) -> None:
         return None
 
@@ -324,13 +206,12 @@ def test_src_def_constructs_with_valid_fields():
     )
 
 
-def test_auto_src_def_constructs_with_valid_fields():
+def test_stream_src_def_constructs_with_valid_fields():
     StreamSrcDef(
         conn=_Conn,
         src_type="ok",
         src_version="v1",
         src=_SDStreamSrc,
-        table_mode=TableMode.SINGLE,
         cardinality=lambda s: 1,
         uses_manifest=False,
         plugin=_SDStreamSrcPlugin,
@@ -350,108 +231,6 @@ def test_dest_def_constructs_with_valid_fields():
     )
 
 
-# --- bad src/dest conn type rejection ------------------------------
-
-
-@_api.dataclass(ApiErrorCode.API_14)
-class _BadSrcType(Src):
-    conn: int  # type: ignore[assignment]
-
-
-@_api.dataclass(ApiErrorCode.API_14)
-class _BadStreamSrcType(StreamSrc):
-    conn: int  # type: ignore[assignment]
-
-
-@_api.dataclass(ApiErrorCode.API_14)
-class _BadDestType(Dest):
-    conn: int  # type: ignore[assignment]
-
-
-class _DummySrcPlugin(SrcPlugin):
-    def read_in(self, ctx, src):
-        return [[]]
-
-
-class _DummyStreamSrcPlugin(StreamSrcPlugin):
-    def run(self, ctx, src):
-
-        return (Path("/dev/null"), [[]])
-
-
-class _DummyDestPlugin(DestPlugin):
-    def write_out(self, ctx, dest, tables):
-        return None
-
-
-def test_src_def_rejects_bad_src_conn_type():
-    with pytest.raises(ApiException) as excinfo:
-        SrcDef(
-            conn=Conn,
-            src_type="bad",
-            src_version="v1",
-            src=_BadSrcType,
-            table_mode=TableMode.SINGLE,
-            cardinality=lambda s: 1,
-            plugin=_DummySrcPlugin,
-            explorer=None,
-        )
-    assert excinfo.value.api_error is ApiErrorCode.API_14
-
-
-def test_auto_src_def_rejects_bad_src_conn_type():
-    with pytest.raises(ApiException) as excinfo:
-        StreamSrcDef(
-            conn=Conn,
-            src_type="bad",
-            src_version="v1",
-            src=_BadStreamSrcType,
-            table_mode=TableMode.SINGLE,
-            cardinality=lambda s: 1,
-            uses_manifest=False,
-            plugin=_DummyStreamSrcPlugin,
-            explorer=None,
-        )
-    assert excinfo.value.api_error is ApiErrorCode.API_15
-
-
-def test_dest_def_rejects_bad_dest_conn_type():
-    with pytest.raises(ApiException) as excinfo:
-        DestDef(
-            conn=Conn,
-            dest_type="bad",
-            dest_version="v1",
-            dest=_BadDestType,
-            cardinality=lambda d: 1,
-            plugin=_DummyDestPlugin,
-            explorer=None,
-        )
-    assert excinfo.value.api_error is ApiErrorCode.API_16
-
-
-# --- def-conn must be assignable to src/dest.conn -------------------
-
-
-def test_src_def_rejects_when_def_conn_not_assignable_to_src_conn():
-    # Src.conn is _OtherConn but Def declares _Conn -- not assignable.
-    @_api.dataclass(ApiErrorCode.API_14)
-    class _SrcOnlyOther(Src):
-        conn: _OtherConn
-
-    with pytest.raises(ApiException) as excinfo:
-        SrcDef(
-            conn=_Conn,
-            src_type="bad",
-            src_version="v1",
-            src=_SrcOnlyOther,
-            table_mode=TableMode.SINGLE,
-            cardinality=lambda s: 1,
-            plugin=_DummySrcPlugin,
-            explorer=None,
-        )
-    assert excinfo.value.api_error is ApiErrorCode.API_14
-
-
 # --- plugin signature mismatch --------------------------------------
 
 
@@ -460,23 +239,45 @@ def test_src_def_rejects_when_def_conn_not_assignable_to_src_conn():
 # annotations`` turns annotations into strings.
 @_api.dataclass(ApiErrorCode.API_14)
 class _OtherSrc(Src):
-    conn: _Conn
+    pass
 
 
 @_api.dataclass(ApiErrorCode.API_14)
 class _OtherDest(Dest):
-    conn: _Conn
+    pass
 
 
-class _MismatchSrcPlugin(SrcPlugin[_SDSrc]):
+@_api.dataclass(ApiErrorCode.API_14)
+class _OtherStreamSrc(StreamSrc):
+    pass
+
+
+class _MismatchSrcPlugin(SrcPlugin[_Conn, _SDSrc]):
     # Annotated against ``_OtherSrc``, but the Def binds ``_SDSrc``.
-    def read_in(self, ctx: SrcPluginCtx, src: _OtherSrc) -> list[list[TableFileSpec]]:
+    def read_in(
+        self, ctx: SrcPluginCtx, conn: _Conn, src: _OtherSrc
+    ) -> list[list[TableFileSpec]]:
         return [[]]
 
 
-class _MismatchDestPlugin(DestPlugin[_SDDest]):
+class _MismatchConnSrcPlugin(SrcPlugin[_Conn, _SDSrc]):
+    # ``conn`` annotated against ``_OtherConn``, but the Def binds ``_Conn``.
+    def read_in(
+        self, ctx: SrcPluginCtx, conn: _OtherConn, src: _SDSrc
+    ) -> list[list[TableFileSpec]]:
+        return [[]]
+
+
+class _MismatchDestPlugin(DestPlugin[_Conn, _SDDest]):
     def write_out(
-        self, ctx: DestContext, dest: _OtherDest, tables: list[TableFileSpec]
+        self, ctx: DestContext, conn: _Conn, dest: _OtherDest, tables: list[TableFileSpec]
+    ) -> None:
+        return None
+
+
+class _MismatchStreamSrcPlugin(StreamSrcPlugin[_Conn, _SDStreamSrc]):
+    def run(
+        self, ctx: StreamSrcPluginCtx, conn: _Conn, stream_src: _OtherStreamSrc
     ) -> None:
         return None
 
@@ -494,6 +295,36 @@ def test_src_def_rejects_plugin_with_mismatched_src_param():
             explorer=None,
         )
     assert excinfo.value.api_error is ApiErrorCode.API_14
+
+
+def test_src_def_rejects_plugin_with_mismatched_conn_param():
+    with pytest.raises(ApiException) as excinfo:
+        SrcDef(
+            conn=_Conn,
+            src_type="bad",
+            src_version="v1",
+            src=_SDSrc,
+            table_mode=TableMode.SINGLE,
+            cardinality=lambda s: 1,
+            plugin=_MismatchConnSrcPlugin,
+            explorer=None,
+        )
+    assert excinfo.value.api_error is ApiErrorCode.API_14
+
+
+def test_stream_src_def_rejects_plugin_with_mismatched_stream_src_param():
+    with pytest.raises(ApiException) as excinfo:
+        StreamSrcDef(
+            conn=_Conn,
+            src_type="bad",
+            src_version="v1",
+            src=_SDStreamSrc,
+            cardinality=lambda s: 1,
+            uses_manifest=False,
+            plugin=_MismatchStreamSrcPlugin,
+            explorer=None,
+        )
+    assert excinfo.value.api_error is ApiErrorCode.API_15
 
 
 def test_dest_def_rejects_plugin_with_mismatched_dest_param():

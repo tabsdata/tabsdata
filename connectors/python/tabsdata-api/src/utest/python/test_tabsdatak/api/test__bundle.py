@@ -50,13 +50,13 @@ pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 # regresses that unwrap, the round-trip test in this file will fail.
 
 
+_CONN = LocalFileSrcConn(base_path="/tmp")
 _SRC = LocalFileSrc(
-    conn=LocalFileSrcConn(base_path="/tmp"),
     paths=["data/*.csv"],
 )
 
 
-@publisher(source=_SRC, output_tables=["t"])
+@publisher(conn=_CONN, source=_SRC, output_tables=["t"])
 def _fixture_publisher(in_1: TableFramesSpec) -> tuple[TableFrameSpec]:
     """Docstring for the test fixture publisher."""
     return (None,)
@@ -109,6 +109,7 @@ def test_capture_source_snippet_returns_placeholder_on_failure():
     fake = PublisherInfo(
         # unwrap to the bare function for valid construction
         func=_fixture_publisher.func,
+        conn=_CONN,
         source=_SRC,
         output_tables=["t"],
         trigger_by=None,

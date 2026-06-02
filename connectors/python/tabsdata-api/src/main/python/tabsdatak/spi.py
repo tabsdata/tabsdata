@@ -36,10 +36,6 @@ from typing import (
     Callable,
     Type,
     TypeAlias,
-    TypeVar,
-    Union,
-    get_args,
-    get_origin,
     get_type_hints,
 )
 
@@ -326,63 +322,6 @@ class Explorer[C: Conn](ABC):
         rows. Connector-specific row shape."""
 
 
-def flatten_union(hint: object) -> tuple[type, ...]:
-    if get_origin(hint) is Annotated:
-        hint = get_args(hint)[0]
-    if get_origin(hint) is Union:
-        out: list[type] = []
-        for arg in get_args(hint):
-            out.extend(flatten_union(arg))
-        return tuple(out)
-    # Unbound generic type parameters (PEP 695) reach here as TypeVars.
-    # An unparametrised subclass like ``class _Src(Src)`` inherits
-    # ``Src.conn: C`` where ``C`` is the TypeVar bound by ``Conn``;
-    # collapse it to the bound so the rest of the validator can treat
-    # it as the effective type.
-    if isinstance(hint, TypeVar):
-        bound = hint.__bound__
-        if bound is not None:
-            return (bound,)  # type: ignore[return-value]
-    return (hint,)  # type: ignore[return-value]
-
-
-def check_conn_field(cls: type, side: str, expected: type) -> None:
-    """Validate the `conn` field on ``cls``.
-
-    - ``cls`` must declare a ``conn`` field.
-    - Every member of the ``conn`` annotation (after Union flattening)
-      must be a ``Conn`` subclass.
-    - ``expected`` (the concrete conn type the binding declares) must
-      be a subclass of at least one of those members, so a value of
-      type ``expected`` is assignable to the field.
-    """
-    try:
-        hints = get_type_hints(cls)
-    except Exception as exc:
-        raise ValueError(
-            f"{cls.__qualname__}: cannot resolve type hints: {exc}"
-        ) from exc
-    if "conn" not in hints:
-        raise ValueError(f"{cls.__qualname__}: missing required `conn` field")
-    members = flatten_union(hints["conn"])
-    if not members:
-        raise ValueError(f"{cls.__qualname__}.conn: empty type annotation")
-    bad = [m for m in members if not (isinstance(m, type) and issubclass(m, Conn))]
-    if bad:
-        names = ", ".join(getattr(m, "__qualname__", repr(m)) for m in bad)
-        raise ValueError(
-            f"{cls.__qualname__}.conn: every member of the type must be "
-            f"a subclass of Conn ({side} side); offending: {names}"
-        )
-    if not any(issubclass(expected, m) for m in members):
-        raise ValueError(
-            f"{cls.__qualname__}.conn: must accept "
-            f"{expected.__qualname__} ({side} side); "
-            f"current annotation members: "
-            f"{', '.join(m.__qualname__ for m in members)}"
-        )
-
-
 def check_plugin_param_type(
     plugin_cls: type,
     method_name: str,
@@ -459,6 +398,7 @@ class SrcDef[C: Conn, S: Src]:
 
     @model_validator(mode="after")
     def _validate(self) -> "SrcDef":
+        check_plugin_param_type(self.plugin, "read_in", "conn", self.conn)
         check_plugin_param_type(self.plugin, "read_in", "src", self.src)
         if self.explorer is not None:
             check_plugin_param_type(self.explorer, "metadata", "conn", self.conn)
@@ -499,8 +439,9 @@ class StreamSrcDef[C: Conn, S: StreamSrc]:
 
     @model_validator(mode="after")
     def _validate(self) -> "StreamSrcDef":
-        # ``StreamSrcPlugin`` defines ``run(ctx, stream_src)``, not the
-        # batch-mode ``read_in(ctx, src)`` from ``SrcPlugin``.
+        # ``StreamSrcPlugin`` defines ``run(ctx, conn, stream_src)``, not
+        # the batch-mode ``read_in(ctx, conn, src)`` from ``SrcPlugin``.
+        check_plugin_param_type(self.plugin, "run", "conn", self.conn)
         check_plugin_param_type(self.plugin, "run", "stream_src", self.src)
         if self.explorer is not None:
             check_plugin_param_type(self.explorer, "metadata", "conn", self.conn)
@@ -537,6 +478,7 @@ class DestDef[C: Conn, D: Dest]:
 
     @model_validator(mode="after")
     def _validate(self) -> "DestDef":
+        check_plugin_param_type(self.plugin, "write_out", "conn", self.conn)
         check_plugin_param_type(self.plugin, "write_out", "dest", self.dest)
         if self.explorer is not None:
             check_plugin_param_type(self.explorer, "metadata", "conn", self.conn)

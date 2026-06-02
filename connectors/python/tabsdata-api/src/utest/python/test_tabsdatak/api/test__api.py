@@ -251,7 +251,11 @@ class _BmConn(m.Conn, BaseModel):
 
 
 def _build_publisher() -> _info.PublisherInfo:
-    @m.publisher(source=_SerdeSrc(name="src1"), output_tables=["out"])
+    @m.publisher(
+        conn=m.NamedConn(name="conn1"),
+        source=_SerdeSrc(name="src1"),
+        output_tables=["out"],
+    )
     def p(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
         return (t1,)
     # Replace the local closure with a module-level function so the
@@ -390,6 +394,7 @@ def test_publisher_round_trips_with_named_conn():
     src = _SerdeSrc(name="src1")
     p = _info.PublisherInfo(
         func=serde_pub_func,
+        conn=m.NamedConn(name="prod_db"),
         source=src,
         output_tables=["out"],
         trigger_by=None,
@@ -399,12 +404,17 @@ def test_publisher_round_trips_with_named_conn():
     assert d["kind"] == _info.KIND_PUBLISHER_DEF
     # Spec carries func as module:qualname.
     assert d["spec"]["func"].endswith(":serde_pub_func")
+    # Conn is wrapped in its own envelope.
+    assert d["spec"]["conn"]["kind"] == "connectionRef"
+    assert d["spec"]["conn"]["spec"]["name"] == "prod_db"
     # Source is wrapped in its own envelope.
     assert d["spec"]["source"]["kind"] == m.KIND_SOURCE_DEF
     assert d["spec"]["source"]["spec"]["name"] == "src1"
 
     p2 = _info.PublisherInfo.from_dict(d)
     assert p2.func is serde_pub_func
+    assert isinstance(p2.conn, m.NamedConn)
+    assert p2.conn.name == "prod_db"
     assert isinstance(p2.source, _SerdeSrc)
     assert p2.source.name == "src1"
     assert p2.output_tables == ["out"]
@@ -422,6 +432,7 @@ def test_publisher_rejects_closure_func():
 def test_publisher_round_trips_via_json_string():
     p = _info.PublisherInfo(
         func=serde_pub_func,
+        conn=m.NamedConn(name="prod_db"),
         source=_SerdeSrc(name="src1"),
         output_tables=["out"],
         trigger_by=None,
@@ -451,6 +462,7 @@ def test_transformer_round_trips():
 def test_subscriber_round_trips():
     s = _info.SubscriberInfo(
         func=serde_sub_func,
+        conn=m.NamedConn(name="dest_conn"),
         destination=_SerdeDest(name="dest1"),
         input_tables=["in"],
         trigger_by=None,
@@ -550,6 +562,7 @@ class _MarkAction(m.OnTablesAction):
 def test_on_tables_action_round_trips_inside_publisher():
     p = _info.PublisherInfo(
         func=serde_pub_func,
+        conn=m.NamedConn(name="prod_db"),
         source=_SerdeSrc(name="src1"),
         output_tables=["out"],
         trigger_by=None,
