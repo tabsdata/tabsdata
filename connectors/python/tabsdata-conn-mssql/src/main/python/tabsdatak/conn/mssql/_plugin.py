@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any
 
 from tabsdatak.conn.mssql import (
     DestCfgKey,
@@ -113,10 +113,11 @@ def _resolve_dest_cfg(dest_cfg: DestCfgSpec | None) -> _WriterCfg:
 # and the abstract Src / Dest classes, not the runtime IO stack).
 
 
-class MSSQLSrcPlugin(SrcPlugin[MSSQLSrc]):
+class MSSQLSrcPlugin(SrcPlugin[MSSQLSrcConn, MSSQLSrc]):
     def read_in(
         self,
         ctx: SrcPluginCtx,
+        conn: MSSQLSrcConn,
         src: MSSQLSrc,
     ) -> list[list[TableFileSpec]]:
         from sqlalchemy.exc import OperationalError, SQLAlchemyError
@@ -135,7 +136,7 @@ class MSSQLSrcPlugin(SrcPlugin[MSSQLSrc]):
         logger.info("mssql: read_in starting (%d queries)", len(src.queries or []))
 
         read_cfg = MSSQLReadCfg(
-            conn=cast(MSSQLSrcConn, src.conn),
+            conn=conn,
             queries=src.queries,
             transactional=src.transactional,
             schema_overrides=src.schema_overrides,
@@ -170,10 +171,11 @@ class MSSQLSrcPlugin(SrcPlugin[MSSQLSrc]):
             )
 
 
-class MSSQLDestPlugin(DestPlugin[MSSQLDest]):
+class MSSQLDestPlugin(DestPlugin[MSSQLDestConn, MSSQLDest]):
     def write_out(
         self,
         ctx: DestContext,
+        conn: MSSQLDestConn,
         dest: MSSQLDest,
         tables: list[TableFileSpec],
     ) -> None:
@@ -197,7 +199,7 @@ class MSSQLDestPlugin(DestPlugin[MSSQLDest]):
             )
 
         write_cfg = MSSQLWriteCfg(
-            conn=cast(MSSQLDestConn, dest.conn),
+            conn=conn,
             target_tables=list(dest.tables),
             if_table_exists=dest.if_table_exists,
             transactional=dest.transactional,

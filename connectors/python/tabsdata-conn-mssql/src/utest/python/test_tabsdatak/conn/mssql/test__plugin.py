@@ -107,9 +107,9 @@ def test_src_plugin_wraps_operational_error_as_mssql_5(monkeypatch, work_dir):
     fake = MagicMock()
     fake.connect.side_effect = OperationalError("conn fail", {}, BaseException("c"))
     monkeypatch.setattr(impl, "build_mssql_engine", lambda *a, **kw: fake)
-    src = MSSQLSrc(conn=_bare_src_conn(), queries=["SELECT 1"])
+    src = MSSQLSrc(queries=["SELECT 1"])
     with pytest.raises(MSSQLRuntimeException) as ei:
-        plugin.MSSQLSrcPlugin().read_in(_src_ctx(work_dir), src)
+        plugin.MSSQLSrcPlugin().read_in(_src_ctx(work_dir), _bare_src_conn(), src)
     assert ei.value.api_error is MssqlErrorCode.MSSQL_5
     fake.dispose.assert_called()
 
@@ -121,9 +121,9 @@ def test_src_plugin_wraps_other_sqlalchemy_error_as_mssql_6(
     fake = MagicMock()
     fake.connect.side_effect = ProgrammingError("bad sql", {}, BaseException("p"))
     monkeypatch.setattr(impl, "build_mssql_engine", lambda *a, **kw: fake)
-    src = MSSQLSrc(conn=_bare_src_conn(), queries=["SELECT 1"])
+    src = MSSQLSrc(queries=["SELECT 1"])
     with pytest.raises(MSSQLRuntimeException) as ei:
-        plugin.MSSQLSrcPlugin().read_in(_src_ctx(work_dir), src)
+        plugin.MSSQLSrcPlugin().read_in(_src_ctx(work_dir), _bare_src_conn(), src)
     assert ei.value.api_error is MssqlErrorCode.MSSQL_6
 
 
@@ -133,11 +133,12 @@ def test_src_plugin_wraps_other_sqlalchemy_error_as_mssql_6(
 
 
 def test_dest_plugin_raises_mssql_7_on_tables_slots_mismatch(work_dir):
-    dest = MSSQLDest(conn=_bare_dest_conn(), tables=["users", "orders"])
+    dest = MSSQLDest(tables=["users", "orders"])
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     with pytest.raises(MSSQLRuntimeException) as ei:
         plugin.MSSQLDestPlugin().write_out(
             _dest_ctx(work_dir),
+            _bare_dest_conn(),
             dest,
             [src],
         )
@@ -149,9 +150,11 @@ def test_dest_plugin_wraps_operational_error_as_mssql_8(monkeypatch, work_dir):
     fake.connect.side_effect = OperationalError("conn fail", {}, BaseException("c"))
     monkeypatch.setattr(impl, "build_mssql_engine", lambda *a, **kw: fake)
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
-    dest = MSSQLDest(conn=_bare_dest_conn(), tables=["users"])
+    dest = MSSQLDest(tables=["users"])
     with pytest.raises(MSSQLRuntimeException) as ei:
-        plugin.MSSQLDestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
+        plugin.MSSQLDestPlugin().write_out(
+            _dest_ctx(work_dir), _bare_dest_conn(), dest, [src]
+        )
     assert ei.value.api_error is MssqlErrorCode.MSSQL_8
     fake.dispose.assert_called()
 
@@ -164,9 +167,11 @@ def test_dest_plugin_wraps_other_sqlalchemy_error_as_mssql_9(
     fake.connect.side_effect = ProgrammingError("bad sql", {}, BaseException("p"))
     monkeypatch.setattr(impl, "build_mssql_engine", lambda *a, **kw: fake)
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
-    dest = MSSQLDest(conn=_bare_dest_conn(), tables=["users"])
+    dest = MSSQLDest(tables=["users"])
     with pytest.raises(MSSQLRuntimeException) as ei:
-        plugin.MSSQLDestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
+        plugin.MSSQLDestPlugin().write_out(
+            _dest_ctx(work_dir), _bare_dest_conn(), dest, [src]
+        )
     assert ei.value.api_error is MssqlErrorCode.MSSQL_9
 
 
@@ -206,12 +211,12 @@ def test_mssql_dest_def_wires_plugin_and_explorer():
 
 
 def test_mssql_src_cardinality_uses_queries_length():
-    src = MSSQLSrc(conn=_bare_src_conn(), queries=["SELECT 1", "SELECT 2", "SELECT 3"])
+    src = MSSQLSrc(queries=["SELECT 1", "SELECT 2", "SELECT 3"])
     assert plugin.MSSQL_SRC.cardinality(src) == 3
 
 
 def test_mssql_dest_cardinality_uses_tables_length():
-    dest = MSSQLDest(conn=_bare_dest_conn(), tables=["users", "orders"])
+    dest = MSSQLDest(tables=["users", "orders"])
     assert plugin.MSSQL_DEST.cardinality(dest) == 2
 
 
@@ -287,9 +292,8 @@ def test_read_in_uses_resolved_initial_values(work_dir, monkeypatch):
 
     ctx = CtxStub(work_dir, scratch={"last_modified": "from-ctx"})
     src = MSSQLSrc(
-        conn=_bare_src_conn(),
         queries=["SELECT * FROM t WHERE ts > :last_modified"],
         initial_values={"last_modified": "from-seed-ignored"},
     )
-    plugin.MSSQLSrcPlugin().read_in(ctx, src)
+    plugin.MSSQLSrcPlugin().read_in(ctx, _bare_src_conn(), src)
     assert captured["initial_values"] == {"last_modified": "from-ctx"}
