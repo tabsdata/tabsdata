@@ -23,7 +23,7 @@ from __future__ import annotations
 import logging
 from typing import Any, cast
 
-from tabsdatak.conn.common.sql.cdc._runner import CdcRunConfig, run_cdc
+from tabsdatak.conn.common.sql.cdc._runner import CdcPlugin, CdcRunConfig
 from tabsdatak.conn.common.sql.cdc.constants import (
     DEFAULT_BLOCKING_TIMEOUT_SECONDS,
     DEFAULT_BUFFER_MAX_BYTES,
@@ -51,11 +51,7 @@ from tabsdatak.conn.mysql._cdc_impl import BinlogIngester
 from tabsdatak.spi import (
     Explorer,
     StreamSrcDef,
-    StreamSrcPlugin,
-    StreamSrcPluginCtx,
 )
-
-logger = logging.getLogger(__name__)
 
 
 # Allowed CDC src_cfg keys -- the Literal annotation gates typos at
@@ -109,39 +105,32 @@ def _build_cdc_run_config(
     )
 
 
-class MySQLCdcStreamSrcPlugin(StreamSrcPlugin[MySQLCdcStreamSrc]):
-    """Wires a :class:`MySQLCdcStreamSrc` to the dialect-agnostic
-    ``run_cdc`` loop."""
+class MySQLCdcStreamSrcPlugin(CdcPlugin[MySQLCdcStreamSrc]):
+    """Drives a :class:`MySQLCdcStreamSrc` via the dialect-agnostic
+    :class:`~tabsdatak.conn.common.sql.cdc._runner.CdcPlugin` loop, backed
+    by a :class:`~tabsdatak.conn.mysql._cdc_impl.BinlogIngester`."""
 
-    def run(
+    def build_run_config(
         self,
-        ctx: StreamSrcPluginCtx,
         stream_src: MySQLCdcStreamSrc,
-    ):
+    ) -> CdcRunConfig:
+        return _build_cdc_run_config(stream_src)
+
+    def build_ingester(
+        self,
+        stream_src: MySQLCdcStreamSrc,
+    ) -> BinlogIngester:
         conn = cast(MySQLCdcStreamSrcConn, stream_src.conn)
-        cfg = _build_cdc_run_config(stream_src)
-        # Sync this connector's logger level with the runner +
-        # sentinels (``run_cdc`` handles the common-sql namespace).
-        logger.setLevel(cfg.logging_level)
-        logger.info(
-            "mysql-cdc: starting (%d table(s), start_from=%r)",
-            len(stream_src.tables or []),
-            stream_src.start_from,
-        )
         blocking_timeout = (stream_src.src_cfg or {}).get(
             _KEY_CDC_BLOCKING_TIMEOUT, DEFAULT_BLOCKING_TIMEOUT_SECONDS
         )
-        ingester = BinlogIngester(
+        return BinlogIngester(
             conn=conn,
             tables=list(stream_src.tables),
             start_from=_to_internal_start_from(stream_src.start_from),
             server_id=conn.server_id,
             blocking_timeout_seconds=blocking_timeout,
         )
-        try:
-            run_cdc(ctx=ctx, ingester=ingester, cfg=cfg)
-        finally:
-            logger.info("mysql-cdc: stopped")
 
 
 class MySQLCdcExplorer(Explorer[MySQLCdcStreamSrcConn]):

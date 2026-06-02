@@ -21,7 +21,7 @@ from __future__ import annotations
 import logging
 from typing import Any, cast
 
-from tabsdatak.conn.common.sql.cdc._runner import CdcRunConfig, run_cdc
+from tabsdatak.conn.common.sql.cdc._runner import CdcPlugin, CdcRunConfig
 from tabsdatak.conn.common.sql.cdc.constants import (
     DEFAULT_BLOCKING_TIMEOUT_SECONDS,
     DEFAULT_BUFFER_MAX_BYTES,
@@ -49,11 +49,7 @@ from tabsdatak.conn.db2._cdc_impl import DEFAULT_FETCH_SIZE, SqlReplicaIngester
 from tabsdatak.spi import (
     Explorer,
     StreamSrcDef,
-    StreamSrcPlugin,
-    StreamSrcPluginCtx,
 )
-
-logger = logging.getLogger(__name__)
 
 
 # Allowed CDC src_cfg keys -- the Literal annotation gates typos at
@@ -109,42 +105,35 @@ def _build_cdc_run_config(
     )
 
 
-class Db2CdcStreamSrcPlugin(StreamSrcPlugin[Db2CdcStreamSrc]):
-    """Wires a :class:`Db2CdcStreamSrc` to the dialect-agnostic
-    ``run_cdc`` loop."""
+class Db2CdcStreamSrcPlugin(CdcPlugin[Db2CdcStreamSrc]):
+    """Drives a :class:`Db2CdcStreamSrc` via the dialect-agnostic
+    :class:`~tabsdatak.conn.common.sql.cdc._runner.CdcPlugin` loop, backed
+    by a :class:`~tabsdatak.conn.db2._cdc_impl.SqlReplicaIngester`."""
 
-    def run(
+    def build_run_config(
         self,
-        ctx: StreamSrcPluginCtx,
         stream_src: Db2CdcStreamSrc,
-    ):
+    ) -> CdcRunConfig:
+        return _build_cdc_run_config(stream_src)
+
+    def build_ingester(
+        self,
+        stream_src: Db2CdcStreamSrc,
+    ) -> SqlReplicaIngester:
         conn = cast(Db2CdcStreamSrcConn, stream_src.conn)
-        cfg = _build_cdc_run_config(stream_src)
-        # Sync this connector's logger level with the runner +
-        # sentinels (``run_cdc`` handles the common-sql namespace).
-        logger.setLevel(cfg.logging_level)
-        logger.info(
-            "db2-cdc: starting (%d CD table(s), start_from=%r)",
-            len(stream_src.tables or []),
-            stream_src.start_from,
-        )
         src_cfg = stream_src.src_cfg or {}
         blocking_timeout = src_cfg.get(
             _KEY_CDC_BLOCKING_TIMEOUT,
             DEFAULT_BLOCKING_TIMEOUT_SECONDS,
         )
         fetch_size = src_cfg.get(_KEY_CDC_FETCH_SIZE, DEFAULT_FETCH_SIZE)
-        ingester = SqlReplicaIngester(
+        return SqlReplicaIngester(
             conn=conn,
             tables=list(stream_src.tables),
             start_from=_to_internal_start_from(stream_src.start_from),
             blocking_timeout_seconds=blocking_timeout,
             fetch_size=fetch_size,
         )
-        try:
-            run_cdc(ctx=ctx, ingester=ingester, cfg=cfg)
-        finally:
-            logger.info("db2-cdc: stopped")
 
 
 class Db2CdcExplorer(Explorer[Db2CdcStreamSrcConn]):

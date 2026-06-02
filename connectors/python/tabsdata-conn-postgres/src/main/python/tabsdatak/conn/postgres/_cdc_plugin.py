@@ -22,7 +22,7 @@ from __future__ import annotations
 import logging
 from typing import Any, cast
 
-from tabsdatak.conn.common.sql.cdc._runner import CdcRunConfig, run_cdc
+from tabsdatak.conn.common.sql.cdc._runner import CdcPlugin, CdcRunConfig
 from tabsdatak.conn.common.sql.cdc.constants import (
     DEFAULT_BLOCKING_TIMEOUT_SECONDS,
     DEFAULT_BUFFER_MAX_BYTES,
@@ -51,11 +51,7 @@ from tabsdatak.conn.postgres._cdc_impl import (
 from tabsdatak.spi import (
     Explorer,
     StreamSrcDef,
-    StreamSrcPlugin,
-    StreamSrcPluginCtx,
 )
-
-logger = logging.getLogger(__name__)
 
 
 # Allowed CDC src_cfg keys -- the Literal annotation gates typos at
@@ -110,26 +106,22 @@ def _build_cdc_run_config(
     )
 
 
-class PostgresCdcStreamSrcPlugin(StreamSrcPlugin[PostgresCdcStreamSrc]):
-    """Wires a :class:`PostgresCdcStreamSrc` to the dialect-agnostic
-    ``run_cdc`` loop."""
+class PostgresCdcStreamSrcPlugin(CdcPlugin[PostgresCdcStreamSrc]):
+    """Drives a :class:`PostgresCdcStreamSrc` via the dialect-agnostic
+    :class:`~tabsdatak.conn.common.sql.cdc._runner.CdcPlugin` loop, backed
+    by a :class:`~tabsdatak.conn.postgres._cdc_impl.Wal2JsonIngester`."""
 
-    def run(
+    def build_run_config(
         self,
-        ctx: StreamSrcPluginCtx,
         stream_src: PostgresCdcStreamSrc,
-    ):
+    ) -> CdcRunConfig:
+        return _build_cdc_run_config(stream_src)
+
+    def build_ingester(
+        self,
+        stream_src: PostgresCdcStreamSrc,
+    ) -> Wal2JsonIngester:
         conn = cast(PostgresCdcStreamSrcConn, stream_src.conn)
-        cfg = _build_cdc_run_config(stream_src)
-        # Sync this connector's logger level with the runner +
-        # sentinels (``run_cdc`` handles the common-sql namespace).
-        logger.setLevel(cfg.logging_level)
-        logger.info(
-            "postgres-cdc: starting (%d table(s), slot=%r, start_from=%r)",
-            len(stream_src.tables or []),
-            stream_src.replication_slot,
-            stream_src.start_from,
-        )
         src_cfg = stream_src.src_cfg or {}
         blocking_timeout = src_cfg.get(
             _KEY_CDC_BLOCKING_TIMEOUT,
@@ -139,7 +131,7 @@ class PostgresCdcStreamSrcPlugin(StreamSrcPlugin[PostgresCdcStreamSrc]):
             _KEY_CDC_WAL2JSON_FORMAT_VERSION,
             DEFAULT_WAL2JSON_FORMAT_VERSION,
         )
-        ingester = Wal2JsonIngester(
+        return Wal2JsonIngester(
             conn=conn,
             tables=list(stream_src.tables),
             start_from=_to_internal_start_from(stream_src.start_from),
@@ -149,10 +141,6 @@ class PostgresCdcStreamSrcPlugin(StreamSrcPlugin[PostgresCdcStreamSrc]):
             publication_name=stream_src.publication_name,
             wal2json_format_version=int(wal2json_format),
         )
-        try:
-            run_cdc(ctx=ctx, ingester=ingester, cfg=cfg)
-        finally:
-            logger.info("postgres-cdc: stopped")
 
 
 class PostgresCdcExplorer(Explorer[PostgresCdcStreamSrcConn]):

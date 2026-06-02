@@ -128,8 +128,11 @@ def test_plugin_run_applies_logging_level_to_connector_logger():
     connector_logger = logging.getLogger("tabsdatak.conn.mysql._cdc_plugin")
     connector_logger.setLevel(logging.NOTSET)
     try:
+        # ``run`` is inherited from ``CdcPlugin``; patch the shared loop so
+        # ``run`` just does its setup (config + log levels + ingester) and
+        # returns.
         with patch(
-            "tabsdatak.conn.mysql._cdc_plugin.run_cdc",
+            "tabsdatak.conn.common.sql.cdc._runner._run_loop",
         ), patch(
             "tabsdatak.conn.mysql._cdc_plugin.BinlogIngester",
         ):
@@ -139,27 +142,19 @@ def test_plugin_run_applies_logging_level_to_connector_logger():
         connector_logger.setLevel(logging.NOTSET)
 
 
-# --- Plugin.run wires the right BinlogIngester ----------------------
+# --- build_ingester wires the right BinlogIngester ------------------
 
 
-def test_plugin_run_constructs_binlog_ingester_with_server_id_and_blocking():
+def test_build_ingester_constructs_binlog_with_server_id_and_blocking():
     src = _src(
         src_cfg={"mysql.cdc.blocking_timeout_seconds": 7},
     )
-    ctx = MagicMock()
-    captured: dict = {}
-
-    def fake_run(*, ctx, ingester, cfg):
-        captured["ingester"] = ingester
-        captured["cfg"] = cfg
 
     with patch(
-        "tabsdatak.conn.mysql._cdc_plugin.run_cdc", side_effect=fake_run,
-    ), patch(
         "tabsdatak.conn.mysql._cdc_plugin.BinlogIngester",
     ) as mock_ingester_cls:
         mock_ingester_cls.return_value = "ingester-instance"
-        MySQLCdcStreamSrcPlugin().run(ctx=ctx, stream_src=src)
+        ingester = MySQLCdcStreamSrcPlugin().build_ingester(src)
 
     mock_ingester_cls.assert_called_once()
     kw = mock_ingester_cls.call_args.kwargs
@@ -168,9 +163,7 @@ def test_plugin_run_constructs_binlog_ingester_with_server_id_and_blocking():
     assert kw["start_from"] == "tail"
     assert kw["server_id"] == 777
     assert kw["blocking_timeout_seconds"] == 7
-
-    assert captured["ingester"] == "ingester-instance"
-    assert isinstance(captured["cfg"], CdcRunConfig)
+    assert ingester == "ingester-instance"
 
 
 # --- Public -> internal conversion at the plugin boundary -----------
@@ -204,7 +197,7 @@ def test_to_internal_start_from_passes_through_relative_keywords():
     assert _to_internal_start_from("tail") == "tail"
 
 
-def test_plugin_run_translates_timestamp_start_from_for_ingester():
+def test_build_ingester_translates_timestamp_start_from():
     from datetime import datetime, timezone
 
     from tabsdatak.conn.common.sql.cdc.typing import (
@@ -214,30 +207,24 @@ def test_plugin_run_translates_timestamp_start_from_for_ingester():
 
     ts = datetime(2026, 1, 1, tzinfo=timezone.utc)
     src = _src(start_from=TimestampPosition(ts=ts))
-    ctx = MagicMock()
 
     with patch(
-        "tabsdatak.conn.mysql._cdc_plugin.run_cdc",
-    ), patch(
         "tabsdatak.conn.mysql._cdc_plugin.BinlogIngester",
     ) as mock_ingester_cls:
-        MySQLCdcStreamSrcPlugin().run(ctx=ctx, stream_src=src)
+        MySQLCdcStreamSrcPlugin().build_ingester(src)
 
     kw = mock_ingester_cls.call_args.kwargs
     assert isinstance(kw["start_from"], _CommonTimestampPosition)
     assert kw["start_from"].ts == ts
 
 
-def test_plugin_run_blocking_timeout_falls_back_to_default():
+def test_build_ingester_blocking_timeout_falls_back_to_default():
     src = _src()  # no src_cfg
-    ctx = MagicMock()
 
     with patch(
-        "tabsdatak.conn.mysql._cdc_plugin.run_cdc",
-    ), patch(
         "tabsdatak.conn.mysql._cdc_plugin.BinlogIngester",
     ) as mock_ingester_cls:
-        MySQLCdcStreamSrcPlugin().run(ctx=ctx, stream_src=src)
+        MySQLCdcStreamSrcPlugin().build_ingester(src)
 
     kw = mock_ingester_cls.call_args.kwargs
     # DEFAULT_BLOCKING_TIMEOUT_SECONDS from common-sql constants.

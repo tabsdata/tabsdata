@@ -485,10 +485,10 @@ class SqlReplicaIngester(CdcIngester):
         except ValueError as error:
             from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode
 
-            raise SqlCdcErrorCode.SQL_CDC_1.exception(
-                table=tablespec,
-                reason=str(error),
-            ) from error
+            raise SqlCdcErrorCode.CDC_1.exception(
+                cause=error,
+                spec=tablespec,
+            )
 
         real_cd_schema = self.resolve_identifier(cd_schema)
         real_cd_table = self.resolve_identifier(cd_table)
