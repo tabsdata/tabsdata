@@ -117,8 +117,9 @@ def test_src_plugin_passes_build_location_run_env_and_errors(monkeypatch, tmp_pa
 
     monkeypatch.setattr(_file_plugin, "import_files", fake)
 
-    src = GCSSrc(conn=_src_conn(), paths=["a/b.parquet"])
-    out = plugin.GCSSrcPlugin().read_in(_src_ctx(tmp_path), src)
+    conn = _src_conn()
+    src = GCSSrc(paths=["a/b.parquet"])
+    out = plugin.GCSSrcPlugin().read_in(_src_ctx(tmp_path), conn, src)
 
     assert out == [[Path(tmp_path / "ok.parquet")]]
     assert captured["build_location"] is plugin.build_location
@@ -138,9 +139,10 @@ def test_dest_plugin_passes_build_location_run_env_and_errors(monkeypatch, tmp_p
 
     monkeypatch.setattr(_file_plugin, "copy_out", fake)
 
-    dest = GCSDest(conn=_dest_conn(), paths=["out/x.parquet"])
+    conn = _dest_conn()
+    dest = GCSDest(paths=["out/x.parquet"])
     parquet = Path(tmp_path / "in.parquet")
-    plugin.GCSDestPlugin().write_out(_dest_ctx(tmp_path), dest, [parquet])
+    plugin.GCSDestPlugin().write_out(_dest_ctx(tmp_path), conn, dest, [parquet])
 
     assert captured["tables"] == [parquet]
     assert captured["build_location"] is plugin.build_location
@@ -185,7 +187,7 @@ def test_gcs_dest_def_wires_plugin_and_explorer():
 
 
 def test_gcs_cardinality_uses_paths_length():
-    src = GCSSrc(conn=_src_conn(), paths=["a", "b", "c"])
+    src = GCSSrc(paths=["a", "b", "c"])
     assert plugin.GCS_SRC.cardinality(src) == 3
-    dest = GCSDest(conn=_dest_conn(), paths=["a", "b"])
+    dest = GCSDest(paths=["a", "b"])
     assert plugin.GCS_DEST.cardinality(dest) == 2

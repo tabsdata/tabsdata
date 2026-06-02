@@ -24,7 +24,6 @@ import tabsdatak._api as _api
 from tabsdatak.api import (
     Conn,
     Dest,
-    NamedConn,
     Secret,
     Src,
     Var,
@@ -134,10 +133,6 @@ class GCSDestConn(Conn):
         return full_path(self.base_path, path)
 
 
-SrcConnSpec: TypeAlias = Union[NamedConn, GCSSrcConn]
-DestConnSpec: TypeAlias = Union[NamedConn, GCSDestConn]
-
-
 # --- Source ----------------------------------------------------------
 
 
@@ -145,7 +140,6 @@ DestConnSpec: TypeAlias = Union[NamedConn, GCSDestConn]
 class GCSSrc(Src):
     """GCS source — one parquet slot per path.
 
-    :param conn: :class:`GCSSrcConn` / :class:`GCSDestConn` (or :class:`NamedConn`).
     :param paths: List of file paths (or glob patterns) relative
         to the conn's root. One parquet slot per entry.
     :param format: Optional file-format override (default AUTO).
@@ -158,7 +152,6 @@ class GCSSrc(Src):
         ``{"tabsdata.file.chunkSize"}``.
     """
 
-    conn: SrcConnSpec
     paths: SrcPathsSpec
     format: SrcFileFormat = SrcFileFormat.AUTO
     format_cfg: SrcFormatCfgSpec | None = None
@@ -180,7 +173,6 @@ class GCSSrc(Src):
 class GCSDest(Dest):
     """GCS destination — write one parquet slot per path.
 
-    :param conn: :class:`GCSSrcConn` / :class:`GCSDestConn` (or :class:`NamedConn`).
     :param paths: List of target file paths relative to the
         conn's root. One parquet slot per entry. Tokens like
         ``${date}`` / ``${trx_id}`` are resolved at write time.
@@ -189,7 +181,6 @@ class GCSDest(Dest):
         ``{"tabsdata.file.chunkSize"}``.
     """
 
-    conn: DestConnSpec
     paths: DestPathsSpec
     format: DestFileFormat = DestFileFormat.AUTO
     format_cfg: DestFormatCfgSpec | None = None

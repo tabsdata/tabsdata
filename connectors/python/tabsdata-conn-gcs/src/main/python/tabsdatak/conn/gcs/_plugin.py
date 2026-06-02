@@ -77,31 +77,33 @@ ERRORS = _plugin.FilePluginErrors(
 # --- Plugins ------------------------------------------------------
 
 
-class GCSSrcPlugin(SrcPlugin[GCSSrc]):
+class GCSSrcPlugin(SrcPlugin[GCSSrcConn, GCSSrc]):
     def read_in(
         self,
         ctx: SrcPluginCtx,
+        conn: GCSSrcConn,
         src: GCSSrc,
     ) -> list[list[TableFileSpec]]:
         return _plugin.import_files(
             ctx=ctx,
-            cfg=_plugin.ReaderConf.from_src(src),
+            cfg=_plugin.ReaderConf.from_src(conn, src),
             build_location=build_location,
             run_env=run_env,
             errors=ERRORS,
         )
 
 
-class GCSDestPlugin(DestPlugin[GCSDest]):
+class GCSDestPlugin(DestPlugin[GCSDestConn, GCSDest]):
     def write_out(
         self,
         ctx: DestContext,
+        conn: GCSDestConn,
         dest: GCSDest,
         tables: list[TableFileSpec],
     ) -> None:
         _plugin.copy_out(
             ctx=ctx,
-            cfg=_plugin.WriterConf.from_dest(dest),
+            cfg=_plugin.WriterConf.from_dest(conn, dest),
             tables=tables,
             build_location=build_location,
             run_env=run_env,

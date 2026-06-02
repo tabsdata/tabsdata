@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from tabsdatak.api import NamedConn, Secret
+from tabsdatak.api import Secret
 from tabsdatak.conn.gcs.error import GcsValidateException
 from tabsdatak.conn.common.types import GCPJson
 from tabsdatak.conn.common.file.typing_ import (
@@ -18,27 +18,8 @@ from tabsdatak.conn.gcs.error import GcsErrorCode
 pytestmark = pytest.mark.gcs
 
 
-def _src_conn() -> GCSSrcConn:
-    return GCSSrcConn(
-        bucket="my-bucket",
-        credentials=GCPJson(json=Secret()),
-        project="my-project",
-        conn_cfg={"gcs.timeout": 30},
-    )
-
-
-def _dest_conn() -> GCSDestConn:
-    return GCSDestConn(
-        bucket="my-bucket",
-        credentials=GCPJson(json=Secret()),
-        project="my-project",
-        conn_cfg={"gcs.timeout": 30},
-    )
-
-
 def test_gcs_src_full_round_trip():
     src = GCSSrc(
-        conn=_src_conn(),
         paths=["raw/users.csv", "raw/orders/*.csv"],
         format=SrcFileFormat.CSV,
         format_cfg={SrcFileFormat.CSV: {"separator": ";", "has_header": True}},
@@ -48,9 +29,6 @@ def test_gcs_src_full_round_trip():
     )
     loaded = GCSSrc.from_json(src.to_json())
     assert loaded == src
-    assert loaded.conn.bucket == "my-bucket"
-    assert loaded.conn.project.value() == "my-project"
-    assert loaded.conn.conn_cfg == {"gcs.timeout": 30}
     assert loaded.paths == ["raw/users.csv", "raw/orders/*.csv"]
     assert loaded.format is SrcFileFormat.CSV
     assert loaded.format_cfg == {
@@ -63,7 +41,6 @@ def test_gcs_src_full_round_trip():
 
 def test_gcs_dest_full_round_trip():
     dest = GCSDest(
-        conn=_dest_conn(),
         paths=["${EXEC_PLAN_ID}/users.csv", "${TRX_ID}/orders.csv"],
         format=DestFileFormat.CSV,
         format_cfg={DestFileFormat.CSV: {"include_header": True, "separator": ","}},
@@ -71,8 +48,6 @@ def test_gcs_dest_full_round_trip():
     )
     loaded = GCSDest.from_json(dest.to_json())
     assert loaded == dest
-    assert loaded.conn.bucket == "my-bucket"
-    assert loaded.conn.conn_cfg == {"gcs.timeout": 30}
     assert loaded.paths == ["${EXEC_PLAN_ID}/users.csv", "${TRX_ID}/orders.csv"]
     assert loaded.format is DestFileFormat.CSV
     assert loaded.format_cfg == {
@@ -81,34 +56,9 @@ def test_gcs_dest_full_round_trip():
     assert loaded.dest_cfg == {"tabsdata.file.chunkSize": 2048}
 
 
-def test_gcs_src_round_trip_with_named_conn():
-    src = GCSSrc(
-        conn=NamedConn(name="prod_gcs"),
-        paths=["raw/users.csv"],
-        format=SrcFileFormat.CSV,
-    )
-    loaded = GCSSrc.from_json(src.to_json())
-    assert loaded == src
-    assert isinstance(loaded.conn, NamedConn)
-    assert loaded.conn.name == "prod_gcs"
-
-
-def test_gcs_dest_round_trip_with_named_conn():
-    dest = GCSDest(
-        conn=NamedConn(name="prod_gcs"),
-        paths=["out/users.csv"],
-        format=DestFileFormat.CSV,
-    )
-    loaded = GCSDest.from_json(dest.to_json())
-    assert loaded == dest
-    assert isinstance(loaded.conn, NamedConn)
-    assert loaded.conn.name == "prod_gcs"
-
-
 def test_gcs_validate_rejects_cross_side_format_cfg_keys():
     with pytest.raises(GcsValidateException) as ei:
         GCSSrc(
-            conn=_src_conn(),
             paths=["data.csv"],
             format=SrcFileFormat.CSV,
             format_cfg={SrcFileFormat.CSV: {"include_header": True}},
@@ -117,7 +67,6 @@ def test_gcs_validate_rejects_cross_side_format_cfg_keys():
 
     with pytest.raises(GcsValidateException) as ei:
         GCSDest(
-            conn=_dest_conn(),
             paths=["out.csv"],
             format=DestFileFormat.CSV,
             format_cfg={DestFileFormat.CSV: {"has_header": True}},
@@ -191,7 +140,6 @@ def test_gcs_src_rejects_missing_paths():
 
     with pytest.raises(ConnInitException) as ei:
         GCSSrc(  # type: ignore[call-arg]
-            conn=_src_conn(),
             format=SrcFileFormat.CSV,
         )
     assert ei.value.api_error is GcsErrorCode.GCS_2
@@ -202,7 +150,6 @@ def test_gcs_dest_rejects_missing_paths():
 
     with pytest.raises(ConnInitException) as ei:
         GCSDest(  # type: ignore[call-arg]
-            conn=_dest_conn(),
             format=DestFileFormat.CSV,
         )
     assert ei.value.api_error is GcsErrorCode.GCS_4
