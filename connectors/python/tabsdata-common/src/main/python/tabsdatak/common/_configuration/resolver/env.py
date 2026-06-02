@@ -7,25 +7,20 @@ from __future__ import annotations
 import os
 import re
 
-ENV_VAR_PATTERN = re.compile(r"\$\{env:(\w+)(\?)?}")
+from tabsdatak.common._configuration.resolver.error import ResolverErrorCode
+
+ENV_VAR_PATTERN = re.compile(r"\$\{env:([A-Za-z_][A-Za-z0-9_]*)(\?)?}")
 
 
 def resolve(text: str) -> str:
-    current = text
-    while True:
-        match = ENV_VAR_PATTERN.search(current)
-        if match is None:
-            break
-        placeholder = match.group(0)
+    def substitute(match: re.Match[str]) -> str:
         variable = match.group(1)
         optional = match.group(2) is not None
         value = os.environ.get(variable)
         if value is None:
             if optional:
-                value = ""
-            else:
-                raise ValueError(f"Environment variable '{variable}' not found")
-        else:
-            value = value.strip()
-        current = current.replace(placeholder, value)
-    return current.strip()
+                return ""
+            raise ResolverErrorCode.RESOLVER_1.exception(variable=variable)
+        return value.strip()
+
+    return ENV_VAR_PATTERN.sub(substitute, text).strip()

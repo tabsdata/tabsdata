@@ -7,6 +7,7 @@ from __future__ import annotations
 import pytest
 
 from tabsdatak.common._configuration.resolver.env import resolve
+from tabsdatak.common._configuration.resolver.error import ResolverEnvException
 
 
 def test_resolves_unsubstituted_text_unchanged():
@@ -24,7 +25,7 @@ def test_resolves_required_env_placeholder(monkeypatch):
 
 def test_missing_required_env_raises(monkeypatch):
     monkeypatch.delenv("TDK_TEST_RESOLVER_MISSING", raising=False)
-    with pytest.raises(ValueError, match="TDK_TEST_RESOLVER_MISSING"):
+    with pytest.raises(ResolverEnvException, match="TDK_TEST_RESOLVER_MISSING"):
         resolve("${env:TDK_TEST_RESOLVER_MISSING}")
 
 
@@ -71,3 +72,78 @@ def test_repeated_placeholder_resolves_all_occurrences(monkeypatch):
         )
         == "x-x"
     )
+
+
+def test_adjacent_placeholders(monkeypatch):
+    monkeypatch.setenv("TDK_TEST_RESOLVER_ADJ_A", "x")
+    monkeypatch.setenv("TDK_TEST_RESOLVER_ADJ_B", "y")
+    assert (
+        resolve("${env:TDK_TEST_RESOLVER_ADJ_A}${env:TDK_TEST_RESOLVER_ADJ_B}")
+        == "xy"
+    )
+
+
+def test_placeholder_inside_word(monkeypatch):
+    monkeypatch.setenv("TDK_TEST_RESOLVER_INSIDE", "MID")
+    assert (
+        resolve("foo${env:TDK_TEST_RESOLVER_INSIDE}baz") == "fooMIDbaz"
+    )
+
+
+def test_placeholder_starting_with_underscore(monkeypatch):
+    monkeypatch.setenv("_TDK_TEST_RESOLVER_HIDDEN", "ok")
+    assert resolve("${env:_TDK_TEST_RESOLVER_HIDDEN}") == "ok"
+
+
+def test_empty_value(monkeypatch):
+    monkeypatch.setenv("TDK_TEST_RESOLVER_EMPTY", "")
+    assert resolve("a=${env:TDK_TEST_RESOLVER_EMPTY}b") == "a=b"
+
+
+def test_multiline_content(monkeypatch):
+    monkeypatch.setenv("TDK_TEST_RESOLVER_HOST", "example.com")
+    monkeypatch.setenv("TDK_TEST_RESOLVER_PORT", "8080")
+    text = (
+        "host: ${env:TDK_TEST_RESOLVER_HOST}\n"
+        "port: ${env:TDK_TEST_RESOLVER_PORT}"
+    )
+    assert resolve(text) == "host: example.com\nport: 8080"
+
+
+def test_value_with_embedded_newline_inserted_verbatim(monkeypatch):
+    monkeypatch.setenv("TDK_TEST_RESOLVER_MULTI", "line1\nline2")
+    assert (
+        resolve("x=${env:TDK_TEST_RESOLVER_MULTI};")
+        == "x=line1\nline2;"
+    )
+
+
+def test_resolution_is_not_recursive(monkeypatch):
+    """A resolved value that looks like a placeholder is not re-expanded."""
+    monkeypatch.setenv("TDK_TEST_RESOLVER_OUTER", "${env:TDK_TEST_RESOLVER_INNER}")
+    monkeypatch.setenv("TDK_TEST_RESOLVER_INNER", "should-not-appear")
+    assert (
+        resolve("${env:TDK_TEST_RESOLVER_OUTER}")
+        == "${env:TDK_TEST_RESOLVER_INNER}"
+    )
+
+
+@pytest.mark.parametrize(
+    "literal",
+    [
+        "${env:}",  # empty var name
+        "${env:FOO",  # missing closing brace
+        "${ENV:FOO}",  # wrong prefix casing
+        "$env:FOO}",  # missing opening brace
+        "${env: FOO}",  # leading space in name
+        "${env:FOO }",  # trailing space in name
+        "${env:1FOO}",  # starts with digit
+        "${env:FOO-BAR}",  # hyphen not allowed in POSIX env names
+        "${env:FOO.BAR}",  # dot not allowed either
+        "$FOO",  # plain shell-style ref is not our grammar
+    ],
+)
+def test_invalid_placeholder_shapes_left_untouched(literal, monkeypatch):
+    monkeypatch.setenv("FOO", "X")
+    monkeypatch.setenv("BAR", "Y")
+    assert resolve(literal) == literal.strip()
