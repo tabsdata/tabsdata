@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any
 
 from tabsdatak.conn.common.file import _transporter
 
@@ -72,7 +72,7 @@ def _resolve_dest_cfg(dest_cfg: DestCfgSpec | None) -> _WriterCfg:
     )
 
 
-class DruidDestPlugin(DestPlugin[DruidDest]):
+class DruidDestPlugin(DestPlugin[DruidDestConn, DruidDest]):
     """Apache Druid destination plugin.
 
     Druid ingestion is asynchronous: parquet files first land in a
@@ -88,6 +88,7 @@ class DruidDestPlugin(DestPlugin[DruidDest]):
     def write_out(
         self,
         ctx: DestContext,
+        conn: DruidDestConn,
         dest: DruidDest,
         tables: list[TableFileSpec],
     ) -> None:
@@ -113,7 +114,6 @@ class DruidDestPlugin(DestPlugin[DruidDest]):
                 slots=len(tables),
             )
 
-        conn = cast(DruidDestConn, dest.conn)
         staging = conn.staging
 
         # ---- Stage parquet to the cloud --------------------------

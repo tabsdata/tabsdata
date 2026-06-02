@@ -4,7 +4,7 @@ import typing
 
 import pytest
 
-from tabsdatak.api import NamedConn, Secret
+from tabsdatak.api import Secret
 from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
     CfgSpec,
@@ -15,7 +15,6 @@ from tabsdatak.conn.druid import (
     S3Location,
 )
 from tabsdatak.conn.druid import (
-    ConnSpec,
     CredentialsSpec,
     DestCfgSpec,
     DruidDestConn,
@@ -58,7 +57,6 @@ def _conn():
 
 def test_druid_dest_full_round_trip():
     dest = DruidDest(
-        conn=_conn(),
         tables=["events", "metrics"],
         if_table_exists="replace",
         time_column="ts",
@@ -71,7 +69,6 @@ def test_druid_dest_full_round_trip():
     )
     loaded = DruidDest.from_json(dest.to_json())
     assert loaded == dest
-    assert loaded.conn.conn_cfg == {"druid.timeout": 30}
     assert loaded.tables == ["events", "metrics"]
     assert loaded.if_table_exists == "replace"
     assert loaded.time_column == "ts"
@@ -81,17 +78,6 @@ def test_druid_dest_full_round_trip():
     assert loaded.max_rows_in_memory == 500_000
     assert loaded.http_timeout_sec == 120
     assert loaded.dest_cfg == {"druid.logging_level": 20}
-
-
-def test_druid_dest_round_trip_with_named_conn():
-    dest = DruidDest(
-        conn=NamedConn(name="prod_druid"),
-        tables=["events"],
-    )
-    loaded = DruidDest.from_json(dest.to_json())
-    assert loaded == dest
-    assert isinstance(loaded.conn, NamedConn)
-    assert loaded.conn.name == "prod_druid"
 
 
 # ---------------------------------------------------------------------------
@@ -111,7 +97,6 @@ def test_druid_conn_fields_wire_expected_specs():
 
 
 def test_druid_dest_fields_wire_expected_specs():
-    assert _hint(DruidDest, "conn") == ConnSpec
     assert _hint(DruidDest, "tables") == DruidTableNamesSpec
     assert _hint(DruidDest, "if_table_exists") == IfTableExistsSpec
     assert _hint(DruidDest, "time_column") == str | None
@@ -131,7 +116,6 @@ def test_druid_dest_fields_wire_expected_specs():
 def test_druid_dest_rejects_unknown_dest_cfg_key():
     with pytest.raises(ConnInitException) as ei:
         DruidDest(
-            conn=_conn(),
             tables=["my_datasource"],
             dest_cfg={"bogus.key": 1},
         )
@@ -140,7 +124,6 @@ def test_druid_dest_rejects_unknown_dest_cfg_key():
 
 def test_druid_dest_accepts_known_dest_cfg_keys():
     dest = DruidDest(
-        conn=_conn(),
         tables=["my_datasource"],
         dest_cfg={
             "druid.logging_level": 20,

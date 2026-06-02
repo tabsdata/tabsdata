@@ -24,7 +24,6 @@ import tabsdatak._api as _api
 from tabsdatak.api import (
     Conn,
     Dest,
-    NamedConn,
     Secret,
     Var,
 )
@@ -201,9 +200,6 @@ class DruidDestConn(Conn):
     conn_cfg: CfgSpec | None = None
 
 
-ConnSpec: TypeAlias = Union[NamedConn, DruidDestConn]
-
-
 # --- Destination -----------------------------------------------------
 
 
@@ -211,7 +207,6 @@ ConnSpec: TypeAlias = Union[NamedConn, DruidDestConn]
 class DruidDest(Dest):
     """Druid destination — one parquet slot per datasource.
 
-    :param conn: :class:`DruidDestConn` (or :class:`NamedConn`).
     :param tables: Datasource names; one slot per entry.
     :param if_table_exists: ``"append"`` (default) or
         ``"replace"`` (overwrite the datasource).
@@ -232,7 +227,6 @@ class DruidDest(Dest):
         ``druid.retry_attempts`` / ``druid.retry_backoff_seconds``.
     """
 
-    conn: ConnSpec
     tables: DruidTableNamesSpec
     if_table_exists: IfTableExistsSpec = "append"
     time_column: str | None = None

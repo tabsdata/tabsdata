@@ -139,11 +139,11 @@ def _conn(staging=None) -> DruidDestConn:
 
 
 def test_dest_plugin_raises_druid_6_on_tables_slots_mismatch(work_dir):
-    dest = DruidDest(conn=_conn(), tables=["events", "metrics"])
+    dest = DruidDest(tables=["events", "metrics"])
     parquet = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     with pytest.raises(DruidRuntimeException) as ei:
         plugin.DruidDestPlugin().write_out(
-            _dest_ctx(work_dir), dest, [parquet],
+            _dest_ctx(work_dir), _conn(), dest, [parquet],
         )
     assert ei.value.api_error is DruidErrorCode.DRUID_6
 
@@ -161,10 +161,10 @@ def test_dest_plugin_wraps_transporter_run_error_as_druid_7(
 
     monkeypatch.setattr(impl, "upload_staged_files", boom)
     parquet = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
-    dest = DruidDest(conn=_conn(), tables=["events"])
+    dest = DruidDest(tables=["events"])
     with pytest.raises(DruidRuntimeException) as ei:
         plugin.DruidDestPlugin().write_out(
-            _dest_ctx(work_dir), dest, [parquet],
+            _dest_ctx(work_dir), _conn(), dest, [parquet],
         )
     assert ei.value.api_error is DruidErrorCode.DRUID_7
 
@@ -177,10 +177,10 @@ def test_dest_plugin_wraps_transporter_binary_not_found_as_druid_7(
 
     monkeypatch.setattr(impl, "upload_staged_files", boom)
     parquet = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
-    dest = DruidDest(conn=_conn(), tables=["events"])
+    dest = DruidDest(tables=["events"])
     with pytest.raises(DruidRuntimeException) as ei:
         plugin.DruidDestPlugin().write_out(
-            _dest_ctx(work_dir), dest, [parquet],
+            _dest_ctx(work_dir), _conn(), dest, [parquet],
         )
     assert ei.value.api_error is DruidErrorCode.DRUID_7
 
@@ -207,10 +207,10 @@ def test_dest_plugin_wraps_submit_failure_as_druid_8(
         lambda conn, dest: fake_client,
     )
     parquet = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
-    dest = DruidDest(conn=_conn(), tables=["events"])
+    dest = DruidDest(tables=["events"])
     with pytest.raises(DruidRuntimeException) as ei:
         plugin.DruidDestPlugin().write_out(
-            _dest_ctx(work_dir), dest, [parquet],
+            _dest_ctx(work_dir), _conn(), dest, [parquet],
         )
     assert ei.value.api_error is DruidErrorCode.DRUID_8
     # The URL embedded in the error is the safe-sanitized form.
@@ -247,10 +247,10 @@ def test_dest_plugin_wraps_task_failure_as_druid_9(monkeypatch, work_dir):
         lambda conn, dest: fake_client,
     )
     parquet = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
-    dest = DruidDest(conn=_conn(), tables=["events"])
+    dest = DruidDest(tables=["events"])
     with pytest.raises(DruidRuntimeException) as ei:
         plugin.DruidDestPlugin().write_out(
-            _dest_ctx(work_dir), dest, [parquet],
+            _dest_ctx(work_dir), _conn(), dest, [parquet],
         )
     assert ei.value.api_error is DruidErrorCode.DRUID_9
     # The datasource is hydrated from the dest's tables -- the
@@ -291,7 +291,6 @@ def test_dest_plugin_submits_one_task_per_table(monkeypatch, work_dir):
     parquet_a = _make_parquet(work_dir / "a.parquet", [{"id": 1}])
     parquet_b = _make_parquet(work_dir / "b.parquet", [{"id": 2}])
     dest = DruidDest(
-        conn=_conn(),
         tables=["events", "metrics"],
         if_table_exists="replace",
         time_column="ts",
@@ -299,7 +298,7 @@ def test_dest_plugin_submits_one_task_per_table(monkeypatch, work_dir):
         max_concurrent_subtasks=4,
     )
     plugin.DruidDestPlugin().write_out(
-        _dest_ctx(work_dir), dest, [parquet_a, parquet_b],
+        _dest_ctx(work_dir), _conn(), dest, [parquet_a, parquet_b],
     )
 
     # One ingestion task per target datasource.
@@ -572,7 +571,7 @@ def test_druid_dest_def_wires_plugin_and_explorer():
 
 
 def test_druid_dest_cardinality_uses_tables_length():
-    dest = DruidDest(conn=_conn(), tables=["events", "metrics", "logs"])
+    dest = DruidDest(tables=["events", "metrics", "logs"])
     assert plugin.DRUID_DEST.cardinality(dest) == 3
 
 
