@@ -349,6 +349,8 @@ def test_subscriber_full_chain(
             str(fn_out_dir),
             "--outputs-manifest",
             str(outputs_manifest),
+            "--state-dir",
+            str(state_dir),
             "--liveness",
             str(tmp_path / "liveness-fn"),
         ],

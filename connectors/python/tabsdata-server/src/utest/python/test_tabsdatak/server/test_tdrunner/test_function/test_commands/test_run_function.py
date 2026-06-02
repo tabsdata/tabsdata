@@ -39,6 +39,7 @@ from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
 )
 from tabsdatak.server._tdrunner.function.commands.run_function import (
     EXIT_BAD_BUNDLE,
+    EXIT_BAD_INITIAL_VALUES,
     EXIT_BAD_INPUT_PARQUET,
     EXIT_BAD_MANIFEST,
     EXIT_BAD_REQUEST,
@@ -48,6 +49,7 @@ from tabsdatak.server._tdrunner.function.commands.run_function import (
     EXIT_OUTPUT_WRITE_FAILED,
     EXIT_OUTPUTS_MANIFEST_WRITE_FAILED,
     EXIT_USER_FUNCTION_FAILED,
+    _FunctionContext,
     _infer_table_modes,
     _invoke_user_function,
     _load_function_def,
@@ -57,7 +59,11 @@ from tabsdatak.server._tdrunner.function.commands.run_function import (
     _sink_outputs,
     main,
 )
-from tabsdatak.spi import TableMode
+from tabsdatak.server._tdrunner.function._lib.initial_values import (
+    read_initial_values,
+    write_initial_values,
+)
+from tabsdatak.spi import FunctionCtx, SrcPluginCtx, DestContext, TableMode
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
@@ -369,7 +375,11 @@ def _set_argv(
     out_dir: Path,
     outputs_manifest: Path,
     liveness: Path,
+    state_dir: Path | None = None,
 ) -> None:
+    if state_dir is None:
+        state_dir = out_dir.parent / "state"
+        state_dir.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(
         sys,
         "argv",
@@ -387,6 +397,8 @@ def _set_argv(
             str(outputs_manifest),
             "--liveness",
             str(liveness),
+            "--state-dir",
+            str(state_dir),
         ],
     )
 
@@ -996,3 +1008,544 @@ def test_main_manifest_length_mismatch_returns_bad_manifest(
 def test_main_carries_tabsdata_command_metadata():
     assert getattr(main, "tabsdata_command", False) is True
     assert getattr(main, "tabsdata_command_name", None) == "td_run_function"
+
+
+# --- T5: FunctionCtx + initial_values lifecycle -------------------------
+
+
+def test_function_context_is_a_function_ctx_subclass():
+    """``_FunctionContext`` must be a concrete FunctionCtx so that
+    ``isinstance(ctx, FunctionCtx)`` holds at the call boundary, and
+    must NOT also satisfy the SrcPluginCtx / DestContext role tags."""
+    c = _FunctionContext(
+        work_dir=Path("/work"),
+        exec_plan_id="ep",
+        trx_id="tx",
+        collection_id="cid",
+        collection_name="c",
+        function_id="fn",
+    )
+    assert isinstance(c, FunctionCtx)
+    assert not isinstance(c, SrcPluginCtx)
+    assert not isinstance(c, DestContext)
+
+
+def test_infer_table_modes_skips_trailing_ctx_param():
+    """When the user function declares a trailing TrxCtx-typed param,
+    ``_infer_table_modes`` must skip it — only the input slots are
+    real table-mode-bearing parameters."""
+
+    def f(in_1: TableFrameSpec, ctx: FunctionCtx) -> tuple[TableFrameSpec]:
+        return (None,)
+
+    modes = _infer_table_modes(f)
+    assert modes == [TableMode.SINGLE]
+
+
+def test_infer_table_modes_does_not_skip_without_ctx():
+    """No trailing ctx → every parameter is a slot. Sanity check that
+    the trim only kicks in when has_trx_ctx_param is True."""
+
+    def f(in_1: TableFrameSpec, in_2: TableFrameSpec) -> tuple[TableFrameSpec]:
+        return (None,)
+
+    modes = _infer_table_modes(f)
+    assert modes == [TableMode.SINGLE, TableMode.SINGLE]
+
+
+# Helper to build a self-contained user project with a ctx-aware
+# publisher whose user function reads / writes initial_values through
+# the trailing ctx parameter.
+
+_CTX_PUBLISHER_SRC = """\
+from __future__ import annotations
+
+from tabsdatak.api import TableFrameSpec, TableFramesSpec, TrxCtx, publisher
+from tabsdatak.conn.localfile import LocalFileSrcConn, LocalFileSrc
+
+_SRC = LocalFileSrc(
+    conn=LocalFileSrcConn(base_path={base_path!r}),
+    paths=["*.parquet"],
+)
+
+
+@publisher(source=_SRC, output_tables=["my_table"])
+def my_publisher(in_1: TableFramesSpec, ctx: TrxCtx) -> tuple[TableFrameSpec]:
+    seen = ctx.get_attr("my-key")
+    new = "from-user-fn" if seen is None else "again-after-" + str(seen)
+    ctx.store_attr("my-key", new)
+    return (None,)
+"""
+
+
+@pytest.fixture
+def ctx_aware_built_bundle(tmp_path, monkeypatch) -> Path:
+    """Build + extract a bundle whose @publisher function declares a
+    trailing ``ctx: TrxCtx`` parameter."""
+    srcdata = tmp_path / "srcdata"
+    srcdata.mkdir()
+    _write_sample_parquet(srcdata / "rows.parquet")
+
+    project = tmp_path / "project"
+    pkg = project / "my_pkg"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text("")
+    (pkg / "publisher.py").write_text(_CTX_PUBLISHER_SRC.format(base_path=str(srcdata)))
+    monkeypatch.syspath_prepend(str(project))
+    importlib.invalidate_caches()
+
+    from my_pkg.publisher import my_publisher  # noqa: E402
+
+    bundle_path = tmp_path / "bundle.tar.zst"
+    build_bundle(my_publisher, project, bundle_path)
+    extracted = tmp_path / "extracted"
+    extract_bundle(bundle_path, extracted)
+
+    yield extracted
+
+    for name in list(sys.modules):
+        if name == "my_pkg" or name.startswith("my_pkg."):
+            del sys.modules[name]
+
+
+def _write_inputs_manifest_for(input_files: list[str], path: Path) -> None:
+    """Helper: write a minimal inputs manifest mapping ``in_1`` to
+    ``input_files`` (ARRAY mode → list)."""
+    write_inputs_manifest(
+        [{INPUTS_NAME_KEY: "in_1", MANIFEST_FILES_KEY: input_files}], path
+    )
+
+
+def _request_with_state_slots(
+    path: Path, *, state_in_name: str = "iv-in", state_out_name: str = "iv-out"
+) -> Path:
+    path.write_text(
+        yaml.safe_dump({
+            "info": {
+                "collection": "c",
+                "collection_id": 1,
+                "execution_id": 2,
+                "transaction_id": 3,
+                "function_run_id": 4,
+                "function_bundle": {"uri": "file:///bundle.tgz"},
+            },
+            "output": [{"name": "my_table"}],
+            "system_input": [
+                {
+                    "name": state_in_name,
+                    "location": {"uri": "file:///irrelevant"},
+                }
+            ],
+            "system_output": [
+                {
+                    "name": state_out_name,
+                    "location": {"uri": "file:///irrelevant"},
+                }
+            ],
+        })
+    )
+    return path
+
+
+def test_main_ctx_aware_function_hydrates_from_state_in_first_run(
+    tmp_path, ctx_aware_built_bundle, monkeypatch
+):
+    """First run for the flow: no state-out parquet exists yet. The
+    ctx hydrates from state-in. The user function sees ``None`` for
+    ``get_attr`` because we don't seed state-in either."""
+    req = _request_with_state_slots(tmp_path / "request.yaml")
+    inputs_manifest = tmp_path / "inputs.yaml"
+    _write_inputs_manifest_for([str(_seed_input_parquet(tmp_path))], inputs_manifest)
+    out_dir = tmp_path / "out"
+    outputs_manifest = tmp_path / "outputs.yaml"
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+
+    _set_argv(
+        monkeypatch,
+        req,
+        ctx_aware_built_bundle,
+        inputs_manifest,
+        out_dir,
+        outputs_manifest,
+        tmp_path / "live",
+        state_dir=state_dir,
+    )
+    rc = main()
+    assert rc == 0, rc
+
+    # User function called store_attr("my-key", "from-user-fn") because
+    # get_attr returned None on the first run; drain wrote it out.
+    out_state = state_dir / "iv-out.parquet"
+    assert out_state.is_file()
+    assert read_initial_values(out_state) == {"my-key": "from-user-fn"}
+
+
+def test_main_ctx_aware_function_hydrates_from_state_out_when_present(
+    tmp_path, ctx_aware_built_bundle, monkeypatch
+):
+    """``prefer_output=True`` — when state-out already exists (as
+    would be the case mid-chain after run-source-plugin drained), the
+    user function reads from there, not from state-in."""
+    req = _request_with_state_slots(tmp_path / "request.yaml")
+    inputs_manifest = tmp_path / "inputs.yaml"
+    _write_inputs_manifest_for([str(_seed_input_parquet(tmp_path))], inputs_manifest)
+    out_dir = tmp_path / "out"
+    outputs_manifest = tmp_path / "outputs.yaml"
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+
+    # Pre-populate state-out (simulates run-source-plugin's drain).
+    write_initial_values({"my-key": "preset"}, state_dir / "iv-out.parquet")
+    # Also seed state-in to a different value to prove it's NOT picked.
+    write_initial_values({"my-key": "from-state-in"}, state_dir / "iv-in.parquet")
+
+    _set_argv(
+        monkeypatch,
+        req,
+        ctx_aware_built_bundle,
+        inputs_manifest,
+        out_dir,
+        outputs_manifest,
+        tmp_path / "live",
+        state_dir=state_dir,
+    )
+    rc = main()
+    assert rc == 0, rc
+
+    # User function got "preset" from state-out, then appended.
+    assert read_initial_values(state_dir / "iv-out.parquet") == {
+        "my-key": "again-after-preset"
+    }
+
+
+def test_main_ctx_aware_function_falls_back_to_state_in(
+    tmp_path, ctx_aware_built_bundle, monkeypatch
+):
+    """``prefer_output=True`` — when state-out doesn't exist (e.g.
+    transformer / subscriber chain), the user function hydrates from
+    state-in instead."""
+    req = _request_with_state_slots(tmp_path / "request.yaml")
+    inputs_manifest = tmp_path / "inputs.yaml"
+    _write_inputs_manifest_for([str(_seed_input_parquet(tmp_path))], inputs_manifest)
+    out_dir = tmp_path / "out"
+    outputs_manifest = tmp_path / "outputs.yaml"
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+
+    # Only state-in is populated; state-out does NOT exist.
+    write_initial_values({"my-key": "from-state-in"}, state_dir / "iv-in.parquet")
+
+    _set_argv(
+        monkeypatch,
+        req,
+        ctx_aware_built_bundle,
+        inputs_manifest,
+        out_dir,
+        outputs_manifest,
+        tmp_path / "live",
+        state_dir=state_dir,
+    )
+    rc = main()
+    assert rc == 0, rc
+
+    assert read_initial_values(state_dir / "iv-out.parquet") == {
+        "my-key": "again-after-from-state-in"
+    }
+
+
+def test_main_function_without_ctx_does_not_touch_state(
+    tmp_path, built_bundle, monkeypatch
+):
+    """The original publisher (no ctx param) must not produce a
+    state-out file -- a function with no ctx is signaling that it
+    doesn't care about state."""
+    req = _request_with_state_slots(tmp_path / "request.yaml")
+    inputs_manifest = tmp_path / "inputs.yaml"
+    _write_inputs_manifest_for([str(_seed_input_parquet(tmp_path))], inputs_manifest)
+    out_dir = tmp_path / "out"
+    outputs_manifest = tmp_path / "outputs.yaml"
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+
+    _set_argv(
+        monkeypatch,
+        req,
+        built_bundle,
+        inputs_manifest,
+        out_dir,
+        outputs_manifest,
+        tmp_path / "live",
+        state_dir=state_dir,
+    )
+    rc = main()
+    assert rc == 0, rc
+
+    # The fixture publisher has no ctx -- run-function did not touch
+    # state-out and did not overwrite anything in state-dir.
+    assert not (state_dir / "iv-out.parquet").exists()
+
+
+def _seed_input_parquet(tmp_path: Path) -> Path:
+    """Write a simple parquet so the inputs manifest references a real
+    file (run-function won't fail materialising the slot). Mirrors the
+    fixture publisher's expected input shape."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    out = tmp_path / "input.parquet"
+    pq.write_table(pa.table({"id": [1, 2, 3]}), out)
+    return out
+
+
+# --- mkdir ordering: out_dir exists before the user function runs --------
+
+
+def test_main_creates_out_dir_before_invoking_user_function(tmp_path, monkeypatch):
+    """A ctx-aware user function may surface ``ctx.work_dir`` (==
+    ``out_dir`` for run-function) and try to write a sidecar there;
+    the runtime must create the directory before the call, not after.
+    Builds a publisher whose body asserts the directory exists
+    immediately on entry."""
+    srcdata = tmp_path / "srcdata"
+    srcdata.mkdir()
+    _write_sample_parquet(srcdata / "rows.parquet")
+
+    project = tmp_path / "project"
+    pkg = project / "my_pkg"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text("")
+    (pkg / "publisher.py").write_text(f"""\
+from __future__ import annotations
+
+from tabsdatak.api import TableFrameSpec, TableFramesSpec, TrxCtx, publisher
+from tabsdatak.conn.localfile import LocalFileSrcConn, LocalFileSrc
+
+_SRC = LocalFileSrc(
+    conn=LocalFileSrcConn(base_path={str(srcdata)!r}),
+    paths=["*.parquet"],
+)
+
+
+@publisher(source=_SRC, output_tables=["my_table"])
+def my_publisher(
+    in_1: TableFramesSpec, ctx: TrxCtx
+) -> tuple[TableFrameSpec]:
+    import os
+    # ctx.work_dir == --out-dir for run-function. Must already exist
+    # by the time the user function runs, so a body that writes a
+    # sidecar / probes the directory doesn't crash.
+    assert os.path.isdir(ctx.work_dir), (
+        f"ctx.work_dir {{ctx.work_dir}} does not exist; runtime "
+        f"created out_dir too late"
+    )
+    return (None,)
+""")
+    monkeypatch.syspath_prepend(str(project))
+    importlib.invalidate_caches()
+    from my_pkg.publisher import my_publisher  # noqa: E402
+
+    bundle_path = tmp_path / "bundle.tar.zst"
+    build_bundle(my_publisher, project, bundle_path)
+    extracted = tmp_path / "extracted"
+    extract_bundle(bundle_path, extracted)
+
+    req = _request_with_state_slots(tmp_path / "request.yaml")
+    inputs_manifest = tmp_path / "inputs.yaml"
+    _write_inputs_manifest_for([str(_seed_input_parquet(tmp_path))], inputs_manifest)
+    out_dir = tmp_path / "fn_out"  # deliberately does NOT exist yet
+    outputs_manifest = tmp_path / "outputs.yaml"
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+
+    _set_argv(
+        monkeypatch,
+        req,
+        extracted,
+        inputs_manifest,
+        out_dir,
+        outputs_manifest,
+        tmp_path / "live",
+        state_dir=state_dir,
+    )
+    rc = main()
+    # Cleanup: the temporary `my_pkg` import lingers in sys.modules.
+    for name in list(sys.modules):
+        if name == "my_pkg" or name.startswith("my_pkg."):
+            del sys.modules[name]
+
+    assert rc == 0, rc
+
+
+# --- ctx parameter works for @transformer and @subscriber too -----------
+#
+# The runtime in ``run_function`` is kind-agnostic: it constructs the
+# FunctionCtx and drains it based on ``has_trx_ctx_param(func)`` only,
+# regardless of which decorator wrapped the user function. These tests
+# pin that behaviour for the two non-publisher kinds so anyone narrowing
+# the ctx surface in the future hits a test failure.
+
+
+_CTX_TRANSFORMER_SRC = """\
+from __future__ import annotations
+
+from tabsdatak.api import TableFrameSpec, TrxCtx, transformer
+
+
+@transformer(input_tables=["c1/t_in"], output_tables=["t_out"])
+def my_transformer(
+    in_1: TableFrameSpec, ctx: TrxCtx
+) -> tuple[TableFrameSpec]:
+    seen = ctx.get_attr("smoke.last-seen")
+    ctx.store_attr("smoke.last-seen", "tx-after-" + str(seen))
+    return (in_1,)
+"""
+
+
+_CTX_SUBSCRIBER_SRC = """\
+from __future__ import annotations
+
+from tabsdatak.api import TableFrameSpec, TrxCtx, subscriber
+from tabsdatak.conn.localfile import LocalFileDestConn, LocalFileDest
+
+_DEST = LocalFileDest(
+    conn=LocalFileDestConn(base_path={base_path!r}),
+    paths=["sink.parquet"],
+)
+
+
+@subscriber(destination=_DEST, input_tables=["c1/t_in"])
+def my_subscriber(
+    in_1: TableFrameSpec, ctx: TrxCtx
+) -> tuple[TableFrameSpec]:
+    seen = ctx.get_attr("smoke.last-seen")
+    ctx.store_attr("smoke.last-seen", "sub-after-" + str(seen))
+    return (in_1,)
+"""
+
+
+def _build_extracted_bundle(
+    tmp_path: Path,
+    monkeypatch,
+    request,
+    *,
+    pkg_name: str,
+    module_name: str,
+    source: str,
+    decorated_name: str,
+) -> Path:
+    """Materialise a single-module user project under ``tmp_path``,
+    import the decorated function, build + extract the bundle, return
+    the extracted dir. Cleans up ``sys.modules`` registration via a
+    pytest ``request`` finalizer."""
+    project = tmp_path / f"{pkg_name}_project"
+    pkg = project / pkg_name
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text("")
+    (pkg / f"{module_name}.py").write_text(source)
+    monkeypatch.syspath_prepend(str(project))
+    importlib.invalidate_caches()
+
+    mod = importlib.import_module(f"{pkg_name}.{module_name}")
+    decorated = getattr(mod, decorated_name)
+
+    bundle_path = tmp_path / f"{pkg_name}_bundle.tar.zst"
+    build_bundle(decorated, project, bundle_path)
+    extracted = tmp_path / f"{pkg_name}_extracted"
+    extract_bundle(bundle_path, extracted)
+
+    def _cleanup():
+        for name in list(sys.modules):
+            if name == pkg_name or name.startswith(f"{pkg_name}."):
+                del sys.modules[name]
+
+    request.addfinalizer(_cleanup)
+    return extracted
+
+
+def test_main_ctx_aware_transformer_hydrates_and_drains(tmp_path, monkeypatch, request):
+    """A @transformer that declares a trailing ``ctx: TrxCtx`` gets the
+    same hydrate-from-state-out / drain-to-state-out treatment as a
+    publisher. Verifies the runtime is kind-agnostic."""
+    extracted = _build_extracted_bundle(
+        tmp_path,
+        monkeypatch,
+        request,
+        pkg_name="tx_ctx_pkg",
+        module_name="transformer",
+        source=_CTX_TRANSFORMER_SRC,
+        decorated_name="my_transformer",
+    )
+
+    req = _request_with_state_slots(tmp_path / "request.yaml")
+    inputs_manifest = tmp_path / "inputs.yaml"
+    _write_inputs_manifest_for([str(_seed_input_parquet(tmp_path))], inputs_manifest)
+    out_dir = tmp_path / "out"
+    outputs_manifest = tmp_path / "outputs.yaml"
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    # Seed only state-in: transformers run in chains without
+    # run-source-plugin, so the fallback path is the one exercised.
+    write_initial_values(
+        {"smoke.last-seen": "from-state-in"}, state_dir / "iv-in.parquet"
+    )
+
+    _set_argv(
+        monkeypatch,
+        req,
+        extracted,
+        inputs_manifest,
+        out_dir,
+        outputs_manifest,
+        tmp_path / "live",
+        state_dir=state_dir,
+    )
+    rc = main()
+    assert rc == 0, rc
+    assert read_initial_values(state_dir / "iv-out.parquet") == {
+        "smoke.last-seen": "tx-after-from-state-in"
+    }
+
+
+def test_main_ctx_aware_subscriber_hydrates_and_drains(tmp_path, monkeypatch, request):
+    """A @subscriber that declares a trailing ``ctx: TrxCtx`` also
+    round-trips state cleanly. Pins kind-agnostic runtime behaviour
+    for the third decorator kind."""
+    dest_out = tmp_path / "sub_dest"
+    dest_out.mkdir()
+    extracted = _build_extracted_bundle(
+        tmp_path,
+        monkeypatch,
+        request,
+        pkg_name="sub_ctx_pkg",
+        module_name="subscriber",
+        source=_CTX_SUBSCRIBER_SRC.format(base_path=str(dest_out)),
+        decorated_name="my_subscriber",
+    )
+
+    req = _request_with_state_slots(tmp_path / "request.yaml")
+    inputs_manifest = tmp_path / "inputs.yaml"
+    _write_inputs_manifest_for([str(_seed_input_parquet(tmp_path))], inputs_manifest)
+    out_dir = tmp_path / "out"
+    outputs_manifest = tmp_path / "outputs.yaml"
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    write_initial_values(
+        {"smoke.last-seen": "from-state-in"}, state_dir / "iv-in.parquet"
+    )
+
+    _set_argv(
+        monkeypatch,
+        req,
+        extracted,
+        inputs_manifest,
+        out_dir,
+        outputs_manifest,
+        tmp_path / "live",
+        state_dir=state_dir,
+    )
+    rc = main()
+    assert rc == 0, rc
+    assert read_initial_values(state_dir / "iv-out.parquet") == {
+        "smoke.last-seen": "sub-after-from-state-in"
+    }

@@ -35,7 +35,7 @@ from typing import Any, Callable
 
 import polars as pl
 
-from tabsdatak._api import _is_array_slot, _is_single_slot
+from tabsdatak._api import _is_array_slot, _is_single_slot, has_trx_ctx_param
 from tabsdatak._connectors import get_dest
 from tabsdatak._info import (
     KIND_PUBLISHER_DEF,
@@ -49,6 +49,10 @@ from tabsdatak._info import (
 from tabsdatak.server._tdrunner.function._lib.cli import build_parser, command
 from tabsdatak.server._tdrunner.function._lib.errors import CommandSpecificError
 from tabsdatak.server._tdrunner.function._lib.function_def import load_function_def
+from tabsdatak.server._tdrunner.function._lib.initial_values import (
+    drain_ctx_to_state,
+    hydrate_ctx_from_state,
+)
 from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
     MANIFEST_FILES_KEY,
     load_inputs_manifest_or_fail,
@@ -59,7 +63,8 @@ from tabsdatak.server._tdrunner.function._lib.outputs_manifest import (
     write_outputs_manifest,
 )
 from tabsdatak.server._tdrunner.function._lib.request import load_request_or_fail
-from tabsdatak.spi import TableMode
+from tabsdatak.server._tdrunner.function._lib.request_ctx import FromRequestCtx
+from tabsdatak.spi import FunctionCtx, TableMode
 
 # The Info classes this command knows how to invoke. The runner is
 # agnostic of *what* the function does — it just needs the call shape
@@ -99,6 +104,7 @@ EXIT_USER_FUNCTION_FAILED = 17
 EXIT_OUTPUT_SHAPE_MISMATCH = 18
 EXIT_OUTPUT_WRITE_FAILED = 19
 EXIT_OUTPUTS_MANIFEST_WRITE_FAILED = 20
+EXIT_BAD_INITIAL_VALUES = 21
 
 
 def _build_parser():
@@ -132,7 +138,32 @@ def _build_parser():
             "the function returned None). Consumed by prep-upload-state."
         ),
     )
+    parser.add_argument(
+        "--state-dir",
+        required=True,
+        dest="state_dir",
+        help=(
+            "Local directory mirroring the one used by "
+            "prep-localize-state / run-source-plugin / "
+            "prep-upload-state. When the user function declares a "
+            "trailing ``ctx: TrxCtx`` parameter, the runtime hydrates "
+            "the ctx scratch from <state-dir>/<system_output[0].name>."
+            "parquet (falling back to <system_input[0].name>.parquet) "
+            "before invoking the function, and drains it back to "
+            "<state-dir>/<system_output[0].name>.parquet afterwards. "
+            "Ignored when the user function has no ``ctx`` parameter."
+        ),
+    )
     return parser
+
+
+class _FunctionContext(FromRequestCtx, FunctionCtx):
+    """Concrete :class:`FunctionCtx` for the run-function command.
+
+    All behaviour comes from :class:`FromRequestCtx`; this class
+    only fixes the abstract base so ``isinstance(ctx, FunctionCtx)``
+    holds at the call boundary.
+    """
 
 
 _INFO_BY_KIND: dict[str, type[FunctionInfo]] = {
@@ -160,19 +191,21 @@ def _load_function_def(bundle_dir: Path) -> FunctionInfo:
 
 
 def _infer_table_modes(func: Callable) -> list[TableMode]:
-    """Derive the table-mode (SINGLE / ARRAY) for each of the user
-    function's parameters from its type annotations.
+    """Derive the table-mode (SINGLE / ARRAY) for each input slot
+    parameter of the user function from its type annotations.
 
-    The count of returned modes equals `len(inspect.signature(func).
-    parameters)` — the function's parameter count *is* the input slot
-    count, by construction. Both `@publisher` and `@transformer`
-    validate at decoration time that the function has exactly the
-    expected number of slot-annotated parameters and nothing else, so
-    iterating all params here is correct for both kinds.
+    The count of returned modes equals the number of *slot*
+    parameters: the trailing ``ctx: TrxCtx`` parameter (if declared)
+    is stripped before iteration because it isn't an input slot.
+    ``@publisher`` / ``@transformer`` / ``@subscriber`` validate at
+    decoration time that the function has exactly the expected slot
+    parameters plus the optional ctx, so iterating the remaining
+    params here is correct for all three kinds.
 
-    Each parameter must be annotated as either `TableFrameSpec`
-    (single-mode) or `TableFramesSpec` (array-mode). Because the
-    decorator's `_check_callable_signature` already enforces that, the
+    Each slot parameter must be annotated as either
+    ``TableFrameSpec`` (single-mode) or ``TableFramesSpec``
+    (array-mode). Because the decorator's
+    ``_check_callable_signature`` already enforces that, the
     EXIT_BAD_USER_CODE branches below are defensive fallbacks for
     runtime invariant violations rather than realistic user errors.
     """
@@ -184,6 +217,10 @@ def _infer_table_modes(func: Callable) -> list[TableMode]:
             f"cannot resolve type hints for user function: {exc}",
         ) from exc
     params = list(inspect.signature(func).parameters.values())
+    # The trailing ``ctx: TrxCtx`` parameter (if declared) is not an
+    # input slot -- skip it when inferring slot modes.
+    if has_trx_ctx_param(func) and params:
+        params = params[:-1]
     modes: list[TableMode] = []
     for p in params:
         hint = hints.get(p.name)
@@ -364,8 +401,9 @@ def main(args: argparse.Namespace) -> int:
     inputs_manifest_path = Path(args.inputs_manifest)
     out_dir = Path(args.out_dir)
     outputs_manifest_path = Path(args.outputs_manifest)
+    state_dir = Path(args.state_dir)
 
-    load_request_or_fail(request_path, EXIT_BAD_REQUEST)  # validates shape only
+    request = load_request_or_fail(request_path, EXIT_BAD_REQUEST)
     info = _load_function_def(bundle_dir)
     entries = load_inputs_manifest_or_fail(inputs_manifest_path, EXIT_BAD_MANIFEST)
 
@@ -378,6 +416,13 @@ def main(args: argparse.Namespace) -> int:
             f"user function declares {len(table_modes)} input slots",
         )
 
+    # Make the function's output directory available BEFORE invoking
+    # the user function: the FunctionCtx surfaces it as ``work_dir``
+    # (per the PluginCtx contract), so a user function that drops a
+    # sidecar file there mustn't fail with FileNotFoundError. Also
+    # required up-front for ``_sink_outputs`` after the call.
+    out_dir.mkdir(parents=True, exist_ok=True)
+
     # Build the positional args for the user function from the
     # inputs manifest. Manifest order mirrors function parameter
     # order.
@@ -386,10 +431,38 @@ def main(args: argparse.Namespace) -> int:
         files = entry.get(MANIFEST_FILES_KEY) or []
         call_args.append(_materialise_input_slot(files, table_mode=table_mode))
 
+    # If the user function declares a trailing ``ctx: TrxCtx``
+    # parameter, construct a FunctionCtx and hydrate it from the
+    # state-dir before invocation. Preferring the state-out file
+    # (written by run-source-plugin's drain on the same run) over
+    # the state-in file handles publisher chains; falling back to
+    # state-in handles transformer / subscriber chains where
+    # run-source-plugin does not run.
+    ctx: _FunctionContext | None = None
+    if has_trx_ctx_param(func):
+        ctx = _FunctionContext(
+            work_dir=out_dir,
+            exec_plan_id=str(request.info.execution_id),
+            trx_id=str(request.info.transaction_id),
+            collection_id=str(request.info.collection_id),
+            collection_name=request.info.collection,
+            function_id=str(request.info.function_run_id),
+        )
+        hydrate_ctx_from_state(
+            ctx,
+            request,
+            state_dir,
+            exit_code=EXIT_BAD_INITIAL_VALUES,
+            prefer_output=True,
+        )
+        call_args.append(ctx)
+
     output_tables = _output_table_names(info)
     result = _invoke_user_function(func, call_args, output_tables)
 
-    out_dir.mkdir(parents=True, exist_ok=True)
+    if ctx is not None:
+        drain_ctx_to_state(ctx, request, state_dir, exit_code=EXIT_BAD_INITIAL_VALUES)
+
     entries_out = _sink_outputs(result, output_tables, out_dir)
 
     try:
