@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any
 
 from tabsdatak.conn.salesforce import (
     SalesforceReportSrc,
@@ -59,13 +59,14 @@ def _resolve_src_cfg(src_cfg: SrcCfgSpec | None) -> _ReaderCfg:
 # that only care about the SrcDef metadata.
 
 
-class _SalesforceSrcPlugin(SrcPlugin[SalesforceSrc]):
+class _SalesforceSrcPlugin(SrcPlugin[SalesforceSrcConn, SalesforceSrc]):
     """Run SOQL queries against Salesforce and emit one parquet file
     per query (``TableMode.SINGLE``)."""
 
     def read_in(
         self,
         ctx: SrcPluginCtx,
+        conn: SalesforceSrcConn,
         src: SalesforceSrc,
     ) -> list[list[TableFileSpec]]:
         # noinspection PyProtectedMember
@@ -75,7 +76,6 @@ class _SalesforceSrcPlugin(SrcPlugin[SalesforceSrc]):
         logger.setLevel(cfg.logging_level)
         logger.info("salesforce: read_in starting (%d quer(ies))", len(src.queries))
 
-        conn = cast(SalesforceSrcConn, src.conn)
         api_version = src.api_version
         sf = _reader.login(conn, api_version=api_version)
         try:
@@ -84,13 +84,14 @@ class _SalesforceSrcPlugin(SrcPlugin[SalesforceSrc]):
             logger.info("salesforce: read_in finished (%d quer(ies))", len(src.queries))
 
 
-class _SalesforceReportSrcPlugin(SrcPlugin[SalesforceReportSrc]):
+class _SalesforceReportSrcPlugin(SrcPlugin[SalesforceSrcConn, SalesforceReportSrc]):
     """Run Salesforce Analytics reports and emit one parquet file per
     report (``TableMode.SINGLE``)."""
 
     def read_in(
         self,
         ctx: SrcPluginCtx,
+        conn: SalesforceSrcConn,
         src: SalesforceReportSrc,
     ) -> list[list[TableFileSpec]]:
         # noinspection PyProtectedMember
@@ -100,7 +101,6 @@ class _SalesforceReportSrcPlugin(SrcPlugin[SalesforceReportSrc]):
         logger.setLevel(cfg.logging_level)
         logger.info("salesforce: read_in starting (%d report(s))", len(src.reports))
 
-        conn = cast(SalesforceSrcConn, src.conn)
         sf = _reader.login(conn)
         try:
             return _reader.read_report_src(sf, src, ctx.work_dir)

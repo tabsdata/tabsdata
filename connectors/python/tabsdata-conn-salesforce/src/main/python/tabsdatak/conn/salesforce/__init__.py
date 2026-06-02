@@ -24,7 +24,7 @@ from pydantic import Field
 import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
-from tabsdatak.api import Conn, NamedConn, Secret, SecretOrVarSpec, Src, Var
+from tabsdatak.api import Conn, Secret, SecretOrVarSpec, Src, Var
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation
@@ -152,9 +152,6 @@ class SalesforceSrcConn(Conn):
     conn_cfg: CfgSpec | None = None
 
 
-ConnSpec: TypeAlias = Union[NamedConn, SalesforceSrcConn]
-
-
 # --- Source: SOQL queries --------------------------------------------
 
 
@@ -162,7 +159,6 @@ ConnSpec: TypeAlias = Union[NamedConn, SalesforceSrcConn]
 class SalesforceSrc(Src):
     """Salesforce SOQL source — exactly one SOQL query.
 
-    :param conn: :class:`SalesforceSrcConn` (or :class:`NamedConn`).
     :param queries: SOQL query list (today exactly one; the
         list shape leaves room for future multi-query support).
     :param include_deleted: When ``True``, scan deleted rows
@@ -175,7 +171,6 @@ class SalesforceSrc(Src):
         ``salesforce.logging_level``.
     """
 
-    conn: ConnSpec
     queries: QueriesSpec
     include_deleted: bool = False
     initial_last_modified: datetime | None = None
@@ -190,7 +185,6 @@ class SalesforceSrc(Src):
 class SalesforceReportSrc(Src):
     """Salesforce report source — Tabular reports only.
 
-    :param conn: :class:`SalesforceSrcConn` (or :class:`NamedConn`).
     :param reports: Report ids or names; one slot per entry.
     :param column_name_strategy: ``"columnName"`` (default,
         API names) or ``"label"`` (display names).
@@ -213,7 +207,6 @@ class SalesforceReportSrc(Src):
         ``salesforce.logging_level``.
     """
 
-    conn: ConnSpec
     reports: ReportsSpec
     column_name_strategy: Literal["columnName", "label"] = "columnName"
     find_report_by: Literal["id", "name"] | None = None

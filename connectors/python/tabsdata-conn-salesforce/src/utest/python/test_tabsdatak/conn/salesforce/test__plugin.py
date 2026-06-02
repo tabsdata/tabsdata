@@ -196,10 +196,9 @@ def test_src_plugin_writes_one_parquet_per_query(monkeypatch, work_dir):
     _patch_login(monkeypatch, fake)
 
     src = SalesforceSrc(
-        conn=_conn(),
         queries=["SELECT Id, Name FROM Account"],
     )
-    out = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), src)
+    out = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
 
     assert len(out) == 1
     assert len(out[0]) == 1
@@ -215,8 +214,8 @@ def test_src_plugin_strips_attributes_column(monkeypatch, work_dir):
         [{"attributes": {"x": 1}, "Id": "001"}],
     ]
     _patch_login(monkeypatch, fake)
-    src = SalesforceSrc(conn=_conn(), queries=["SELECT Id FROM Account"])
-    out = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), src)
+    src = SalesforceSrc(queries=["SELECT Id FROM Account"])
+    out = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
     df = _read_parquet(out[0][0])
     assert list(df.columns) == ["Id"]
 
@@ -226,13 +225,12 @@ def test_src_plugin_replaces_last_modified_token(monkeypatch, work_dir):
     fake.records_by_query = [[{"attributes": {}, "Id": "001"}]]
     _patch_login(monkeypatch, fake)
     src = SalesforceSrc(
-        conn=_conn(),
         queries=[
             "SELECT Id FROM Account WHERE SystemModstamp > $lastModified",
         ],
         initial_last_modified=datetime(2026, 1, 1, tzinfo=timezone.utc),
     )
-    plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), src)
+    plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
     # The token must have been replaced inside the rewritten query.
     actual_query = fake.query_all_iter_calls[0][0]
     assert "$lastModified" not in actual_query
@@ -243,13 +241,12 @@ def test_src_plugin_rejects_token_without_initial_value(monkeypatch, work_dir):
     fake = _FakeSF()
     _patch_login(monkeypatch, fake)
     src = SalesforceSrc(
-        conn=_conn(),
         queries=[
             "SELECT Id FROM Account WHERE SystemModstamp > $lastModified",
         ],
     )
     with pytest.raises(SalesforceRuntimeException) as ei:
-        plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), src)
+        plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
     assert ei.value.api_error is SalesforceErrorCode.SALESFORCE_11
 
 
@@ -257,9 +254,9 @@ def test_src_plugin_wraps_query_failure_as_salesforce_11(monkeypatch, work_dir):
     fake = _FakeSF()
     fake.query_all_iter_raise = RuntimeError("API explode")
     _patch_login(monkeypatch, fake)
-    src = SalesforceSrc(conn=_conn(), queries=["SELECT Id FROM Account"])
+    src = SalesforceSrc(queries=["SELECT Id FROM Account"])
     with pytest.raises(SalesforceRuntimeException) as ei:
-        plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), src)
+        plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
     assert ei.value.api_error is SalesforceErrorCode.SALESFORCE_10
 
 
@@ -267,8 +264,8 @@ def test_src_plugin_handles_empty_result_set(monkeypatch, work_dir):
     fake = _FakeSF()
     fake.records_by_query = [[]]
     _patch_login(monkeypatch, fake)
-    src = SalesforceSrc(conn=_conn(), queries=["SELECT Id FROM Account"])
-    out = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), src)
+    src = SalesforceSrc(queries=["SELECT Id FROM Account"])
+    out = plugin._SalesforceSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
     # Even on empty results we must emit one parquet so the framework
     # has a slot to consume.
     assert len(out) == 1
@@ -289,12 +286,11 @@ def test_report_plugin_raises_salesforce_14_when_lookup_misses(
     fake.query_returns = {"records": []}
     _patch_login(monkeypatch, fake)
     src = SalesforceReportSrc(
-        conn=_conn(),
         reports=["NotARealReport"],
         find_report_by="name",
     )
     with pytest.raises(SalesforceRuntimeException) as ei:
-        plugin._SalesforceReportSrcPlugin().read_in(_src_ctx(work_dir), src)
+        plugin._SalesforceReportSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
     assert ei.value.api_error is SalesforceErrorCode.SALESFORCE_13
 
 
@@ -307,12 +303,11 @@ def test_report_plugin_raises_salesforce_16_on_unsupported_format(
     }
     _patch_login(monkeypatch, fake)
     src = SalesforceReportSrc(
-        conn=_conn(),
         reports=["00O000000000001"],
         find_report_by="id",
     )
     with pytest.raises(SalesforceRuntimeException) as ei:
-        plugin._SalesforceReportSrcPlugin().read_in(_src_ctx(work_dir), src)
+        plugin._SalesforceReportSrcPlugin().read_in(_src_ctx(work_dir), _conn(), src)
     assert ei.value.api_error is SalesforceErrorCode.SALESFORCE_15
 
 
@@ -350,7 +345,6 @@ def test_salesforce_report_src_def_wires_plugin_and_explorer():
 
 def test_salesforce_src_cardinality_uses_queries_length():
     src = SalesforceSrc(
-        conn=_conn(),
         queries=["SELECT Id FROM Account"],
     )
     assert plugin.SALESFORCE_SRC.cardinality(src) == 1
@@ -358,7 +352,6 @@ def test_salesforce_src_cardinality_uses_queries_length():
 
 def test_salesforce_report_src_cardinality_uses_reports_length():
     src = SalesforceReportSrc(
-        conn=_conn(),
         reports=["A", "B", "C"],
     )
     assert plugin.SALESFORCE_REPORT_SRC.cardinality(src) == 3
