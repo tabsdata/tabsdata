@@ -38,21 +38,23 @@ fn unexpected(id: &str, kind: &str, payload: &OrchestratorMessagePayload<Value>)
     }
 }
 
-fn extract_worker<'a>(
+fn derive_template_stem(
     id: &str,
-    payload: &'a OrchestratorMessagePayload<Value>,
-) -> Result<&'a str, QueueError> {
+    payload: &OrchestratorMessagePayload<Value>,
+) -> Result<String, QueueError> {
     match payload {
         OrchestratorMessagePayload::OrchestratorFunctionRequestMessagePayload(request) => {
             match request {
-                FunctionRequest::Start(start) => Ok(start.worker.as_str()),
+                FunctionRequest::Start(start) => {
+                    Ok(format!("{}-{}", start.worker, start.decorator.as_ref()))
+                }
                 FunctionRequest::Stop => Err(unsupported(id, "Stop")),
                 FunctionRequest::Notify => Err(unsupported(id, "Notify")),
             }
         }
         OrchestratorMessagePayload::OrchestratorRequestMessagePayload(request) => {
             match request.action {
-                MessageAction::Start => Ok(request.worker.as_str()),
+                MessageAction::Start => Ok(request.worker.clone()),
                 MessageAction::Stop => Err(unsupported(id, "Stop")),
                 MessageAction::Notify => Err(unsupported(id, "Notify")),
             }
@@ -69,14 +71,14 @@ fn extract_worker<'a>(
 fn lookup_template<'a>(
     templates: &'a PodTemplateIndex,
     id: &str,
-    worker: &str,
+    stem: &str,
 ) -> Result<&'a PodTemplate, QueueError> {
-    templates.lookup(worker).map_err(|error| {
+    templates.lookup(stem).map_err(|error| {
         error!(
             id = %id,
-            worker = %worker,
+            stem = %stem,
             error = %error,
-            "Template not found for worker."
+            "Template not found for stem."
         );
         QueueError::BackendError {
             cause: error.to_string(),
@@ -84,13 +86,13 @@ fn lookup_template<'a>(
     })
 }
 
-fn derive_kube_name(id: &str, worker: &str) -> Result<String, QueueError> {
-    to_kube_identifier(worker, id, None).map_err(|error| {
+fn derive_kube_name(id: &str, stem: &str) -> Result<String, QueueError> {
+    to_kube_identifier(stem, id, None).map_err(|error| {
         error!(
             id = %id,
-            worker = %worker,
+            stem = %stem,
             error = %error,
-            "Failed to derive kube name from worker and id."
+            "Failed to derive kube name from stem and id."
         );
         QueueError::BackendError {
             cause: error.to_string(),
@@ -130,13 +132,13 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
         id: String,
         payload: OrchestratorMessagePayload<Value>,
     ) -> Result<OrchestratorMessage<Value>, QueueError> {
-        let worker = extract_worker(&id, &payload)?;
-        let template = lookup_template(&self.templates, &id, worker)?;
-        let name = derive_kube_name(&id, worker)?;
+        let stem = derive_template_stem(&id, &payload)?;
+        let template = lookup_template(&self.templates, &id, &stem)?;
+        let name = derive_kube_name(&id, &stem)?;
         match template.kind {
             TemplateKind::Pod => {
                 let pod = self.manifest_pod(template, &name)?;
-                create_pod(&self.context, &pod, worker, None, Vec::new(), Vec::new())
+                create_pod(&self.context, &pod, &stem, None, Vec::new(), Vec::new())
                     .await
                     .map_err(|error| QueueError::BackendError {
                         cause: error.to_string(),
@@ -144,7 +146,7 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
             }
             TemplateKind::Job => {
                 let job = self.manifest_job(template, &name)?;
-                create_job(&self.context, &job, worker, None, Vec::new(), Vec::new())
+                create_job(&self.context, &job, &stem, None, Vec::new(), Vec::new())
                     .await
                     .map_err(|error| QueueError::BackendError {
                         cause: error.to_string(),
@@ -160,9 +162,9 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
     }
 
     async fn rollback(&self, message: &OrchestratorMessage<Value>) -> Result<(), QueueError> {
-        let worker = extract_worker(&message.id, &message.payload)?;
-        let template = lookup_template(&self.templates, &message.id, worker)?;
-        let name = derive_kube_name(&message.id, worker)?;
+        let stem = derive_template_stem(&message.id, &message.payload)?;
+        let template = lookup_template(&self.templates, &message.id, &stem)?;
+        let name = derive_kube_name(&message.id, &stem)?;
         match template.kind {
             TemplateKind::Pod => {
                 delete_pod(&self.context, &name).await.map_err(|error| {

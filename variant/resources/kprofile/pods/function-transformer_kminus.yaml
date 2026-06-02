@@ -5,10 +5,10 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: td-function
+  name: td-function-transformer
   namespace: default
   annotations:
-    tabsdata.com/description: "Tabsdata function worker (placeholder)"
+    tabsdata.com/description: "Tabsdata transformer function worker"
     kubernetes.io/change-cause: ""
   labels:
     app.kubernetes.io/name: tabsdata
@@ -17,7 +17,8 @@ metadata:
     app.kubernetes.io/component: function
     app.kubernetes.io/part-of: tabsdata
     app.kubernetes.io/managed-by: tdkserver
-    tabsdata.com/worker-tier: ephemeral
+    tabsdata.com/tier: ephemeral
+    tabsdata.com/decorator: transformer
 spec:
   backoffLimit: 0
   ttlSecondsAfterFinished: 300
@@ -30,7 +31,8 @@ spec:
         app.kubernetes.io/component: function
         app.kubernetes.io/part-of: tabsdata
         app.kubernetes.io/managed-by: tdkserver
-        tabsdata.com/worker-tier: ephemeral
+        tabsdata.com/tier: ephemeral
+        tabsdata.com/decorator: transformer
     spec:
       restartPolicy: Never
       serviceAccountName: default
@@ -41,17 +43,16 @@ spec:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
-      containers:
-        - name: function
+      initContainers:
+        - name: env-dump
           image: /dev/null
           imagePullPolicy: IfNotPresent
-          command: ["/bin/sh"]
+          command: ["/bin/sh", "-c"]
           args:
-            - -c
             - |
-              echo "pod=$POD_NAME namespace=$POD_NAMESPACE worker=function instance=$POD_TABSDATA_INSTANCE"
-              sleep 60
-              echo "done"
+              echo "[function-transformer env-dump] step=env-dump pod=$POD_NAME"
+              env | sort
+              echo "[function-transformer env-dump] done"
           resources:
             requests:
               cpu: "50m"
@@ -69,9 +70,33 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
-            - name: POD_SERVICE_ACCOUNT
+            - name: POD_TABSDATA_INSTANCE
+              value: "${sys:TDK_INSTANCE_NAME}"
+      containers:
+        - name: report
+          image: /dev/null
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              echo "[function-transformer report] step=report pod=$POD_NAME"
+              echo "[function-transformer report] done"
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: POD_NAME
               valueFrom:
                 fieldRef:
-                  fieldPath: spec.serviceAccountName
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
               value: "${sys:TDK_INSTANCE_NAME}"

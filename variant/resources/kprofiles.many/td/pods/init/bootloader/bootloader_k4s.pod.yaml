@@ -11,7 +11,7 @@ metadata:
     app.kubernetes.io/name: tabsdata
     app.kubernetes.io/component: bootloader
     tabsdata.com/instance: ${TD_INSTANCE_NAME}
-    tabsdata.com/worker-tier: init
+    tabsdata.com/tier: init
 spec:
   restartPolicy: Never
   containers:

@@ -11,7 +11,7 @@ metadata:
     app.kubernetes.io/name: tabsdata
     app.kubernetes.io/component: function
     tabsdata.com/instance: ${TD_INSTANCE_NAME}
-    tabsdata.com/worker-tier: ephemeral
+    tabsdata.com/tier: ephemeral
     tabsdata.com/run-id: ${TD_RUN_ID}
     td-collection: ${TD_COLLECTION}
     td-function: ${TD_FUNCTION}

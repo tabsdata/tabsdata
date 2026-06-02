@@ -17,7 +17,7 @@ metadata:
     app.kubernetes.io/component: crontrigger
     app.kubernetes.io/part-of: tabsdata
     app.kubernetes.io/managed-by: tdkserver
-    tabsdata.com/worker-tier: ephemeral
+    tabsdata.com/tier: ephemeral
 spec:
   backoffLimit: 0
   ttlSecondsAfterFinished: 300
@@ -30,7 +30,7 @@ spec:
         app.kubernetes.io/component: crontrigger
         app.kubernetes.io/part-of: tabsdata
         app.kubernetes.io/managed-by: tdkserver
-        tabsdata.com/worker-tier: ephemeral
+        tabsdata.com/tier: ephemeral
     spec:
       restartPolicy: Never
       serviceAccountName: default

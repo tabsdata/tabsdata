@@ -70,7 +70,7 @@ kind: Job
 metadata:
   name: {name}
   labels:
-    tabsdata.com/worker-tier: {tier}
+    tabsdata.com/tier: {tier}
 spec:
   template:
     spec:
@@ -89,7 +89,7 @@ kind: Pod
 metadata:
   name: {name}
   labels:
-    tabsdata.com/worker-tier: {tier}
+    tabsdata.com/tier: {tier}
 spec:
   containers:
     - name: apiserver
@@ -243,7 +243,7 @@ kind: Pod
 metadata:
   name: garbage
   labels:
-    tabsdata.com/worker-tier: bogus
+    tabsdata.com/tier: bogus
 spec:
   containers:
     - name: c

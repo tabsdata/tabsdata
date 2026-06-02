@@ -11,7 +11,7 @@ metadata:
     app.kubernetes.io/name: tabsdata
     app.kubernetes.io/component: janitor
     tabsdata.com/instance: ${TD_INSTANCE_NAME}
-    tabsdata.com/worker-tier: regular
+    tabsdata.com/tier: regular
 spec:
   restartPolicy: Always
   containers:

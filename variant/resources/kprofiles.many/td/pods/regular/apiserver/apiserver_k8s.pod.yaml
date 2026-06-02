@@ -11,7 +11,7 @@ metadata:
     app.kubernetes.io/name: tabsdata
     app.kubernetes.io/component: apiserver
     tabsdata.com/instance: ${TD_INSTANCE_NAME}
-    tabsdata.com/worker-tier: regular
+    tabsdata.com/tier: regular
 spec:
   replicas: 1
   strategy:
@@ -26,7 +26,7 @@ spec:
         app.kubernetes.io/name: tabsdata
         app.kubernetes.io/component: apiserver
         tabsdata.com/instance: ${TD_INSTANCE_NAME}
-        tabsdata.com/worker-tier: regular
+        tabsdata.com/tier: regular
     spec:
       serviceAccountName: td-worker
       restartPolicy: Always

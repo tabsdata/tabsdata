@@ -11,7 +11,7 @@ metadata:
     app.kubernetes.io/name: tabsdata
     app.kubernetes.io/component: server-information
     tabsdata.com/instance: ${TD_INSTANCE_NAME}
-    tabsdata.com/worker-tier: init
+    tabsdata.com/tier: init
 spec:
   backoffLimit: 0
   template:
@@ -20,7 +20,7 @@ spec:
         app.kubernetes.io/name: tabsdata
         app.kubernetes.io/component: server-information
         tabsdata.com/instance: ${TD_INSTANCE_NAME}
-        tabsdata.com/worker-tier: init
+        tabsdata.com/tier: init
     spec:
       serviceAccountName: td-worker
       restartPolicy: Never
