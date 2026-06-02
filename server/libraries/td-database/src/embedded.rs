@@ -12,7 +12,9 @@
 use crate::config::EmbeddedConfig;
 use crate::error::DbError;
 use postgresql_embedded::{PostgreSQL, Settings};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
+use tracing::{info, warn};
 use url::Url;
 
 /// Superuser password persisted alongside a persistent data directory.
@@ -20,6 +22,23 @@ use url::Url;
 /// would not match what `initdb` baked into the existing catalog — so we
 /// own the password lifecycle for the persistent case.
 const PASSWORD_FILE: &str = ".td_embedded_password";
+
+/// PID file written by postgres on start and removed on clean shutdown.
+const POSTMASTER_PID_FILE: &str = "postmaster.pid";
+
+/// How long to wait for a prior postmaster (started by an earlier td-apiserver
+/// process on the same data_dir) to fully release `postmaster.pid` before we
+/// boot our own. Covers the ~100 ms shutdown overlap window between a stopped
+/// instance and an immediate restart.
+const STALE_POSTMASTER_WAIT_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// How long to wait, on shutdown, for `postmaster.pid` to disappear after we
+/// ask postgres to stop. `pg_ctl stop --wait` should already block until the
+/// postmaster exits, but the .pid file removal can lag a bit; this is the
+/// belt-and-braces tail wait.
+const SHUTDOWN_PID_FILE_WAIT_TIMEOUT: Duration = Duration::from_secs(10);
+
+const POSTMASTER_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
 /// Drop guard for a live embedded Postgres server. Drop stops the server
 /// cleanly; that's the only reason this wrapper exists. The connection URL
@@ -34,6 +53,29 @@ impl EmbeddedPostgres {
     /// to settings (port, data dir) or the raw `PostgreSQL` API.
     pub fn server(&self) -> &PostgreSQL {
         &self.server
+    }
+}
+
+impl Drop for EmbeddedPostgres {
+    /// Wait for `postmaster.pid` to disappear after the upstream
+    /// `PostgreSQL` drop runs `pg_ctl stop --wait`. The upstream Drop
+    /// returns once pg_ctl reports the postmaster gone, but the .pid file
+    /// removal can lag by tens of milliseconds — long enough for an
+    /// immediate restart in the same data_dir to race a stale lock file.
+    /// Polling here closes that window without bringing the test driver
+    /// into the picture.
+    fn drop(&mut self) {
+        let pid_file = self.server.settings().data_dir.join(POSTMASTER_PID_FILE);
+        let deadline = Instant::now() + SHUTDOWN_PID_FILE_WAIT_TIMEOUT;
+        while pid_file.exists() && Instant::now() < deadline {
+            std::thread::sleep(POSTMASTER_POLL_INTERVAL);
+        }
+        if pid_file.exists() {
+            warn!(
+                pid_file = %pid_file.display(),
+                "postmaster.pid still present after shutdown wait; an immediate restart on this data_dir may race",
+            );
+        }
     }
 }
 
@@ -54,6 +96,8 @@ pub async fn start(cfg: &EmbeddedConfig) -> Result<(EmbeddedPostgres, Url), DbEr
         settings.password = load_or_create_password(&settings.data_dir)?;
     }
 
+    wait_for_postmaster_release(&settings.data_dir).await?;
+
     let mut server = PostgreSQL::new(settings);
     server
         .setup()
@@ -68,6 +112,41 @@ pub async fn start(cfg: &EmbeddedConfig) -> Result<(EmbeddedPostgres, Url), DbEr
     let url = Url::parse(&url).map_err(|e| DbError::EmbeddedPostgres(e.to_string()))?;
 
     Ok((EmbeddedPostgres { server }, url))
+}
+
+/// Wait for `postmaster.pid` in `data_dir` to disappear before we attempt to
+/// boot a fresh postgres on top of it. Closes the restart race where an
+/// outgoing instance's postmaster has been asked to stop but has not yet
+/// finished tearing down, leaving its lock file in place.
+///
+/// Postgres removes `postmaster.pid` cleanly on shutdown, so the file's
+/// presence is a sufficient "another server might still be running" signal.
+/// We do NOT remove a stale file ourselves — if the prior postmaster crashed
+/// hard and left the file behind, the user should see the surfaced error and
+/// recover manually, not have the lock silently bypassed by us.
+async fn wait_for_postmaster_release(data_dir: &Path) -> Result<(), DbError> {
+    let pid_file: PathBuf = data_dir.join(POSTMASTER_PID_FILE);
+    if !pid_file.exists() {
+        return Ok(());
+    }
+    info!(
+        pid_file = %pid_file.display(),
+        "postmaster.pid present at start; waiting for the prior server to release it",
+    );
+    let deadline = Instant::now() + STALE_POSTMASTER_WAIT_TIMEOUT;
+    while pid_file.exists() {
+        if Instant::now() >= deadline {
+            return Err(DbError::EmbeddedPostgres(format!(
+                "postmaster.pid at {} did not disappear within {}s; \
+                 either the previous postmaster is still running or it crashed \
+                 and left a stale lock — inspect and remove manually if needed",
+                pid_file.display(),
+                STALE_POSTMASTER_WAIT_TIMEOUT.as_secs()
+            )));
+        }
+        tokio::time::sleep(POSTMASTER_POLL_INTERVAL).await;
+    }
+    Ok(())
 }
 
 /// Read the persisted superuser password from `<data_dir>/../PASSWORD_FILE`,
