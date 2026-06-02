@@ -120,11 +120,11 @@ class SrcPluginCtx(TrxCtx, PluginCtx, ABC):
     with :class:`PluginCtx` (flow identifiers + work dir)."""
 
 
-class SrcPlugin[S: Src](ABC):
+class SrcPlugin[C: Conn, S: Src](ABC):
     """Plugin implementing the read-side of a :class:`Src` subclass."""
 
     @abstractmethod
-    def read_in(self, ctx: SrcPluginCtx, src: S) -> list[list[TableFileSpec]]:
+    def read_in(self, ctx: SrcPluginCtx, conn: C, src: S) -> list[list[TableFileSpec]]:
         """Materialise ``src``'s output slots to parquet under
         ``ctx.work_dir``.
 
@@ -245,7 +245,7 @@ class StreamSrcPluginCtx(PluginCtx, ABC):
         and/or invoking it for its side effect)."""
 
 
-class StreamSrcPlugin[SS: StreamSrc](ABC):
+class StreamSrcPlugin[C: Conn, SS: StreamSrc](ABC):
     """Plugin implementing the long-running side of a
     :class:`StreamSrc` subclass (CDC, log tail, queue tail)."""
 
@@ -253,6 +253,7 @@ class StreamSrcPlugin[SS: StreamSrc](ABC):
     def run(
         self,
         ctx: StreamSrcPluginCtx,
+        conn: C,
         stream_src: SS,
     ):
         """Drive the change stream until ``ctx.active`` flips to
@@ -267,7 +268,7 @@ class DestContext(TrxCtx, PluginCtx, ABC):
     :class:`tabsdatak.api.TrxCtx` with :class:`PluginCtx`."""
 
 
-class DestPlugin[D: Dest](ABC):
+class DestPlugin[C: Conn, D: Dest](ABC):
     """Plugin implementing the write-side of a :class:`Dest`
     subclass."""
 
@@ -275,6 +276,7 @@ class DestPlugin[D: Dest](ABC):
     def write_out(
         self,
         ctx: DestContext,
+        conn: C,
         dest: D,
         tables: list[TableFileSpec],
     ):
@@ -457,7 +459,6 @@ class SrcDef[C: Conn, S: Src]:
 
     @model_validator(mode="after")
     def _validate(self) -> "SrcDef":
-        check_conn_field(self.src, "source", self.conn)
         check_plugin_param_type(self.plugin, "read_in", "src", self.src)
         if self.explorer is not None:
             check_plugin_param_type(self.explorer, "metadata", "conn", self.conn)
@@ -498,7 +499,6 @@ class StreamSrcDef[C: Conn, S: StreamSrc]:
 
     @model_validator(mode="after")
     def _validate(self) -> "StreamSrcDef":
-        check_conn_field(self.src, "stream_source", self.conn)
         # ``StreamSrcPlugin`` defines ``run(ctx, stream_src)``, not the
         # batch-mode ``read_in(ctx, src)`` from ``SrcPlugin``.
         check_plugin_param_type(self.plugin, "run", "stream_src", self.src)
@@ -537,7 +537,6 @@ class DestDef[C: Conn, D: Dest]:
 
     @model_validator(mode="after")
     def _validate(self) -> "DestDef":
-        check_conn_field(self.dest, "destination", self.conn)
         check_plugin_param_type(self.plugin, "write_out", "dest", self.dest)
         if self.explorer is not None:
             check_plugin_param_type(self.explorer, "metadata", "conn", self.conn)

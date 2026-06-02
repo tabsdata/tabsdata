@@ -343,51 +343,25 @@ KIND_ON_TABLES_ACTION = "onTablesAction"
 class Src[C: Conn](ABC, _api.DescriptorBase):
     """Abstract batch source. Used as the ``source`` argument of
     ``@publisher``.
-
-    Concrete subclasses live in connector packages (e.g.
-    ``MySQLSrc``, ``PostgresSrc``); each declares a ``conn`` field
-    bound to its connector's :class:`Conn` union and any per-source
-    knobs (queries, tables, cfg). The plugin / cardinality wiring
-    is registered via :class:`tabsdatak.spi.SrcDef`.
     """
 
     __kind__ = KIND_SOURCE_DEF
-    # Abstract field-style annotation: subclasses bind `conn` to their
-    # concrete connection union. Advertises the contract; pydantic does
-    # not enforce it on the ABC itself -- the SrcDef does.
-    conn: C
 
 
 class StreamSrc[C: Conn](ABC, _api.DescriptorBase):
     """Abstract stream source. Used as the ``source`` argument of
     ``@stream_publisher``.
-
-    Concrete subclasses (e.g. ``MySQLCdcStreamSrc``,
-    ``PostgresCdcStreamSrc``) declare their own ``tables`` /
-    ``start_from`` / ``src_cfg`` knobs and bind to a connector
-    :class:`Conn`. Wiring is registered via
-    :class:`tabsdatak.spi.StreamSrcDef`.
     """
 
     __kind__ = KIND_STREAM_SOURCE_DEF
-    # Abstract field-style annotation: subclasses bind `conn` to their
-    # concrete connection union. Advertises the contract; pydantic does
-    # not enforce it on the ABC itself -- the streamSrcDef does.
-    conn: C
 
 
 class Dest[C: Conn](ABC, _api.DescriptorBase):
     """Abstract destination. Used as the ``destination`` argument
     of ``@subscriber``.
-
-    Concrete subclasses (e.g. ``MySQLDest``, ``PostgresDest``)
-    declare a ``conn`` field plus per-destination knobs (target
-    tables, replace/append, cfg). Wiring is registered via
-    :class:`tabsdatak.spi.DestDef`.
     """
 
     __kind__ = KIND_DESTINATION_DEF
-    conn: C
 
 
 class OnTablesAction(ABC, _api.JsonSerde):
@@ -408,8 +382,9 @@ def _info_cls(name: str):
     return getattr(importlib.import_module("tabsdatak._info"), name)
 
 
-def publisher(
-    source: Src,
+def publisher[C: Conn](
+    conn: C,
+    source: Src[C],
     output_tables: TableNamesSpec,
     trigger_by: PublisherTriggerBySpec | None = None,
     on_tables: OnTablesActionSpec | None = None,
@@ -436,14 +411,15 @@ def publisher(
 
     def _publisher(func):
         return _info_cls("PublisherInfo")(
-            func, source, output_tables, trigger_by, on_tables
+            func, conn, source, output_tables, trigger_by, on_tables
         )
 
     return _publisher
 
 
-def stream_publisher(
-    source: StreamSrc,
+def stream_publisher[C: Conn](
+    conn: C,
+    source: StreamSrc[C],
     flush_interval_mins: FlushIntervalSpec,
     output_tables: TableNamesSpec,
     on_tables: OnTablesActionSpec | None = None,
@@ -470,6 +446,7 @@ def stream_publisher(
     def _stream_publisher(func):
         return _info_cls("StreamPublisherInfo")(
             func,
+            conn,
             source,
             flush_interval_mins,
             output_tables,
@@ -510,8 +487,9 @@ def transformer(
     return _transformer
 
 
-def subscriber(
-    destination: Dest,
+def subscriber[C: Conn](
+    conn: C,
+    destination: Dest[C],
     input_tables: CollTableNamesSpec,
     trigger_by: SubscriberTriggerBySpec | None = None,
 ) -> Callable:
@@ -531,7 +509,7 @@ def subscriber(
     """
 
     def _subscriber(func):
-        return _info_cls("SubscriberInfo")(func, destination, input_tables, trigger_by)
+        return _info_cls("SubscriberInfo")(func, conn, destination, input_tables, trigger_by)
 
     return _subscriber
 
