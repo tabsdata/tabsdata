@@ -123,6 +123,11 @@ class MSSQLSrcPlugin(SrcPlugin[MSSQLSrc]):
 
         # noinspection PyProtectedMember
         from tabsdatak.conn.common.sql._engine import factory as factory
+
+        # noinspection PyProtectedMember
+        from tabsdatak.conn.common.sql._engine.initial_values import (
+            resolve_initial_values,
+        )
         from tabsdatak.conn.mssql._impl import MSSQL_READ_DEFAULTS, MSSQLReadCfg
 
         cfg = _resolve_src_cfg(src.src_cfg)
@@ -134,7 +139,7 @@ class MSSQLSrcPlugin(SrcPlugin[MSSQLSrc]):
             queries=src.queries,
             transactional=src.transactional,
             schema_overrides=src.schema_overrides,
-            initial_values=src.initial_values or None,
+            initial_values=resolve_initial_values(ctx, src.initial_values),
             cfg=src.src_cfg,
         )
         engine = factory.get_read_engine(

@@ -24,6 +24,7 @@ from pydantic import StringConstraints
 import tabsdatak._api as _api
 from tabsdatak.api import (
     Conn,
+    ContextValueSpec,
     Dest,
     NamedConn,
     Secret,
@@ -134,7 +135,14 @@ class MSSQLSrc(Src):
         inside one transactional session.
     :param schema_overrides: Optional per-query column dtype hints
         (same length as ``queries``).
-    :param initial_values: Optional ``{name: value}`` bind parameters.
+    :param initial_values: Optional ``{bind_name: value}`` seed dict.
+        Each name is bound into the query as a SQLAlchemy ``:name``
+        parameter at execute time. Acts as the **first-run seed** for
+        each bind name: at runtime, the plugin looks up
+        ``ctx.get_attr(bind_name)`` per bind, and falls back to this
+        field when the ctx scratch store has no entry for that name.
+        User functions persist new values for the next run with
+        ``ctx.store_attr(bind_name, new_value)``.
     :param src_cfg: Optional ``Mapping`` over the literal cfg key
         set (logging_level, readEngine, chunkSize).
     """
@@ -143,7 +151,7 @@ class MSSQLSrc(Src):
     queries: QueriesSpec
     transactional: bool = True
     schema_overrides: SchemaOverrideSpec | None = None
-    initial_values: dict[str, Any] | None = None
+    initial_values: dict[str, ContextValueSpec] | None = None
     src_cfg: SrcCfgSpec | None = None
 
     def validate(self) -> None:
