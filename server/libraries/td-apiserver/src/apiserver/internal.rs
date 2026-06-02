@@ -46,9 +46,12 @@ impl InternalServer {
             let router = utoipa_axum::router::OpenApiRouter::default().merge(
                 utoipa_axum::router::OpenApiRouter::default()
                     .merge(InternalRouter::router(context.services.clone()))
-                    // internal authorization layer: validate the per-request
+                    // internal authorization gate: validate the per-request
                     // internal-endpoint token (replaces the loopback-IP gate).
-                    .layer(from_fn_with_state(
+                    // `route_layer` (not `layer`) so routing runs first and the
+                    // gate can read the matched route + path params it validates
+                    // the token against; unmatched paths fall through to 404.
+                    .route_layer(from_fn_with_state(
                         context.context.clone(),
                         internal_token_layer,
                     )),

@@ -97,6 +97,9 @@ pub const OPENAPI_JSON_URL: &str = url!(BASE_API_URL, "/api-docs/openapi.json");
 
 // Endpoints URLs
 
+// Unsecured liveness probe ("is the server up and serving?").
+pub const PING: &str = url!("/ping");
+
 // Auth
 pub const AUTH: &str = url!("/auth");
 pub const AUTH_LOGIN: &str = url!(AUTH, "/login");

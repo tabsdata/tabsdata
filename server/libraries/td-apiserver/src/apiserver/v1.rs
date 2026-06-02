@@ -47,6 +47,7 @@ use crate::router::inter_collection_permissions::InterCollectionPermissionsRoute
 use crate::router::logical_versions::LogicalVersionsRouter;
 use crate::router::metrics::MetricsRouter;
 use crate::router::permissions::PermissionsRouter;
+use crate::router::ping::ping_router;
 use crate::router::roles::RolesRouter;
 use crate::router::server_status::ServerStatusRouter;
 use crate::router::tables::TablesRouter;
@@ -79,7 +80,8 @@ impl ApiServerV1 {
                 // unsecure endpoints
                 .merge(
                     utoipa_axum::router::OpenApiRouter::default()
-                        .merge(UnsecureAuthRouter::router(context.services.clone())),
+                        .merge(UnsecureAuthRouter::router(context.services.clone()))
+                        .merge(ping_router()),
                 )
                 // secure endpoints
                 .merge(

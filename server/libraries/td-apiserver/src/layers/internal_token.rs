@@ -10,17 +10,19 @@
 //! validates it against the actual request, then injects the system
 //! `RequestContext` the internal handlers expect.
 
-use axum::extract::{Request, State};
+use axum::extract::{MatchedPath, RawPathParams, Request, State};
 use axum::http;
 use axum::middleware::Next;
 use axum::response::Response;
+use axum::RequestExt;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use ta_apiserver::status::error_status::ErrorStatus;
-use td_authz::jwt::{InternalTokenClaims, JwtConfig, decode_internal_token};
-use td_error::{TdError, td_error};
+use td_authz::jwt::{decode_internal_token, InternalTokenClaims, JwtConfig};
+use td_error::{td_error, TdError};
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
-use tracing::{Instrument, Level, span, warn};
+use tracing::{error, span, warn, Instrument, Level};
 
 #[td_error]
 enum InternalTokenError {
@@ -50,12 +52,30 @@ pub async fn internal_token_layer(
         TdError::from(InternalTokenError::Invalid(e.to_string()))
     })?;
 
-    // Validate against the actual request.
-    if !token_authorizes_request(&claims, request.method().as_str(), request.uri().path()) {
-        warn!(
+    let path = request
+        .extensions()
+        .get::<MatchedPath>()
+        .map(|m| m.as_str().to_string());
+    let params = request
+        .extract_parts::<RawPathParams>()
+        .await
+        .ok()
+        .map(|p| {
+            p.iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect::<BTreeMap<_, _>>()
+        });
+
+    if !token_authorizes_request(
+        &claims,
+        request.method().as_str(),
+        path.as_deref(),
+        params.as_ref(),
+    ) {
+        error!(
             scope = %claims.scope,
             method = %claims.method,
-            request_path = %request.uri().path(),
+            ?path,
             "internal token does not authorize this request"
         );
         return Err(TdError::from(InternalTokenError::Mismatch).into());
@@ -73,28 +93,35 @@ pub async fn internal_token_layer(
     Ok(next.run(request).instrument(log_span).await)
 }
 
-/// True iff the token authorizes exactly this request: same method, and the
-/// authorized concrete path (the token's `scope` pattern with its `bindings`
-/// substituted) equals the request path. A `scope` placeholder with no
-/// matching binding leaves a literal `{name}` that can't match a real path,
-/// so under-binding fails closed.
-fn token_authorizes_request(claims: &InternalTokenClaims, method: &str, path: &str) -> bool {
-    if claims.method != method {
-        return false;
-    }
-    let mut expected_path = claims.scope.clone();
-    for (name, value) in &claims.bindings {
-        expected_path = expected_path.replace(&format!("{{{name}}}"), value);
-    }
-    expected_path == path
+/// True iff the token authorizes exactly this request: same `method`, the
+/// matched route template equals the token's `scope`, and the request's decoded
+/// path params equal the token's `bindings` exactly (as a set).
+fn token_authorizes_request(
+    claims: &InternalTokenClaims,
+    method: &str,
+    matched: Option<&str>,
+    params: Option<&BTreeMap<String, String>>,
+) -> bool {
+    claims.method == method
+        && matched == Some(claims.scope.as_str())
+        && params == Some(&claims.bindings)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::body::Body;
+    use axum::http::Request;
+    use axum::http::StatusCode;
+    use axum::middleware::from_fn_with_state;
+    use axum::routing::get;
+    use axum::Router;
     use std::collections::BTreeMap;
-    use td_authz::jwt::INTERNAL_TOKEN_KIND;
+    use td_authz::jwt::{encode_internal_token, INTERNAL_TOKEN_KIND};
     use td_common::id;
+    use td_objects::rest_urls::internal::RESOLVE_FUNCTION_RUN_WORKER;
+    use td_objects::rest_urls::{BASE_API_URL, BASE_URL, V1};
+    use tower::ServiceExt;
 
     fn claims(method: &str, scope: &str, bindings: &[(&str, &str)]) -> InternalTokenClaims {
         InternalTokenClaims {
@@ -102,11 +129,15 @@ mod tests {
             kind: INTERNAL_TOKEN_KIND.to_string(),
             method: method.to_string(),
             scope: scope.to_string(),
-            bindings: bindings
-                .iter()
-                .map(|(k, v)| (k.to_string(), v.to_string()))
-                .collect::<BTreeMap<_, _>>(),
+            bindings: params(bindings),
         }
+    }
+
+    fn params(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
+        pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
     }
 
     const SCOPE: &str = "/api/v1/internal/function-runs/{function_run_id}/workers/{worker_id}";
@@ -121,7 +152,8 @@ mod tests {
         assert!(token_authorizes_request(
             &c,
             "POST",
-            "/api/v1/internal/function-runs/F/workers/W"
+            Some(SCOPE),
+            Some(&params(&[("function_run_id", "F"), ("worker_id", "W")])),
         ));
     }
 
@@ -135,7 +167,8 @@ mod tests {
         assert!(!token_authorizes_request(
             &c,
             "GET",
-            "/api/v1/internal/function-runs/F/workers/W"
+            Some(SCOPE),
+            Some(&params(&[("function_run_id", "F"), ("worker_id", "W")])),
         ));
     }
 
@@ -150,25 +183,28 @@ mod tests {
         assert!(!token_authorizes_request(
             &c,
             "POST",
-            "/api/v1/internal/function-runs/F/workers/W2"
+            Some(SCOPE),
+            Some(&params(&[("function_run_id", "F"), ("worker_id", "W2")])),
         ));
     }
 
     #[test]
-    fn rejects_under_binding() {
-        // Missing worker_id binding leaves a literal placeholder → no match.
+    fn rejects_extra_binding() {
+        // A token bound only to function_run_id must not authorize a request
+        // whose route also binds worker_id (param sets differ).
         let c = claims("POST", SCOPE, &[("function_run_id", "F")]);
         assert!(!token_authorizes_request(
             &c,
             "POST",
-            "/api/v1/internal/function-runs/F/workers/W"
+            Some(SCOPE),
+            Some(&params(&[("function_run_id", "F"), ("worker_id", "W")])),
         ));
     }
 
     #[test]
     fn rejects_different_endpoint_same_binding() {
         // A status token (GET) must not authorize download-state (GET) even
-        // though both bind only function_version_id.
+        // though both bind only function_version_id: the matched template differs.
         let c = claims(
             "GET",
             "/api/v1/internal/function-versions/{function_version_id}/execution-status",
@@ -177,7 +213,87 @@ mod tests {
         assert!(!token_authorizes_request(
             &c,
             "GET",
-            "/api/v1/internal/function-versions/FV/download-state"
+            Some("/api/v1/internal/function-versions/{function_version_id}/download-state"),
+            Some(&params(&[("function_version_id", "FV")])),
         ));
+    }
+
+    #[test]
+    fn rejects_missing_match_or_params() {
+        // Fail closed if the router gave us no matched path or no path params.
+        let c = claims(
+            "GET",
+            SCOPE,
+            &[("function_run_id", "F"), ("worker_id", "W")],
+        );
+        let p = params(&[("function_run_id", "F"), ("worker_id", "W")]);
+        assert!(!token_authorizes_request(&c, "GET", None, Some(&p)));
+        assert!(!token_authorizes_request(&c, "GET", Some(SCOPE), None));
+    }
+
+    #[tokio::test]
+    async fn nested_router_authorizes_resolve_token() {
+        let jwt = Arc::new(JwtConfig::new("test-secret".to_string(), 3600));
+
+        // Mint the token the same way the scheduler does for this endpoint.
+        let scope = format!("{BASE_URL}{RESOLVE_FUNCTION_RUN_WORKER}");
+        let bindings = BTreeMap::from([
+            ("function_run_id".to_string(), "F".to_string()),
+            ("worker_id".to_string(), "W".to_string()),
+        ]);
+        let token = encode_internal_token(&jwt, "GET", &scope, bindings).unwrap();
+
+        let inner = Router::new()
+            .route(
+                RESOLVE_FUNCTION_RUN_WORKER,
+                get(|| async { StatusCode::OK }),
+            )
+            .route_layer(from_fn_with_state(jwt.clone(), internal_token_layer));
+        let app = Router::new().nest(BASE_API_URL, Router::new().nest(V1, inner));
+
+        let request = Request::builder()
+            .method("GET")
+            .uri("/api/v1/internal/function-runs/F/workers/W/message")
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "a correctly minted token for the resolve endpoint must authorize the request"
+        );
+    }
+
+    #[tokio::test]
+    async fn nested_router_rejects_wrong_worker() {
+        let jwt = Arc::new(JwtConfig::new("test-secret".to_string(), 3600));
+
+        let scope = format!("{BASE_URL}{RESOLVE_FUNCTION_RUN_WORKER}");
+        let bindings = BTreeMap::from([
+            ("function_run_id".to_string(), "F".to_string()),
+            ("worker_id".to_string(), "W".to_string()),
+        ]);
+        let token = encode_internal_token(&jwt, "GET", &scope, bindings).unwrap();
+
+        let inner = Router::new()
+            .route(
+                RESOLVE_FUNCTION_RUN_WORKER,
+                get(|| async { StatusCode::OK }),
+            )
+            .route_layer(from_fn_with_state(jwt.clone(), internal_token_layer));
+        let app = Router::new().nest(BASE_API_URL, Router::new().nest(V1, inner));
+
+        let request = Request::builder()
+            .method("GET")
+            .uri("/api/v1/internal/function-runs/F/workers/W2/message")
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 }
