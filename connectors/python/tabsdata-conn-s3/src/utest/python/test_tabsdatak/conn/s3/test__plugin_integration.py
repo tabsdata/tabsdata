@@ -122,6 +122,7 @@ def src_conn() -> S3SrcConn:
     )
 
 
+@pytest.fixture
 def dest_conn() -> S3DestConn:
     bucket, base_path = _parse_uri(_URI)
     return S3DestConn(
@@ -141,22 +142,22 @@ def dest_conn() -> S3DestConn:
 
 
 def _upload_parquet(
-    conn: S3Conn, run_prefix: str, name: str, rows: list[dict],
+    dest_conn: S3DestConn, run_prefix: str, name: str, rows: list[dict],
     tmp_path: Path, work_dest: Path,
 ) -> None:
     local = tmp_path / name
     pl.DataFrame(rows).write_parquet(local, use_pyarrow=True)
     dest = S3Dest(paths=[f"{run_prefix}/{name}"])
     plugin.S3DestPlugin().write_out(
-        _DestCtx(work_dest), conn, dest, [Path(local)],
+        _DestCtx(work_dest), dest_conn, dest, [Path(local)],
     )
 
 
-def test_dest_then_src_round_trip(conn, run_prefix, tmp_path):
+def test_dest_then_src_round_trip(src_conn, dest_conn, run_prefix, tmp_path):
     work_dest = tmp_path / "work_dest"
     work_dest.mkdir()
     _upload_parquet(
-        conn, run_prefix, "users.parquet",
+        dest_conn, run_prefix, "users.parquet",
         [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}],
         tmp_path, work_dest,
     )
@@ -164,7 +165,7 @@ def test_dest_then_src_round_trip(conn, run_prefix, tmp_path):
     src = S3Src(paths=[f"{run_prefix}/users.parquet"])
     work_src = tmp_path / "work_src"
     work_src.mkdir()
-    out = plugin.S3SrcPlugin().read_in(_SrcCtx(work_src), conn, src)
+    out = plugin.S3SrcPlugin().read_in(_SrcCtx(work_src), src_conn, src)
 
     assert len(out) == 1
     assert len(out[0]) >= 1
@@ -176,13 +177,13 @@ def test_dest_then_src_round_trip(conn, run_prefix, tmp_path):
 
 
 def test_src_wildcard_in_basename_matches_multiple_objects(
-    conn, run_prefix, tmp_path,
+    src_conn, dest_conn, run_prefix, tmp_path,
 ):
     work_dest = tmp_path / "work_dest"
     work_dest.mkdir()
     for name in ("a.parquet", "b.parquet", "c.parquet"):
         _upload_parquet(
-            conn, run_prefix, name,
+            dest_conn, run_prefix, name,
             [{"name": name}],
             tmp_path, work_dest,
         )
@@ -190,7 +191,7 @@ def test_src_wildcard_in_basename_matches_multiple_objects(
     src = S3Src(paths=[f"{run_prefix}/*.parquet"])
     work_src = tmp_path / "work_src"
     work_src.mkdir()
-    out = plugin.S3SrcPlugin().read_in(_SrcCtx(work_src), conn, src)
+    out = plugin.S3SrcPlugin().read_in(_SrcCtx(work_src), src_conn, src)
 
     names = sorted(
         pl.read_parquet(f).select("name").item(0, 0) for f in out[0]
@@ -199,13 +200,13 @@ def test_src_wildcard_in_basename_matches_multiple_objects(
 
 
 def test_src_initial_last_modified_filters_out_older_objects(
-    conn, run_prefix, tmp_path,
+    src_conn, dest_conn, run_prefix, tmp_path,
 ):
     work_dest = tmp_path / "work_dest"
     work_dest.mkdir()
 
     _upload_parquet(
-        conn, run_prefix, "old.parquet", [{"name": "old"}],
+        dest_conn, run_prefix, "old.parquet", [{"name": "old"}],
         tmp_path, work_dest,
     )
     # Cut-off taken between the two uploads; remote object stamping is
@@ -216,7 +217,7 @@ def test_src_initial_last_modified_filters_out_older_objects(
     cutoff = datetime.now(timezone.utc)
     _time.sleep(2)
     _upload_parquet(
-        conn, run_prefix, "new.parquet", [{"name": "new"}],
+        dest_conn, run_prefix, "new.parquet", [{"name": "new"}],
         tmp_path, work_dest,
     )
 
@@ -226,7 +227,7 @@ def test_src_initial_last_modified_filters_out_older_objects(
     )
     work_src = tmp_path / "work_src"
     work_src.mkdir()
-    out = plugin.S3SrcPlugin().read_in(_SrcCtx(work_src), conn, src)
+    out = plugin.S3SrcPlugin().read_in(_SrcCtx(work_src), src_conn, src)
 
     names = sorted(
         pl.read_parquet(f).select("name").item(0, 0) for f in out[0]
