@@ -3,7 +3,7 @@
 //
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use clap_derive::Args;
 use td_common::status::ExitStatus::GeneralError;
@@ -16,10 +16,17 @@ use crate::base::naming::to_configmap_name;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
 use crate::core::system::exit::{CommandResult, abort_with};
 use crate::core::system::file::is_hidden_or_system;
-use crate::kube::api::{LabelFilter, get_configmaps, merge_configmap};
+use crate::kube::api::{LabelFilter, get_configmaps, replace_configmap};
+use crate::kube::context::KubeContext;
 use crate::runtime::provider::{Provider, provider_for_or_tdkcontext};
 
 #[derive(Debug, Clone, Args)]
+#[command(group(
+    clap::ArgGroup::new("source")
+        .args(["folder", "file"])
+        .required(true)
+        .multiple(false),
+))]
 pub struct PutArguments {
     #[command(flatten)]
     pub cluster: ClusterArguments,
@@ -30,14 +37,38 @@ pub struct PutArguments {
     #[arg(
         long,
         name = "folder",
-        required = true,
         value_parser = clap::value_parser!(PathBuf),
-        long_help = "Source folder. One file per config, the file name matching the \
-                     configmap key (e.g. 'apiserver.yaml'). File contents become the \
-                     new key value. Only files matching an existing config in the \
-                     cluster are updated; anything else is ignored with a warning."
+        long_help = "Source folder containing one file per config to update. \
+                     Each file name must map (via the naming convention) to an existing \
+                     config in the cluster; otherwise that file is skipped with a warning. \
+                     File contents replace the configmap entry. Mutually exclusive with --file."
     )]
-    pub folder: PathBuf,
+    pub folder: Option<PathBuf>,
+
+    #[arg(
+        long,
+        name = "file",
+        value_parser = clap::value_parser!(PathBuf),
+        long_help = "Single file to upload. The file name must map (via the naming \
+                     convention) to an existing config in the cluster. File contents \
+                     replace the configmap entry. Mutually exclusive with --folder."
+    )]
+    pub file: Option<PathBuf>,
+}
+
+pub enum PutSource {
+    Folder(PathBuf),
+    File(PathBuf),
+}
+
+impl PutSource {
+    fn from_args(folder: Option<PathBuf>, file: Option<PathBuf>) -> Self {
+        match (folder, file) {
+            (Some(folder), _) => PutSource::Folder(folder),
+            (_, Some(file)) => PutSource::File(file),
+            _ => unreachable!("clap ArgGroup ensures exactly one of --folder/--file"),
+        }
+    }
 }
 
 pub async fn command_put(arguments: PutArguments, globals: &GlobalArguments) -> CommandResult {
@@ -45,93 +76,107 @@ pub async fn command_put(arguments: PutArguments, globals: &GlobalArguments) -> 
         cluster,
         instance,
         folder,
+        file,
     } = arguments;
-
-    ensure_source_folder(&folder)?;
+    let source = PutSource::from_args(folder, file);
+    ensure_source(&source)?;
     let provider = provider_for_or_tdkcontext(cluster, instance, globals.verbose).await?;
-    put_configs(provider.as_ref(), &folder).await
+    put_configs(provider.as_ref(), &source).await
 }
 
-pub fn ensure_source_folder(folder: &PathBuf) -> CommandResult {
-    if !folder.is_dir() {
-        return abort_with(
-            GeneralError,
-            CliError::FolderNotFound(folder.display().to_string()),
-        );
-    }
-    let mut folder_entries = std::fs::read_dir(folder).map_err(|error| {
-        TdError::from(CliError::FolderReadFailed {
-            folder: folder.display().to_string(),
-            cause: error.to_string(),
-        })
-    })?;
-    if folder_entries.next().is_none() {
-        return abort_with(
-            GeneralError,
-            CliError::FolderEmpty(folder.display().to_string()),
-        );
+pub fn ensure_source(source: &PutSource) -> CommandResult {
+    match source {
+        PutSource::Folder(folder) => {
+            if !folder.is_dir() {
+                return abort_with(
+                    GeneralError,
+                    CliError::FolderNotFound(folder.display().to_string()),
+                );
+            }
+            let mut entries = std::fs::read_dir(folder).map_err(|error| {
+                TdError::from(CliError::FolderReadFailed {
+                    folder: folder.display().to_string(),
+                    cause: error.to_string(),
+                })
+            })?;
+            if entries.next().is_none() {
+                return abort_with(
+                    GeneralError,
+                    CliError::FolderEmpty(folder.display().to_string()),
+                );
+            }
+        }
+        PutSource::File(file) => {
+            if !file.is_file() {
+                return abort_with(
+                    GeneralError,
+                    CliError::FolderNotFound(file.display().to_string()),
+                );
+            }
+        }
     }
     Ok(())
 }
 
-pub async fn put_configs(provider: &dyn Provider, folder: &PathBuf) -> CommandResult {
+pub async fn put_configs(provider: &dyn Provider, source: &PutSource) -> CommandResult {
     let context = provider.kube_context().await?;
-
-    let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY.item);
-    let known_configs: BTreeSet<String> = get_configmaps(&context, Some(filter))
-        .await?
-        .into_iter()
-        .map(|(name, _entries)| name)
-        .collect();
+    let known_configs = list_known_configs(&context).await?;
+    let candidates = collect_candidates(source)?;
 
     let mut warnings: Vec<String> = Vec::new();
-    let mut updated = 0;
+    let mut replaced = 0;
 
-    for entry in read_sorted(folder)? {
-        let entry_path = entry.path();
-        if is_hidden_or_system(&entry_path) {
-            continue;
-        }
-        let file_name = entry.file_name().to_string_lossy().into_owned();
-        if entry_path.is_dir() {
-            warnings.push(format!("Subfolder '{file_name}' ignored; expected a flat layout."));
-            continue;
-        }
-        let configmap_name = to_configmap_name(&KPROFILE_CONFIGS_FAMILY, &file_name)?;
-        if !known_configs.contains(&configmap_name) {
-            warnings.push(format!("No config named '{configmap_name}' exists; ignored."));
-            continue;
-        }
-        let bytes = match std::fs::read(&entry_path) {
-            Ok(bytes) => bytes,
-            Err(error) => {
-                warnings.push(format!("Could not read file '{file_name}': {error}; ignored."));
-                continue;
+    for candidate in candidates {
+        match candidate {
+            Candidate::Skip(reason) => warnings.push(reason),
+            Candidate::Process { file_name, path } => {
+                match process_candidate(&context, &known_configs, &file_name, &path).await? {
+                    Outcome::Replaced => replaced += 1,
+                    Outcome::Skipped(reason) => warnings.push(reason),
+                }
             }
-        };
-        let text = match String::from_utf8(bytes) {
-            Ok(text) => text,
-            Err(_) => {
-                warnings.push(format!("File '{file_name}' is not valid UTF-8; ignored."));
-                continue;
-            }
-        };
-        let mut updates: BTreeMap<String, String> = BTreeMap::new();
-        updates.insert(file_name.clone(), text);
-        merge_configmap(&context, &configmap_name, updates).await?;
-        updated += 1;
+        }
     }
 
     for warning in &warnings {
         warn!("{warning}");
     }
 
-    let noun = if updated == 1 { "config" } else { "configs" };
-    info!("Updated {updated} tabsdata {noun}.");
+    let noun = if replaced == 1 { "config" } else { "configs" };
+    info!("Replaced {replaced} tabsdata {noun}.");
     Ok(())
 }
 
-fn read_sorted(folder: &PathBuf) -> CommandResult<Vec<std::fs::DirEntry>> {
+async fn list_known_configs(
+    context: &KubeContext,
+) -> CommandResult<BTreeSet<String>> {
+    let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY.item);
+    let configs = get_configmaps(context, Some(filter))
+        .await?
+        .into_iter()
+        .map(|(name, _entries)| name)
+        .collect();
+    Ok(configs)
+}
+
+enum Candidate {
+    Process { file_name: String, path: PathBuf },
+    Skip(String),
+}
+
+enum Outcome {
+    Replaced,
+    Skipped(String),
+}
+
+fn collect_candidates(source: &PutSource) -> CommandResult<Vec<Candidate>> {
+    match source {
+        PutSource::Folder(folder) => collect_folder_candidates(folder),
+        PutSource::File(file) => Ok(vec![candidate_for_file(file)]),
+    }
+}
+
+fn collect_folder_candidates(folder: &Path) -> CommandResult<Vec<Candidate>> {
     let reader = std::fs::read_dir(folder).map_err(|error| {
         TdError::from(CliError::FolderReadFailed {
             folder: folder.display().to_string(),
@@ -140,5 +185,74 @@ fn read_sorted(folder: &PathBuf) -> CommandResult<Vec<std::fs::DirEntry>> {
     })?;
     let mut entries: Vec<std::fs::DirEntry> = reader.filter_map(|entry| entry.ok()).collect();
     entries.sort_by_key(|entry| entry.file_name());
-    Ok(entries)
+    let mut out = Vec::with_capacity(entries.len());
+    for entry in entries {
+        let path = entry.path();
+        if is_hidden_or_system(&path) {
+            continue;
+        }
+        let file_name = entry.file_name().to_string_lossy().into_owned();
+        if path.is_dir() {
+            out.push(Candidate::Skip(format!(
+                "Subfolder '{file_name}' ignored; expected a flat layout."
+            )));
+            continue;
+        }
+        out.push(Candidate::Process { file_name, path });
+    }
+    Ok(out)
+}
+
+fn candidate_for_file(path: &Path) -> Candidate {
+    let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
+        return Candidate::Skip(format!(
+            "File '{}' has no readable name; ignored.",
+            path.display()
+        ));
+    };
+    Candidate::Process {
+        file_name: file_name.to_owned(),
+        path: path.to_path_buf(),
+    }
+}
+
+async fn process_candidate(
+    context: &KubeContext,
+    known_configs: &BTreeSet<String>,
+    file_name: &str,
+    path: &Path,
+) -> CommandResult<Outcome> {
+    let configmap_name = match to_configmap_name(&KPROFILE_CONFIGS_FAMILY, file_name) {
+        Ok(name) => name,
+        Err(error) => {
+            return Ok(Outcome::Skipped(format!(
+                "File '{file_name}' does not map to a valid config name: {error}; ignored."
+            )));
+        }
+    };
+    if !known_configs.contains(&configmap_name) {
+        return Ok(Outcome::Skipped(format!(
+            "No config named '{configmap_name}' exists; ignored."
+        )));
+    }
+    let bytes = match std::fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            return Ok(Outcome::Skipped(format!(
+                "Could not read file '{file_name}': {error}; ignored."
+            )));
+        }
+    };
+    let text = match String::from_utf8(bytes) {
+        Ok(text) => text,
+        Err(_) => {
+            return Ok(Outcome::Skipped(format!(
+                "File '{file_name}' is not valid UTF-8; ignored."
+            )));
+        }
+    };
+    let mut data: BTreeMap<String, String> = BTreeMap::new();
+    data.insert(file_name.to_owned(), text);
+    replace_configmap(context, &configmap_name, data).await?;
+    Ok(Outcome::Replaced)
 }

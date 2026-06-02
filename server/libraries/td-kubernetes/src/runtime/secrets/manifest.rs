@@ -15,7 +15,6 @@ pub const SECRET_MANIFEST_TYPE: &str = "Opaque";
 
 pub fn build_secret_manifest(
     name: &str,
-    namespace: &str,
     family: &str,
     leaves: &[SecretLeaf],
     values: Option<&BTreeMap<String, String>>,
@@ -36,7 +35,6 @@ pub fn build_secret_manifest(
     Secret {
         metadata: ObjectMeta {
             name: Some(name.to_owned()),
-            namespace: Some(namespace.to_owned()),
             labels: Some(labels),
             ..Default::default()
         },

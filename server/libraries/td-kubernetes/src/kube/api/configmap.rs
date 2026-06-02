@@ -238,3 +238,42 @@ pub async fn merge_configmap(
             .into()
         })
 }
+
+pub async fn replace_configmap(
+    context: &KubeContext,
+    name: &str,
+    data: BTreeMap<String, String>,
+) -> Result<(), KubernetesError> {
+    let api: Api<ConfigMap> = Api::namespaced(context.client().clone(), context.namespace());
+    let mut configmap = match api.get_opt(name).await {
+        Ok(Some(configmap)) => configmap,
+        Ok(None) => {
+            return Err(KubeConfigMapError::NotFound {
+                namespace: context.namespace().to_owned(),
+                name: name.to_owned(),
+            }
+            .into());
+        }
+        Err(error) => {
+            return Err(KubeConfigMapError::QueryFailed {
+                namespace: context.namespace().to_owned(),
+                name: name.to_owned(),
+                cause: error.to_string(),
+            }
+            .into());
+        }
+    };
+    configmap.data = Some(data);
+    configmap.binary_data = None;
+    api.replace(name, &PostParams::default(), &configmap)
+        .await
+        .map(|_| ())
+        .map_err(|error| {
+            KubeConfigMapError::ReplaceFailed {
+                namespace: context.namespace().to_owned(),
+                name: name.to_owned(),
+                cause: error.to_string(),
+            }
+            .into()
+        })
+}

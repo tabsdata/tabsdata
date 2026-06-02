@@ -92,7 +92,6 @@ pub async fn command_get(arguments: GetArguments, globals: &GlobalArguments) -> 
     ensure_empty_folder(&folder)?;
 
     let provider = provider_for_or_tdkcontext(cluster, instance, globals.verbose).await?;
-    let namespace = provider.kube_config().await?.default_namespace.clone();
     let resolved = resolve_source(provider.as_ref(), source.into()).await?;
     let configs = read_configs(provider.as_ref(), resolved, globals.verbose).await?;
 
@@ -125,7 +124,6 @@ pub async fn command_get(arguments: GetArguments, globals: &GlobalArguments) -> 
         let string_values = live_values.as_ref().map(secret_values_to_strings);
         let manifest = build_secret_manifest(
             &entry.secret,
-            &namespace,
             SECRET_FAMILY_CONFIG,
             &leaves,
             string_values.as_ref(),

@@ -116,7 +116,7 @@ env.bak/
 env/
 ENV/
 htmlcov/
-instance/
+/instance/
 ipython_config.py
 lib64/
 licenses.json
