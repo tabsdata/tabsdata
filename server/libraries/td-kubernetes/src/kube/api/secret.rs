@@ -15,18 +15,164 @@ use crate::base::error::kubernetes::{KubeSecretError, KubernetesError};
 use crate::kube::api::{LabelFilter, label_tabsdata, tabsdata_selector};
 use crate::kube::context::KubeContext;
 
-fn family_labels(family: Option<&str>) -> Vec<LabelFilter<'_>> {
-    match family {
-        Some(value) => vec![LabelFilter::new(SECRET_FAMILY_LABEL, value)],
-        None => Vec::new(),
-    }
+pub async fn create_secret(
+    context: &KubeContext,
+    name: &str,
+    data: BTreeMap<String, String>,
+    labels: BTreeMap<String, String>,
+    owner: Option<OwnerReference>,
+    family: Option<&str>,
+) -> Result<(), KubernetesError> {
+    let api: Api<Secret> = Api::namespaced(context.client().clone(), context.namespace());
+    let mut metadata = ObjectMeta {
+        name: Some(name.to_owned()),
+        namespace: Some(context.namespace().to_owned()),
+        owner_references: owner.map(|reference| vec![reference]),
+        labels: Some(labels),
+        ..Default::default()
+    };
+    label_tabsdata(&mut metadata, &family_labels(family));
+    let secret = Secret {
+        metadata,
+        data: Some(to_byte_strings(data)),
+        ..Default::default()
+    };
+    api.create(&PostParams::default(), &secret)
+        .await
+        .map(|_| ())
+        .map_err(|error| match &error {
+            kube::Error::Api(response) if response.code == HTTP_STATUS_CONFLICT => {
+                KubeSecretError::AlreadyExists {
+                    namespace: context.namespace().to_owned(),
+                    name: name.to_owned(),
+                }
+                .into()
+            }
+            _ => KubeSecretError::CreateFailed {
+                namespace: context.namespace().to_owned(),
+                name: name.to_owned(),
+                cause: error.to_string(),
+            }
+            .into(),
+        })
 }
 
-pub async fn exists_secret(context: &KubeContext, name: &str) -> Result<bool, KubernetesError> {
+pub async fn replace_secret(
+    context: &KubeContext,
+    name: &str,
+    data: BTreeMap<String, String>,
+    labels: BTreeMap<String, String>,
+    family: Option<&str>,
+) -> Result<(), KubernetesError> {
+    let api: Api<Secret> = Api::namespaced(context.client().clone(), context.namespace());
+    let existing = match api.get_opt(name).await {
+        Ok(Some(secret)) => secret,
+        Ok(None) => {
+            return Err(KubeSecretError::NotFound {
+                namespace: context.namespace().to_owned(),
+                name: name.to_owned(),
+            }
+            .into());
+        }
+        Err(error) => {
+            return Err(KubeSecretError::QueryFailed {
+                namespace: context.namespace().to_owned(),
+                name: name.to_owned(),
+                cause: error.to_string(),
+            }
+            .into());
+        }
+    };
+    let mut metadata = ObjectMeta {
+        name: Some(name.to_owned()),
+        namespace: Some(context.namespace().to_owned()),
+        resource_version: existing.metadata.resource_version,
+        owner_references: existing.metadata.owner_references,
+        labels: Some(labels),
+        ..Default::default()
+    };
+    label_tabsdata(&mut metadata, &family_labels(family));
+    let secret = Secret {
+        metadata,
+        data: Some(to_byte_strings(data)),
+        ..Default::default()
+    };
+    api.replace(name, &PostParams::default(), &secret)
+        .await
+        .map(|_| ())
+        .map_err(|error| {
+            KubeSecretError::ReplaceFailed {
+                namespace: context.namespace().to_owned(),
+                name: name.to_owned(),
+                cause: error.to_string(),
+            }
+            .into()
+        })
+}
+
+pub async fn upsert_secret(
+    context: &KubeContext,
+    name: &str,
+    data: BTreeMap<String, String>,
+    labels: BTreeMap<String, String>,
+    owner: Option<OwnerReference>,
+    family: Option<&str>,
+) -> Result<(), KubernetesError> {
     let api: Api<Secret> = Api::namespaced(context.client().clone(), context.namespace());
     match api.get_opt(name).await {
-        Ok(Some(_)) => Ok(true),
-        Ok(None) => Ok(false),
+        Ok(Some(existing)) => {
+            let mut metadata = ObjectMeta {
+                name: Some(name.to_owned()),
+                namespace: Some(context.namespace().to_owned()),
+                resource_version: existing.metadata.resource_version,
+                owner_references: existing.metadata.owner_references,
+                labels: Some(labels),
+                ..Default::default()
+            };
+            label_tabsdata(&mut metadata, &family_labels(family));
+            let secret = Secret {
+                metadata,
+                data: Some(to_byte_strings(data)),
+                ..Default::default()
+            };
+            api.replace(name, &PostParams::default(), &secret)
+                .await
+                .map(|_| ())
+                .map_err(|error| {
+                    KubeSecretError::ReplaceFailed {
+                        namespace: context.namespace().to_owned(),
+                        name: name.to_owned(),
+                        cause: error.to_string(),
+                    }
+                    .into()
+                })
+        }
+        Ok(None) => {
+            let mut metadata = ObjectMeta {
+                name: Some(name.to_owned()),
+                namespace: Some(context.namespace().to_owned()),
+                owner_references: owner.map(|reference| vec![reference]),
+                labels: Some(labels),
+                ..Default::default()
+            };
+            label_tabsdata(&mut metadata, &family_labels(family));
+            let secret = Secret {
+                metadata,
+                data: Some(to_byte_strings(data)),
+                ..Default::default()
+            };
+            api.create(&PostParams::default(), &secret)
+                .await
+                .map(|_| ())
+                .map_err(|error| {
+                    KubeSecretError::CreateFailed {
+                        namespace: context.namespace().to_owned(),
+                        name: name.to_owned(),
+                        cause: error.to_string(),
+                    }
+                    .into()
+                })
+        }
         Err(error) => Err(KubeSecretError::QueryFailed {
             namespace: context.namespace().to_owned(),
             name: name.to_owned(),
@@ -34,6 +180,21 @@ pub async fn exists_secret(context: &KubeContext, name: &str) -> Result<bool, Ku
         }
         .into()),
     }
+}
+
+pub async fn delete_secret(context: &KubeContext, name: &str) -> Result<(), KubernetesError> {
+    let api: Api<Secret> = Api::namespaced(context.client().clone(), context.namespace());
+    api.delete(name, &DeleteParams::default())
+        .await
+        .map(|_| ())
+        .map_err(|error| {
+            KubeSecretError::DeleteFailed {
+                namespace: context.namespace().to_owned(),
+                name: name.to_owned(),
+                cause: error.to_string(),
+            }
+            .into()
+        })
 }
 
 pub async fn get_secret(
@@ -62,124 +223,58 @@ pub async fn get_secret(
     }
 }
 
-pub async fn create_secret(
+pub async fn get_secrets(
     context: &KubeContext,
-    name: &str,
-    data: BTreeMap<String, String>,
-    owner: Option<OwnerReference>,
-    family: Option<&str>,
-) -> Result<(), KubernetesError> {
+    label: Option<LabelFilter<'_>>,
+) -> Result<Vec<(String, Vec<(String, Vec<u8>)>)>, KubernetesError> {
     let api: Api<Secret> = Api::namespaced(context.client().clone(), context.namespace());
-    let mut metadata = ObjectMeta {
-        name: Some(name.to_owned()),
-        namespace: Some(context.namespace().to_owned()),
-        owner_references: owner.map(|reference| vec![reference]),
-        ..Default::default()
-    };
-    label_tabsdata(&mut metadata, &family_labels(family));
-    let body = Secret {
-        metadata,
-        data: Some(
-            data.into_iter()
-                .map(|(key, value)| (key, ByteString(value.into_bytes())))
-                .collect(),
-        ),
-        ..Default::default()
-    };
-    api.create(&PostParams::default(), &body)
+    let selector = tabsdata_selector(label);
+    let list_params = ListParams::default().labels_from(&selector);
+    let secrets = api
+        .list(&list_params)
         .await
-        .map(|_| ())
-        .map_err(|error| match &error {
-            kube::Error::Api(response) if response.code == HTTP_STATUS_CONFLICT => {
-                KubeSecretError::AlreadyExists {
-                    namespace: context.namespace().to_owned(),
-                    name: name.to_owned(),
-                }
-                .into()
-            }
-            _ => KubeSecretError::CreateFailed {
-                namespace: context.namespace().to_owned(),
-                name: name.to_owned(),
-                cause: error.to_string(),
-            }
-            .into(),
-        })
+        .map_err(|error| KubeSecretError::ListFailed {
+            namespace: context.namespace().to_owned(),
+            label_selector: selector.to_string(),
+            cause: error.to_string(),
+        })?;
+    let mut fetched = Vec::new();
+    for secret in secrets {
+        let Some(name) = secret.metadata.name else {
+            continue;
+        };
+        let mut entries: Vec<(String, Vec<u8>)> = secret
+            .data
+            .into_iter()
+            .flatten()
+            .map(|(key, value)| (key, value.0))
+            .chain(
+                secret
+                    .string_data
+                    .into_iter()
+                    .flatten()
+                    .map(|(key, value)| (key, value.into_bytes())),
+            )
+            .collect();
+        entries.sort_by(|left, right| left.0.cmp(&right.0));
+        fetched.push((name, entries));
+    }
+    fetched.sort_by(|left, right| left.0.cmp(&right.0));
+    Ok(fetched)
 }
 
-pub async fn upsert_secret(
+pub async fn require_secret(
     context: &KubeContext,
     name: &str,
-    data: BTreeMap<String, String>,
-    owner: Option<OwnerReference>,
-    family: Option<&str>,
-) -> Result<(), KubernetesError> {
-    let api: Api<Secret> = Api::namespaced(context.client().clone(), context.namespace());
-    let mut metadata = ObjectMeta {
-        name: Some(name.to_owned()),
-        namespace: Some(context.namespace().to_owned()),
-        owner_references: owner.map(|reference| vec![reference]),
-        ..Default::default()
-    };
-    label_tabsdata(&mut metadata, &family_labels(family));
-    let body = Secret {
-        metadata,
-        data: Some(
-            data.into_iter()
-                .map(|(key, value)| (key, ByteString(value.into_bytes())))
-                .collect(),
-        ),
-        ..Default::default()
-    };
-    match api.get_opt(name).await {
-        Ok(Some(existing)) => {
-            let mut updated = body;
-            updated.metadata.resource_version = existing.metadata.resource_version;
-            api.replace(name, &PostParams::default(), &updated)
-                .await
-                .map(|_| ())
-                .map_err(|error| {
-                    KubeSecretError::ReplaceFailed {
-                        namespace: context.namespace().to_owned(),
-                        name: name.to_owned(),
-                        cause: error.to_string(),
-                    }
-                    .into()
-                })
-        }
-        Ok(None) => api
-            .create(&PostParams::default(), &body)
-            .await
-            .map(|_| ())
-            .map_err(|error| {
-                KubeSecretError::CreateFailed {
-                    namespace: context.namespace().to_owned(),
-                    name: name.to_owned(),
-                    cause: error.to_string(),
-                }
-                .into()
-            }),
-        Err(error) => Err(KubeSecretError::QueryFailed {
+) -> Result<BTreeMap<String, Vec<u8>>, KubernetesError> {
+    match get_secret(context, name).await? {
+        Some(data) => Ok(data),
+        None => Err(KubeSecretError::NotFound {
             namespace: context.namespace().to_owned(),
             name: name.to_owned(),
-            cause: error.to_string(),
         }
         .into()),
     }
-}
-
-pub async fn delete_secret(context: &KubeContext, name: &str) -> Result<(), KubernetesError> {
-    let api: Api<Secret> = Api::namespaced(context.client().clone(), context.namespace());
-    api.delete(name, &DeleteParams::default())
-        .await
-        .map(|_| ())
-        .map_err(|error| {
-            KubeSecretError::DeleteFailed {
-                namespace: context.namespace().to_owned(),
-                name: name.to_owned(),
-                cause: error.to_string(),
-            }
-            .into()
-        })
 }
 
 pub async fn list_secrets(
@@ -214,4 +309,31 @@ pub async fn list_secrets(
     }
     listed.sort_by(|left, right| left.0.cmp(&right.0));
     Ok(listed)
+}
+
+pub async fn exists_secret(context: &KubeContext, name: &str) -> Result<bool, KubernetesError> {
+    let api: Api<Secret> = Api::namespaced(context.client().clone(), context.namespace());
+    match api.get_opt(name).await {
+        Ok(Some(_)) => Ok(true),
+        Ok(None) => Ok(false),
+        Err(error) => Err(KubeSecretError::QueryFailed {
+            namespace: context.namespace().to_owned(),
+            name: name.to_owned(),
+            cause: error.to_string(),
+        }
+        .into()),
+    }
+}
+
+fn family_labels(family: Option<&str>) -> Vec<LabelFilter<'_>> {
+    match family {
+        Some(value) => vec![LabelFilter::new(SECRET_FAMILY_LABEL, value)],
+        None => Vec::new(),
+    }
+}
+
+fn to_byte_strings(data: BTreeMap<String, String>) -> BTreeMap<String, ByteString> {
+    data.into_iter()
+        .map(|(key, value)| (key, ByteString(value.into_bytes())))
+        .collect()
 }

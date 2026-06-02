@@ -2,6 +2,8 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+use std::collections::BTreeMap;
+
 use tracing::{debug, info};
 
 use crate::base::error::kubernetes::KubernetesError;
@@ -28,7 +30,15 @@ impl SecretHandler {
                 continue;
             }
             let data = generator.generate(context).await?;
-            upsert_secret(context, generator.name(), data, None, None).await?;
+            upsert_secret(
+                context,
+                generator.name(),
+                data,
+                BTreeMap::new(),
+                None,
+                None,
+            )
+            .await?;
             info!(
                 secret = %generator.name(),
                 namespace = %context.namespace(),

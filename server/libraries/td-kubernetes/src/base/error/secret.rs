@@ -7,14 +7,10 @@ use td_error::td_error;
 use crate::base::error::kubernetes::KubernetesError;
 use crate::base::error::naming::NamingError;
 use crate::base::error::profile::ProfileError;
+use crate::base::error::provider::ProviderError;
 
 #[td_error]
 pub enum SecretError {
-    #[error(
-        "Reading the current source requires a started cluster. \
-         Start the cluster with `tdkserver server start ...` or use `--source default` to read from the kprofile."
-    )]
-    GetCurrentRequiresStartedCluster = 1,
     #[error(
         "Inconsistent kminus instance state: the cluster is running but the staging folder '{staging_path}' still exists. \
          Expected exactly one of (a) cluster stopped with stage present (never started), or (b) cluster started with stage consumed. \
@@ -100,10 +96,19 @@ pub enum SecretError {
     ConfigmapEntryNotUtf8 { configmap: String, cause: String } = 5003,
     #[error("Could not parse config '{config}' as YAML: {cause}.")]
     ConfigYamlParseFailed { config: String, cause: String } = 5007,
+    #[error("Could not parse secret manifest '{file}': {cause}.")]
+    ManifestParseFailed { file: String, cause: String } = 5008,
+    #[error(
+        "Secret manifest '{file}' has no 'metadata.name'. \
+         Add a name so the manifest identifies which secret to update."
+    )]
+    ManifestMissingName { file: String } = 5009,
     #[error(transparent)]
     Profile(#[from] ProfileError) = 5004,
     #[error(transparent)]
     Kubernetes(#[from] KubernetesError) = 5005,
     #[error(transparent)]
     Naming(#[from] NamingError) = 5006,
+    #[error(transparent)]
+    Provider(#[from] ProviderError) = 5010,
 }

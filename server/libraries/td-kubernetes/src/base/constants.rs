@@ -57,7 +57,7 @@ pub const POD_YAML_COMPONENT_LABEL: &str = concatcp!(KUBERNETES_LABEL_NAMESPACE,
 pub const TABSDATA_CONFIGMAP_PREFIX: &str = "tabsdata-";
 pub const CONFIGMAP_TABSDATA_MANIFEST: &str = concatcp!(TABSDATA_CONFIGMAP_PREFIX, "manifest.yaml");
 
-pub const TABSDATA_SECRET_PREFIX: &str = "tabsdata-";
+pub const TABSDATA_SECRET_PREFIX: &str = "tabsdata-secret-";
 pub const SECRET_TABSDATA_KUBECONFIG: &str = concatcp!(TABSDATA_SECRET_PREFIX, "kubeconfig");
 pub const SECRET_KEY_KUBECONFIG: &str = "kubeconfig";
 

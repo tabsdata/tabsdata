@@ -2,6 +2,7 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+use std::collections::BTreeMap;
 use std::time::Instant;
 
 use k8s_openapi::api::core::v1::Pod;
@@ -46,31 +47,29 @@ pub async fn create_pod(
     let owner = owner_ref_for_pod(&created, template)?;
     for spec in configmaps {
         let name = to_kube_identifier(&component, &spec.name, runid)?;
-        create_configmap(context, &name, spec.data, Some(owner.clone()), None).await?;
+        create_configmap(
+            context,
+            &name,
+            spec.data,
+            BTreeMap::new(),
+            Some(owner.clone()),
+            None,
+        )
+        .await?;
     }
     for spec in secrets {
         let name = to_kube_identifier(&component, &spec.name, runid)?;
-        create_secret(context, &name, spec.data, Some(owner.clone()), None).await?;
+        create_secret(
+            context,
+            &name,
+            spec.data,
+            BTreeMap::new(),
+            Some(owner.clone()),
+            None,
+        )
+        .await?;
     }
     Ok(created)
-}
-
-pub async fn await_pod_condition(
-    context: &KubeContext,
-    name: &str,
-    condition: impl Condition<Pod> + Send + Sync + 'static,
-) -> Result<Option<Pod>, KubernetesError> {
-    let api: Api<Pod> = Api::namespaced(context.client().clone(), context.namespace());
-    await_condition(api, name, condition)
-        .await
-        .map_err(|error| {
-            KubePodError::AwaitFailed {
-                namespace: context.namespace().to_owned(),
-                name: name.to_owned(),
-                cause: error.to_string(),
-            }
-            .into()
-        })
 }
 
 pub async fn delete_pod(context: &KubeContext, name: &str) -> Result<(), KubernetesError> {
@@ -144,6 +143,24 @@ pub async fn list_pods(context: &KubeContext) -> Result<Vec<Pod>, KubernetesErro
             KubePodError::ListFailed {
                 namespace: context.namespace().to_owned(),
                 label_selector: selector.to_string(),
+                cause: error.to_string(),
+            }
+            .into()
+        })
+}
+
+pub async fn await_pod_condition(
+    context: &KubeContext,
+    name: &str,
+    condition: impl Condition<Pod> + Send + Sync + 'static,
+) -> Result<Option<Pod>, KubernetesError> {
+    let api: Api<Pod> = Api::namespaced(context.client().clone(), context.namespace());
+    await_condition(api, name, condition)
+        .await
+        .map_err(|error| {
+            KubePodError::AwaitFailed {
+                namespace: context.namespace().to_owned(),
+                name: name.to_owned(),
                 cause: error.to_string(),
             }
             .into()

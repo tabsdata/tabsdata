@@ -14,24 +14,11 @@ use crate::base::error::kubernetes::{KubeConfigMapError, KubernetesError};
 use crate::kube::api::{LabelFilter, label_tabsdata, tabsdata_selector};
 use crate::kube::context::KubeContext;
 
-pub async fn exists_configmap(context: &KubeContext, name: &str) -> Result<bool, KubernetesError> {
-    let api: Api<ConfigMap> = Api::namespaced(context.client().clone(), context.namespace());
-    match api.get_opt(name).await {
-        Ok(Some(_)) => Ok(true),
-        Ok(None) => Ok(false),
-        Err(error) => Err(KubeConfigMapError::QueryFailed {
-            namespace: context.namespace().to_owned(),
-            name: name.to_owned(),
-            cause: error.to_string(),
-        }
-        .into()),
-    }
-}
-
 pub async fn create_configmap(
     context: &KubeContext,
     name: &str,
     data: BTreeMap<String, String>,
+    labels: BTreeMap<String, String>,
     owner: Option<OwnerReference>,
     family: Option<&str>,
 ) -> Result<(), KubernetesError> {
@@ -40,13 +27,10 @@ pub async fn create_configmap(
         name: Some(name.to_owned()),
         namespace: Some(context.namespace().to_owned()),
         owner_references: owner.map(|reference| vec![reference]),
+        labels: Some(labels),
         ..Default::default()
     };
-    let extras: &[LabelFilter<'_>] = match family {
-        Some(family) => &[LabelFilter::new(CONFIGMAP_FAMILY_LABEL, family)],
-        None => &[],
-    };
-    label_tabsdata(&mut metadata, extras);
+    label_tabsdata(&mut metadata, &family_labels(family));
     let configmap = ConfigMap {
         metadata,
         data: Some(data),
@@ -72,32 +56,126 @@ pub async fn create_configmap(
         })
 }
 
-pub async fn get_configmap(
+pub async fn replace_configmap(
     context: &KubeContext,
     name: &str,
-) -> Result<Option<BTreeMap<String, String>>, KubernetesError> {
+    data: BTreeMap<String, String>,
+    labels: BTreeMap<String, String>,
+    family: Option<&str>,
+) -> Result<(), KubernetesError> {
+    let api: Api<ConfigMap> = Api::namespaced(context.client().clone(), context.namespace());
+    let existing = match api.get_opt(name).await {
+        Ok(Some(configmap)) => configmap,
+        Ok(None) => {
+            return Err(KubeConfigMapError::NotFound {
+                namespace: context.namespace().to_owned(),
+                name: name.to_owned(),
+            }
+            .into());
+        }
+        Err(error) => {
+            return Err(KubeConfigMapError::QueryFailed {
+                namespace: context.namespace().to_owned(),
+                name: name.to_owned(),
+                cause: error.to_string(),
+            }
+            .into());
+        }
+    };
+    let mut metadata = ObjectMeta {
+        name: Some(name.to_owned()),
+        namespace: Some(context.namespace().to_owned()),
+        resource_version: existing.metadata.resource_version,
+        owner_references: existing.metadata.owner_references,
+        labels: Some(labels),
+        ..Default::default()
+    };
+    label_tabsdata(&mut metadata, &family_labels(family));
+    let configmap = ConfigMap {
+        metadata,
+        data: Some(data),
+        ..Default::default()
+    };
+    api.replace(name, &PostParams::default(), &configmap)
+        .await
+        .map(|_| ())
+        .map_err(|error| {
+            KubeConfigMapError::ReplaceFailed {
+                namespace: context.namespace().to_owned(),
+                name: name.to_owned(),
+                cause: error.to_string(),
+            }
+            .into()
+        })
+}
+
+pub async fn upsert_configmap(
+    context: &KubeContext,
+    name: &str,
+    data: BTreeMap<String, String>,
+    labels: BTreeMap<String, String>,
+    owner: Option<OwnerReference>,
+    family: Option<&str>,
+) -> Result<(), KubernetesError> {
     let api: Api<ConfigMap> = Api::namespaced(context.client().clone(), context.namespace());
     match api.get_opt(name).await {
-        Ok(Some(configmap)) => Ok(Some(configmap.data.unwrap_or_default())),
-        Ok(None) => Ok(None),
-        Err(error) => Err(KubeConfigMapError::ReadFailed {
+        Ok(Some(existing)) => {
+            let mut metadata = ObjectMeta {
+                name: Some(name.to_owned()),
+                namespace: Some(context.namespace().to_owned()),
+                resource_version: existing.metadata.resource_version,
+                owner_references: existing.metadata.owner_references,
+                labels: Some(labels),
+                ..Default::default()
+            };
+            label_tabsdata(&mut metadata, &family_labels(family));
+            let configmap = ConfigMap {
+                metadata,
+                data: Some(data),
+                ..Default::default()
+            };
+            api.replace(name, &PostParams::default(), &configmap)
+                .await
+                .map(|_| ())
+                .map_err(|error| {
+                    KubeConfigMapError::ReplaceFailed {
+                        namespace: context.namespace().to_owned(),
+                        name: name.to_owned(),
+                        cause: error.to_string(),
+                    }
+                    .into()
+                })
+        }
+        Ok(None) => {
+            let mut metadata = ObjectMeta {
+                name: Some(name.to_owned()),
+                namespace: Some(context.namespace().to_owned()),
+                owner_references: owner.map(|reference| vec![reference]),
+                labels: Some(labels),
+                ..Default::default()
+            };
+            label_tabsdata(&mut metadata, &family_labels(family));
+            let configmap = ConfigMap {
+                metadata,
+                data: Some(data),
+                ..Default::default()
+            };
+            api.create(&PostParams::default(), &configmap)
+                .await
+                .map(|_| ())
+                .map_err(|error| {
+                    KubeConfigMapError::CreateFailed {
+                        namespace: context.namespace().to_owned(),
+                        name: name.to_owned(),
+                        cause: error.to_string(),
+                    }
+                    .into()
+                })
+        }
+        Err(error) => Err(KubeConfigMapError::QueryFailed {
             namespace: context.namespace().to_owned(),
             name: name.to_owned(),
             cause: error.to_string(),
-        }
-        .into()),
-    }
-}
-
-pub async fn require_configmap(
-    context: &KubeContext,
-    name: &str,
-) -> Result<BTreeMap<String, String>, KubernetesError> {
-    match get_configmap(context, name).await? {
-        Some(data) => Ok(data),
-        None => Err(KubeConfigMapError::NotFound {
-            namespace: context.namespace().to_owned(),
-            name: name.to_owned(),
         }
         .into()),
     }
@@ -118,44 +196,21 @@ pub async fn delete_configmap(context: &KubeContext, name: &str) -> Result<(), K
         })
 }
 
-pub async fn list_configmaps(
+pub async fn get_configmap(
     context: &KubeContext,
-    label: Option<LabelFilter<'_>>,
-) -> Result<Vec<(String, Vec<String>)>, KubernetesError> {
+    name: &str,
+) -> Result<Option<BTreeMap<String, String>>, KubernetesError> {
     let api: Api<ConfigMap> = Api::namespaced(context.client().clone(), context.namespace());
-    let selector = tabsdata_selector(label);
-    let list_params = ListParams::default().labels_from(&selector);
-    let configmaps =
-        api.list(&list_params)
-            .await
-            .map_err(|error| KubeConfigMapError::ListFailed {
-                namespace: context.namespace().to_owned(),
-                label_selector: selector.to_string(),
-                cause: error.to_string(),
-            })?;
-    let mut listed = Vec::new();
-    for configmap in configmaps {
-        let Some(name) = configmap.metadata.name else {
-            continue;
-        };
-        let mut keys: Vec<String> = configmap
-            .data
-            .into_iter()
-            .flatten()
-            .map(|(key, _)| key)
-            .chain(
-                configmap
-                    .binary_data
-                    .into_iter()
-                    .flatten()
-                    .map(|(key, _)| key),
-            )
-            .collect();
-        keys.sort();
-        listed.push((name, keys));
+    match api.get_opt(name).await {
+        Ok(Some(configmap)) => Ok(Some(configmap.data.unwrap_or_default())),
+        Ok(None) => Ok(None),
+        Err(error) => Err(KubeConfigMapError::ReadFailed {
+            namespace: context.namespace().to_owned(),
+            name: name.to_owned(),
+            cause: error.to_string(),
+        }
+        .into()),
     }
-    listed.sort_by(|left, right| left.0.cmp(&right.0));
-    Ok(listed)
 }
 
 pub async fn get_configmaps(
@@ -198,82 +253,77 @@ pub async fn get_configmaps(
     Ok(fetched)
 }
 
-pub async fn merge_configmap(
+pub async fn require_configmap(
     context: &KubeContext,
     name: &str,
-    updates: BTreeMap<String, String>,
-) -> Result<(), KubernetesError> {
-    let api: Api<ConfigMap> = Api::namespaced(context.client().clone(), context.namespace());
-    let mut configmap = match api.get_opt(name).await {
-        Ok(Some(configmap)) => configmap,
-        Ok(None) => {
-            return Err(KubeConfigMapError::NotFound {
-                namespace: context.namespace().to_owned(),
-                name: name.to_owned(),
-            }
-            .into());
+) -> Result<BTreeMap<String, String>, KubernetesError> {
+    match get_configmap(context, name).await? {
+        Some(data) => Ok(data),
+        None => Err(KubeConfigMapError::NotFound {
+            namespace: context.namespace().to_owned(),
+            name: name.to_owned(),
         }
-        Err(error) => {
-            return Err(KubeConfigMapError::QueryFailed {
-                namespace: context.namespace().to_owned(),
-                name: name.to_owned(),
-                cause: error.to_string(),
-            }
-            .into());
-        }
-    };
-    configmap
-        .data
-        .get_or_insert_with(BTreeMap::new)
-        .extend(updates);
-    api.replace(name, &PostParams::default(), &configmap)
-        .await
-        .map(|_| ())
-        .map_err(|error| {
-            KubeConfigMapError::ReplaceFailed {
-                namespace: context.namespace().to_owned(),
-                name: name.to_owned(),
-                cause: error.to_string(),
-            }
-            .into()
-        })
+        .into()),
+    }
 }
 
-pub async fn replace_configmap(
+pub async fn list_configmaps(
     context: &KubeContext,
-    name: &str,
-    data: BTreeMap<String, String>,
-) -> Result<(), KubernetesError> {
+    label: Option<LabelFilter<'_>>,
+) -> Result<Vec<(String, Vec<String>)>, KubernetesError> {
     let api: Api<ConfigMap> = Api::namespaced(context.client().clone(), context.namespace());
-    let mut configmap = match api.get_opt(name).await {
-        Ok(Some(configmap)) => configmap,
-        Ok(None) => {
-            return Err(KubeConfigMapError::NotFound {
+    let selector = tabsdata_selector(label);
+    let list_params = ListParams::default().labels_from(&selector);
+    let configmaps =
+        api.list(&list_params)
+            .await
+            .map_err(|error| KubeConfigMapError::ListFailed {
                 namespace: context.namespace().to_owned(),
-                name: name.to_owned(),
-            }
-            .into());
-        }
-        Err(error) => {
-            return Err(KubeConfigMapError::QueryFailed {
-                namespace: context.namespace().to_owned(),
-                name: name.to_owned(),
+                label_selector: selector.to_string(),
                 cause: error.to_string(),
-            }
-            .into());
+            })?;
+    let mut listed = Vec::new();
+    for configmap in configmaps {
+        let Some(name) = configmap.metadata.name else {
+            continue;
+        };
+        let mut keys: Vec<String> = configmap
+            .data
+            .into_iter()
+            .flatten()
+            .map(|(key, _)| key)
+            .chain(
+                configmap
+                    .binary_data
+                    .into_iter()
+                    .flatten()
+                    .map(|(key, _)| key),
+            )
+            .collect();
+        keys.sort();
+        listed.push((name, keys));
+    }
+    listed.sort_by(|left, right| left.0.cmp(&right.0));
+    Ok(listed)
+}
+
+pub async fn exists_configmap(context: &KubeContext, name: &str) -> Result<bool, KubernetesError> {
+    let api: Api<ConfigMap> = Api::namespaced(context.client().clone(), context.namespace());
+    match api.get_opt(name).await {
+        Ok(Some(_)) => Ok(true),
+        Ok(None) => Ok(false),
+        Err(error) => Err(KubeConfigMapError::QueryFailed {
+            namespace: context.namespace().to_owned(),
+            name: name.to_owned(),
+            cause: error.to_string(),
         }
-    };
-    configmap.data = Some(data);
-    configmap.binary_data = None;
-    api.replace(name, &PostParams::default(), &configmap)
-        .await
-        .map(|_| ())
-        .map_err(|error| {
-            KubeConfigMapError::ReplaceFailed {
-                namespace: context.namespace().to_owned(),
-                name: name.to_owned(),
-                cause: error.to_string(),
-            }
-            .into()
-        })
+        .into()),
+    }
+}
+
+fn family_labels(family: Option<&str>) -> Vec<LabelFilter<'_>> {
+    match family {
+        Some(value) => vec![LabelFilter::new(CONFIGMAP_FAMILY_LABEL, value)],
+        None => Vec::new(),
+    }
 }

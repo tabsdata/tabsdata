@@ -362,6 +362,7 @@ impl DockerProvider {
             &context,
             CONFIGMAP_TABSDATA_MANIFEST,
             manifest_data,
+            BTreeMap::new(),
             None,
             None,
         )
@@ -402,7 +403,7 @@ async fn store_family_configmaps(
         let name = to_configmap_name(family, &file)?;
         let mut data = BTreeMap::new();
         data.insert(file, content);
-        create_configmap(context, &name, data, None, Some(family.item)).await?;
+        create_configmap(context, &name, data, BTreeMap::new(), None, Some(family.item)).await?;
     }
     Ok(())
 }

@@ -9,6 +9,7 @@ use crate::base::constants::{
     CONFIGMAP_FAMILY_LABEL, Family, KPROFILE_CONFIGS_FAMILY, KUBE_NAME_SEPARATOR,
     TABSDATA_SECRET_PREFIX,
 };
+use crate::base::error::provider::ProviderError;
 use crate::base::error::secret::SecretError;
 use crate::base::naming::to_configmap_file;
 use crate::core::system::exit::CommandError;
@@ -55,7 +56,11 @@ pub async fn resolve_source(
         }),
         (ClusterProvider::Kminus, false, Some(_)) => Ok(ResolvedSource::Stage),
         (_, true, _) => Ok(ResolvedSource::Configmaps),
-        (_, false, _) => Err(SecretError::GetCurrentRequiresStartedCluster),
+        (ClusterProvider::Kminus, false, None) => Err(ProviderError::ClusterNotRunningKminus.into()),
+        (other, false, _) => Err(ProviderError::ClusterNotRunningExternal {
+            provider: other.as_str().to_owned(),
+        }
+        .into()),
     }
 }
 

@@ -99,6 +99,17 @@ pub enum ProviderError {
     NofileLimitTooLow { required: u64, soft: u64, hard: u64 } = 12,
     #[error("Provider '{0}' is not yet implemented.")]
     NotImplemented(String) = 6000,
+    #[error(
+        "The cluster is not running. \
+         Start it with `tdkserver cluster start ...` and try again."
+    )]
+    ClusterNotRunningKminus = 13,
+    #[error(
+        "The cluster is not running. tdkserver cannot be used to manage the cluster lifecycle \
+         of '{provider}' clusters; start the cluster externally (e.g. via your cloud console or \
+         `kubectl`) and try again."
+    )]
+    ClusterNotRunningExternal { provider: String } = 14,
 }
 
 #[cfg(test)]

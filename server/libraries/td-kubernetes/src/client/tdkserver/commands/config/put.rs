@@ -18,7 +18,7 @@ use crate::core::system::exit::{CommandResult, abort_with};
 use crate::core::system::file::is_hidden_or_system;
 use crate::kube::api::{LabelFilter, get_configmaps, replace_configmap};
 use crate::kube::context::KubeContext;
-use crate::runtime::provider::{Provider, provider_for_or_tdkcontext};
+use crate::runtime::provider::{Provider, provider_for_or_tdkcontext, require_started_cluster};
 
 #[derive(Debug, Clone, Args)]
 #[command(group(
@@ -81,6 +81,7 @@ pub async fn command_put(arguments: PutArguments, globals: &GlobalArguments) -> 
     let source = PutSource::from_args(folder, file);
     ensure_source(&source)?;
     let provider = provider_for_or_tdkcontext(cluster, instance, globals.verbose).await?;
+    require_started_cluster(provider.as_ref()).await?;
     put_configs(provider.as_ref(), &source).await
 }
 
@@ -253,6 +254,13 @@ async fn process_candidate(
     };
     let mut data: BTreeMap<String, String> = BTreeMap::new();
     data.insert(file_name.to_owned(), text);
-    replace_configmap(context, &configmap_name, data).await?;
+    replace_configmap(
+        context,
+        &configmap_name,
+        data,
+        BTreeMap::new(),
+        Some(KPROFILE_CONFIGS_FAMILY.item),
+    )
+    .await?;
     Ok(Outcome::Replaced)
 }

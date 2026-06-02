@@ -2,6 +2,8 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+use std::collections::BTreeMap;
+
 use k8s_openapi::api::batch::v1::Job;
 use kube::Api;
 use kube::api::{DeleteParams, ListParams, PostParams, PropagationPolicy};
@@ -43,31 +45,29 @@ pub async fn create_job(
     let owner = owner_ref_for_job(&created, template)?;
     for spec in configmaps {
         let name = to_kube_identifier(&component, &spec.name, runid)?;
-        create_configmap(context, &name, spec.data, Some(owner.clone()), None).await?;
+        create_configmap(
+            context,
+            &name,
+            spec.data,
+            BTreeMap::new(),
+            Some(owner.clone()),
+            None,
+        )
+        .await?;
     }
     for spec in secrets {
         let name = to_kube_identifier(&component, &spec.name, runid)?;
-        create_secret(context, &name, spec.data, Some(owner.clone()), None).await?;
+        create_secret(
+            context,
+            &name,
+            spec.data,
+            BTreeMap::new(),
+            Some(owner.clone()),
+            None,
+        )
+        .await?;
     }
     Ok(created)
-}
-
-pub async fn await_job_condition(
-    context: &KubeContext,
-    name: &str,
-    condition: impl Condition<Job> + Send + Sync + 'static,
-) -> Result<Option<Job>, KubernetesError> {
-    let api: Api<Job> = Api::namespaced(context.client().clone(), context.namespace());
-    await_condition(api, name, condition)
-        .await
-        .map_err(|error| {
-            KubeJobError::AwaitFailed {
-                namespace: context.namespace().to_owned(),
-                name: name.to_owned(),
-                cause: error.to_string(),
-            }
-            .into()
-        })
 }
 
 pub async fn delete_job(context: &KubeContext, name: &str) -> Result<(), KubernetesError> {
@@ -117,6 +117,24 @@ pub async fn list_jobs(context: &KubeContext) -> Result<Vec<Job>, KubernetesErro
             KubeJobError::ListFailed {
                 namespace: context.namespace().to_owned(),
                 label_selector: selector.to_string(),
+                cause: error.to_string(),
+            }
+            .into()
+        })
+}
+
+pub async fn await_job_condition(
+    context: &KubeContext,
+    name: &str,
+    condition: impl Condition<Job> + Send + Sync + 'static,
+) -> Result<Option<Job>, KubernetesError> {
+    let api: Api<Job> = Api::namespaced(context.client().clone(), context.namespace());
+    await_condition(api, name, condition)
+        .await
+        .map_err(|error| {
+            KubeJobError::AwaitFailed {
+                namespace: context.namespace().to_owned(),
+                name: name.to_owned(),
                 cause: error.to_string(),
             }
             .into()

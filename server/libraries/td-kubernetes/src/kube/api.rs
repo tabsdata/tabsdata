@@ -6,19 +6,24 @@
 //!
 //! Verb table (resource is singular: pod, job, configmap, secret, namespace, cluster):
 //!
-//!   `await_<resource>_condition`   wait on a caller-supplied condition
 //!   `build_<resource>`              factory for a client or handle
 //!   `create_<resource>`             create; error if it exists
+//!   `replace_<resource>`            replace entirely; error if missing
+//!   `upsert_<resource>`             create if missing, replace if present
 //!   `delete_<resource>`             delete one named; error if missing
 //!   `delete_<resource>s`            selector-driven bulk delete
-//!   `ensure_<resource>_<state>`     idempotent precondition
+//!   `get_<resource>`                fetch one with data; returns `Option<T>`
+//!   `get_<resource>s`               selector-driven bulk fetch with data
+//!   `require_<resource>`            fetch one with data; errors if missing
+//!   `list_<resource>s`              selector-driven bulk fetch (names + key lists, no values)
 //!   `exists_<resource>`             predicate; returns bool; does not error on missing
-//!   `get_<resource>`                fetch one; returns `Option<T>`
-//!   `list_<resource>s`              selector-driven bulk fetch
-//!   `merge_<resource>`              merge given keys into existing; error if missing
-//!   `replace_<resource>`            replace entirely; error if missing
-//!   `require_<resource>`            fetch one; errors if missing
-//!   `upsert_<resource>`             create if missing, replace if present
+//!   `ensure_<resource>_<state>`     idempotent precondition (e.g.
+//!                                     `ensure_<resource>_exists`,
+//!                                     `ensure_<resource>_reachable`)
+//!   `await_<resource>_condition`    wait on a caller-supplied condition
+//!
+//! Process-level helpers (not resource verbs) live in `client` and are exempt
+//! from the table (e.g. `install_crypto_provider`).
 
 pub mod client;
 pub mod cluster;
@@ -46,10 +51,13 @@ pub use client::{build_incluster_kube_client, build_kube_client, install_crypto_
 pub use cluster::ensure_cluster_reachable;
 pub use configmap::{
     create_configmap, delete_configmap, exists_configmap, get_configmap, get_configmaps,
-    list_configmaps, merge_configmap, replace_configmap, require_configmap,
+    list_configmaps, replace_configmap, require_configmap, upsert_configmap,
 };
 pub use namespace::ensure_namespace_exists;
-pub use secret::{delete_secret, exists_secret, list_secrets, upsert_secret};
+pub use secret::{
+    create_secret, delete_secret, exists_secret, get_secret, get_secrets, list_secrets,
+    replace_secret, require_secret, upsert_secret,
+};
 
 #[derive(Debug, Clone)]
 pub struct ConfigMapSpec {

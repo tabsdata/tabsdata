@@ -110,6 +110,7 @@ pub mod generator;
 pub mod handler;
 pub mod kubeconfig;
 pub mod manifest;
+pub mod parser;
 pub mod phase;
 pub mod source;
 

@@ -14,21 +14,6 @@ use crate::base::error::kubernetes::{KubeClientError, KubernetesError};
 
 pub const POD_KUBECONFIG_ENV: &str = "TDK_KUBECONFIG";
 
-pub fn install_crypto_provider() {
-    if let Err(error) = aws_lc_rs::default_provider().install_default() {
-        debug!(
-            "Failed to install the aws-lc-rs tls cryptographic provider: {error:?}. Falling back to the ring tls cryptographic provider."
-        );
-        if let Err(error) = ring::default_provider().install_default() {
-            debug!("Failed to install the ring tls cryptographic provider: {error:?}.");
-        } else {
-            debug!("Successfully installed the ring tls cryptographic provider.");
-        }
-    } else {
-        debug!("Successfully installed the aws-lc-rs tls cryptographic provider.");
-    }
-}
-
 pub fn build_kube_client(config: &Config) -> Result<Client, KubernetesError> {
     Client::try_from(config.clone())
         .map_err(|error| KubeClientError::BuildFailed(error.to_string()).into())
@@ -56,5 +41,20 @@ pub async fn build_pod_kube_client() -> Result<Client, KubernetesError> {
                 .map_err(|error| KubeClientError::BuildFailed(error.to_string()).into())
         }
         _ => build_incluster_kube_client().await,
+    }
+}
+
+pub fn install_crypto_provider() {
+    if let Err(error) = aws_lc_rs::default_provider().install_default() {
+        debug!(
+            "Failed to install the aws-lc-rs tls cryptographic provider: {error:?}. Falling back to the ring tls cryptographic provider."
+        );
+        if let Err(error) = ring::default_provider().install_default() {
+            debug!("Failed to install the ring tls cryptographic provider: {error:?}.");
+        } else {
+            debug!("Successfully installed the ring tls cryptographic provider.");
+        }
+    } else {
+        debug!("Successfully installed the aws-lc-rs tls cryptographic provider.");
     }
 }

@@ -329,6 +329,18 @@ pub trait Provider: Send + Sync {
     async fn ensure_restartable_server(&self) -> CommandResult;
 }
 
+pub async fn require_started_cluster(provider: &dyn Provider) -> Result<(), ProviderError> {
+    if provider.cluster_alive().await {
+        return Ok(());
+    }
+    Err(match provider.cluster_provider() {
+        ClusterProvider::Kminus => ProviderError::ClusterNotRunningKminus,
+        other => ProviderError::ClusterNotRunningExternal {
+            provider: other.as_str().to_owned(),
+        },
+    })
+}
+
 pub(super) async fn handle_phase_secrets(
     provider: &(impl Provider + ?Sized),
     phase: SecretPhase,
