@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert
@@ -62,10 +62,11 @@ def _resolve_dest_cfg(dest_cfg: DestCfgSpec | None) -> _WriterCfg:
 # the runtime IO stack).
 
 
-class StarRocksDestPlugin(DestPlugin[StarRocksDest]):
+class StarRocksDestPlugin(DestPlugin[StarRocksDestConn, StarRocksDest]):
     def write_out(
         self,
         ctx: DestContext,
+        conn: StarRocksDestConn,
         dest: StarRocksDest,
         tables: list[TableFileSpec],
     ) -> None:
@@ -88,7 +89,6 @@ class StarRocksDestPlugin(DestPlugin[StarRocksDest]):
                 slots=len(tables),
             )
 
-        conn = cast(StarRocksDestConn, dest.conn)
         host = _convert(conn.host, str)
         port = _convert(conn.port, int)
         database = _convert(conn.database, str)

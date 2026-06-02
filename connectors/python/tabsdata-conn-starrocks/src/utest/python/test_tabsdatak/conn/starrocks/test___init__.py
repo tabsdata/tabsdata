@@ -4,14 +4,13 @@ import typing
 
 import pytest
 
-from tabsdatak.api import Var, NamedConn, Secret
+from tabsdatak.api import Var, Secret
 from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
     CfgSpec,
     UserPassword,
 )
 from tabsdatak.conn.starrocks import (
-    ConnSpec,
     CredentialsSpec,
     DatabaseSpec,
     DestCfgSpec,
@@ -43,23 +42,8 @@ def _staging():
     )
 
 
-def _conn():
-    return StarRocksDestConn(
-        host="starrocks.example.com",
-        staging=_staging(),
-        port=9031,
-        database="analytics",
-        credentials=UserPassword(
-            user=Secret.lit("etl"),
-            password=Secret.lit("hunter2"),
-        ),
-        conn_cfg={"starrocks.timeout": 30},
-    )
-
-
 def test_starrocks_dest_full_round_trip():
     dest = StarRocksDest(
-        conn=_conn(),
         tables=["analytics.users", "analytics.orders"],
         if_table_exists="replace",
         schema_evolution="iceberg",
@@ -67,24 +51,10 @@ def test_starrocks_dest_full_round_trip():
     )
     loaded = StarRocksDest.from_json(dest.to_json())
     assert loaded == dest
-    assert loaded.conn.port == 9031
-    assert loaded.conn.database.value() == "analytics"
-    assert loaded.conn.conn_cfg == {"starrocks.timeout": 30}
     assert loaded.tables == ["analytics.users", "analytics.orders"]
     assert loaded.if_table_exists == "replace"
     assert loaded.schema_evolution == "iceberg"
     assert loaded.dest_cfg == {"starrocks.logging_level": 20}
-
-
-def test_starrocks_dest_round_trip_with_named_conn():
-    dest = StarRocksDest(
-        conn=NamedConn(name="prod_starrocks"),
-        tables=["analytics.users"],
-    )
-    loaded = StarRocksDest.from_json(dest.to_json())
-    assert loaded == dest
-    assert isinstance(loaded.conn, NamedConn)
-    assert loaded.conn.name == "prod_starrocks"
 
 
 # ---------------------------------------------------------------------------
@@ -105,7 +75,6 @@ def test_starrocks_conn_fields_wire_expected_specs():
 
 
 def test_starrocks_dest_fields_wire_expected_specs():
-    assert _hint(StarRocksDest, "conn") == ConnSpec
     assert _hint(StarRocksDest, "tables") == StarRocksTableNamesSpec
     assert _hint(StarRocksDest, "if_table_exists") == IfTableExistsSpec
     assert _hint(StarRocksDest, "schema_evolution") == SchemaEvolutionSpec
@@ -186,7 +155,6 @@ def _bare_conn():
 def test_starrocks_dest_rejects_unknown_dest_cfg_key():
     with pytest.raises(ConnInitException) as ei:
         StarRocksDest(
-            conn=_bare_conn(),
             tables=["default.users"],
             dest_cfg={"bogus.key": 1},
         )
@@ -195,7 +163,6 @@ def test_starrocks_dest_rejects_unknown_dest_cfg_key():
 
 def test_starrocks_dest_accepts_known_dest_cfg_keys():
     dest = StarRocksDest(
-        conn=_bare_conn(),
         tables=["default.users"],
         dest_cfg={"starrocks.logging_level": 20},
     )

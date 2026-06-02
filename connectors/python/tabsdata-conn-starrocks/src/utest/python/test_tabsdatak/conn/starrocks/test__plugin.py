@@ -96,12 +96,13 @@ def _bare_conn() -> StarRocksDestConn:
 
 def test_dest_plugin_raises_starrocks_3_on_tables_slots_mismatch(work_dir):
     dest = StarRocksDest(
-        conn=_bare_conn(),
         tables=["analytics.users", "analytics.orders"],
     )
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     with pytest.raises(StarRocksRuntimeException) as ei:
-        plugin.StarRocksDestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
+        plugin.StarRocksDestPlugin().write_out(
+            _dest_ctx(work_dir), _bare_conn(), dest, [src]
+        )
     assert ei.value.api_error is StarRocksErrorCode.STARROCKS_3
 
 
@@ -114,9 +115,11 @@ def test_dest_plugin_wraps_operational_error_as_starrocks_4(monkeypatch, work_di
     monkeypatch.setattr(impl, "build_starrocks_engine", lambda **kw: fake)
 
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
-    dest = StarRocksDest(conn=_bare_conn(), tables=["users"])
+    dest = StarRocksDest(tables=["users"])
     with pytest.raises(StarRocksRuntimeException) as ei:
-        plugin.StarRocksDestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
+        plugin.StarRocksDestPlugin().write_out(
+            _dest_ctx(work_dir), _bare_conn(), dest, [src]
+        )
     assert ei.value.api_error is StarRocksErrorCode.STARROCKS_4
     fake.dispose.assert_called()
 
@@ -131,9 +134,11 @@ def test_dest_plugin_wraps_other_sqlalchemy_error_as_starrocks_5(
     monkeypatch.setattr(impl, "build_starrocks_engine", lambda **kw: fake)
 
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
-    dest = StarRocksDest(conn=_bare_conn(), tables=["users"])
+    dest = StarRocksDest(tables=["users"])
     with pytest.raises(StarRocksRuntimeException) as ei:
-        plugin.StarRocksDestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
+        plugin.StarRocksDestPlugin().write_out(
+            _dest_ctx(work_dir), _bare_conn(), dest, [src]
+        )
     assert ei.value.api_error is StarRocksErrorCode.STARROCKS_5
 
 
@@ -169,8 +174,10 @@ def test_dest_plugin_uploads_then_executes_insert(monkeypatch, work_dir):
     monkeypatch.setattr(impl, "build_starrocks_engine", lambda **kw: fake_engine)
 
     parquet = _make_parquet(work_dir / "users.parquet", [{"id": 1, "name": "a"}])
-    dest = StarRocksDest(conn=_bare_conn(), tables=["users"])
-    plugin.StarRocksDestPlugin().write_out(_dest_ctx(work_dir), dest, [parquet])
+    dest = StarRocksDest(tables=["users"])
+    plugin.StarRocksDestPlugin().write_out(
+        _dest_ctx(work_dir), _bare_conn(), dest, [parquet]
+    )
 
     assert calls == [("upload", "users.parquet", "users")]
     assert len(executed) == 1
@@ -204,11 +211,12 @@ def test_dest_plugin_replace_truncates_then_inserts(monkeypatch, work_dir):
 
     parquet = _make_parquet(work_dir / "users.parquet", [{"id": 1}])
     dest = StarRocksDest(
-        conn=_bare_conn(),
         tables=["users"],
         if_table_exists="replace",
     )
-    plugin.StarRocksDestPlugin().write_out(_dest_ctx(work_dir), dest, [parquet])
+    plugin.StarRocksDestPlugin().write_out(
+        _dest_ctx(work_dir), _bare_conn(), dest, [parquet]
+    )
 
     assert len(executed) == 2
     assert executed[0] == "TRUNCATE TABLE `testdb`.`users`"
@@ -241,7 +249,6 @@ def test_starrocks_dest_def_wires_plugin_and_explorer():
 
 def test_starrocks_dest_cardinality_uses_tables_length():
     dest = StarRocksDest(
-        conn=_bare_conn(),
         tables=["users", "orders", "events"],
     )
     assert plugin.STARROCKS_DEST.cardinality(dest) == 3

@@ -26,7 +26,6 @@ import tabsdatak._api as _api
 from tabsdatak.api import (
     Conn,
     Dest,
-    NamedConn,
     Secret,
     Var,
 )
@@ -202,9 +201,6 @@ class StarRocksDestConn(Conn):
     conn_cfg: CfgSpec | None = None
 
 
-ConnSpec: TypeAlias = Union[NamedConn, StarRocksDestConn]
-
-
 # --- Destination -----------------------------------------------------
 
 
@@ -212,7 +208,6 @@ ConnSpec: TypeAlias = Union[NamedConn, StarRocksDestConn]
 class StarRocksDest(Dest):
     """StarRocks destination — one parquet slot per table.
 
-    :param conn: :class:`StarRocksDestConn` (or :class:`NamedConn`).
     :param tables: FQN table names; one parquet slot per entry.
     :param if_table_exists: ``"append"`` (default) or
         ``"replace"``.
@@ -221,7 +216,6 @@ class StarRocksDest(Dest):
     :param dest_cfg: Optional dest cfg dict.
     """
 
-    conn: ConnSpec
     tables: StarRocksTableNamesSpec
     if_table_exists: IfTableExistsSpec = "append"
     schema_evolution: SchemaEvolutionSpec = "strict"
