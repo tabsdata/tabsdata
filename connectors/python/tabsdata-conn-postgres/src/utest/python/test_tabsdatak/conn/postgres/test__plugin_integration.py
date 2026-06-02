@@ -167,26 +167,26 @@ def work_dir(tmp_path: Path) -> Path:
 
 
 def test_src_plugin_read_in_returns_parquet_files(fresh_postgres, work_dir):
+    conn = _src_conn_from(fresh_postgres)
     src = PostgresSrc(
-        conn=_src_conn_from(fresh_postgres),
         queries=["SELECT id, name FROM users ORDER BY id"],
     )
-    out = plugin.PostgresSrcPlugin().read_in(_src_ctx(work_dir), src)
+    out = plugin.PostgresSrcPlugin().read_in(_src_ctx(work_dir), conn, src)
     assert len(out) == 1
     df = pl.concat([_read_parquet(p) for p in out[0]])
     assert df["name"].to_list() == ["alice", "bob", "carol"]
 
 
 def test_src_plugin_read_in_multiple_queries(fresh_postgres, work_dir):
+    conn = _src_conn_from(fresh_postgres)
     src = PostgresSrc(
-        conn=_src_conn_from(fresh_postgres),
         queries=[
             "SELECT id FROM users WHERE age >= :cut ORDER BY id",
             "SELECT id FROM orders ORDER BY id",
         ],
         initial_values={"cut": 30},
     )
-    out = plugin.PostgresSrcPlugin().read_in(_src_ctx(work_dir), src)
+    out = plugin.PostgresSrcPlugin().read_in(_src_ctx(work_dir), conn, src)
     assert len(out) == 2
     ids = pl.concat([_read_parquet(p) for p in out[0]])["id"].to_list()
     order_ids = pl.concat([_read_parquet(p) for p in out[1]])["id"].to_list()
@@ -204,11 +204,11 @@ def test_dest_plugin_write_out_appends_rows(fresh_postgres, work_dir):
         work_dir / "in.parquet",
         [{"id": 100, "name": "dave", "age": 50}],
     )
+    conn = _dest_conn_from(fresh_postgres)
     dest = PostgresDest(
-        conn=_dest_conn_from(fresh_postgres),
         tables=["users"],
     )
-    plugin.PostgresDestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
+    plugin.PostgresDestPlugin().write_out(_dest_ctx(work_dir), conn, dest, [src])
     eng = create_engine(fresh_postgres.uri_with_credentials)
     try:
         with eng.connect() as conn:
@@ -227,12 +227,12 @@ def test_dest_plugin_write_out_replace_clears_existing(fresh_postgres, work_dir)
         work_dir / "in.parquet",
         [{"id": 1, "name": "only", "age": 1}],
     )
+    conn = _dest_conn_from(fresh_postgres)
     dest = PostgresDest(
-        conn=_dest_conn_from(fresh_postgres),
         tables=["users"],
         if_table_exists="replace",
     )
-    plugin.PostgresDestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
+    plugin.PostgresDestPlugin().write_out(_dest_ctx(work_dir), conn, dest, [src])
     eng = create_engine(fresh_postgres.uri_with_credentials)
     try:
         with eng.connect() as conn:

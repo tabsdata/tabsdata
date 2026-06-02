@@ -270,6 +270,7 @@ def _patched_signal_handlers():
 
 def _run_plugin_in_thread(
     ctx: _CdcCtx,
+    conn: PostgresCdcStreamSrcConn,
     src: PostgresCdcStreamSrc,
     timeout_s: float = 60.0,
 ) -> None:
@@ -278,7 +279,7 @@ def _run_plugin_in_thread(
     def _go():
         try:
             with _patched_signal_handlers():
-                PostgresCdcStreamSrcPlugin().run(ctx=ctx, stream_src=src)
+                PostgresCdcStreamSrcPlugin().run(ctx=ctx, conn=conn, stream_src=src)
         except BaseException as exc:  # noqa: BLE001
             err.append(exc)
 
@@ -315,8 +316,8 @@ def test_cdc_insert_events_stage_a_committed_manifest(
     work.mkdir()
     ctx = _CdcCtx(work, active_polls=8)
 
+    conn = _make_cdc_conn(cfg)
     src = PostgresCdcStreamSrc(
-        conn=_make_cdc_conn(cfg),
         tables=[f"public.users"],
         replication_slot=_REPLICATION_SLOT,
         replication_slot_behavior="reuse",
@@ -337,7 +338,7 @@ def test_cdc_insert_events_stage_a_committed_manifest(
 
     threading.Thread(target=_producer, daemon=True).start()
 
-    _run_plugin_in_thread(ctx, src, timeout_s=60.0)
+    _run_plugin_in_thread(ctx, conn, src, timeout_s=60.0)
 
     files = _all_staged_files(ctx)
     assert files, "no committed manifest files produced by the plugin"
@@ -364,8 +365,8 @@ def test_cdc_update_and_delete_events_surface(
 
     _insert_users(cfg, [{"id": 7, "name": "carol", "age": 40}])
 
+    conn = _make_cdc_conn(cfg)
     src = PostgresCdcStreamSrc(
-        conn=_make_cdc_conn(cfg),
         tables=["public.users"],
         replication_slot=_REPLICATION_SLOT,
         replication_slot_behavior="reuse",
@@ -386,7 +387,7 @@ def test_cdc_update_and_delete_events_surface(
 
     threading.Thread(target=_producer, daemon=True).start()
 
-    _run_plugin_in_thread(ctx, src, timeout_s=60.0)
+    _run_plugin_in_thread(ctx, conn, src, timeout_s=60.0)
 
     files = _all_staged_files(ctx)
     assert files, "no committed manifest files produced"
@@ -417,8 +418,8 @@ def test_cdc_tail_skips_pre_existing_events(
         {"id": 101, "name": "pre-2", "age": 2},
     ])
 
+    conn = _make_cdc_conn(cfg)
     src = PostgresCdcStreamSrc(
-        conn=_make_cdc_conn(cfg),
         tables=["public.users"],
         replication_slot=_REPLICATION_SLOT,
         replication_slot_behavior="reuse",
@@ -437,7 +438,7 @@ def test_cdc_tail_skips_pre_existing_events(
 
     threading.Thread(target=_producer, daemon=True).start()
 
-    _run_plugin_in_thread(ctx, src, timeout_s=60.0)
+    _run_plugin_in_thread(ctx, conn, src, timeout_s=60.0)
 
     files = _all_staged_files(ctx)
     if not files:
@@ -468,8 +469,8 @@ def test_cdc_keeps_offset_in_slot_not_ctx_state(
 
     _insert_users(cfg, [{"id": 1, "name": "alice", "age": 30}])
 
+    conn = _make_cdc_conn(cfg)
     src = PostgresCdcStreamSrc(
-        conn=_make_cdc_conn(cfg),
         tables=["public.users"],
         replication_slot=_REPLICATION_SLOT,
         replication_slot_behavior="reuse",
@@ -482,7 +483,7 @@ def test_cdc_keeps_offset_in_slot_not_ctx_state(
         },
     )
 
-    _run_plugin_in_thread(ctx, src, timeout_s=60.0)
+    _run_plugin_in_thread(ctx, conn, src, timeout_s=60.0)
 
     # External offset: nothing is persisted to Tabsdata stream state
     # (the staged commits used a plain callable, not StoreStreamState).
@@ -503,8 +504,8 @@ def test_cdc_wal2json_v1_emits_inserted_row(
     work.mkdir()
     ctx = _CdcCtx(work, active_polls=10)
 
+    conn = _make_cdc_conn(cfg)
     src = PostgresCdcStreamSrc(
-        conn=_make_cdc_conn(cfg),
         tables=["public.users"],
         replication_slot=_REPLICATION_SLOT,
         replication_slot_behavior="reuse",
@@ -520,7 +521,7 @@ def test_cdc_wal2json_v1_emits_inserted_row(
 
     _insert_users(cfg, [{"id": 9, "name": "v1-test", "age": 99}])
 
-    _run_plugin_in_thread(ctx, src, timeout_s=60.0)
+    _run_plugin_in_thread(ctx, conn, src, timeout_s=60.0)
 
     files = _all_staged_files(ctx)
     if not files:
