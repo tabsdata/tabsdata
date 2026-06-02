@@ -79,7 +79,7 @@ pub struct Autoconfirm {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct TdkPin {
+pub struct PinContext {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session: Option<Session>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -93,7 +93,7 @@ pub fn tdkpin_path() -> PathBuf {
         .join(TDKPIN_FILE)
 }
 
-impl TdkPin {
+impl PinContext {
     pub fn load() -> Result<Self> {
         let path = tdkpin_path();
         if !path.exists() {
@@ -107,7 +107,7 @@ impl TdkPin {
             }
         };
         match serde_json::from_str(&data) {
-            Ok(tdkpin) => Ok(tdkpin),
+            Ok(pin_context) => Ok(pin_context),
             Err(error) => {
                 cerror!(
                     "Failed to parse '{}': {error}. Run 'tdkserver session unpin' to clear the active tabsdata session.",

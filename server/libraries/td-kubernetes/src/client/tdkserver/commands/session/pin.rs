@@ -5,7 +5,7 @@
 use clap_derive::Args;
 use tracing::info;
 
-use crate::client::tdkpin::TdkPin;
+use crate::client::session::pin::PinContext;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
 use crate::client::tdkserver::common::{effective_yes, prompt_yes_no};
 use crate::core::system::exit::Result;
@@ -61,7 +61,7 @@ pub async fn command_pin(arguments: PinArguments, globals: &GlobalArguments) -> 
         return Ok(());
     }
 
-    TdkPin::pin_session(provider.to_session())?;
+    PinContext::pin_session(provider.to_session())?;
     provider.report_pinned_runtime();
 
     Ok(())

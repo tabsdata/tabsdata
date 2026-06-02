@@ -5,7 +5,7 @@
 use clap_derive::Args;
 use tracing::info;
 
-use crate::client::tdkpin::TdkPin;
+use crate::client::session::pin::PinContext;
 use crate::core::system::exit::Result;
 
 #[derive(Debug, Clone, Args)]
@@ -27,7 +27,7 @@ pub struct PinArguments {
 pub async fn command_pin(arguments: PinArguments) -> Result {
     let PinArguments { value } = arguments;
 
-    TdkPin::pin_autoconfirm(value)?;
+    PinContext::pin_autoconfirm(value)?;
     if value {
         info!("Pinned autoconfirm as enabled.");
     } else {

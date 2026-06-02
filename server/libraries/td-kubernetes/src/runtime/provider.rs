@@ -19,7 +19,7 @@ use td_common::status::ExitStatus::GeneralError;
 
 use crate::base::constants::KMINUS_MIN_NOFILE;
 use crate::cerror;
-use crate::client::tdkpin::{Session, TdkPin};
+use crate::client::session::pin::{Session, PinContext};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use std::sync::Arc;
 
@@ -349,7 +349,7 @@ pub async fn provider_for_or_tdkcontext(
     if cluster.provider.is_some() {
         return provider_for(cluster, instance, verbose).await;
     }
-    match TdkPin::load()?.session {
+    match PinContext::load()?.session {
         Some(session) => {
             let (cluster, instance) = session.to_args();
             provider_for(cluster, instance, verbose).await

@@ -5,7 +5,7 @@
 use clap_derive::Args;
 use tracing::info;
 
-use crate::client::tdkpin::TdkPin;
+use crate::client::session::pin::PinContext;
 use crate::core::system::exit::Result;
 use crate::cwarn;
 
@@ -13,7 +13,7 @@ use crate::cwarn;
 pub struct UnpinArguments {}
 
 pub async fn command_unpin(_arguments: UnpinArguments) -> Result {
-    if TdkPin::unpin_autoconfirm()? {
+    if PinContext::unpin_autoconfirm()? {
         info!("Cleared the pinned autoconfirm.");
     } else {
         cwarn!("No autoconfirm is pinned.");

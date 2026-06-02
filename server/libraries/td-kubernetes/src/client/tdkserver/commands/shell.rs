@@ -24,7 +24,7 @@ use super::secret::{SecretCommands, command_secret};
 use super::server::{ServerCommands, command_server};
 use super::session::{SessionCommands, command_session};
 use crate::cerror;
-use crate::client::tdkpin::{TdkPin, tdkpin_path};
+use crate::client::session::pin::{PinContext, tdkpin_path};
 use crate::core::system::exit::Result;
 
 const TOOL_NAME: &str = "tdkserver";
@@ -152,7 +152,7 @@ pub async fn command_shell(globals: &GlobalArguments) -> Result {
 }
 
 fn show_initial_active_context() {
-    if let Some(session) = TdkPin::read().session {
+    if let Some(session) = PinContext::read().session {
         info!(
             "Active tabsdata session: {} (from {}).",
             session.display_name(),
@@ -323,7 +323,7 @@ impl ShellPrompt {
 impl Prompt for ShellPrompt {
     fn render_prompt_left(&self) -> Cow<'_, str> {
         let tool = format!("{} ❯", self.tool_name).bold().green().to_string();
-        let label = match TdkPin::read().session {
+        let label = match PinContext::read().session {
             Some(session) => format!("[{}]", session.display_name())
                 .truecolor(0xCC, 0xB2, 0x33)
                 .to_string(),

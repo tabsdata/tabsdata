@@ -15,14 +15,14 @@ pub const POD_SERVICE_ACCOUNT_ENV: &str = "POD_SERVICE_ACCOUNT";
 pub const POD_TABSDATA_INSTANCE_ENV: &str = "POD_TABSDATA_INSTANCE";
 
 #[derive(Debug, Clone)]
-pub struct TdkPodContext {
+pub struct PodContext {
     pub namespace: String,
     pub pod_name: String,
     pub service_account: String,
     pub tabsdata_instance: String,
 }
 
-impl TdkPodContext {
+impl PodContext {
     pub fn from_environment() -> Result<Self, KubePodContextError> {
         Ok(Self {
             namespace: read_namespace()?,

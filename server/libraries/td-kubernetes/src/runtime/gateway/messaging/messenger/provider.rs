@@ -10,7 +10,7 @@ use td_common::server::{
 };
 
 use crate::base::error::kubernetes::KubernetesError;
-use crate::client::tdkpodcontext::TdkPodContext;
+use crate::client::session::pod::PodContext;
 use crate::kube::api::client::install_crypto_provider;
 use crate::kube::context::KubeContext;
 use crate::runtime::gateway::messaging::messenger::queue::KubernetesOrchestratorMessageQueue;
@@ -28,7 +28,7 @@ impl KubernetesOrchestratorMessagingProvider {
 
     pub async fn from_pod_environment() -> Result<Self, KubernetesError> {
         install_crypto_provider();
-        let pod_context = TdkPodContext::from_environment()?;
+        let pod_context = PodContext::from_environment()?;
         let client = build_pod_kube_client().await?;
         Ok(Self::new(KubeContext::new(
             Arc::new(client),

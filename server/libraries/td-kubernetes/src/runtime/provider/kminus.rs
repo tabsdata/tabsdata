@@ -25,7 +25,7 @@ use crate::base::constants::{
     KPROFILE_GLOBALS_FOLDER, KPROFILE_PODS_FOLDER,
 };
 use crate::cerror;
-use crate::client::tdkpin::{KminusInputs, Session};
+use crate::client::session::pin::{KminusInputs, Session};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::validate_instance_name;
 use crate::client::tdkserver::widgets::spinner;

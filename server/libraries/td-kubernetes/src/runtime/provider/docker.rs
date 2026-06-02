@@ -19,7 +19,7 @@ use crate::base::constants::{
     DEFAULT_INSTANCE_NAME,
 };
 use crate::cerror;
-use crate::client::tdkpin::{DockerInputs, Session};
+use crate::client::session::pin::{DockerInputs, Session};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::widgets::spinner;
 use crate::core::system::exit::{Result, abort};
