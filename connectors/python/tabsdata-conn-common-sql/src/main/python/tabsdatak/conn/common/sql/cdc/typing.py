@@ -8,9 +8,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal, TypeAlias, Union
 
-# noinspection PyProtectedMember
-from tabsdata._utils.validation import _td_validate_call
-from tabsdata.exceptions import ErrorCode
+from tabsdatak.conn.common.sql.cdc.error import (
+    SqlCdcErrorCode,
+    cdc_validate_call,
+)
 
 QualifiedTableSpec: TypeAlias = str
 
@@ -30,12 +31,12 @@ class TimestampPosition:
 
     ts: datetime
 
-    @_td_validate_call(ErrorCode.CDC13)
+    @cdc_validate_call(SqlCdcErrorCode.CDC_13)
     def __init__(self, ts: datetime):
         object.__setattr__(self, "ts", ts)
 
 
-CdcValuesFormatSpec: TypeAlias = Literal["columns", "struct", "map"]
+CdcColumnsFormatSpec: TypeAlias = Literal["columns", "struct", "map"]
 
 
 @dataclass(frozen=True, init=False)
@@ -44,18 +45,18 @@ class CdcFormat:
     Specifies the output format for CDC change data.
 
     Attributes:
-        values_format: The layout for change values ("columns", "struct", or "map").
-        flatten_values: Whether to flatten new values into top-level columns.
+        columns_format: The layout for change values ("columns", "struct", or "map").
+        flatten_columns: Whether to flatten new values into top-level columns.
     """
 
-    values_format: CdcValuesFormatSpec = "columns"
-    flatten_values: bool = True
+    columns_format: CdcColumnsFormatSpec = "columns"
+    flatten_columns: bool = True
 
-    @_td_validate_call(ErrorCode.CDC14)
+    @cdc_validate_call(SqlCdcErrorCode.CDC_14)
     def __init__(
         self,
-        values_format: CdcValuesFormatSpec = "columns",
-        flatten_values: bool = True,
+        columns_format: CdcColumnsFormatSpec = "columns",
+        flatten_columns: bool = True,
     ):
-        object.__setattr__(self, "values_format", values_format)
-        object.__setattr__(self, "flatten_values", flatten_values)
+        object.__setattr__(self, "columns_format", columns_format)
+        object.__setattr__(self, "flatten_columns", flatten_columns)

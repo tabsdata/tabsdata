@@ -5,10 +5,10 @@
 import importlib.metadata
 
 from tabsdatak.conn.common.sql.cdc._connection import CdcConn
-from tabsdatak.conn.common.sql.cdc._connector import CdcTrigger
+from tabsdatak.conn.common.sql.cdc._runner import CdcPlugin, CdcRunConfig
 from tabsdatak.conn.common.sql.cdc.typing import (
     CdcFormat,
-    CdcValuesFormatSpec,
+    CdcColumnsFormatSpec,
     QualifiedTableSpec,
     QualifiedTablesSpec,
     RelativePositionSpec,
@@ -18,19 +18,21 @@ from tabsdatak.conn.common.sql.cdc.typing import (
 __all__ = [
     # Connections
     "CdcConn",
-    "CdcTrigger",
+    # Runner
+    "CdcPlugin",
+    "CdcRunConfig",
     # Specs
     "QualifiedTableSpec",
     "QualifiedTablesSpec",
     "RelativePositionSpec",
     "TimestampPosition",
     "CdcFormat",
-    "CdcValuesFormatSpec",
+    "CdcColumnsFormatSpec",
 ]
 
 # noinspection PyBroadException
 try:
-    __version__ = importlib.metadata.version("tabsdata-cdc-common")
+    __version__ = importlib.metadata.version("tabsdata-conn-common-sql")
 except Exception:
     __version__ = "unknown"
 

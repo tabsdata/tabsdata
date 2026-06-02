@@ -11,8 +11,6 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Union
 
-import polars as pl
-
 from tabsdatak.conn.common.sql.cdc._column import TrackedColumn
 from tabsdatak.conn.common.sql.cdc._dictionary import SchemaVersion
 from tabsdatak.conn.common.sql.cdc._dtype import sqlalchemy_to_arrow
@@ -22,13 +20,6 @@ from tabsdatak.conn.common.sql.cdc.constants import DOT
 class CdcOffset(ABC):
     @abstractmethod
     def update(self, other: CdcOffset) -> None: ...
-
-    @abstractmethod
-    def upload(self) -> pl.DataFrame: ...
-
-    @classmethod
-    @abstractmethod
-    def download(cls, df: pl.DataFrame | None) -> CdcOffset | None: ...
 
     @abstractmethod
     def write(self) -> dict: ...

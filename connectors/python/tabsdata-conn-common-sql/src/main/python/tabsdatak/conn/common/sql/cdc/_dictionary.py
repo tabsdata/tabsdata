@@ -53,11 +53,11 @@ def build_pa_schema(
         pa.field(CDC_META_SCH, pa.utf8()),
     ]
 
-    if cdc_format.flatten_values:
+    if cdc_format.flatten_columns:
         for column in columns:
             fields.append(pa.field(column.name, column.patype))
     else:
-        match cdc_format.values_format:
+        match cdc_format.columns_format:
             case "columns":
                 for column in columns:
                     fields.append(
@@ -73,10 +73,10 @@ def build_pa_schema(
                 fields.append(pa.field(CDC_DATA_MAP_NEW, pa.utf8()))
             case _:
                 raise ValueError(
-                    f"Unsupported values format: {cdc_format.values_format!r}"
+                    f"Unsupported values format: {cdc_format.columns_format!r}"
                 )
 
-    match cdc_format.values_format:
+    match cdc_format.columns_format:
         case "columns":
             for column in columns:
                 fields.append(
@@ -92,7 +92,7 @@ def build_pa_schema(
         case "map":
             fields.append(pa.field(CDC_DATA_MAP_OLD, pa.utf8(), nullable=True))
         case _:
-            raise ValueError(f"Unsupported values_format: {cdc_format.values_format!r}")
+            raise ValueError(f"Unsupported columns_format: {cdc_format.columns_format!r}")
 
     return pa.schema(fields)
 

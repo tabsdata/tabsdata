@@ -7,25 +7,14 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Union
 from urllib.parse import urlparse
 
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine, create_engine, make_url
 
-from tabsdata._credentials import UserPasswordCredentials
+from tabsdatak.api import Conn
 
 # noinspection PyProtectedMember
-from tabsdata._io.connections.connections import Conn
-from tabsdata._io.sql_io_helpers.helper_utils import obtain_sqlalchemy_url
-from tabsdata._io.sql_io_helpers.sql_helper_configs import SQLConnConfig
-
-if TYPE_CHECKING:
-    from tabsdata.connector.cdc.db2._connection import Db2CdcConn
-    from tabsdata.connector.cdc.mysql._connection import MySQLCdcConn
-    from tabsdata.connector.cdc.postgres._connection import PostgresCdcConn
-
-    CdcConnType = Union[MySQLCdcConn, PostgresCdcConn, Db2CdcConn]
-
+from tabsdatak.conn.common.types import UserPassword, _convert
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -46,17 +35,18 @@ class CdcConn(Conn, ABC):
     """
 
     uri: str
-    credentials: UserPasswordCredentials | None
+    credentials: UserPassword | None = None
 
     @staticmethod
-    def _engine(conn: CdcConnType) -> Engine:
-        config = SQLConnConfig(
-            uri=conn.uri,
-            credentials=conn.credentials,
-            cx_src_configs_sql=dict(conn._cx_configs or {}),
-        )
-        url = obtain_sqlalchemy_url(config)
-        return create_engine(url, connect_args=config.cx_src_configs_sql or {})
+    def _engine(conn: "CdcConn") -> Engine:
+        url = make_url(_convert(conn.uri, str))
+        if conn.credentials is not None:
+            url = url.set(
+                username=conn.credentials.user.value(),
+                password=conn.credentials.password.value(),
+            )
+        connect_args = dict(getattr(conn, "conn_cfg", None) or {})
+        return create_engine(url, connect_args=connect_args)
 
     @staticmethod
     def _default_host() -> str:
@@ -69,10 +59,10 @@ class CdcConn(Conn, ABC):
     def _default_dbname(self) -> str: ...
 
     def _settings(self) -> CdcConnectionSettings:
-        parsed = urlparse(self.uri)
+        parsed = urlparse(_convert(self.uri, str))
         if self.credentials:
-            user = self.credentials.user.secret_value
-            password = self.credentials.password.secret_value
+            user = self.credentials.user.value()
+            password = self.credentials.password.value()
         else:
             user = parsed.username
             password = parsed.password

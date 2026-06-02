@@ -11,20 +11,11 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from tabsdata._io.inputs.stage_input import (
-    STAGE_MANIFEST_FILE_EXTENSION,
-    StageManifest,
-    StageManifestEntry,
-    _serialize_manifest,
-    _write_manifest_file,
-)
-from tabsdata._io.stage_trigger import StagedFilesSpec, StageTriggerContext
-from tabsdata._utils.id import encode_id
 from tabsdatak.conn.common.sql.cdc._model import CdcDataChange, TrackedTable
 from tabsdatak.conn.common.sql.cdc._sentinel import CdcBuffer, row_to_record
-from tabsdatak.conn.common.sql.cdc._utils import sanitize_file_name
+from tabsdatak.conn.common.sql.cdc._utils import encode_id, sanitize_file_name
 from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
-from tabsdata.exceptions import CdcError, ErrorCode
+from tabsdatak.spi import ParquetFile, TableManifest
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -33,7 +24,6 @@ logger.setLevel(logging.DEBUG)
 class DiskSentinel:
     def __init__(
         self,
-        context: StageTriggerContext,
         landing: Path,
         max_rows: int,
         max_bytes: int | None,
@@ -41,7 +31,6 @@ class DiskSentinel:
         tables: dict[str, TrackedTable],
         cdc_format: CdcFormat,
     ):
-        self._context = context
         self._landing = landing
         self._max_rows = max_rows
         self._max_bytes = max_bytes
@@ -52,7 +41,6 @@ class DiskSentinel:
         self._total_rows: int = 0
         self._total_bytes: int = 0
         self._last_flushed: float = time.time()
-        self._trigger_pending: bool = False
 
     @property
     def is_empty(self) -> bool:
@@ -62,17 +50,8 @@ class DiskSentinel:
     def has_data(self) -> bool:
         return self._total_rows > 0
 
-    @property
-    def trigger_pending(self) -> bool:
-        return self._trigger_pending
-
     def reset_timer(self) -> None:
         self._last_flushed = time.time()
-
-    def retry_trigger(self) -> None:
-        if self._trigger_pending:
-            if self._context.trigger_monitor():
-                self._trigger_pending = False
 
     def process_buffers(
         self,
@@ -137,60 +116,53 @@ class DiskSentinel:
             f"({file_rows} rows & {file_bytes} bytes)"
         )
 
-    def stage_data(self) -> StagedFilesSpec:
-        files = [file for files in self._files.values() for file in files]
-        staged_files = self._context.stage(files)
-        self.stage_meta(staged_files)
-        self._trigger_pending = not self._context.trigger()
+    def should_flush(
+        self,
+        force: bool = False,
+    ) -> bool:
+        """Whether the accumulated on-disk files are due to be staged.
+
+        Triggers on ``force`` (shutdown flush) or any of the row / byte /
+        time thresholds. Staging itself is driven by the plugin, which
+        pulls :meth:`build_manifest` and publishes through the
+        :class:`~tabsdatak.spi.StreamSrcPluginCtx` two-phase
+        ``stage`` / ``commit`` contract.
+        """
+        rows_hit = self._max_rows is not None and self._total_rows >= self._max_rows
+        bytes_hit = self._max_bytes is not None and self._total_bytes >= self._max_bytes
+        time_hit = (time.time() - self._last_flushed) >= self._max_secs
+        return self.has_data and (force or rows_hit or bytes_hit or time_hit)
+
+    def build_manifest(self) -> list[TableManifest]:
+        """Compose the per-table :class:`~tabsdatak.spi.TableManifest`
+        list for the files accumulated since the last :meth:`clear`.
+
+        One entry per tracked table that produced at least one file.
+        The manifest ``table`` is the *unqualified* table name (the
+        schema-less name on ``TableObject``): ``TableManifest.table`` is a
+        :data:`~tabsdatak.api.TableNameSpec`, which forbids the dot in a
+        ``schema.table`` qualified name. Files are wrapped as
+        :class:`~tabsdatak.spi.ParquetFile` (a ``Path`` subclass) so the
+        manifest validation accepts them.
+        """
+        manifest: list[TableManifest] = []
+        for table_key, tracked_table in self._tables.items():
+            files = self._files.get(table_key, [])
+            if not files:
+                continue
+            manifest.append(
+                TableManifest(
+                    table=tracked_table.data_table.table,
+                    files=[ParquetFile(file) for file in files],
+                )
+            )
+        return manifest
+
+    def clear(self) -> None:
+        """Drop the staged file bookkeeping and reset the counters /
+        timer. Called by the plugin once a batch has been committed."""
         for files in self._files.values():
             files.clear()
         self._total_rows = 0
         self._total_bytes = 0
         self._last_flushed = time.time()
-        return staged_files
-
-    def stage_meta(self, staged_files: StagedFilesSpec) -> None:
-        _, name = encode_id()
-        manifest_name = f"{name}{STAGE_MANIFEST_FILE_EXTENSION}"
-        manifest_path = self._landing / manifest_name
-
-        entries: dict[int, StageManifestEntry] = {}
-        for idx, (table_key, tracked_table) in enumerate(self._tables.items()):
-            table_file_paths = self._files.get(table_key, [])
-            staged_uris = []
-            for file_path in table_file_paths:
-                file_key = str(file_path)
-                if file_key not in staged_files:
-                    raise CdcError(
-                        ErrorCode.CDC9,
-                        file_key,
-                        tracked_table.data_table.qualified,
-                    )
-                staged_uris.append(staged_files[file_key])
-            entries[idx] = StageManifestEntry(
-                table=tracked_table.data_table.qualified,
-                files=staged_uris,
-            )
-
-        manifest = StageManifest(entries=entries)
-        content = _serialize_manifest(manifest)
-        _write_manifest_file(str(manifest_path), content)
-
-        self._context.commit(manifest_path)
-        logger.debug(f"Manifest committed: {manifest_name}")
-
-    def flush(
-        self,
-        force: bool = False,
-    ) -> bool:
-        rows_hit = self._max_rows is not None and self._total_rows >= self._max_rows
-        bytes_hit = self._max_bytes is not None and self._total_bytes >= self._max_bytes
-        time_hit = (time.time() - self._last_flushed) >= self._max_secs
-        if self.has_data and (force or rows_hit or bytes_hit or time_hit):
-            logger.debug(
-                f"Disk flush: staging {self._files} "
-                f"({self._total_rows} rows & {self._total_bytes} bytes)"
-            )
-            self.stage_data()
-            return True
-        return False

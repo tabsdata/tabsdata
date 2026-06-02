@@ -22,13 +22,13 @@ from tabsdatak.conn.common.sql.cdc._model import (
     TrackedColumn,
     TrackedTable,
 )
+from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode
 from tabsdatak.conn.common.sql.cdc._schema import SchemaRegistry
-from tabsdatak.conn.common.sql.cdc.typing import CdcFormat, QualifiedTablesSpec
-from tabsdata.connector.sql.common._generic.dialect import (
+from tabsdatak.conn.common.sql.cdc.dialect import (
     CdcIngesterType,
     Dialect,
 )
-from tabsdata.exceptions import CdcError, ErrorCode
+from tabsdatak.conn.common.sql.cdc.typing import CdcFormat, QualifiedTablesSpec
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -91,11 +91,10 @@ class CdcIngester(ABC):
         try:
             schema, table = self.dialect.parse_qualified_table(tablespec)
         except ValueError as error:
-            raise CdcError(
-                ErrorCode.CDC1,
-                tablespec,
-                error,
-            ) from error
+            raise SqlCdcErrorCode.CDC_1.exception(
+                cause=error,
+                spec=tablespec,
+            )
 
         db_schema = self.resolve_identifier(schema)
         db_table = self.resolve_identifier(table)
@@ -110,10 +109,9 @@ class CdcIngester(ABC):
             normalized_table,
             schema=normalized_schema,
         ):
-            raise CdcError(
-                ErrorCode.CDC2,
-                db_schema,
-                db_table,
+            raise SqlCdcErrorCode.CDC_2.exception(
+                schema=db_schema,
+                table=db_table,
             )
 
         table_object = TableObject(
@@ -145,10 +143,9 @@ class CdcIngester(ABC):
             schema=normalized_schema,
         )
         if not sa_columns:
-            raise CdcError(
-                ErrorCode.CDC3,
-                db_schema,
-                db_table,
+            raise SqlCdcErrorCode.CDC_3.exception(
+                schema=db_schema,
+                table=db_table,
             )
 
         with inspector.bind.connect() as connection:
@@ -159,22 +156,20 @@ class CdcIngester(ABC):
             )
 
         if len(db_columns) != len(sa_columns):
-            raise CdcError(
-                ErrorCode.CDC7,
-                db_schema,
-                db_table,
-                len(db_columns),
-                len(sa_columns),
+            raise SqlCdcErrorCode.CDC_7.exception(
+                schema=db_schema,
+                table=db_table,
+                catalog_count=len(db_columns),
+                inspector_count=len(sa_columns),
             )
 
         for db_column, sa_column in zip(db_columns, sa_columns):
             if db_column.upper() != sa_column["name"].upper():
-                raise CdcError(
-                    ErrorCode.CDC8,
-                    db_schema,
-                    db_table,
-                    db_column,
-                    sa_column["name"],
+                raise SqlCdcErrorCode.CDC_8.exception(
+                    schema=db_schema,
+                    table=db_table,
+                    catalog_column=db_column,
+                    inspector_column=sa_column["name"],
                 )
 
         columns = []

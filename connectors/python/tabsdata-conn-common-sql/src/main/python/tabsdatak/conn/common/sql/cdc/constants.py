@@ -6,7 +6,9 @@ from __future__ import annotations
 
 from enum import Enum
 
-from tabsdata._utils.tableframe._constants import TD_CONNECTOR_COLUMN_PREFIX
+# Duplicated from ``tabsdata._utils.tableframe._constants`` so the shared
+# CDC code carries no dependency on the legacy ``tabsdata.*`` packages.
+TD_CONNECTOR_COLUMN_PREFIX = "@td."
 
 
 class CdcOperation(str, Enum):

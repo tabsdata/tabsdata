@@ -9,7 +9,7 @@ import sys
 import time
 from collections.abc import Iterable
 
-from tabsdata._tabsserver.function.global_utils import TRACE
+from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode
 from tabsdatak.conn.common.sql.cdc._model import (
     CdcChange,
     CdcDataChange,
@@ -18,7 +18,7 @@ from tabsdatak.conn.common.sql.cdc._model import (
 )
 from tabsdatak.conn.common.sql.cdc._sentinel import CdcBuffer
 from tabsdatak.conn.common.sql.cdc._sentinel.disk import DiskSentinel
-from tabsdata.exceptions import CdcError, ErrorCode
+from tabsdatak.conn.common.sql.cdc._utils import TRACE
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -87,9 +87,9 @@ class BufferSentinel:
             self._total_bytes += row_bytes
 
         if self._offset is None:
-            raise CdcError(ErrorCode.CDC10)
+            raise SqlCdcErrorCode.CDC_10.exception()
         if change.offset is None:
-            raise CdcError(ErrorCode.CDC11, change.table)
+            raise SqlCdcErrorCode.CDC_11.exception(table=change.table)
         self._offset.update(change.offset)
 
         rows_hit = self._max_rows is not None and self._total_rows >= self._max_rows

@@ -56,18 +56,18 @@ def row_to_record(
         CDC_META_TX: change.transaction,
         CDC_META_SQ: change.sequence,
         CDC_META_TS: change.timestamp.astimezone(timezone.utc),
-        CDC_META_FMT: cdc_format.values_format,
-        CDC_META_FLAT: cdc_format.flatten_values,
+        CDC_META_FMT: cdc_format.columns_format,
+        CDC_META_FLAT: cdc_format.flatten_columns,
         CDC_META_SCH: change.schema.hash,
     }
 
     columns = change.schema.columns
 
-    if cdc_format.flatten_values:
+    if cdc_format.flatten_columns:
         for column in columns:
             record[column.name] = change.new_values.get(column.name)
     else:
-        match cdc_format.values_format:
+        match cdc_format.columns_format:
             case "columns":
                 for column in columns:
                     record[f"{CDC_DATA_COL_NEW_PREFIX}{DOT}{column.name}"] = (
@@ -88,10 +88,10 @@ def row_to_record(
                 ).decode()
             case _:
                 raise ValueError(
-                    f"Unsupported values format: {cdc_format.values_format!r}"
+                    f"Unsupported values format: {cdc_format.columns_format!r}"
                 )
 
-    match cdc_format.values_format:
+    match cdc_format.columns_format:
         case "columns":
             prefix = CDC_DATA_COL_OLD_PREFIX
             for column in columns:
@@ -108,6 +108,6 @@ def row_to_record(
                 default=_orjson_default,
             ).decode()
         case _:
-            raise ValueError(f"Unsupported values format: {cdc_format.values_format!r}")
+            raise ValueError(f"Unsupported values format: {cdc_format.columns_format!r}")
 
     return record
