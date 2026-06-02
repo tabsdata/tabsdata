@@ -137,11 +137,10 @@ def test_dest_inserts_documents_without_id_field(
         [{"name": "alice", "age": 30}, {"name": "bob", "age": 31}],
     )
     dest = MongoDBDest(
-        conn=conn,
         collections_with_ids=[(fqn, None)],
     )
     plugin._MongoDBDestPlugin().write_out(
-        _Ctx(work_dir), dest, [Path(parquet)],
+        _Ctx(work_dir), conn, dest, [Path(parquet)],
     )
 
     docs = sorted(
@@ -166,11 +165,10 @@ def test_dest_upserts_documents_with_id_field(
         ],
     )
     dest = MongoDBDest(
-        conn=conn,
         collections_with_ids=[(fqn, "user_id")],
     )
     plugin._MongoDBDestPlugin().write_out(
-        _Ctx(work_dir), dest, [Path(p1)],
+        _Ctx(work_dir), conn, dest, [Path(p1)],
     )
 
     # Second write -- updates user 1, inserts user 3.
@@ -182,7 +180,7 @@ def test_dest_upserts_documents_with_id_field(
         ],
     )
     plugin._MongoDBDestPlugin().write_out(
-        _Ctx(work_dir), dest, [Path(p2)],
+        _Ctx(work_dir), conn, dest, [Path(p2)],
     )
 
     docs = sorted(
@@ -203,8 +201,8 @@ def test_dest_replace_strategy_drops_old_documents(
     p1 = _make_parquet(tmp_path / "seed.parquet", [{"name": "seed"}])
     plugin._MongoDBDestPlugin().write_out(
         _Ctx(work_dir),
+        conn,
         MongoDBDest(
-            conn=conn,
             collections_with_ids=[(fqn, None)],
         ),
         [Path(p1)],
@@ -214,8 +212,8 @@ def test_dest_replace_strategy_drops_old_documents(
     p2 = _make_parquet(tmp_path / "replace.parquet", [{"name": "fresh"}])
     plugin._MongoDBDestPlugin().write_out(
         _Ctx(work_dir),
+        conn,
         MongoDBDest(
-            conn=conn,
             collections_with_ids=[(fqn, None)],
             if_collection_exists="replace",
         ),
@@ -234,12 +232,11 @@ def test_dest_chunked_writes(
         [{"i": i} for i in range(10)],
     )
     dest = MongoDBDest(
-        conn=conn,
         collections_with_ids=[(fqn, None)],
         docs_per_trx=3,
     )
     plugin._MongoDBDestPlugin().write_out(
-        _Ctx(work_dir), dest, [Path(parquet)],
+        _Ctx(work_dir), conn, dest, [Path(parquet)],
     )
 
     docs = sorted(_read_collection(conn, database, collection_name), key=lambda d: d["i"])
