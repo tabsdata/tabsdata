@@ -103,6 +103,33 @@ pub enum SecretError {
          Add a name so the manifest identifies which secret to update."
     )]
     ManifestMissingName { file: String } = 5009,
+    #[error(
+        "Config '{config}' declares secret keys but the matching secret '{secret}' is missing.\n\
+         Expected keys:{expected}"
+    )]
+    ReconciliationSecretMissing {
+        config: String,
+        secret: String,
+        expected: String,
+    } = 5011,
+    #[error(
+        "Config '{config}' declares no secret keys but a matching secret '{secret}' exists. \
+         Delete the orphan secret or add the corresponding '${{secret}}' placeholders to the config."
+    )]
+    ReconciliationSecretUnexpected { config: String, secret: String } = 5012,
+    #[error(
+        "Secret '{secret}' keys do not match those declared by config '{config}'.\n\
+         Extra keys:{extra}\n\
+         Missing keys:{missing}"
+    )]
+    ReconciliationKeysMismatch {
+        config: String,
+        secret: String,
+        extra: String,
+        missing: String,
+    } = 5013,
+    #[error("Cannot start the instance: configs and secrets are not in sync.{failures}")]
+    ReconciliationBatchFailed { failures: String } = 5014,
     #[error(transparent)]
     Profile(#[from] ProfileError) = 5004,
     #[error(transparent)]

@@ -22,8 +22,13 @@ pub fn parse_secret_manifest(path: &Path) -> Result<ParsedSecret, SecretError> {
         path: file.clone(),
         cause: error.to_string(),
     })?;
-    let secret: Secret =
+    let value: serde_yaml::Value =
         serde_yaml::from_str(&text).map_err(|error| SecretError::ManifestParseFailed {
+            file: file.clone(),
+            cause: error.to_string(),
+        })?;
+    let secret: Secret =
+        serde_yaml::from_value(value).map_err(|error| SecretError::ManifestParseFailed {
             file: file.clone(),
             cause: error.to_string(),
         })?;

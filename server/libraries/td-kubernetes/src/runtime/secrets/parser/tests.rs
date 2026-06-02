@@ -129,6 +129,57 @@ data:
 }
 
 #[test]
+fn duplicate_stringdata_keys_are_an_error() {
+    let file = write_yaml(
+        r#"apiVersion: v1
+kind: Secret
+metadata:
+  name: example
+type: Opaque
+stringData:
+  K: a
+  K: b
+"#,
+    );
+    let error = parse_secret_manifest(file.path()).expect_err("rejected");
+    assert!(matches!(error, SecretError::ManifestParseFailed { .. }));
+}
+
+#[test]
+fn duplicate_data_keys_are_an_error() {
+    let file = write_yaml(
+        r#"apiVersion: v1
+kind: Secret
+metadata:
+  name: example
+type: Opaque
+data:
+  K: YQ==
+  K: Yg==
+"#,
+    );
+    let error = parse_secret_manifest(file.path()).expect_err("rejected");
+    assert!(matches!(error, SecretError::ManifestParseFailed { .. }));
+}
+
+#[test]
+fn duplicate_label_keys_are_an_error() {
+    let file = write_yaml(
+        r#"apiVersion: v1
+kind: Secret
+metadata:
+  name: example
+  labels:
+    same: a
+    same: b
+type: Opaque
+"#,
+    );
+    let error = parse_secret_manifest(file.path()).expect_err("rejected");
+    assert!(matches!(error, SecretError::ManifestParseFailed { .. }));
+}
+
+#[test]
 fn no_labels_returns_empty_map() {
     let file = write_yaml(
         r#"apiVersion: v1

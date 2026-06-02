@@ -112,6 +112,7 @@ pub mod kubeconfig;
 pub mod manifest;
 pub mod parser;
 pub mod phase;
+pub mod reconciliation;
 pub mod source;
 
 pub use generator::SecretGenerator;

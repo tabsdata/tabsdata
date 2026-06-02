@@ -58,36 +58,34 @@ pub async fn reconciliation(
         .map(|(key, _)| key.as_str())
         .collect();
 
-    info!("  - {}: {}.", label("Extra keys"), render_list(&extra));
-    if missing.is_empty() {
-        info!("  - {}: None.", label("Missing keys"));
-    } else {
-        warn!(
-            "  - {}: {}.",
-            label("Missing keys"),
-            render_list(&missing)
-        );
-    }
-    if empty.is_empty() {
-        info!("  - {}: None.", label("Empty values"));
-    } else {
-        warn!("  - {}: {}.", label("Empty values"), render_list(&empty));
-    }
+    render_keys_line(false, "Extra keys", &extra);
+    render_keys_line(true, "Missing keys", &missing);
+    render_keys_line(true, "Empty values", &empty);
     Ok(())
+}
+
+fn render_keys_line(as_warning: bool, caption: &str, items: &[&str]) {
+    if items.is_empty() {
+        info!("  - {}: None.", label(caption));
+        return;
+    }
+    if as_warning {
+        warn!("  - {}:", label(caption));
+        for item in items {
+            warn!("    - {item}");
+        }
+    } else {
+        info!("  - {}:", label(caption));
+        for item in items {
+            info!("    - {item}");
+        }
+    }
 }
 
 const LABEL_WIDTH: usize = 17;
 
 fn label(name: &str) -> String {
     format!("{name:.<LABEL_WIDTH$}")
-}
-
-fn render_list(items: &[&str]) -> String {
-    if items.is_empty() {
-        "None".to_owned()
-    } else {
-        items.join(", ")
-    }
 }
 
 fn trimmed_is_empty(value: &[u8]) -> bool {

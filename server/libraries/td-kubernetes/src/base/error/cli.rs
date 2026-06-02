@@ -30,6 +30,10 @@ pub enum CliError {
     FileWriteFailed { file: String, cause: String } = 5004,
     #[error("Could not create folder '{folder}': {cause}.")]
     FolderCreateFailed { folder: String, cause: String } = 5005,
+    #[error("Could not read file '{file}': {cause}.")]
+    FileReadFailed { file: String, cause: String } = 5006,
+    #[error("File '{file}' is not valid UTF-8: {cause}.")]
+    FileNotUtf8 { file: String, cause: String } = 5007,
 }
 
 #[cfg(test)]

@@ -62,8 +62,9 @@ lerna-debug.log*
 CLAUDE.md
 .claude/
 MANIFEST
-!server/libraries/td-kubernetes/src/instance/manifest/
-!server/libraries/td-kubernetes/src/error/manifest/
+!server/libraries/td-kubernetes/src/base/error/manifest/
+!server/libraries/td-kubernetes/src/runtime/instance/manifest/
+!server/libraries/td-kubernetes/src/runtime/secrets/manifest/
 !assets/manifest
 !connectors/python/**/assets/manifest/
 !templates/connector/**/assets/manifest/

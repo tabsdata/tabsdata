@@ -14,7 +14,7 @@ use crate::base::constants::{CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY};
 use crate::base::error::cli::CliError;
 use crate::base::naming::to_configmap_name;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
-use crate::core::system::exit::{CommandResult, abort_with};
+use crate::core::system::exit::{CommandError, CommandResult, abort_with};
 use crate::core::system::file::is_hidden_or_system;
 use crate::kube::api::{LabelFilter, get_configmaps, replace_configmap};
 use crate::kube::context::KubeContext;
@@ -125,27 +125,46 @@ pub async fn put_configs(provider: &dyn Provider, source: &PutSource) -> Command
     let candidates = collect_candidates(source)?;
 
     let mut warnings: Vec<String> = Vec::new();
-    let mut replaced = 0;
+    let mut replaced: Vec<String> = Vec::new();
+    let mut error: Option<CommandError> = None;
 
     for candidate in candidates {
         match candidate {
             Candidate::Skip(reason) => warnings.push(reason),
             Candidate::Process { file_name, path } => {
-                match process_candidate(&context, &known_configs, &file_name, &path).await? {
-                    Outcome::Replaced => replaced += 1,
-                    Outcome::Skipped(reason) => warnings.push(reason),
+                match process_candidate(&context, &known_configs, &file_name, &path).await {
+                    Ok(Outcome::Replaced) => replaced.push(file_name),
+                    Ok(Outcome::Skipped(reason)) => warnings.push(reason),
+                    Err(failure) => {
+                        error = Some(failure);
+                        break;
+                    }
                 }
             }
         }
     }
 
-    for warning in &warnings {
+    report_summary(&replaced, &warnings, "config");
+    match error {
+        Some(failure) => Err(failure),
+        None => Ok(()),
+    }
+}
+
+fn report_summary(replaced: &[String], warnings: &[String], noun_singular: &str) {
+    for warning in warnings {
         warn!("{warning}");
     }
-
-    let noun = if replaced == 1 { "config" } else { "configs" };
-    info!("Replaced {replaced} tabsdata {noun}.");
-    Ok(())
+    for name in replaced {
+        info!("Replaced: {name}.");
+    }
+    let count = replaced.len();
+    let noun = if count == 1 {
+        noun_singular.to_owned()
+    } else {
+        format!("{noun_singular}s")
+    };
+    info!("Replaced {count} tabsdata {noun}.");
 }
 
 async fn list_known_configs(
@@ -236,22 +255,18 @@ async fn process_candidate(
             "No config named '{configmap_name}' exists; ignored."
         )));
     }
-    let bytes = match std::fs::read(path) {
-        Ok(bytes) => bytes,
-        Err(error) => {
-            return Ok(Outcome::Skipped(format!(
-                "Could not read file '{file_name}': {error}; ignored."
-            )));
-        }
-    };
-    let text = match String::from_utf8(bytes) {
-        Ok(text) => text,
-        Err(_) => {
-            return Ok(Outcome::Skipped(format!(
-                "File '{file_name}' is not valid UTF-8; ignored."
-            )));
-        }
-    };
+    let bytes = std::fs::read(path).map_err(|error| {
+        TdError::from(CliError::FileReadFailed {
+            file: file_name.to_owned(),
+            cause: error.to_string(),
+        })
+    })?;
+    let text = String::from_utf8(bytes).map_err(|error| {
+        TdError::from(CliError::FileNotUtf8 {
+            file: file_name.to_owned(),
+            cause: error.to_string(),
+        })
+    })?;
     let mut data: BTreeMap<String, String> = BTreeMap::new();
     data.insert(file_name.to_owned(), text);
     replace_configmap(

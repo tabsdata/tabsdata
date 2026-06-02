@@ -16,12 +16,15 @@ use crate::base::constants::{
 };
 use crate::base::error::cli::CliError;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
-use crate::core::system::exit::{CommandResult, abort_with};
+use crate::core::system::exit::{CommandError, CommandResult, abort_with};
 use crate::core::system::file::is_hidden_or_system;
-use crate::kube::api::{LabelFilter, list_configmaps, upsert_secret};
+use crate::kube::api::{LabelFilter, get_configmap, list_configmaps, upsert_secret};
 use crate::kube::context::KubeContext;
+use crate::base::error::secret::SecretError;
+use crate::base::naming::to_configmap_file;
 use crate::runtime::provider::{provider_for_or_tdkcontext, require_started_cluster};
 use crate::runtime::secrets::parser::parse_secret_manifest;
+use crate::runtime::secrets::reconciliation::{Reconciliation, reconcile_secret_keys};
 
 #[derive(Debug, Clone, Args)]
 #[command(group(
@@ -91,27 +94,30 @@ pub async fn command_put(arguments: PutArguments, globals: &GlobalArguments) -> 
     let candidates = collect_candidates(&source)?;
 
     let mut warnings: Vec<String> = Vec::new();
-    let mut replaced = 0;
+    let mut replaced: Vec<String> = Vec::new();
+    let mut error: Option<CommandError> = None;
 
     for candidate in candidates {
         match candidate {
             Candidate::Skip(reason) => warnings.push(reason),
             Candidate::Process { file_name, path } => {
-                match process_candidate(&context, &known_configs, &file_name, &path).await? {
-                    Outcome::Replaced => replaced += 1,
-                    Outcome::Skipped(reason) => warnings.push(reason),
+                match process_candidate(&context, &known_configs, &file_name, &path).await {
+                    Ok(Outcome::Replaced) => replaced.push(file_name),
+                    Ok(Outcome::Skipped(reason)) => warnings.push(reason),
+                    Err(failure) => {
+                        error = Some(failure);
+                        break;
+                    }
                 }
             }
         }
     }
 
-    for warning in &warnings {
-        warn!("{warning}");
+    report_summary(&replaced, &warnings, "secret");
+    match error {
+        Some(failure) => Err(failure),
+        None => Ok(()),
     }
-
-    let noun = if replaced == 1 { "secret" } else { "secrets" };
-    info!("Replaced {replaced} tabsdata {noun}.");
-    Ok(())
 }
 
 pub fn ensure_source(source: &PutSource) -> CommandResult {
@@ -221,14 +227,7 @@ async fn process_candidate(
     file_name: &str,
     path: &Path,
 ) -> CommandResult<Outcome> {
-    let parsed = match parse_secret_manifest(path) {
-        Ok(parsed) => parsed,
-        Err(error) => {
-            return Ok(Outcome::Skipped(format!(
-                "Manifest '{file_name}' could not be parsed: {error}; ignored."
-            )));
-        }
-    };
+    let parsed = parse_secret_manifest(path)?;
     let expected_secret_prefix = format!(
         "{TABSDATA_SECRET_PREFIX}{}{KUBE_NAME_SEPARATOR}",
         KPROFILE_CONFIGS_FAMILY.item
@@ -249,6 +248,15 @@ async fn process_candidate(
             parsed.name
         )));
     }
+    let config_file = to_configmap_file(&KPROFILE_CONFIGS_FAMILY, &configmap_name)?.to_owned();
+    let config_yaml = load_config_yaml(context, &configmap_name, &config_file).await?;
+    let actual_keys: BTreeSet<String> = parsed.data.keys().cloned().collect();
+    reconcile_secret_keys(&Reconciliation {
+        config: &config_file,
+        config_yaml: &config_yaml,
+        secret: &parsed.name,
+        actual_keys: Some(actual_keys),
+    })?;
     upsert_secret(
         context,
         &parsed.name,
@@ -259,4 +267,40 @@ async fn process_candidate(
     )
     .await?;
     Ok(Outcome::Replaced)
+}
+
+async fn load_config_yaml(
+    context: &KubeContext,
+    configmap_name: &str,
+    config_file: &str,
+) -> CommandResult<String> {
+    let data = get_configmap(context, configmap_name).await?.ok_or_else(|| {
+        SecretError::ConfigYamlParseFailed {
+            config: config_file.to_owned(),
+            cause: format!("configmap '{configmap_name}' disappeared between listing and read"),
+        }
+    })?;
+    let yaml = data.get(config_file).cloned().ok_or_else(|| {
+        SecretError::ConfigYamlParseFailed {
+            config: config_file.to_owned(),
+            cause: format!("configmap '{configmap_name}' has no '{config_file}' entry"),
+        }
+    })?;
+    Ok(yaml)
+}
+
+fn report_summary(replaced: &[String], warnings: &[String], noun_singular: &str) {
+    for warning in warnings {
+        warn!("{warning}");
+    }
+    for name in replaced {
+        info!("Replaced: {name}.");
+    }
+    let count = replaced.len();
+    let noun = if count == 1 {
+        noun_singular.to_owned()
+    } else {
+        format!("{noun_singular}s")
+    };
+    info!("Replaced {count} tabsdata {noun}.");
 }
