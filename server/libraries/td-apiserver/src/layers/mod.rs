@@ -5,5 +5,5 @@
 pub mod authorization;
 pub mod compression;
 pub mod cors;
+pub mod internal_token;
 pub mod tracing;
-pub mod uri_filter;

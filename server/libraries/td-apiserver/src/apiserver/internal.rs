@@ -6,10 +6,10 @@ use crate::apiserver::ApiServerCtx;
 use crate::apiserver::server::{Server, ServerBuilder, ServerError};
 use crate::layers::cors::CorsService;
 use crate::layers::tracing::TraceService;
-use crate::layers::uri_filter::LoopbackIpFilterService;
+use crate::layers::internal_token::internal_token_layer;
 use crate::router::internal::InternalRouter;
 use async_trait::async_trait;
-use axum::middleware::from_fn;
+use axum::middleware::from_fn_with_state;
 use http::StatusCode;
 use std::error::Error;
 use std::time::Duration;
@@ -46,8 +46,12 @@ impl InternalServer {
             let router = utoipa_axum::router::OpenApiRouter::default().merge(
                 utoipa_axum::router::OpenApiRouter::default()
                     .merge(InternalRouter::router(context.services.clone()))
-                    // internal authorization layer
-                    .layer(from_fn(LoopbackIpFilterService::layer)),
+                    // internal authorization layer: validate the per-request
+                    // internal-endpoint token (replaces the loopback-IP gate).
+                    .layer(from_fn_with_state(
+                        context.context.clone(),
+                        internal_token_layer,
+                    )),
             );
 
             // Nest the router in the V1 address.
