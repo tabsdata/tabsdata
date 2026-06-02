@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any
 
 from tabsdatak.conn.clickhouse import (
     ClickHouseDest,
@@ -74,10 +74,11 @@ def _resolve_dest_cfg(dest_cfg: DestCfgSpec | None) -> _WriterCfg:
 # classes, not the runtime IO stack).
 
 
-class _ClickHouseDestPlugin(DestPlugin[ClickHouseDest]):
+class _ClickHouseDestPlugin(DestPlugin[ClickHouseDestConn, ClickHouseDest]):
     def write_out(
         self,
         ctx: DestContext,
+        conn: ClickHouseDestConn,
         dest: ClickHouseDest,
         tables: list[TableFileSpec],
     ) -> None:
@@ -99,7 +100,6 @@ class _ClickHouseDestPlugin(DestPlugin[ClickHouseDest]):
                 slots=len(tables),
             )
 
-        conn = cast(ClickHouseDestConn, dest.conn)
         write_cfg = _impl.ClickHouseWriteCfg(
             conn=conn,
             target_tables=list(dest.tables),

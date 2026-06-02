@@ -25,7 +25,6 @@ import tabsdatak._api as _api
 from tabsdatak.api import (
     Conn,
     Dest,
-    NamedConn,
     Secret,
     Var,
 )
@@ -252,9 +251,6 @@ class ClickHouseDestConn(Conn):
     conn_cfg: CfgSpec | None = None
 
 
-ConnSpec: TypeAlias = Union[NamedConn, ClickHouseDestConn]
-
-
 # --- Destination -----------------------------------------------------
 
 
@@ -262,7 +258,6 @@ ConnSpec: TypeAlias = Union[NamedConn, ClickHouseDestConn]
 class ClickHouseDest(Dest):
     """ClickHouse destination — one parquet slot per table.
 
-    :param conn: :class:`ClickHouseDestConn` (or :class:`NamedConn`).
     :param tables: FQN table names (``[<db>.]<table>``); one
         parquet slot per entry.
     :param if_table_exists: ``"append"`` (default) or
@@ -272,7 +267,6 @@ class ClickHouseDest(Dest):
     :param dest_cfg: Optional dest cfg dict.
     """
 
-    conn: ConnSpec
     tables: ClickHouseTableNamesSpec
     if_table_exists: IfTableExistsSpec = "append"
     schema_evolution: SchemaEvolutionSpec = "strict"

@@ -127,7 +127,7 @@ def _bare_conn(staging=None) -> ClickHouseDestConn:
 
 def test_dest_validate_rejects_empty_tables():
     with pytest.raises(ClickHouseValidateException) as ei:
-        ClickHouseDest(conn=_bare_conn(), tables=[])
+        ClickHouseDest(tables=[])
     assert ei.value.api_error is ClickHouseErrorCode.CLICKHOUSE_3
 
 
@@ -138,13 +138,12 @@ def test_dest_validate_rejects_empty_tables():
 
 def test_dest_plugin_raises_clickhouse_4_on_tables_slots_mismatch(work_dir):
     dest = ClickHouseDest(
-        conn=_bare_conn(),
         tables=["users", "orders"],
     )
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     with pytest.raises(ClickHouseRuntimeException) as ei:
         plugin._ClickHouseDestPlugin().write_out(
-            _dest_ctx(work_dir), dest, [src],
+            _dest_ctx(work_dir), _bare_conn(), dest, [src],
         )
     assert ei.value.api_error is ClickHouseErrorCode.CLICKHOUSE_4
 
@@ -172,10 +171,10 @@ def test_dest_plugin_wraps_connection_failure_as_clickhouse_5(
     monkeypatch.setattr(impl, "write_via_bulk_loader", boom)
 
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
-    dest = ClickHouseDest(conn=_bare_conn(), tables=["users"])
+    dest = ClickHouseDest(tables=["users"])
     with pytest.raises(ClickHouseRuntimeException) as ei:
         plugin._ClickHouseDestPlugin().write_out(
-            _dest_ctx(work_dir), dest, [src],
+            _dest_ctx(work_dir), _bare_conn(), dest, [src],
         )
     assert ei.value.api_error is ClickHouseErrorCode.CLICKHOUSE_5
 
@@ -189,10 +188,10 @@ def test_dest_plugin_wraps_other_failure_as_clickhouse_6(
         MagicMock(side_effect=RuntimeError("load fail")),
     )
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
-    dest = ClickHouseDest(conn=_bare_conn(), tables=["users"])
+    dest = ClickHouseDest(tables=["users"])
     with pytest.raises(ClickHouseRuntimeException) as ei:
         plugin._ClickHouseDestPlugin().write_out(
-            _dest_ctx(work_dir), dest, [src],
+            _dest_ctx(work_dir), _bare_conn(), dest, [src],
         )
     assert ei.value.api_error is ClickHouseErrorCode.CLICKHOUSE_6
 
@@ -208,10 +207,10 @@ def test_dest_plugin_wraps_unsupported_staging_as_clickhouse_7(
         ),
     )
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
-    dest = ClickHouseDest(conn=_bare_conn(), tables=["users"])
+    dest = ClickHouseDest(tables=["users"])
     with pytest.raises(ClickHouseRuntimeException) as ei:
         plugin._ClickHouseDestPlugin().write_out(
-            _dest_ctx(work_dir), dest, [src],
+            _dest_ctx(work_dir), _bare_conn(), dest, [src],
         )
     assert ei.value.api_error is ClickHouseErrorCode.CLICKHOUSE_7
 
@@ -233,13 +232,12 @@ def test_dest_plugin_dispatches_to_bulk_loader(monkeypatch, work_dir):
     src1 = _make_parquet(work_dir / "u.parquet", [{"id": 1}])
     src2 = _make_parquet(work_dir / "o.parquet", [{"id": 2}])
     dest = ClickHouseDest(
-        conn=_bare_conn(),
         tables=["users", "orders"],
         if_table_exists="replace",
         schema_evolution="iceberg",
     )
     plugin._ClickHouseDestPlugin().write_out(
-        _dest_ctx(work_dir), dest, [src1, src2],
+        _dest_ctx(work_dir), _bare_conn(), dest, [src1, src2],
     )
     assert captured["tables"] == [src1, src2]
     assert captured["cfg"].target_tables == ["users", "orders"]
@@ -273,7 +271,6 @@ def test_clickhouse_dest_def_wires_plugin_and_explorer():
 
 def test_clickhouse_dest_cardinality_uses_tables_length():
     dest = ClickHouseDest(
-        conn=_bare_conn(),
         tables=["users", "orders", "events"],
     )
     assert plugin.CLICKHOUSE_DEST.cardinality(dest) == 3

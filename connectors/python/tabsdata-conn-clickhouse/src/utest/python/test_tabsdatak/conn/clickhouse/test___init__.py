@@ -4,7 +4,7 @@ import typing
 
 import pytest
 
-from tabsdatak.api import Var, NamedConn, Secret
+from tabsdatak.api import Var, Secret
 from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
     CfgSpec,
@@ -17,7 +17,6 @@ from tabsdatak.conn.clickhouse import (
     ClickHouseDest,
     ClickHouseTableNamesSpec,
     CloudLocation,
-    ConnSpec,
     CredentialsSpec,
     DatabaseSpec,
     DestCfgSpec,
@@ -47,24 +46,8 @@ def _staging():
     )
 
 
-def _conn():
-    return ClickHouseDestConn(
-        host="ch.example.com",
-        staging=_staging(),
-        port=8443,
-        database="analytics",
-        credentials=UserPassword(
-            user=Secret.lit("etl"),
-            password=Secret.lit("hunter2"),
-        ),
-        secure=True,
-        conn_cfg={"clickhouse.timeout": 30},
-    )
-
-
 def test_clickhouse_dest_full_round_trip():
     dest = ClickHouseDest(
-        conn=_conn(),
         tables=["analytics.users", "analytics.orders"],
         if_table_exists="replace",
         schema_evolution="iceberg",
@@ -72,25 +55,10 @@ def test_clickhouse_dest_full_round_trip():
     )
     loaded = ClickHouseDest.from_json(dest.to_json())
     assert loaded == dest
-    assert loaded.conn.port == 8443
-    assert loaded.conn.database.value() == "analytics"
-    assert loaded.conn.secure is True
-    assert loaded.conn.conn_cfg == {"clickhouse.timeout": 30}
     assert loaded.tables == ["analytics.users", "analytics.orders"]
     assert loaded.if_table_exists == "replace"
     assert loaded.schema_evolution == "iceberg"
     assert loaded.dest_cfg == {"clickhouse.logging_level": 20}
-
-
-def test_clickhouse_dest_round_trip_with_named_conn():
-    dest = ClickHouseDest(
-        conn=NamedConn(name="prod_clickhouse"),
-        tables=["analytics.users"],
-    )
-    loaded = ClickHouseDest.from_json(dest.to_json())
-    assert loaded == dest
-    assert isinstance(loaded.conn, NamedConn)
-    assert loaded.conn.name == "prod_clickhouse"
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +81,6 @@ def test_clickhouse_conn_fields_wire_expected_specs():
 
 
 def test_clickhouse_dest_fields_wire_expected_specs():
-    assert _hint(ClickHouseDest, "conn") == ConnSpec
     assert _hint(ClickHouseDest, "tables") == ClickHouseTableNamesSpec
     assert _hint(ClickHouseDest, "if_table_exists") == IfTableExistsSpec
     assert _hint(ClickHouseDest, "schema_evolution") == SchemaEvolutionSpec
