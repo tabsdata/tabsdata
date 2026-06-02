@@ -1,0 +1,103 @@
+direction: up
+
+api: API {
+  style.fill: "#f8fafc"
+  style.stroke: "#cbd5e1"
+  style.font-size: 16
+  style.bold: true
+  style.font-color: "#334155"
+  label.near: top-left
+  width: 1460
+  height: 150
+
+  node: tabsdata-api {
+    style.fill: "#e0f2fe"; style.stroke: "#0284c7"; style.font-color: "#0c4a6e"
+  }
+}
+
+core: Core {
+  style.fill: "#f8fafc"
+  style.stroke: "#cbd5e1"
+  style.font-size: 16
+  style.bold: true
+  style.font-color: "#334155"
+  label.near: top-left
+  width: 720
+  height: 540
+
+  common: tabsdata-common {
+    style.fill: "#e0f2fe"; style.stroke: "#0284c7"; style.font-color: "#0c4a6e"
+  }
+  sdk: tabsdata-sdk {
+    style.fill: "#dcfce7"; style.stroke: "#16a34a"; style.font-color: "#14532d"
+  }
+  server: tabsdata-server {
+    style.fill: "#dcfce7"; style.stroke: "#16a34a"; style.font-color: "#14532d"
+  }
+  cli: tabsdata-cli {
+    style.fill: "#dcfce7"; style.stroke: "#16a34a"; style.font-color: "#14532d"
+  }
+
+  sdk -> common: { style.stroke: "#16a34a" }
+  server -> common: { style.stroke: "#16a34a" }
+  cli -> sdk: { style.stroke: "#16a34a" }
+  cli -> common: { style.stroke: "#16a34a" }
+}
+
+connectors: Connectors {
+  style.fill: "#f8fafc"
+  style.stroke: "#cbd5e1"
+  style.font-size: 16
+  style.bold: true
+  style.font-color: "#334155"
+  label.near: top-left
+  width: 720
+  height: 540
+
+  ccommon: tabsdata-conn-common {
+    style.fill: "#fef9c3"; style.stroke: "#ca8a04"; style.font-color: "#713f12"
+  }
+  cfam: tabsdata-conn-common-* {
+    style.fill: "#fce7f3"; style.stroke: "#db2777"; style.font-color: "#831843"
+  }
+  cother: tabsdata-conn-* {
+    style.fill: "#f3e8ff"; style.stroke: "#9333ea"; style.font-color: "#581c87"
+  }
+
+  cfam -> ccommon: { style.stroke: "#9333ea" }
+  cother -> ccommon: { style.stroke: "#9333ea" }
+  cother -> cfam: { style.stroke: "#9333ea" }
+}
+
+assistants: Assistants {
+  style.fill: "#f8fafc"
+  style.stroke: "#cbd5e1"
+  style.font-size: 16
+  style.bold: true
+  style.font-color: "#334155"
+  label.near: top-left
+  width: 1460
+  height: 150
+
+  agent: tabsdata-agent {
+    style.fill: "#ffedd5"; style.stroke: "#ea580c"; style.font-color: "#7c2d12"
+  }
+}
+
+core.common -> api.node: { style.stroke: "#16a34a" }
+core.sdk -> api.node: { style.stroke: "#16a34a" }
+core.server -> api.node: { style.stroke: "#16a34a" }
+core.cli -> api.node: { style.stroke: "#16a34a" }
+
+connectors.ccommon -> api.node: { style.stroke: "#9333ea" }
+connectors.cfam -> api.node: { style.stroke: "#9333ea" }
+connectors.cother -> api.node: { style.stroke: "#9333ea" }
+
+assistants.agent -> api.node: { style.stroke: "#ea580c" }
+assistants.agent -> core.common: { style.stroke: "#ea580c" }
+assistants.agent -> core.sdk: { style.stroke: "#ea580c" }
+assistants.agent -> core.server: { style.stroke: "#ea580c" }
+assistants.agent -> core.cli: { style.stroke: "#ea580c" }
+assistants.agent -> connectors.ccommon: { style.stroke: "#ea580c" }
+assistants.agent -> connectors.cfam: { style.stroke: "#ea580c" }
+assistants.agent -> connectors.cother: { style.stroke: "#ea580c" }
