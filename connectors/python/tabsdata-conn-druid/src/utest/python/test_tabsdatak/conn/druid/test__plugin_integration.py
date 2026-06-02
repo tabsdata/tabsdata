@@ -236,13 +236,12 @@ def test_dest_plugin_writes_single_datasource(
         ],
     )
     dest = DruidDest(
-        conn=fresh_druid,
         tables=[datasource_name],
         time_column="ts",
         segment_granularity="HOUR",
     )
     plugin.DruidDestPlugin().write_out(
-        _DestCtx(work_dir), dest, [Path(parquet)],
+        _DestCtx(work_dir), fresh_druid, dest, [Path(parquet)],
     )
 
     # Allow the segments to become queryable (small grace period).
@@ -271,12 +270,11 @@ def test_dest_plugin_writes_multiple_datasources(
         ],
     )
     dest = DruidDest(
-        conn=fresh_druid,
         tables=[ds_a, ds_b],
         time_column="ts",
     )
     plugin.DruidDestPlugin().write_out(
-        _DestCtx(work_dir), dest, [
+        _DestCtx(work_dir), fresh_druid, dest, [
             Path(parquet_a), Path(parquet_b),
         ],
     )
