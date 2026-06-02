@@ -35,7 +35,7 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
-from tabsdatak.api import StreamSrc
+from tabsdatak.api import Conn, StreamSrc
 from tabsdatak.conn.common.sql.cdc._ingester import CdcIngester
 from tabsdatak.conn.common.sql.cdc._sentinel.buffer import BufferSentinel
 from tabsdatak.conn.common.sql.cdc._sentinel.disk import DiskSentinel
@@ -238,7 +238,7 @@ def _run_loop(
             ingester.close_session(session)
 
 
-class CdcPlugin[SS: StreamSrc](StreamSrcPlugin[SS], ABC):
+class CdcPlugin[C: Conn, SS: StreamSrc](StreamSrcPlugin[C, SS], ABC):
     """Abstract :class:`~tabsdatak.spi.StreamSrcPlugin` for CDC stream
     sources.
 
@@ -255,15 +255,16 @@ class CdcPlugin[SS: StreamSrc](StreamSrcPlugin[SS], ABC):
         output format, logging level)."""
 
     @abstractmethod
-    def build_ingester(self, stream_src: SS) -> CdcIngester:
+    def build_ingester(self, conn: C, stream_src: SS) -> CdcIngester:
         """Construct the connector-specific
         :class:`~tabsdatak.conn.common.sql.cdc._ingester.CdcIngester` from
-        ``stream_src`` (connection, tables, start position, protocol
-        knobs)."""
+        ``conn`` + ``stream_src`` (connection, tables, start position,
+        protocol knobs)."""
 
     def run(
         self,
         ctx: StreamSrcPluginCtx,
+        conn: C,
         stream_src: SS,
     ) -> None:
         cfg = self.build_run_config(stream_src)
@@ -273,7 +274,7 @@ class CdcPlugin[SS: StreamSrc](StreamSrcPlugin[SS], ABC):
         plugin_logger = logging.getLogger(type(self).__module__)
         plugin_logger.setLevel(cfg.logging_level)
 
-        ingester = self.build_ingester(stream_src)
+        ingester = self.build_ingester(conn, stream_src)
         plugin_logger.info("cdc: starting (%s)", type(ingester).__name__)
         try:
             _run_loop(ctx=ctx, ingester=ingester, cfg=cfg)
