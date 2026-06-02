@@ -36,6 +36,32 @@ pub async fn exists_secret(context: &KubeContext, name: &str) -> Result<bool, Ku
     }
 }
 
+pub async fn get_secret(
+    context: &KubeContext,
+    name: &str,
+) -> Result<Option<BTreeMap<String, Vec<u8>>>, KubernetesError> {
+    let api: Api<Secret> = Api::namespaced(context.client().clone(), context.namespace());
+    match api.get_opt(name).await {
+        Ok(Some(secret)) => {
+            let mut merged: BTreeMap<String, Vec<u8>> = BTreeMap::new();
+            for (key, value) in secret.data.into_iter().flatten() {
+                merged.insert(key, value.0);
+            }
+            for (key, value) in secret.string_data.into_iter().flatten() {
+                merged.insert(key, value.into_bytes());
+            }
+            Ok(Some(merged))
+        }
+        Ok(None) => Ok(None),
+        Err(error) => Err(KubeSecretError::ReadFailed {
+            namespace: context.namespace().to_owned(),
+            name: name.to_owned(),
+            cause: error.to_string(),
+        }
+        .into()),
+    }
+}
+
 pub async fn create_secret(
     context: &KubeContext,
     name: &str,

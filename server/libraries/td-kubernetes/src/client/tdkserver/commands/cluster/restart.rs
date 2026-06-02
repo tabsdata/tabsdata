@@ -72,7 +72,7 @@ pub async fn command_restart(
 
     let reporter = InteractiveReporter::new();
     provider.restart_cluster(&reporter).await?;
-    report::restarted_cluster(&provider.summary());
+    report::cluster::restarted_cluster(&provider.summary());
 
     Ok(())
 }

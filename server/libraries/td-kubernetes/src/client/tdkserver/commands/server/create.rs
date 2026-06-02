@@ -69,7 +69,7 @@ pub async fn command_create(
     provider.create_database(&reporter).await?;
     provider.create_runtimes(&reporter).await?;
     tx.commit();
-    report::created_server(&provider.summary());
+    report::server::created_server(&provider.summary());
 
     Ok(())
 }

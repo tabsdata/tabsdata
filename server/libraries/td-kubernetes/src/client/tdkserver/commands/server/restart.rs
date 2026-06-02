@@ -88,14 +88,14 @@ pub async fn restart_server(
         {
             cwarn!("Server was already stopped.");
         } else {
-            report::stopped_server(&provider.summary());
+            report::server::stopped_server(&provider.summary());
         }
     } else {
         cwarn!("Server was already stopped; starting it.");
     }
 
     provider.start_server(reporter).await?;
-    report::restarted_server(&provider.summary());
+    report::server::restarted_server(&provider.summary());
 
     Ok(())
 }

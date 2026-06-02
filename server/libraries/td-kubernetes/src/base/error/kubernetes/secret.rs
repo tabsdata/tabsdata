@@ -40,4 +40,10 @@ pub enum KubeSecretError {
         label_selector: String,
         cause: String,
     } = 5004,
+    #[error("Could not read Secret '{name}' in namespace '{namespace}': {cause}.")]
+    ReadFailed {
+        namespace: String,
+        name: String,
+        cause: String,
+    } = 5005,
 }

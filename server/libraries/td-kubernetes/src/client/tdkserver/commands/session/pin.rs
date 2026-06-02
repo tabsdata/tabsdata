@@ -63,7 +63,7 @@ pub async fn command_pin(arguments: PinArguments, globals: &GlobalArguments) -> 
     }
 
     PinContext::pin_session(provider.to_session())?;
-    report::pinned_server(&provider.summary());
+    report::session::pinned_server(&provider.summary());
 
     Ok(())
 }
