@@ -123,6 +123,11 @@ class Db2SrcPlugin(SrcPlugin[Db2Src]):
 
         # noinspection PyProtectedMember
         from tabsdatak.conn.common.sql._engine import factory as factory
+
+        # noinspection PyProtectedMember
+        from tabsdatak.conn.common.sql._engine.initial_values import (
+            resolve_initial_values,
+        )
         from tabsdatak.conn.db2._impl import DB2_READ_DEFAULTS, Db2ReadCfg
 
         cfg = _resolve_src_cfg(src.src_cfg)
@@ -134,7 +139,7 @@ class Db2SrcPlugin(SrcPlugin[Db2Src]):
             queries=src.queries,
             transactional=src.transactional,
             schema_overrides=src.schema_overrides,
-            initial_values=src.initial_values or None,
+            initial_values=resolve_initial_values(ctx, src.initial_values),
             cfg=src.src_cfg,
         )
         engine = factory.get_read_engine(

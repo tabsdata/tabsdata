@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -9,20 +8,26 @@ import pytest
 from sqlalchemy.exc import OperationalError, ProgrammingError
 
 from tabsdatak.conn.common.types import UserPassword
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine import (
     sqlalchemy_reader as saw_reader,
     sqlalchemy_writer as saw_writer,
 )
 from tabsdatak.conn.db2 import Db2SrcConn, Db2DestConn, Db2Dest, Db2Src
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.db2 import _impl as impl
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.db2 import _plugin as plugin
 from tabsdatak.conn.db2.error import (
     Db2RuntimeException,
     Db2ErrorCode,
 )
+
+# noinspection PyProtectedMember
+from test_tabsdatak.conn.common.sql._testing import CtxStub
 
 
 pytestmark = pytest.mark.db2
@@ -33,21 +38,12 @@ pytestmark = pytest.mark.db2
 # ---------------------------------------------------------------------------
 
 
-@dataclass
-class _Ctx:
-    _work: Path
-
-    @property
-    def work_dir(self) -> Path:
-        return self._work
+def _src_ctx(work: Path) -> CtxStub:
+    return CtxStub(work)
 
 
-def _src_ctx(work: Path) -> _Ctx:
-    return _Ctx(work)
-
-
-def _dest_ctx(work: Path) -> _Ctx:
-    return _Ctx(work)
+def _dest_ctx(work: Path) -> CtxStub:
+    return CtxStub(work)
 
 
 def _make_parquet(path: Path, rows: list[dict]) -> Path:
@@ -83,6 +79,7 @@ def _bare_src_conn() -> Db2SrcConn:
     """Minimal Db2SrcConn for error tests -- the URI/creds never see
     a real driver (the engine is mocked)."""
     from tabsdatak.api import Secret
+
     return Db2SrcConn(
         uri="db2://stub.invalid:50000/db",
         credentials=UserPassword(
@@ -96,6 +93,7 @@ def _bare_dest_conn() -> Db2DestConn:
     """Minimal Db2DestConn for error tests -- the URI/creds never see
     a real driver (the engine is mocked)."""
     from tabsdatak.api import Secret
+
     return Db2DestConn(
         uri="db2://stub.invalid:50000/db",
         credentials=UserPassword(
@@ -117,7 +115,8 @@ def test_src_plugin_wraps_operational_error_as_db2_5(monkeypatch, work_dir):
 
 
 def test_src_plugin_wraps_other_sqlalchemy_error_as_db2_6(
-    monkeypatch, work_dir,
+    monkeypatch,
+    work_dir,
 ):
     fake = MagicMock()
     fake.connect.side_effect = ProgrammingError("bad sql", {}, BaseException("p"))
@@ -138,7 +137,9 @@ def test_dest_plugin_raises_db2_7_on_tables_slots_mismatch(work_dir):
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     with pytest.raises(Db2RuntimeException) as ei:
         plugin.Db2DestPlugin().write_out(
-            _dest_ctx(work_dir), dest, [src],
+            _dest_ctx(work_dir),
+            dest,
+            [src],
         )
     assert ei.value.api_error is Db2ErrorCode.DB2_7
 
@@ -156,7 +157,8 @@ def test_dest_plugin_wraps_operational_error_as_db2_8(monkeypatch, work_dir):
 
 
 def test_dest_plugin_wraps_other_sqlalchemy_error_as_db2_9(
-    monkeypatch, work_dir,
+    monkeypatch,
+    work_dir,
 ):
     fake = MagicMock()
     fake.connect.side_effect = ProgrammingError("bad sql", {}, BaseException("p"))
@@ -227,6 +229,7 @@ def test_db2_dest_cardinality_uses_tables_length():
 
 def test_resolve_src_cfg_returns_defaults_when_empty():
     import logging as _logging
+
     cfg = plugin._resolve_src_cfg(None)
     assert cfg.logging_level == _logging.ERROR
     assert cfg.read_engine is None
@@ -234,13 +237,11 @@ def test_resolve_src_cfg_returns_defaults_when_empty():
 
 
 def test_resolve_src_cfg_applies_overrides():
-    cfg = plugin._resolve_src_cfg(
-        {
-            "db2.logging_level": 20,
-            "tabsdata.sql.sql.readEngine": "polarsSqlAlchemyRead",
-            "tabsdata.sql.chunkSize": 500,
-        }
-    )
+    cfg = plugin._resolve_src_cfg({
+        "db2.logging_level": 20,
+        "tabsdata.sql.sql.readEngine": "polarsSqlAlchemyRead",
+        "tabsdata.sql.chunkSize": 500,
+    })
     assert cfg.logging_level == 20
     assert cfg.read_engine == "polarsSqlAlchemyRead"
     assert cfg.chunk_size == 500
@@ -253,13 +254,11 @@ def test_resolve_src_cfg_warns_on_unknown_key_via_raw_dict(caplog):
 
 
 def test_resolve_dest_cfg_applies_overrides():
-    cfg = plugin._resolve_dest_cfg(
-        {
-            "db2.logging_level": 20,
-            "tabsdata.sql.sql.writeEngine": "polarsSqlAlchemyWrite",
-            "tabsdata.sql.chunkSize": 500,
-        }
-    )
+    cfg = plugin._resolve_dest_cfg({
+        "db2.logging_level": 20,
+        "tabsdata.sql.sql.writeEngine": "polarsSqlAlchemyWrite",
+        "tabsdata.sql.chunkSize": 500,
+    })
     assert cfg.logging_level == 20
     assert cfg.write_engine == "polarsSqlAlchemyWrite"
     assert cfg.chunk_size == 500
@@ -269,3 +268,35 @@ def test_resolve_dest_cfg_warns_on_unknown_key_via_raw_dict(caplog):
     with caplog.at_level("WARNING", logger=plugin.logger.name):
         plugin._resolve_dest_cfg({"bogus.key": "value"})
     assert any("Unknown dest_cfg key" in r.getMessage() for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# initial_values wiring -- per-bind-name ctx lookup with Src field fallback.
+# The resolver itself is exercised in sql-common's
+# ``test_initial_values.py``; this smoke test only verifies that
+# ``Db2SrcPlugin.read_in`` actually feeds its result into
+# ``Db2ReadCfg`` rather than the raw Src field.
+# ---------------------------------------------------------------------------
+
+
+def test_read_in_uses_resolved_initial_values(work_dir, monkeypatch):
+    captured: dict = {}
+
+    class _FakeEngine:
+        def read(self, read_cfg, work_dir_arg):
+            captured["initial_values"] = read_cfg.initial_values
+            return []
+
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common.sql._engine import factory as _factory
+
+    monkeypatch.setattr(_factory, "get_read_engine", lambda *a, **kw: _FakeEngine())
+
+    ctx = CtxStub(work_dir, scratch={"last_modified": "from-ctx"})
+    src = Db2Src(
+        conn=_bare_src_conn(),
+        queries=["SELECT * FROM t WHERE ts > :last_modified"],
+        initial_values={"last_modified": "from-seed-ignored"},
+    )
+    plugin.Db2SrcPlugin().read_in(ctx, src)
+    assert captured["initial_values"] == {"last_modified": "from-ctx"}
