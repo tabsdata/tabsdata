@@ -136,9 +136,9 @@ def _upload_parquet(
 ) -> None:
     local = tmp_path / name
     pl.DataFrame(rows).write_parquet(local, use_pyarrow=True)
-    dest = GCSDest(conn=conn, paths=[f"{run_prefix}/{name}"])
+    dest = GCSDest(paths=[f"{run_prefix}/{name}"])
     plugin.GCSDestPlugin().write_out(
-        _DestCtx(work_dest), dest, [Path(local)],
+        _DestCtx(work_dest), conn, dest, [Path(local)],
     )
 
 
@@ -151,10 +151,10 @@ def test_dest_then_src_round_trip(conn, run_prefix, tmp_path):
         tmp_path, work_dest,
     )
 
-    src = GCSSrc(conn=conn, paths=[f"{run_prefix}/users.parquet"])
+    src = GCSSrc(paths=[f"{run_prefix}/users.parquet"])
     work_src = tmp_path / "work_src"
     work_src.mkdir()
-    out = plugin.GCSSrcPlugin().read_in(_SrcCtx(work_src), src)
+    out = plugin.GCSSrcPlugin().read_in(_SrcCtx(work_src), conn, src)
 
     assert len(out) == 1
     assert len(out[0]) >= 1
@@ -175,10 +175,10 @@ def test_src_wildcard_in_basename_matches_multiple_objects(
             conn, run_prefix, name, [{"name": name}], tmp_path, work_dest,
         )
 
-    src = GCSSrc(conn=conn, paths=[f"{run_prefix}/*.parquet"])
+    src = GCSSrc(paths=[f"{run_prefix}/*.parquet"])
     work_src = tmp_path / "work_src"
     work_src.mkdir()
-    out = plugin.GCSSrcPlugin().read_in(_SrcCtx(work_src), src)
+    out = plugin.GCSSrcPlugin().read_in(_SrcCtx(work_src), conn, src)
 
     names = sorted(
         pl.read_parquet(f).select("name").item(0, 0) for f in out[0]
@@ -206,13 +206,12 @@ def test_src_initial_last_modified_filters_out_older_objects(
     )
 
     src = GCSSrc(
-        conn=conn,
         paths=[f"{run_prefix}/*.parquet"],
         initial_last_modified=cutoff,
     )
     work_src = tmp_path / "work_src"
     work_src.mkdir()
-    out = plugin.GCSSrcPlugin().read_in(_SrcCtx(work_src), src)
+    out = plugin.GCSSrcPlugin().read_in(_SrcCtx(work_src), conn, src)
 
     names = sorted(
         pl.read_parquet(f).select("name").item(0, 0) for f in out[0]
