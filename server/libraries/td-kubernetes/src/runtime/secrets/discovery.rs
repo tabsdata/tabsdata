@@ -4,69 +4,12 @@
 
 use std::collections::HashMap;
 
-use once_cell::sync::Lazy;
-use regex::Regex;
 use serde_yaml::Value;
 
-use crate::base::constants::{SECRET_GENERATOR_PASSWORD, SECRET_GENERATOR_UUID};
 use crate::base::error::secret::SecretError;
+use crate::runtime::secrets::walker::{Placeholder, SecretVisitor, walk};
 
-pub const SECRET_KEY_SEPARATOR: &str = "__";
-
-static PLACEHOLDER_PATTERN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^\$\{secret(?::([A-Za-z][A-Za-z0-9_]*))?\}$")
-        .expect("invalid secret placeholder pattern")
-});
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Generator {
-    Uuid,
-    Password,
-}
-
-impl Generator {
-    pub fn from_name(name: &str) -> Option<Generator> {
-        match name {
-            SECRET_GENERATOR_UUID => Some(Generator::Uuid),
-            SECRET_GENERATOR_PASSWORD => Some(Generator::Password),
-            _ => None,
-        }
-    }
-
-    pub fn supported() -> &'static [&'static str] {
-        &[SECRET_GENERATOR_UUID, SECRET_GENERATOR_PASSWORD]
-    }
-
-    pub fn generate(self) -> String {
-        match self {
-            Generator::Uuid => td_common::id::id().to_string(),
-            Generator::Password => td_common::random::password(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Placeholder {
-    Bare,
-    Generated(Generator),
-}
-
-fn parse_placeholder(config: &str, text: &str) -> Result<Option<Placeholder>, SecretError> {
-    let Some(captures) = PLACEHOLDER_PATTERN.captures(text) else {
-        return Ok(None);
-    };
-    let Some(name) = captures.get(1) else {
-        return Ok(Some(Placeholder::Bare));
-    };
-    match Generator::from_name(name.as_str()) {
-        Some(generator) => Ok(Some(Placeholder::Generated(generator))),
-        None => Err(SecretError::UnknownGeneratorName {
-            config: config.to_owned(),
-            name: name.as_str().to_owned(),
-            supported: Generator::supported().join(", "),
-        }),
-    }
-}
+pub use crate::runtime::secrets::walker::{Generator, SECRET_KEY_SEPARATOR, encode_secret_key};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SecretLeaf {
@@ -77,14 +20,14 @@ pub struct SecretLeaf {
 
 pub fn extract_secret_leaves(
     config: &str,
-    yaml: &Value,
+    yaml: &mut Value,
 ) -> Result<Vec<SecretLeaf>, SecretError> {
-    let mut hits: Vec<(Vec<String>, Option<Generator>)> = Vec::new();
-    walk(config, yaml, &mut Vec::new(), &mut hits)?;
+    let mut collector = LeafCollector { hits: Vec::new() };
+    walk(config, yaml, &mut collector)?;
 
-    let mut leaves: Vec<SecretLeaf> = Vec::with_capacity(hits.len());
-    let mut seen: HashMap<String, String> = HashMap::with_capacity(hits.len());
-    for (path, generator) in hits {
+    let mut leaves: Vec<SecretLeaf> = Vec::with_capacity(collector.hits.len());
+    let mut seen: HashMap<String, String> = HashMap::with_capacity(collector.hits.len());
+    for (path, generator) in collector.hits {
         let key = encode_secret_key(config, &path)?;
         let displayed = path.join(".");
         if let Some(first) = seen.get(&key) {
@@ -105,200 +48,27 @@ pub fn extract_secret_leaves(
     Ok(leaves)
 }
 
-fn walk(
-    config: &str,
-    node: &Value,
-    path: &mut Vec<String>,
-    leaves: &mut Vec<(Vec<String>, Option<Generator>)>,
-) -> Result<(), SecretError> {
-    match node {
-        Value::String(text) => {
-            if let Some(placeholder) = parse_placeholder(config, text)? {
-                let generator = match placeholder {
-                    Placeholder::Bare => None,
-                    Placeholder::Generated(generator) => Some(generator),
-                };
-                leaves.push((path.clone(), generator));
-            }
-            Ok(())
-        }
-        Value::Mapping(map) => {
-            for (key, value) in map {
-                let segment = mapping_key_as_string(key);
-                path.push(segment);
-                walk(config, value, path, leaves)?;
-                path.pop();
-            }
-            Ok(())
-        }
-        Value::Sequence(items) => walk_promoted_sequence(config, items, path, leaves),
-        _ => Ok(()),
-    }
+struct LeafCollector {
+    hits: Vec<(Vec<String>, Option<Generator>)>,
 }
 
-fn walk_promoted_sequence(
-    config: &str,
-    items: &[Value],
-    path: &mut Vec<String>,
-    leaves: &mut Vec<(Vec<String>, Option<Generator>)>,
-) -> Result<(), SecretError> {
-    if !sequence_contains_secret_placeholder(config, items)? {
-        return Ok(());
+impl SecretVisitor for LeafCollector {
+    type Error = SecretError;
+
+    fn visit_placeholder(
+        &mut self,
+        _config: &str,
+        path: &[String],
+        placeholder: Placeholder,
+        _scalar: &mut String,
+    ) -> Result<(), SecretError> {
+        let generator = match placeholder {
+            Placeholder::Bare => None,
+            Placeholder::Generated(generator) => Some(generator),
+        };
+        self.hits.push((path.to_vec(), generator));
+        Ok(())
     }
-
-    let displayed_path = path.join(".");
-    let mut first_key: Option<String> = None;
-    let mut seen_values: HashMap<String, usize> = HashMap::with_capacity(items.len());
-
-    let item_first_keys: Vec<(String, String)> = items
-        .iter()
-        .enumerate()
-        .map(|(item_index, item)| {
-            let mapping = match item {
-                Value::Mapping(map) => map,
-                _ => {
-                    return Err(SecretError::SequenceMixedItems {
-                        config: config.to_owned(),
-                        path: displayed_path.clone(),
-                        item_index,
-                    });
-                }
-            };
-            let (key_node, value_node) = mapping.iter().next().ok_or_else(|| {
-                SecretError::SequenceEmptyItem {
-                    config: config.to_owned(),
-                    path: displayed_path.clone(),
-                    item_index,
-                }
-            })?;
-            let key_text = mapping_key_as_string(key_node);
-            match first_key.as_ref() {
-                None => first_key = Some(key_text.clone()),
-                Some(expected) if expected == &key_text => {}
-                Some(expected) => {
-                    return Err(SecretError::SequenceFirstKeyMismatch {
-                        config: config.to_owned(),
-                        path: displayed_path.clone(),
-                        first_key: expected.clone(),
-                        item_index,
-                        other_key: key_text,
-                    });
-                }
-            }
-            let value_text = match value_node {
-                Value::String(text)
-                    if matches!(parse_placeholder(config, text)?, Some(_)) =>
-                {
-                    return Err(SecretError::PromotedKeyIsSecret {
-                        config: config.to_owned(),
-                        path: displayed_path.clone(),
-                    });
-                }
-                Value::String(text) => text.clone(),
-                Value::Number(number) => number.to_string(),
-                Value::Bool(boolean) => boolean.to_string(),
-                _ => {
-                    return Err(SecretError::SequenceFirstValueNonScalar {
-                        config: config.to_owned(),
-                        path: displayed_path.clone(),
-                        item_index,
-                    });
-                }
-            };
-            if let Some(prior_index) = seen_values.get(&value_text) {
-                return Err(SecretError::SequenceDuplicateFirstValues {
-                    config: config.to_owned(),
-                    path: displayed_path.clone(),
-                    value: value_text,
-                    first_index: *prior_index,
-                    second_index: item_index,
-                });
-            }
-            seen_values.insert(value_text.clone(), item_index);
-            Ok((key_text, value_text))
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-
-    for (item, (_first_key, item_id)) in items.iter().zip(item_first_keys.into_iter()) {
-        path.push(item_id);
-        walk(config, item, path, leaves)?;
-        path.pop();
-    }
-    Ok(())
-}
-
-fn sequence_contains_secret_placeholder(
-    config: &str,
-    items: &[Value],
-) -> Result<bool, SecretError> {
-    for item in items {
-        if node_contains_secret_placeholder(config, item)? {
-            return Ok(true);
-        }
-    }
-    Ok(false)
-}
-
-fn node_contains_secret_placeholder(
-    config: &str,
-    node: &Value,
-) -> Result<bool, SecretError> {
-    match node {
-        Value::String(text) => Ok(parse_placeholder(config, text)?.is_some()),
-        Value::Mapping(map) => {
-            for value in map.values() {
-                if node_contains_secret_placeholder(config, value)? {
-                    return Ok(true);
-                }
-            }
-            Ok(false)
-        }
-        Value::Sequence(items) => sequence_contains_secret_placeholder(config, items),
-        _ => Ok(false),
-    }
-}
-
-fn mapping_key_as_string(key: &Value) -> String {
-    match key {
-        Value::String(text) => text.clone(),
-        Value::Bool(boolean) => boolean.to_string(),
-        Value::Number(number) => number.to_string(),
-        other => format!("{other:?}"),
-    }
-}
-
-pub fn encode_secret_key(config: &str, path: &[String]) -> Result<String, SecretError> {
-    let mut segments: Vec<String> = Vec::with_capacity(path.len());
-    for segment in path {
-        if segment.is_empty() {
-            return Err(SecretError::EmptySegment {
-                config: config.to_owned(),
-                path: path.join("."),
-            });
-        }
-        segments.push(encode_segment(segment));
-    }
-    Ok(segments.join(SECRET_KEY_SEPARATOR))
-}
-
-fn encode_segment(segment: &str) -> String {
-    let mut encoded: String = segment
-        .chars()
-        .map(|character| {
-            let upper = character.to_ascii_uppercase();
-            if upper.is_ascii_alphanumeric() || upper == '_' {
-                upper
-            } else {
-                '_'
-            }
-        })
-        .collect();
-    if let Some(first) = encoded.chars().next()
-        && first.is_ascii_digit()
-    {
-        encoded.insert(0, '_');
-    }
-    encoded
 }
 
 #[cfg(test)]

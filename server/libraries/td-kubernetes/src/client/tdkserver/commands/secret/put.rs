@@ -2,7 +2,7 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use clap_derive::Args;
@@ -15,14 +15,15 @@ use crate::base::constants::{
     TABSDATA_CONFIGMAP_PREFIX, TABSDATA_SECRET_PREFIX,
 };
 use crate::base::error::cli::CliError;
+use crate::base::error::secret::SecretError;
+use crate::base::naming::to_configmap_file;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
 use crate::core::system::exit::{CommandError, CommandResult, abort_with};
 use crate::core::system::file::is_hidden_or_system;
-use crate::kube::api::{LabelFilter, get_configmap, list_configmaps, upsert_secret};
+use crate::kube::api::{LabelFilter, get_configmap, get_secret, list_configmaps, upsert_secret};
 use crate::kube::context::KubeContext;
-use crate::base::error::secret::SecretError;
-use crate::base::naming::to_configmap_file;
 use crate::runtime::provider::{provider_for_or_tdkcontext, require_started_cluster};
+use crate::runtime::secrets::discovery::extract_secret_leaves;
 use crate::runtime::secrets::parser::parse_secret_manifest;
 use crate::runtime::secrets::reconciliation::{Reconciliation, reconcile_secret_keys};
 
@@ -94,7 +95,7 @@ pub async fn command_put(arguments: PutArguments, globals: &GlobalArguments) -> 
     let candidates = collect_candidates(&source)?;
 
     let mut warnings: Vec<String> = Vec::new();
-    let mut replaced: Vec<String> = Vec::new();
+    let mut replaced: Vec<(String, KeyBreakdown)> = Vec::new();
     let mut error: Option<CommandError> = None;
 
     for candidate in candidates {
@@ -102,7 +103,7 @@ pub async fn command_put(arguments: PutArguments, globals: &GlobalArguments) -> 
             Candidate::Skip(reason) => warnings.push(reason),
             Candidate::Process { file_name, path } => {
                 match process_candidate(&context, &known_configs, &file_name, &path).await {
-                    Ok(Outcome::Replaced) => replaced.push(file_name),
+                    Ok(Outcome::Replaced(breakdown)) => replaced.push((file_name, breakdown)),
                     Ok(Outcome::Skipped(reason)) => warnings.push(reason),
                     Err(failure) => {
                         error = Some(failure);
@@ -113,7 +114,7 @@ pub async fn command_put(arguments: PutArguments, globals: &GlobalArguments) -> 
         }
     }
 
-    report_summary(&replaced, &warnings, "secret");
+    report_summary(&replaced, &warnings);
     match error {
         Some(failure) => Err(failure),
         None => Ok(()),
@@ -169,8 +170,14 @@ enum Candidate {
     Skip(String),
 }
 
+struct KeyBreakdown {
+    overwritten: Vec<String>,
+    preserved: Vec<String>,
+    created: Vec<String>,
+}
+
 enum Outcome {
-    Replaced,
+    Replaced(KeyBreakdown),
     Skipped(String),
 }
 
@@ -257,16 +264,77 @@ async fn process_candidate(
         secret: &parsed.name,
         actual_keys: Some(actual_keys),
     })?;
+    let generator_keys = generated_keys_from_config(&config_file, &config_yaml)?;
+    let live = get_secret(context, &parsed.name).await?;
+    let MergeResult { data, breakdown } =
+        merge_with_live(parsed.data, live.as_ref(), &generator_keys);
     upsert_secret(
         context,
         &parsed.name,
-        parsed.data,
+        data,
         parsed.labels,
         None,
         Some(SECRET_FAMILY_CONFIG),
     )
     .await?;
-    Ok(Outcome::Replaced)
+    Ok(Outcome::Replaced(breakdown))
+}
+
+struct MergeResult {
+    data: BTreeMap<String, String>,
+    breakdown: KeyBreakdown,
+}
+
+fn merge_with_live(
+    manifest: BTreeMap<String, String>,
+    live: Option<&BTreeMap<String, Vec<u8>>>,
+    generator_keys: &BTreeSet<String>,
+) -> MergeResult {
+    let mut data: BTreeMap<String, String> = BTreeMap::new();
+    let mut overwritten: Vec<String> = Vec::new();
+    let mut preserved: Vec<String> = Vec::new();
+    let mut created: Vec<String> = Vec::new();
+    for (key, manifest_value) in manifest {
+        let live_value = live.and_then(|map| map.get(&key));
+        let live_text = live_value.and_then(|bytes| std::str::from_utf8(bytes).ok());
+        let live_non_empty = matches!(live_text, Some(text) if !text.is_empty());
+        let manifest_empty = manifest_value.is_empty();
+        let is_generated = generator_keys.contains(&key);
+        if is_generated && manifest_empty && live_non_empty {
+            data.insert(key.clone(), live_text.unwrap().to_owned());
+            preserved.push(key);
+        } else if live_value.is_some() {
+            data.insert(key.clone(), manifest_value);
+            overwritten.push(key);
+        } else {
+            data.insert(key.clone(), manifest_value);
+            created.push(key);
+        }
+    }
+    MergeResult {
+        data,
+        breakdown: KeyBreakdown {
+            overwritten,
+            preserved,
+            created,
+        },
+    }
+}
+
+fn generated_keys_from_config(
+    config_file: &str,
+    config_yaml: &str,
+) -> CommandResult<BTreeSet<String>> {
+    let mut yaml: serde_yaml::Value =
+        serde_yaml::from_str(config_yaml).map_err(|error| SecretError::ConfigYamlParseFailed {
+            config: config_file.to_owned(),
+            cause: error.to_string(),
+        })?;
+    let leaves = extract_secret_leaves(config_file, &mut yaml)?;
+    Ok(leaves
+        .into_iter()
+        .filter_map(|leaf| leaf.generator.map(|_| leaf.key))
+        .collect())
 }
 
 async fn load_config_yaml(
@@ -274,33 +342,153 @@ async fn load_config_yaml(
     configmap_name: &str,
     config_file: &str,
 ) -> CommandResult<String> {
-    let data = get_configmap(context, configmap_name).await?.ok_or_else(|| {
-        SecretError::ConfigYamlParseFailed {
+    let data = get_configmap(context, configmap_name)
+        .await?
+        .ok_or_else(|| SecretError::ConfigYamlParseFailed {
             config: config_file.to_owned(),
             cause: format!("configmap '{configmap_name}' disappeared between listing and read"),
-        }
-    })?;
-    let yaml = data.get(config_file).cloned().ok_or_else(|| {
-        SecretError::ConfigYamlParseFailed {
-            config: config_file.to_owned(),
-            cause: format!("configmap '{configmap_name}' has no '{config_file}' entry"),
-        }
-    })?;
+        })?;
+    let yaml =
+        data.get(config_file)
+            .cloned()
+            .ok_or_else(|| SecretError::ConfigYamlParseFailed {
+                config: config_file.to_owned(),
+                cause: format!("configmap '{configmap_name}' has no '{config_file}' entry"),
+            })?;
     Ok(yaml)
 }
 
-fn report_summary(replaced: &[String], warnings: &[String], noun_singular: &str) {
+fn report_summary(replaced: &[(String, KeyBreakdown)], warnings: &[String]) {
     for warning in warnings {
         warn!("{warning}");
     }
-    for name in replaced {
+    for (name, breakdown) in replaced {
         info!("Replaced: {name}.");
+        for key in &breakdown.created {
+            info!("  - created:     {key}.");
+        }
+        for key in &breakdown.overwritten {
+            info!("  - overwritten: {key}.");
+        }
+        for key in &breakdown.preserved {
+            info!("  - preserved:   {key} (live non-empty, manifest empty).");
+        }
     }
     let count = replaced.len();
-    let noun = if count == 1 {
-        noun_singular.to_owned()
-    } else {
-        format!("{noun_singular}s")
-    };
+    let noun = if count == 1 { "secret" } else { "secrets" };
     info!("Replaced {count} tabsdata {noun}.");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn map(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
+        pairs
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+            .collect()
+    }
+
+    fn live(pairs: &[(&str, &str)]) -> BTreeMap<String, Vec<u8>> {
+        pairs
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), v.as_bytes().to_vec()))
+            .collect()
+    }
+
+    fn generators(items: &[&str]) -> BTreeSet<String> {
+        items.iter().map(|s| (*s).to_owned()).collect()
+    }
+
+    #[test]
+    fn generated_empty_manifest_with_live_non_empty_preserves() {
+        let manifest = map(&[("JWT__SECRET", "")]);
+        let live_map = live(&[("JWT__SECRET", "uuid-xyz")]);
+        let gens = generators(&["JWT__SECRET"]);
+        let result = merge_with_live(manifest, Some(&live_map), &gens);
+        assert_eq!(
+            result.data.get("JWT__SECRET").map(String::as_str),
+            Some("uuid-xyz")
+        );
+        assert_eq!(result.breakdown.preserved, vec!["JWT__SECRET"]);
+        assert!(result.breakdown.overwritten.is_empty());
+        assert!(result.breakdown.created.is_empty());
+    }
+
+    #[test]
+    fn generated_non_empty_manifest_overwrites_live() {
+        let manifest = map(&[("JWT__SECRET", "user-chosen")]);
+        let live_map = live(&[("JWT__SECRET", "uuid-xyz")]);
+        let gens = generators(&["JWT__SECRET"]);
+        let result = merge_with_live(manifest, Some(&live_map), &gens);
+        assert_eq!(
+            result.data.get("JWT__SECRET").map(String::as_str),
+            Some("user-chosen")
+        );
+        assert_eq!(result.breakdown.overwritten, vec!["JWT__SECRET"]);
+    }
+
+    #[test]
+    fn bare_secret_empty_manifest_overwrites_live() {
+        let manifest = map(&[("API_KEY", "")]);
+        let live_map = live(&[("API_KEY", "current")]);
+        let gens = generators(&[]);
+        let result = merge_with_live(manifest, Some(&live_map), &gens);
+        assert_eq!(result.data.get("API_KEY").map(String::as_str), Some(""));
+        assert_eq!(result.breakdown.overwritten, vec!["API_KEY"]);
+    }
+
+    #[test]
+    fn manifest_key_absent_from_live_is_created() {
+        let manifest = map(&[("NEW_KEY", "value")]);
+        let result = merge_with_live(manifest, None, &generators(&[]));
+        assert_eq!(
+            result.data.get("NEW_KEY").map(String::as_str),
+            Some("value")
+        );
+        assert_eq!(result.breakdown.created, vec!["NEW_KEY"]);
+    }
+
+    #[test]
+    fn generated_empty_manifest_with_live_empty_is_overwritten() {
+        let manifest = map(&[("JWT__SECRET", "")]);
+        let live_map = live(&[("JWT__SECRET", "")]);
+        let gens = generators(&["JWT__SECRET"]);
+        let result = merge_with_live(manifest, Some(&live_map), &gens);
+        assert_eq!(result.data.get("JWT__SECRET").map(String::as_str), Some(""));
+        assert_eq!(result.breakdown.overwritten, vec!["JWT__SECRET"]);
+        assert!(result.breakdown.preserved.is_empty());
+    }
+
+    #[test]
+    fn mixed_breakdown() {
+        let manifest = map(&[
+            ("BARE_NEW", "supplied"),
+            ("GEN_PRESERVE", ""),
+            ("GEN_OVERWRITE", "new"),
+            ("BARE_OVERWRITE", ""),
+        ]);
+        let live_map = live(&[
+            ("GEN_PRESERVE", "kept-value"),
+            ("GEN_OVERWRITE", "old"),
+            ("BARE_OVERWRITE", "old-bare"),
+        ]);
+        let gens = generators(&["GEN_PRESERVE", "GEN_OVERWRITE"]);
+        let result = merge_with_live(manifest, Some(&live_map), &gens);
+        assert_eq!(result.breakdown.created, vec!["BARE_NEW"]);
+        assert_eq!(result.breakdown.preserved, vec!["GEN_PRESERVE"]);
+        assert_eq!(
+            result.breakdown.overwritten,
+            vec!["BARE_OVERWRITE", "GEN_OVERWRITE"]
+        );
+        assert_eq!(
+            result.data.get("GEN_PRESERVE").map(String::as_str),
+            Some("kept-value")
+        );
+        assert_eq!(
+            result.data.get("GEN_OVERWRITE").map(String::as_str),
+            Some("new")
+        );
+    }
 }

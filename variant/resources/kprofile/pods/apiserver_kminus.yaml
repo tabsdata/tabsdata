@@ -108,7 +108,7 @@ spec:
         - name: TDK_KUBECONFIG
           valueFrom:
             secretKeyRef:
-              name: tabsdata-kubeconfig
+              name: tabsdata-secret-kubeconfig
               key: kubeconfig
   volumes:
     - name: config

@@ -91,6 +91,10 @@ impl Provider for EksProvider {
         unreachable!("eks provider not yet implemented")
     }
 
+    async fn instance_alive(&self) -> bool {
+        unreachable!("eks provider not yet implemented")
+    }
+
     async fn start_cluster_hook(&self, _reporter: &dyn Reporter) -> CommandResult {
         unreachable!("eks provider not yet implemented")
     }

@@ -20,8 +20,12 @@ pub fn created_server(summary: &Summary) {
 }
 
 fn next_steps_after_create(summary: &Summary) {
-    let needs_cluster_start = matches!(summary.provider, ClusterProvider::Kminus);
-    warn!("Next steps before starting the instance:");
+    let kminus = matches!(summary.provider, ClusterProvider::Kminus);
+    if kminus {
+        warn!("The cluster is now running. Next steps before starting the instance:");
+    } else {
+        warn!("Next steps before starting the instance:");
+    }
     warn!(
         "  - Inspect the deployed configs with 'tdkserver config get --folder <folder>' \
          and the placeholders for required secrets with 'tdkserver secret get --folder <folder>'. \
@@ -31,16 +35,11 @@ fn next_steps_after_create(summary: &Summary) {
         "  - Push edits back with 'tdkserver config put --folder <folder>' for configs and \
          'tdkserver secret put --folder <folder>' for secrets."
     );
-    if needs_cluster_start {
-        warn!(
-            "  - The 'get' and 'put' commands require a running cluster. \
-             Start it with 'tdkserver cluster start' before configuring configs or secrets."
-        );
+    if kminus {
         warn!(
             "  - Once the configs and secrets are in place, launch the workload with \
-             'tdkserver instance start' (cluster already running), 'tdkserver server start' \
-             (cluster not yet started), or 'tdkserver instance restart' / \
-             'tdkserver server restart' to roll a running instance."
+             'tdkserver instance start' or 'tdkserver instance restart' to roll a running \
+             instance. The cluster is already running, so 'tdkserver server start' is unnecessary."
         );
     } else {
         warn!(
@@ -53,6 +52,15 @@ fn next_steps_after_create(summary: &Summary) {
              'tdkserver instance restart'."
         );
     }
+    warn!(
+        "  - Reduce typing on subsequent commands by pinning this instance with \
+         'tdkserver session pin ...' — pinned values become defaults for cluster / instance / \
+         namespace flags."
+    );
+    warn!(
+        "  - Drop the 'tdkserver' prefix entirely by entering a tdkserver shell with \
+         'tdkserver shell ...' — every command typed inside is implicitly prefixed."
+    );
 }
 
 pub fn started_server(summary: &Summary) {

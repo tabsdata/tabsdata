@@ -6,8 +6,9 @@ use crate::launcher::cli::{move_to_dir, obtain_config_dir, obtain_current_dir};
 use config::{File, FileFormat};
 use serde::{Deserialize, Serialize};
 use std::io::Read;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use td_common::env::{TABSDATA_HOME_DIR, get_current_dir, get_home_dir, get_user_name};
+use td_kubernetes::runtime::gateway::resolver::{ConfigurationResolver, SystemValues};
 use tracing::{debug, error, info};
 
 /// Marker trait to define a configuration.
@@ -104,8 +105,9 @@ pub fn load_config<T: Config>(
             "Loading configuration from explicit file: {}",
             path.display()
         );
-        config_builder = config_builder
-            .add_source(config::File::with_name(path.to_str().unwrap()).required(true));
+        let resolved_yaml = read_and_resolve(path);
+        config_builder =
+            config_builder.add_source(File::from_str(&resolved_yaml, FileFormat::Yaml));
     }
 
     config_builder = config_builder.add_source(config::Environment::with_prefix(&app_env_prefix));
@@ -145,6 +147,37 @@ pub fn load_config<T: Config>(
 
     debug!(config = %config_name, "process.launcher: config loaded");
     config
+}
+
+fn read_and_resolve(path: &Path) -> String {
+    let raw = match std::fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(error) => {
+            error!("Failed to read config file '{}': {error:?}", path.display());
+            panic!("Exiting due to configuration read failure.");
+        }
+    };
+    let resolver = ConfigurationResolver::new(SystemValues::default());
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("tokio runtime for resolver");
+    match runtime.block_on(resolver.resolve(&raw)) {
+        Ok(resolved) => {
+            info!(
+                "Resolved configuration from '{}':\n{resolved}",
+                path.display()
+            );
+            resolved
+        }
+        Err(error) => {
+            error!(
+                "Failed to resolve placeholders in config file '{}': {error:?}",
+                path.display()
+            );
+            panic!("Exiting due to configuration placeholder resolution failure.");
+        }
+    }
 }
 
 #[cfg(test)]
@@ -320,5 +353,46 @@ mod tests {
 
         assert_eq!(config.name, "env_config_name");
         assert_eq!(config.port(), &5u16);
+    }
+
+    #[test]
+    fn test_load_config_resolves_env_placeholders_in_explicit_file() {
+        unsafe {
+            std::env::set_var("TD_PROCESS_TEST_RESOLVE_NAME", "from-env");
+            std::env::set_var("TD_PROCESS_TEST_RESOLVE_PORT", "7777");
+        }
+        let path = get_current_dir().join("explicit-resolved.yaml");
+        std::fs::write(
+            &path,
+            "name: ${env:TD_PROCESS_TEST_RESOLVE_NAME}\nport: ${env:TD_PROCESS_TEST_RESOLVE_PORT}\n",
+        )
+        .expect("write explicit config");
+
+        let config = load_config::<MyConfig>("my-config-resolve", None, Some(path.clone()), false);
+
+        assert_eq!(config.name, "from-env");
+        assert_eq!(config.port(), &7777u16);
+
+        std::fs::remove_file(&path).ok();
+        unsafe {
+            std::env::remove_var("TD_PROCESS_TEST_RESOLVE_NAME");
+            std::env::remove_var("TD_PROCESS_TEST_RESOLVE_PORT");
+        }
+    }
+
+    #[test]
+    fn test_load_config_resolves_secret_placeholders_in_explicit_file() {
+        unsafe { std::env::set_var("NAME", "from-secret") };
+
+        let path = get_current_dir().join("explicit-secret.yaml");
+        std::fs::write(&path, "name: ${secret}\nport: 9999\n").expect("write explicit config");
+
+        let config = load_config::<MyConfig>("my-config-secret", None, Some(path.clone()), false);
+
+        assert_eq!(config.name, "from-secret");
+        assert_eq!(config.port(), &9999u16);
+
+        std::fs::remove_file(&path).ok();
+        unsafe { std::env::remove_var("NAME") };
     }
 }

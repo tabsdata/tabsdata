@@ -25,7 +25,6 @@ async fn resolves_unsubstituted_text_unchanged() {
 #[tokio::test]
 async fn resolves_required_env_placeholder() {
     let key = "TD_TEST_RESOLVER_REQUIRED";
-    // SAFETY: tests are scoped to this process; env writes are intentional.
     unsafe { std::env::set_var(key, "world") };
 
     let resolver = resolver();
@@ -40,7 +39,6 @@ async fn resolves_required_env_placeholder() {
 
 #[tokio::test]
 async fn missing_required_env_returns_error() {
-    // SAFETY: ensure the key is unset.
     unsafe { std::env::remove_var("TD_TEST_RESOLVER_MISSING") };
 
     let resolver = resolver();
@@ -52,7 +50,6 @@ async fn missing_required_env_returns_error() {
 
 #[tokio::test]
 async fn optional_env_placeholder_falls_back_to_empty_string() {
-    // SAFETY: ensure the key is unset.
     unsafe { std::env::remove_var("TD_TEST_RESOLVER_OPTIONAL") };
 
     let resolver = resolver();
@@ -65,7 +62,6 @@ async fn optional_env_placeholder_falls_back_to_empty_string() {
 
 #[tokio::test]
 async fn multiple_env_placeholders_resolve_left_to_right() {
-    // SAFETY: scoped env writes.
     unsafe {
         std::env::set_var("TD_TEST_RESOLVER_A", "alpha");
         std::env::set_var("TD_TEST_RESOLVER_B", "beta");
@@ -115,4 +111,84 @@ async fn unknown_system_key_returns_error() {
     let resolver = resolver();
     let result = resolver.resolve_sys("${sys:UNKNOWN_KEY}").await;
     assert!(result.is_err(), "unknown system key should error");
+}
+
+#[tokio::test]
+async fn resolve_secret_substitutes_bare_placeholder() {
+    let key = "TD_RESOLVE_TEST_BARE__VALUE";
+    unsafe { std::env::set_var(key, "supersecret") };
+
+    let resolver = resolver();
+    let yaml = "td_resolve_test_bare:\n  value: ${secret}\n";
+    let resolved = resolver.resolve_secret(yaml).await.expect("resolve");
+    let parsed: serde_yaml::Value = serde_yaml::from_str(&resolved).expect("yaml");
+    assert_eq!(
+        parsed["td_resolve_test_bare"]["value"].as_str(),
+        Some("supersecret")
+    );
+
+    unsafe { std::env::remove_var(key) };
+}
+
+#[tokio::test]
+async fn resolve_secret_substitutes_named_placeholder_using_path_encoding() {
+    let key = "TD_RESOLVE_TEST_NAMED__VALUE";
+    unsafe { std::env::set_var(key, "jwt-value") };
+
+    let resolver = resolver();
+    let yaml = "td_resolve_test_named:\n  value: ${secret:jwt_signing_key}\n";
+    let resolved = resolver.resolve_secret(yaml).await.expect("resolve");
+    let parsed: serde_yaml::Value = serde_yaml::from_str(&resolved).expect("yaml");
+    assert_eq!(
+        parsed["td_resolve_test_named"]["value"].as_str(),
+        Some("jwt-value")
+    );
+
+    unsafe { std::env::remove_var(key) };
+}
+
+#[tokio::test]
+async fn resolve_secret_errors_when_env_var_missing() {
+    unsafe { std::env::remove_var("TD_RESOLVE_TEST_MISSING__SECRET") };
+
+    let resolver = resolver();
+    let yaml = "td_resolve_test_missing:\n  secret: ${secret}\n";
+    let result = resolver.resolve_secret(yaml).await;
+    assert!(result.is_err(), "missing env var should error");
+}
+
+#[tokio::test]
+async fn resolve_runs_env_then_secret() {
+    unsafe {
+        std::env::set_var("TD_RESOLVE_TEST_BOTH_LOG", "info");
+        std::env::set_var("TD_RESOLVE_TEST_BOTH__VALUE", "p@ss");
+    }
+
+    let resolver = resolver();
+    let yaml =
+        "log_level: ${env:TD_RESOLVE_TEST_BOTH_LOG}\ntd_resolve_test_both:\n  value: ${secret}\n";
+    let resolved = resolver.resolve(yaml).await.expect("resolve");
+    let parsed: serde_yaml::Value = serde_yaml::from_str(&resolved).expect("yaml");
+    assert_eq!(parsed["log_level"].as_str(), Some("info"));
+    assert_eq!(
+        parsed["td_resolve_test_both"]["value"].as_str(),
+        Some("p@ss")
+    );
+
+    unsafe {
+        std::env::remove_var("TD_RESOLVE_TEST_BOTH_LOG");
+        std::env::remove_var("TD_RESOLVE_TEST_BOTH__VALUE");
+    }
+}
+
+#[tokio::test]
+async fn resolve_passes_through_text_without_placeholders() {
+    let resolver = resolver();
+    let yaml = "anchor:\n  literal: not a placeholder\n";
+    let resolved = resolver.resolve(yaml).await.expect("resolve");
+    let parsed: serde_yaml::Value = serde_yaml::from_str(&resolved).expect("yaml");
+    assert_eq!(
+        parsed["anchor"]["literal"].as_str(),
+        Some("not a placeholder")
+    );
 }

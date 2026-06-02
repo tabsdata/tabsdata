@@ -18,9 +18,7 @@ fn leaves(keys: &[(&str, &str)]) -> Vec<SecretLeaf> {
 
 #[test]
 fn manifest_carries_name_type_and_labels_but_no_namespace() {
-    let leaves = leaves(&[
-        ("database.postgres.password", "DATABASE__POSTGRES__PASSWORD"),
-    ]);
+    let leaves = leaves(&[("database.postgres.password", "DATABASE__POSTGRES__PASSWORD")]);
     let secret = build_secret_manifest(
         "tabsdata-secret-apiserver.yaml",
         SECRET_FAMILY_CONFIG,
@@ -28,7 +26,10 @@ fn manifest_carries_name_type_and_labels_but_no_namespace() {
         None,
     );
     let metadata = &secret.metadata;
-    assert_eq!(metadata.name.as_deref(), Some("tabsdata-secret-apiserver.yaml"));
+    assert_eq!(
+        metadata.name.as_deref(),
+        Some("tabsdata-secret-apiserver.yaml")
+    );
     assert!(metadata.namespace.is_none());
     assert_eq!(secret.type_.as_deref(), Some("Opaque"));
     let labels = metadata.labels.as_ref().expect("labels present");
@@ -44,10 +45,7 @@ fn manifest_carries_name_type_and_labels_but_no_namespace() {
 
 #[test]
 fn manifest_without_values_fills_empty_strings() {
-    let leaves = leaves(&[
-        ("a.b", "A__B"),
-        ("c", "C"),
-    ]);
+    let leaves = leaves(&[("a.b", "A__B"), ("c", "C")]);
     let secret = build_secret_manifest("name", SECRET_FAMILY_CONFIG, &leaves, None);
     let string_data = secret.string_data.as_ref().expect("string_data present");
     assert_eq!(string_data.get("A__B").map(String::as_str), Some(""));
@@ -57,25 +55,22 @@ fn manifest_without_values_fills_empty_strings() {
 
 #[test]
 fn manifest_with_values_uses_them() {
-    let leaves = leaves(&[
-        ("a.b", "A__B"),
-        ("c", "C"),
-    ]);
+    let leaves = leaves(&[("a.b", "A__B"), ("c", "C")]);
     let mut values = BTreeMap::new();
     values.insert("A__B".to_owned(), "supersecret".to_owned());
     values.insert("C".to_owned(), "another".to_owned());
     let secret = build_secret_manifest("name", SECRET_FAMILY_CONFIG, &leaves, Some(&values));
     let string_data = secret.string_data.as_ref().expect("string_data present");
-    assert_eq!(string_data.get("A__B").map(String::as_str), Some("supersecret"));
+    assert_eq!(
+        string_data.get("A__B").map(String::as_str),
+        Some("supersecret")
+    );
     assert_eq!(string_data.get("C").map(String::as_str), Some("another"));
 }
 
 #[test]
 fn manifest_with_partial_values_fills_missing_keys_with_empty() {
-    let leaves = leaves(&[
-        ("a", "A"),
-        ("b", "B"),
-    ]);
+    let leaves = leaves(&[("a", "A"), ("b", "B")]);
     let mut values = BTreeMap::new();
     values.insert("A".to_owned(), "only-a".to_owned());
     let secret = build_secret_manifest("name", SECRET_FAMILY_CONFIG, &leaves, Some(&values));

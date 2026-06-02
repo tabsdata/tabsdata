@@ -7,9 +7,14 @@ import shutil
 import sys
 
 import pytest
-from case import STATE_BOTH_STOPPED
+from case import STATE_BOTH_STOPPED, STATE_CLUSTER_ONLY
 from constant import INSTANCE_FOLDER, KEEP_ON_FAILURE_ENV
-from helper import drive_to_state, ensure_instance_exists, observed_state
+from helper import (
+    drive_to_state,
+    ensure_instance_exists,
+    ensure_secrets_populated,
+    observed_state,
+)
 
 
 def pytest_addoption(parser):
@@ -28,10 +33,11 @@ def pytest_addoption(parser):
 def instance(pytestconfig):
     ensure_instance_exists(pytestconfig)
     state = observed_state()
-    assert state == STATE_BOTH_STOPPED, (
-        f"Post-create state should be {STATE_BOTH_STOPPED.label()}, "
+    assert state == STATE_CLUSTER_ONLY, (
+        f"Post-create state should be {STATE_CLUSTER_ONLY.label()}, "
         f"observed {state.label()}"
     )
+    ensure_secrets_populated(pytestconfig)
     session = pytestconfig.pluginmanager.getplugin("terminalreporter")
     yield
     keep_on_failure = os.environ.get(KEEP_ON_FAILURE_ENV) == "1"

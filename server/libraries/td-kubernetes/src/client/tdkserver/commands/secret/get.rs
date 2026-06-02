@@ -3,7 +3,7 @@
 //
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use clap_derive::{Args, ValueEnum};
 use td_common::status::ExitStatus::GeneralError;
@@ -104,19 +104,17 @@ pub async fn command_get(arguments: GetArguments, globals: &GlobalArguments) -> 
 
     let mut count = 0usize;
     for entry in configs {
-        let yaml: serde_yaml::Value = serde_yaml::from_str(&entry.yaml).map_err(|error| {
+        let mut yaml: serde_yaml::Value = serde_yaml::from_str(&entry.yaml).map_err(|error| {
             SecretError::ConfigYamlParseFailed {
                 config: entry.file.clone(),
                 cause: error.to_string(),
             }
         })?;
-        let leaves = extract_secret_leaves(&entry.file, &yaml)?;
+        let leaves = extract_secret_leaves(&entry.file, &mut yaml)?;
         if leaves.is_empty() {
             continue;
         }
-        let live_values = if values
-            && let Some(context) = kube_context.as_ref()
-        {
+        let live_values = if values && let Some(context) = kube_context.as_ref() {
             get_secret(context, &entry.secret).await?
         } else {
             None
@@ -139,7 +137,7 @@ pub async fn command_get(arguments: GetArguments, globals: &GlobalArguments) -> 
     Ok(())
 }
 
-fn ensure_empty_folder(folder: &PathBuf) -> CommandResult {
+fn ensure_empty_folder(folder: &Path) -> CommandResult {
     if !folder.is_dir() {
         return abort_with(
             GeneralError,
@@ -161,7 +159,7 @@ fn ensure_empty_folder(folder: &PathBuf) -> CommandResult {
     Ok(())
 }
 
-fn write_manifest(folder: &PathBuf, secret_name: &str, yaml: &str) -> CommandResult {
+fn write_manifest(folder: &Path, secret_name: &str, yaml: &str) -> CommandResult {
     let file = folder.join(secret_name);
     std::fs::write(&file, yaml).map_err(|error| {
         TdError::from(CliError::FileWriteFailed {

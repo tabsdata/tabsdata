@@ -20,8 +20,8 @@ use td_python::python::{get_python_scripts_folder, resolve_python_binary};
 use tracing::info;
 
 use crate::base::constants::{
-    CONFIGMAP_TABSDATA_MANIFEST, FOLDER_CLUSTER, FOLDER_DATABASE, FOLDER_PYENV_AG, FOLDER_PYENV_TD,
-    FOLDER_PYTHON, FOLDER_REPOSITORY, FOLDER_RUNTIMES, FOLDER_STORAGE, KPROFILE_CONFIGS_FAMILY,
+    FOLDER_CLUSTER, FOLDER_DATABASE, FOLDER_PYENV_AG, FOLDER_PYENV_TD, FOLDER_PYTHON,
+    FOLDER_REPOSITORY, FOLDER_RUNTIMES, FOLDER_STORAGE, KPROFILE_CONFIGS_FAMILY,
     KPROFILE_PODS_FAMILY,
 };
 use crate::base::error::provider::ProviderError;
@@ -32,17 +32,15 @@ use crate::client::tdkserver::common::validate_instance_name;
 use crate::core::system::exit::{CommandError, CommandResult, abort_with};
 use crate::core::system::subprocess;
 use crate::core::system::subprocess::apply_detached_flags;
-use crate::kube::api::require_configmap;
+use crate::kube::api::get_secret;
 use crate::kube::kubeconfig::{
     build_kubeconfig, resolve_cluster_name, resolve_cluster_url, resolve_current_context,
     resolve_namespace,
 };
 use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues};
-use crate::runtime::instance::launcher::{start_workload, stop_workload};
 use crate::runtime::instance::manifest::MANIFEST_FILE;
 use crate::runtime::instance::profile::{
-    Profile, load_profile, parse_from_configmaps, read_family_configmaps, render_for_configmaps,
-    resolve_profile_entry,
+    Profile, load_profile, render_for_configmaps, resolve_profile_entry,
 };
 use crate::runtime::instance::verify_manifest_compatibility;
 use crate::runtime::provider::kminus::cluster::{InstanceFolderGuard, KminusCluster};
@@ -53,6 +51,8 @@ use crate::runtime::provider::{
     Cluster, ClusterProvider, HostedProvider, Instance, LocalProvider, ProcessProvider, Provider,
     Transaction, handle_phase_secrets,
 };
+use crate::runtime::secrets::reconciliation::auto_fill_generated_secrets;
+use crate::runtime::secrets::source::to_secret_name;
 use crate::runtime::secrets::{KubeconfigSecretGenerator, SecretGenerator, SecretPhase};
 
 const APISERVER_BINARY: &str = "td_apiserver";
@@ -360,6 +360,7 @@ impl Provider for KminusProvider {
         let step = reporter.step("Staging tabsdata configmap");
         self.stage_configmaps().await?;
         step.done("Tabsdata configmap staged");
+        self.start_cluster_hook(reporter).await?;
         Ok(result)
     }
 
@@ -392,6 +393,18 @@ impl Provider for KminusProvider {
                 error.to_string(),
             )
         })?;
+        let context = self.kube_context().await?;
+        auto_fill_generated_secrets(&context).await?;
+        let apiserver_secret_name = to_secret_name(APISERVER_CONFIG_KEY);
+        let secret_env: Vec<(String, String)> = match get_secret(&context, &apiserver_secret_name)
+            .await?
+        {
+            Some(data) => data
+                .into_iter()
+                .filter_map(|(key, value)| String::from_utf8(value).ok().map(|text| (key, text)))
+                .collect(),
+            None => Vec::new(),
+        };
         let apiserver = name_program(&PathBuf::from(APISERVER_BINARY));
         let command_label = format!("{} --db-schema create", apiserver.display());
         let step = reporter.step("Creating tabsdata database schema");
@@ -401,6 +414,9 @@ impl Provider for KminusProvider {
             .arg(config_file.path())
             .arg("--db-schema")
             .arg("create");
+        for (key, value) in &secret_env {
+            command.env(key, value);
+        }
         apply_detached_flags(&mut command);
         let output = match subprocess::run(&mut command, APISERVER_BINARY, self.verbose) {
             Ok(output) => output,
@@ -478,6 +494,10 @@ impl Provider for KminusProvider {
         self.cluster.is_alive().await
     }
 
+    async fn instance_alive(&self) -> bool {
+        self.cluster_alive().await && self.instance.is_alive().await
+    }
+
     fn staging_profile_path(&self) -> Option<PathBuf> {
         Some(self.cluster.staging_profile_path())
     }
@@ -486,7 +506,7 @@ impl Provider for KminusProvider {
         let step = reporter.step("Starting kminus cluster");
         self.cluster.start().await?;
         step.done("Kminus cluster started");
-        self.instance.start().await?;
+        self.instance.promote_stage().await?;
         handle_phase_secrets(self, SecretPhase::ClusterStart).await?;
         Ok(())
     }
@@ -654,24 +674,10 @@ impl KminusProvider {
     }
 
     async fn apply_workload(&self, multi: &MultiProgress) -> CommandResult {
-        let context = self.kube_context().await?;
-        let pods = read_family_configmaps(&context, &KPROFILE_PODS_FAMILY).await?;
-        let configs = read_family_configmaps(&context, &KPROFILE_CONFIGS_FAMILY).await?;
-        let mut manifest_data = require_configmap(&context, CONFIGMAP_TABSDATA_MANIFEST).await?;
-        let Some(manifest_yaml) = manifest_data.remove(MANIFEST_FILE) else {
-            return Err(ProviderError::ConfigmapEntryMissing(
-                CONFIGMAP_TABSDATA_MANIFEST.to_owned(),
-                MANIFEST_FILE.to_owned(),
-            )
-            .into());
-        };
-        let profile = parse_from_configmaps(&pods, &configs, &manifest_yaml)?;
-        start_workload(self, &profile, multi).await
+        self.instance.start(multi).await
     }
 
     async fn teardown_workload(&self, multi: &MultiProgress) -> CommandResult<bool> {
-        let stopped_workload = stop_workload(self, multi).await?;
-        let stopped_instance = self.instance.stop().await?;
-        Ok(stopped_workload || stopped_instance)
+        self.instance.stop(multi).await
     }
 }

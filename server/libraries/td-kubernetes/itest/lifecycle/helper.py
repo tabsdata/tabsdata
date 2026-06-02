@@ -4,8 +4,10 @@
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from typing import Iterable
 
@@ -145,6 +147,39 @@ def ensure_instance_exists(config) -> None:
         "--yes",
         timeout=CREATE_TIMEOUT_SECONDS,
     )
+
+
+def ensure_secrets_populated(config) -> None:
+    folder = tempfile.mkdtemp(prefix="td-lifecycle-secrets-")
+    try:
+        run_tdkserver(
+            config,
+            "secret",
+            "get",
+            "--source",
+            "default",
+            "--provider",
+            PROVIDER,
+            "--name",
+            INSTANCE_NAME,
+            "--folder",
+            folder,
+            timeout=START_TIMEOUT_SECONDS,
+        )
+        run_tdkserver(
+            config,
+            "secret",
+            "put",
+            "--provider",
+            PROVIDER,
+            "--name",
+            INSTANCE_NAME,
+            "--folder",
+            folder,
+            timeout=START_TIMEOUT_SECONDS,
+        )
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
 
 
 def stop_instance(config) -> None:

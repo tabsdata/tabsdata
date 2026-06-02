@@ -87,7 +87,7 @@ orjson==3.11.7
 packaging==26.0
 pandas==2.3.3
 pillow==12.1.1
-pip==26.1.1
+pip==26.1.2
 pip-tools==7.5.3
 platformdirs==4.9.4
 polars==1.39.3

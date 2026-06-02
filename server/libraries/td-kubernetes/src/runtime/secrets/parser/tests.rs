@@ -34,9 +34,21 @@ stringData:
     let parsed = parse_secret_manifest(file.path()).expect("parses");
     assert_eq!(parsed.name, "tabsdata-secret-config-apiserver.yaml");
     assert_eq!(parsed.data.len(), 2);
-    assert_eq!(parsed.data.get("DATABASE__POSTGRES__PASSWORD").map(String::as_str), Some("pgpw"));
-    assert_eq!(parsed.data.get("AUTH__JWT_SIGNING_KEY").map(String::as_str), Some("jwtkey"));
-    assert_eq!(parsed.labels.get("custom").map(String::as_str), Some("keep-me"));
+    assert_eq!(
+        parsed
+            .data
+            .get("DATABASE__POSTGRES__PASSWORD")
+            .map(String::as_str),
+        Some("pgpw")
+    );
+    assert_eq!(
+        parsed.data.get("AUTH__JWT_SIGNING_KEY").map(String::as_str),
+        Some("jwtkey")
+    );
+    assert_eq!(
+        parsed.labels.get("custom").map(String::as_str),
+        Some("keep-me")
+    );
 }
 
 #[test]
@@ -73,7 +85,10 @@ stringData:
 "#,
     );
     let parsed = parse_secret_manifest(file.path()).expect("parses");
-    assert_eq!(parsed.data.get("KEY").map(String::as_str), Some("from_string_data"));
+    assert_eq!(
+        parsed.data.get("KEY").map(String::as_str),
+        Some("from_string_data")
+    );
 }
 
 #[test]

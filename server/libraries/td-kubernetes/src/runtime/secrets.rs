@@ -72,7 +72,7 @@
 //!                                                        ↓
 //!                                   kube/api/secret.rs ::upsert_secret
 //!                                       → cluster.namespace.Secret
-//!                                         name: "tabsdata-kubeconfig"
+//!                                         name: "tabsdata-secret-kubeconfig"
 //!                                         data: { kubeconfig: <encoded> }
 //!
 //! Startup sequence (kminus)::
@@ -96,7 +96,7 @@
 //!             │              ← reads kubefile, encodes bytes
 //!             │          upsert_secret(client, ns, name, data)
 //!             │              ← creates or replaces
-//!             │                  Secret "tabsdata-kubeconfig"
+//!             │                  Secret "tabsdata-secret-kubeconfig"
 //!             ↓
 //!       start_instance()            stage configmaps, apply pods
 //!                                   apiserver pod boots with env:
@@ -114,6 +114,7 @@ pub mod parser;
 pub mod phase;
 pub mod reconciliation;
 pub mod source;
+pub mod walker;
 
 pub use generator::SecretGenerator;
 pub use handler::SecretHandler;

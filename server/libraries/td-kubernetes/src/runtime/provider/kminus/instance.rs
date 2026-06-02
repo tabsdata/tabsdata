@@ -7,6 +7,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use indicatif::MultiProgress;
 use tracing::info;
 
 use crate::base::constants::{
@@ -17,14 +18,19 @@ use crate::base::error::provider::ProviderError;
 use crate::base::naming::to_configmap_name;
 use crate::core::system::exit::CommandResult;
 use crate::core::system::file::is_hidden_or_system;
+use crate::kube::api::pod::list_pods;
 use crate::kube::api::{
     LabelFilter, create_configmap, delete_configmap, exists_configmap, list_configmaps,
+    require_configmap,
 };
 use crate::kube::context::KubeContext;
 use crate::kube::kubeconfig::build_kubeconfig;
+use crate::runtime::instance::launcher::{start_workload, stop_workload};
 use crate::runtime::instance::manifest::MANIFEST_FILE;
-use crate::runtime::instance::profile::RenderedConfigmap;
-use crate::runtime::provider::Instance;
+use crate::runtime::instance::profile::{
+    RenderedConfigmap, parse_from_configmaps, read_family_configmaps,
+};
+use crate::runtime::provider::{ClusterProvider, Instance};
 use crate::runtime::reporting::build_kube_client;
 
 pub struct KminusInstance {
@@ -63,11 +69,30 @@ impl KminusInstance {
         }
     }
 
-    async fn replace_configmaps(&self, staged: StagedConfigmaps) -> CommandResult {
+    async fn kube_context(&self) -> CommandResult<KubeContext> {
         let kminus_config = build_kubeconfig(Some(&self.kubefile), None, None).await?;
         let namespace = kminus_config.default_namespace.clone();
         let client = build_kube_client(&kminus_config)?;
-        let context = KubeContext::new(Arc::new(client), namespace);
+        Ok(KubeContext::new(Arc::new(client), namespace))
+    }
+
+    pub async fn promote_stage(&self) -> CommandResult {
+        let staged = self.read_staged_profile()?;
+        let Some(staged) = staged else {
+            return Ok(());
+        };
+        self.replace_configmaps(staged).await?;
+        fs::remove_dir_all(&self.staging_path).map_err(|error| {
+            ProviderError::StagingFolderRemoveFailed(
+                self.staging_path.display().to_string(),
+                error.to_string(),
+            )
+        })?;
+        Ok(())
+    }
+
+    async fn replace_configmaps(&self, staged: StagedConfigmaps) -> CommandResult {
+        let context = self.kube_context().await?;
         for (family, files) in [
             (&KPROFILE_PODS_FAMILY, staged.pods),
             (&KPROFILE_CONFIGS_FAMILY, staged.configs),
@@ -114,7 +139,15 @@ async fn replace_family_configmaps(
         let name = to_configmap_name(family, &file)?;
         let mut data = BTreeMap::new();
         data.insert(file, content);
-        create_configmap(context, &name, data, BTreeMap::new(), None, Some(family.item)).await?;
+        create_configmap(
+            context,
+            &name,
+            data,
+            BTreeMap::new(),
+            None,
+            Some(family.item),
+        )
+        .await?;
     }
     Ok(())
 }
@@ -186,26 +219,41 @@ fn read_staged_manifest(staged_folder: &Path) -> CommandResult<Option<String>> {
 }
 
 impl Instance for KminusInstance {
-    async fn start(&self) -> CommandResult {
-        let staged = self.read_staged_profile()?;
-        let Some(staged) = staged else {
-            return Ok(());
-        };
-        self.replace_configmaps(staged).await?;
-        fs::remove_dir_all(&self.staging_path).map_err(|error| {
-            ProviderError::StagingFolderRemoveFailed(
-                self.staging_path.display().to_string(),
-                error.to_string(),
+    async fn start(&self, multi: &MultiProgress) -> CommandResult {
+        let context = self.kube_context().await?;
+        let pods = read_family_configmaps(&context, &KPROFILE_PODS_FAMILY).await?;
+        let configs = read_family_configmaps(&context, &KPROFILE_CONFIGS_FAMILY).await?;
+        let mut manifest_data = require_configmap(&context, CONFIGMAP_TABSDATA_MANIFEST).await?;
+        let Some(manifest_yaml) = manifest_data.remove(MANIFEST_FILE) else {
+            return Err(ProviderError::ConfigmapEntryMissing(
+                CONFIGMAP_TABSDATA_MANIFEST.to_owned(),
+                MANIFEST_FILE.to_owned(),
             )
-        })?;
-        Ok(())
+            .into());
+        };
+        let profile = parse_from_configmaps(&pods, &configs, &manifest_yaml)?;
+        start_workload(&context, ClusterProvider::Kminus, &profile, multi).await
     }
 
-    async fn stop(&self) -> CommandResult<bool> {
-        Ok(false)
+    async fn stop(&self, multi: &MultiProgress) -> CommandResult<bool> {
+        let context = self.kube_context().await?;
+        stop_workload(&context, multi).await
     }
 
     async fn is_alive(&self) -> bool {
-        false
+        let Ok(context) = self.kube_context().await else {
+            return false;
+        };
+        let Ok(pods) = list_pods(&context).await else {
+            return false;
+        };
+        pods.iter().any(|pod| {
+            !matches!(
+                pod.status
+                    .as_ref()
+                    .and_then(|status| status.phase.as_deref()),
+                Some("Succeeded") | Some("Failed"),
+            )
+        })
     }
 }

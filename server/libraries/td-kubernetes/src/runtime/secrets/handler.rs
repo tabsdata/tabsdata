@@ -30,15 +30,7 @@ impl SecretHandler {
                 continue;
             }
             let data = generator.generate(context).await?;
-            upsert_secret(
-                context,
-                generator.name(),
-                data,
-                BTreeMap::new(),
-                None,
-                None,
-            )
-            .await?;
+            upsert_secret(context, generator.name(), data, BTreeMap::new(), None, None).await?;
             info!(
                 secret = %generator.name(),
                 namespace = %context.namespace(),

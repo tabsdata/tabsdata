@@ -23,6 +23,10 @@ pub struct EmbeddedConfig {
     /// When `true`, the data directory survives across runs (apiserver). When
     /// `false`, the data directory is wiped on drop (tests).
     pub persistent: bool,
+    /// Superuser name. When `Some`, the value is used as-is. When `None`,
+    /// `postgresql_embedded`'s built-in default applies.
+    #[serde(default)]
+    pub username: Option<String>,
     /// Superuser password. When `Some`, the value is used as-is. When
     /// `None`, the persistent path falls back to a sidecar password file
     /// alongside `data_dir`. Configmap-driven deployments set this from a

@@ -14,9 +14,13 @@ use crate::client::tdkserver::widgets::{phase_spinner_in, spinner};
 use crate::core::pod::ValidationError;
 use crate::core::system::exit::{CommandError, CommandResult};
 use crate::kube::api::{job as job_api, pod as pod_api};
+use crate::kube::context::KubeContext;
+use crate::runtime::instance::injection::{
+    inject_into_job, inject_into_pod, list_available_secrets,
+};
 use crate::runtime::instance::profile::Profile;
 use crate::runtime::instance::tier::Tier;
-use crate::runtime::provider::Provider;
+use crate::runtime::provider::ClusterProvider;
 
 const JOB_CONDITION_COMPLETE: &str = "Complete";
 const JOB_CONDITION_FAILED: &str = "Failed";
@@ -26,37 +30,39 @@ const POD_CONDITION_STATUS_TRUE: &str = "True";
 const POD_PHASE_FAILED: &str = "Failed";
 
 pub async fn start_workload(
-    provider: &dyn Provider,
+    context: &KubeContext,
+    cluster_provider: ClusterProvider,
     profile: &Profile,
     multi: &MultiProgress,
 ) -> CommandResult {
-    delete_workload(provider, multi).await?;
-    let init_jobs = apply_init_phase(provider, profile, multi).await?;
-    wait_init_phase(provider, &init_jobs, multi).await?;
-    let regular_pods = apply_regular_phase(provider, profile, multi).await?;
-    wait_regular_phase(provider, &regular_pods, multi).await?;
+    delete_workload(context, multi).await?;
+    let init_jobs = apply_init_phase(context, cluster_provider, profile, multi).await?;
+    wait_init_phase(context, &init_jobs, multi).await?;
+    let regular_pods = apply_regular_phase(context, cluster_provider, profile, multi).await?;
+    wait_regular_phase(context, &regular_pods, multi).await?;
     Ok(())
 }
 
-pub async fn stop_workload(provider: &dyn Provider, multi: &MultiProgress) -> CommandResult<bool> {
-    let existed = workload_exists(provider).await?;
+pub async fn stop_workload(context: &KubeContext, multi: &MultiProgress) -> CommandResult<bool> {
+    let existed = workload_exists(context).await?;
     if existed {
-        delete_workload(provider, multi).await?;
+        delete_workload(context, multi).await?;
     }
     Ok(existed)
 }
 
 pub async fn apply_init_phase(
-    provider: &dyn Provider,
+    context: &KubeContext,
+    cluster_provider: ClusterProvider,
     profile: &Profile,
     multi: &MultiProgress,
 ) -> CommandResult<Vec<String>> {
-    let context = provider.kube_context().await?;
-    let cluster_provider = provider.cluster_provider();
+    let available_secrets = list_available_secrets(context).await?;
     let mut prepared: Vec<(String, Job)> = Vec::new();
     for (key, yaml) in pods_for_tier(profile, Tier::Init)? {
         let mut job = deserialize_pod_entry::<Job>(key, yaml, Tier::Init)?;
         cluster_provider.enrich_init_job(&mut job)?;
+        inject_into_job(profile, key, &mut job, &available_secrets)?;
         validate_pod(key, cluster_provider.validate_init_job(&job))?;
         prepared.push((key.to_owned(), job));
     }
@@ -65,7 +71,7 @@ pub async fn apply_init_phase(
     for (key, job) in prepared {
         let bar = phase.add_resource(&key);
         let created =
-            match job_api::create_job(&context, &job, &key, None, Vec::new(), Vec::new()).await {
+            match job_api::create_job(context, &job, &key, None, Vec::new(), Vec::new()).await {
                 Ok(created) => {
                     bar.finish_with_message(format!("{key} (applied)"));
                     created
@@ -85,15 +91,14 @@ pub async fn apply_init_phase(
 }
 
 pub async fn wait_init_phase(
-    provider: &dyn Provider,
+    context: &KubeContext,
     jobs: &[String],
     multi: &MultiProgress,
 ) -> CommandResult {
-    let context = provider.kube_context().await?;
     let phase = phase_spinner_in(multi, &format!("Waiting for {} init job(s)", jobs.len()));
     for name in jobs {
         let bar = phase.add_resource(name);
-        let settled = match job_api::await_job_condition(&context, name, is_job_settled()).await {
+        let settled = match job_api::await_job_condition(context, name, is_job_settled()).await {
             Ok(Some(job)) => job,
             Ok(None) => {
                 bar.finish_with_message(format!("{name} (deleted)"));
@@ -203,17 +208,18 @@ fn deserialize_pod_entry<T: DeserializeOwned>(
 }
 
 pub async fn apply_regular_phase(
-    provider: &dyn Provider,
+    context: &KubeContext,
+    cluster_provider: ClusterProvider,
     profile: &Profile,
     multi: &MultiProgress,
 ) -> CommandResult<Vec<String>> {
-    let context = provider.kube_context().await?;
-    let provider_kind = provider.cluster_provider();
+    let available_secrets = list_available_secrets(context).await?;
     let mut prepared: Vec<(String, Pod)> = Vec::new();
     for (key, yaml) in pods_for_tier(profile, Tier::Regular)? {
         let mut pod = deserialize_pod_entry::<Pod>(key, yaml, Tier::Regular)?;
-        provider_kind.enrich_regular_pod(&mut pod)?;
-        validate_pod(key, provider_kind.validate_regular_pod(&pod))?;
+        cluster_provider.enrich_regular_pod(&mut pod)?;
+        inject_into_pod(profile, key, &mut pod, &available_secrets)?;
+        validate_pod(key, cluster_provider.validate_regular_pod(&pod))?;
         prepared.push((key.to_owned(), pod));
     }
     let phase = phase_spinner_in(
@@ -251,11 +257,10 @@ pub async fn apply_regular_phase(
 }
 
 pub async fn wait_regular_phase(
-    provider: &dyn Provider,
+    context: &KubeContext,
     pods: &[String],
     multi: &MultiProgress,
 ) -> CommandResult {
-    let context = provider.kube_context().await?;
     let phase = phase_spinner_in(multi, &format!("Waiting for {} regular pod(s)", pods.len()));
     let waits = pods.iter().map(|name| {
         let context = context.clone();
@@ -316,13 +321,12 @@ fn has_failed_phase(pod: &Pod) -> bool {
 #[cfg(test)]
 mod tests;
 
-async fn delete_workload(provider: &dyn Provider, multi: &MultiProgress) -> CommandResult {
-    let context = provider.kube_context().await?;
+async fn delete_workload(context: &KubeContext, multi: &MultiProgress) -> CommandResult {
     let phase = phase_spinner_in(multi, "Deleting tabsdata workload");
     let pods_bar = phase.add_resource("Pods");
     let jobs_bar = phase.add_resource("Jobs");
     let pods_delete = async {
-        match pod_api::delete_pods(&context).await {
+        match pod_api::delete_pods(context).await {
             Ok(()) => {
                 pods_bar.finish_with_message("Pods (deleted)");
                 Ok(())
@@ -334,7 +338,7 @@ async fn delete_workload(provider: &dyn Provider, multi: &MultiProgress) -> Comm
         }
     };
     let jobs_delete = async {
-        match job_api::delete_jobs(&context).await {
+        match job_api::delete_jobs(context).await {
             Ok(()) => {
                 jobs_bar.finish_with_message("Jobs (deleted)");
                 Ok(())
@@ -351,9 +355,9 @@ async fn delete_workload(provider: &dyn Provider, multi: &MultiProgress) -> Comm
     Ok(())
 }
 
-async fn workload_exists(provider: &dyn Provider) -> CommandResult<bool> {
+async fn workload_exists(context: &KubeContext) -> CommandResult<bool> {
     let bar = spinner("Checking tabsdata workload");
-    let result = workload_exists_inner(provider).await;
+    let result = workload_exists_inner(context).await;
     match &result {
         Ok(_) => bar.finish("Tabsdata workload checked"),
         Err(_) => bar.finish_and_clear(),
@@ -361,15 +365,14 @@ async fn workload_exists(provider: &dyn Provider) -> CommandResult<bool> {
     result
 }
 
-async fn workload_exists_inner(provider: &dyn Provider) -> CommandResult<bool> {
-    let context = provider.kube_context().await?;
+async fn workload_exists_inner(context: &KubeContext) -> CommandResult<bool> {
     let pods_list = async {
-        pod_api::list_pods(&context)
+        pod_api::list_pods(context)
             .await
             .map(|pods| !pods.is_empty())
     };
     let jobs_list = async {
-        job_api::list_jobs(&context)
+        job_api::list_jobs(context)
             .await
             .map(|jobs| !jobs.is_empty())
     };

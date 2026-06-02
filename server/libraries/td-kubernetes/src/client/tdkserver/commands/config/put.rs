@@ -167,9 +167,7 @@ fn report_summary(replaced: &[String], warnings: &[String], noun_singular: &str)
     info!("Replaced {count} tabsdata {noun}.");
 }
 
-async fn list_known_configs(
-    context: &KubeContext,
-) -> CommandResult<BTreeSet<String>> {
+async fn list_known_configs(context: &KubeContext) -> CommandResult<BTreeSet<String>> {
     let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY.item);
     let configs = get_configmaps(context, Some(filter))
         .await?

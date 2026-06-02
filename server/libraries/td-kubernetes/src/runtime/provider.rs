@@ -14,6 +14,7 @@ use std::future::Future;
 
 use async_trait::async_trait;
 use clap_derive::ValueEnum;
+use indicatif::MultiProgress;
 use k8s_openapi::api::batch::v1::Job;
 use k8s_openapi::api::core::v1::Pod;
 use kube::Config;
@@ -27,7 +28,6 @@ use std::sync::Arc;
 
 use crate::core::pod::{ValidationError, container as container_pod, process as process_pod};
 use crate::core::system::exit::CommandResult;
-use crate::kube::api::pod::list_pods;
 use crate::kube::context::KubeContext;
 use crate::runtime::gateway::resolver::SystemValues;
 use crate::runtime::instance::profile::bundle::Axis;
@@ -176,18 +176,12 @@ pub trait Cluster: Send + Sync {
 }
 
 pub trait Instance: Send + Sync {
-    fn start(&self) -> impl Future<Output = CommandResult> + Send;
-    fn stop(&self) -> impl Future<Output = CommandResult<bool>> + Send;
+    fn start(&self, multi: &MultiProgress) -> impl Future<Output = CommandResult> + Send;
+    fn stop(&self, multi: &MultiProgress) -> impl Future<Output = CommandResult<bool>> + Send;
 
     fn is_alive(&self) -> impl Future<Output = bool> + Send;
     fn is_dead(&self) -> impl Future<Output = bool> + Send {
         async move { !self.is_alive().await }
-    }
-    fn poll_alive(&self) -> impl Future<Output = bool> + Send {
-        async move { self.is_alive().await }
-    }
-    fn poll_dead(&self) -> impl Future<Output = bool> + Send {
-        async move { self.is_dead().await }
     }
 }
 
@@ -255,25 +249,7 @@ pub trait Provider: Send + Sync {
     async fn ensure_stoppable_cluster(&self) -> CommandResult;
     async fn ensure_restartable_cluster(&self) -> CommandResult;
 
-    async fn instance_alive(&self) -> bool {
-        if !self.cluster_alive().await {
-            return false;
-        }
-        let Ok(context) = self.kube_context().await else {
-            return false;
-        };
-        let Ok(pods) = list_pods(&context).await else {
-            return false;
-        };
-        pods.iter().any(|pod| {
-            !matches!(
-                pod.status
-                    .as_ref()
-                    .and_then(|status| status.phase.as_deref()),
-                Some("Succeeded") | Some("Failed"),
-            )
-        })
-    }
+    async fn instance_alive(&self) -> bool;
     async fn instance_dead(&self) -> bool {
         !self.instance_alive().await
     }

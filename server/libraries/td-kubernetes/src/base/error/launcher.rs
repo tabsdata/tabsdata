@@ -42,4 +42,18 @@ pub enum LauncherError {
     PodDeletedBeforeReady { name: String } = 5003,
     #[error(transparent)]
     Kubernetes(#[from] KubernetesError) = 5004,
+    #[error("Could not parse config '{config}' while preparing secret env injection: {cause}.")]
+    SecretEnvInjectionConfigParseFailed { config: String, cause: String } = 5005,
+    #[error(
+        "Could not extract secret leaves from config '{config}' while preparing secret env injection: {cause}."
+    )]
+    SecretEnvInjectionLeafExtractionFailed { config: String, cause: String } = 5006,
+    #[error(
+        "Cannot apply pod '{pod_template_key}': required Secret(s) not present in the cluster: {secrets}. \
+         Run `tdkserver server start` (which auto-fills generators) or `tdkserver secret put` to provision them first."
+    )]
+    SecretEnvInjectionMissingSecrets {
+        pod_template_key: String,
+        secrets: String,
+    } = 5007,
 }

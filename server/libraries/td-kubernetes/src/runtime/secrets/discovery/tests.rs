@@ -9,11 +9,11 @@ fn parse(yaml: &str) -> Value {
 }
 
 fn leaves_of(yaml: &str) -> Vec<SecretLeaf> {
-    extract_secret_leaves("c.yaml", &parse(yaml)).expect("extract succeeds")
+    extract_secret_leaves("c.yaml", &mut parse(yaml)).expect("extract succeeds")
 }
 
 fn error_of(yaml: &str) -> SecretError {
-    extract_secret_leaves("c.yaml", &parse(yaml)).expect_err("extract fails")
+    extract_secret_leaves("c.yaml", &mut parse(yaml)).expect_err("extract fails")
 }
 
 #[test]
@@ -258,7 +258,10 @@ fn collision_after_normalization_is_rejected() {
             jwt_key: ${secret}
         "#,
     );
-    let SecretError::KeyCollision { key, first, second, .. } = error else {
+    let SecretError::KeyCollision {
+        key, first, second, ..
+    } = error
+    else {
         panic!("expected KeyCollision");
     };
     assert_eq!(key, "JWT_KEY");
@@ -306,17 +309,24 @@ fn bare_placeholder_has_no_generator() {
 }
 
 #[test]
-fn named_placeholder_uuid_picks_uuid_generator() {
-    let leaves = leaves_of(r#"jwt: ${secret:uuid}"#);
+fn named_placeholder_jwt_signing_key_picks_jwt_signing_key_generator() {
+    let leaves = leaves_of(r#"jwt: ${secret:jwt_signing_key}"#);
     assert_eq!(leaves.len(), 1);
-    assert_eq!(leaves[0].generator, Some(Generator::Uuid));
+    assert_eq!(leaves[0].generator, Some(Generator::JwtSigningKey));
 }
 
 #[test]
-fn named_placeholder_password_picks_password_generator() {
-    let leaves = leaves_of(r#"password: ${secret:password}"#);
+fn named_placeholder_postgres_password_picks_postgres_password_generator() {
+    let leaves = leaves_of(r#"password: ${secret:postgres_password}"#);
     assert_eq!(leaves.len(), 1);
-    assert_eq!(leaves[0].generator, Some(Generator::Password));
+    assert_eq!(leaves[0].generator, Some(Generator::PostgresPassword));
+}
+
+#[test]
+fn named_placeholder_postgres_user_picks_postgres_user_generator() {
+    let leaves = leaves_of(r#"username: ${secret:postgres_user}"#);
+    assert_eq!(leaves.len(), 1);
+    assert_eq!(leaves[0].generator, Some(Generator::PostgresUser));
 }
 
 #[test]
@@ -324,28 +334,42 @@ fn mixed_placeholders_keep_their_kinds() {
     let leaves = leaves_of(
         r#"
             external: ${secret}
-            generated: ${secret:uuid}
-            password: ${secret:password}
+            jwt: ${secret:jwt_signing_key}
+            username: ${secret:postgres_user}
+            password: ${secret:postgres_password}
         "#,
     );
-    assert_eq!(leaves.len(), 3);
+    assert_eq!(leaves.len(), 4);
     let by_path: std::collections::HashMap<_, _> = leaves
         .iter()
         .map(|leaf| (leaf.path.join("."), leaf.generator))
         .collect();
     assert_eq!(by_path.get("external").copied(), Some(None));
-    assert_eq!(by_path.get("generated").copied(), Some(Some(Generator::Uuid)));
-    assert_eq!(by_path.get("password").copied(), Some(Some(Generator::Password)));
+    assert_eq!(
+        by_path.get("jwt").copied(),
+        Some(Some(Generator::JwtSigningKey))
+    );
+    assert_eq!(
+        by_path.get("username").copied(),
+        Some(Some(Generator::PostgresUser))
+    );
+    assert_eq!(
+        by_path.get("password").copied(),
+        Some(Some(Generator::PostgresPassword))
+    );
 }
 
 #[test]
 fn unknown_generator_name_is_rejected() {
     let error = error_of(r#"key: ${secret:nope}"#);
     match error {
-        SecretError::UnknownGeneratorName { name, supported, .. } => {
+        SecretError::UnknownGeneratorName {
+            name, supported, ..
+        } => {
             assert_eq!(name, "nope");
-            assert!(supported.contains("uuid"));
-            assert!(supported.contains("password"));
+            assert!(supported.contains("jwt_signing_key"));
+            assert!(supported.contains("postgres_user"));
+            assert!(supported.contains("postgres_password"));
         }
         other => panic!("unexpected variant: {other:?}"),
     }

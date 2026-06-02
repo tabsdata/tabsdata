@@ -112,6 +112,7 @@ impl BackendConfig {
             data_dir,
             port,
             persistent: true,
+            username: None,
             password: None,
         })
     }

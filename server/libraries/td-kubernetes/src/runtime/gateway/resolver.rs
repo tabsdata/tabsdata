@@ -19,6 +19,7 @@
 //!   intentionally NOT chained from `resolve_sys`.
 
 mod env;
+mod secret;
 mod sys;
 
 use td_error::TdError;
@@ -40,6 +41,15 @@ impl ConfigurationResolver {
 
     pub async fn resolve_env(&self, content: &str) -> Result<String, TdError> {
         env::resolve(content)
+    }
+
+    pub async fn resolve_secret(&self, content: &str) -> Result<String, TdError> {
+        secret::resolve(content)
+    }
+
+    pub async fn resolve(&self, content: &str) -> Result<String, TdError> {
+        let partial = env::resolve(content)?;
+        secret::resolve(&partial)
     }
 }
 

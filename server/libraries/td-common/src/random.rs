@@ -12,7 +12,7 @@ use rand::distr::Alphanumeric;
 
 /// Length, in characters, of the alphanumeric password produced by
 /// [`password`]. The embedded postgres superuser uses exactly this length;
-/// kubernetes `${secret:password}` placeholders inherit the same shape.
+/// kubernetes `${secret:postgres_password}` placeholders inherit the same shape.
 pub const PASSWORD_LENGTH: usize = 32;
 
 /// Generates a random alphanumeric password of [`PASSWORD_LENGTH`]
@@ -37,7 +37,11 @@ mod tests {
     #[test]
     fn password_is_alphanumeric() {
         let value = password();
-        assert!(value.chars().all(|character| character.is_ascii_alphanumeric()));
+        assert!(
+            value
+                .chars()
+                .all(|character| character.is_ascii_alphanumeric())
+        );
     }
 
     #[test]

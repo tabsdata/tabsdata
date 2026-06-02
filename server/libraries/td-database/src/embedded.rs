@@ -115,6 +115,9 @@ pub async fn start(cfg: &EmbeddedConfig) -> Result<(EmbeddedPostgres, Url), DbEr
         settings.port = port;
     }
 
+    if let Some(username) = cfg.username.clone() {
+        settings.username = username;
+    }
     if let Some(password) = cfg.password.clone() {
         settings.password = password;
     } else if cfg.persistent {

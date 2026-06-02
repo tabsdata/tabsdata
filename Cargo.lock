@@ -9067,6 +9067,7 @@ dependencies = [
  "sysinfo 0.38.4",
  "td-build",
  "td-common",
+ "td-kubernetes",
  "td-objects",
  "td-process",
  "tempfile",

@@ -28,18 +28,13 @@ use crate::core::system::exit::{CommandResult, abort_with};
 use crate::kube::api::configmap::get_configmap;
 use crate::kube::api::{
     create_configmap, ensure_cluster_reachable, ensure_namespace_exists, exists_configmap,
-    require_configmap,
 };
 use crate::kube::kubeconfig::{
     build_kubeconfig, resolve_cluster_name, resolve_current_context, resolve_kubefile,
 };
 use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues};
-use crate::runtime::instance::launcher::{start_workload, stop_workload};
 use crate::runtime::instance::manifest::MANIFEST_FILE;
-use crate::runtime::instance::profile::{
-    RenderedConfigmap, load_profile, parse_from_configmaps, read_family_configmaps,
-    render_for_configmaps,
-};
+use crate::runtime::instance::profile::{RenderedConfigmap, load_profile, render_for_configmaps};
 use crate::runtime::instance::verify_manifest_compatibility;
 use crate::runtime::provider::docker::cluster::DockerCluster;
 use crate::runtime::provider::docker::instance::DockerInstance;
@@ -132,7 +127,7 @@ impl DockerProvider {
         }
 
         let cluster = DockerCluster::new(config.clone());
-        let instance = DockerInstance::new();
+        let instance = DockerInstance::new(config.clone());
 
         Ok(Self {
             kubefile,
@@ -255,6 +250,10 @@ impl Provider for DockerProvider {
         self.cluster.is_alive().await
     }
 
+    async fn instance_alive(&self) -> bool {
+        self.cluster_alive().await && self.instance.is_alive().await
+    }
+
     async fn start_cluster_hook(&self, reporter: &dyn Reporter) -> CommandResult {
         let step = reporter.step("Starting kubernetes cluster");
         self.cluster.start().await?;
@@ -371,26 +370,11 @@ impl DockerProvider {
     }
 
     async fn apply_workload(&self, multi: &MultiProgress) -> CommandResult {
-        self.instance.start().await?;
-        let context = self.kube_context().await?;
-        let pods = read_family_configmaps(&context, &KPROFILE_PODS_FAMILY).await?;
-        let configs = read_family_configmaps(&context, &KPROFILE_CONFIGS_FAMILY).await?;
-        let mut manifest_data = require_configmap(&context, CONFIGMAP_TABSDATA_MANIFEST).await?;
-        let Some(manifest_yaml) = manifest_data.remove(MANIFEST_FILE) else {
-            return Err(ProviderError::ConfigmapEntryMissing(
-                CONFIGMAP_TABSDATA_MANIFEST.to_owned(),
-                MANIFEST_FILE.to_owned(),
-            )
-            .into());
-        };
-        let profile = parse_from_configmaps(&pods, &configs, &manifest_yaml)?;
-        start_workload(self, &profile, multi).await
+        self.instance.start(multi).await
     }
 
     async fn teardown_workload(&self, multi: &MultiProgress) -> CommandResult<bool> {
-        let stopped_workload = stop_workload(self, multi).await?;
-        let stopped_instance = self.instance.stop().await?;
-        Ok(stopped_workload || stopped_instance)
+        self.instance.stop(multi).await
     }
 }
 
@@ -403,7 +387,15 @@ async fn store_family_configmaps(
         let name = to_configmap_name(family, &file)?;
         let mut data = BTreeMap::new();
         data.insert(file, content);
-        create_configmap(context, &name, data, BTreeMap::new(), None, Some(family.item)).await?;
+        create_configmap(
+            context,
+            &name,
+            data,
+            BTreeMap::new(),
+            None,
+            Some(family.item),
+        )
+        .await?;
     }
     Ok(())
 }

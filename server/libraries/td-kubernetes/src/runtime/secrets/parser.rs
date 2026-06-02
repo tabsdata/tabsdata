@@ -40,12 +40,11 @@ pub fn parse_secret_manifest(path: &Path) -> Result<ParsedSecret, SecretError> {
         .ok_or_else(|| SecretError::ManifestMissingName { file: file.clone() })?;
     let mut data: BTreeMap<String, String> = BTreeMap::new();
     for (key, value) in secret.data.into_iter().flatten() {
-        let utf8 = String::from_utf8(value.0).map_err(|error| {
-            SecretError::ManifestParseFailed {
+        let utf8 =
+            String::from_utf8(value.0).map_err(|error| SecretError::ManifestParseFailed {
                 file: file.clone(),
                 cause: format!("Secret 'data.{key}' is not valid UTF-8: {error}"),
-            }
-        })?;
+            })?;
         data.insert(key, utf8);
     }
     for (key, value) in secret.string_data.into_iter().flatten() {

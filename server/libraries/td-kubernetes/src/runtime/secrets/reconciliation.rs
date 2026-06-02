@@ -22,14 +22,13 @@ pub struct Reconciliation<'a> {
 }
 
 pub fn reconcile_secret_keys(input: &Reconciliation<'_>) -> Result<(), SecretError> {
-    let yaml: serde_yaml::Value =
-        serde_yaml::from_str(input.config_yaml).map_err(|error| {
-            SecretError::ConfigYamlParseFailed {
-                config: input.config.to_owned(),
-                cause: error.to_string(),
-            }
-        })?;
-    let leaves = extract_secret_leaves(input.config, &yaml)?;
+    let mut yaml: serde_yaml::Value = serde_yaml::from_str(input.config_yaml).map_err(|error| {
+        SecretError::ConfigYamlParseFailed {
+            config: input.config.to_owned(),
+            cause: error.to_string(),
+        }
+    })?;
+    let leaves = extract_secret_leaves(input.config, &mut yaml)?;
     let expected: BTreeSet<String> = leaves.into_iter().map(|leaf| leaf.key).collect();
 
     match (&input.actual_keys, expected.is_empty()) {
@@ -44,10 +43,8 @@ pub fn reconcile_secret_keys(input: &Reconciliation<'_>) -> Result<(), SecretErr
             secret: input.secret.to_owned(),
         }),
         (Some(actual), false) => {
-            let extra: BTreeSet<&str> =
-                actual.difference(&expected).map(String::as_str).collect();
-            let missing: BTreeSet<&str> =
-                expected.difference(actual).map(String::as_str).collect();
+            let extra: BTreeSet<&str> = actual.difference(&expected).map(String::as_str).collect();
+            let missing: BTreeSet<&str> = expected.difference(actual).map(String::as_str).collect();
             if extra.is_empty() && missing.is_empty() {
                 Ok(())
             } else {
@@ -73,14 +70,13 @@ pub async fn auto_fill_generated_secrets(context: &KubeContext) -> Result<(), Se
         let Ok(config_yaml) = String::from_utf8(bytes) else {
             continue;
         };
-        let yaml: serde_yaml::Value =
-            serde_yaml::from_str(&config_yaml).map_err(|error| {
-                SecretError::ConfigYamlParseFailed {
-                    config: config_file.clone(),
-                    cause: error.to_string(),
-                }
-            })?;
-        let leaves = extract_secret_leaves(&config_file, &yaml)?;
+        let mut yaml: serde_yaml::Value = serde_yaml::from_str(&config_yaml).map_err(|error| {
+            SecretError::ConfigYamlParseFailed {
+                config: config_file.clone(),
+                cause: error.to_string(),
+            }
+        })?;
+        let leaves = extract_secret_leaves(&config_file, &mut yaml)?;
         let secret_name = to_secret_name(&config_file);
         fill_generated_keys(context, &secret_name, &leaves).await?;
     }
@@ -94,7 +90,10 @@ async fn fill_generated_keys(
 ) -> Result<(), SecretError> {
     let generated: Vec<(&str, Generator)> = leaves
         .iter()
-        .filter_map(|leaf| leaf.generator.map(|generator| (leaf.key.as_str(), generator)))
+        .filter_map(|leaf| {
+            leaf.generator
+                .map(|generator| (leaf.key.as_str(), generator))
+        })
         .collect();
     if generated.is_empty() {
         return Ok(());
@@ -102,10 +101,12 @@ async fn fill_generated_keys(
     let live = get_secret(context, secret_name).await?;
     let needs_fill: Vec<(&str, Generator)> = generated
         .into_iter()
-        .filter(|(key, _)| match live.as_ref().and_then(|data| data.get(*key)) {
-            None => true,
-            Some(value) => value.is_empty(),
-        })
+        .filter(
+            |(key, _)| match live.as_ref().and_then(|data| data.get(*key)) {
+                None => true,
+                Some(value) => value.is_empty(),
+            },
+        )
         .collect();
     if needs_fill.is_empty() {
         return Ok(());

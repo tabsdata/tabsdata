@@ -2,6 +2,7 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+pub mod injection;
 pub mod launcher;
 pub mod manifest;
 pub mod profile;

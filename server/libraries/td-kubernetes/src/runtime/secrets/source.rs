@@ -47,16 +47,16 @@ pub async fn resolve_source(
         return Ok(ResolvedSource::Kprofile);
     }
     let cluster_alive = provider.cluster_alive().await;
-    let staging = provider
-        .staging_profile_path()
-        .filter(|path| path.is_dir());
+    let staging = provider.staging_profile_path().filter(|path| path.is_dir());
     match (provider.cluster_provider(), cluster_alive, staging) {
         (ClusterProvider::Kminus, true, Some(path)) => Err(SecretError::KminusInconsistentState {
             staging_path: path.display().to_string(),
         }),
         (ClusterProvider::Kminus, false, Some(_)) => Ok(ResolvedSource::Stage),
         (_, true, _) => Ok(ResolvedSource::Configmaps),
-        (ClusterProvider::Kminus, false, None) => Err(ProviderError::ClusterNotRunningKminus.into()),
+        (ClusterProvider::Kminus, false, None) => {
+            Err(ProviderError::ClusterNotRunningKminus.into())
+        }
         (other, false, _) => Err(ProviderError::ClusterNotRunningExternal {
             provider: other.as_str().to_owned(),
         }
@@ -125,12 +125,13 @@ fn read_configs_from_stage(provider: &dyn Provider) -> Result<Vec<ConfigEntry>, 
 async fn read_configs_from_configmaps(
     provider: &dyn Provider,
 ) -> Result<Vec<ConfigEntry>, SecretError> {
-    let context = provider
-        .kube_context()
-        .await
-        .map_err(|error| SecretError::CurrentSourceReadFailed {
-            cause: command_error_to_string(&error),
-        })?;
+    let context =
+        provider
+            .kube_context()
+            .await
+            .map_err(|error| SecretError::CurrentSourceReadFailed {
+                cause: command_error_to_string(&error),
+            })?;
     read_configs_via_context(&context, &KPROFILE_CONFIGS_FAMILY).await
 }
 
@@ -144,12 +145,11 @@ async fn read_configs_via_context(
     for (configmap_name, items) in configmaps {
         let file = to_configmap_file(family, &configmap_name)?.to_owned();
         for (_key, value) in items {
-            let yaml = String::from_utf8(value).map_err(|error| {
-                SecretError::ConfigmapEntryNotUtf8 {
+            let yaml =
+                String::from_utf8(value).map_err(|error| SecretError::ConfigmapEntryNotUtf8 {
                     configmap: configmap_name.clone(),
                     cause: error.to_string(),
-                }
-            })?;
+                })?;
             entries.push(ConfigEntry {
                 secret: to_secret_name(&file),
                 file: file.clone(),
