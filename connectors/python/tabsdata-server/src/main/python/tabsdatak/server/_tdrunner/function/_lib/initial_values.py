@@ -4,22 +4,23 @@
 
 """Initial-values one-row Parquet codec.
 
-Wire format for the per-flow scratch-state round-trip: every entry in
-the dict becomes one column of a one-row Parquet table (column name =
-key, cell = value). The empty dict writes an empty file (no columns, no
-rows), which reads back as ``{}``.
+Wire format for the per-flow scratch-state round-trip: a one-row,
+one-column Parquet table whose single column ``user_namespace``
+holds the entire scratch dict as a Struct cell. The empty dict
+writes an empty file (no columns, no rows), which reads back as
+``{}``.
 
-`request.system_input[0]` carries the previous run's dict; the next
-run's dict gets written to `request.system_output[0]`. This module
-provides the codec only -- which slot to load from / write to and
-whether a write is needed are concerns of the caller.
+``request.system_input[0]`` carries the previous run's state; the
+next run's state gets written to ``request.system_output[0]``. This
+module provides the codec only -- which slot to load from / write
+to and whether a write is needed are concerns of the caller.
 
 Validation:
 
-  * Every key must match the ``ContextKeySpec`` regex
-    (dotted-identifier, max 253 chars, segments 1-63 chars each).
-  * Every value must be a ``ContextValueSpec`` shape: ``str``, ``int``,
-    ``float``, ``bool``, ``list[str]``, or ``dict[str, str]``.
+  * Keys are plain strings (``ContextKeySpec``).
+  * Values must match ``ContextValueSpec``: a primitive (``str``,
+    ``int``, ``float``, ``bool``), a ``list[primitive]``, or a
+    flat ``dict[str, primitive]``.
 
 Bad input is rejected before any I/O: a malformed value never reaches
 disk, and a malformed on-disk file never silently round-trips through.
@@ -47,28 +48,27 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Validate keys and values against the canonical type aliases via
-# pydantic ``TypeAdapter`` rather than re-deriving the rules here.
-# Single source of truth -- if ``ContextKeySpec`` /
-# ``ContextValueSpec`` change shape upstream (a tightened regex,
-# a new union arm), this validator tracks automatically and no
-# drift is possible between what the type says and what we accept.
+# pydantic ``TypeAdapter``. Single source of truth -- if
+# ``ContextKeySpec`` / ``ContextValueSpec`` change shape upstream,
+# this validator tracks automatically and no drift is possible
+# between what the SPI says and what we accept.
 #
 # ``strict=True`` disables pydantic's coercion, so ``"1"`` is not
 # silently promoted to ``int`` and ``True`` stays a ``bool`` rather
 # than matching the ``int`` arm (since ``bool`` is an ``int`` subclass
 # in Python). Both matter for the round-trip: the value we accept
 # here is the same value Parquet stores and round-trips back.
-#
-# ``regex_engine='python-re'`` is required for ``ContextKeySpec``:
-# the spec's regex uses a lookahead (``(?=.{1,253}$)`` for the
-# total-length cap), which pydantic's default Rust regex engine
-# rejects with "look-around ... is not supported". Python's stdlib
-# ``re`` module handles it natively.
-_STRICT = ConfigDict(strict=True, regex_engine="python-re")
+_STRICT = ConfigDict(strict=True)
 _KEY_ADAPTER: TypeAdapter[ContextKeySpec] = TypeAdapter(ContextKeySpec, config=_STRICT)
 _VALUE_ADAPTER: TypeAdapter[ContextValueSpec] = TypeAdapter(
     ContextValueSpec, config=_STRICT
 )
+
+# Reserved Parquet column name carrying the entire scratch dict as a
+# Struct cell. The user's flat ``store_attr`` / ``get_attr`` keys are
+# the fields *inside* that Struct -- they don't appear as Parquet
+# columns themselves, so they're free of column-name constraints.
+USER_NAMESPACE_COLUMN = "user_namespace"
 
 
 class InvalidInitialValuesError(ValueError):
@@ -80,7 +80,7 @@ def _validate_key(key: Any) -> None:
         _KEY_ADAPTER.validate_python(key)
     except ValidationError as exc:
         raise InvalidInitialValuesError(
-            f"key {key!r} does not match ContextKeySpec pattern"
+            f"key {key!r} is not a valid ContextKeySpec (must be a str)"
         ) from exc
 
 
@@ -95,15 +95,16 @@ def _validate_value(key: str, value: Any) -> None:
 
 
 def read_initial_values(path: Path) -> dict[str, Any]:
-    """Read the one-row Parquet at ``path`` and return its dict.
+    """Read the one-row, one-column Parquet at ``path`` and return
+    the scratch dict carried by the ``user_namespace`` cell.
 
     An empty file (no columns) reads back as the empty dict ``{}``.
 
     Raises:
         FileNotFoundError: if ``path`` does not exist.
         InvalidInitialValuesError: if the file is unreadable as
-            Parquet, has more than one row, or any column name fails
-            ContextKeySpec validation.
+            Parquet, lacks the ``user_namespace`` column, or has
+            more than one row.
     """
     if not path.is_file():
         raise FileNotFoundError(f"initial_values file not found: {path}")
@@ -115,18 +116,24 @@ def read_initial_values(path: Path) -> dict[str, Any]:
         ) from exc
     if df.width == 0:
         return {}
+    if df.width != 1 or df.columns[0] != USER_NAMESPACE_COLUMN:
+        raise InvalidInitialValuesError(
+            f"initial_values parquet {path} must have exactly one column "
+            f"named {USER_NAMESPACE_COLUMN!r}; got columns {df.columns!r}"
+        )
     if df.height != 1:
         raise InvalidInitialValuesError(
             f"initial_values parquet {path} has {df.height} row(s); expected 1"
         )
-    for col in df.columns:
-        _validate_key(col)
-    return dict(df.row(0, named=True))
+    cell = df.row(0, named=True)[USER_NAMESPACE_COLUMN]
+    # Polars hands the Struct cell back as a Python dict already.
+    return dict(cell) if cell is not None else {}
 
 
 def write_initial_values(values: dict[str, Any], path: Path) -> None:
-    """Persist ``values`` as a one-row Parquet at ``path``.
+    """Persist ``values`` as a one-row, one-column Parquet at ``path``.
 
+    The dict is wrapped in a single ``user_namespace`` Struct cell.
     The empty dict writes an empty Parquet (no columns, no rows).
 
     The write is **crash-safe**: bytes land first at a sibling
@@ -137,8 +144,8 @@ def write_initial_values(values: dict[str, Any], path: Path) -> None:
     input is rejected before any I/O for the same reason.
 
     Raises:
-        InvalidInitialValuesError: if any key fails ContextKeySpec
-            validation or any value isn't a ContextValueSpec shape.
+        InvalidInitialValuesError: if any key isn't a str or any
+            value isn't a ContextValueSpec shape.
         OSError: on write errors (missing parent dir, permission, etc.).
     """
     for key, value in values.items():
@@ -149,7 +156,7 @@ def write_initial_values(values: dict[str, Any], path: Path) -> None:
         if not values:
             pl.DataFrame().write_parquet(tmp_path)
         else:
-            pl.DataFrame({k: [v] for k, v in values.items()}).write_parquet(tmp_path)
+            pl.DataFrame({USER_NAMESPACE_COLUMN: [values]}).write_parquet(tmp_path)
         os.replace(tmp_path, path)
     except BaseException:
         # Best-effort cleanup of the orphan tmp file on any failure --

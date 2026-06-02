@@ -29,7 +29,7 @@ import importlib
 from abc import ABC, abstractmethod
 from typing import Annotated, Callable, TypeAlias, Union
 
-from pydantic import Field, StringConstraints, model_validator
+from pydantic import Field, model_validator
 
 # noinspection PyProtectedMember
 from tabsdatak import _api
@@ -541,14 +541,18 @@ def subscriber(
     return _subscriber
 
 
-# Per-flow scratch-key identifier; restricted to dotted identifiers
-# so the key space is namespaceable across plugins.
-ContextKeySpec: TypeAlias = Annotated[
-    str, StringConstraints(pattern=_api.CONTEXT_KEY_RE_STR)
-]
-# Allowed per-flow scratch-value shapes -- primitives + flat
-# list/dict-of-strings. Stays JSON-serialisable end-to-end.
-ContextValueSpec: TypeAlias = Union[str, int, float, bool, list[str], dict[str, str]]
+# Per-flow scratch-key identifier. Plain string -- the framework
+# packs all ``store_attr`` entries into a single ``user_namespace``
+# Parquet cell, so the key never appears as a Parquet column name
+# and doesn't need DNS-1123 / column-name constraints.
+ContextKeySpec: TypeAlias = str
+
+# Allowed per-flow scratch-value shapes. Primitives + flat lists /
+# dicts whose values are also primitives. Stays JSON-serialisable
+# end-to-end. Heterogeneous values inside the same dict are fine
+# (e.g. ``{"last_modified": "...", "min_id": 1234}``).
+_PRIM: TypeAlias = Union[str, int, float, bool]
+ContextValueSpec: TypeAlias = Union[_PRIM, list[_PRIM], dict[str, _PRIM]]
 
 
 class TrxCtx(ABC):

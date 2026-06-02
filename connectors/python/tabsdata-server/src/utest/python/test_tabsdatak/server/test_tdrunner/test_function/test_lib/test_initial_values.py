@@ -10,6 +10,7 @@ import polars as pl
 import pytest
 
 from tabsdatak.server._tdrunner.function._lib.initial_values import (
+    USER_NAMESPACE_COLUMN,
     InvalidInitialValuesError,
     read_initial_values,
     write_initial_values,
@@ -23,8 +24,8 @@ pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
 def test_roundtrip_single_str(tmp_path):
     p = tmp_path / "iv.parquet"
-    write_initial_values({"last-modified": "2026-05-28T00:00:00Z"}, p)
-    assert read_initial_values(p) == {"last-modified": "2026-05-28T00:00:00Z"}
+    write_initial_values({"last_modified": "2026-05-28T00:00:00Z"}, p)
+    assert read_initial_values(p) == {"last_modified": "2026-05-28T00:00:00Z"}
 
 
 def test_roundtrip_mixed_primitive_types(tmp_path):
@@ -33,9 +34,19 @@ def test_roundtrip_mixed_primitive_types(tmp_path):
         "a": "x",
         "b": 42,
         "c": 3.14,
-        "d-true": True,
-        "d-false": False,
+        "d_true": True,
+        "d_false": False,
     }
+    write_initial_values(values, p)
+    assert read_initial_values(p) == values
+
+
+def test_roundtrip_heterogeneous_dict(tmp_path):
+    """The actual SQL-incremental-ingest use case: a bind dict whose
+    values are a mix of primitives. Previously broken under the
+    ``dict[str, str]`` codec; now round-trips end-to-end."""
+    p = tmp_path / "iv.parquet"
+    values = {"last_modified": "2026-01-15T00:00:00Z", "min_id": 1234}
     write_initial_values(values, p)
     assert read_initial_values(p) == values
 
@@ -46,7 +57,9 @@ def test_roundtrip_list_of_str(tmp_path):
     assert read_initial_values(p) == {"tags": ["alpha", "beta", "gamma"]}
 
 
-def test_roundtrip_dict_of_str(tmp_path):
+def test_roundtrip_dict_of_primitives_value(tmp_path):
+    """A single scratch entry whose value is a ``dict[str, primitive]``
+    (one ContextValueSpec arm)."""
     p = tmp_path / "iv.parquet"
     write_initial_values({"labels": {"env": "prod", "team": "data"}}, p)
     assert read_initial_values(p) == {"labels": {"env": "prod", "team": "data"}}
@@ -58,12 +71,19 @@ def test_roundtrip_empty_dict(tmp_path):
     assert read_initial_values(p) == {}
 
 
-def test_roundtrip_dotted_key(tmp_path):
+def test_roundtrip_underscored_keys_allowed(tmp_path):
+    """Plain ``str`` keys -- underscores, dashes, dots, mixed, all
+    legal. The old DNS-1123 regex is gone."""
     p = tmp_path / "iv.parquet"
-    write_initial_values({"databricks.last-modified": "2026-05-28T00:00:00Z"}, p)
-    assert read_initial_values(p) == {
-        "databricks.last-modified": "2026-05-28T00:00:00Z"
+    values = {
+        "last_modified": "2026-01-01T00:00:00Z",
+        "min-id": 1,
+        "snake_case_key": "v",
+        "kebab-case-key": "v",
+        "dotted.namespace": "v",
     }
+    write_initial_values(values, p)
+    assert read_initial_values(p) == values
 
 
 # --- read: error paths ---
@@ -81,49 +101,46 @@ def test_read_unreadable_file_raises_invalid(tmp_path):
         read_initial_values(bogus)
 
 
+def test_read_multi_column_parquet_raises(tmp_path):
+    """The codec expects exactly one ``user_namespace`` column.
+    Anything else (e.g. legacy per-key columns) is rejected."""
+    p = tmp_path / "iv.parquet"
+    pl.DataFrame({"a": ["v"], "b": ["w"]}).write_parquet(p)
+    with pytest.raises(InvalidInitialValuesError, match="user_namespace"):
+        read_initial_values(p)
+
+
+def test_read_wrong_column_name_raises(tmp_path):
+    p = tmp_path / "iv.parquet"
+    pl.DataFrame({"some_other_column": [{"k": "v"}]}).write_parquet(p)
+    with pytest.raises(InvalidInitialValuesError, match="user_namespace"):
+        read_initial_values(p)
+
+
 def test_read_multi_row_parquet_raises(tmp_path):
     p = tmp_path / "iv.parquet"
-    pl.DataFrame({"k": ["v1", "v2"]}).write_parquet(p)
+    pl.DataFrame({USER_NAMESPACE_COLUMN: [{"k": "v1"}, {"k": "v2"}]}).write_parquet(p)
     with pytest.raises(InvalidInitialValuesError, match="2 row"):
         read_initial_values(p)
 
 
 def test_read_zero_row_parquet_raises(tmp_path):
     p = tmp_path / "iv.parquet"
-    pl.DataFrame({"k": pl.Series("k", [], dtype=pl.Utf8)}).write_parquet(p)
+    pl.DataFrame({
+        USER_NAMESPACE_COLUMN: pl.Series([], dtype=pl.Struct({"k": pl.Utf8}))
+    }).write_parquet(p)
     with pytest.raises(InvalidInitialValuesError, match="0 row"):
-        read_initial_values(p)
-
-
-def test_read_bad_key_column_raises(tmp_path):
-    p = tmp_path / "iv.parquet"
-    # "k!" violates the ContextKeySpec pattern (non-alphanumeric + non-dash).
-    pl.DataFrame({"k!": ["v"]}).write_parquet(p)
-    with pytest.raises(InvalidInitialValuesError, match="ContextKeySpec"):
         read_initial_values(p)
 
 
 # --- write: validation ---
 
 
-def test_write_bad_key_raises(tmp_path):
+def test_write_non_str_key_raises(tmp_path):
     p = tmp_path / "iv.parquet"
     with pytest.raises(InvalidInitialValuesError, match="ContextKeySpec"):
-        write_initial_values({"bad key!": "v"}, p)
+        write_initial_values({42: "v"}, p)
     assert not p.exists()
-
-
-def test_write_empty_key_raises(tmp_path):
-    p = tmp_path / "iv.parquet"
-    with pytest.raises(InvalidInitialValuesError, match="ContextKeySpec"):
-        write_initial_values({"": "v"}, p)
-
-
-def test_write_key_too_long_raises(tmp_path):
-    p = tmp_path / "iv.parquet"
-    # ContextKeySpec caps total length at 253.
-    with pytest.raises(InvalidInitialValuesError, match="ContextKeySpec"):
-        write_initial_values({"a" * 254: "v"}, p)
 
 
 def test_write_unsupported_value_type_raises(tmp_path):
@@ -133,34 +150,29 @@ def test_write_unsupported_value_type_raises(tmp_path):
     assert not p.exists()
 
 
-def test_write_list_with_non_str_raises(tmp_path):
+def test_write_list_with_unsupported_item_raises(tmp_path):
     p = tmp_path / "iv.parquet"
     with pytest.raises(InvalidInitialValuesError, match="ContextValueSpec"):
-        write_initial_values({"k": ["a", 1, "c"]}, p)
+        write_initial_values({"k": ["a", object(), "c"]}, p)
 
 
-def test_write_dict_with_non_str_key_raises(tmp_path):
+def test_write_nested_dict_value_rejected(tmp_path):
+    """``ContextValueSpec`` allows ``dict[str, primitive]`` but NOT
+    a recursive ``dict[str, dict[...]]`` -- the latter wouldn't fit
+    a single ``user_namespace`` Struct cell with primitive fields."""
     p = tmp_path / "iv.parquet"
     with pytest.raises(InvalidInitialValuesError, match="ContextValueSpec"):
-        write_initial_values({"k": {1: "v"}}, p)
-
-
-def test_write_dict_with_non_str_value_raises(tmp_path):
-    p = tmp_path / "iv.parquet"
-    with pytest.raises(InvalidInitialValuesError, match="ContextValueSpec"):
-        write_initial_values({"k": {"a": 1}}, p)
+        write_initial_values({"k": {"inner": {"too-deep": "v"}}}, p)
 
 
 def test_write_validates_before_io(tmp_path):
     """If any key/value is invalid, no file is written -- the previous
     file (or absence) is preserved."""
     p = tmp_path / "iv.parquet"
-    # First write a valid file.
     write_initial_values({"good": "v1"}, p)
     snapshot = p.read_bytes()
-    # Now attempt an invalid write -- file should stay byte-identical.
     with pytest.raises(InvalidInitialValuesError):
-        write_initial_values({"good": "v2", "bad key!": "v"}, p)
+        write_initial_values({"good": "v2", "bad": object()}, p)
     assert p.read_bytes() == snapshot
 
 
@@ -179,8 +191,6 @@ def test_bool_round_trips_as_bool_not_int(tmp_path):
     write_initial_values({"flag": True}, p)
     out = read_initial_values(p)
     assert out == {"flag": True}
-    # ``True == 1`` in Python, so equality alone isn't proof -- check
-    # the type explicitly. Polars writes booleans as bool, not int.
     assert isinstance(out["flag"], bool)
 
 
@@ -215,8 +225,6 @@ def test_write_crash_mid_write_leaves_previous_content_intact(tmp_path, monkeypa
     real_write_parquet = pl.DataFrame.write_parquet
 
     def boom(self, target, *a, **kw):
-        # Write *something* to the tmp file first so the test simulates
-        # a partial write, then explode before the os.replace can run.
         Path(target).write_bytes(b"corrupt")
         raise RuntimeError("simulated mid-write crash")
 
@@ -224,19 +232,13 @@ def test_write_crash_mid_write_leaves_previous_content_intact(tmp_path, monkeypa
     with pytest.raises(RuntimeError, match="simulated mid-write crash"):
         write_initial_values({"k": "after"}, p)
 
-    # Destination untouched; tmp file cleaned up.
     assert p.read_bytes() == snapshot
     assert not (tmp_path / "iv.parquet.tmp").exists()
 
-    # Restoring the real call works for sanity (catches accidental
-    # monkeypatch leakage if this test ever gets reordered).
     pl.DataFrame.write_parquet = real_write_parquet
 
 
 def test_write_crash_after_partial_tmp_cleans_up_orphan(tmp_path, monkeypatch):
-    """Even when the failure happens *after* a partial tmp file
-    exists, the tmp gets removed so we don't accumulate orphans
-    across crashes."""
     p = tmp_path / "iv.parquet"
 
     def boom(self, target, *a, **kw):
@@ -275,5 +277,5 @@ def test_key_validator_uses_pydantic_against_context_key_spec():
     from tabsdatak.server._tdrunner.function._lib import initial_values
 
     with pytest.raises(InvalidInitialValuesError) as ei:
-        initial_values._validate_key("bad_underscore")
+        initial_values._validate_key(123)  # non-str key
     assert isinstance(ei.value.__cause__, ValidationError)

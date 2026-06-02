@@ -156,9 +156,9 @@ class FromRequestCtx(TrxCtx, FlowCtx):
         in-memory dict; the runtime persists the dict to Parquet at
         the end of the invocation via :meth:`drain`.
 
-        The key is validated eagerly against ``ContextKeySpec`` so
-        violations surface at the user's call site rather than at
-        drain time (where the stack trace would point at the runtime).
+        The key is validated eagerly as a ``str`` so a non-string
+        key surfaces at the user's call site rather than at drain
+        time (where the stack trace would point at the runtime).
         Value-shape validation is deferred to the codec so the None
         sentinel — which the SPI allows but the Parquet codec
         doesn't take a position on — round-trips through the

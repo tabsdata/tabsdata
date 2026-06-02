@@ -203,36 +203,32 @@ def test_separate_instances_have_separate_scratch_stores():
 # --- eager validation in store_attr -------------------------------------
 
 
-def test_store_attr_rejects_bad_key_at_call_site():
-    """An invalid key (e.g. with an underscore -- ContextKeySpec is
-    dash-only) must raise at the user's ``store_attr`` call site
-    rather than silently landing in the scratch store and exploding
-    later at drain time."""
+def test_store_attr_rejects_non_str_key_at_call_site():
+    """``ContextKeySpec`` is plain ``str``, but a non-string key must
+    still raise at the user's ``store_attr`` call site rather than
+    silently landing in the scratch store and exploding later at
+    drain time."""
     c = _ctx()
     with pytest.raises(InvalidInitialValuesError, match="ContextKeySpec"):
-        c.store_attr("bad_key", "v")
+        c.store_attr(123, "v")  # type: ignore[arg-type]
     # Failure means the scratch store stayed clean.
-    assert "bad_key" not in c.drain()
+    assert 123 not in c.drain()
 
 
-def test_store_attr_rejects_empty_key_at_call_site():
+def test_store_attr_accepts_any_string_key_shape():
+    """``ContextKeySpec`` is plain ``str`` -- underscores, dashes,
+    dots, spaces, mixed: anything goes. The framework packs all the
+    user's flat keys into one ``user_namespace`` Struct cell, so
+    keys never appear as Parquet column names."""
     c = _ctx()
-    with pytest.raises(InvalidInitialValuesError, match="ContextKeySpec"):
-        c.store_attr("", "v")
-
-
-def test_store_attr_rejects_punctuation_in_key():
-    """Path-traversal-style or special-character keys are rejected at
-    the call site, not at drain."""
-    c = _ctx()
-    for bad in ("a/b", "a..b", "a b", "a!b"):
-        with pytest.raises(InvalidInitialValuesError, match="ContextKeySpec"):
-            c.store_attr(bad, "v")
-
-
-def test_store_attr_accepts_dotted_keys():
-    """Valid dotted-identifier keys are accepted: each segment is
-    a DNS-1123 label-style identifier separated by dots."""
-    c = _ctx()
-    c.store_attr("databricks.last-modified", "v")
-    assert c.get_attr("databricks.last-modified") == "v"
+    for ok in (
+        "last_modified",
+        "min-id",
+        "snake_case_key",
+        "kebab-case-key",
+        "dotted.namespace",
+        "with space",
+        "weird!@#",
+    ):
+        c.store_attr(ok, "v")
+        assert c.get_attr(ok) == "v"

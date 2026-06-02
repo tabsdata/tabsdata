@@ -278,13 +278,6 @@ SECRET_NAME_CONSTRAINTS = AfterValidator(_validate_secret_name)
 NON_EMPTY_LIST_CONSTRAINTS = Field(min_length=1)
 
 
-CONTEXT_KEY_RE_STR = (
-    r"^(?=.{1,253}$)"
-    r"([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)"
-    r"(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$"
-)
-
-
 # ---------------------------------------------------------------------------
 # Pattern annotation marker for Var / Secret fields.
 #
