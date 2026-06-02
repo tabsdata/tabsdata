@@ -30,7 +30,7 @@ from pydantic import StringConstraints
 
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
-from tabsdatak.api import Conn, NamedConn, Secret, StreamSrc, Var
+from tabsdatak.api import Conn, Secret, StreamSrc, Var
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation
@@ -219,9 +219,6 @@ class KafkaStreamSrcConn(Conn):
     conn_cfg: CfgSpec | None = None
 
 
-ConnSpec: TypeAlias = Union[NamedConn, KafkaStreamSrcConn]
-
-
 # --- KafkaStreamSrc.src_cfg keys ------------------------------------
 #
 # Mirrors the CDC connectors' ``src_cfg`` shape. The rollover knobs
@@ -252,7 +249,6 @@ class KafkaStreamSrc(StreamSrc):
     sources use. Each rollover yields a single-table positional
     manifest pointing at the parquet file the buffer flushed to.
 
-    :param conn: :class:`KafkaStreamSrcConn` (or :class:`NamedConn`).
     :param data_format: Wire format -- ``"avro"`` / ``"json"`` or
         :class:`Protobuf`.
     :param schema: Schema definition string for the data format
@@ -268,7 +264,6 @@ class KafkaStreamSrc(StreamSrc):
         consume timeouts.
     """
 
-    conn: ConnSpec
     data_format: KafkaMessageFormatSpec
     schema: str
     topic: KafkaTopicSpec

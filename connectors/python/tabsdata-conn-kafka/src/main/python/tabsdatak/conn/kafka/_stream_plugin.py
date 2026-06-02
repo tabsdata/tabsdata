@@ -21,7 +21,7 @@ import logging
 import signal
 import time
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from tabsdatak.conn.kafka import (
     KafkaStreamSrc,
@@ -104,18 +104,18 @@ def _setup_sigterm_handler() -> None:
         pass
 
 
-class KafkaStreamSrcPlugin(StreamSrcPlugin[KafkaStreamSrc]):
+class KafkaStreamSrcPlugin(StreamSrcPlugin[KafkaStreamSrcConn, KafkaStreamSrc]):
     """Wires a :class:`KafkaStreamSrc` to a polling consumer +
     manifest-based staging."""
 
     def run(
         self,
         ctx: StreamSrcPluginCtx,
+        conn: KafkaStreamSrcConn,
         stream_src: KafkaStreamSrc,
     ) -> None:
         from confluent_kafka import Consumer
 
-        conn = cast(KafkaStreamSrcConn, stream_src.conn)
         cfg = _resolve_rollover_cfg(stream_src)
         # Set the level on the whole connector namespace so the
         # plugin, consumer wrapper, serdes and the kafka-config

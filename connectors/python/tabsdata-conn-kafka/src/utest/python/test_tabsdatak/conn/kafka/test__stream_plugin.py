@@ -30,11 +30,14 @@ def _creds() -> UserPassword:
     return UserPassword(user=Secret.lit("u"), password=Secret.lit("p"))
 
 
+def _conn() -> KafkaStreamSrcConn:
+    return KafkaStreamSrcConn(
+        servers="broker:9092", credentials=_creds(), group_id="g1",
+    )
+
+
 def _src(**overrides) -> KafkaStreamSrc:
     base = dict(
-        conn=KafkaStreamSrcConn(
-            servers="broker:9092", credentials=_creds(), group_id="g1",
-        ),
         topic="events",
         data_format="json",
         schema="",
@@ -105,7 +108,7 @@ def test_plugin_run_subscribes_to_topic(consumer_cls, _sigterm, tmp_path):
 
     ctx = _make_ctx(tmp_path, active_calls=[False])
     plugin = KafkaStreamSrcPlugin()
-    plugin.run(ctx, _src())
+    plugin.run(ctx, _conn(), _src())
 
     consumer_cls.assert_called_once()
     consumer.subscribe.assert_called_once_with(["events"])
@@ -124,7 +127,7 @@ def test_plugin_run_kafka_connection_failure_raises_kafka_6(
     ctx = _make_ctx(tmp_path, active_calls=[True])
     plugin = KafkaStreamSrcPlugin()
     with pytest.raises(TabsdataException) as ei:
-        plugin.run(ctx, _src())
+        plugin.run(ctx, _conn(), _src())
     assert ei.value.api_error is KafkaErrorCode.KAFKA_6
 
 
@@ -142,7 +145,7 @@ def test_plugin_run_builds_dlq_producer_when_dlq_topic_set(
 
     ctx = _make_ctx(tmp_path, active_calls=[False])
     plugin = KafkaStreamSrcPlugin()
-    plugin.run(ctx, _src(dlq_topic="events_dlq"))
+    plugin.run(ctx, _conn(), _src(dlq_topic="events_dlq"))
 
     producer_cls.assert_called_once()
     producer.list_topics.assert_called_once()
@@ -161,7 +164,7 @@ def test_plugin_run_no_dlq_topic_skips_producer(
     ctx = _make_ctx(tmp_path, active_calls=[False])
     plugin = KafkaStreamSrcPlugin()
     with patch("confluent_kafka.Producer") as producer_cls:
-        plugin.run(ctx, _src(dlq_topic=None))
+        plugin.run(ctx, _conn(), _src(dlq_topic=None))
         producer_cls.assert_not_called()
 
 
@@ -189,6 +192,7 @@ def test_plugin_run_applies_logging_level_to_connector_namespace(
         plugin = KafkaStreamSrcPlugin()
         plugin.run(
             ctx,
+            _conn(),
             _src(src_cfg={"kafka.logging_level": logging.DEBUG}),
         )
         assert pkg_logger.level == logging.DEBUG

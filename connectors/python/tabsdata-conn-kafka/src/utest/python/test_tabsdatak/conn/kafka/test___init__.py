@@ -177,19 +177,10 @@ def test_kafka_conn_rejects_missing_group_id():
 # --- KafkaStreamSrc -------------------------------------------------
 
 
-def _kafka_conn():
-    from tabsdatak.conn.kafka import KafkaStreamSrcConn
-
-    return KafkaStreamSrcConn(
-        servers="broker:9092", credentials=_creds(), group_id="g1",
-    )
-
-
 def test_kafka_stream_src_minimal_construction():
     from tabsdatak.conn.kafka import KafkaStreamSrc
 
     src = KafkaStreamSrc(
-        conn=_kafka_conn(),
         topic="events",
         data_format="json",
         schema="",
@@ -203,7 +194,7 @@ def test_kafka_stream_src_output_table_is_topic():
     from tabsdatak.conn.kafka import KafkaStreamSrc
 
     src = KafkaStreamSrc(
-        conn=_kafka_conn(), topic="events", data_format="json", schema="",
+        topic="events", data_format="json", schema="",
     )
     assert src.output_table() == "events"
 
@@ -212,7 +203,6 @@ def test_kafka_stream_src_accepts_protobuf_format():
     from tabsdatak.conn.kafka import KafkaStreamSrc
 
     src = KafkaStreamSrc(
-        conn=_kafka_conn(),
         topic="events",
         data_format=Protobuf(message_name="com.example.Foo"),
         schema='syntax = "proto3"; message Foo {}',
@@ -225,7 +215,6 @@ def test_kafka_stream_src_rejects_unknown_src_cfg_key():
 
     with pytest.raises(ConnInitException) as ei:
         KafkaStreamSrc(
-            conn=_kafka_conn(),
             topic="events",
             data_format="json",
             schema="",
@@ -238,7 +227,6 @@ def test_kafka_stream_src_accepts_known_src_cfg_keys():
     from tabsdatak.conn.kafka import KafkaStreamSrc
 
     src = KafkaStreamSrc(
-        conn=_kafka_conn(),
         topic="events",
         data_format="json",
         schema="",
@@ -257,7 +245,6 @@ def test_kafka_stream_src_json_round_trip():
     from tabsdatak.conn.kafka import KafkaStreamSrc
 
     src = KafkaStreamSrc(
-        conn=_kafka_conn(),
         topic="events",
         data_format="json",
         schema='{"type": "object"}',
