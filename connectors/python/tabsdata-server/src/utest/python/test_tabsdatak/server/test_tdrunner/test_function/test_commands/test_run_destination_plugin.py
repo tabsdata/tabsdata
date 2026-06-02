@@ -194,15 +194,18 @@ def test_dest_context_exec_plan_ts_raises_notimplemented():
         _ = _dest_ctx().exec_plan_ts
 
 
-def test_dest_context_get_attr_returns_none_no_state():
-    """No state store wired through tdrunner yet -- ``get_attr``
-    honours the documented ``returns None if unset`` contract."""
+def test_dest_context_get_attr_returns_none_for_unset_key():
+    """``get_attr`` honours the ``returns None if unset`` contract on
+    a fresh ctx."""
     assert _dest_ctx().get_attr("k") is None
 
 
-def test_dest_context_store_attr_is_noop():
-    """No state store wired yet -- ``store_attr`` swallows the write."""
-    assert _dest_ctx().store_attr("k", "v") is None
+def test_dest_context_store_attr_round_trips_via_get_attr():
+    """``store_attr`` writes through; a subsequent ``get_attr`` sees
+    the value."""
+    c = _dest_ctx()
+    c.store_attr("k", "v")
+    assert c.get_attr("k") == "v"
 
 
 def test_dest_context_add_metadata_is_noop():

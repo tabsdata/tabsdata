@@ -75,12 +75,10 @@ def my_publisher(in_1: TableFramesSpec) -> tuple[TableFrameSpec]:
 
 def _write_sample_parquet(path: Path) -> None:
     """Write a tiny three-row parquet for the source plugin to import."""
-    table = pa.table(
-        {
-            "id": [1, 2, 3],
-            "name": ["alice", "bob", "carol"],
-        }
-    )
+    table = pa.table({
+        "id": [1, 2, 3],
+        "name": ["alice", "bob", "carol"],
+    })
     pq.write_table(table, path)
 
 
@@ -133,23 +131,19 @@ def built_bundle(tmp_path, user_project, fixture_publisher) -> Path:
     return extracted
 
 
-def _write_request(
-    path: Path, bundle_uri: str = "file:///bundle.tgz"
-) -> Path:
+def _write_request(path: Path, bundle_uri: str = "file:///bundle.tgz") -> Path:
     path.write_text(
-        yaml.safe_dump(
-            {
-                "info": {
-                    "collection": "c",
-                    "collection_id": 1,
-                    "execution_id": 2,
-                    "transaction_id": 3,
-                    "function_run_id": 4,
-                    "function_bundle": {"uri": bundle_uri},
-                },
-                "output": [{"name": "my_table"}],
-            }
-        )
+        yaml.safe_dump({
+            "info": {
+                "collection": "c",
+                "collection_id": 1,
+                "execution_id": 2,
+                "transaction_id": 3,
+                "function_run_id": 4,
+                "function_bundle": {"uri": bundle_uri},
+            },
+            "output": [{"name": "my_table"}],
+        })
     )
     return path
 
@@ -195,10 +189,7 @@ def test_normalise_single_slash_uri():
 
 
 def test_normalise_path_object_wrapping_uri():
-    assert (
-        _normalise_table_file(Path("file:///tmp/x.parquet"))
-        == "/tmp/x.parquet"
-    )
+    assert _normalise_table_file(Path("file:///tmp/x.parquet")) == "/tmp/x.parquet"
 
 
 def test_normalise_uri_with_percent_encoding():
@@ -278,17 +269,18 @@ def test_src_context_exec_plan_ts_raises_notimplemented():
         _ = _ctx().exec_plan_ts
 
 
-def test_src_context_get_attr_returns_none_no_state():
-    """No state store wired through tdrunner yet -- ``get_attr``
-    honours the documented ``returns None if unset`` contract so
-    plugins that probe for scratch state don't crash."""
+def test_src_context_get_attr_returns_none_for_unset_key():
+    """``get_attr`` honours the ``returns None if unset`` contract
+    on a fresh ctx."""
     assert _ctx().get_attr("k") is None
 
 
-def test_src_context_store_attr_is_noop():
-    """No state store wired yet -- ``store_attr`` returns None and
-    swallows the write without raising."""
-    assert _ctx().store_attr("k", "v") is None
+def test_src_context_store_attr_round_trips_via_get_attr():
+    """``store_attr`` writes through; a subsequent ``get_attr`` sees
+    the value."""
+    c = _ctx()
+    c.store_attr("k", "v")
+    assert c.get_attr("k") == "v"
 
 
 def test_src_context_add_metadata_is_noop():
@@ -348,9 +340,7 @@ def test_resolve_plugin_happy(fixture_publisher):
     assert isinstance(plugin, SrcPlugin)
 
 
-def test_resolve_plugin_unknown_source_raises_no_plugin(
-    fixture_publisher, monkeypatch
-):
+def test_resolve_plugin_unknown_source_raises_no_plugin(fixture_publisher, monkeypatch):
     """When `get_src` raises `KeyError`, the runner surfaces
     `EXIT_NO_PLUGIN`."""
 
@@ -403,9 +393,7 @@ def test_write_inputs_manifest_happy(tmp_path, fixture_publisher):
     }
 
 
-def test_write_inputs_manifest_normalises_file_uris(
-    tmp_path, fixture_publisher
-):
+def test_write_inputs_manifest_normalises_file_uris(tmp_path, fixture_publisher):
     """The plugin may return `Path("file:///...")` URI-shaped values
     rather than bare paths; the manifest must always carry plain
     absolute filesystem paths."""
@@ -416,9 +404,7 @@ def test_write_inputs_manifest_normalises_file_uris(
     assert data["inputs"][0]["files"] == ["/tmp/uri-shaped.parquet"]
 
 
-def test_write_inputs_manifest_cardinality_mismatch_raises(
-    tmp_path, fixture_publisher
-):
+def test_write_inputs_manifest_cardinality_mismatch_raises(tmp_path, fixture_publisher):
     """Source cardinality is 1 (`LocalFileSrc` with one path); a plugin
     that returns two slots is a contract violation."""
     out = tmp_path / "manifest.yaml"
@@ -478,9 +464,7 @@ def test_main_invalid_options_returns_1(monkeypatch):
 # --- main: end-to-end happy path -----------------------------------------
 
 
-def test_main_end_to_end_happy_path(
-    tmp_path, built_bundle, monkeypatch
-):
+def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch):
     """Real LocalFile publisher, real plugin, real td_transporter.
 
     Mirrors `donotmerge.py`. Requires `td_transporter` on PATH and

@@ -34,8 +34,8 @@ from tabsdatak.server._tdrunner.function._lib.outputs_manifest import (
     MANIFEST_NAME_KEY,
     load_outputs_manifest_or_fail,
 )
-from tabsdatak.server._tdrunner.function._lib.plugin_ctx import FromRequestPluginCtx
 from tabsdatak.server._tdrunner.function._lib.request import load_request_or_fail
+from tabsdatak.server._tdrunner.function._lib.request_ctx import FromRequestCtx
 from tabsdatak.spi import DestContext, ParquetFile
 
 VERSION = "0.1.0"
@@ -101,10 +101,10 @@ def _load_function_def(bundle_dir: Path) -> SubscriberInfo:
     )
 
 
-class _DestContext(FromRequestPluginCtx, DestContext):
+class _DestContext(FromRequestCtx, DestContext):
     """Concrete :class:`DestContext` for the run-destination-plugin command.
 
-    All behaviour comes from :class:`FromRequestPluginCtx`; this class
+    All behaviour comes from :class:`FromRequestCtx`; this class
     only fixes the abstract base so ``isinstance(ctx, DestContext)``
     holds at the call boundary.
     """

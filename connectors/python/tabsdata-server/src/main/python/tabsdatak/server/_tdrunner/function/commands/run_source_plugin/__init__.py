@@ -28,8 +28,8 @@ from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
     MANIFEST_NAME_KEY,
     write_inputs_manifest,
 )
-from tabsdatak.server._tdrunner.function._lib.plugin_ctx import FromRequestPluginCtx
 from tabsdatak.server._tdrunner.function._lib.request import load_request_or_fail
+from tabsdatak.server._tdrunner.function._lib.request_ctx import FromRequestCtx
 from tabsdatak.spi import SrcPluginCtx
 
 # TODO: After all commands are done, version will be unified in a single source of
@@ -103,10 +103,10 @@ def _load_function_def(bundle_dir: Path) -> PublisherInfo:
     )
 
 
-class _SrcContext(FromRequestPluginCtx, SrcPluginCtx):
+class _SrcContext(FromRequestCtx, SrcPluginCtx):
     """Concrete :class:`SrcPluginCtx` for the run-source-plugin command.
 
-    All behaviour comes from :class:`FromRequestPluginCtx`; this class
+    All behaviour comes from :class:`FromRequestCtx`; this class
     only fixes the abstract base so ``isinstance(ctx, SrcPluginCtx)``
     holds at the call boundary.
     """
