@@ -98,6 +98,8 @@ pub enum SecretError {
     CurrentSourceReadFailed { cause: String } = 5002,
     #[error("Configmap '{configmap}' entry value is not valid UTF-8: {cause}.")]
     ConfigmapEntryNotUtf8 { configmap: String, cause: String } = 5003,
+    #[error("Could not parse config '{config}' as YAML: {cause}.")]
+    ConfigYamlParseFailed { config: String, cause: String } = 5007,
     #[error(transparent)]
     Profile(#[from] ProfileError) = 5004,
     #[error(transparent)]
