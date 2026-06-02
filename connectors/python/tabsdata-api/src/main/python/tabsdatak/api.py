@@ -444,7 +444,6 @@ def publisher(
 
 def stream_publisher(
     source: StreamSrc,
-    use_existing_data: bool,
     flush_interval_mins: FlushIntervalSpec,
     output_tables: TableNamesSpec,
     on_tables: OnTablesActionSpec | None = None,
@@ -461,9 +460,6 @@ def stream_publisher(
     boundary.
 
     :param source: The :class:`StreamSrc` to consume.
-    :param use_existing_data: When ``True``, replay everything the
-        source's ``start_from`` makes available; when ``False``,
-        skip to the live edge before emitting.
     :param flush_interval_mins: Fallback rollover window: the
         runtime closes the current batch every N minutes if the
         source's own rollover threshold has not fired.
@@ -475,7 +471,6 @@ def stream_publisher(
         return _info_cls("StreamPublisherInfo")(
             func,
             source,
-            use_existing_data,
             flush_interval_mins,
             output_tables,
             on_tables,

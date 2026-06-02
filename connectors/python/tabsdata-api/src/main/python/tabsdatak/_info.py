@@ -131,15 +131,14 @@ class StreamPublisherInfo(_api.JsonSerde):
     """Descriptor for a ``@stream_publisher``-decorated function.
 
     Captures the :class:`~tabsdatak.api.StreamSrc`, the
-    ``use_existing_data`` replay flag, the ``fallback_rollover_mins``
-    batching window, and the output-table contract. Stream-publisher
-    inputs are always array-mode (one event fans out across rows)."""
+    ``fallback_rollover_mins`` batching window, and the output-table
+    contract. Stream-publisher inputs are always array-mode (one
+    event fans out across rows)."""
 
     __kind__ = KIND_STREAM_PUBLISHER_DEF
 
     func: Callable
     source: api.StreamSrc
-    use_existing_data: bool
     fallback_rollover_mins: api.FlushIntervalSpec
     output_tables: api.TableNamesSpec
     on_tables: api.OnTablesActionSpec | None

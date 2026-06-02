@@ -858,10 +858,9 @@ def test_cron_mask_rejects_invalid(mask):
 def test_auto_publisher_dataclass_constructs_ok():
     src = _auto_src()
     p = _info.StreamPublisherInfo(
-        _good_1in_1out_stream, src, False, 5, ["t1"], None,
+        _good_1in_1out_stream, src, 5, ["t1"], None,
     )
     assert p.source is src
-    assert p.use_existing_data is False
     assert p.fallback_rollover_mins == 5
     assert p.output_tables == ["t1"]
     assert p.on_tables is None
@@ -910,7 +909,6 @@ def test_auto_publisher_dataclass_signature_mismatch_raises_api_10():
 def test_auto_publisher_decorator_returns_auto_publisher_instance():
     @m.stream_publisher(
         source=_auto_src(),
-        use_existing_data=True,
         flush_interval_mins=10,
         output_tables=["t1"],
     )
@@ -918,7 +916,6 @@ def test_auto_publisher_decorator_returns_auto_publisher_instance():
         return (None,)
 
     assert isinstance(my_pub, _info.StreamPublisherInfo)
-    assert my_pub.use_existing_data is True
     assert my_pub.fallback_rollover_mins == 10
 
 
@@ -929,7 +926,6 @@ def test_auto_publisher_decorator_rejects_rollover_below_one_with_api_10():
     with pytest.raises(ApiException) as excinfo:
         @m.stream_publisher(
             source=_auto_src(),
-            use_existing_data=False,
             flush_interval_mins=0,
             output_tables=["t1"],
         )
@@ -941,7 +937,6 @@ def test_auto_publisher_decorator_rejects_rollover_below_one_with_api_10():
 def test_auto_publisher_decorator_accepts_on_tables_hooks():
     @m.stream_publisher(
         source=_auto_src(),
-        use_existing_data=False,
         flush_interval_mins=15,
         output_tables=["t1"],
         on_tables=[_OnTab()],
@@ -956,7 +951,6 @@ def test_auto_publisher_decorator_accepts_on_tables_hooks():
 def test_auto_publisher_decorator_default_none_on_tables():
     @m.stream_publisher(
         source=_auto_src(),
-        use_existing_data=False,
         flush_interval_mins=1,
         output_tables=["t1"],
     )
@@ -974,7 +968,6 @@ def test_stream_publisher_rejects_trailing_trx_ctx_param():
     with pytest.raises(ApiException) as excinfo:
         @m.stream_publisher(
             source=_auto_src(),
-            use_existing_data=False,
             flush_interval_mins=1,
             output_tables=["t1"],
         )
@@ -994,7 +987,6 @@ def test_stream_publisher_rejects_any_extra_trailing_param():
     with pytest.raises(ApiException) as excinfo:
         @m.stream_publisher(
             source=_auto_src(),
-            use_existing_data=False,
             flush_interval_mins=1,
             output_tables=["t1"],
         )
