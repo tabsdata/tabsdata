@@ -7,8 +7,8 @@ use tracing::info;
 
 use crate::client::session::pin::PinContext;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
-use crate::client::tdkserver::render::{preview, report};
 use crate::client::tdkserver::common::{effective_yes, prompt_yes_no};
+use crate::client::tdkserver::render::{preview, report};
 use crate::core::system::exit::Result;
 use crate::runtime::provider::provider_for;
 
