@@ -3,7 +3,6 @@ from datetime import datetime, timezone
 
 import pytest
 
-from tabsdatak.api import NamedConn
 from tabsdatak.conn.localfile.error import LocalFileValidateException
 from tabsdatak.conn.common.file.typing_ import (
     DestFileFormat,
@@ -17,20 +16,6 @@ from tabsdatak.conn.localfile.error import LocalFileErrorCode
 pytestmark = pytest.mark.localfile
 
 
-def _src_conn():
-    return LocalFileSrcConn(
-        base_path="/data/",
-        conn_cfg={"localfile.timeout": 30},
-    )
-
-
-def _dest_conn():
-    return LocalFileDestConn(
-        base_path="/data/",
-        conn_cfg={"localfile.timeout": 30},
-    )
-
-
 @pytest.fixture(params=[LocalFileSrcConn, LocalFileDestConn])
 def conn_cls(request):
     return request.param
@@ -42,7 +27,6 @@ def test_localfile_src_dest_conn_have_distinct_kinds():
 
 def test_localfile_src_full_round_trip():
     src = LocalFileSrc(
-        conn=_src_conn(),
         paths=["raw/users.csv", "raw/orders/*.csv"],
         format=SrcFileFormat.CSV,
         format_cfg={SrcFileFormat.CSV: {"separator": ";", "has_header": True}},
@@ -52,8 +36,6 @@ def test_localfile_src_full_round_trip():
     )
     loaded = LocalFileSrc.from_json(src.to_json())
     assert loaded == src
-    assert loaded.conn.base_path == "/data/"
-    assert loaded.conn.conn_cfg == {"localfile.timeout": 30}
     assert loaded.paths == ["raw/users.csv", "raw/orders/*.csv"]
     assert loaded.format is SrcFileFormat.CSV
     assert loaded.format_cfg == {
@@ -66,7 +48,6 @@ def test_localfile_src_full_round_trip():
 
 def test_localfile_dest_full_round_trip():
     dest = LocalFileDest(
-        conn=_dest_conn(),
         paths=["${EXEC_PLAN_ID}/users.csv", "${TRX_ID}/orders.csv"],
         format=DestFileFormat.CSV,
         format_cfg={DestFileFormat.CSV: {"include_header": True, "separator": ","}},
@@ -74,7 +55,6 @@ def test_localfile_dest_full_round_trip():
     )
     loaded = LocalFileDest.from_json(dest.to_json())
     assert loaded == dest
-    assert loaded.conn.base_path == "/data/"
     assert loaded.paths == ["${EXEC_PLAN_ID}/users.csv", "${TRX_ID}/orders.csv"]
     assert loaded.format is DestFileFormat.CSV
     assert loaded.format_cfg == {
@@ -83,34 +63,9 @@ def test_localfile_dest_full_round_trip():
     assert loaded.dest_cfg == {"tabsdata.file.chunkSize": 2048}
 
 
-def test_localfile_src_round_trip_with_named_conn():
-    src = LocalFileSrc(
-        conn=NamedConn(name="prod_localfile"),
-        paths=["raw/users.csv"],
-        format=SrcFileFormat.CSV,
-    )
-    loaded = LocalFileSrc.from_json(src.to_json())
-    assert loaded == src
-    assert isinstance(loaded.conn, NamedConn)
-    assert loaded.conn.name == "prod_localfile"
-
-
-def test_localfile_dest_round_trip_with_named_conn():
-    dest = LocalFileDest(
-        conn=NamedConn(name="prod_localfile"),
-        paths=["out/users.csv"],
-        format=DestFileFormat.CSV,
-    )
-    loaded = LocalFileDest.from_json(dest.to_json())
-    assert loaded == dest
-    assert isinstance(loaded.conn, NamedConn)
-    assert loaded.conn.name == "prod_localfile"
-
-
 def test_localfile_validate_rejects_cross_side_format_cfg_keys():
     with pytest.raises(LocalFileValidateException) as ei:
         LocalFileSrc(
-            conn=_src_conn(),
             paths=["data.csv"],
             format=SrcFileFormat.CSV,
             format_cfg={SrcFileFormat.CSV: {"include_header": True}},
@@ -119,7 +74,6 @@ def test_localfile_validate_rejects_cross_side_format_cfg_keys():
 
     with pytest.raises(LocalFileValidateException) as ei:
         LocalFileDest(
-            conn=_dest_conn(),
             paths=["out.csv"],
             format=DestFileFormat.CSV,
             format_cfg={DestFileFormat.CSV: {"has_header": True}},
@@ -168,7 +122,6 @@ def test_localfile_src_rejects_missing_paths():
 
     with pytest.raises(ConnInitException) as ei:
         LocalFileSrc(  # type: ignore[call-arg]
-            conn=_src_conn(),
             format=SrcFileFormat.CSV,
         )
     assert ei.value.api_error is LocalFileErrorCode.LOCALFILE_2
@@ -179,7 +132,6 @@ def test_localfile_dest_rejects_missing_paths():
 
     with pytest.raises(ConnInitException) as ei:
         LocalFileDest(  # type: ignore[call-arg]
-            conn=_dest_conn(),
             format=DestFileFormat.CSV,
         )
     assert ei.value.api_error is LocalFileErrorCode.LOCALFILE_4

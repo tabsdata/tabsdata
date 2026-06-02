@@ -17,14 +17,13 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import datetime
-from typing import Annotated, Any, Literal, TypeAlias, Union
+from typing import Annotated, Any, Literal, TypeAlias
 
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
 from tabsdatak.api import (
     Conn,
     Dest,
-    NamedConn,
     Src,
 )
 
@@ -95,10 +94,6 @@ class LocalFileDestConn(Conn):
         return full_path(self.base_path, path)
 
 
-SrcConnSpec: TypeAlias = Union[NamedConn, LocalFileSrcConn]
-DestConnSpec: TypeAlias = Union[NamedConn, LocalFileDestConn]
-
-
 # --- Source ---------------------------------------------------------
 
 
@@ -106,7 +101,6 @@ DestConnSpec: TypeAlias = Union[NamedConn, LocalFileDestConn]
 class LocalFileSrc(Src):
     """LocalFile source — one parquet slot per path.
 
-    :param conn: :class:`LocalFileSrcConn` (or :class:`NamedConn`).
     :param paths: List of file paths (or glob patterns) relative
         to the conn's root. One parquet slot per entry.
     :param format: Optional file-format override (default AUTO).
@@ -119,7 +113,6 @@ class LocalFileSrc(Src):
         ``{"tabsdata.file.chunkSize"}``.
     """
 
-    conn: SrcConnSpec
     paths: SrcPathsSpec
     format: SrcFileFormat = SrcFileFormat.AUTO
     format_cfg: SrcFormatCfgSpec | None = None
@@ -141,7 +134,6 @@ class LocalFileSrc(Src):
 class LocalFileDest(Dest):
     """LocalFile destination — write one parquet slot per path.
 
-    :param conn: :class:`LocalFileDestConn` (or :class:`NamedConn`).
     :param paths: List of target file paths relative to the
         conn's root. One parquet slot per entry. Tokens like
         ``${date}`` / ``${trx_id}`` are resolved at write time.
@@ -150,7 +142,6 @@ class LocalFileDest(Dest):
         ``{"tabsdata.file.chunkSize"}``.
     """
 
-    conn: DestConnSpec
     paths: DestPathsSpec
     format: DestFileFormat = DestFileFormat.AUTO
     format_cfg: DestFormatCfgSpec | None = None

@@ -75,8 +75,10 @@ def test_src_plugin_passes_build_location_and_errors(monkeypatch, tmp_path):
 
     monkeypatch.setattr(_file_plugin, "import_files", fake)
 
-    src = LocalFileSrc(conn=LocalFileSrcConn(), paths=["a/b.csv"])
-    out = plugin.LocalFileSrcPlugin().read_in(_src_ctx(tmp_path), src)
+    src = LocalFileSrc(paths=["a/b.csv"])
+    out = plugin.LocalFileSrcPlugin().read_in(
+        _src_ctx(tmp_path), LocalFileSrcConn(), src
+    )
 
     assert out == [[Path(tmp_path / "ok.parquet")]]
     assert captured["build_location"] is plugin.build_location
@@ -97,9 +99,11 @@ def test_dest_plugin_passes_build_location_and_errors(monkeypatch, tmp_path):
 
     monkeypatch.setattr(_file_plugin, "copy_out", fake)
 
-    dest = LocalFileDest(conn=LocalFileDestConn(), paths=["out/x.csv"])
+    dest = LocalFileDest(paths=["out/x.csv"])
     parquet = Path(tmp_path / "in.parquet")
-    plugin.LocalFileDestPlugin().write_out(_dest_ctx(tmp_path), dest, [parquet])
+    plugin.LocalFileDestPlugin().write_out(
+        _dest_ctx(tmp_path), LocalFileDestConn(), dest, [parquet]
+    )
 
     assert captured["tables"] == [parquet]
     assert captured["build_location"] is plugin.build_location
@@ -142,7 +146,7 @@ def test_localfile_dest_def_wires_plugin_and_explorer():
 
 
 def test_localfile_cardinality_uses_paths_length():
-    src = LocalFileSrc(conn=LocalFileSrcConn(), paths=["a", "b", "c"])
+    src = LocalFileSrc(paths=["a", "b", "c"])
     assert plugin.LOCALFILE_SRC.cardinality(src) == 3
-    dest = LocalFileDest(conn=LocalFileDestConn(), paths=["a", "b"])
+    dest = LocalFileDest(paths=["a", "b"])
     assert plugin.LOCALFILE_DEST.cardinality(dest) == 2

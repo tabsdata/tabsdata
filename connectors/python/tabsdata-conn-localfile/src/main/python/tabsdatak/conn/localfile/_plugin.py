@@ -58,30 +58,32 @@ ERRORS = _file_plugin.FilePluginErrors(
 # --- Plugins ------------------------------------------------------
 
 
-class LocalFileSrcPlugin(SrcPlugin[LocalFileSrc]):
+class LocalFileSrcPlugin(SrcPlugin[LocalFileSrcConn, LocalFileSrc]):
     def read_in(
         self,
         ctx: SrcPluginCtx,
+        conn: LocalFileSrcConn,
         src: LocalFileSrc,
     ) -> list[list[TableFileSpec]]:
         return _file_plugin.import_files(
             ctx=ctx,
-            cfg=_file_plugin.ReaderConf.from_src(src),
+            cfg=_file_plugin.ReaderConf.from_src(conn, src),
             build_location=build_location,
             errors=ERRORS,
         )
 
 
-class LocalFileDestPlugin(DestPlugin[LocalFileDest]):
+class LocalFileDestPlugin(DestPlugin[LocalFileDestConn, LocalFileDest]):
     def write_out(
         self,
         ctx: DestContext,
+        conn: LocalFileDestConn,
         dest: LocalFileDest,
         tables: list[TableFileSpec],
     ) -> None:
         _file_plugin.copy_out(
             ctx=ctx,
-            cfg=_file_plugin.WriterConf.from_dest(dest),
+            cfg=_file_plugin.WriterConf.from_dest(conn, dest),
             tables=tables,
             build_location=build_location,
             errors=ERRORS,
