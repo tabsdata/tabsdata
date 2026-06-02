@@ -136,8 +136,11 @@ class AzureBlobSrc(Src):
     :param paths: List of file paths (or glob patterns) relative
         to the conn's root. One parquet slot per entry.
     :param format: Optional file-format override (default AUTO).
-    :param initial_last_modified: Optional cutoff; the runtime
-        re-imports only files newer than this.
+    :param initial_last_modified: Optional cutoff for incremental
+        ingestion. On the first run, the connector imports only
+        files modified at or after this timestamp; on each
+        subsequent run, the cutoff advances automatically so that
+        only files newer than the previous run are re-imported.
     :param src_cfg: Optional ``Mapping`` over
         ``{"tabsdata.file.chunkSize"}``.
     """

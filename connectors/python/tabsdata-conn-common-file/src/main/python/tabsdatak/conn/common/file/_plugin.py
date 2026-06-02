@@ -111,6 +111,10 @@ RunEnvBuilder = Callable[[Any], dict[str, str]]
 # stable round-trips cleanly. The key shape (one alphanumeric label
 # per dot-separated segment, no underscores) matches the context-key
 # regex declared on `ContextKeySpec`.
+#
+# The ``file-lastmod.`` prefix is reserved for this plugin's
+# bookkeeping; see :meth:`tabsdatak.api.TrxCtx.store_attr` for the
+# reserved-prefix convention.
 _LASTMOD_KEY_PREFIX = "file-lastmod.slot"
 
 

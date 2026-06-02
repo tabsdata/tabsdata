@@ -589,7 +589,14 @@ class TrxCtx(ABC):
     @abstractmethod
     def store_attr(self, attr: ContextKeySpec, val: ContextValueSpec | None):
         """Write a per-flow scratch value -- persists across trx
-        invocations within the same flow."""
+        invocations within the same flow.
+
+        Connectors may reserve namespaces under this scratch store
+        for their own internal bookkeeping (``file-lastmod.*`` is
+        the only one today). Writing to such names from user code
+        can corrupt connector state -- pick names that don't
+        collide with these prefixes.
+        """
 
     @abstractmethod
     def add_metadata(self, attr: ContextKeySpec, val: ContextValueSpec | None):
