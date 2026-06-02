@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any
 
 from tabsdatak.conn.db2 import (
     Db2Dest,
@@ -113,10 +113,11 @@ def _resolve_dest_cfg(dest_cfg: DestCfgSpec | None) -> _WriterCfg:
 # and the abstract Src / Dest classes, not the runtime IO stack).
 
 
-class Db2SrcPlugin(SrcPlugin[Db2Src]):
+class Db2SrcPlugin(SrcPlugin[Db2SrcConn, Db2Src]):
     def read_in(
         self,
         ctx: SrcPluginCtx,
+        conn: Db2SrcConn,
         src: Db2Src,
     ) -> list[list[TableFileSpec]]:
         from sqlalchemy.exc import OperationalError, SQLAlchemyError
@@ -135,7 +136,7 @@ class Db2SrcPlugin(SrcPlugin[Db2Src]):
         logger.info("db2: read_in starting (%d queries)", len(src.queries or []))
 
         read_cfg = Db2ReadCfg(
-            conn=cast(Db2SrcConn, src.conn),
+            conn=conn,
             queries=src.queries,
             transactional=src.transactional,
             schema_overrides=src.schema_overrides,
@@ -170,10 +171,11 @@ class Db2SrcPlugin(SrcPlugin[Db2Src]):
             )
 
 
-class Db2DestPlugin(DestPlugin[Db2Dest]):
+class Db2DestPlugin(DestPlugin[Db2DestConn, Db2Dest]):
     def write_out(
         self,
         ctx: DestContext,
+        conn: Db2DestConn,
         dest: Db2Dest,
         tables: list[TableFileSpec],
     ) -> None:
@@ -197,7 +199,7 @@ class Db2DestPlugin(DestPlugin[Db2Dest]):
             )
 
         write_cfg = Db2WriteCfg(
-            conn=cast(Db2DestConn, dest.conn),
+            conn=conn,
             target_tables=list(dest.tables),
             if_table_exists=dest.if_table_exists,
             transactional=dest.transactional,

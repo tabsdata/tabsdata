@@ -31,12 +31,15 @@ def _creds() -> UserPassword:
     return UserPassword(user=Secret.lit("u"), password=Secret.lit("p"))
 
 
+def _conn() -> Db2CdcStreamSrcConn:
+    return Db2CdcStreamSrcConn(
+        uri="db2+ibm_db://h:50000/sample",
+        credentials=_creds(),
+    )
+
+
 def _src(**overrides) -> Db2CdcStreamSrc:
     kw = dict(
-        conn=Db2CdcStreamSrcConn(
-            uri="db2+ibm_db://h:50000/sample",
-            credentials=_creds(),
-        ),
         tables=["CDSCHEMA.USERS_CD", "CDSCHEMA.ORDERS_CD"],
         start_from="tail",
     )
@@ -136,7 +139,7 @@ def test_plugin_run_applies_logging_level_to_connector_logger():
         ), patch(
             "tabsdatak.conn.db2._cdc_plugin.SqlReplicaIngester",
         ):
-            Db2CdcStreamSrcPlugin().run(ctx=ctx, stream_src=src)
+            Db2CdcStreamSrcPlugin().run(ctx=ctx, conn=_conn(), stream_src=src)
         assert connector_logger.level == logging.DEBUG
     finally:
         connector_logger.setLevel(logging.NOTSET)
@@ -152,16 +155,17 @@ def test_build_ingester_constructs_with_timeout_and_fetch_size():
             "db2.cdc.fetch_size": 5000,
         },
     )
+    conn = _conn()
 
     with patch(
         "tabsdatak.conn.db2._cdc_plugin.SqlReplicaIngester",
     ) as mock_ingester_cls:
         mock_ingester_cls.return_value = "ingester-instance"
-        ingester = Db2CdcStreamSrcPlugin().build_ingester(src)
+        ingester = Db2CdcStreamSrcPlugin().build_ingester(conn, src)
 
     mock_ingester_cls.assert_called_once()
     kw = mock_ingester_cls.call_args.kwargs
-    assert kw["conn"] is src.conn
+    assert kw["conn"] is conn
     assert kw["tables"] == ["CDSCHEMA.USERS_CD", "CDSCHEMA.ORDERS_CD"]
     assert kw["start_from"] == "tail"
     assert kw["blocking_timeout_seconds"] == 7
@@ -175,7 +179,7 @@ def test_build_ingester_defaults_when_no_src_cfg():
     with patch(
         "tabsdatak.conn.db2._cdc_plugin.SqlReplicaIngester",
     ) as mock_ingester_cls:
-        Db2CdcStreamSrcPlugin().build_ingester(src)
+        Db2CdcStreamSrcPlugin().build_ingester(_conn(), src)
 
     kw = mock_ingester_cls.call_args.kwargs
     # DEFAULT_BLOCKING_TIMEOUT_SECONDS from common-sql constants.
@@ -224,7 +228,7 @@ def test_build_ingester_translates_timestamp_start_from():
     with patch(
         "tabsdatak.conn.db2._cdc_plugin.SqlReplicaIngester",
     ) as mock_ingester_cls:
-        Db2CdcStreamSrcPlugin().build_ingester(src)
+        Db2CdcStreamSrcPlugin().build_ingester(_conn(), src)
 
     kw = mock_ingester_cls.call_args.kwargs
     assert isinstance(kw["start_from"], _CommonTimestampPosition)
@@ -237,7 +241,7 @@ def test_build_ingester_forwards_commitseq_position():
     with patch(
         "tabsdatak.conn.db2._cdc_plugin.SqlReplicaIngester",
     ) as mock_ingester_cls:
-        Db2CdcStreamSrcPlugin().build_ingester(src)
+        Db2CdcStreamSrcPlugin().build_ingester(_conn(), src)
 
     kw = mock_ingester_cls.call_args.kwargs
     assert isinstance(kw["start_from"], CommitSeqPosition)

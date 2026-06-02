@@ -4,7 +4,7 @@ import typing
 
 import pytest
 
-from tabsdatak.api import NamedConn, Secret
+from tabsdatak.api import Secret
 from tabsdatak.error import TabsdataException
 from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
@@ -20,11 +20,9 @@ from tabsdatak.conn.db2 import (
     Db2SrcConn,
     Db2TableNamesSpec,
     DestCfgSpec,
-    DestConnSpec,
     IfTableExistsSpec,
     QueriesSpec,
     SrcCfgSpec,
-    SrcConnSpec,
     TableCommitSeqPosition,
     TimestampPosition,
     UriSpec,
@@ -107,7 +105,6 @@ def test_db2_src_dest_conn_have_distinct_kinds():
 
 def test_db2_src_full_round_trip():
     src = Db2Src(
-        conn=_src_conn(),
         queries=["SELECT * FROM USERS", "SELECT * FROM ORDERS"],
         transactional=False,
         schema_overrides=[None, None],
@@ -123,21 +120,9 @@ def test_db2_src_full_round_trip():
     assert loaded.src_cfg == {"db2.logging_level": 20}
 
 
-def test_db2_src_round_trip_with_named_conn():
-    src = Db2Src(
-        conn=NamedConn(name="prod_db2"),
-        queries=["SELECT 1 FROM SYSIBM.SYSDUMMY1"],
-    )
-    loaded = Db2Src.from_json(src.to_json())
-    assert loaded == src
-    assert isinstance(loaded.conn, NamedConn)
-    assert loaded.conn.name == "prod_db2"
-
-
 def test_db2_src_validate_rejects_schema_overrides_length_mismatch():
     with pytest.raises(Db2ValidateException) as ei:
         Db2Src(
-            conn=_src_conn(),
             queries=[
                 "SELECT 1 FROM SYSIBM.SYSDUMMY1",
                 "SELECT 2 FROM SYSIBM.SYSDUMMY1",
@@ -149,7 +134,6 @@ def test_db2_src_validate_rejects_schema_overrides_length_mismatch():
 
 def test_db2_src_validate_accepts_matching_schema_overrides_length():
     src = Db2Src(
-        conn=_src_conn(),
         queries=[
             "SELECT 1 FROM SYSIBM.SYSDUMMY1",
             "SELECT 2 FROM SYSIBM.SYSDUMMY1",
@@ -166,7 +150,6 @@ def test_db2_src_validate_accepts_matching_schema_overrides_length():
 
 def test_db2_dest_full_round_trip():
     dest = Db2Dest(
-        conn=_dest_conn(),
         tables=["ANALYTICS.USERS", "ANALYTICS.ORDERS"],
         if_table_exists="replace",
         transactional=False,
@@ -180,19 +163,8 @@ def test_db2_dest_full_round_trip():
     assert loaded.dest_cfg == {"db2.logging_level": 20}
 
 
-def test_db2_dest_round_trip_with_named_conn():
-    dest = Db2Dest(
-        conn=NamedConn(name="prod_db2"),
-        tables=["ANALYTICS.USERS"],
-    )
-    loaded = Db2Dest.from_json(dest.to_json())
-    assert loaded == dest
-    assert isinstance(loaded.conn, NamedConn)
-    assert loaded.conn.name == "prod_db2"
-
-
 def test_db2_dest_defaults_if_table_exists_to_append():
-    dest = Db2Dest(conn=_dest_conn(), tables=["ANALYTICS.USERS"])
+    dest = Db2Dest(tables=["ANALYTICS.USERS"])
     assert dest.if_table_exists == "append"
     assert dest.transactional is True
     assert dest.dest_cfg is None
@@ -215,7 +187,6 @@ def test_db2_conn_fields_wire_expected_specs(cls):
 
 
 def test_db2_src_fields_wire_expected_specs():
-    assert _hint(Db2Src, "conn") == SrcConnSpec
     assert _hint(Db2Src, "queries") == QueriesSpec
     assert _hint(Db2Src, "transactional") is bool
     assert _hint(Db2Src, "schema_overrides") == SchemaOverrideSpec | None
@@ -223,7 +194,6 @@ def test_db2_src_fields_wire_expected_specs():
 
 
 def test_db2_dest_fields_wire_expected_specs():
-    assert _hint(Db2Dest, "conn") == DestConnSpec
     assert _hint(Db2Dest, "tables") == Db2TableNamesSpec
     assert _hint(Db2Dest, "if_table_exists") == IfTableExistsSpec
     assert _hint(Db2Dest, "transactional") is bool
@@ -238,7 +208,6 @@ def test_db2_dest_fields_wire_expected_specs():
 def test_db2_src_rejects_unknown_src_cfg_key():
     with pytest.raises(ConnInitException) as ei:
         Db2Src(
-            conn=_src_conn(),
             queries=["SELECT 1"],
             src_cfg={"bogus.key": 1},
         )
@@ -247,7 +216,6 @@ def test_db2_src_rejects_unknown_src_cfg_key():
 
 def test_db2_src_accepts_known_src_cfg_keys():
     src = Db2Src(
-        conn=_src_conn(),
         queries=["SELECT 1"],
         src_cfg={
             "db2.logging_level": 20,
@@ -262,7 +230,6 @@ def test_db2_src_accepts_known_src_cfg_keys():
 def test_db2_dest_rejects_unknown_dest_cfg_key():
     with pytest.raises(ConnInitException) as ei:
         Db2Dest(
-            conn=_dest_conn(),
             tables=["analytics.users"],
             dest_cfg={"bogus.key": 1},
         )
@@ -271,7 +238,6 @@ def test_db2_dest_rejects_unknown_dest_cfg_key():
 
 def test_db2_dest_accepts_known_dest_cfg_keys():
     dest = Db2Dest(
-        conn=_dest_conn(),
         tables=["analytics.users"],
         dest_cfg={
             "db2.logging_level": 20,
@@ -371,10 +337,6 @@ def test_db2_cdc_conn_is_not_a_db2_conn_subclass():
 
 def _cdc_stream_src(**overrides) -> Db2CdcStreamSrc:
     kw = dict(
-        conn=Db2CdcStreamSrcConn(
-            uri="db2+ibm_db://h:50000/sample",
-            credentials=_cdc_creds(),
-        ),
         tables=["CDSCHEMA.USERS_CD"],
         start_from="tail",
     )

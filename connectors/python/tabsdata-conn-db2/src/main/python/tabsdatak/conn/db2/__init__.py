@@ -50,7 +50,6 @@ from tabsdatak.api import (
     Conn,
     ContextValueSpec,
     Dest,
-    NamedConn,
     Secret,
     Src,
     StreamSrc,
@@ -153,10 +152,6 @@ class Db2DestConn(Conn):
     conn_cfg: CfgSpec | None = None
 
 
-SrcConnSpec: TypeAlias = Union[NamedConn, Db2SrcConn]
-DestConnSpec: TypeAlias = Union[NamedConn, Db2DestConn]
-
-
 # --- Source ----------------------------------------------------------
 
 
@@ -164,7 +159,6 @@ DestConnSpec: TypeAlias = Union[NamedConn, Db2DestConn]
 class Db2Src(Src):
     """Db2 source — one parquet slot per SELECT query.
 
-    :param conn: :class:`Db2SrcConn` (or :class:`NamedConn`).
     :param queries: List of SELECT statements; one slot per query.
     :param transactional: When ``True`` (default), run all queries
         inside one transactional session.
@@ -182,7 +176,6 @@ class Db2Src(Src):
         set (logging_level, readEngine, chunkSize).
     """
 
-    conn: SrcConnSpec
     queries: QueriesSpec
     transactional: bool = True
     schema_overrides: SchemaOverrideSpec | None = None
@@ -206,7 +199,6 @@ class Db2Src(Src):
 class Db2Dest(Dest):
     """Db2 destination — write one parquet slot per target table.
 
-    :param conn: :class:`Db2DestConn` (or :class:`NamedConn`).
     :param tables: Target table names (FQN or bare); one parquet
         slot per table.
     :param if_table_exists: ``"append"`` (default) or ``"replace"``
@@ -217,7 +209,6 @@ class Db2Dest(Dest):
         set (logging_level, writeEngine, chunkSize).
     """
 
-    conn: DestConnSpec
     tables: Db2TableNamesSpec
     if_table_exists: IfTableExistsSpec = "append"
     transactional: bool = True
@@ -347,9 +338,6 @@ class Db2CdcStreamSrcConn(Conn):
     conn_cfg: CfgSpec | None = None
 
 
-CdcStreamSrcConnSpec: TypeAlias = Union[NamedConn, Db2CdcStreamSrcConn]
-
-
 @_api.dataclass(Db2ErrorCode.DB2_11, kw_only=True)
 class Db2CdcStreamSrc(StreamSrc):
     """Db2 CDC stream source -- emits one tableframe-batch per
@@ -364,7 +352,6 @@ class Db2CdcStreamSrc(StreamSrc):
     columns to discover the operation / commit sequence /
     intent sequence / before-image prefix.
 
-    :param conn: :class:`Db2CdcStreamSrcConn` (or :class:`NamedConn`).
     :param tables: Qualified ``cd_schema.cd_table`` CD table names.
     :param start_from: ``"head"`` (every tracked CD table replayed
         from the origin), ``"tail"`` (each table's current
@@ -383,7 +370,6 @@ class Db2CdcStreamSrc(StreamSrc):
         polling cadence, server-side fetch size.
     """
 
-    conn: CdcStreamSrcConnSpec
     tables: list[Db2TableNameSpec]
     start_from: Db2CdcStartFromSpec
     columns_format: CdcColumnsFormatSpec = "columns"

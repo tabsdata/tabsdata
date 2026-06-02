@@ -19,7 +19,7 @@ sits one layer below in ``_cdc_impl.py``.
 from __future__ import annotations
 
 import logging
-from typing import Any, cast
+from typing import Any
 
 from tabsdatak.conn.common.sql.cdc._runner import CdcPlugin, CdcRunConfig
 from tabsdatak.conn.common.sql.cdc.constants import (
@@ -105,7 +105,7 @@ def _build_cdc_run_config(
     )
 
 
-class Db2CdcStreamSrcPlugin(CdcPlugin[Db2CdcStreamSrc]):
+class Db2CdcStreamSrcPlugin(CdcPlugin[Db2CdcStreamSrcConn, Db2CdcStreamSrc]):
     """Drives a :class:`Db2CdcStreamSrc` via the dialect-agnostic
     :class:`~tabsdatak.conn.common.sql.cdc._runner.CdcPlugin` loop, backed
     by a :class:`~tabsdatak.conn.db2._cdc_impl.SqlReplicaIngester`."""
@@ -118,9 +118,9 @@ class Db2CdcStreamSrcPlugin(CdcPlugin[Db2CdcStreamSrc]):
 
     def build_ingester(
         self,
+        conn: Db2CdcStreamSrcConn,
         stream_src: Db2CdcStreamSrc,
     ) -> SqlReplicaIngester:
-        conn = cast(Db2CdcStreamSrcConn, stream_src.conn)
         src_cfg = stream_src.src_cfg or {}
         blocking_timeout = src_cfg.get(
             _KEY_CDC_BLOCKING_TIMEOUT,
