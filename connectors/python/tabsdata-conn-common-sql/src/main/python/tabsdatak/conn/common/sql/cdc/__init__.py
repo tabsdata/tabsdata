@@ -1,21 +1,14 @@
-"""Shared building blocks for SQL-based CDC stream sources.
+#
+# Copyright 2026 Tabs Data Inc.
+#
 
-This sub-package hosts the reusable layer used by per-database CDC
-connectors (MySQL, Postgres, Db2). Per-database packages bring
-their dialect-specific ingester (binlog / WAL / log capture) and
-plug it into the common runner / sentinels / model defined here.
+import importlib.metadata
 
-Public surface (re-exported below): typing primitives that callers
-declare on their ``StreamSrc`` subclasses (``CdcFormat``,
-``TimestampPosition``, ``RelativePositionSpec``,
-``QualifiedTablesSpec``). Everything else is internal machinery.
-"""
-
-from __future__ import annotations
-
+from tabsdatak.conn.common.sql.cdc._connection import CdcConn
+from tabsdatak.conn.common.sql.cdc._connector import CdcTrigger
 from tabsdatak.conn.common.sql.cdc.typing import (
-    CdcColumnsFormatSpec,
     CdcFormat,
+    CdcValuesFormatSpec,
     QualifiedTableSpec,
     QualifiedTablesSpec,
     RelativePositionSpec,
@@ -23,10 +16,22 @@ from tabsdatak.conn.common.sql.cdc.typing import (
 )
 
 __all__ = [
-    "CdcFormat",
-    "CdcColumnsFormatSpec",
+    # Connections
+    "CdcConn",
+    "CdcTrigger",
+    # Specs
     "QualifiedTableSpec",
     "QualifiedTablesSpec",
     "RelativePositionSpec",
     "TimestampPosition",
+    "CdcFormat",
+    "CdcValuesFormatSpec",
 ]
+
+# noinspection PyBroadException
+try:
+    __version__ = importlib.metadata.version("tabsdata-cdc-common")
+except Exception:
+    __version__ = "unknown"
+
+version = __version__

@@ -1,18 +1,12 @@
-"""Constants shared by every SQL-CDC connector.
-
-Names mirror the legacy ``tabsdata.connector.cdc.common.constants``
-module so column-name conventions on the wire stay identical and
-existing downstream pipelines continue to recognise them.
-"""
+#
+# Copyright 2026 Tabs Data Inc.
+#
 
 from __future__ import annotations
 
 from enum import Enum
 
-# Reserved column-name prefix that marks framework-emitted columns
-# (CDC metadata, soft-delete flags, etc.). Mirrors the legacy value
-# from `tabsdata._utils.tableframe._constants.TD_CONNECTOR_COLUMN_PREFIX`.
-TD_CONNECTOR_COLUMN_PREFIX = "@td."
+from tabsdata._utils.tableframe._constants import TD_CONNECTOR_COLUMN_PREFIX
 
 
 class CdcOperation(str, Enum):
@@ -25,10 +19,8 @@ OP_INSERT = CdcOperation.INSERT
 OP_UPDATE = CdcOperation.UPDATE
 OP_DELETE = CdcOperation.DELETE
 
-
-# --- Column-name infixes ----------------------------------------------
-
 TD_CDC_INFIX = "cdc"
+
 TD_CDC_META_INFIX = "meta"
 TD_CDC_DATA_INFIX = "data"
 
@@ -50,9 +42,6 @@ TD_CDC_SCH_INFIX = "sch"
 DOT = "."
 COMMA = ","
 
-
-# --- Composite meta-column names --------------------------------------
-
 # `TD_CONNECTOR_COLUMN_PREFIX` already carries its trailing dot, so it
 # is concatenated as a literal prefix rather than passed to `DOT.join`.
 CDC_META_PREFIX = TD_CONNECTOR_COLUMN_PREFIX + DOT.join([
@@ -67,9 +56,6 @@ CDC_META_TS = CDC_META_PREFIX + DOT + TD_CDC_TS_INFIX
 CDC_META_FMT = CDC_META_PREFIX + DOT + TD_CDC_FMT_INFIX
 CDC_META_FLAT = CDC_META_PREFIX + DOT + TD_CDC_FLAT_INFIX
 CDC_META_SCH = CDC_META_PREFIX + DOT + TD_CDC_SCH_INFIX
-
-
-# --- Composite data-column prefixes -----------------------------------
 
 CDC_DATA_COL_PREFIX = TD_CONNECTOR_COLUMN_PREFIX + DOT.join([
     TD_CDC_INFIX,
@@ -119,23 +105,13 @@ CDC_DATA_MAP_NEW = TD_CONNECTOR_COLUMN_PREFIX + DOT.join([
     TD_CDC_NEW_INFIX,
 ])
 
-
-# --- Runner / sentinel defaults ---------------------------------------
-
-# In-memory buffer thresholds (rows / bytes / seconds) before a flush
-# to the working directory. ``None`` disables the corresponding cap.
 DEFAULT_BUFFER_MAX_ROWS = 10_000
-DEFAULT_BUFFER_MAX_BYTES: int | None = None
+DEFAULT_BUFFER_MAX_BYTES = None
 DEFAULT_BUFFER_MAX_SECS = 60
 
-# Working-dir → stage thresholds. ``None`` disables the corresponding
-# cap. The disk sentinel triggers a manifest stage call when any cap
-# is hit.
-DEFAULT_TRIGGER_MAX_ROWS: int | None = None
-DEFAULT_TRIGGER_MAX_BYTES: int | None = None
+DEFAULT_TRIGGER_MAX_ROWS = None
+DEFAULT_TRIGGER_MAX_BYTES = None
 DEFAULT_TRIGGER_MAX_SECS = 60
 
-# Polling cadence and how long the ingester blocks waiting for the
-# next event from the source's change stream.
 DEFAULT_POLL_INTERVAL_SECONDS = 1
 DEFAULT_BLOCKING_TIMEOUT_SECONDS = 1

@@ -1,8 +1,6 @@
-"""Core CDC value-types: offset, change records, table identity.
-
-The offset abstract is intentionally narrow -- per-database
-ingesters subclass it (GTID, LSN, log+pos) and own the wire
-representation."""
+#
+# Copyright 2026 Tabs Data Inc.
+#
 
 from __future__ import annotations
 
@@ -13,6 +11,8 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Union
 
+import polars as pl
+
 from tabsdatak.conn.common.sql.cdc._column import TrackedColumn
 from tabsdatak.conn.common.sql.cdc._dictionary import SchemaVersion
 from tabsdatak.conn.common.sql.cdc._dtype import sqlalchemy_to_arrow
@@ -20,15 +20,15 @@ from tabsdatak.conn.common.sql.cdc.constants import DOT
 
 
 class CdcOffset(ABC):
-    """Per-ingester position in the source's change stream.
-
-    Concrete subclasses carry whatever the source needs (a GTID set,
-    an LSN, a log+position). The runner persists offsets via
-    ``StreamSrcPluginCtx.write_state`` using ``write()`` for the
-    on-wire dict shape; ``read()`` is the inverse loader."""
-
     @abstractmethod
     def update(self, other: CdcOffset) -> None: ...
+
+    @abstractmethod
+    def upload(self) -> pl.DataFrame: ...
+
+    @classmethod
+    @abstractmethod
+    def download(cls, df: pl.DataFrame | None) -> CdcOffset | None: ...
 
     @abstractmethod
     def write(self) -> dict: ...
@@ -40,10 +40,6 @@ class CdcOffset(ABC):
 
 @dataclass
 class CdcDataChange:
-    """One CDC row -- an insert, update, or delete -- plus its
-    schema-version pointer and an optional offset to commit alongside
-    it on flush."""
-
     operation: str
     transaction: str
     sequence: int
@@ -55,8 +51,6 @@ class CdcDataChange:
     offset: CdcOffset | None = None
 
     def __sizeof__(self) -> int:
-        # Best-effort byte accounting; the buffer sentinel uses this
-        # to decide when to flush by ``buffer_max_bytes``.
         size = object.__sizeof__(self)
         size += sys.getsizeof(self.operation)
         size += sys.getsizeof(self.transaction)
@@ -76,11 +70,6 @@ class CdcDataChange:
 
 @dataclass
 class CdcSchemaChange:
-    """DDL signal -- the source has emitted a schema change for
-    ``table`` (or ``None`` for a global event the dialect couldn't
-    associate with a specific table). The ingester re-introspects
-    and registers a new ``SchemaVersion`` on the next call."""
-
     table: str | None
 
 
@@ -89,8 +78,6 @@ CdcChange = Union[CdcDataChange, CdcSchemaChange]
 
 @dataclass(frozen=True)
 class TableObject:
-    """A (schema, table) identity within the source database."""
-
     schema: str
     table: str
 
@@ -101,10 +88,6 @@ class TableObject:
 
 @dataclass
 class TrackedTable:
-    """A tracked source table plus the location of its CDC capture
-    (where the source emits change rows for it). For databases that
-    capture in-place, ``data_table`` and ``cdc_table`` are equal."""
-
     data_table: TableObject
     cdc_table: TableObject
     columns: list[TrackedColumn] = field(default_factory=list)
@@ -124,8 +107,4 @@ class TrackedTable:
 
 
 class CdcArchitecture(StrEnum):
-    """Marker enum for dialect-specific CDC architectures (binlog,
-    WAL, log capture, ...). Concrete subclasses live in per-database
-    connectors and feed into ``Dialect.cdc_to_sa``."""
-
     pass

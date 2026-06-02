@@ -1,5 +1,6 @@
-"""SQLAlchemy → PyArrow dtype map used by the CDC ingester to build
-parquet schemas for each tracked table."""
+#
+# Copyright 2026 Tabs Data Inc.
+#
 
 from __future__ import annotations
 
@@ -10,12 +11,6 @@ import sqlalchemy as sa
 
 
 def sqlalchemy_to_arrow(sa_type: Any) -> pa.DataType:
-    """Map a SQLAlchemy type (concrete or generic) to a PyArrow type.
-
-    Generic types win over dialect-specific ones via
-    ``sa_type.as_generic()``. Types that don't fit any known bucket
-    fall through to ``pa.utf8()`` -- the CDC ingester treats them as
-    string-encoded values."""
     try:
         gt = sa_type.as_generic()
     except (NotImplementedError, AttributeError):

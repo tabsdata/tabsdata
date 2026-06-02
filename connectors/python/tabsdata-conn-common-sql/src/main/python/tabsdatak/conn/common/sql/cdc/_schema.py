@@ -1,8 +1,6 @@
-"""Schema registry shared across CDC ingesters.
-
-Holds one ordered list of ``SchemaVersion`` per tracked table.
-Versions are de-duplicated by their raw-schema hash so a redundant
-schema-change event does not allocate a new entry."""
+#
+# Copyright 2026 Tabs Data Inc.
+#
 
 from __future__ import annotations
 
@@ -22,21 +20,12 @@ from tabsdatak.conn.common.sql.cdc._model import TrackedTable
 from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 INITIAL_SCHEMA_VERSION = 0
 
 
 class SchemaRegistry:
-    """Per-ingester registry of ``SchemaVersion`` entries.
-
-    Two ingress paths:
-      * ``register_from_log`` -- a DDL signal observed in the
-        change stream; the raw types come from the source's
-        wire format and are mapped to SQLAlchemy via ``type_mapper``.
-      * ``register_from_catalog`` -- the initial snapshot, taken
-        from SQLAlchemy's catalog introspection at startup.
-    """
-
     def __init__(
         self,
         type_mapper: Callable[[Any], Any],
@@ -84,11 +73,8 @@ class SchemaRegistry:
         self._hashes.setdefault(table, {})[sch] = sv
 
         logger.info(
-            "Registered schema version %d for table %s (hash=%s, columns=%d)",
-            version_ordinal,
-            table,
-            sch,
-            len(columns),
+            f"Registered schema version {version_ordinal} for table {table} "
+            f"(hash={sch} - columns={len(columns)})"
         )
 
         return sv
@@ -127,10 +113,8 @@ class SchemaRegistry:
         self._hashes[table] = {sch: sv}
 
         logger.info(
-            "Registered catalog schema version 0 for table %s (hash=%s, columns=%d)",
-            table,
-            sch,
-            len(columns),
+            f"Registered catalog schema version 0 for table {table} "
+            f"(hash={sch}, columns={len(columns)})"
         )
 
         return sv

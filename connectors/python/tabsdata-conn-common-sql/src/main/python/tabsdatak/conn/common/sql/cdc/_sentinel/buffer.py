@@ -1,7 +1,6 @@
-"""In-memory buffer sentinel.
-
-Accumulates ``CdcChange`` events per-table; on row / byte / time
-threshold, flushes the staged batches to the disk sentinel."""
+#
+#  Copyright 2026 Tabs Data Inc.
+#
 
 from __future__ import annotations
 
@@ -10,6 +9,7 @@ import sys
 import time
 from collections.abc import Iterable
 
+from tabsdata._tabsserver.function.global_utils import TRACE
 from tabsdatak.conn.common.sql.cdc._model import (
     CdcChange,
     CdcDataChange,
@@ -18,8 +18,10 @@ from tabsdatak.conn.common.sql.cdc._model import (
 )
 from tabsdatak.conn.common.sql.cdc._sentinel import CdcBuffer
 from tabsdatak.conn.common.sql.cdc._sentinel.disk import DiskSentinel
+from tabsdata.exceptions import CdcError, ErrorCode
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 class BufferSentinel:
@@ -50,10 +52,6 @@ class BufferSentinel:
     def has_data(self) -> bool:
         return self._total_rows > 0
 
-    @property
-    def offset(self) -> CdcOffset:
-        return self._offset
-
     def reset_timer(self) -> None:
         self._last_flushed = time.time()
 
@@ -63,21 +61,21 @@ class BufferSentinel:
                 case CdcDataChange():
                     self.process_data_change(change)
                 case _:
-                    # ``CdcSchemaChange`` etc. land here. The
-                    # registry already absorbed them at the ingester
-                    # level; nothing extra to do at the buffer.
                     raise NotImplementedError(
                         f"Event type {type(change).__name__} is not supported yet"
                     )
+
+    @property
+    def offset(self) -> CdcOffset:
+        return self._offset
 
     def process_data_change(self, change: CdcDataChange) -> None:
         table = change.table
 
         if table not in self._buffers:
-            # Untracked tables can appear when the source emits
-            # changes for objects outside the connector's scope
-            # (other schemas, system tables). Silently drop them.
-            logger.debug("Untracked table %r; skipping change", table)
+            logger.log(
+                TRACE, f"Received change for untracked table {table!r}; skipping it."
+            )
             return
 
         buffer = self._buffers[table]
@@ -88,13 +86,10 @@ class BufferSentinel:
             buffer.bytes += row_bytes
             self._total_bytes += row_bytes
 
-        # The change must carry an offset for the sentinel to
-        # advance its commit point; ingesters that don't supply
-        # one signal a bug.
-        if self._offset is None:  # pragma: no cover - constructed with one
-            raise RuntimeError("BufferSentinel has no base offset to merge into")
+        if self._offset is None:
+            raise CdcError(ErrorCode.CDC10)
         if change.offset is None:
-            raise RuntimeError(f"CDC change for table {change.table!r} has no offset")
+            raise CdcError(ErrorCode.CDC11, change.table)
         self._offset.update(change.offset)
 
         rows_hit = self._max_rows is not None and self._total_rows >= self._max_rows
@@ -104,9 +99,6 @@ class BufferSentinel:
             self.flush()
 
     def expire(self) -> None:
-        """Time-based flush probe. The runner calls this once per
-        poll cycle so a slow change stream still flushes within
-        ``max_secs``."""
         if self.has_data and (time.time() - self._last_flushed) >= self._max_secs:
             self.flush()
 
