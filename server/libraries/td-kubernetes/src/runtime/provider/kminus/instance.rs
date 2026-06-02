@@ -14,7 +14,7 @@ use crate::base::constants::{
     KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY,
 };
 use crate::base::error::provider::ProviderError;
-use crate::base::naming::configmap_name;
+use crate::base::naming::to_configmap_name;
 use crate::core::system::exit::CommandResult;
 use crate::core::system::file::is_hidden_or_system;
 use crate::kube::api::{
@@ -110,7 +110,7 @@ async fn replace_family_configmaps(
         delete_configmap(context, &name).await?;
     }
     for (file, content) in files {
-        let name = configmap_name(family, &file)?;
+        let name = to_configmap_name(family, &file)?;
         let mut data = BTreeMap::new();
         data.insert(file, content);
         create_configmap(context, &name, data, None, Some(family.item)).await?;

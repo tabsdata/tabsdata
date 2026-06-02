@@ -17,7 +17,7 @@ static DNS_SUBDOMAIN_PATTERN: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$").expect("invalid dns subdomain pattern")
 });
 
-pub fn configmap_name(family: &Family, file: &str) -> Result<String, NamingError> {
+pub fn to_configmap_name(family: &Family, file: &str) -> Result<String, NamingError> {
     let item = family.item;
     let mut name = String::with_capacity(
         TABSDATA_CONFIGMAP_PREFIX.len() + item.len() + KUBE_NAME_SEPARATOR.len() + file.len(),
@@ -36,6 +36,19 @@ pub fn configmap_name(family: &Family, file: &str) -> Result<String, NamingError
         });
     }
     Ok(name)
+}
+
+pub fn to_configmap_file<'a>(family: &Family, name: &'a str) -> Result<&'a str, NamingError> {
+    let mut prefix = String::with_capacity(
+        TABSDATA_CONFIGMAP_PREFIX.len() + family.item.len() + KUBE_NAME_SEPARATOR.len(),
+    );
+    prefix.push_str(TABSDATA_CONFIGMAP_PREFIX);
+    prefix.push_str(family.item);
+    prefix.push_str(KUBE_NAME_SEPARATOR);
+    name.strip_prefix(prefix.as_str())
+        .ok_or_else(|| NamingError::InvalidConfigmapName {
+            name: name.to_owned(),
+        })
 }
 
 pub fn to_kube_identifier(

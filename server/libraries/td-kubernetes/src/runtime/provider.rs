@@ -223,6 +223,10 @@ pub trait Provider: Send + Sync {
     async fn cluster_dead(&self) -> bool {
         !self.cluster_alive().await
     }
+
+    fn staging_profile_path(&self) -> Option<std::path::PathBuf> {
+        None
+    }
     async fn start_cluster(&self, reporter: &dyn Reporter) -> CommandResult<ClusterStartOutcome> {
         if self.cluster_alive().await {
             return Ok(ClusterStartOutcome::AlreadyRunning);

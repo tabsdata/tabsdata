@@ -4,6 +4,10 @@
 
 use td_error::td_error;
 
+use crate::base::error::kubernetes::KubernetesError;
+use crate::base::error::naming::NamingError;
+use crate::base::error::profile::ProfileError;
+
 #[td_error]
 pub enum SecretError {
     #[error(
@@ -88,4 +92,16 @@ pub enum SecretError {
     } = 10,
     #[error("Could not serialize Secret manifest to YAML: {0}.")]
     ManifestSerializeFailed(String) = 5000,
+    #[error("Could not read staged file '{path}': {cause}.")]
+    StageReadFailed { path: String, cause: String } = 5001,
+    #[error("Could not read the current source from the cluster: {cause}.")]
+    CurrentSourceReadFailed { cause: String } = 5002,
+    #[error("Configmap '{configmap}' entry value is not valid UTF-8: {cause}.")]
+    ConfigmapEntryNotUtf8 { configmap: String, cause: String } = 5003,
+    #[error(transparent)]
+    Profile(#[from] ProfileError) = 5004,
+    #[error(transparent)]
+    Kubernetes(#[from] KubernetesError) = 5005,
+    #[error(transparent)]
+    Naming(#[from] NamingError) = 5006,
 }

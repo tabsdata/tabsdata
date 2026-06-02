@@ -10,10 +10,9 @@ use td_common::status::ExitStatus::GeneralError;
 use td_error::TdError;
 use tracing::{info, warn};
 
-use crate::base::constants::{
-    CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY, TABSDATA_CONFIGMAP_PREFIX,
-};
+use crate::base::constants::{CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY};
 use crate::base::error::cli::CliError;
+use crate::base::naming::to_configmap_name;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
 use crate::core::system::exit::{CommandResult, abort_with};
 use crate::core::system::file::is_hidden_or_system;
@@ -85,7 +84,6 @@ pub async fn put_configs(provider: &dyn Provider, folder: &PathBuf) -> CommandRe
         .map(|(name, _entries)| name)
         .collect();
 
-    let prefix = format!("{TABSDATA_CONFIGMAP_PREFIX}{}-", KPROFILE_CONFIGS_FAMILY.item);
     let mut warnings: Vec<String> = Vec::new();
     let mut updated = 0;
 
@@ -99,7 +97,7 @@ pub async fn put_configs(provider: &dyn Provider, folder: &PathBuf) -> CommandRe
             warnings.push(format!("Subfolder '{file_name}' ignored; expected a flat layout."));
             continue;
         }
-        let configmap_name = format!("{prefix}{file_name}");
+        let configmap_name = to_configmap_name(&KPROFILE_CONFIGS_FAMILY, &file_name)?;
         if !known_configs.contains(&configmap_name) {
             warnings.push(format!("No config named '{configmap_name}' exists; ignored."));
             continue;

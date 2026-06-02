@@ -111,6 +111,7 @@ pub mod handler;
 pub mod kubeconfig;
 pub mod manifest;
 pub mod phase;
+pub mod source;
 
 pub use generator::SecretGenerator;
 pub use handler::SecretHandler;

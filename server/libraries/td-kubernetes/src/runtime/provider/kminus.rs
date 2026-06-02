@@ -478,6 +478,10 @@ impl Provider for KminusProvider {
         self.cluster.is_alive().await
     }
 
+    fn staging_profile_path(&self) -> Option<PathBuf> {
+        Some(self.cluster.staging_profile_path())
+    }
+
     async fn start_cluster_hook(&self, reporter: &dyn Reporter) -> CommandResult {
         let step = reporter.step("Starting kminus cluster");
         self.cluster.start().await?;

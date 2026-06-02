@@ -20,7 +20,7 @@ use crate::base::constants::{
     KPROFILE_PODS_FAMILY,
 };
 use crate::base::error::provider::ProviderError;
-use crate::base::naming::configmap_name;
+use crate::base::naming::to_configmap_name;
 use crate::base::reporter::Reporter;
 use crate::client::session::pin::{DockerInputs, Session};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
@@ -399,7 +399,7 @@ async fn store_family_configmaps(
     files: RenderedConfigmap,
 ) -> CommandResult {
     for (file, content) in files {
-        let name = configmap_name(family, &file)?;
+        let name = to_configmap_name(family, &file)?;
         let mut data = BTreeMap::new();
         data.insert(file, content);
         create_configmap(context, &name, data, None, Some(family.item)).await?;
