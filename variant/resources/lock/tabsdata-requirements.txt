@@ -59,7 +59,7 @@ humanize==4.15.0
 hvac==2.4.0
 ibm-db==3.2.8 ; platform_machine != 'aarch64'
 ibm-db-sa==0.4.4 ; platform_machine != 'aarch64'
-idna==3.16
+idna==3.17
 ijson==3.5.0
 importlib-metadata==8.7.1
 isodate==0.7.2
@@ -126,7 +126,7 @@ requests-file==3.0.1
 requests-toolbelt==1.0.0
 rich==14.3.3
 rich-click==1.9.7
-rpds-py==0.30.0
+rpds-py==2026.5.1
 ruamel-yaml==0.19.1
 s3transfer==0.16.1
 setuptools==82.0.1

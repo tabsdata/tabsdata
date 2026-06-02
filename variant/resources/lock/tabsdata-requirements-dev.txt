@@ -52,7 +52,7 @@ devpi-web==5.0.2
 distlib==0.4.0
 docker==7.1.0
 docopt-ng==0.9.0
-docutils==0.22.4
+docutils==0.23
 durationpy==0.10
 entry-points-txt==0.3.0
 et-xmlfile==2.0.0
@@ -83,7 +83,7 @@ httpcore==1.0.9
 httpx==0.28.1
 hupper==1.12.1
 id==1.6.1
-idna==3.16
+idna==3.17
 import-linter==2.11
 iniconfig==2.3.0
 isodate==0.7.2
@@ -188,7 +188,7 @@ pytest-reporter-html1==0.9.5
 pytest-timeout==2.4.0
 pytest-xdist==3.8.0
 python-dateutil==2.9.0.post0
-python-discovery==1.3.1
+python-discovery==1.4.0
 python-dotenv==1.2.2
 python-on-whales==0.81.0
 python-slugify==8.0.4

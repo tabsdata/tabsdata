@@ -65,7 +65,6 @@ td-tower = { workspace = true }
 
 aquamarine = { workspace = true }
 axum = { workspace = true }
-axum-extra = { workspace = true, features = ["typed-header"] }
 bytes = { workspace = true }
 constcat = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
