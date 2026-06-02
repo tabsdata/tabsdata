@@ -18,7 +18,8 @@ use crate::base::naming::to_kube_identifier;
 use crate::kube::api::job::{create_job, delete_job};
 use crate::kube::api::pod::{create_pod, delete_pod};
 use crate::kube::context::KubeContext;
-use crate::runtime::gateway::messaging::template::{PodTemplate, PodTemplateIndex, TemplateKind};
+use crate::runtime::gateway::messaging::message::function::FunctionMessage;
+use crate::runtime::gateway::messaging::messenger::template::{PodTemplate, PodTemplateIndex, TemplateKind};
 
 pub struct KubernetesOrchestratorMessageQueue {
     context: KubeContext,
@@ -52,6 +53,10 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
         id: String,
         payload: RequestMessagePayload<Value>,
     ) -> Result<OrchestratorMessage<Value>, QueueError> {
+        let _message =
+            FunctionMessage::from_payload(&payload).map_err(|error| QueueError::BackendError {
+                cause: error.to_string(),
+            })?;
         let template =
             self.templates
                 .lookup(&payload.worker)

@@ -2,9 +2,9 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-pub mod provider;
-pub mod queue;
-pub mod template;
+mod message;
+mod messenger;
 
-pub use provider::KubernetesOrchestratorMessagingProvider;
-pub use queue::KubernetesOrchestratorMessageQueue;
+pub use message::function::{Decorator, FunctionInfo, FunctionMessage, FunctionStart, FunctionStop};
+pub use messenger::provider::KubernetesOrchestratorMessagingProvider;
+pub use messenger::queue::KubernetesOrchestratorMessageQueue;

@@ -13,8 +13,8 @@ use crate::base::error::kubernetes::KubernetesError;
 use crate::client::tdkpodcontext::TdkPodContext;
 use crate::kube::api::client::install_crypto_provider;
 use crate::kube::context::KubeContext;
-use crate::runtime::gateway::messaging::queue::KubernetesOrchestratorMessageQueue;
-use crate::runtime::gateway::messaging::template::PodTemplateIndex;
+use crate::runtime::gateway::messaging::messenger::queue::KubernetesOrchestratorMessageQueue;
+use crate::runtime::gateway::messaging::messenger::template::PodTemplateIndex;
 use crate::runtime::reporting::build_pod_kube_client;
 
 pub struct KubernetesOrchestratorMessagingProvider {
