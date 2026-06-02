@@ -54,9 +54,9 @@ class ReaderConf:
     file_info: str | None = None
 
     @classmethod
-    def from_src(cls, src: Any) -> "ReaderConf":
+    def from_src(cls, conn: Any, src: Any) -> "ReaderConf":
         return cls(
-            conn=src.conn,
+            conn=conn,
             paths=list(src.paths),
             format=_transporter.src_format_to_transporter(
                 src.format,
@@ -74,9 +74,9 @@ class WriterConf:
     format: _transporter.TransporterFormat
 
     @classmethod
-    def from_dest(cls, dest: Any) -> "WriterConf":
+    def from_dest(cls, conn: Any, dest: Any) -> "WriterConf":
         return cls(
-            conn=dest.conn,
+            conn=conn,
             paths=list(dest.paths),
             format=_transporter.dest_format_to_transporter(
                 dest.format,

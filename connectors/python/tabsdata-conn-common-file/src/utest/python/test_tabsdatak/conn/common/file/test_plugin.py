@@ -193,11 +193,11 @@ _STUB_ERRORS = _plugin.FilePluginErrors(
 
 class _StubSrc:
     """Duck-typed stand-in for any connector's Src dataclass --
-    ReaderConf.from_src only reads ``.conn``, ``.paths``, ``.format``,
-    ``.format_cfg``, ``.initial_last_modified`` and ``.file_info``."""
+    ReaderConf.from_src only reads ``.paths``, ``.format``,
+    ``.format_cfg``, ``.initial_last_modified`` and ``.file_info``
+    (``conn`` is now passed in separately by the plugin)."""
 
     def __init__(self):
-        self.conn = object()
         self.paths = ["a.csv", "b.csv"]
         self.format = SrcFileFormat.CSV
         self.format_cfg = {SrcFileFormat.CSV: {"separator": ","}}
@@ -206,7 +206,7 @@ class _StubSrc:
 
 
 def test_reader_conf_from_src_translates_fields():
-    rc = _plugin.ReaderConf.from_src(_StubSrc())
+    rc = _plugin.ReaderConf.from_src(object(), _StubSrc())
     assert rc.paths == ["a.csv", "b.csv"]
     assert isinstance(rc.format, _transporter.TransporterCSVFormat)
     assert rc.format.options["separator"] == ","
@@ -218,7 +218,7 @@ def test_reader_conf_from_src_translates_fields():
 def test_reader_conf_from_src_handles_none_format_cfg():
     src = _StubSrc()
     src.format_cfg = None
-    rc = _plugin.ReaderConf.from_src(src)
+    rc = _plugin.ReaderConf.from_src(object(), src)
     assert isinstance(rc.format, _transporter.TransporterCSVFormat)
     # No user options -> binary-required defaults only.
     assert "has_header" in rc.format.options
@@ -229,14 +229,13 @@ class _StubDest:
     """Mirror of ``_StubSrc`` for the dest side."""
 
     def __init__(self):
-        self.conn = object()
         self.paths = ["out/x.csv"]
         self.format = DestFileFormat.CSV
         self.format_cfg = {DestFileFormat.CSV: {"include_header": True}}
 
 
 def test_writer_conf_from_dest_translates_fields():
-    wc = _plugin.WriterConf.from_dest(_StubDest())
+    wc = _plugin.WriterConf.from_dest(object(), _StubDest())
     assert wc.paths == ["out/x.csv"]
     assert isinstance(wc.format, _transporter.TransporterCSVFormat)
     assert wc.format.options["include_header"] is True
@@ -246,7 +245,7 @@ def test_writer_conf_from_dest_translates_fields():
 def test_writer_conf_from_dest_handles_none_format_cfg():
     dest = _StubDest()
     dest.format_cfg = None
-    wc = _plugin.WriterConf.from_dest(dest)
+    wc = _plugin.WriterConf.from_dest(object(), dest)
     assert isinstance(wc.format, _transporter.TransporterCSVFormat)
     assert "include_header" in wc.format.options
     assert "separator" in wc.format.options
