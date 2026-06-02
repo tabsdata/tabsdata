@@ -48,7 +48,6 @@ from tabsdatak.api import (
     Conn,
     ContextValueSpec,
     Dest,
-    NamedConn,
     Secret,
     Src,
     StreamSrc,
@@ -229,10 +228,6 @@ class MySQLDestConn(Conn):
     conn_cfg: CfgSpec | None = None
 
 
-SrcConnSpec: TypeAlias = Union[NamedConn, MySQLSrcConn]
-DestConnSpec: TypeAlias = Union[NamedConn, MySQLDestConn]
-
-
 # --- Source ----------------------------------------------------------
 
 
@@ -240,7 +235,6 @@ DestConnSpec: TypeAlias = Union[NamedConn, MySQLDestConn]
 class MySQLSrc(Src):
     """MySQL source — one parquet slot per SELECT query.
 
-    :param conn: :class:`MySQLSrcConn` (or :class:`NamedConn`).
     :param queries: List of SELECT statements; one slot per query.
     :param transactional: When ``True`` (default), run all queries
         inside one transactional session; ``False`` opens a fresh
@@ -260,7 +254,6 @@ class MySQLSrc(Src):
         ``tabsdata.sql.chunkSize``).
     """
 
-    conn: SrcConnSpec
     queries: QueriesSpec
     transactional: bool = True
     schema_overrides: SchemaOverrideSpec | None = None
@@ -284,7 +277,6 @@ class MySQLSrc(Src):
 class MySQLDest(Dest):
     """MySQL destination — write one parquet slot per target table.
 
-    :param conn: :class:`MySQLDestConn` (or :class:`NamedConn`).
     :param tables: Target table names (FQN or bare); one parquet
         slot per table.
     :param if_table_exists: ``"append"`` (default) or ``"replace"``
@@ -296,7 +288,6 @@ class MySQLDest(Dest):
         ``tabsdata.sql.sql.writeEngine``, ``tabsdata.sql.chunkSize``).
     """
 
-    conn: DestConnSpec
     tables: MySQLTableNamesSpec
     if_table_exists: IfTableExistsSpec = "append"
     transactional: bool = True
@@ -362,15 +353,11 @@ class MySQLCdcStreamSrcConn(Conn):
     conn_cfg: CfgSpec | None = None
 
 
-CdcStreamSrcConnSpec: TypeAlias = Union[NamedConn, MySQLCdcStreamSrcConn]
-
-
 @_api.dataclass(MysqlErrorCode.MYSQL_11, kw_only=True)
 class MySQLCdcStreamSrc(StreamSrc):
     """MySQL CDC stream source -- emits one tableframe-batch per
     binlog flush across the tracked tables.
 
-    :param conn: :class:`MySQLCdcStreamSrcConn` (or :class:`NamedConn`).
     :param tables: Qualified ``schema.table`` names to track.
     :param start_from: Where to begin reading the binlog when no
         prior offset has been persisted on the trx context --
@@ -389,7 +376,6 @@ class MySQLCdcStreamSrc(StreamSrc):
         defaults for missing keys.
     """
 
-    conn: CdcStreamSrcConnSpec
     tables: list[MySQLTableNameSpec]
     start_from: MySQLCdcStartFromSpec
     columns_format: CdcColumnsFormatSpec = "columns"

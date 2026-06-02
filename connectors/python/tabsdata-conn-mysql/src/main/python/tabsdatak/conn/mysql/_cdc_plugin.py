@@ -21,7 +21,7 @@ sits one layer below in ``_cdc_impl.py``.
 from __future__ import annotations
 
 import logging
-from typing import Any, cast
+from typing import Any
 
 from tabsdatak.conn.common.sql.cdc._runner import CdcPlugin, CdcRunConfig
 from tabsdatak.conn.common.sql.cdc.constants import (
@@ -105,7 +105,9 @@ def _build_cdc_run_config(
     )
 
 
-class MySQLCdcStreamSrcPlugin(CdcPlugin[MySQLCdcStreamSrc]):
+class MySQLCdcStreamSrcPlugin(
+    CdcPlugin[MySQLCdcStreamSrcConn, MySQLCdcStreamSrc]
+):
     """Drives a :class:`MySQLCdcStreamSrc` via the dialect-agnostic
     :class:`~tabsdatak.conn.common.sql.cdc._runner.CdcPlugin` loop, backed
     by a :class:`~tabsdatak.conn.mysql._cdc_impl.BinlogIngester`."""
@@ -118,9 +120,9 @@ class MySQLCdcStreamSrcPlugin(CdcPlugin[MySQLCdcStreamSrc]):
 
     def build_ingester(
         self,
+        conn: MySQLCdcStreamSrcConn,
         stream_src: MySQLCdcStreamSrc,
     ) -> BinlogIngester:
-        conn = cast(MySQLCdcStreamSrcConn, stream_src.conn)
         blocking_timeout = (stream_src.src_cfg or {}).get(
             _KEY_CDC_BLOCKING_TIMEOUT, DEFAULT_BLOCKING_TIMEOUT_SECONDS
         )

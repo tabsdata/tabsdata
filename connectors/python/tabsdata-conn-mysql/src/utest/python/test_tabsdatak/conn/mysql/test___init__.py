@@ -4,7 +4,7 @@ import typing
 
 import pytest
 
-from tabsdatak.api import NamedConn, Secret
+from tabsdatak.api import Secret
 from tabsdatak.error import TabsdataException
 from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
@@ -14,7 +14,6 @@ from tabsdatak.conn.mysql import (
     CredentialsSpec,
     DEFAULT_SERVER_ID,
     DestCfgSpec,
-    DestConnSpec,
     GtidPosition,
     IfTableExistsSpec,
     MySQLCdcStreamSrc,
@@ -26,7 +25,6 @@ from tabsdatak.conn.mysql import (
     MySQLTableNamesSpec,
     QueriesSpec,
     SrcCfgSpec,
-    SrcConnSpec,
     TimestampPosition,
     UriSpec,
 )
@@ -112,7 +110,6 @@ def test_mysql_src_dest_conn_have_distinct_kinds():
 
 def test_mysql_src_full_round_trip():
     src = MySQLSrc(
-        conn=_src_conn(),
         queries=["SELECT * FROM users", "SELECT * FROM orders"],
         transactional=False,
         schema_overrides=[None, None],
@@ -128,18 +125,9 @@ def test_mysql_src_full_round_trip():
     assert loaded.src_cfg == {"mysql.logging_level": 20}
 
 
-def test_mysql_src_round_trip_with_named_conn():
-    src = MySQLSrc(conn=NamedConn(name="prod_mysql"), queries=["SELECT 1"])
-    loaded = MySQLSrc.from_json(src.to_json())
-    assert loaded == src
-    assert isinstance(loaded.conn, NamedConn)
-    assert loaded.conn.name == "prod_mysql"
-
-
 def test_mysql_src_validate_rejects_schema_overrides_length_mismatch():
     with pytest.raises(MySQLValidateException) as ei:
         MySQLSrc(
-            conn=_src_conn(),
             queries=["SELECT 1", "SELECT 2"],
             schema_overrides=[None],
         )
@@ -148,7 +136,6 @@ def test_mysql_src_validate_rejects_schema_overrides_length_mismatch():
 
 def test_mysql_src_validate_accepts_matching_schema_overrides_length():
     src = MySQLSrc(
-        conn=_src_conn(),
         queries=["SELECT 1", "SELECT 2"],
         schema_overrides=[None, None],
     )
@@ -162,7 +149,6 @@ def test_mysql_src_validate_accepts_matching_schema_overrides_length():
 
 def test_mysql_dest_full_round_trip():
     dest = MySQLDest(
-        conn=_dest_conn(),
         tables=["analytics.users", "analytics.orders"],
         if_table_exists="replace",
         transactional=False,
@@ -176,16 +162,8 @@ def test_mysql_dest_full_round_trip():
     assert loaded.dest_cfg == {"mysql.logging_level": 20}
 
 
-def test_mysql_dest_round_trip_with_named_conn():
-    dest = MySQLDest(conn=NamedConn(name="prod_mysql"), tables=["analytics.users"])
-    loaded = MySQLDest.from_json(dest.to_json())
-    assert loaded == dest
-    assert isinstance(loaded.conn, NamedConn)
-    assert loaded.conn.name == "prod_mysql"
-
-
 def test_mysql_dest_defaults_if_table_exists_to_append():
-    dest = MySQLDest(conn=_dest_conn(), tables=["analytics.users"])
+    dest = MySQLDest(tables=["analytics.users"])
     assert dest.if_table_exists == "append"
     assert dest.transactional is True
     assert dest.dest_cfg is None
@@ -213,7 +191,6 @@ def test_mysql_conn_fields_wire_expected_specs(cls):
 
 
 def test_mysql_src_fields_wire_expected_specs():
-    assert _hint(MySQLSrc, "conn") == SrcConnSpec
     assert _hint(MySQLSrc, "queries") == QueriesSpec
     assert _hint(MySQLSrc, "transactional") is bool
     assert _hint(MySQLSrc, "schema_overrides") == SchemaOverrideSpec | None
@@ -221,7 +198,6 @@ def test_mysql_src_fields_wire_expected_specs():
 
 
 def test_mysql_dest_fields_wire_expected_specs():
-    assert _hint(MySQLDest, "conn") == DestConnSpec
     assert _hint(MySQLDest, "tables") == MySQLTableNamesSpec
     assert _hint(MySQLDest, "if_table_exists") == IfTableExistsSpec
     assert _hint(MySQLDest, "transactional") is bool
@@ -236,7 +212,6 @@ def test_mysql_dest_fields_wire_expected_specs():
 def test_mysql_src_rejects_unknown_src_cfg_key():
     with pytest.raises(ConnInitException) as ei:
         MySQLSrc(
-            conn=_src_conn(),
             queries=["SELECT 1"],
             src_cfg={"bogus.key": 1},
         )
@@ -245,7 +220,6 @@ def test_mysql_src_rejects_unknown_src_cfg_key():
 
 def test_mysql_src_accepts_known_src_cfg_keys():
     src = MySQLSrc(
-        conn=_src_conn(),
         queries=["SELECT 1"],
         src_cfg={
             "mysql.logging_level": 20,
@@ -265,7 +239,6 @@ def test_mysql_src_accepts_known_src_cfg_keys():
 def test_mysql_dest_rejects_unknown_dest_cfg_key():
     with pytest.raises(ConnInitException) as ei:
         MySQLDest(
-            conn=_dest_conn(),
             tables=["analytics.users"],
             dest_cfg={"bogus.key": 1},
         )
@@ -274,7 +247,6 @@ def test_mysql_dest_rejects_unknown_dest_cfg_key():
 
 def test_mysql_dest_accepts_known_dest_cfg_keys():
     dest = MySQLDest(
-        conn=_dest_conn(),
         tables=["analytics.users"],
         dest_cfg={
             "mysql.logging_level": 20,
@@ -387,7 +359,6 @@ def test_mysql_cdc_conn_is_not_a_mysql_conn_subclass():
 
 def test_mysql_cdc_stream_src_minimal_construction():
     src = MySQLCdcStreamSrc(
-        conn=MySQLCdcStreamSrcConn(uri="mysql://h/d", credentials=_cdc_creds()),
         tables=["app.users"],
         start_from="tail",
     )
@@ -399,7 +370,6 @@ def test_mysql_cdc_stream_src_minimal_construction():
 
 def test_mysql_cdc_stream_src_accepts_explicit_format_fields():
     src = MySQLCdcStreamSrc(
-        conn=MySQLCdcStreamSrcConn(uri="mysql://h/d", credentials=_cdc_creds()),
         tables=["app.users"],
         start_from="head",
         columns_format="map",
@@ -412,7 +382,6 @@ def test_mysql_cdc_stream_src_accepts_explicit_format_fields():
 def test_mysql_cdc_stream_src_rejects_unknown_columns_format():
     with pytest.raises(ConnInitException) as ei:
         MySQLCdcStreamSrc(
-            conn=MySQLCdcStreamSrcConn(uri="mysql://h/d", credentials=_cdc_creds()),
             tables=["app.users"],
             start_from="tail",
             columns_format="bogus",  # type: ignore[arg-type]
@@ -422,7 +391,6 @@ def test_mysql_cdc_stream_src_rejects_unknown_columns_format():
 
 def test_mysql_cdc_stream_src_accepts_gtid_start_from():
     src = MySQLCdcStreamSrc(
-        conn=MySQLCdcStreamSrcConn(uri="mysql://h/d", credentials=_cdc_creds()),
         tables=["app.users"],
         start_from=GtidPosition(gtid="uuid:1"),
     )
@@ -431,7 +399,6 @@ def test_mysql_cdc_stream_src_accepts_gtid_start_from():
 
 def test_mysql_cdc_stream_src_accepts_binlog_start_from():
     src = MySQLCdcStreamSrc(
-        conn=MySQLCdcStreamSrcConn(uri="mysql://h/d", credentials=_cdc_creds()),
         tables=["app.users"],
         start_from=BinlogPosition(file="bin.000001", pos=4),
     )
@@ -441,7 +408,6 @@ def test_mysql_cdc_stream_src_accepts_binlog_start_from():
 def test_mysql_cdc_stream_src_accepts_timestamp_start_from():
     ts = datetime(2026, 1, 1, tzinfo=timezone.utc)
     src = MySQLCdcStreamSrc(
-        conn=MySQLCdcStreamSrcConn(uri="mysql://h/d", credentials=_cdc_creds()),
         tables=["app.users"],
         start_from=TimestampPosition(ts=ts),
     )
@@ -452,7 +418,6 @@ def test_mysql_cdc_stream_src_accepts_timestamp_start_from():
 def test_mysql_cdc_stream_src_rejects_unknown_src_cfg_key():
     with pytest.raises(ConnInitException) as ei:
         MySQLCdcStreamSrc(
-            conn=MySQLCdcStreamSrcConn(uri="mysql://h/d", credentials=_cdc_creds()),
             tables=["app.users"],
             start_from="tail",
             src_cfg={"bogus.key": 1},  # type: ignore[dict-item]
@@ -462,7 +427,6 @@ def test_mysql_cdc_stream_src_rejects_unknown_src_cfg_key():
 
 def test_mysql_cdc_stream_src_accepts_known_src_cfg_keys():
     src = MySQLCdcStreamSrc(
-        conn=MySQLCdcStreamSrcConn(uri="mysql://h/d", credentials=_cdc_creds()),
         tables=["app.users"],
         start_from="head",
         src_cfg={
@@ -478,11 +442,6 @@ def test_mysql_cdc_stream_src_accepts_known_src_cfg_keys():
 
 def test_mysql_cdc_stream_src_json_round_trip():
     src = MySQLCdcStreamSrc(
-        conn=MySQLCdcStreamSrcConn(
-            uri="mysql://h/d",
-            credentials=_cdc_creds(),
-            server_id=777,
-        ),
         tables=["app.users", "app.orders"],
         start_from=GtidPosition(gtid="uuid-x:42"),
         columns_format="struct",

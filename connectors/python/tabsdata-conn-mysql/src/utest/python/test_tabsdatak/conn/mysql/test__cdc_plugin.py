@@ -27,13 +27,16 @@ def _creds() -> UserPassword:
     return UserPassword(user=Secret.lit("u"), password=Secret.lit("p"))
 
 
+def _conn() -> MySQLCdcStreamSrcConn:
+    return MySQLCdcStreamSrcConn(
+        uri="mysql://h:3306/d",
+        credentials=_creds(),
+        server_id=777,
+    )
+
+
 def _src(**overrides) -> MySQLCdcStreamSrc:
     kw = dict(
-        conn=MySQLCdcStreamSrcConn(
-            uri="mysql://h:3306/d",
-            credentials=_creds(),
-            server_id=777,
-        ),
         tables=["app.users", "app.orders"],
         start_from="tail",
     )
@@ -136,7 +139,7 @@ def test_plugin_run_applies_logging_level_to_connector_logger():
         ), patch(
             "tabsdatak.conn.mysql._cdc_plugin.BinlogIngester",
         ):
-            MySQLCdcStreamSrcPlugin().run(ctx=ctx, stream_src=src)
+            MySQLCdcStreamSrcPlugin().run(ctx=ctx, conn=_conn(), stream_src=src)
         assert connector_logger.level == logging.DEBUG
     finally:
         connector_logger.setLevel(logging.NOTSET)
@@ -149,16 +152,17 @@ def test_build_ingester_constructs_binlog_with_server_id_and_blocking():
     src = _src(
         src_cfg={"mysql.cdc.blocking_timeout_seconds": 7},
     )
+    conn = _conn()
 
     with patch(
         "tabsdatak.conn.mysql._cdc_plugin.BinlogIngester",
     ) as mock_ingester_cls:
         mock_ingester_cls.return_value = "ingester-instance"
-        ingester = MySQLCdcStreamSrcPlugin().build_ingester(src)
+        ingester = MySQLCdcStreamSrcPlugin().build_ingester(conn, src)
 
     mock_ingester_cls.assert_called_once()
     kw = mock_ingester_cls.call_args.kwargs
-    assert kw["conn"] is src.conn
+    assert kw["conn"] is conn
     assert kw["tables"] == ["app.users", "app.orders"]
     assert kw["start_from"] == "tail"
     assert kw["server_id"] == 777
@@ -211,7 +215,7 @@ def test_build_ingester_translates_timestamp_start_from():
     with patch(
         "tabsdatak.conn.mysql._cdc_plugin.BinlogIngester",
     ) as mock_ingester_cls:
-        MySQLCdcStreamSrcPlugin().build_ingester(src)
+        MySQLCdcStreamSrcPlugin().build_ingester(_conn(), src)
 
     kw = mock_ingester_cls.call_args.kwargs
     assert isinstance(kw["start_from"], _CommonTimestampPosition)
@@ -224,7 +228,7 @@ def test_build_ingester_blocking_timeout_falls_back_to_default():
     with patch(
         "tabsdatak.conn.mysql._cdc_plugin.BinlogIngester",
     ) as mock_ingester_cls:
-        MySQLCdcStreamSrcPlugin().build_ingester(src)
+        MySQLCdcStreamSrcPlugin().build_ingester(_conn(), src)
 
     kw = mock_ingester_cls.call_args.kwargs
     # DEFAULT_BLOCKING_TIMEOUT_SECONDS from common-sql constants.

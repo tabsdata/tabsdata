@@ -128,10 +128,11 @@ def _resolve_dest_cfg(dest_cfg: DestCfgSpec | None) -> _WriterCfg:
 # and the abstract Src / Dest classes, not the runtime IO stack).
 
 
-class MySQLSrcPlugin(SrcPlugin[MySQLSrc]):
+class MySQLSrcPlugin(SrcPlugin[MySQLSrcConn, MySQLSrc]):
     def read_in(
         self,
         ctx: SrcPluginCtx,
+        conn: MySQLSrcConn,
         src: MySQLSrc,
     ) -> list[list[TableFileSpec]]:
         from sqlalchemy.exc import OperationalError, SQLAlchemyError
@@ -150,7 +151,7 @@ class MySQLSrcPlugin(SrcPlugin[MySQLSrc]):
         logger.info("mysql: read_in starting (%d queries)", len(src.queries or []))
 
         read_cfg = MySQLReadCfg(
-            conn=cast(MySQLSrcConn, src.conn),
+            conn=conn,
             queries=src.queries,
             transactional=src.transactional,
             schema_overrides=src.schema_overrides,
@@ -185,10 +186,11 @@ class MySQLSrcPlugin(SrcPlugin[MySQLSrc]):
             )
 
 
-class MySQLDestPlugin(DestPlugin[MySQLDest]):
+class MySQLDestPlugin(DestPlugin[MySQLDestConn, MySQLDest]):
     def write_out(
         self,
         ctx: DestContext,
+        conn: MySQLDestConn,
         dest: MySQLDest,
         tables: list[TableFileSpec],
     ) -> None:
@@ -212,7 +214,7 @@ class MySQLDestPlugin(DestPlugin[MySQLDest]):
             )
 
         write_cfg = MySQLWriteCfg(
-            conn=cast(MySQLDestConn, dest.conn),
+            conn=conn,
             target_tables=list(dest.tables),
             if_table_exists=dest.if_table_exists,
             transactional=dest.transactional,
