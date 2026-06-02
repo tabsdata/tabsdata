@@ -6,8 +6,8 @@ use std::path::PathBuf;
 
 use super::*;
 
-fn sample_docker() -> TdkContext {
-    TdkContext::Docker {
+fn sample_docker() -> Session {
+    Session::Docker {
         kubeconfig: PathBuf::from("/home/user/.kube/config"),
         context: "dev".to_owned(),
         cluster: "dev-cluster".to_owned(),
@@ -21,8 +21,8 @@ fn sample_docker() -> TdkContext {
     }
 }
 
-fn sample_kminus() -> TdkContext {
-    TdkContext::Kminus {
+fn sample_kminus() -> Session {
+    Session::Kminus {
         path: PathBuf::from("/home/user/.tabsdata/instances/tabsdata"),
         kubeconfig: PathBuf::from("/home/user/.tabsdata/instances/tabsdata/cluster/kube/config"),
         context: "kminus".to_owned(),
@@ -36,17 +36,17 @@ fn sample_kminus() -> TdkContext {
 }
 
 #[test]
-fn tdkcontext_path_ends_with_tdkcontext_json() {
-    let path = tdkcontext_path();
+fn tdkpin_path_ends_with_tdkpin_json() {
+    let path = tdkpin_path();
     assert_eq!(
         path.file_name().and_then(|name| name.to_str()),
-        Some(TDKCONTEXT_FILE)
+        Some(TDKPIN_FILE)
     );
 }
 
 #[test]
-fn tdkcontext_path_lives_under_tabsdata_home_dir() {
-    let path = tdkcontext_path();
+fn tdkpin_path_lives_under_tabsdata_home_dir() {
+    let path = tdkpin_path();
     let parent = path.parent().expect("path has parent");
     assert_eq!(
         parent.file_name().and_then(|name| name.to_str()),
@@ -78,8 +78,8 @@ fn kminus_serializes_with_lowercase_provider_tag() {
 fn docker_round_trips_through_json() {
     let original = sample_docker();
     let json = serde_json::to_string(&original).expect("serialize");
-    let parsed: TdkContext = serde_json::from_str(&json).expect("deserialize");
-    let TdkContext::Docker {
+    let parsed: Session = serde_json::from_str(&json).expect("deserialize");
+    let Session::Docker {
         kubeconfig,
         context,
         cluster,
@@ -102,8 +102,8 @@ fn docker_round_trips_through_json() {
 fn kminus_round_trips_through_json() {
     let original = sample_kminus();
     let json = serde_json::to_string(&original).expect("serialize");
-    let parsed: TdkContext = serde_json::from_str(&json).expect("deserialize");
-    let TdkContext::Kminus {
+    let parsed: Session = serde_json::from_str(&json).expect("deserialize");
+    let Session::Kminus {
         path,
         kubeconfig,
         context,
@@ -131,7 +131,7 @@ fn kminus_round_trips_through_json() {
 
 #[test]
 fn docker_inputs_with_default_values_skips_optional_fields_in_json() {
-    let context = TdkContext::Docker {
+    let context = Session::Docker {
         kubeconfig: PathBuf::from("/k"),
         context: "c".to_owned(),
         cluster: "cl".to_owned(),
@@ -192,7 +192,7 @@ fn display_name_for_kminus_uses_last_path_component() {
 
 #[test]
 fn display_name_for_kminus_falls_back_when_path_has_no_filename() {
-    let context = TdkContext::Kminus {
+    let context = Session::Kminus {
         path: PathBuf::from("/"),
         kubeconfig: PathBuf::from("/kube"),
         context: "c".to_owned(),

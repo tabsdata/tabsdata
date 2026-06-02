@@ -6,7 +6,7 @@ use clap_derive::Args;
 use td_common::status::ExitStatus::Cancelled;
 
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
-use crate::client::tdkserver::common::prompt_yes_no;
+use crate::client::tdkserver::common::{effective_yes, prompt_yes_no};
 use crate::core::system::exit::{Result, abort};
 use crate::runtime::provider::provider_for;
 
@@ -25,9 +25,8 @@ pub struct CreateArguments {
         default_value_t = true,
         num_args = 0..=1,
         default_missing_value = "true",
-        long_help = "Show the summary of resolved values and prompt for confirmation \
-                     before creating the instance. Defaults to 'true'. \
-                     Pass '--preview false' to skip the summary and prompt."
+        long_help = "Show the summary of resolved values before creating the instance. \
+                     Defaults to 'true'. Pass '--preview false' to skip the summary."
     )]
     pub preview: bool,
 
@@ -37,8 +36,7 @@ pub struct CreateArguments {
         short = 'y',
         required = false,
         default_value_t = false,
-        long_help = "Skip the interactive confirmation prompt and proceed immediately. \
-                     Has no effect when --preview is 'false'."
+        long_help = "Skip the interactive confirmation prompt and proceed immediately."
     )]
     pub yes: bool,
 }
@@ -56,9 +54,9 @@ pub async fn command_create(arguments: CreateArguments, globals: &GlobalArgument
 
     if preview {
         provider.preview_create_runtime_summary();
-        if !yes && !prompt_yes_no("Proceed with the creation?") {
-            return abort(Cancelled);
-        }
+    }
+    if !effective_yes(yes) && !prompt_yes_no("Proceed with the creation?") {
+        return abort(Cancelled);
     }
 
     let tx = provider.prepare_cluster().await?;

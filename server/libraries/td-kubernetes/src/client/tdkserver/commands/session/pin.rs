@@ -5,8 +5,9 @@
 use clap_derive::Args;
 use tracing::info;
 
+use crate::client::tdkpin::TdkPin;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
-use crate::client::tdkserver::common::prompt_yes_no;
+use crate::client::tdkserver::common::{effective_yes, prompt_yes_no};
 use crate::core::system::exit::Result;
 use crate::runtime::provider::provider_for;
 
@@ -25,9 +26,8 @@ pub struct PinArguments {
         default_value_t = true,
         num_args = 0..=1,
         default_missing_value = "true",
-        long_help = "Show the summary of resolved values and prompt for confirmation \
-                     before storing the active tabsdata session. Defaults to 'true'. \
-                     Pass '--preview false' to skip the summary and prompt."
+        long_help = "Show the summary of resolved values before pinning the tabsdata \
+                     session. Defaults to 'true'. Pass '--preview false' to skip the summary."
     )]
     pub preview: bool,
 
@@ -37,8 +37,7 @@ pub struct PinArguments {
         short = 'y',
         required = false,
         default_value_t = false,
-        long_help = "Skip the interactive confirmation prompt and proceed immediately. \
-                     Has no effect when --preview is 'false'."
+        long_help = "Skip the interactive confirmation prompt and proceed immediately."
     )]
     pub yes: bool,
 }
@@ -56,13 +55,13 @@ pub async fn command_pin(arguments: PinArguments, globals: &GlobalArguments) -> 
 
     if preview {
         provider.preview_pin_runtime_summary();
-        if !yes && !prompt_yes_no("Pin this as the active tabsdata session?") {
-            info!("Operation cancelled.");
-            return Ok(());
-        }
+    }
+    if !effective_yes(yes) && !prompt_yes_no("Pin this as the active tabsdata session?") {
+        info!("Operation cancelled.");
+        return Ok(());
     }
 
-    provider.to_tdkcontext().save()?;
+    TdkPin::pin_session(provider.to_session())?;
     provider.report_pinned_runtime();
 
     Ok(())

@@ -11,6 +11,7 @@ use clap::{CommandFactory, Parser};
 
 use crate::cerror;
 use crate::client::tdkserver::arguments::{Arguments, Commands};
+use crate::client::tdkserver::commands::autoconfirm::command_autoconfirm;
 use crate::client::tdkserver::commands::config::command_config;
 use crate::client::tdkserver::commands::secret::command_secret;
 use crate::client::tdkserver::commands::server::command_server;
@@ -32,6 +33,7 @@ impl TabsDataKubernetesClient {
                 println!();
                 Ok(())
             }
+            Some(Commands::Autoconfirm(command)) => command_autoconfirm(command, &globals).await,
             Some(Commands::Config(command)) => command_config(command, &globals).await,
             Some(Commands::Secret(command)) => command_secret(command, &globals).await,
             Some(Commands::Server(command)) => command_server(command, &globals).await,

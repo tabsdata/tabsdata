@@ -10,7 +10,7 @@ use tracing::info;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
 use crate::client::tdkserver::commands::config::put::{ensure_source_folder, put_configs};
 use crate::client::tdkserver::commands::server::restart::restart_runtime;
-use crate::client::tdkserver::common::prompt_yes_no;
+use crate::client::tdkserver::common::{effective_yes, prompt_yes_no};
 use crate::core::system::exit::Result;
 use crate::runtime::provider::provider_for_or_tdkcontext;
 
@@ -35,6 +35,18 @@ pub struct ApplyArguments {
 
     #[arg(
         long,
+        name = "preview",
+        required = false,
+        default_value_t = true,
+        num_args = 0..=1,
+        default_missing_value = "true",
+        long_help = "Show the summary of resolved values before applying. \
+                     Defaults to 'true'. Pass '--preview false' to skip the summary."
+    )]
+    pub preview: bool,
+
+    #[arg(
+        long,
         name = "yes",
         short = 'y',
         required = false,
@@ -49,6 +61,7 @@ pub async fn command_apply(arguments: ApplyArguments, globals: &GlobalArguments)
         cluster,
         instance,
         folder,
+        preview,
         yes,
     } = arguments;
 
@@ -61,8 +74,10 @@ pub async fn command_apply(arguments: ApplyArguments, globals: &GlobalArguments)
         provider.ensure_stoppable_runtime().await?;
     }
 
-    provider.preview_apply_runtime_summary();
-    if !yes && !prompt_yes_no("Proceed with the apply?") {
+    if preview {
+        provider.preview_apply_runtime_summary();
+    }
+    if !effective_yes(yes) && !prompt_yes_no("Proceed with the apply?") {
         info!("Operation cancelled.");
         return Ok(());
     }

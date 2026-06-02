@@ -15,7 +15,7 @@ use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::core::system::exit::{Result, abort};
 use crate::runtime::provider::ClusterProvider;
 
-const TDKCONTEXT_FILE: &str = "tdkcontext.json";
+const TDKPIN_FILE: &str = "tdkpin.json";
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct KminusInputs {
@@ -45,7 +45,7 @@ pub struct FargateInputs {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "provider", rename_all = "lowercase")]
-pub enum TdkContext {
+pub enum Session {
     Kminus {
         path: PathBuf,
         kubeconfig: PathBuf,
@@ -73,18 +73,31 @@ pub enum TdkContext {
     },
 }
 
-pub fn tdkcontext_path() -> PathBuf {
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Autoconfirm {
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TdkPin {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<Session>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub autoconfirm: Option<Autoconfirm>,
+}
+
+pub fn tdkpin_path() -> PathBuf {
     dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join(TABSDATA_HOME_DIR)
-        .join(TDKCONTEXT_FILE)
+        .join(TDKPIN_FILE)
 }
 
-impl TdkContext {
-    pub fn load() -> Result<Option<Self>> {
-        let path = tdkcontext_path();
+impl TdkPin {
+    pub fn load() -> Result<Self> {
+        let path = tdkpin_path();
         if !path.exists() {
-            return Ok(None);
+            return Ok(Self::default());
         }
         let data = match fs::read_to_string(&path) {
             Ok(data) => data,
@@ -94,7 +107,7 @@ impl TdkContext {
             }
         };
         match serde_json::from_str(&data) {
-            Ok(tdkcontext) => Ok(Some(tdkcontext)),
+            Ok(tdkpin) => Ok(tdkpin),
             Err(error) => {
                 cerror!(
                     "Failed to parse '{}': {error}. Run 'tdkserver session unpin' to clear the active tabsdata session.",
@@ -105,14 +118,16 @@ impl TdkContext {
         }
     }
 
-    pub fn read() -> Option<Self> {
-        let path = tdkcontext_path();
-        let data = fs::read_to_string(&path).ok()?;
-        serde_json::from_str(&data).ok()
+    pub fn read() -> Self {
+        let path = tdkpin_path();
+        fs::read_to_string(&path)
+            .ok()
+            .and_then(|data| serde_json::from_str(&data).ok())
+            .unwrap_or_default()
     }
 
-    pub fn save(&self) -> Result {
-        let path = tdkcontext_path();
+    fn save(&self) -> Result {
+        let path = tdkpin_path();
         if let Some(parent) = path.parent()
             && let Err(error) = fs::create_dir_all(parent)
         {
@@ -122,7 +137,7 @@ impl TdkContext {
         let data = match serde_json::to_string_pretty(self) {
             Ok(data) => data,
             Err(error) => {
-                cerror!("Failed to serialize the active tabsdata session: {error}");
+                cerror!("Failed to serialize the tabsdata pin: {error}");
                 return abort(GeneralError);
             }
         };
@@ -133,45 +148,84 @@ impl TdkContext {
         Ok(())
     }
 
-    pub fn delete() -> Result<bool> {
-        let path = tdkcontext_path();
-        if !path.exists() {
-            return Ok(false);
+    fn delete_if_empty(&self) -> Result {
+        if self.session.is_none() && self.autoconfirm.is_none() {
+            let path = tdkpin_path();
+            if path.exists()
+                && let Err(error) = fs::remove_file(&path)
+            {
+                cerror!("Failed to delete '{}': {error}", path.display());
+                return abort(GeneralError);
+            }
+            return Ok(());
         }
-        if let Err(error) = fs::remove_file(&path) {
-            cerror!("Failed to delete '{}': {error}", path.display());
-            return abort(GeneralError);
-        }
-        Ok(true)
+        self.save()
     }
 
+    pub fn pin_session(session: Session) -> Result {
+        let mut pin = Self::load()?;
+        pin.session = Some(session);
+        pin.save()
+    }
+
+    pub fn unpin_session() -> Result<bool> {
+        let mut pin = Self::load()?;
+        let existed = pin.session.is_some();
+        pin.session = None;
+        pin.delete_if_empty()?;
+        Ok(existed)
+    }
+
+    pub fn pin_autoconfirm(enabled: bool) -> Result {
+        let mut pin = Self::load()?;
+        pin.autoconfirm = Some(Autoconfirm { enabled });
+        pin.save()
+    }
+
+    pub fn unpin_autoconfirm() -> Result<bool> {
+        let mut pin = Self::load()?;
+        let existed = pin.autoconfirm.is_some();
+        pin.autoconfirm = None;
+        pin.delete_if_empty()?;
+        Ok(existed)
+    }
+
+    pub fn autoconfirm_enabled() -> bool {
+        Self::read()
+            .autoconfirm
+            .map(|autoconfirm| autoconfirm.enabled)
+            .unwrap_or(false)
+    }
+}
+
+impl Session {
     pub fn provider(&self) -> ClusterProvider {
         match self {
-            TdkContext::Kminus { .. } => ClusterProvider::Kminus,
-            TdkContext::Docker { .. } => ClusterProvider::Docker,
-            TdkContext::Eks { .. } => ClusterProvider::Eks,
-            TdkContext::Fargate { .. } => ClusterProvider::Fargate,
+            Session::Kminus { .. } => ClusterProvider::Kminus,
+            Session::Docker { .. } => ClusterProvider::Docker,
+            Session::Eks { .. } => ClusterProvider::Eks,
+            Session::Fargate { .. } => ClusterProvider::Fargate,
         }
     }
 
     pub fn display_name(&self) -> String {
         match self {
-            TdkContext::Kminus { path, .. } => {
+            Session::Kminus { path, .. } => {
                 let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("?");
                 format!("{}:{name}", ClusterProvider::Kminus.as_str())
             }
-            TdkContext::Docker {
+            Session::Docker {
                 context, namespace, ..
             } => format!("{}:{context}/{namespace}", ClusterProvider::Docker.as_str()),
-            TdkContext::Eks { .. } => ClusterProvider::Eks.as_str().to_string(),
-            TdkContext::Fargate { .. } => ClusterProvider::Fargate.as_str().to_string(),
+            Session::Eks { .. } => ClusterProvider::Eks.as_str().to_string(),
+            Session::Fargate { .. } => ClusterProvider::Fargate.as_str().to_string(),
         }
     }
 
     pub fn report_active(&self) {
         info!("Active tabsdata session:");
         match self {
-            TdkContext::Kminus {
+            Session::Kminus {
                 path,
                 kubeconfig,
                 context,
@@ -191,7 +245,7 @@ impl TdkContext {
                 info!("  - cluster......: {cluster}");
                 info!("  - namespace....: {namespace}");
             }
-            TdkContext::Docker {
+            Session::Docker {
                 kubeconfig,
                 context,
                 cluster,
@@ -204,10 +258,10 @@ impl TdkContext {
                 info!("  - cluster......: {cluster}");
                 info!("  - namespace....: {namespace}");
             }
-            TdkContext::Eks { .. } => {
+            Session::Eks { .. } => {
                 info!("  - provider.....: {}", ClusterProvider::Eks.as_str());
             }
-            TdkContext::Fargate { .. } => {
+            Session::Fargate { .. } => {
                 info!("  - provider.....: {}", ClusterProvider::Fargate.as_str());
             }
         }
@@ -215,11 +269,11 @@ impl TdkContext {
 
     pub fn to_args(&self) -> (ClusterArguments, InstanceArguments) {
         match self {
-            TdkContext::Kminus { path, .. } => (
+            Session::Kminus { path, .. } => (
                 ClusterArguments::new(Some(ClusterProvider::Kminus), None, None, false, None),
                 InstanceArguments::new(None, Some(path.clone())),
             ),
-            TdkContext::Docker {
+            Session::Docker {
                 kubeconfig,
                 context,
                 namespace,
@@ -234,11 +288,11 @@ impl TdkContext {
                 ),
                 InstanceArguments::new(None, None),
             ),
-            TdkContext::Eks { .. } => (
+            Session::Eks { .. } => (
                 ClusterArguments::new(Some(ClusterProvider::Eks), None, None, false, None),
                 InstanceArguments::new(None, None),
             ),
-            TdkContext::Fargate { .. } => (
+            Session::Fargate { .. } => (
                 ClusterArguments::new(Some(ClusterProvider::Fargate), None, None, false, None),
                 InstanceArguments::new(None, None),
             ),

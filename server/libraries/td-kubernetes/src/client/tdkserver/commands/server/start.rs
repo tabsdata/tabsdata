@@ -6,7 +6,7 @@ use clap_derive::Args;
 use td_common::status::ExitStatus::Cancelled;
 
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
-use crate::client::tdkserver::common::prompt_yes_no;
+use crate::client::tdkserver::common::{effective_yes, prompt_yes_no};
 use crate::core::system::exit::{Result, abort};
 use crate::cwarn;
 use crate::runtime::provider::provider_for_or_tdkcontext;
@@ -23,12 +23,11 @@ pub struct StartArguments {
         long,
         name = "preview",
         required = false,
-        default_value_t = false,
+        default_value_t = true,
         num_args = 0..=1,
         default_missing_value = "true",
-        long_help = "Show the summary of resolved values and prompt for confirmation \
-                     before starting. Defaults to 'false'. \
-                     Pass '--preview' or '--preview true' to opt in."
+        long_help = "Show the summary of resolved values before starting the instance. \
+                     Defaults to 'true'. Pass '--preview false' to skip the summary."
     )]
     pub preview: bool,
 
@@ -38,8 +37,7 @@ pub struct StartArguments {
         short = 'y',
         required = false,
         default_value_t = false,
-        long_help = "Skip the interactive confirmation prompt when --preview is 'true'. \
-                     Has no effect when --preview is 'false'."
+        long_help = "Skip the interactive confirmation prompt and proceed immediately."
     )]
     pub yes: bool,
 }
@@ -62,9 +60,9 @@ pub async fn command_start(arguments: StartArguments, globals: &GlobalArguments)
 
     if preview {
         provider.preview_start_runtime_summary();
-        if !yes && !prompt_yes_no("Proceed with the start?") {
-            return abort(Cancelled);
-        }
+    }
+    if !effective_yes(yes) && !prompt_yes_no("Proceed with the start?") {
+        return abort(Cancelled);
     }
 
     provider.start_runtime().await?;

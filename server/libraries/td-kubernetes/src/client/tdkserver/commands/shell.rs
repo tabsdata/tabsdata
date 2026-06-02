@@ -18,12 +18,13 @@ use tracing::info;
 
 use crate::client::tdkserver::arguments::GlobalArguments;
 
+use super::autoconfirm::{AutoconfirmCommands, command_autoconfirm};
 use super::config::{ConfigCommands, command_config};
 use super::secret::{SecretCommands, command_secret};
 use super::server::{ServerCommands, command_server};
 use super::session::{SessionCommands, command_session};
 use crate::cerror;
-use crate::client::tdkcontext::{TdkContext, tdkcontext_path};
+use crate::client::tdkpin::{TdkPin, tdkpin_path};
 use crate::core::system::exit::Result;
 
 const TOOL_NAME: &str = "tdkserver";
@@ -36,6 +37,9 @@ enum ShellCommand {
     Exit,
     /// Exit the shell
     Quit,
+    /// Manage the autoconfirm preference
+    #[command(subcommand)]
+    Autoconfirm(AutoconfirmCommands),
     /// Manage tabsdata configs
     #[command(subcommand)]
     Config(ConfigCommands),
@@ -123,6 +127,9 @@ pub async fn command_shell(globals: &GlobalArguments) -> Result {
         match ShellInput::try_parse_from(tokens) {
             Ok(input) => match input.command {
                 ShellCommand::Exit | ShellCommand::Quit => break,
+                ShellCommand::Autoconfirm(command) => {
+                    let _ = command_autoconfirm(command, globals).await;
+                }
                 ShellCommand::Config(command) => {
                     let _ = command_config(command, globals).await;
                 }
@@ -145,18 +152,14 @@ pub async fn command_shell(globals: &GlobalArguments) -> Result {
 }
 
 fn show_initial_active_context() {
-    match TdkContext::load() {
-        Ok(Some(tdkcontext)) => {
-            info!(
-                "Active tabsdata session: {} (from {}).",
-                tdkcontext.display_name(),
-                tdkcontext_path().display()
-            );
-        }
-        Ok(None) => {
-            info!("No active tabsdata session is set.");
-        }
-        Err(_) => {}
+    if let Some(session) = TdkPin::read().session {
+        info!(
+            "Active tabsdata session: {} (from {}).",
+            session.display_name(),
+            tdkpin_path().display()
+        );
+    } else {
+        info!("No active tabsdata session is set.");
     }
 }
 
@@ -320,8 +323,8 @@ impl ShellPrompt {
 impl Prompt for ShellPrompt {
     fn render_prompt_left(&self) -> Cow<'_, str> {
         let tool = format!("{} ❯", self.tool_name).bold().green().to_string();
-        let label = match TdkContext::read() {
-            Some(tdkcontext) => format!("[{}]", tdkcontext.display_name())
+        let label = match TdkPin::read().session {
+            Some(session) => format!("[{}]", session.display_name())
                 .truecolor(0xCC, 0xB2, 0x33)
                 .to_string(),
             None => "[no tabsdata session]".dimmed().to_string(),

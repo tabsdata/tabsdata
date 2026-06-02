@@ -5,6 +5,7 @@
 use std::io::{self, BufRead, Write};
 
 use crate::base::constants::{VALUE_N, VALUE_NO, VALUE_Y, VALUE_YES};
+use crate::client::tdkpin::TdkPin;
 
 const MAX_INSTANCE_NAME_LENGTH: usize = 256;
 
@@ -72,6 +73,10 @@ pub fn prompt_yes_no(message: &str) -> bool {
         return false;
     }
     matches!(parse_yes_no(line.trim()), Some(true))
+}
+
+pub fn effective_yes(yes: bool) -> bool {
+    yes || TdkPin::autoconfirm_enabled()
 }
 
 #[cfg(test)]

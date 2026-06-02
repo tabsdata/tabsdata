@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use clap::Parser;
 use clap_derive::{Args, Subcommand};
 
+use crate::client::tdkserver::commands::autoconfirm::AutoconfirmCommands;
 use crate::client::tdkserver::commands::config::ConfigCommands;
 use crate::client::tdkserver::commands::secret::SecretCommands;
 use crate::client::tdkserver::commands::server::ServerCommands;
@@ -52,6 +53,8 @@ pub struct GlobalArguments {
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum Commands {
+    #[command(subcommand, about = "Manage the autoconfirm preference")]
+    Autoconfirm(AutoconfirmCommands),
     #[command(subcommand, about = "Manage tabsdata configs")]
     Config(ConfigCommands),
     #[command(subcommand, about = "Manage tabsdata secrets")]

@@ -7,7 +7,7 @@ use kube::Config;
 use td_common::status::ExitStatus::GeneralError;
 
 use crate::cerror;
-use crate::client::tdkcontext::TdkContext;
+use crate::client::tdkpin::Session;
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::core::system::exit::{Result, abort};
 use crate::runtime::gateway::resolver::SystemValues;
@@ -42,7 +42,7 @@ impl Provider for FargateProvider {
         unreachable!("fargate provider not yet implemented")
     }
 
-    fn to_tdkcontext(&self) -> TdkContext {
+    fn to_session(&self) -> Session {
         unreachable!("fargate provider not yet implemented")
     }
 

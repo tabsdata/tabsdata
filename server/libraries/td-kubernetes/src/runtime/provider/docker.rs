@@ -19,7 +19,7 @@ use crate::base::constants::{
     DEFAULT_INSTANCE_NAME,
 };
 use crate::cerror;
-use crate::client::tdkcontext::{DockerInputs, TdkContext};
+use crate::client::tdkpin::{DockerInputs, Session};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::widgets::spinner;
 use crate::core::system::exit::{Result, abort};
@@ -160,8 +160,8 @@ impl Provider for DockerProvider {
         )
     }
 
-    fn to_tdkcontext(&self) -> TdkContext {
-        TdkContext::Docker {
+    fn to_session(&self) -> Session {
+        Session::Docker {
             kubeconfig: self.kubefile.clone(),
             context: self.context.clone(),
             cluster: self.cluster_name.clone(),
