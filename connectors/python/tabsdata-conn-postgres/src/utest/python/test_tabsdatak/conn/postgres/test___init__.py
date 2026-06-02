@@ -4,14 +4,12 @@ import typing
 
 import pytest
 
-from tabsdatak.api import NamedConn, Secret
+from tabsdatak.api import Secret
 from tabsdatak.error import TabsdataException
 from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
 from tabsdatak.conn.common.types import CfgSpec, UserPassword
 from tabsdatak.conn.postgres import (
-    DestConnSpec,
-    SrcConnSpec,
     CredentialsSpec,
     DestCfgSpec,
     IfTableExistsSpec,
@@ -109,7 +107,6 @@ def test_postgres_conn_rejects_bad_uri(cls):
 
 def test_postgres_src_full_round_trip():
     src = PostgresSrc(
-        conn=_src_conn(),
         queries=["SELECT * FROM users", "SELECT * FROM orders"],
         transactional=False,
         schema_overrides=[None, None],
@@ -125,18 +122,9 @@ def test_postgres_src_full_round_trip():
     assert loaded.src_cfg == {"postgres.logging_level": 20}
 
 
-def test_postgres_src_round_trip_with_named_conn():
-    src = PostgresSrc(conn=NamedConn(name="prod_postgres"), queries=["SELECT 1"])
-    loaded = PostgresSrc.from_json(src.to_json())
-    assert loaded == src
-    assert isinstance(loaded.conn, NamedConn)
-    assert loaded.conn.name == "prod_postgres"
-
-
 def test_postgres_src_validate_rejects_schema_overrides_length_mismatch():
     with pytest.raises(PostgresValidateException) as ei:
         PostgresSrc(
-            conn=_src_conn(),
             queries=["SELECT 1", "SELECT 2"],
             schema_overrides=[None],
         )
@@ -145,7 +133,6 @@ def test_postgres_src_validate_rejects_schema_overrides_length_mismatch():
 
 def test_postgres_src_validate_accepts_matching_schema_overrides_length():
     src = PostgresSrc(
-        conn=_src_conn(),
         queries=["SELECT 1", "SELECT 2"],
         schema_overrides=[None, None],
     )
@@ -159,7 +146,6 @@ def test_postgres_src_validate_accepts_matching_schema_overrides_length():
 
 def test_postgres_dest_full_round_trip():
     dest = PostgresDest(
-        conn=_dest_conn(),
         tables=["analytics.users", "analytics.orders"],
         if_table_exists="replace",
         transactional=False,
@@ -173,16 +159,8 @@ def test_postgres_dest_full_round_trip():
     assert loaded.dest_cfg == {"postgres.logging_level": 20}
 
 
-def test_postgres_dest_round_trip_with_named_conn():
-    dest = PostgresDest(conn=NamedConn(name="prod_postgres"), tables=["analytics.users"])
-    loaded = PostgresDest.from_json(dest.to_json())
-    assert loaded == dest
-    assert isinstance(loaded.conn, NamedConn)
-    assert loaded.conn.name == "prod_postgres"
-
-
 def test_postgres_dest_defaults_if_table_exists_to_append():
-    dest = PostgresDest(conn=_dest_conn(), tables=["analytics.users"])
+    dest = PostgresDest(tables=["analytics.users"])
     assert dest.if_table_exists == "append"
     assert dest.transactional is True
     assert dest.dest_cfg is None
@@ -205,7 +183,6 @@ def test_postgres_conn_fields_wire_expected_specs(cls):
 
 
 def test_postgres_src_fields_wire_expected_specs():
-    assert _hint(PostgresSrc, "conn") == SrcConnSpec
     assert _hint(PostgresSrc, "queries") == QueriesSpec
     assert _hint(PostgresSrc, "transactional") is bool
     assert _hint(PostgresSrc, "schema_overrides") == SchemaOverrideSpec | None
@@ -213,7 +190,6 @@ def test_postgres_src_fields_wire_expected_specs():
 
 
 def test_postgres_dest_fields_wire_expected_specs():
-    assert _hint(PostgresDest, "conn") == DestConnSpec
     assert _hint(PostgresDest, "tables") == PostgresTableNamesSpec
     assert _hint(PostgresDest, "if_table_exists") == IfTableExistsSpec
     assert _hint(PostgresDest, "transactional") is bool
@@ -228,7 +204,6 @@ def test_postgres_dest_fields_wire_expected_specs():
 def test_postgres_src_rejects_unknown_src_cfg_key():
     with pytest.raises(ConnInitException) as ei:
         PostgresSrc(
-            conn=_src_conn(),
             queries=["SELECT 1"],
             src_cfg={"bogus.key": 1},
         )
@@ -237,7 +212,6 @@ def test_postgres_src_rejects_unknown_src_cfg_key():
 
 def test_postgres_src_accepts_known_src_cfg_keys():
     src = PostgresSrc(
-        conn=_src_conn(),
         queries=["SELECT 1"],
         src_cfg={
             "postgres.logging_level": 20,
@@ -252,7 +226,6 @@ def test_postgres_src_accepts_known_src_cfg_keys():
 def test_postgres_dest_rejects_unknown_dest_cfg_key():
     with pytest.raises(ConnInitException) as ei:
         PostgresDest(
-            conn=_dest_conn(),
             tables=["analytics.users"],
             dest_cfg={"bogus.key": 1},
         )
@@ -261,7 +234,6 @@ def test_postgres_dest_rejects_unknown_dest_cfg_key():
 
 def test_postgres_dest_accepts_known_dest_cfg_keys():
     dest = PostgresDest(
-        conn=_dest_conn(),
         tables=["analytics.users"],
         dest_cfg={
             "postgres.logging_level": 20,
@@ -335,7 +307,6 @@ def test_postgres_cdc_conn_is_not_a_postgres_conn_subclass():
 
 def _cdc_stream_src(**overrides) -> PostgresCdcStreamSrc:
     kw = dict(
-        conn=PostgresCdcStreamSrcConn(uri="postgresql://h/d", credentials=_cdc_creds()),
         tables=["public.users"],
         replication_slot="tdcdc_slot",
         start_from="tail",

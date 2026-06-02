@@ -20,7 +20,7 @@ sits one layer below in ``_cdc_impl.py``.
 from __future__ import annotations
 
 import logging
-from typing import Any, cast
+from typing import Any
 
 from tabsdatak.conn.common.sql.cdc._runner import CdcPlugin, CdcRunConfig
 from tabsdatak.conn.common.sql.cdc.constants import (
@@ -106,7 +106,9 @@ def _build_cdc_run_config(
     )
 
 
-class PostgresCdcStreamSrcPlugin(CdcPlugin[PostgresCdcStreamSrc]):
+class PostgresCdcStreamSrcPlugin(
+    CdcPlugin[PostgresCdcStreamSrcConn, PostgresCdcStreamSrc]
+):
     """Drives a :class:`PostgresCdcStreamSrc` via the dialect-agnostic
     :class:`~tabsdatak.conn.common.sql.cdc._runner.CdcPlugin` loop, backed
     by a :class:`~tabsdatak.conn.postgres._cdc_impl.Wal2JsonIngester`."""
@@ -119,9 +121,9 @@ class PostgresCdcStreamSrcPlugin(CdcPlugin[PostgresCdcStreamSrc]):
 
     def build_ingester(
         self,
+        conn: PostgresCdcStreamSrcConn,
         stream_src: PostgresCdcStreamSrc,
     ) -> Wal2JsonIngester:
-        conn = cast(PostgresCdcStreamSrcConn, stream_src.conn)
         src_cfg = stream_src.src_cfg or {}
         blocking_timeout = src_cfg.get(
             _KEY_CDC_BLOCKING_TIMEOUT,

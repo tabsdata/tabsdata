@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any
 
 from tabsdatak.conn.postgres import (
     DestCfgKey,
@@ -113,10 +113,11 @@ def _resolve_dest_cfg(dest_cfg: DestCfgSpec | None) -> _WriterCfg:
 # and the abstract Src / Dest classes, not the runtime IO stack).
 
 
-class PostgresSrcPlugin(SrcPlugin[PostgresSrc]):
+class PostgresSrcPlugin(SrcPlugin[PostgresSrcConn, PostgresSrc]):
     def read_in(
         self,
         ctx: SrcPluginCtx,
+        conn: PostgresSrcConn,
         src: PostgresSrc,
     ) -> list[list[TableFileSpec]]:
         from sqlalchemy.exc import OperationalError, SQLAlchemyError
@@ -138,7 +139,7 @@ class PostgresSrcPlugin(SrcPlugin[PostgresSrc]):
         logger.info("postgres: read_in starting (%d queries)", len(src.queries or []))
 
         read_cfg = PostgresReadCfg(
-            conn=cast(PostgresSrcConn, src.conn),
+            conn=conn,
             queries=src.queries,
             transactional=src.transactional,
             schema_overrides=src.schema_overrides,
@@ -173,10 +174,11 @@ class PostgresSrcPlugin(SrcPlugin[PostgresSrc]):
             )
 
 
-class PostgresDestPlugin(DestPlugin[PostgresDest]):
+class PostgresDestPlugin(DestPlugin[PostgresDestConn, PostgresDest]):
     def write_out(
         self,
         ctx: DestContext,
+        conn: PostgresDestConn,
         dest: PostgresDest,
         tables: list[TableFileSpec],
     ) -> None:
@@ -202,7 +204,7 @@ class PostgresDestPlugin(DestPlugin[PostgresDest]):
             )
 
         write_cfg = PostgresWriteCfg(
-            conn=cast(PostgresDestConn, dest.conn),
+            conn=conn,
             target_tables=list(dest.tables),
             if_table_exists=dest.if_table_exists,
             transactional=dest.transactional,

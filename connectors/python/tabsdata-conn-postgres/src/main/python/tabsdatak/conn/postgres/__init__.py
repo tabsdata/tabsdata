@@ -47,7 +47,6 @@ from tabsdatak.api import (
     Conn,
     ContextValueSpec,
     Dest,
-    NamedConn,
     Secret,
     Src,
     StreamSrc,
@@ -150,10 +149,6 @@ class PostgresDestConn(Conn):
     conn_cfg: CfgSpec | None = None
 
 
-SrcConnSpec: TypeAlias = Union[NamedConn, PostgresSrcConn]
-DestConnSpec: TypeAlias = Union[NamedConn, PostgresDestConn]
-
-
 # --- Source ----------------------------------------------------------
 
 
@@ -161,7 +156,6 @@ DestConnSpec: TypeAlias = Union[NamedConn, PostgresDestConn]
 class PostgresSrc(Src):
     """Postgres source — one parquet slot per SELECT query.
 
-    :param conn: :class:`PostgresSrcConn` (or :class:`NamedConn`).
     :param queries: List of SELECT statements; one slot per query.
     :param transactional: When ``True`` (default), run all queries
         inside one transactional session.
@@ -179,7 +173,6 @@ class PostgresSrc(Src):
         set (logging_level, readEngine, chunkSize).
     """
 
-    conn: SrcConnSpec
     queries: QueriesSpec
     transactional: bool = True
     schema_overrides: SchemaOverrideSpec | None = None
@@ -203,7 +196,6 @@ class PostgresSrc(Src):
 class PostgresDest(Dest):
     """Postgres destination — write one parquet slot per target table.
 
-    :param conn: :class:`PostgresDestConn` (or :class:`NamedConn`).
     :param tables: Target table names (FQN or bare); one parquet
         slot per table.
     :param if_table_exists: ``"append"`` (default) or ``"replace"``
@@ -214,7 +206,6 @@ class PostgresDest(Dest):
         set (logging_level, writeEngine, chunkSize).
     """
 
-    conn: DestConnSpec
     tables: PostgresTableNamesSpec
     if_table_exists: IfTableExistsSpec = "append"
     transactional: bool = True
@@ -323,9 +314,6 @@ class PostgresCdcStreamSrcConn(Conn):
     conn_cfg: CfgSpec | None = None
 
 
-CdcStreamSrcConnSpec: TypeAlias = Union[NamedConn, PostgresCdcStreamSrcConn]
-
-
 @_api.dataclass(PostgresErrorCode.POSTGRES_11, kw_only=True)
 class PostgresCdcStreamSrc(StreamSrc):
     """Postgres CDC stream source -- emits one tableframe-batch per
@@ -339,8 +327,6 @@ class PostgresCdcStreamSrc(StreamSrc):
     creates it (``"create"``, no-op if it already exists) or
     requires it to exist (``"reuse"``, default).
 
-    :param conn: :class:`PostgresCdcStreamSrcConn` (or
-        :class:`NamedConn`).
     :param tables: Qualified ``schema.table`` names to track.
     :param replication_slot: Logical replication slot to attach to.
     :param replication_slot_behavior: ``"reuse"`` (default) or
@@ -359,7 +345,6 @@ class PostgresCdcStreamSrc(StreamSrc):
         polling cadence, wal2json format version.
     """
 
-    conn: CdcStreamSrcConnSpec
     tables: list[PostgresTableNameSpec]
     replication_slot: str
     start_from: PostgresCdcStartFromSpec

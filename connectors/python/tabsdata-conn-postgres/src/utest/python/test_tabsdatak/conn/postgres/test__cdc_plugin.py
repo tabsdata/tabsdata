@@ -28,12 +28,15 @@ def _creds() -> UserPassword:
     return UserPassword(user=Secret.lit("u"), password=Secret.lit("p"))
 
 
+def _conn() -> PostgresCdcStreamSrcConn:
+    return PostgresCdcStreamSrcConn(
+        uri="postgresql://h:5432/d",
+        credentials=_creds(),
+    )
+
+
 def _src(**overrides) -> PostgresCdcStreamSrc:
     kw = dict(
-        conn=PostgresCdcStreamSrcConn(
-            uri="postgresql://h:5432/d",
-            credentials=_creds(),
-        ),
         tables=["public.users", "public.orders"],
         replication_slot="tdcdc_slot",
         start_from="tail",
@@ -137,7 +140,7 @@ def test_plugin_run_applies_logging_level_to_connector_logger():
         ), patch(
             "tabsdatak.conn.postgres._cdc_plugin.Wal2JsonIngester",
         ):
-            PostgresCdcStreamSrcPlugin().run(ctx=ctx, stream_src=src)
+            PostgresCdcStreamSrcPlugin().run(ctx=ctx, conn=_conn(), stream_src=src)
         assert connector_logger.level == logging.DEBUG
     finally:
         connector_logger.setLevel(logging.NOTSET)
@@ -155,16 +158,17 @@ def test_build_ingester_constructs_with_slot_and_format_version():
             "postgres.cdc.wal2json_format_version": 1,
         },
     )
+    conn = _conn()
 
     with patch(
         "tabsdatak.conn.postgres._cdc_plugin.Wal2JsonIngester",
     ) as mock_ingester_cls:
         mock_ingester_cls.return_value = "ingester-instance"
-        ingester = PostgresCdcStreamSrcPlugin().build_ingester(src)
+        ingester = PostgresCdcStreamSrcPlugin().build_ingester(conn, src)
 
     mock_ingester_cls.assert_called_once()
     kw = mock_ingester_cls.call_args.kwargs
-    assert kw["conn"] is src.conn
+    assert kw["conn"] is conn
     assert kw["tables"] == ["public.users", "public.orders"]
     assert kw["start_from"] == "tail"
     assert kw["replication_slot"] == "tdcdc_slot"
@@ -181,7 +185,7 @@ def test_build_ingester_blocking_timeout_falls_back_to_default():
     with patch(
         "tabsdatak.conn.postgres._cdc_plugin.Wal2JsonIngester",
     ) as mock_ingester_cls:
-        PostgresCdcStreamSrcPlugin().build_ingester(src)
+        PostgresCdcStreamSrcPlugin().build_ingester(_conn(), src)
 
     kw = mock_ingester_cls.call_args.kwargs
     # DEFAULT_BLOCKING_TIMEOUT_SECONDS from common-sql constants.
@@ -194,7 +198,7 @@ def test_build_ingester_format_version_falls_back_to_default():
     with patch(
         "tabsdatak.conn.postgres._cdc_plugin.Wal2JsonIngester",
     ) as mock_ingester_cls:
-        PostgresCdcStreamSrcPlugin().build_ingester(src)
+        PostgresCdcStreamSrcPlugin().build_ingester(_conn(), src)
 
     kw = mock_ingester_cls.call_args.kwargs
     # DEFAULT_WAL2JSON_FORMAT_VERSION = 2.
@@ -220,7 +224,7 @@ def test_build_ingester_forwards_lsn_position_to_ingester():
     with patch(
         "tabsdatak.conn.postgres._cdc_plugin.Wal2JsonIngester",
     ) as mock_ingester_cls:
-        PostgresCdcStreamSrcPlugin().build_ingester(src)
+        PostgresCdcStreamSrcPlugin().build_ingester(_conn(), src)
 
     kw = mock_ingester_cls.call_args.kwargs
     assert isinstance(kw["start_from"], LsnPosition)
