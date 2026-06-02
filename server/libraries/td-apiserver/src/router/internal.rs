@@ -21,10 +21,11 @@ mod routes {
     use td_objects::dxo::physical_function_run::PhysicalFunctionRun;
     use td_objects::dxo::worker::CallbackRequest;
     use td_objects::rest_urls::AtTimeParam;
+    use td_objects::dxo::yaml::WorkerInput;
     use td_objects::rest_urls::internal::{
         DOWNLOAD_FUNCTION_STATE, FUNCTION_VERSION_EXECUTE, FUNCTION_VERSION_EXECUTION_STATUS,
         FunctionVersionAtId, FunctionVersionExecution, PhysicalFunctionRunWorkerIdParam,
-        UPDATE_FUNCTION_RUN_WORKER, UPDATE_WORKER, WorkerIdParam,
+        RESOLVE_FUNCTION_RUN_WORKER, UPDATE_FUNCTION_RUN_WORKER, UPDATE_WORKER, WorkerIdParam,
     };
     use td_objects::rest_urls::{ExecutionParam, FunctionVersionIdParam};
     use td_services::execution::services::ExecutionServices;
@@ -60,6 +61,18 @@ mod routes {
         let request = context.update(param, request);
         let response = state.callback.service().oneshot(request).await?;
         Ok(UpdateStatus::OK(response))
+    }
+
+    #[apiserver_path(method = get, path = RESOLVE_FUNCTION_RUN_WORKER, tag = INTERNAL_TAG)]
+    #[doc = "Resolve and return a function-run worker's message (kubernetes pull path)"]
+    pub async fn function_run_message(
+        State(state): State<Arc<WorkerServices>>,
+        Extension(context): Extension<RequestContext>,
+        Path(param): Path<PhysicalFunctionRunWorkerIdParam>,
+    ) -> Result<GetStatus<WorkerInput>, ErrorStatus> {
+        let request = context.read(param);
+        let response = state.resolve_message.service().oneshot(request).await?;
+        Ok(GetStatus::OK(response))
     }
 
     #[apiserver_path(method = post, path = FUNCTION_VERSION_EXECUTE, tag = INTERNAL_TAG)]

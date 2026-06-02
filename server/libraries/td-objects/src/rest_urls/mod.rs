@@ -84,6 +84,11 @@ pub mod internal {
     }
 
     pub const UPDATE_FUNCTION_RUN_WORKER: &str = url!(INTERNAL_PREFIX, FUNCTION_RUN_WORKER);
+
+    /// GET: a worker (e.g. a kubernetes pod) resolves its worker message
+    /// on demand instead of the scheduler renaming a queue file.
+    pub const RESOLVE_FUNCTION_RUN_WORKER: &str =
+        url!(INTERNAL_PREFIX, FUNCTION_RUN_WORKER, "/message");
 }
 
 // OpenApi URLs

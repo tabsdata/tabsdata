@@ -12,7 +12,7 @@ pub mod function_runner;
 pub mod location;
 pub mod stage_trigger;
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, ToSchema)]
 pub enum WorkerInput {
     FunctionV2(Box<function_runner::v2::FunctionInput>),
     /// Logical-only input format. Worker resolves
