@@ -140,10 +140,9 @@ def conn() -> SalesforceSrcConn:
 
 def test_src_plugin_read_in_returns_parquet_files(conn, work_dir):
     src = SalesforceSrc(
-        conn=conn,
         queries=[f"SELECT Id FROM {_OBJECT} LIMIT 1"],
     )
-    out = plugin._SalesforceSrcPlugin().read_in(_SrcCtx(work_dir), src)
+    out = plugin._SalesforceSrcPlugin().read_in(_SrcCtx(work_dir), conn, src)
     assert len(out) == 1
     assert len(out[0]) == 1
     df = pl.read_parquet(out[0][0])
@@ -154,10 +153,9 @@ def test_src_plugin_read_in_returns_parquet_files(conn, work_dir):
 
 def test_src_plugin_includes_deleted_flag_runs(conn, work_dir):
     src = SalesforceSrc(
-        conn=conn,
         queries=[f"SELECT Id FROM {_OBJECT} LIMIT 1"],
         include_deleted=True,
     )
-    out = plugin._SalesforceSrcPlugin().read_in(_SrcCtx(work_dir), src)
+    out = plugin._SalesforceSrcPlugin().read_in(_SrcCtx(work_dir), conn, src)
     assert len(out) == 1
     assert out[0][0].exists()
