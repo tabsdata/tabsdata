@@ -231,8 +231,8 @@ def test_dest_plugin_write_out_creates_and_appends(fresh_bigquery, work_dir):
         work_dir / "in.parquet",
         [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}],
     )
+    conn = _conn_from(cfg)
     dest = BigQueryDest(
-        conn=_conn_from(cfg),
         tables=[_table_fqn(cfg, table)],
         if_table_exists="append",
         schema_evolution="update",
@@ -240,7 +240,7 @@ def test_dest_plugin_write_out_creates_and_appends(fresh_bigquery, work_dir):
 
     client = _bq_client(cfg)
     try:
-        plugin._BigQueryDestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
+        plugin._BigQueryDestPlugin().write_out(_dest_ctx(work_dir), conn, dest, [src])
         rows = list(client.query(f"SELECT id, name FROM `{full}` ORDER BY id"))
         assert [(r.id, r.name) for r in rows] == [(1, "alice"), (2, "bob")]
     finally:
@@ -260,10 +260,11 @@ def test_dest_plugin_write_out_replace_clears_existing(fresh_bigquery, work_dir)
         work_dir / "seed.parquet",
         [{"id": 99, "name": "stale"}],
     )
+    conn = _conn_from(cfg)
     plugin._BigQueryDestPlugin().write_out(
         _dest_ctx(work_dir),
+        conn,
         BigQueryDest(
-            conn=_conn_from(cfg),
             tables=[_table_fqn(cfg, table)],
             if_table_exists="append",
         ),
@@ -275,7 +276,6 @@ def test_dest_plugin_write_out_replace_clears_existing(fresh_bigquery, work_dir)
         [{"id": 1, "name": "fresh"}],
     )
     dest = BigQueryDest(
-        conn=_conn_from(cfg),
         tables=[_table_fqn(cfg, table)],
         if_table_exists="replace",
     )
@@ -283,7 +283,7 @@ def test_dest_plugin_write_out_replace_clears_existing(fresh_bigquery, work_dir)
     client = _bq_client(cfg)
     try:
         plugin._BigQueryDestPlugin().write_out(
-            _dest_ctx(work_dir), dest, [replacement],
+            _dest_ctx(work_dir), conn, dest, [replacement],
         )
         rows = list(client.query(f"SELECT id, name FROM `{full}` ORDER BY id"))
         assert [(r.id, r.name) for r in rows] == [(1, "fresh")]
@@ -304,15 +304,15 @@ def test_dest_plugin_write_out_multiple_tables(fresh_bigquery, work_dir):
     src1 = _make_parquet(work_dir / "in1.parquet", [{"x": 10}])
     src2 = _make_parquet(work_dir / "in2.parquet", [{"y": "v"}])
 
+    conn = _conn_from(cfg)
     dest = BigQueryDest(
-        conn=_conn_from(cfg),
         tables=[_table_fqn(cfg, t1), _table_fqn(cfg, t2)],
     )
 
     client = _bq_client(cfg)
     try:
         plugin._BigQueryDestPlugin().write_out(
-            _dest_ctx(work_dir), dest, [src1, src2],
+            _dest_ctx(work_dir), conn, dest, [src1, src2],
         )
         rows1 = list(client.query(f"SELECT x FROM `{full1}`"))
         rows2 = list(client.query(f"SELECT y FROM `{full2}`"))
