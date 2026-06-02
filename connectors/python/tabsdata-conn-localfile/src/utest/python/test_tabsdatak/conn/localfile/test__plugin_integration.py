@@ -157,17 +157,18 @@ def test_dest_then_src_round_trip(tmp_path: Path):
     conn = LocalFileDestConn(base_path=str(base))
 
     # 1. Write
-    dest = LocalFileDest(conn=conn, paths=["users.parquet"])
+    dest = LocalFileDest(paths=["users.parquet"])
     plugin.LocalFileDestPlugin().write_out(
         _DestCtx(work_dest),
+        conn,
         dest,
         [Path(in_parquet)],
     )
     assert (base / "users.parquet").exists()
 
     # 2. Read back
-    src = LocalFileSrc(conn=conn, paths=["users.parquet"])
-    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work_src), src)
+    src = LocalFileSrc(paths=["users.parquet"])
+    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work_src), conn, src)
 
     assert len(out) == 1
     assert len(out[0]) >= 1
@@ -186,11 +187,11 @@ def test_src_treats_absolute_path_as_relative_to_base_path(tmp_path: Path):
 
     conn = LocalFileSrcConn(base_path=str(base))
     # Note the leading slash on the entry -- the plugin strips it.
-    src = LocalFileSrc(conn=conn, paths=["/data.parquet"])
+    src = LocalFileSrc(paths=["/data.parquet"])
 
     work = tmp_path / "work"
     work.mkdir()
-    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), src)
+    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
     assert len(out[0]) >= 1
     assert pl.read_parquet(out[0][0]).select("x").to_dicts() == [{"x": 1}]
 
@@ -213,11 +214,11 @@ def test_src_wildcard_in_basename_matches_multiple_files(tmp_path: Path):
     )
 
     conn = LocalFileSrcConn(base_path=str(base))
-    src = LocalFileSrc(conn=conn, paths=["*.parquet"])
+    src = LocalFileSrc(paths=["*.parquet"])
 
     work = tmp_path / "work"
     work.mkdir()
-    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), src)
+    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
 
     assert len(out) == 1
     # Three parquet inputs -> at least three target files in the report
@@ -236,11 +237,11 @@ def test_src_wildcard_with_no_matches_returns_empty_slot(tmp_path: Path):
     )
 
     conn = LocalFileSrcConn(base_path=str(base))
-    src = LocalFileSrc(conn=conn, paths=["*.parquet"])
+    src = LocalFileSrc(paths=["*.parquet"])
 
     work = tmp_path / "work"
     work.mkdir()
-    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), src)
+    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
 
     # One slot, zero files
     assert len(out) == 1
@@ -277,14 +278,13 @@ def test_src_initial_last_modified_filters_out_older_files(tmp_path: Path):
     cutoff = datetime(2026, 1, 1, 12, 30, 0, tzinfo=timezone.utc)
     conn = LocalFileSrcConn(base_path=str(base))
     src = LocalFileSrc(
-        conn=conn,
         paths=["*.parquet"],
         initial_last_modified=cutoff,
     )
 
     work = tmp_path / "work"
     work.mkdir()
-    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), src)
+    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
 
     names = sorted(
         pl.read_parquet(f).select("name").item(0, 0) for f in out[0]
@@ -306,14 +306,13 @@ def test_src_initial_last_modified_at_or_before_oldest_returns_all(
 
     conn = LocalFileSrcConn(base_path=str(base))
     src = LocalFileSrc(
-        conn=conn,
         paths=["*.parquet"],
         initial_last_modified=floor,
     )
 
     work = tmp_path / "work"
     work.mkdir()
-    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), src)
+    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
 
     names = sorted(
         pl.read_parquet(f).select("name").item(0, 0) for f in out[0]
@@ -340,13 +339,12 @@ def test_src_format_csv_reads_with_default_options(tmp_path: Path):
 
     conn = LocalFileSrcConn(base_path=str(base))
     src = LocalFileSrc(
-        conn=conn,
         paths=["users.csv"],
         format=SrcFileFormat.CSV,
     )
     work = tmp_path / "work"
     work.mkdir()
-    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), src)
+    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
     df = pl.read_parquet(out[0][0]).select("id", "name").sort("id")
     assert df.to_dicts() == [
         {"id": 1, "name": "alice"},
@@ -371,14 +369,13 @@ def test_src_format_csv_honours_separator_option(tmp_path: Path):
 
     conn = LocalFileSrcConn(base_path=str(base))
     src = LocalFileSrc(
-        conn=conn,
         paths=["users.csv"],
         format=SrcFileFormat.CSV,
         format_cfg={SrcFileFormat.CSV: {"separator": ";"}},
     )
     work = tmp_path / "work"
     work.mkdir()
-    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), src)
+    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
     df = pl.read_parquet(out[0][0]).select("id", "name").sort("id")
     assert df.to_dicts() == [
         {"id": 1, "name": "alice"},
@@ -397,13 +394,12 @@ def test_src_format_json_reads_records(tmp_path: Path):
 
     conn = LocalFileSrcConn(base_path=str(base))
     src = LocalFileSrc(
-        conn=conn,
         paths=["users.json"],
         format=SrcFileFormat.JSON,
     )
     work = tmp_path / "work"
     work.mkdir()
-    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), src)
+    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
     df = pl.read_parquet(out[0][0]).select("id", "name").sort("id")
     assert df.to_dicts() == [
         {"id": 1, "name": "alice"},
@@ -432,13 +428,12 @@ def test_src_format_avro_reads_records(tmp_path: Path):
 
     conn = LocalFileSrcConn(base_path=str(base))
     src = LocalFileSrc(
-        conn=conn,
         paths=["users.avro"],
         format=SrcFileFormat.AVRO,
     )
     work = tmp_path / "work"
     work.mkdir()
-    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), src)
+    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
     df = pl.read_parquet(out[0][0]).select("id", "name").sort("id")
     assert df.to_dicts() == [
         {"id": 1, "name": "alice"},
@@ -455,14 +450,13 @@ def test_src_format_auto_infers_parquet_from_extension(tmp_path: Path):
 
     conn = LocalFileSrcConn(base_path=str(base))
     src = LocalFileSrc(
-        conn=conn,
         paths=["users.parquet"],
         # AUTO is the default; spell it out for clarity.
         format=SrcFileFormat.AUTO,
     )
     work = tmp_path / "work"
     work.mkdir()
-    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), src)
+    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
     df = pl.read_parquet(out[0][0]).select("id", "name")
     assert df.to_dicts() == [{"id": 1, "name": "alice"}]
 
@@ -499,14 +493,13 @@ def test_dest_format_csv_writes_csv_file(tmp_path: Path):
 
     conn = LocalFileSrcConn(base_path=str(base))
     dest = LocalFileDest(
-        conn=conn,
         paths=["users.csv"],
         format=DestFileFormat.CSV,
     )
     work = tmp_path / "work"
     work.mkdir()
     plugin.LocalFileDestPlugin().write_out(
-        _DestCtx(work), dest, [Path(src_parquet)],
+        _DestCtx(work), conn, dest, [Path(src_parquet)],
     )
 
     out_file = base / "users.csv"
@@ -527,7 +520,6 @@ def test_dest_format_csv_honours_separator_option(tmp_path: Path):
 
     conn = LocalFileDestConn(base_path=str(base))
     dest = LocalFileDest(
-        conn=conn,
         paths=["users.csv"],
         format=DestFileFormat.CSV,
         format_cfg={DestFileFormat.CSV: {"separator": ";"}},
@@ -535,7 +527,7 @@ def test_dest_format_csv_honours_separator_option(tmp_path: Path):
     work = tmp_path / "work"
     work.mkdir()
     plugin.LocalFileDestPlugin().write_out(
-        _DestCtx(work), dest, [Path(src_parquet)],
+        _DestCtx(work), conn, dest, [Path(src_parquet)],
     )
 
     raw = (base / "users.csv").read_text()
@@ -553,14 +545,13 @@ def test_dest_format_json_writes_json_file(tmp_path: Path):
 
     conn = LocalFileDestConn(base_path=str(base))
     dest = LocalFileDest(
-        conn=conn,
         paths=["users.json"],
         format=DestFileFormat.JSON,
     )
     work = tmp_path / "work"
     work.mkdir()
     plugin.LocalFileDestPlugin().write_out(
-        _DestCtx(work), dest, [Path(src_parquet)],
+        _DestCtx(work), conn, dest, [Path(src_parquet)],
     )
 
     out_file = base / "users.json"
@@ -583,14 +574,13 @@ def test_dest_format_avro_writes_avro_file(tmp_path: Path):
 
     conn = LocalFileDestConn(base_path=str(base))
     dest = LocalFileDest(
-        conn=conn,
         paths=["users.avro"],
         format=DestFileFormat.AVRO,
     )
     work = tmp_path / "work"
     work.mkdir()
     plugin.LocalFileDestPlugin().write_out(
-        _DestCtx(work), dest, [Path(src_parquet)],
+        _DestCtx(work), conn, dest, [Path(src_parquet)],
     )
 
     out_file = base / "users.avro"
@@ -611,14 +601,13 @@ def test_dest_format_auto_defaults_to_parquet(tmp_path: Path):
 
     conn = LocalFileDestConn(base_path=str(base))
     dest = LocalFileDest(
-        conn=conn,
         paths=["users.parquet"],
         format=DestFileFormat.AUTO,
     )
     work = tmp_path / "work"
     work.mkdir()
     plugin.LocalFileDestPlugin().write_out(
-        _DestCtx(work), dest, [Path(src_parquet)],
+        _DestCtx(work), conn, dest, [Path(src_parquet)],
     )
 
     out_file = base / "users.parquet"
@@ -648,15 +637,15 @@ def _read_csv_with_cfg(
     base.mkdir()
     (base / "in.csv").write_text(csv_text)
 
+    conn = LocalFileSrcConn(base_path=str(base))
     src = LocalFileSrc(
-        conn=LocalFileSrcConn(base_path=str(base)),
         paths=["in.csv"],
         format=SrcFileFormat.CSV,
         format_cfg={SrcFileFormat.CSV: cfg},
     )
     work = tmp_path / "work"
     work.mkdir()
-    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), src)
+    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
     # Drop the binary's ``$td.opt.*`` provenance columns.
     df = pl.read_parquet(out[0][0])
     user_cols = [c for c in df.columns if not c.startswith("$td.")]
@@ -908,15 +897,15 @@ def test_csv_src_encoding_utf8(tmp_path: Path):
     (base / "in.csv").write_bytes(
         "id,name\n1,café\n2,piñata\n".encode("utf-8"),
     )
+    conn = LocalFileSrcConn(base_path=str(base))
     src = LocalFileSrc(
-        conn=LocalFileSrcConn(base_path=str(base)),
         paths=["in.csv"],
         format=SrcFileFormat.CSV,
         format_cfg={SrcFileFormat.CSV: {"encoding": "utf8"}},
     )
     work = tmp_path / "work"
     work.mkdir()
-    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), src)
+    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
     df = pl.read_parquet(out[0][0]).select("id", "name")
     assert df.sort("id").to_dicts() == [
         {"id": 1, "name": "café"},
