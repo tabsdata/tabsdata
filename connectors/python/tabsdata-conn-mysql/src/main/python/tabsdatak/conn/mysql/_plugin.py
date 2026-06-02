@@ -149,7 +149,7 @@ class MySQLSrcPlugin(SrcPlugin[MySQLSrc]):
             queries=src.queries,
             transactional=src.transactional,
             schema_overrides=src.schema_overrides,
-            query_params=src.query_params or None,
+            initial_values=src.initial_values or None,
             cfg=cast(dict, src.src_cfg),
         )
         engine = factory.get_read_engine(

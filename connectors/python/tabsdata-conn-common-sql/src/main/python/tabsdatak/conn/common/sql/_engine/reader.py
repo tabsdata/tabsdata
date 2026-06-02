@@ -17,7 +17,7 @@ class SqlReadCfg[C: Conn](ABC):
     queries: list[str]
     transactional: bool
     schema_overrides: SchemaOverrideSpec | None
-    query_params: Mapping[str, Any] | None
+    initial_values: Mapping[str, Any] | None
     cfg: CfgSpec | None
 
     def create_sql_alchemy_engine(self) -> Engine:

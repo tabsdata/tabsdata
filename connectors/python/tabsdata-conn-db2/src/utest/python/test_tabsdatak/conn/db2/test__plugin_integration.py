@@ -195,7 +195,7 @@ def test_src_plugin_read_in_multiple_queries(fresh_db2, work_dir):
             "SELECT id FROM users WHERE age >= :cut ORDER BY id",
             "SELECT id FROM orders ORDER BY id",
         ],
-        query_params={"cut": 30},
+        initial_values={"cut": 30},
     )
     out = plugin.Db2SrcPlugin().read_in(_src_ctx(work_dir), src)
     assert len(out) == 2

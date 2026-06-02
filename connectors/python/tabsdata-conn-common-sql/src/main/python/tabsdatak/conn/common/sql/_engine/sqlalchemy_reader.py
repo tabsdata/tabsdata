@@ -57,7 +57,7 @@ class SqlAlchemyReadEngine(SqlReadEngine, ABC):
 
         # Empty dict -> None (per the public contract; saves the
         # loaders from having to special-case the empty case).
-        parameters: Mapping[str, Any] | None = src.query_params or None
+        parameters: Mapping[str, Any] | None = src.initial_values or None
 
         def _run() -> list[list[TableFileSpec]]:
             logger.debug("sql-reader: establishing engine")

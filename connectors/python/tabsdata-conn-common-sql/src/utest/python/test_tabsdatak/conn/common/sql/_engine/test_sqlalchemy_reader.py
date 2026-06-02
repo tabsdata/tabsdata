@@ -156,7 +156,7 @@ def test_polars_named_params_filter_rows(db_path, work_dir):
             queries=[
                 "SELECT id FROM users WHERE id > :min_id ORDER BY id",
             ],
-            query_params={"min_id": 2},
+            initial_values={"min_id": 2},
         ),
         work_dir,
     )
@@ -165,13 +165,13 @@ def test_polars_named_params_filter_rows(db_path, work_dir):
 
 
 def test_polars_empty_params_dict_is_treated_as_no_params(db_path, work_dir):
-    # ``query_params={}`` -> the engine forwards ``None`` so the
+    # ``initial_values={}`` -> the engine forwards ``None`` so the
     # DBAPI doesn't choke on an empty bindings payload.
     out = sar.PolarsReadEngine().read(
         _cfg(
             db_path,
             queries=["SELECT id FROM users ORDER BY id"],
-            query_params={},
+            initial_values={},
         ),
         work_dir,
     )
@@ -201,7 +201,7 @@ def test_pandas_named_params(db_path, work_dir):
         _cfg(
             db_path,
             queries=["SELECT id FROM users WHERE age >= :cut ORDER BY id"],
-            query_params={"cut": 30},
+            initial_values={"cut": 30},
         ),
         work_dir,
     )
@@ -218,7 +218,7 @@ def test_polars_and_pandas_return_same_rows(db_path, work_dir):
     cfg_q = _cfg(
         db_path,
         queries=["SELECT id, age FROM users WHERE age > :cut ORDER BY id"],
-        query_params={"cut": 28},
+        initial_values={"cut": 28},
     )
     pol = sar.PolarsReadEngine().read(cfg_q, work_dir)
     # Rebuild cfg because the prior pol-read consumed it (same uri,
@@ -226,7 +226,7 @@ def test_polars_and_pandas_return_same_rows(db_path, work_dir):
     cfg_q2 = _cfg(
         db_path,
         queries=["SELECT id, age FROM users WHERE age > :cut ORDER BY id"],
-        query_params={"cut": 28},
+        initial_values={"cut": 28},
     )
     pan = sar.PandasReadEngine().read(cfg_q2, work_dir)
     df_pol = pl.concat([_read_parquet(p) for p in pol[0]])

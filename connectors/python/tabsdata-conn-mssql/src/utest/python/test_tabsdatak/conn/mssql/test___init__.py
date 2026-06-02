@@ -137,7 +137,7 @@ def test_mssql_src_full_round_trip():
         queries=["SELECT * FROM users", "SELECT * FROM orders"],
         transactional=False,
         schema_overrides=[None, None],
-        query_params={"x": 1},
+        initial_values={"x": 1},
         src_cfg={"mssql.logging_level": 20},
     )
     loaded = MSSQLSrc.from_json(src.to_json())
@@ -145,7 +145,7 @@ def test_mssql_src_full_round_trip():
     assert loaded.queries == ["SELECT * FROM users", "SELECT * FROM orders"]
     assert loaded.transactional is False
     assert loaded.schema_overrides == [None, None]
-    assert loaded.query_params == {"x": 1}
+    assert loaded.initial_values == {"x": 1}
     assert loaded.src_cfg == {"mssql.logging_level": 20}
 
 

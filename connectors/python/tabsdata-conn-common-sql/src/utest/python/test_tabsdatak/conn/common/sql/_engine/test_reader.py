@@ -30,7 +30,7 @@ def test_sql_read_cfg_declares_all_io_fields():
         "queries",
         "transactional",
         "schema_overrides",
-        "query_params",
+        "initial_values",
         "cfg",
     } <= set(fields)
 
@@ -47,7 +47,7 @@ def test_sql_read_cfg_default_create_engine_raises_not_implemented():
         queries=["SELECT 1"],
         transactional=True,
         schema_overrides=None,
-        query_params=None,
+        initial_values=None,
         cfg=None,
     )
     with pytest.raises(NotImplementedError):

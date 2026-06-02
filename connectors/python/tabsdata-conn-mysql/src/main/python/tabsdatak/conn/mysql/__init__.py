@@ -246,7 +246,7 @@ class MySQLSrc(Src):
         autocommit connection per query.
     :param schema_overrides: Optional per-query column dtype hints
         (one entry per query, same length as ``queries``); else MYSQL_3.
-    :param query_params: Optional ``{name: value}`` bind parameters
+    :param initial_values: Optional ``{name: value}`` bind parameters
         substituted into every query via SQLAlchemy ``:name`` syntax.
     :param src_cfg: Optional ``Mapping`` over the literal cfg key
         set (``mysql.logging_level``, ``tabsdata.sql.sql.readEngine``,
@@ -257,7 +257,7 @@ class MySQLSrc(Src):
     queries: QueriesSpec
     transactional: bool = True
     schema_overrides: SchemaOverrideSpec | None = None
-    query_params: dict[str, Any] | None = None
+    initial_values: dict[str, Any] | None = None
     src_cfg: SrcCfgSpec | None = None
 
     def validate(self) -> None:

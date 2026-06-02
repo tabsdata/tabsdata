@@ -140,7 +140,7 @@ def test_oracle_read_cfg_creates_engine_from_conn(captured):
         queries=["SELECT 1 FROM DUAL"],
         transactional=True,
         schema_overrides=None,
-        query_params=None,
+        initial_values=None,
         cfg=None,
     )
     cfg.create_sql_alchemy_engine()
@@ -176,7 +176,7 @@ def test_oracle_read_cfg_no_conn_cfg_forwards_empty_connect_args(captured):
         queries=["SELECT 1 FROM DUAL"],
         transactional=True,
         schema_overrides=None,
-        query_params=None,
+        initial_values=None,
         cfg=None,
     )
     cfg.create_sql_alchemy_engine()

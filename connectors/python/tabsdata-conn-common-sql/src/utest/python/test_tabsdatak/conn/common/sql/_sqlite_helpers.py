@@ -69,7 +69,7 @@ class _SqliteSqlReadCfg(SqlReadCfg[_NullConn]):
     conn: _NullConn | None = None  # type: ignore[assignment]
     transactional: bool = True
     schema_overrides: Any = None
-    query_params: Any = None
+    initial_values: Any = None
     cfg: Any = None
 
     def create_sql_alchemy_engine(self) -> Engine:

@@ -133,7 +133,7 @@ class OracleSrc(Src):
         inside one transactional session.
     :param schema_overrides: Optional per-query column dtype hints
         (same length as ``queries``).
-    :param query_params: Optional ``{name: value}`` bind parameters.
+    :param initial_values: Optional ``{name: value}`` bind parameters.
     :param src_cfg: Optional ``Mapping`` over the literal cfg key
         set (logging_level, readEngine, chunkSize).
     """
@@ -142,7 +142,7 @@ class OracleSrc(Src):
     queries: QueriesSpec
     transactional: bool = True
     schema_overrides: SchemaOverrideSpec | None = None
-    query_params: dict[str, Any] | None = None
+    initial_values: dict[str, Any] | None = None
     src_cfg: SrcCfgSpec | None = None
 
     def validate(self) -> None:
