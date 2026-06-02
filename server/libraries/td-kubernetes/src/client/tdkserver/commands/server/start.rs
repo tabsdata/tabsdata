@@ -8,6 +8,7 @@ use td_common::status::ExitStatus::Cancelled;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
 use crate::client::tdkserver::common::prompt_yes_no;
 use crate::core::system::exit::{Result, abort};
+use crate::cwarn;
 use crate::runtime::provider::provider_for_or_tdkcontext;
 
 #[derive(Debug, Clone, Args)]
@@ -53,6 +54,11 @@ pub async fn command_start(arguments: StartArguments, globals: &GlobalArguments)
 
     let provider = provider_for_or_tdkcontext(cluster, instance, globals.verbose).await?;
     provider.ensure_startable_runtime().await?;
+
+    if provider.runtime_alive().await {
+        cwarn!("Instance is already started.");
+        return Ok(());
+    }
 
     if preview {
         provider.preview_start_runtime_summary();

@@ -82,6 +82,10 @@ impl Provider for FargateProvider {
         unreachable!("fargate provider not yet implemented")
     }
 
+    async fn runtime_alive(&self) -> bool {
+        unreachable!("fargate provider not yet implemented")
+    }
+
     async fn ensure_stoppable_runtime(&self) -> Result {
         unreachable!("fargate provider not yet implemented")
     }
@@ -91,6 +95,10 @@ impl Provider for FargateProvider {
     }
 
     fn report_stopped_runtime(&self) {
+        unreachable!("fargate provider not yet implemented")
+    }
+
+    fn preview_restart_runtime_summary(&self) {
         unreachable!("fargate provider not yet implemented")
     }
 

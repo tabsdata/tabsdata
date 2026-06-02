@@ -261,6 +261,10 @@ impl Provider for DockerProvider {
         info!("  export KUBECONFIG={}", self.kubefile.display());
     }
 
+    async fn runtime_alive(&self) -> bool {
+        self.cluster.is_alive().await
+    }
+
     async fn ensure_stoppable_runtime(&self) -> Result {
         Ok(())
     }
@@ -274,6 +278,14 @@ impl Provider for DockerProvider {
     }
 
     fn report_stopped_runtime(&self) {}
+
+    fn preview_restart_runtime_summary(&self) {
+        info!("About to restart tabsdata instance:");
+        info!("  - provider.....: {}", ClusterProvider::Docker.as_str());
+        info!("  - kubeconfig...: {}", self.kubefile.display());
+        info!("  - context......: {}", self.context);
+        info!("  - namespace....: {}", self.config.default_namespace);
+    }
 
     async fn prepare_cluster(&self) -> Result<Box<dyn Transaction>> {
         let bar = spinner("Preparing kubernetes cluster");

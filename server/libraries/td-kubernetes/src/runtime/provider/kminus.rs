@@ -341,6 +341,10 @@ impl Provider for KminusProvider {
         info!("  export KUBECONFIG={}", summary.kubefile.display());
     }
 
+    async fn runtime_alive(&self) -> bool {
+        self.cluster.is_alive().await
+    }
+
     async fn ensure_stoppable_runtime(&self) -> Result {
         if !self.folder.exists() {
             cerror!(
@@ -375,6 +379,19 @@ impl Provider for KminusProvider {
         info!("  - kubeconfig...: {}", summary.kubefile.display());
         info!("  - context......: {}", summary.context);
         info!("  - cluster......: {}", summary.cluster);
+        info!("  - namespace....: {}", summary.namespace);
+    }
+
+    fn preview_restart_runtime_summary(&self) {
+        let summary = self.kube_summary();
+        info!("About to restart tabsdata instance:");
+        info!("  - provider.....: {}", ClusterProvider::Kminus.as_str());
+        info!("  - instance name: {}", self.name);
+        info!("  - instance path: {}", self.folder.display());
+        info!("  - kubeconfig...: {}", summary.kubefile.display());
+        info!("  - context......: {}", summary.context);
+        info!("  - cluster url..: {}", summary.cluster_url);
+        info!("  - cluster name.: {}", summary.cluster);
         info!("  - namespace....: {}", summary.namespace);
     }
 
@@ -529,8 +546,8 @@ impl Provider for KminusProvider {
         let bar = spinner("Stopping kminus cluster");
         let result = self.cluster.stop().await;
         match &result {
-            Ok(_) => bar.finish("Kminus cluster stopped"),
-            Err(_) => bar.finish_and_clear(),
+            Ok(true) => bar.finish("Kminus cluster stopped"),
+            Ok(false) | Err(_) => bar.finish_and_clear(),
         }
         result
     }

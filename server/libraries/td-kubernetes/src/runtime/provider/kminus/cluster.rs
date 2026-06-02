@@ -63,6 +63,10 @@ impl KminusCluster {
         self.path.join(KM_CONFIG_FOLDER).join(KM_KUBECONFIG_FILE)
     }
 
+    pub async fn responds(&self) -> bool {
+        try_connect(&self.kubefile()).await
+    }
+
     pub fn staging_path(&self) -> PathBuf {
         self.path.join(FOLDER_STAGING)
     }
@@ -210,7 +214,7 @@ impl Cluster for KminusCluster {
         let Some(pid) = read_km_pid(&self.pids_path()) else {
             return false;
         };
-        process_is_alive(pid)
+        process_is_alive(pid) && try_connect(&self.kubefile()).await
     }
 
     async fn poll_alive(&self) -> bool {

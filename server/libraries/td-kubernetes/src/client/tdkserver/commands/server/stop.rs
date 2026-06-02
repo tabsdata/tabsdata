@@ -55,6 +55,11 @@ pub async fn command_stop(arguments: StopArguments, globals: &GlobalArguments) -
     let provider = provider_for_or_tdkcontext(cluster, instance, globals.verbose).await?;
     provider.ensure_stoppable_runtime().await?;
 
+    if !provider.runtime_alive().await {
+        cwarn!("Instance is already stopped.");
+        return Ok(());
+    }
+
     if preview {
         provider.preview_stop_runtime_summary();
         if !yes && !prompt_yes_no("Proceed with the stop?") {

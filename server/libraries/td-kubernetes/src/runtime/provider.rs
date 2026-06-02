@@ -203,6 +203,8 @@ pub trait Provider: Send + Sync {
     }
     fn report_started_runtime(&self);
 
+    async fn runtime_alive(&self) -> bool;
+
     async fn ensure_stoppable_runtime(&self) -> Result;
     fn preview_stop_runtime_summary(&self);
     async fn stop_runtime(&self) -> Result<bool> {
@@ -211,6 +213,8 @@ pub trait Provider: Send + Sync {
         Ok(stopped_instance || stopped_cluster)
     }
     fn report_stopped_runtime(&self);
+
+    fn preview_restart_runtime_summary(&self);
 
     async fn prepare_cluster(&self) -> Result<Box<dyn Transaction>>;
     async fn create_database(&self) -> Result;
