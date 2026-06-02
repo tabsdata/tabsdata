@@ -79,7 +79,7 @@
 //!
 //!     tdkserver server start --provider kminus
 //!             ↓
-//!     Provider::start_runtime
+//!     Provider::start_server
 //!             ↓
 //!       start_cluster()             kminus boots; kubeconfig.yaml on disk
 //!             ↓

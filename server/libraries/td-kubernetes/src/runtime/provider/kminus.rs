@@ -11,6 +11,7 @@ use std::path::PathBuf;
 
 use async_trait::async_trait;
 use indicatif::MultiProgress;
+use once_cell::sync::OnceCell;
 use td_common::env::TABSDATA_HOME_DIR;
 use td_common::os::name_program;
 use td_common::server::{DEFAULT_INSTANCE, INSTANCES_FOLDER};
@@ -24,11 +25,11 @@ use crate::base::constants::{
     FOLDER_REPOSITORY, FOLDER_RUNTIMES, FOLDER_STORAGE, KPROFILE_CONFIGS_FOLDER,
     KPROFILE_GLOBALS_FOLDER, KPROFILE_PODS_FOLDER,
 };
+use crate::base::reporter::Reporter;
 use crate::cerror;
 use crate::client::session::pin::{KminusInputs, Session};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::validate_instance_name;
-use crate::client::tdkserver::widgets::spinner;
 use crate::core::system::exit::{Result, abort};
 use crate::core::system::subprocess;
 use crate::core::system::subprocess::apply_detached_flags;
@@ -41,14 +42,16 @@ use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues};
 use crate::runtime::instance::launcher::{start_workload, stop_workload};
 use crate::runtime::instance::manifest::MANIFEST_FILE;
 use crate::runtime::instance::profile::{
-    load_profile, parse_from_configmaps, render_for_configmaps, resolve_profile_entry,
+    Profile, load_profile, parse_from_configmaps, render_for_configmaps, resolve_profile_entry,
 };
 use crate::runtime::instance::verify_manifest_compatibility;
 use crate::runtime::provider::kminus::cluster::{InstanceFolderGuard, KminusCluster};
 use crate::runtime::provider::kminus::instance::KminusInstance;
+use crate::runtime::provider::outcome::{ClusterStopOutcome, InstanceStopOutcome};
+use crate::runtime::provider::summary::Summary;
 use crate::runtime::provider::{
     Cluster, ClusterProvider, HostedProvider, Instance, LocalProvider, ProcessProvider, Provider,
-    Transaction,
+    Transaction, handle_phase_secrets,
 };
 use crate::runtime::secrets::{KubeconfigSecretGenerator, SecretGenerator, SecretPhase};
 
@@ -63,6 +66,7 @@ pub struct KminusProvider {
     instance: KminusInstance,
     inputs: KminusInputs,
     verbose: bool,
+    profile: OnceCell<Profile>,
 }
 
 impl KminusProvider {
@@ -141,10 +145,16 @@ impl KminusProvider {
             instance: kminus_instance,
             inputs,
             verbose,
+            profile: OnceCell::new(),
         })
     }
 
-    fn prepare_cluster_inner(&self) -> Result<Box<dyn Transaction>> {
+    fn profile(&self) -> Result<&Profile> {
+        self.profile
+            .get_or_try_init(|| load_profile(self.cluster_provider(), self.verbose))
+    }
+
+    fn bootstrap_cluster(&self) -> Result<Box<dyn Transaction>> {
         if let Err(error) = fs::create_dir_all(&self.folder) {
             cerror!(
                 "Failed to create instance folder {}: {error}",
@@ -216,387 +226,6 @@ impl Provider for KminusProvider {
             namespace: summary.namespace,
             inputs: self.inputs.clone(),
         }
-    }
-
-    async fn ensure_creatable_runtime(&self) -> Result {
-        if self.folder.exists() {
-            info!("Folder {} already exists.", self.folder.display());
-            return abort(NoAction);
-        }
-        Ok(())
-    }
-
-    fn preview_create_runtime_summary(&self) {
-        info!("About to create tabsdata instance:");
-        info!("  - provider.....: {}", ClusterProvider::Kminus.as_str());
-        info!("  - instance name: {}", self.name);
-        info!("  - instance path: {}", self.folder.display());
-    }
-
-    fn report_created_runtime(&self) {
-        info!("Created tabsdata instance at {}.", self.folder.display());
-        info!(
-            "Edit '{}' to customize ports or log settings of the instance's kminus cluster.",
-            self.cluster.sysconfig_path().display()
-        );
-    }
-
-    async fn ensure_pinnable_runtime(&self) -> Result {
-        if !self.folder.exists() {
-            cerror!(
-                "Instance folder '{}' does not exist. Run 'tdkserver server create ...' first.",
-                self.folder.display()
-            );
-            return abort(GeneralError);
-        }
-        if !self.cluster.sysconfig_path().exists() {
-            cerror!(
-                "Folder '{}' is not a valid kminus instance (missing '{}').",
-                self.folder.display(),
-                self.cluster.sysconfig_path().display()
-            );
-            return abort(GeneralError);
-        }
-        Ok(())
-    }
-
-    fn preview_pin_runtime_summary(&self) {
-        let summary = self.kube_summary();
-        info!("About to pin tabsdata session:");
-        info!("  - provider.....: {}", ClusterProvider::Kminus.as_str());
-        info!("  - instance name: {}", self.name);
-        info!("  - instance path: {}", self.folder.display());
-        info!("  - kubeconfig...: {}", summary.kubefile.display());
-        info!("  - context......: {}", summary.context);
-        info!("  - cluster url..: {}", summary.cluster_url);
-        info!("  - cluster name.: {}", summary.cluster);
-        info!("  - namespace....: {}", summary.namespace);
-    }
-
-    fn report_pinned_runtime(&self) {
-        let summary = self.kube_summary();
-        info!(
-            "Pinned tabsdata session '{}' at {}.",
-            self.name,
-            self.folder.display()
-        );
-        info!("  - kubeconfig...: {}", summary.kubefile.display());
-        info!("  - context......: {}", summary.context);
-        info!("  - cluster......: {}", summary.cluster);
-        info!("  - namespace....: {}", summary.namespace);
-    }
-
-    async fn ensure_startable_runtime(&self) -> Result {
-        if !self.folder.exists() {
-            cerror!(
-                "Instance folder '{}' does not exist. Run 'create' first.",
-                self.folder.display()
-            );
-            return abort(GeneralError);
-        }
-        if cfg!(td_k8s_development) {
-            let manifest_path = self.cluster.staging_profile_path().join(MANIFEST_FILE);
-            if manifest_path.exists() {
-                let yaml = match fs::read_to_string(&manifest_path) {
-                    Ok(yaml) => yaml,
-                    Err(error) => {
-                        cerror!(
-                            "Failed to read staged manifest '{}': {error}",
-                            manifest_path.display()
-                        );
-                        return abort(GeneralError);
-                    }
-                };
-                verify_manifest_compatibility(&yaml)?;
-            }
-        }
-        Ok(())
-    }
-
-    fn preview_start_runtime_summary(&self) {
-        let summary = self.kube_summary();
-        info!("About to start tabsdata instance:");
-        info!("  - provider.....: {}", ClusterProvider::Kminus.as_str());
-        info!("  - instance name: {}", self.name);
-        info!("  - instance path: {}", self.folder.display());
-        info!("  - kubeconfig...: {}", summary.kubefile.display());
-        info!("  - context......: {}", summary.context);
-        info!("  - cluster url..: {}", summary.cluster_url);
-        info!("  - cluster name.: {}", summary.cluster);
-        info!("  - namespace....: {}", summary.namespace);
-    }
-
-    fn report_started_runtime(&self) {
-        let summary = self.kube_summary();
-        info!(
-            "Started tabsdata instance '{}' at {}.",
-            self.name,
-            self.folder.display()
-        );
-        info!("  - kubeconfig...: {}", summary.kubefile.display());
-        info!("  - context......: {}", summary.context);
-        info!("  - cluster......: {}", summary.cluster);
-        info!("  - namespace....: {}", summary.namespace);
-        info!("To use kubectl against this cluster, run:");
-        info!("  export KUBECONFIG={}", summary.kubefile.display());
-    }
-
-    async fn runtime_alive(&self) -> bool {
-        self.cluster.is_alive().await
-    }
-
-    async fn ensure_stoppable_runtime(&self) -> Result {
-        if !self.folder.exists() {
-            cerror!(
-                "Instance folder '{}' does not exist.",
-                self.folder.display()
-            );
-            return abort(GeneralError);
-        }
-        Ok(())
-    }
-
-    fn preview_stop_runtime_summary(&self) {
-        let summary = self.kube_summary();
-        info!("About to stop tabsdata instance:");
-        info!("  - provider.....: {}", ClusterProvider::Kminus.as_str());
-        info!("  - instance name: {}", self.name);
-        info!("  - instance path: {}", self.folder.display());
-        info!("  - kubeconfig...: {}", summary.kubefile.display());
-        info!("  - context......: {}", summary.context);
-        info!("  - cluster url..: {}", summary.cluster_url);
-        info!("  - cluster name.: {}", summary.cluster);
-        info!("  - namespace....: {}", summary.namespace);
-    }
-
-    fn report_stopped_runtime(&self) {
-        let summary = self.kube_summary();
-        info!(
-            "Stopped tabsdata instance '{}' at {}.",
-            self.name,
-            self.folder.display()
-        );
-        info!("  - kubeconfig...: {}", summary.kubefile.display());
-        info!("  - context......: {}", summary.context);
-        info!("  - cluster......: {}", summary.cluster);
-        info!("  - namespace....: {}", summary.namespace);
-    }
-
-    fn preview_restart_runtime_summary(&self) {
-        let summary = self.kube_summary();
-        info!("About to restart tabsdata instance:");
-        info!("  - provider.....: {}", ClusterProvider::Kminus.as_str());
-        info!("  - instance name: {}", self.name);
-        info!("  - instance path: {}", self.folder.display());
-        info!("  - kubeconfig...: {}", summary.kubefile.display());
-        info!("  - context......: {}", summary.context);
-        info!("  - cluster url..: {}", summary.cluster_url);
-        info!("  - cluster name.: {}", summary.cluster);
-        info!("  - namespace....: {}", summary.namespace);
-    }
-
-    fn preview_apply_runtime_summary(&self) {
-        let summary = self.kube_summary();
-        info!("About to apply tabsdata configs and restart the instance:");
-        info!("  - provider.....: {}", ClusterProvider::Kminus.as_str());
-        info!("  - instance name: {}", self.name);
-        info!("  - instance path: {}", self.folder.display());
-        info!("  - kubeconfig...: {}", summary.kubefile.display());
-        info!("  - context......: {}", summary.context);
-        info!("  - cluster url..: {}", summary.cluster_url);
-        info!("  - cluster name.: {}", summary.cluster);
-        info!("  - namespace....: {}", summary.namespace);
-    }
-
-    async fn prepare_cluster(&self) -> Result<Box<dyn Transaction>> {
-        let bar = spinner("Preparing kminus cluster");
-        let result = self.prepare_cluster_inner();
-        match &result {
-            Ok(_) => bar.finish("Kminus cluster prepared"),
-            Err(_) => bar.finish_and_clear(),
-        }
-        result
-    }
-
-    async fn create_database(&self) -> Result {
-        let loaded = load_profile(self.cluster_provider(), self.verbose)?;
-        let resolver = ConfigurationResolver::new(self.system_values()?);
-        let apiserver_config = resolve_profile_entry(
-            &loaded,
-            &resolver,
-            KPROFILE_CONFIGS_FOLDER,
-            APISERVER_CONFIG_KEY,
-        )
-        .await?;
-        let mut config_file = match tempfile::Builder::new()
-            .prefix("td-apiserver-")
-            .suffix(".yaml")
-            .tempfile()
-        {
-            Ok(file) => file,
-            Err(error) => {
-                cerror!("Failed to create temporary apiserver config file: {error}");
-                return abort(GeneralError);
-            }
-        };
-        if let Err(error) = config_file.write_all(apiserver_config.as_bytes()) {
-            cerror!(
-                "Failed to write temporary apiserver config '{}': {error}",
-                config_file.path().display()
-            );
-            return abort(GeneralError);
-        }
-        if let Err(error) = config_file.flush() {
-            cerror!(
-                "Failed to flush temporary apiserver config '{}': {error}",
-                config_file.path().display()
-            );
-            return abort(GeneralError);
-        }
-        let apiserver = name_program(&PathBuf::from(APISERVER_BINARY));
-        let bar = spinner("Creating tabsdata database schema");
-        let mut command = std::process::Command::new(&apiserver);
-        command
-            .arg("--config-file")
-            .arg(config_file.path())
-            .arg("--db-schema")
-            .arg("create");
-        apply_detached_flags(&mut command);
-        let result = subprocess::run(&mut command, APISERVER_BINARY, self.verbose);
-        match result {
-            Ok(output) => {
-                if !output.status.success() {
-                    bar.finish_and_clear();
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    cerror!(
-                        "'{} --db-schema create' failed with status {}: {}",
-                        apiserver.display(),
-                        output.status,
-                        stderr.trim()
-                    );
-                    return abort(GeneralError);
-                }
-                bar.finish("Tabsdata database schema created");
-                Ok(())
-            }
-            Err(error) => {
-                bar.finish_and_clear();
-                cerror!(
-                    "Failed to run '{} --db-schema create': {error}",
-                    apiserver.display()
-                );
-                abort(GeneralError)
-            }
-        }
-    }
-
-    async fn create_runtimes(&self) -> Result {
-        let runtimes_python = self.folder.join(FOLDER_RUNTIMES).join(FOLDER_PYTHON);
-        if let Err(error) = fs::create_dir_all(&runtimes_python) {
-            cerror!(
-                "Failed to create runtimes folder '{}': {error}",
-                runtimes_python.display()
-            );
-            return abort(GeneralError);
-        }
-        let pyvenv = match resolve_python_binary(PYVENV_BINARY) {
-            Ok(path) => path,
-            Err(error) => {
-                cerror!("Failed to locate the '{PYVENV_BINARY}' binary: {error}");
-                return abort(GeneralError);
-            }
-        };
-        let bar = spinner("Creating Python virtual environment templates");
-        let mut command = std::process::Command::new(&pyvenv);
-        if self.verbose {
-            command.arg("--verbose");
-        }
-        command.arg("create").arg("--target").arg(&runtimes_python);
-        apply_detached_flags(&mut command);
-        let result = subprocess::run(&mut command, PYVENV_BINARY, self.verbose);
-        match result {
-            Ok(output) => {
-                if !output.status.success() {
-                    bar.finish_and_clear();
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    cerror!(
-                        "Failed to create Python virtual environment templates under '{}': {}",
-                        runtimes_python.display(),
-                        stderr.trim()
-                    );
-                    return abort(GeneralError);
-                }
-                bar.finish("Python virtual environment templates created");
-                info!("Current Python environment tabsdata metadata:");
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                for line in stdout.lines() {
-                    info!("  {line}");
-                }
-                Ok(())
-            }
-            Err(error) => {
-                bar.finish_and_clear();
-                cerror!(
-                    "Failed to create Python virtual environment templates under '{}': {error}",
-                    runtimes_python.display()
-                );
-                abort(GeneralError)
-            }
-        }
-    }
-
-    async fn start_cluster(&self) -> Result {
-        let bar = spinner("Starting kminus cluster");
-        let result = self.cluster.start().await;
-        match &result {
-            Ok(()) => bar.finish("Kminus cluster started"),
-            Err(_) => bar.finish_and_clear(),
-        }
-        result
-    }
-
-    async fn stop_cluster(&self) -> Result<bool> {
-        let bar = spinner("Stopping kminus cluster");
-        let result = self.cluster.stop().await;
-        match &result {
-            Ok(true) => bar.finish("Kminus cluster stopped"),
-            Ok(false) | Err(_) => bar.finish_and_clear(),
-        }
-        result
-    }
-
-    async fn stage_configmap(&self) -> Result {
-        let bar = spinner("Staging tabsdata configmap");
-        let result = self.stage_configmap_inner().await;
-        match &result {
-            Ok(()) => bar.finish("Tabsdata configmap staged"),
-            Err(_) => bar.finish_and_clear(),
-        }
-        result
-    }
-
-    async fn store_configmap(&self) -> Result {
-        Ok(())
-    }
-
-    async fn start_instance(&self) -> Result {
-        let bar = spinner("Starting tabsdata instance");
-        let result = self.start_instance_inner(bar.multi()).await;
-        match &result {
-            Ok(_) => bar.finish("Tabsdata instance started"),
-            Err(_) => bar.finish_and_clear(),
-        }
-        result
-    }
-
-    async fn stop_instance(&self) -> Result<bool> {
-        let bar = spinner("Stopping tabsdata instance");
-        let result = self.stop_instance_inner(bar.multi()).await;
-        match &result {
-            Ok(_) => bar.finish("Tabsdata instance stopped"),
-            Err(_) => bar.finish_and_clear(),
-        }
-        result
     }
 
     fn cluster_provider(&self) -> ClusterProvider {
@@ -672,11 +301,330 @@ impl Provider for KminusProvider {
 
     fn secret_generators(&self, phase: SecretPhase) -> Vec<Box<dyn SecretGenerator>> {
         match phase {
-            SecretPhase::Start => vec![Box::new(KubeconfigSecretGenerator::new(
+            SecretPhase::ClusterStart => vec![Box::new(KubeconfigSecretGenerator::new(
                 self.cluster.kubefile(),
             ))],
-            SecretPhase::Create => Vec::new(),
+            SecretPhase::InstanceStart => Vec::new(),
         }
+    }
+
+    fn summary(&self) -> Summary {
+        let kube = self.kube_summary();
+        Summary {
+            provider: ClusterProvider::Kminus,
+            instance_name: Some(self.name.clone()),
+            instance_path: Some(self.folder.clone()),
+            kubeconfig_path: Some(kube.kubefile),
+            context: Some(kube.context),
+            cluster_url: Some(kube.cluster_url),
+            cluster_name: Some(kube.cluster),
+            namespace: Some(kube.namespace),
+        }
+    }
+
+    async fn ensure_pinnable_server(&self) -> Result {
+        if !self.folder.exists() {
+            cerror!(
+                "Instance folder '{}' does not exist. Run 'tdkserver server create ...' first.",
+                self.folder.display()
+            );
+            return abort(GeneralError);
+        }
+        if !self.cluster.sysconfig_path().exists() {
+            cerror!(
+                "Folder '{}' is not a valid kminus instance (missing '{}').",
+                self.folder.display(),
+                self.cluster.sysconfig_path().display()
+            );
+            return abort(GeneralError);
+        }
+        Ok(())
+    }
+
+    async fn ensure_creatable_server(&self) -> Result {
+        if self.folder.exists() {
+            info!("Folder {} already exists.", self.folder.display());
+            return abort(NoAction);
+        }
+        Ok(())
+    }
+
+    async fn create_cluster_hook(&self, reporter: &dyn Reporter) -> Result<Box<dyn Transaction>> {
+        let step = reporter.step("Preparing kminus cluster");
+        let result = self.bootstrap_cluster()?;
+        step.done("Kminus cluster prepared");
+        let step = reporter.step("Staging tabsdata configmap");
+        self.stage_configmaps().await?;
+        step.done("Tabsdata configmap staged");
+        Ok(result)
+    }
+
+    async fn create_database(&self, reporter: &dyn Reporter) -> Result {
+        let loaded = self.profile()?;
+        let resolver = ConfigurationResolver::new(self.system_values()?);
+        let apiserver_config = resolve_profile_entry(
+            loaded,
+            &resolver,
+            KPROFILE_CONFIGS_FOLDER,
+            APISERVER_CONFIG_KEY,
+        )
+        .await?;
+        let mut config_file = match tempfile::Builder::new()
+            .prefix("td-apiserver-")
+            .suffix(".yaml")
+            .tempfile()
+        {
+            Ok(file) => file,
+            Err(error) => {
+                cerror!("Failed to create temporary apiserver config file: {error}");
+                return abort(GeneralError);
+            }
+        };
+        if let Err(error) = config_file.write_all(apiserver_config.as_bytes()) {
+            cerror!(
+                "Failed to write temporary apiserver config '{}': {error}",
+                config_file.path().display()
+            );
+            return abort(GeneralError);
+        }
+        if let Err(error) = config_file.flush() {
+            cerror!(
+                "Failed to flush temporary apiserver config '{}': {error}",
+                config_file.path().display()
+            );
+            return abort(GeneralError);
+        }
+        let apiserver = name_program(&PathBuf::from(APISERVER_BINARY));
+        let step = reporter.step("Creating tabsdata database schema");
+        let mut command = std::process::Command::new(&apiserver);
+        command
+            .arg("--config-file")
+            .arg(config_file.path())
+            .arg("--db-schema")
+            .arg("create");
+        apply_detached_flags(&mut command);
+        let result = subprocess::run(&mut command, APISERVER_BINARY, self.verbose);
+        match result {
+            Ok(output) => {
+                if !output.status.success() {
+                    step.fail();
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    cerror!(
+                        "'{} --db-schema create' failed with status {}: {}",
+                        apiserver.display(),
+                        output.status,
+                        stderr.trim()
+                    );
+                    return abort(GeneralError);
+                }
+                step.done("Tabsdata database schema created");
+                Ok(())
+            }
+            Err(error) => {
+                step.fail();
+                cerror!(
+                    "Failed to run '{} --db-schema create': {error}",
+                    apiserver.display()
+                );
+                abort(GeneralError)
+            }
+        }
+    }
+
+    async fn create_runtimes(&self, reporter: &dyn Reporter) -> Result {
+        let runtimes_python = self.folder.join(FOLDER_RUNTIMES).join(FOLDER_PYTHON);
+        if let Err(error) = fs::create_dir_all(&runtimes_python) {
+            cerror!(
+                "Failed to create runtimes folder '{}': {error}",
+                runtimes_python.display()
+            );
+            return abort(GeneralError);
+        }
+        let pyvenv = match resolve_python_binary(PYVENV_BINARY) {
+            Ok(path) => path,
+            Err(error) => {
+                cerror!("Failed to locate the '{PYVENV_BINARY}' binary: {error}");
+                return abort(GeneralError);
+            }
+        };
+        let step = reporter.step("Creating Python virtual environment templates");
+        let mut command = std::process::Command::new(&pyvenv);
+        if self.verbose {
+            command.arg("--verbose");
+        }
+        command.arg("create").arg("--target").arg(&runtimes_python);
+        apply_detached_flags(&mut command);
+        let result = subprocess::run(&mut command, PYVENV_BINARY, self.verbose);
+        match result {
+            Ok(output) => {
+                if !output.status.success() {
+                    step.fail();
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    cerror!(
+                        "Failed to create Python virtual environment templates under '{}': {}",
+                        runtimes_python.display(),
+                        stderr.trim()
+                    );
+                    return abort(GeneralError);
+                }
+                step.done("Python virtual environment templates created");
+                info!("Current Python environment tabsdata metadata:");
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                for line in stdout.lines() {
+                    info!("  {line}");
+                }
+                Ok(())
+            }
+            Err(error) => {
+                step.fail();
+                cerror!(
+                    "Failed to create Python virtual environment templates under '{}': {error}",
+                    runtimes_python.display()
+                );
+                abort(GeneralError)
+            }
+        }
+    }
+
+    async fn cluster_alive(&self) -> bool {
+        self.cluster.is_alive().await
+    }
+
+    async fn start_cluster_hook(&self, reporter: &dyn Reporter) -> Result {
+        let step = reporter.step("Starting kminus cluster");
+        self.cluster.start().await?;
+        step.done("Kminus cluster started");
+        self.instance.start().await?;
+        handle_phase_secrets(self, SecretPhase::ClusterStart).await?;
+        Ok(())
+    }
+
+    async fn stop_cluster(&self, reporter: &dyn Reporter) -> Result<ClusterStopOutcome> {
+        let step = reporter.step("Stopping kminus cluster");
+        let stopped = self.cluster.stop().await?;
+        if stopped {
+            step.done("Kminus cluster stopped");
+            Ok(ClusterStopOutcome::Stopped)
+        } else {
+            step.fail();
+            Ok(ClusterStopOutcome::AlreadyStopped)
+        }
+    }
+
+    async fn ensure_startable_cluster(&self) -> Result {
+        Ok(())
+    }
+
+    async fn ensure_stoppable_cluster(&self) -> Result {
+        Ok(())
+    }
+
+    async fn ensure_restartable_cluster(&self) -> Result {
+        Ok(())
+    }
+
+    async fn start_instance_hook(&self, reporter: &dyn Reporter) -> Result {
+        handle_phase_secrets(self, SecretPhase::InstanceStart).await?;
+        let step = reporter.step("Starting tabsdata instance");
+        let multi = td_common::logging::multi_progress().unwrap_or_default();
+        self.apply_workload(&multi).await?;
+        step.done("Tabsdata instance started");
+        Ok(())
+    }
+
+    async fn stop_instance(&self, reporter: &dyn Reporter) -> Result<InstanceStopOutcome> {
+        let step = reporter.step("Stopping tabsdata instance");
+        let multi = td_common::logging::multi_progress().unwrap_or_default();
+        let stopped = self.teardown_workload(&multi).await?;
+        if stopped {
+            step.done("Tabsdata instance stopped");
+            Ok(InstanceStopOutcome::Stopped)
+        } else {
+            step.fail();
+            Ok(InstanceStopOutcome::AlreadyStopped)
+        }
+    }
+
+    async fn ensure_startable_instance(&self) -> Result {
+        if !self.folder.exists() {
+            cerror!(
+                "Instance folder '{}' does not exist.",
+                self.folder.display()
+            );
+            return abort(GeneralError);
+        }
+        Ok(())
+    }
+
+    async fn ensure_stoppable_instance(&self) -> Result {
+        if !self.folder.exists() {
+            cerror!(
+                "Instance folder '{}' does not exist.",
+                self.folder.display()
+            );
+            return abort(GeneralError);
+        }
+        Ok(())
+    }
+
+    async fn ensure_restartable_instance(&self) -> Result {
+        if !self.folder.exists() {
+            cerror!(
+                "Instance folder '{}' does not exist.",
+                self.folder.display()
+            );
+            return abort(GeneralError);
+        }
+        Ok(())
+    }
+
+    async fn ensure_startable_server(&self) -> Result {
+        if !self.folder.exists() {
+            cerror!(
+                "Instance folder '{}' does not exist. Run 'create' first.",
+                self.folder.display()
+            );
+            return abort(GeneralError);
+        }
+        if cfg!(td_k8s_development) {
+            let manifest_path = self.cluster.staging_profile_path().join(MANIFEST_FILE);
+            if manifest_path.exists() {
+                let yaml = match fs::read_to_string(&manifest_path) {
+                    Ok(yaml) => yaml,
+                    Err(error) => {
+                        cerror!(
+                            "Failed to read staged manifest '{}': {error}",
+                            manifest_path.display()
+                        );
+                        return abort(GeneralError);
+                    }
+                };
+                verify_manifest_compatibility(&yaml)?;
+            }
+        }
+        Ok(())
+    }
+
+    async fn ensure_stoppable_server(&self) -> Result {
+        if !self.folder.exists() {
+            cerror!(
+                "Instance folder '{}' does not exist.",
+                self.folder.display()
+            );
+            return abort(GeneralError);
+        }
+        Ok(())
+    }
+
+    async fn ensure_restartable_server(&self) -> Result {
+        if !self.folder.exists() {
+            cerror!(
+                "Instance folder '{}' does not exist.",
+                self.folder.display()
+            );
+            return abort(GeneralError);
+        }
+        Ok(())
     }
 }
 
@@ -687,8 +635,8 @@ impl HostedProvider for KminusProvider {}
 impl LocalProvider for KminusProvider {}
 
 impl KminusProvider {
-    async fn stage_configmap_inner(&self) -> Result {
-        let loaded = load_profile(self.cluster_provider(), self.verbose)?;
+    async fn stage_configmaps(&self) -> Result {
+        let loaded = self.profile()?;
         let staging_profile = self.cluster.staging_profile_path();
         if let Err(error) = fs::create_dir_all(&staging_profile) {
             cerror!(
@@ -698,7 +646,7 @@ impl KminusProvider {
             return abort(GeneralError);
         }
         let resolver = ConfigurationResolver::new(self.system_values()?);
-        let rendered = render_for_configmaps(&loaded, &resolver).await?;
+        let rendered = render_for_configmaps(loaded, &resolver).await?;
         for (folder, data) in [
             (KPROFILE_GLOBALS_FOLDER, rendered.globals),
             (KPROFILE_PODS_FOLDER, rendered.pods),
@@ -723,8 +671,7 @@ impl KminusProvider {
         Ok(())
     }
 
-    async fn start_instance_inner(&self, multi: &MultiProgress) -> Result {
-        self.instance.start().await?;
+    async fn apply_workload(&self, multi: &MultiProgress) -> Result {
         let context = self.kube_context().await?;
         let globals = require_configmap(&context, CONFIGMAP_TABSDATA_GLOBALS).await?;
         let pods = require_configmap(&context, CONFIGMAP_TABSDATA_PODS).await?;
@@ -733,7 +680,7 @@ impl KminusProvider {
         start_workload(self, &profile, multi).await
     }
 
-    async fn stop_instance_inner(&self, multi: &MultiProgress) -> Result<bool> {
+    async fn teardown_workload(&self, multi: &MultiProgress) -> Result<bool> {
         let stopped_workload = stop_workload(self, multi).await?;
         let stopped_instance = self.instance.stop().await?;
         Ok(stopped_workload || stopped_instance)

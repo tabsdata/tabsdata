@@ -43,7 +43,10 @@ pub async fn command_get(arguments: GetArguments, globals: &GlobalArguments) -> 
     } = arguments;
 
     if !folder.is_dir() {
-        return abort_with(GeneralError, CliError::FolderNotFound(folder.display().to_string()));
+        return abort_with(
+            GeneralError,
+            CliError::FolderNotFound(folder.display().to_string()),
+        );
     }
     let mut entries = std::fs::read_dir(&folder).map_err(|error| {
         TdError::from(CliError::FolderReadFailed {
@@ -52,7 +55,10 @@ pub async fn command_get(arguments: GetArguments, globals: &GlobalArguments) -> 
         })
     })?;
     if entries.next().is_some() {
-        return abort_with(GeneralError, CliError::FolderNotEmpty(folder.display().to_string()));
+        return abort_with(
+            GeneralError,
+            CliError::FolderNotEmpty(folder.display().to_string()),
+        );
     }
 
     let provider = provider_for_or_tdkcontext(cluster, instance, globals.verbose).await?;

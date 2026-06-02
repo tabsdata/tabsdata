@@ -11,6 +11,6 @@ use strum::{AsRefStr, Display, EnumString};
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum SecretPhase {
-    Create,
-    Start,
+    ClusterStart,
+    InstanceStart,
 }

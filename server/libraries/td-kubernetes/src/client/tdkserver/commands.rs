@@ -3,7 +3,9 @@
 //
 
 pub mod autoconfirm;
+pub mod cluster;
 pub mod config;
+pub mod instance;
 pub mod secret;
 pub mod server;
 pub mod session;

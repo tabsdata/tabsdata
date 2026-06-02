@@ -5,7 +5,9 @@
 use clap_derive::Args;
 use td_common::status::ExitStatus::Cancelled;
 
+use crate::base::reporter::InteractiveReporter;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
+use crate::client::tdkserver::render::{preview, report};
 use crate::client::tdkserver::common::{effective_yes, prompt_yes_no};
 use crate::core::system::exit::{Result, abort};
 use crate::runtime::provider::provider_for;
@@ -50,21 +52,21 @@ pub async fn command_create(arguments: CreateArguments, globals: &GlobalArgument
     } = arguments;
 
     let provider = provider_for(cluster, instance, globals.verbose).await?;
-    provider.ensure_creatable_runtime().await?;
+    provider.ensure_creatable_server().await?;
 
     if preview {
-        provider.preview_create_runtime_summary();
+        preview::create_server(&provider.summary());
     }
     if !effective_yes(yes) && !prompt_yes_no("Proceed with the creation?") {
         return abort(Cancelled);
     }
 
-    let tx = provider.prepare_cluster().await?;
-    provider.create_database().await?;
-    provider.create_runtimes().await?;
-    provider.prepare_instance().await?;
+    let reporter = InteractiveReporter::new();
+    let tx = provider.create_cluster_hook(&reporter).await?;
+    provider.create_database(&reporter).await?;
+    provider.create_runtimes(&reporter).await?;
     tx.commit();
-    provider.report_created_runtime();
+    report::created_server(&provider.summary());
 
     Ok(())
 }

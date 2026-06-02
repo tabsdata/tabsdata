@@ -119,13 +119,14 @@ pub async fn list_configmaps(
     let api: Api<ConfigMap> = Api::namespaced(context.client().clone(), context.namespace());
     let selector = part_of_tabsdata();
     let list_params = ListParams::default().labels_from(&selector);
-    let configmaps = api.list(&list_params).await.map_err(|error| {
-        KubeConfigMapError::ListFailed {
-            namespace: context.namespace().to_owned(),
-            label_selector: selector.to_string(),
-            cause: error.to_string(),
-        }
-    })?;
+    let configmaps =
+        api.list(&list_params)
+            .await
+            .map_err(|error| KubeConfigMapError::ListFailed {
+                namespace: context.namespace().to_owned(),
+                label_selector: selector.to_string(),
+                cause: error.to_string(),
+            })?;
     let mut listed = Vec::new();
     for configmap in configmaps {
         let Some(name) = configmap.metadata.name else {
@@ -157,13 +158,14 @@ pub async fn get_configmaps(
     let api: Api<ConfigMap> = Api::namespaced(context.client().clone(), context.namespace());
     let selector = part_of_tabsdata();
     let list_params = ListParams::default().labels_from(&selector);
-    let configmaps = api.list(&list_params).await.map_err(|error| {
-        KubeConfigMapError::ListFailed {
-            namespace: context.namespace().to_owned(),
-            label_selector: selector.to_string(),
-            cause: error.to_string(),
-        }
-    })?;
+    let configmaps =
+        api.list(&list_params)
+            .await
+            .map_err(|error| KubeConfigMapError::ListFailed {
+                namespace: context.namespace().to_owned(),
+                label_selector: selector.to_string(),
+                cause: error.to_string(),
+            })?;
     let mut fetched = Vec::new();
     for configmap in configmaps {
         let Some(name) = configmap.metadata.name else {
@@ -213,7 +215,10 @@ pub async fn merge_configmap(
             .into());
         }
     };
-    configmap.data.get_or_insert_with(BTreeMap::new).extend(updates);
+    configmap
+        .data
+        .get_or_insert_with(BTreeMap::new)
+        .extend(updates);
     api.replace(name, &PostParams::default(), &configmap)
         .await
         .map(|_| ())

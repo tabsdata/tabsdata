@@ -18,10 +18,10 @@ use crate::base::constants::{
     CONFIGMAP_TABSDATA_CONFIGS, CONFIGMAP_TABSDATA_GLOBALS, CONFIGMAP_TABSDATA_PODS,
     DEFAULT_INSTANCE_NAME,
 };
+use crate::base::reporter::Reporter;
 use crate::cerror;
 use crate::client::session::pin::{DockerInputs, Session};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
-use crate::client::tdkserver::widgets::spinner;
 use crate::core::system::exit::{Result, abort};
 use crate::kube::api::configmap::get_configmap;
 use crate::kube::api::{
@@ -40,9 +40,11 @@ use crate::runtime::instance::profile::{
 use crate::runtime::instance::verify_manifest_compatibility;
 use crate::runtime::provider::docker::cluster::DockerCluster;
 use crate::runtime::provider::docker::instance::DockerInstance;
+use crate::runtime::provider::outcome::{ClusterStopOutcome, InstanceStopOutcome};
+use crate::runtime::provider::summary::Summary;
 use crate::runtime::provider::{
     Cluster, ClusterProvider, ContainerProvider, HostedProvider, Instance, LocalProvider, Provider,
-    Transaction,
+    Transaction, handle_phase_secrets,
 };
 use crate::runtime::secrets::{SecretGenerator, SecretPhase};
 
@@ -170,198 +172,6 @@ impl Provider for DockerProvider {
         }
     }
 
-    async fn ensure_creatable_runtime(&self) -> Result {
-        let context = self.kube_context().await?;
-        ensure_cluster_reachable(context.client()).await?;
-        ensure_namespace_exists(&context).await?;
-        if exists_configmap(&context, CONFIGMAP_TABSDATA_GLOBALS).await? {
-            info!(
-                "A tabsdata instance already exists in namespace '{}'.",
-                self.config.default_namespace
-            );
-            return abort(NoAction);
-        }
-        Ok(())
-    }
-
-    fn preview_create_runtime_summary(&self) {
-        info!("About to create tabsdata instance:");
-        info!("  - provider.....: {}", ClusterProvider::Docker.as_str());
-        info!("  - kubeconfig...: {}", self.kubefile.display());
-        info!("  - context......: {}", self.context);
-        info!("  - cluster url..: {}", self.config.cluster_url);
-        info!("  - cluster name.: {}", self.cluster_name);
-        info!("  - namespace....: {}", self.config.default_namespace);
-    }
-
-    fn report_created_runtime(&self) {
-        info!(
-            "Created tabsdata instance in namespace '{}'.",
-            self.config.default_namespace
-        );
-    }
-
-    async fn ensure_pinnable_runtime(&self) -> Result {
-        let context = self.kube_context().await?;
-        ensure_cluster_reachable(context.client()).await?;
-        ensure_namespace_exists(&context).await?;
-        if !exists_configmap(&context, CONFIGMAP_TABSDATA_GLOBALS).await? {
-            cerror!(
-                "No tabsdata instance found in namespace '{}'. Run 'tdkserver server create ...' first.",
-                self.config.default_namespace
-            );
-            return abort(GeneralError);
-        }
-        Ok(())
-    }
-
-    fn preview_pin_runtime_summary(&self) {
-        info!("About to pin tabsdata session:");
-        info!("  - provider.....: {}", ClusterProvider::Docker.as_str());
-        info!("  - kubeconfig...: {}", self.kubefile.display());
-        info!("  - context......: {}", self.context);
-        info!("  - cluster url..: {}", self.config.cluster_url);
-        info!("  - cluster name.: {}", self.cluster_name);
-        info!("  - namespace....: {}", self.config.default_namespace);
-    }
-
-    fn report_pinned_runtime(&self) {
-        info!(
-            "Pinned tabsdata session in namespace '{}'.",
-            self.config.default_namespace
-        );
-    }
-
-    async fn ensure_startable_runtime(&self) -> Result {
-        if cfg!(td_k8s_development) {
-            let context = self.kube_context().await?;
-            if let Some(data) = get_configmap(&context, CONFIGMAP_TABSDATA_GLOBALS).await?
-                && let Some(yaml) = data.get(MANIFEST_FILE)
-            {
-                verify_manifest_compatibility(yaml)?;
-            }
-        }
-        Ok(())
-    }
-
-    fn preview_start_runtime_summary(&self) {
-        info!("About to start tabsdata instance:");
-        info!("  - provider.....: {}", ClusterProvider::Docker.as_str());
-        info!("  - kubeconfig...: {}", self.kubefile.display());
-        info!("  - context......: {}", self.context);
-        info!("  - namespace....: {}", self.config.default_namespace);
-    }
-
-    fn report_started_runtime(&self) {
-        info!(
-            "Started tabsdata instance in namespace '{}'.",
-            self.config.default_namespace
-        );
-        info!("To use kubectl against this cluster, run:");
-        info!("  export KUBECONFIG={}", self.kubefile.display());
-    }
-
-    async fn runtime_alive(&self) -> bool {
-        self.cluster.is_alive().await
-    }
-
-    async fn ensure_stoppable_runtime(&self) -> Result {
-        Ok(())
-    }
-
-    fn preview_stop_runtime_summary(&self) {
-        info!("About to stop tabsdata instance:");
-        info!("  - provider.....: {}", ClusterProvider::Docker.as_str());
-        info!("  - kubeconfig...: {}", self.kubefile.display());
-        info!("  - context......: {}", self.context);
-        info!("  - namespace....: {}", self.config.default_namespace);
-    }
-
-    fn report_stopped_runtime(&self) {}
-
-    fn preview_restart_runtime_summary(&self) {
-        info!("About to restart tabsdata instance:");
-        info!("  - provider.....: {}", ClusterProvider::Docker.as_str());
-        info!("  - kubeconfig...: {}", self.kubefile.display());
-        info!("  - context......: {}", self.context);
-        info!("  - namespace....: {}", self.config.default_namespace);
-    }
-
-    fn preview_apply_runtime_summary(&self) {
-        info!("About to apply tabsdata configs and restart the instance:");
-        info!("  - provider.....: {}", ClusterProvider::Docker.as_str());
-        info!("  - kubeconfig...: {}", self.kubefile.display());
-        info!("  - context......: {}", self.context);
-        info!("  - namespace....: {}", self.config.default_namespace);
-    }
-
-    async fn prepare_cluster(&self) -> Result<Box<dyn Transaction>> {
-        let bar = spinner("Preparing kubernetes cluster");
-        let result = self.cluster.create();
-        match &result {
-            Ok(_) => bar.finish("Kubernetes cluster prepared"),
-            Err(_) => bar.finish_and_clear(),
-        }
-        result?;
-        Ok(Box::new(()))
-    }
-
-    async fn start_cluster(&self) -> Result {
-        let bar = spinner("Starting kubernetes cluster");
-        let result = self.cluster.start().await;
-        match &result {
-            Ok(_) => bar.finish("Kubernetes cluster started"),
-            Err(_) => bar.finish_and_clear(),
-        }
-        result
-    }
-
-    async fn stop_cluster(&self) -> Result<bool> {
-        let bar = spinner("Stopping kubernetes cluster");
-        let result = self.cluster.stop().await;
-        match &result {
-            Ok(_) => bar.finish("Kubernetes cluster stopped"),
-            Err(_) => bar.finish_and_clear(),
-        }
-        result
-    }
-
-    async fn stage_configmap(&self) -> Result {
-        let bar = spinner("Staging tabsdata configmap");
-        bar.finish("Tabsdata configmap staged");
-        Ok(())
-    }
-
-    async fn store_configmap(&self) -> Result {
-        let bar = spinner("Storing tabsdata configmap");
-        let result = self.store_configmap_inner().await;
-        match &result {
-            Ok(()) => bar.finish("Tabsdata configmap stored"),
-            Err(_) => bar.finish_and_clear(),
-        }
-        result
-    }
-
-    async fn start_instance(&self) -> Result {
-        let bar = spinner("Starting tabsdata instance");
-        let result = self.start_instance_inner(bar.multi()).await;
-        match &result {
-            Ok(_) => bar.finish("Tabsdata instance started"),
-            Err(_) => bar.finish_and_clear(),
-        }
-        result
-    }
-
-    async fn stop_instance(&self) -> Result<bool> {
-        let bar = spinner("Stopping tabsdata instance");
-        let result = self.stop_instance_inner(bar.multi()).await;
-        match &result {
-            Ok(_) => bar.finish("Tabsdata instance stopped"),
-            Err(_) => bar.finish_and_clear(),
-        }
-        result
-    }
-
     fn cluster_provider(&self) -> ClusterProvider {
         ClusterProvider::Docker
     }
@@ -377,16 +187,154 @@ impl Provider for DockerProvider {
         })
     }
 
-    async fn create_database(&self) -> Result {
-        Ok(())
-    }
-
-    async fn create_runtimes(&self) -> Result {
-        Ok(())
-    }
-
     fn secret_generators(&self, _phase: SecretPhase) -> Vec<Box<dyn SecretGenerator>> {
         Vec::new()
+    }
+
+    fn summary(&self) -> Summary {
+        Summary {
+            provider: ClusterProvider::Docker,
+            instance_name: None,
+            instance_path: None,
+            kubeconfig_path: Some(self.kubefile.clone()),
+            context: Some(self.context.clone()),
+            cluster_url: Some(self.config.cluster_url.to_string()),
+            cluster_name: Some(self.cluster_name.clone()),
+            namespace: Some(self.config.default_namespace.clone()),
+        }
+    }
+
+    async fn ensure_pinnable_server(&self) -> Result {
+        let context = self.kube_context().await?;
+        ensure_cluster_reachable(context.client()).await?;
+        ensure_namespace_exists(&context).await?;
+        if !exists_configmap(&context, CONFIGMAP_TABSDATA_GLOBALS).await? {
+            cerror!(
+                "No tabsdata instance found in namespace '{}'. Run 'tdkserver server create ...' first.",
+                self.config.default_namespace
+            );
+            return abort(GeneralError);
+        }
+        Ok(())
+    }
+
+    async fn ensure_creatable_server(&self) -> Result {
+        let context = self.kube_context().await?;
+        ensure_cluster_reachable(context.client()).await?;
+        ensure_namespace_exists(&context).await?;
+        if exists_configmap(&context, CONFIGMAP_TABSDATA_GLOBALS).await? {
+            info!(
+                "A tabsdata instance already exists in namespace '{}'.",
+                self.config.default_namespace
+            );
+            return abort(NoAction);
+        }
+        Ok(())
+    }
+
+    async fn create_cluster_hook(&self, reporter: &dyn Reporter) -> Result<Box<dyn Transaction>> {
+        let step = reporter.step("Preparing kubernetes cluster");
+        self.cluster.create()?;
+        step.done("Kubernetes cluster prepared");
+        let step = reporter.step("Storing tabsdata configmap");
+        self.store_configmaps().await?;
+        step.done("Tabsdata configmap stored");
+        handle_phase_secrets(self, SecretPhase::ClusterStart).await?;
+        Ok(Box::new(()))
+    }
+
+    async fn create_database(&self, _reporter: &dyn Reporter) -> Result {
+        Ok(())
+    }
+
+    async fn create_runtimes(&self, _reporter: &dyn Reporter) -> Result {
+        Ok(())
+    }
+
+    async fn cluster_alive(&self) -> bool {
+        self.cluster.is_alive().await
+    }
+
+    async fn start_cluster_hook(&self, reporter: &dyn Reporter) -> Result {
+        let step = reporter.step("Starting kubernetes cluster");
+        self.cluster.start().await?;
+        step.done("Kubernetes cluster started");
+        handle_phase_secrets(self, SecretPhase::ClusterStart).await?;
+        Ok(())
+    }
+
+    async fn stop_cluster(&self, reporter: &dyn Reporter) -> Result<ClusterStopOutcome> {
+        let step = reporter.step("Stopping kubernetes cluster");
+        let stopped = self.cluster.stop().await?;
+        step.done("Kubernetes cluster stopped");
+        match stopped {
+            true => Ok(ClusterStopOutcome::Stopped),
+            false => Ok(ClusterStopOutcome::AlreadyStopped),
+        }
+    }
+
+    async fn ensure_startable_cluster(&self) -> Result {
+        Ok(())
+    }
+
+    async fn ensure_stoppable_cluster(&self) -> Result {
+        Ok(())
+    }
+
+    async fn ensure_restartable_cluster(&self) -> Result {
+        Ok(())
+    }
+
+    async fn start_instance_hook(&self, reporter: &dyn Reporter) -> Result {
+        handle_phase_secrets(self, SecretPhase::InstanceStart).await?;
+        let step = reporter.step("Starting tabsdata instance");
+        let multi = td_common::logging::multi_progress().unwrap_or_default();
+        self.apply_workload(&multi).await?;
+        step.done("Tabsdata instance started");
+        Ok(())
+    }
+
+    async fn stop_instance(&self, reporter: &dyn Reporter) -> Result<InstanceStopOutcome> {
+        let step = reporter.step("Stopping tabsdata instance");
+        let multi = td_common::logging::multi_progress().unwrap_or_default();
+        let stopped = self.teardown_workload(&multi).await?;
+        step.done("Tabsdata instance stopped");
+        match stopped {
+            true => Ok(InstanceStopOutcome::Stopped),
+            false => Ok(InstanceStopOutcome::AlreadyStopped),
+        }
+    }
+
+    async fn ensure_startable_instance(&self) -> Result {
+        Ok(())
+    }
+
+    async fn ensure_stoppable_instance(&self) -> Result {
+        Ok(())
+    }
+
+    async fn ensure_restartable_instance(&self) -> Result {
+        Ok(())
+    }
+
+    async fn ensure_startable_server(&self) -> Result {
+        if cfg!(td_k8s_development) {
+            let context = self.kube_context().await?;
+            if let Some(data) = get_configmap(&context, CONFIGMAP_TABSDATA_GLOBALS).await?
+                && let Some(yaml) = data.get(MANIFEST_FILE)
+            {
+                verify_manifest_compatibility(yaml)?;
+            }
+        }
+        Ok(())
+    }
+
+    async fn ensure_stoppable_server(&self) -> Result {
+        Ok(())
+    }
+
+    async fn ensure_restartable_server(&self) -> Result {
+        Ok(())
     }
 }
 
@@ -397,7 +345,7 @@ impl HostedProvider for DockerProvider {}
 impl LocalProvider for DockerProvider {}
 
 impl DockerProvider {
-    async fn store_configmap_inner(&self) -> Result {
+    async fn store_configmaps(&self) -> Result {
         let loaded = load_profile(self.cluster_provider(), self.verbose)?;
         let resolver = ConfigurationResolver::new(self.system_values()?);
         let rendered = render_for_configmaps(&loaded, &resolver).await?;
@@ -408,7 +356,7 @@ impl DockerProvider {
         Ok(())
     }
 
-    async fn start_instance_inner(&self, multi: &MultiProgress) -> Result {
+    async fn apply_workload(&self, multi: &MultiProgress) -> Result {
         self.instance.start().await?;
         let context = self.kube_context().await?;
         let globals = require_configmap(&context, CONFIGMAP_TABSDATA_GLOBALS).await?;
@@ -418,7 +366,7 @@ impl DockerProvider {
         start_workload(self, &profile, multi).await
     }
 
-    async fn stop_instance_inner(&self, multi: &MultiProgress) -> Result<bool> {
+    async fn teardown_workload(&self, multi: &MultiProgress) -> Result<bool> {
         let stopped_workload = stop_workload(self, multi).await?;
         let stopped_instance = self.instance.stop().await?;
         Ok(stopped_workload || stopped_instance)

@@ -7,9 +7,11 @@ use std::path::PathBuf;
 use clap_derive::Args;
 use tracing::info;
 
+use crate::base::reporter::InteractiveReporter;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
 use crate::client::tdkserver::commands::config::put::{ensure_source_folder, put_configs};
-use crate::client::tdkserver::commands::server::restart::restart_runtime;
+use crate::client::tdkserver::render::preview;
+use crate::client::tdkserver::commands::server::restart::restart_server;
 use crate::client::tdkserver::common::{effective_yes, prompt_yes_no};
 use crate::core::system::exit::Result;
 use crate::runtime::provider::provider_for_or_tdkcontext;
@@ -67,15 +69,15 @@ pub async fn command_apply(arguments: ApplyArguments, globals: &GlobalArguments)
 
     ensure_source_folder(&folder)?;
     let provider = provider_for_or_tdkcontext(cluster, instance, globals.verbose).await?;
-    provider.ensure_startable_runtime().await?;
+    provider.ensure_startable_server().await?;
 
-    let alive = provider.runtime_alive().await;
-    if alive {
-        provider.ensure_stoppable_runtime().await?;
+    let not_dead = !provider.server_dead().await;
+    if not_dead {
+        provider.ensure_stoppable_server().await?;
     }
 
     if preview {
-        provider.preview_apply_runtime_summary();
+        preview::apply_config(&provider.summary());
     }
     if !effective_yes(yes) && !prompt_yes_no("Proceed with the apply?") {
         info!("Operation cancelled.");
@@ -83,5 +85,6 @@ pub async fn command_apply(arguments: ApplyArguments, globals: &GlobalArguments)
     }
 
     put_configs(provider.as_ref(), &folder).await?;
-    restart_runtime(provider.as_ref(), alive).await
+    let reporter = InteractiveReporter::new();
+    restart_server(provider.as_ref(), &reporter, not_dead).await
 }

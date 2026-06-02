@@ -153,13 +153,14 @@ pub async fn list_secrets(
     let api: Api<Secret> = Api::namespaced(context.client().clone(), context.namespace());
     let selector = part_of_tabsdata();
     let list_params = ListParams::default().labels_from(&selector);
-    let secrets = api.list(&list_params).await.map_err(|error| {
-        KubeSecretError::ListFailed {
+    let secrets = api
+        .list(&list_params)
+        .await
+        .map_err(|error| KubeSecretError::ListFailed {
             namespace: context.namespace().to_owned(),
             label_selector: selector.to_string(),
             cause: error.to_string(),
-        }
-    })?;
+        })?;
     let mut listed = Vec::new();
     for secret in secrets {
         let Some(name) = secret.metadata.name else {
@@ -170,13 +171,7 @@ pub async fn list_secrets(
             .into_iter()
             .flatten()
             .map(|(key, _)| key)
-            .chain(
-                secret
-                    .string_data
-                    .into_iter()
-                    .flatten()
-                    .map(|(key, _)| key),
-            )
+            .chain(secret.string_data.into_iter().flatten().map(|(key, _)| key))
             .collect();
         keys.sort();
         listed.push((name, keys));

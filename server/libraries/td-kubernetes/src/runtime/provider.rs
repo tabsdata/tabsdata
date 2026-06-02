@@ -7,6 +7,8 @@ pub mod docker;
 pub mod eks;
 pub mod fargate;
 pub mod kminus;
+pub mod outcome;
+pub mod summary;
 
 use std::future::Future;
 
@@ -18,13 +20,15 @@ use kube::Config;
 use td_common::status::ExitStatus::GeneralError;
 
 use crate::base::constants::KMINUS_MIN_NOFILE;
+use crate::base::reporter::Reporter;
 use crate::cerror;
-use crate::client::session::pin::{Session, PinContext};
+use crate::client::session::pin::{PinContext, Session};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use std::sync::Arc;
 
 use crate::core::pod::{ValidationError, container as container_pod, process as process_pod};
 use crate::core::system::exit::{Result, abort};
+use crate::kube::api::pod::list_pods;
 use crate::kube::context::KubeContext;
 use crate::runtime::gateway::resolver::SystemValues;
 use crate::runtime::instance::profile::bundle::Axis;
@@ -33,6 +37,12 @@ use crate::runtime::provider::docker::DockerProvider;
 use crate::runtime::provider::eks::EksProvider;
 use crate::runtime::provider::fargate::FargateProvider;
 use crate::runtime::provider::kminus::KminusProvider;
+use crate::runtime::provider::outcome::{
+    ClusterRestartOutcome, ClusterStartOutcome, ClusterStopOutcome, InstanceRestartOutcome,
+    InstanceStartOutcome, InstanceStopOutcome, ServerRestartOutcome, ServerStartOutcome,
+    ServerStopOutcome,
+};
+use crate::runtime::provider::summary::Summary;
 use crate::runtime::reporting::build_kube_client;
 use crate::runtime::secrets::{SecretGenerator, SecretHandler, SecretPhase};
 
@@ -183,59 +193,11 @@ pub trait Instance: Send + Sync {
 pub trait Provider: Send + Sync {
     fn name(&self) -> &'static str;
     fn display_name(&self) -> String;
+
     fn to_session(&self) -> Session;
-
-    async fn ensure_creatable_runtime(&self) -> Result;
-    fn preview_create_runtime_summary(&self);
-    fn report_created_runtime(&self);
-
-    async fn ensure_pinnable_runtime(&self) -> Result;
-    fn preview_pin_runtime_summary(&self);
-    fn report_pinned_runtime(&self);
-
-    async fn ensure_startable_runtime(&self) -> Result;
-    fn preview_start_runtime_summary(&self);
-    async fn start_runtime(&self) -> Result {
-        self.start_cluster().await?;
-        handle_phase_secrets(self, SecretPhase::Start).await?;
-        self.start_instance().await?;
-        Ok(())
-    }
-    fn report_started_runtime(&self);
-
-    async fn runtime_alive(&self) -> bool;
-
-    async fn ensure_stoppable_runtime(&self) -> Result;
-    fn preview_stop_runtime_summary(&self);
-    async fn stop_runtime(&self) -> Result<bool> {
-        let stopped_instance = self.stop_instance().await?;
-        let stopped_cluster = self.stop_cluster().await?;
-        Ok(stopped_instance || stopped_cluster)
-    }
-    fn report_stopped_runtime(&self);
-
-    fn preview_restart_runtime_summary(&self);
-
-    fn preview_apply_runtime_summary(&self);
-
-    async fn prepare_cluster(&self) -> Result<Box<dyn Transaction>>;
-    async fn create_database(&self) -> Result;
-    async fn create_runtimes(&self) -> Result;
-    async fn start_cluster(&self) -> Result;
-    async fn stop_cluster(&self) -> Result<bool>;
-
-    async fn prepare_instance(&self) -> Result {
-        self.stage_configmap().await?;
-        self.store_configmap().await
-    }
-    async fn stage_configmap(&self) -> Result;
-    async fn store_configmap(&self) -> Result;
-    async fn start_instance(&self) -> Result;
-    async fn stop_instance(&self) -> Result<bool>;
 
     fn cluster_provider(&self) -> ClusterProvider;
     async fn kube_config(&self) -> Result<Config>;
-
     async fn kube_context(&self) -> Result<KubeContext> {
         let config = self.kube_config().await?;
         let namespace = config.default_namespace.clone();
@@ -244,11 +206,121 @@ pub trait Provider: Send + Sync {
     }
 
     fn system_values(&self) -> Result<SystemValues>;
-
     fn secret_generators(&self, phase: SecretPhase) -> Vec<Box<dyn SecretGenerator>>;
+
+    fn summary(&self) -> Summary;
+
+    async fn ensure_pinnable_server(&self) -> Result;
+    async fn ensure_creatable_server(&self) -> Result;
+
+    async fn create_cluster_hook(&self, reporter: &dyn Reporter) -> Result<Box<dyn Transaction>>;
+    async fn create_database(&self, reporter: &dyn Reporter) -> Result;
+    async fn create_runtimes(&self, reporter: &dyn Reporter) -> Result;
+
+    async fn cluster_alive(&self) -> bool;
+    async fn cluster_dead(&self) -> bool {
+        !self.cluster_alive().await
+    }
+    async fn start_cluster(&self, reporter: &dyn Reporter) -> Result<ClusterStartOutcome> {
+        if self.cluster_alive().await {
+            return Ok(ClusterStartOutcome::AlreadyRunning);
+        }
+        self.start_cluster_hook(reporter).await?;
+        Ok(ClusterStartOutcome::Started)
+    }
+    async fn start_cluster_hook(&self, reporter: &dyn Reporter) -> Result;
+    async fn stop_cluster(&self, reporter: &dyn Reporter) -> Result<ClusterStopOutcome>;
+    async fn restart_cluster(&self, reporter: &dyn Reporter) -> Result<ClusterRestartOutcome> {
+        let stop = if self.cluster_alive().await {
+            Some(self.stop_cluster(reporter).await?)
+        } else {
+            None
+        };
+        let start = self.start_cluster(reporter).await?;
+        Ok(ClusterRestartOutcome { stop, start })
+    }
+    async fn ensure_startable_cluster(&self) -> Result;
+    async fn ensure_stoppable_cluster(&self) -> Result;
+    async fn ensure_restartable_cluster(&self) -> Result;
+
+    async fn instance_alive(&self) -> bool {
+        if !self.cluster_alive().await {
+            return false;
+        }
+        let Ok(context) = self.kube_context().await else {
+            return false;
+        };
+        let Ok(pods) = list_pods(&context).await else {
+            return false;
+        };
+        pods.iter().any(|pod| {
+            !matches!(
+                pod.status
+                    .as_ref()
+                    .and_then(|status| status.phase.as_deref()),
+                Some("Succeeded") | Some("Failed"),
+            )
+        })
+    }
+    async fn instance_dead(&self) -> bool {
+        !self.instance_alive().await
+    }
+    async fn start_instance(&self, reporter: &dyn Reporter) -> Result<InstanceStartOutcome> {
+        if self.instance_alive().await {
+            return Ok(InstanceStartOutcome::AlreadyRunning);
+        }
+        self.start_instance_hook(reporter).await?;
+        Ok(InstanceStartOutcome::Started)
+    }
+    async fn start_instance_hook(&self, reporter: &dyn Reporter) -> Result;
+    async fn stop_instance(&self, reporter: &dyn Reporter) -> Result<InstanceStopOutcome>;
+    async fn restart_instance(&self, reporter: &dyn Reporter) -> Result<InstanceRestartOutcome> {
+        let stop = if self.instance_alive().await {
+            Some(self.stop_instance(reporter).await?)
+        } else {
+            None
+        };
+        let start = self.start_instance(reporter).await?;
+        Ok(InstanceRestartOutcome { stop, start })
+    }
+    async fn ensure_startable_instance(&self) -> Result;
+    async fn ensure_stoppable_instance(&self) -> Result;
+    async fn ensure_restartable_instance(&self) -> Result;
+
+    async fn server_alive(&self) -> bool {
+        self.cluster_alive().await && self.instance_alive().await
+    }
+    async fn server_dead(&self) -> bool {
+        self.cluster_dead().await && self.instance_dead().await
+    }
+    async fn start_server(&self, reporter: &dyn Reporter) -> Result<ServerStartOutcome> {
+        let cluster = self.start_cluster(reporter).await?;
+        let instance = self.start_instance(reporter).await?;
+        Ok(ServerStartOutcome { cluster, instance })
+    }
+    async fn stop_server(&self, reporter: &dyn Reporter) -> Result<ServerStopOutcome> {
+        let instance = self.stop_instance(reporter).await?;
+        let cluster = self.stop_cluster(reporter).await?;
+        Ok(ServerStopOutcome { cluster, instance })
+    }
+    async fn restart_server(&self, reporter: &dyn Reporter) -> Result<ServerRestartOutcome> {
+        let stop = if self.server_alive().await {
+            Some(self.stop_server(reporter).await?)
+        } else {
+            None
+        };
+        let start = self.start_server(reporter).await?;
+        Ok(ServerRestartOutcome { stop, start })
+    }
+    async fn ensure_startable_server(&self) -> Result;
+    async fn ensure_stoppable_server(&self) -> Result;
+    async fn ensure_restartable_server(&self) -> Result;
 }
 
-async fn handle_phase_secrets(provider: &(impl Provider + ?Sized), phase: SecretPhase) -> Result {
+pub(super) async fn handle_phase_secrets(
+    provider: &(impl Provider + ?Sized),
+    phase: SecretPhase,
+) -> Result {
     let generators = provider.secret_generators(phase);
     if generators.is_empty() {
         return Ok(());

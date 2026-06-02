@@ -5,10 +5,13 @@
 use clap_derive::Args;
 use tracing::info;
 
+use crate::base::reporter::{InteractiveReporter, Reporter};
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
+use crate::client::tdkserver::render::{preview, report};
 use crate::client::tdkserver::common::{effective_yes, prompt_yes_no};
 use crate::core::system::exit::Result;
 use crate::cwarn;
+use crate::runtime::provider::outcome::{ClusterStopOutcome, InstanceStopOutcome};
 use crate::runtime::provider::{Provider, provider_for_or_tdkcontext};
 
 #[derive(Debug, Clone, Args)]
@@ -51,37 +54,45 @@ pub async fn command_restart(arguments: RestartArguments, globals: &GlobalArgume
     } = arguments;
 
     let provider = provider_for_or_tdkcontext(cluster, instance, globals.verbose).await?;
-    provider.ensure_startable_runtime().await?;
+    provider.ensure_startable_server().await?;
 
-    let alive = provider.runtime_alive().await;
-    if alive {
-        provider.ensure_stoppable_runtime().await?;
+    let not_dead = !provider.server_dead().await;
+    if not_dead {
+        provider.ensure_stoppable_server().await?;
     }
 
     if preview {
-        provider.preview_restart_runtime_summary();
+        preview::restart_server(&provider.summary());
     }
     if !effective_yes(yes) && !prompt_yes_no("Proceed with the restart?") {
         info!("Operation cancelled.");
         return Ok(());
     }
 
-    restart_runtime(provider.as_ref(), alive).await
+    let reporter = InteractiveReporter::new();
+    restart_server(provider.as_ref(), &reporter, not_dead).await
 }
 
-pub async fn restart_runtime(provider: &dyn Provider, alive: bool) -> Result {
-    if alive {
-        if provider.stop_runtime().await? {
-            provider.report_stopped_runtime();
+pub async fn restart_server(
+    provider: &dyn Provider,
+    reporter: &dyn Reporter,
+    not_dead: bool,
+) -> Result {
+    if not_dead {
+        let outcome = provider.stop_server(reporter).await?;
+        if matches!(outcome.cluster, ClusterStopOutcome::AlreadyStopped)
+            && matches!(outcome.instance, InstanceStopOutcome::AlreadyStopped)
+        {
+            cwarn!("Server was already stopped.");
         } else {
-            cwarn!("Nothing to stop.");
+            report::stopped_server(&provider.summary());
         }
     } else {
-        cwarn!("Instance is already stopped; starting it.");
+        cwarn!("Server was already stopped; starting it.");
     }
 
-    provider.start_runtime().await?;
-    provider.report_started_runtime();
+    provider.start_server(reporter).await?;
+    report::restarted_server(&provider.summary());
 
     Ok(())
 }

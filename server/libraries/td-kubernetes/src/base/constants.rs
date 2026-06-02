@@ -2,6 +2,8 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+use std::time::Duration;
+
 use const_format::concatcp;
 
 pub const ENV_KUBECONFIG: &str = "KUBECONFIG";
@@ -72,3 +74,6 @@ pub const VALUE_Y: &str = "y";
 pub const VALUE_YES: &str = "yes";
 pub const VALUE_N: &str = "n";
 pub const VALUE_NO: &str = "no";
+
+pub const DELETE_POD_WAIT_TIMEOUT: Duration = Duration::from_secs(30);
+pub const DELETE_POD_POLL_INTERVAL: Duration = Duration::from_millis(250);

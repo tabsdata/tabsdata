@@ -51,7 +51,10 @@ pub async fn command_put(arguments: PutArguments, globals: &GlobalArguments) -> 
 
 pub fn ensure_source_folder(folder: &PathBuf) -> Result {
     if !folder.is_dir() {
-        return abort_with(GeneralError, CliError::FolderNotFound(folder.display().to_string()));
+        return abort_with(
+            GeneralError,
+            CliError::FolderNotFound(folder.display().to_string()),
+        );
     }
     let mut folder_entries = std::fs::read_dir(folder).map_err(|error| {
         TdError::from(CliError::FolderReadFailed {
@@ -60,7 +63,10 @@ pub fn ensure_source_folder(folder: &PathBuf) -> Result {
         })
     })?;
     if folder_entries.next().is_none() {
-        return abort_with(GeneralError, CliError::FolderEmpty(folder.display().to_string()));
+        return abort_with(
+            GeneralError,
+            CliError::FolderEmpty(folder.display().to_string()),
+        );
     }
     Ok(())
 }
@@ -84,7 +90,9 @@ pub async fn put_configs(provider: &dyn Provider, folder: &PathBuf) -> Result {
         }
         let config_name = config_entry.file_name().to_string_lossy().into_owned();
         if !config_path.is_dir() {
-            warnings.push(format!("Entry '{config_name}' is not a config folder; ignored."));
+            warnings.push(format!(
+                "Entry '{config_name}' is not a config folder; ignored."
+            ));
             continue;
         }
         let Some(existing_keys) = keys_by_config.get(&config_name) else {

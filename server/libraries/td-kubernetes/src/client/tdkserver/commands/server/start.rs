@@ -5,7 +5,9 @@
 use clap_derive::Args;
 use td_common::status::ExitStatus::Cancelled;
 
+use crate::base::reporter::InteractiveReporter;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
+use crate::client::tdkserver::render::{preview, report};
 use crate::client::tdkserver::common::{effective_yes, prompt_yes_no};
 use crate::core::system::exit::{Result, abort};
 use crate::cwarn;
@@ -51,22 +53,23 @@ pub async fn command_start(arguments: StartArguments, globals: &GlobalArguments)
     } = arguments;
 
     let provider = provider_for_or_tdkcontext(cluster, instance, globals.verbose).await?;
-    provider.ensure_startable_runtime().await?;
+    provider.ensure_startable_server().await?;
 
-    if provider.runtime_alive().await {
-        cwarn!("Instance is already started.");
+    if provider.server_alive().await {
+        cwarn!("Server is already started.");
         return Ok(());
     }
 
     if preview {
-        provider.preview_start_runtime_summary();
+        preview::start_server(&provider.summary());
     }
     if !effective_yes(yes) && !prompt_yes_no("Proceed with the start?") {
         return abort(Cancelled);
     }
 
-    provider.start_runtime().await?;
-    provider.report_started_runtime();
+    let reporter = InteractiveReporter::new();
+    provider.start_server(&reporter).await?;
+    report::started_server(&provider.summary());
 
     Ok(())
 }

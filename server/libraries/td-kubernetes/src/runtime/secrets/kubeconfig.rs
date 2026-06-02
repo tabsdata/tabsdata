@@ -24,7 +24,7 @@ impl KubeconfigSecretGenerator {
     pub fn new(kubefile: PathBuf) -> Self {
         Self {
             kubefile,
-            phases: vec![SecretPhase::Start],
+            phases: vec![SecretPhase::ClusterStart],
         }
     }
 }

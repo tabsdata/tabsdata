@@ -14,7 +14,11 @@ pub struct ShowArguments {}
 pub async fn command_show(_arguments: ShowArguments) -> Result {
     match PinContext::load()?.autoconfirm {
         Some(autoconfirm) => {
-            let state = if autoconfirm.enabled { "enabled" } else { "disabled" };
+            let state = if autoconfirm.enabled {
+                "enabled"
+            } else {
+                "disabled"
+            };
             tracing::info!("Autoconfirm is {state}.");
         }
         None => println!("{}", "No autoconfirm is pinned.".dimmed()),

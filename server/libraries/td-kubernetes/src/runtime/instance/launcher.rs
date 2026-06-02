@@ -66,19 +66,18 @@ pub async fn apply_init_phase(
     let mut applied: Vec<String> = Vec::new();
     for (key, job) in prepared {
         let bar = phase.add_resource(&key);
-        let created = match job_api::create_job(&context, &job, &key, None, Vec::new(), Vec::new())
-            .await
-        {
-            Ok(created) => {
-                bar.finish_with_message(format!("{key} (applied)"));
-                created
-            }
-            Err(error) => {
-                bar.finish_with_message(format!("{key} (failed)"));
-                cerror!("Failed to apply init job from '{key}': {error}");
-                return Err(error.into());
-            }
-        };
+        let created =
+            match job_api::create_job(&context, &job, &key, None, Vec::new(), Vec::new()).await {
+                Ok(created) => {
+                    bar.finish_with_message(format!("{key} (applied)"));
+                    created
+                }
+                Err(error) => {
+                    bar.finish_with_message(format!("{key} (failed)"));
+                    cerror!("Failed to apply init job from '{key}': {error}");
+                    return Err(error.into());
+                }
+            };
         let Some(name) = created.metadata.name else {
             cerror!("Init job from '{key}' was created without a metadata.name.");
             return abort(GeneralError);

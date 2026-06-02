@@ -5,10 +5,13 @@
 use clap_derive::Args;
 use tracing::info;
 
+use crate::base::reporter::InteractiveReporter;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
+use crate::client::tdkserver::render::{preview, report};
 use crate::client::tdkserver::common::{effective_yes, prompt_yes_no};
 use crate::core::system::exit::Result;
 use crate::cwarn;
+use crate::runtime::provider::outcome::{ClusterStopOutcome, InstanceStopOutcome};
 use crate::runtime::provider::provider_for_or_tdkcontext;
 
 #[derive(Debug, Clone, Args)]
@@ -51,25 +54,29 @@ pub async fn command_stop(arguments: StopArguments, globals: &GlobalArguments) -
     } = arguments;
 
     let provider = provider_for_or_tdkcontext(cluster, instance, globals.verbose).await?;
-    provider.ensure_stoppable_runtime().await?;
+    provider.ensure_stoppable_server().await?;
 
-    if !provider.runtime_alive().await {
-        cwarn!("Instance is already stopped.");
+    if provider.server_dead().await {
+        cwarn!("Server is already stopped.");
         return Ok(());
     }
 
     if preview {
-        provider.preview_stop_runtime_summary();
+        preview::stop_server(&provider.summary());
     }
     if !effective_yes(yes) && !prompt_yes_no("Proceed with the stop?") {
         info!("Operation cancelled.");
         return Ok(());
     }
 
-    if provider.stop_runtime().await? {
-        provider.report_stopped_runtime();
+    let reporter = InteractiveReporter::new();
+    let outcome = provider.stop_server(&reporter).await?;
+    if matches!(outcome.cluster, ClusterStopOutcome::AlreadyStopped)
+        && matches!(outcome.instance, InstanceStopOutcome::AlreadyStopped)
+    {
+        cwarn!("Server is already stopped.");
     } else {
-        cwarn!("Nothing to stop.");
+        report::stopped_server(&provider.summary());
     }
 
     Ok(())

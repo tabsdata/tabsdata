@@ -2,11 +2,14 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+use std::time::Instant;
+
 use k8s_openapi::api::core::v1::Pod;
 use kube::Api;
 use kube::api::{DeleteParams, ListParams, PostParams, PropagationPolicy};
 use kube::runtime::wait::{Condition, await_condition};
 
+use crate::base::constants::{DELETE_POD_POLL_INTERVAL, DELETE_POD_WAIT_TIMEOUT};
 use crate::base::error::kubernetes::{KubePodError, KubernetesError};
 use crate::base::naming::to_kube_identifier;
 use crate::kube::api::secret::create_secret;
@@ -96,14 +99,38 @@ pub async fn delete_pods(context: &KubeContext) -> Result<(), KubernetesError> {
     api.delete_collection(&delete_params, &list_params)
         .await
         .map(|_| ())
-        .map_err(|error| {
-            KubePodError::DeleteCollectionFailed {
+        .map_err(|error| KubePodError::DeleteCollectionFailed {
+            namespace: context.namespace().to_owned(),
+            label_selector: selector.to_string(),
+            cause: error.to_string(),
+        })?;
+    let deadline = Instant::now() + DELETE_POD_WAIT_TIMEOUT;
+    loop {
+        let remaining = api
+            .list(&list_params)
+            .await
+            .map(|list| list.items.len())
+            .map_err(|error| KubePodError::ListFailed {
                 namespace: context.namespace().to_owned(),
                 label_selector: selector.to_string(),
                 cause: error.to_string(),
+            })?;
+        if remaining == 0 {
+            return Ok(());
+        }
+        if Instant::now() >= deadline {
+            return Err(KubePodError::DeleteCollectionFailed {
+                namespace: context.namespace().to_owned(),
+                label_selector: selector.to_string(),
+                cause: format!(
+                    "There is/are {remaining} pod(s) still present after {}s",
+                    DELETE_POD_WAIT_TIMEOUT.as_secs()
+                ),
             }
-            .into()
-        })
+            .into());
+        }
+        tokio::time::sleep(DELETE_POD_POLL_INTERVAL).await;
+    }
 }
 
 pub async fn list_pods(context: &KubeContext) -> Result<Vec<Pod>, KubernetesError> {

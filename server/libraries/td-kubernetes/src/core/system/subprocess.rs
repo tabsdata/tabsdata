@@ -7,7 +7,7 @@ use std::process::{Command as SystemCommand, Output, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use sysinfo::{Pid, System};
+use sysinfo::{Pid, ProcessesToUpdate, System};
 use tracing::info;
 
 pub fn run(command: &mut SystemCommand, label: &str, verbose: bool) -> io::Result<Output> {
@@ -76,35 +76,51 @@ pub fn apply_subprocess_flags(command: &mut SystemCommand) {
         use windows_sys::Win32::System::Threading::{CREATE_NEW_PROCESS_GROUP, CREATE_NO_WINDOW};
         command.creation_flags(CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP);
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(unix)]
     {
-        let _ = command;
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
     }
 }
 
 pub fn is_alive(pid: u32) -> bool {
     let mut system = System::new();
-    system.refresh_processes(
-        sysinfo::ProcessesToUpdate::Some(&[Pid::from_u32(pid)]),
-        true,
-    );
+    system.refresh_processes(ProcessesToUpdate::Some(&[Pid::from_u32(pid)]), true);
     system.process(Pid::from_u32(pid)).is_some()
 }
 
 pub fn terminate_process(pid: u32, grace: Duration) {
+    let descendants = collect_descendants(pid);
     request_graceful_shutdown(pid);
-    if wait_for_exit(pid, grace) {
+    if wait_for_tree_exit(pid, &descendants, grace) {
         return;
     }
-    force_kill_tree(pid);
+    force_kill_tree(pid, &descendants);
+}
+
+fn collect_descendants(root: u32) -> Vec<u32> {
+    let mut system = System::new();
+    system.refresh_processes(ProcessesToUpdate::All, true);
+    let root_pid = Pid::from_u32(root);
+    let mut descendants: Vec<u32> = Vec::new();
+    let mut frontier: Vec<Pid> = vec![root_pid];
+    while let Some(current) = frontier.pop() {
+        for (pid, process) in system.processes() {
+            if process.parent() == Some(current) {
+                descendants.push(pid.as_u32());
+                frontier.push(*pid);
+            }
+        }
+    }
+    descendants
 }
 
 fn request_graceful_shutdown(pid: u32) {
     #[cfg(unix)]
     {
-        use sysinfo::Signal;
-        use td_common::os::terminate_process as os_terminate;
-        let _ = os_terminate(pid as i32, Signal::Term);
+        unsafe {
+            libc::kill(-(pid as i32), libc::SIGTERM);
+        }
     }
     #[cfg(target_os = "windows")]
     {
@@ -115,10 +131,11 @@ fn request_graceful_shutdown(pid: u32) {
     }
 }
 
-fn wait_for_exit(pid: u32, timeout: Duration) -> bool {
+fn wait_for_tree_exit(root: u32, descendants: &[u32], timeout: Duration) -> bool {
     let deadline = Instant::now() + timeout;
     loop {
-        if !is_alive(pid) {
+        let any_alive = is_alive(root) || descendants.iter().any(|pid| is_alive(*pid));
+        if !any_alive {
             return true;
         }
         if Instant::now() >= deadline {
@@ -128,20 +145,24 @@ fn wait_for_exit(pid: u32, timeout: Duration) -> bool {
     }
 }
 
-fn force_kill_tree(pid: u32) {
+fn force_kill_tree(root: u32, descendants: &[u32]) {
     #[cfg(unix)]
     {
-        use sysinfo::Signal;
-        use td_common::os::terminate_process as os_terminate;
-        let _ = os_terminate(pid as i32, Signal::Kill);
+        unsafe {
+            libc::kill(-(root as i32), libc::SIGKILL);
+            for pid in descendants {
+                libc::kill(*pid as i32, libc::SIGKILL);
+            }
+        }
     }
     #[cfg(target_os = "windows")]
     {
+        let _ = descendants;
         let mut command = SystemCommand::new("taskkill.exe");
         apply_detached_flags(&mut command);
         let _ = command
             .arg("/PID")
-            .arg(pid.to_string())
+            .arg(root.to_string())
             .arg("/T")
             .arg("/F")
             .status();

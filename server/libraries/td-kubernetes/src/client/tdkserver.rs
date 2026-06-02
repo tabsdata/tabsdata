@@ -5,6 +5,7 @@
 pub mod arguments;
 pub mod commands;
 pub mod common;
+pub mod render;
 pub mod widgets;
 
 use clap::{CommandFactory, Parser};
@@ -12,7 +13,9 @@ use clap::{CommandFactory, Parser};
 use crate::cerror;
 use crate::client::tdkserver::arguments::{Arguments, Commands};
 use crate::client::tdkserver::commands::autoconfirm::command_autoconfirm;
+use crate::client::tdkserver::commands::cluster::command_cluster;
 use crate::client::tdkserver::commands::config::command_config;
+use crate::client::tdkserver::commands::instance::command_instance;
 use crate::client::tdkserver::commands::secret::command_secret;
 use crate::client::tdkserver::commands::server::command_server;
 use crate::client::tdkserver::commands::session::command_session;
@@ -33,12 +36,14 @@ impl TabsDataKubernetesClient {
                 println!();
                 Ok(())
             }
-            Some(Commands::Autoconfirm(command)) => command_autoconfirm(command, &globals).await,
+            Some(Commands::Shell) => command_shell(&globals).await,
+            Some(Commands::Cluster(command)) => command_cluster(command, &globals).await,
+            Some(Commands::Instance(command)) => command_instance(command, &globals).await,
+            Some(Commands::Server(command)) => command_server(command, &globals).await,
             Some(Commands::Config(command)) => command_config(command, &globals).await,
             Some(Commands::Secret(command)) => command_secret(command, &globals).await,
-            Some(Commands::Server(command)) => command_server(command, &globals).await,
             Some(Commands::Session(command)) => command_session(command, &globals).await,
-            Some(Commands::Shell) => command_shell(&globals).await,
+            Some(Commands::Autoconfirm(command)) => command_autoconfirm(command, &globals).await,
         }
     }
 }

@@ -7,6 +7,7 @@ use tracing::info;
 
 use crate::client::session::pin::PinContext;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
+use crate::client::tdkserver::render::{preview, report};
 use crate::client::tdkserver::common::{effective_yes, prompt_yes_no};
 use crate::core::system::exit::Result;
 use crate::runtime::provider::provider_for;
@@ -51,10 +52,10 @@ pub async fn command_pin(arguments: PinArguments, globals: &GlobalArguments) -> 
     } = arguments;
 
     let provider = provider_for(cluster, instance, globals.verbose).await?;
-    provider.ensure_pinnable_runtime().await?;
+    provider.ensure_pinnable_server().await?;
 
     if preview {
-        provider.preview_pin_runtime_summary();
+        preview::pin_server(&provider.summary());
     }
     if !effective_yes(yes) && !prompt_yes_no("Pin this as the active tabsdata session?") {
         info!("Operation cancelled.");
@@ -62,7 +63,7 @@ pub async fn command_pin(arguments: PinArguments, globals: &GlobalArguments) -> 
     }
 
     PinContext::pin_session(provider.to_session())?;
-    provider.report_pinned_runtime();
+    report::pinned_server(&provider.summary());
 
     Ok(())
 }

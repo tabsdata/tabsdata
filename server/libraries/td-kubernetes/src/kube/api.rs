@@ -75,14 +75,14 @@ pub fn part_of_tabsdata() -> Selector {
 }
 
 pub fn owner_ref_for_pod(pod: &Pod, template: &str) -> Result<OwnerReference, NamingError> {
-    let name =
-        pod.metadata
-            .name
-            .clone()
-            .ok_or_else(|| NamingError::PodMissingOwnerMetadata {
-                template: template.to_owned(),
-                field: KUBE_METADATA_FIELD_NAME.to_owned(),
-            })?;
+    let name = pod
+        .metadata
+        .name
+        .clone()
+        .ok_or_else(|| NamingError::PodMissingOwnerMetadata {
+            template: template.to_owned(),
+            field: KUBE_METADATA_FIELD_NAME.to_owned(),
+        })?;
     let uid = pod
         .metadata
         .uid
@@ -102,14 +102,14 @@ pub fn owner_ref_for_pod(pod: &Pod, template: &str) -> Result<OwnerReference, Na
 }
 
 pub fn owner_ref_for_job(job: &Job, template: &str) -> Result<OwnerReference, NamingError> {
-    let name =
-        job.metadata
-            .name
-            .clone()
-            .ok_or_else(|| NamingError::JobMissingOwnerMetadata {
-                template: template.to_owned(),
-                field: KUBE_METADATA_FIELD_NAME.to_owned(),
-            })?;
+    let name = job
+        .metadata
+        .name
+        .clone()
+        .ok_or_else(|| NamingError::JobMissingOwnerMetadata {
+            template: template.to_owned(),
+            field: KUBE_METADATA_FIELD_NAME.to_owned(),
+        })?;
     let uid = job
         .metadata
         .uid
