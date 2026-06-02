@@ -109,6 +109,7 @@ pub mod discovery;
 pub mod generator;
 pub mod handler;
 pub mod kubeconfig;
+pub mod manifest;
 pub mod phase;
 
 pub use generator::SecretGenerator;

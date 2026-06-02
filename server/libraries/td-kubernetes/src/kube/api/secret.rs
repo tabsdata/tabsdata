@@ -10,10 +10,17 @@ use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, OwnerReference}
 use kube::Api;
 use kube::api::{DeleteParams, ListParams, PostParams};
 
-use crate::base::constants::HTTP_STATUS_CONFLICT;
+use crate::base::constants::{HTTP_STATUS_CONFLICT, SECRET_FAMILY_LABEL};
 use crate::base::error::kubernetes::{KubeSecretError, KubernetesError};
-use crate::kube::api::{label_tabsdata, tabsdata_selector};
+use crate::kube::api::{LabelFilter, label_tabsdata, tabsdata_selector};
 use crate::kube::context::KubeContext;
+
+fn family_labels(family: Option<&str>) -> Vec<LabelFilter<'_>> {
+    match family {
+        Some(value) => vec![LabelFilter::new(SECRET_FAMILY_LABEL, value)],
+        None => Vec::new(),
+    }
+}
 
 pub async fn exists_secret(context: &KubeContext, name: &str) -> Result<bool, KubernetesError> {
     let api: Api<Secret> = Api::namespaced(context.client().clone(), context.namespace());
@@ -34,6 +41,7 @@ pub async fn create_secret(
     name: &str,
     data: BTreeMap<String, String>,
     owner: Option<OwnerReference>,
+    family: Option<&str>,
 ) -> Result<(), KubernetesError> {
     let api: Api<Secret> = Api::namespaced(context.client().clone(), context.namespace());
     let mut metadata = ObjectMeta {
@@ -42,7 +50,7 @@ pub async fn create_secret(
         owner_references: owner.map(|reference| vec![reference]),
         ..Default::default()
     };
-    label_tabsdata(&mut metadata, &[]);
+    label_tabsdata(&mut metadata, &family_labels(family));
     let body = Secret {
         metadata,
         data: Some(
@@ -77,6 +85,7 @@ pub async fn upsert_secret(
     name: &str,
     data: BTreeMap<String, String>,
     owner: Option<OwnerReference>,
+    family: Option<&str>,
 ) -> Result<(), KubernetesError> {
     let api: Api<Secret> = Api::namespaced(context.client().clone(), context.namespace());
     let mut metadata = ObjectMeta {
@@ -85,7 +94,7 @@ pub async fn upsert_secret(
         owner_references: owner.map(|reference| vec![reference]),
         ..Default::default()
     };
-    label_tabsdata(&mut metadata, &[]);
+    label_tabsdata(&mut metadata, &family_labels(family));
     let body = Secret {
         metadata,
         data: Some(

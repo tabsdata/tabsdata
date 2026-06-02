@@ -86,4 +86,6 @@ pub enum SecretError {
         path: String,
         item_index: usize,
     } = 10,
+    #[error("Could not serialize Secret manifest to YAML: {0}.")]
+    ManifestSerializeFailed(String) = 5000,
 }

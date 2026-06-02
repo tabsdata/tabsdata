@@ -47,7 +47,7 @@ pub async fn create_job(
     }
     for spec in secrets {
         let name = to_kube_identifier(&component, &spec.name, runid)?;
-        create_secret(context, &name, spec.data, Some(owner.clone())).await?;
+        create_secret(context, &name, spec.data, Some(owner.clone()), None).await?;
     }
     Ok(created)
 }

@@ -28,7 +28,7 @@ impl SecretHandler {
                 continue;
             }
             let data = generator.generate(context).await?;
-            upsert_secret(context, generator.name(), data, None).await?;
+            upsert_secret(context, generator.name(), data, None, None).await?;
             info!(
                 secret = %generator.name(),
                 namespace = %context.namespace(),
