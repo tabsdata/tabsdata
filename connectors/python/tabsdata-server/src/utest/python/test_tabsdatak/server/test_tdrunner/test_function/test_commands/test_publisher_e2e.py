@@ -67,12 +67,15 @@ from tabsdatak.api import TableFrameSpec, TableFramesSpec, publisher
 from tabsdatak.conn.localfile import LocalFileSrcConn, LocalFileSrc
 
 _SRC = LocalFileSrc(
-    conn=LocalFileSrcConn(base_path={base_path!r}),
     paths=["*.parquet"],
 )
 
 
-@publisher(source=_SRC, output_tables=["my_table", "my_table2"])
+@publisher(
+    conn=LocalFileSrcConn(base_path={base_path!r}),
+    source=_SRC, 
+    output_tables=["my_table", "my_table2"]
+)
 def my_publisher(in_1: TableFramesSpec) -> tuple[TableFrameSpec, TableFrameSpec]:
     # ARRAY-mode input → first source file appended with a marker col.
     # Second slot is None (== "not modified this run").
@@ -153,12 +156,12 @@ from tabsdatak.api import TableFrameSpec, TableFramesSpec, publisher
 from tabsdatak.conn.localfile import LocalFileSrcConn, LocalFileSrc
 
 _SRC = LocalFileSrc(
-    conn=LocalFileSrcConn(base_path={base_path!r}),
     paths=["a.parquet", "b.parquet"],
 )
 
 
 @publisher(
+    conn=LocalFileSrcConn(base_path={base_path!r}),
     source=_SRC,
     output_tables=["concat_all", "first_only", "skipped"],
 )
