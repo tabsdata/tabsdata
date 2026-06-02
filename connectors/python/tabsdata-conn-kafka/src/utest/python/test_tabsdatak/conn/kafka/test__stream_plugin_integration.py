@@ -431,21 +431,22 @@ def _make_src(
     variant: _Variant,
     group_id: str,
     src_cfg: dict | None = None,
-) -> KafkaStreamSrc:
-    return KafkaStreamSrc(
-        conn=KafkaStreamSrcConn(
-            servers=kafka_config.bootstrap_servers,
-            credentials=_kafka_creds(kafka_config),
-            group_id=group_id,
-            schema_registry=(
-                _confluent_sr(kafka_config) if variant.sr == "confluent" else None
-            ),
+) -> tuple[KafkaStreamSrcConn, KafkaStreamSrc]:
+    conn = KafkaStreamSrcConn(
+        servers=kafka_config.bootstrap_servers,
+        credentials=_kafka_creds(kafka_config),
+        group_id=group_id,
+        schema_registry=(
+            _confluent_sr(kafka_config) if variant.sr == "confluent" else None
         ),
+    )
+    src = KafkaStreamSrc(
         topic=topic,
         data_format=variant.data_format,
         schema=variant.schema_loader(),
         src_cfg=src_cfg,
     )
+    return conn, src
 
 
 # ---------------------------------------------------------------------------
@@ -468,6 +469,7 @@ def _patched_sigterm():
 
 def _run_plugin_in_thread(
     ctx: _KafkaCtx,
+    conn: KafkaStreamSrcConn,
     src: KafkaStreamSrc,
     timeout_s: float = 60.0,
 ) -> None:
@@ -476,7 +478,7 @@ def _run_plugin_in_thread(
     def _go():
         try:
             with _patched_sigterm():
-                KafkaStreamSrcPlugin().run(ctx=ctx, stream_src=src)
+                KafkaStreamSrcPlugin().run(ctx=ctx, conn=conn, stream_src=src)
         except BaseException as exc:  # noqa: BLE001
             err.append(exc)
 
@@ -520,7 +522,7 @@ def test_plugin_round_trips_each_serde_variant(
     msgs = variant.messages(8)
     _produce(kafka_config, fresh_kafka_topic, serde, msgs)
 
-    src = _make_src(
+    conn, src = _make_src(
         kafka_config=kafka_config,
         topic=fresh_kafka_topic,
         variant=variant,
@@ -532,7 +534,7 @@ def test_plugin_round_trips_each_serde_variant(
         },
     )
 
-    _run_plugin_in_thread(ctx, src, timeout_s=60.0)
+    _run_plugin_in_thread(ctx, conn, src, timeout_s=60.0)
 
     files = _all_staged_files(ctx)
     assert files, f"no committed manifest files produced for {variant.id}"
@@ -564,7 +566,7 @@ def test_plugin_output_table_is_topic(
     serde = variant.build_producer_serde(kafka_config, tmp_path)
     _produce(kafka_config, fresh_kafka_topic, serde, variant.messages(3))
 
-    src = _make_src(
+    conn, src = _make_src(
         kafka_config=kafka_config,
         topic=fresh_kafka_topic,
         variant=variant,
@@ -576,7 +578,7 @@ def test_plugin_output_table_is_topic(
         },
     )
 
-    _run_plugin_in_thread(ctx, src, timeout_s=60.0)
+    _run_plugin_in_thread(ctx, conn, src, timeout_s=60.0)
 
     # The topic -> single output table mapping now lives on the src
     # (the positional manifest carries no table name); slot 0 is that
@@ -656,7 +658,7 @@ def test_plugin_schema_change_rollover_segregates_buffers(
         },
     )
 
-    _run_plugin_in_thread(ctx, src, timeout_s=60.0)
+    _run_plugin_in_thread(ctx, conn, src, timeout_s=60.0)
 
     committed = [sm for sm in ctx.staged if sm.committed]
     assert len(committed) >= 2, (
