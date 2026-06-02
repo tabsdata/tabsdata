@@ -118,12 +118,11 @@ def test_dest_plugin_write_out_calls_write_all_tables(monkeypatch, work_dir):
     monkeypatch.setattr(impl, "write_all_tables", fake_write_all_tables)
 
     dest = SnowflakeDest(
-        conn=_conn(),
         tables=["ANALYTICS.PUBLIC.USERS"],
         if_table_exists="replace",
         dest_cfg={"snowflake.logging_level": 20},
     )
-    plugin.SnowflakeDestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
+    plugin.SnowflakeDestPlugin().write_out(_dest_ctx(work_dir), _conn(), dest, [src])
 
     cfg = captured["cfg"]
     assert isinstance(cfg, impl.SnowflakeWriteCfg)
@@ -139,13 +138,12 @@ def test_dest_plugin_write_out_calls_write_all_tables(monkeypatch, work_dir):
 
 def test_dest_plugin_raises_snowflake_4_on_tables_slots_mismatch(work_dir):
     dest = SnowflakeDest(
-        conn=_bare_conn(),
         tables=["USERS", "ORDERS"],
     )
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     with pytest.raises(SnowflakeRuntimeException) as ei:
         plugin.SnowflakeDestPlugin().write_out(
-            _dest_ctx(work_dir), dest, [src],
+            _dest_ctx(work_dir), _bare_conn(), dest, [src],
         )
     assert ei.value.api_error is SnowflakeErrorCode.SNOWFLAKE_4
 
@@ -164,9 +162,9 @@ def test_dest_plugin_wraps_database_error_as_snowflake_5(monkeypatch, work_dir):
 
     monkeypatch.setattr(impl, "write_all_tables", boom)
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
-    dest = SnowflakeDest(conn=_conn(), tables=["USERS"])
+    dest = SnowflakeDest(tables=["USERS"])
     with pytest.raises(SnowflakeRuntimeException) as ei:
-        plugin.SnowflakeDestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
+        plugin.SnowflakeDestPlugin().write_out(_dest_ctx(work_dir), _conn(), dest, [src])
     assert ei.value.api_error is SnowflakeErrorCode.SNOWFLAKE_5
 
 
@@ -176,9 +174,11 @@ def test_dest_plugin_wraps_programming_error_as_snowflake_6(monkeypatch, work_di
 
     monkeypatch.setattr(impl, "write_all_tables", boom)
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
-    dest = SnowflakeDest(conn=_bare_conn(), tables=["USERS"])
+    dest = SnowflakeDest(tables=["USERS"])
     with pytest.raises(SnowflakeRuntimeException) as ei:
-        plugin.SnowflakeDestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
+        plugin.SnowflakeDestPlugin().write_out(
+            _dest_ctx(work_dir), _bare_conn(), dest, [src]
+        )
     assert ei.value.api_error is SnowflakeErrorCode.SNOWFLAKE_6
 
 
@@ -189,9 +189,9 @@ def test_dest_plugin_wraps_error_mentions_account(monkeypatch, work_dir):
 
     monkeypatch.setattr(impl, "write_all_tables", boom)
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
-    dest = SnowflakeDest(conn=_conn(), tables=["USERS"])
+    dest = SnowflakeDest(tables=["USERS"])
     with pytest.raises(SnowflakeRuntimeException) as ei:
-        plugin.SnowflakeDestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
+        plugin.SnowflakeDestPlugin().write_out(_dest_ctx(work_dir), _conn(), dest, [src])
     assert "ACME-MAIN" in str(ei.value)
 
 
@@ -202,9 +202,11 @@ def test_dest_plugin_wraps_error_mentions_tables(monkeypatch, work_dir):
 
     monkeypatch.setattr(impl, "write_all_tables", boom)
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
-    dest = SnowflakeDest(conn=_bare_conn(), tables=["USERS"])
+    dest = SnowflakeDest(tables=["USERS"])
     with pytest.raises(SnowflakeRuntimeException) as ei:
-        plugin.SnowflakeDestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
+        plugin.SnowflakeDestPlugin().write_out(
+            _dest_ctx(work_dir), _bare_conn(), dest, [src]
+        )
     assert "USERS" in str(ei.value)
 
 
@@ -235,7 +237,6 @@ def test_snowflake_dest_def_wires_plugin_and_explorer():
 
 def test_snowflake_dest_cardinality_uses_tables_length():
     dest = SnowflakeDest(
-        conn=_bare_conn(),
         tables=["USERS", "ORDERS", "EVENTS"],
     )
     assert plugin.SNOWFLAKE_DEST.cardinality(dest) == 3

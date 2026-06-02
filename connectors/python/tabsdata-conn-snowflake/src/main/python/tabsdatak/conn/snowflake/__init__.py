@@ -25,7 +25,7 @@ from typing import Annotated, Any, Literal, TypeAlias, Union
 import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
-from tabsdatak.api import Conn, Dest, NamedConn, Secret, Var
+from tabsdatak.api import Conn, Dest, Secret, Var
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation
@@ -118,9 +118,6 @@ class SnowflakeDestConn(Conn):
             raise SnowflakeErrorCode.SNOWFLAKE_2.exception(schema=self.schema)
 
 
-ConnSpec: TypeAlias = Union[NamedConn, SnowflakeDestConn]
-
-
 # --- Destination -----------------------------------------------------
 
 
@@ -128,7 +125,6 @@ ConnSpec: TypeAlias = Union[NamedConn, SnowflakeDestConn]
 class SnowflakeDest(Dest):
     """Snowflake destination — write one parquet per target table.
 
-    :param conn: :class:`SnowflakeDestConn` (or :class:`NamedConn`).
     :param tables: Fully-qualified Snowflake table names
         (``[<db>.]<schema>.<table>`` or bare). Identifier parts
         accept double-quoted spelling for case-sensitive / special-
@@ -140,7 +136,6 @@ class SnowflakeDest(Dest):
         consumes today is ``"snowflake.logging_level"``.
     """
 
-    conn: ConnSpec
     tables: SnowflakeTableNamesSpec
     if_table_exists: IfTableExistsSpec = "append"
     dest_cfg: DestCfgSpec | None = None

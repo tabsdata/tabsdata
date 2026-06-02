@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any
 
 from tabsdatak.conn.snowflake import (
     DestCfgKey,
@@ -78,10 +78,11 @@ def _is_connection_error(exc: BaseException) -> bool:
     }
 
 
-class SnowflakeDestPlugin(DestPlugin[SnowflakeDest]):
+class SnowflakeDestPlugin(DestPlugin[SnowflakeDestConn, SnowflakeDest]):
     def write_out(
         self,
         ctx: DestContext,
+        conn: SnowflakeDestConn,
         dest: SnowflakeDest,
         tables: list[TableFileSpec],
     ) -> None:
@@ -104,7 +105,6 @@ class SnowflakeDestPlugin(DestPlugin[SnowflakeDest]):
                 slots=len(tables),
             )
 
-        conn = cast(SnowflakeDestConn, dest.conn)
         logger.info("snowflake: write_out starting (%d table(s))", len(dest.tables))
         write_cfg = _impl.SnowflakeWriteCfg(
             conn=conn,
