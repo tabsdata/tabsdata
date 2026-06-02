@@ -110,7 +110,6 @@ def _dest_conn() -> DatabricksDestConn:
 
 def _src() -> DatabricksSrc:
     return DatabricksSrc(
-        conn=_src_conn(),
         queries=["SELECT 1"],
     )
 
@@ -119,7 +118,6 @@ def _dest(
     *, tables=("main.analytics.users",), if_table_exists="append"
 ) -> DatabricksDest:
     return DatabricksDest(
-        conn=_dest_conn(),
         tables=list(tables),
         if_table_exists=if_table_exists,
     )
@@ -202,7 +200,7 @@ def test_src_plugin_wraps_connection_failure_as_databricks_5(
     monkeypatch.setattr(impl, "read_all_queries", boom)
 
     with pytest.raises(DatabricksRuntimeException) as ei:
-        plugin._DatabricksSrcPlugin().read_in(_ctx(work_dir), _src())
+        plugin._DatabricksSrcPlugin().read_in(_ctx(work_dir), _src_conn(), _src())
     assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_5
 
 
@@ -216,7 +214,7 @@ def test_src_plugin_wraps_query_failure_as_databricks_6(
         MagicMock(side_effect=RuntimeError("query failed")),
     )
     with pytest.raises(DatabricksRuntimeException) as ei:
-        plugin._DatabricksSrcPlugin().read_in(_ctx(work_dir), _src())
+        plugin._DatabricksSrcPlugin().read_in(_ctx(work_dir), _src_conn(), _src())
     assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_6
 
 
@@ -230,10 +228,9 @@ def test_src_plugin_returns_one_parquet_per_query(
     monkeypatch.setattr(impl, "read_all_queries", fake)
 
     src = DatabricksSrc(
-        conn=_src_conn(),
         queries=["SELECT 1", "SELECT 2"],
     )
-    out = plugin._DatabricksSrcPlugin().read_in(_ctx(work_dir), src)
+    out = plugin._DatabricksSrcPlugin().read_in(_ctx(work_dir), _src_conn(), src)
     # Each spec IS a Path (Path subclass).
     assert len(out) == 2
     assert all(len(row) == 1 for row in out)
@@ -264,6 +261,7 @@ def test_dest_plugin_raises_databricks_7_on_tables_slots_mismatch(
     with pytest.raises(DatabricksRuntimeException) as ei:
         plugin._DatabricksDestPlugin().write_out(
             _ctx(work_dir),
+            _dest_conn(),
             dest,
             [_parquet(work_dir, "in.parquet")],
         )
@@ -282,6 +280,7 @@ def test_dest_plugin_wraps_connection_failure_as_databricks_8(
     with pytest.raises(DatabricksRuntimeException) as ei:
         plugin._DatabricksDestPlugin().write_out(
             _ctx(work_dir),
+            _dest_conn(),
             _dest(),
             [_parquet(work_dir, "in.parquet")],
         )
@@ -300,6 +299,7 @@ def test_dest_plugin_wraps_copy_failure_as_databricks_9(
     with pytest.raises(DatabricksRuntimeException) as ei:
         plugin._DatabricksDestPlugin().write_out(
             _ctx(work_dir),
+            _dest_conn(),
             _dest(),
             [_parquet(work_dir, "in.parquet")],
         )
@@ -323,6 +323,7 @@ def test_dest_plugin_passes_validate_exception_through(
     with pytest.raises(DatabricksValidateException) as ei:
         plugin._DatabricksDestPlugin().write_out(
             _ctx(work_dir),
+            _dest_conn(),
             _dest(),
             [_parquet(work_dir, "in.parquet")],
         )
@@ -346,6 +347,7 @@ def test_dest_plugin_dispatches_to_adapter(monkeypatch, work_dir):
     )
     plugin._DatabricksDestPlugin().write_out(
         _ctx(work_dir),
+        _dest_conn(),
         dest,
         [src1, src2],
     )
@@ -394,7 +396,6 @@ def test_databricks_dest_def_wires_plugin_and_explorer():
 
 def test_databricks_src_cardinality_uses_queries_length():
     src = DatabricksSrc(
-        conn=_src_conn(),
         queries=["SELECT 1", "SELECT 2", "SELECT 3"],
     )
     assert plugin.DATABRICKS_SRC.cardinality(src) == 3
@@ -423,7 +424,6 @@ def test_resolve_initial_values_returns_seed_when_ctx_empty(work_dir):
     name, fall back to the user-supplied Src seed for each."""
     ctx = _Ctx(work_dir)
     src = DatabricksSrc(
-        conn=_src_conn(),
         queries=["SELECT 1"],
         initial_values={"last_modified": "2026-01-01T00:00:00Z", "min_id": 0},
     )
@@ -443,7 +443,6 @@ def test_resolve_initial_values_prefers_ctx_per_bind_name(work_dir):
         },
     )
     src = DatabricksSrc(
-        conn=_src_conn(),
         queries=["SELECT 1"],
         initial_values={"last_modified": "from-seed", "min_id": 0},
     )
@@ -459,7 +458,6 @@ def test_resolve_initial_values_partial_ctx_falls_back_per_name(work_dir):
     name falls back to the seed -- per-name granularity."""
     ctx = _Ctx(work_dir, scratch={"last_modified": "2026-05-28T00:00:00Z"})
     src = DatabricksSrc(
-        conn=_src_conn(),
         queries=["SELECT 1"],
         initial_values={"last_modified": "seed-ts", "min_id": 42},
     )
@@ -473,7 +471,6 @@ def test_resolve_initial_values_preserves_falsy_ctx_values(work_dir):
     silently shadowed by the seed."""
     ctx = _Ctx(work_dir, scratch={"min_id": 0, "flag": False, "label": ""})
     src = DatabricksSrc(
-        conn=_src_conn(),
         queries=["SELECT 1"],
         initial_values={"min_id": 999, "flag": True, "label": "default"},
     )
@@ -493,7 +490,6 @@ def test_resolve_initial_values_heterogeneous_primitive_values(work_dir):
         },
     )
     src = DatabricksSrc(
-        conn=_src_conn(),
         queries=["SELECT 1"],
         initial_values={"last_modified": "seed", "min_id": 0},
     )
@@ -517,9 +513,8 @@ def test_read_in_uses_resolved_initial_values(work_dir, monkeypatch):
 
     ctx = _Ctx(work_dir, scratch={"last_modified": "from-ctx"})
     src = DatabricksSrc(
-        conn=_src_conn(),
         queries=["SELECT * FROM t WHERE ts > {last_modified}"],
         initial_values={"last_modified": "from-seed-ignored"},
     )
-    plugin._DatabricksSrcPlugin().read_in(ctx, src)
+    plugin._DatabricksSrcPlugin().read_in(ctx, _src_conn(), src)
     assert captured["initial_values"] == {"last_modified": "from-ctx"}

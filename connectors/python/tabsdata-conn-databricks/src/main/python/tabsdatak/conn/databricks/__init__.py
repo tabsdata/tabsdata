@@ -24,7 +24,6 @@ from tabsdatak.api import (
     Conn,
     ContextValueSpec,
     Dest,
-    NamedConn,
     Secret,
     SecretOrVarSpec,
     Src,
@@ -170,10 +169,6 @@ class DatabricksDestConn(Conn):
         _validate_databricks_conn(self)
 
 
-SrcConnSpec: TypeAlias = Union[NamedConn, DatabricksSrcConn]
-DestConnSpec: TypeAlias = Union[NamedConn, DatabricksDestConn]
-
-
 # --- Source ----------------------------------------------------------
 
 
@@ -181,7 +176,6 @@ DestConnSpec: TypeAlias = Union[NamedConn, DatabricksDestConn]
 class DatabricksSrc(Src):
     """Databricks source — one parquet slot per SQL statement.
 
-    :param conn: :class:`DatabricksSrcConn` (or :class:`NamedConn`).
     :param queries: List of SQL statements.
     :param initial_values: Optional ``{bind_name: value}`` dict.
         Each occurrence of ``{bind_name}`` in a query is substituted
@@ -198,7 +192,6 @@ class DatabricksSrc(Src):
         ``databricks.logging_level``.
     """
 
-    conn: SrcConnSpec
     queries: QueriesSpec
     initial_values: dict[str, ContextValueSpec] | None = None
     src_cfg: SrcCfgSpec | None = None
@@ -211,7 +204,6 @@ class DatabricksSrc(Src):
 class DatabricksDest(Dest):
     """Databricks destination — one parquet slot per table.
 
-    :param conn: :class:`DatabricksDestConn` (or :class:`NamedConn`).
     :param tables: Table names ([catalog.][schema.]table).
     :param if_table_exists: ``"append"`` (default) or
         ``"replace"``.
@@ -221,7 +213,6 @@ class DatabricksDest(Dest):
     :param dest_cfg: Optional dest cfg dict.
     """
 
-    conn: DestConnSpec
     tables: DatabricksTableNamesSpec
     if_table_exists: IfTableExistsSpec = "append"
     schema_evolution: SchemaEvolutionSpec = "update"

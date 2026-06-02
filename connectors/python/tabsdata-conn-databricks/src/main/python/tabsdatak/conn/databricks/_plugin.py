@@ -4,7 +4,7 @@ from pathlib import Path
 
 import logging
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert
@@ -151,10 +151,11 @@ def _is_connection_error(exc: BaseException) -> bool:
     }
 
 
-class _DatabricksSrcPlugin(SrcPlugin[DatabricksSrc]):
+class _DatabricksSrcPlugin(SrcPlugin[DatabricksSrcConn, DatabricksSrc]):
     def read_in(
         self,
         ctx: SrcPluginCtx,
+        conn: DatabricksSrcConn,
         src: DatabricksSrc,
     ) -> list[list[TableFileSpec]]:
         # noinspection PyProtectedMember
@@ -168,7 +169,6 @@ class _DatabricksSrcPlugin(SrcPlugin[DatabricksSrc]):
         # so the SDK doesn't fight us.
         logging.getLogger("databricks").setLevel(cfg.logging_level)
 
-        conn = cast(DatabricksSrcConn, src.conn)
         read_cfg = _impl.DatabricksReadCfg(
             conn=conn,
             queries=list(src.queries),
@@ -198,10 +198,11 @@ class _DatabricksSrcPlugin(SrcPlugin[DatabricksSrc]):
         return [[Path(p)] for p in parquet_paths]
 
 
-class _DatabricksDestPlugin(DestPlugin[DatabricksDest]):
+class _DatabricksDestPlugin(DestPlugin[DatabricksDestConn, DatabricksDest]):
     def write_out(
         self,
         ctx: DestContext,
+        conn: DatabricksDestConn,
         dest: DatabricksDest,
         tables: list[TableFileSpec],
     ) -> None:
@@ -223,7 +224,6 @@ class _DatabricksDestPlugin(DestPlugin[DatabricksDest]):
                 slots=len(tables),
             )
 
-        conn = cast(DatabricksDestConn, dest.conn)
         write_cfg = _impl.DatabricksWriteCfg(
             conn=conn,
             target_tables=list(dest.tables),
