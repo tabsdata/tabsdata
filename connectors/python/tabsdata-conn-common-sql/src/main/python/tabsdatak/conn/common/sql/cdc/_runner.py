@@ -112,18 +112,18 @@ def _publish(
     """Stage + commit the accumulated batch through ``ctx`` and persist
     the resume offset.
 
-    The disk sentinel hands us a per-table
-    :class:`~tabsdatak.spi.TableManifest` list, the runtime stages it
-    (returning an opaque :class:`~tabsdatak.spi.StageRef`) and commits.
-    The source-side offset is then advanced (``ingester.commit_offset``)
-    and written to per-flow state so the next run resumes where this one
-    left off.
+    The disk sentinel hands us a positional per-output-table file-list
+    manifest (a :data:`~tabsdatak.spi.StreamManifestSpec`); the runtime
+    stages it (returning an opaque :class:`~tabsdatak.spi.StageRef`) and
+    commits. The source-side offset is then advanced
+    (``ingester.commit_offset``) and written to per-flow state so the
+    next run resumes where this one left off.
 
     Returns whether downstream is back-pressuring (``True`` -> a later
     ``trigger_monitor`` must clear before publishing resumes).
     """
     manifest = disk_sentinel.build_manifest()
-    if not manifest:
+    if not any(manifest):
         return False
     stage_ref: StageRef = ctx.stage(manifest)
     ctx.commit(stage_ref)

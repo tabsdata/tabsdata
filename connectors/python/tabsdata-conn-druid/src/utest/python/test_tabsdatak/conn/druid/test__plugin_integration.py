@@ -48,7 +48,7 @@ from tabsdatak.conn.druid import DruidDestConn, DruidDest, S3Location
 
 # noinspection PyProtectedMember
 import tabsdatak.conn.druid._plugin as plugin
-from tabsdatak.spi import DestContext, ParquetFile
+from tabsdatak.spi import DestContext
 
 
 pytestmark = pytest.mark.druid
@@ -242,7 +242,7 @@ def test_dest_plugin_writes_single_datasource(
         segment_granularity="HOUR",
     )
     plugin.DruidDestPlugin().write_out(
-        _DestCtx(work_dir), dest, [ParquetFile(parquet)],
+        _DestCtx(work_dir), dest, [Path(parquet)],
     )
 
     # Allow the segments to become queryable (small grace period).
@@ -277,7 +277,7 @@ def test_dest_plugin_writes_multiple_datasources(
     )
     plugin.DruidDestPlugin().write_out(
         _DestCtx(work_dir), dest, [
-            ParquetFile(parquet_a), ParquetFile(parquet_b),
+            Path(parquet_a), Path(parquet_b),
         ],
     )
 

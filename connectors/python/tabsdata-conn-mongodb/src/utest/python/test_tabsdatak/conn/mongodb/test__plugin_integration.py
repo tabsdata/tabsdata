@@ -23,7 +23,7 @@ import tabsdatak.conn.mongodb._plugin as plugin
 from tabsdatak.api import Secret
 from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn.mongodb import MongoDBDestConn, MongoDBDest
-from tabsdatak.spi import ParquetFile
+
 
 pytestmark = pytest.mark.mongodb
 
@@ -141,7 +141,7 @@ def test_dest_inserts_documents_without_id_field(
         collections_with_ids=[(fqn, None)],
     )
     plugin._MongoDBDestPlugin().write_out(
-        _Ctx(work_dir), dest, [ParquetFile(parquet)],
+        _Ctx(work_dir), dest, [Path(parquet)],
     )
 
     docs = sorted(
@@ -170,7 +170,7 @@ def test_dest_upserts_documents_with_id_field(
         collections_with_ids=[(fqn, "user_id")],
     )
     plugin._MongoDBDestPlugin().write_out(
-        _Ctx(work_dir), dest, [ParquetFile(p1)],
+        _Ctx(work_dir), dest, [Path(p1)],
     )
 
     # Second write -- updates user 1, inserts user 3.
@@ -182,7 +182,7 @@ def test_dest_upserts_documents_with_id_field(
         ],
     )
     plugin._MongoDBDestPlugin().write_out(
-        _Ctx(work_dir), dest, [ParquetFile(p2)],
+        _Ctx(work_dir), dest, [Path(p2)],
     )
 
     docs = sorted(
@@ -207,7 +207,7 @@ def test_dest_replace_strategy_drops_old_documents(
             conn=conn,
             collections_with_ids=[(fqn, None)],
         ),
-        [ParquetFile(p1)],
+        [Path(p1)],
     )
 
     # Replace.
@@ -219,7 +219,7 @@ def test_dest_replace_strategy_drops_old_documents(
             collections_with_ids=[(fqn, None)],
             if_collection_exists="replace",
         ),
-        [ParquetFile(p2)],
+        [Path(p2)],
     )
 
     docs = _read_collection(conn, database, collection_name)
@@ -239,7 +239,7 @@ def test_dest_chunked_writes(
         docs_per_trx=3,
     )
     plugin._MongoDBDestPlugin().write_out(
-        _Ctx(work_dir), dest, [ParquetFile(parquet)],
+        _Ctx(work_dir), dest, [Path(parquet)],
     )
 
     docs = sorted(_read_collection(conn, database, collection_name), key=lambda d: d["i"])

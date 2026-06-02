@@ -5,8 +5,8 @@ Mirrors the layering of the CDC sides (``_cdc_plugin.py`` /
 sit in ``_stream_impl.py``, and the wire-format (de)serialisers
 in :mod:`tabsdatak.conn.kafka._serdes`.
 
-Each rollover composes a single-table :class:`TableManifest`,
-hands it to ``ctx.stage``, and commits the returned
+Each rollover hands a single-table positional manifest
+(``[[parquet_file]]``) to ``ctx.stage`` and commits the returned
 :class:`StageRef` -- exactly like the CDC sources.
 
 * :class:`KafkaStreamSrcPlugin` -- wires
@@ -20,6 +20,7 @@ from __future__ import annotations
 import logging
 import signal
 import time
+from pathlib import Path
 from typing import Any, cast
 
 from tabsdatak.conn.kafka import (
@@ -46,12 +47,10 @@ from tabsdatak.conn.kafka._stream_impl import (
 from tabsdatak.conn.kafka.error import KafkaErrorCode
 from tabsdatak.spi import (
     Explorer,
-    ParquetFile,
     StageRef,
     StreamSrcDef,
     StreamSrcPlugin,
     StreamSrcPluginCtx,
-    TableManifest,
 )
 
 logger = logging.getLogger(__name__)
@@ -234,7 +233,7 @@ class KafkaStreamSrcPlugin(StreamSrcPlugin[KafkaStreamSrc]):
         cfg: dict,
     ) -> None:
         """Poll + rollover loop. Stages each completed buffer as a
-        single-table :class:`TableManifest`; exits cleanly on
+        single-table positional manifest; exits cleanly on
         ``ctx.is_active() == False``.
         """
         deadline_window_start = time.time()
@@ -290,7 +289,7 @@ class KafkaStreamSrcPlugin(StreamSrcPlugin[KafkaStreamSrc]):
         buffer,
         rollover_reason: RolloverReason,
     ) -> float:
-        """Write the buffer to parquet, build a :class:`TableManifest`
+        """Write the buffer to parquet, build a positional manifest
         for the topic's output table, stage + commit through the
         plugin ctx, and commit the Kafka consumer offset.
 
@@ -301,14 +300,10 @@ class KafkaStreamSrcPlugin(StreamSrcPlugin[KafkaStreamSrc]):
         parquet_path = buffer.to_parquet(dir_path=str(ctx.work_dir))
         if parquet_path is None:
             return time.time()
-        # ``TableManifest.files`` does an ``isinstance(..., ParquetFile)``
-        # check; ``Path``-cast won't pass. Wrap explicitly.
-        manifest = [
-            TableManifest(
-                table=stream_src.output_table(),
-                files=[ParquetFile(parquet_path)],
-            )
-        ]
+        # One Kafka topic -> one output table (index 0): a single-entry
+        # positional manifest whose only inner list holds this rollover's
+        # parquet file.
+        manifest = [[Path(parquet_path)]]
         stage_ref: StageRef = ctx.stage(manifest)
         ctx.commit(stage_ref)
         kafka_consumer.commit()

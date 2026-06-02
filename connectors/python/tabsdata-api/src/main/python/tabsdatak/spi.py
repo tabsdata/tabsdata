@@ -19,8 +19,8 @@ The plugin abstracts (:class:`SrcPlugin`, :class:`StreamSrcPlugin`,
 :class:`DestPlugin`) and their per-mode context types
 (:class:`SrcPluginCtx`, :class:`StreamSrcPluginCtx`,
 :class:`DestContext`) are what plugin code consumes. The remaining
-pieces -- :class:`ParquetFile`, :class:`TableMode`,
-:class:`TableManifest`, :class:`StageRef` -- are the data-shape
+pieces -- :data:`TableFileSpec`, :class:`TableMode`,
+:data:`StreamManifestSpec`, :class:`StageRef` -- are the data-shape
 contracts that travel between framework and plugin during a trx.
 """
 
@@ -53,25 +53,15 @@ from tabsdatak.api import (
     Dest,
     Src,
     StreamSrc,
-    TableNameSpec,
     TrxCtx,
 )
 from tabsdatak.error import ApiErrorCode
 
 
-class ParquetFile(Path):
-    """``pathlib.Path`` tagged as a parquet payload.
-
-    Subclassing keeps the path semantics while letting the runtime
-    + plugins discriminate on type."""
-
-    pass
-
-
 # All in-flight tables travel between framework and plugin as Parquet
-# files on disk. Plugins materialise rows to these paths during reads
-# and consume them during writes.
-TableFileSpec: TypeAlias = ParquetFile
+# files on disk (a plain ``pathlib.Path``). Plugins materialise rows to
+# these paths during reads and consume them during writes.
+TableFileSpec: TypeAlias = Path
 
 
 class TableMode(Enum):
@@ -151,34 +141,20 @@ class SrcPlugin[S: Src](ABC):
 FilesSpec: TypeAlias = Annotated[list[TableFileSpec], _api.NON_EMPTY_LIST_CONSTRAINTS]
 
 
-# ``ParquetFile`` is a ``pathlib.Path`` subclass, not a pydantic type;
-# pydantic cannot synthesize a schema for it on its own. The same
-# ``arbitrary_types_allowed=True`` escape hatch the ``SrcDef`` /
-# ``StreamSrcDef`` / ``DestDef`` dataclasses use below applies to any
-# dataclass that holds files (``TableManifest`` here).
+# ``arbitrary_types_allowed=True`` escape hatch for the ``SrcDef`` /
+# ``StreamSrcDef`` / ``DestDef`` dataclasses below, whose ``Type[...]``
+# fields reference abstract classes (``SrcPlugin``, ``Explorer``, ...)
+# that pydantic validates via issubclass / isinstance.
 _ARBITRARY = ConfigDict(arbitrary_types_allowed=True)
 
 
-@_api.dataclass(ApiErrorCode.API_21, config=_ARBITRARY, frozen=True, kw_only=True)
-class TableManifest:
-    """One table's worth of parquet files in a stream stage batch.
-
-    :param table: Output-table name (per
-        :data:`tabsdatak.api.TableNameSpec`); must be one of the
-        names declared on the source's ``tables`` list.
-    :param files: Parquet files contributed to this table for the
-        batch. Paths must live under
-        :attr:`StreamSrcPluginCtx.work_dir`.
-    """
-
-    table: TableNameSpec
-    files: FilesSpec
-
-
-# One stage call's payload: the per-table parquet manifests the
-# stream-source plugin hands to ``ctx.stage`` at flush time.
+# One stage call's payload: positional per-output-table parquet file
+# lists the stream-source plugin hands to ``ctx.stage`` at flush time.
+# Entry ``i`` holds the files contributed to output-table index ``i``
+# this batch; an empty inner list means that table produced no files.
+# Paths must live under :attr:`StreamSrcPluginCtx.work_dir`.
 StreamManifestSpec: TypeAlias = Annotated[
-    list[TableManifest], _api.NON_EMPTY_LIST_CONSTRAINTS
+    list[list[TableFileSpec]], _api.NON_EMPTY_LIST_CONSTRAINTS
 ]
 
 
@@ -213,13 +189,11 @@ class StreamSrcPluginCtx(PluginCtx, ABC):
 
     @abstractmethod
     def stage(self, manifest: StreamManifestSpec) -> StageRef:
-        """Hand a per-table manifest to the runtime for staging.
-        Returns an opaque :class:`StageRef` to pass to
-        :meth:`commit`. Files in the manifest must live under
-        :attr:`work_dir`."""
-
-    # Must be files within the working directory
-    # table names in manifest must be a subset of tables in src
+        """Hand a batch to the runtime for staging: a positional list
+        of per-output-table file lists (entry ``i`` -> output-table
+        index ``i``; an empty inner list means no files for that table
+        this batch). Returns an opaque :class:`StageRef` to pass to
+        :meth:`commit`. Files must live under :attr:`work_dir`."""
 
     @abstractmethod
     def commit(self, stage_ref: StageRef):

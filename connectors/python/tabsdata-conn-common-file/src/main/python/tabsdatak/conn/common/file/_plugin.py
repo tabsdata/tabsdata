@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -11,7 +13,6 @@ from tabsdatak.conn.common.file.typing_ import FileInfo
 from tabsdatak.error import ApiException, ErrorCode
 from tabsdatak.spi import (
     DestContext,
-    ParquetFile,
     SrcPluginCtx,
     TableFileSpec,
 )
@@ -174,7 +175,7 @@ def import_files(
         for f in report.files:
             target = f.get("to") if isinstance(f, dict) else None
             if target:
-                slot_files.append(ParquetFile(cast(str, target)))
+                slot_files.append(Path(cast(str, target)))
         logger.debug(
             "file-reader: path %d/%d produced %d file(s)",
             slot_idx + 1,

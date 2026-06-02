@@ -15,7 +15,6 @@ from tabsdatak.conn.common.sql.cdc._model import CdcDataChange, TrackedTable
 from tabsdatak.conn.common.sql.cdc._sentinel import CdcBuffer, row_to_record
 from tabsdatak.conn.common.sql.cdc._utils import encode_id, sanitize_file_name
 from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
-from tabsdatak.spi import ParquetFile, TableManifest
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -133,30 +132,19 @@ class DiskSentinel:
         time_hit = (time.time() - self._last_flushed) >= self._max_secs
         return self.has_data and (force or rows_hit or bytes_hit or time_hit)
 
-    def build_manifest(self) -> list[TableManifest]:
-        """Compose the per-table :class:`~tabsdatak.spi.TableManifest`
-        list for the files accumulated since the last :meth:`clear`.
+    def build_manifest(self) -> list[list[Path]]:
+        """Positional per-output-table file lists for ``ctx.stage`` (a
+        :data:`~tabsdatak.spi.StreamManifestSpec`).
 
-        One entry per tracked table that produced at least one file.
-        The manifest ``table`` is the *unqualified* table name (the
-        schema-less name on ``TableObject``): ``TableManifest.table`` is a
-        :data:`~tabsdatak.api.TableNameSpec`, which forbids the dot in a
-        ``schema.table`` qualified name. Files are wrapped as
-        :class:`~tabsdatak.spi.ParquetFile` (a ``Path`` subclass) so the
-        manifest validation accepts them.
+        One entry per tracked table, in tracked-table (== output-slot)
+        order; entry ``i`` holds the parquet files accumulated for table
+        ``i`` since the last :meth:`clear`, or an empty list when that
+        table produced no files this batch.
         """
-        manifest: list[TableManifest] = []
-        for table_key, tracked_table in self._tables.items():
-            files = self._files.get(table_key, [])
-            if not files:
-                continue
-            manifest.append(
-                TableManifest(
-                    table=tracked_table.data_table.table,
-                    files=[ParquetFile(file) for file in files],
-                )
-            )
-        return manifest
+        return [
+            list(self._files.get(table_key, []))
+            for table_key in self._tables
+        ]
 
     def clear(self) -> None:
         """Drop the staged file bookkeeping and reset the counters /

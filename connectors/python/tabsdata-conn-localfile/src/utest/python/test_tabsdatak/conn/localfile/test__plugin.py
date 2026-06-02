@@ -12,7 +12,7 @@ from tabsdatak.conn.common.file import _transporter
 from tabsdatak.conn.localfile import LocalFileDest, LocalFileDestConn, LocalFileSrc, LocalFileSrcConn
 # noinspection PyProtectedMember
 import tabsdatak.conn.localfile._plugin as plugin
-from tabsdatak.spi import ParquetFile
+
 
 
 pytestmark = pytest.mark.localfile
@@ -71,14 +71,14 @@ def test_src_plugin_passes_build_location_and_errors(monkeypatch, tmp_path):
             ctx=ctx, cfg=cfg, build_location=build_location,
             errors=errors, run_env=run_env,
         )
-        return [[ParquetFile(tmp_path / "ok.parquet")]]
+        return [[Path(tmp_path / "ok.parquet")]]
 
     monkeypatch.setattr(_file_plugin, "import_files", fake)
 
     src = LocalFileSrc(conn=LocalFileSrcConn(), paths=["a/b.csv"])
     out = plugin.LocalFileSrcPlugin().read_in(_src_ctx(tmp_path), src)
 
-    assert out == [[ParquetFile(tmp_path / "ok.parquet")]]
+    assert out == [[Path(tmp_path / "ok.parquet")]]
     assert captured["build_location"] is plugin.build_location
     assert captured["errors"] is plugin.ERRORS
     # localfile has no creds -> no run_env passed
@@ -98,7 +98,7 @@ def test_dest_plugin_passes_build_location_and_errors(monkeypatch, tmp_path):
     monkeypatch.setattr(_file_plugin, "copy_out", fake)
 
     dest = LocalFileDest(conn=LocalFileDestConn(), paths=["out/x.csv"])
-    parquet = ParquetFile(tmp_path / "in.parquet")
+    parquet = Path(tmp_path / "in.parquet")
     plugin.LocalFileDestPlugin().write_out(_dest_ctx(tmp_path), dest, [parquet])
 
     assert captured["tables"] == [parquet]

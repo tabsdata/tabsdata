@@ -14,7 +14,7 @@ from tabsdatak.conn.common.types import GCPJson
 from tabsdatak.conn.gcs import GCSDestConn, GCSSrcConn, GCSDest, GCSSrc
 # noinspection PyProtectedMember
 import tabsdatak.conn.gcs._plugin as plugin
-from tabsdatak.spi import ParquetFile
+
 
 
 pytestmark = pytest.mark.gcs
@@ -113,14 +113,14 @@ def test_src_plugin_passes_build_location_run_env_and_errors(monkeypatch, tmp_pa
             ctx=ctx, cfg=cfg, build_location=build_location,
             run_env=run_env, errors=errors,
         )
-        return [[ParquetFile(tmp_path / "ok.parquet")]]
+        return [[Path(tmp_path / "ok.parquet")]]
 
     monkeypatch.setattr(_file_plugin, "import_files", fake)
 
     src = GCSSrc(conn=_src_conn(), paths=["a/b.parquet"])
     out = plugin.GCSSrcPlugin().read_in(_src_ctx(tmp_path), src)
 
-    assert out == [[ParquetFile(tmp_path / "ok.parquet")]]
+    assert out == [[Path(tmp_path / "ok.parquet")]]
     assert captured["build_location"] is plugin.build_location
     assert captured["run_env"] is plugin.run_env
     assert captured["errors"] is plugin.ERRORS
@@ -139,7 +139,7 @@ def test_dest_plugin_passes_build_location_run_env_and_errors(monkeypatch, tmp_p
     monkeypatch.setattr(_file_plugin, "copy_out", fake)
 
     dest = GCSDest(conn=_dest_conn(), paths=["out/x.parquet"])
-    parquet = ParquetFile(tmp_path / "in.parquet")
+    parquet = Path(tmp_path / "in.parquet")
     plugin.GCSDestPlugin().write_out(_dest_ctx(tmp_path), dest, [parquet])
 
     assert captured["tables"] == [parquet]

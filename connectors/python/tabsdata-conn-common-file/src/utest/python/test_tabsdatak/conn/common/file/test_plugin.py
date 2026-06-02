@@ -16,7 +16,7 @@ from tabsdatak.conn.common.file.typing_ import (
     FileInfo,
     SrcFileFormat,
 )
-from tabsdatak.spi import DestContext, ParquetFile
+from tabsdatak.spi import DestContext
 
 
 # --- _transporter.src_format_to_transporter ----------------------------------
@@ -254,7 +254,7 @@ def test_writer_conf_from_dest_handles_none_format_cfg():
 
 def test_run_write_out_slot_count_mismatch_raises_file_common_16(tmp_path):
     cfg = _plugin.WriterConf(conn=None, paths=["a", "b"], format=_transporter.TransporterParquetFormat())
-    parquet = ParquetFile(tmp_path / "x.parquet")
+    parquet = Path(tmp_path / "x.parquet")
     with pytest.raises(ConnException) as ei:
         _plugin.copy_out(
             ctx=_DestCtx(tmp_path),
@@ -274,7 +274,6 @@ def test_run_write_out_slot_count_mismatch_raises_file_common_16(tmp_path):
 # tests below stub those entry points so the orchestrator's wiring,
 # slot bookkeeping, and error-mapping are exercised in isolation --
 # no real binary needed.
-
 
 from tabsdatak.spi import SrcPluginCtx
 from tabsdatak.error import ApiErrorCode
@@ -403,7 +402,7 @@ def test_run_read_in_per_slot_dir_and_parquet_collection(monkeypatch, tmp_path):
     # One TableFileSpec per slot, each pointing at the synthesized parquet
     assert len(out) == 2
     assert len(out[0]) == 1
-    assert isinstance(out[0][0], ParquetFile)
+    assert isinstance(out[0][0], Path)
     assert str(out[0][0]).endswith("slot0/out.parquet")
     assert str(out[1][0]).endswith("slot1/out.parquet")
     # import_one called per path with that slot's target_dir
@@ -670,8 +669,8 @@ def test_run_write_out_passes_source_target_pairs(monkeypatch, tmp_path):
 
     monkeypatch.setattr(_output_module, "copy_one", fake_copy_one)
 
-    parquet_a = ParquetFile(tmp_path / "a.parquet")
-    parquet_b = ParquetFile(tmp_path / "b.parquet")
+    parquet_a = Path(tmp_path / "a.parquet")
+    parquet_b = Path(tmp_path / "b.parquet")
     cfg = _plugin.WriterConf(
         conn=object(),
         paths=["x/y", "z"],
@@ -709,7 +708,7 @@ def test_run_write_out_run_env_propagates_to_copy_one(monkeypatch, tmp_path):
     _plugin.copy_out(
         ctx=_DestCtx(tmp_path),
         cfg=cfg,
-        tables=[ParquetFile(tmp_path / "a.parquet")],
+        tables=[Path(tmp_path / "a.parquet")],
         build_location=_location_builder,
         errors=_RUN_ERRORS,
         run_env=lambda _c: {"K": "V"},
@@ -732,7 +731,7 @@ def test_run_write_out_run_env_failure_wraps_as_cred_resolution(monkeypatch, tmp
         _plugin.copy_out(
             ctx=_DestCtx(tmp_path),
             cfg=cfg,
-            tables=[ParquetFile(tmp_path / "a.parquet")],
+            tables=[Path(tmp_path / "a.parquet")],
             build_location=_location_builder,
             errors=_RUN_ERRORS,
             run_env=bad_run_env,
@@ -774,7 +773,7 @@ def test_run_write_out_wraps_transporter_failures(
         _plugin.copy_out(
             ctx=_DestCtx(tmp_path),
             cfg=cfg,
-            tables=[ParquetFile(tmp_path / "a.parquet")],
+            tables=[Path(tmp_path / "a.parquet")],
             build_location=_location_builder,
             errors=_RUN_ERRORS,
         )

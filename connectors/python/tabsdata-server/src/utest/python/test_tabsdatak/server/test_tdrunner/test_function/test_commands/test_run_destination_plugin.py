@@ -49,7 +49,7 @@ from tabsdatak.server._tdrunner.function.commands.run_destination_plugin import 
     _tables_from_manifest,
     main,
 )
-from tabsdatak.spi import ParquetFile
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
@@ -290,8 +290,8 @@ def test_tables_from_manifest_happy():
         {MANIFEST_NAME_KEY: "out_1", MANIFEST_FILE_KEY: "/b.parquet"},
     ]
     tables = _tables_from_manifest(entries)
-    assert tables == [ParquetFile("/a.parquet"), ParquetFile("/b.parquet")]
-    assert all(isinstance(t, ParquetFile) for t in tables)
+    assert tables == [Path("/a.parquet"), Path("/b.parquet")]
+    assert all(isinstance(t, Path) for t in tables)
 
 
 def test_tables_from_manifest_empty_entries_yields_empty_list():

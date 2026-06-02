@@ -27,7 +27,7 @@ from tabsdatak.conn.common.types import GCPJson
 from tabsdatak.conn.gcs import GCSDestConn, GCSSrcConn, GCSDest, GCSSrc
 # noinspection PyProtectedMember
 import tabsdatak.conn.gcs._plugin as plugin
-from tabsdatak.spi import ParquetFile
+
 
 
 pytestmark = pytest.mark.gcs
@@ -138,7 +138,7 @@ def _upload_parquet(
     pl.DataFrame(rows).write_parquet(local, use_pyarrow=True)
     dest = GCSDest(conn=conn, paths=[f"{run_prefix}/{name}"])
     plugin.GCSDestPlugin().write_out(
-        _DestCtx(work_dest), dest, [ParquetFile(local)],
+        _DestCtx(work_dest), dest, [Path(local)],
     )
 
 

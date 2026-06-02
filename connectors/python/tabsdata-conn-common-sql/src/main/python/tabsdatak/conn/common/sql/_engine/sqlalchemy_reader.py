@@ -25,7 +25,7 @@ from tabsdatak.conn.common.sql._engine.reader import SqlReadCfg, SqlReadEngine
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine.type_convertion import resolve_schema_overrides
-from tabsdatak.spi import ParquetFile, TableFileSpec
+from tabsdatak.spi import TableFileSpec
 
 # --- Retry ----------------------------------------------------------
 
@@ -117,7 +117,7 @@ class SqlAlchemyReadEngine(SqlReadEngine, ABC):
             logger.debug(
                 "sql-reader: query %d/%d produced %d chunk(s)", i + 1, total, len(files)
             )
-            results.append([ParquetFile(p) for p in files])
+            results.append([Path(p) for p in files])
         logger.info("sql-reader: finished reading %d quer(ies)", total)
 
 

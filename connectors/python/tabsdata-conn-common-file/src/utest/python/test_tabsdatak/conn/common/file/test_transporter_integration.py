@@ -33,7 +33,7 @@ from tabsdatak.conn.common.file.typing_ import (
     DestFileFormat,
     SrcFileFormat,
 )
-from tabsdatak.spi import DestContext, ParquetFile, SrcPluginCtx
+from tabsdatak.spi import DestContext, SrcPluginCtx
 
 
 # ---------------------------------------------------------------------------
@@ -299,7 +299,7 @@ def test_run_read_in_end_to_end_against_real_binary(tmp_path: Path):
     assert len(out) == 1
     assert len(out[0]) >= 1
     parquet = out[0][0]
-    assert isinstance(parquet, ParquetFile)
+    assert isinstance(parquet, Path)
     df = pl.read_parquet(parquet).select("id", "name").sort("id")
     assert df.to_dicts() == [{"id": 1, "name": "x"}, {"id": 2, "name": "y"}]
 
@@ -323,7 +323,7 @@ def test_run_write_out_end_to_end_against_real_binary(tmp_path: Path):
     _plugin.copy_out(
         ctx=_DestCtx(work_dir),
         cfg=cfg,
-        tables=[ParquetFile(src_dir / "data.parquet")],
+        tables=[Path(src_dir / "data.parquet")],
         build_location=_local_location,
         errors=_INTEG_ERRORS,
     )

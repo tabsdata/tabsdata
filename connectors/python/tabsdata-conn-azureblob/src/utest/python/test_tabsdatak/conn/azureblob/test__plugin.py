@@ -14,7 +14,7 @@ from tabsdatak.conn.common.types import AzureAccountKey
 from tabsdatak.conn.azureblob import AzureBlobDest, AzureBlobDestConn, AzureBlobSrc, AzureBlobSrcConn
 # noinspection PyProtectedMember
 import tabsdatak.conn.azureblob._plugin as plugin
-from tabsdatak.spi import ParquetFile
+
 
 
 pytestmark = pytest.mark.azureblob
@@ -127,14 +127,14 @@ def test_src_plugin_passes_build_location_run_env_and_errors(monkeypatch, tmp_pa
             ctx=ctx, cfg=cfg, build_location=build_location,
             run_env=run_env, errors=errors,
         )
-        return [[ParquetFile(tmp_path / "ok.parquet")]]
+        return [[Path(tmp_path / "ok.parquet")]]
 
     monkeypatch.setattr(_file_plugin, "import_files", fake)
 
     src = AzureBlobSrc(conn=_src_conn(), paths=["a/b.parquet"])
     out = plugin.AzureBlobSrcPlugin().read_in(_src_ctx(tmp_path), src)
 
-    assert out == [[ParquetFile(tmp_path / "ok.parquet")]]
+    assert out == [[Path(tmp_path / "ok.parquet")]]
     assert captured["build_location"] is plugin.build_location
     assert captured["run_env"] is plugin.run_env
     assert captured["errors"] is plugin.ERRORS
@@ -153,7 +153,7 @@ def test_dest_plugin_passes_build_location_run_env_and_errors(monkeypatch, tmp_p
     monkeypatch.setattr(_file_plugin, "copy_out", fake)
 
     dest = AzureBlobDest(conn=_dest_conn(), paths=["out/x.parquet"])
-    parquet = ParquetFile(tmp_path / "in.parquet")
+    parquet = Path(tmp_path / "in.parquet")
     plugin.AzureBlobDestPlugin().write_out(_dest_ctx(tmp_path), dest, [parquet])
 
     assert captured["tables"] == [parquet]

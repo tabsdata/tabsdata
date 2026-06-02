@@ -150,7 +150,7 @@ def _invoke_read_in(plugin, ctx: SrcPluginCtx, src) -> list[list[Path]]:
 def _normalise_table_file(p) -> str:
     """Render a `TableFileSpec` as an absolute filesystem path string.
 
-    `TableFileSpec` is declared as `ParquetFile` (a `Path` subclass),
+    `TableFileSpec` is declared as `Path` (a `Path` subclass),
     which should mean a real filesystem path. In practice some
     connector plugins (e.g. `LocalFileSrcPlugin`) return the path
     parsed verbatim from the transporter report's `to:` field — i.e.

@@ -27,7 +27,7 @@ from tabsdatak.conn.common.types import AwsAccessSecretKey
 from tabsdatak.conn.s3 import S3Dest, S3DestConn, S3Src, S3SrcConn
 # noinspection PyProtectedMember
 import tabsdatak.conn.s3._plugin as plugin
-from tabsdatak.spi import ParquetFile
+
 
 
 pytestmark = pytest.mark.s3
@@ -148,7 +148,7 @@ def _upload_parquet(
     pl.DataFrame(rows).write_parquet(local, use_pyarrow=True)
     dest = S3Dest(conn=conn, paths=[f"{run_prefix}/{name}"])
     plugin.S3DestPlugin().write_out(
-        _DestCtx(work_dest), dest, [ParquetFile(local)],
+        _DestCtx(work_dest), dest, [Path(local)],
     )
 
 

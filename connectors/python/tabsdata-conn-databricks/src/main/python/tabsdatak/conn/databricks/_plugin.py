@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import logging
 from dataclasses import dataclass
 from typing import Any, cast
@@ -25,7 +27,6 @@ from tabsdatak.spi import (
     DestDef,
     DestPlugin,
     Explorer,
-    ParquetFile,
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,
@@ -192,9 +193,9 @@ class _DatabricksSrcPlugin(SrcPlugin[DatabricksSrc]):
             )
 
         # One parquet per query; SrcDef.table_mode is SINGLE.
-        # ``TableFileSpec`` aliases ``ParquetFile``, a ``Path``
+        # ``TableFileSpec`` aliases ``Path``, a ``Path``
         # subclass -- wrap each adapter-returned path.
-        return [[ParquetFile(p)] for p in parquet_paths]
+        return [[Path(p)] for p in parquet_paths]
 
 
 class _DatabricksDestPlugin(DestPlugin[DatabricksDest]):
@@ -232,7 +233,7 @@ class _DatabricksDestPlugin(DestPlugin[DatabricksDest]):
         host = _convert(conn.host_url, str)
         try:
             # ``tables`` is ``list[TableFileSpec]`` =
-            # ``list[ParquetFile]`` (a ``Path`` subclass), so each
+            # ``list[Path]`` (a ``Path`` subclass), so each
             # entry is path-like directly -- no ``.path`` access.
             _impl.write_all_tables(write_cfg, list(tables))
         except DatabricksValidateException:

@@ -14,7 +14,7 @@ from tabsdatak.conn.common.types import AwsAccessSecretKey
 from tabsdatak.conn.s3 import S3Dest, S3DestConn, S3Src, S3SrcConn
 # noinspection PyProtectedMember
 import tabsdatak.conn.s3._plugin as plugin
-from tabsdatak.spi import ParquetFile
+
 
 
 pytestmark = pytest.mark.s3
@@ -116,14 +116,14 @@ def test_src_plugin_passes_build_location_run_env_and_errors(monkeypatch, tmp_pa
             ctx=ctx, cfg=cfg, build_location=build_location,
             run_env=run_env, errors=errors,
         )
-        return [[ParquetFile(tmp_path / "ok.parquet")]]
+        return [[Path(tmp_path / "ok.parquet")]]
 
     monkeypatch.setattr(_file_plugin, "import_files", fake)
 
     src = S3Src(conn=_src_conn(), paths=["a/b.parquet"])
     out = plugin.S3SrcPlugin().read_in(_src_ctx(tmp_path), src)
 
-    assert out == [[ParquetFile(tmp_path / "ok.parquet")]]
+    assert out == [[Path(tmp_path / "ok.parquet")]]
     assert captured["build_location"] is plugin.build_location
     assert captured["run_env"] is plugin.run_env
     assert captured["errors"] is plugin.ERRORS
@@ -143,7 +143,7 @@ def test_dest_plugin_passes_build_location_run_env_and_errors(monkeypatch, tmp_p
     monkeypatch.setattr(_file_plugin, "copy_out", fake)
 
     dest = S3Dest(conn=_dest_conn(), paths=["out/x.parquet"])
-    parquet = ParquetFile(tmp_path / "in.parquet")
+    parquet = Path(tmp_path / "in.parquet")
     plugin.S3DestPlugin().write_out(_dest_ctx(tmp_path), dest, [parquet])
 
     assert captured["tables"] == [parquet]

@@ -26,7 +26,7 @@ from tabsdatak.conn.common.types import AzureAccountKey
 from tabsdatak.conn.azureblob import AzureBlobDest, AzureBlobDestConn, AzureBlobSrc, AzureBlobSrcConn
 # noinspection PyProtectedMember
 import tabsdatak.conn.azureblob._plugin as plugin
-from tabsdatak.spi import ParquetFile
+
 
 
 pytestmark = pytest.mark.azureblob
@@ -144,7 +144,7 @@ def _upload_parquet(
     pl.DataFrame(rows).write_parquet(local, use_pyarrow=True)
     dest = AzureBlobDest(conn=conn, paths=[f"{run_prefix}/{name}"])
     plugin.AzureBlobDestPlugin().write_out(
-        _DestCtx(work_dest), dest, [ParquetFile(local)],
+        _DestCtx(work_dest), dest, [Path(local)],
     )
 
 

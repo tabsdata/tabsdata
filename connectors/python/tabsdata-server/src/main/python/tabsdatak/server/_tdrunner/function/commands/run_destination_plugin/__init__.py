@@ -36,7 +36,7 @@ from tabsdatak.server._tdrunner.function._lib.outputs_manifest import (
 )
 from tabsdatak.server._tdrunner.function._lib.request import load_request_or_fail
 from tabsdatak.server._tdrunner.function._lib.request_ctx import FromRequestCtx
-from tabsdatak.spi import DestContext, ParquetFile
+from tabsdatak.spi import DestContext
 
 VERSION = "0.1.0"
 INFO = (
@@ -118,7 +118,7 @@ def _resolve_plugin(info: SubscriberInfo):
     return dest_def.plugin()
 
 
-def _tables_from_manifest(entries: list[dict]) -> list[ParquetFile]:
+def _tables_from_manifest(entries: list[dict]) -> list[Path]:
     """Convert outputs-manifest entries to a positional list of
     `TableFileSpec` (parquet) paths for `DestPlugin.write_out`.
 
@@ -128,7 +128,7 @@ def _tables_from_manifest(entries: list[dict]) -> list[ParquetFile]:
     not allow None entries, so the framework cannot pass them
     through.)
     """
-    tables: list[ParquetFile] = []
+    tables: list[Path] = []
     for i, entry in enumerate(entries):
         file = entry.get(MANIFEST_FILE_KEY)
         name = entry.get(MANIFEST_NAME_KEY, f"slot{i}")
@@ -138,7 +138,7 @@ def _tables_from_manifest(entries: list[dict]) -> list[ParquetFile]:
                 f"output slot {i} ({name!r}) is null — subscribers "
                 f"must return a concrete frame for every output slot",
             )
-        tables.append(ParquetFile(file))
+        tables.append(Path(file))
     return tables
 
 

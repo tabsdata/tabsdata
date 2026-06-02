@@ -221,8 +221,8 @@ def _all_staged_files(ctx: _CdcCtx) -> list[Path]:
     for sm in ctx.staged:
         if not sm.committed:
             continue
-        for tm in sm.manifest:
-            files.extend(Path(p) for p in tm.files)
+        for table_files in sm.manifest:
+            files.extend(Path(p) for p in table_files)
     return files
 
 

@@ -21,7 +21,7 @@ from tabsdatak.conn.common.file.typing_ import DestFileFormat, SrcFileFormat
 from tabsdatak.conn.localfile import LocalFileDest, LocalFileDestConn, LocalFileSrc, LocalFileSrcConn
 # noinspection PyProtectedMember
 import tabsdatak.conn.localfile._plugin as plugin
-from tabsdatak.spi import DestContext, ParquetFile, SrcPluginCtx
+from tabsdatak.spi import DestContext, SrcPluginCtx
 
 
 pytestmark = pytest.mark.localfile
@@ -161,7 +161,7 @@ def test_dest_then_src_round_trip(tmp_path: Path):
     plugin.LocalFileDestPlugin().write_out(
         _DestCtx(work_dest),
         dest,
-        [ParquetFile(in_parquet)],
+        [Path(in_parquet)],
     )
     assert (base / "users.parquet").exists()
 
@@ -506,7 +506,7 @@ def test_dest_format_csv_writes_csv_file(tmp_path: Path):
     work = tmp_path / "work"
     work.mkdir()
     plugin.LocalFileDestPlugin().write_out(
-        _DestCtx(work), dest, [ParquetFile(src_parquet)],
+        _DestCtx(work), dest, [Path(src_parquet)],
     )
 
     out_file = base / "users.csv"
@@ -535,7 +535,7 @@ def test_dest_format_csv_honours_separator_option(tmp_path: Path):
     work = tmp_path / "work"
     work.mkdir()
     plugin.LocalFileDestPlugin().write_out(
-        _DestCtx(work), dest, [ParquetFile(src_parquet)],
+        _DestCtx(work), dest, [Path(src_parquet)],
     )
 
     raw = (base / "users.csv").read_text()
@@ -560,7 +560,7 @@ def test_dest_format_json_writes_json_file(tmp_path: Path):
     work = tmp_path / "work"
     work.mkdir()
     plugin.LocalFileDestPlugin().write_out(
-        _DestCtx(work), dest, [ParquetFile(src_parquet)],
+        _DestCtx(work), dest, [Path(src_parquet)],
     )
 
     out_file = base / "users.json"
@@ -590,7 +590,7 @@ def test_dest_format_avro_writes_avro_file(tmp_path: Path):
     work = tmp_path / "work"
     work.mkdir()
     plugin.LocalFileDestPlugin().write_out(
-        _DestCtx(work), dest, [ParquetFile(src_parquet)],
+        _DestCtx(work), dest, [Path(src_parquet)],
     )
 
     out_file = base / "users.avro"
@@ -618,7 +618,7 @@ def test_dest_format_auto_defaults_to_parquet(tmp_path: Path):
     work = tmp_path / "work"
     work.mkdir()
     plugin.LocalFileDestPlugin().write_out(
-        _DestCtx(work), dest, [ParquetFile(src_parquet)],
+        _DestCtx(work), dest, [Path(src_parquet)],
     )
 
     out_file = base / "users.parquet"

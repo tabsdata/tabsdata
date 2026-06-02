@@ -35,7 +35,7 @@ from tabsdatak.conn.databricks.error import (
     DatabricksRuntimeException,
     DatabricksValidateException,
 )
-from tabsdatak.spi import ParquetFile
+
 
 
 pytestmark = pytest.mark.databricks
@@ -234,14 +234,14 @@ def test_src_plugin_returns_one_parquet_per_query(
         queries=["SELECT 1", "SELECT 2"],
     )
     out = plugin._DatabricksSrcPlugin().read_in(_ctx(work_dir), src)
-    # Each spec IS a Path (ParquetFile subclass).
+    # Each spec IS a Path (Path subclass).
     assert len(out) == 2
     assert all(len(row) == 1 for row in out)
     assert [str(out[0][0]), str(out[1][0])] == [
         "q0.parquet",
         "q1.parquet",
     ]
-    assert all(isinstance(out[i][0], ParquetFile) for i in (0, 1))
+    assert all(isinstance(out[i][0], Path) for i in (0, 1))
 
 
 # ---------------------------------------------------------------------------
@@ -249,8 +249,8 @@ def test_src_plugin_returns_one_parquet_per_query(
 # ---------------------------------------------------------------------------
 
 
-def _parquet(work_dir: Path, name: str) -> ParquetFile:
-    p = ParquetFile(work_dir / name)
+def _parquet(work_dir: Path, name: str) -> Path:
+    p = Path(work_dir / name)
     p.write_bytes(b"")  # contents irrelevant -- impl is mocked
     return p
 

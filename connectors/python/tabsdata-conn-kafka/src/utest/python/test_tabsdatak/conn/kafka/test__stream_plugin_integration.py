@@ -491,8 +491,8 @@ def _all_staged_files(ctx: _KafkaCtx) -> list[Path]:
     for sm in ctx.staged:
         if not sm.committed:
             continue
-        for tm in sm.manifest:
-            files.extend(Path(p) for p in tm.files)
+        for table_files in sm.manifest:
+            files.extend(Path(p) for p in table_files)
     return files
 
 
@@ -549,8 +549,8 @@ def test_plugin_round_trips_each_serde_variant(
 def test_plugin_output_table_is_topic(
     fresh_kafka_topic, kafka_config, tmp_path,
 ):
-    """``output_table()`` is the topic name -- the staged manifest
-    table matches the source topic."""
+    """``output_table()`` is the topic name; the staged manifest is
+    positional (slot 0 == that single output table)."""
     work = tmp_path / "work"
     work.mkdir()
     ctx = _KafkaCtx(work, active_polls=12)
@@ -573,10 +573,12 @@ def test_plugin_output_table_is_topic(
 
     _run_plugin_in_thread(ctx, src, timeout_s=60.0)
 
-    staged_tables = [
-        tm.table for sm in ctx.staged if sm.committed for tm in sm.manifest
-    ]
-    assert fresh_kafka_topic in staged_tables
+    # The topic -> single output table mapping now lives on the src
+    # (the positional manifest carries no table name); slot 0 is that
+    # output table.
+    assert src.output_table() == fresh_kafka_topic
+    staged = [sm for sm in ctx.staged if sm.committed and any(sm.manifest)]
+    assert staged, "expected a committed batch with files for the topic"
 
 
 def test_plugin_messages_rollover_creates_multiple_parquet_batches(
@@ -659,8 +661,8 @@ def test_plugin_schema_change_rollover_segregates_buffers(
     # shape families (no cross-contamination).
     file_shape_pairs = []
     for sm in committed:
-        for tm in sm.manifest:
-            for p in tm.files:
+        for table_files in sm.manifest:
+            for p in table_files:
                 cols = set(pl.from_arrow(pq.read_table(p)).columns)
                 file_shape_pairs.append(cols)
     assert {"name", "age"} in file_shape_pairs

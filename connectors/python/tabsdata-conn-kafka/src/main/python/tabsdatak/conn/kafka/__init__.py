@@ -249,8 +249,8 @@ class KafkaStreamSrc(StreamSrc):
     The legacy ``KafkaTrigger`` ran outside the manifest-stage
     contract; this stream source plugs into the same
     :class:`StreamSrcPluginCtx.stage` / ``commit`` flow the CDC
-    sources use. Each rollover yields one :class:`TableManifest`
-    pointing at the parquet file the buffer flushed to.
+    sources use. Each rollover yields a single-table positional
+    manifest pointing at the parquet file the buffer flushed to.
 
     :param conn: :class:`KafkaStreamSrcConn` (or :class:`NamedConn`).
     :param data_format: Wire format -- ``"avro"`` / ``"json"`` or
