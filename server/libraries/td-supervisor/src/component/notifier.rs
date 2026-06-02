@@ -19,8 +19,8 @@ use std::str::FromStr;
 use td_common::execution_status::WorkerCallbackStatus;
 use td_common::server::MessageAction::Notify;
 use td_common::server::OrchestratorMessagePayload::{
-    OrchestratorExceptionMessagePayload, OrchestratorRequestMessagePayload,
-    OrchestratorResponseMessagePayload,
+    OrchestratorExceptionMessagePayload, OrchestratorFunctionRequestMessagePayload,
+    OrchestratorRequestMessagePayload, OrchestratorResponseMessagePayload,
 };
 use td_common::server::{
     Callback, EXCEPTION_FILE, ExceptionMessagePayload, OrchestratorMessage, PayloadType,
@@ -114,7 +114,8 @@ impl WorkerNotifier for Callback {
                 let request_payload = match request_message.payload {
                     OrchestratorRequestMessagePayload(payload) => payload,
                     OrchestratorResponseMessagePayload(_)
-                    | OrchestratorExceptionMessagePayload(_) => {
+                    | OrchestratorExceptionMessagePayload(_)
+                    | OrchestratorFunctionRequestMessagePayload(_) => {
                         return Err(InvalidMessageType);
                     }
                 };
@@ -138,7 +139,8 @@ impl WorkerNotifier for Callback {
                                 let exception_payload: &ExceptionMessagePayload<Value> =
                                     match &exception_message.payload {
                                         OrchestratorRequestMessagePayload(_)
-                                        | OrchestratorResponseMessagePayload(_) => {
+                                        | OrchestratorResponseMessagePayload(_)
+                                        | OrchestratorFunctionRequestMessagePayload(_) => {
                                             return Err(InvalidMessageType);
                                         }
                                         OrchestratorExceptionMessagePayload(payload) => payload,
@@ -170,7 +172,8 @@ impl WorkerNotifier for Callback {
                                 let response_payload: &ResponseMessagePayload<Value> =
                                     match &response_message.payload {
                                         OrchestratorRequestMessagePayload(_)
-                                        | OrchestratorExceptionMessagePayload(_) => {
+                                        | OrchestratorExceptionMessagePayload(_)
+                                        | OrchestratorFunctionRequestMessagePayload(_) => {
                                             return Err(InvalidMessageType);
                                         }
                                         OrchestratorResponseMessagePayload(payload) => payload,

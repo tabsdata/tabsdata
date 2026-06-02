@@ -212,6 +212,31 @@ pub enum MessageAction {
     Notify,
 }
 
+/// Function decorator carried on a worker message so the orchestrator can act
+/// on it before the worker resolves its full message (e.g. the kubernetes
+/// gateway selecting a pod template). Wire-level mirror of the td-objects
+/// `Decorator`; lives in td-common so the message envelope can reference it.
+#[derive(
+    ToSchema,
+    Debug,
+    Clone,
+    Copy,
+    Eq,
+    PartialEq,
+    Serialize,
+    Deserialize,
+    EnumString,
+    Display,
+    AsRefStr,
+)]
+#[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
+pub enum Decorator {
+    Publisher,
+    Transformer,
+    Subscriber,
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, new, Serialize, Deserialize)]
 pub struct OrchestratorMessage<T = Value>
 where
@@ -231,6 +256,10 @@ where
     OrchestratorRequestMessagePayload(RequestMessagePayload<T>),
     OrchestratorResponseMessagePayload(ResponseMessagePayload<T>),
     OrchestratorExceptionMessagePayload(ExceptionMessagePayload<T>),
+    /// Kubernetes function-runner request (per-action enum). Never written to
+    /// the supervisor file queue — only the kubernetes gateway produces/accepts
+    /// it.
+    OrchestratorFunctionRequestMessagePayload(FunctionRequest),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -248,6 +277,33 @@ where
     pub callback: Option<Callback>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub context: Option<T>,
+}
+
+/// A kubernetes function-runner request, modeled as a per-action enum (the
+/// counterpart to the file-queue's flat `RequestMessagePayload`). Carried as
+/// its own [`OrchestratorMessagePayload`] kind so the kubernetes gateway can
+/// act on it before the worker resolves its full message. Mirrors the
+/// gateway's internal `FunctionMessage` shape; lives here because the message
+/// envelope references it.
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub enum FunctionRequest {
+    Start(FunctionStartRequest),
+    Stop,
+    Notify,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub struct FunctionStartRequest {
+    /// Worker name (template key), e.g. `function`.
+    pub worker: String,
+    /// Worker id / run id.
+    pub run_id: String,
+    /// Function decorator (publisher / transformer / subscriber).
+    pub decorator: Decorator,
+    /// GET endpoint the worker pulls its resolved message from.
+    pub resolver: Callback,
+    /// POST endpoint the worker reports status back on.
+    pub responder: Callback,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -717,7 +773,7 @@ impl OrchestratorMessageQueue for OrchestratorMessageQueueHandle {
     async fn put(
         &self,
         id: String,
-        payload: RequestMessagePayload<Value>,
+        payload: OrchestratorMessagePayload<Value>,
     ) -> Result<OrchestratorMessage<Value>, QueueError> {
         self.0.put(id, payload).await
     }
@@ -741,7 +797,7 @@ pub trait OrchestratorMessageQueue: Send + Sync {
     async fn put(
         &self,
         id: String,
-        payload: RequestMessagePayload<Value>,
+        payload: OrchestratorMessagePayload<Value>,
     ) -> Result<OrchestratorMessage<Value>, QueueError>;
 
     /// Commits a message in the queue.
@@ -753,38 +809,77 @@ pub trait OrchestratorMessageQueue: Send + Sync {
     async fn locked_messages(&self) -> Vec<OrchestratorMessage<Value>>;
 }
 
+/// In-memory queue for tests: records every `put` regardless of payload kind
+/// and replays them via `locked_messages`. Unlike the file queue it accepts
+/// all message kinds (including the kubernetes function request).
+#[cfg(feature = "test-utils")]
+#[derive(Default)]
+pub struct InMemoryOrchestratorMessageQueue {
+    messages: std::sync::Mutex<Vec<OrchestratorMessage<Value>>>,
+}
+
+#[cfg(feature = "test-utils")]
+#[async_trait]
+impl OrchestratorMessageQueue for InMemoryOrchestratorMessageQueue {
+    async fn put(
+        &self,
+        id: String,
+        payload: OrchestratorMessagePayload<Value>,
+    ) -> Result<OrchestratorMessage<Value>, QueueError> {
+        let message = OrchestratorMessage::new(id.clone(), id, PathBuf::new(), payload);
+        self.messages.lock().unwrap().push(message.clone());
+        Ok(message)
+    }
+
+    async fn commit(&self, _message: &OrchestratorMessage<Value>) -> Result<(), QueueError> {
+        Ok(())
+    }
+
+    async fn rollback(&self, _message: &OrchestratorMessage<Value>) -> Result<(), QueueError> {
+        Ok(())
+    }
+
+    async fn locked_messages(&self) -> Vec<OrchestratorMessage<Value>> {
+        self.messages.lock().unwrap().clone()
+    }
+}
+
 #[async_trait]
 impl OrchestratorMessageQueue for FileSupervisorMessageQueue {
     async fn put(
         &self,
         id: String,
-        payload: RequestMessagePayload<Value>,
+        payload: OrchestratorMessagePayload<Value>,
     ) -> Result<OrchestratorMessage<Value>, QueueError> {
         if self.check(&id) {
             return Err(MessageAlreadyExisting { id });
+        };
+        // The supervisor file queue only carries request messages; other kinds
+        // (e.g. the kubernetes function request) are never written to files.
+        let OrchestratorRequestMessagePayload(request) = &payload else {
+            return Err(QueueError::BackendError {
+                cause: format!(
+                    "supervisor file queue only supports request messages, got: {payload:?}"
+                ),
+            });
         };
         let work = format!("{id}{INITIAL_CALL}");
         let file = format!("{work}.{LOCK_EXTENSION}");
         let message_path = self.location.join(file);
         let mut message_file = File::create(message_path.clone())?;
-        let message_yaml = serde_yaml::to_string(&payload)?;
+        let message_yaml = serde_yaml::to_string(request)?;
         message_file.write_all(message_yaml.as_bytes())?;
         debug!(
             id = %id,
-            class = ?payload.class,
-            worker = %payload.worker,
-            run_id = %payload.run_id,
-            action = %payload.action,
+            class = ?request.class,
+            worker = %request.worker,
+            run_id = %request.run_id,
+            action = %request.action,
             payload_bytes = message_yaml.len(),
             "queue.put"
         );
         trace!(id = %id, body = %message_yaml, "queue.put: body");
-        let message = OrchestratorMessage::new(
-            id,
-            work,
-            message_path,
-            OrchestratorRequestMessagePayload(payload),
-        );
+        let message = OrchestratorMessage::new(id, work, message_path, payload);
         Ok(message)
     }
 
@@ -888,7 +983,10 @@ mod tests_queue {
             "File '.yaml' exists and it shouldn't"
         );
 
-        let message = queue.put(id.to_string(), payload.clone()).await.unwrap();
+        let message = queue.put(
+            id.to_string(),
+            OrchestratorMessagePayload::OrchestratorRequestMessagePayload(payload.clone()),
+        ).await.unwrap();
 
         assert!(
             lock_message_path.exists(),
@@ -942,7 +1040,10 @@ mod tests_queue {
             "File '.yaml' exists and it shouldn't"
         );
 
-        let message = queue.put(id.to_string(), payload.clone()).await.unwrap();
+        let message = queue.put(
+            id.to_string(),
+            OrchestratorMessagePayload::OrchestratorRequestMessagePayload(payload.clone()),
+        ).await.unwrap();
 
         assert!(
             lock_message_path.exists(),
@@ -980,9 +1081,15 @@ mod tests_queue {
             context: None,
         };
 
-        let _ = queue.put(id.to_string(), payload.clone()).await.unwrap();
+        let _ = queue.put(
+            id.to_string(),
+            OrchestratorMessagePayload::OrchestratorRequestMessagePayload(payload.clone()),
+        ).await.unwrap();
 
-        let result = queue.put(id.to_string(), payload.clone()).await;
+        let result = queue.put(
+            id.to_string(),
+            OrchestratorMessagePayload::OrchestratorRequestMessagePayload(payload.clone()),
+        ).await;
 
         assert!(matches!(result, Err(MessageAlreadyExisting { .. })));
     }

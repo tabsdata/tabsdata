@@ -600,6 +600,11 @@ fn function_run_to_execute_select() -> sea_query::SelectStatement {
             Expr::col((FunctionDBIden::Table, FunctionDBIden::StorageVersion)),
             FunctionDBIden::StorageVersion,
         )
+        // Decorator is head-side (patches don't override it).
+        .expr_as(
+            Expr::col((FunctionDBIden::Table, FunctionDBIden::Decorator)),
+            FunctionDBIden::Decorator,
+        )
         // bundle_id / defined_on ARE patch-overridable. Patch
         // preferred via COALESCE (patch col first → fallback to head).
         .expr_as(

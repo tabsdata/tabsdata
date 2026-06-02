@@ -61,8 +61,8 @@ use td_common::id::id;
 use td_common::os::terminate_process;
 use td_common::server::MessageAction;
 use td_common::server::OrchestratorMessagePayload::{
-    OrchestratorExceptionMessagePayload, OrchestratorRequestMessagePayload,
-    OrchestratorResponseMessagePayload,
+    OrchestratorExceptionMessagePayload, OrchestratorFunctionRequestMessagePayload,
+    OrchestratorRequestMessagePayload, OrchestratorResponseMessagePayload,
 };
 use td_common::server::WorkerClass::{Ephemeral, Init, Regular};
 use td_common::server::{
@@ -763,7 +763,8 @@ impl Supervisor {
                 let payload = match &message.payload {
                     OrchestratorRequestMessagePayload(payload) => payload,
                     OrchestratorResponseMessagePayload(_)
-                    | OrchestratorExceptionMessagePayload(_) => {
+                    | OrchestratorExceptionMessagePayload(_)
+                    | OrchestratorFunctionRequestMessagePayload(_) => {
                         return Err(RuntimeError::new(
                             "Unexpected response message received".to_string(),
                         ));
@@ -1019,7 +1020,8 @@ impl Supervisor {
                     let payload = match &message.payload {
                         OrchestratorRequestMessagePayload(payload) => {payload},
                         OrchestratorResponseMessagePayload(_) |
-                        OrchestratorExceptionMessagePayload(_) => {
+                        OrchestratorExceptionMessagePayload(_) |
+                        OrchestratorFunctionRequestMessagePayload(_) => {
                             return Err(RuntimeError::new("Unexpected response message received".to_string()));
                         }
                     };
@@ -1640,7 +1642,8 @@ impl Supervisor {
                     let payload = match &message.payload {
                         OrchestratorRequestMessagePayload(payload) => {payload},
                         OrchestratorResponseMessagePayload(_) |
-                        OrchestratorExceptionMessagePayload(_) => {
+                        OrchestratorExceptionMessagePayload(_) |
+                        OrchestratorFunctionRequestMessagePayload(_) => {
                             return Err(RuntimeError::new("Unexpected response message received".to_string()));
                         }
                     };
@@ -2544,7 +2547,8 @@ impl Supervisor {
                 let payload = match &message.payload {
                     OrchestratorRequestMessagePayload(payload) => payload,
                     OrchestratorResponseMessagePayload(_)
-                    | OrchestratorExceptionMessagePayload(_) => {
+                    | OrchestratorExceptionMessagePayload(_)
+                    | OrchestratorFunctionRequestMessagePayload(_) => {
                         return Err(InvalidMessageType);
                     }
                 };

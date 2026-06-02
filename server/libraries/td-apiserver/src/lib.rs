@@ -225,6 +225,8 @@ pub fn run() {
                 orchestrator_message_queue.clone(),
                 internal_addresses.clone(),
                 scheduler_notify,
+                config.orchestrator,
+                Arc::new(config.jwt.clone()),
             );
             let function_request_server = FunctionRequester::new(&scheduler_context).await;
             let function_dispatch_server = FunctionDispatcher::new(&scheduler_context).await;

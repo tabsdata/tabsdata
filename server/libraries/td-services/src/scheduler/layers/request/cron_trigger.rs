@@ -2,25 +2,24 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use super::shared::{WorkerRequestError, loopback_post_callback};
+use super::shared::{internal_post_callback, internal_request};
 use http::Method;
 use std::collections::HashMap;
+use td_authz::jwt::JwtConfig;
 use td_common::id;
 use td_common::server::{
-    HttpRequest, MessageAction, OrchestratorMessageQueueHandle, RequestMessagePayload, WorkerClass,
-    WorkerName,
+    MessageAction, OrchestratorMessagePayload, OrchestratorMessageQueueHandle, RequestMessagePayload,
+    WorkerClass, WorkerName,
 };
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::worker::WorkerDBWithNames;
 use td_objects::dxo::yaml::cron_trigger::v1::CronTriggerInput;
 use td_objects::dxo::yaml::{WorkerInput, cron_trigger};
-use td_objects::rest_urls::BASE_URL;
 use td_objects::rest_urls::internal::{FUNCTION_VERSION_EXECUTE, UPDATE_WORKER};
 use td_objects::types::addresses::InternalServerAddresses;
 use td_objects::types::basic::{AtTime, WorkerConfig};
 use td_tower::extractors::Ref;
 use tracing::instrument;
-use url::Url;
 
 #[instrument(
     name = "scheduler.create_cron_trigger_workers_start",
@@ -31,6 +30,7 @@ use url::Url;
 pub async fn create_locked_cron_trigger_workers_start_request(
     message_queue: Ref<OrchestratorMessageQueueHandle>,
     server_addresses: Ref<InternalServerAddresses>,
+    jwt: Ref<JwtConfig>,
     cron_trigger_workers: Ref<Vec<WorkerDBWithNames>>,
 ) -> Result<(), TdError> {
     let futures: Vec<_> = cron_trigger_workers
@@ -38,29 +38,29 @@ pub async fn create_locked_cron_trigger_workers_start_request(
         .map(|cron_trigger_worker| {
             let message_queue = message_queue.clone();
             let server_addresses = server_addresses.clone();
+            let jwt = jwt.clone();
             async move {
                 let worker_id = cron_trigger_worker.id.to_string();
                 let server_address = server_addresses.first();
-                let endpoint = UPDATE_WORKER.replace("{worker_id}", &worker_id);
-                let callback = loopback_post_callback(server_address, &endpoint)?;
+                let callback = internal_post_callback(
+                    &jwt,
+                    server_address,
+                    UPDATE_WORKER,
+                    &[("worker_id", &worker_id)],
+                )?;
 
                 let function_version_id = cron_trigger_worker.function_version_id.to_string();
 
-                // Build trigger task
-                let task = HttpRequest {
-                    url: {
-                        let endpoint = FUNCTION_VERSION_EXECUTE
-                            .replace("{function_version_id}", &function_version_id);
-                        let trigger_url = format!("http://{server_address}{BASE_URL}{endpoint}");
-                        Url::parse(&trigger_url).map_err(WorkerRequestError::UrlParse)?
-                    },
-                    method: Method::POST,
-                    headers: HashMap::from([(
-                        "content-type".to_string(),
-                        "application/json".to_string(),
-                    )]),
-                    body: true,
-                };
+                // Build trigger task (tokenized POST to the execute endpoint).
+                let task = internal_request(
+                    &jwt,
+                    server_address,
+                    Method::POST,
+                    FUNCTION_VERSION_EXECUTE,
+                    &[("function_version_id", &function_version_id)],
+                    HashMap::from([("content-type".to_string(), "application/json".to_string())]),
+                    true,
+                )?;
 
                 // Build info
                 let info = cron_trigger::v1::Info {
@@ -95,7 +95,8 @@ pub async fn create_locked_cron_trigger_workers_start_request(
                 };
 
                 // Add it to the queue
-                message_queue.put(worker_id, message_payload).await?;
+                message_queue.put(worker_id, OrchestratorMessagePayload::OrchestratorRequestMessagePayload(message_payload))
+                    .await?;
                 Ok::<_, TdError>(())
             }
         })
@@ -113,6 +114,7 @@ pub async fn create_locked_cron_trigger_workers_start_request(
 pub async fn create_locked_cron_trigger_workers_stop_request(
     message_queue: Ref<OrchestratorMessageQueueHandle>,
     server_addresses: Ref<InternalServerAddresses>,
+    jwt: Ref<JwtConfig>,
     cron_trigger_workers: Ref<Vec<WorkerDBWithNames>>,
 ) -> Result<(), TdError> {
     let futures: Vec<_> = cron_trigger_workers
@@ -120,11 +122,16 @@ pub async fn create_locked_cron_trigger_workers_stop_request(
         .map(|cron_trigger_worker| {
             let message_queue = message_queue.clone();
             let server_addresses = server_addresses.clone();
+            let jwt = jwt.clone();
             async move {
                 let worker_id = cron_trigger_worker.id.to_string();
                 let server_address = server_addresses.first();
-                let endpoint = UPDATE_WORKER.replace("{worker_id}", &worker_id);
-                let callback = loopback_post_callback(server_address, &endpoint)?;
+                let callback = internal_post_callback(
+                    &jwt,
+                    server_address,
+                    UPDATE_WORKER,
+                    &[("worker_id", &worker_id)],
+                )?;
 
                 // Different message ID than the worker ID for STOP — current
                 // messaging impl needs a distinct file name.
@@ -142,7 +149,8 @@ pub async fn create_locked_cron_trigger_workers_stop_request(
                 };
 
                 // Add it to the queue
-                message_queue.put(message_id, message_payload).await?;
+                message_queue.put(message_id, OrchestratorMessagePayload::OrchestratorRequestMessagePayload(message_payload))
+                    .await?;
                 Ok::<_, TdError>(())
             }
         })

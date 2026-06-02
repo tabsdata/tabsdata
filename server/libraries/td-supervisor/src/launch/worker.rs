@@ -17,8 +17,8 @@ use std::sync::RwLock;
 use td_common::execution_status::WorkerCallbackStatus;
 use td_common::server::OrchestratorMessage;
 use td_common::server::OrchestratorMessagePayload::{
-    OrchestratorExceptionMessagePayload, OrchestratorRequestMessagePayload,
-    OrchestratorResponseMessagePayload,
+    OrchestratorExceptionMessagePayload, OrchestratorFunctionRequestMessagePayload,
+    OrchestratorRequestMessagePayload, OrchestratorResponseMessagePayload,
 };
 use thiserror::Error;
 use tokio::process::Child;
@@ -124,7 +124,9 @@ pub async fn notify(
     let mut failed = false;
     let payload = match &request_message.payload {
         OrchestratorRequestMessagePayload(payload) => payload,
-        OrchestratorResponseMessagePayload(_) | OrchestratorExceptionMessagePayload(_) => {
+        OrchestratorResponseMessagePayload(_)
+        | OrchestratorExceptionMessagePayload(_)
+        | OrchestratorFunctionRequestMessagePayload(_) => {
             return Err(InvalidMessageType);
         }
     };

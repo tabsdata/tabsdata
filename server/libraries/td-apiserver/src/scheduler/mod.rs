@@ -5,7 +5,8 @@
 use crate::scheduler::v1::{FunctionDispatcherV1, FunctionRequesterV1};
 use async_trait::async_trait;
 use std::sync::Arc;
-use td_common::server::OrchestratorMessageQueueHandle;
+use td_authz::jwt::JwtConfig;
+use td_common::server::{Orchestrator, OrchestratorMessageQueueHandle};
 use td_common::server_runner::ServerRunnable;
 use td_database::pool::TdPool;
 use td_execution::SchedulerNotify;
@@ -27,6 +28,8 @@ impl SchedulerCtx {
         orchestrator_queue: Arc<OrchestratorMessageQueueHandle>,
         internal_addresses: Arc<InternalServerAddresses>,
         scheduler_notify: SchedulerNotify,
+        orchestrator: Orchestrator,
+        jwt_config: Arc<JwtConfig>,
     ) -> Self {
         let scheduler_notify = Arc::new(scheduler_notify);
         let context = SchedulerContext {
@@ -35,6 +38,8 @@ impl SchedulerCtx {
             orchestrator_queue,
             internal_addresses,
             scheduler_notify: scheduler_notify.clone(),
+            orchestrator: Arc::new(orchestrator),
+            jwt_config,
         };
 
         Self { context }

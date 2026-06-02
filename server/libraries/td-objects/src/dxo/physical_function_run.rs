@@ -7,7 +7,7 @@ mod definitions {
     use crate::dxo::execution::ExecutionDB;
     use crate::dxo::worker::UpdateWorkerExecution;
     use crate::types::basic::{
-        AtTime, BundleId, ByteCount, CollectionId, CollectionName, DataLocation, EpochMs,
+        AtTime, BundleId, ByteCount, CollectionId, CollectionName, DataLocation, Decorator, EpochMs,
         ExecutionId, ExecutionName, FunctionId, FunctionName, FunctionVersionId,
         PhysicalFunctionRunId, PhysicalFunctionRunStatus, RowCount, StorageVersion,
         TableVersionCount, TransactionId, Trigger, TriggeredOn, UserId, UserName,
@@ -96,6 +96,7 @@ mod definitions {
         pub storage_version: StorageVersion,
         pub bundle_id: BundleId,
         pub defined_on: AtTime,
+        pub decorator: Decorator,
     }
 
     #[ta_objects::Dto]

@@ -14,7 +14,8 @@ use crate::scheduler::layers::request::{
     materialize_replay_dispatch, pfr_ids_from_minted_dispatch,
 };
 use ta_services::factory::service_factory;
-use td_common::server::OrchestratorMessageQueueHandle;
+use td_authz::jwt::JwtConfig;
+use td_common::server::{Orchestrator, OrchestratorMessageQueueHandle};
 use td_execution::SchedulerNotify;
 use td_objects::dxo::logical::{LogicalFunctionRunDB, UpdateLogicalFunctionRunDB};
 use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, UpdatePhysicalFunctionRunDB};
@@ -40,6 +41,8 @@ use td_tower::{layer, layers};
     context = OrchestratorMessageQueueHandle,
     context = InternalServerAddresses,
     context = SchedulerNotify,
+    context = Orchestrator,
+    context = JwtConfig,
 )]
 fn service() {
     layers!(
@@ -239,6 +242,13 @@ pub fn stop_stage_trigger_runners() {
 mod tests {
     use super::*;
     use crate::execution::services::execute::ExecuteFunctionService;
+    use http::Method;
+    use std::sync::Arc;
+    use td_authz::jwt::decode_internal_token;
+    use td_common::server::{
+        Callback, Decorator as MessageDecorator, FunctionRequest, InMemoryOrchestratorMessageQueue,
+        OrchestratorMessageQueueHandle,
+    };
     use crate::scheduler::services::SchedulerContext;
     use std::str::FromStr;
     use ta_services::factory::ServiceFactory;
@@ -441,7 +451,8 @@ mod tests {
                 &message.context
             }
             OrchestratorMessagePayload::OrchestratorResponseMessagePayload(_)
-            | OrchestratorMessagePayload::OrchestratorExceptionMessagePayload(_) => {
+            | OrchestratorMessagePayload::OrchestratorExceptionMessagePayload(_)
+            | OrchestratorMessagePayload::OrchestratorFunctionRequestMessagePayload(_) => {
                 panic!("Unexpected OrchestratorMessagePayload")
             }
         };
@@ -739,6 +750,101 @@ mod tests {
             messages_after.len(),
             prior_messages_count,
             "second tick must not enqueue a duplicate worker for the same replay PFR"
+        );
+
+        Ok(())
+    }
+
+    /// In kubernetes mode the request path emits the per-action
+    /// `FunctionRequest::Start` kind (not the flat request), carrying the
+    /// decorator + resolver, with no pre-resolved context. WorkerDB stays Locked.
+    #[td_test::test(db)]
+    async fn test_schedule_request_kubernetes(db: TdPool) -> Result<(), TdError> {
+        let collection = db
+            .seed()
+            .collection(&CollectionName::try_from("c_k8s")?, &UserId::admin())
+            .await?;
+        let create = FunctionRegister::builder()
+            .try_name("function_1")?
+            .try_description("d")?
+            .bundle_id(BundleId::default())
+            .try_snippet("s")?
+            .decorator(Decorator::Publisher)
+            .dependencies(vec![TableDependencyDto::try_from("table_1")?])
+            .triggers(None)
+            .tables(vec![TableNameDto::try_from("table_1")?])
+            .runtime_values(FunctionRuntimeValues::try_from("rv")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+        let _ = db.seed().function(&collection, &create).await?;
+
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                    .function(FunctionIdName::from_str("function_1")?)
+                    .build()?,
+                ExecutionRequest::builder()
+                    .name(Some(ExecutionName::try_from("e_k8s")?))
+                    .build()?,
+            );
+        ExecuteFunctionService::with_defaults(db.clone())
+            .service()
+            .raw_oneshot(request)
+            .await?;
+
+        // Run the request tick with the kubernetes orchestrator. Use an
+        // in-memory queue (the file queue only accepts request messages).
+        let mut context = SchedulerContext::with_defaults(db.clone());
+        context.orchestrator_queue = Arc::new(OrchestratorMessageQueueHandle::new(Arc::new(
+            InMemoryOrchestratorMessageQueue::default(),
+        )));
+        context.orchestrator = Arc::new(Orchestrator::Kubernetes);
+        RequestService::build(&context).service().oneshot(()).await?;
+
+        let created = context.orchestrator_queue.locked_messages().await;
+        assert_eq!(created.len(), 1);
+
+        // Kubernetes emits the per-action FunctionRequest kind, carrying the
+        // decorator + resolver, with no pre-resolved context.
+        let OrchestratorMessagePayload::OrchestratorFunctionRequestMessagePayload(
+            FunctionRequest::Start(start),
+        ) = &created[0].payload
+        else {
+            panic!("expected a FunctionRequest::Start payload");
+        };
+        assert_eq!(start.decorator, MessageDecorator::Publisher);
+
+        // Resolver is a GET to the resolve endpoint; responder is a POST.
+        let Callback::Http(resolver) = &start.resolver;
+        assert_eq!(resolver.method, Method::GET);
+        assert!(resolver.url.path().ends_with("/message"));
+        let Callback::Http(responder) = &start.responder;
+        assert_eq!(responder.method, Method::POST);
+
+        // WorkerDB row still created Locked.
+        let worker_id = WorkerId::try_from(created[0].id.as_str())?;
+        let worker: WorkerDB = db.live().fetch_one::<WorkerDB>(&worker_id).await?;
+        assert_eq!(worker.message_status, WorkerMessageStatus::Locked);
+        let function_run_id = worker.physical_function_run_id.clone().unwrap();
+
+        // The resolver carries a valid internal token bound to this exact
+        // request: GET, the /message scope, and the worker's resource ids.
+        let bearer = resolver
+            .headers
+            .get("authorization")
+            .and_then(|h| h.strip_prefix("Bearer "))
+            .expect("authorization bearer header");
+        let claims = decode_internal_token(&context.jwt_config, bearer)?;
+        assert_eq!(claims.method, "GET");
+        assert!(claims.scope.ends_with("/message"));
+        assert_eq!(
+            claims.bindings.get("worker_id").unwrap(),
+            &worker_id.to_string()
+        );
+        assert_eq!(
+            claims.bindings.get("function_run_id").unwrap(),
+            &function_run_id.to_string()
         );
 
         Ok(())

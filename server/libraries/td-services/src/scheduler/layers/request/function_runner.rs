@@ -2,14 +2,16 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use super::shared::loopback_post_callback;
+use super::shared::{internal_get_callback, internal_post_callback};
 use crate::function::layers::topology::RunnableVersion;
 use crate::logical::layers::dispatch_mint::MintedDispatch;
 use crate::logical::layers::index_lfrs_by_exec_fn;
 use crate::scheduler::message_builder::{build_function_v2, prefetch_dispatch};
 use std::collections::HashMap;
+use td_authz::jwt::JwtConfig;
 use td_common::server::{
-    MessageAction, OrchestratorMessageQueueHandle, RequestMessagePayload, WorkerClass, WorkerName,
+    FunctionRequest, FunctionStartRequest, MessageAction, Orchestrator, OrchestratorMessagePayload,
+    OrchestratorMessageQueueHandle, RequestMessagePayload, WorkerClass, WorkerName,
 };
 use td_database::dynamic::DynamicConnection;
 use td_error::{ApiError, TdError, api_error};
@@ -18,7 +20,7 @@ use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, PhysicalFunc
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
 use td_objects::dxo::worker::WorkerDB;
 use td_objects::dxo::yaml::WorkerInput;
-use td_objects::rest_urls::internal::UPDATE_FUNCTION_RUN_WORKER;
+use td_objects::rest_urls::internal::{RESOLVE_FUNCTION_RUN_WORKER, UPDATE_FUNCTION_RUN_WORKER};
 use td_objects::types::addresses::InternalServerAddresses;
 use td_objects::types::basic::{
     AtTime, Enabled, ExecutionId, LogicalFunctionRunId, PhysicalFunctionRunId, WorkerId,
@@ -208,39 +210,80 @@ pub async fn create_locked_function_runner_workers_start_request(
     server_addresses: Ref<InternalServerAddresses>,
     mut conn: MutRef<DynamicConnection<'static>>,
     at: Ref<AtTime>,
+    orchestrator: Ref<Orchestrator>,
+    jwt: Ref<JwtConfig>,
     physical_function_runs: Ref<Vec<PhysicalFunctionRunToExecute>>,
 ) -> Result<Vec<WorkerDB>, TdError> {
-    // Resolve the tick-wide batches once; the per-FR build is then mostly
-    // map lookups (eager v2 resolution at `at`, the dispatch tick time).
-    let prefetch = prefetch_dispatch(&mut conn, physical_function_runs.as_slice(), &at).await?;
+    // Supervisor resolves the message eagerly at the dispatch tick; the
+    // kubernetes path defers resolution to the resolve endpoint (the pod
+    // pulls its message), so it skips the tick-wide prefetch + build and
+    // ships a lean message carrying only a resolver callback.
+    let prefetch = match *orchestrator {
+        Orchestrator::Supervisor => {
+            Some(prefetch_dispatch(&mut conn, physical_function_runs.as_slice(), &at).await?)
+        }
+        Orchestrator::Kubernetes => None,
+    };
 
     let mut results = Vec::new();
     for f in physical_function_runs.iter() {
         let worker_id = WorkerId::default();
 
         let server_address = server_addresses.first();
-        let endpoint = UPDATE_FUNCTION_RUN_WORKER
-            .replace("{function_run_id}", &f.id.to_string())
-            .replace("{worker_id}", &worker_id.to_string());
-        let callback = loopback_post_callback(server_address, &endpoint)?;
+        let fr_id = f.id.to_string();
+        let w_id = worker_id.to_string();
+        let bindings = [
+            ("function_run_id", fr_id.as_str()),
+            ("worker_id", w_id.as_str()),
+        ];
+        // Responder: where the worker POSTs its status back (both paths).
+        let responder =
+            internal_post_callback(&jwt, server_address, UPDATE_FUNCTION_RUN_WORKER, &bindings)?;
 
-        let function_input_v2 = build_function_v2(&mut conn, &storage, f, &prefetch).await?;
-        let function_input = WorkerInput::FunctionV2(Box::new(function_input_v2));
-
-        // Build message payload
-        let message_payload = RequestMessagePayload::<serde_yaml::Value> {
-            class: WorkerClass::Ephemeral,
-            worker: WorkerName::Function.as_ref().to_string(),
-            run_id: worker_id.to_string(),
-            action: MessageAction::Start,
-            arguments: Vec::new(),
-            callback: Some(callback),
-            context: Some(serde_yaml::to_value(&function_input).map_err(|e| {
-                api_error!(
-                    ApiError::InternalError,
-                    "Failed to serialize function input: {e}"
+        // The message kind differs by orchestrator: supervisor ships a flat
+        // request carrying the fully-resolved FunctionV2 context; kubernetes
+        // ships a per-action FunctionRequest carrying the decorator + resolver,
+        // resolved later via the endpoint.
+        let payload = match prefetch.as_ref() {
+            Some(prefetch) => {
+                let function_input_v2 =
+                    build_function_v2(&mut conn, &storage, f, prefetch).await?;
+                let function_input = WorkerInput::FunctionV2(Box::new(function_input_v2));
+                let context = serde_yaml::to_value(&function_input).map_err(|e| {
+                    api_error!(
+                        ApiError::InternalError,
+                        "Failed to serialize function input: {e}"
+                    )
+                })?;
+                OrchestratorMessagePayload::OrchestratorRequestMessagePayload(
+                    RequestMessagePayload::<serde_yaml::Value> {
+                        class: WorkerClass::Ephemeral,
+                        worker: WorkerName::Function.as_ref().to_string(),
+                        run_id: worker_id.to_string(),
+                        action: MessageAction::Start,
+                        arguments: Vec::new(),
+                        callback: Some(responder),
+                        context: Some(context),
+                    },
                 )
-            })?),
+            }
+            None => {
+                let resolver = internal_get_callback(
+                    &jwt,
+                    server_address,
+                    RESOLVE_FUNCTION_RUN_WORKER,
+                    &bindings,
+                )?;
+                OrchestratorMessagePayload::OrchestratorFunctionRequestMessagePayload(
+                    FunctionRequest::Start(FunctionStartRequest {
+                        worker: WorkerName::Function.as_ref().to_string(),
+                        run_id: worker_id.to_string(),
+                        decorator: f.decorator.to_message(),
+                        resolver,
+                        responder,
+                    }),
+                )
+            }
         };
 
         // Create worker message
@@ -262,7 +305,7 @@ pub async fn create_locked_function_runner_workers_start_request(
 
         // Add it to the queue
         message_queue
-            .put(message.id.to_string(), message_payload)
+            .put(message.id.to_string(), payload)
             .await?;
         results.push(message);
     }
