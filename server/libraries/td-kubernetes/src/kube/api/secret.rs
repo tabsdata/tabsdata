@@ -158,9 +158,10 @@ pub async fn delete_secret(context: &KubeContext, name: &str) -> Result<(), Kube
 
 pub async fn list_secrets(
     context: &KubeContext,
+    label: Option<LabelFilter<'_>>,
 ) -> Result<Vec<(String, Vec<String>)>, KubernetesError> {
     let api: Api<Secret> = Api::namespaced(context.client().clone(), context.namespace());
-    let selector = tabsdata_selector(None);
+    let selector = tabsdata_selector(label);
     let list_params = ListParams::default().labels_from(&selector);
     let secrets = api
         .list(&list_params)
