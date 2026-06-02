@@ -12,7 +12,7 @@ use tracing::{info, warn};
 
 use crate::base::error::cli::CliError;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
-use crate::core::system::exit::{Result, abort_with};
+use crate::core::system::exit::{CommandResult, abort_with};
 use crate::core::system::file::is_hidden_or_system;
 use crate::kube::api::{get_configmaps, merge_configmap};
 use crate::runtime::provider::{Provider, provider_for_or_tdkcontext};
@@ -37,7 +37,7 @@ pub struct PutArguments {
     pub folder: PathBuf,
 }
 
-pub async fn command_put(arguments: PutArguments, globals: &GlobalArguments) -> Result {
+pub async fn command_put(arguments: PutArguments, globals: &GlobalArguments) -> CommandResult {
     let PutArguments {
         cluster,
         instance,
@@ -49,7 +49,7 @@ pub async fn command_put(arguments: PutArguments, globals: &GlobalArguments) -> 
     put_configs(provider.as_ref(), &folder).await
 }
 
-pub fn ensure_source_folder(folder: &PathBuf) -> Result {
+pub fn ensure_source_folder(folder: &PathBuf) -> CommandResult {
     if !folder.is_dir() {
         return abort_with(
             GeneralError,
@@ -71,10 +71,10 @@ pub fn ensure_source_folder(folder: &PathBuf) -> Result {
     Ok(())
 }
 
-pub async fn put_configs(provider: &dyn Provider, folder: &PathBuf) -> Result {
+pub async fn put_configs(provider: &dyn Provider, folder: &PathBuf) -> CommandResult {
     let context = provider.kube_context().await?;
 
-    let keys_by_config: BTreeMap<String, BTreeSet<String>> = get_configmaps(&context)
+    let keys_by_config: BTreeMap<String, BTreeSet<String>> = get_configmaps(&context, None)
         .await?
         .into_iter()
         .map(|(name, entries)| (name, entries.into_iter().map(|(key, _)| key).collect()))
@@ -150,7 +150,7 @@ pub async fn put_configs(provider: &dyn Provider, folder: &PathBuf) -> Result {
     Ok(())
 }
 
-fn read_sorted(folder: &PathBuf) -> Result<Vec<std::fs::DirEntry>> {
+fn read_sorted(folder: &PathBuf) -> CommandResult<Vec<std::fs::DirEntry>> {
     let reader = std::fs::read_dir(folder).map_err(|error| {
         TdError::from(CliError::FolderReadFailed {
             folder: folder.display().to_string(),

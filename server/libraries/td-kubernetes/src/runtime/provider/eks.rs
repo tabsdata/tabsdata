@@ -4,13 +4,12 @@
 
 use async_trait::async_trait;
 use kube::Config;
-use td_common::status::ExitStatus::GeneralError;
 
+use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
-use crate::cerror;
 use crate::client::session::pin::Session;
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
-use crate::core::system::exit::{Result, abort};
+use crate::core::system::exit::CommandResult;
 use crate::runtime::gateway::resolver::SystemValues;
 use crate::runtime::provider::outcome::{ClusterStopOutcome, InstanceStopOutcome};
 use crate::runtime::provider::summary::Summary;
@@ -26,12 +25,8 @@ impl EksProvider {
         _cluster: ClusterArguments,
         _instance: InstanceArguments,
         _verbose: bool,
-    ) -> Result<Self> {
-        cerror!(
-            "Provider '{}' is not yet implemented.",
-            ClusterProvider::Eks.as_str()
-        );
-        abort(GeneralError)
+    ) -> CommandResult<Self> {
+        Err(ProviderError::NotImplemented(ClusterProvider::Eks.as_str().to_owned()).into())
     }
 }
 
@@ -53,11 +48,11 @@ impl Provider for EksProvider {
         ClusterProvider::Eks
     }
 
-    async fn kube_config(&self) -> Result<Config> {
+    async fn kube_config(&self) -> CommandResult<Config> {
         unreachable!("eks provider not yet implemented")
     }
 
-    fn system_values(&self) -> Result<SystemValues> {
+    fn system_values(&self) -> CommandResult<SystemValues> {
         unreachable!("eks provider not yet implemented")
     }
 
@@ -69,23 +64,26 @@ impl Provider for EksProvider {
         unreachable!("eks provider not yet implemented")
     }
 
-    async fn ensure_pinnable_server(&self) -> Result {
+    async fn ensure_pinnable_server(&self) -> CommandResult {
         unreachable!("eks provider not yet implemented")
     }
 
-    async fn ensure_creatable_server(&self) -> Result {
+    async fn ensure_creatable_server(&self) -> CommandResult {
         unreachable!("eks provider not yet implemented")
     }
 
-    async fn create_cluster_hook(&self, _reporter: &dyn Reporter) -> Result<Box<dyn Transaction>> {
+    async fn create_cluster_hook(
+        &self,
+        _reporter: &dyn Reporter,
+    ) -> CommandResult<Box<dyn Transaction>> {
         unreachable!("eks provider not yet implemented")
     }
 
-    async fn create_database(&self, _reporter: &dyn Reporter) -> Result {
+    async fn create_database(&self, _reporter: &dyn Reporter) -> CommandResult {
         unreachable!("eks provider not yet implemented")
     }
 
-    async fn create_runtimes(&self, _reporter: &dyn Reporter) -> Result {
+    async fn create_runtimes(&self, _reporter: &dyn Reporter) -> CommandResult {
         unreachable!("eks provider not yet implemented")
     }
 
@@ -93,55 +91,55 @@ impl Provider for EksProvider {
         unreachable!("eks provider not yet implemented")
     }
 
-    async fn start_cluster_hook(&self, _reporter: &dyn Reporter) -> Result {
+    async fn start_cluster_hook(&self, _reporter: &dyn Reporter) -> CommandResult {
         unreachable!("eks provider not yet implemented")
     }
 
-    async fn stop_cluster(&self, _reporter: &dyn Reporter) -> Result<ClusterStopOutcome> {
+    async fn stop_cluster(&self, _reporter: &dyn Reporter) -> CommandResult<ClusterStopOutcome> {
         unreachable!("eks provider not yet implemented")
     }
 
-    async fn ensure_startable_cluster(&self) -> Result {
+    async fn ensure_startable_cluster(&self) -> CommandResult {
         unreachable!("eks provider not yet implemented")
     }
 
-    async fn ensure_stoppable_cluster(&self) -> Result {
+    async fn ensure_stoppable_cluster(&self) -> CommandResult {
         unreachable!("eks provider not yet implemented")
     }
 
-    async fn ensure_restartable_cluster(&self) -> Result {
+    async fn ensure_restartable_cluster(&self) -> CommandResult {
         unreachable!("eks provider not yet implemented")
     }
 
-    async fn start_instance_hook(&self, _reporter: &dyn Reporter) -> Result {
+    async fn start_instance_hook(&self, _reporter: &dyn Reporter) -> CommandResult {
         unreachable!("eks provider not yet implemented")
     }
 
-    async fn stop_instance(&self, _reporter: &dyn Reporter) -> Result<InstanceStopOutcome> {
+    async fn stop_instance(&self, _reporter: &dyn Reporter) -> CommandResult<InstanceStopOutcome> {
         unreachable!("eks provider not yet implemented")
     }
 
-    async fn ensure_startable_instance(&self) -> Result {
+    async fn ensure_startable_instance(&self) -> CommandResult {
         unreachable!("eks provider not yet implemented")
     }
 
-    async fn ensure_stoppable_instance(&self) -> Result {
+    async fn ensure_stoppable_instance(&self) -> CommandResult {
         unreachable!("eks provider not yet implemented")
     }
 
-    async fn ensure_restartable_instance(&self) -> Result {
+    async fn ensure_restartable_instance(&self) -> CommandResult {
         unreachable!("eks provider not yet implemented")
     }
 
-    async fn ensure_startable_server(&self) -> Result {
+    async fn ensure_startable_server(&self) -> CommandResult {
         unreachable!("eks provider not yet implemented")
     }
 
-    async fn ensure_stoppable_server(&self) -> Result {
+    async fn ensure_stoppable_server(&self) -> CommandResult {
         unreachable!("eks provider not yet implemented")
     }
 
-    async fn ensure_restartable_server(&self) -> Result {
+    async fn ensure_restartable_server(&self) -> CommandResult {
         unreachable!("eks provider not yet implemented")
     }
 }

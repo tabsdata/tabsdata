@@ -4,7 +4,7 @@
 
 use kube::{Client, Config};
 
-use crate::core::system::exit::Result;
+use crate::core::system::exit::CommandResult;
 use crate::runtime::provider::Cluster;
 
 pub struct DockerCluster {
@@ -18,15 +18,15 @@ impl DockerCluster {
 }
 
 impl Cluster for DockerCluster {
-    fn create(&self) -> Result {
+    fn create(&self) -> CommandResult {
         Ok(())
     }
 
-    async fn start(&self) -> Result {
+    async fn start(&self) -> CommandResult {
         Ok(())
     }
 
-    async fn stop(&self) -> Result<bool> {
+    async fn stop(&self) -> CommandResult<bool> {
         Ok(false)
     }
 

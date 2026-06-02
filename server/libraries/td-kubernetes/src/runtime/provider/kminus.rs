@@ -15,22 +15,21 @@ use once_cell::sync::OnceCell;
 use td_common::env::TABSDATA_HOME_DIR;
 use td_common::os::name_program;
 use td_common::server::{DEFAULT_INSTANCE, INSTANCES_FOLDER};
-use td_common::status::ExitStatus::{GeneralError, NoAction};
+use td_common::status::ExitStatus::NoAction;
 use td_python::python::{get_python_scripts_folder, resolve_python_binary};
 use tracing::info;
 
 use crate::base::constants::{
-    CONFIGMAP_TABSDATA_CONFIGS, CONFIGMAP_TABSDATA_GLOBALS, CONFIGMAP_TABSDATA_PODS,
-    FOLDER_CLUSTER, FOLDER_DATABASE, FOLDER_PYENV_AG, FOLDER_PYENV_TD, FOLDER_PYTHON,
-    FOLDER_REPOSITORY, FOLDER_RUNTIMES, FOLDER_STORAGE, KPROFILE_CONFIGS_FOLDER,
-    KPROFILE_GLOBALS_FOLDER, KPROFILE_PODS_FOLDER,
+    CONFIGMAP_TABSDATA_MANIFEST, FOLDER_CLUSTER, FOLDER_DATABASE, FOLDER_PYENV_AG, FOLDER_PYENV_TD,
+    FOLDER_PYTHON, FOLDER_REPOSITORY, FOLDER_RUNTIMES, FOLDER_STORAGE, KPROFILE_CONFIGS_FAMILY,
+    KPROFILE_PODS_FAMILY,
 };
+use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
-use crate::cerror;
 use crate::client::session::pin::{KminusInputs, Session};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::validate_instance_name;
-use crate::core::system::exit::{Result, abort};
+use crate::core::system::exit::{CommandError, CommandResult, abort_with};
 use crate::core::system::subprocess;
 use crate::core::system::subprocess::apply_detached_flags;
 use crate::kube::api::require_configmap;
@@ -42,7 +41,8 @@ use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues};
 use crate::runtime::instance::launcher::{start_workload, stop_workload};
 use crate::runtime::instance::manifest::MANIFEST_FILE;
 use crate::runtime::instance::profile::{
-    Profile, load_profile, parse_from_configmaps, render_for_configmaps, resolve_profile_entry,
+    Profile, load_profile, parse_from_configmaps, read_family_configmaps, render_for_configmaps,
+    resolve_profile_entry,
 };
 use crate::runtime::instance::verify_manifest_compatibility;
 use crate::runtime::provider::kminus::cluster::{InstanceFolderGuard, KminusCluster};
@@ -74,21 +74,24 @@ impl KminusProvider {
         cluster: ClusterArguments,
         instance: InstanceArguments,
         verbose: bool,
-    ) -> Result<Self> {
+    ) -> CommandResult<Self> {
         if cluster.context.is_some()
             || cluster.kubeconfig.is_some()
             || cluster.current
             || cluster.namespace.is_some()
         {
-            cerror!(
-                "Arguments --context, --kubeconfig, --current, and --namespace are not valid for the '{}' provider.",
-                ClusterProvider::Kminus.as_str()
-            );
-            return abort(GeneralError);
+            return Err(ProviderError::ArgumentNotValidForProvider {
+                argument: "context | kubeconfig | current | namespace".to_owned(),
+                provider: ClusterProvider::Kminus.as_str().to_owned(),
+            }
+            .into());
         }
         if instance.name.is_some() && instance.path.is_some() {
-            cerror!("Arguments --name and --path are mutually exclusive.");
-            return abort(GeneralError);
+            return Err(ProviderError::MutuallyExclusiveArguments {
+                first: "name".to_owned(),
+                second: "path".to_owned(),
+            }
+            .into());
         }
 
         let inputs = KminusInputs {
@@ -124,14 +127,20 @@ impl KminusProvider {
                 (name, folder)
             }
             (Some(_), Some(_)) => {
-                cerror!("Arguments --name and --path are mutually exclusive.");
-                return abort(GeneralError);
+                return Err(ProviderError::MutuallyExclusiveArguments {
+                    first: "name".to_owned(),
+                    second: "path".to_owned(),
+                }
+                .into());
             }
         };
 
         if let Err(error) = validate_instance_name(&name) {
-            cerror!("{error}");
-            return abort(GeneralError);
+            return Err(ProviderError::InvalidInstanceName {
+                name: name.clone(),
+                reason: error.to_string(),
+            }
+            .into());
         }
 
         let kminus_cluster = KminusCluster::new(folder.join(FOLDER_CLUSTER), verbose);
@@ -149,19 +158,19 @@ impl KminusProvider {
         })
     }
 
-    fn profile(&self) -> Result<&Profile> {
-        self.profile
-            .get_or_try_init(|| load_profile(self.cluster_provider(), self.verbose))
+    fn profile(&self) -> CommandResult<&Profile> {
+        self.profile.get_or_try_init(|| {
+            load_profile(self.cluster_provider(), self.verbose).map_err(CommandError::from)
+        })
     }
 
-    fn bootstrap_cluster(&self) -> Result<Box<dyn Transaction>> {
-        if let Err(error) = fs::create_dir_all(&self.folder) {
-            cerror!(
-                "Failed to create instance folder {}: {error}",
-                self.folder.display()
-            );
-            return abort(GeneralError);
-        }
+    fn bootstrap_cluster(&self) -> CommandResult<Box<dyn Transaction>> {
+        fs::create_dir_all(&self.folder).map_err(|error| {
+            ProviderError::InstanceFolderCreateFailed(
+                self.folder.display().to_string(),
+                error.to_string(),
+            )
+        })?;
         let guard = InstanceFolderGuard::new(self.folder.clone());
         let repository = self.folder.join(FOLDER_REPOSITORY);
         for subfolder in [
@@ -169,13 +178,12 @@ impl KminusProvider {
             &repository.join(FOLDER_DATABASE),
             &repository.join(FOLDER_STORAGE),
         ] {
-            if let Err(error) = fs::create_dir_all(subfolder) {
-                cerror!(
-                    "Failed to create repository folder {}: {error}",
-                    subfolder.display()
-                );
-                return abort(GeneralError);
-            }
+            fs::create_dir_all(subfolder).map_err(|error| {
+                ProviderError::InstanceFolderCreateFailed(
+                    subfolder.display().to_string(),
+                    error.to_string(),
+                )
+            })?;
         }
         self.cluster.create()?;
         Ok(Box::new(guard))
@@ -232,11 +240,11 @@ impl Provider for KminusProvider {
         ClusterProvider::Kminus
     }
 
-    async fn kube_config(&self) -> Result<kube::Config> {
-        build_kubeconfig(Some(&self.cluster.kubefile()), None, None).await
+    async fn kube_config(&self) -> CommandResult<kube::Config> {
+        Ok(build_kubeconfig(Some(&self.cluster.kubefile()), None, None).await?)
     }
 
-    fn system_values(&self) -> Result<SystemValues> {
+    fn system_values(&self) -> CommandResult<SystemValues> {
         let repository_folder = self.folder.join(FOLDER_REPOSITORY);
         let repository_url = url::Url::from_directory_path(&repository_folder)
             .ok()
@@ -265,19 +273,13 @@ impl Provider for KminusProvider {
                 .to_string_lossy()
                 .to_string(),
         );
-        let scripts_folder = match get_python_scripts_folder() {
-            Ok(path) => path,
-            Err(error) => {
-                cerror!("Failed to resolve the Python scripts folder: {error}");
-                return abort(GeneralError);
-            }
-        };
+        let scripts_folder = get_python_scripts_folder()
+            .map_err(|error| ProviderError::PythonScriptsFolderResolveFailed(error.to_string()))?;
         let Some(scripts_name) = scripts_folder.file_name().and_then(|name| name.to_str()) else {
-            cerror!(
-                "Unable to extract the Python scripts folder name from '{}'.",
-                scripts_folder.display()
-            );
-            return abort(GeneralError);
+            return Err(ProviderError::PythonScriptsFolderNameInvalid(
+                scripts_folder.display().to_string(),
+            )
+            .into());
         };
         let pyenv_scripts_folder = Some(scripts_name.to_string());
         let instance_name = self
@@ -322,34 +324,36 @@ impl Provider for KminusProvider {
         }
     }
 
-    async fn ensure_pinnable_server(&self) -> Result {
+    async fn ensure_pinnable_server(&self) -> CommandResult {
         if !self.folder.exists() {
-            cerror!(
-                "Instance folder '{}' does not exist. Run 'tdkserver server create ...' first.",
-                self.folder.display()
+            return Err(
+                ProviderError::InstanceFolderNotFound(self.folder.display().to_string()).into(),
             );
-            return abort(GeneralError);
         }
         if !self.cluster.sysconfig_path().exists() {
-            cerror!(
-                "Folder '{}' is not a valid kminus instance (missing '{}').",
-                self.folder.display(),
-                self.cluster.sysconfig_path().display()
-            );
-            return abort(GeneralError);
+            return Err(ProviderError::InvalidKminusInstance {
+                folder: self.folder.display().to_string(),
+                marker: self.cluster.sysconfig_path().display().to_string(),
+            }
+            .into());
         }
         Ok(())
     }
 
-    async fn ensure_creatable_server(&self) -> Result {
+    async fn ensure_creatable_server(&self) -> CommandResult {
         if self.folder.exists() {
-            info!("Folder {} already exists.", self.folder.display());
-            return abort(NoAction);
+            return abort_with(
+                NoAction,
+                ProviderError::InstanceFolderExists(self.folder.display().to_string()),
+            );
         }
         Ok(())
     }
 
-    async fn create_cluster_hook(&self, reporter: &dyn Reporter) -> Result<Box<dyn Transaction>> {
+    async fn create_cluster_hook(
+        &self,
+        reporter: &dyn Reporter,
+    ) -> CommandResult<Box<dyn Transaction>> {
         let step = reporter.step("Preparing kminus cluster");
         let result = self.bootstrap_cluster()?;
         step.done("Kminus cluster prepared");
@@ -359,42 +363,37 @@ impl Provider for KminusProvider {
         Ok(result)
     }
 
-    async fn create_database(&self, reporter: &dyn Reporter) -> Result {
+    async fn create_database(&self, reporter: &dyn Reporter) -> CommandResult {
         let loaded = self.profile()?;
         let resolver = ConfigurationResolver::new(self.system_values()?);
         let apiserver_config = resolve_profile_entry(
             loaded,
             &resolver,
-            KPROFILE_CONFIGS_FOLDER,
+            KPROFILE_CONFIGS_FAMILY,
             APISERVER_CONFIG_KEY,
         )
         .await?;
-        let mut config_file = match tempfile::Builder::new()
+        let mut config_file = tempfile::Builder::new()
             .prefix("td-apiserver-")
             .suffix(".yaml")
             .tempfile()
-        {
-            Ok(file) => file,
-            Err(error) => {
-                cerror!("Failed to create temporary apiserver config file: {error}");
-                return abort(GeneralError);
-            }
-        };
-        if let Err(error) = config_file.write_all(apiserver_config.as_bytes()) {
-            cerror!(
-                "Failed to write temporary apiserver config '{}': {error}",
-                config_file.path().display()
-            );
-            return abort(GeneralError);
-        }
-        if let Err(error) = config_file.flush() {
-            cerror!(
-                "Failed to flush temporary apiserver config '{}': {error}",
-                config_file.path().display()
-            );
-            return abort(GeneralError);
-        }
+            .map_err(|error| ProviderError::ApiserverTempConfigCreateFailed(error.to_string()))?;
+        config_file
+            .write_all(apiserver_config.as_bytes())
+            .map_err(|error| {
+                ProviderError::ApiserverTempConfigWriteFailed(
+                    config_file.path().display().to_string(),
+                    error.to_string(),
+                )
+            })?;
+        config_file.flush().map_err(|error| {
+            ProviderError::ApiserverTempConfigFlushFailed(
+                config_file.path().display().to_string(),
+                error.to_string(),
+            )
+        })?;
         let apiserver = name_program(&PathBuf::from(APISERVER_BINARY));
+        let command_label = format!("{} --db-schema create", apiserver.display());
         let step = reporter.step("Creating tabsdata database schema");
         let mut command = std::process::Command::new(&apiserver);
         command
@@ -403,50 +402,42 @@ impl Provider for KminusProvider {
             .arg("--db-schema")
             .arg("create");
         apply_detached_flags(&mut command);
-        let result = subprocess::run(&mut command, APISERVER_BINARY, self.verbose);
-        match result {
-            Ok(output) => {
-                if !output.status.success() {
-                    step.fail();
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    cerror!(
-                        "'{} --db-schema create' failed with status {}: {}",
-                        apiserver.display(),
-                        output.status,
-                        stderr.trim()
-                    );
-                    return abort(GeneralError);
-                }
-                step.done("Tabsdata database schema created");
-                Ok(())
-            }
+        let output = match subprocess::run(&mut command, APISERVER_BINARY, self.verbose) {
+            Ok(output) => output,
             Err(error) => {
                 step.fail();
-                cerror!(
-                    "Failed to run '{} --db-schema create': {error}",
-                    apiserver.display()
-                );
-                abort(GeneralError)
-            }
-        }
-    }
-
-    async fn create_runtimes(&self, reporter: &dyn Reporter) -> Result {
-        let runtimes_python = self.folder.join(FOLDER_RUNTIMES).join(FOLDER_PYTHON);
-        if let Err(error) = fs::create_dir_all(&runtimes_python) {
-            cerror!(
-                "Failed to create runtimes folder '{}': {error}",
-                runtimes_python.display()
-            );
-            return abort(GeneralError);
-        }
-        let pyvenv = match resolve_python_binary(PYVENV_BINARY) {
-            Ok(path) => path,
-            Err(error) => {
-                cerror!("Failed to locate the '{PYVENV_BINARY}' binary: {error}");
-                return abort(GeneralError);
+                return Err(ProviderError::ApiserverInvocationFailed {
+                    command: command_label,
+                    cause: error.to_string(),
+                }
+                .into());
             }
         };
+        if !output.status.success() {
+            step.fail();
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+            return Err(ProviderError::ApiserverFailedStatus {
+                command: command_label,
+                status: output.status.to_string(),
+                stderr,
+            }
+            .into());
+        }
+        step.done("Tabsdata database schema created");
+        Ok(())
+    }
+
+    async fn create_runtimes(&self, reporter: &dyn Reporter) -> CommandResult {
+        let runtimes_python = self.folder.join(FOLDER_RUNTIMES).join(FOLDER_PYTHON);
+        fs::create_dir_all(&runtimes_python).map_err(|error| {
+            ProviderError::RuntimesFolderCreateFailed(
+                runtimes_python.display().to_string(),
+                error.to_string(),
+            )
+        })?;
+        let pyvenv = resolve_python_binary(PYVENV_BINARY).map_err(|error| {
+            ProviderError::BinaryNotFound(PYVENV_BINARY.to_owned(), error.to_string())
+        })?;
         let step = reporter.step("Creating Python virtual environment templates");
         let mut command = std::process::Command::new(&pyvenv);
         if self.verbose {
@@ -454,43 +445,40 @@ impl Provider for KminusProvider {
         }
         command.arg("create").arg("--target").arg(&runtimes_python);
         apply_detached_flags(&mut command);
-        let result = subprocess::run(&mut command, PYVENV_BINARY, self.verbose);
-        match result {
-            Ok(output) => {
-                if !output.status.success() {
-                    step.fail();
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    cerror!(
-                        "Failed to create Python virtual environment templates under '{}': {}",
-                        runtimes_python.display(),
-                        stderr.trim()
-                    );
-                    return abort(GeneralError);
-                }
-                step.done("Python virtual environment templates created");
-                info!("Current Python environment tabsdata metadata:");
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                for line in stdout.lines() {
-                    info!("  {line}");
-                }
-                Ok(())
-            }
+        let output = match subprocess::run(&mut command, PYVENV_BINARY, self.verbose) {
+            Ok(output) => output,
             Err(error) => {
                 step.fail();
-                cerror!(
-                    "Failed to create Python virtual environment templates under '{}': {error}",
-                    runtimes_python.display()
-                );
-                abort(GeneralError)
+                return Err(ProviderError::PyvenvCreateFailed {
+                    folder: runtimes_python.display().to_string(),
+                    cause: error.to_string(),
+                }
+                .into());
             }
+        };
+        if !output.status.success() {
+            step.fail();
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+            return Err(ProviderError::PyvenvCreateFailed {
+                folder: runtimes_python.display().to_string(),
+                cause: stderr,
+            }
+            .into());
         }
+        step.done("Python virtual environment templates created");
+        info!("Current Python environment tabsdata metadata:");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for line in stdout.lines() {
+            info!("  {line}");
+        }
+        Ok(())
     }
 
     async fn cluster_alive(&self) -> bool {
         self.cluster.is_alive().await
     }
 
-    async fn start_cluster_hook(&self, reporter: &dyn Reporter) -> Result {
+    async fn start_cluster_hook(&self, reporter: &dyn Reporter) -> CommandResult {
         let step = reporter.step("Starting kminus cluster");
         self.cluster.start().await?;
         step.done("Kminus cluster started");
@@ -499,7 +487,7 @@ impl Provider for KminusProvider {
         Ok(())
     }
 
-    async fn stop_cluster(&self, reporter: &dyn Reporter) -> Result<ClusterStopOutcome> {
+    async fn stop_cluster(&self, reporter: &dyn Reporter) -> CommandResult<ClusterStopOutcome> {
         let step = reporter.step("Stopping kminus cluster");
         let stopped = self.cluster.stop().await?;
         if stopped {
@@ -511,19 +499,19 @@ impl Provider for KminusProvider {
         }
     }
 
-    async fn ensure_startable_cluster(&self) -> Result {
+    async fn ensure_startable_cluster(&self) -> CommandResult {
         Ok(())
     }
 
-    async fn ensure_stoppable_cluster(&self) -> Result {
+    async fn ensure_stoppable_cluster(&self) -> CommandResult {
         Ok(())
     }
 
-    async fn ensure_restartable_cluster(&self) -> Result {
+    async fn ensure_restartable_cluster(&self) -> CommandResult {
         Ok(())
     }
 
-    async fn start_instance_hook(&self, reporter: &dyn Reporter) -> Result {
+    async fn start_instance_hook(&self, reporter: &dyn Reporter) -> CommandResult {
         handle_phase_secrets(self, SecretPhase::InstanceStart).await?;
         let step = reporter.step("Starting tabsdata instance");
         let multi = td_common::logging::multi_progress().unwrap_or_default();
@@ -532,7 +520,7 @@ impl Provider for KminusProvider {
         Ok(())
     }
 
-    async fn stop_instance(&self, reporter: &dyn Reporter) -> Result<InstanceStopOutcome> {
+    async fn stop_instance(&self, reporter: &dyn Reporter) -> CommandResult<InstanceStopOutcome> {
         let step = reporter.step("Stopping tabsdata instance");
         let multi = td_common::logging::multi_progress().unwrap_or_default();
         let stopped = self.teardown_workload(&multi).await?;
@@ -545,84 +533,68 @@ impl Provider for KminusProvider {
         }
     }
 
-    async fn ensure_startable_instance(&self) -> Result {
+    async fn ensure_startable_instance(&self) -> CommandResult {
         if !self.folder.exists() {
-            cerror!(
-                "Instance folder '{}' does not exist.",
-                self.folder.display()
+            return Err(
+                ProviderError::InstanceFolderNotFound(self.folder.display().to_string()).into(),
             );
-            return abort(GeneralError);
         }
         Ok(())
     }
 
-    async fn ensure_stoppable_instance(&self) -> Result {
+    async fn ensure_stoppable_instance(&self) -> CommandResult {
         if !self.folder.exists() {
-            cerror!(
-                "Instance folder '{}' does not exist.",
-                self.folder.display()
+            return Err(
+                ProviderError::InstanceFolderNotFound(self.folder.display().to_string()).into(),
             );
-            return abort(GeneralError);
         }
         Ok(())
     }
 
-    async fn ensure_restartable_instance(&self) -> Result {
+    async fn ensure_restartable_instance(&self) -> CommandResult {
         if !self.folder.exists() {
-            cerror!(
-                "Instance folder '{}' does not exist.",
-                self.folder.display()
+            return Err(
+                ProviderError::InstanceFolderNotFound(self.folder.display().to_string()).into(),
             );
-            return abort(GeneralError);
         }
         Ok(())
     }
 
-    async fn ensure_startable_server(&self) -> Result {
+    async fn ensure_startable_server(&self) -> CommandResult {
         if !self.folder.exists() {
-            cerror!(
-                "Instance folder '{}' does not exist. Run 'create' first.",
-                self.folder.display()
+            return Err(
+                ProviderError::InstanceFolderNotFound(self.folder.display().to_string()).into(),
             );
-            return abort(GeneralError);
         }
         if cfg!(td_k8s_development) {
             let manifest_path = self.cluster.staging_profile_path().join(MANIFEST_FILE);
             if manifest_path.exists() {
-                let yaml = match fs::read_to_string(&manifest_path) {
-                    Ok(yaml) => yaml,
-                    Err(error) => {
-                        cerror!(
-                            "Failed to read staged manifest '{}': {error}",
-                            manifest_path.display()
-                        );
-                        return abort(GeneralError);
-                    }
-                };
+                let yaml = fs::read_to_string(&manifest_path).map_err(|error| {
+                    ProviderError::StagingReadFailed(
+                        manifest_path.display().to_string(),
+                        error.to_string(),
+                    )
+                })?;
                 verify_manifest_compatibility(&yaml)?;
             }
         }
         Ok(())
     }
 
-    async fn ensure_stoppable_server(&self) -> Result {
+    async fn ensure_stoppable_server(&self) -> CommandResult {
         if !self.folder.exists() {
-            cerror!(
-                "Instance folder '{}' does not exist.",
-                self.folder.display()
+            return Err(
+                ProviderError::InstanceFolderNotFound(self.folder.display().to_string()).into(),
             );
-            return abort(GeneralError);
         }
         Ok(())
     }
 
-    async fn ensure_restartable_server(&self) -> Result {
+    async fn ensure_restartable_server(&self) -> CommandResult {
         if !self.folder.exists() {
-            cerror!(
-                "Instance folder '{}' does not exist.",
-                self.folder.display()
+            return Err(
+                ProviderError::InstanceFolderNotFound(self.folder.display().to_string()).into(),
             );
-            return abort(GeneralError);
         }
         Ok(())
     }
@@ -635,52 +607,65 @@ impl HostedProvider for KminusProvider {}
 impl LocalProvider for KminusProvider {}
 
 impl KminusProvider {
-    async fn stage_configmaps(&self) -> Result {
+    async fn stage_configmaps(&self) -> CommandResult {
         let loaded = self.profile()?;
         let staging_profile = self.cluster.staging_profile_path();
-        if let Err(error) = fs::create_dir_all(&staging_profile) {
-            cerror!(
-                "Failed to create staging folder '{}': {error}",
-                staging_profile.display()
-            );
-            return abort(GeneralError);
-        }
+        fs::create_dir_all(&staging_profile).map_err(|error| {
+            ProviderError::StagingFolderCreateFailed(
+                staging_profile.display().to_string(),
+                error.to_string(),
+            )
+        })?;
         let resolver = ConfigurationResolver::new(self.system_values()?);
         let rendered = render_for_configmaps(loaded, &resolver).await?;
-        for (folder, data) in [
-            (KPROFILE_GLOBALS_FOLDER, rendered.globals),
-            (KPROFILE_PODS_FOLDER, rendered.pods),
-            (KPROFILE_CONFIGS_FOLDER, rendered.configs),
+        for (family, data) in [
+            (KPROFILE_PODS_FAMILY, rendered.pods),
+            (KPROFILE_CONFIGS_FAMILY, rendered.configs),
         ] {
-            let folder_path = staging_profile.join(folder);
-            if let Err(error) = fs::create_dir_all(&folder_path) {
-                cerror!(
-                    "Failed to create staging folder '{}': {error}",
-                    folder_path.display()
-                );
-                return abort(GeneralError);
-            }
+            let family_path = staging_profile.join(family);
+            fs::create_dir_all(&family_path).map_err(|error| {
+                ProviderError::StagingFolderCreateFailed(
+                    family_path.display().to_string(),
+                    error.to_string(),
+                )
+            })?;
             for (key, value) in data {
-                let file_path = folder_path.join(&key);
-                if let Err(error) = fs::write(&file_path, value.as_bytes()) {
-                    cerror!("Failed to write '{}': {error}", file_path.display());
-                    return abort(GeneralError);
-                }
+                let file_path = family_path.join(&key);
+                fs::write(&file_path, value.as_bytes()).map_err(|error| {
+                    ProviderError::StagingWriteFailed(
+                        file_path.display().to_string(),
+                        error.to_string(),
+                    )
+                })?;
             }
         }
+        let manifest_path = staging_profile.join(MANIFEST_FILE);
+        fs::write(&manifest_path, rendered.manifest.as_bytes()).map_err(|error| {
+            ProviderError::StagingWriteFailed(
+                manifest_path.display().to_string(),
+                error.to_string(),
+            )
+        })?;
         Ok(())
     }
 
-    async fn apply_workload(&self, multi: &MultiProgress) -> Result {
+    async fn apply_workload(&self, multi: &MultiProgress) -> CommandResult {
         let context = self.kube_context().await?;
-        let globals = require_configmap(&context, CONFIGMAP_TABSDATA_GLOBALS).await?;
-        let pods = require_configmap(&context, CONFIGMAP_TABSDATA_PODS).await?;
-        let configs = require_configmap(&context, CONFIGMAP_TABSDATA_CONFIGS).await?;
-        let profile = parse_from_configmaps(&globals, &pods, &configs)?;
+        let pods = read_family_configmaps(&context, KPROFILE_PODS_FAMILY).await?;
+        let configs = read_family_configmaps(&context, KPROFILE_CONFIGS_FAMILY).await?;
+        let mut manifest_data = require_configmap(&context, CONFIGMAP_TABSDATA_MANIFEST).await?;
+        let Some(manifest_yaml) = manifest_data.remove(MANIFEST_FILE) else {
+            return Err(ProviderError::ConfigmapEntryMissing(
+                CONFIGMAP_TABSDATA_MANIFEST.to_owned(),
+                MANIFEST_FILE.to_owned(),
+            )
+            .into());
+        };
+        let profile = parse_from_configmaps(&pods, &configs, &manifest_yaml)?;
         start_workload(self, &profile, multi).await
     }
 
-    async fn teardown_workload(&self, multi: &MultiProgress) -> Result<bool> {
+    async fn teardown_workload(&self, multi: &MultiProgress) -> CommandResult<bool> {
         let stopped_workload = stop_workload(self, multi).await?;
         let stopped_instance = self.instance.stop().await?;
         Ok(stopped_workload || stopped_instance)

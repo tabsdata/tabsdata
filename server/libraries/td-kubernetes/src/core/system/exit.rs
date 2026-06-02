@@ -3,9 +3,14 @@
 //
 
 use td_common::status::ExitStatus;
-use td_error::{TdDomainError, TdError};
+use td_error::{ApiError, TdDomainError, TdError};
 
-use crate::base::error::kubernetes::KubernetesError;
+use crate::base::error::kubernetes::{KubeconfigError, KubernetesError};
+use crate::base::error::launcher::LauncherError;
+use crate::base::error::manifest::ManifestError;
+use crate::base::error::naming::NamingError;
+use crate::base::error::profile::ProfileError;
+use crate::base::error::provider::ProviderError;
 
 #[derive(Debug)]
 pub struct CommandError {
@@ -37,25 +42,48 @@ impl CommandError {
     }
 }
 
+fn exit_status_for(error: &TdError) -> ExitStatus {
+    match error.api_error() {
+        ApiError::InputError
+        | ApiError::NotFound
+        | ApiError::NotAllowed
+        | ApiError::Forbidden
+        | ApiError::NotAuthorized => ExitStatus::TabsDataError,
+        ApiError::InternalError | ApiError::NotImplemented | ApiError::Unexpected => {
+            ExitStatus::GeneralError
+        }
+    }
+}
+
 impl From<TdError> for CommandError {
     fn from(error: TdError) -> Self {
-        CommandError::with(ExitStatus::GeneralError, error)
+        let status = exit_status_for(&error);
+        CommandError::with(status, error)
     }
 }
 
 impl From<KubernetesError> for CommandError {
     fn from(error: KubernetesError) -> Self {
-        CommandError::with(ExitStatus::GeneralError, TdError::from(error))
+        TdError::from(error).into()
     }
 }
 
-pub type Result<T = ()> = std::result::Result<T, CommandError>;
+crate::command_error_from!(
+    KubeconfigError,
+    LauncherError,
+    ManifestError,
+    NamingError,
+    ProfileError,
+    ProviderError
+);
 
-pub fn abort<T>(status: ExitStatus) -> Result<T> {
+pub type CommandResult<T = ()> = Result<T, CommandError>;
+
+pub fn abort<T>(status: ExitStatus) -> CommandResult<T> {
     Err(CommandError::new(status))
 }
 
-pub fn abort_with<T, E>(status: ExitStatus, error: E) -> Result<T>
+pub fn abort_with<T, E>(status: ExitStatus, error: E) -> CommandResult<T>
 where
     E: TdDomainError + 'static,
 {

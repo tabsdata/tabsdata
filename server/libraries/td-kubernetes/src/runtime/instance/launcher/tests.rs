@@ -57,7 +57,6 @@ fn profile_with_pods(entries: &[(&str, &str)]) -> Profile {
         pods.insert((*key).to_owned(), (*yaml).to_owned());
     }
     Profile {
-        globals: BTreeMap::new(),
         pods,
         configs: BTreeMap::new(),
         manifest: Manifest::initial_install("1.0.0", Utc::now(), std::iter::empty()),
@@ -278,7 +277,7 @@ fn deserialize_pod_entry_parses_valid_job() {
 
 #[test]
 fn deserialize_pod_entry_aborts_for_invalid_yaml() {
-    let result: Result<Job> = deserialize_pod_entry("broken.yaml", "::: not yaml :::", Tier::Init);
+    let result = deserialize_pod_entry::<Job>("broken.yaml", "::: not yaml :::", Tier::Init);
     assert!(result.is_err());
 }
 

@@ -9,7 +9,7 @@ use crate::client::session::pin::PinContext;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
 use crate::client::tdkserver::common::{effective_yes, prompt_yes_no};
 use crate::client::tdkserver::render::{preview, report};
-use crate::core::system::exit::Result;
+use crate::core::system::exit::CommandResult;
 use crate::runtime::provider::provider_for;
 
 #[derive(Debug, Clone, Args)]
@@ -43,7 +43,7 @@ pub struct PinArguments {
     pub yes: bool,
 }
 
-pub async fn command_pin(arguments: PinArguments, globals: &GlobalArguments) -> Result {
+pub async fn command_pin(arguments: PinArguments, globals: &GlobalArguments) -> CommandResult {
     let PinArguments {
         cluster,
         instance,

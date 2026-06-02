@@ -9,9 +9,9 @@ use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, OwnerReference}
 use kube::Api;
 use kube::api::{DeleteParams, ListParams, PostParams};
 
-use crate::base::constants::HTTP_STATUS_CONFLICT;
+use crate::base::constants::{CONFIGMAP_FAMILY_LABEL, HTTP_STATUS_CONFLICT};
 use crate::base::error::kubernetes::{KubeConfigMapError, KubernetesError};
-use crate::kube::api::{label_tabsdata, part_of_tabsdata};
+use crate::kube::api::{LabelFilter, label_tabsdata, tabsdata_selector};
 use crate::kube::context::KubeContext;
 
 pub async fn exists_configmap(context: &KubeContext, name: &str) -> Result<bool, KubernetesError> {
@@ -33,6 +33,7 @@ pub async fn create_configmap(
     name: &str,
     data: BTreeMap<String, String>,
     owner: Option<OwnerReference>,
+    family: Option<&str>,
 ) -> Result<(), KubernetesError> {
     let api: Api<ConfigMap> = Api::namespaced(context.client().clone(), context.namespace());
     let mut metadata = ObjectMeta {
@@ -41,7 +42,11 @@ pub async fn create_configmap(
         owner_references: owner.map(|reference| vec![reference]),
         ..Default::default()
     };
-    label_tabsdata(&mut metadata);
+    let extras: &[LabelFilter<'_>] = match family {
+        Some(family) => &[LabelFilter::new(CONFIGMAP_FAMILY_LABEL, family)],
+        None => &[],
+    };
+    label_tabsdata(&mut metadata, extras);
     let configmap = ConfigMap {
         metadata,
         data: Some(data),
@@ -115,9 +120,10 @@ pub async fn delete_configmap(context: &KubeContext, name: &str) -> Result<(), K
 
 pub async fn list_configmaps(
     context: &KubeContext,
+    label: Option<LabelFilter<'_>>,
 ) -> Result<Vec<(String, Vec<String>)>, KubernetesError> {
     let api: Api<ConfigMap> = Api::namespaced(context.client().clone(), context.namespace());
-    let selector = part_of_tabsdata();
+    let selector = tabsdata_selector(label);
     let list_params = ListParams::default().labels_from(&selector);
     let configmaps =
         api.list(&list_params)
@@ -154,9 +160,10 @@ pub async fn list_configmaps(
 
 pub async fn get_configmaps(
     context: &KubeContext,
+    label: Option<LabelFilter<'_>>,
 ) -> Result<Vec<(String, Vec<(String, Vec<u8>)>)>, KubernetesError> {
     let api: Api<ConfigMap> = Api::namespaced(context.client().clone(), context.namespace());
-    let selector = part_of_tabsdata();
+    let selector = tabsdata_selector(label);
     let list_params = ListParams::default().labels_from(&selector);
     let configmaps =
         api.list(&list_params)

@@ -9,7 +9,7 @@ use crate::base::reporter::InteractiveReporter;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
 use crate::client::tdkserver::common::{effective_yes, prompt_yes_no};
 use crate::client::tdkserver::render::{preview, report};
-use crate::core::system::exit::Result;
+use crate::core::system::exit::CommandResult;
 use crate::cwarn;
 use crate::runtime::provider::outcome::ClusterStopOutcome;
 use crate::runtime::provider::provider_for_or_tdkcontext;
@@ -45,7 +45,7 @@ pub struct StopArguments {
     pub yes: bool,
 }
 
-pub async fn command_stop(arguments: StopArguments, globals: &GlobalArguments) -> Result {
+pub async fn command_stop(arguments: StopArguments, globals: &GlobalArguments) -> CommandResult {
     let StopArguments {
         cluster,
         instance,

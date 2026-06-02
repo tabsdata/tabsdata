@@ -12,7 +12,7 @@ use crate::client::tdkserver::arguments::GlobalArguments;
 use crate::client::tdkserver::commands::instance::restart::{RestartArguments, command_restart};
 use crate::client::tdkserver::commands::instance::start::{StartArguments, command_start};
 use crate::client::tdkserver::commands::instance::stop::{StopArguments, command_stop};
-use crate::core::system::exit::Result;
+use crate::core::system::exit::CommandResult;
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum InstanceCommands {
@@ -24,7 +24,10 @@ pub enum InstanceCommands {
     Stop(StopArguments),
 }
 
-pub async fn command_instance(command: InstanceCommands, globals: &GlobalArguments) -> Result {
+pub async fn command_instance(
+    command: InstanceCommands,
+    globals: &GlobalArguments,
+) -> CommandResult {
     match command {
         InstanceCommands::Restart(arguments) => command_restart(arguments, globals).await,
         InstanceCommands::Start(arguments) => command_start(arguments, globals).await,

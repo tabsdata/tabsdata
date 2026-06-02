@@ -7,14 +7,12 @@ use k8s_openapi::api::batch::v1::Job;
 use k8s_openapi::api::core::v1::Pod;
 use kube::runtime::wait::Condition;
 use serde::de::DeserializeOwned;
-use td_common::status::ExitStatus::{GeneralError, TabsDataError};
 
 use crate::base::constants::TIER_LABEL;
-use crate::base::error::kubernetes::KubernetesError;
-use crate::cerror;
+use crate::base::error::launcher::LauncherError;
 use crate::client::tdkserver::widgets::{phase_spinner_in, spinner};
 use crate::core::pod::ValidationError;
-use crate::core::system::exit::{CommandError, Result, abort};
+use crate::core::system::exit::{CommandError, CommandResult};
 use crate::kube::api::{job as job_api, pod as pod_api};
 use crate::runtime::instance::profile::Profile;
 use crate::runtime::instance::tier::Tier;
@@ -31,7 +29,7 @@ pub async fn start_workload(
     provider: &dyn Provider,
     profile: &Profile,
     multi: &MultiProgress,
-) -> Result {
+) -> CommandResult {
     delete_workload(provider, multi).await?;
     let init_jobs = apply_init_phase(provider, profile, multi).await?;
     wait_init_phase(provider, &init_jobs, multi).await?;
@@ -40,7 +38,7 @@ pub async fn start_workload(
     Ok(())
 }
 
-pub async fn stop_workload(provider: &dyn Provider, multi: &MultiProgress) -> Result<bool> {
+pub async fn stop_workload(provider: &dyn Provider, multi: &MultiProgress) -> CommandResult<bool> {
     let existed = workload_exists(provider).await?;
     if existed {
         delete_workload(provider, multi).await?;
@@ -52,14 +50,14 @@ pub async fn apply_init_phase(
     provider: &dyn Provider,
     profile: &Profile,
     multi: &MultiProgress,
-) -> Result<Vec<String>> {
+) -> CommandResult<Vec<String>> {
     let context = provider.kube_context().await?;
     let cluster_provider = provider.cluster_provider();
     let mut prepared: Vec<(String, Job)> = Vec::new();
     for (key, yaml) in pods_for_tier(profile, Tier::Init)? {
         let mut job = deserialize_pod_entry::<Job>(key, yaml, Tier::Init)?;
         cluster_provider.enrich_init_job(&mut job)?;
-        report_validation(key, cluster_provider.validate_init_job(&job))?;
+        validate_pod(key, cluster_provider.validate_init_job(&job))?;
         prepared.push((key.to_owned(), job));
     }
     let phase = phase_spinner_in(multi, &format!("Applying {} init job(s)", prepared.len()));
@@ -74,14 +72,13 @@ pub async fn apply_init_phase(
                 }
                 Err(error) => {
                     bar.finish_with_message(format!("{key} (failed)"));
-                    cerror!("Failed to apply init job from '{key}': {error}");
                     return Err(error.into());
                 }
             };
-        let Some(name) = created.metadata.name else {
-            cerror!("Init job from '{key}' was created without a metadata.name.");
-            return abort(GeneralError);
-        };
+        let name = created
+            .metadata
+            .name
+            .ok_or_else(|| LauncherError::JobMissingName { key: key.clone() })?;
         applied.push(name);
     }
     Ok(applied)
@@ -91,7 +88,7 @@ pub async fn wait_init_phase(
     provider: &dyn Provider,
     jobs: &[String],
     multi: &MultiProgress,
-) -> Result {
+) -> CommandResult {
     let context = provider.kube_context().await?;
     let phase = phase_spinner_in(multi, &format!("Waiting for {} init job(s)", jobs.len()));
     for name in jobs {
@@ -100,19 +97,18 @@ pub async fn wait_init_phase(
             Ok(Some(job)) => job,
             Ok(None) => {
                 bar.finish_with_message(format!("{name} (deleted)"));
-                cerror!("Init job '{name}' was deleted before completion.");
-                return abort(GeneralError);
+                return Err(
+                    LauncherError::JobDeletedBeforeCompletion { name: name.clone() }.into(),
+                );
             }
             Err(error) => {
                 bar.finish_with_message(format!("{name} (errored)"));
-                cerror!("Failed to await init job '{name}': {error}");
                 return Err(error.into());
             }
         };
         if has_failed_condition(&settled) {
             bar.finish_with_message(format!("{name} (failed)"));
-            cerror!("Init job '{name}' failed.");
-            return abort(TabsDataError);
+            return Err(LauncherError::JobFailed { name: name.clone() }.into());
         }
         bar.finish_with_message(format!("{name} (completed)"));
     }
@@ -146,49 +142,47 @@ fn has_failed_condition(job: &Job) -> bool {
     })
 }
 
-fn report_validation(key: &str, errors: Vec<ValidationError>) -> Result {
+fn validate_pod(key: &str, errors: Vec<ValidationError>) -> CommandResult {
     if errors.is_empty() {
         return Ok(());
     }
-    cerror!("Pod manifest 'pods/{key}' failed provider validation:");
-    for error in &errors {
-        cerror!("  - {}: {}", error.path, error.message);
+    let rendered = errors
+        .iter()
+        .map(|error| format!("  - {}: {}", error.path, error.message))
+        .collect::<Vec<_>>()
+        .join("\n");
+    Err(LauncherError::PodValidationFailed {
+        key: key.to_owned(),
+        errors: rendered,
     }
-    abort(TabsDataError)
+    .into())
 }
 
-fn pods_for_tier(profile: &Profile, tier: Tier) -> Result<Vec<(&str, &str)>> {
+fn pods_for_tier(profile: &Profile, tier: Tier) -> Result<Vec<(&str, &str)>, LauncherError> {
     let mut matched = Vec::new();
     for (key, yaml) in &profile.pods {
-        let value: serde_yaml::Value = match serde_yaml::from_str(yaml) {
-            Ok(value) => value,
-            Err(error) => {
-                cerror!("Failed to parse pod manifest 'pods/{key}' as YAML: {error}");
-                return abort(TabsDataError);
-            }
-        };
+        let value: serde_yaml::Value =
+            serde_yaml::from_str(yaml).map_err(|error| LauncherError::PodYamlParseFailed {
+                key: key.clone(),
+                cause: error.to_string(),
+            })?;
         let label_value = value
             .get("metadata")
             .and_then(|metadata| metadata.get("labels"))
             .and_then(|labels| labels.get(TIER_LABEL))
             .and_then(|value| value.as_str());
         let Some(label_value) = label_value else {
-            cerror!(
-                "Pod manifest 'pods/{key}' is missing the required label \
-                 '{TIER_LABEL}'."
-            );
-            return abort(TabsDataError);
+            return Err(LauncherError::PodMissingTierLabel {
+                key: key.clone(),
+                label: TIER_LABEL.to_owned(),
+            });
         };
-        let entry_tier = match Tier::from_label(label_value) {
-            Some(tier) => tier,
-            None => {
-                cerror!(
-                    "Pod manifest 'pods/{key}' has unknown tier label \
-                     '{TIER_LABEL}: {label_value}'."
-                );
-                return abort(TabsDataError);
-            }
-        };
+        let entry_tier =
+            Tier::from_label(label_value).ok_or_else(|| LauncherError::PodUnknownTierLabel {
+                key: key.clone(),
+                label: TIER_LABEL.to_owned(),
+                value: label_value.to_owned(),
+            })?;
         if entry_tier == tier {
             matched.push((key.as_str(), yaml.as_str()));
         }
@@ -196,31 +190,30 @@ fn pods_for_tier(profile: &Profile, tier: Tier) -> Result<Vec<(&str, &str)>> {
     Ok(matched)
 }
 
-fn deserialize_pod_entry<T: DeserializeOwned>(key: &str, yaml: &str, tier: Tier) -> Result<T> {
-    match serde_yaml::from_str(yaml) {
-        Ok(value) => Ok(value),
-        Err(error) => {
-            cerror!(
-                "Failed to deserialize pod manifest 'pods/{key}' as the {tier} tier's \
-                 expected kind: {error}"
-            );
-            abort(TabsDataError)
-        }
-    }
+fn deserialize_pod_entry<T: DeserializeOwned>(
+    key: &str,
+    yaml: &str,
+    tier: Tier,
+) -> Result<T, LauncherError> {
+    serde_yaml::from_str(yaml).map_err(|error| LauncherError::PodDeserializeFailed {
+        key: key.to_owned(),
+        tier: tier.to_string(),
+        cause: error.to_string(),
+    })
 }
 
 pub async fn apply_regular_phase(
     provider: &dyn Provider,
     profile: &Profile,
     multi: &MultiProgress,
-) -> Result<Vec<String>> {
+) -> CommandResult<Vec<String>> {
     let context = provider.kube_context().await?;
     let provider_kind = provider.cluster_provider();
     let mut prepared: Vec<(String, Pod)> = Vec::new();
     for (key, yaml) in pods_for_tier(profile, Tier::Regular)? {
         let mut pod = deserialize_pod_entry::<Pod>(key, yaml, Tier::Regular)?;
         provider_kind.enrich_regular_pod(&mut pod)?;
-        report_validation(key, provider_kind.validate_regular_pod(&pod))?;
+        validate_pod(key, provider_kind.validate_regular_pod(&pod))?;
         prepared.push((key.to_owned(), pod));
     }
     let phase = phase_spinner_in(
@@ -231,26 +224,15 @@ pub async fn apply_regular_phase(
         let context = context.clone();
         let bar = phase.add_resource(&key);
         async move {
-            let namespace = context.namespace().to_owned();
-            let created = match pod_api::create_pod(
-                &context,
-                &pod,
-                &key,
-                None,
-                Vec::new(),
-                Vec::new(),
-            )
-            .await
-            {
-                Ok(created) => created,
-                Err(error) => {
-                    bar.finish_with_message(format!("{key} (failed)"));
-                    cerror!(
-                        "Failed to apply regular pod from '{key}' to namespace '{namespace}': {error}"
-                    );
-                    return Err::<String, CommandError>(error.into());
-                }
-            };
+            let created =
+                match pod_api::create_pod(&context, &pod, &key, None, Vec::new(), Vec::new()).await
+                {
+                    Ok(created) => created,
+                    Err(error) => {
+                        bar.finish_with_message(format!("{key} (failed)"));
+                        return Err::<String, CommandError>(error.into());
+                    }
+                };
             match created.metadata.name {
                 Some(name) => {
                     bar.finish_with_message(format!("{key} (applied)"));
@@ -258,8 +240,7 @@ pub async fn apply_regular_phase(
                 }
                 None => {
                     bar.finish_with_message(format!("{key} (no name)"));
-                    cerror!("Regular pod from '{key}' was created without a metadata.name.");
-                    abort::<String>(GeneralError)
+                    Err(LauncherError::PodMissingName { key: key.clone() }.into())
                 }
             }
         }
@@ -273,7 +254,7 @@ pub async fn wait_regular_phase(
     provider: &dyn Provider,
     pods: &[String],
     multi: &MultiProgress,
-) -> Result {
+) -> CommandResult {
     let context = provider.kube_context().await?;
     let phase = phase_spinner_in(multi, &format!("Waiting for {} regular pod(s)", pods.len()));
     let waits = pods.iter().map(|name| {
@@ -285,19 +266,18 @@ pub async fn wait_regular_phase(
                 Ok(Some(pod)) => pod,
                 Ok(None) => {
                     bar.finish_with_message(format!("{name} (deleted)"));
-                    cerror!("Regular pod '{name}' was deleted before becoming ready.");
-                    return abort::<()>(GeneralError);
+                    return Err::<(), CommandError>(
+                        LauncherError::PodDeletedBeforeReady { name: name.clone() }.into(),
+                    );
                 }
                 Err(error) => {
                     bar.finish_with_message(format!("{name} (errored)"));
-                    cerror!("Failed to await regular pod '{name}': {error}");
                     return Err(error.into());
                 }
             };
             if has_failed_phase(&settled) {
                 bar.finish_with_message(format!("{name} (failed)"));
-                cerror!("Regular pod '{name}' failed.");
-                return abort::<()>(TabsDataError);
+                return Err(LauncherError::PodFailed { name: name.clone() }.into());
             }
             bar.finish_with_message(format!("{name} (ready)"));
             Ok(())
@@ -336,14 +316,11 @@ fn has_failed_phase(pod: &Pod) -> bool {
 #[cfg(test)]
 mod tests;
 
-async fn delete_workload(provider: &dyn Provider, multi: &MultiProgress) -> Result {
+async fn delete_workload(provider: &dyn Provider, multi: &MultiProgress) -> CommandResult {
     let context = provider.kube_context().await?;
-    let namespace = context.namespace().to_owned();
     let phase = phase_spinner_in(multi, "Deleting tabsdata workload");
     let pods_bar = phase.add_resource("Pods");
     let jobs_bar = phase.add_resource("Jobs");
-    let pods_namespace = namespace.clone();
-    let jobs_namespace = namespace.clone();
     let pods_delete = async {
         match pod_api::delete_pods(&context).await {
             Ok(()) => {
@@ -352,8 +329,7 @@ async fn delete_workload(provider: &dyn Provider, multi: &MultiProgress) -> Resu
             }
             Err(error) => {
                 pods_bar.finish_with_message("Pods (failed)");
-                cerror!("Failed to delete pods in namespace '{pods_namespace}': {error}");
-                Err(error)
+                Err(CommandError::from(error))
             }
         }
     };
@@ -365,8 +341,7 @@ async fn delete_workload(provider: &dyn Provider, multi: &MultiProgress) -> Resu
             }
             Err(error) => {
                 jobs_bar.finish_with_message("Jobs (failed)");
-                cerror!("Failed to delete jobs in namespace '{jobs_namespace}': {error}");
-                Err(error)
+                Err(CommandError::from(error))
             }
         }
     };
@@ -376,7 +351,7 @@ async fn delete_workload(provider: &dyn Provider, multi: &MultiProgress) -> Resu
     Ok(())
 }
 
-async fn workload_exists(provider: &dyn Provider) -> Result<bool> {
+async fn workload_exists(provider: &dyn Provider) -> CommandResult<bool> {
     let bar = spinner("Checking tabsdata workload");
     let result = workload_exists_inner(provider).await;
     match &result {
@@ -386,27 +361,17 @@ async fn workload_exists(provider: &dyn Provider) -> Result<bool> {
     result
 }
 
-async fn workload_exists_inner(provider: &dyn Provider) -> Result<bool> {
+async fn workload_exists_inner(provider: &dyn Provider) -> CommandResult<bool> {
     let context = provider.kube_context().await?;
-    let pods_namespace = context.namespace().to_owned();
-    let jobs_namespace = context.namespace().to_owned();
     let pods_list = async {
-        match pod_api::list_pods(&context).await {
-            Ok(pods) => Ok::<bool, KubernetesError>(!pods.is_empty()),
-            Err(error) => {
-                cerror!("Failed to list pods in namespace '{pods_namespace}': {error}");
-                Err(error)
-            }
-        }
+        pod_api::list_pods(&context)
+            .await
+            .map(|pods| !pods.is_empty())
     };
     let jobs_list = async {
-        match job_api::list_jobs(&context).await {
-            Ok(jobs) => Ok::<bool, KubernetesError>(!jobs.is_empty()),
-            Err(error) => {
-                cerror!("Failed to list jobs in namespace '{jobs_namespace}': {error}");
-                Err(error)
-            }
-        }
+        job_api::list_jobs(&context)
+            .await
+            .map(|jobs| !jobs.is_empty())
     };
     let (pods_exist, jobs_exist) = futures::future::try_join(pods_list, jobs_list).await?;
     Ok(pods_exist || jobs_exist)

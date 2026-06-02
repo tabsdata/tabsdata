@@ -104,5 +104,9 @@ spec:
           value: "${sys:TDK_INSTANCE_NAME}"
   volumes:
     - name: configmap-configs
-      configMap:
-        name: tabsdata-configs
+      projected:
+        sources:
+          - configMap:
+              name: tabsdata-configs-apiserver.yaml
+          - configMap:
+              name: tabsdata-configs-apiserver.log.yaml

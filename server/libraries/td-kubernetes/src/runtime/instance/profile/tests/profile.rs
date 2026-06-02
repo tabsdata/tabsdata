@@ -60,7 +60,6 @@ fn profile_with_configs(configs: &[(&str, &str)]) -> Profile {
         map.insert((*key).to_owned(), (*value).to_owned());
     }
     Profile {
-        globals: BTreeMap::new(),
         pods: BTreeMap::new(),
         configs: map,
         manifest: Manifest::initial_install("1.0.0", Utc::now(), std::iter::empty()),

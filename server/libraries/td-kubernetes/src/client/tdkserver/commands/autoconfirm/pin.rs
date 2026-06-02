@@ -6,7 +6,7 @@ use clap_derive::Args;
 use tracing::info;
 
 use crate::client::session::pin::PinContext;
-use crate::core::system::exit::Result;
+use crate::core::system::exit::CommandResult;
 
 #[derive(Debug, Clone, Args)]
 pub struct PinArguments {
@@ -24,7 +24,7 @@ pub struct PinArguments {
     pub value: bool,
 }
 
-pub async fn command_pin(arguments: PinArguments) -> Result {
+pub async fn command_pin(arguments: PinArguments) -> CommandResult {
     let PinArguments { value } = arguments;
 
     PinContext::pin_autoconfirm(value)?;

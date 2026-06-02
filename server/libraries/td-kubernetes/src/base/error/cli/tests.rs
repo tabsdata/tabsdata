@@ -50,11 +50,11 @@ fn display_messages_carry_constructor_args() {
 fn unit_variants_have_static_messages() {
     assert_eq!(
         CliError::InvalidCommandLine.to_string(),
-        "Invalid command line"
+        "Invalid command line."
     );
     assert_eq!(
         CliError::InvalidShellCommand.to_string(),
-        "Invalid shell command"
+        "Invalid shell command."
     );
 }
 

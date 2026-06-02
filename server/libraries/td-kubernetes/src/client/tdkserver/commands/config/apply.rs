@@ -13,7 +13,7 @@ use crate::client::tdkserver::commands::config::put::{ensure_source_folder, put_
 use crate::client::tdkserver::commands::server::restart::restart_server;
 use crate::client::tdkserver::common::{effective_yes, prompt_yes_no};
 use crate::client::tdkserver::render::preview;
-use crate::core::system::exit::Result;
+use crate::core::system::exit::CommandResult;
 use crate::runtime::provider::provider_for_or_tdkcontext;
 
 #[derive(Debug, Clone, Args)]
@@ -58,7 +58,7 @@ pub struct ApplyArguments {
     pub yes: bool,
 }
 
-pub async fn command_apply(arguments: ApplyArguments, globals: &GlobalArguments) -> Result {
+pub async fn command_apply(arguments: ApplyArguments, globals: &GlobalArguments) -> CommandResult {
     let ApplyArguments {
         cluster,
         instance,

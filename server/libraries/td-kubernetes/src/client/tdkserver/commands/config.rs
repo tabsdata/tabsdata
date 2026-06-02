@@ -14,7 +14,7 @@ use crate::client::tdkserver::commands::config::apply::{ApplyArguments, command_
 use crate::client::tdkserver::commands::config::get::{GetArguments, command_get};
 use crate::client::tdkserver::commands::config::list::{ListArguments, command_list};
 use crate::client::tdkserver::commands::config::put::{PutArguments, command_put};
-use crate::core::system::exit::Result;
+use crate::core::system::exit::CommandResult;
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum ConfigCommands {
@@ -28,7 +28,7 @@ pub enum ConfigCommands {
     Put(PutArguments),
 }
 
-pub async fn command_config(command: ConfigCommands, globals: &GlobalArguments) -> Result {
+pub async fn command_config(command: ConfigCommands, globals: &GlobalArguments) -> CommandResult {
     match command {
         ConfigCommands::Apply(arguments) => command_apply(arguments, globals).await,
         ConfigCommands::Get(arguments) => command_get(arguments, globals).await,

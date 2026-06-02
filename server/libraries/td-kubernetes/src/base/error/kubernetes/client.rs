@@ -6,10 +6,10 @@ use td_error::td_error;
 
 #[td_error]
 pub enum KubeClientError {
-    #[error("Could not build the Kubernetes client: {0}")]
+    #[error("Could not build the Kubernetes client: {0}.")]
     BuildFailed(String) = 5000,
-    #[error("Could not serialize the active context: {0}")]
+    #[error("Could not serialize the active context: {0}.")]
     ContextSerializeFailed(String) = 5001,
-    #[error("Could not load in-cluster Kubernetes config: {0}")]
+    #[error("Could not load in-cluster Kubernetes config: {0}.")]
     InclusterConfigFailed(String) = 5002,
 }

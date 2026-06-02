@@ -12,7 +12,7 @@ use crate::client::tdkserver::arguments::GlobalArguments;
 use crate::client::tdkserver::commands::session::pin::{PinArguments, command_pin};
 use crate::client::tdkserver::commands::session::show::{ShowArguments, command_show};
 use crate::client::tdkserver::commands::session::unpin::{UnpinArguments, command_unpin};
-use crate::core::system::exit::Result;
+use crate::core::system::exit::CommandResult;
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum SessionCommands {
@@ -24,7 +24,7 @@ pub enum SessionCommands {
     Unpin(UnpinArguments),
 }
 
-pub async fn command_session(command: SessionCommands, globals: &GlobalArguments) -> Result {
+pub async fn command_session(command: SessionCommands, globals: &GlobalArguments) -> CommandResult {
     match command {
         SessionCommands::Pin(arguments) => command_pin(arguments, globals).await,
         SessionCommands::Show(arguments) => command_show(arguments).await,

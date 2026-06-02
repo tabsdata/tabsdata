@@ -63,15 +63,39 @@ pub struct SecretSpec {
     pub data: BTreeMap<String, String>,
 }
 
-pub fn label_tabsdata(metadata: &mut ObjectMeta) {
+#[derive(Debug, Clone, Copy)]
+pub struct LabelFilter<'a> {
+    pub key: &'a str,
+    pub value: &'a str,
+}
+
+impl<'a> LabelFilter<'a> {
+    pub fn new(key: &'a str, value: &'a str) -> Self {
+        Self { key, value }
+    }
+}
+
+pub fn label_tabsdata(metadata: &mut ObjectMeta, extras: &[LabelFilter<'_>]) {
+    add_label(metadata, PART_OF_LABEL, PART_OF_TABSDATA);
+    for label in extras {
+        add_label(metadata, label.key, label.value);
+    }
+}
+
+fn add_label(metadata: &mut ObjectMeta, key: &str, value: &str) {
     metadata
         .labels
         .get_or_insert_with(BTreeMap::new)
-        .insert(PART_OF_LABEL.to_owned(), PART_OF_TABSDATA.to_owned());
+        .insert(key.to_owned(), value.to_owned());
 }
 
-pub fn part_of_tabsdata() -> Selector {
-    Expression::Equal(PART_OF_LABEL.to_owned(), PART_OF_TABSDATA.to_owned()).into()
+pub fn tabsdata_selector(label: Option<LabelFilter<'_>>) -> Selector {
+    let mut selector: Selector =
+        Expression::Equal(PART_OF_LABEL.to_owned(), PART_OF_TABSDATA.to_owned()).into();
+    if let Some(LabelFilter { key, value }) = label {
+        selector.extend([Expression::Equal(key.to_owned(), value.to_owned())]);
+    }
+    selector
 }
 
 pub fn owner_ref_for_pod(pod: &Pod, template: &str) -> Result<OwnerReference, NamingError> {

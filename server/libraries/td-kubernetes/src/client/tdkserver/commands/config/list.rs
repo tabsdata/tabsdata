@@ -6,7 +6,7 @@ use clap_derive::Args;
 use tracing::info;
 
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
-use crate::core::system::exit::Result;
+use crate::core::system::exit::CommandResult;
 use crate::kube::api::list_configmaps;
 use crate::runtime::provider::provider_for_or_tdkcontext;
 
@@ -19,12 +19,12 @@ pub struct ListArguments {
     pub instance: InstanceArguments,
 }
 
-pub async fn command_list(arguments: ListArguments, globals: &GlobalArguments) -> Result {
+pub async fn command_list(arguments: ListArguments, globals: &GlobalArguments) -> CommandResult {
     let ListArguments { cluster, instance } = arguments;
 
     let provider = provider_for_or_tdkcontext(cluster, instance, globals.verbose).await?;
     let context = provider.kube_context().await?;
-    let configs = list_configmaps(&context).await?;
+    let configs = list_configmaps(&context, None).await?;
 
     for (name, keys) in configs {
         info!("{name}");

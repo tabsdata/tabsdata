@@ -17,17 +17,16 @@ use clap_derive::ValueEnum;
 use k8s_openapi::api::batch::v1::Job;
 use k8s_openapi::api::core::v1::Pod;
 use kube::Config;
-use td_common::status::ExitStatus::GeneralError;
 
 use crate::base::constants::KMINUS_MIN_NOFILE;
+use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
-use crate::cerror;
 use crate::client::session::pin::{PinContext, Session};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use std::sync::Arc;
 
 use crate::core::pod::{ValidationError, container as container_pod, process as process_pod};
-use crate::core::system::exit::{Result, abort};
+use crate::core::system::exit::CommandResult;
 use crate::kube::api::pod::list_pods;
 use crate::kube::context::KubeContext;
 use crate::runtime::gateway::resolver::SystemValues;
@@ -132,7 +131,7 @@ impl ClusterProvider {
         }
     }
 
-    pub fn enrich_regular_pod(self, pod: &mut Pod) -> Result {
+    pub fn enrich_regular_pod(self, pod: &mut Pod) -> CommandResult {
         let _ = pod;
         Ok(())
     }
@@ -142,7 +141,7 @@ impl ClusterProvider {
         Vec::new()
     }
 
-    pub fn enrich_init_job(self, job: &mut Job) -> Result {
+    pub fn enrich_init_job(self, job: &mut Job) -> CommandResult {
         let _ = job;
         Ok(())
     }
@@ -157,9 +156,9 @@ impl Transaction for () {
 }
 
 pub trait Cluster: Send + Sync {
-    fn create(&self) -> Result;
-    fn start(&self) -> impl Future<Output = Result> + Send;
-    fn stop(&self) -> impl Future<Output = Result<bool>> + Send;
+    fn create(&self) -> CommandResult;
+    fn start(&self) -> impl Future<Output = CommandResult> + Send;
+    fn stop(&self) -> impl Future<Output = CommandResult<bool>> + Send;
 
     fn is_alive(&self) -> impl Future<Output = bool> + Send;
     fn is_dead(&self) -> impl Future<Output = bool> + Send {
@@ -174,8 +173,8 @@ pub trait Cluster: Send + Sync {
 }
 
 pub trait Instance: Send + Sync {
-    fn start(&self) -> impl Future<Output = Result> + Send;
-    fn stop(&self) -> impl Future<Output = Result<bool>> + Send;
+    fn start(&self) -> impl Future<Output = CommandResult> + Send;
+    fn stop(&self) -> impl Future<Output = CommandResult<bool>> + Send;
 
     fn is_alive(&self) -> impl Future<Output = bool> + Send;
     fn is_dead(&self) -> impl Future<Output = bool> + Send {
@@ -197,40 +196,46 @@ pub trait Provider: Send + Sync {
     fn to_session(&self) -> Session;
 
     fn cluster_provider(&self) -> ClusterProvider;
-    async fn kube_config(&self) -> Result<Config>;
-    async fn kube_context(&self) -> Result<KubeContext> {
+    async fn kube_config(&self) -> CommandResult<Config>;
+    async fn kube_context(&self) -> CommandResult<KubeContext> {
         let config = self.kube_config().await?;
         let namespace = config.default_namespace.clone();
         let client = build_kube_client(&config)?;
         Ok(KubeContext::new(Arc::new(client), namespace))
     }
 
-    fn system_values(&self) -> Result<SystemValues>;
+    fn system_values(&self) -> CommandResult<SystemValues>;
     fn secret_generators(&self, phase: SecretPhase) -> Vec<Box<dyn SecretGenerator>>;
 
     fn summary(&self) -> Summary;
 
-    async fn ensure_pinnable_server(&self) -> Result;
-    async fn ensure_creatable_server(&self) -> Result;
+    async fn ensure_pinnable_server(&self) -> CommandResult;
+    async fn ensure_creatable_server(&self) -> CommandResult;
 
-    async fn create_cluster_hook(&self, reporter: &dyn Reporter) -> Result<Box<dyn Transaction>>;
-    async fn create_database(&self, reporter: &dyn Reporter) -> Result;
-    async fn create_runtimes(&self, reporter: &dyn Reporter) -> Result;
+    async fn create_cluster_hook(
+        &self,
+        reporter: &dyn Reporter,
+    ) -> CommandResult<Box<dyn Transaction>>;
+    async fn create_database(&self, reporter: &dyn Reporter) -> CommandResult;
+    async fn create_runtimes(&self, reporter: &dyn Reporter) -> CommandResult;
 
     async fn cluster_alive(&self) -> bool;
     async fn cluster_dead(&self) -> bool {
         !self.cluster_alive().await
     }
-    async fn start_cluster(&self, reporter: &dyn Reporter) -> Result<ClusterStartOutcome> {
+    async fn start_cluster(&self, reporter: &dyn Reporter) -> CommandResult<ClusterStartOutcome> {
         if self.cluster_alive().await {
             return Ok(ClusterStartOutcome::AlreadyRunning);
         }
         self.start_cluster_hook(reporter).await?;
         Ok(ClusterStartOutcome::Started)
     }
-    async fn start_cluster_hook(&self, reporter: &dyn Reporter) -> Result;
-    async fn stop_cluster(&self, reporter: &dyn Reporter) -> Result<ClusterStopOutcome>;
-    async fn restart_cluster(&self, reporter: &dyn Reporter) -> Result<ClusterRestartOutcome> {
+    async fn start_cluster_hook(&self, reporter: &dyn Reporter) -> CommandResult;
+    async fn stop_cluster(&self, reporter: &dyn Reporter) -> CommandResult<ClusterStopOutcome>;
+    async fn restart_cluster(
+        &self,
+        reporter: &dyn Reporter,
+    ) -> CommandResult<ClusterRestartOutcome> {
         let stop = if self.cluster_alive().await {
             Some(self.stop_cluster(reporter).await?)
         } else {
@@ -239,9 +244,9 @@ pub trait Provider: Send + Sync {
         let start = self.start_cluster(reporter).await?;
         Ok(ClusterRestartOutcome { stop, start })
     }
-    async fn ensure_startable_cluster(&self) -> Result;
-    async fn ensure_stoppable_cluster(&self) -> Result;
-    async fn ensure_restartable_cluster(&self) -> Result;
+    async fn ensure_startable_cluster(&self) -> CommandResult;
+    async fn ensure_stoppable_cluster(&self) -> CommandResult;
+    async fn ensure_restartable_cluster(&self) -> CommandResult;
 
     async fn instance_alive(&self) -> bool {
         if !self.cluster_alive().await {
@@ -265,16 +270,19 @@ pub trait Provider: Send + Sync {
     async fn instance_dead(&self) -> bool {
         !self.instance_alive().await
     }
-    async fn start_instance(&self, reporter: &dyn Reporter) -> Result<InstanceStartOutcome> {
+    async fn start_instance(&self, reporter: &dyn Reporter) -> CommandResult<InstanceStartOutcome> {
         if self.instance_alive().await {
             return Ok(InstanceStartOutcome::AlreadyRunning);
         }
         self.start_instance_hook(reporter).await?;
         Ok(InstanceStartOutcome::Started)
     }
-    async fn start_instance_hook(&self, reporter: &dyn Reporter) -> Result;
-    async fn stop_instance(&self, reporter: &dyn Reporter) -> Result<InstanceStopOutcome>;
-    async fn restart_instance(&self, reporter: &dyn Reporter) -> Result<InstanceRestartOutcome> {
+    async fn start_instance_hook(&self, reporter: &dyn Reporter) -> CommandResult;
+    async fn stop_instance(&self, reporter: &dyn Reporter) -> CommandResult<InstanceStopOutcome>;
+    async fn restart_instance(
+        &self,
+        reporter: &dyn Reporter,
+    ) -> CommandResult<InstanceRestartOutcome> {
         let stop = if self.instance_alive().await {
             Some(self.stop_instance(reporter).await?)
         } else {
@@ -283,9 +291,9 @@ pub trait Provider: Send + Sync {
         let start = self.start_instance(reporter).await?;
         Ok(InstanceRestartOutcome { stop, start })
     }
-    async fn ensure_startable_instance(&self) -> Result;
-    async fn ensure_stoppable_instance(&self) -> Result;
-    async fn ensure_restartable_instance(&self) -> Result;
+    async fn ensure_startable_instance(&self) -> CommandResult;
+    async fn ensure_stoppable_instance(&self) -> CommandResult;
+    async fn ensure_restartable_instance(&self) -> CommandResult;
 
     async fn server_alive(&self) -> bool {
         self.cluster_alive().await && self.instance_alive().await
@@ -293,17 +301,17 @@ pub trait Provider: Send + Sync {
     async fn server_dead(&self) -> bool {
         self.cluster_dead().await && self.instance_dead().await
     }
-    async fn start_server(&self, reporter: &dyn Reporter) -> Result<ServerStartOutcome> {
+    async fn start_server(&self, reporter: &dyn Reporter) -> CommandResult<ServerStartOutcome> {
         let cluster = self.start_cluster(reporter).await?;
         let instance = self.start_instance(reporter).await?;
         Ok(ServerStartOutcome { cluster, instance })
     }
-    async fn stop_server(&self, reporter: &dyn Reporter) -> Result<ServerStopOutcome> {
+    async fn stop_server(&self, reporter: &dyn Reporter) -> CommandResult<ServerStopOutcome> {
         let instance = self.stop_instance(reporter).await?;
         let cluster = self.stop_cluster(reporter).await?;
         Ok(ServerStopOutcome { cluster, instance })
     }
-    async fn restart_server(&self, reporter: &dyn Reporter) -> Result<ServerRestartOutcome> {
+    async fn restart_server(&self, reporter: &dyn Reporter) -> CommandResult<ServerRestartOutcome> {
         let stop = if self.server_alive().await {
             Some(self.stop_server(reporter).await?)
         } else {
@@ -312,24 +320,26 @@ pub trait Provider: Send + Sync {
         let start = self.start_server(reporter).await?;
         Ok(ServerRestartOutcome { stop, start })
     }
-    async fn ensure_startable_server(&self) -> Result;
-    async fn ensure_stoppable_server(&self) -> Result;
-    async fn ensure_restartable_server(&self) -> Result;
+    async fn ensure_startable_server(&self) -> CommandResult;
+    async fn ensure_stoppable_server(&self) -> CommandResult;
+    async fn ensure_restartable_server(&self) -> CommandResult;
 }
 
 pub(super) async fn handle_phase_secrets(
     provider: &(impl Provider + ?Sized),
     phase: SecretPhase,
-) -> Result {
+) -> CommandResult {
     let generators = provider.secret_generators(phase);
     if generators.is_empty() {
         return Ok(());
     }
     let context = provider.kube_context().await?;
-    if let Err(error) = SecretHandler::handle(&context, phase, &generators).await {
-        cerror!("Failed to handle {phase} secrets: {error}");
-        return abort(GeneralError);
-    }
+    SecretHandler::handle(&context, phase, &generators)
+        .await
+        .map_err(|error| ProviderError::SecretHandlerFailed {
+            phase: phase.to_string(),
+            cause: error.to_string(),
+        })?;
     Ok(())
 }
 
@@ -355,14 +365,10 @@ pub async fn provider_for(
     cluster: ClusterArguments,
     instance: InstanceArguments,
     verbose: bool,
-) -> Result<Box<dyn Provider>> {
-    let provider = match cluster.provider {
-        Some(provider) => provider,
-        None => {
-            cerror!("Argument --provider is required when no active context is set.");
-            return abort(GeneralError);
-        }
-    };
+) -> CommandResult<Box<dyn Provider>> {
+    let provider = cluster
+        .provider
+        .ok_or(ProviderError::ProviderArgumentRequired)?;
     match provider {
         ClusterProvider::Kminus => {
             check_kminus_ulimit()?;
@@ -385,31 +391,24 @@ pub async fn provider_for(
 }
 
 #[cfg(unix)]
-fn check_kminus_ulimit() -> Result {
+fn check_kminus_ulimit() -> CommandResult {
     use td_common::limits::{Resource, limit};
 
-    let nofile = match limit(Resource::NOFILE) {
-        Ok(limits) => limits,
-        Err(error) => {
-            cerror!("Failed to read the current process's open-files limit: {error}");
-            return abort(GeneralError);
-        }
-    };
+    let nofile = limit(Resource::NOFILE)
+        .map_err(|error| ProviderError::NofileLimitReadFailed(error.to_string()))?;
     if nofile.soft < KMINUS_MIN_NOFILE {
-        cerror!(
-            "The kminus provider requires at least {KMINUS_MIN_NOFILE} open files \
-             (current soft limit is {soft}, hard limit is {hard}). Raise it with \
-             `ulimit -n {KMINUS_MIN_NOFILE}` and rerun this command.",
-            soft = nofile.soft,
-            hard = nofile.hard,
-        );
-        return abort(GeneralError);
+        return Err(ProviderError::NofileLimitTooLow {
+            required: KMINUS_MIN_NOFILE,
+            soft: nofile.soft,
+            hard: nofile.hard,
+        }
+        .into());
     }
     Ok(())
 }
 
 #[cfg(not(unix))]
-fn check_kminus_ulimit() -> Result {
+fn check_kminus_ulimit() -> CommandResult {
     Ok(())
 }
 
@@ -417,7 +416,7 @@ pub async fn provider_for_or_tdkcontext(
     cluster: ClusterArguments,
     instance: InstanceArguments,
     verbose: bool,
-) -> Result<Box<dyn Provider>> {
+) -> CommandResult<Box<dyn Provider>> {
     if cluster.provider.is_some() {
         return provider_for(cluster, instance, verbose).await;
     }
@@ -426,12 +425,6 @@ pub async fn provider_for_or_tdkcontext(
             let (cluster, instance) = session.to_args();
             provider_for(cluster, instance, verbose).await
         }
-        None => {
-            cerror!(
-                "No cluster specification supplied and no active context is set. \
-                 Pass the required arguments, or run 'tdkserver session pin ...' first."
-            );
-            abort(GeneralError)
-        }
+        None => Err(ProviderError::NoClusterSpecification.into()),
     }
 }

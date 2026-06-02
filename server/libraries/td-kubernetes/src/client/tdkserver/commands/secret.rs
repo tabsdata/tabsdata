@@ -8,7 +8,7 @@ use clap_derive::Subcommand;
 
 use crate::client::tdkserver::arguments::GlobalArguments;
 use crate::client::tdkserver::commands::secret::list::{ListArguments, command_list};
-use crate::core::system::exit::Result;
+use crate::core::system::exit::CommandResult;
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum SecretCommands {
@@ -16,7 +16,7 @@ pub enum SecretCommands {
     List(ListArguments),
 }
 
-pub async fn command_secret(command: SecretCommands, globals: &GlobalArguments) -> Result {
+pub async fn command_secret(command: SecretCommands, globals: &GlobalArguments) -> CommandResult {
     match command {
         SecretCommands::List(arguments) => command_list(arguments, globals).await,
     }

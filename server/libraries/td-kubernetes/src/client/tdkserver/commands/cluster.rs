@@ -12,7 +12,7 @@ use crate::client::tdkserver::arguments::GlobalArguments;
 use crate::client::tdkserver::commands::cluster::restart::{RestartArguments, command_restart};
 use crate::client::tdkserver::commands::cluster::start::{StartArguments, command_start};
 use crate::client::tdkserver::commands::cluster::stop::{StopArguments, command_stop};
-use crate::core::system::exit::Result;
+use crate::core::system::exit::CommandResult;
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum ClusterCommands {
@@ -24,7 +24,7 @@ pub enum ClusterCommands {
     Stop(StopArguments),
 }
 
-pub async fn command_cluster(command: ClusterCommands, globals: &GlobalArguments) -> Result {
+pub async fn command_cluster(command: ClusterCommands, globals: &GlobalArguments) -> CommandResult {
     match command {
         ClusterCommands::Restart(arguments) => command_restart(arguments, globals).await,
         ClusterCommands::Start(arguments) => command_start(arguments, globals).await,

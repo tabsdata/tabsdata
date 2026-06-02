@@ -20,14 +20,14 @@ use crate::client::tdkserver::commands::secret::command_secret;
 use crate::client::tdkserver::commands::server::command_server;
 use crate::client::tdkserver::commands::session::command_session;
 use crate::client::tdkserver::commands::shell::command_shell;
-use crate::core::system::exit::{CommandError, Result};
+use crate::core::system::exit::{CommandError, CommandResult};
 use crate::kube::api::client::install_crypto_provider;
 use td_common::status::ExitStatus;
 
 pub struct TabsDataKubernetesClient;
 
 impl TabsDataKubernetesClient {
-    async fn run(&self) -> Result {
+    async fn run(&self) -> CommandResult {
         let arguments = Arguments::parse();
         let globals = arguments.globals;
         match arguments.command {

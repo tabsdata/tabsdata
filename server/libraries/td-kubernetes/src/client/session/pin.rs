@@ -12,7 +12,7 @@ use tracing::info;
 
 use crate::cerror;
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
-use crate::core::system::exit::{Result, abort};
+use crate::core::system::exit::{CommandResult, abort};
 use crate::runtime::provider::ClusterProvider;
 
 const TDKPIN_FILE: &str = "tdkpin.json";
@@ -94,7 +94,7 @@ pub fn tdkpin_path() -> PathBuf {
 }
 
 impl PinContext {
-    pub fn load() -> Result<Self> {
+    pub fn load() -> CommandResult<Self> {
         let path = tdkpin_path();
         if !path.exists() {
             return Ok(Self::default());
@@ -126,7 +126,7 @@ impl PinContext {
             .unwrap_or_default()
     }
 
-    fn save(&self) -> Result {
+    fn save(&self) -> CommandResult {
         let path = tdkpin_path();
         if let Some(parent) = path.parent()
             && let Err(error) = fs::create_dir_all(parent)
@@ -148,7 +148,7 @@ impl PinContext {
         Ok(())
     }
 
-    fn delete_if_empty(&self) -> Result {
+    fn delete_if_empty(&self) -> CommandResult {
         if self.session.is_none() && self.autoconfirm.is_none() {
             let path = tdkpin_path();
             if path.exists()
@@ -162,13 +162,13 @@ impl PinContext {
         self.save()
     }
 
-    pub fn pin_session(session: Session) -> Result {
+    pub fn pin_session(session: Session) -> CommandResult {
         let mut pin = Self::load()?;
         pin.session = Some(session);
         pin.save()
     }
 
-    pub fn unpin_session() -> Result<bool> {
+    pub fn unpin_session() -> CommandResult<bool> {
         let mut pin = Self::load()?;
         let existed = pin.session.is_some();
         pin.session = None;
@@ -176,13 +176,13 @@ impl PinContext {
         Ok(existed)
     }
 
-    pub fn pin_autoconfirm(enabled: bool) -> Result {
+    pub fn pin_autoconfirm(enabled: bool) -> CommandResult {
         let mut pin = Self::load()?;
         pin.autoconfirm = Some(Autoconfirm { enabled });
         pin.save()
     }
 
-    pub fn unpin_autoconfirm() -> Result<bool> {
+    pub fn unpin_autoconfirm() -> CommandResult<bool> {
         let mut pin = Self::load()?;
         let existed = pin.autoconfirm.is_some();
         pin.autoconfirm = None;

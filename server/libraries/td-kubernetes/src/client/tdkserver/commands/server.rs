@@ -14,7 +14,7 @@ use crate::client::tdkserver::commands::server::create::{CreateArguments, comman
 use crate::client::tdkserver::commands::server::restart::{RestartArguments, command_restart};
 use crate::client::tdkserver::commands::server::start::{StartArguments, command_start};
 use crate::client::tdkserver::commands::server::stop::{StopArguments, command_stop};
-use crate::core::system::exit::Result;
+use crate::core::system::exit::CommandResult;
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum ServerCommands {
@@ -28,7 +28,7 @@ pub enum ServerCommands {
     Stop(StopArguments),
 }
 
-pub async fn command_server(command: ServerCommands, globals: &GlobalArguments) -> Result {
+pub async fn command_server(command: ServerCommands, globals: &GlobalArguments) -> CommandResult {
     match command {
         ServerCommands::Create(arguments) => command_create(arguments, globals).await,
         ServerCommands::Restart(arguments) => command_restart(arguments, globals).await,

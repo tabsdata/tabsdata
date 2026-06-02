@@ -8,21 +8,20 @@ use std::path::{Path, PathBuf};
 use std::process::Command as SystemCommand;
 
 use chrono::Utc;
-use td_common::status::ExitStatus::{GeneralError, TabsDataError};
 use td_python::python::resolve_python_binary;
 use td_python::tabsdata::tabsdata_version;
 use tracing::info;
 
 use crate::base::constants::{
-    CONFIGMAP_TABSDATA_CONFIGS, CONFIGMAP_TABSDATA_GLOBALS, CONFIGMAP_TABSDATA_PODS,
-    KPROFILE_CONFIGMAPS_FOLDER, KPROFILE_CONFIGS_FOLDER, KPROFILE_GLOBALS_FOLDER,
-    KPROFILE_PODS_FOLDER, PROGRAM_TD_RESOURCE, RESOURCE_KPROFILE,
+    CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, PROGRAM_TD_RESOURCE,
+    RESOURCE_KPROFILE,
 };
-use crate::cerror;
-use crate::core::system::exit::{Result, abort};
+use crate::base::error::profile::ProfileError;
 use crate::core::system::file::is_hidden_or_system;
 use crate::core::system::subprocess;
 use crate::core::system::subprocess::apply_detached_flags;
+use crate::kube::api::{LabelFilter, get_configmaps};
+use crate::kube::context::KubeContext;
 use crate::runtime::gateway::resolver::ConfigurationResolver;
 use crate::runtime::instance::manifest::{MANIFEST_FILE, Manifest, deserialize_manifest};
 use crate::runtime::instance::profile::bundle::{ParsedFileName, parse_filename, pick_winner};
@@ -31,66 +30,40 @@ use crate::runtime::provider::ClusterProvider;
 pub type RenderedConfigmap = BTreeMap<String, String>;
 
 pub struct Profile {
-    pub globals: RenderedConfigmap,
     pub pods: RenderedConfigmap,
     pub configs: RenderedConfigmap,
     pub manifest: Manifest,
 }
 
-const CONFIGMAP_FOLDERS: &[&str] = &[
-    KPROFILE_GLOBALS_FOLDER,
-    KPROFILE_PODS_FOLDER,
-    KPROFILE_CONFIGS_FOLDER,
-];
+const CONFIGMAP_FAMILIES: &[&str] = &[KPROFILE_PODS_FAMILY, KPROFILE_CONFIGS_FAMILY];
 
-pub fn resolve_kprofile_path(verbose: bool) -> Result<PathBuf> {
-    let resolver = match resolve_python_binary(PROGRAM_TD_RESOURCE) {
-        Ok(path) => path,
-        Err(error) => {
-            cerror!("Failed to locate the '{PROGRAM_TD_RESOURCE}' binary: {error}");
-            return abort(GeneralError);
-        }
-    };
+pub fn resolve_kprofile_path(verbose: bool) -> Result<PathBuf, ProfileError> {
+    let resolver = resolve_python_binary(PROGRAM_TD_RESOURCE).map_err(|error| {
+        ProfileError::ResourceBinaryNotFound(PROGRAM_TD_RESOURCE.to_owned(), error.to_string())
+    })?;
+    let resolver_display = resolver.display().to_string();
+    let command_label = format!("{resolver_display} {RESOURCE_KPROFILE}");
     let mut command = SystemCommand::new(&resolver);
     command.arg(RESOURCE_KPROFILE);
     apply_detached_flags(&mut command);
-    let output = match subprocess::run(&mut command, PROGRAM_TD_RESOURCE, verbose) {
-        Ok(output) => output,
-        Err(error) => {
-            cerror!(
-                "Failed to run '{} {RESOURCE_KPROFILE}': {error}",
-                resolver.display()
-            );
-            return abort(GeneralError);
-        }
-    };
+    let output = subprocess::run(&mut command, PROGRAM_TD_RESOURCE, verbose).map_err(|error| {
+        ProfileError::ResourceBinaryFailed(command_label.clone(), error.to_string())
+    })?;
     if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        cerror!(
-            "'{} {RESOURCE_KPROFILE}' failed with status {}: {}",
-            resolver.display(),
-            output.status,
-            stderr.trim()
-        );
-        return abort(GeneralError);
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+        return Err(ProfileError::ResourceBinaryStatus(
+            command_label,
+            output.status.to_string(),
+            stderr,
+        ));
     }
-    let stdout = match String::from_utf8(output.stdout) {
-        Ok(text) => text,
-        Err(error) => {
-            cerror!(
-                "Output of '{}' is not valid UTF-8: {error}",
-                resolver.display()
-            );
-            return abort(GeneralError);
-        }
-    };
+    let stdout = String::from_utf8(output.stdout)
+        .map_err(|_| ProfileError::ResourceBinaryNonUtf8Output(resolver_display.clone()))?;
     let path = PathBuf::from(stdout.trim());
     if !path.is_dir() {
-        cerror!(
-            "Resolved profile path '{}' does not exist or is not a folder.",
-            path.display()
-        );
-        return abort(TabsDataError);
+        return Err(ProfileError::KprofilesPathInvalid(
+            path.display().to_string(),
+        ));
     }
     Ok(path)
 }
@@ -101,57 +74,41 @@ struct DiscoveryFile {
     content: String,
 }
 
-pub fn load_profile(provider: ClusterProvider, verbose: bool) -> Result<Profile> {
+pub fn load_profile(provider: ClusterProvider, verbose: bool) -> Result<Profile, ProfileError> {
     let root = resolve_kprofile_path(verbose)?;
-    let configmaps_root = root.join(KPROFILE_CONFIGMAPS_FOLDER);
-    if !configmaps_root.is_dir() {
-        cerror!(
-            "Profile is missing the '{KPROFILE_CONFIGMAPS_FOLDER}' folder at '{}'.",
-            configmaps_root.display()
-        );
-        return abort(TabsDataError);
-    }
-    let tabsdata_version = match tabsdata_version() {
-        Ok(version) => version,
-        Err(error) => {
-            cerror!("Failed to resolve the tabsdata package version: {error}");
-            return abort(TabsDataError);
-        }
-    };
+    let tabsdata_version = tabsdata_version()
+        .map_err(|error| ProfileError::TabsdataVersionResolveFailed(error.to_string()))?;
     let axes = provider.axes();
     let preferred = provider.preferred_values();
 
     let mut maps: BTreeMap<&'static str, RenderedConfigmap> = BTreeMap::new();
     let mut entries: Vec<(String, String)> = Vec::new();
 
-    for folder in CONFIGMAP_FOLDERS {
-        let folder_path = configmaps_root.join(folder);
-        if !folder_path.is_dir() {
-            cerror!(
-                "Profile is missing the required folder \
-                 '{KPROFILE_CONFIGMAPS_FOLDER}/{folder}' at '{}'.",
-                folder_path.display()
-            );
-            return abort(TabsDataError);
+    for family in CONFIGMAP_FAMILIES {
+        let family_path = root.join(family);
+        if !family_path.is_dir() {
+            return Err(ProfileError::FamilyFolderMissing(
+                (*family).to_owned(),
+                family_path.display().to_string(),
+            ));
         }
         let mut map = BTreeMap::new();
         load_configmap_folder(
-            &folder_path,
-            folder,
+            &family_path,
+            family,
             axes,
             preferred,
             &mut map,
             &mut entries,
         )?;
-        maps.insert(*folder, map);
+        maps.insert(*family, map);
     }
 
     let now = Utc::now();
     let manifest = Manifest::initial_install(&tabsdata_version, now, entries);
     Ok(Profile {
-        globals: maps.remove(KPROFILE_GLOBALS_FOLDER).unwrap_or_default(),
-        pods: maps.remove(KPROFILE_PODS_FOLDER).unwrap_or_default(),
-        configs: maps.remove(KPROFILE_CONFIGS_FOLDER).unwrap_or_default(),
+        pods: maps.remove(KPROFILE_PODS_FAMILY).unwrap_or_default(),
+        configs: maps.remove(KPROFILE_CONFIGS_FAMILY).unwrap_or_default(),
         manifest,
     })
 }
@@ -163,26 +120,15 @@ fn load_configmap_folder(
     preferred: &[&'static str],
     map: &mut RenderedConfigmap,
     entries: &mut Vec<(String, String)>,
-) -> Result {
+) -> Result<(), ProfileError> {
     let mut discoveries: Vec<DiscoveryFile> = Vec::new();
-    let read = match fs::read_dir(folder_path) {
-        Ok(entries) => entries,
-        Err(error) => {
-            cerror!(
-                "Failed to read profile folder '{}': {error}",
-                folder_path.display()
-            );
-            return abort(GeneralError);
-        }
-    };
+    let read = fs::read_dir(folder_path).map_err(|error| {
+        ProfileError::WalkFailed(folder_path.display().to_string(), error.to_string())
+    })?;
     for entry in read {
-        let entry = match entry {
-            Ok(entry) => entry,
-            Err(error) => {
-                cerror!("Failed to enumerate '{}': {error}", folder_path.display());
-                return abort(GeneralError);
-            }
-        };
+        let entry = entry.map_err(|error| {
+            ProfileError::WalkFailed(folder_path.display().to_string(), error.to_string())
+        })?;
         let path = entry.path();
         let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
             continue;
@@ -190,31 +136,22 @@ fn load_configmap_folder(
         if is_hidden_or_system(&path) {
             continue;
         }
-        let file_type = match entry.file_type() {
-            Ok(file_type) => file_type,
-            Err(error) => {
-                cerror!("Failed to stat '{}': {error}", path.display());
-                return abort(GeneralError);
-            }
-        };
+        let file_type = entry.file_type().map_err(|error| {
+            ProfileError::StatFailed(path.display().to_string(), error.to_string())
+        })?;
         if file_type.is_dir() {
-            cerror!(
-                "Profile folder 'configmaps/{folder}' must be flat, but contains \
-                 the subfolder '{file_name}'."
-            );
-            return abort(TabsDataError);
+            return Err(ProfileError::FamilyFolderNotFlat(
+                folder.to_owned(),
+                file_name.to_owned(),
+            ));
         }
         if !file_type.is_file() {
             continue;
         }
         let parsed = parse_filename(file_name);
-        let content = match fs::read_to_string(&path) {
-            Ok(content) => content,
-            Err(error) => {
-                cerror!("Failed to read '{}': {error}", path.display());
-                return abort(GeneralError);
-            }
-        };
+        let content = fs::read_to_string(&path).map_err(|error| {
+            ProfileError::ReadFailed(path.display().to_string(), error.to_string())
+        })?;
         discoveries.push(DiscoveryFile {
             file: file_name.to_owned(),
             parsed,
@@ -243,17 +180,14 @@ fn load_configmap_folder(
         let winner = &discoveries[winner_index];
         let stripped_name = winner.parsed.render_stripped();
         if let Err(component) = validate_path_component(&stripped_name) {
-            cerror!(
-                "Profile entry '{component}' in 'configmaps/{folder}' contains characters \
-                 not allowed in a configmap key. Only ASCII alphanumerics, '-', and '.' are \
-                 permitted (no '_')."
-            );
-            return abort(TabsDataError);
+            return Err(ProfileError::InvalidPathComponent(
+                component,
+                folder.to_owned(),
+            ));
         }
         if winner.file != stripped_name {
             info!(
-                "Bundle resolved 'configmaps/{folder}/{stripped_name}' from \
-                 'configmaps/{folder}/{}'",
+                "Bundle resolved '{folder}/{stripped_name}' from '{folder}/{}'",
                 winner.file
             );
         }
@@ -269,58 +203,38 @@ fn load_configmap_folder(
 pub async fn render_for_configmaps(
     loaded: &Profile,
     resolver: &ConfigurationResolver,
-) -> Result<RenderedConfigmaps> {
-    let globals = resolve_map(&loaded.globals, KPROFILE_GLOBALS_FOLDER, resolver).await?;
-    let pods = resolve_map(&loaded.pods, KPROFILE_PODS_FOLDER, resolver).await?;
-    let configs = resolve_map(&loaded.configs, KPROFILE_CONFIGS_FOLDER, resolver).await?;
-
-    let manifest_yaml = match serde_yaml::to_string(&loaded.manifest) {
-        Ok(yaml) => yaml,
-        Err(error) => {
-            cerror!("Failed to serialize the profile manifest: {error}");
-            return abort(GeneralError);
-        }
-    };
-    let mut globals = globals;
-    globals.insert(MANIFEST_FILE.to_owned(), manifest_yaml);
-
+) -> Result<RenderedConfigmaps, ProfileError> {
+    let pods = resolve_map(&loaded.pods, KPROFILE_PODS_FAMILY, resolver).await?;
+    let configs = resolve_map(&loaded.configs, KPROFILE_CONFIGS_FAMILY, resolver).await?;
+    let manifest = serde_yaml::to_string(&loaded.manifest)
+        .map_err(|error| ProfileError::ManifestSerializeFailed(error.to_string()))?;
     Ok(RenderedConfigmaps {
-        globals,
         pods,
         configs,
+        manifest,
     })
 }
 
 pub struct RenderedConfigmaps {
-    pub globals: RenderedConfigmap,
     pub pods: RenderedConfigmap,
     pub configs: RenderedConfigmap,
-}
-
-impl RenderedConfigmaps {
-    pub fn into_named(self) -> [(&'static str, RenderedConfigmap); 3] {
-        [
-            (CONFIGMAP_TABSDATA_GLOBALS, self.globals),
-            (CONFIGMAP_TABSDATA_PODS, self.pods),
-            (CONFIGMAP_TABSDATA_CONFIGS, self.configs),
-        ]
-    }
+    pub manifest: String,
 }
 
 async fn resolve_map(
     source: &RenderedConfigmap,
     folder: &str,
     resolver: &ConfigurationResolver,
-) -> Result<RenderedConfigmap> {
+) -> Result<RenderedConfigmap, ProfileError> {
     let mut data = BTreeMap::new();
     for (key, value) in source {
-        let resolved = match resolver.resolve_sys(value).await {
-            Ok(resolved) => resolved,
-            Err(error) => {
-                cerror!("Failed to resolve placeholders in '{folder}/{key}': {error}");
-                return abort(TabsDataError);
-            }
-        };
+        let resolved = resolver.resolve_sys(value).await.map_err(|error| {
+            ProfileError::PlaceholderResolutionFailed(
+                folder.to_owned(),
+                key.clone(),
+                error.to_string(),
+            )
+        })?;
         data.insert(key.clone(), resolved);
     }
     Ok(data)
@@ -329,56 +243,57 @@ async fn resolve_map(
 pub async fn resolve_profile_entry(
     loaded: &Profile,
     resolver: &ConfigurationResolver,
-    folder: &str,
+    family: &str,
     key: &str,
-) -> Result<String> {
-    let source = match folder {
-        KPROFILE_GLOBALS_FOLDER => &loaded.globals,
-        KPROFILE_PODS_FOLDER => &loaded.pods,
-        KPROFILE_CONFIGS_FOLDER => &loaded.configs,
-        other => {
-            cerror!("Unknown profile folder '{other}'.");
-            return abort(GeneralError);
-        }
+) -> Result<String, ProfileError> {
+    let source = match family {
+        KPROFILE_PODS_FAMILY => &loaded.pods,
+        KPROFILE_CONFIGS_FAMILY => &loaded.configs,
+        other => return Err(ProfileError::UnknownFamily(other.to_owned())),
     };
-    let Some(content) = source.get(key) else {
-        cerror!("Profile is missing the '{folder}/{key}' entry.");
-        return abort(TabsDataError);
-    };
-    match resolver.resolve_sys(content).await {
-        Ok(resolved) => Ok(resolved),
-        Err(error) => {
-            cerror!("Failed to resolve placeholders in '{folder}/{key}': {error}");
-            abort(TabsDataError)
+    let content = source
+        .get(key)
+        .ok_or_else(|| ProfileError::EntryMissing(family.to_owned(), key.to_owned()))?;
+    resolver.resolve_sys(content).await.map_err(|error| {
+        ProfileError::PlaceholderResolutionFailed(
+            family.to_owned(),
+            key.to_owned(),
+            error.to_string(),
+        )
+    })
+}
+
+pub async fn read_family_configmaps(
+    context: &KubeContext,
+    family: &str,
+) -> Result<RenderedConfigmap, ProfileError> {
+    let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, family);
+    let configmaps = get_configmaps(context, Some(filter)).await?;
+    let mut merged: RenderedConfigmap = BTreeMap::new();
+    for (configmap_name, entries) in configmaps {
+        for (key, value) in entries {
+            let content = String::from_utf8(value).map_err(|error| {
+                ProfileError::ConfigmapEntryNotUtf8(
+                    configmap_name.clone(),
+                    key.clone(),
+                    error.to_string(),
+                )
+            })?;
+            merged.insert(key, content);
         }
     }
+    Ok(merged)
 }
 
 pub fn parse_from_configmaps(
-    globals: &RenderedConfigmap,
     pods: &RenderedConfigmap,
     configs: &RenderedConfigmap,
-) -> Result<Profile> {
-    let manifest_yaml = match globals.get(MANIFEST_FILE) {
-        Some(yaml) => yaml,
-        None => {
-            cerror!(
-                "Configmap '{KPROFILE_GLOBALS_FOLDER}' is missing the '{MANIFEST_FILE}' entry."
-            );
-            return abort(TabsDataError);
-        }
-    };
-    let manifest = match deserialize_manifest(manifest_yaml) {
-        Ok(manifest) => manifest,
-        Err(error) => {
-            cerror!("Failed to deserialize '{MANIFEST_FILE}': {error}");
-            return abort(TabsDataError);
-        }
-    };
-    let mut globals_clone = globals.clone();
-    globals_clone.remove(MANIFEST_FILE);
+    manifest_yaml: &str,
+) -> Result<Profile, ProfileError> {
+    let manifest = deserialize_manifest(manifest_yaml).map_err(|error| {
+        ProfileError::ManifestDeserializeFailed(MANIFEST_FILE.to_owned(), error.to_string())
+    })?;
     Ok(Profile {
-        globals: globals_clone,
         pods: pods.clone(),
         configs: configs.clone(),
         manifest,
@@ -402,7 +317,7 @@ pub fn configs_for_worker<'a>(
     })
 }
 
-fn validate_path_component(name: &str) -> std::result::Result<(), String> {
+fn validate_path_component(name: &str) -> Result<(), String> {
     if !is_valid_path_component(name) {
         return Err(name.to_owned());
     }

@@ -25,7 +25,7 @@ use super::server::{ServerCommands, command_server};
 use super::session::{SessionCommands, command_session};
 use crate::cerror;
 use crate::client::session::pin::{PinContext, tdkpin_path};
-use crate::core::system::exit::Result;
+use crate::core::system::exit::CommandResult;
 
 const TOOL_NAME: &str = "tdkserver";
 const HISTORY_FILE: &str = ".tdkserver.history";
@@ -61,7 +61,7 @@ struct ShellInput {
     command: ShellCommand,
 }
 
-pub async fn command_shell(globals: &GlobalArguments) -> Result {
+pub async fn command_shell(globals: &GlobalArguments) -> CommandResult {
     show_quick_reference();
     show_initial_active_context();
 

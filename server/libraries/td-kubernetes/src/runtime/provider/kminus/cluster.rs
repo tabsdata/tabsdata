@@ -9,12 +9,11 @@ use std::time::Duration;
 
 use kube::Client;
 use kube::config::{Config, KubeConfigOptions, Kubeconfig};
-use td_common::status::ExitStatus::GeneralError;
 use td_python::python::resolve_python_binary;
 
 use crate::base::constants::{FOLDER_PROFILE, FOLDER_STAGING};
-use crate::cerror;
-use crate::core::system::exit::{Result, abort};
+use crate::base::error::provider::ProviderError;
+use crate::core::system::exit::CommandResult;
 use crate::core::system::stream::Silencer;
 use crate::core::system::subprocess::{
     self, apply_detached_flags, apply_subprocess_flags, is_alive as process_is_alive,
@@ -82,14 +81,10 @@ impl KminusCluster {
             .join(KM_PIDS_FOLDER)
     }
 
-    fn spawn_km(&self) -> Result {
-        let km = match resolve_python_binary(KM_BINARY) {
-            Ok(path) => path,
-            Err(error) => {
-                cerror!("Failed to locate the '{KM_BINARY}' binary: {error}");
-                return abort(GeneralError);
-            }
-        };
+    fn spawn_km(&self) -> CommandResult {
+        let km = resolve_python_binary(KM_BINARY).map_err(|error| {
+            ProviderError::BinaryNotFound(KM_BINARY.to_owned(), error.to_string())
+        })?;
         let mut command = SystemCommand::new(&km);
         command
             .arg(KM_START_SUBCOMMAND)
@@ -102,13 +97,12 @@ impl KminusCluster {
             command.stdout(Stdio::null()).stderr(Stdio::null());
         }
         apply_subprocess_flags(&mut command);
-        if let Err(error) = command.spawn() {
-            cerror!(
-                "Failed to spawn '{} {KM_START_SUBCOMMAND}': {error}",
+        command.spawn().map_err(|error| {
+            ProviderError::KminusStartFailed(format!(
+                "spawn '{} {KM_START_SUBCOMMAND}': {error}",
                 km.display()
-            );
-            return abort(GeneralError);
-        }
+            ))
+        })?;
         Ok(())
     }
 
@@ -132,14 +126,10 @@ impl KminusCluster {
 }
 
 impl Cluster for KminusCluster {
-    fn create(&self) -> Result {
-        let km = match resolve_python_binary(KM_BINARY) {
-            Ok(path) => path,
-            Err(error) => {
-                cerror!("Failed to locate the '{KM_BINARY}' binary: {error}");
-                return abort(GeneralError);
-            }
-        };
+    fn create(&self) -> CommandResult {
+        let km = resolve_python_binary(KM_BINARY).map_err(|error| {
+            ProviderError::BinaryNotFound(KM_BINARY.to_owned(), error.to_string())
+        })?;
         let mut command = SystemCommand::new(&km);
         command
             .arg(KM_CREATE_SUBCOMMAND)
@@ -147,52 +137,47 @@ impl Cluster for KminusCluster {
             .arg(self.path())
             .stdin(Stdio::null());
         apply_detached_flags(&mut command);
-        let output = match subprocess::run(&mut command, KM_BINARY, self.verbose) {
-            Ok(output) => output,
-            Err(error) => {
-                cerror!(
-                    "Failed to run '{} {KM_CREATE_SUBCOMMAND}': {error}",
-                    km.display()
-                );
-                return abort(GeneralError);
-            }
-        };
+        let output = subprocess::run(&mut command, KM_BINARY, self.verbose).map_err(|error| {
+            ProviderError::KminusStartFailed(format!(
+                "run '{} {KM_CREATE_SUBCOMMAND}': {error}",
+                km.display()
+            ))
+        })?;
         if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            cerror!(
-                "'{} {KM_CREATE_SUBCOMMAND}' failed with status {}: {}",
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+            return Err(ProviderError::KminusStartFailed(format!(
+                "'{} {KM_CREATE_SUBCOMMAND}' failed with status {}: {stderr}",
                 km.display(),
                 output.status,
-                stderr.trim()
-            );
-            return abort(GeneralError);
+            ))
+            .into());
         }
         Ok(())
     }
 
-    async fn start(&self) -> Result {
+    async fn start(&self) -> CommandResult {
         if self.is_alive().await {
             return Ok(());
         }
         self.spawn_km()?;
         if !self.poll_alive().await {
-            cerror!(
-                "The kminus cluster process did not start within {} seconds.",
+            return Err(ProviderError::KminusStartFailed(format!(
+                "process did not start within {} seconds",
                 KM_POLL_ALIVE_TIMEOUT.as_secs()
-            );
-            return abort(GeneralError);
+            ))
+            .into());
         }
         if !self.poll_ready().await {
-            cerror!(
-                "The kminus cluster kubernetes apiserver did not become ready within {} seconds.",
+            return Err(ProviderError::KminusStartFailed(format!(
+                "kubernetes apiserver did not become ready within {} seconds",
                 KM_POLL_ALIVE_TIMEOUT.as_secs()
-            );
-            return abort(GeneralError);
+            ))
+            .into());
         }
         Ok(())
     }
 
-    async fn stop(&self) -> Result<bool> {
+    async fn stop(&self) -> CommandResult<bool> {
         if self.is_dead().await {
             return Ok(false);
         }
@@ -201,11 +186,11 @@ impl Cluster for KminusCluster {
         };
         terminate_process(pid, KM_TERMINATE_GRACE);
         if !self.poll_dead().await {
-            cerror!(
-                "The kminus cluster process is still alive after {} seconds.",
+            return Err(ProviderError::KminusStopFailed(format!(
+                "process still alive after {} seconds",
                 KM_POLL_DEAD_TIMEOUT.as_secs()
-            );
-            return abort(GeneralError);
+            ))
+            .into());
         }
         Ok(true)
     }

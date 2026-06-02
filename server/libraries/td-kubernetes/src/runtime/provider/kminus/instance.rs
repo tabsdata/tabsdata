@@ -5,22 +5,24 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
-use td_common::status::ExitStatus::{GeneralError, TabsDataError};
 use tracing::info;
 
 use crate::base::constants::{
-    CONFIGMAP_TABSDATA_CONFIGS, CONFIGMAP_TABSDATA_GLOBALS, CONFIGMAP_TABSDATA_PODS,
-    FOLDER_PROFILE, KPROFILE_CONFIGS_FOLDER, KPROFILE_GLOBALS_FOLDER, KPROFILE_PODS_FOLDER,
+    CONFIGMAP_FAMILY_LABEL, CONFIGMAP_TABSDATA_MANIFEST, FOLDER_PROFILE, KPROFILE_CONFIGS_FAMILY,
+    KPROFILE_PODS_FAMILY,
 };
-use crate::cerror;
-use std::sync::Arc;
-
-use crate::core::system::exit::{Result, abort};
+use crate::base::error::provider::ProviderError;
+use crate::base::naming::configmap_name;
+use crate::core::system::exit::CommandResult;
 use crate::core::system::file::is_hidden_or_system;
-use crate::kube::api::{create_configmap, delete_configmap, exists_configmap};
+use crate::kube::api::{
+    LabelFilter, create_configmap, delete_configmap, exists_configmap, list_configmaps,
+};
 use crate::kube::context::KubeContext;
 use crate::kube::kubeconfig::build_kubeconfig;
+use crate::runtime::instance::manifest::MANIFEST_FILE;
 use crate::runtime::instance::profile::RenderedConfigmap;
 use crate::runtime::provider::Instance;
 use crate::runtime::reporting::build_kube_client;
@@ -42,74 +44,93 @@ impl KminusInstance {
         self.staging_path.join(FOLDER_PROFILE)
     }
 
-    fn read_staged_profile(&self) -> Result<Option<StagedConfigmaps>> {
+    fn read_staged_profile(&self) -> CommandResult<Option<StagedConfigmaps>> {
         let staged_folder = self.staging_profile_path();
         if !staged_folder.is_dir() {
             return Ok(None);
         }
-        let globals = read_staged_folder(&staged_folder, KPROFILE_GLOBALS_FOLDER)?;
-        let pods = read_staged_folder(&staged_folder, KPROFILE_PODS_FOLDER)?;
-        let configs = read_staged_folder(&staged_folder, KPROFILE_CONFIGS_FOLDER)?;
-        if globals.is_empty() && pods.is_empty() && configs.is_empty() {
+        let pods = read_staged_family(&staged_folder, KPROFILE_PODS_FAMILY)?;
+        let configs = read_staged_family(&staged_folder, KPROFILE_CONFIGS_FAMILY)?;
+        let manifest = read_staged_manifest(&staged_folder)?;
+        if pods.is_empty() && configs.is_empty() && manifest.is_none() {
             Ok(None)
         } else {
             Ok(Some(StagedConfigmaps {
-                globals,
                 pods,
                 configs,
+                manifest,
             }))
         }
     }
 
-    async fn replace_configmaps(&self, staged: StagedConfigmaps) -> Result {
+    async fn replace_configmaps(&self, staged: StagedConfigmaps) -> CommandResult {
         let kminus_config = build_kubeconfig(Some(&self.kubefile), None, None).await?;
         let namespace = kminus_config.default_namespace.clone();
         let client = build_kube_client(&kminus_config)?;
         let context = KubeContext::new(Arc::new(client), namespace);
-        for (name, data) in [
-            (CONFIGMAP_TABSDATA_GLOBALS, staged.globals),
-            (CONFIGMAP_TABSDATA_PODS, staged.pods),
-            (CONFIGMAP_TABSDATA_CONFIGS, staged.configs),
+        for (family, files) in [
+            (KPROFILE_PODS_FAMILY, staged.pods),
+            (KPROFILE_CONFIGS_FAMILY, staged.configs),
         ] {
-            if exists_configmap(&context, name).await? {
-                delete_configmap(&context, name).await?;
+            replace_family_configmaps(&context, family, files).await?;
+        }
+        if let Some(manifest_yaml) = staged.manifest {
+            if exists_configmap(&context, CONFIGMAP_TABSDATA_MANIFEST).await? {
+                delete_configmap(&context, CONFIGMAP_TABSDATA_MANIFEST).await?;
             }
-            create_configmap(&context, name, data, None).await?;
+            let mut manifest_data = BTreeMap::new();
+            manifest_data.insert(MANIFEST_FILE.to_owned(), manifest_yaml);
+            create_configmap(
+                &context,
+                CONFIGMAP_TABSDATA_MANIFEST,
+                manifest_data,
+                None,
+                None,
+            )
+            .await?;
         }
         Ok(())
     }
 }
 
 struct StagedConfigmaps {
-    globals: RenderedConfigmap,
     pods: RenderedConfigmap,
     configs: RenderedConfigmap,
+    manifest: Option<String>,
 }
 
-fn read_staged_folder(staged_folder: &Path, folder: &str) -> Result<RenderedConfigmap> {
-    let folder_path = staged_folder.join(folder);
+async fn replace_family_configmaps(
+    context: &KubeContext,
+    family: &str,
+    files: RenderedConfigmap,
+) -> CommandResult {
+    let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, family);
+    let existing = list_configmaps(context, Some(filter)).await?;
+    for (name, _) in existing {
+        delete_configmap(context, &name).await?;
+    }
+    for (file, content) in files {
+        let name = configmap_name(family, &file)?;
+        let mut data = BTreeMap::new();
+        data.insert(file, content);
+        create_configmap(context, &name, data, None, Some(family)).await?;
+    }
+    Ok(())
+}
+
+fn read_staged_family(staged_folder: &Path, family: &str) -> CommandResult<RenderedConfigmap> {
+    let family_path = staged_folder.join(family);
     let mut data = BTreeMap::new();
-    if !folder_path.is_dir() {
+    if !family_path.is_dir() {
         return Ok(data);
     }
-    let read = match fs::read_dir(&folder_path) {
-        Ok(entries) => entries,
-        Err(error) => {
-            cerror!(
-                "Failed to read staged folder '{}': {error}",
-                folder_path.display()
-            );
-            return abort(GeneralError);
-        }
-    };
+    let read = fs::read_dir(&family_path).map_err(|error| {
+        ProviderError::StagingReadFailed(family_path.display().to_string(), error.to_string())
+    })?;
     for entry in read {
-        let entry = match entry {
-            Ok(entry) => entry,
-            Err(error) => {
-                cerror!("Failed to enumerate '{}': {error}", folder_path.display());
-                return abort(GeneralError);
-            }
-        };
+        let entry = entry.map_err(|error| {
+            ProviderError::StagingReadFailed(family_path.display().to_string(), error.to_string())
+        })?;
         let path = entry.path();
         let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
             continue;
@@ -117,19 +138,15 @@ fn read_staged_folder(staged_folder: &Path, folder: &str) -> Result<RenderedConf
         if is_hidden_or_system(&path) {
             continue;
         }
-        let file_type = match entry.file_type() {
-            Ok(file_type) => file_type,
-            Err(error) => {
-                cerror!("Failed to stat '{}': {error}", path.display());
-                return abort(GeneralError);
-            }
-        };
+        let file_type = entry.file_type().map_err(|error| {
+            ProviderError::StagingReadFailed(path.display().to_string(), error.to_string())
+        })?;
         if file_type.is_dir() {
-            cerror!(
-                "Staged profile folder '{folder}' must be flat, but contains the \
-                 subfolder '{name}'."
-            );
-            return abort(TabsDataError);
+            return Err(ProviderError::StagingFamilyNotFlat {
+                family: family.to_owned(),
+                subfolder: name.to_owned(),
+            }
+            .into());
         }
         if !file_type.is_file() {
             continue;
@@ -144,8 +161,11 @@ fn read_staged_folder(staged_folder: &Path, folder: &str) -> Result<RenderedConf
                 continue;
             }
             Err(error) => {
-                cerror!("Failed to read '{}': {error}", path.display());
-                return abort(GeneralError);
+                return Err(ProviderError::StagingReadFailed(
+                    path.display().to_string(),
+                    error.to_string(),
+                )
+                .into());
             }
         };
         data.insert(name.to_owned(), contents);
@@ -153,24 +173,34 @@ fn read_staged_folder(staged_folder: &Path, folder: &str) -> Result<RenderedConf
     Ok(data)
 }
 
+fn read_staged_manifest(staged_folder: &Path) -> CommandResult<Option<String>> {
+    let manifest_path = staged_folder.join(MANIFEST_FILE);
+    if !manifest_path.is_file() {
+        return Ok(None);
+    }
+    let contents = fs::read_to_string(&manifest_path).map_err(|error| {
+        ProviderError::StagingReadFailed(manifest_path.display().to_string(), error.to_string())
+    })?;
+    Ok(Some(contents))
+}
+
 impl Instance for KminusInstance {
-    async fn start(&self) -> Result {
+    async fn start(&self) -> CommandResult {
         let staged = self.read_staged_profile()?;
         let Some(staged) = staged else {
             return Ok(());
         };
         self.replace_configmaps(staged).await?;
-        if let Err(error) = fs::remove_dir_all(&self.staging_path) {
-            cerror!(
-                "Failed to remove staging folder '{}': {error}",
-                self.staging_path.display()
-            );
-            return abort(GeneralError);
-        }
+        fs::remove_dir_all(&self.staging_path).map_err(|error| {
+            ProviderError::StagingFolderRemoveFailed(
+                self.staging_path.display().to_string(),
+                error.to_string(),
+            )
+        })?;
         Ok(())
     }
 
-    async fn stop(&self) -> Result<bool> {
+    async fn stop(&self) -> CommandResult<bool> {
         Ok(false)
     }
 

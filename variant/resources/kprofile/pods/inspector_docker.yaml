@@ -6,7 +6,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: td-inspector
-  namespace: default
+  namespace: tabsdata
   annotations:
     tabsdata.com/description: "Tabsdata inspector init job"
     kubernetes.io/change-cause: ""
@@ -45,18 +45,18 @@ spec:
         # fsGroup: 1000       # only relevant once Pod has volumes
       containers:
         - name: inspector
-          image: /dev/null
+          image: busybox:1.37
           imagePullPolicy: IfNotPresent
           command: ["sh", "-c"]
           args:
             - |
               set -e
-              for cm in globals pods configs; do
-                dir="${KM_CONTAINER_ROOT}/tabsdata/configmaps/${cm}"
-                echo "Reading mounted ConfigMap 'tabsdata-${cm}' under ${dir}"
+              for family in pods configs; do
+                dir="/tabsdata/configmaps/${family}"
+                echo "Reading mounted configmap family '${family}' under ${dir}"
                 for f in "${dir}"/*; do
                   [ -f "$f" ] || continue
-                  printf '[inspector]   %s/%s = %s\n' "${cm}" "$(basename "$f")" "$(cat "$f")"
+                  printf '[inspector]   %s/%s = %s\n' "${family}" "$(basename "$f")" "$(cat "$f")"
                 done
               done
               echo "Done!"
@@ -70,31 +70,32 @@ spec:
               drop: ["ALL"]
             # readOnlyRootFilesystem: true   # enable after mapping writable paths to emptyDir mounts
           volumeMounts:
-            - name: configmap-globals
-              mountPath: /tabsdata/configmaps/globals
-              readOnly: true
             - name: configmap-pods
               mountPath: /tabsdata/configmaps/pods
               readOnly: true
             - name: configmap-configs
               mountPath: /tabsdata/configmaps/configs
               readOnly: true
-            - name: pyenv
-              mountPath: /tabsdata/pyenv
-              readOnly: true
-          env:
-            - name: CONTAINER_ROOT
-              value: "$(KM_CONTAINER_ROOT)"
       volumes:
-        - name: configmap-globals
-          configMap:
-            name: tabsdata-globals
         - name: configmap-pods
-          configMap:
-            name: tabsdata-pods
+          projected:
+            sources:
+              - configMap:
+                  name: tabsdata-pods-apiserver.yaml
+              - configMap:
+                  name: tabsdata-pods-crontrigger.yaml
+              - configMap:
+                  name: tabsdata-pods-function.yaml
+              - configMap:
+                  name: tabsdata-pods-inspector.yaml
+              - configMap:
+                  name: tabsdata-pods-stagetrigger.yaml
         - name: configmap-configs
-          configMap:
-            name: tabsdata-configs
-        - name: pyenv
-          hostPath:
-            path: "${sys:TDK_PYENV_TD_ROOT}"
+          projected:
+            sources:
+              - configMap:
+                  name: tabsdata-configs-apiserver.yaml
+              - configMap:
+                  name: tabsdata-configs-apiserver.log.yaml
+              - configMap:
+                  name: tabsdata-configs-tabsdata.yaml

@@ -9,7 +9,7 @@ use crate::base::reporter::{InteractiveReporter, Reporter};
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
 use crate::client::tdkserver::common::{effective_yes, prompt_yes_no};
 use crate::client::tdkserver::render::{preview, report};
-use crate::core::system::exit::Result;
+use crate::core::system::exit::CommandResult;
 use crate::cwarn;
 use crate::runtime::provider::outcome::{ClusterStopOutcome, InstanceStopOutcome};
 use crate::runtime::provider::{Provider, provider_for_or_tdkcontext};
@@ -45,7 +45,10 @@ pub struct RestartArguments {
     pub yes: bool,
 }
 
-pub async fn command_restart(arguments: RestartArguments, globals: &GlobalArguments) -> Result {
+pub async fn command_restart(
+    arguments: RestartArguments,
+    globals: &GlobalArguments,
+) -> CommandResult {
     let RestartArguments {
         cluster,
         instance,
@@ -77,7 +80,7 @@ pub async fn restart_server(
     provider: &dyn Provider,
     reporter: &dyn Reporter,
     not_dead: bool,
-) -> Result {
+) -> CommandResult {
     if not_dead {
         let outcome = provider.stop_server(reporter).await?;
         if matches!(outcome.cluster, ClusterStopOutcome::AlreadyStopped)

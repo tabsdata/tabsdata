@@ -2,7 +2,7 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-use crate::core::system::exit::Result;
+use crate::core::system::exit::CommandResult;
 use crate::runtime::provider::Instance;
 
 #[derive(Default)]
@@ -15,11 +15,11 @@ impl DockerInstance {
 }
 
 impl Instance for DockerInstance {
-    async fn start(&self) -> Result {
+    async fn start(&self) -> CommandResult {
         Ok(())
     }
 
-    async fn stop(&self) -> Result<bool> {
+    async fn stop(&self) -> CommandResult<bool> {
         Ok(false)
     }
 

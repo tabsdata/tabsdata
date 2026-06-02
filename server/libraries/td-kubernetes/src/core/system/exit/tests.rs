@@ -24,7 +24,7 @@ fn command_error_with_carries_source() {
 
 #[test]
 fn abort_returns_err_with_passed_status_and_no_source() {
-    let result: Result<()> = abort(ExitStatus::GeneralError);
+    let result: CommandResult<()> = abort(ExitStatus::GeneralError);
     let error = result.expect_err("abort returns Err");
     assert!(matches!(error.status(), ExitStatus::GeneralError));
     assert!(error.source().is_none());
@@ -40,7 +40,7 @@ fn abort_supports_each_status_variant() {
         ExitStatus::TabsDataError,
     ] {
         let expected_code = expected.code();
-        let result: Result<()> = abort(expected);
+        let result: CommandResult<()> = abort(expected);
         let error = result.expect_err("abort returns Err");
         // The returned status must match the requested one regardless of value.
         assert_eq!(error.status().code(), expected_code);
@@ -49,7 +49,7 @@ fn abort_supports_each_status_variant() {
 
 #[test]
 fn abort_with_returns_err_carrying_typed_source() {
-    let result: Result<()> = abort_with(
+    let result: CommandResult<()> = abort_with(
         ExitStatus::TabsDataError,
         ProfileError::NotFound("dev".to_owned()),
     );
@@ -61,7 +61,7 @@ fn abort_with_returns_err_carrying_typed_source() {
 
 #[test]
 fn abort_with_preserves_typed_error_code_and_message() {
-    let result: Result<()> = abort_with(
+    let result: CommandResult<()> = abort_with(
         ExitStatus::TabsDataError,
         ProfileError::DuplicateFile("config.yaml".to_owned()),
     );

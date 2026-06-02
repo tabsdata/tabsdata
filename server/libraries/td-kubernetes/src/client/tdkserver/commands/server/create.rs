@@ -9,7 +9,7 @@ use crate::base::reporter::InteractiveReporter;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
 use crate::client::tdkserver::common::{effective_yes, prompt_yes_no};
 use crate::client::tdkserver::render::{preview, report};
-use crate::core::system::exit::{Result, abort};
+use crate::core::system::exit::{CommandResult, abort};
 use crate::runtime::provider::provider_for;
 
 #[derive(Debug, Clone, Args)]
@@ -43,7 +43,10 @@ pub struct CreateArguments {
     pub yes: bool,
 }
 
-pub async fn command_create(arguments: CreateArguments, globals: &GlobalArguments) -> Result {
+pub async fn command_create(
+    arguments: CreateArguments,
+    globals: &GlobalArguments,
+) -> CommandResult {
     let CreateArguments {
         cluster,
         instance,

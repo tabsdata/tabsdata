@@ -7,11 +7,11 @@ use std::collections::HashMap;
 use serde_yaml::Value;
 
 use crate::base::constants::{
-    CONFIGMAP_TABSDATA_PODS, POD_YAML_COMPONENT_LABEL, POD_YAML_FIELD_KIND, POD_YAML_FIELD_LABELS,
-    POD_YAML_FIELD_METADATA, POD_YAML_KIND_JOB, POD_YAML_KIND_POD,
+    CONFIGMAP_FAMILY_LABEL, KPROFILE_PODS_FAMILY, POD_YAML_COMPONENT_LABEL, POD_YAML_FIELD_KIND,
+    POD_YAML_FIELD_LABELS, POD_YAML_FIELD_METADATA, POD_YAML_KIND_JOB, POD_YAML_KIND_POD,
 };
 use crate::base::error::kubernetes::{KubeMessagingError, KubernetesError};
-use crate::kube::api::configmap::require_configmap;
+use crate::kube::api::{LabelFilter, get_configmaps};
 use crate::kube::context::KubeContext;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,24 +29,37 @@ pub struct PodTemplate {
 
 #[derive(Debug, Clone, Default)]
 pub struct PodTemplateIndex {
-    by_worker: HashMap<String, PodTemplate>,
+    map: HashMap<String, PodTemplate>,
 }
 
 impl PodTemplateIndex {
     pub async fn load(context: &KubeContext) -> Result<Self, KubernetesError> {
-        let entries = require_configmap(context, CONFIGMAP_TABSDATA_PODS).await?;
-        let mut by_worker: HashMap<String, PodTemplate> = HashMap::new();
-        for (_, manifest) in entries {
-            let Some(template) = parse_template(&manifest)? else {
-                continue;
-            };
-            by_worker.insert(template.worker.clone(), template);
+        let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, KPROFILE_PODS_FAMILY);
+        let configmaps = get_configmaps(context, Some(filter)).await?;
+        let mut worker_map: HashMap<String, PodTemplate> = HashMap::new();
+        for (configmap_name, entries) in configmaps {
+            for (key, value) in entries {
+                let text = match String::from_utf8(value) {
+                    Ok(text) => text,
+                    Err(_) => {
+                        return Err(KubeMessagingError::TemplateNotUtf8 {
+                            configmap: configmap_name.clone(),
+                            key,
+                        }
+                        .into());
+                    }
+                };
+                let Some(template) = parse_template(&text)? else {
+                    continue;
+                };
+                worker_map.insert(template.worker.clone(), template);
+            }
         }
-        Ok(Self { by_worker })
+        Ok(Self { map: worker_map })
     }
 
     pub fn lookup(&self, worker: &str) -> Result<&PodTemplate, KubeMessagingError> {
-        self.by_worker
+        self.map
             .get(worker)
             .ok_or_else(|| KubeMessagingError::TemplateNotFound {
                 worker: worker.to_owned(),

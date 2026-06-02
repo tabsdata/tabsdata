@@ -12,7 +12,7 @@ use crate::client::tdkserver::arguments::GlobalArguments;
 use crate::client::tdkserver::commands::autoconfirm::pin::{PinArguments, command_pin};
 use crate::client::tdkserver::commands::autoconfirm::show::{ShowArguments, command_show};
 use crate::client::tdkserver::commands::autoconfirm::unpin::{UnpinArguments, command_unpin};
-use crate::core::system::exit::Result;
+use crate::core::system::exit::CommandResult;
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum AutoconfirmCommands {
@@ -27,7 +27,7 @@ pub enum AutoconfirmCommands {
 pub async fn command_autoconfirm(
     command: AutoconfirmCommands,
     _globals: &GlobalArguments,
-) -> Result {
+) -> CommandResult {
     match command {
         AutoconfirmCommands::Pin(arguments) => command_pin(arguments).await,
         AutoconfirmCommands::Show(arguments) => command_show(arguments).await,

@@ -11,7 +11,7 @@ use tracing::info;
 
 use crate::base::error::cli::CliError;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
-use crate::core::system::exit::{Result, abort_with};
+use crate::core::system::exit::{CommandResult, abort_with};
 use crate::kube::api::get_configmaps;
 use crate::runtime::provider::provider_for_or_tdkcontext;
 
@@ -35,7 +35,7 @@ pub struct GetArguments {
     pub folder: PathBuf,
 }
 
-pub async fn command_get(arguments: GetArguments, globals: &GlobalArguments) -> Result {
+pub async fn command_get(arguments: GetArguments, globals: &GlobalArguments) -> CommandResult {
     let GetArguments {
         cluster,
         instance,
@@ -63,7 +63,7 @@ pub async fn command_get(arguments: GetArguments, globals: &GlobalArguments) -> 
 
     let provider = provider_for_or_tdkcontext(cluster, instance, globals.verbose).await?;
     let context = provider.kube_context().await?;
-    let configmaps = get_configmaps(&context).await?;
+    let configmaps = get_configmaps(&context, None).await?;
 
     let count = configmaps.len();
     for (name, keys) in configmaps {

@@ -15,7 +15,7 @@ use crate::base::naming::to_kube_identifier;
 use crate::kube::api::secret::create_secret;
 use crate::kube::api::{
     ConfigMapSpec, SecretSpec, component_from_pod, create_configmap, label_tabsdata,
-    owner_ref_for_pod, part_of_tabsdata,
+    owner_ref_for_pod, tabsdata_selector,
 };
 use crate::kube::context::KubeContext;
 
@@ -29,7 +29,7 @@ pub async fn create_pod(
 ) -> Result<Pod, KubernetesError> {
     let api: Api<Pod> = Api::namespaced(context.client().clone(), context.namespace());
     let mut pod = pod.clone();
-    label_tabsdata(&mut pod.metadata);
+    label_tabsdata(&mut pod.metadata, &[]);
     let created = api
         .create(&PostParams::default(), &pod)
         .await
@@ -46,7 +46,7 @@ pub async fn create_pod(
     let owner = owner_ref_for_pod(&created, template)?;
     for spec in configmaps {
         let name = to_kube_identifier(&component, &spec.name, runid)?;
-        create_configmap(context, &name, spec.data, Some(owner.clone())).await?;
+        create_configmap(context, &name, spec.data, Some(owner.clone()), None).await?;
     }
     for spec in secrets {
         let name = to_kube_identifier(&component, &spec.name, runid)?;
@@ -90,7 +90,7 @@ pub async fn delete_pod(context: &KubeContext, name: &str) -> Result<(), Kuberne
 
 pub async fn delete_pods(context: &KubeContext) -> Result<(), KubernetesError> {
     let api: Api<Pod> = Api::namespaced(context.client().clone(), context.namespace());
-    let selector = part_of_tabsdata();
+    let selector = tabsdata_selector(None);
     let list_params = ListParams::default().labels_from(&selector);
     let delete_params = DeleteParams {
         propagation_policy: Some(PropagationPolicy::Background),
@@ -135,7 +135,7 @@ pub async fn delete_pods(context: &KubeContext) -> Result<(), KubernetesError> {
 
 pub async fn list_pods(context: &KubeContext) -> Result<Vec<Pod>, KubernetesError> {
     let api: Api<Pod> = Api::namespaced(context.client().clone(), context.namespace());
-    let selector = part_of_tabsdata();
+    let selector = tabsdata_selector(None);
     let list_params = ListParams::default().labels_from(&selector);
     api.list(&list_params)
         .await

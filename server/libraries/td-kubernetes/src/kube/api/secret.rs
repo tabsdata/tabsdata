@@ -12,7 +12,7 @@ use kube::api::{DeleteParams, ListParams, PostParams};
 
 use crate::base::constants::HTTP_STATUS_CONFLICT;
 use crate::base::error::kubernetes::{KubeSecretError, KubernetesError};
-use crate::kube::api::{label_tabsdata, part_of_tabsdata};
+use crate::kube::api::{label_tabsdata, tabsdata_selector};
 use crate::kube::context::KubeContext;
 
 pub async fn exists_secret(context: &KubeContext, name: &str) -> Result<bool, KubernetesError> {
@@ -42,7 +42,7 @@ pub async fn create_secret(
         owner_references: owner.map(|reference| vec![reference]),
         ..Default::default()
     };
-    label_tabsdata(&mut metadata);
+    label_tabsdata(&mut metadata, &[]);
     let body = Secret {
         metadata,
         data: Some(
@@ -85,7 +85,7 @@ pub async fn upsert_secret(
         owner_references: owner.map(|reference| vec![reference]),
         ..Default::default()
     };
-    label_tabsdata(&mut metadata);
+    label_tabsdata(&mut metadata, &[]);
     let body = Secret {
         metadata,
         data: Some(
@@ -151,7 +151,7 @@ pub async fn list_secrets(
     context: &KubeContext,
 ) -> Result<Vec<(String, Vec<String>)>, KubernetesError> {
     let api: Api<Secret> = Api::namespaced(context.client().clone(), context.namespace());
-    let selector = part_of_tabsdata();
+    let selector = tabsdata_selector(None);
     let list_params = ListParams::default().labels_from(&selector);
     let secrets = api
         .list(&list_params)
