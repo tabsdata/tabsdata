@@ -23,4 +23,10 @@ pub struct EmbeddedConfig {
     /// When `true`, the data directory survives across runs (apiserver). When
     /// `false`, the data directory is wiped on drop (tests).
     pub persistent: bool,
+    /// Superuser password. When `Some`, the value is used as-is. When
+    /// `None`, the persistent path falls back to a sidecar password file
+    /// alongside `data_dir`. Configmap-driven deployments set this from a
+    /// kubernetes Secret so the password lives outside the pod filesystem.
+    #[serde(default)]
+    pub password: Option<String>,
 }

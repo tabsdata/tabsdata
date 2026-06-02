@@ -11,6 +11,7 @@ fn leaves(keys: &[(&str, &str)]) -> Vec<SecretLeaf> {
         .map(|(path, key)| SecretLeaf {
             path: path.split('.').map(str::to_owned).collect(),
             key: (*key).to_owned(),
+            generator: None,
         })
         .collect()
 }

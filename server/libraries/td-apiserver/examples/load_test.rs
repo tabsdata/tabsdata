@@ -106,6 +106,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 data_dir: Some(td_common::tdtestdir!().join("postgres")),
                 port: None,
                 persistent: true,
+                password: None,
             })),
             ..Default::default()
         },

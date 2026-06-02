@@ -43,7 +43,9 @@ use crate::runtime::provider::outcome::{
 };
 use crate::runtime::provider::summary::Summary;
 use crate::runtime::reporting::build_kube_client;
-use crate::runtime::secrets::reconciliation::reconcile_cluster_configs_and_secrets;
+use crate::runtime::secrets::reconciliation::{
+    auto_fill_generated_secrets, reconcile_cluster_configs_and_secrets,
+};
 use crate::runtime::secrets::{SecretGenerator, SecretHandler, SecretPhase};
 
 pub const PROVIDER_AXIS_NAME: &str = "provider";
@@ -280,6 +282,7 @@ pub trait Provider: Send + Sync {
             return Ok(InstanceStartOutcome::AlreadyRunning);
         }
         let context = self.kube_context().await?;
+        auto_fill_generated_secrets(&context).await?;
         reconcile_cluster_configs_and_secrets(&context).await?;
         self.start_instance_hook(reporter).await?;
         Ok(InstanceStartOutcome::Started)

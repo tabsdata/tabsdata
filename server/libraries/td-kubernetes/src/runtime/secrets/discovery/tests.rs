@@ -297,3 +297,62 @@ fn encode_rejects_empty_segment() {
     let error = encode_secret_key("c.yaml", &["a".to_owned(), "".to_owned()]).unwrap_err();
     assert!(matches!(error, SecretError::EmptySegment { .. }));
 }
+
+#[test]
+fn bare_placeholder_has_no_generator() {
+    let leaves = leaves_of(r#"password: ${secret}"#);
+    assert_eq!(leaves.len(), 1);
+    assert_eq!(leaves[0].generator, None);
+}
+
+#[test]
+fn named_placeholder_uuid_picks_uuid_generator() {
+    let leaves = leaves_of(r#"jwt: ${secret:uuid}"#);
+    assert_eq!(leaves.len(), 1);
+    assert_eq!(leaves[0].generator, Some(Generator::Uuid));
+}
+
+#[test]
+fn named_placeholder_password_picks_password_generator() {
+    let leaves = leaves_of(r#"password: ${secret:password}"#);
+    assert_eq!(leaves.len(), 1);
+    assert_eq!(leaves[0].generator, Some(Generator::Password));
+}
+
+#[test]
+fn mixed_placeholders_keep_their_kinds() {
+    let leaves = leaves_of(
+        r#"
+            external: ${secret}
+            generated: ${secret:uuid}
+            password: ${secret:password}
+        "#,
+    );
+    assert_eq!(leaves.len(), 3);
+    let by_path: std::collections::HashMap<_, _> = leaves
+        .iter()
+        .map(|leaf| (leaf.path.join("."), leaf.generator))
+        .collect();
+    assert_eq!(by_path.get("external").copied(), Some(None));
+    assert_eq!(by_path.get("generated").copied(), Some(Some(Generator::Uuid)));
+    assert_eq!(by_path.get("password").copied(), Some(Some(Generator::Password)));
+}
+
+#[test]
+fn unknown_generator_name_is_rejected() {
+    let error = error_of(r#"key: ${secret:nope}"#);
+    match error {
+        SecretError::UnknownGeneratorName { name, supported, .. } => {
+            assert_eq!(name, "nope");
+            assert!(supported.contains("uuid"));
+            assert!(supported.contains("password"));
+        }
+        other => panic!("unexpected variant: {other:?}"),
+    }
+}
+
+#[test]
+fn empty_generator_name_is_not_a_placeholder() {
+    let leaves = leaves_of(r#"key: "${secret:}""#);
+    assert!(leaves.is_empty());
+}

@@ -2,14 +2,16 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
-use crate::base::constants::{CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY};
+use crate::base::constants::{
+    CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY, SECRET_FAMILY_CONFIG,
+};
 use crate::base::error::secret::SecretError;
 use crate::base::naming::to_configmap_file;
-use crate::kube::api::{LabelFilter, get_configmaps, get_secret};
+use crate::kube::api::{LabelFilter, get_configmaps, get_secret, upsert_secret};
 use crate::kube::context::KubeContext;
-use crate::runtime::secrets::discovery::extract_secret_leaves;
+use crate::runtime::secrets::discovery::{Generator, SecretLeaf, extract_secret_leaves};
 use crate::runtime::secrets::source::to_secret_name;
 
 pub struct Reconciliation<'a> {
@@ -58,6 +60,79 @@ pub fn reconcile_secret_keys(input: &Reconciliation<'_>) -> Result<(), SecretErr
             }
         }
     }
+}
+
+pub async fn auto_fill_generated_secrets(context: &KubeContext) -> Result<(), SecretError> {
+    let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY.item);
+    let configmaps = get_configmaps(context, Some(filter)).await?;
+    for (configmap_name, entries) in configmaps {
+        let config_file = to_configmap_file(&KPROFILE_CONFIGS_FAMILY, &configmap_name)?.to_owned();
+        let Some((_, bytes)) = entries.into_iter().next() else {
+            continue;
+        };
+        let Ok(config_yaml) = String::from_utf8(bytes) else {
+            continue;
+        };
+        let yaml: serde_yaml::Value =
+            serde_yaml::from_str(&config_yaml).map_err(|error| {
+                SecretError::ConfigYamlParseFailed {
+                    config: config_file.clone(),
+                    cause: error.to_string(),
+                }
+            })?;
+        let leaves = extract_secret_leaves(&config_file, &yaml)?;
+        let secret_name = to_secret_name(&config_file);
+        fill_generated_keys(context, &secret_name, &leaves).await?;
+    }
+    Ok(())
+}
+
+async fn fill_generated_keys(
+    context: &KubeContext,
+    secret_name: &str,
+    leaves: &[SecretLeaf],
+) -> Result<(), SecretError> {
+    let generated: Vec<(&str, Generator)> = leaves
+        .iter()
+        .filter_map(|leaf| leaf.generator.map(|generator| (leaf.key.as_str(), generator)))
+        .collect();
+    if generated.is_empty() {
+        return Ok(());
+    }
+    let live = get_secret(context, secret_name).await?;
+    let needs_fill: Vec<(&str, Generator)> = generated
+        .into_iter()
+        .filter(|(key, _)| match live.as_ref().and_then(|data| data.get(*key)) {
+            None => true,
+            Some(value) => value.is_empty(),
+        })
+        .collect();
+    if needs_fill.is_empty() {
+        return Ok(());
+    }
+    let mut data: BTreeMap<String, String> = match live {
+        Some(existing) => existing
+            .into_iter()
+            .map(|(key, bytes)| {
+                let text = String::from_utf8(bytes).unwrap_or_default();
+                (key, text)
+            })
+            .collect(),
+        None => BTreeMap::new(),
+    };
+    for (key, generator) in needs_fill {
+        data.insert(key.to_owned(), generator.generate());
+    }
+    upsert_secret(
+        context,
+        secret_name,
+        data,
+        BTreeMap::new(),
+        None,
+        Some(SECRET_FAMILY_CONFIG),
+    )
+    .await?;
+    Ok(())
 }
 
 pub async fn reconcile_cluster_configs_and_secrets(

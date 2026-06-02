@@ -4,29 +4,87 @@
 
 use std::collections::HashMap;
 
+use once_cell::sync::Lazy;
+use regex::Regex;
 use serde_yaml::Value;
 
+use crate::base::constants::{SECRET_GENERATOR_PASSWORD, SECRET_GENERATOR_UUID};
 use crate::base::error::secret::SecretError;
 
-pub const SECRET_PLACEHOLDER: &str = "${secret}";
 pub const SECRET_KEY_SEPARATOR: &str = "__";
+
+static PLACEHOLDER_PATTERN: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"^\$\{secret(?::([A-Za-z][A-Za-z0-9_]*))?\}$")
+        .expect("invalid secret placeholder pattern")
+});
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Generator {
+    Uuid,
+    Password,
+}
+
+impl Generator {
+    pub fn from_name(name: &str) -> Option<Generator> {
+        match name {
+            SECRET_GENERATOR_UUID => Some(Generator::Uuid),
+            SECRET_GENERATOR_PASSWORD => Some(Generator::Password),
+            _ => None,
+        }
+    }
+
+    pub fn supported() -> &'static [&'static str] {
+        &[SECRET_GENERATOR_UUID, SECRET_GENERATOR_PASSWORD]
+    }
+
+    pub fn generate(self) -> String {
+        match self {
+            Generator::Uuid => td_common::id::id().to_string(),
+            Generator::Password => td_common::random::password(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Placeholder {
+    Bare,
+    Generated(Generator),
+}
+
+fn parse_placeholder(config: &str, text: &str) -> Result<Option<Placeholder>, SecretError> {
+    let Some(captures) = PLACEHOLDER_PATTERN.captures(text) else {
+        return Ok(None);
+    };
+    let Some(name) = captures.get(1) else {
+        return Ok(Some(Placeholder::Bare));
+    };
+    match Generator::from_name(name.as_str()) {
+        Some(generator) => Ok(Some(Placeholder::Generated(generator))),
+        None => Err(SecretError::UnknownGeneratorName {
+            config: config.to_owned(),
+            name: name.as_str().to_owned(),
+            supported: Generator::supported().join(", "),
+        }),
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SecretLeaf {
     pub path: Vec<String>,
     pub key: String,
+    pub generator: Option<Generator>,
 }
 
 pub fn extract_secret_leaves(
     config: &str,
     yaml: &Value,
 ) -> Result<Vec<SecretLeaf>, SecretError> {
-    let mut paths: Vec<Vec<String>> = Vec::new();
-    walk(config, yaml, &mut Vec::new(), &mut paths)?;
+    let mut hits: Vec<(Vec<String>, Option<Generator>)> = Vec::new();
+    walk(config, yaml, &mut Vec::new(), &mut hits)?;
 
-    let mut leaves: Vec<SecretLeaf> = Vec::with_capacity(paths.len());
-    let mut seen: HashMap<String, String> = HashMap::with_capacity(paths.len());
-    for path in paths {
+    let mut leaves: Vec<SecretLeaf> = Vec::with_capacity(hits.len());
+    let mut seen: HashMap<String, String> = HashMap::with_capacity(hits.len());
+    for (path, generator) in hits {
         let key = encode_secret_key(config, &path)?;
         let displayed = path.join(".");
         if let Some(first) = seen.get(&key) {
@@ -38,7 +96,11 @@ pub fn extract_secret_leaves(
             });
         }
         seen.insert(key.clone(), displayed);
-        leaves.push(SecretLeaf { path, key });
+        leaves.push(SecretLeaf {
+            path,
+            key,
+            generator,
+        });
     }
     Ok(leaves)
 }
@@ -47,11 +109,17 @@ fn walk(
     config: &str,
     node: &Value,
     path: &mut Vec<String>,
-    leaves: &mut Vec<Vec<String>>,
+    leaves: &mut Vec<(Vec<String>, Option<Generator>)>,
 ) -> Result<(), SecretError> {
     match node {
-        Value::String(text) if text == SECRET_PLACEHOLDER => {
-            leaves.push(path.clone());
+        Value::String(text) => {
+            if let Some(placeholder) = parse_placeholder(config, text)? {
+                let generator = match placeholder {
+                    Placeholder::Bare => None,
+                    Placeholder::Generated(generator) => Some(generator),
+                };
+                leaves.push((path.clone(), generator));
+            }
             Ok(())
         }
         Value::Mapping(map) => {
@@ -72,9 +140,9 @@ fn walk_promoted_sequence(
     config: &str,
     items: &[Value],
     path: &mut Vec<String>,
-    leaves: &mut Vec<Vec<String>>,
+    leaves: &mut Vec<(Vec<String>, Option<Generator>)>,
 ) -> Result<(), SecretError> {
-    if !sequence_contains_secret_placeholder(items) {
+    if !sequence_contains_secret_placeholder(config, items)? {
         return Ok(());
     }
 
@@ -118,7 +186,9 @@ fn walk_promoted_sequence(
                 }
             }
             let value_text = match value_node {
-                Value::String(text) if text == SECRET_PLACEHOLDER => {
+                Value::String(text)
+                    if matches!(parse_placeholder(config, text)?, Some(_)) =>
+                {
                     return Err(SecretError::PromotedKeyIsSecret {
                         config: config.to_owned(),
                         path: displayed_path.clone(),
@@ -157,16 +227,34 @@ fn walk_promoted_sequence(
     Ok(())
 }
 
-fn sequence_contains_secret_placeholder(items: &[Value]) -> bool {
-    items.iter().any(node_contains_secret_placeholder)
+fn sequence_contains_secret_placeholder(
+    config: &str,
+    items: &[Value],
+) -> Result<bool, SecretError> {
+    for item in items {
+        if node_contains_secret_placeholder(config, item)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
-fn node_contains_secret_placeholder(node: &Value) -> bool {
+fn node_contains_secret_placeholder(
+    config: &str,
+    node: &Value,
+) -> Result<bool, SecretError> {
     match node {
-        Value::String(text) => text == SECRET_PLACEHOLDER,
-        Value::Mapping(map) => map.values().any(node_contains_secret_placeholder),
-        Value::Sequence(items) => items.iter().any(node_contains_secret_placeholder),
-        _ => false,
+        Value::String(text) => Ok(parse_placeholder(config, text)?.is_some()),
+        Value::Mapping(map) => {
+            for value in map.values() {
+                if node_contains_secret_placeholder(config, value)? {
+                    return Ok(true);
+                }
+            }
+            Ok(false)
+        }
+        Value::Sequence(items) => sequence_contains_secret_placeholder(config, items),
+        _ => Ok(false),
     }
 }
 

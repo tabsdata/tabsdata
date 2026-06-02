@@ -13,7 +13,7 @@ password:
   time_cost: 2
   parallelism_cost: 1
 jwt:
-  # secret: null # by default a UUID is generated
+  secret: ${secret:uuid}
   access_token_expiration: 3600
 request_timeout: 60
 orchestrator: kubernetes
@@ -30,6 +30,7 @@ database:
   # url: postgres://user:pass@host:5432/tabsdata
   data_dir: ${sys:TDK_DATABASE_PATH}
   persistent: true
+  password: ${secret:password}
   min_connections: 1
   max_connections: 10
   acquire_timeout: 30

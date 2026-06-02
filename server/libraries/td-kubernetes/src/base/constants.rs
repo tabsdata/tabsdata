@@ -49,6 +49,9 @@ pub const CONFIGMAP_FAMILY_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "co
 pub const SECRET_FAMILY_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "secret-family");
 pub const SECRET_FAMILY_CONFIG: &str = "config";
 
+pub const SECRET_GENERATOR_UUID: &str = "uuid";
+pub const SECRET_GENERATOR_PASSWORD: &str = "password";
+
 pub const PART_OF_LABEL: &str = concatcp!(KUBERNETES_LABEL_NAMESPACE, "part-of");
 pub const PART_OF_TABSDATA: &str = "tabsdata";
 

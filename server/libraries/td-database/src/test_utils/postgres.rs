@@ -44,6 +44,7 @@ pub async fn pool() -> TdPool {
             data_dir: None,
             port: None,
             persistent: false,
+            password: None,
         })),
         pool: Default::default(),
     };

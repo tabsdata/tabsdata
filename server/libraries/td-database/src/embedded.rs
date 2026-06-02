@@ -115,7 +115,9 @@ pub async fn start(cfg: &EmbeddedConfig) -> Result<(EmbeddedPostgres, Url), DbEr
         settings.port = port;
     }
 
-    if cfg.persistent {
+    if let Some(password) = cfg.password.clone() {
+        settings.password = password;
+    } else if cfg.persistent {
         settings.password = load_or_create_password(&settings.data_dir)?;
     }
 
@@ -187,12 +189,7 @@ fn load_or_create_password(data_dir: &Path) -> Result<String, DbError> {
     }
     std::fs::create_dir_all(parent)
         .map_err(|e| DbError::EmbeddedPostgres(format!("create password dir: {e}")))?;
-    use rand::RngExt;
-    let password: String = (&mut rand::rng())
-        .sample_iter(rand::distr::Alphanumeric)
-        .take(32)
-        .map(char::from)
-        .collect();
+    let password = td_common::random::password();
     std::fs::write(&path, &password)
         .map_err(|e| DbError::EmbeddedPostgres(format!("write password file: {e}")))?;
     Ok(password)
