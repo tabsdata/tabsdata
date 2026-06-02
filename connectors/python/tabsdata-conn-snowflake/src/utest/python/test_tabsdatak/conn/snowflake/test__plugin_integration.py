@@ -206,9 +206,9 @@ def test_dest_plugin_write_out_appends_rows(conn, run_table, work_dir):
         work_dir / "in.parquet",
         [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}],
     )
-    dest = SnowflakeDest(conn=conn, tables=[fq], if_table_exists="replace")
+    dest = SnowflakeDest(tables=[fq], if_table_exists="replace")
     try:
-        plugin.SnowflakeDestPlugin().write_out(_DestCtx(work_dir), dest, [src])
+        plugin.SnowflakeDestPlugin().write_out(_DestCtx(work_dir), conn, dest, [src])
         rows = _select_rows(conn, fq)
         assert [(r[0], r[1]) for r in rows] == [(1, "alice"), (2, "bob")]
     finally:
@@ -228,12 +228,14 @@ def test_dest_plugin_write_out_replace_clears_existing(conn, run_table, work_dir
     try:
         plugin.SnowflakeDestPlugin().write_out(
             _DestCtx(work_dir),
-            SnowflakeDest(conn=conn, tables=[fq], if_table_exists="replace"),
+            conn,
+            SnowflakeDest(tables=[fq], if_table_exists="replace"),
             [src1],
         )
         plugin.SnowflakeDestPlugin().write_out(
             _DestCtx(work_dir),
-            SnowflakeDest(conn=conn, tables=[fq], if_table_exists="replace"),
+            conn,
+            SnowflakeDest(tables=[fq], if_table_exists="replace"),
             [src2],
         )
         rows = _select_rows(conn, fq)
