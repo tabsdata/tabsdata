@@ -171,9 +171,11 @@ def test_databricks_conn_fields_wire_expected_specs(cls):
 
 
 def test_databricks_src_fields_wire_expected_specs():
+    from tabsdatak.api import ContextValueSpec
+
     assert _hint(DatabricksSrc, "conn") == SrcConnSpec
     assert _hint(DatabricksSrc, "queries") == QueriesSpec
-    assert _hint(DatabricksSrc, "initial_values") == dict | None
+    assert _hint(DatabricksSrc, "initial_values") == dict[str, ContextValueSpec] | None
     assert _hint(DatabricksSrc, "src_cfg") == SrcCfgSpec | None
 
 

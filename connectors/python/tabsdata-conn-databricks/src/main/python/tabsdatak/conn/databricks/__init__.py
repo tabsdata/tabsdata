@@ -22,6 +22,7 @@ import tabsdatak._api as _api
 # noinspection PyProtectedMember
 from tabsdatak.api import (
     Conn,
+    ContextValueSpec,
     Dest,
     NamedConn,
     Secret,
@@ -176,39 +177,30 @@ DestConnSpec: TypeAlias = Union[NamedConn, DatabricksDestConn]
 # --- Source ----------------------------------------------------------
 
 
-# Canonical TrxCtx scratch-store key for Databricks' per-flow
-# initial_values bind dict. The user function reads it with
-# ``ctx.get_attr(DATABRICKS_INITIAL_VALUES_KEY)`` to resume from the
-# previous run's values, and writes it back via
-# ``ctx.store_attr(DATABRICKS_INITIAL_VALUES_KEY, {...})`` to persist
-# the new dict for the next run. Co-located with the connector so
-# each shipped plugin owns its own key namespace; the runtime never
-# imports it.
-DATABRICKS_INITIAL_VALUES_KEY = "databricks.initial-values"
-
-
 @_api.dataclass(DatabricksErrorCode.DATABRICKS_3, kw_only=True)
 class DatabricksSrc(Src):
     """Databricks source — one parquet slot per SQL statement.
 
     :param conn: :class:`DatabricksSrcConn` (or :class:`NamedConn`).
     :param queries: List of SQL statements.
-    :param initial_values: Optional ``{key: value}`` bind dict;
-        each occurrence of ``{key}`` in a query is substituted by
-        the corresponding value at execute time (Python
+    :param initial_values: Optional ``{bind_name: value}`` dict.
+        Each occurrence of ``{bind_name}`` in a query is substituted
+        by the corresponding value at execute time (Python
         ``str.format``-style; values are inlined verbatim, not
         parameterised -- use only for literal-safe substitutions
-        like dates and ids). Acts as the **first-run seed**: the
-        plugin reads ``ctx.get_attr(DATABRICKS_INITIAL_VALUES_KEY)``
-        first, and falls back to this field when the ctx scratch
-        store has no entry (i.e. there is no previous-run state).
+        like dates and ids). Acts as the **first-run seed** for
+        each bind name: at runtime, the plugin looks up
+        ``ctx.get_attr(bind_name)`` per bind, and falls back to
+        this field when the ctx scratch store has no entry for that
+        name. User functions persist new values for the next run
+        with ``ctx.store_attr(bind_name, new_value)``.
     :param src_cfg: Optional ``Mapping`` over
         ``databricks.logging_level``.
     """
 
     conn: SrcConnSpec
     queries: QueriesSpec
-    initial_values: dict | None = None
+    initial_values: dict[str, ContextValueSpec] | None = None
     src_cfg: SrcCfgSpec | None = None
 
 

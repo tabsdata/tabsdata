@@ -406,104 +406,107 @@ def test_databricks_dest_cardinality_uses_tables_length():
 
 
 # ---------------------------------------------------------------------------
-# _resolve_initial_values -- ctx-first with Src field fallback
+# _resolve_initial_values -- per-bind-name ctx lookup with Src field fallback
 # ---------------------------------------------------------------------------
 
 
-from tabsdatak.conn.databricks import DATABRICKS_INITIAL_VALUES_KEY
-
-
-def test_resolve_initial_values_returns_none_when_both_empty(work_dir):
-    """No ctx value, no Src seed → ``None``. Connector skips
-    substitution entirely."""
+def test_resolve_initial_values_returns_none_when_src_has_no_seed(work_dir):
+    """No Src seed → ``None``. Connector skips substitution entirely
+    (no placeholders, no work to do)."""
     ctx = _Ctx(work_dir)
     src = _src()  # initial_values defaults to None
     assert plugin._resolve_initial_values(ctx, src) is None
 
 
-def test_resolve_initial_values_returns_src_when_ctx_empty(work_dir):
-    """First run for a flow: ctx scratch has no entry, fall back to
-    the user-supplied Src seed."""
+def test_resolve_initial_values_returns_seed_when_ctx_empty(work_dir):
+    """First run for a flow: ctx scratch has no entry for any bind
+    name, fall back to the user-supplied Src seed for each."""
     ctx = _Ctx(work_dir)
     src = DatabricksSrc(
         conn=_src_conn(),
         queries=["SELECT 1"],
-        initial_values={"last-modified": "2026-01-01T00:00:00Z"},
+        initial_values={"last_modified": "2026-01-01T00:00:00Z", "min_id": 0},
     )
     out = plugin._resolve_initial_values(ctx, src)
-    assert out == {"last-modified": "2026-01-01T00:00:00Z"}
+    assert out == {"last_modified": "2026-01-01T00:00:00Z", "min_id": 0}
 
 
-def test_resolve_initial_values_returns_ctx_when_present(work_dir):
-    """Subsequent run: ctx scratch has a value (from previous run's
-    drain). The Src seed is ignored even if non-empty."""
+def test_resolve_initial_values_prefers_ctx_per_bind_name(work_dir):
+    """Subsequent run: each bind name independently picks up its
+    most recent value via ``ctx.get_attr(name)``. Seed is only
+    used for the names ctx doesn't have."""
     ctx = _Ctx(
         work_dir,
         scratch={
-            DATABRICKS_INITIAL_VALUES_KEY: {"last-modified": "2026-05-28T00:00:00Z"}
+            "last_modified": "2026-05-28T00:00:00Z",
+            "min_id": 1234,
         },
     )
     src = DatabricksSrc(
         conn=_src_conn(),
         queries=["SELECT 1"],
-        initial_values={"last-modified": "from-seed-should-be-ignored"},
+        initial_values={"last_modified": "from-seed", "min_id": 0},
     )
     out = plugin._resolve_initial_values(ctx, src)
-    assert out == {"last-modified": "2026-05-28T00:00:00Z"}
+    assert out == {
+        "last_modified": "2026-05-28T00:00:00Z",
+        "min_id": 1234,
+    }
 
 
-def test_resolve_initial_values_returns_empty_dict_when_ctx_has_empty_dict(
-    work_dir,
-):
-    """``is not None`` (not truthiness) -- a legitimately empty dict
-    stored last run isn't silently shadowed by the Src seed."""
-    ctx = _Ctx(work_dir, scratch={DATABRICKS_INITIAL_VALUES_KEY: {}})
+def test_resolve_initial_values_partial_ctx_falls_back_per_name(work_dir):
+    """If ctx has one bind name set but not another, the missing
+    name falls back to the seed -- per-name granularity."""
+    ctx = _Ctx(work_dir, scratch={"last_modified": "2026-05-28T00:00:00Z"})
     src = DatabricksSrc(
         conn=_src_conn(),
         queries=["SELECT 1"],
-        initial_values={"k": "v"},
+        initial_values={"last_modified": "seed-ts", "min_id": 42},
     )
     out = plugin._resolve_initial_values(ctx, src)
-    assert out == {}
+    assert out == {"last_modified": "2026-05-28T00:00:00Z", "min_id": 42}
 
 
-def test_resolve_initial_values_returns_copy_not_alias(work_dir):
-    """The returned dict must be a copy so the caller mutating it
-    can't bleed into the ctx scratch / Src field."""
-    src_seed = {"k": "v"}
+def test_resolve_initial_values_preserves_falsy_ctx_values(work_dir):
+    """Uses ``is not None`` (not truthiness): a legitimately falsy
+    value persisted last run (``0``, ``False``, ``""``) isn't
+    silently shadowed by the seed."""
+    ctx = _Ctx(work_dir, scratch={"min_id": 0, "flag": False, "label": ""})
     src = DatabricksSrc(
         conn=_src_conn(),
         queries=["SELECT 1"],
-        initial_values=src_seed,
+        initial_values={"min_id": 999, "flag": True, "label": "default"},
     )
-    ctx = _Ctx(work_dir)
     out = plugin._resolve_initial_values(ctx, src)
-    assert out is not src_seed
-    out["k"] = "tampered"
-    assert src.initial_values == {"k": "v"}
+    assert out == {"min_id": 0, "flag": False, "label": ""}
 
 
-def test_resolve_initial_values_ctx_non_dict_value_raises(work_dir):
-    """If a (misbehaving) user code path stores a non-dict at the
-    connector's key, we must surface the contract violation
-    explicitly. Silent fall-through would either run the queries
-    without substitution (wrong data) or hit a literal ``{key}``
-    placeholder in SQL (confusing syntax error from Databricks)."""
-    ctx = _Ctx(work_dir, scratch={DATABRICKS_INITIAL_VALUES_KEY: "not-a-dict"})
+def test_resolve_initial_values_heterogeneous_primitive_values(work_dir):
+    """The realistic SQL use case: bind values of mixed primitive
+    types (str + int). The new flat-key model round-trips them
+    cleanly."""
+    ctx = _Ctx(
+        work_dir,
+        scratch={
+            "last_modified": "2026-01-15T00:00:00Z",
+            "min_id": 1234,
+        },
+    )
     src = DatabricksSrc(
         conn=_src_conn(),
         queries=["SELECT 1"],
-        initial_values={"k": "from-seed"},
+        initial_values={"last_modified": "seed", "min_id": 0},
     )
-    with pytest.raises(DatabricksValidateException) as ei:
-        plugin._resolve_initial_values(ctx, src)
-    assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_11
-    assert "str" in str(ei.value)
+    out = plugin._resolve_initial_values(ctx, src)
+    assert isinstance(out["last_modified"], str)
+    assert isinstance(out["min_id"], int)
+    assert out == {"last_modified": "2026-01-15T00:00:00Z", "min_id": 1234}
 
 
 def test_read_in_uses_resolved_initial_values(work_dir, monkeypatch):
-    """``read_in`` must pass the *resolved* dict (ctx-first, Src
-    fallback) into ``DatabricksReadCfg``, not the raw Src field."""
+    """``read_in`` must pass the *resolved* dict (ctx-first per
+    bind name, Src fallback) into ``DatabricksReadCfg``, not the
+    raw Src field."""
     captured: dict = {}
 
     def fake_read_all_queries(read_cfg, work_dir_arg):
@@ -512,26 +515,11 @@ def test_read_in_uses_resolved_initial_values(work_dir, monkeypatch):
 
     monkeypatch.setattr(impl, "read_all_queries", fake_read_all_queries)
 
-    ctx = _Ctx(
-        work_dir,
-        scratch={DATABRICKS_INITIAL_VALUES_KEY: {"last-modified": "from-ctx"}},
-    )
+    ctx = _Ctx(work_dir, scratch={"last_modified": "from-ctx"})
     src = DatabricksSrc(
         conn=_src_conn(),
-        queries=["SELECT * FROM t WHERE ts > {last-modified}"],
-        initial_values={"last-modified": "from-seed-ignored"},
+        queries=["SELECT * FROM t WHERE ts > {last_modified}"],
+        initial_values={"last_modified": "from-seed-ignored"},
     )
     plugin._DatabricksSrcPlugin().read_in(ctx, src)
-    assert captured["initial_values"] == {"last-modified": "from-ctx"}
-
-
-def test_initial_values_key_constant_matches_context_key_pattern():
-    """The exported key constant must satisfy ContextKeySpec's regex
-    (dotted DNS-label-style identifier). A typo here would break
-    user code that imports it for round-tripping."""
-    import re
-
-    # noinspection PyProtectedMember
-    from tabsdatak._api import CONTEXT_KEY_RE_STR
-
-    assert re.match(CONTEXT_KEY_RE_STR, DATABRICKS_INITIAL_VALUES_KEY)
+    assert captured["initial_values"] == {"last_modified": "from-ctx"}

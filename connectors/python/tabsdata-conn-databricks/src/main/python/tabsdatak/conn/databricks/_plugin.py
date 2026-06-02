@@ -7,7 +7,6 @@ from typing import Any, cast
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.databricks import (
-    DATABRICKS_INITIAL_VALUES_KEY,
     DatabricksDest,
     DatabricksDestConn,
     DatabricksSrc,
@@ -57,39 +56,28 @@ _DEST_CFGS_DEFAULTS: dict[DestCfgKey, Any] = {
 
 
 def _resolve_initial_values(ctx: SrcPluginCtx, src: DatabricksSrc) -> dict | None:
-    """Look up the active ``initial_values`` dict for this run.
+    """Look up the active bind dict for this run.
 
-    Reads the TrxCtx scratch store at
-    :data:`DATABRICKS_INITIAL_VALUES_KEY` first -- that's where the
-    previous run's values land after the runtime drains the ctx. If
-    the scratch store has no entry (first run, or a brand-new flow),
-    falls back to the user-supplied seed on ``src.initial_values``.
+    Walks ``src.initial_values`` (the user's first-run seed) bind
+    name by bind name. For each, prefers ``ctx.get_attr(name)`` --
+    that's where the previous run's persisted value lands -- and
+    falls back to the seed when the ctx scratch has no entry for
+    that name.
 
-    Returns ``None`` when neither source has a value, signalling that
-    the queries don't need bind-dict substitution.
+    Returns ``None`` when ``src.initial_values`` is None (no
+    placeholders in any query), signalling no substitution is needed.
 
-    Uses ``is not None`` rather than truthiness so legitimately empty
-    dicts / falsy primitives stored last run aren't silently shadowed
-    by the seed.
-
-    Raises:
-        DatabricksValidateException(DATABRICKS_11): if the scratch
-            store *does* hold an entry under the connector's key, but
-            its shape isn't a dict. Silent fall-through would mask the
-            user's mistake -- queries would either run without
-            substitution (wrong data) or hit a literal ``{key}`` in
-            SQL (confusing syntax error). Surface it explicitly.
+    Uses ``is not None`` rather than truthiness so a legitimately
+    falsy value stored last run (``0``, ``False``, ``""``) isn't
+    silently shadowed by the seed.
     """
-    from_ctx = ctx.get_attr(DATABRICKS_INITIAL_VALUES_KEY)
-    if from_ctx is not None:
-        if not isinstance(from_ctx, dict):
-            raise DatabricksErrorCode.DATABRICKS_11.exception(
-                actual_type=type(from_ctx).__name__,
-            )
-        return dict(from_ctx)
-    if src.initial_values is not None:
-        return dict(src.initial_values)
-    return None
+    if src.initial_values is None:
+        return None
+    out: dict[str, Any] = {}
+    for name, seed in src.initial_values.items():
+        from_ctx = ctx.get_attr(name)
+        out[name] = from_ctx if from_ctx is not None else seed
+    return out
 
 
 @dataclass(frozen=True)
