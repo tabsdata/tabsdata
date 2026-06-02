@@ -74,13 +74,13 @@ from __future__ import annotations
 from tabsdatak.api import TableFrameSpec, TableFramesSpec, publisher
 from tabsdatak.conn.localfile import LocalFileSrcConn, LocalFileSrc
 
+_CONN = LocalFileSrcConn(base_path={base_path!r})
 _SRC = LocalFileSrc(
-    conn=LocalFileSrcConn(base_path={base_path!r}),
     paths=["*.parquet"],
 )
 
 
-@publisher(source=_SRC, output_tables=["my_table"])
+@publisher(conn=_CONN, source=_SRC, output_tables=["my_table"])
 def my_publisher(in_1: TableFramesSpec) -> tuple[TableFrameSpec]:
     return (None,)
 """
@@ -379,20 +379,20 @@ def test_resolve_plugin_unknown_source_raises_no_plugin(fixture_publisher, monke
 
 def test_invoke_read_in_returns_plugin_result():
     class _FakePlugin:
-        def read_in(self, ctx, src):
+        def read_in(self, ctx, conn, src):
             return [[Path("/x.parquet")]]
 
-    out = _invoke_read_in(_FakePlugin(), object(), object())
+    out = _invoke_read_in(_FakePlugin(), object(), object(), object())
     assert out == [[Path("/x.parquet")]]
 
 
 def test_invoke_read_in_wraps_exceptions_as_plugin_failed():
     class _BrokenPlugin:
-        def read_in(self, ctx, src):
+        def read_in(self, ctx, conn, src):
             raise RuntimeError("boom")
 
     with pytest.raises(CommandSpecificError) as exc_info:
-        _invoke_read_in(_BrokenPlugin(), object(), object())
+        _invoke_read_in(_BrokenPlugin(), object(), object(), object())
     assert exc_info.value.exit_code == EXIT_PLUGIN_FAILED
 
 

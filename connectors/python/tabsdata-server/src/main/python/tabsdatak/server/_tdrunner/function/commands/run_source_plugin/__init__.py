@@ -138,9 +138,9 @@ def _resolve_plugin(info: PublisherInfo):
     return src_def.plugin()
 
 
-def _invoke_read_in(plugin, ctx: SrcPluginCtx, src) -> list[list[Path]]:
+def _invoke_read_in(plugin, ctx: SrcPluginCtx, conn, src) -> list[list[Path]]:
     try:
-        return plugin.read_in(ctx, src)
+        return plugin.read_in(ctx, conn, src)
     except Exception as exc:
         raise CommandSpecificError(
             EXIT_PLUGIN_FAILED, f"plugin read_in failed: {exc}"
@@ -254,7 +254,7 @@ def main(args: argparse.Namespace) -> int:
         function_id=str(request.info.function_run_id),
     )
     hydrate_ctx_from_state(ctx, request, state_dir, exit_code=EXIT_BAD_INITIAL_VALUES)
-    produced = _invoke_read_in(plugin, ctx, info.source)
+    produced = _invoke_read_in(plugin, ctx, info.conn, info.source)
     drain_ctx_to_state(ctx, request, state_dir, exit_code=EXIT_BAD_INITIAL_VALUES)
     _write_inputs_manifest(info, produced, inputs_manifest)
     return 0

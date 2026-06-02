@@ -142,9 +142,9 @@ def _tables_from_manifest(entries: list[dict]) -> list[Path]:
     return tables
 
 
-def _invoke_write_out(plugin, ctx: DestContext, dest, tables) -> None:
+def _invoke_write_out(plugin, ctx: DestContext, conn, dest, tables) -> None:
     try:
-        plugin.write_out(ctx, dest, tables)
+        plugin.write_out(ctx, conn, dest, tables)
     except Exception as exc:
         raise CommandSpecificError(
             EXIT_PLUGIN_FAILED, f"plugin write_out failed: {exc}"
@@ -172,7 +172,7 @@ def main(args: argparse.Namespace) -> int:
         collection_name=request.info.collection,
         function_id=str(request.info.function_run_id),
     )
-    _invoke_write_out(plugin, ctx, info.destination, tables)
+    _invoke_write_out(plugin, ctx, info.conn, info.destination, tables)
     return 0
 
 

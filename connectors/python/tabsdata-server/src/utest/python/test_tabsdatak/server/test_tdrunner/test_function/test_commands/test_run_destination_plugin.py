@@ -66,13 +66,13 @@ from __future__ import annotations
 from tabsdatak.api import TableFrameSpec, subscriber
 from tabsdatak.conn.localfile import LocalFileDestConn, LocalFileDest
 
+_CONN = LocalFileDestConn(base_path={base_path!r})
 _DEST = LocalFileDest(
-    conn=LocalFileDestConn(base_path={base_path!r}),
     paths=["sink.parquet"],
 )
 
 
-@subscriber(destination=_DEST, input_tables=["c1/t_in"])
+@subscriber(conn=_CONN, destination=_DEST, input_tables=["c1/t_in"])
 def my_subscriber(in_1: TableFrameSpec) -> tuple[TableFrameSpec]:
     return (in_1,)
 """
@@ -317,8 +317,8 @@ def test_invoke_write_out_returns_normally(tmp_path):
     calls = []
 
     class _Plugin:
-        def write_out(self, ctx, dest, tables):
-            calls.append((ctx, dest, tables))
+        def write_out(self, ctx, conn, dest, tables):
+            calls.append((ctx, conn, dest, tables))
 
     ctx = _DestContext(
         work_dir=tmp_path,
@@ -328,13 +328,13 @@ def test_invoke_write_out_returns_normally(tmp_path):
         collection_name="c_name",
         function_id="fn",
     )
-    _invoke_write_out(_Plugin(), ctx, object(), [Path("/x.parquet")])
+    _invoke_write_out(_Plugin(), ctx, object(), object(), [Path("/x.parquet")])
     assert len(calls) == 1
 
 
 def test_invoke_write_out_wraps_plugin_exception(tmp_path):
     class _Plugin:
-        def write_out(self, ctx, dest, tables):
+        def write_out(self, ctx, conn, dest, tables):
             raise RuntimeError("boom")
 
     ctx = _DestContext(
@@ -346,7 +346,7 @@ def test_invoke_write_out_wraps_plugin_exception(tmp_path):
         function_id="fn",
     )
     with pytest.raises(CommandSpecificError) as ei:
-        _invoke_write_out(_Plugin(), ctx, object(), [])
+        _invoke_write_out(_Plugin(), ctx, object(), object(), [])
     assert ei.value.exit_code == EXIT_PLUGIN_FAILED
 
 
