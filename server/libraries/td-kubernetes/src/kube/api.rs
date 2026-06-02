@@ -37,8 +37,8 @@ use crate::base::constants::{PART_OF_LABEL, PART_OF_TABSDATA};
 pub use client::{build_incluster_kube_client, build_kube_client, install_crypto_provider};
 pub use cluster::ensure_cluster_reachable;
 pub use configmap::{
-    create_configmap, delete_configmap, exists_configmap, get_configmap, list_configmaps,
-    require_configmap,
+    create_configmap, delete_configmap, exists_configmap, get_configmap, get_configmaps,
+    list_configmaps, put_configmap, require_configmap,
 };
 pub use namespace::ensure_namespace_exists;
 pub use secret::{delete_secret, exists_secret, list_secrets, upsert_secret};

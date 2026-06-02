@@ -140,3 +140,79 @@ pub async fn list_configmaps(
     listed.sort_by(|left, right| left.0.cmp(&right.0));
     Ok(listed)
 }
+
+pub async fn get_configmaps(
+    context: &KubeContext,
+) -> Result<Vec<(String, Vec<(String, Vec<u8>)>)>, KubernetesError> {
+    let api: Api<ConfigMap> = Api::namespaced(context.client().clone(), context.namespace());
+    let selector = part_of_tabsdata();
+    let list_params = ListParams::default().labels_from(&selector);
+    let configmaps = api.list(&list_params).await.map_err(|error| {
+        KubeConfigMapError::ListFailed {
+            namespace: context.namespace().to_owned(),
+            label_selector: selector.to_string(),
+            cause: error.to_string(),
+        }
+    })?;
+    let mut fetched = Vec::new();
+    for configmap in configmaps {
+        let Some(name) = configmap.metadata.name else {
+            continue;
+        };
+        let mut entries: Vec<(String, Vec<u8>)> = configmap
+            .data
+            .into_iter()
+            .flatten()
+            .map(|(key, value)| (key, value.into_bytes()))
+            .chain(
+                configmap
+                    .binary_data
+                    .into_iter()
+                    .flatten()
+                    .map(|(key, value)| (key, value.0)),
+            )
+            .collect();
+        entries.sort_by(|left, right| left.0.cmp(&right.0));
+        fetched.push((name, entries));
+    }
+    fetched.sort_by(|left, right| left.0.cmp(&right.0));
+    Ok(fetched)
+}
+
+pub async fn put_configmap(
+    context: &KubeContext,
+    name: &str,
+    updates: BTreeMap<String, String>,
+) -> Result<(), KubernetesError> {
+    let api: Api<ConfigMap> = Api::namespaced(context.client().clone(), context.namespace());
+    let mut configmap = match api.get_opt(name).await {
+        Ok(Some(configmap)) => configmap,
+        Ok(None) => {
+            return Err(KubeConfigMapError::NotFound {
+                namespace: context.namespace().to_owned(),
+                name: name.to_owned(),
+            }
+            .into());
+        }
+        Err(error) => {
+            return Err(KubeConfigMapError::QueryFailed {
+                namespace: context.namespace().to_owned(),
+                name: name.to_owned(),
+                cause: error.to_string(),
+            }
+            .into());
+        }
+    };
+    configmap.data.get_or_insert_with(BTreeMap::new).extend(updates);
+    api.replace(name, &PostParams::default(), &configmap)
+        .await
+        .map(|_| ())
+        .map_err(|error| {
+            KubeConfigMapError::ReplaceFailed {
+                namespace: context.namespace().to_owned(),
+                name: name.to_owned(),
+                cause: error.to_string(),
+            }
+            .into()
+        })
+}

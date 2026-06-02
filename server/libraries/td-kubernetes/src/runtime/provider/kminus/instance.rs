@@ -17,6 +17,7 @@ use crate::cerror;
 use std::sync::Arc;
 
 use crate::core::system::exit::{Result, abort};
+use crate::core::system::file::is_hidden_or_system;
 use crate::kube::api::{create_configmap, delete_configmap, exists_configmap};
 use crate::kube::context::KubeContext;
 use crate::kube::kubeconfig::build_kubeconfig;
@@ -113,7 +114,7 @@ fn read_staged_folder(staged_folder: &Path, folder: &str) -> Result<RenderedConf
         let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
             continue;
         };
-        if name.starts_with('.') || is_hidden(&path) {
+        if is_hidden_or_system(&path) {
             continue;
         }
         let file_type = match entry.file_type() {
@@ -176,18 +177,4 @@ impl Instance for KminusInstance {
     async fn is_alive(&self) -> bool {
         false
     }
-}
-
-#[cfg(windows)]
-fn is_hidden(path: &Path) -> bool {
-    use std::os::windows::fs::MetadataExt;
-    const FILE_ATTRIBUTE_HIDDEN: u32 = 0x2;
-    fs::metadata(path)
-        .map(|metadata| metadata.file_attributes() & FILE_ATTRIBUTE_HIDDEN != 0)
-        .unwrap_or(false)
-}
-
-#[cfg(not(windows))]
-fn is_hidden(_path: &Path) -> bool {
-    false
 }

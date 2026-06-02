@@ -40,6 +40,12 @@ pub enum KubeConfigMapError {
         label_selector: String,
         cause: String,
     } = 5004,
+    #[error("Could not replace ConfigMap '{name}' in namespace '{namespace}': {cause}")]
+    ReplaceFailed {
+        namespace: String,
+        name: String,
+        cause: String,
+    } = 5005,
 }
 
 #[cfg(test)]

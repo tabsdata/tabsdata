@@ -20,6 +20,7 @@ use crate::base::constants::{
 };
 use crate::cerror;
 use crate::core::system::exit::{Result, abort};
+use crate::core::system::file::is_hidden_or_system;
 use crate::core::system::subprocess;
 use crate::core::system::subprocess::apply_detached_flags;
 use crate::runtime::gateway::resolver::ConfigurationResolver;
@@ -186,7 +187,7 @@ fn load_configmap_folder(
         let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
             continue;
         };
-        if file_name.starts_with('.') {
+        if is_hidden_or_system(&path) {
             continue;
         }
         let file_type = match entry.file_type() {
