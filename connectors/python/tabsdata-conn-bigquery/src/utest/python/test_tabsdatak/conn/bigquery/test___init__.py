@@ -4,12 +4,11 @@ import typing
 
 import pytest
 
-from tabsdatak.api import NamedConn, Secret
+from tabsdatak.api import Secret
 from tabsdatak.conn.bigquery import (
     BigQueryDestConn,
     BigQueryDest,
     BigQueryTableNamesSpec,
-    ConnSpec,
     CredentialsSpec,
     DatasetSpec,
     DestCfgSpec,
@@ -37,19 +36,8 @@ def _staging():
     )
 
 
-def _conn():
-    return BigQueryDestConn(
-        staging=_staging(),
-        credentials=GCPJson(json=Secret()),
-        project="my-project",
-        dataset="analytics",
-        conn_cfg={"bigquery.timeout": 30},
-    )
-
-
 def test_bigquery_dest_full_round_trip():
     dest = BigQueryDest(
-        conn=_conn(),
         tables=["`my-project.analytics.users`", "`my-project.analytics.orders`"],
         if_table_exists="replace",
         schema_evolution="strict",
@@ -57,9 +45,6 @@ def test_bigquery_dest_full_round_trip():
     )
     loaded = BigQueryDest.from_json(dest.to_json())
     assert loaded == dest
-    assert loaded.conn.project.value() == "my-project"
-    assert loaded.conn.dataset.value() == "analytics"
-    assert loaded.conn.conn_cfg == {"bigquery.timeout": 30}
     assert loaded.tables == [
         "`my-project.analytics.users`",
         "`my-project.analytics.orders`",
@@ -67,14 +52,6 @@ def test_bigquery_dest_full_round_trip():
     assert loaded.if_table_exists == "replace"
     assert loaded.schema_evolution == "strict"
     assert loaded.dest_cfg == {"bigquery.logging_level": 20}
-
-
-def test_bigquery_dest_round_trip_with_named_conn():
-    dest = BigQueryDest(conn=NamedConn(name="prod_bigquery"))
-    loaded = BigQueryDest.from_json(dest.to_json())
-    assert loaded == dest
-    assert isinstance(loaded.conn, NamedConn)
-    assert loaded.conn.name == "prod_bigquery"
 
 
 def test_bigquery_conn_validate_rejects_dataset_without_project():
@@ -105,7 +82,6 @@ def test_bigquery_conn_fields_wire_expected_specs():
 
 
 def test_bigquery_dest_fields_wire_expected_specs():
-    assert _hint(BigQueryDest, "conn") == ConnSpec
     assert _hint(BigQueryDest, "tables") == BigQueryTableNamesSpec | None
     assert _hint(BigQueryDest, "if_table_exists") == IfTableExistsSpec
     assert _hint(BigQueryDest, "schema_evolution") == SchemaEvolutionSpec
@@ -120,7 +96,6 @@ def test_bigquery_dest_fields_wire_expected_specs():
 def test_bigquery_dest_rejects_unknown_dest_cfg_key():
     with pytest.raises(ConnInitException) as ei:
         BigQueryDest(
-            conn=_conn(),
             tables=["`myproject.mydataset.users`"],
             dest_cfg={"bogus.key": 1},
         )
@@ -129,7 +104,6 @@ def test_bigquery_dest_rejects_unknown_dest_cfg_key():
 
 def test_bigquery_dest_accepts_known_dest_cfg_keys():
     dest = BigQueryDest(
-        conn=_conn(),
         tables=["`myproject.mydataset.users`"],
         dest_cfg={"bigquery.logging_level": 20},
     )

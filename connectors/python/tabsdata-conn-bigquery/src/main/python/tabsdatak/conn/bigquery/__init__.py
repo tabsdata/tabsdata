@@ -21,7 +21,7 @@ from typing import Annotated, Any, Literal, TypeAlias, Union
 import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
-from tabsdatak.api import Conn, Dest, NamedConn, Secret, Var
+from tabsdatak.api import Conn, Dest, Secret, Var
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.bigquery import _validation
@@ -141,9 +141,6 @@ class BigQueryDestConn(Conn):
             raise BigqueryErrorCode.BIGQUERY_2.exception(dataset=self.dataset)
 
 
-ConnSpec: TypeAlias = Union[NamedConn, BigQueryDestConn]
-
-
 # --- Destination -----------------------------------------------------
 
 
@@ -151,7 +148,6 @@ ConnSpec: TypeAlias = Union[NamedConn, BigQueryDestConn]
 class BigQueryDest(Dest):
     """BigQuery destination — one parquet slot per target table.
 
-    :param conn: :class:`BigQueryDestConn` (or :class:`NamedConn`).
     :param tables: Fully-qualified table names
         (``[project.]dataset.table``). One slot per table.
     :param if_table_exists: ``"append"`` (default) or
@@ -162,7 +158,6 @@ class BigQueryDest(Dest):
         ``"bigquery.logging_level"``.
     """
 
-    conn: ConnSpec
     tables: BigQueryTableNamesSpec | None = None
     if_table_exists: IfTableExistsSpec = "append"
     schema_evolution: SchemaEvolutionSpec = "update"

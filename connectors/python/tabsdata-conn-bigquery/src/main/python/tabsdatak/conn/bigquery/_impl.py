@@ -113,7 +113,9 @@ class BigQueryWriteCfg:
     dest_cfg: CfgSpec | None = None
 
     @classmethod
-    def from_dest(cls, dest: BigQueryDest) -> "BigQueryWriteCfg":
+    def from_dest(
+        cls, conn: BigQueryDestConn, dest: BigQueryDest
+    ) -> "BigQueryWriteCfg":
         # Validator-enforced invariant: when ``tables is None`` the
         # plugin can't proceed -- the legacy plugin took table names
         # from the upstream input plugin's table list, which the new
@@ -124,7 +126,7 @@ class BigQueryWriteCfg:
             for t in dest.tables:
                 target_tables.append(unquote_table_fqn(t))
         return cls(
-            conn=dest.conn,  # type: ignore[arg-type]
+            conn=conn,
             target_tables=target_tables,
             if_table_exists=dest.if_table_exists,
             schema_evolution=dest.schema_evolution,

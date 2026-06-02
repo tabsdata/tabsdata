@@ -161,10 +161,9 @@ def test_load_job_config_parquet_source_and_create_if_needed():
 
 def test_write_cfg_unwraps_backticked_tables():
     dest = BigQueryDest(
-        conn=_bare_conn(),
         tables=["`my-project.analytics.users`", "`my-project.analytics.orders`"],
     )
-    cfg = impl.BigQueryWriteCfg.from_dest(dest)
+    cfg = impl.BigQueryWriteCfg.from_dest(_bare_conn(), dest)
     assert cfg.target_tables == [
         "my-project.analytics.users",
         "my-project.analytics.orders",
@@ -174,8 +173,8 @@ def test_write_cfg_unwraps_backticked_tables():
 
 
 def test_write_cfg_handles_tables_none():
-    dest = BigQueryDest(conn=_bare_conn())
-    cfg = impl.BigQueryWriteCfg.from_dest(dest)
+    dest = BigQueryDest()
+    cfg = impl.BigQueryWriteCfg.from_dest(_bare_conn(), dest)
     assert cfg.target_tables == []
 
 
@@ -186,20 +185,23 @@ def test_write_cfg_handles_tables_none():
 
 def test_dest_plugin_raises_bigquery_4_on_tables_slots_mismatch(work_dir):
     dest = BigQueryDest(
-        conn=_bare_conn(),
         tables=["`my-project.analytics.users`", "`my-project.analytics.orders`"],
     )
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     with pytest.raises(BigQueryRuntimeException) as ei:
-        plugin._BigQueryDestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
+        plugin._BigQueryDestPlugin().write_out(
+            _dest_ctx(work_dir), _bare_conn(), dest, [src]
+        )
     assert ei.value.api_error is BigqueryErrorCode.BIGQUERY_4
 
 
 def test_dest_plugin_raises_bigquery_4_when_tables_none(work_dir):
-    dest = BigQueryDest(conn=_bare_conn())
+    dest = BigQueryDest()
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     with pytest.raises(BigQueryRuntimeException) as ei:
-        plugin._BigQueryDestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
+        plugin._BigQueryDestPlugin().write_out(
+            _dest_ctx(work_dir), _bare_conn(), dest, [src]
+        )
     assert ei.value.api_error is BigqueryErrorCode.BIGQUERY_4
 
 
@@ -216,12 +218,13 @@ def test_dest_plugin_wraps_client_init_failure_as_bigquery_5(
     monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: MagicMock())
 
     dest = BigQueryDest(
-        conn=_bare_conn(),
         tables=["`my-project.analytics.users`"],
     )
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     with pytest.raises(BigQueryRuntimeException) as ei:
-        plugin._BigQueryDestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
+        plugin._BigQueryDestPlugin().write_out(
+            _dest_ctx(work_dir), _bare_conn(), dest, [src]
+        )
     assert ei.value.api_error is BigqueryErrorCode.BIGQUERY_5
 
 
@@ -242,12 +245,13 @@ def test_dest_plugin_wraps_gcs_upload_failure_as_bigquery_6(
     monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: gcs_client)
 
     dest = BigQueryDest(
-        conn=_bare_conn(),
         tables=["`my-project.analytics.users`"],
     )
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     with pytest.raises(BigQueryRuntimeException) as ei:
-        plugin._BigQueryDestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
+        plugin._BigQueryDestPlugin().write_out(
+            _dest_ctx(work_dir), _bare_conn(), dest, [src]
+        )
     assert ei.value.api_error is BigqueryErrorCode.BIGQUERY_6
     # Best-effort cleanup still attempts to delete the staging URI even
     # when the upload (which created the partial / nothing) failed.
@@ -274,12 +278,13 @@ def test_dest_plugin_wraps_load_job_failure_as_bigquery_7(
     monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: gcs_client)
 
     dest = BigQueryDest(
-        conn=_bare_conn(),
         tables=["`my-project.analytics.users`"],
     )
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     with pytest.raises(BigQueryRuntimeException) as ei:
-        plugin._BigQueryDestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
+        plugin._BigQueryDestPlugin().write_out(
+            _dest_ctx(work_dir), _bare_conn(), dest, [src]
+        )
     assert ei.value.api_error is BigqueryErrorCode.BIGQUERY_7
     # Upload succeeded, so cleanup runs unconditionally.
     blob.delete.assert_called()
@@ -311,7 +316,6 @@ def test_dest_plugin_happy_path_calls_load_table_from_uri_per_table(
     monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: gcs_client)
 
     dest = BigQueryDest(
-        conn=_bare_conn(),
         tables=[
             "`my-project.analytics.users`",
             "`my-project.analytics.orders`",
@@ -320,7 +324,7 @@ def test_dest_plugin_happy_path_calls_load_table_from_uri_per_table(
     src1 = _make_parquet(work_dir / "in1.parquet", [{"id": 1}])
     src2 = _make_parquet(work_dir / "in2.parquet", [{"id": 2}])
     plugin._BigQueryDestPlugin().write_out(
-        _dest_ctx(work_dir), dest, [src1, src2],
+        _dest_ctx(work_dir), _bare_conn(), dest, [src1, src2],
     )
 
     # Two parquet -> GCS uploads.
@@ -357,11 +361,12 @@ def test_dest_plugin_forwards_project_to_bigquery_client(monkeypatch, work_dir):
     ))
 
     dest = BigQueryDest(
-        conn=_bare_conn(),
         tables=["`my-project.analytics.users`"],
     )
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
-    plugin._BigQueryDestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
+    plugin._BigQueryDestPlugin().write_out(
+        _dest_ctx(work_dir), _bare_conn(), dest, [src]
+    )
 
     assert captured["project"] == "my-project"
 
@@ -393,7 +398,6 @@ def test_bigquery_dest_def_wires_plugin_and_explorer():
 
 def test_bigquery_dest_cardinality_uses_tables_length():
     dest = BigQueryDest(
-        conn=_bare_conn(),
         tables=[
             "`my-project.analytics.users`",
             "`my-project.analytics.orders`",
@@ -403,7 +407,7 @@ def test_bigquery_dest_cardinality_uses_tables_length():
 
 
 def test_bigquery_dest_cardinality_zero_for_none_tables():
-    dest = BigQueryDest(conn=_bare_conn())
+    dest = BigQueryDest()
     assert plugin.BIGQUERY_DEST.cardinality(dest) == 0
 
 

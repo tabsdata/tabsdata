@@ -4,7 +4,7 @@ import logging
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from tabsdatak.conn.bigquery import (
     BigQueryDest,
@@ -61,10 +61,11 @@ def _resolve_dest_cfg(dest_cfg: DestCfgSpec | None) -> _WriterCfg:
     )
 
 
-class _BigQueryDestPlugin(DestPlugin[BigQueryDest]):
+class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
     def write_out(
         self,
         ctx: DestContext,
+        conn: BigQueryDestConn,
         dest: BigQueryDest,
         tables: list[TableFileSpec],
     ) -> None:
@@ -82,7 +83,7 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDest]):
             "bigquery: write_out starting (%d table(s))", len(dest.tables or [])
         )
 
-        write_cfg = BigQueryWriteCfg.from_dest(dest)
+        write_cfg = BigQueryWriteCfg.from_dest(conn, dest)
 
         # Defensive: framework should have already lined ``dest.tables``
         # up with ``tables`` -- when ``tables is None`` the legacy
@@ -96,7 +97,6 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDest]):
                 slots=len(tables),
             )
 
-        conn = cast(BigQueryDestConn, write_cfg.conn)
         project_str = conn.project.value() if conn.project is not None else None
 
         logger.debug("bigquery: establishing BigQuery client (project=%r)", project_str)
