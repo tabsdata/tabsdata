@@ -176,6 +176,17 @@ DestConnSpec: TypeAlias = Union[NamedConn, DatabricksDestConn]
 # --- Source ----------------------------------------------------------
 
 
+# Canonical TrxCtx scratch-store key for Databricks' per-flow
+# initial_values bind dict. The user function reads it with
+# ``ctx.get_attr(DATABRICKS_INITIAL_VALUES_KEY)`` to resume from the
+# previous run's values, and writes it back via
+# ``ctx.store_attr(DATABRICKS_INITIAL_VALUES_KEY, {...})`` to persist
+# the new dict for the next run. Co-located with the connector so
+# each shipped plugin owns its own key namespace; the runtime never
+# imports it.
+DATABRICKS_INITIAL_VALUES_KEY = "databricks.initial-values"
+
+
 @_api.dataclass(DatabricksErrorCode.DATABRICKS_3, kw_only=True)
 class DatabricksSrc(Src):
     """Databricks source — one parquet slot per SQL statement.
@@ -187,7 +198,10 @@ class DatabricksSrc(Src):
         the corresponding value at execute time (Python
         ``str.format``-style; values are inlined verbatim, not
         parameterised -- use only for literal-safe substitutions
-        like dates and ids).
+        like dates and ids). Acts as the **first-run seed**: the
+        plugin reads ``ctx.get_attr(DATABRICKS_INITIAL_VALUES_KEY)``
+        first, and falls back to this field when the ctx scratch
+        store has no entry (i.e. there is no previous-run state).
     :param src_cfg: Optional ``Mapping`` over
         ``databricks.logging_level``.
     """

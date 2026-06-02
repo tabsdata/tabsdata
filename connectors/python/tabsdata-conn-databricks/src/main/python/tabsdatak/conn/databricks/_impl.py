@@ -342,7 +342,7 @@ def execute_query(
         StatementState,
     )
 
-    if cfg.initial_values:
+    if cfg.initial_values is not None:
         statement = _replace_initial_values(statement, cfg.initial_values)
 
     uuid_string = uuid.uuid4().hex[:16]

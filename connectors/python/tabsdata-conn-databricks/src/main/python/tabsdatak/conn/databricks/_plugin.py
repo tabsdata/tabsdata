@@ -7,6 +7,7 @@ from typing import Any, cast
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.databricks import (
+    DATABRICKS_INITIAL_VALUES_KEY,
     DatabricksDest,
     DatabricksDestConn,
     DatabricksSrc,
@@ -53,6 +54,42 @@ _SRC_CFGS_DEFAULTS: dict[SrcCfgKey, Any] = {
 _DEST_CFGS_DEFAULTS: dict[DestCfgKey, Any] = {
     _KEY_DEST_LOGGING_LEVEL: logging.ERROR,
 }
+
+
+def _resolve_initial_values(ctx: SrcPluginCtx, src: DatabricksSrc) -> dict | None:
+    """Look up the active ``initial_values`` dict for this run.
+
+    Reads the TrxCtx scratch store at
+    :data:`DATABRICKS_INITIAL_VALUES_KEY` first -- that's where the
+    previous run's values land after the runtime drains the ctx. If
+    the scratch store has no entry (first run, or a brand-new flow),
+    falls back to the user-supplied seed on ``src.initial_values``.
+
+    Returns ``None`` when neither source has a value, signalling that
+    the queries don't need bind-dict substitution.
+
+    Uses ``is not None`` rather than truthiness so legitimately empty
+    dicts / falsy primitives stored last run aren't silently shadowed
+    by the seed.
+
+    Raises:
+        DatabricksValidateException(DATABRICKS_11): if the scratch
+            store *does* hold an entry under the connector's key, but
+            its shape isn't a dict. Silent fall-through would mask the
+            user's mistake -- queries would either run without
+            substitution (wrong data) or hit a literal ``{key}`` in
+            SQL (confusing syntax error). Surface it explicitly.
+    """
+    from_ctx = ctx.get_attr(DATABRICKS_INITIAL_VALUES_KEY)
+    if from_ctx is not None:
+        if not isinstance(from_ctx, dict):
+            raise DatabricksErrorCode.DATABRICKS_11.exception(
+                actual_type=type(from_ctx).__name__,
+            )
+        return dict(from_ctx)
+    if src.initial_values is not None:
+        return dict(src.initial_values)
+    return None
 
 
 @dataclass(frozen=True)
@@ -146,9 +183,7 @@ class _DatabricksSrcPlugin(SrcPlugin[DatabricksSrc]):
         read_cfg = _impl.DatabricksReadCfg(
             conn=conn,
             queries=list(src.queries),
-            initial_values=(
-                dict(src.initial_values) if src.initial_values is not None else None
-            ),
+            initial_values=_resolve_initial_values(ctx, src),
         )
         host = _convert(conn.host_url, str)
         try:

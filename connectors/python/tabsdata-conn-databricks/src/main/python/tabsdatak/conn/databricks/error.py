@@ -61,3 +61,10 @@ class DatabricksErrorCode(ErrorCode):
         "qualified 'catalog.schema.table' (set conn.catalog and/or"
         " conn.schema, or use a 3-part name)",
     )  # _writer._fully_qualify_table
+    DATABRICKS_11 = ErrorDef(
+        DatabricksValidateException,
+        "Databricks initial_values scratch entry must be a "
+        "dict[str, str] (got {actual_type}). Set with "
+        "ctx.store_attr(DATABRICKS_INITIAL_VALUES_KEY, "
+        "{{...}}).",
+    )  # _resolve_initial_values: non-dict value under the connector's key

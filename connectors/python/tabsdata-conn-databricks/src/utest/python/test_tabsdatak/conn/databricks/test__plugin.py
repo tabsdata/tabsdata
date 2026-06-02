@@ -24,8 +24,10 @@ from tabsdatak.conn.databricks import (
     DatabricksDest,
     DatabricksSrc,
 )
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.databricks import _impl as impl
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.databricks import _plugin as plugin
 from tabsdatak.conn.databricks.error import (
@@ -44,13 +46,28 @@ pytestmark = pytest.mark.databricks
 # ---------------------------------------------------------------------------
 
 
-@dataclass
 class _Ctx:
-    _work: Path
+    """Duck-typed SrcPluginCtx for unit tests.
+
+    Exposes ``work_dir`` plus a minimal in-memory scratch store so
+    tests for the ctx-vs-Src-field fallback (see ``_resolve_initial_values``)
+    can drive ``get_attr`` / ``store_attr`` without instantiating
+    a real :class:`tabsdatak.spi.SrcPluginCtx`.
+    """
+
+    def __init__(self, work: Path, scratch: dict | None = None) -> None:
+        self._work = work
+        self._scratch: dict = dict(scratch) if scratch else {}
 
     @property
     def work_dir(self) -> Path:
         return self._work
+
+    def get_attr(self, key):
+        return self._scratch.get(key)
+
+    def store_attr(self, key, val) -> None:
+        self._scratch[key] = val
 
 
 @pytest.fixture
@@ -158,13 +175,9 @@ def test_resolve_src_cfg_logs_unknown_keys(caplog):
     import logging as _logging
 
     caplog.set_level(_logging.WARNING, logger=plugin.logger.name)
-    cfg = plugin._resolve_src_cfg(
-        {"databricks.logging_level": 20, "bogus": 1}
-    )
+    cfg = plugin._resolve_src_cfg({"databricks.logging_level": 20, "bogus": 1})
     assert cfg.logging_level == 20
-    assert any(
-        "Unknown src_cfg key" in rec.getMessage() for rec in caplog.records
-    )
+    assert any("Unknown src_cfg key" in rec.getMessage() for rec in caplog.records)
 
 
 def test_resolve_dest_cfg_defaults_when_none():
@@ -180,10 +193,12 @@ def test_resolve_dest_cfg_defaults_when_none():
 
 
 def test_src_plugin_wraps_connection_failure_as_databricks_5(
-    monkeypatch, work_dir,
+    monkeypatch,
+    work_dir,
 ):
     def boom(*_a, **_kw):
         raise _StubDatabricksError("connect fail")
+
     monkeypatch.setattr(impl, "read_all_queries", boom)
 
     with pytest.raises(DatabricksRuntimeException) as ei:
@@ -192,7 +207,8 @@ def test_src_plugin_wraps_connection_failure_as_databricks_5(
 
 
 def test_src_plugin_wraps_query_failure_as_databricks_6(
-    monkeypatch, work_dir,
+    monkeypatch,
+    work_dir,
 ):
     monkeypatch.setattr(
         impl,
@@ -205,10 +221,12 @@ def test_src_plugin_wraps_query_failure_as_databricks_6(
 
 
 def test_src_plugin_returns_one_parquet_per_query(
-    monkeypatch, work_dir,
+    monkeypatch,
+    work_dir,
 ):
     def fake(_cfg, _dir):
         return [Path("q0.parquet"), Path("q1.parquet")]
+
     monkeypatch.setattr(impl, "read_all_queries", fake)
 
     src = DatabricksSrc(
@@ -245,16 +263,20 @@ def test_dest_plugin_raises_databricks_7_on_tables_slots_mismatch(
     dest = _dest(tables=("main.s.t1", "main.s.t2"))
     with pytest.raises(DatabricksRuntimeException) as ei:
         plugin._DatabricksDestPlugin().write_out(
-            _ctx(work_dir), dest, [_parquet(work_dir, "in.parquet")],
+            _ctx(work_dir),
+            dest,
+            [_parquet(work_dir, "in.parquet")],
         )
     assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_7
 
 
 def test_dest_plugin_wraps_connection_failure_as_databricks_8(
-    monkeypatch, work_dir,
+    monkeypatch,
+    work_dir,
 ):
     def boom(*_a, **_kw):
         raise _StubDatabricksError("connect fail")
+
     monkeypatch.setattr(impl, "write_all_tables", boom)
 
     with pytest.raises(DatabricksRuntimeException) as ei:
@@ -267,7 +289,8 @@ def test_dest_plugin_wraps_connection_failure_as_databricks_8(
 
 
 def test_dest_plugin_wraps_copy_failure_as_databricks_9(
-    monkeypatch, work_dir,
+    monkeypatch,
+    work_dir,
 ):
     monkeypatch.setattr(
         impl,
@@ -284,7 +307,8 @@ def test_dest_plugin_wraps_copy_failure_as_databricks_9(
 
 
 def test_dest_plugin_passes_validate_exception_through(
-    monkeypatch, work_dir,
+    monkeypatch,
+    work_dir,
 ):
     """DatabricksValidateException (e.g. DATABRICKS_10 from
     ``_fully_qualify_table``) is already correctly typed; the
@@ -293,9 +317,7 @@ def test_dest_plugin_passes_validate_exception_through(
         impl,
         "write_all_tables",
         MagicMock(
-            side_effect=DatabricksErrorCode.DATABRICKS_10.exception(
-                value="bad_name"
-            ),
+            side_effect=DatabricksErrorCode.DATABRICKS_10.exception(value="bad_name"),
         ),
     )
     with pytest.raises(DatabricksValidateException) as ei:
@@ -313,6 +335,7 @@ def test_dest_plugin_dispatches_to_adapter(monkeypatch, work_dir):
     def stub(cfg, parquet_paths):
         captured["cfg"] = cfg
         captured["parquet_paths"] = parquet_paths
+
     monkeypatch.setattr(impl, "write_all_tables", stub)
 
     src1 = _parquet(work_dir, "u.parquet")
@@ -322,7 +345,9 @@ def test_dest_plugin_dispatches_to_adapter(monkeypatch, work_dir):
         if_table_exists="replace",
     )
     plugin._DatabricksDestPlugin().write_out(
-        _ctx(work_dir), dest, [src1, src2],
+        _ctx(work_dir),
+        dest,
+        [src1, src2],
     )
     assert captured["parquet_paths"] == [src1, src2]
     assert captured["cfg"].target_tables == [
@@ -378,3 +403,135 @@ def test_databricks_src_cardinality_uses_queries_length():
 def test_databricks_dest_cardinality_uses_tables_length():
     dest = _dest(tables=("main.s.t1", "main.s.t2", "main.s.t3"))
     assert plugin.DATABRICKS_DEST.cardinality(dest) == 3
+
+
+# ---------------------------------------------------------------------------
+# _resolve_initial_values -- ctx-first with Src field fallback
+# ---------------------------------------------------------------------------
+
+
+from tabsdatak.conn.databricks import DATABRICKS_INITIAL_VALUES_KEY
+
+
+def test_resolve_initial_values_returns_none_when_both_empty(work_dir):
+    """No ctx value, no Src seed → ``None``. Connector skips
+    substitution entirely."""
+    ctx = _Ctx(work_dir)
+    src = _src()  # initial_values defaults to None
+    assert plugin._resolve_initial_values(ctx, src) is None
+
+
+def test_resolve_initial_values_returns_src_when_ctx_empty(work_dir):
+    """First run for a flow: ctx scratch has no entry, fall back to
+    the user-supplied Src seed."""
+    ctx = _Ctx(work_dir)
+    src = DatabricksSrc(
+        conn=_src_conn(),
+        queries=["SELECT 1"],
+        initial_values={"last-modified": "2026-01-01T00:00:00Z"},
+    )
+    out = plugin._resolve_initial_values(ctx, src)
+    assert out == {"last-modified": "2026-01-01T00:00:00Z"}
+
+
+def test_resolve_initial_values_returns_ctx_when_present(work_dir):
+    """Subsequent run: ctx scratch has a value (from previous run's
+    drain). The Src seed is ignored even if non-empty."""
+    ctx = _Ctx(
+        work_dir,
+        scratch={
+            DATABRICKS_INITIAL_VALUES_KEY: {"last-modified": "2026-05-28T00:00:00Z"}
+        },
+    )
+    src = DatabricksSrc(
+        conn=_src_conn(),
+        queries=["SELECT 1"],
+        initial_values={"last-modified": "from-seed-should-be-ignored"},
+    )
+    out = plugin._resolve_initial_values(ctx, src)
+    assert out == {"last-modified": "2026-05-28T00:00:00Z"}
+
+
+def test_resolve_initial_values_returns_empty_dict_when_ctx_has_empty_dict(
+    work_dir,
+):
+    """``is not None`` (not truthiness) -- a legitimately empty dict
+    stored last run isn't silently shadowed by the Src seed."""
+    ctx = _Ctx(work_dir, scratch={DATABRICKS_INITIAL_VALUES_KEY: {}})
+    src = DatabricksSrc(
+        conn=_src_conn(),
+        queries=["SELECT 1"],
+        initial_values={"k": "v"},
+    )
+    out = plugin._resolve_initial_values(ctx, src)
+    assert out == {}
+
+
+def test_resolve_initial_values_returns_copy_not_alias(work_dir):
+    """The returned dict must be a copy so the caller mutating it
+    can't bleed into the ctx scratch / Src field."""
+    src_seed = {"k": "v"}
+    src = DatabricksSrc(
+        conn=_src_conn(),
+        queries=["SELECT 1"],
+        initial_values=src_seed,
+    )
+    ctx = _Ctx(work_dir)
+    out = plugin._resolve_initial_values(ctx, src)
+    assert out is not src_seed
+    out["k"] = "tampered"
+    assert src.initial_values == {"k": "v"}
+
+
+def test_resolve_initial_values_ctx_non_dict_value_raises(work_dir):
+    """If a (misbehaving) user code path stores a non-dict at the
+    connector's key, we must surface the contract violation
+    explicitly. Silent fall-through would either run the queries
+    without substitution (wrong data) or hit a literal ``{key}``
+    placeholder in SQL (confusing syntax error from Databricks)."""
+    ctx = _Ctx(work_dir, scratch={DATABRICKS_INITIAL_VALUES_KEY: "not-a-dict"})
+    src = DatabricksSrc(
+        conn=_src_conn(),
+        queries=["SELECT 1"],
+        initial_values={"k": "from-seed"},
+    )
+    with pytest.raises(DatabricksValidateException) as ei:
+        plugin._resolve_initial_values(ctx, src)
+    assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_11
+    assert "str" in str(ei.value)
+
+
+def test_read_in_uses_resolved_initial_values(work_dir, monkeypatch):
+    """``read_in`` must pass the *resolved* dict (ctx-first, Src
+    fallback) into ``DatabricksReadCfg``, not the raw Src field."""
+    captured: dict = {}
+
+    def fake_read_all_queries(read_cfg, work_dir_arg):
+        captured["initial_values"] = read_cfg.initial_values
+        return []
+
+    monkeypatch.setattr(impl, "read_all_queries", fake_read_all_queries)
+
+    ctx = _Ctx(
+        work_dir,
+        scratch={DATABRICKS_INITIAL_VALUES_KEY: {"last-modified": "from-ctx"}},
+    )
+    src = DatabricksSrc(
+        conn=_src_conn(),
+        queries=["SELECT * FROM t WHERE ts > {last-modified}"],
+        initial_values={"last-modified": "from-seed-ignored"},
+    )
+    plugin._DatabricksSrcPlugin().read_in(ctx, src)
+    assert captured["initial_values"] == {"last-modified": "from-ctx"}
+
+
+def test_initial_values_key_constant_matches_context_key_pattern():
+    """The exported key constant must satisfy ContextKeySpec's regex
+    (dotted DNS-label-style identifier). A typo here would break
+    user code that imports it for round-tripping."""
+    import re
+
+    # noinspection PyProtectedMember
+    from tabsdatak._api import CONTEXT_KEY_RE_STR
+
+    assert re.match(CONTEXT_KEY_RE_STR, DATABRICKS_INITIAL_VALUES_KEY)
