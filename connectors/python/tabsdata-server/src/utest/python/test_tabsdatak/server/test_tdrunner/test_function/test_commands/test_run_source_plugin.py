@@ -32,6 +32,7 @@ from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
 from tabsdatak.server._tdrunner.function._lib.errors import CommandSpecificError
 from tabsdatak.server._tdrunner.function.commands.run_source_plugin import (
     EXIT_BAD_BUNDLE,
+    EXIT_BAD_INITIAL_VALUES,
     EXIT_BAD_REQUEST,
     EXIT_BAD_USER_CODE,
     EXIT_MANIFEST_WRITE_FAILED,
@@ -44,6 +45,18 @@ from tabsdatak.server._tdrunner.function.commands.run_source_plugin import (
     _resolve_plugin,
     _write_inputs_manifest,
     main,
+)
+from tabsdatak.server._tdrunner.function._lib.initial_values import (
+    drain_ctx_to_state,
+    hydrate_ctx_from_state,
+    read_initial_values,
+    write_initial_values,
+)
+from tabsdatak.server._tdrunner.function._lib.request import (
+    Info,
+    Location,
+    Request,
+    Table,
 )
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
@@ -155,7 +168,13 @@ def _set_argv(
     out_dir: Path,
     inputs_manifest: Path,
     liveness: Path,
+    state_dir: Path | None = None,
 ) -> None:
+    if state_dir is None:
+        # Default to a sibling dir of out_dir so callers that don't care
+        # about state lifecycle don't have to plumb a path.
+        state_dir = out_dir.parent / "state"
+        state_dir.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(
         sys,
         "argv",
@@ -171,6 +190,8 @@ def _set_argv(
             str(inputs_manifest),
             "--liveness",
             str(liveness),
+            "--state-dir",
+            str(state_dir),
         ],
     )
 
@@ -516,3 +537,219 @@ def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch):
 def test_main_carries_tabsdata_command_metadata():
     assert getattr(main, "tabsdata_command", False) is True
     assert getattr(main, "tabsdata_command_name", None) == "td_run_source_plugin"
+
+
+# --- unit: initial_values lifecycle helpers -----------------------------
+
+
+def _bare_ctx() -> _SrcContext:
+    return _SrcContext(
+        work_dir=Path("/work"),
+        exec_plan_id="ep",
+        trx_id="tx",
+        collection_id="cid",
+        collection_name="c",
+        function_id="fn",
+    )
+
+
+def _bare_request(
+    *,
+    system_input=(),
+    system_output=(),
+) -> Request:
+    info = Info(
+        collection="c",
+        collection_id=1,
+        execution_id=2,
+        transaction_id=3,
+        function_run_id=4,
+        function_bundle=Location(uri="file:///bundle.tgz"),
+    )
+    return Request(
+        info=info,
+        system_input=system_input,
+        system_output=system_output,
+    )
+
+
+def test_hydrate_noop_when_system_input_empty(tmp_path):
+    ctx = _bare_ctx()
+    hydrate_ctx_from_state(
+        ctx, _bare_request(), tmp_path, exit_code=EXIT_BAD_INITIAL_VALUES
+    )
+    assert ctx.drain() == {}
+
+
+def test_hydrate_noop_when_slot_has_no_location(tmp_path):
+    ctx = _bare_ctx()
+    req = _bare_request(system_input=(Table(name="iv", location=None),))
+    hydrate_ctx_from_state(ctx, req, tmp_path, exit_code=EXIT_BAD_INITIAL_VALUES)
+    assert ctx.drain() == {}
+
+
+def test_hydrate_noop_when_state_file_missing(tmp_path):
+    """First run for a flow: the slot has a location (the URI in the
+    request), but the transporter never materialised it locally —
+    e.g. first time the flow runs. Start with empty scratch."""
+    ctx = _bare_ctx()
+    req = _bare_request(
+        system_input=(Table(name="iv", location=Location(uri="file:///x")),),
+    )
+    hydrate_ctx_from_state(ctx, req, tmp_path, exit_code=EXIT_BAD_INITIAL_VALUES)
+    assert ctx.drain() == {}
+
+
+def test_hydrate_loads_values_when_state_file_present(tmp_path):
+    state_file = tmp_path / "iv.parquet"
+    write_initial_values({"last-modified": "2026-05-27T00:00:00Z"}, state_file)
+    ctx = _bare_ctx()
+    req = _bare_request(
+        system_input=(Table(name="iv", location=Location(uri="file:///x")),),
+    )
+    hydrate_ctx_from_state(ctx, req, tmp_path, exit_code=EXIT_BAD_INITIAL_VALUES)
+    assert ctx.drain() == {"last-modified": "2026-05-27T00:00:00Z"}
+
+
+def test_hydrate_malformed_state_file_raises_bad_initial_values(tmp_path):
+    state_file = tmp_path / "iv.parquet"
+    state_file.write_bytes(b"not parquet")
+    ctx = _bare_ctx()
+    req = _bare_request(
+        system_input=(Table(name="iv", location=Location(uri="file:///x")),),
+    )
+    with pytest.raises(CommandSpecificError) as exc_info:
+        hydrate_ctx_from_state(ctx, req, tmp_path, exit_code=EXIT_BAD_INITIAL_VALUES)
+    assert exc_info.value.exit_code == EXIT_BAD_INITIAL_VALUES
+
+
+def test_drain_noop_when_system_output_empty(tmp_path):
+    ctx = _bare_ctx()
+    ctx.store_attr("foo", "bar")  # has state but nowhere to send it.
+    drain_ctx_to_state(
+        ctx, _bare_request(), tmp_path, exit_code=EXIT_BAD_INITIAL_VALUES
+    )
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_drain_noop_when_slot_has_no_location(tmp_path):
+    ctx = _bare_ctx()
+    ctx.store_attr("foo", "bar")
+    req = _bare_request(system_output=(Table(name="iv", location=None),))
+    drain_ctx_to_state(ctx, req, tmp_path, exit_code=EXIT_BAD_INITIAL_VALUES)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_drain_writes_state_file_when_slot_present(tmp_path):
+    ctx = _bare_ctx()
+    ctx.store_attr("last-modified", "2026-05-28T00:00:00Z")
+    req = _bare_request(
+        system_output=(Table(name="iv", location=Location(uri="file:///x")),),
+    )
+    drain_ctx_to_state(ctx, req, tmp_path, exit_code=EXIT_BAD_INITIAL_VALUES)
+    written = tmp_path / "iv.parquet"
+    assert written.is_file()
+    assert read_initial_values(written) == {"last-modified": "2026-05-28T00:00:00Z"}
+
+
+def test_drain_writes_empty_file_when_ctx_empty(tmp_path):
+    """An empty scratch store still drains to an empty Parquet — the
+    plugin explicitly didn't want to persist anything this run."""
+    ctx = _bare_ctx()
+    req = _bare_request(
+        system_output=(Table(name="iv", location=Location(uri="file:///x")),),
+    )
+    drain_ctx_to_state(ctx, req, tmp_path, exit_code=EXIT_BAD_INITIAL_VALUES)
+    written = tmp_path / "iv.parquet"
+    assert written.is_file()
+    assert read_initial_values(written) == {}
+
+
+def test_drain_creates_state_dir_if_missing(tmp_path):
+    state_dir = tmp_path / "fresh"
+    assert not state_dir.exists()
+    ctx = _bare_ctx()
+    ctx.store_attr("k", "v")
+    req = _bare_request(
+        system_output=(Table(name="iv", location=Location(uri="file:///x")),),
+    )
+    drain_ctx_to_state(ctx, req, state_dir, exit_code=EXIT_BAD_INITIAL_VALUES)
+    assert (state_dir / "iv.parquet").is_file()
+
+
+def test_drain_bad_value_raises_bad_initial_values(tmp_path, monkeypatch):
+    """If something poisons the ctx with a non-ContextValueSpec value,
+    the codec rejects it and the command surfaces EXIT_BAD_INITIAL_VALUES."""
+    ctx = _bare_ctx()
+    # Bypass store_attr's type-friendly surface to inject a bad value
+    # directly into the underlying scratch dict.
+    ctx._scratch["k"] = object()  # type: ignore[assignment]
+    req = _bare_request(
+        system_output=(Table(name="iv", location=Location(uri="file:///x")),),
+    )
+    with pytest.raises(CommandSpecificError) as exc_info:
+        drain_ctx_to_state(ctx, req, tmp_path, exit_code=EXIT_BAD_INITIAL_VALUES)
+    assert exc_info.value.exit_code == EXIT_BAD_INITIAL_VALUES
+
+
+# --- main: end-to-end with initial_values round-trip --------------------
+
+
+def test_main_hydrates_and_drains_initial_values(tmp_path, built_bundle, monkeypatch):
+    """Wire a previous-run state file into system_input[0], let main()
+    run the plugin (which is unaware of state), and verify drain
+    produced an output state file. The publisher plugin doesn't itself
+    mutate ctx, so the drained dict equals the hydrated one."""
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    # Seed: previous run's state.
+    write_initial_values(
+        {"last-modified": "2026-05-27T00:00:00Z"},
+        state_dir / "iv-in.parquet",
+    )
+
+    # Request declares system_input[0] AND system_output[0] both named
+    # after the local state files.
+    req_path = tmp_path / "request.yaml"
+    req_path.write_text(
+        yaml.safe_dump({
+            "info": {
+                "collection": "c",
+                "collection_id": 1,
+                "execution_id": 2,
+                "transaction_id": 3,
+                "function_run_id": 4,
+                "function_bundle": {"uri": "file:///bundle.tgz"},
+            },
+            "output": [{"name": "my_table"}],
+            "system_input": [
+                {"name": "iv-in", "location": {"uri": "file:///irrelevant"}}
+            ],
+            "system_output": [
+                {"name": "iv-out", "location": {"uri": "file:///irrelevant"}}
+            ],
+        })
+    )
+    manifest = tmp_path / "manifest.yaml"
+    liveness = tmp_path / "live"
+    _set_argv(
+        monkeypatch,
+        req_path,
+        built_bundle,
+        out_dir,
+        manifest,
+        liveness,
+        state_dir=state_dir,
+    )
+
+    rc = main()
+    assert rc == 0, f"main() returned {rc}"
+
+    # iv-out.parquet now holds whatever the ctx had when drained.
+    # The publisher's plugin doesn't store anything, so the drained
+    # dict equals the hydrated dict.
+    out_state = state_dir / "iv-out.parquet"
+    assert out_state.is_file()
+    assert read_initial_values(out_state) == {"last-modified": "2026-05-27T00:00:00Z"}

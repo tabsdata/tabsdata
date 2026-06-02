@@ -27,14 +27,24 @@ disk, and a malformed on-disk file never silently round-trips through.
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import polars as pl
 from pydantic import ConfigDict, TypeAdapter, ValidationError
 
 from tabsdatak.api import ContextKeySpec, ContextValueSpec
+from tabsdatak.server._tdrunner.function._lib.errors import CommandSpecificError
+
+if TYPE_CHECKING:
+    from tabsdatak.server._tdrunner.function._lib.request import Request, Table
+    from tabsdatak.server._tdrunner.function._lib.request_ctx import (
+        FromRequestCtx,
+    )
+
+logger = logging.getLogger(__name__)
 
 # Validate keys and values against the canonical type aliases via
 # pydantic ``TypeAdapter`` rather than re-deriving the rules here.
@@ -149,3 +159,132 @@ def write_initial_values(values: dict[str, Any], path: Path) -> None:
         except FileNotFoundError:
             pass
         raise
+
+
+# --- ctx-lifecycle helpers (used by run-source-plugin and run-function) -
+
+
+def hydrate_ctx_from_state(
+    ctx: FromRequestCtx,
+    request: Request,
+    state_dir: Path,
+    *,
+    exit_code: int,
+    prefer_output: bool = False,
+) -> None:
+    """Hydrate ``ctx``'s scratch store from the relevant on-disk state
+    Parquet under ``state_dir``.
+
+    Lookup strategy:
+
+    * ``prefer_output=False`` (run-source-plugin): read from
+      ``<state-dir>/<system_input[0].name>.parquet``. This is the
+      file ``prep-localize-state`` + ``run-transporter`` materialised
+      from the previous run's persisted state. No-op when
+      ``request.system_input`` is empty, when the slot has no
+      location, or when the file isn't on disk yet (first run).
+
+    * ``prefer_output=True`` (run-function): read
+      ``<state-dir>/<system_output[0].name>.parquet`` first --
+      ``run-source-plugin`` drains its ctx there on the same run --
+      and fall back to the ``system_input[0]`` file when the output
+      side hasn't been written (transformer / subscriber chains
+      where ``run-source-plugin`` doesn't run).
+
+    Raises:
+        CommandSpecificError: if the resolved state file exists but
+            doesn't decode as a valid initial_values Parquet. The
+            exit code is the command-specific value passed in by the
+            caller (``EXIT_BAD_INITIAL_VALUES`` for both commands
+            today; the helper does not enforce a specific number).
+    """
+    state_file = _resolve_state_file(prefer_output, request, state_dir)
+    if state_file is None:
+        return
+    try:
+        values = read_initial_values(state_file)
+    except InvalidInitialValuesError as exc:
+        raise CommandSpecificError(
+            exit_code, f"unreadable state-in {state_file}: {exc}"
+        ) from exc
+    ctx.hydrate(values)
+
+
+def _resolve_state_file(
+    prefer_output: bool,
+    request: Request,
+    state_dir: Path,
+) -> Path | None:
+    """Pick which on-disk state Parquet to hydrate from.
+
+    "First non-None wins": try the output-slot file when
+    ``prefer_output`` is set, otherwise fall through to the input-slot
+    file. Returns ``None`` when neither yields a usable candidate (first
+    run, no state declared, file not yet on disk). See
+    :func:`hydrate_ctx_from_state` for the per-mode rationale.
+    """
+    state_file: Path | None = None
+    if prefer_output:
+        # If state was already drained to the output slot earlier in
+        # the same run (run-source-plugin), prefer it -- the function
+        # then sees values potentially modified by the source.
+        state_file = _state_candidate(request.system_output, state_dir)
+    return state_file or _state_candidate(request.system_input, state_dir)
+
+
+def _state_candidate(
+    slots: tuple[Table, ...],
+    state_dir: Path,
+) -> Path | None:
+    """Return the on-disk state file for ``slots[0]``, or ``None`` if no
+    usable candidate exists.
+
+    Debug logs at each negative branch tell us *why* a slot was skipped
+    (no slots declared / no location / file not yet on disk) plus a
+    happy-path line on the slot that won. Logs are ``DEBUG``-level so
+    they stay quiet in normal operation.
+    """
+    if not slots:
+        logger.debug("state lookup: no slots declared")
+        return None
+    slot = slots[0]
+    if slot.location is None:
+        logger.debug("state lookup: slot %r has no location", slot.name)
+        return None
+    candidate = state_dir / f"{slot.name}.parquet"
+    if not candidate.is_file():
+        logger.debug("state lookup: %s not on disk yet", candidate)
+        return None
+    logger.debug("state lookup: found %s for slot %r", candidate, slot.name)
+    return candidate
+
+
+def drain_ctx_to_state(
+    ctx: FromRequestCtx,
+    request: Request,
+    state_dir: Path,
+    *,
+    exit_code: int,
+) -> None:
+    """Persist ``ctx``'s scratch store to
+    ``<state-dir>/<system_output[0].name>.parquet``. The state-dir is
+    created if it doesn't exist. No-op when ``request.system_output``
+    is empty or the slot has no location.
+
+    Raises:
+        CommandSpecificError: if any value in the drained dict isn't a
+            valid ``ContextValueSpec`` shape.
+    """
+    if not request.system_output:
+        return
+    slot = request.system_output[0]
+    if slot.location is None:
+        return
+    state_dir.mkdir(parents=True, exist_ok=True)
+    state_file = state_dir / f"{slot.name}.parquet"
+    try:
+        write_initial_values(ctx.drain(), state_file)
+    except InvalidInitialValuesError as exc:
+        raise CommandSpecificError(
+            exit_code, f"unwritable state-out {state_file}: {exc}"
+        ) from exc

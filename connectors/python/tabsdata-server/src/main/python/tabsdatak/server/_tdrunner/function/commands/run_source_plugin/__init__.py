@@ -23,6 +23,10 @@ from tabsdatak._info import KIND_PUBLISHER_DEF, PublisherInfo, _unwrap_info
 from tabsdatak.server._tdrunner.function._lib.cli import build_parser, command
 from tabsdatak.server._tdrunner.function._lib.errors import CommandSpecificError
 from tabsdatak.server._tdrunner.function._lib.function_def import load_function_def
+from tabsdatak.server._tdrunner.function._lib.initial_values import (
+    drain_ctx_to_state,
+    hydrate_ctx_from_state,
+)
 from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
     MANIFEST_FILES_KEY,
     MANIFEST_NAME_KEY,
@@ -59,6 +63,7 @@ EXIT_WRONG_KIND = 13
 EXIT_NO_PLUGIN = 14
 EXIT_PLUGIN_FAILED = 15
 EXIT_MANIFEST_WRITE_FAILED = 16
+EXIT_BAD_INITIAL_VALUES = 17
 
 
 def _build_parser():
@@ -85,6 +90,19 @@ def _build_parser():
             "Path where this command writes the YAML manifest mapping "
             "each function input parameter to the parquet files produced "
             "by the source plugin. Consumed by the function runner."
+        ),
+    )
+    parser.add_argument(
+        "--state-dir",
+        required=True,
+        dest="state_dir",
+        help=(
+            "Local directory where state-in tables are read from "
+            "(populated by prep-localize-state + run-transporter) and "
+            "state-out tables are written to (consumed by "
+            "prep-upload-state). The convention is "
+            "<state-dir>/<table.name>.parquet, mirroring the wire "
+            "format prep-localize-state / prep-upload-state already use."
         ),
     )
     return parser
@@ -222,6 +240,7 @@ def main(args: argparse.Namespace) -> int:
     bundle_dir = Path(args.bundle_dir)
     out_dir = Path(args.out_dir)
     inputs_manifest = Path(args.inputs_manifest)
+    state_dir = Path(args.state_dir)
 
     request = load_request_or_fail(request_path, EXIT_BAD_REQUEST)
     info = _load_function_def(bundle_dir)
@@ -234,7 +253,9 @@ def main(args: argparse.Namespace) -> int:
         collection_name=request.info.collection,
         function_id=str(request.info.function_run_id),
     )
+    hydrate_ctx_from_state(ctx, request, state_dir, exit_code=EXIT_BAD_INITIAL_VALUES)
     produced = _invoke_read_in(plugin, ctx, info.source)
+    drain_ctx_to_state(ctx, request, state_dir, exit_code=EXIT_BAD_INITIAL_VALUES)
     _write_inputs_manifest(info, produced, inputs_manifest)
     return 0
 
