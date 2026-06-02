@@ -166,26 +166,26 @@ def work_dir(tmp_path: Path) -> Path:
 
 
 def test_src_plugin_read_in_returns_parquet_files(fresh_mysql, work_dir):
+    conn = _src_conn_from(fresh_mysql)
     src = MySQLSrc(
-        conn=_src_conn_from(fresh_mysql),
         queries=["SELECT id, name FROM users ORDER BY id"],
     )
-    out = plugin.MySQLSrcPlugin().read_in(_src_ctx(work_dir), src)
+    out = plugin.MySQLSrcPlugin().read_in(_src_ctx(work_dir), conn, src)
     assert len(out) == 1
     df = pl.concat([_read_parquet(p) for p in out[0]])
     assert df["name"].to_list() == ["alice", "bob", "carol"]
 
 
 def test_src_plugin_read_in_multiple_queries(fresh_mysql, work_dir):
+    conn = _src_conn_from(fresh_mysql)
     src = MySQLSrc(
-        conn=_src_conn_from(fresh_mysql),
         queries=[
             "SELECT id FROM users WHERE age >= :cut ORDER BY id",
             "SELECT id FROM orders ORDER BY id",
         ],
         initial_values={"cut": 30},
     )
-    out = plugin.MySQLSrcPlugin().read_in(_src_ctx(work_dir), src)
+    out = plugin.MySQLSrcPlugin().read_in(_src_ctx(work_dir), conn, src)
     assert len(out) == 2
     ids = pl.concat([_read_parquet(p) for p in out[0]])["id"].to_list()
     order_ids = pl.concat([_read_parquet(p) for p in out[1]])["id"].to_list()
@@ -203,11 +203,11 @@ def test_dest_plugin_write_out_appends_rows(fresh_mysql, work_dir):
         work_dir / "in.parquet",
         [{"id": 100, "name": "dave", "age": 50}],
     )
+    conn = _dest_conn_from(fresh_mysql)
     dest = MySQLDest(
-        conn=_dest_conn_from(fresh_mysql),
         tables=["users"],
     )
-    plugin.MySQLDestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
+    plugin.MySQLDestPlugin().write_out(_dest_ctx(work_dir), conn, dest, [src])
     eng = create_engine(fresh_mysql.uri_with_credentials)
     try:
         with eng.connect() as conn:
@@ -226,12 +226,12 @@ def test_dest_plugin_write_out_replace_clears_existing(fresh_mysql, work_dir):
         work_dir / "in.parquet",
         [{"id": 1, "name": "only", "age": 1}],
     )
+    conn = _dest_conn_from(fresh_mysql)
     dest = MySQLDest(
-        conn=_dest_conn_from(fresh_mysql),
         tables=["users"],
         if_table_exists="replace",
     )
-    plugin.MySQLDestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
+    plugin.MySQLDestPlugin().write_out(_dest_ctx(work_dir), conn, dest, [src])
     eng = create_engine(fresh_mysql.uri_with_credentials)
     try:
         with eng.connect() as conn:

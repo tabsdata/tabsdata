@@ -268,6 +268,7 @@ def _patched_signal_handlers():
 
 def _run_plugin_in_thread(
     ctx: _CdcCtx,
+    conn: MySQLCdcStreamSrcConn,
     src: MySQLCdcStreamSrc,
     timeout_s: float = 30.0,
 ) -> None:
@@ -279,7 +280,7 @@ def _run_plugin_in_thread(
     def _go():
         try:
             with _patched_signal_handlers():
-                MySQLCdcStreamSrcPlugin().run(ctx=ctx, stream_src=src)
+                MySQLCdcStreamSrcPlugin().run(ctx=ctx, conn=conn, stream_src=src)
         except BaseException as exc:  # noqa: BLE001 -- surface to main thread
             err.append(exc)
 
@@ -306,8 +307,8 @@ def test_cdc_insert_events_stage_a_committed_manifest(
     work.mkdir()
     ctx = _CdcCtx(work, active_polls=8)
 
+    conn = _make_cdc_conn(fresh_mysql_cdc)
     src = MySQLCdcStreamSrc(
-        conn=_make_cdc_conn(fresh_mysql_cdc),
         tables=[f"{fresh_mysql_cdc.database}.users"],
         # "head" replays from the oldest available binlog so we
         # capture events whether they happen before or after the
@@ -338,7 +339,7 @@ def test_cdc_insert_events_stage_a_committed_manifest(
 
     threading.Thread(target=_producer, daemon=True).start()
 
-    _run_plugin_in_thread(ctx, src, timeout_s=60.0)
+    _run_plugin_in_thread(ctx, conn, src, timeout_s=60.0)
 
     # The ctx should have at least one committed manifest with
     # the qualified table name; combined the parquet should
@@ -371,8 +372,8 @@ def test_cdc_update_and_delete_events_surface(fresh_mysql_cdc, tmp_path):
         {"id": 7, "name": "carol", "age": 40},
     ])
 
+    conn = _make_cdc_conn(fresh_mysql_cdc)
     src = MySQLCdcStreamSrc(
-        conn=_make_cdc_conn(fresh_mysql_cdc),
         tables=[f"{fresh_mysql_cdc.database}.users"],
         start_from="head",
         src_cfg={
@@ -391,7 +392,7 @@ def test_cdc_update_and_delete_events_surface(fresh_mysql_cdc, tmp_path):
 
     threading.Thread(target=_producer, daemon=True).start()
 
-    _run_plugin_in_thread(ctx, src, timeout_s=60.0)
+    _run_plugin_in_thread(ctx, conn, src, timeout_s=60.0)
 
     files = _all_staged_files(ctx)
     assert files, "no committed manifest files produced"
@@ -423,8 +424,8 @@ def test_cdc_tail_skips_pre_existing_events(fresh_mysql_cdc, tmp_path):
         {"id": 101, "name": "pre-2", "age": 2},
     ])
 
+    conn = _make_cdc_conn(fresh_mysql_cdc)
     src = MySQLCdcStreamSrc(
-        conn=_make_cdc_conn(fresh_mysql_cdc),
         tables=[f"{fresh_mysql_cdc.database}.users"],
         # "tail" -> only events the plugin sees from now on.
         start_from="tail",
@@ -446,7 +447,7 @@ def test_cdc_tail_skips_pre_existing_events(fresh_mysql_cdc, tmp_path):
 
     threading.Thread(target=_producer, daemon=True).start()
 
-    _run_plugin_in_thread(ctx, src, timeout_s=60.0)
+    _run_plugin_in_thread(ctx, conn, src, timeout_s=60.0)
 
     files = _all_staged_files(ctx)
     if not files:
@@ -478,8 +479,8 @@ def test_cdc_persists_offset_to_ctx_state(fresh_mysql_cdc, tmp_path):
         {"id": 1, "name": "alice", "age": 30},
     ])
 
+    conn = _make_cdc_conn(fresh_mysql_cdc)
     src = MySQLCdcStreamSrc(
-        conn=_make_cdc_conn(fresh_mysql_cdc),
         tables=[f"{fresh_mysql_cdc.database}.users"],
         start_from="head",
         src_cfg={
@@ -490,7 +491,7 @@ def test_cdc_persists_offset_to_ctx_state(fresh_mysql_cdc, tmp_path):
         },
     )
 
-    _run_plugin_in_thread(ctx, src, timeout_s=60.0)
+    _run_plugin_in_thread(ctx, conn, src, timeout_s=60.0)
 
     # The runner writes the offset under ``cdc.offset`` once a
     # commit completes. If no events were captured the state
@@ -527,9 +528,10 @@ def test_cdc_resumes_from_persisted_stream_state(fresh_mysql_cdc, tmp_path):
         "mysql.cdc.blocking_timeout_seconds": 2,
     }
 
+    conn = _make_cdc_conn(fresh_mysql_cdc)
+
     def _src() -> MySQLCdcStreamSrc:
         return MySQLCdcStreamSrc(
-            conn=_make_cdc_conn(fresh_mysql_cdc),
             tables=[f"{fresh_mysql_cdc.database}.users"],
             start_from="head",
             src_cfg=src_cfg,
@@ -540,7 +542,7 @@ def test_cdc_resumes_from_persisted_stream_state(fresh_mysql_cdc, tmp_path):
     run1_work.mkdir()
     ctx1 = _CdcCtx(run1_work, active_polls=8)
     _insert_users(fresh_mysql_cdc, [{"id": 1, "name": "alice", "age": 30}])
-    _run_plugin_in_thread(ctx1, _src(), timeout_s=60.0)
+    _run_plugin_in_thread(ctx1, conn, _src(), timeout_s=60.0)
 
     if 1 not in _staged_ids(ctx1):
         pytest.skip("run 1 captured no events (timing); cannot test resume")
@@ -555,7 +557,7 @@ def test_cdc_resumes_from_persisted_stream_state(fresh_mysql_cdc, tmp_path):
     run2_work.mkdir()
     ctx2 = _CdcCtx(run2_work, active_polls=8, initial_state=persisted)
     assert ctx2.first_stage is False
-    _run_plugin_in_thread(ctx2, _src(), timeout_s=60.0)
+    _run_plugin_in_thread(ctx2, conn, _src(), timeout_s=60.0)
 
     run2_ids = _staged_ids(ctx2)
     # Resumed from the persisted offset: the new row surfaces, the
