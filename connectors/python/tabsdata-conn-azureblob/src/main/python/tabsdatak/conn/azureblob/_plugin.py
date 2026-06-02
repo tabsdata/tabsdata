@@ -87,29 +87,33 @@ ERRORS = _plugin.FilePluginErrors(
 # --- Plugins ------------------------------------------------------
 
 
-class AzureBlobSrcPlugin(SrcPlugin[AzureBlobSrc]):
+class AzureBlobSrcPlugin(SrcPlugin[AzureBlobSrcConn, AzureBlobSrc]):
     def read_in(
-        self, ctx: SrcPluginCtx, src: AzureBlobSrc
+        self,
+        ctx: SrcPluginCtx,
+        conn: AzureBlobSrcConn,
+        src: AzureBlobSrc,
     ) -> list[list[TableFileSpec]]:
         return _plugin.import_files(
             ctx=ctx,
-            cfg=_plugin.ReaderConf.from_src(src),
+            cfg=_plugin.ReaderConf.from_src(conn, src),
             build_location=build_location,
             run_env=run_env,
             errors=ERRORS,
         )
 
 
-class AzureBlobDestPlugin(DestPlugin[AzureBlobDest]):
+class AzureBlobDestPlugin(DestPlugin[AzureBlobDestConn, AzureBlobDest]):
     def write_out(
         self,
         ctx: DestContext,
+        conn: AzureBlobDestConn,
         dest: AzureBlobDest,
         tables: list[TableFileSpec],
     ) -> None:
         _plugin.copy_out(
             ctx=ctx,
-            cfg=_plugin.WriterConf.from_dest(dest),
+            cfg=_plugin.WriterConf.from_dest(conn, dest),
             tables=tables,
             build_location=build_location,
             run_env=run_env,

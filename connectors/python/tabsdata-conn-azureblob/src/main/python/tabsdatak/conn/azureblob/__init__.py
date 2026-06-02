@@ -18,14 +18,13 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import datetime
-from typing import Annotated, Any, Literal, TypeAlias, Union
+from typing import Annotated, Any, Literal, TypeAlias
 
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
 from tabsdatak.api import (
     Conn,
     Dest,
-    NamedConn,
     Src,
 )
 from tabsdatak.conn.azureblob.error import AzureBlobErrorCode
@@ -121,10 +120,6 @@ class AzureBlobDestConn(Conn):
         return full_path(self.base_path, path)
 
 
-SrcConnSpec: TypeAlias = Union[NamedConn, AzureBlobSrcConn]
-DestConnSpec: TypeAlias = Union[NamedConn, AzureBlobDestConn]
-
-
 # --- Source ----------------------------------------------------------
 
 
@@ -132,7 +127,6 @@ DestConnSpec: TypeAlias = Union[NamedConn, AzureBlobDestConn]
 class AzureBlobSrc(Src):
     """Azure Blob source — one parquet slot per path.
 
-    :param conn: :class:`AzureBlobSrcConn` (or :class:`NamedConn`).
     :param paths: List of file paths (or glob patterns) relative
         to the conn's root. One parquet slot per entry.
     :param format: Optional file-format override (default AUTO).
@@ -145,7 +139,6 @@ class AzureBlobSrc(Src):
         ``{"tabsdata.file.chunkSize"}``.
     """
 
-    conn: SrcConnSpec
     paths: SrcPathsSpec
     format: SrcFileFormat = SrcFileFormat.AUTO
     format_cfg: SrcFormatCfgSpec | None = None
@@ -167,7 +160,6 @@ class AzureBlobSrc(Src):
 class AzureBlobDest(Dest):
     """Azure Blob destination — write one parquet slot per path.
 
-    :param conn: :class:`AzureBlobDestConn` (or :class:`NamedConn`).
     :param paths: List of target file paths relative to the
         conn's root. One parquet slot per entry. Tokens like
         ``${date}`` / ``${trx_id}`` are resolved at write time.
@@ -176,7 +168,6 @@ class AzureBlobDest(Dest):
         ``{"tabsdata.file.chunkSize"}``.
     """
 
-    conn: DestConnSpec
     paths: DestPathsSpec
     format: DestFileFormat = DestFileFormat.AUTO
     format_cfg: DestFormatCfgSpec | None = None

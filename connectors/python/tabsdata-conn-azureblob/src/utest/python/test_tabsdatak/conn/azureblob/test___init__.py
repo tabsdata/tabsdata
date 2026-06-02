@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from tabsdatak.api import NamedConn, Secret
+from tabsdatak.api import Secret
 from tabsdatak.conn.azureblob.error import AzureBlobValidateException
 from tabsdatak.conn.common.types import AzureAccountKey
 from tabsdatak.conn.common.file.typing_ import (
@@ -18,31 +18,8 @@ from tabsdatak.conn.azureblob.error import AzureBlobErrorCode
 pytestmark = pytest.mark.azureblob
 
 
-def _src_conn() -> AzureBlobSrcConn:
-    return AzureBlobSrcConn(
-        container=Secret(),
-        credentials=AzureAccountKey(
-            account_name=Secret(),
-            account_key=Secret(),
-        ),
-        conn_cfg={"azure.timeout": 30},
-    )
-
-
-def _dest_conn() -> AzureBlobDestConn:
-    return AzureBlobDestConn(
-        container=Secret(),
-        credentials=AzureAccountKey(
-            account_name=Secret(),
-            account_key=Secret(),
-        ),
-        conn_cfg={"azure.timeout": 30},
-    )
-
-
 def test_azureblob_src_full_round_trip():
     src = AzureBlobSrc(
-        conn=_src_conn(),
         paths=["raw/users.csv", "raw/orders/*.csv"],
         format=SrcFileFormat.CSV,
         format_cfg={SrcFileFormat.CSV: {"separator": ";", "has_header": True}},
@@ -52,7 +29,6 @@ def test_azureblob_src_full_round_trip():
     )
     loaded = AzureBlobSrc.from_json(src.to_json())
     assert loaded == src
-    assert loaded.conn.conn_cfg == {"azure.timeout": 30}
     assert loaded.paths == ["raw/users.csv", "raw/orders/*.csv"]
     assert loaded.format is SrcFileFormat.CSV
     assert loaded.format_cfg == {
@@ -65,7 +41,6 @@ def test_azureblob_src_full_round_trip():
 
 def test_azureblob_dest_full_round_trip():
     dest = AzureBlobDest(
-        conn=_dest_conn(),
         paths=["${EXEC_PLAN_ID}/users.csv", "${TRX_ID}/orders.csv"],
         format=DestFileFormat.CSV,
         format_cfg={DestFileFormat.CSV: {"include_header": True, "separator": ","}},
@@ -73,37 +48,12 @@ def test_azureblob_dest_full_round_trip():
     )
     loaded = AzureBlobDest.from_json(dest.to_json())
     assert loaded == dest
-    assert loaded.conn.conn_cfg == {"azure.timeout": 30}
     assert loaded.paths == ["${EXEC_PLAN_ID}/users.csv", "${TRX_ID}/orders.csv"]
     assert loaded.format is DestFileFormat.CSV
     assert loaded.format_cfg == {
         DestFileFormat.CSV: {"include_header": True, "separator": ","}
     }
     assert loaded.dest_cfg == {"tabsdata.file.chunkSize": 2048}
-
-
-def test_azureblob_src_round_trip_with_named_conn():
-    src = AzureBlobSrc(
-        conn=NamedConn(name="prod_azure"),
-        paths=["raw/users.csv"],
-        format=SrcFileFormat.CSV,
-    )
-    loaded = AzureBlobSrc.from_json(src.to_json())
-    assert loaded == src
-    assert isinstance(loaded.conn, NamedConn)
-    assert loaded.conn.name == "prod_azure"
-
-
-def test_azureblob_dest_round_trip_with_named_conn():
-    dest = AzureBlobDest(
-        conn=NamedConn(name="prod_azure"),
-        paths=["out/users.csv"],
-        format=DestFileFormat.CSV,
-    )
-    loaded = AzureBlobDest.from_json(dest.to_json())
-    assert loaded == dest
-    assert isinstance(loaded.conn, NamedConn)
-    assert loaded.conn.name == "prod_azure"
 
 
 # ---------------------------------------------------------------------------
@@ -146,7 +96,6 @@ def test_azureblob_src_rejects_missing_paths():
 
     with pytest.raises(ConnInitException) as ei:
         AzureBlobSrc(  # type: ignore[call-arg]
-            conn=_src_conn(),
             format=SrcFileFormat.CSV,
         )
     assert ei.value.api_error is AzureBlobErrorCode.AZURE_BLOB_2
@@ -157,7 +106,6 @@ def test_azureblob_dest_rejects_missing_paths():
 
     with pytest.raises(ConnInitException) as ei:
         AzureBlobDest(  # type: ignore[call-arg]
-            conn=_dest_conn(),
             format=DestFileFormat.CSV,
         )
     assert ei.value.api_error is AzureBlobErrorCode.AZURE_BLOB_4
@@ -166,7 +114,6 @@ def test_azureblob_dest_rejects_missing_paths():
 def test_azureblob_validate_rejects_cross_side_format_cfg_keys():
     with pytest.raises(AzureBlobValidateException) as ei:
         AzureBlobSrc(
-            conn=_src_conn(),
             paths=["data.csv"],
             format=SrcFileFormat.CSV,
             format_cfg={SrcFileFormat.CSV: {"include_header": True}},
@@ -175,7 +122,6 @@ def test_azureblob_validate_rejects_cross_side_format_cfg_keys():
 
     with pytest.raises(AzureBlobValidateException) as ei:
         AzureBlobDest(
-            conn=_dest_conn(),
             paths=["out.csv"],
             format=DestFileFormat.CSV,
             format_cfg={DestFileFormat.CSV: {"has_header": True}},

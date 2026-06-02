@@ -131,8 +131,9 @@ def test_src_plugin_passes_build_location_run_env_and_errors(monkeypatch, tmp_pa
 
     monkeypatch.setattr(_file_plugin, "import_files", fake)
 
-    src = AzureBlobSrc(conn=_src_conn(), paths=["a/b.parquet"])
-    out = plugin.AzureBlobSrcPlugin().read_in(_src_ctx(tmp_path), src)
+    conn = _src_conn()
+    src = AzureBlobSrc(paths=["a/b.parquet"])
+    out = plugin.AzureBlobSrcPlugin().read_in(_src_ctx(tmp_path), conn, src)
 
     assert out == [[Path(tmp_path / "ok.parquet")]]
     assert captured["build_location"] is plugin.build_location
@@ -152,9 +153,10 @@ def test_dest_plugin_passes_build_location_run_env_and_errors(monkeypatch, tmp_p
 
     monkeypatch.setattr(_file_plugin, "copy_out", fake)
 
-    dest = AzureBlobDest(conn=_dest_conn(), paths=["out/x.parquet"])
+    conn = _dest_conn()
+    dest = AzureBlobDest(paths=["out/x.parquet"])
     parquet = Path(tmp_path / "in.parquet")
-    plugin.AzureBlobDestPlugin().write_out(_dest_ctx(tmp_path), dest, [parquet])
+    plugin.AzureBlobDestPlugin().write_out(_dest_ctx(tmp_path), conn, dest, [parquet])
 
     assert captured["tables"] == [parquet]
     assert captured["build_location"] is plugin.build_location
@@ -199,7 +201,7 @@ def test_azureblob_dest_def_wires_plugin_and_explorer():
 
 
 def test_azureblob_cardinality_uses_paths_length():
-    src = AzureBlobSrc(conn=_src_conn(), paths=["a", "b", "c"])
+    src = AzureBlobSrc(paths=["a", "b", "c"])
     assert plugin.AZURE_BLOB_SRC.cardinality(src) == 3
-    dest = AzureBlobDest(conn=_dest_conn(), paths=["a", "b"])
+    dest = AzureBlobDest(paths=["a", "b"])
     assert plugin.AZURE_BLOB_DEST.cardinality(dest) == 2
