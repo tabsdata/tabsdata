@@ -280,6 +280,7 @@ def _patched_signal_handlers():
 
 def _run_plugin_in_thread(
     ctx: _CdcCtx,
+    conn: Db2CdcStreamSrcConn,
     src: Db2CdcStreamSrc,
     timeout_s: float = 60.0,
 ) -> None:
@@ -288,7 +289,7 @@ def _run_plugin_in_thread(
     def _go():
         try:
             with _patched_signal_handlers():
-                Db2CdcStreamSrcPlugin().run(ctx=ctx, stream_src=src)
+                Db2CdcStreamSrcPlugin().run(ctx=ctx, conn=conn, stream_src=src)
         except BaseException as exc:  # noqa: BLE001
             err.append(exc)
 
@@ -318,8 +319,8 @@ def test_cdc_insert_event_stages_a_committed_manifest(
     work.mkdir()
     ctx = _CdcCtx(work, active_polls=6)
 
+    conn = _make_cdc_conn(cfg)
     src = Db2CdcStreamSrc(
-        conn=_make_cdc_conn(cfg),
         tables=[f"{_CD_SCHEMA}.{_CD_TABLE}"],
         start_from="head",
         src_cfg={
@@ -338,7 +339,7 @@ def test_cdc_insert_event_stages_a_committed_manifest(
         id_=1, name="alice", age=30,
     )
 
-    _run_plugin_in_thread(ctx, src, timeout_s=60.0)
+    _run_plugin_in_thread(ctx, conn, src, timeout_s=60.0)
 
     files = _all_staged_files(ctx)
     assert files, "no committed manifest files produced by the plugin"
@@ -363,8 +364,8 @@ def test_cdc_insert_update_delete_events_surface(fresh_db2_cdc, tmp_path):
     work.mkdir()
     ctx = _CdcCtx(work, active_polls=8)
 
+    conn = _make_cdc_conn(cfg)
     src = Db2CdcStreamSrc(
-        conn=_make_cdc_conn(cfg),
         tables=[f"{_CD_SCHEMA}.{_CD_TABLE}"],
         start_from="head",
         src_cfg={
@@ -394,7 +395,7 @@ def test_cdc_insert_update_delete_events_surface(fresh_db2_cdc, tmp_path):
         id_=7, name=None, age=None,
     )
 
-    _run_plugin_in_thread(ctx, src, timeout_s=60.0)
+    _run_plugin_in_thread(ctx, conn, src, timeout_s=60.0)
 
     files = _all_staged_files(ctx)
     assert files, "no committed manifest files produced"
@@ -434,8 +435,8 @@ def test_cdc_tail_skips_pre_existing_events(fresh_db2_cdc, tmp_path):
         id_=101, name="pre-2", age=2,
     )
 
+    conn = _make_cdc_conn(cfg)
     src = Db2CdcStreamSrc(
-        conn=_make_cdc_conn(cfg),
         tables=[f"{_CD_SCHEMA}.{_CD_TABLE}"],
         start_from="tail",
         src_cfg={
@@ -456,7 +457,7 @@ def test_cdc_tail_skips_pre_existing_events(fresh_db2_cdc, tmp_path):
 
     threading.Thread(target=_producer, daemon=True).start()
 
-    _run_plugin_in_thread(ctx, src, timeout_s=60.0)
+    _run_plugin_in_thread(ctx, conn, src, timeout_s=60.0)
 
     files = _all_staged_files(ctx)
     if not files:
@@ -493,8 +494,8 @@ def test_cdc_resumes_from_commitseq_position(fresh_db2_cdc, tmp_path):
 
     # Start at commitseq 6 -- only commitseq 7 should surface (the
     # ingester's where-clause is ``IBMSNAP_COMMITSEQ > commitseq``).
+    conn = _make_cdc_conn(cfg)
     src = Db2CdcStreamSrc(
-        conn=_make_cdc_conn(cfg),
         tables=[f"{_CD_SCHEMA}.{_CD_TABLE}"],
         start_from=CommitSeqPosition(seq=_commitseq(6).hex()),
         src_cfg={
@@ -505,7 +506,7 @@ def test_cdc_resumes_from_commitseq_position(fresh_db2_cdc, tmp_path):
         },
     )
 
-    _run_plugin_in_thread(ctx, src, timeout_s=60.0)
+    _run_plugin_in_thread(ctx, conn, src, timeout_s=60.0)
 
     files = _all_staged_files(ctx)
     assert files, "no committed manifest files produced"
@@ -535,8 +536,8 @@ def test_cdc_persists_offset_to_ctx_state(fresh_db2_cdc, tmp_path):
         id_=1, name="alice", age=30,
     )
 
+    conn = _make_cdc_conn(cfg)
     src = Db2CdcStreamSrc(
-        conn=_make_cdc_conn(cfg),
         tables=[f"{_CD_SCHEMA}.{_CD_TABLE}"],
         start_from="head",
         src_cfg={
@@ -547,7 +548,7 @@ def test_cdc_persists_offset_to_ctx_state(fresh_db2_cdc, tmp_path):
         },
     )
 
-    _run_plugin_in_thread(ctx, src, timeout_s=60.0)
+    _run_plugin_in_thread(ctx, conn, src, timeout_s=60.0)
 
     if "cdc.offset" not in ctx._state:
         pytest.skip("no offset persisted (no events captured)")
@@ -587,9 +588,10 @@ def test_cdc_resumes_from_persisted_stream_state(fresh_db2_cdc, tmp_path):
         "db2.cdc.blocking_timeout_seconds": 3,
     }
 
+    conn = _make_cdc_conn(cfg)
+
     def _src() -> Db2CdcStreamSrc:
         return Db2CdcStreamSrc(
-            conn=_make_cdc_conn(cfg),
             tables=[qualified],
             start_from="head",
             src_cfg=src_cfg,
@@ -605,7 +607,7 @@ def test_cdc_resumes_from_persisted_stream_state(fresh_db2_cdc, tmp_path):
     run1_work = tmp_path / "run1"
     run1_work.mkdir()
     ctx1 = _CdcCtx(run1_work, active_polls=6)
-    _run_plugin_in_thread(ctx1, _src(), timeout_s=60.0)
+    _run_plugin_in_thread(ctx1, conn, _src(), timeout_s=60.0)
 
     if not {50, 60} <= _staged_ids(ctx1):
         pytest.skip("run 1 captured no events (timing); cannot test resume")
@@ -626,7 +628,7 @@ def test_cdc_resumes_from_persisted_stream_state(fresh_db2_cdc, tmp_path):
     run2_work.mkdir()
     ctx2 = _CdcCtx(run2_work, active_polls=6, initial_state=persisted)
     assert ctx2.first_stage is False
-    _run_plugin_in_thread(ctx2, _src(), timeout_s=60.0)
+    _run_plugin_in_thread(ctx2, conn, _src(), timeout_s=60.0)
 
     run2_ids = _staged_ids(ctx2)
     # Resumed from the persisted commit-seq: only the new row surfaces;

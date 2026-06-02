@@ -327,6 +327,7 @@ def _patched_signal_handlers():
 
 def _run_plugin_in_thread(
     ctx: _CdcCtx,
+    conn: Db2CdcStreamSrcConn,
     src: Db2CdcStreamSrc,
     timeout_s: float = 90.0,
 ) -> None:
@@ -335,7 +336,7 @@ def _run_plugin_in_thread(
     def _go():
         try:
             with _patched_signal_handlers():
-                Db2CdcStreamSrcPlugin().run(ctx=ctx, stream_src=src)
+                Db2CdcStreamSrcPlugin().run(ctx=ctx, conn=conn, stream_src=src)
         except BaseException as exc:  # noqa: BLE001
             err.append(exc)
 
@@ -372,7 +373,6 @@ def _make_src(
     src_cfg: dict | None = None,
 ) -> Db2CdcStreamSrc:
     return Db2CdcStreamSrc(
-        conn=_make_cdc_conn(cfg),
         tables=[_cd_qualified(source_table)],
         start_from=start_from,
         src_cfg=src_cfg or {
@@ -397,6 +397,7 @@ def test_cdc_insert_event_stages_a_committed_manifest(fresh_db2_cdc_asncap, tmp_
     work.mkdir()
     ctx = _CdcCtx(work, active_polls=12)
 
+    conn = _make_cdc_conn(cfg)
     src = _make_src(cfg, source_table, start_from="head")
 
     _source_insert(
@@ -405,7 +406,7 @@ def test_cdc_insert_event_stages_a_committed_manifest(fresh_db2_cdc_asncap, tmp_
     )
     _wait_cd_count(cfg, source_table, expected=1)
 
-    _run_plugin_in_thread(ctx, src, timeout_s=90.0)
+    _run_plugin_in_thread(ctx, conn, src, timeout_s=90.0)
 
     files = _all_staged_files(ctx)
     assert files, "no committed manifest files produced by the plugin"
@@ -430,6 +431,7 @@ def test_cdc_insert_update_delete_events_surface(fresh_db2_cdc_asncap, tmp_path)
     work.mkdir()
     ctx = _CdcCtx(work, active_polls=18)
 
+    conn = _make_cdc_conn(cfg)
     src = _make_src(cfg, source_table, start_from="head")
 
     # I, U, D on the same primary key; asncap emits one CD row per
@@ -447,7 +449,7 @@ def test_cdc_insert_update_delete_events_surface(fresh_db2_cdc_asncap, tmp_path)
     # asncap variants.
     _wait_cd_count(cfg, source_table, expected=3)
 
-    _run_plugin_in_thread(ctx, src, timeout_s=90.0)
+    _run_plugin_in_thread(ctx, conn, src, timeout_s=90.0)
 
     files = _all_staged_files(ctx)
     assert files, "no committed manifest files produced"
@@ -485,6 +487,7 @@ def test_cdc_tail_skips_pre_existing_events(fresh_db2_cdc_asncap, tmp_path):
     )
     _wait_cd_count(cfg, source_table, expected=2)
 
+    conn = _make_cdc_conn(cfg)
     src = _make_src(cfg, source_table, start_from="tail")
 
     def _producer():
@@ -498,7 +501,7 @@ def test_cdc_tail_skips_pre_existing_events(fresh_db2_cdc_asncap, tmp_path):
 
     threading.Thread(target=_producer, daemon=True).start()
 
-    _run_plugin_in_thread(ctx, src, timeout_s=90.0)
+    _run_plugin_in_thread(ctx, conn, src, timeout_s=90.0)
 
     files = _all_staged_files(ctx)
     if not files:
@@ -545,11 +548,12 @@ def test_cdc_resumes_from_commitseq_position(fresh_db2_cdc_asncap, tmp_path):
     # should surface.
     resume_seq_hex = seqs[1].hex()
 
+    conn = _make_cdc_conn(cfg)
     src = _make_src(
         cfg, source_table,
         start_from=CommitSeqPosition(seq=resume_seq_hex),
     )
-    _run_plugin_in_thread(ctx, src, timeout_s=90.0)
+    _run_plugin_in_thread(ctx, conn, src, timeout_s=90.0)
 
     files = _all_staged_files(ctx)
     assert files, "no committed manifest files produced"
@@ -579,8 +583,9 @@ def test_cdc_persists_offset_to_ctx_state(fresh_db2_cdc_asncap, tmp_path):
     )
     _wait_cd_count(cfg, source_table, expected=1)
 
+    conn = _make_cdc_conn(cfg)
     src = _make_src(cfg, source_table, start_from="head")
-    _run_plugin_in_thread(ctx, src, timeout_s=90.0)
+    _run_plugin_in_thread(ctx, conn, src, timeout_s=90.0)
 
     if "cdc.offset" not in ctx._state:
         pytest.skip("no offset persisted (no events captured)")

@@ -174,11 +174,11 @@ def work_dir(tmp_path: Path) -> Path:
 @pytest.mark.db2_seq
 @pytest.mark.xdist_group("db2_seq")
 def test_src_plugin_read_in_returns_parquet_files(fresh_db2, work_dir):
+    conn = _src_conn_from(fresh_db2)
     src = Db2Src(
-        conn=_src_conn_from(fresh_db2),
         queries=["SELECT id, name FROM users ORDER BY id"],
     )
-    out = plugin.Db2SrcPlugin().read_in(_src_ctx(work_dir), src)
+    out = plugin.Db2SrcPlugin().read_in(_src_ctx(work_dir), conn, src)
     assert len(out) == 1
     df = pl.concat([_read_parquet(p) for p in out[0]])
     # Db2 folds unquoted identifiers to upper-case.
@@ -189,15 +189,15 @@ def test_src_plugin_read_in_returns_parquet_files(fresh_db2, work_dir):
 @pytest.mark.db2_seq
 @pytest.mark.xdist_group("db2_seq")
 def test_src_plugin_read_in_multiple_queries(fresh_db2, work_dir):
+    conn = _src_conn_from(fresh_db2)
     src = Db2Src(
-        conn=_src_conn_from(fresh_db2),
         queries=[
             "SELECT id FROM users WHERE age >= :cut ORDER BY id",
             "SELECT id FROM orders ORDER BY id",
         ],
         initial_values={"cut": 30},
     )
-    out = plugin.Db2SrcPlugin().read_in(_src_ctx(work_dir), src)
+    out = plugin.Db2SrcPlugin().read_in(_src_ctx(work_dir), conn, src)
     assert len(out) == 2
     df0 = pl.concat([_read_parquet(p) for p in out[0]])
     df1 = pl.concat([_read_parquet(p) for p in out[1]])
@@ -219,11 +219,11 @@ def test_dest_plugin_write_out_appends_rows(fresh_db2, work_dir):
         work_dir / "in.parquet",
         [{"id": 100, "name": "dave", "age": 50}],
     )
+    conn = _dest_conn_from(fresh_db2)
     dest = Db2Dest(
-        conn=_dest_conn_from(fresh_db2),
         tables=["users"],
     )
-    plugin.Db2DestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
+    plugin.Db2DestPlugin().write_out(_dest_ctx(work_dir), conn, dest, [src])
     eng = create_engine(fresh_db2.uri_with_credentials)
     try:
         def _read():
@@ -247,12 +247,12 @@ def test_dest_plugin_write_out_replace_clears_existing(fresh_db2, work_dir):
         work_dir / "in.parquet",
         [{"id": 1, "name": "only", "age": 1}],
     )
+    conn = _dest_conn_from(fresh_db2)
     dest = Db2Dest(
-        conn=_dest_conn_from(fresh_db2),
         tables=["users"],
         if_table_exists="replace",
     )
-    plugin.Db2DestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
+    plugin.Db2DestPlugin().write_out(_dest_ctx(work_dir), conn, dest, [src])
     eng = create_engine(fresh_db2.uri_with_credentials)
     try:
         def _read():
