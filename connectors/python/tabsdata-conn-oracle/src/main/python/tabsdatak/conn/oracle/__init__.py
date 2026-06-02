@@ -26,7 +26,6 @@ from tabsdatak.api import (
     Conn,
     ContextValueSpec,
     Dest,
-    NamedConn,
     Secret,
     Src,
     Var,
@@ -116,10 +115,6 @@ class OracleDestConn(Conn):
     conn_cfg: CfgSpec | None = None
 
 
-SrcConnSpec: TypeAlias = Union[NamedConn, OracleSrcConn]
-DestConnSpec: TypeAlias = Union[NamedConn, OracleDestConn]
-
-
 # --- Source ----------------------------------------------------------
 
 
@@ -127,8 +122,6 @@ DestConnSpec: TypeAlias = Union[NamedConn, OracleDestConn]
 class OracleSrc(Src):
     """Oracle source — one parquet slot per SELECT query.
 
-    :param conn: :class:`OracleSrcConn` / :class:`OracleDestConn`
-        (or :class:`NamedConn`).
     :param queries: List of SELECT statements; one slot per query.
     :param transactional: When ``True`` (default), run all queries
         inside one transactional session.
@@ -146,7 +139,6 @@ class OracleSrc(Src):
         set (logging_level, readEngine, chunkSize).
     """
 
-    conn: SrcConnSpec
     queries: QueriesSpec
     transactional: bool = True
     schema_overrides: SchemaOverrideSpec | None = None
@@ -170,8 +162,6 @@ class OracleSrc(Src):
 class OracleDest(Dest):
     """Oracle destination — write one parquet slot per target table.
 
-    :param conn: :class:`OracleSrcConn` / :class:`OracleDestConn`
-        (or :class:`NamedConn`).
     :param tables: Target table names (FQN or bare); one parquet
         slot per table.
     :param if_table_exists: ``"append"`` (default) or ``"replace"``
@@ -182,7 +172,6 @@ class OracleDest(Dest):
         set (logging_level, writeEngine, chunkSize).
     """
 
-    conn: DestConnSpec
     tables: OracleTableNamesSpec
     if_table_exists: IfTableExistsSpec = "append"
     transactional: bool = True

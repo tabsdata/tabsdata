@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any
 
 from tabsdatak.conn.oracle import (
     DestCfgKey,
@@ -113,10 +113,11 @@ def _resolve_dest_cfg(dest_cfg: DestCfgSpec | None) -> _WriterCfg:
 # and the abstract Src / Dest classes, not the runtime IO stack).
 
 
-class OracleSrcPlugin(SrcPlugin[OracleSrc]):
+class OracleSrcPlugin(SrcPlugin[OracleSrcConn, OracleSrc]):
     def read_in(
         self,
         ctx: SrcPluginCtx,
+        conn: OracleSrcConn,
         src: OracleSrc,
     ) -> list[list[TableFileSpec]]:
         from sqlalchemy.exc import OperationalError, SQLAlchemyError
@@ -135,7 +136,7 @@ class OracleSrcPlugin(SrcPlugin[OracleSrc]):
         logger.info("oracle: read_in starting (%d queries)", len(src.queries or []))
 
         read_cfg = OracleReadCfg(
-            conn=cast(OracleSrcConn, src.conn),
+            conn=conn,
             queries=src.queries,
             transactional=src.transactional,
             schema_overrides=src.schema_overrides,
@@ -161,10 +162,11 @@ class OracleSrcPlugin(SrcPlugin[OracleSrc]):
             )
 
 
-class OracleDestPlugin(DestPlugin[OracleDest]):
+class OracleDestPlugin(DestPlugin[OracleDestConn, OracleDest]):
     def write_out(
         self,
         ctx: DestContext,
+        conn: OracleDestConn,
         dest: OracleDest,
         tables: list[TableFileSpec],
     ) -> None:
@@ -188,7 +190,7 @@ class OracleDestPlugin(DestPlugin[OracleDest]):
             )
 
         write_cfg = OracleWriteCfg(
-            conn=cast(OracleDestConn, dest.conn),
+            conn=conn,
             target_tables=list(dest.tables),
             if_table_exists=dest.if_table_exists,
             transactional=dest.transactional,

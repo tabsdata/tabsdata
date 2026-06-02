@@ -4,14 +4,12 @@ import typing
 
 import pytest
 
-from tabsdatak.api import NamedConn, Secret
+from tabsdatak.api import Secret
 from tabsdatak.error import TabsdataException
 from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
 from tabsdatak.conn.common.types import CfgSpec, UserPassword
 from tabsdatak.conn.oracle import (
-    DestConnSpec,
-    SrcConnSpec,
     CredentialsSpec,
     DestCfgSpec,
     IfTableExistsSpec,
@@ -104,7 +102,6 @@ def test_oracle_conn_rejects_bad_uri(cls):
 
 def test_oracle_src_full_round_trip():
     src = OracleSrc(
-        conn=_src_conn(),
         queries=["SELECT * FROM users", "SELECT * FROM orders"],
         transactional=False,
         schema_overrides=[None, None],
@@ -120,18 +117,9 @@ def test_oracle_src_full_round_trip():
     assert loaded.src_cfg == {"oracle.logging_level": 20}
 
 
-def test_oracle_src_round_trip_with_named_conn():
-    src = OracleSrc(conn=NamedConn(name="prod_oracle"), queries=["SELECT 1"])
-    loaded = OracleSrc.from_json(src.to_json())
-    assert loaded == src
-    assert isinstance(loaded.conn, NamedConn)
-    assert loaded.conn.name == "prod_oracle"
-
-
 def test_oracle_src_validate_rejects_schema_overrides_length_mismatch():
     with pytest.raises(OracleValidateException) as ei:
         OracleSrc(
-            conn=_src_conn(),
             queries=["SELECT 1", "SELECT 2"],
             schema_overrides=[None],
         )
@@ -140,7 +128,6 @@ def test_oracle_src_validate_rejects_schema_overrides_length_mismatch():
 
 def test_oracle_src_validate_accepts_matching_schema_overrides_length():
     src = OracleSrc(
-        conn=_src_conn(),
         queries=["SELECT 1", "SELECT 2"],
         schema_overrides=[None, None],
     )
@@ -154,7 +141,6 @@ def test_oracle_src_validate_accepts_matching_schema_overrides_length():
 
 def test_oracle_dest_full_round_trip():
     dest = OracleDest(
-        conn=_dest_conn(),
         tables=["analytics.users", "analytics.orders"],
         if_table_exists="replace",
         transactional=False,
@@ -168,16 +154,8 @@ def test_oracle_dest_full_round_trip():
     assert loaded.dest_cfg == {"oracle.logging_level": 20}
 
 
-def test_oracle_dest_round_trip_with_named_conn():
-    dest = OracleDest(conn=NamedConn(name="prod_oracle"), tables=["analytics.users"])
-    loaded = OracleDest.from_json(dest.to_json())
-    assert loaded == dest
-    assert isinstance(loaded.conn, NamedConn)
-    assert loaded.conn.name == "prod_oracle"
-
-
 def test_oracle_dest_defaults_if_table_exists_to_append():
-    dest = OracleDest(conn=_dest_conn(), tables=["analytics.users"])
+    dest = OracleDest(tables=["analytics.users"])
     assert dest.if_table_exists == "append"
     assert dest.transactional is True
     assert dest.dest_cfg is None
@@ -200,7 +178,6 @@ def test_oracle_conn_fields_wire_expected_specs(cls):
 
 
 def test_oracle_src_fields_wire_expected_specs():
-    assert _hint(OracleSrc, "conn") == SrcConnSpec
     assert _hint(OracleSrc, "queries") == QueriesSpec
     assert _hint(OracleSrc, "transactional") is bool
     assert _hint(OracleSrc, "schema_overrides") == SchemaOverrideSpec | None
@@ -208,7 +185,6 @@ def test_oracle_src_fields_wire_expected_specs():
 
 
 def test_oracle_dest_fields_wire_expected_specs():
-    assert _hint(OracleDest, "conn") == DestConnSpec
     assert _hint(OracleDest, "tables") == OracleTableNamesSpec
     assert _hint(OracleDest, "if_table_exists") == IfTableExistsSpec
     assert _hint(OracleDest, "transactional") is bool
@@ -223,7 +199,6 @@ def test_oracle_dest_fields_wire_expected_specs():
 def test_oracle_src_rejects_unknown_src_cfg_key():
     with pytest.raises(ConnInitException) as ei:
         OracleSrc(
-            conn=_src_conn(),
             queries=["SELECT 1"],
             src_cfg={"bogus.key": 1},
         )
@@ -232,7 +207,6 @@ def test_oracle_src_rejects_unknown_src_cfg_key():
 
 def test_oracle_src_accepts_known_src_cfg_keys():
     src = OracleSrc(
-        conn=_src_conn(),
         queries=["SELECT 1"],
         src_cfg={
             "oracle.logging_level": 20,
@@ -247,7 +221,6 @@ def test_oracle_src_accepts_known_src_cfg_keys():
 def test_oracle_dest_rejects_unknown_dest_cfg_key():
     with pytest.raises(ConnInitException) as ei:
         OracleDest(
-            conn=_dest_conn(),
             tables=["analytics.users"],
             dest_cfg={"bogus.key": 1},
         )
@@ -256,7 +229,6 @@ def test_oracle_dest_rejects_unknown_dest_cfg_key():
 
 def test_oracle_dest_accepts_known_dest_cfg_keys():
     dest = OracleDest(
-        conn=_dest_conn(),
         tables=["analytics.users"],
         dest_cfg={
             "oracle.logging_level": 20,
