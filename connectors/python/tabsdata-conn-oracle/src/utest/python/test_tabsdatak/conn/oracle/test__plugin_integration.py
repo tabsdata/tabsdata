@@ -167,11 +167,11 @@ def work_dir(tmp_path: Path) -> Path:
 
 
 def test_src_plugin_read_in_returns_parquet_files(fresh_oracle, work_dir):
+    conn = _src_conn_from(fresh_oracle)
     src = OracleSrc(
-        conn=_src_conn_from(fresh_oracle),
         queries=["SELECT id, name FROM users ORDER BY id"],
     )
-    out = plugin.OracleSrcPlugin().read_in(_src_ctx(work_dir), src)
+    out = plugin.OracleSrcPlugin().read_in(_src_ctx(work_dir), conn, src)
     assert len(out) == 1
     df = pl.concat([_read_parquet(p) for p in out[0]])
     names = df["name"].to_list() if "name" in df.columns else df["NAME"].to_list()
@@ -179,15 +179,15 @@ def test_src_plugin_read_in_returns_parquet_files(fresh_oracle, work_dir):
 
 
 def test_src_plugin_read_in_multiple_queries(fresh_oracle, work_dir):
+    conn = _src_conn_from(fresh_oracle)
     src = OracleSrc(
-        conn=_src_conn_from(fresh_oracle),
         queries=[
             "SELECT id FROM users WHERE age >= :cut ORDER BY id",
             "SELECT id FROM orders ORDER BY id",
         ],
         initial_values={"cut": 30},
     )
-    out = plugin.OracleSrcPlugin().read_in(_src_ctx(work_dir), src)
+    out = plugin.OracleSrcPlugin().read_in(_src_ctx(work_dir), conn, src)
     assert len(out) == 2
     users_df = pl.concat([_read_parquet(p) for p in out[0]])
     orders_df = pl.concat([_read_parquet(p) for p in out[1]])
@@ -207,11 +207,11 @@ def test_dest_plugin_write_out_appends_rows(fresh_oracle, work_dir):
         work_dir / "in.parquet",
         [{"ID": 100, "NAME": "dave", "AGE": 50}],
     )
+    conn = _dest_conn_from(fresh_oracle)
     dest = OracleDest(
-        conn=_dest_conn_from(fresh_oracle),
         tables=["users"],
     )
-    plugin.OracleDestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
+    plugin.OracleDestPlugin().write_out(_dest_ctx(work_dir), conn, dest, [src])
     eng = create_engine(fresh_oracle.uri_with_credentials)
     try:
         with eng.connect() as conn:
@@ -230,12 +230,12 @@ def test_dest_plugin_write_out_replace_clears_existing(fresh_oracle, work_dir):
         work_dir / "in.parquet",
         [{"ID": 1, "NAME": "only", "AGE": 1}],
     )
+    conn = _dest_conn_from(fresh_oracle)
     dest = OracleDest(
-        conn=_dest_conn_from(fresh_oracle),
         tables=["users"],
         if_table_exists="replace",
     )
-    plugin.OracleDestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
+    plugin.OracleDestPlugin().write_out(_dest_ctx(work_dir), conn, dest, [src])
     eng = create_engine(fresh_oracle.uri_with_credentials)
     try:
         with eng.connect() as conn:
