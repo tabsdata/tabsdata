@@ -105,6 +105,7 @@
 //!                                   (codec is internal to td-kubernetes;
 //!                                    callers never see encode/decode)
 
+pub mod discovery;
 pub mod generator;
 pub mod handler;
 pub mod kubeconfig;

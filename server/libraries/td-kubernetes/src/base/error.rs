@@ -12,4 +12,5 @@ pub mod naming;
 pub mod pod;
 pub mod profile;
 pub mod provider;
+pub mod secret;
 pub mod system;

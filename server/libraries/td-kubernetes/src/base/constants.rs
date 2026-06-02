@@ -46,6 +46,8 @@ pub const KUBERNETES_LABEL_NAMESPACE: &str = "app.kubernetes.io/";
 
 pub const TIER_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "worker-tier");
 pub const CONFIGMAP_FAMILY_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "configmap-family");
+pub const SECRET_FAMILY_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "secret-family");
+pub const SECRET_FAMILY_CONFIG: &str = "config";
 
 pub const PART_OF_LABEL: &str = concatcp!(KUBERNETES_LABEL_NAMESPACE, "part-of");
 pub const PART_OF_TABSDATA: &str = "tabsdata";

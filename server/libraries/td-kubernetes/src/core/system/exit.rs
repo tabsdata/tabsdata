@@ -11,6 +11,7 @@ use crate::base::error::manifest::ManifestError;
 use crate::base::error::naming::NamingError;
 use crate::base::error::profile::ProfileError;
 use crate::base::error::provider::ProviderError;
+use crate::base::error::secret::SecretError;
 
 #[derive(Debug)]
 pub struct CommandError {
@@ -74,7 +75,8 @@ crate::command_error_from!(
     ManifestError,
     NamingError,
     ProfileError,
-    ProviderError
+    ProviderError,
+    SecretError
 );
 
 pub type CommandResult<T = ()> = Result<T, CommandError>;
