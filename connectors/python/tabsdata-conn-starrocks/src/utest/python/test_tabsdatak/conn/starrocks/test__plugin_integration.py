@@ -129,10 +129,11 @@ def test_dest_plugin_write_out_appends_rows(
         [{"id": 100, "name": "dave", "age": 50}],
     )
     dest = StarRocksDest(
-        conn=_conn_from(fresh_starrocks, s3_staging),
         tables=["users"],
     )
-    plugin.StarRocksDestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
+    plugin.StarRocksDestPlugin().write_out(
+        _dest_ctx(work_dir), _conn_from(fresh_starrocks, s3_staging), dest, [src]
+    )
     eng = create_engine(fresh_starrocks.uri_with_credentials)
     try:
         with eng.connect() as conn:
@@ -154,11 +155,12 @@ def test_dest_plugin_write_out_replace_clears_existing(
         [{"id": 1, "name": "only", "age": 1}],
     )
     dest = StarRocksDest(
-        conn=_conn_from(fresh_starrocks, s3_staging),
         tables=["users"],
         if_table_exists="replace",
     )
-    plugin.StarRocksDestPlugin().write_out(_dest_ctx(work_dir), dest, [src])
+    plugin.StarRocksDestPlugin().write_out(
+        _dest_ctx(work_dir), _conn_from(fresh_starrocks, s3_staging), dest, [src]
+    )
     eng = create_engine(fresh_starrocks.uri_with_credentials)
     try:
         with eng.connect() as conn:
@@ -182,11 +184,13 @@ def test_dest_plugin_write_out_two_tables_round_trip(
         [{"id": 99, "user_id": 200, "qty": 1}],
     )
     dest = StarRocksDest(
-        conn=_conn_from(fresh_starrocks, s3_staging),
         tables=["users", "orders"],
     )
     plugin.StarRocksDestPlugin().write_out(
-        _dest_ctx(work_dir), dest, [users, orders],
+        _dest_ctx(work_dir),
+        _conn_from(fresh_starrocks, s3_staging),
+        dest,
+        [users, orders],
     )
     eng = create_engine(fresh_starrocks.uri_with_credentials)
     try:
