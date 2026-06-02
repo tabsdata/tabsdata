@@ -37,7 +37,7 @@ from tabsdatak.conn.mysql import (
     MySQLCdcStreamSrc,
 )
 from tabsdatak.conn.mysql._cdc_plugin import MySQLCdcStreamSrcPlugin
-from tabsdatak.spi import StageRef, StreamSrcPluginCtx
+from tabsdatak.spi import StoreStreamState, StreamSrcPluginCtx
 
 logger = logging.getLogger(__name__)
 
@@ -56,21 +56,27 @@ class _StagedManifest:
     committed: bool = False
 
 
-class _Stage(StageRef):
-    def __init__(self, idx: int) -> None:
-        self.idx = idx
-
-
 class _CdcCtx(StreamSrcPluginCtx):
     """Minimal but real ``StreamSrcPluginCtx`` for the CDC plugin.
-    ``active_polls`` caps how many times the runner can call
-    ``is_active`` before it returns False; this is how the test
+    ``active_polls`` caps how many times the runner can read
+    ``active`` before it returns False; this is how the test
     exits the otherwise-infinite poll loop."""
 
-    def __init__(self, work_dir: Path, *, active_polls: int) -> None:
+    def __init__(
+        self,
+        work_dir: Path,
+        *,
+        active_polls: int,
+        initial_state: dict | None = None,
+    ) -> None:
         self._work_dir = work_dir
         self._active_left = active_polls
-        self._state: dict[str, Any] = {}
+        # ``initial_state`` models a prior run's persisted stream state:
+        # when present, this is not the first stage and ``stream_state``
+        # replays it until a new batch overwrites it.
+        self._state: dict[str, Any] = dict(initial_state) if initial_state else {}
+        self._tabsdata_owns_state = initial_state is not None
+        self._committed_before = initial_state is not None
         self.staged: list[_StagedManifest] = []
         self._stage_counter = 0
         self._lock = threading.Lock()
@@ -120,40 +126,45 @@ class _CdcCtx(StreamSrcPluginCtx):
 
     # StreamSrcPluginCtx surface ----------------------------------------
 
-    def is_active(self) -> bool:
+    @property
+    def active(self) -> bool:
         with self._lock:
             if self._active_left <= 0:
                 return False
             self._active_left -= 1
             return True
 
-    def stage(self, manifest):
+    @property
+    def first_stage(self) -> bool:
         with self._lock:
-            self._stage_counter += 1
-            captured = _StagedManifest(manifest=list(manifest))
-            self.staged.append(captured)
-            return _Stage(self._stage_counter)
+            return not self._committed_before and not self.staged
 
-    def commit(self, stage_ref):
+    @property
+    def stream_state(self) -> dict | None:
         with self._lock:
-            idx = getattr(stage_ref, "idx", None)
-            if idx is not None and 1 <= idx <= len(self.staged):
-                self.staged[idx - 1].committed = True
+            if not self._tabsdata_owns_state:
+                return None
+            return dict(self._state) if self._state else None
 
-    def trigger(self) -> bool:
-        return True
+    @property
+    def flush_interval_mins(self) -> int:
+        return 0
 
-    def trigger_monitor(self) -> bool:
-        return True
-
-    def read_state(self):
-        return dict(self._state)
-
-    def write_state(self, state):
-        # The runner serialises the offset under ``cdc.offset``;
-        # keep the latest value seen so an "expected state" test
-        # could be added later.
-        self._state = dict(state)
+    def stage(self, tables_files, new_state):
+        with self._lock:
+            self.staged.append(
+                _StagedManifest(manifest=list(tables_files), committed=True)
+            )
+            # Tabsdata-owned state persists the dict (read back via
+            # ``stream_state``); a plain callable (external system owns the
+            # offset) leaves ``stream_state`` None and is invoked for its
+            # side effect.
+            if isinstance(new_state, StoreStreamState):
+                self._state = dict(new_state.state)
+                self._tabsdata_owns_state = True
+            else:
+                self._tabsdata_owns_state = False
+        new_state()
 
 
 # ---------------------------------------------------------------------------
@@ -226,6 +237,17 @@ def _all_staged_files(ctx: _CdcCtx) -> list[Path]:
     return files
 
 
+def _staged_ids(ctx: _CdcCtx) -> list[int]:
+    """Sorted ``id`` values across every committed parquet the ctx
+    captured (``columns_format='columns'`` flattens ``id`` to a top-level
+    column)."""
+    files = _all_staged_files(ctx)
+    if not files:
+        return []
+    df = pl.concat([_read_parquet(p) for p in files])
+    return sorted(df["id"].to_list())
+
+
 @contextmanager
 def _patched_signal_handlers():
     """The runner installs SIGINT/SIGTERM handlers via
@@ -233,7 +255,7 @@ def _patched_signal_handlers():
     the plugin on a worker thread (so the test can produce events
     in parallel), so substitute a plain ``threading.Event`` that
     will never be set -- the runner's other exit condition,
-    ``ctx.is_active()``, drains the budget and ends the loop."""
+    ``ctx.active``, drains the budget and ends the loop."""
     def _fake() -> threading.Event:
         return threading.Event()
 
@@ -480,3 +502,64 @@ def test_cdc_persists_offset_to_ctx_state(fresh_mysql_cdc, tmp_path):
     assert isinstance(offset, dict)
     # ``GtidOffset.write()`` returns ``{"gtid": "..."}``.
     assert "gtid" in offset
+
+
+# ---------------------------------------------------------------------------
+# Cross-run resume: MySQL is Tabsdata-owned-offset, so a second run seeded
+# with the first run's stream_state resumes *past* it.
+# ---------------------------------------------------------------------------
+
+
+def test_cdc_resumes_from_persisted_stream_state(fresh_mysql_cdc, tmp_path):
+    """Two runs sharing the Tabsdata-persisted offset.
+
+    Run 1 (first_stage) captures the first row and persists its GTID
+    offset to ``stream_state``. Run 2 is seeded with that state
+    (``first_stage`` is False), so even though ``start_from='head'`` would
+    replay the whole binlog, the ingester resumes *past* run 1's offset:
+    it picks up only the row inserted after run 1, never replaying the
+    already-consumed one.
+    """
+    src_cfg = {
+        "tabsdata.cdc.buffer.max_rows": 1,
+        "tabsdata.cdc.buffer.max_secs": 1,
+        "tabsdata.cdc.poll_interval_seconds": 1,
+        "mysql.cdc.blocking_timeout_seconds": 2,
+    }
+
+    def _src() -> MySQLCdcStreamSrc:
+        return MySQLCdcStreamSrc(
+            conn=_make_cdc_conn(fresh_mysql_cdc),
+            tables=[f"{fresh_mysql_cdc.database}.users"],
+            start_from="head",
+            src_cfg=src_cfg,
+        )
+
+    # --- Run 1: consume id=1, persist its offset ---
+    run1_work = tmp_path / "run1"
+    run1_work.mkdir()
+    ctx1 = _CdcCtx(run1_work, active_polls=8)
+    _insert_users(fresh_mysql_cdc, [{"id": 1, "name": "alice", "age": 30}])
+    _run_plugin_in_thread(ctx1, _src(), timeout_s=60.0)
+
+    if 1 not in _staged_ids(ctx1):
+        pytest.skip("run 1 captured no events (timing); cannot test resume")
+    persisted = ctx1.stream_state
+    assert persisted is not None and "cdc.offset" in persisted
+
+    # --- A new row, committed after run 1's offset ---
+    _insert_users(fresh_mysql_cdc, [{"id": 2, "name": "bob", "age": 25}])
+
+    # --- Run 2: seeded with run 1's state -> resumes past id=1 ---
+    run2_work = tmp_path / "run2"
+    run2_work.mkdir()
+    ctx2 = _CdcCtx(run2_work, active_polls=8, initial_state=persisted)
+    assert ctx2.first_stage is False
+    _run_plugin_in_thread(ctx2, _src(), timeout_s=60.0)
+
+    run2_ids = _staged_ids(ctx2)
+    # Resumed from the persisted offset: the new row surfaces, the
+    # already-consumed one is NOT replayed (which it would be on a
+    # ``start_from='head'`` cold start).
+    assert 2 in run2_ids, f"run 2 should capture the post-resume row, got {run2_ids}"
+    assert 1 not in run2_ids, f"run 2 replayed a consumed row, got {run2_ids}"

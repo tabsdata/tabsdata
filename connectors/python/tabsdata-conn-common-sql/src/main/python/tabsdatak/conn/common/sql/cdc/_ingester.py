@@ -29,9 +29,15 @@ from tabsdatak.conn.common.sql.cdc.dialect import (
     Dialect,
 )
 from tabsdatak.conn.common.sql.cdc.typing import CdcFormat, QualifiedTablesSpec
+from tabsdatak.spi import CommitStateSpec, StoreStreamState
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+# Key under which the CDC offset dict lives inside the per-flow stream
+# state, for Tabsdata-owned-offset ingesters (read back via
+# ``ctx.stream_state[CDC_OFFSET_STATE_KEY]``).
+CDC_OFFSET_STATE_KEY = "cdc.offset"
 
 
 class CdcIngester(ABC):
@@ -40,6 +46,9 @@ class CdcIngester(ABC):
         self._tracked_tables: dict[str, TrackedTable] = {}
         self._schema_registry: SchemaRegistry | None = None
         self._server_tz: tzinfo | None = None
+        # Resume mark seeded by :meth:`seed_offset` before the stream
+        # opens; subclasses retype it to their concrete offset class.
+        self._mark: CdcOffset | None = None
 
     @property
     @abstractmethod
@@ -287,3 +296,55 @@ class CdcIngester(ABC):
 
     @abstractmethod
     def poll_changes(self, session: Any) -> Iterable[CdcChange]: ...
+
+    # ------------------------------------------------------------------
+    # Offset ownership: Tabsdata-owned (default) vs external-owned.
+    #
+    # By default Tabsdata keeps the resume offset -- the run loop
+    # persists it (:meth:`commit_state`) and resumes from it
+    # (:meth:`resume_offset` -> :meth:`offset_from_state`). Ingesters
+    # whose source keeps its own consumer cursor (e.g. a Postgres
+    # replication slot) override :meth:`commit_state` to commit there and
+    # :meth:`resume_offset` to let the source resume itself.
+    # ------------------------------------------------------------------
+
+    def commit_state(self, offset: CdcOffset) -> CommitStateSpec:
+        """The :data:`~tabsdatak.spi.CommitStateSpec` to hand
+        ``ctx.stage`` for this batch. Default: Tabsdata persists the
+        offset under :data:`CDC_OFFSET_STATE_KEY`."""
+        return StoreStreamState({CDC_OFFSET_STATE_KEY: offset.write()})
+
+    def resume_offset(
+        self,
+        *,
+        first_stage: bool,
+        stream_state: dict | None,
+    ) -> CdcOffset | None:
+        """The offset to resume this run from, or ``None`` to seed from
+        the configured ``start_from``.
+
+        Default (Tabsdata-owned): ``None`` on the first stage (cold start
+        -> ``start_from``), otherwise reconstruct from the persisted
+        ``stream_state`` via :meth:`offset_from_state`. External-owned
+        ingesters override this to always return ``None`` (the source
+        resumes its own cursor)."""
+        if first_stage or not stream_state:
+            return None
+        return self.offset_from_state(stream_state[CDC_OFFSET_STATE_KEY])
+
+    def offset_from_state(self, offset_state: dict) -> CdcOffset:
+        """Reconstruct the resume offset from the Tabsdata-persisted
+        ``offset_state`` dict (the value :meth:`commit_state` stored).
+        Tabsdata-owned ingesters implement this; external-owned ones
+        override :meth:`resume_offset` and need not."""
+        raise NotImplementedError(
+            f"{type(self).__name__} keeps no Tabsdata-owned offset state"
+        )
+
+    def seed_offset(self, offset: CdcOffset | None) -> None:
+        """Seed the resume mark before the stream opens, so
+        ``open_session`` / ``init_stream`` continues from ``offset``
+        instead of ``start_from``. ``None`` leaves the mark untouched
+        (cold start / source-managed resume)."""
+        if offset is not None:
+            self._mark = offset

@@ -56,7 +56,7 @@ from tabsdatak.conn.kafka._serdes import (
     ProtobufSrKafkaSerde,
 )
 from tabsdatak.conn.kafka._stream_plugin import KafkaStreamSrcPlugin
-from tabsdatak.spi import StageRef, StreamSrcPluginCtx
+from tabsdatak.spi import StoreStreamState, StreamSrcPluginCtx
 
 
 logger = logging.getLogger(__name__)
@@ -81,14 +81,9 @@ class _StagedManifest:
     committed: bool = False
 
 
-class _Stage(StageRef):
-    def __init__(self, idx: int) -> None:
-        self.idx = idx
-
-
 class _KafkaCtx(StreamSrcPluginCtx):
     """Real :class:`StreamSrcPluginCtx` implementation. ``active_polls``
-    caps how many times the plugin can call ``is_active`` before it
+    caps how many times the plugin can read ``active`` before it
     returns ``False`` -- that's the test's exit lever for the
     otherwise-infinite consume loop."""
 
@@ -96,6 +91,7 @@ class _KafkaCtx(StreamSrcPluginCtx):
         self._work_dir = work_dir
         self._active_left = active_polls
         self._state: dict[str, Any] = {}
+        self._tabsdata_owns_state = False
         self.staged: list[_StagedManifest] = []
         self._stage_counter = 0
         self._lock = threading.Lock()
@@ -141,36 +137,45 @@ class _KafkaCtx(StreamSrcPluginCtx):
     def add_metadata(self, attr, val):
         pass
 
-    def is_active(self) -> bool:
+    @property
+    def active(self) -> bool:
         with self._lock:
             if self._active_left <= 0:
                 return False
             self._active_left -= 1
             return True
 
-    def stage(self, manifest):
+    @property
+    def first_stage(self) -> bool:
         with self._lock:
-            self._stage_counter += 1
-            self.staged.append(_StagedManifest(manifest=list(manifest)))
-            return _Stage(self._stage_counter)
+            return not self.staged
 
-    def commit(self, stage_ref):
+    @property
+    def stream_state(self) -> dict | None:
         with self._lock:
-            idx = getattr(stage_ref, "idx", None)
-            if idx is not None and 1 <= idx <= len(self.staged):
-                self.staged[idx - 1].committed = True
+            if not self._tabsdata_owns_state:
+                return None
+            return dict(self._state) if self._state else None
 
-    def trigger(self) -> bool:
-        return True
+    @property
+    def flush_interval_mins(self) -> int:
+        return 0
 
-    def trigger_monitor(self) -> bool:
-        return True
-
-    def read_state(self):
-        return dict(self._state)
-
-    def write_state(self, state):
-        self._state = dict(state)
+    def stage(self, tables_files, new_state):
+        with self._lock:
+            self.staged.append(
+                _StagedManifest(manifest=list(tables_files), committed=True)
+            )
+            # Tabsdata-owned state persists the dict (read back via
+            # ``stream_state``); a plain callable (external system owns the
+            # offset) leaves ``stream_state`` None and is invoked for its
+            # side effect.
+            if isinstance(new_state, StoreStreamState):
+                self._state = dict(new_state.state)
+                self._tabsdata_owns_state = True
+            else:
+                self._tabsdata_owns_state = False
+        new_state()
 
 
 # ---------------------------------------------------------------------------

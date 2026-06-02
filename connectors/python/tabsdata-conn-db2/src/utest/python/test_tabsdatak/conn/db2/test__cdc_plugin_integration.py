@@ -38,7 +38,7 @@ from tabsdatak.conn.db2 import (
     Db2CdcStreamSrc,
 )
 from tabsdatak.conn.db2._cdc_plugin import Db2CdcStreamSrcPlugin
-from tabsdatak.spi import StageRef, StreamSrcPluginCtx
+from tabsdatak.spi import StoreStreamState, StreamSrcPluginCtx
 
 logger = logging.getLogger(__name__)
 
@@ -62,16 +62,22 @@ class _StagedManifest:
     committed: bool = False
 
 
-class _Stage(StageRef):
-    def __init__(self, idx: int) -> None:
-        self.idx = idx
-
-
 class _CdcCtx(StreamSrcPluginCtx):
-    def __init__(self, work_dir: Path, *, active_polls: int) -> None:
+    def __init__(
+        self,
+        work_dir: Path,
+        *,
+        active_polls: int,
+        initial_state: dict | None = None,
+    ) -> None:
         self._work_dir = work_dir
         self._active_left = active_polls
-        self._state: dict[str, Any] = {}
+        # ``initial_state`` models a prior run's persisted stream state:
+        # when present, this is not the first stage and ``stream_state``
+        # replays it until a new batch overwrites it.
+        self._state: dict[str, Any] = dict(initial_state) if initial_state else {}
+        self._tabsdata_owns_state = initial_state is not None
+        self._committed_before = initial_state is not None
         self.staged: list[_StagedManifest] = []
         self._stage_counter = 0
         self._lock = threading.Lock()
@@ -117,37 +123,45 @@ class _CdcCtx(StreamSrcPluginCtx):
     def add_metadata(self, attr, val):
         pass
 
-    def is_active(self) -> bool:
+    @property
+    def active(self) -> bool:
         with self._lock:
             if self._active_left <= 0:
                 return False
             self._active_left -= 1
             return True
 
-    def stage(self, manifest):
+    @property
+    def first_stage(self) -> bool:
         with self._lock:
-            self._stage_counter += 1
-            captured = _StagedManifest(manifest=list(manifest))
-            self.staged.append(captured)
-            return _Stage(self._stage_counter)
+            return not self._committed_before and not self.staged
 
-    def commit(self, stage_ref):
+    @property
+    def stream_state(self) -> dict | None:
         with self._lock:
-            idx = getattr(stage_ref, "idx", None)
-            if idx is not None and 1 <= idx <= len(self.staged):
-                self.staged[idx - 1].committed = True
+            if not self._tabsdata_owns_state:
+                return None
+            return dict(self._state) if self._state else None
 
-    def trigger(self) -> bool:
-        return True
+    @property
+    def flush_interval_mins(self) -> int:
+        return 0
 
-    def trigger_monitor(self) -> bool:
-        return True
-
-    def read_state(self):
-        return dict(self._state)
-
-    def write_state(self, state):
-        self._state = dict(state)
+    def stage(self, tables_files, new_state):
+        with self._lock:
+            self.staged.append(
+                _StagedManifest(manifest=list(tables_files), committed=True)
+            )
+            # Tabsdata-owned state persists the dict (read back via
+            # ``stream_state``); a plain callable (external system owns the
+            # offset) leaves ``stream_state`` None and is invoked for its
+            # side effect.
+            if isinstance(new_state, StoreStreamState):
+                self._state = dict(new_state.state)
+                self._tabsdata_owns_state = True
+            else:
+                self._tabsdata_owns_state = False
+        new_state()
 
 
 # ---------------------------------------------------------------------------
@@ -239,6 +253,15 @@ def _all_staged_files(ctx: _CdcCtx) -> list[Path]:
         for table_files in sm.manifest:
             files.extend(Path(p) for p in table_files)
     return files
+
+
+def _staged_ids(ctx: _CdcCtx) -> set[int]:
+    """``ID`` values across every committed parquet the ctx captured."""
+    files = _all_staged_files(ctx)
+    if not files:
+        return set()
+    df = pl.concat([_read_parquet(p) for p in files])
+    return set(df["ID"].to_list())
 
 
 @contextmanager
@@ -536,3 +559,79 @@ def test_cdc_persists_offset_to_ctx_state(fresh_db2_cdc, tmp_path):
     assert qualified in offset
     # The advanced mark should be at or past commitseq 42.
     assert int(offset[qualified], 16) >= 42
+
+
+# ---------------------------------------------------------------------------
+# Cross-run resume: DB2 is Tabsdata-owned-offset, so a second run seeded
+# with the first run's stream_state resumes *past* it.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.db2_seq
+@pytest.mark.xdist_group("db2_seq")
+def test_cdc_resumes_from_persisted_stream_state(fresh_db2_cdc, tmp_path):
+    """Two runs sharing the Tabsdata-persisted offset.
+
+    Run 1 (first_stage) consumes commitseqs 5 and 6 and persists its
+    commit-seq map to ``stream_state``. Run 2 is seeded with that state
+    (``first_stage`` is False), so even though ``start_from='head'`` would
+    replay from the oldest CD row, the ingester resumes *past* run 1's
+    commit-seq: it picks up only commitseq 7, never replaying 5/6.
+    """
+    cfg = fresh_db2_cdc
+    qualified = f"{_CD_SCHEMA}.{_CD_TABLE}"
+    src_cfg = {
+        "tabsdata.cdc.buffer.max_rows": 1,
+        "tabsdata.cdc.buffer.max_secs": 1,
+        "tabsdata.cdc.poll_interval_seconds": 1,
+        "db2.cdc.blocking_timeout_seconds": 3,
+    }
+
+    def _src() -> Db2CdcStreamSrc:
+        return Db2CdcStreamSrc(
+            conn=_make_cdc_conn(cfg),
+            tables=[qualified],
+            start_from="head",
+            src_cfg=src_cfg,
+        )
+
+    # --- Run 1: consume commitseqs 5 & 6, persist the commit-seq map ---
+    for cs, id_, name in ((5, 50, "five"), (6, 60, "six")):
+        _insert_cd_row(
+            cfg, op="I",
+            commitseq=_commitseq(cs), intentseq=_commitseq(1),
+            id_=id_, name=name, age=cs,
+        )
+    run1_work = tmp_path / "run1"
+    run1_work.mkdir()
+    ctx1 = _CdcCtx(run1_work, active_polls=6)
+    _run_plugin_in_thread(ctx1, _src(), timeout_s=60.0)
+
+    if not {50, 60} <= _staged_ids(ctx1):
+        pytest.skip("run 1 captured no events (timing); cannot test resume")
+    persisted = ctx1.stream_state
+    assert persisted is not None and "cdc.offset" in persisted
+    # ``CommitSeqOffset.write()`` advanced to at least commitseq 6.
+    assert int(persisted["cdc.offset"][qualified], 16) >= 6
+
+    # --- A new CD row past run 1's commit-seq ---
+    _insert_cd_row(
+        cfg, op="I",
+        commitseq=_commitseq(7), intentseq=_commitseq(1),
+        id_=70, name="seven", age=7,
+    )
+
+    # --- Run 2: seeded with run 1's state -> resumes past commitseq 6 ---
+    run2_work = tmp_path / "run2"
+    run2_work.mkdir()
+    ctx2 = _CdcCtx(run2_work, active_polls=6, initial_state=persisted)
+    assert ctx2.first_stage is False
+    _run_plugin_in_thread(ctx2, _src(), timeout_s=60.0)
+
+    run2_ids = _staged_ids(ctx2)
+    # Resumed from the persisted commit-seq: only the new row surfaces;
+    # the already-consumed ones are NOT replayed (which they would be on a
+    # ``start_from='head'`` cold start).
+    assert 70 in run2_ids, f"run 2 should capture the post-resume row, got {run2_ids}"
+    assert 50 not in run2_ids, f"run 2 replayed a consumed row, got {run2_ids}"
+    assert 60 not in run2_ids, f"run 2 replayed a consumed row, got {run2_ids}"

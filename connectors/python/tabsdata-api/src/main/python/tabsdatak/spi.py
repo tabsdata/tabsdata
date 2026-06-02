@@ -20,8 +20,9 @@ The plugin abstracts (:class:`SrcPlugin`, :class:`StreamSrcPlugin`,
 (:class:`SrcPluginCtx`, :class:`StreamSrcPluginCtx`,
 :class:`DestContext`) are what plugin code consumes. The remaining
 pieces -- :data:`TableFileSpec`, :class:`TableMode`,
-:data:`StreamManifestSpec`, :class:`StageRef` -- are the data-shape
-contracts that travel between framework and plugin during a trx.
+:data:`CommitStateSpec` / :class:`StoreStreamState` -- are the
+data-shape contracts that travel between framework and plugin during a
+trx.
 """
 
 from __future__ import annotations
@@ -33,7 +34,6 @@ from typing import (
     Annotated,
     Any,
     Callable,
-    Mapping,
     Type,
     TypeAlias,
     TypeVar,
@@ -48,8 +48,6 @@ from pydantic import ConfigDict, model_validator
 import tabsdatak._api as _api
 from tabsdatak.api import (
     Conn,
-    ContextKeySpec,
-    ContextValueSpec,
     Dest,
     Src,
     StreamSrc,
@@ -148,77 +146,103 @@ FilesSpec: TypeAlias = Annotated[list[TableFileSpec], _api.NON_EMPTY_LIST_CONSTR
 _ARBITRARY = ConfigDict(arbitrary_types_allowed=True)
 
 
-# One stage call's payload: positional per-output-table parquet file
-# lists the stream-source plugin hands to ``ctx.stage`` at flush time.
-# Entry ``i`` holds the files contributed to output-table index ``i``
-# this batch; an empty inner list means that table produced no files.
-# Paths must live under :attr:`StreamSrcPluginCtx.work_dir`.
-StreamManifestSpec: TypeAlias = Annotated[
-    list[list[TableFileSpec]], _api.NON_EMPTY_LIST_CONSTRAINTS
-]
+# Callback the runtime invokes when it commits a staged batch, to
+# commit the matching new resume offset. Where the offset lives is the
+# plugin's choice: use :class:`StoreStreamState` to have *Tabsdata* keep
+# it, or pass a plain callable that commits it on the *external* system
+# (e.g. ``lambda: external.commit()``).
+CommitStateSpec: TypeAlias = Callable[[], None]
 
 
-class StageRef(ABC):
-    """Opaque handle returned by :meth:`StreamSrcPluginCtx.stage`
-    and consumed by :meth:`StreamSrcPluginCtx.commit`. Concrete
-    shape is runtime-private."""
+class StoreStreamState:
+    """A :data:`CommitStateSpec` for the case where *Tabsdata* owns the
+    stream's resume offset.
 
+    Wrap the new per-flow state dict and hand it to
+    :meth:`StreamSrcPluginCtx.stage`; when the runtime commits the staged
+    batch it persists this state (atomically with the batch) and exposes
+    it on the next run via :attr:`StreamSrcPluginCtx.stream_state`::
 
-# Serialisable key/value bag a stream-source plugin persists on
-# the trx context across invocations (e.g. resume-offset state).
-StreamStateSpec: TypeAlias = Mapping[ContextKeySpec, ContextValueSpec]
+        ctx.stage(tables_files, StoreStreamState(new_state))
+
+    Subclasses may override :meth:`__call__` to also run a side effect at
+    commit time (e.g. ack/advance the source); the runtime persists
+    :attr:`state` *and* invokes :meth:`__call__`.
+    """
+
+    def __init__(self, state: dict):
+        self.state = state
+
+    def __call__(self) -> None:
+        """Commit side effect, run by the runtime when the staged batch
+        commits. The base implementation is a no-op -- persisting
+        :attr:`state` to the per-flow store is the runtime's job."""
 
 
 class StreamSrcPluginCtx(PluginCtx, ABC):
     """Context handed to :meth:`StreamSrcPlugin.run`. Provides the
     plugin its long-lived control surface:
 
-    * :meth:`is_active` -- loop predicate the plugin polls.
-    * :meth:`stage` + :meth:`commit` -- two-phase batch publish.
-    * :meth:`trigger` + :meth:`trigger_monitor` -- backpressure
-      gate against downstream consumers.
-    * :meth:`read_state` + :meth:`write_state` -- per-flow resume
-      state (offsets, watermarks, ...).
+    * :attr:`active` -- loop predicate the plugin polls.
+    * :attr:`first_stage` -- whether nothing has been staged yet, so the
+      plugin seeds from config rather than from :attr:`stream_state`.
+    * :attr:`stream_state` -- the per-flow resume state persisted by the
+      last :class:`StoreStreamState` commit.
+    * :attr:`flush_interval_mins` -- max minutes the plugin may buffer
+      before it must :meth:`stage`.
+    * :meth:`stage` -- publish a batch and commit its new resume state.
     """
 
+    @property
     @abstractmethod
-    def is_active(self) -> bool:
-        """``True`` while the runtime wants the plugin to keep
-        polling. The plugin loop should exit (cleanly) on
-        ``False``."""
+    def active(self) -> bool:
+        """``True`` while the runtime wants the plugin to keep polling.
+        The plugin loop should exit (cleanly) once this is ``False``."""
+
+    @property
+    @abstractmethod
+    def first_stage(self) -> bool:
+        """``True`` until the first batch has been staged + committed.
+
+        The plugin uses it to decide where to seed its resume position:
+        when ``first_stage`` is ``True`` nothing has been published yet,
+        so seed from the source's configured initial values; otherwise a
+        prior batch exists, so resume from :attr:`stream_state` (or, when
+        the external system owns the offset, from the external system)."""
+
+    @property
+    @abstractmethod
+    def stream_state(self) -> dict | None:
+        """The per-flow resume state persisted by the most recent
+        :class:`StoreStreamState` commit.
+
+        ``None`` when the last commit handed :meth:`stage` a plain
+        :data:`CommitStateSpec` callable (a ``lambda``) instead of a
+        :class:`StoreStreamState` -- i.e. the *external* system owns the
+        offset and Tabsdata keeps no state. Distinguish "first run"
+        (nothing staged yet) via :attr:`first_stage`, not by this being
+        ``None``."""
+
+    @property
+    @abstractmethod
+    def flush_interval_mins(self) -> int:
+        """Maximum minutes the plugin may accumulate before it must
+        :meth:`stage`, regardless of its own size/row thresholds."""
 
     @abstractmethod
-    def stage(self, manifest: StreamManifestSpec) -> StageRef:
-        """Hand a batch to the runtime for staging: a positional list
-        of per-output-table file lists (entry ``i`` -> output-table
-        index ``i``; an empty inner list means no files for that table
-        this batch). Returns an opaque :class:`StageRef` to pass to
-        :meth:`commit`. Files must live under :attr:`work_dir`."""
+    def stage(
+        self,
+        tables_files: list[list[Path]],
+        new_state: CommitStateSpec,
+    ) -> None:
+        """Publish a batch and commit its new resume state in one step.
 
-    @abstractmethod
-    def commit(self, stage_ref: StageRef):
-        """Commit a previously-staged batch. The runtime publishes
-        the manifest atomically and clears the work-dir slot."""
-
-    @abstractmethod
-    def trigger(self) -> bool:
-        """Signal that an output batch is available. ``False``
-        means downstream is back-pressuring -- the plugin should
-        pause publishing until :meth:`trigger_monitor` clears."""
-
-    @abstractmethod
-    def trigger_monitor(self) -> bool:
-        """Poll backpressure recovery. ``True`` means downstream is
-        consuming again and the plugin may resume."""
-
-    @abstractmethod
-    def read_state(self) -> StreamStateSpec:
-        """Read the persisted per-flow state the plugin wrote last
-        run (e.g. a CDC offset)."""
-
-    @abstractmethod
-    def write_state(self, state: StreamStateSpec):
-        """Persist per-flow state for the next run."""
+        ``tables_files`` is positional by output-table index (entry
+        ``i`` -> table ``i``; an empty inner list means no files for that
+        table this batch); files must live under :attr:`work_dir`. The
+        runtime stages + commits the files, then commits ``new_state``
+        (persisting it when ``new_state`` is a :class:`StoreStreamState`,
+        and/or invoking it for its side effect)."""
 
 
 class StreamSrcPlugin[SS: StreamSrc](ABC):
@@ -231,9 +255,11 @@ class StreamSrcPlugin[SS: StreamSrc](ABC):
         ctx: StreamSrcPluginCtx,
         stream_src: SS,
     ):
-        """Drive the change stream until ``ctx.is_active()`` flips
-        to ``False`` or a signal arrives. Implementations should
-        stage + commit through ``ctx`` as batches complete."""
+        """Drive the change stream until ``ctx.active`` flips to
+        ``False`` or a signal arrives. Implementations seed from config
+        when ``ctx.first_stage`` else from ``ctx.stream_state``, then
+        :meth:`StreamSrcPluginCtx.stage` batches as they complete
+        (honouring ``ctx.flush_interval_mins``)."""
 
 
 class DestContext(TrxCtx, PluginCtx, ABC):

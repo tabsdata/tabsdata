@@ -55,6 +55,7 @@ from tabsdatak.conn.common.sql.cdc.constants import (
 )
 from tabsdatak.conn.common.sql.cdc.dialect import CdcIngesterType, Dialect
 from tabsdatak.conn.common.sql.cdc.typing import QualifiedTablesSpec
+from tabsdatak.spi import CommitStateSpec
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert
@@ -576,6 +577,24 @@ class Wal2JsonIngester(CdcIngester):
         flush_lsn = self._mark.lsn if self._mark is not None else offset.lsn
         self._cursor.send_feedback(flush_lsn=flush_lsn, reply=True)
         logger.debug("Confirmed LSN position %d", flush_lsn)
+
+    # Postgres keeps the offset in its replication slot (external-owned),
+    # so it overrides the Tabsdata-owned defaults: commit by advancing the
+    # slot, and let the slot resume itself rather than reading Tabsdata
+    # ``stream_state``.
+
+    def commit_state(self, offset: CdcOffset) -> CommitStateSpec:
+        return lambda: self.commit_offset(offset)
+
+    def resume_offset(
+        self,
+        *,
+        first_stage: bool,
+        stream_state: dict | None,
+    ) -> CdcOffset | None:
+        # The slot resumes from its server-side confirmed position; the
+        # cold-start mark is seeded from ``start_from`` by ``init_stream``.
+        return None
 
     # ------------------------------------------------------------------
     # Schema extraction

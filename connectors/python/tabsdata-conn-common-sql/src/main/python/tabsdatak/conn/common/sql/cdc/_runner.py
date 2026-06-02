@@ -27,6 +27,7 @@ import logging
 import signal
 import sys
 import threading
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
@@ -44,7 +45,7 @@ from tabsdatak.conn.common.sql.cdc.constants import (
     DEFAULT_TRIGGER_MAX_SECS,
 )
 from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
-from tabsdatak.spi import StageRef, StreamSrcPlugin, StreamSrcPluginCtx
+from tabsdatak.spi import StreamSrcPlugin, StreamSrcPluginCtx
 
 logger = logging.getLogger(__name__)
 
@@ -109,31 +110,27 @@ def _publish(
     buffer_sentinel: BufferSentinel,
     ingester: CdcIngester,
 ) -> bool:
-    """Stage + commit the accumulated batch through ``ctx`` and persist
-    the resume offset.
+    """Stage the accumulated batch through ``ctx`` and commit the offset.
 
     The disk sentinel hands us a positional per-output-table file-list
-    manifest (a :data:`~tabsdatak.spi.StreamManifestSpec`); the runtime
-    stages it (returning an opaque :class:`~tabsdatak.spi.StageRef`) and
-    commits. The source-side offset is then advanced
-    (``ingester.commit_offset``) and written to per-flow state so the
-    next run resumes where this one left off.
+    (entry ``i`` -> table ``i``), which we hand to ``ctx.stage`` along
+    with the ingester's :meth:`~CdcIngester.commit_state` -- the ingester
+    decides whether Tabsdata persists the offset (read back via
+    ``ctx.stream_state``) or the source commits it itself.
 
-    Returns whether downstream is back-pressuring (``True`` -> a later
-    ``trigger_monitor`` must clear before publishing resumes).
+    Returns whether anything was staged (so the caller can reset its
+    flush-interval clock only on a real flush).
     """
-    manifest = disk_sentinel.build_manifest()
-    if not any(manifest):
+    tables_files = disk_sentinel.build_manifest()
+    if not any(tables_files):
         return False
-    stage_ref: StageRef = ctx.stage(manifest)
-    ctx.commit(stage_ref)
-    ingester.commit_offset(buffer_sentinel.offset)
-    ctx.write_state(buffer_sentinel.offset.write())
+    # The ingester decides how the new offset is committed: Tabsdata-owned
+    # ingesters persist it (``StoreStreamState``); external-owned ones
+    # (e.g. a Postgres slot) commit on the source. ``ctx.stage`` runs that
+    # commit when it publishes the batch.
+    ctx.stage(tables_files, ingester.commit_state(buffer_sentinel.offset))
     disk_sentinel.clear()
-    # Notify downstream a batch is ready. A ``False`` return means
-    # downstream is back-pressuring; pause publishing until
-    # ``trigger_monitor`` clears (checked at the top of the loop).
-    return not ctx.trigger()
+    return True
 
 
 def _run_loop(
@@ -142,24 +139,37 @@ def _run_loop(
     ingester: CdcIngester,
     cfg: CdcRunConfig,
 ) -> None:
-    """Drive ``ingester`` until ``ctx.is_active()`` flips to ``False`` or a
+    """Drive ``ingester`` until ``ctx.active`` flips to ``False`` or a
     termination signal arrives.
 
     Opens the ingester session, harvests the tracked-table schema, then
     polls for changes, buffering them in memory and spilling to the work
-    dir; completed batches are staged + committed through ``ctx``. On a
-    graceful end-of-stream the trailing partial batch is flushed before
-    returning. Invoked by :meth:`CdcPlugin.run`.
+    dir; a batch is staged through ``ctx`` when the disk sentinel's
+    row/byte/time thresholds fire **or** ``ctx.flush_interval_mins`` has
+    elapsed since the last stage. On a graceful end-of-stream the trailing
+    partial batch is flushed before returning. Invoked by
+    :meth:`CdcPlugin.run`.
     """
     buffer_sentinel: BufferSentinel | None = None
     disk_sentinel: DiskSentinel | None = None
     session = None
-    trigger_pending = False
     interrupted = False
     errored = False
 
+    flush_interval_secs = max(ctx.flush_interval_mins, 0) * 60
+
     stop_signal = _setup_signal_handlers()
     try:
+        # Seed the resume position before the stream opens: from the
+        # persisted ``stream_state`` (Tabsdata-owned offset) or left to
+        # the source (external-owned / cold start). ``first_stage`` ->
+        # seed from the configured ``start_from``.
+        ingester.seed_offset(
+            ingester.resume_offset(
+                first_stage=ctx.first_stage,
+                stream_state=ctx.stream_state,
+            )
+        )
         session = ingester.open_session()
         tracked_tables = ingester.harvest_tables(
             session=session,
@@ -184,18 +194,24 @@ def _run_loop(
 
         buffer_sentinel.reset_timer()
         disk_sentinel.reset_timer()
+        last_flush = time.time()
 
-        while not stop_signal.is_set() and ctx.is_active():
-            if trigger_pending and ctx.trigger_monitor():
-                trigger_pending = False
+        while not stop_signal.is_set() and ctx.active:
             buffer_sentinel.process_changes(
                 changes=ingester.poll_changes(session),
             )
             buffer_sentinel.expire()
-            if disk_sentinel.should_flush(force=False):
-                trigger_pending = _publish(
-                    ctx, disk_sentinel, buffer_sentinel, ingester
-                )
+            # Stage on the sentinel's own thresholds, or once the
+            # runtime-imposed flush interval has elapsed (and we have
+            # something buffered to stage).
+            interval_due = (
+                flush_interval_secs > 0
+                and (time.time() - last_flush) >= flush_interval_secs
+                and disk_sentinel.has_data
+            )
+            if disk_sentinel.should_flush(force=False) or interval_due:
+                _publish(ctx, disk_sentinel, buffer_sentinel, ingester)
+                last_flush = time.time()
             stop_signal.wait(timeout=cfg.poll_interval_seconds)
         if stop_signal.is_set():
             interrupted = True
@@ -205,10 +221,10 @@ def _run_loop(
         logger.error(f"Error in CDC run loop: {exception}")
         raise
     finally:
-        # On a graceful end-of-stream (``ctx.is_active()`` flipped to
-        # ``False`` with no signal and no error) publish the trailing
-        # partial batch before exiting. A signalled or errored exit
-        # leaves the buffer for the next run to resume from the offset.
+        # On a graceful end-of-stream (``ctx.active`` flipped to ``False``
+        # with no signal and no error) publish the trailing partial batch
+        # before exiting. A signalled or errored exit leaves the buffer
+        # for the next run to resume from the offset.
         if not interrupted and not errored:
             if buffer_sentinel is not None:
                 buffer_sentinel.flush()

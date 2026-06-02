@@ -634,6 +634,11 @@ class BinlogIngester(CdcIngester):
                 actual=type(offset).__name__,
             )
 
+    def offset_from_state(self, offset_state: dict) -> CdcOffset:
+        # MySQL keeps no server-side consumer cursor: Tabsdata owns the
+        # offset, so resume from the persisted GTID set.
+        return GtidOffset.read(offset_state)
+
     # ------------------------------------------------------------------
     # Schema extraction
     # ------------------------------------------------------------------

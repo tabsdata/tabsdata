@@ -200,25 +200,28 @@ def test_plugin_run_applies_logging_level_to_connector_namespace(
 
 
 def _make_ctx(work_dir: Path, *, active_calls: list[bool]):
-    """Mock :class:`StreamSrcPluginCtx`. ``active_calls`` is read
-    in order on each ``is_active()`` invocation; once exhausted the
-    last value is repeated."""
-    ctx = MagicMock()
-    ctx.work_dir = work_dir
+    """Minimal :class:`StreamSrcPluginCtx` stand-in. ``active_calls`` is
+    read in order on each ``active`` access; once exhausted the last
+    value is repeated. ``stage`` is a no-op ``MagicMock`` (the unit
+    tests assert on the consumer/producer, not on staging)."""
     calls = iter(active_calls)
     last = [active_calls[-1] if active_calls else False]
 
-    def _is_active():
-        try:
-            v = next(calls)
-            last[0] = v
-            return v
-        except StopIteration:
-            return last[0]
+    class _Ctx:
+        def __init__(self) -> None:
+            self.work_dir = work_dir
+            self.flush_interval_mins = 0
+            self.first_stage = True
+            self.stream_state = None
+            self.stage = MagicMock()
 
-    ctx.is_active.side_effect = _is_active
-    ctx.trigger_monitor = MagicMock()
-    ctx.trigger = MagicMock()
-    ctx.stage = MagicMock(return_value=MagicMock())
-    ctx.commit = MagicMock()
-    return ctx
+        @property
+        def active(self) -> bool:
+            try:
+                v = next(calls)
+                last[0] = v
+                return v
+            except StopIteration:
+                return last[0]
+
+    return _Ctx()

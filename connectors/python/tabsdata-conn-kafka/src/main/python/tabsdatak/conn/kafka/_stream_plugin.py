@@ -6,8 +6,8 @@ sit in ``_stream_impl.py``, and the wire-format (de)serialisers
 in :mod:`tabsdatak.conn.kafka._serdes`.
 
 Each rollover hands a single-table positional manifest
-(``[[parquet_file]]``) to ``ctx.stage`` and commits the returned
-:class:`StageRef` -- exactly like the CDC sources.
+(``[[parquet_file]]``) to ``ctx.stage`` along with a callback that
+commits the Kafka consumer offset -- exactly like the CDC sources.
 
 * :class:`KafkaStreamSrcPlugin` -- wires
   :class:`KafkaStreamSrc` to a polling consumer + manifest-based
@@ -47,7 +47,6 @@ from tabsdatak.conn.kafka._stream_impl import (
 from tabsdatak.conn.kafka.error import KafkaErrorCode
 from tabsdatak.spi import (
     Explorer,
-    StageRef,
     StreamSrcDef,
     StreamSrcPlugin,
     StreamSrcPluginCtx,
@@ -234,13 +233,20 @@ class KafkaStreamSrcPlugin(StreamSrcPlugin[KafkaStreamSrc]):
     ) -> None:
         """Poll + rollover loop. Stages each completed buffer as a
         single-table positional manifest; exits cleanly on
-        ``ctx.is_active() == False``.
+        ``ctx.active == False``.
         """
+        # Honour the runtime's flush interval: never let the time-based
+        # rollover window exceed it (the connector's own
+        # ``time_rollover_secs`` may be shorter).
+        time_rollover_secs = cfg["time_rollover_secs"]
+        if ctx.flush_interval_mins > 0:
+            time_rollover_secs = min(
+                time_rollover_secs, ctx.flush_interval_mins * 60
+            )
         deadline_window_start = time.time()
         reset_on_next_consume = False
         try:
-            while ctx.is_active():
-                ctx.trigger_monitor()
+            while ctx.active:
                 rollover_reason, buffer = kafka_consumer.consume(
                     timeout_secs=cfg["consume_timeout_secs"],
                     reset_buffer=reset_on_next_consume,
@@ -252,7 +258,7 @@ class KafkaStreamSrcPlugin(StreamSrcPlugin[KafkaStreamSrc]):
                     buffer.size_mb,
                 )
                 elapsed = time.time() - deadline_window_start
-                max_timeout = cfg["time_rollover_secs"] - elapsed
+                max_timeout = time_rollover_secs - elapsed
                 if rollover_reason != RolloverReason.Time or max_timeout <= 0:
                     deadline_window_start = self._handle_rollover(
                         ctx=ctx,
@@ -290,8 +296,9 @@ class KafkaStreamSrcPlugin(StreamSrcPlugin[KafkaStreamSrc]):
         rollover_reason: RolloverReason,
     ) -> float:
         """Write the buffer to parquet, build a positional manifest
-        for the topic's output table, stage + commit through the
-        plugin ctx, and commit the Kafka consumer offset.
+        for the topic's output table, and stage it through the plugin
+        ctx -- committing the Kafka consumer offset (the external
+        system keeps the offset) once the batch is durably staged.
 
         Returns the new ``deadline_window_start`` for the time-based
         rollover bookkeeping in the loop above."""
@@ -302,17 +309,9 @@ class KafkaStreamSrcPlugin(StreamSrcPlugin[KafkaStreamSrc]):
             return time.time()
         # One Kafka topic -> one output table (index 0): a single-entry
         # positional manifest whose only inner list holds this rollover's
-        # parquet file.
-        manifest = [[Path(parquet_path)]]
-        stage_ref: StageRef = ctx.stage(manifest)
-        ctx.commit(stage_ref)
-        kafka_consumer.commit()
-        if rollover_reason != RolloverReason.SchemaChange:
-            # Schema-change rollovers don't fire downstream
-            # immediately; the legacy connector matches this
-            # behaviour so trigger callers don't react to a half
-            # batch.
-            ctx.trigger()
+        # parquet file. Kafka owns the offset, so commit it on the broker
+        # when the runtime commits the staged batch.
+        ctx.stage([[Path(parquet_path)]], lambda: kafka_consumer.commit())
         logger.info(
             "kafka-stream: staged + committed (reason=%s, msgs=%d)",
             rollover_reason.value,

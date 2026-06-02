@@ -133,8 +133,8 @@ class DiskSentinel:
         return self.has_data and (force or rows_hit or bytes_hit or time_hit)
 
     def build_manifest(self) -> list[list[Path]]:
-        """Positional per-output-table file lists for ``ctx.stage`` (a
-        :data:`~tabsdatak.spi.StreamManifestSpec`).
+        """Positional per-output-table file lists for
+        :meth:`~tabsdatak.spi.StreamSrcPluginCtx.stage`.
 
         One entry per tracked table, in tracked-table (== output-slot)
         order; entry ``i`` holds the parquet files accumulated for table

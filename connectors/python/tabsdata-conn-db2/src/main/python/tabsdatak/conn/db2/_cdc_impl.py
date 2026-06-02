@@ -662,6 +662,11 @@ class SqlReplicaIngester(CdcIngester):
         # capture program advances independently. The mark stays
         # local to the runner -- no-op here, just type-check.
 
+    def offset_from_state(self, offset_state: dict) -> CdcOffset:
+        # SQL Replication keeps no server-side consumer cursor: Tabsdata
+        # owns the offset, so resume from the persisted commit-seq map.
+        return CommitSeqOffset.read(offset_state)
+
     # ------------------------------------------------------------------
     # init_reader -- translate start_from to the per-table commit map
     # ------------------------------------------------------------------
