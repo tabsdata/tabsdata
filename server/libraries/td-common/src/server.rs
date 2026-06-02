@@ -285,6 +285,11 @@ where
 /// act on it before the worker resolves its full message. Mirrors the
 /// gateway's internal `FunctionMessage` shape; lives here because the message
 /// envelope references it.
+// Start carries the full FunctionStartRequest payload while Stop and Notify
+// are unit variants. Boxing Start would force an allocation on every message
+// just to flatten the size of two variants we rarely build; the enum is small
+// in absolute terms and lives behind a clone-on-send channel.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum FunctionRequest {
     Start(FunctionStartRequest),

@@ -160,7 +160,7 @@ mod tests {
         // Resolve the message via the endpoint service.
         let param = PhysicalFunctionRunWorkerIdParam {
             function_run_id: pfr.id.clone(),
-            worker_id: worker.id.clone(),
+            worker_id: worker.id,
         };
         let read = RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
             .read(param);

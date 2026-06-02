@@ -156,6 +156,26 @@ pub fn decode_internal_token(
     Ok(claims)
 }
 
+pub fn encode_token(jwt_settings: &JwtConfig, token: &TokenClaims) -> Result<String, JwtError> {
+    let encoded = encode(
+        &jsonwebtoken::Header::default(),
+        token,
+        jwt_settings.encoding_key(),
+    )
+    .map_err(JwtError::JwtEncodingError)?;
+    debug!(jti = %token.jti, exp = token.exp, "auth.token.issued");
+    Ok(encoded)
+}
+
+pub fn decode_token(jwt_settings: &JwtConfig, token: &str) -> Result<TokenClaims, JwtError> {
+    let mut validation = Validation::new(Algorithm::HS256);
+    validation.leeway = 5;
+    validation.set_required_spec_claims(&["jti", "exp"]);
+    decode::<TokenClaims>(token, jwt_settings.decoding_key(), &jwt_settings.validation)
+        .map_err(JwtError::JwtEncodingError)
+        .map(|tt| tt.claims)
+}
+
 #[cfg(test)]
 mod internal_token_tests {
     use super::*;
@@ -213,24 +233,4 @@ mod internal_token_tests {
             encode_internal_token(&jwt, "GET", "/s", bindings(&[("worker_id", "W")])).unwrap();
         assert!(decode_token(&jwt, &internal).is_err());
     }
-}
-
-pub fn encode_token(jwt_settings: &JwtConfig, token: &TokenClaims) -> Result<String, JwtError> {
-    let encoded = encode(
-        &jsonwebtoken::Header::default(),
-        token,
-        jwt_settings.encoding_key(),
-    )
-    .map_err(JwtError::JwtEncodingError)?;
-    debug!(jti = %token.jti, exp = token.exp, "auth.token.issued");
-    Ok(encoded)
-}
-
-pub fn decode_token(jwt_settings: &JwtConfig, token: &str) -> Result<TokenClaims, JwtError> {
-    let mut validation = Validation::new(Algorithm::HS256);
-    validation.leeway = 5;
-    validation.set_required_spec_claims(&["jti", "exp"]);
-    decode::<TokenClaims>(token, jwt_settings.decoding_key(), &jwt_settings.validation)
-        .map_err(JwtError::JwtEncodingError)
-        .map(|tt| tt.claims)
 }

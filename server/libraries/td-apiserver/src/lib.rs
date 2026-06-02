@@ -232,14 +232,20 @@ pub fn run() {
             let function_dispatch_server = FunctionDispatcher::new(&scheduler_context).await;
 
             // Start servers
-            ServerRunner::default()
+            let outcome = ServerRunner::default()
                 .graceful_timeout_secs(Duration::from_secs(30))
                 .server(api_server)
                 .server(internal_server)
                 .server(function_request_server)
                 .server(function_dispatch_server)
                 .run()
-                .await
+                .await;
+
+            // Explicit shutdown so the embedded postgres lifecycle does not
+            // depend on Drop ordering during tokio runtime teardown.
+            db.shutdown().await;
+
+            outcome
         },
         None,
         None,

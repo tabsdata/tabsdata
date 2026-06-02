@@ -54,6 +54,29 @@ impl EmbeddedPostgres {
     pub fn server(&self) -> &PostgreSQL {
         &self.server
     }
+
+    /// Asynchronously shut down the embedded server. Calls `pg_ctl stop --wait`
+    /// and polls for `postmaster.pid` removal. Use this from an explicit
+    /// shutdown path so the postgres lifecycle is not at the mercy of Drop
+    /// ordering after the tokio runtime has been torn down.
+    pub async fn stop(&self) -> Result<(), DbError> {
+        self.server
+            .stop()
+            .await
+            .map_err(|e| DbError::EmbeddedPostgres(e.to_string()))?;
+        let pid_file = self.server.settings().data_dir.join(POSTMASTER_PID_FILE);
+        let deadline = Instant::now() + SHUTDOWN_PID_FILE_WAIT_TIMEOUT;
+        while pid_file.exists() && Instant::now() < deadline {
+            tokio::time::sleep(POSTMASTER_POLL_INTERVAL).await;
+        }
+        if pid_file.exists() {
+            warn!(
+                pid_file = %pid_file.display(),
+                "postmaster.pid still present after async shutdown wait; an immediate restart on this data_dir may race",
+            );
+        }
+        Ok(())
+    }
 }
 
 impl Drop for EmbeddedPostgres {

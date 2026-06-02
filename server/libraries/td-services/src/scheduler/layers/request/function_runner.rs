@@ -198,6 +198,11 @@ pub async fn pfr_ids_from_minted_dispatch(
     Ok(minted.iter().map(|m| m.fr.id.clone()).collect())
 }
 
+// The argument list IS the dependency-injection contract for `from_fn`:
+// each `Ref<T>` / `MutRef<T>` is extracted from the layer context by type.
+// Bundling them into a struct would just rebuild the same 7 extractions
+// behind one layer of indirection without simplifying the call site.
+#[allow(clippy::too_many_arguments)]
 #[instrument(
     name = "scheduler.create_function_runner_workers",
     skip_all,

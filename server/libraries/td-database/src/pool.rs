@@ -380,6 +380,21 @@ impl TdPool {
     pub async fn close(&self) {
         self.pool.close().await;
     }
+
+    /// Close the sqlx pool and, if this pool owns an embedded postgres handle,
+    /// stop the server explicitly via `pg_ctl stop --wait`. Use this on a
+    /// graceful shutdown path so the embedded server lifecycle is not at the
+    /// mercy of Drop ordering after the tokio runtime has been torn down.
+    /// Safe to call on a non-embedded pool (no-op for the embedded part).
+    pub async fn shutdown(&self) {
+        self.pool.close().await;
+        #[cfg(feature = "embedded-postgres")]
+        if let Some(embedded) = self._embedded.as_ref()
+            && let Err(error) = embedded.stop().await
+        {
+            warn!(%error, "embedded postgres shutdown failed");
+        }
+    }
 }
 
 /// True if a database error reports a missing `tabsdata_system` table for any

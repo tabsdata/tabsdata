@@ -154,7 +154,7 @@ mod tests {
         let name = CollectionName::try_from("ds_grp").unwrap();
         let create = CollectionCreate::builder()
             .name(&name)
-            .description(&Description::try_from("DS").unwrap())
+            .description(Description::try_from("DS").unwrap())
             .group(GroupName::try_from("analytics").unwrap())
             .build()
             .unwrap();
