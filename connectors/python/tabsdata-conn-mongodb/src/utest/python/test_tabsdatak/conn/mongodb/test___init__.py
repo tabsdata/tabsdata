@@ -1,7 +1,7 @@
 
 import pytest
 
-from tabsdatak.api import Var, NamedConn, Secret
+from tabsdatak.api import Var, Secret
 from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn.mongodb import MongoDBDestConn, MongoDBDest
@@ -15,20 +15,8 @@ from tabsdatak.error import TabsdataException
 pytestmark = pytest.mark.mongodb
 
 
-def _conn():
-    return MongoDBDestConn(
-        uri="mongodb://mongo.example.com:27017",
-        credentials=UserPassword(
-            user=Secret.lit("etl"),
-            password=Secret.lit("hunter2"),
-        ),
-        conn_cfg={"mongodb.timeout": 30},
-    )
-
-
 def test_mongodb_dest_full_round_trip():
     dest = MongoDBDest(
-        conn=_conn(),
         collections_with_ids=[("users", "user_id"), ("orders", None)],
         if_collection_exists="replace",
         use_trxs=True,
@@ -41,7 +29,6 @@ def test_mongodb_dest_full_round_trip():
     )
     loaded = MongoDBDest.from_json(dest.to_json())
     assert loaded == dest
-    assert loaded.conn.conn_cfg == {"mongodb.timeout": 30}
     assert loaded.collections_with_ids == [("users", "user_id"), ("orders", None)]
     assert loaded.if_collection_exists == "replace"
     assert loaded.use_trxs is True
@@ -55,7 +42,6 @@ def test_mongodb_dest_full_round_trip():
 
 def test_mongodb_dest_defaults():
     dest = MongoDBDest(
-        conn=_conn(),
         collections_with_ids=[("users", None)],
     )
     assert dest.if_collection_exists == "append"
@@ -66,17 +52,6 @@ def test_mongodb_dest_defaults():
     assert dest.fail_on_duplicate_key is True
     assert dest.log_intermediate_files is False
     assert dest.dest_cfg is None
-
-
-def test_mongodb_dest_round_trip_with_named_conn():
-    dest = MongoDBDest(
-        conn=NamedConn(name="prod_mongodb"),
-        collections_with_ids=[("users", None)],
-    )
-    loaded = MongoDBDest.from_json(dest.to_json())
-    assert loaded == dest
-    assert isinstance(loaded.conn, NamedConn)
-    assert loaded.conn.name == "prod_mongodb"
 
 
 def test_mongodb_conn_accepts_plain_str_uri():
@@ -131,7 +106,6 @@ def test_mongodb_dest_rejects_bad_collection_name():
     # ``$`` is forbidden in collection names.
     with pytest.raises(ConnInitException):
         MongoDBDest(
-            conn=_conn(),
             collections_with_ids=[("bad$name", None)],
         )
 
@@ -140,7 +114,6 @@ def test_mongodb_dest_rejects_bad_id_field_name():
     # Dot is forbidden in field names.
     with pytest.raises(ConnInitException):
         MongoDBDest(
-            conn=_conn(),
             collections_with_ids=[("users", "bad.field")],
         )
 
@@ -148,7 +121,6 @@ def test_mongodb_dest_rejects_bad_id_field_name():
 def test_mongodb_dest_rejects_non_positive_docs_per_trx():
     with pytest.raises(MongoDBValidateException) as ei:
         MongoDBDest(
-            conn=_conn(),
             collections_with_ids=[("users", None)],
             docs_per_trx=0,
         )
@@ -163,7 +135,6 @@ def test_mongodb_dest_rejects_non_positive_docs_per_trx():
 def test_mongodb_dest_rejects_unknown_dest_cfg_key():
     with pytest.raises(ConnInitException) as ei:
         MongoDBDest(
-            conn=_conn(),
             collections_with_ids=[("users", None)],
             dest_cfg={"bogus.key": 1},
         )
@@ -172,7 +143,6 @@ def test_mongodb_dest_rejects_unknown_dest_cfg_key():
 
 def test_mongodb_dest_accepts_known_dest_cfg_keys():
     dest = MongoDBDest(
-        conn=_conn(),
         collections_with_ids=[("users", None)],
         dest_cfg={"mongodb.logging_level": 20},
     )

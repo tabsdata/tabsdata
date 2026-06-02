@@ -22,7 +22,7 @@ from pydantic import StringConstraints
 import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
-from tabsdatak.api import Conn, Dest, NamedConn, Secret, Var
+from tabsdatak.api import Conn, Dest, Secret, Var
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation
@@ -77,9 +77,6 @@ class MongoDBDestConn(Conn):
     conn_cfg: CfgSpec | None = None
 
 
-ConnSpec: TypeAlias = Union[NamedConn, MongoDBDestConn]
-
-
 # --- Destination -----------------------------------------------------
 
 
@@ -87,7 +84,6 @@ ConnSpec: TypeAlias = Union[NamedConn, MongoDBDestConn]
 class MongoDBDest(Dest):
     """MongoDB destination — one parquet slot per collection.
 
-    :param conn: :class:`MongoDBDestConn` (or :class:`NamedConn`).
     :param collections_with_ids: List of
         ``(collection_name, id_field)`` tuples; one slot per
         entry. ``collection_name`` is the destination collection
@@ -123,7 +119,6 @@ class MongoDBDest(Dest):
         and forwarded to ``pymongo.MongoClient``.
     """
 
-    conn: ConnSpec
     collections_with_ids: CollectionsWithIdsSpec
     if_collection_exists: IfTableExistsSpec = "append"
     use_trxs: bool = False

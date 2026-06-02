@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 from urllib.parse import quote_plus
 
 # noinspection PyProtectedMember
@@ -178,10 +178,11 @@ def _iter_parquet_documents(path: TableFileSpec):
 # --- Plugin: destination ---------------------------------------------
 
 
-class _MongoDBDestPlugin(DestPlugin[MongoDBDest]):
+class _MongoDBDestPlugin(DestPlugin[MongoDBDestConn, MongoDBDest]):
     def write_out(
         self,
         ctx: DestContext,
+        conn: MongoDBDestConn,
         dest: MongoDBDest,
         tables: list[TableFileSpec],
     ) -> None:
@@ -203,7 +204,6 @@ class _MongoDBDestPlugin(DestPlugin[MongoDBDest]):
                 slots=len(tables),
             )
 
-        conn = cast(MongoDBDestConn, dest.conn)
         logger.debug("mongodb: establishing pymongo client")
         client = _build_client(conn)
         total = len(dest.collections_with_ids)
