@@ -77,8 +77,8 @@ def _write(fresh_clickhouse, work_dir, parquet_path, table, **dest_kwargs):
     ``schema_evolution="iceberg"``)."""
     plugin._ClickHouseDestPlugin().write_out(
         _dest_ctx(work_dir),
+        _conn_from(fresh_clickhouse),
         ClickHouseDest(
-            conn=_conn_from(fresh_clickhouse),
             tables=[table],
             **dest_kwargs,
         ),

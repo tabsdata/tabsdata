@@ -120,11 +120,10 @@ def test_fqn_create_table(
         [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}],
     )
     dest = ClickHouseDest(
-        conn=_conn_from(fresh_clickhouse),
         tables=[spelled],
     )
     plugin._ClickHouseDestPlugin().write_out(
-        _dest_ctx(work_dir), dest, [src],
+        _dest_ctx(work_dir), _conn_from(fresh_clickhouse), dest, [src],
     )
     client = _ch_client(fresh_clickhouse)
     assert _count_rows(client, db, tbl) == 2
@@ -143,11 +142,10 @@ def test_fqn_append_to_existing_table(
         [{"id": 1, "name": "alice"}],
     )
     seed_dest = ClickHouseDest(
-        conn=_conn_from(fresh_clickhouse),
         tables=[tbl],
     )
     plugin._ClickHouseDestPlugin().write_out(
-        _dest_ctx(work_dir), seed_dest, [seed_src],
+        _dest_ctx(work_dir), _conn_from(fresh_clickhouse), seed_dest, [seed_src],
     )
     # Append: address the SAME table via the parametrized spelling.
     spelled = template.format(db=db, tbl=tbl)
@@ -156,11 +154,10 @@ def test_fqn_append_to_existing_table(
         [{"id": 2, "name": "bob"}, {"id": 3, "name": "carol"}],
     )
     dest = ClickHouseDest(
-        conn=_conn_from(fresh_clickhouse),
         tables=[spelled],
     )
     plugin._ClickHouseDestPlugin().write_out(
-        _dest_ctx(work_dir), dest, [add_src],
+        _dest_ctx(work_dir), _conn_from(fresh_clickhouse), dest, [add_src],
     )
     client = _ch_client(fresh_clickhouse)
     assert _count_rows(client, db, tbl) == 3
@@ -178,11 +175,10 @@ def test_fqn_replace_truncates_existing(
         [{"id": 100, "name": "old"}, {"id": 101, "name": "also_old"}],
     )
     seed_dest = ClickHouseDest(
-        conn=_conn_from(fresh_clickhouse),
         tables=[tbl],
     )
     plugin._ClickHouseDestPlugin().write_out(
-        _dest_ctx(work_dir), seed_dest, [seed_src],
+        _dest_ctx(work_dir), _conn_from(fresh_clickhouse), seed_dest, [seed_src],
     )
     # Replace: address the SAME table via the parametrized spelling.
     spelled = template.format(db=db, tbl=tbl)
@@ -191,12 +187,11 @@ def test_fqn_replace_truncates_existing(
         [{"id": 1, "name": "only"}],
     )
     dest = ClickHouseDest(
-        conn=_conn_from(fresh_clickhouse),
         tables=[spelled],
         if_table_exists="replace",
     )
     plugin._ClickHouseDestPlugin().write_out(
-        _dest_ctx(work_dir), dest, [new_src],
+        _dest_ctx(work_dir), _conn_from(fresh_clickhouse), dest, [new_src],
     )
     client = _ch_client(fresh_clickhouse)
     assert _count_rows(client, db, tbl) == 1
