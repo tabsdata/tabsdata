@@ -5,9 +5,10 @@
 use clap_derive::Args;
 use tracing::info;
 
+use crate::base::constants::{CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY};
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
 use crate::core::system::exit::CommandResult;
-use crate::kube::api::list_configmaps;
+use crate::kube::api::{LabelFilter, list_configmaps};
 use crate::runtime::provider::provider_for_or_tdkcontext;
 
 #[derive(Debug, Clone, Args)]
@@ -24,12 +25,12 @@ pub async fn command_list(arguments: ListArguments, globals: &GlobalArguments) -
 
     let provider = provider_for_or_tdkcontext(cluster, instance, globals.verbose).await?;
     let context = provider.kube_context().await?;
-    let configs = list_configmaps(&context, None).await?;
+    let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY.item);
+    let configs = list_configmaps(&context, Some(filter)).await?;
 
-    for (name, keys) in configs {
-        info!("{name}");
+    for (_name, keys) in configs {
         for key in keys {
-            info!("  {key}");
+            info!("{key}");
         }
     }
 

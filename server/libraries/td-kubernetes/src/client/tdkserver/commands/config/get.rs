@@ -9,10 +9,11 @@ use td_common::status::ExitStatus::GeneralError;
 use td_error::TdError;
 use tracing::info;
 
+use crate::base::constants::{CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY};
 use crate::base::error::cli::CliError;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
 use crate::core::system::exit::{CommandResult, abort_with};
-use crate::kube::api::get_configmaps;
+use crate::kube::api::{LabelFilter, get_configmaps};
 use crate::runtime::provider::provider_for_or_tdkcontext;
 
 #[derive(Debug, Clone, Args)]
@@ -28,9 +29,9 @@ pub struct GetArguments {
         name = "folder",
         required = true,
         value_parser = clap::value_parser!(PathBuf),
-        long_help = "Empty target folder. One subfolder per config, one file per key, \
-                     file contents being the key value, as kubernetes materializes a \
-                     configmap mount."
+        long_help = "Empty target folder. One file per config, the file name matching \
+                     the configmap key (e.g. 'apiserver.yaml'). The configmap name is \
+                     inferred as 'tabsdata-config-<file>'."
     )]
     pub folder: PathBuf,
 }
@@ -63,25 +64,20 @@ pub async fn command_get(arguments: GetArguments, globals: &GlobalArguments) -> 
 
     let provider = provider_for_or_tdkcontext(cluster, instance, globals.verbose).await?;
     let context = provider.kube_context().await?;
-    let configmaps = get_configmaps(&context, None).await?;
+    let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY.item);
+    let configmaps = get_configmaps(&context, Some(filter)).await?;
 
-    let count = configmaps.len();
-    for (name, keys) in configmaps {
-        let config_folder = folder.join(&name);
-        std::fs::create_dir(&config_folder).map_err(|error| {
-            TdError::from(CliError::FolderCreateFailed {
-                folder: config_folder.display().to_string(),
-                cause: error.to_string(),
-            })
-        })?;
-        for (key, value) in keys {
-            let file = config_folder.join(&key);
+    let mut count = 0usize;
+    for (_name, entries) in configmaps {
+        for (key, value) in entries {
+            let file = folder.join(&key);
             std::fs::write(&file, value).map_err(|error| {
                 TdError::from(CliError::FileWriteFailed {
                     file: file.display().to_string(),
                     cause: error.to_string(),
                 })
             })?;
+            count += 1;
         }
     }
 

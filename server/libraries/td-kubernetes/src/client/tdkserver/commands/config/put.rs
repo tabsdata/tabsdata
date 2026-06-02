@@ -10,11 +10,14 @@ use td_common::status::ExitStatus::GeneralError;
 use td_error::TdError;
 use tracing::{info, warn};
 
+use crate::base::constants::{
+    CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY, TABSDATA_CONFIGMAP_PREFIX,
+};
 use crate::base::error::cli::CliError;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
 use crate::core::system::exit::{CommandResult, abort_with};
 use crate::core::system::file::is_hidden_or_system;
-use crate::kube::api::{get_configmaps, merge_configmap};
+use crate::kube::api::{LabelFilter, get_configmaps, merge_configmap};
 use crate::runtime::provider::{Provider, provider_for_or_tdkcontext};
 
 #[derive(Debug, Clone, Args)]
@@ -30,9 +33,10 @@ pub struct PutArguments {
         name = "folder",
         required = true,
         value_parser = clap::value_parser!(PathBuf),
-        long_help = "Source folder. One subfolder per config, one file per key, \
-                     file contents being the new key value. Only existing configs \
-                     and keys are updated; anything else is ignored with a warning."
+        long_help = "Source folder. One file per config, the file name matching the \
+                     configmap key (e.g. 'apiserver.yaml'). File contents become the \
+                     new key value. Only files matching an existing config in the \
+                     cluster are updated; anything else is ignored with a warning."
     )]
     pub folder: PathBuf,
 }
@@ -74,79 +78,58 @@ pub fn ensure_source_folder(folder: &PathBuf) -> CommandResult {
 pub async fn put_configs(provider: &dyn Provider, folder: &PathBuf) -> CommandResult {
     let context = provider.kube_context().await?;
 
-    let keys_by_config: BTreeMap<String, BTreeSet<String>> = get_configmaps(&context, None)
+    let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY.item);
+    let known_configs: BTreeSet<String> = get_configmaps(&context, Some(filter))
         .await?
         .into_iter()
-        .map(|(name, entries)| (name, entries.into_iter().map(|(key, _)| key).collect()))
+        .map(|(name, _entries)| name)
         .collect();
 
+    let prefix = format!("{TABSDATA_CONFIGMAP_PREFIX}{}-", KPROFILE_CONFIGS_FAMILY.item);
     let mut warnings: Vec<String> = Vec::new();
     let mut updated = 0;
 
-    for config_entry in read_sorted(folder)? {
-        let config_path = config_entry.path();
-        if is_hidden_or_system(&config_path) {
+    for entry in read_sorted(folder)? {
+        let entry_path = entry.path();
+        if is_hidden_or_system(&entry_path) {
             continue;
         }
-        let config_name = config_entry.file_name().to_string_lossy().into_owned();
-        if !config_path.is_dir() {
-            warnings.push(format!(
-                "Entry '{config_name}' is not a config folder; ignored."
-            ));
+        let file_name = entry.file_name().to_string_lossy().into_owned();
+        if entry_path.is_dir() {
+            warnings.push(format!("Subfolder '{file_name}' ignored; expected a flat layout."));
             continue;
         }
-        let Some(existing_keys) = keys_by_config.get(&config_name) else {
-            warnings.push(format!("No config named '{config_name}' exists; ignored."));
+        let configmap_name = format!("{prefix}{file_name}");
+        if !known_configs.contains(&configmap_name) {
+            warnings.push(format!("No config named '{configmap_name}' exists; ignored."));
             continue;
+        }
+        let bytes = match std::fs::read(&entry_path) {
+            Ok(bytes) => bytes,
+            Err(error) => {
+                warnings.push(format!("Could not read file '{file_name}': {error}; ignored."));
+                continue;
+            }
         };
-
+        let text = match String::from_utf8(bytes) {
+            Ok(text) => text,
+            Err(_) => {
+                warnings.push(format!("File '{file_name}' is not valid UTF-8; ignored."));
+                continue;
+            }
+        };
         let mut updates: BTreeMap<String, String> = BTreeMap::new();
-        for key_entry in read_sorted(&config_path)? {
-            let key_path = key_entry.path();
-            if is_hidden_or_system(&key_path) {
-                continue;
-            }
-            let key = key_entry.file_name().to_string_lossy().into_owned();
-            if key_path.is_dir() {
-                warnings.push(format!(
-                    "Subfolder '{config_name}/{key}' ignored; nested folders are not supported."
-                ));
-                continue;
-            }
-            if !existing_keys.contains(&key) {
-                warnings.push(format!(
-                    "Key '{key}' does not exist in config '{config_name}'; file ignored."
-                ));
-                continue;
-            }
-            match std::fs::read(&key_path) {
-                Ok(bytes) => match String::from_utf8(bytes) {
-                    Ok(text) => {
-                        updates.insert(key, text.trim().to_owned());
-                    }
-                    Err(_) => warnings.push(format!(
-                        "File '{config_name}/{key}' is not valid UTF-8; ignored."
-                    )),
-                },
-                Err(error) => warnings.push(format!(
-                    "Could not read file '{config_name}/{key}': {error}; ignored."
-                )),
-            }
-        }
-
-        if !updates.is_empty() {
-            let count = updates.len();
-            merge_configmap(&context, &config_name, updates).await?;
-            updated += count;
-        }
+        updates.insert(file_name.clone(), text);
+        merge_configmap(&context, &configmap_name, updates).await?;
+        updated += 1;
     }
 
     for warning in &warnings {
         warn!("{warning}");
     }
 
-    let noun = if updated == 1 { "key" } else { "keys" };
-    info!("Updated {updated} tabsdata config {noun}.");
+    let noun = if updated == 1 { "config" } else { "configs" };
+    info!("Updated {updated} tabsdata {noun}.");
     Ok(())
 }
 
