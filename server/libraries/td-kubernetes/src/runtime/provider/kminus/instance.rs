@@ -10,8 +10,8 @@ use std::sync::Arc;
 use tracing::info;
 
 use crate::base::constants::{
-    CONFIGMAP_FAMILY_LABEL, CONFIGMAP_TABSDATA_MANIFEST, FOLDER_PROFILE, KPROFILE_CONFIGS_FAMILY,
-    KPROFILE_PODS_FAMILY,
+    CONFIGMAP_FAMILY_LABEL, CONFIGMAP_TABSDATA_MANIFEST, FOLDER_PROFILE, Family,
+    KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY,
 };
 use crate::base::error::provider::ProviderError;
 use crate::base::naming::configmap_name;
@@ -49,8 +49,8 @@ impl KminusInstance {
         if !staged_folder.is_dir() {
             return Ok(None);
         }
-        let pods = read_staged_family(&staged_folder, KPROFILE_PODS_FAMILY)?;
-        let configs = read_staged_family(&staged_folder, KPROFILE_CONFIGS_FAMILY)?;
+        let pods = read_staged_family(&staged_folder, &KPROFILE_PODS_FAMILY)?;
+        let configs = read_staged_family(&staged_folder, &KPROFILE_CONFIGS_FAMILY)?;
         let manifest = read_staged_manifest(&staged_folder)?;
         if pods.is_empty() && configs.is_empty() && manifest.is_none() {
             Ok(None)
@@ -69,8 +69,8 @@ impl KminusInstance {
         let client = build_kube_client(&kminus_config)?;
         let context = KubeContext::new(Arc::new(client), namespace);
         for (family, files) in [
-            (KPROFILE_PODS_FAMILY, staged.pods),
-            (KPROFILE_CONFIGS_FAMILY, staged.configs),
+            (&KPROFILE_PODS_FAMILY, staged.pods),
+            (&KPROFILE_CONFIGS_FAMILY, staged.configs),
         ] {
             replace_family_configmaps(&context, family, files).await?;
         }
@@ -101,10 +101,10 @@ struct StagedConfigmaps {
 
 async fn replace_family_configmaps(
     context: &KubeContext,
-    family: &str,
+    family: &Family,
     files: RenderedConfigmap,
 ) -> CommandResult {
-    let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, family);
+    let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, family.item);
     let existing = list_configmaps(context, Some(filter)).await?;
     for (name, _) in existing {
         delete_configmap(context, &name).await?;
@@ -113,13 +113,13 @@ async fn replace_family_configmaps(
         let name = configmap_name(family, &file)?;
         let mut data = BTreeMap::new();
         data.insert(file, content);
-        create_configmap(context, &name, data, None, Some(family)).await?;
+        create_configmap(context, &name, data, None, Some(family.item)).await?;
     }
     Ok(())
 }
 
-fn read_staged_family(staged_folder: &Path, family: &str) -> CommandResult<RenderedConfigmap> {
-    let family_path = staged_folder.join(family);
+fn read_staged_family(staged_folder: &Path, family: &Family) -> CommandResult<RenderedConfigmap> {
+    let family_path = staged_folder.join(family.folder);
     let mut data = BTreeMap::new();
     if !family_path.is_dir() {
         return Ok(data);
@@ -143,7 +143,7 @@ fn read_staged_family(staged_folder: &Path, family: &str) -> CommandResult<Rende
         })?;
         if file_type.is_dir() {
             return Err(ProviderError::StagingFamilyNotFlat {
-                family: family.to_owned(),
+                family: family.folder.to_owned(),
                 subfolder: name.to_owned(),
             }
             .into());

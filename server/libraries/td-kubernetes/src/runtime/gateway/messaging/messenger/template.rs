@@ -34,7 +34,7 @@ pub struct PodTemplateIndex {
 
 impl PodTemplateIndex {
     pub async fn load(context: &KubeContext) -> Result<Self, KubernetesError> {
-        let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, KPROFILE_PODS_FAMILY);
+        let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, KPROFILE_PODS_FAMILY.item);
         let configmaps = get_configmaps(context, Some(filter)).await?;
         let mut worker_map: HashMap<String, PodTemplate> = HashMap::new();
         for (configmap_name, entries) in configmaps {

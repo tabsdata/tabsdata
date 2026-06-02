@@ -23,8 +23,19 @@ pub const FILE_KUBECONFIG: &str = "config";
 
 pub const RESOURCE_KPROFILE: &str = "resources/kprofile";
 
-pub const KPROFILE_PODS_FAMILY: &str = "pods";
-pub const KPROFILE_CONFIGS_FAMILY: &str = "configs";
+pub struct Family {
+    pub folder: &'static str,
+    pub item: &'static str,
+}
+
+pub const KPROFILE_PODS_FAMILY: Family = Family {
+    folder: "pods",
+    item: "pod",
+};
+pub const KPROFILE_CONFIGS_FAMILY: Family = Family {
+    folder: "configs",
+    item: "config",
+};
 
 pub const PROGRAM_TD_RESOURCE: &str = "td_resource";
 

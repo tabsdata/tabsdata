@@ -16,7 +16,7 @@ use td_common::status::ExitStatus::NoAction;
 use std::collections::BTreeMap;
 
 use crate::base::constants::{
-    CONFIGMAP_TABSDATA_MANIFEST, DEFAULT_INSTANCE_NAME, KPROFILE_CONFIGS_FAMILY,
+    CONFIGMAP_TABSDATA_MANIFEST, DEFAULT_INSTANCE_NAME, Family, KPROFILE_CONFIGS_FAMILY,
     KPROFILE_PODS_FAMILY,
 };
 use crate::base::error::provider::ProviderError;
@@ -351,8 +351,8 @@ impl DockerProvider {
         let rendered = render_for_configmaps(&loaded, &resolver).await?;
         let context = self.kube_context().await?;
         for (family, files) in [
-            (KPROFILE_PODS_FAMILY, rendered.pods),
-            (KPROFILE_CONFIGS_FAMILY, rendered.configs),
+            (&KPROFILE_PODS_FAMILY, rendered.pods),
+            (&KPROFILE_CONFIGS_FAMILY, rendered.configs),
         ] {
             store_family_configmaps(&context, family, files).await?;
         }
@@ -372,8 +372,8 @@ impl DockerProvider {
     async fn apply_workload(&self, multi: &MultiProgress) -> CommandResult {
         self.instance.start().await?;
         let context = self.kube_context().await?;
-        let pods = read_family_configmaps(&context, KPROFILE_PODS_FAMILY).await?;
-        let configs = read_family_configmaps(&context, KPROFILE_CONFIGS_FAMILY).await?;
+        let pods = read_family_configmaps(&context, &KPROFILE_PODS_FAMILY).await?;
+        let configs = read_family_configmaps(&context, &KPROFILE_CONFIGS_FAMILY).await?;
         let mut manifest_data = require_configmap(&context, CONFIGMAP_TABSDATA_MANIFEST).await?;
         let Some(manifest_yaml) = manifest_data.remove(MANIFEST_FILE) else {
             return Err(ProviderError::ConfigmapEntryMissing(
@@ -395,14 +395,14 @@ impl DockerProvider {
 
 async fn store_family_configmaps(
     context: &crate::kube::context::KubeContext,
-    family: &str,
+    family: &Family,
     files: RenderedConfigmap,
 ) -> CommandResult {
     for (file, content) in files {
         let name = configmap_name(family, &file)?;
         let mut data = BTreeMap::new();
         data.insert(file, content);
-        create_configmap(context, &name, data, None, Some(family)).await?;
+        create_configmap(context, &name, data, None, Some(family.item)).await?;
     }
     Ok(())
 }

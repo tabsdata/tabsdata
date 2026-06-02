@@ -51,12 +51,12 @@ spec:
           args:
             - |
               set -e
-              for family in pods configs; do
-                dir="/tabsdata/configmaps/${family}"
-                echo "Reading mounted configmap family '${family}' under ${dir}"
+              for folder in pods configs; do
+                dir="/tabsdata/${folder}"
+                echo "Reading mounted '${folder}' folder under ${dir}"
                 for f in "${dir}"/*; do
                   [ -f "$f" ] || continue
-                  printf '[inspector]   %s/%s = %s\n' "${family}" "$(basename "$f")" "$(cat "$f")"
+                  printf '[inspector]   %s/%s = %s\n' "${folder}" "$(basename "$f")" "$(cat "$f")"
                 done
               done
               echo "Done!"
@@ -70,32 +70,32 @@ spec:
               drop: ["ALL"]
             # readOnlyRootFilesystem: true   # enable after mapping writable paths to emptyDir mounts
           volumeMounts:
-            - name: configmap-pods
-              mountPath: /tabsdata/configmaps/pods
+            - name: pods
+              mountPath: /tabsdata/pods
               readOnly: true
-            - name: configmap-configs
-              mountPath: /tabsdata/configmaps/configs
+            - name: configs
+              mountPath: /tabsdata/configs
               readOnly: true
       volumes:
-        - name: configmap-pods
+        - name: pods
           projected:
             sources:
               - configMap:
-                  name: tabsdata-pods-apiserver.yaml
+                  name: tabsdata-pod-apiserver.yaml
               - configMap:
-                  name: tabsdata-pods-crontrigger.yaml
+                  name: tabsdata-pod-crontrigger.yaml
               - configMap:
-                  name: tabsdata-pods-function.yaml
+                  name: tabsdata-pod-function.yaml
               - configMap:
-                  name: tabsdata-pods-inspector.yaml
+                  name: tabsdata-pod-inspector.yaml
               - configMap:
-                  name: tabsdata-pods-stagetrigger.yaml
-        - name: configmap-configs
+                  name: tabsdata-pod-stagetrigger.yaml
+        - name: configs
           projected:
             sources:
               - configMap:
-                  name: tabsdata-configs-apiserver.yaml
+                  name: tabsdata-config-apiserver.yaml
               - configMap:
-                  name: tabsdata-configs-apiserver.log.yaml
+                  name: tabsdata-config-apiserver.log.yaml
               - configMap:
-                  name: tabsdata-configs-tabsdata.yaml
+                  name: tabsdata-config-tabsdata.yaml

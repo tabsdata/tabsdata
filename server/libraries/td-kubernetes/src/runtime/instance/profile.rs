@@ -13,8 +13,8 @@ use td_python::tabsdata::tabsdata_version;
 use tracing::info;
 
 use crate::base::constants::{
-    CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, PROGRAM_TD_RESOURCE,
-    RESOURCE_KPROFILE,
+    CONFIGMAP_FAMILY_LABEL, Family, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY,
+    PROGRAM_TD_RESOURCE, RESOURCE_KPROFILE,
 };
 use crate::base::error::profile::ProfileError;
 use crate::core::system::file::is_hidden_or_system;
@@ -35,7 +35,7 @@ pub struct Profile {
     pub manifest: Manifest,
 }
 
-const CONFIGMAP_FAMILIES: &[&str] = &[KPROFILE_PODS_FAMILY, KPROFILE_CONFIGS_FAMILY];
+const CONFIGMAP_FAMILIES: &[&Family] = &[&KPROFILE_PODS_FAMILY, &KPROFILE_CONFIGS_FAMILY];
 
 pub fn resolve_kprofile_path(verbose: bool) -> Result<PathBuf, ProfileError> {
     let resolver = resolve_python_binary(PROGRAM_TD_RESOURCE).map_err(|error| {
@@ -85,10 +85,10 @@ pub fn load_profile(provider: ClusterProvider, verbose: bool) -> Result<Profile,
     let mut entries: Vec<(String, String)> = Vec::new();
 
     for family in CONFIGMAP_FAMILIES {
-        let family_path = root.join(family);
+        let family_path = root.join(family.folder);
         if !family_path.is_dir() {
             return Err(ProfileError::FamilyFolderMissing(
-                (*family).to_owned(),
+                family.folder.to_owned(),
                 family_path.display().to_string(),
             ));
         }
@@ -101,26 +101,29 @@ pub fn load_profile(provider: ClusterProvider, verbose: bool) -> Result<Profile,
             &mut map,
             &mut entries,
         )?;
-        maps.insert(*family, map);
+        maps.insert(family.folder, map);
     }
 
     let now = Utc::now();
     let manifest = Manifest::initial_install(&tabsdata_version, now, entries);
     Ok(Profile {
-        pods: maps.remove(KPROFILE_PODS_FAMILY).unwrap_or_default(),
-        configs: maps.remove(KPROFILE_CONFIGS_FAMILY).unwrap_or_default(),
+        pods: maps.remove(KPROFILE_PODS_FAMILY.folder).unwrap_or_default(),
+        configs: maps
+            .remove(KPROFILE_CONFIGS_FAMILY.folder)
+            .unwrap_or_default(),
         manifest,
     })
 }
 
 fn load_configmap_folder(
     folder_path: &Path,
-    folder: &str,
+    family: &Family,
     axes: &[bundle::Axis],
     preferred: &[&'static str],
     map: &mut RenderedConfigmap,
     entries: &mut Vec<(String, String)>,
 ) -> Result<(), ProfileError> {
+    let folder = family.folder;
     let mut discoveries: Vec<DiscoveryFile> = Vec::new();
     let read = fs::read_dir(folder_path).map_err(|error| {
         ProfileError::WalkFailed(folder_path.display().to_string(), error.to_string())
@@ -204,8 +207,8 @@ pub async fn render_for_configmaps(
     loaded: &Profile,
     resolver: &ConfigurationResolver,
 ) -> Result<RenderedConfigmaps, ProfileError> {
-    let pods = resolve_map(&loaded.pods, KPROFILE_PODS_FAMILY, resolver).await?;
-    let configs = resolve_map(&loaded.configs, KPROFILE_CONFIGS_FAMILY, resolver).await?;
+    let pods = resolve_map(&loaded.pods, &KPROFILE_PODS_FAMILY, resolver).await?;
+    let configs = resolve_map(&loaded.configs, &KPROFILE_CONFIGS_FAMILY, resolver).await?;
     let manifest = serde_yaml::to_string(&loaded.manifest)
         .map_err(|error| ProfileError::ManifestSerializeFailed(error.to_string()))?;
     Ok(RenderedConfigmaps {
@@ -223,14 +226,14 @@ pub struct RenderedConfigmaps {
 
 async fn resolve_map(
     source: &RenderedConfigmap,
-    folder: &str,
+    family: &Family,
     resolver: &ConfigurationResolver,
 ) -> Result<RenderedConfigmap, ProfileError> {
     let mut data = BTreeMap::new();
     for (key, value) in source {
         let resolved = resolver.resolve_sys(value).await.map_err(|error| {
             ProfileError::PlaceholderResolutionFailed(
-                folder.to_owned(),
+                family.folder.to_owned(),
                 key.clone(),
                 error.to_string(),
             )
@@ -243,20 +246,20 @@ async fn resolve_map(
 pub async fn resolve_profile_entry(
     loaded: &Profile,
     resolver: &ConfigurationResolver,
-    family: &str,
+    family: &Family,
     key: &str,
 ) -> Result<String, ProfileError> {
-    let source = match family {
-        KPROFILE_PODS_FAMILY => &loaded.pods,
-        KPROFILE_CONFIGS_FAMILY => &loaded.configs,
+    let source = match family.folder {
+        f if f == KPROFILE_PODS_FAMILY.folder => &loaded.pods,
+        f if f == KPROFILE_CONFIGS_FAMILY.folder => &loaded.configs,
         other => return Err(ProfileError::UnknownFamily(other.to_owned())),
     };
     let content = source
         .get(key)
-        .ok_or_else(|| ProfileError::EntryMissing(family.to_owned(), key.to_owned()))?;
+        .ok_or_else(|| ProfileError::EntryMissing(family.folder.to_owned(), key.to_owned()))?;
     resolver.resolve_sys(content).await.map_err(|error| {
         ProfileError::PlaceholderResolutionFailed(
-            family.to_owned(),
+            family.folder.to_owned(),
             key.to_owned(),
             error.to_string(),
         )
@@ -265,9 +268,9 @@ pub async fn resolve_profile_entry(
 
 pub async fn read_family_configmaps(
     context: &KubeContext,
-    family: &str,
+    family: &Family,
 ) -> Result<RenderedConfigmap, ProfileError> {
-    let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, family);
+    let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, family.item);
     let configmaps = get_configmaps(context, Some(filter)).await?;
     let mut merged: RenderedConfigmap = BTreeMap::new();
     for (configmap_name, entries) in configmaps {

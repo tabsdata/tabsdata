@@ -38,9 +38,9 @@ spec:
       command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:TDK_PYENV_SCRIPTS_FOLDER}/td_apiserver"]
       args:
         - --config-file
-        - $(CONTAINER_ROOT)/tabsdata/configmaps/configs/apiserver.yaml/apiserver.yaml
+        - $(CONTAINER_ROOT)/tabsdata/config/apiserver.yaml
         - --log-config
-        - $(CONTAINER_ROOT)/tabsdata/configmaps/configs/apiserver.log.yaml/apiserver.log.yaml
+        - $(CONTAINER_ROOT)/tabsdata/config/apiserver.log.yaml
       ports:
         - name: public-http
           containerPort: 2457
@@ -58,11 +58,8 @@ spec:
           drop: ["ALL"]
         # readOnlyRootFilesystem: true   # enable after mapping writable paths to emptyDir mounts
       volumeMounts:
-        - name: cfg-apiserver-yaml
-          mountPath: /tabsdata/configmaps/configs/apiserver.yaml
-          readOnly: true
-        - name: cfg-apiserver-log-yaml
-          mountPath: /tabsdata/configmaps/configs/apiserver.log.yaml
+        - name: config
+          mountPath: /tabsdata/config
           readOnly: true
         - name: pyenv
           mountPath: /tabsdata/pyenv
@@ -114,21 +111,15 @@ spec:
               name: tabsdata-kubeconfig
               key: kubeconfig
   volumes:
-    - name: cfg-apiserver-yaml
-      configMap:
-        name: tabsdata-configs-apiserver.yaml
-    - name: cfg-apiserver-log-yaml
-      configMap:
-        name: tabsdata-configs-apiserver.log.yaml
-    # When kminus pod-runner supports `projected:`, replace the two configMap
-    # volumes above with the block below.
-    # - name: configmap-configs
-    #   projected:
-    #     sources:
-    #       - configMap:
-    #           name: tabsdata-configs-apiserver.yaml
-    #       - configMap:
-    #           name: tabsdata-configs-apiserver.log.yaml
+    - name: config
+      projected:
+        sources:
+          - configMap:
+              name: tabsdata-config-apiserver.yaml
+          - configMap:
+              name: tabsdata-config-apiserver.log.yaml
+          - configMap:
+              name: tabsdata-config-tabsdata.yaml
     - name: pyenv
       hostPath:
         path: "${sys:TDK_PYENV_TD_ROOT}"

@@ -369,7 +369,7 @@ impl Provider for KminusProvider {
         let apiserver_config = resolve_profile_entry(
             loaded,
             &resolver,
-            KPROFILE_CONFIGS_FAMILY,
+            &KPROFILE_CONFIGS_FAMILY,
             APISERVER_CONFIG_KEY,
         )
         .await?;
@@ -619,10 +619,10 @@ impl KminusProvider {
         let resolver = ConfigurationResolver::new(self.system_values()?);
         let rendered = render_for_configmaps(loaded, &resolver).await?;
         for (family, data) in [
-            (KPROFILE_PODS_FAMILY, rendered.pods),
-            (KPROFILE_CONFIGS_FAMILY, rendered.configs),
+            (&KPROFILE_PODS_FAMILY, rendered.pods),
+            (&KPROFILE_CONFIGS_FAMILY, rendered.configs),
         ] {
-            let family_path = staging_profile.join(family);
+            let family_path = staging_profile.join(family.folder);
             fs::create_dir_all(&family_path).map_err(|error| {
                 ProviderError::StagingFolderCreateFailed(
                     family_path.display().to_string(),
@@ -651,8 +651,8 @@ impl KminusProvider {
 
     async fn apply_workload(&self, multi: &MultiProgress) -> CommandResult {
         let context = self.kube_context().await?;
-        let pods = read_family_configmaps(&context, KPROFILE_PODS_FAMILY).await?;
-        let configs = read_family_configmaps(&context, KPROFILE_CONFIGS_FAMILY).await?;
+        let pods = read_family_configmaps(&context, &KPROFILE_PODS_FAMILY).await?;
+        let configs = read_family_configmaps(&context, &KPROFILE_CONFIGS_FAMILY).await?;
         let mut manifest_data = require_configmap(&context, CONFIGMAP_TABSDATA_MANIFEST).await?;
         let Some(manifest_yaml) = manifest_data.remove(MANIFEST_FILE) else {
             return Err(ProviderError::ConfigmapEntryMissing(

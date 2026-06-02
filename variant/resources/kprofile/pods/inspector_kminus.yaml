@@ -51,12 +51,12 @@ spec:
           args:
             - |
               set -e
-              for family in pods configs; do
-                dir="${KM_CONTAINER_ROOT}/tabsdata/configmaps/${family}"
-                echo "Reading mounted configmap family '${family}' under ${dir}"
-                for f in "${dir}"/*/*; do
+              for folder in pods configs; do
+                dir="${KM_CONTAINER_ROOT}/tabsdata/${folder}"
+                echo "Reading mounted '${folder}' folder under ${dir}"
+                for f in "${dir}"/*; do
                   [ -f "$f" ] || continue
-                  printf '[inspector]   %s/%s = %s\n' "${family}" "$(basename "$f")" "$(cat "$f")"
+                  printf '[inspector]   %s/%s = %s\n' "${folder}" "$(basename "$f")" "$(cat "$f")"
                 done
               done
               echo "Done!"
@@ -70,29 +70,11 @@ spec:
               drop: ["ALL"]
             # readOnlyRootFilesystem: true   # enable after mapping writable paths to emptyDir mounts
           volumeMounts:
-            - name: cfg-apiserver-yaml
-              mountPath: /tabsdata/configmaps/configs/apiserver.yaml
+            - name: configs
+              mountPath: /tabsdata/configs
               readOnly: true
-            - name: cfg-apiserver-log-yaml
-              mountPath: /tabsdata/configmaps/configs/apiserver.log.yaml
-              readOnly: true
-            - name: cfg-tabsdata-yaml
-              mountPath: /tabsdata/configmaps/configs/tabsdata.yaml
-              readOnly: true
-            - name: pod-apiserver
-              mountPath: /tabsdata/configmaps/pods/apiserver.yaml
-              readOnly: true
-            - name: pod-crontrigger
-              mountPath: /tabsdata/configmaps/pods/crontrigger.yaml
-              readOnly: true
-            - name: pod-function
-              mountPath: /tabsdata/configmaps/pods/function.yaml
-              readOnly: true
-            - name: pod-inspector
-              mountPath: /tabsdata/configmaps/pods/inspector.yaml
-              readOnly: true
-            - name: pod-stagetrigger
-              mountPath: /tabsdata/configmaps/pods/stagetrigger.yaml
+            - name: pods
+              mountPath: /tabsdata/pods
               readOnly: true
             - name: pyenv
               mountPath: /tabsdata/pyenv
@@ -101,54 +83,28 @@ spec:
             - name: CONTAINER_ROOT
               value: "$(KM_CONTAINER_ROOT)"
       volumes:
-        - name: cfg-apiserver-yaml
-          configMap:
-            name: tabsdata-configs-apiserver.yaml
-        - name: cfg-apiserver-log-yaml
-          configMap:
-            name: tabsdata-configs-apiserver.log.yaml
-        - name: cfg-tabsdata-yaml
-          configMap:
-            name: tabsdata-configs-tabsdata.yaml
-        - name: pod-apiserver
-          configMap:
-            name: tabsdata-pods-apiserver.yaml
-        - name: pod-crontrigger
-          configMap:
-            name: tabsdata-pods-crontrigger.yaml
-        - name: pod-function
-          configMap:
-            name: tabsdata-pods-function.yaml
-        - name: pod-inspector
-          configMap:
-            name: tabsdata-pods-inspector.yaml
-        - name: pod-stagetrigger
-          configMap:
-            name: tabsdata-pods-stagetrigger.yaml
-        # When kminus pod-runner supports `projected:`, replace the per-file
-        # configMap volumes above with the two blocks below.
-        # - name: configmap-configs
-        #   projected:
-        #     sources:
-        #       - configMap:
-        #           name: tabsdata-configs-apiserver.yaml
-        #       - configMap:
-        #           name: tabsdata-configs-apiserver.log.yaml
-        #       - configMap:
-        #           name: tabsdata-configs-tabsdata.yaml
-        # - name: configmap-pods
-        #   projected:
-        #     sources:
-        #       - configMap:
-        #           name: tabsdata-pods-apiserver.yaml
-        #       - configMap:
-        #           name: tabsdata-pods-crontrigger.yaml
-        #       - configMap:
-        #           name: tabsdata-pods-function.yaml
-        #       - configMap:
-        #           name: tabsdata-pods-inspector.yaml
-        #       - configMap:
-        #           name: tabsdata-pods-stagetrigger.yaml
+        - name: configs
+          projected:
+            sources:
+              - configMap:
+                  name: tabsdata-config-apiserver.yaml
+              - configMap:
+                  name: tabsdata-config-apiserver.log.yaml
+              - configMap:
+                  name: tabsdata-config-tabsdata.yaml
+        - name: pods
+          projected:
+            sources:
+              - configMap:
+                  name: tabsdata-pod-apiserver.yaml
+              - configMap:
+                  name: tabsdata-pod-crontrigger.yaml
+              - configMap:
+                  name: tabsdata-pod-function.yaml
+              - configMap:
+                  name: tabsdata-pod-inspector.yaml
+              - configMap:
+                  name: tabsdata-pod-stagetrigger.yaml
         - name: pyenv
           hostPath:
             path: "${sys:TDK_PYENV_TD_ROOT}"

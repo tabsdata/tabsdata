@@ -5,7 +5,7 @@
 use once_cell::sync::Lazy;
 use regex::Regex;
 
-use crate::base::constants::{KUBE_NAME_SEPARATOR, TABSDATA_CONFIGMAP_PREFIX};
+use crate::base::constants::{Family, KUBE_NAME_SEPARATOR, TABSDATA_CONFIGMAP_PREFIX};
 use crate::base::error::naming::{NameSegment, NamingError};
 
 const KUBE_IDENTIFIER_MAX_LENGTH: usize = 253;
@@ -17,12 +17,13 @@ static DNS_SUBDOMAIN_PATTERN: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$").expect("invalid dns subdomain pattern")
 });
 
-pub fn configmap_name(family: &str, file: &str) -> Result<String, NamingError> {
+pub fn configmap_name(family: &Family, file: &str) -> Result<String, NamingError> {
+    let item = family.item;
     let mut name = String::with_capacity(
-        TABSDATA_CONFIGMAP_PREFIX.len() + family.len() + KUBE_NAME_SEPARATOR.len() + file.len(),
+        TABSDATA_CONFIGMAP_PREFIX.len() + item.len() + KUBE_NAME_SEPARATOR.len() + file.len(),
     );
     name.push_str(TABSDATA_CONFIGMAP_PREFIX);
-    name.push_str(family);
+    name.push_str(item);
     name.push_str(KUBE_NAME_SEPARATOR);
     name.push_str(file);
     if !DNS_SUBDOMAIN_PATTERN.is_match(&name) {
