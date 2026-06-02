@@ -86,13 +86,10 @@ class TableMode(Enum):
     ARRAY = "array"
 
 
-class PluginCtx(ABC):
-    """Common context surface shared by every plugin variant
-    (batch source, stream source, destination).
-
-    Carries the flow-level identifiers (collection / function) and
-    the per-trx working directory where the plugin materialises
-    parquet files."""
+class FlowCtx(ABC):
+    """Flow-level identifiers (collection / function) shared by every
+    role that runs inside a trx -- plugins *and* user-decorated
+    functions. Carries no plugin-specific surface (no ``work_dir``)."""
 
     @property
     @abstractmethod
@@ -113,6 +110,14 @@ class PluginCtx(ABC):
     @abstractmethod
     def function_name(self) -> str:
         """Human-readable function name."""
+
+
+class PluginCtx(FlowCtx, ABC):
+    """Common context surface shared by every plugin variant
+    (batch source, stream source, destination).
+
+    Extends :class:`FlowCtx` with the per-trx working directory where
+    the plugin materialises parquet files."""
 
     @property
     @abstractmethod
@@ -277,6 +282,27 @@ class DestPlugin[D: Dest](ABC):
         ``dest``. The runtime guarantees ``len(tables)`` equals
         ``dest``'s declared target-table count.
         """
+
+
+class FunctionCtx(TrxCtx, FlowCtx, ABC):
+    """Context handed to a user-decorated function (``@publisher`` /
+    ``@transformer`` / ``@subscriber``) when its signature declares a
+    trailing ``ctx`` parameter typed as :class:`FunctionCtx` (or any
+    :class:`tabsdatak.api.TrxCtx` subclass).
+
+    Combines :class:`tabsdatak.api.TrxCtx` (trx identifiers + per-flow
+    scratch state via ``get_attr`` / ``store_attr``) with
+    :class:`FlowCtx` (flow identifiers). The user function uses it to
+    read state from the previous run and persist new state for the
+    next.
+
+    Sibling of :class:`SrcPluginCtx` and :class:`DestContext`: same
+    flow-level identifiers, but deliberately **does not** inherit
+    :class:`PluginCtx` -- user functions are not plugins and should
+    not see plugin-only surface like ``work_dir`` (the plugin's
+    parquet-staging directory). Keeping the bases disjoint stops
+    that detail from leaking into user code at type-check time.
+    """
 
 
 class Explorer[C: Conn](ABC):

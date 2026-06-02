@@ -9,6 +9,7 @@ import pytest
 from tabsdatak import _api
 from tabsdatak.api import StreamSrc, Conn, Dest, Src
 from tabsdatak.error import ApiErrorCode, ApiException
+from tabsdatak.api import TrxCtx
 from tabsdatak.spi import (
     StreamSrcPluginCtx,
     StreamSrcDef,
@@ -17,6 +18,9 @@ from tabsdatak.spi import (
     DestDef,
     DestPlugin,
     Explorer,
+    FlowCtx,
+    FunctionCtx,
+    PluginCtx,
     SrcPluginCtx,
     SrcDef,
     SrcPlugin,
@@ -202,7 +206,9 @@ class _PluginNoAnnotation(SrcPlugin[_CheckSrc]):
 
 
 class _PluginWrongType(SrcPlugin[_CheckSrc]):
-    def read_in(self, ctx: SrcPluginCtx, src: _CheckOtherSrc) -> list[list[TableFileSpec]]:
+    def read_in(
+        self, ctx: SrcPluginCtx, src: _CheckOtherSrc
+    ) -> list[list[TableFileSpec]]:
         return [[]]
 
 
@@ -227,9 +233,7 @@ def testcheck_plugin_param_type_skips_when_no_annotation():
 
 def testcheck_plugin_param_type_rejects_incompatible_annotation():
     with pytest.raises(ValueError, match="`src` parameter is typed as"):
-        check_plugin_param_type(
-            _PluginWrongType, "read_in", "src", _CheckSrc
-        )
+        check_plugin_param_type(_PluginWrongType, "read_in", "src", _CheckSrc)
 
 
 def testcheck_plugin_param_type_missing_method_raises():
@@ -584,3 +588,56 @@ def test_src_def_accepts_explorer_with_loose_conn_annotation():
         plugin=_SDSrcPlugin,
         explorer=_LooseExplorer,
     )
+
+
+# --- FunctionCtx (sibling of SrcPluginCtx / DestContext) ----------------
+
+
+def test_function_ctx_is_abstract():
+    """FunctionCtx is purely abstract -- cannot instantiate directly."""
+    with pytest.raises(TypeError, match="abstract"):
+        FunctionCtx()  # type: ignore[abstract]
+
+
+def test_function_ctx_subclasses_trx_and_flow_ctx():
+    """The role tag composes the two orthogonal abstract bases."""
+    assert issubclass(FunctionCtx, TrxCtx)
+    assert issubclass(FunctionCtx, FlowCtx)
+
+
+def test_function_ctx_is_not_a_plugin_ctx():
+    """User functions are not plugins -- ``FunctionCtx`` deliberately
+    excludes :class:`PluginCtx` so plugin-only surface (``work_dir``)
+    doesn't leak into the user-function type contract."""
+    assert not issubclass(FunctionCtx, PluginCtx)
+
+
+def test_plugin_ctx_is_a_flow_ctx():
+    """``PluginCtx`` carries the flow-level identifiers via
+    :class:`FlowCtx`; user functions see only the identifiers."""
+    assert issubclass(PluginCtx, FlowCtx)
+
+
+def test_function_ctx_distinct_from_src_and_dest_ctx():
+    """Three sibling role tags: separate identities so role-typed
+    signatures stay honest."""
+    assert FunctionCtx is not SrcPluginCtx
+    assert FunctionCtx is not DestContext
+    assert not issubclass(FunctionCtx, SrcPluginCtx)
+    assert not issubclass(FunctionCtx, DestContext)
+    assert not issubclass(SrcPluginCtx, FunctionCtx)
+    assert not issubclass(DestContext, FunctionCtx)
+
+
+def test_function_ctx_concrete_subclass_must_implement_abstracts():
+    """A concrete subclass that doesn't implement every abstract member
+    inherited from TrxCtx + FlowCtx is itself abstract."""
+
+    class _Half(FunctionCtx):
+        # Only some abstracts implemented -- still abstract.
+        @property
+        def exec_plan_id(self) -> str:
+            return "x"
+
+    with pytest.raises(TypeError, match="abstract"):
+        _Half()  # type: ignore[abstract]
