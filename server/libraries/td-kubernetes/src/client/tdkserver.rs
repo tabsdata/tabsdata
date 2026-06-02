@@ -54,8 +54,18 @@ pub async fn start() {
 
 fn report_command_termination(error: &CommandError) {
     match error.status() {
-        ExitStatus::Cancelled => tracing::info!("Operation cancelled."),
-        ExitStatus::NoAction => {}
-        _ => cerror!("Command aborted."),
+        ExitStatus::Cancelled => match error.source() {
+            Some(source) => tracing::info!("Operation cancelled: {source}"),
+            None => tracing::info!("Operation cancelled."),
+        },
+        ExitStatus::NoAction => {
+            if let Some(source) = error.source() {
+                tracing::info!("{source}");
+            }
+        }
+        _ => match error.source() {
+            Some(source) => cerror!("Command aborted: {source}"),
+            None => cerror!("Command aborted."),
+        },
     }
 }

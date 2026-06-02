@@ -102,6 +102,10 @@ impl Provider for EksProvider {
         unreachable!("eks provider not yet implemented")
     }
 
+    fn preview_apply_runtime_summary(&self) {
+        unreachable!("eks provider not yet implemented")
+    }
+
     async fn prepare_cluster(&self) -> Result<Box<dyn Transaction>> {
         unreachable!("eks provider not yet implemented")
     }

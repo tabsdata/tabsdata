@@ -15,7 +15,7 @@ use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, Ins
 use crate::core::system::exit::{Result, abort_with};
 use crate::core::system::file::is_hidden_or_system;
 use crate::kube::api::{get_configmaps, put_configmap};
-use crate::runtime::provider::provider_for_or_tdkcontext;
+use crate::runtime::provider::{Provider, provider_for_or_tdkcontext};
 
 #[derive(Debug, Clone, Args)]
 pub struct PutArguments {
@@ -44,10 +44,16 @@ pub async fn command_put(arguments: PutArguments, globals: &GlobalArguments) -> 
         folder,
     } = arguments;
 
+    ensure_source_folder(&folder)?;
+    let provider = provider_for_or_tdkcontext(cluster, instance, globals.verbose).await?;
+    put_configs(provider.as_ref(), &folder).await
+}
+
+pub fn ensure_source_folder(folder: &PathBuf) -> Result {
     if !folder.is_dir() {
         return abort_with(GeneralError, CliError::FolderNotFound(folder.display().to_string()));
     }
-    let mut folder_entries = std::fs::read_dir(&folder).map_err(|error| {
+    let mut folder_entries = std::fs::read_dir(folder).map_err(|error| {
         TdError::from(CliError::FolderReadFailed {
             folder: folder.display().to_string(),
             cause: error.to_string(),
@@ -56,8 +62,10 @@ pub async fn command_put(arguments: PutArguments, globals: &GlobalArguments) -> 
     if folder_entries.next().is_none() {
         return abort_with(GeneralError, CliError::FolderEmpty(folder.display().to_string()));
     }
+    Ok(())
+}
 
-    let provider = provider_for_or_tdkcontext(cluster, instance, globals.verbose).await?;
+pub async fn put_configs(provider: &dyn Provider, folder: &PathBuf) -> Result {
     let context = provider.kube_context().await?;
 
     let keys_by_config: BTreeMap<String, BTreeSet<String>> = get_configmaps(&context)
@@ -69,7 +77,7 @@ pub async fn command_put(arguments: PutArguments, globals: &GlobalArguments) -> 
     let mut warnings: Vec<String> = Vec::new();
     let mut updated = 0;
 
-    for config_entry in read_sorted(&folder)? {
+    for config_entry in read_sorted(folder)? {
         let config_path = config_entry.path();
         if is_hidden_or_system(&config_path) {
             continue;

@@ -4,7 +4,6 @@
 
 use td_common::status::ExitStatus;
 use td_error::{TdDomainError, TdError};
-use tracing::{error, info};
 
 use crate::base::error::kubernetes::KubernetesError;
 
@@ -53,14 +52,6 @@ impl From<KubernetesError> for CommandError {
 pub type Result<T = ()> = std::result::Result<T, CommandError>;
 
 pub fn abort<T>(status: ExitStatus) -> Result<T> {
-    match status {
-        ExitStatus::Cancelled => info!("Operation cancelled."),
-        ExitStatus::NoAction => {}
-        _ => {
-            error!("Command aborted.");
-            error!("");
-        }
-    }
     Err(CommandError::new(status))
 }
 
@@ -68,16 +59,7 @@ pub fn abort_with<T, E>(status: ExitStatus, error: E) -> Result<T>
 where
     E: TdDomainError + 'static,
 {
-    let td_error = TdError::new(error);
-    match status {
-        ExitStatus::Cancelled => info!("Operation cancelled: {}", td_error),
-        ExitStatus::NoAction => info!("{}", td_error),
-        _ => {
-            error!("Command aborted: {}", td_error);
-            error!("");
-        }
-    }
-    Err(CommandError::with(status, td_error))
+    Err(CommandError::with(status, TdError::new(error)))
 }
 
 #[cfg(test)]

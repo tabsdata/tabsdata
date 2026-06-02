@@ -216,6 +216,8 @@ pub trait Provider: Send + Sync {
 
     fn preview_restart_runtime_summary(&self);
 
+    fn preview_apply_runtime_summary(&self);
+
     async fn prepare_cluster(&self) -> Result<Box<dyn Transaction>>;
     async fn create_database(&self) -> Result;
     async fn create_runtimes(&self) -> Result;

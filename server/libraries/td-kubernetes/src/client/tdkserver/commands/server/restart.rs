@@ -9,7 +9,7 @@ use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, Ins
 use crate::client::tdkserver::common::prompt_yes_no;
 use crate::core::system::exit::Result;
 use crate::cwarn;
-use crate::runtime::provider::provider_for_or_tdkcontext;
+use crate::runtime::provider::{Provider, provider_for_or_tdkcontext};
 
 #[derive(Debug, Clone, Args)]
 pub struct RestartArguments {
@@ -68,6 +68,10 @@ pub async fn command_restart(arguments: RestartArguments, globals: &GlobalArgume
         }
     }
 
+    restart_runtime(provider.as_ref(), alive).await
+}
+
+pub async fn restart_runtime(provider: &dyn Provider, alive: bool) -> Result {
     if alive {
         if provider.stop_runtime().await? {
             provider.report_stopped_runtime();

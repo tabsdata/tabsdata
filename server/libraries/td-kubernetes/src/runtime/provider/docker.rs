@@ -287,6 +287,14 @@ impl Provider for DockerProvider {
         info!("  - namespace....: {}", self.config.default_namespace);
     }
 
+    fn preview_apply_runtime_summary(&self) {
+        info!("About to apply tabsdata configs and restart the instance:");
+        info!("  - provider.....: {}", ClusterProvider::Docker.as_str());
+        info!("  - kubeconfig...: {}", self.kubefile.display());
+        info!("  - context......: {}", self.context);
+        info!("  - namespace....: {}", self.config.default_namespace);
+    }
+
     async fn prepare_cluster(&self) -> Result<Box<dyn Transaction>> {
         let bar = spinner("Preparing kubernetes cluster");
         let result = self.cluster.create();

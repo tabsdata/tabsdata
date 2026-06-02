@@ -395,6 +395,19 @@ impl Provider for KminusProvider {
         info!("  - namespace....: {}", summary.namespace);
     }
 
+    fn preview_apply_runtime_summary(&self) {
+        let summary = self.kube_summary();
+        info!("About to apply tabsdata configs and restart the instance:");
+        info!("  - provider.....: {}", ClusterProvider::Kminus.as_str());
+        info!("  - instance name: {}", self.name);
+        info!("  - instance path: {}", self.folder.display());
+        info!("  - kubeconfig...: {}", summary.kubefile.display());
+        info!("  - context......: {}", summary.context);
+        info!("  - cluster url..: {}", summary.cluster_url);
+        info!("  - cluster name.: {}", summary.cluster);
+        info!("  - namespace....: {}", summary.namespace);
+    }
+
     async fn prepare_cluster(&self) -> Result<Box<dyn Transaction>> {
         let bar = spinner("Preparing kminus cluster");
         let result = self.prepare_cluster_inner();

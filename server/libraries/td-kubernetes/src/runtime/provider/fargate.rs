@@ -102,6 +102,10 @@ impl Provider for FargateProvider {
         unreachable!("fargate provider not yet implemented")
     }
 
+    fn preview_apply_runtime_summary(&self) {
+        unreachable!("fargate provider not yet implemented")
+    }
+
     async fn prepare_cluster(&self) -> Result<Box<dyn Transaction>> {
         unreachable!("fargate provider not yet implemented")
     }
