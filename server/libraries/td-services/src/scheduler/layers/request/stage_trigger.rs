@@ -2,7 +2,8 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use super::shared::{WorkerRequestError, build_external_location, loopback_post_callback};
+use super::shared::{WorkerRequestError, loopback_post_callback};
+use crate::scheduler::message_builder::build_external_location;
 use http::Method;
 use std::collections::HashMap;
 use td_common::id;
