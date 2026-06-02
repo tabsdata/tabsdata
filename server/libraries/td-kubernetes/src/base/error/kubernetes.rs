@@ -23,6 +23,8 @@ pub mod secret;
 use td_error::TdError;
 use thiserror::Error;
 
+use crate::base::error::naming::NamingError;
+
 pub use client::KubeClientError;
 pub use cluster::KubeClusterError;
 pub use configmap::KubeConfigMapError;
@@ -56,6 +58,8 @@ pub enum KubernetesError {
     PodContext(#[from] KubePodContextError),
     #[error(transparent)]
     Secret(#[from] KubeSecretError),
+    #[error(transparent)]
+    Naming(#[from] NamingError),
 }
 
 impl From<KubernetesError> for TdError {
@@ -71,6 +75,7 @@ impl From<KubernetesError> for TdError {
             KubernetesError::Pod(inner) => TdError::new(inner),
             KubernetesError::PodContext(inner) => TdError::new(inner),
             KubernetesError::Secret(inner) => TdError::new(inner),
+            KubernetesError::Naming(inner) => TdError::new(inner),
         }
     }
 }

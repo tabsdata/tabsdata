@@ -66,7 +66,9 @@ pub async fn apply_init_phase(
     let mut applied: Vec<String> = Vec::new();
     for (key, job) in prepared {
         let bar = phase.add_resource(&key);
-        let created = match job_api::create_job(&context, &job).await {
+        let created = match job_api::create_job(&context, &job, &key, None, Vec::new(), Vec::new())
+            .await
+        {
             Ok(created) => {
                 bar.finish_with_message(format!("{key} (applied)"));
                 created
@@ -231,7 +233,16 @@ pub async fn apply_regular_phase(
         let bar = phase.add_resource(&key);
         async move {
             let namespace = context.namespace().to_owned();
-            let created = match pod_api::create_pod(&context, &pod).await {
+            let created = match pod_api::create_pod(
+                &context,
+                &pod,
+                &key,
+                None,
+                Vec::new(),
+                Vec::new(),
+            )
+            .await
+            {
                 Ok(created) => created,
                 Err(error) => {
                     bar.finish_with_message(format!("{key} (failed)"));

@@ -74,7 +74,7 @@ impl KminusInstance {
             if exists_configmap(&context, name).await? {
                 delete_configmap(&context, name).await?;
             }
-            create_configmap(&context, name, data).await?;
+            create_configmap(&context, name, data, None).await?;
         }
         Ok(())
     }

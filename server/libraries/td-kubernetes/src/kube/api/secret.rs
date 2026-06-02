@@ -6,10 +6,11 @@ use std::collections::BTreeMap;
 
 use k8s_openapi::ByteString;
 use k8s_openapi::api::core::v1::Secret;
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, OwnerReference};
 use kube::Api;
 use kube::api::{DeleteParams, ListParams, PostParams};
 
+use crate::base::constants::HTTP_STATUS_CONFLICT;
 use crate::base::error::kubernetes::{KubeSecretError, KubernetesError};
 use crate::kube::api::{label_tabsdata, part_of_tabsdata};
 use crate::kube::context::KubeContext;
@@ -28,15 +29,60 @@ pub async fn exists_secret(context: &KubeContext, name: &str) -> Result<bool, Ku
     }
 }
 
-pub async fn upsert_secret(
+pub async fn create_secret(
     context: &KubeContext,
     name: &str,
     data: BTreeMap<String, String>,
+    owner: Option<OwnerReference>,
 ) -> Result<(), KubernetesError> {
     let api: Api<Secret> = Api::namespaced(context.client().clone(), context.namespace());
     let mut metadata = ObjectMeta {
         name: Some(name.to_owned()),
         namespace: Some(context.namespace().to_owned()),
+        owner_references: owner.map(|reference| vec![reference]),
+        ..Default::default()
+    };
+    label_tabsdata(&mut metadata);
+    let body = Secret {
+        metadata,
+        data: Some(
+            data.into_iter()
+                .map(|(key, value)| (key, ByteString(value.into_bytes())))
+                .collect(),
+        ),
+        ..Default::default()
+    };
+    api.create(&PostParams::default(), &body)
+        .await
+        .map(|_| ())
+        .map_err(|error| match &error {
+            kube::Error::Api(response) if response.code == HTTP_STATUS_CONFLICT => {
+                KubeSecretError::AlreadyExists {
+                    namespace: context.namespace().to_owned(),
+                    name: name.to_owned(),
+                }
+                .into()
+            }
+            _ => KubeSecretError::CreateFailed {
+                namespace: context.namespace().to_owned(),
+                name: name.to_owned(),
+                cause: error.to_string(),
+            }
+            .into(),
+        })
+}
+
+pub async fn upsert_secret(
+    context: &KubeContext,
+    name: &str,
+    data: BTreeMap<String, String>,
+    owner: Option<OwnerReference>,
+) -> Result<(), KubernetesError> {
+    let api: Api<Secret> = Api::namespaced(context.client().clone(), context.namespace());
+    let mut metadata = ObjectMeta {
+        name: Some(name.to_owned()),
+        namespace: Some(context.namespace().to_owned()),
+        owner_references: owner.map(|reference| vec![reference]),
         ..Default::default()
     };
     label_tabsdata(&mut metadata);

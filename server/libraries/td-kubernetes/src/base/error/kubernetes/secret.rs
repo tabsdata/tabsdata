@@ -6,6 +6,8 @@ use td_error::td_error;
 
 #[td_error]
 pub enum KubeSecretError {
+    #[error("Secret '{name}' already exists in namespace '{namespace}'")]
+    AlreadyExists { namespace: String, name: String } = 100,
     #[error("Secret '{name}' not found in namespace '{namespace}'")]
     NotFound { namespace: String, name: String } = 1000,
     #[error("Could not query Secret '{name}' in namespace '{namespace}': {cause}")]

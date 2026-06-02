@@ -14,7 +14,7 @@ use crate::base::error::cli::CliError;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
 use crate::core::system::exit::{Result, abort_with};
 use crate::core::system::file::is_hidden_or_system;
-use crate::kube::api::{get_configmaps, put_configmap};
+use crate::kube::api::{get_configmaps, merge_configmap};
 use crate::runtime::provider::{Provider, provider_for_or_tdkcontext};
 
 #[derive(Debug, Clone, Args)]
@@ -128,7 +128,7 @@ pub async fn put_configs(provider: &dyn Provider, folder: &PathBuf) -> Result {
 
         if !updates.is_empty() {
             let count = updates.len();
-            put_configmap(&context, &config_name, updates).await?;
+            merge_configmap(&context, &config_name, updates).await?;
             updated += count;
         }
     }

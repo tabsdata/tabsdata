@@ -8,22 +8,48 @@ use kube::api::{DeleteParams, ListParams, PostParams, PropagationPolicy};
 use kube::runtime::wait::{Condition, await_condition};
 
 use crate::base::error::kubernetes::{KubePodError, KubernetesError};
-use crate::kube::api::{label_tabsdata, part_of_tabsdata};
+use crate::base::naming::to_kube_identifier;
+use crate::kube::api::secret::create_secret;
+use crate::kube::api::{
+    ConfigMapSpec, SecretSpec, component_from_pod, create_configmap, label_tabsdata,
+    owner_ref_for_pod, part_of_tabsdata,
+};
 use crate::kube::context::KubeContext;
 
-pub async fn create_pod(context: &KubeContext, pod: &Pod) -> Result<Pod, KubernetesError> {
+pub async fn create_pod(
+    context: &KubeContext,
+    pod: &Pod,
+    template: &str,
+    runid: Option<&str>,
+    configmaps: Vec<ConfigMapSpec>,
+    secrets: Vec<SecretSpec>,
+) -> Result<Pod, KubernetesError> {
     let api: Api<Pod> = Api::namespaced(context.client().clone(), context.namespace());
     let mut pod = pod.clone();
     label_tabsdata(&mut pod.metadata);
-    api.create(&PostParams::default(), &pod)
+    let created = api
+        .create(&PostParams::default(), &pod)
         .await
         .map_err(|error| {
-            KubePodError::ApplyFailed {
+            KubernetesError::from(KubePodError::ApplyFailed {
                 namespace: context.namespace().to_owned(),
                 cause: error.to_string(),
-            }
-            .into()
-        })
+            })
+        })?;
+    if configmaps.is_empty() && secrets.is_empty() {
+        return Ok(created);
+    }
+    let component = component_from_pod(&created, template)?;
+    let owner = owner_ref_for_pod(&created, template)?;
+    for spec in configmaps {
+        let name = to_kube_identifier(&component, &spec.name, runid)?;
+        create_configmap(context, &name, spec.data, Some(owner.clone())).await?;
+    }
+    for spec in secrets {
+        let name = to_kube_identifier(&component, &spec.name, runid)?;
+        create_secret(context, &name, spec.data, Some(owner.clone())).await?;
+    }
+    Ok(created)
 }
 
 pub async fn await_pod_condition(

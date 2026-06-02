@@ -5,10 +5,11 @@
 use std::collections::BTreeMap;
 
 use k8s_openapi::api::core::v1::ConfigMap;
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, OwnerReference};
 use kube::Api;
 use kube::api::{DeleteParams, ListParams, PostParams};
 
+use crate::base::constants::HTTP_STATUS_CONFLICT;
 use crate::base::error::kubernetes::{KubeConfigMapError, KubernetesError};
 use crate::kube::api::{label_tabsdata, part_of_tabsdata};
 use crate::kube::context::KubeContext;
@@ -31,11 +32,13 @@ pub async fn create_configmap(
     context: &KubeContext,
     name: &str,
     data: BTreeMap<String, String>,
+    owner: Option<OwnerReference>,
 ) -> Result<(), KubernetesError> {
     let api: Api<ConfigMap> = Api::namespaced(context.client().clone(), context.namespace());
     let mut metadata = ObjectMeta {
         name: Some(name.to_owned()),
         namespace: Some(context.namespace().to_owned()),
+        owner_references: owner.map(|reference| vec![reference]),
         ..Default::default()
     };
     label_tabsdata(&mut metadata);
@@ -47,13 +50,20 @@ pub async fn create_configmap(
     api.create(&PostParams::default(), &configmap)
         .await
         .map(|_| ())
-        .map_err(|error| {
-            KubeConfigMapError::CreateFailed {
+        .map_err(|error| match &error {
+            kube::Error::Api(response) if response.code == HTTP_STATUS_CONFLICT => {
+                KubeConfigMapError::AlreadyExists {
+                    namespace: context.namespace().to_owned(),
+                    name: name.to_owned(),
+                }
+                .into()
+            }
+            _ => KubeConfigMapError::CreateFailed {
                 namespace: context.namespace().to_owned(),
                 name: name.to_owned(),
                 cause: error.to_string(),
             }
-            .into()
+            .into(),
         })
 }
 
@@ -179,7 +189,7 @@ pub async fn get_configmaps(
     Ok(fetched)
 }
 
-pub async fn put_configmap(
+pub async fn merge_configmap(
     context: &KubeContext,
     name: &str,
     updates: BTreeMap<String, String>,

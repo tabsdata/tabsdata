@@ -58,24 +58,40 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                 .map_err(|error| QueueError::BackendError {
                     cause: error.to_string(),
                 })?;
-        let name = to_kube_identifier(&id).map_err(|error| QueueError::BackendError {
-            cause: error.to_string(),
+        let name = to_kube_identifier(&payload.worker, &id, None).map_err(|error| {
+            QueueError::BackendError {
+                cause: error.to_string(),
+            }
         })?;
         match template.kind {
             TemplateKind::Pod => {
                 let pod = self.manifest_pod(template, &name)?;
-                create_pod(&self.context, &pod).await.map_err(|error| {
-                    QueueError::BackendError {
-                        cause: error.to_string(),
-                    }
+                create_pod(
+                    &self.context,
+                    &pod,
+                    &payload.worker,
+                    None,
+                    Vec::new(),
+                    Vec::new(),
+                )
+                .await
+                .map_err(|error| QueueError::BackendError {
+                    cause: error.to_string(),
                 })?;
             }
             TemplateKind::Job => {
                 let job = self.manifest_job(template, &name)?;
-                create_job(&self.context, &job).await.map_err(|error| {
-                    QueueError::BackendError {
-                        cause: error.to_string(),
-                    }
+                create_job(
+                    &self.context,
+                    &job,
+                    &payload.worker,
+                    None,
+                    Vec::new(),
+                    Vec::new(),
+                )
+                .await
+                .map_err(|error| QueueError::BackendError {
+                    cause: error.to_string(),
                 })?;
             }
         }
@@ -111,7 +127,7 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                 return Ok(());
             }
         };
-        let name = match to_kube_identifier(&message.id) {
+        let name = match to_kube_identifier(worker, &message.id, None) {
             Ok(name) => name,
             Err(error) => {
                 warn!(

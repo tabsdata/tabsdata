@@ -8,22 +8,48 @@ use kube::api::{DeleteParams, ListParams, PostParams, PropagationPolicy};
 use kube::runtime::wait::{Condition, await_condition};
 
 use crate::base::error::kubernetes::{KubeJobError, KubernetesError};
-use crate::kube::api::{label_tabsdata, part_of_tabsdata};
+use crate::base::naming::to_kube_identifier;
+use crate::kube::api::secret::create_secret;
+use crate::kube::api::{
+    ConfigMapSpec, SecretSpec, component_from_job, create_configmap, label_tabsdata,
+    owner_ref_for_job, part_of_tabsdata,
+};
 use crate::kube::context::KubeContext;
 
-pub async fn create_job(context: &KubeContext, job: &Job) -> Result<Job, KubernetesError> {
+pub async fn create_job(
+    context: &KubeContext,
+    job: &Job,
+    template: &str,
+    runid: Option<&str>,
+    configmaps: Vec<ConfigMapSpec>,
+    secrets: Vec<SecretSpec>,
+) -> Result<Job, KubernetesError> {
     let api: Api<Job> = Api::namespaced(context.client().clone(), context.namespace());
     let mut job = job.clone();
     label_tabsdata(&mut job.metadata);
-    api.create(&PostParams::default(), &job)
+    let created = api
+        .create(&PostParams::default(), &job)
         .await
         .map_err(|error| {
-            KubeJobError::ApplyFailed {
+            KubernetesError::from(KubeJobError::ApplyFailed {
                 namespace: context.namespace().to_owned(),
                 cause: error.to_string(),
-            }
-            .into()
-        })
+            })
+        })?;
+    if configmaps.is_empty() && secrets.is_empty() {
+        return Ok(created);
+    }
+    let component = component_from_job(&created, template)?;
+    let owner = owner_ref_for_job(&created, template)?;
+    for spec in configmaps {
+        let name = to_kube_identifier(&component, &spec.name, runid)?;
+        create_configmap(context, &name, spec.data, Some(owner.clone())).await?;
+    }
+    for spec in secrets {
+        let name = to_kube_identifier(&component, &spec.name, runid)?;
+        create_secret(context, &name, spec.data, Some(owner.clone())).await?;
+    }
+    Ok(created)
 }
 
 pub async fn await_job_condition(

@@ -52,7 +52,12 @@ pub const TIER_LABEL: &str = "tabsdata.com/worker-tier";
 pub const PART_OF_LABEL: &str = "app.kubernetes.io/part-of";
 pub const PART_OF_TABSDATA: &str = "tabsdata";
 
-pub const KUBE_IDENTIFIER_PREFIX: &str = "td-";
+pub const KUBE_NAME_SEPARATOR: &str = "-";
+
+pub const KUBE_METADATA_FIELD_NAME: &str = "name";
+pub const KUBE_METADATA_FIELD_UID: &str = "uid";
+
+pub const HTTP_STATUS_CONFLICT: u16 = 409;
 
 pub const POD_YAML_COMPONENT_LABEL: &str = "app.kubernetes.io/component";
 

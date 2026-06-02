@@ -403,7 +403,7 @@ impl DockerProvider {
         let rendered = render_for_configmaps(&loaded, &resolver).await?;
         let context = self.kube_context().await?;
         for (name, data) in rendered.into_named() {
-            create_configmap(&context, name, data).await?;
+            create_configmap(&context, name, data, None).await?;
         }
         Ok(())
     }
