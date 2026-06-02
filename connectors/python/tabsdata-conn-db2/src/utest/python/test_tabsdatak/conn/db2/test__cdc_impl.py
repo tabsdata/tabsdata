@@ -13,6 +13,7 @@ import pytest
 import sqlalchemy.types as sa_types
 from sqlalchemy.types import BLOB, CLOB, LargeBinary, Text
 
+from tabsdatak.conn.common.sql.cdc._ingester import CDC_OFFSET_STATE_KEY
 from tabsdatak.conn.common.sql.cdc._model import TableObject, TrackedTable
 from tabsdatak.conn.db2._cdc_impl import (
     COMMITSEQ_ORIGIN,
@@ -25,6 +26,7 @@ from tabsdatak.conn.db2._cdc_impl import (
 )
 from tabsdatak.conn.db2.error import Db2ErrorCode
 from tabsdatak.error import TabsdataException
+from tabsdatak.spi import StoreStreamState
 
 
 # =====================================================================
@@ -301,3 +303,52 @@ def test_commit_offset_rejects_foreign_offset():
 
 def test_commitseq_origin_is_16_zero_bytes():
     assert COMMITSEQ_ORIGIN == b"\x00" * 16
+
+
+# =====================================================================
+# Offset ownership -- Db2 is Tabsdata-owned: it persists the per-CD-table
+# commitseq watermarks in stream state (default commit_state) and
+# reconstructs them on resume via offset_from_state.
+# =====================================================================
+
+
+def test_offset_from_state_reconstructs_commitseq_offset():
+    bi = _ingester_with_tables(["CDSCHEMA.USERS_CD"])
+    offset = bi.offset_from_state({"CDSCHEMA.USERS_CD": "01" * 16})
+    assert isinstance(offset, CommitSeqOffset)
+    assert offset.commits == {"CDSCHEMA.USERS_CD": b"\x01" * 16}
+
+
+def test_commit_state_persists_commitseqs_in_stream_state():
+    bi = _ingester_with_tables(["CDSCHEMA.USERS_CD"])
+    offset = CommitSeqOffset(commits={"CDSCHEMA.USERS_CD": b"\x01" * 16})
+    spec = bi.commit_state(offset)
+    assert isinstance(spec, StoreStreamState)
+    assert spec.state == {CDC_OFFSET_STATE_KEY: {"CDSCHEMA.USERS_CD": "01" * 16}}
+
+
+def test_resume_offset_round_trips_persisted_commitseqs():
+    bi = _ingester_with_tables(["CDSCHEMA.USERS_CD"])
+    offset = CommitSeqOffset(commits={"CDSCHEMA.USERS_CD": b"\x07" * 16})
+    persisted = bi.commit_state(offset).state
+    resumed = bi.resume_offset(first_stage=False, stream_state=persisted)
+    assert isinstance(resumed, CommitSeqOffset)
+    assert resumed.commits == {"CDSCHEMA.USERS_CD": b"\x07" * 16}
+
+
+def test_resume_offset_first_stage_ignores_persisted_state():
+    bi = _ingester_with_tables(["CDSCHEMA.USERS_CD"])
+    assert (
+        bi.resume_offset(
+            first_stage=True,
+            stream_state={CDC_OFFSET_STATE_KEY: {"CDSCHEMA.USERS_CD": "01" * 16}},
+        )
+        is None
+    )
+
+
+def test_seed_offset_sets_resume_mark():
+    bi = _ingester_with_tables(["CDSCHEMA.USERS_CD"])
+    offset = CommitSeqOffset(commits={"CDSCHEMA.USERS_CD": b"\x01" * 16})
+    bi.seed_offset(offset)
+    assert bi._mark is offset

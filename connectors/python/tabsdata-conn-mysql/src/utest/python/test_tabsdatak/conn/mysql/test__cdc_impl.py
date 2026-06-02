@@ -22,6 +22,7 @@ from sqlalchemy.dialects.mysql import (
 )
 from sqlalchemy.types import LargeBinary, Text
 
+from tabsdatak.conn.common.sql.cdc._ingester import CDC_OFFSET_STATE_KEY
 from tabsdatak.conn.common.sql.cdc._model import TableObject, TrackedTable
 from tabsdatak.conn.mysql._cdc_impl import (
     BinlogIngester,
@@ -30,6 +31,7 @@ from tabsdatak.conn.mysql._cdc_impl import (
 )
 from tabsdatak.conn.mysql.error import MysqlErrorCode
 from tabsdatak.error import TabsdataException
+from tabsdatak.spi import StoreStreamState
 
 
 # =====================================================================
@@ -348,3 +350,49 @@ def test_commit_offset_rejects_foreign_offset():
     with pytest.raises(TabsdataException) as ei:
         bi.commit_offset(_Foreign())  # type: ignore[arg-type]
     assert ei.value.api_error is MysqlErrorCode.MYSQL_17
+
+
+# =====================================================================
+# Offset ownership -- MySQL is Tabsdata-owned: it persists the GTID in
+# stream state (default commit_state) and reconstructs it on resume via
+# offset_from_state.
+# =====================================================================
+
+
+def test_offset_from_state_reconstructs_gtid_offset():
+    bi = _ingester_with_tables(["app.users"])
+    offset = bi.offset_from_state({"gtid": "uuid:42"})
+    assert isinstance(offset, GtidOffset)
+    assert offset.gtid == "uuid:42"
+
+
+def test_commit_state_persists_gtid_in_stream_state():
+    bi = _ingester_with_tables(["app.users"])
+    spec = bi.commit_state(GtidOffset(gtid="uuid:7"))
+    assert isinstance(spec, StoreStreamState)
+    assert spec.state == {CDC_OFFSET_STATE_KEY: {"gtid": "uuid:7"}}
+
+
+def test_resume_offset_round_trips_persisted_gtid():
+    bi = _ingester_with_tables(["app.users"])
+    persisted = bi.commit_state(GtidOffset(gtid="uuid:7")).state
+    resumed = bi.resume_offset(first_stage=False, stream_state=persisted)
+    assert isinstance(resumed, GtidOffset)
+    assert resumed.gtid == "uuid:7"
+
+
+def test_resume_offset_first_stage_ignores_persisted_state():
+    bi = _ingester_with_tables(["app.users"])
+    assert (
+        bi.resume_offset(
+            first_stage=True,
+            stream_state={CDC_OFFSET_STATE_KEY: {"gtid": "uuid:7"}},
+        )
+        is None
+    )
+
+
+def test_seed_offset_sets_resume_mark():
+    bi = _ingester_with_tables(["app.users"])
+    bi.seed_offset(GtidOffset(gtid="uuid:7"))
+    assert bi._mark.gtid == "uuid:7"

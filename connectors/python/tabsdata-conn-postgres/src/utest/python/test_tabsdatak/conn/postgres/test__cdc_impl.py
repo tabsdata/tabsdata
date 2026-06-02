@@ -13,6 +13,7 @@ import sqlalchemy.types as sa_types
 from sqlalchemy.dialects.postgresql import BYTEA
 from sqlalchemy.types import LargeBinary, Text
 
+from tabsdatak.conn.common.sql.cdc._ingester import CDC_OFFSET_STATE_KEY
 from tabsdatak.conn.common.sql.cdc._model import TableObject, TrackedTable
 from tabsdatak.conn.postgres._cdc_impl import (
     DEFAULT_WAL2JSON_FORMAT_VERSION,
@@ -22,6 +23,7 @@ from tabsdatak.conn.postgres._cdc_impl import (
 )
 from tabsdatak.conn.postgres.error import PostgresErrorCode
 from tabsdatak.error import TabsdataException
+from tabsdatak.spi import StoreStreamState
 
 
 # =====================================================================
@@ -410,3 +412,41 @@ def test_ingester_type_is_wal2json():
 
 def test_ingester_default_format_version_is_v2():
     assert DEFAULT_WAL2JSON_FORMAT_VERSION == 2
+
+
+# =====================================================================
+# Offset ownership -- Postgres keeps the offset in the slot (external),
+# so it overrides commit_state / resume_offset away from the defaults.
+# =====================================================================
+
+
+def test_commit_state_is_a_plain_callable_not_store_stream_state():
+    """The slot owns the offset, so the commit callback runs a source
+    side effect rather than persisting Tabsdata stream state."""
+    bi = _ingester_with_tables(["public.users"])
+    spec = bi.commit_state(LsnOffset(lsn=5))
+    assert callable(spec)
+    assert not isinstance(spec, StoreStreamState)
+
+
+def test_commit_state_callable_commits_the_offset_to_the_source():
+    bi = _ingester_with_tables(["public.users"])
+    committed: list = []
+    bi.commit_offset = lambda offset: committed.append(offset)  # type: ignore[method-assign]
+
+    bi.commit_state(LsnOffset(lsn=7))()
+
+    assert len(committed) == 1
+    assert committed[0].lsn == 7
+
+
+def test_resume_offset_is_always_none_so_slot_resumes_itself():
+    bi = _ingester_with_tables(["public.users"])
+    assert bi.resume_offset(first_stage=True, stream_state=None) is None
+    assert (
+        bi.resume_offset(
+            first_stage=False,
+            stream_state={CDC_OFFSET_STATE_KEY: {"lsn": 9}},
+        )
+        is None
+    )
