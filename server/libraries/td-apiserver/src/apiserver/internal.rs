@@ -5,8 +5,8 @@
 use crate::apiserver::ApiServerCtx;
 use crate::apiserver::server::{Server, ServerBuilder, ServerError};
 use crate::layers::cors::CorsService;
-use crate::layers::tracing::TraceService;
 use crate::layers::internal_token::internal_token_layer;
+use crate::layers::tracing::TraceService;
 use crate::router::internal::InternalRouter;
 use async_trait::async_trait;
 use axum::middleware::from_fn_with_state;

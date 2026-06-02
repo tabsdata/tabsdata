@@ -709,7 +709,6 @@ pub enum Orchestrator {
     Kubernetes,
 }
 
-
 #[async_trait]
 pub trait OrchestratorMessagingProvider: Send + Sync {
     async fn orchestrator_message_queue(
@@ -983,10 +982,13 @@ mod tests_queue {
             "File '.yaml' exists and it shouldn't"
         );
 
-        let message = queue.put(
-            id.to_string(),
-            OrchestratorMessagePayload::OrchestratorRequestMessagePayload(payload.clone()),
-        ).await.unwrap();
+        let message = queue
+            .put(
+                id.to_string(),
+                OrchestratorMessagePayload::OrchestratorRequestMessagePayload(payload.clone()),
+            )
+            .await
+            .unwrap();
 
         assert!(
             lock_message_path.exists(),
@@ -1040,10 +1042,13 @@ mod tests_queue {
             "File '.yaml' exists and it shouldn't"
         );
 
-        let message = queue.put(
-            id.to_string(),
-            OrchestratorMessagePayload::OrchestratorRequestMessagePayload(payload.clone()),
-        ).await.unwrap();
+        let message = queue
+            .put(
+                id.to_string(),
+                OrchestratorMessagePayload::OrchestratorRequestMessagePayload(payload.clone()),
+            )
+            .await
+            .unwrap();
 
         assert!(
             lock_message_path.exists(),
@@ -1081,15 +1086,20 @@ mod tests_queue {
             context: None,
         };
 
-        let _ = queue.put(
-            id.to_string(),
-            OrchestratorMessagePayload::OrchestratorRequestMessagePayload(payload.clone()),
-        ).await.unwrap();
+        let _ = queue
+            .put(
+                id.to_string(),
+                OrchestratorMessagePayload::OrchestratorRequestMessagePayload(payload.clone()),
+            )
+            .await
+            .unwrap();
 
-        let result = queue.put(
-            id.to_string(),
-            OrchestratorMessagePayload::OrchestratorRequestMessagePayload(payload.clone()),
-        ).await;
+        let result = queue
+            .put(
+                id.to_string(),
+                OrchestratorMessagePayload::OrchestratorRequestMessagePayload(payload.clone()),
+            )
+            .await;
 
         assert!(matches!(result, Err(MessageAlreadyExisting { .. })));
     }

@@ -9,8 +9,8 @@ use std::collections::HashMap;
 use td_authz::jwt::JwtConfig;
 use td_common::id;
 use td_common::server::{
-    MessageAction, OrchestratorMessagePayload, OrchestratorMessageQueueHandle, RequestMessagePayload,
-    WorkerClass, WorkerName,
+    MessageAction, OrchestratorMessagePayload, OrchestratorMessageQueueHandle,
+    RequestMessagePayload, WorkerClass, WorkerName,
 };
 use td_database::dynamic::DynamicConnection;
 use td_error::{ApiError, TdError, api_error};
@@ -62,8 +62,12 @@ pub async fn create_locked_stage_trigger_workers_start_request(
     for stage_trigger_worker in stage_trigger_workers.iter() {
         let worker_id = stage_trigger_worker.id.to_string();
         let server_address = server_addresses.first();
-        let callback =
-            internal_post_callback(&jwt, server_address, UPDATE_WORKER, &[("worker_id", &worker_id)])?;
+        let callback = internal_post_callback(
+            &jwt,
+            server_address,
+            UPDATE_WORKER,
+            &[("worker_id", &worker_id)],
+        )?;
 
         let function_version_id = stage_trigger_worker.function_version_id.to_string();
         let fv_binding = [("function_version_id", function_version_id.as_str())];
@@ -172,7 +176,11 @@ pub async fn create_locked_stage_trigger_workers_start_request(
         };
 
         // Add it to the queue
-        message_queue.put(worker_id, OrchestratorMessagePayload::OrchestratorRequestMessagePayload(message_payload))
+        message_queue
+            .put(
+                worker_id,
+                OrchestratorMessagePayload::OrchestratorRequestMessagePayload(message_payload),
+            )
             .await?;
     }
     Ok(())
@@ -222,8 +230,14 @@ pub async fn create_locked_stage_trigger_workers_stop_request(
                 };
 
                 // Add it to the queue
-                message_queue.put(message_id, OrchestratorMessagePayload::OrchestratorRequestMessagePayload(message_payload))
-            .await?;
+                message_queue
+                    .put(
+                        message_id,
+                        OrchestratorMessagePayload::OrchestratorRequestMessagePayload(
+                            message_payload,
+                        ),
+                    )
+                    .await?;
                 Ok::<_, TdError>(())
             }
         })

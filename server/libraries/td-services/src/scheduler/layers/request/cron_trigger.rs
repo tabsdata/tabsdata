@@ -8,8 +8,8 @@ use std::collections::HashMap;
 use td_authz::jwt::JwtConfig;
 use td_common::id;
 use td_common::server::{
-    MessageAction, OrchestratorMessagePayload, OrchestratorMessageQueueHandle, RequestMessagePayload,
-    WorkerClass, WorkerName,
+    MessageAction, OrchestratorMessagePayload, OrchestratorMessageQueueHandle,
+    RequestMessagePayload, WorkerClass, WorkerName,
 };
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::worker::WorkerDBWithNames;
@@ -95,7 +95,13 @@ pub async fn create_locked_cron_trigger_workers_start_request(
                 };
 
                 // Add it to the queue
-                message_queue.put(worker_id, OrchestratorMessagePayload::OrchestratorRequestMessagePayload(message_payload))
+                message_queue
+                    .put(
+                        worker_id,
+                        OrchestratorMessagePayload::OrchestratorRequestMessagePayload(
+                            message_payload,
+                        ),
+                    )
                     .await?;
                 Ok::<_, TdError>(())
             }
@@ -149,7 +155,13 @@ pub async fn create_locked_cron_trigger_workers_stop_request(
                 };
 
                 // Add it to the queue
-                message_queue.put(message_id, OrchestratorMessagePayload::OrchestratorRequestMessagePayload(message_payload))
+                message_queue
+                    .put(
+                        message_id,
+                        OrchestratorMessagePayload::OrchestratorRequestMessagePayload(
+                            message_payload,
+                        ),
+                    )
                     .await?;
                 Ok::<_, TdError>(())
             }

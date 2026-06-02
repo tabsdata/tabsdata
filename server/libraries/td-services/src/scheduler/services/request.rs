@@ -242,18 +242,18 @@ pub fn stop_stage_trigger_runners() {
 mod tests {
     use super::*;
     use crate::execution::services::execute::ExecuteFunctionService;
+    use crate::scheduler::services::SchedulerContext;
     use http::Method;
+    use std::str::FromStr;
     use std::sync::Arc;
+    use ta_services::factory::ServiceFactory;
+    use ta_services::service::TdService;
     use td_authz::jwt::decode_internal_token;
+    use td_common::server::OrchestratorMessagePayload;
     use td_common::server::{
         Callback, Decorator as MessageDecorator, FunctionRequest, InMemoryOrchestratorMessageQueue,
         OrchestratorMessageQueueHandle,
     };
-    use crate::scheduler::services::SchedulerContext;
-    use std::str::FromStr;
-    use ta_services::factory::ServiceFactory;
-    use ta_services::service::TdService;
-    use td_common::server::OrchestratorMessagePayload;
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::Buildable;
@@ -800,7 +800,10 @@ mod tests {
             InMemoryOrchestratorMessageQueue::default(),
         )));
         context.orchestrator = Arc::new(Orchestrator::Kubernetes);
-        RequestService::build(&context).service().oneshot(()).await?;
+        RequestService::build(&context)
+            .service()
+            .oneshot(())
+            .await?;
 
         let created = context.orchestrator_queue.locked_messages().await;
         assert_eq!(created.len(), 1);

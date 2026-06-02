@@ -25,7 +25,8 @@ pub(crate) async fn build_function_v2(
 ) -> Result<FunctionInput, TdError> {
     let info = build_function_info(storage, f)?;
     let (system_input, input) = resolve_input_tables(conn, storage, f, prefetch).await?;
-    let (system_output, output) = build_output_tables(storage, f, prefetch.output_tables_for(&f.id))?;
+    let (system_output, output) =
+        build_output_tables(storage, f, prefetch.output_tables_for(&f.id))?;
 
     let function_input_v2 = FunctionInput::builder()
         .info(info)

@@ -108,7 +108,8 @@ mod tests {
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues,
-        LogicalFunctionRunStatus, RoleId, TableNameDto, TransactionKey, UserId, WorkerMessageStatus,
+        LogicalFunctionRunStatus, RoleId, TableNameDto, TransactionKey, UserId,
+        WorkerMessageStatus,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
@@ -153,12 +154,7 @@ mod tests {
             .await?;
         let worker = db
             .seed()
-            .function_runner_worker(
-                &execution,
-                &transaction,
-                &pfr,
-                &WorkerMessageStatus::Locked,
-            )
+            .function_runner_worker(&execution, &transaction, &pfr, &WorkerMessageStatus::Locked)
             .await?;
 
         // Resolve the message via the endpoint service.

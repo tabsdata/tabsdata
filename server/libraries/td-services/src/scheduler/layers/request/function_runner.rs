@@ -246,8 +246,7 @@ pub async fn create_locked_function_runner_workers_start_request(
         // resolved later via the endpoint.
         let payload = match prefetch.as_ref() {
             Some(prefetch) => {
-                let function_input_v2 =
-                    build_function_v2(&mut conn, &storage, f, prefetch).await?;
+                let function_input_v2 = build_function_v2(&mut conn, &storage, f, prefetch).await?;
                 let function_input = WorkerInput::FunctionV2(Box::new(function_input_v2));
                 let context = serde_yaml::to_value(&function_input).map_err(|e| {
                     api_error!(
@@ -304,9 +303,7 @@ pub async fn create_locked_function_runner_workers_start_request(
         };
 
         // Add it to the queue
-        message_queue
-            .put(message.id.to_string(), payload)
-            .await?;
+        message_queue.put(message.id.to_string(), payload).await?;
         results.push(message);
     }
 
