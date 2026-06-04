@@ -697,38 +697,39 @@ class Collection:
     def update_function(
         self,
         function_name: str,
-        function_path: str,
-        description: str,
-        directory_to_bundle: str = None,
-        requirements: str = None,
-        local_packages: List[str] | str | None = None,
-        new_function_name=None,
+        info: FunctionInfo,
+        project_root: str | Path,
+        *,
+        description: str | None = None,
+        local_packages: List[str] | None = None,
+        new_function_name: str | None = None,
         reuse_tables: bool = False,
         enabled: bool = True,
         raise_for_status: bool = True,
     ) -> Function:
-        """
-        Update a function in the server.
+        """Update a function in this collection from a tabsdatak ``FunctionInfo``.
+
+        Mirror of :meth:`register_function` for an already-registered
+        function: builds a fresh bundle from ``info`` + ``project_root``,
+        uploads it, and points the existing function at the new bundle.
 
         Args:
-            function_name (str): The name of the function.
-            function_path (str): The path to the function. It should be in the form of
-                /path/to/file.py::function_name.
-            description (str): The new description of the function.
-            directory_to_bundle (str, optional): The path that has to be bundled and
-                sent to the server. If None, the folder containing the function will be
-                bundled.
-            requirements (str, optional): Path to a custom requirements.yaml file
-                with the packages, python version and other information needed to
-                create the Python environment for the function to run in the backend.
-                If not provided, this information will be inferred from the current
-                execution session.
-            local_packages (List[str] | str, optional): A list of paths to local
-                Python packages that need to be included in the bundle. Each path
-                must exist and be a valid Python package that can be installed by
-                running `pip install /path/to/package`.
-            raise_for_status (bool, optional): Whether to raise an exception if the
-                request was not successful. Defaults to True.
+            function_name: The current name of the function to update.
+            info: The descriptor produced by ``@publisher`` /
+                ``@stream_publisher`` / ``@transformer`` /
+                ``@subscriber`` (a :class:`PublisherInfo` /
+                :class:`StreamPublisherInfo` / :class:`TransformerInfo`
+                / :class:`SubscriberInfo`).
+            project_root: Directory containing the user's project tree
+                (see :meth:`register_function`).
+            description: Optional new description.
+            local_packages: Optional local-package directories to stage
+                under ``local_packages/<n>/`` in the bundle.
+            new_function_name: Optional rename; if omitted, the
+                function's name (from ``info.func.__name__``) is used.
+            reuse_tables: When ``True``, frozen tables are reused.
+            enabled: New enabled state for the function.
+            raise_for_status: Raise on non-2xx responses.
 
         Raises:
             APIServerError: If the function could not be updated.
@@ -743,13 +744,11 @@ class Collection:
                 .get("python_versions")
             )
             archive = _create_archive(
-                function_path,
+                info,
+                project_root,
                 temporary_directory,
-                directory_to_bundle,
-                requirements,
-                local_packages,
-                valid_python_versions,
-                collection=self.name,
+                local_packages=local_packages,
+                valid_python_versions=valid_python_versions,
             )
 
             tables = archive.tables
@@ -4108,39 +4107,25 @@ class TabsdataServer:
         self,
         collection_name: str,
         function_name: str,
-        function_path: str,
-        description: str,
-        directory_to_bundle: str = None,
-        requirements: str = None,
-        local_packages: List[str] | str | None = None,
-        new_function_name: str = None,
+        info: FunctionInfo,
+        project_root: str | Path,
+        *,
+        description: str | None = None,
+        local_packages: List[str] | None = None,
+        new_function_name: str | None = None,
         reuse_tables: bool = False,
         enabled: bool = True,
         raise_for_status: bool = True,
     ) -> Function:
-        """
-        Update a function in the server.
+        """Update a function in ``collection_name`` from a tabsdatak
+        ``FunctionInfo``.
+
+        See :meth:`Collection.update_function` for the full argument
+        contract; this wrapper resolves the collection by name and
+        forwards.
 
         Args:
-            collection_name (str): The name of the collection.
-            function_name (str): The name of the function.
-            function_path (str): The path to the function. It should be in the form of
-                /path/to/file.py::function_name.
-            description (str): The new description of the function.
-            directory_to_bundle (str, optional): The path that has to be bundled and
-                sent to the server. If None, the folder containing the function will be
-                bundled.
-            requirements (str, optional): Path to a custom requirements.yaml file
-                with the packages, python version and other information needed to
-                create the Python environment for the function to run in the backend.
-                If not provided, this information will be inferred from the current
-                execution session.
-            local_packages (List[str] | str, optional): A list of paths to local
-                Python packages that need to be included in the bundle. Each path
-                must exist and be a valid Python package that can be installed by
-                running `pip install /path/to/package`.
-            raise_for_status (bool, optional): Whether to raise an exception if the
-                request was not successful. Defaults to True.
+            collection_name: The name of the collection.
 
         Raises:
             APIServerError: If the function could not be updated.
@@ -4148,10 +4133,9 @@ class TabsdataServer:
         collection = Collection(self.connection, collection_name)
         return collection.update_function(
             function_name,
-            function_path,
-            description,
-            directory_to_bundle=directory_to_bundle,
-            requirements=requirements,
+            info,
+            project_root,
+            description=description,
             local_packages=local_packages,
             new_function_name=new_function_name,
             reuse_tables=reuse_tables,

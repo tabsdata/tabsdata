@@ -593,15 +593,8 @@ def _monitor_execution_or_transaction(
     "--dir-to-bundle",
     help=(
         "Path to the directory that should be stored in the bundle for "
-        "execution in the backed. If not provided, the folder where the "
+        "execution in the backend. If not provided, the folder where the "
         "function file is will be used."
-    ),
-)
-@click.option(
-    "--requirements",
-    help=(
-        "Path to the requirements file. If not provided, the requirements file will "
-        "be generated based on your current Python environment."
     ),
 )
 @click.option(
@@ -638,26 +631,51 @@ def update(
     description: str,
     path: str,
     dir_to_bundle: str,
-    requirements: str,
     local_pkg: Tuple[str, ...],
     reuse_tables: bool,
     enabled: bool,
 ):
     """Update a function.
 
-    TODO(tabsdatak-migration): ``TabsdataServer.update_function`` still
-    carries its legacy ``function_path``-based signature in
-    ``tabsdatak.sdk.tabsdata_server`` and has not been rewired to the
-    v2 bundle producer. The CLI exposes the command but it will fail
-    at runtime until the SDK method is ported (parallel to the v2
-    ``register_function`` / ``patch_function`` rewrites). Fix in a
-    follow-up ticket alongside the SDK ``update_function`` rewrite.
+    Dynamically imports the symbol named by ``--path`` (a tabsdatak
+    ``*Info`` descriptor) and updates the existing function via the
+    v2 bundle producer (``tabsdatak._bundle.build_bundle``).
     """
-    raise click.ClickException(
-        "'td fn update' is not yet supported in v2 -- "
-        "TabsdataServer.update_function has not been rewired to the "
-        "v2 bundle producer. Track this in the tabsdatak migration."
+    verify_login_or_prompt(ctx)
+    local_pkg_list = list(local_pkg) if local_pkg else None
+    name = name or logical_prompt(ctx, "Name of the function to be updated")
+    coll = (
+        coll
+        or get_currently_pinned_object(ctx, "collection")
+        or logical_prompt(ctx, "Name of the collection to which the function belongs")
     )
+    path = path or logical_prompt(
+        ctx,
+        "Path to the function file. "
+        "Must be of the form "
+        "'/path/to/file.py::function_name'",
+    )
+    file_path = path.split("::", 1)[0]
+    project_root = dir_to_bundle or os.path.dirname(os.path.abspath(file_path))
+    click.echo(f"Updating function '{name}' in collection '{coll}'")
+    click.echo("-" * 10)
+    try:
+        info = _dynamic_import_function_from_path(path)
+        server: TabsdataServer = ctx.obj["tabsdataserver"]
+        server.update_function(
+            coll,
+            name,
+            info,
+            project_root,
+            description=description,
+            local_packages=local_pkg_list,
+            reuse_tables=reuse_tables,
+            enabled=enabled,
+        )
+        click.echo("Function updated successfully")
+    except Exception as e:
+        hint_common_solutions(ctx, e)
+        raise click.ClickException(f"Failed to update function: {e}")
 
 
 @fn.command()
