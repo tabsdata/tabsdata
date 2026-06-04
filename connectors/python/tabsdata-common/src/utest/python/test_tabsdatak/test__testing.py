@@ -2,11 +2,9 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
-"""Tests for the test-side helpers ``setup_tests_logging`` and
-``NewlineOnFirstLog`` merged into ``tabsdatak._logging``. The
-production ``setup_logging`` / ``CriFormatter`` / stdout-stderr
-filters are exercised indirectly across the codebase and aren't
-re-tested here."""
+"""Tests for the shared pytest helpers in
+``test_tabsdatak._testing``: ``setup_tests_logging`` and
+``NewlineOnFirstLog``."""
 
 from __future__ import annotations
 
@@ -15,7 +13,7 @@ import logging
 import pytest
 
 # noinspection PyProtectedMember
-from tabsdatak._logging import NewlineOnFirstLog, setup_tests_logging
+from test_tabsdatak._testing import NewlineOnFirstLog, setup_tests_logging
 
 
 def _make_record(msg: str, level: int = logging.ERROR) -> logging.LogRecord:
