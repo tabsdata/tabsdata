@@ -248,6 +248,17 @@ def list(ctx: click.Context, coll: str):
     ),
 )
 @click.option(
+    "--requirements",
+    help=(
+        "Path to a user-supplied requirements.yaml. When set, this "
+        "file is embedded in the bundle verbatim, overriding the env "
+        "snapshot the bundle producer would otherwise synthesise "
+        "from the active Python interpreter. Use this when the build "
+        "env differs from the runtime env (e.g. cross-platform "
+        "deployment)."
+    ),
+)
+@click.option(
     "--local-pkg",
     type=str,
     multiple=True,
@@ -274,6 +285,15 @@ def list(ctx: click.Context, coll: str):
     default=True,
     help="Enable or disable the feature",
 )
+@click.option(
+    "--update",
+    is_flag=True,
+    help=(
+        "If provided, update the function if it already exists in the "
+        "collection. If not present, the command falls through to the "
+        "normal register flow."
+    ),
+)
 @click.pass_context
 def register(
     ctx: click.Context,
@@ -281,9 +301,11 @@ def register(
     description: str,
     path: str,
     dir_to_bundle: str,
+    requirements: str,
     local_pkg: Tuple[str, ...],
     reuse_tables: bool,
     enabled: bool,
+    update: bool = False,
 ):
     """Register a function.
 
@@ -292,6 +314,9 @@ def register(
     ``SubscriberInfo`` produced by a ``@publisher`` / ``@transformer``
     / ``@subscriber`` decorator) and registers it via the v2 bundle
     producer (``tabsdatak._bundle.build_bundle``).
+
+    With ``--update``, behaves idempotently: if the function already
+    exists in the collection it is updated; otherwise it is registered.
     """
     verify_login_or_prompt(ctx)
     description = description or ""
@@ -312,6 +337,38 @@ def register(
     try:
         info, project_root = load_info_and_project_root(path, dir_to_bundle)
         server: TabsdataServer = ctx.obj["tabsdataserver"]
+        if update:
+            show_hint(
+                ctx,
+                "To update functions you can also use the dedicated command 'td fn "
+                "update'",
+                final_empty_line=True,
+            )
+            function_name = getattr(info.func, "__name__", None) or info.__class__.__name__
+            try:
+                server.get_function(coll, function_name)
+                click.echo(
+                    f"The function '{function_name}' already exists in collection "
+                    f"'{coll}'. Proceeding to update it."
+                )
+                server.update_function(
+                    coll,
+                    function_name,
+                    info,
+                    project_root,
+                    description=description,
+                    local_packages=local_pkg_list,
+                    reuse_tables=reuse_tables,
+                    enabled=enabled,
+                    requirements=requirements,
+                )
+                click.echo("Function updated successfully")
+                return
+            except APIServerError:
+                click.echo(
+                    f"The function '{function_name}' does not exist in collection "
+                    f"'{coll}'. Proceeding to register it."
+                )
         server.register_function(
             coll,
             info,
@@ -320,6 +377,7 @@ def register(
             local_packages=local_pkg_list,
             reuse_tables=reuse_tables,
             enabled=enabled,
+            requirements=requirements,
         )
         click.echo("Function registered successfully")
     except Exception as e:
@@ -595,6 +653,15 @@ def _monitor_execution_or_transaction(
     ),
 )
 @click.option(
+    "--requirements",
+    help=(
+        "Path to a user-supplied requirements.yaml. When set, this "
+        "file is embedded in the bundle verbatim, overriding the env "
+        "snapshot the bundle producer would otherwise synthesise "
+        "from the active Python interpreter."
+    ),
+)
+@click.option(
     "--local-pkg",
     multiple=True,
     help="Path to a local package to include in the bundle.",
@@ -628,6 +695,7 @@ def update(
     description: str,
     path: str,
     dir_to_bundle: str,
+    requirements: str,
     local_pkg: Tuple[str, ...],
     reuse_tables: bool,
     enabled: bool,
@@ -666,6 +734,7 @@ def update(
             local_packages=local_pkg_list,
             reuse_tables=reuse_tables,
             enabled=enabled,
+            requirements=requirements,
         )
         click.echo("Function updated successfully")
     except Exception as e:
@@ -790,8 +859,10 @@ def disable(
 @click.option(
     "--requirements",
     help=(
-        "Path to the requirements file. If not provided, the requirements file will "
-        "be generated based on your current Python environment."
+        "Path to a user-supplied requirements.yaml. When set, this "
+        "file is embedded in the bundle verbatim, overriding the env "
+        "snapshot the bundle producer would otherwise synthesise "
+        "from the active Python interpreter."
     ),
 )
 @click.option(
@@ -849,6 +920,7 @@ def patch(
             patch_of=patch_of,
             description=description,
             local_packages=local_pkg_list,
+            requirements=requirements,
         )
         click.echo("Patch registered successfully")
         click.echo(f"Patch id (fvid): {record.get('id')}")

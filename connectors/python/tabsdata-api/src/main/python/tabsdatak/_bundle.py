@@ -221,6 +221,7 @@ def build_bundle(
     local_packages: Iterable[Path] | None = None,
     valid_python_versions: Iterable[str] | None = None,
     include: Iterable[str] | None = None,
+    requirements_yaml: Path | None = None,
 ) -> Path:
     """Build a function bundle at `output_path`.
 
@@ -250,6 +251,12 @@ def build_bundle(
             is raised.
         include: optional iterable of top-level names in `project_root`
             to bundle; if `None`, every non-ignored entry is included.
+        requirements_yaml: optional path to a user-supplied
+            ``requirements.yaml`` to embed in the bundle verbatim
+            (overriding the auto-synthesised env snapshot). Use this
+            when the build env differs from the runtime env (e.g.
+            cross-platform deployment) and the legacy env-builder
+            schema must be controlled by hand.
 
     Returns:
         `output_path`.
@@ -264,9 +271,17 @@ def build_bundle(
         raise ApiErrorCode.API_22.exception(path=project_root)
     include_list = list(include) if include is not None else None
 
-    requirements, python_version = PythonEnvironment.synthesise()
-    if valid_python_versions is not None:
-        validate_python_version(python_version, valid_python_versions)
+    if requirements_yaml is None:
+        requirements, python_version = PythonEnvironment.synthesise()
+        if valid_python_versions is not None:
+            validate_python_version(python_version, valid_python_versions)
+    else:
+        # User-supplied requirements.yaml: trust the caller's file
+        # verbatim. The interpreter-version validation is skipped
+        # because the file may target a python different from the
+        # producer's.
+        requirements = None
+        python_version = None
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -282,12 +297,15 @@ def build_bundle(
         write_function_def(info, staging)
         if local_packages:
             collect_local_packages(local_packages, staging)
-        write_requirements(
-            staging,
-            requirements,
-            python_version,
-            local_packages=local_packages,
-        )
+        if requirements_yaml is not None:
+            shutil.copyfile(requirements_yaml, staging / BUNDLE_REQUIREMENTS_FILENAME)
+        else:
+            write_requirements(
+                staging,
+                requirements,
+                python_version,
+                local_packages=local_packages,
+            )
 
         # zstd-compressed tar stream. Same shape as
         # ``_tdruntime.python.venv.archive``: write the raw zstd stream

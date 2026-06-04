@@ -345,6 +345,34 @@ def test_create_archive_forwards_local_packages_and_python_versions(
     assert kw["local_packages"] == [Path("/some/pkg")]
 
 
+def test_create_archive_forwards_requirements_to_build_bundle(
+    project_root, _no_op_bundle, tmp_path
+):
+    """``--requirements`` flag in the CLI plumbs through to the
+    ``requirements_yaml`` kwarg on ``build_bundle``."""
+    requirements_file = tmp_path / "my-requirements.yaml"
+    requirements_file.write_text("publicPackages: []\n", encoding="utf-8")
+    info = _publisher_info()
+    with tempfile.TemporaryDirectory() as tmp:
+        ts._create_archive(
+            info,
+            project_root,
+            tmp,
+            requirements=str(requirements_file),
+        )
+    kw = _no_op_bundle["kw"]
+    assert kw["requirements_yaml"] == requirements_file
+
+
+def test_create_archive_passes_none_requirements_yaml_when_not_set(
+    project_root, _no_op_bundle
+):
+    info = _publisher_info()
+    with tempfile.TemporaryDirectory() as tmp:
+        ts._create_archive(info, project_root, tmp)
+    assert _no_op_bundle["kw"]["requirements_yaml"] is None
+
+
 # ---------------------------------------------------------------------------
 # Module-level smoke
 # ---------------------------------------------------------------------------

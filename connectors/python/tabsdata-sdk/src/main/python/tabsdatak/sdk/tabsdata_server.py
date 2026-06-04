@@ -450,6 +450,7 @@ class Collection:
         project_root: str | Path,
         local_packages: list[str] | None,
         raise_for_status: bool,
+        requirements: str | Path | None = None,
     ) -> tuple[_FunctionArchive, str]:
         """Bundle ``info`` + ``project_root`` and upload it to the
         apiserver. Returns the populated ``_FunctionArchive`` (carrying
@@ -460,6 +461,10 @@ class Collection:
         and :meth:`patch_function`. Each caller then issues its
         endpoint-specific ``function_register`` / ``function_update`` /
         ``function_patch`` call with the metadata it needs.
+
+        If ``requirements`` is set, it must point to a
+        ``requirements.yaml`` file the caller wants embedded verbatim
+        in the bundle (overriding the auto-synthesised env snapshot).
         """
         temporary_directory = tempfile.TemporaryDirectory(dir=tabsdata_temp_folder())
         try:
@@ -476,6 +481,7 @@ class Collection:
                 temporary_directory,
                 local_packages=local_packages,
                 valid_python_versions=valid_python_versions,
+                requirements=requirements,
             )
             with open(archive.context_location, "rb") as file:
                 bundle = file.read()
@@ -501,6 +507,7 @@ class Collection:
         reuse_tables: bool = False,
         enabled: bool = True,
         raise_for_status: bool = True,
+        requirements: str | Path | None = None,
     ) -> Function:
         """Register a function in this collection from a tabsdatak ``FunctionInfo``.
 
@@ -523,6 +530,13 @@ class Collection:
             enabled: Register in enabled state. Defaults to ``True``.
             raise_for_status: Raise on non-2xx responses. Defaults to
                 ``True``.
+            requirements: Optional path to a user-supplied
+                ``requirements.yaml``. When set, the file is embedded
+                in the bundle verbatim, overriding the env snapshot
+                that ``build_bundle`` would otherwise synthesise from
+                the active Python interpreter. Use this when the
+                build env differs from the runtime env (e.g.
+                cross-platform deployment).
 
         Returns:
             A :class:`Function` handle for the newly-registered function.
@@ -531,7 +545,7 @@ class Collection:
             APIServerError: If the function could not be created.
         """
         archive, bundle_id = self._build_and_upload_bundle(
-            info, project_root, local_packages, raise_for_status
+            info, project_root, local_packages, raise_for_status, requirements
         )
         function_name = function_name or archive.function_name
         description = description or function_name
@@ -569,6 +583,7 @@ class Collection:
         description: str | None = None,
         local_packages: List[str] | None = None,
         raise_for_status: bool = True,
+        requirements: str | Path | None = None,
     ) -> dict:
         """Register a code-only patch of an existing function version.
 
@@ -587,6 +602,10 @@ class Collection:
             local_packages: Optional list of local-package directories
                 to stage in the bundle.
             raise_for_status: Raise on non-2xx. Defaults to ``True``.
+            requirements: Optional path to a user-supplied
+                ``requirements.yaml`` to embed in the bundle verbatim
+                (overriding the env-synthesised one). See
+                :meth:`register_function` for details.
 
         Returns:
             The created FunctionPatchRecord (id, parent_function_version_id,
@@ -596,7 +615,7 @@ class Collection:
             APIServerError: If the patch could not be created.
         """
         archive, bundle_id = self._build_and_upload_bundle(
-            info, project_root, local_packages, raise_for_status
+            info, project_root, local_packages, raise_for_status, requirements
         )
 
         # TODO: Remove this once the parameter is optional
@@ -689,6 +708,7 @@ class Collection:
         reuse_tables: bool = False,
         enabled: bool = True,
         raise_for_status: bool = True,
+        requirements: str | Path | None = None,
     ) -> Function:
         """Update a function in this collection from a tabsdatak ``FunctionInfo``.
 
@@ -713,12 +733,15 @@ class Collection:
             reuse_tables: When ``True``, frozen tables are reused.
             enabled: New enabled state for the function.
             raise_for_status: Raise on non-2xx responses.
+            requirements: Optional path to a user-supplied
+                ``requirements.yaml`` to embed in the bundle verbatim.
+                See :meth:`register_function` for details.
 
         Raises:
             APIServerError: If the function could not be updated.
         """
         archive, bundle_id = self._build_and_upload_bundle(
-            info, project_root, local_packages, raise_for_status
+            info, project_root, local_packages, raise_for_status, requirements
         )
         new_function_name = new_function_name or archive.function_name
 
@@ -3871,6 +3894,7 @@ class TabsdataServer:
         reuse_tables: bool = False,
         enabled: bool = True,
         raise_for_status: bool = True,
+        requirements: str | Path | None = None,
     ) -> Function:
         """Register a function in ``collection_name`` from a tabsdatak
         ``FunctionInfo``.
@@ -3895,6 +3919,7 @@ class TabsdataServer:
             reuse_tables=reuse_tables,
             enabled=enabled,
             raise_for_status=raise_for_status,
+            requirements=requirements,
         )
 
     def delete_function(
@@ -4063,6 +4088,7 @@ class TabsdataServer:
         reuse_tables: bool = False,
         enabled: bool = True,
         raise_for_status: bool = True,
+        requirements: str | Path | None = None,
     ) -> Function:
         """Update a function in ``collection_name`` from a tabsdatak
         ``FunctionInfo``.
@@ -4088,6 +4114,7 @@ class TabsdataServer:
             reuse_tables=reuse_tables,
             enabled=enabled,
             raise_for_status=raise_for_status,
+            requirements=requirements,
         )
 
     def patch_function(
@@ -4101,6 +4128,7 @@ class TabsdataServer:
         description: str | None = None,
         local_packages: List[str] | None = None,
         raise_for_status: bool = True,
+        requirements: str | Path | None = None,
     ) -> dict:
         """Register a code-only patch of an existing function version.
 
@@ -4122,6 +4150,7 @@ class TabsdataServer:
             description=description,
             local_packages=local_packages,
             raise_for_status=raise_for_status,
+            requirements=requirements,
         )
 
     def list_function_patches(
@@ -5203,12 +5232,39 @@ def _create_archive(
     temporary_directory: tempfile.TemporaryDirectory | str,
     local_packages: list[str] | None = None,
     valid_python_versions: list[str] | None = None,
+    requirements: str | Path | None = None,
 ) -> _FunctionArchive:
     """Bundle ``info`` (a :class:`FunctionInfo`) for registration.
 
     Calls :func:`tabsdatak._bundle.build_bundle` to produce the
     ``.tar.zst`` and assembles the metadata fields the legacy
     ``function_register`` API still expects from the SDK side.
+
+    .. note::
+
+       Two pieces of legacy ``_create_archive`` behaviour are
+       currently NOT carried over from the v1 SDK and remain as
+       deferred work:
+
+       * **StageTrigger workers payload.** The legacy code inspected
+         ``function.trigger_by`` for a :class:`StageTrigger`
+         instance and emitted ``workers={"ST": <json>}`` so the
+         server would route the function via the stage-trigger
+         apparatus. ``StageTrigger`` lives in the legacy
+         ``tabsdata._io.stage_trigger`` module, which is in an
+         excluded subtree, and there is no v2 tabsdatak equivalent
+         yet. Functions whose v2 ``Info`` carries a stage trigger
+         will register with ``workers=None`` until the v2 stage
+         trigger story is designed. TODO(tabsdatak-migration).
+
+       * **DataQualityProcessor table_types.** The legacy code
+         walked ``function.output_actions`` through
+         ``DataQualityProcessor`` and emitted per-table DQ kinds in
+         ``table_types``. The processor depends on
+         ``tabsdata.tableframe._actions.dataquality``, which is in
+         the excluded tableframe subtree. The v2 register payload
+         currently always emits ``table_types={}``. DQ outputs are
+         silently lost. TODO(tabsdatak-migration).
     """
     save_location = (
         temporary_directory.name
@@ -5223,6 +5279,7 @@ def _create_archive(
         bundle_path,
         local_packages=[Path(p) for p in local_packages] if local_packages else None,
         valid_python_versions=valid_python_versions,
+        requirements_yaml=Path(requirements) if requirements else None,
     )
 
     function_name = getattr(info.func, "__name__", "<anonymous>")
@@ -5231,6 +5288,9 @@ def _create_archive(
 
     return _FunctionArchive(
         tables=_output_tables(info),
+        # TODO(tabsdatak-migration): always empty in v2. The legacy
+        # SDK populated this from DataQualityProcessor outputs.
+        # Restore once the data-quality subtree is ported.
         table_types={},
         string_dependencies=_input_tables(info),
         trigger_string_list=_trigger_string_list(info),
@@ -5239,6 +5299,11 @@ def _create_archive(
         function_name=function_name,
         function_type=function_type,
         source_or_destination=_source_or_destination_name(info),
+        # TODO(tabsdatak-migration): ``_cron_workers`` only emits
+        # the ``CT`` (cron-trigger) payload. The legacy SDK also
+        # emitted ``ST`` for ``StageTrigger`` instances. Stage
+        # triggers register as ``workers=None`` until the v2 stage
+        # trigger story exists.
         workers=_cron_workers(info),
     )
 

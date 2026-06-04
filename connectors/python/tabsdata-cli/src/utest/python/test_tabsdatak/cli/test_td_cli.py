@@ -86,7 +86,8 @@ def test_subcommand_help_loads_without_error(subcommand):
 
 
 # ---------------------------------------------------------------------------
-# `td fn register` retains its v2 shape (--path / --dir-to-bundle / --local-pkg)
+# `td fn register` v2 surface (--path / --dir-to-bundle / --local-pkg /
+# --requirements / --update)
 # ---------------------------------------------------------------------------
 
 
@@ -98,13 +99,16 @@ def test_fn_register_help_advertises_v2_flags():
     assert "--path" in out
     assert "--dir-to-bundle" in out
     assert "--local-pkg" in out
-    # v2 dropped --requirements (bundle producer derives requirements
-    # from the active Python env automatically).
-    assert "--requirements" not in out
+    # ``--requirements`` is restored in v2: it now points to a
+    # user-supplied requirements.yaml that the bundle embeds
+    # verbatim. ``--update`` is also restored as an idempotent
+    # register-or-update flag.
+    assert "--requirements" in out
+    assert "--update" in out
 
 
-def test_fn_update_help_explains_v2_unavailability():
+def test_fn_update_help_describes_v2_command():
     runner = CliRunner()
     result = runner.invoke(cli, ["fn", "update", "--help"])
-    # ``--help`` itself succeeds; only the invocation raises.
+    # ``--help`` itself succeeds.
     assert result.exit_code == 0
