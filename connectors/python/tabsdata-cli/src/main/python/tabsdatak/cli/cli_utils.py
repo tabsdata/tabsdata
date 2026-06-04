@@ -518,3 +518,21 @@ def _dynamic_import_function_from_path(path: str) -> Any:  # noqa: C901
             f"Function '{function_name}' not found in module {file_path}."
         )
     return symbol
+
+
+def load_info_and_project_root(
+    path: str,
+    dir_to_bundle: str | None = None,
+) -> tuple[Any, str]:
+    """Resolve ``--path`` and ``--dir-to-bundle`` flags into the
+    ``(info, project_root)`` pair the v2 SDK ``register_function`` /
+    ``update_function`` / ``patch_function`` methods expect.
+
+    ``project_root`` defaults to the directory containing the user's
+    file when ``dir_to_bundle`` is unset -- mirrors the legacy
+    behaviour where the bundle's project root was implicit.
+    """
+    file_path = path.split("::", 1)[0]
+    project_root = dir_to_bundle or os.path.dirname(os.path.abspath(file_path))
+    info = _dynamic_import_function_from_path(path)
+    return info, project_root

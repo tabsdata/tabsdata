@@ -103,6 +103,48 @@ def test_td_resource_normalises_backslashes(monkeypatch, tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# load_info_and_project_root: thin wrapper used by td fn register/update/patch
+# ---------------------------------------------------------------------------
+
+
+def test_load_info_and_project_root_uses_file_dir_when_dir_to_bundle_none(
+    tmp_path, monkeypatch
+):
+    """``project_root`` defaults to the directory containing the
+    user's .py file when ``dir_to_bundle`` is None."""
+    user_dir = tmp_path / "my_pkg"
+    user_dir.mkdir()
+    user_file = user_dir / "publisher.py"
+    user_file.write_text(
+        "class _Stub:\n    func = None\n\npub = _Stub()\n", encoding="utf-8"
+    )
+
+    info, project_root = cli_utils.load_info_and_project_root(
+        f"{user_file}::pub", dir_to_bundle=None
+    )
+    assert info.__class__.__name__ == "_Stub"
+    # ``project_root`` is the file's parent directory (absolute path).
+    assert project_root == str(user_dir)
+
+
+def test_load_info_and_project_root_respects_explicit_dir_to_bundle(tmp_path):
+    user_dir = tmp_path / "my_pkg"
+    user_dir.mkdir()
+    user_file = user_dir / "publisher2.py"
+    user_file.write_text(
+        "class _Stub:\n    func = None\n\npub = _Stub()\n", encoding="utf-8"
+    )
+    explicit_root = tmp_path / "elsewhere"
+    explicit_root.mkdir()
+
+    info, project_root = cli_utils.load_info_and_project_root(
+        f"{user_file}::pub", dir_to_bundle=str(explicit_root)
+    )
+    assert project_root == str(explicit_root)
+    assert info.__class__.__name__ == "_Stub"
+
+
+# ---------------------------------------------------------------------------
 # CurrentPlatform
 # ---------------------------------------------------------------------------
 

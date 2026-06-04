@@ -364,3 +364,58 @@ def test_function_info_alias_covers_all_kinds():
     assert StreamPublisherInfo in ts.FunctionInfo.__args__
     assert TransformerInfo in ts.FunctionInfo.__args__
     assert SubscriberInfo in ts.FunctionInfo.__args__
+
+
+# ---------------------------------------------------------------------------
+# Collection._build_and_upload_bundle -- shared helper used by
+# register_function / update_function / patch_function. The bundle
+# producer and the apiserver client are both mocked out; we verify
+# the helper bundles via ``_create_archive`` and uploads the bytes
+# to the apiserver, returning the archive + bundle_id pair.
+# ---------------------------------------------------------------------------
+
+
+def test_build_and_upload_bundle_invokes_bundle_and_upload(
+    project_root, _no_op_bundle, monkeypatch
+):
+    """End-to-end: ``_build_and_upload_bundle`` produces a bundle
+    (via the mocked ``build_bundle``), passes the bytes to
+    ``function_upload_bundle``, and returns the assigned bundle_id."""
+    info = _publisher_info()
+
+    class _FakeResponse:
+        def json(self):
+            return {"data": {"id": "bundle-abc"}}
+
+    seen_uploads: dict = {}
+
+    class _FakeConnection:
+        def runtime_info_get(self):
+            class R:
+                @staticmethod
+                def json():
+                    return {"data": {"python_versions": ["3.12"]}}
+
+            return R()
+
+        def function_upload_bundle(self, collection_name, bundle, raise_for_status):
+            seen_uploads["collection_name"] = collection_name
+            seen_uploads["bundle"] = bundle
+            seen_uploads["raise_for_status"] = raise_for_status
+            return _FakeResponse()
+
+    coll = ts.Collection.__new__(ts.Collection)
+    coll.connection = _FakeConnection()
+    coll.name = "my_coll"
+
+    archive, bundle_id = coll._build_and_upload_bundle(
+        info, project_root, local_packages=None, raise_for_status=True
+    )
+
+    assert bundle_id == "bundle-abc"
+    assert seen_uploads["collection_name"] == "my_coll"
+    assert seen_uploads["bundle"] == b"stub"  # written by the _no_op_bundle fixture
+    assert seen_uploads["raise_for_status"] is True
+    # The archive carries the v2 metadata extracted from ``info``.
+    assert archive.function_type == "P"
+    assert archive.function_name == "pub_fn"

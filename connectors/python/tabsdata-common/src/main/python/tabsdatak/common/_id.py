@@ -18,8 +18,12 @@ import uuid
 
 from uuid6 import UUID, uuid7
 
-logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
+# Per-module logger -- DO NOT use ``logging.getLogger()`` (the root
+# logger) and DO NOT call ``setLevel(DEBUG)`` at import time: that
+# would flood every consumer's logs with this module's DEBUG output
+# the moment ``tabsdatak.common._id`` is imported. Consumers control
+# levels via ``logging.config`` / ``setup_logging``.
+logger = logging.getLogger(__name__)
 
 
 def encode_id(debug: bool | None = False) -> tuple[UUID, str]:

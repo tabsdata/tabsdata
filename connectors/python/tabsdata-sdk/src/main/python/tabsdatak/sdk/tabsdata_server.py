@@ -444,6 +444,52 @@ class Collection:
         self.kwargs = None
         return self
 
+    def _build_and_upload_bundle(
+        self,
+        info: FunctionInfo,
+        project_root: str | Path,
+        local_packages: list[str] | None,
+        raise_for_status: bool,
+    ) -> tuple[_FunctionArchive, str]:
+        """Bundle ``info`` + ``project_root`` and upload it to the
+        apiserver. Returns the populated ``_FunctionArchive`` (carrying
+        the metadata extracted from ``info``) and the ``bundle_id`` the
+        server assigned to the upload.
+
+        Shared by :meth:`register_function`, :meth:`update_function`,
+        and :meth:`patch_function`. Each caller then issues its
+        endpoint-specific ``function_register`` / ``function_update`` /
+        ``function_patch`` call with the metadata it needs.
+        """
+        temporary_directory = tempfile.TemporaryDirectory(dir=tabsdata_temp_folder())
+        try:
+            valid_python_versions = (
+                self.connection
+                .runtime_info_get()
+                .json()
+                .get("data", {})
+                .get("python_versions")
+            )
+            archive = _create_archive(
+                info,
+                project_root,
+                temporary_directory,
+                local_packages=local_packages,
+                valid_python_versions=valid_python_versions,
+            )
+            with open(archive.context_location, "rb") as file:
+                bundle = file.read()
+        finally:
+            temporary_directory.cleanup()
+
+        response = self.connection.function_upload_bundle(
+            collection_name=self.name,
+            bundle=bundle,
+            raise_for_status=raise_for_status,
+        )
+        bundle_id = response.json().get("data").get("id")
+        return archive, bundle_id
+
     def register_function(
         self,
         info: FunctionInfo,
@@ -484,48 +530,11 @@ class Collection:
         Raises:
             APIServerError: If the function could not be created.
         """
-        temporary_directory = tempfile.TemporaryDirectory(dir=tabsdata_temp_folder())
-        try:
-            valid_python_versions = (
-                self.connection
-                .runtime_info_get()
-                .json()
-                .get("data", {})
-                .get("python_versions")
-            )
-            archive = _create_archive(
-                info,
-                project_root,
-                temporary_directory,
-                local_packages=local_packages,
-                valid_python_versions=valid_python_versions,
-            )
-
-            tables = archive.tables
-            table_types = archive.table_types
-            string_dependencies = archive.string_dependencies
-            trigger_by = archive.trigger_string_list
-            function_snippet = archive.function_snippet
-            context_location = archive.context_location
-            decorator_function_name = archive.function_name
-            decorator_type = archive.function_type
-            source_or_destination_name = archive.source_or_destination
-            workers = archive.workers
-
-            function_name = function_name or decorator_function_name
-            description = description or function_name
-
-            with open(context_location, "rb") as file:
-                bundle = file.read()
-        finally:
-            temporary_directory.cleanup()
-
-        response = self.connection.function_upload_bundle(
-            collection_name=self.name,
-            bundle=bundle,
-            raise_for_status=raise_for_status,
+        archive, bundle_id = self._build_and_upload_bundle(
+            info, project_root, local_packages, raise_for_status
         )
-        bundle_id = response.json().get("data").get("id")
+        function_name = function_name or archive.function_name
+        description = description or function_name
 
         # TODO: Remove this once the parameter is optional
         runtime_values = "{}"
@@ -534,17 +543,17 @@ class Collection:
             collection_name=self.name,
             function_name=function_name,
             description=description,
-            tables=tables,
-            table_types=table_types,
-            dependencies=string_dependencies,
-            trigger_by=trigger_by,
-            function_snippet=function_snippet,
+            tables=archive.tables,
+            table_types=archive.table_types,
+            dependencies=archive.string_dependencies,
+            trigger_by=archive.trigger_string_list,
+            function_snippet=archive.function_snippet,
             bundle_id=bundle_id,
             runtime_values=runtime_values,
             reuse_frozen_tables=reuse_tables,
-            decorator=decorator_type,
-            plugin_name=source_or_destination_name,
-            workers=workers,
+            decorator=archive.function_type,
+            plugin_name=archive.source_or_destination,
+            workers=archive.workers,
             enabled=enabled,
             raise_for_status=raise_for_status,
         )
@@ -586,35 +595,9 @@ class Collection:
         Raises:
             APIServerError: If the patch could not be created.
         """
-        temporary_directory = tempfile.TemporaryDirectory(dir=tabsdata_temp_folder())
-        try:
-            valid_python_versions = (
-                self.connection
-                .runtime_info_get()
-                .json()
-                .get("data", {})
-                .get("python_versions")
-            )
-            archive = _create_archive(
-                info,
-                project_root,
-                temporary_directory,
-                local_packages=local_packages,
-                valid_python_versions=valid_python_versions,
-            )
-            function_snippet = archive.function_snippet
-            context_location = archive.context_location
-            with open(context_location, "rb") as file:
-                bundle = file.read()
-        finally:
-            temporary_directory.cleanup()
-
-        response = self.connection.function_upload_bundle(
-            collection_name=self.name,
-            bundle=bundle,
-            raise_for_status=raise_for_status,
+        archive, bundle_id = self._build_and_upload_bundle(
+            info, project_root, local_packages, raise_for_status
         )
-        bundle_id = response.json().get("data").get("id")
 
         # TODO: Remove this once the parameter is optional
         runtime_values = "{}"
@@ -624,7 +607,7 @@ class Collection:
             function_name=function_name,
             patch_of=patch_of,
             bundle_id=bundle_id,
-            snippet=function_snippet,
+            snippet=archive.function_snippet,
             runtime_values=runtime_values,
             description=description,
             raise_for_status=raise_for_status,
@@ -734,66 +717,30 @@ class Collection:
         Raises:
             APIServerError: If the function could not be updated.
         """
-        temporary_directory = tempfile.TemporaryDirectory(dir=tabsdata_temp_folder())
-        try:
-            valid_python_versions = (
-                self.connection
-                .runtime_info_get()
-                .json()
-                .get("data", {})
-                .get("python_versions")
-            )
-            archive = _create_archive(
-                info,
-                project_root,
-                temporary_directory,
-                local_packages=local_packages,
-                valid_python_versions=valid_python_versions,
-            )
-
-            tables = archive.tables
-            table_types = archive.table_types
-            string_dependencies = archive.string_dependencies
-            trigger_by = archive.trigger_string_list
-            function_snippet = archive.function_snippet
-            context_location = archive.context_location
-            decorator_new_function_name = archive.function_name
-            decorator_type = archive.function_type
-            source_or_destination_name = archive.source_or_destination
-            workers = archive.workers
-
-            with open(context_location, "rb") as file:
-                bundle = file.read()
-        finally:
-            temporary_directory.cleanup()
-
-        response = self.connection.function_upload_bundle(
-            collection_name=self.name,
-            bundle=bundle,
-            raise_for_status=raise_for_status,
+        archive, bundle_id = self._build_and_upload_bundle(
+            info, project_root, local_packages, raise_for_status
         )
-        bundle_id = response.json().get("data").get("id")
+        new_function_name = new_function_name or archive.function_name
 
         # TODO: Remove this once the parameter is optional
         runtime_values = "{}"
 
-        new_function_name = new_function_name or decorator_new_function_name
         self.connection.function_update(
             collection_name=self.name,
             function_name=function_name,
             new_function_name=new_function_name,
             description=description,
-            tables=tables,
-            table_types=table_types,
-            dependencies=string_dependencies,
-            trigger_by=trigger_by,
-            function_snippet=function_snippet,
-            decorator=decorator_type,
+            tables=archive.tables,
+            table_types=archive.table_types,
+            dependencies=archive.string_dependencies,
+            trigger_by=archive.trigger_string_list,
+            function_snippet=archive.function_snippet,
+            decorator=archive.function_type,
             bundle_id=bundle_id,
             runtime_values=runtime_values,
             reuse_frozen_tables=reuse_tables,
-            plugin_name=source_or_destination_name,
-            workers=workers,
+            plugin_name=archive.source_or_destination,
+            workers=archive.workers,
             enabled=enabled,
             raise_for_status=raise_for_status,
         )

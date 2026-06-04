@@ -2,7 +2,6 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
-import os
 from time import sleep
 from typing import Tuple
 
@@ -12,11 +11,11 @@ from rich.live import Live
 from rich.table import Table
 
 from tabsdatak.cli.cli_utils import (
-    _dynamic_import_function_from_path,
     beautify_list,
     beautify_time,
     get_currently_pinned_object,
     hint_common_solutions,
+    load_info_and_project_root,
     logical_prompt,
     show_hint,
     verify_login_or_prompt,
@@ -310,10 +309,8 @@ def register(
         "Must be of the form "
         "'/path/to/file.py::function_name'",
     )
-    file_path = path.split("::", 1)[0]
-    project_root = dir_to_bundle or os.path.dirname(os.path.abspath(file_path))
     try:
-        info = _dynamic_import_function_from_path(path)
+        info, project_root = load_info_and_project_root(path, dir_to_bundle)
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         server.register_function(
             coll,
@@ -655,12 +652,10 @@ def update(
         "Must be of the form "
         "'/path/to/file.py::function_name'",
     )
-    file_path = path.split("::", 1)[0]
-    project_root = dir_to_bundle or os.path.dirname(os.path.abspath(file_path))
     click.echo(f"Updating function '{name}' in collection '{coll}'")
     click.echo("-" * 10)
     try:
-        info = _dynamic_import_function_from_path(path)
+        info, project_root = load_info_and_project_root(path, dir_to_bundle)
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         server.update_function(
             coll,
@@ -839,14 +834,12 @@ def patch(
         "'/path/to/file.py::function_name'",
     )
     local_pkg_list = list(local_pkg) if local_pkg else None
-    file_path = path.split("::", 1)[0]
-    project_root = dir_to_bundle or os.path.dirname(os.path.abspath(file_path))
     click.echo(
         f"Patching function '{name}' in collection '{coll}' (patch_of={patch_of})"
     )
     click.echo("-" * 10)
     try:
-        info = _dynamic_import_function_from_path(path)
+        info, project_root = load_info_and_project_root(path, dir_to_bundle)
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         record = server.patch_function(
             coll,
