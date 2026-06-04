@@ -14,6 +14,9 @@ v2 ports in a future ticket (see TODO blocks below)."""
 
 from __future__ import annotations
 
+import hashlib
+import importlib.machinery
+import importlib.util
 import json
 import os
 import platform
@@ -22,6 +25,7 @@ import sys
 from importlib.metadata import PackageNotFoundError, version
 from importlib.resources import as_file, files
 from pathlib import Path
+from typing import Any
 
 import requests
 import rich_click as click
@@ -420,3 +424,97 @@ def verify_trigger_type(function: Function, type: str):
     # TODO: Awaiting the information needed to be added to the function information
     #  endpoint.
     return True
+
+
+# ---------------------------------------------------------------------------
+# Dynamic-import of a user function from a "path/to/file.py::name" string.
+#
+# Used by ``td fn register`` to materialise the user's decorated
+# function (a tabsdatak ``*Info`` descriptor) without touching
+# ``sys.path``. The legacy version lived in the SDK; v2 keeps it
+# CLI-side because the SDK takes a ready-made ``info`` object directly.
+# ---------------------------------------------------------------------------
+
+
+def _split_python_function_path(path: str) -> tuple[str, str]:
+    if len(path.split("::")) != 2:
+        raise ValueError(
+            f"Failed to split path '{path}' in two parts. Please make sure that "
+            f"the path to the registered function is of the form "
+            f"'/path/to/file.py::function_name'"
+        )
+    file_path, function_name = path.split("::")
+    return file_path, function_name
+
+
+def _dynamic_import_function_from_path(path: str) -> Any:  # noqa: C901
+    """Import the symbol named by ``path`` (``"/path/to/file.py::name"``).
+
+    Loads the user's file as a submodule of a synthetic package whose
+    ``__path__`` points at the file's directory. The synthetic package
+    name is derived from a sha1 of the directory, so:
+
+    * a user file named after an installed package
+      (``databricks.py``, ``snowflake.py``, ...) does NOT shadow the
+      installed package -- ``sys.modules["databricks"]`` is left alone.
+    * two user files with the same basename loaded from different
+      directories don't collide.
+    * relative imports (``from . import helpers``) work because the
+      synthetic package's ``__path__`` lists the file's directory.
+
+    Absolute imports of siblings (``from helpers import X`` in a user
+    file) do NOT work, because we deliberately do not mutate
+    ``sys.path``. Users must use relative imports for sibling files.
+    """
+    file_path, function_name = _split_python_function_path(path)
+    file_path = os.path.abspath(file_path)
+    if not os.path.exists(file_path):
+        if not file_path.endswith(".py"):
+            raise FileNotFoundError(
+                f"File not found: {file_path}. The .py extension may be missing."
+            )
+        raise FileNotFoundError(f"File not found: {file_path}")
+
+    folder_path = os.path.dirname(file_path)
+    folder_name = os.path.splitext(os.path.basename(file_path))[0]
+
+    folder_digest = hashlib.sha1(folder_path.encode("utf-8")).hexdigest()[:12]
+    package_name = f"td_usr_pkg_{folder_digest}"
+    if package_name not in sys.modules:
+        package_spec = importlib.machinery.ModuleSpec(
+            package_name, loader=None, is_package=True
+        )
+        package_spec.submodule_search_locations = [folder_path]
+        sys.modules[package_name] = importlib.util.module_from_spec(package_spec)
+
+    module_name = f"{package_name}.{folder_name}"
+    module_spec = importlib.util.spec_from_file_location(
+        module_name,
+        file_path,
+        submodule_search_locations=[folder_path],
+    )
+    if module_spec is None or module_spec.loader is None:
+        raise ImportError(
+            f"Failed to load module spec from {file_path}. "
+            "The file may not be a valid Python module."
+        )
+    module = importlib.util.module_from_spec(module_spec)
+    if module is None:
+        raise ImportError(
+            f"Failed to create module from spec for {file_path}. "
+            "The file may not be a valid Python module."
+        )
+    sys.modules[module_name] = module
+    try:
+        module_spec.loader.exec_module(module)
+    except BaseException as e:
+        # Don't leave a half-initialized module behind to poison later imports.
+        sys.modules.pop(module_name, None)
+        raise ImportError(f"Failed to execute module {file_path}: {str(e)}")
+    try:
+        symbol = getattr(module, function_name)
+    except AttributeError:
+        raise AttributeError(
+            f"Function '{function_name}' not found in module {file_path}."
+        )
+    return symbol
