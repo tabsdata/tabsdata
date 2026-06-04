@@ -6,11 +6,15 @@ from __future__ import annotations
 
 import logging
 import logging.config
+import platform
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import yaml
+from rich.console import Console
+from rich.logging import RichHandler
 
 TRACE: int = 5
 
@@ -51,3 +55,50 @@ def setup_logging(config_path: str | Path | None = None) -> None:
     with path.open("r", encoding="utf-8") as handle:
         config = yaml.safe_load(handle)
     logging.config.dictConfig(config)
+
+
+# --- Test logging ----------------------------------------------------
+#
+# Pretty-printed test-side logging via rich. Used by pytest conftests
+# in connector packages. Production code uses ``setup_logging`` above.
+
+
+class NewlineOnFirstLog(logging.Filter):
+    """Inject a leading newline on the first emitted record, and on
+    Windows drop everything else (rich's handler upsets the Windows
+    console)."""
+
+    def __init__(self):
+        super().__init__()
+        self.first = True
+
+    def filter(self, record):
+        if self.first:
+            self.first = False
+            record.msg = "\n" + str(record.msg)
+        if platform.system() == "Windows":
+            return False
+        else:
+            return record.levelno >= logging.CRITICAL
+
+
+def setup_tests_logging() -> logging.Logger:
+    """Configure the root logger for pytest runs: ERROR-level, a
+    single :class:`RichHandler` writing to stderr, ``filelock`` bumped
+    to INFO."""
+    logger = logging.getLogger(None)
+    logger.setLevel(logging.ERROR)
+    logger.propagate = True
+    logger.handlers.clear()
+    handler = RichHandler(
+        rich_tracebacks=True,
+        show_time=False,
+        show_level=True,
+        show_path=False,
+        console=Console(file=sys.stderr),
+    )
+    handler.addFilter(NewlineOnFirstLog())
+    logger.addHandler(handler)
+    logging.getLogger("filelock").setLevel(logging.INFO)
+
+    return logger
