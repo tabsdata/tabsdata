@@ -37,6 +37,7 @@ spec:
         tabsdata.com/worker: function
     spec:
       restartPolicy: Never
+      nodeName: tdknode
       serviceAccountName: default
       automountServiceAccountToken: false
       terminationGracePeriodSeconds: 30
@@ -58,7 +59,7 @@ spec:
             - --log-config
             - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
             - --liveness
-            - $(CONTAINER_ROOT)/tabsdata/work/liveness
+            - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
             - --responder-url
             - env:SECRET__TD_RESPONDER_URL
             - --responder-method
@@ -87,7 +88,7 @@ spec:
             - name: POD_TABSDATA_INSTANCE
               value: "${sys:TDK_INSTANCE_NAME}"
           volumeMounts:
-            - name: config
+            - name: config-inspect-function
               mountPath: /tabsdata/config
               readOnly: true
             - name: pyenv
@@ -107,7 +108,7 @@ spec:
             - --log-config
             - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
             - --liveness
-            - $(CONTAINER_ROOT)/tabsdata/work/liveness
+            - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
             - --responder-url
             - env:SECRET__TD_RESPONDER_URL
             - --responder-method
@@ -144,7 +145,7 @@ spec:
             - name: POD_TABSDATA_INSTANCE
               value: "${sys:TDK_INSTANCE_NAME}"
           volumeMounts:
-            - name: config
+            - name: config-fetch-request
               mountPath: /tabsdata/config
               readOnly: true
             - name: pyenv
@@ -181,14 +182,24 @@ spec:
             - name: POD_TABSDATA_INSTANCE
               value: "${sys:TDK_INSTANCE_NAME}"
           volumeMounts:
-            - name: config
+            - name: config-report
               mountPath: /tabsdata/config
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
               readOnly: true
       volumes:
-        - name: config
+        - name: config-inspect-function
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+        - name: config-fetch-request
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+        - name: config-report
           projected:
             sources:
               - configMap:

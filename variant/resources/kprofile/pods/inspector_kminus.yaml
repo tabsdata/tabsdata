@@ -32,6 +32,7 @@ spec:
         tabsdata.com/tier: init
     spec:
       restartPolicy: Never
+      nodeName: tdknode
       serviceAccountName: default
       automountServiceAccountToken: false
       terminationGracePeriodSeconds: 60

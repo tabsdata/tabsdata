@@ -20,6 +20,7 @@ metadata:
     tabsdata.com/tier: regular
 spec:
   restartPolicy: Always
+  nodeName: tdknode
   serviceAccountName: default
   automountServiceAccountToken: false
   terminationGracePeriodSeconds: 60

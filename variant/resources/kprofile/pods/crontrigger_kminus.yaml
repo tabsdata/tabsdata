@@ -33,6 +33,7 @@ spec:
         tabsdata.com/tier: ephemeral
     spec:
       restartPolicy: Never
+      nodeName: tdknode
       serviceAccountName: default
       automountServiceAccountToken: false
       terminationGracePeriodSeconds: 30
