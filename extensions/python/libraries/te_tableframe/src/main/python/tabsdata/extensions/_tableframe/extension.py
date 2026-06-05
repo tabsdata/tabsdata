@@ -121,6 +121,21 @@ def system_columns() -> list[str]:
     return [member.value for member in SystemColumns]
 
 
+# Pristine columns are the system columns that must be regenerated for a stored
+# TableFrame to be usable as the input of a transformer/subscriber function (the
+# "mut" mode in add_system_columns). In the Standard edition this is only the row
+# identity column; the Enterprise edition extends this set with its row index and
+# source columns.
+PRISTINE_COLUMNS = [
+    SystemColumns.TD_IDENTIFIER.value,
+]
+
+# The row-index column whose value carries each row's identity. The Standard
+# edition has no such column, so other row-keyed column generators fall back to a
+# positional range.
+ROW_INDEX_COLUMN = None
+
+
 class TableFrameExtension(Extension):
     name = "TableFrame Extension (Standard)"
     version = version()

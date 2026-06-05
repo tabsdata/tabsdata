@@ -63,8 +63,13 @@ def scan_tf_from_table(
         # noinspection PyProtectedMember
         tf = TableFrame.__build__(
             df=lf,
-            mode="tab",
-            idx=table.input_idx,
+            # Loading a stored table as the input of a transformer/subscriber:
+            # regenerate the pristine columns ($td.id, $td.row, $td.src) so each
+            # input row is re-stamped with a fresh sequential $td.row and a
+            # single-entry $td.src pointing to itself. The provenance 'tab' is this
+            # input's position in the function signature, given by 'table_pos'.
+            mode="mut",
+            idx=table.table_pos,
             properties=properties,
         )
     return tf

@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
 from typing import Any, Iterable, Literal, TypeAlias
 
@@ -33,6 +34,17 @@ AddSystemColumnsMode: TypeAlias = Literal[
     #  columns are assumed to have been stored properly with correct values to use in
     #  future function executions using them).
     "tab",
+    # TableFrame regenerates the pristine system columns ($td.id, $td.row, $td.src),
+    # resetting them to a fresh per-function view, and keeps everything else (user
+    # columns and version columns) as-is. Pristine columns are the system columns that
+    # must be regenerated for a stored TableFrame to be used as the input of a
+    # transformer/subscriber function.
+    # (Used to load a TableFrame as the input of a transformer/subscriber function:
+    #  every input row is re-stamped with a sequential $td.row and a single-entry
+    #  $td.src pointing to itself, where the $td.src 'tab' is this input's position in
+    #  the function signature -- the 'idx' argument, taken from the request.yaml
+    #  'table_pos'. This replaces whatever the producing function stored.)
+    "mut",
 ]
 
 
@@ -91,6 +103,11 @@ def add_system_columns(
             lf=lf,
             ignore_missing=True,
         )
+    elif mode == "mut":
+        lf = drop_pristine_system_columns(
+            lf=lf,
+            ignore_missing=True,
+        )
 
     current_columns = set(lf.collect_schema().names())
 
@@ -139,8 +156,23 @@ def add_system_columns(
                         .alias(column)
                     )
                 case td_constants.Language.RUST:
+                    rust_arguments = {}
+                    # When the generator can key its row off an existing row-index
+                    # column, feed it $td.row so the generated value stays tied to
+                    # the row's identity (stable across filters/joins) instead of
+                    # the row's current physical position.
+                    row_index_column = td_helpers.ROW_INDEX_COLUMN
+                    if (
+                        row_index_column is not None
+                        and row_index_column in lf.collect_schema().names()
+                        and "row_index"
+                        in inspect.signature(generator_instance.rust).parameters
+                    ):
+                        rust_arguments["row_index"] = pl.col(row_index_column)
                     lf = lf.with_columns_seq(
-                        generator_instance.rust(pl.col(column)).alias(column)
+                        generator_instance.rust(pl.col(column), **rust_arguments).alias(
+                            column
+                        )
                     )
                 case _:
                     raise ValueError(
@@ -196,6 +228,28 @@ def drop_inception_regenerate_system_columns(
         for column, metadata in td_helpers.SYSTEM_COLUMNS_METADATA.items()
         if metadata.inception == td_constants.Inception.REGENERATE
     ]
+
+    if ignore_missing:
+        existing_columns = set(lf.collect_schema().names())
+        columns_to_remove = [
+            col for col in columns_to_remove if col in existing_columns
+        ]
+    for column in columns_to_remove:
+        lf = lf.drop(column)
+    return lf
+
+
+def drop_pristine_system_columns(
+    *,
+    lf: pl.LazyFrame,
+    ignore_missing: bool = True,
+) -> pl.LazyFrame:
+    # Pristine columns are the edition-specific system columns that must be
+    # regenerated for a stored TableFrame to be usable as the input of a
+    # transformer/subscriber function. The set is defined by the active edition's
+    # extension (Standard vs Enterprise); the version columns ($td.ver.*) and the
+    # user columns are always left untouched.
+    columns_to_remove = list(td_helpers.PRISTINE_COLUMNS)
 
     if ignore_missing:
         existing_columns = set(lf.collect_schema().names())

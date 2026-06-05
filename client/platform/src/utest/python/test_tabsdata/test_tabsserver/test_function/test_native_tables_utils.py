@@ -67,6 +67,7 @@ def _make_table(
     table_data_version_id="ver1",
     triggered_on="1700000000000",
     input_idx=0,
+    table_pos=0,
 ):
     table = MagicMock()
     table.location = _make_location(uri=uri, env_prefix=env_prefix)
@@ -75,6 +76,7 @@ def _make_table(
     table.table_data_version_id = table_data_version_id
     table.triggered_on = triggered_on
     table.input_idx = input_idx
+    table.table_pos = table_pos
     return table
 
 
@@ -412,12 +414,16 @@ class TestScanTfFromTable:
         mock_scan_lf.return_value = mock_lf
 
         ctx = _make_execution_context()
+        # input_idx and table_pos are deliberately different so the assertion
+        # below proves the provenance 'tab' is taken from table_pos (the
+        # signature position) and not from input_idx.
         table = _make_table(
             uri="file:///data/test.parquet",
             execution_id="exec1",
             transaction_id="txn1",
             table_data_version_id="ver1",
-            input_idx=0,
+            input_idx=7,
+            table_pos=2,
         )
 
         with patch(
@@ -432,8 +438,11 @@ class TestScanTfFromTable:
             mock_build.assert_called_once()
             call_kwargs = mock_build.call_args[1]
             assert call_kwargs["df"] is mock_lf
-            assert call_kwargs["mode"] == "tab"
-            assert call_kwargs["idx"] == 0
+            # Loading a stored table as a transformer/subscriber input
+            # regenerates the pristine columns ("mut" mode) and stamps the
+            # provenance 'tab' with the signature position (table_pos).
+            assert call_kwargs["mode"] == "mut"
+            assert call_kwargs["idx"] == 2
 
     @patch(
         "tabsdata._tabsserver.function.native_tables_utils.scan_lf_from_location"

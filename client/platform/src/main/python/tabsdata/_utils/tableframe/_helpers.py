@@ -36,6 +36,14 @@ def required_columns_metadata() -> dict[str, td_constants.SystemColumn]:
     return te_tableframe.REQUIRED_COLUMNS_METADATA
 
 
+def pristine_columns() -> list[str]:
+    return list(te_tableframe.PRISTINE_COLUMNS)
+
+
+def row_index_column() -> str | None:
+    return te_tableframe.ROW_INDEX_COLUMN
+
+
 def optional_system_columns() -> list[str]:
     return [member.value for member in td_constants.OptionalSystemColumns]
 
@@ -60,6 +68,10 @@ STANDARD_SYSTEM_COLUMNS = standard_system_columns()
 EXTENDED_SYSTEM_COLUMNS = extended_system_columns()
 
 SYSTEM_COLUMNS = system_columns()
+
+PRISTINE_COLUMNS = pristine_columns()
+
+ROW_INDEX_COLUMN = row_index_column()
 
 SYSTEM_COLUMNS_METADATA = system_columns_metadata()
 
