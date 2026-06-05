@@ -262,10 +262,16 @@ def get_tableframes_from_sources(
             intermediate_lfs = [
                 pl.scan_parquet(f) for f in source if isinstance(f, str)
             ]
-            lf = pl.concat(intermediate_lfs)
-            tf = from_polars(lf)
-            table_frames.append(tf)
-            logger.debug(f"Created TableFrame {repr(tf)} for query {idx}")
+            if not intermediate_lfs:
+                logger.debug(
+                    f"No valid file paths found for query {idx}, appending None"
+                )
+                table_frames.append(None)
+            else:
+                lf = pl.concat(intermediate_lfs)
+                tf = from_polars(lf)
+                table_frames.append(tf)
+                logger.debug(f"Created TableFrame {repr(tf)} for query {idx}")
         else:
             raise TypeError(
                 "Each query result must be a list(str) of file paths containing "
