@@ -58,7 +58,7 @@ pnpm-debug.log*
 lerna-debug.log*
 *.local
 !**/utest/resources/**/*.log
-!**/kprofile/configmaps/configs/*.log.yaml
+!**/*.log.yaml
 CLAUDE.md
 .claude/
 MANIFEST
