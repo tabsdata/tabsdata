@@ -47,7 +47,7 @@ use crate::base::constants::{
 };
 use crate::base::error::naming::NamingError;
 
-pub use client::{build_incluster_kube_client, build_kube_client, install_crypto_provider};
+pub use client::{build_incluster_kube_client, build_kube_client};
 pub use cluster::ensure_cluster_reachable;
 pub use configmap::{
     create_configmap, delete_configmap, exists_configmap, get_configmap, get_configmaps,

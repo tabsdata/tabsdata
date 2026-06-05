@@ -6,8 +6,6 @@ use std::env;
 
 use kube::Client;
 use kube::config::{Config, KubeConfigOptions, Kubeconfig};
-use rustls::crypto::{aws_lc_rs, ring};
-use tracing::debug;
 
 use crate::base::codec::decode;
 use crate::base::error::kubernetes::{KubeClientError, KubernetesError};
@@ -41,20 +39,5 @@ pub async fn build_pod_kube_client() -> Result<Client, KubernetesError> {
                 .map_err(|error| KubeClientError::BuildFailed(error.to_string()).into())
         }
         _ => build_incluster_kube_client().await,
-    }
-}
-
-pub fn install_crypto_provider() {
-    if let Err(error) = aws_lc_rs::default_provider().install_default() {
-        debug!(
-            "Failed to install the aws-lc-rs tls cryptographic provider: {error:?}. Falling back to the ring tls cryptographic provider."
-        );
-        if let Err(error) = ring::default_provider().install_default() {
-            debug!("Failed to install the ring tls cryptographic provider: {error:?}.");
-        } else {
-            debug!("Successfully installed the ring tls cryptographic provider.");
-        }
-    } else {
-        debug!("Successfully installed the aws-lc-rs tls cryptographic provider.");
     }
 }

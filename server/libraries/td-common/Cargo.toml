@@ -87,6 +87,7 @@ pico-args = { workspace = true }
 rand = { workspace = true }
 regex = { workspace = true }
 rlimit = { workspace = true }
+rustls = { workspace = true, features = ["aws-lc-rs", "ring"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }

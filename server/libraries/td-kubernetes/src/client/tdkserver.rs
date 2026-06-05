@@ -21,7 +21,7 @@ use crate::client::tdkserver::commands::server::command_server;
 use crate::client::tdkserver::commands::session::command_session;
 use crate::client::tdkserver::commands::shell::command_shell;
 use crate::core::system::exit::{CommandError, CommandResult};
-use crate::kube::api::client::install_crypto_provider;
+use td_common::crypto::install_crypto_provider;
 use td_common::status::ExitStatus;
 
 pub struct TabsDataKubernetesClient;

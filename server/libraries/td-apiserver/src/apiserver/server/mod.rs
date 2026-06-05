@@ -13,11 +13,11 @@ use axum_server::tls_rustls::RustlsConfig;
 use futures::StreamExt;
 use futures::stream::FuturesUnordered;
 use http::uri::Scheme;
-use rustls::crypto::{aws_lc_rs, ring};
 use std::error::Error;
 use std::fmt::Debug;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
+use td_common::crypto::install_crypto_provider;
 use td_common::server::{SSL_CERT_PEM_FILE, SSL_KEY_PEM_FILE};
 use td_common::server_runner::ServerRunnable;
 use td_objects::types::addresses::NonEmptyAddresses;
@@ -160,22 +160,11 @@ impl ServerBuilder {
             return None;
         };
 
-        if let Err(e) = aws_lc_rs::default_provider().install_default() {
+        if !install_crypto_provider() {
             warn!(
-                "Failed to install the aws-lc-rs tls cryptographic provider: {e:?}. Falling back to ring tls cryptographic provider."
+                "No tls cryptographic provider could be installed. Protocol tls will not be available."
             );
-            if let Err(e) = ring::default_provider().install_default() {
-                info!(
-                    "Failed to install the ring tls cryptographic provider: {e:?}. Protocol tls will not be available."
-                );
-                return None;
-            } else {
-                info!("Successfully installed the ring tls cryptographic provider!");
-                println!("Successfully installed the ring tls cryptographic provider!");
-            }
-        } else {
-            info!("Successfully installed the aws-lc-rs tls cryptographic provider!");
-            println!("Successfully installed the aws-lc-rs tls cryptographic provider!");
+            return None;
         }
 
         RustlsConfig::from_pem_file(cert_path, key_path)

@@ -7,6 +7,7 @@ pub mod absolute_path;
 pub mod attach;
 pub mod bucket;
 pub mod constants;
+pub mod crypto;
 pub mod datetime;
 pub mod env;
 pub mod execution_status;

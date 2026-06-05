@@ -5,13 +5,13 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use td_common::crypto::install_crypto_provider;
 use td_common::server::{
     OrchestratorMessageQueueHandle, OrchestratorMessagingProvider, QueueError,
 };
 
 use crate::base::error::kubernetes::KubernetesError;
 use crate::client::session::pod::PodContext;
-use crate::kube::api::client::install_crypto_provider;
 use crate::kube::context::KubeContext;
 use crate::runtime::gateway::messaging::messenger::queue::KubernetesOrchestratorMessageQueue;
 use crate::runtime::gateway::messaging::messenger::template::PodTemplateIndex;

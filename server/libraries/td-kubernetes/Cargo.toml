@@ -84,7 +84,6 @@ libc = { workspace = true }
 once_cell = { workspace = true }
 reedline = { workspace = true }
 regex = { workspace = true }
-rustls = { workspace = true, features = ["aws-lc-rs", "ring"] }
 semver = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
