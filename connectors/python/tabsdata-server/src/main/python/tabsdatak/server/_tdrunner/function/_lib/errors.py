@@ -8,7 +8,10 @@ Exit-code semantics follow `docs/01-CommandBasics.md`:
 
 * 1 — invalid or missing options.
 * 2 — undefined environment variable used in an `env:` option.
-* 3..9 — reserved.
+* 3 — unhandled / unexpected exception.
+* 4 — inconsistent state (e.g., CommandError raised with exit_code=0).
+* 5 — premature exit (SystemExit intercepted in command body).
+* 6..9 — reserved.
 * 10+ — command-specific.
 """
 
@@ -16,6 +19,9 @@ from __future__ import annotations
 
 EXIT_INVALID_OPTIONS: int = 1
 EXIT_UNDEFINED_ENV: int = 2
+EXIT_UNEXPECTED: int = 3
+EXIT_INCONSISTENT: int = 4
+EXIT_PREMATURE: int = 5
 COMMAND_SPECIFIC_MIN_EXIT_CODE: int = 10
 
 

@@ -2,24 +2,51 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
-"""Argument parsing for tdrunner commands.
+"""Argument parsing and run orchestration for tdrunner commands.
 
-Implements the `--<opt> <V> | env:<VAR> | val:<V>` shape from
-`docs/01-CommandBasics.md` and provides a parser builder that pre-installs
-the spec's common options (`--help/-h`, `--man/-m`, `--version/-v`,
-`--info/-i`, `--liveness/-l`).
+Implements the ``--<opt> <V> | env:<VAR> | val:<V>`` shape from
+``docs/01-CommandBasics.md`` and provides a parser builder pre-installed
+with the spec's common options:
+
+* ``--help`` / ``-h``
+* ``--man`` / ``-m``
+* ``--version`` / ``-v``
+* ``--info`` / ``-i``
+* ``--liveness`` / ``-l``
+    * ``--log-config`` / ``-c``
+* ``--responder-url``
+* ``--responder-method``
+* ``--responder-authorization``
+
+Also defines the :func:`command` decorator, which wraps every command
+body in a single try/except orchestration. On exit, it logs the outcome,
+posts a failure payload to the responder endpoint, and returns the
+appropriate exit code. The handled cases are:
+
+* :class:`CommandError`
+* :class:`Exception`
+* :class:`SystemExit`
 """
 
 from __future__ import annotations
 
 import argparse
+import json
+import logging
 import os
 import sys
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Callable, NoReturn
 
+from tenacity import retry, stop_after_delay, wait_fixed
+
 from tabsdatak._logging import setup_logging
 from tabsdatak.server._tdrunner.function._lib.errors import (
+    EXIT_INCONSISTENT,
+    EXIT_PREMATURE,
+    EXIT_UNEXPECTED,
     CommandError,
     InvalidOptionsError,
     UndefinedEnvError,
@@ -27,16 +54,24 @@ from tabsdatak.server._tdrunner.function._lib.errors import (
 from tabsdatak.server._tdrunner.function._lib.liveness import install_liveness_handler
 from tabsdatak.server._tdrunner.function.commands import tabsdata_command
 
+logger = logging.getLogger(__name__)
+
 _ENV_PREFIX = "env:"
 _VAL_PREFIX = "val:"
 
+_RESPONDER_RETRY_WAIT_SECONDS = 2
+_RESPONDER_RETRY_TOTAL_SECONDS = 32
+
 
 def resolve_value(arg: str) -> str:
-    """Resolve a `--<opt> <ARG>` value.
+    """Resolve a ``--<opt> <ARG>`` value.
 
-    `arg` may be a literal string, ``env:<VAR>`` (read from the
-    environment), or ``val:<VALUE>`` (explicit literal form, useful when
-    the literal would otherwise look like an `env:` reference).
+    ``arg`` may take one of three forms:
+
+    * a literal string — returned verbatim.
+    * ``env:<VAR>`` — looked up in the environment.
+    * ``val:<VALUE>`` — explicit literal form, useful when the literal
+      would otherwise look like an ``env:`` reference.
 
     Raises:
         UndefinedEnvError: if ``env:<VAR>`` references an unset variable.
@@ -107,10 +142,21 @@ def build_parser(
 ) -> argparse.ArgumentParser:
     """Build an ArgumentParser pre-installed with the spec's common options.
 
-    The returned parser supports ``--help/-h`` (auto from argparse),
-    ``--man/-m``, ``--version/-v``, ``--info/-i`` (each printing the
-    corresponding text and exiting 0), and a required
-    ``--liveness/-l PATH``.
+    The returned parser supports:
+
+    * ``--help`` / ``-h`` — auto from argparse.
+    * ``--man`` / ``-m`` — print the manual and exit 0.
+    * ``--version`` / ``-v`` — print the version and exit 0.
+    * ``--info`` / ``-i`` — print the info blurb and exit 0.
+    * ``--liveness`` / ``-l PATH`` — required; the file the command
+      touches at least once a minute to signal liveness.
+    * ``--log-config`` / ``-c PATH`` — optional; path to a logging
+      config YAML. Defaults to the bundled config.
+    * ``--responder-url`` — required; URL of the responder endpoint.
+    * ``--responder-method`` — required; HTTP method for the responder
+      call.
+    * ``--responder-authorization`` — required; ``Authorization``
+      header value for the responder call.
     """
     parser = _Parser(prog=prog, description=description)
     parser.add_argument(
@@ -150,23 +196,105 @@ def build_parser(
             "Path to a logging config YAML. When omitted, the bundled default is used."
         ),
     )
+    parser.add_argument(
+        "--responder-url",
+        required=True,
+        help="Responder endpoint URL.",
+    )
+    parser.add_argument(
+        "--responder-method",
+        required=True,
+        help="Responder HTTP method.",
+    )
+    parser.add_argument(
+        "--responder-authorization",
+        required=True,
+        help="Responder Authorization header value.",
+    )
     return parser
 
 
 def run_command(main_fn: Callable[[], int | None]) -> int:
-    """Run a command's `main_fn`, mapping CommandError to its exit code.
+    """Run ``main_fn`` and turn its result into an exit code.
 
-    A return value of ``None`` is treated as success (exit 0). Anything
-    else is coerced to ``int`` and returned.
+    ``CommandError`` is mapped to its declared ``exit_code`` (after
+    printing the message to stderr). A return value of ``None`` is
+    treated as success (0); anything else is coerced via ``int()``.
+
+    Test-only helper: production commands go through the ``command``
+    decorator's orchestration. This shape is preserved so unit tests
+    can call ``run_command(lambda: body(args))`` without standing up
+    argparse, logging, or the responder.
     """
     try:
         result = main_fn()
-    except CommandError as exc:
-        print(str(exc), file=sys.stderr)
-        return exc.exit_code
+    except CommandError as error:
+        print(
+            str(error),
+            file=sys.stderr,
+        )
+        return error.exit_code
     if result is None:
         return 0
     return int(result)
+
+
+@retry(
+    stop=stop_after_delay(_RESPONDER_RETRY_TOTAL_SECONDS),
+    wait=wait_fixed(_RESPONDER_RETRY_WAIT_SECONDS),
+    reraise=True,
+)
+def _send_responder_request(request: urllib.request.Request) -> None:
+    with urllib.request.urlopen(request) as response:
+        response.read()
+
+
+def _failure_to_responder(
+    args: argparse.Namespace | None,
+    exit_code: int,
+    error: BaseException,
+) -> None:
+    """Best-effort POST a failure status back to the responder endpoint.
+
+    Any failure inside this helper is swallowed and logged — we are
+    already in an error path and must not mask the original failure.
+    The HTTP call is wrapped with a tenacity retry: fixed wait of
+    :data:`_RESPONDER_RETRY_WAIT_SECONDS` between attempts, total budget
+    :data:`_RESPONDER_RETRY_TOTAL_SECONDS`.
+    """
+    if args is None:
+        logger.warning(
+            "Skipping responder failure POST: command arguments not available."
+        )
+        return
+    # noinspection PyBroadException
+    try:
+        url = resolve_value(args.responder_url)
+        method = resolve_value(args.responder_method)
+        authorization = resolve_value(args.responder_authorization)
+        body = json.dumps({
+            "status": "Failed",
+            "exit_code": exit_code,
+            "message": repr(error),
+        }).encode("utf-8")
+        request = urllib.request.Request(
+            url,
+            data=body,
+            method=method,
+            headers={
+                "Authorization": authorization,
+                "Content-Type": "application/json",
+            },
+        )
+        logger.warning(
+            f"Posting responder failure: {method} {url} exit_code={exit_code}"
+        )
+        _send_responder_request(request)
+        logger.warning(
+            f"Posted responder failure: {method} {url} exit_code={exit_code}"
+        )
+    except Exception:
+        logger.warning("Failed to post failure status to responder", exc_info=True)
 
 
 def command(
@@ -174,54 +302,81 @@ def command(
     name: str,
     parser: Callable[[], argparse.ArgumentParser],
 ) -> Callable[[Callable[[argparse.Namespace], int | None]], Callable[[], int]]:
-    """Decorator that wires a command body to the standard prologue.
+    """Decorator that wraps a command body with the standard orchestration.
 
-    Every command in ``_tdrunner/function/commands/`` repeats the same
-    five lines at the top of its ``_run()``:
+    The returned zero-arg ``main`` performs, in order:
 
-      1. parse argv via the command's parser,
-      2. configure logging from ``--log-config``,
-      3. install the liveness logging handler from ``--liveness``,
-      4. invoke the command body,
-      5. wrap the whole thing in :func:`run_command` so
-         ``CommandError`` maps to an exit code,
-      6. and decorates the resulting ``main`` with :func:`tabsdata_command`
-         so the SDK packager picks it up.
+    1. parse argv via ``parser``,
+    2. configure logging from ``--log-config``,
+    3. install the liveness handler from ``--liveness``,
+    4. invoke the decorated body with the parsed ``Namespace``,
+    5. coerce the body's return into an exit code (a ``None`` return
+       becomes 0).
 
-    This decorator folds all of that into a single declaration. The
-    decorated body receives the parsed ``args`` and returns an
-    ``int | None``::
+    The whole run lives inside one ``try`` with three ``except`` arms,
+    so the decorated body never needs its own top-level try/except:
+
+    * :class:`CommandError` — logged at ERROR with traceback; posted to
+      the responder; ``exit_code`` is promoted to
+      :data:`EXIT_INCONSISTENT` if the error claimed ``exit_code=0``.
+    * :class:`Exception` — logged at ERROR with traceback; posted to
+      the responder; returns :data:`EXIT_UNEXPECTED`.
+    * :class:`SystemExit` — logged at ERROR (no traceback); posted to
+      the responder; returns :data:`EXIT_PREMATURE`.
+
+    The result is additionally tagged with :func:`tabsdata_command` so
+    the SDK packager picks it up as a console-script entry point.
+
+    Example::
 
         @command(name="td_fetch_request", parser=_build_parser)
         def main(args: argparse.Namespace) -> int:
-            url = resolve_value(args.url)
+            url = resolve_value(args.resolver_url)
             ...
             return 0
-
-    The decorated ``main`` is a zero-arg callable returning ``int``,
-    so it remains drop-in compatible with the previous shape
-    (``main()`` is what tests call after ``monkeypatch.setattr(sys,
-    "argv", [...])``).
     """
 
+    # ToDo:
+    #  Resolve environment variables (similar to config resolver) for
+    #   parameters that represent configuration files
     def wrap(
         body: Callable[[argparse.Namespace], int | None],
     ) -> Callable[[], int]:
         @tabsdata_command(name=name)
         def main() -> int:
-            def _run() -> int | None:
-                args = parser().parse_args()
-                setup_logging(args.log_config)
-                install_liveness_handler(Path(args.liveness))
-                return body(args)
-                # TODO: Eventually, this will also do:
-                # - Enrich environment
-                # - Try/except/finally
-                # - Get and process callback endpoint and token
-                # - Resolve environment variables (similar to config resolver) for
-                # parameters that represent configuration files
-
-            return run_command(_run)
+            args: argparse.Namespace | None = None
+            try:
+                parsed = parser().parse_args()
+                args = parsed
+                setup_logging(parsed.log_config)
+                install_liveness_handler(Path(parsed.liveness))
+                result = body(parsed)
+                exit_code = 0 if result is None else int(result)
+                return exit_code
+            except CommandError as error:
+                exit_code = error.exit_code
+                logger.exception("Handled exception caught by command")
+                if exit_code == 0:
+                    logger.error(
+                        f"CommandError raised with exit_code=0; "
+                        f"promoting to {EXIT_INCONSISTENT}"
+                    )
+                    exit_code = EXIT_INCONSISTENT
+                _failure_to_responder(args, exit_code, error)
+                return exit_code
+            except Exception as exception:
+                exit_code = EXIT_UNEXPECTED
+                logger.exception("Unhandled exception caught by command")
+                _failure_to_responder(args, exit_code, exception)
+                return exit_code
+            except SystemExit as exit_event:
+                exit_code = EXIT_PREMATURE
+                logger.error(
+                    f"Exit ({exit_event.code}) intercepted by command; "
+                    f"promoting to {exit_code}"
+                )
+                _failure_to_responder(args, exit_code, exit_event)
+                return exit_code
 
         return main
 
