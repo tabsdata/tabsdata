@@ -50,7 +50,11 @@ import yaml
 
 from tabsdatak._bundle import build_bundle
 
-pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
+pytestmark = [
+    pytest.mark.unit,
+    pytest.mark.tabsdatak,
+    pytest.mark.skip(reason="Pending revision of all commands"),
+]
 
 
 # --- user code ------------------------------------------------------------

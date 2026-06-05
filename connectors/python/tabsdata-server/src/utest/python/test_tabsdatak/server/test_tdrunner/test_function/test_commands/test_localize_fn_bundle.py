@@ -29,7 +29,17 @@ pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 _MOD = "tabsdatak.server._tdrunner.function.commands.localize_fn_bundle"
 
 
-def _set_argv(monkeypatch, request_path, dest_dir, liveness, scratch_dir):
+def _set_argv(
+    monkeypatch,
+    *,
+    request_path,
+    bundle_dir,
+    bundle_archive,
+    transporter_request,
+    transporter_response,
+    liveness,
+    responder_url,
+):
     monkeypatch.setattr(
         sys,
         "argv",
@@ -38,13 +48,39 @@ def _set_argv(monkeypatch, request_path, dest_dir, liveness, scratch_dir):
             "--request",
             str(request_path),
             "--bundle-dir",
-            str(dest_dir),
-            "--scratch-dir",
-            str(scratch_dir),
+            str(bundle_dir),
+            "--bundle-archive",
+            str(bundle_archive),
+            "--transporter-request",
+            str(transporter_request),
+            "--transporter-response",
+            str(transporter_response),
             "--liveness",
             str(liveness),
+            "--responder-url",
+            responder_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer wtok",
         ],
     )
+
+
+@pytest.fixture
+def paths(tmp_path):
+    """Standard set of paths the command needs, all under tmp_path."""
+
+    class _Paths:
+        request = tmp_path / "request.yaml"
+        bundle_dir = tmp_path / "bundle"
+        bundle_archive = tmp_path / "stage" / "bundle.tar.zst"
+        transporter_request = tmp_path / "stage" / "transporter.yaml"
+        transporter_response = tmp_path / "stage" / "transporter-response.yaml"
+        liveness = tmp_path / "live"
+
+    _Paths.bundle_archive.parent.mkdir(parents=True, exist_ok=True)
+    return _Paths
 
 
 def _write_request(path: Path, bundle_uri: str = "file:///bundle.tgz") -> Path:
@@ -77,27 +113,14 @@ def _make_tarball(path: Path, files: dict[str, bytes] | None = None) -> None:
                     tar.addfile(info, io.BytesIO(content))
 
 
-def _stub_transporter_returns(monkeypatch, tar_target_files=None, returncode=0):
-    """Replace run_transporter so it pretends to download a bundle.
-
-    Reads the transporter request YAML to find the target's local URL
-    (it's a `file://...` URL we generated), then writes a real .tar.zst
-    there before returning `returncode`.
-    """
-    import re
+def _stub_transporter_writes_archive(
+    monkeypatch, bundle_archive: Path, files: dict[str, bytes] | None = None
+):
+    """Replace run_transporter so it writes a real .tar.zst at the archive path."""
 
     def fake(transporter_yaml, report, liveness=None):
-        text = transporter_yaml.read_text()
-        # Find the LocalFileEndpoint target's url. The transporter YAML has
-        # custom tags so safe_load won't parse it; pull out the second
-        # `url:` (target follows source) via regex.
-        urls = re.findall(r"url:\s*(file://\S+)", text)
-        # source is first, target is second
-        target_url = urls[1] if len(urls) >= 2 else urls[0]
-        target_path = Path(target_url.replace("file://", "", 1))
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-        _make_tarball(target_path, tar_target_files)
-        return returncode
+        _make_tarball(bundle_archive, files)
+        return 0
 
     monkeypatch.setattr(f"{_MOD}.run_transporter", fake)
 
@@ -105,69 +128,66 @@ def _stub_transporter_returns(monkeypatch, tar_target_files=None, returncode=0):
 # --- happy path ---
 
 
-def test_main_happy_path(monkeypatch, tmp_path):
-    request_yaml = _write_request(tmp_path / "request.yaml")
-    dest = tmp_path / "bundle"
-    liveness = tmp_path / "live"
-    scratch = tmp_path / "scratch"
-
-    _stub_transporter_returns(monkeypatch, tar_target_files={"a.py": b"print('hi')"})
-
-    _set_argv(monkeypatch, request_yaml, dest, liveness, scratch)
+def test_main_happy_path(monkeypatch, paths, http_ok_url):
+    _write_request(paths.request)
+    _stub_transporter_writes_archive(
+        monkeypatch,
+        paths.bundle_archive,
+        files={"a.py": b"print('hi')"},
+    )
+    _set_argv(
+        monkeypatch,
+        request_path=paths.request,
+        bundle_dir=paths.bundle_dir,
+        bundle_archive=paths.bundle_archive,
+        transporter_request=paths.transporter_request,
+        transporter_response=paths.transporter_response,
+        liveness=paths.liveness,
+        responder_url=http_ok_url,
+    )
     rc = main()
     assert rc == 0
-    assert (dest / "a.py").read_bytes() == b"print('hi')"
-    assert liveness.exists()
-    # The command stages its intermediates under --scratch-dir and does
-    # not clean up — caller controls lifecycle.
-    assert (scratch / "bundle.tar.zst").exists()
-    assert (scratch / "transporter.yaml").exists()
-
-
-def test_main_creates_scratch_dir_when_absent(monkeypatch, tmp_path):
-    """--scratch-dir does not need to exist beforehand; the command
-    mkdir's it on demand."""
-    request_yaml = _write_request(tmp_path / "request.yaml")
-    scratch = tmp_path / "scratch_does_not_exist"
-    assert not scratch.exists()
-    _stub_transporter_returns(monkeypatch, tar_target_files={"a.py": b"x"})
-
-    _set_argv(
-        monkeypatch, request_yaml, tmp_path / "bundle", tmp_path / "live", scratch
-    )
-    assert main() == 0
-    assert scratch.is_dir()
+    assert (paths.bundle_dir / "a.py").read_bytes() == b"print('hi')"
+    assert paths.liveness.exists()
+    assert paths.bundle_archive.exists()
 
 
 # --- error paths ---
 
 
-def test_main_missing_request_returns_bad_request(monkeypatch, tmp_path):
+def test_main_missing_request_returns_bad_request(monkeypatch, paths, http_ok_url):
     _set_argv(
         monkeypatch,
-        tmp_path / "no-such-request.yaml",
-        tmp_path / "bundle",
-        tmp_path / "live",
-        tmp_path / "scratch",
+        request_path=paths.request,
+        bundle_dir=paths.bundle_dir,
+        bundle_archive=paths.bundle_archive,
+        transporter_request=paths.transporter_request,
+        transporter_response=paths.transporter_response,
+        liveness=paths.liveness,
+        responder_url=http_ok_url,
     )
     assert main() == EXIT_BAD_REQUEST
 
 
-def test_main_malformed_request_returns_bad_request(monkeypatch, tmp_path):
-    bad = tmp_path / "request.yaml"
-    bad.write_text("info: { unclosed")
+def test_main_malformed_request_returns_bad_request(monkeypatch, paths, http_ok_url):
+    paths.request.write_text("info: { unclosed")
     _set_argv(
         monkeypatch,
-        bad,
-        tmp_path / "bundle",
-        tmp_path / "live",
-        tmp_path / "scratch",
+        request_path=paths.request,
+        bundle_dir=paths.bundle_dir,
+        bundle_archive=paths.bundle_archive,
+        transporter_request=paths.transporter_request,
+        transporter_response=paths.transporter_response,
+        liveness=paths.liveness,
+        responder_url=http_ok_url,
     )
     assert main() == EXIT_BAD_REQUEST
 
 
-def test_main_transporter_not_found_returns_transporter_failed(monkeypatch, tmp_path):
-    request_yaml = _write_request(tmp_path / "request.yaml")
+def test_main_transporter_not_found_returns_transporter_failed(
+    monkeypatch, paths, http_ok_url
+):
+    _write_request(paths.request)
 
     def fake(yaml_path, report, liveness=None):
         raise TransporterNotFoundError("no binary")
@@ -175,73 +195,80 @@ def test_main_transporter_not_found_returns_transporter_failed(monkeypatch, tmp_
     monkeypatch.setattr(f"{_MOD}.run_transporter", fake)
     _set_argv(
         monkeypatch,
-        request_yaml,
-        tmp_path / "bundle",
-        tmp_path / "live",
-        tmp_path / "scratch",
+        request_path=paths.request,
+        bundle_dir=paths.bundle_dir,
+        bundle_archive=paths.bundle_archive,
+        transporter_request=paths.transporter_request,
+        transporter_response=paths.transporter_response,
+        liveness=paths.liveness,
+        responder_url=http_ok_url,
     )
     assert main() == EXIT_TRANSPORTER_FAILED
 
 
-def test_main_transporter_nonzero_returns_transporter_failed(monkeypatch, tmp_path):
-    request_yaml = _write_request(tmp_path / "request.yaml")
+def test_main_transporter_nonzero_returns_transporter_failed(
+    monkeypatch, paths, http_ok_url
+):
+    _write_request(paths.request)
     monkeypatch.setattr(
         f"{_MOD}.run_transporter", lambda yaml_path, report, liveness=None: 7
     )
     _set_argv(
         monkeypatch,
-        request_yaml,
-        tmp_path / "bundle",
-        tmp_path / "live",
-        tmp_path / "scratch",
+        request_path=paths.request,
+        bundle_dir=paths.bundle_dir,
+        bundle_archive=paths.bundle_archive,
+        transporter_request=paths.transporter_request,
+        transporter_response=paths.transporter_response,
+        liveness=paths.liveness,
+        responder_url=http_ok_url,
     )
     assert main() == EXIT_TRANSPORTER_FAILED
 
 
-def test_main_corrupt_bundle_returns_extract_failed(monkeypatch, tmp_path):
-    request_yaml = _write_request(tmp_path / "request.yaml")
+def test_main_corrupt_bundle_returns_extract_failed(monkeypatch, paths, http_ok_url):
+    _write_request(paths.request)
 
     def fake(transporter_yaml, report, liveness=None):
-        # Find the target path and write garbage instead of a real tar.
-        import re
-
-        text = transporter_yaml.read_text()
-        urls = re.findall(r"url:\s*(file://\S+)", text)
-        target = Path(urls[1].replace("file://", "", 1))
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(b"not a tar")
+        paths.bundle_archive.write_bytes(b"not a tar")
         return 0
 
     monkeypatch.setattr(f"{_MOD}.run_transporter", fake)
     _set_argv(
         monkeypatch,
-        request_yaml,
-        tmp_path / "bundle",
-        tmp_path / "live",
-        tmp_path / "scratch",
+        request_path=paths.request,
+        bundle_dir=paths.bundle_dir,
+        bundle_archive=paths.bundle_archive,
+        transporter_request=paths.transporter_request,
+        transporter_response=paths.transporter_response,
+        liveness=paths.liveness,
+        responder_url=http_ok_url,
     )
     assert main() == EXIT_EXTRACT_FAILED
 
 
 def test_main_missing_bundle_after_transporter_returns_extract_failed(
-    monkeypatch, tmp_path
+    monkeypatch, paths, http_ok_url
 ):
     """Transporter says success but doesn't actually create the file."""
-    request_yaml = _write_request(tmp_path / "request.yaml")
+    _write_request(paths.request)
     monkeypatch.setattr(
         f"{_MOD}.run_transporter", lambda yaml_path, report, liveness=None: 0
     )
     _set_argv(
         monkeypatch,
-        request_yaml,
-        tmp_path / "bundle",
-        tmp_path / "live",
-        tmp_path / "scratch",
+        request_path=paths.request,
+        bundle_dir=paths.bundle_dir,
+        bundle_archive=paths.bundle_archive,
+        transporter_request=paths.transporter_request,
+        transporter_response=paths.transporter_response,
+        liveness=paths.liveness,
+        responder_url=http_ok_url,
     )
     assert main() == EXIT_EXTRACT_FAILED
 
 
-def test_main_invalid_options_returns_1(monkeypatch, tmp_path):
+def test_main_invalid_options_returns_1(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["localize-fn-bundle", "--request", "x"])
     assert main() == 1
 
