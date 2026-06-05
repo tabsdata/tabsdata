@@ -25,6 +25,7 @@ const KM_BINARY: &str = "km";
 const KM_CREATE_SUBCOMMAND: &str = "create";
 const KM_START_SUBCOMMAND: &str = "start";
 const KM_WORKDIR_ARGUMENT: &str = "--workdir";
+const KM_IMAGESDIR_ARGUMENT: &str = "--imagesdir";
 
 const KM_CONFIG_FOLDER: &str = "config";
 const KM_DATA_FOLDER: &str = "data";
@@ -39,19 +40,25 @@ const KM_TERMINATE_GRACE: Duration = Duration::from_secs(10);
 
 pub struct KminusCluster {
     path: PathBuf,
+    images_path: PathBuf,
     verbose: bool,
 }
 
 impl KminusCluster {
-    pub fn new(path: impl Into<PathBuf>, verbose: bool) -> Self {
+    pub fn new(path: impl Into<PathBuf>, images_path: impl Into<PathBuf>, verbose: bool) -> Self {
         Self {
             path: path.into(),
+            images_path: images_path.into(),
             verbose,
         }
     }
 
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    pub fn images_path(&self) -> &Path {
+        &self.images_path
     }
 
     pub fn sysconfig_path(&self) -> PathBuf {
@@ -90,6 +97,8 @@ impl KminusCluster {
             .arg(KM_START_SUBCOMMAND)
             .arg(KM_WORKDIR_ARGUMENT)
             .arg(self.path())
+            .arg(KM_IMAGESDIR_ARGUMENT)
+            .arg(self.images_path())
             .stdin(Stdio::null());
         if self.verbose {
             command.stdout(Stdio::inherit()).stderr(Stdio::inherit());

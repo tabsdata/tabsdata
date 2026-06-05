@@ -1,0 +1,4 @@
+eference-only folder.
+
+Mounted at runtime; contents are ignored on copy.
+The presence of `.ignore` tells `copy_tree` to skip the whole subtree.

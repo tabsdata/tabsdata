@@ -47,14 +47,18 @@ spec:
           type: RuntimeDefault
       initContainers:
         - name: inspect-function
-          image: /dev/null
+          image: function
           imagePullPolicy: IfNotPresent
           command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:TDK_PYENV_SCRIPTS_FOLDER}/td_inspect_function"]
           args:
+            - --shared-dir
+            - $(CONTAINER_ROOT)/tabsdata/shared
+            - --work-dir
+            - $(CONTAINER_ROOT)/tabsdata/work
             - --log-config
             - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
             - --liveness
-            - $(CONTAINER_ROOT)/tabsdata/scratch/liveness
+            - $(CONTAINER_ROOT)/tabsdata/work/liveness
             - --responder-url
             - env:SECRET__TD_RESPONDER_URL
             - --responder-method
@@ -89,33 +93,35 @@ spec:
             - name: pyenv
               mountPath: /tabsdata/pyenv
               readOnly: true
-            - name: work
-              mountPath: /tabsdata/work
-            - name: scratch-inspect-function
-              mountPath: /tabsdata/scratch
+            - name: shared
+              mountPath: /tabsdata/shared
         - name: fetch-request
-          image: /dev/null
+          image: function
           imagePullPolicy: IfNotPresent
           command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:TDK_PYENV_SCRIPTS_FOLDER}/td_fetch_request"]
           args:
+            - --shared-dir
+            - $(CONTAINER_ROOT)/tabsdata/shared
+            - --work-dir
+            - $(CONTAINER_ROOT)/tabsdata/work
             - --log-config
             - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
             - --liveness
-            - $(CONTAINER_ROOT)/tabsdata/scratch/liveness
+            - $(CONTAINER_ROOT)/tabsdata/work/liveness
+            - --responder-url
+            - env:SECRET__TD_RESPONDER_URL
+            - --responder-method
+            - env:SECRET__TD_RESPONDER_METHOD
+            - --responder-authorization
+            - env:SECRET__TD_RESPONDER_AUTHORIZATION
             - --resolver-url
             - env:SECRET__TD_RESOLVER_URL
             - --resolver-method
             - env:SECRET__TD_RESOLVER_METHOD
             - --resolver-authorization
             - env:SECRET__TD_RESOLVER_AUTHORIZATION
-            - --responder-url
-            - env:SECRET__TD_RESPONDER_URL
-            - --responder-method
-            - env:SECRET__TD_RESPONDER_METHOD
-            - --responder-authorization
-            - env:SECRET__TD_RESPONDER_AUTHORIZATION
-            - --out
-            - $(CONTAINER_ROOT)/tabsdata/work/request.yaml
+            - --request-file
+            - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
           resources:
             requests:
               cpu: "50m"
@@ -144,13 +150,11 @@ spec:
             - name: pyenv
               mountPath: /tabsdata/pyenv
               readOnly: true
-            - name: work
-              mountPath: /tabsdata/work
-            - name: scratch-fetch-request
-              mountPath: /tabsdata/scratch
+            - name: shared
+              mountPath: /tabsdata/shared
       containers:
         - name: report
-          image: /dev/null
+          image: function
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-c"]
           args:
@@ -180,11 +184,9 @@ spec:
             - name: config
               mountPath: /tabsdata/config
               readOnly: true
-            - name: work
-              mountPath: /tabsdata/work
+            - name: shared
+              mountPath: /tabsdata/shared
               readOnly: true
-            - name: scratch-report
-              mountPath: /tabsdata/scratch
       volumes:
         - name: config
           projected:
@@ -194,11 +196,5 @@ spec:
         - name: pyenv
           hostPath:
             path: "${sys:TDK_PYENV_TD_ROOT}"
-        - name: work
-          emptyDir: {}
-        - name: scratch-inspect-function
-          emptyDir: {}
-        - name: scratch-fetch-request
-          emptyDir: {}
-        - name: scratch-report
+        - name: shared
           emptyDir: {}

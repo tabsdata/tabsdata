@@ -215,6 +215,7 @@ pub trait Provider: Send + Sync {
     ) -> CommandResult<Box<dyn Transaction>>;
     async fn create_database(&self, reporter: &dyn Reporter) -> CommandResult;
     async fn create_runtimes(&self, reporter: &dyn Reporter) -> CommandResult;
+    async fn create_images(&self, reporter: &dyn Reporter) -> CommandResult;
 
     async fn cluster_alive(&self) -> bool;
     async fn cluster_dead(&self) -> bool {

@@ -13,6 +13,7 @@ pub const FOLDER_REPOSITORY: &str = "repository";
 pub const FOLDER_DATABASE: &str = "database";
 pub const FOLDER_STORAGE: &str = "storage";
 pub const FOLDER_RUNTIMES: &str = "runtimes";
+pub const FOLDER_IMAGES: &str = "images";
 pub const FOLDER_PYTHON: &str = "python";
 pub const FOLDER_PYENV_TD: &str = "td";
 pub const FOLDER_PYENV_AG: &str = "ag";

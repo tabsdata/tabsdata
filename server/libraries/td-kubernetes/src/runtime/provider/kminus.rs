@@ -20,8 +20,8 @@ use td_python::python::{get_python_scripts_folder, resolve_python_binary};
 use tracing::info;
 
 use crate::base::constants::{
-    FOLDER_CLUSTER, FOLDER_DATABASE, FOLDER_PYENV_AG, FOLDER_PYENV_TD, FOLDER_PYTHON,
-    FOLDER_REPOSITORY, FOLDER_RUNTIMES, FOLDER_STORAGE, KPROFILE_CONFIGS_FAMILY,
+    FOLDER_CLUSTER, FOLDER_DATABASE, FOLDER_IMAGES, FOLDER_PYENV_AG, FOLDER_PYENV_TD,
+    FOLDER_PYTHON, FOLDER_REPOSITORY, FOLDER_RUNTIMES, FOLDER_STORAGE, KPROFILE_CONFIGS_FAMILY,
     KPROFILE_PODS_FAMILY, LIBEXEC_TABSDATA,
 };
 use crate::base::error::provider::ProviderError;
@@ -30,6 +30,7 @@ use crate::client::session::pin::{KminusInputs, Session};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::validate_instance_name;
 use crate::core::system::exit::{CommandError, CommandResult, abort_with};
+use crate::core::system::file::copy_tree;
 use crate::core::system::subprocess;
 use crate::core::system::subprocess::apply_detached_flags;
 use crate::kube::api::get_secret;
@@ -40,7 +41,7 @@ use crate::kube::kubeconfig::{
 use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues};
 use crate::runtime::instance::manifest::MANIFEST_FILE;
 use crate::runtime::instance::profile::{
-    Profile, load_profile, render_for_configmaps, resolve_profile_entry,
+    Profile, load_profile, render_for_configmaps, resolve_kprofile_path, resolve_profile_entry,
 };
 use crate::runtime::instance::verify_manifest_compatibility;
 use crate::runtime::provider::kminus::cluster::{InstanceFolderGuard, KminusCluster};
@@ -143,7 +144,11 @@ impl KminusProvider {
             .into());
         }
 
-        let kminus_cluster = KminusCluster::new(folder.join(FOLDER_CLUSTER), verbose);
+        let kminus_cluster = KminusCluster::new(
+            folder.join(FOLDER_CLUSTER),
+            folder.join(FOLDER_IMAGES),
+            verbose,
+        );
         let kminus_instance =
             KminusInstance::new(kminus_cluster.kubefile(), kminus_cluster.staging_path());
 
@@ -489,6 +494,33 @@ impl Provider for KminusProvider {
         for line in stdout.lines() {
             info!("  {line}");
         }
+        Ok(())
+    }
+
+    async fn create_images(&self, reporter: &dyn Reporter) -> CommandResult {
+        let images_target = self.folder.join(FOLDER_IMAGES);
+        fs::create_dir_all(&images_target).map_err(|error| {
+            ProviderError::ImagesFolderCreateFailed(
+                images_target.display().to_string(),
+                error.to_string(),
+            )
+        })?;
+        let kprofile_root = resolve_kprofile_path(self.verbose)?;
+        let images_source = kprofile_root.join(FOLDER_IMAGES);
+        if !images_source.is_dir() {
+            return Ok(());
+        }
+        let step = reporter.step("Copying worker image trees");
+        if let Err(cause) = copy_tree(&images_source, &images_target) {
+            step.fail();
+            return Err(ProviderError::ImagesCopyFailed {
+                from: images_source.display().to_string(),
+                to: images_target.display().to_string(),
+                cause,
+            }
+            .into());
+        }
+        step.done("Worker image trees copied");
         Ok(())
     }
 

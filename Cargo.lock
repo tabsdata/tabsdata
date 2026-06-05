@@ -9001,6 +9001,7 @@ dependencies = [
  "tokio",
  "tracing",
  "url",
+ "walkdir",
  "windows-sys 0.61.2",
 ]
 

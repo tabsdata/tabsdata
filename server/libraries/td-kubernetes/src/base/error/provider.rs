@@ -80,6 +80,14 @@ pub enum ProviderError {
     RuntimesFolderCreateFailed(String, String) = 5107,
     #[error("Could not create Python virtual environment templates under '{folder}': {cause}.")]
     PyvenvCreateFailed { folder: String, cause: String } = 5108,
+    #[error("Could not create images folder '{0}': {1}.")]
+    ImagesFolderCreateFailed(String, String) = 5109,
+    #[error("Could not copy image tree from '{from}' to '{to}': {cause}.")]
+    ImagesCopyFailed {
+        from: String,
+        to: String,
+        cause: String,
+    } = 5110,
     #[error("Failed to handle {phase} secrets: {cause}.")]
     SecretHandlerFailed { phase: String, cause: String } = 5200,
     #[error("Argument --provider is required when no active context is set.")]

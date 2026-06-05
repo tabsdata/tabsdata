@@ -148,10 +148,14 @@ def build_parser(
     * ``--man`` / ``-m`` — print the manual and exit 0.
     * ``--version`` / ``-v`` — print the version and exit 0.
     * ``--info`` / ``-i`` — print the info blurb and exit 0.
-    * ``--liveness`` / ``-l PATH`` — required; the file the command
-      touches at least once a minute to signal liveness.
+    * ``--shared-dir`` / ``-s PATH`` — optional; shared working dir
+      (owned by the pod).
+    * ``--work-dir`` / ``-w PATH`` — optional; private working dir
+      (owned by the container).
     * ``--log-config`` / ``-c PATH`` — optional; path to a logging
       config YAML. Defaults to the bundled config.
+    * ``--liveness`` / ``-l PATH`` — required; the file the command
+      touches at least once a minute to signal liveness.
     * ``--responder-url`` — required; URL of the responder endpoint.
     * ``--responder-method`` — required; HTTP method for the responder
       call.
@@ -178,14 +182,18 @@ def build_parser(
         help="Print the command build info and exit.",
     )
     parser.add_argument(
-        "--liveness",
-        "-l",
-        required=True,
+        "--shared-dir",
+        "-s",
+        default=None,
         metavar="PATH",
-        help=(
-            "File the command must touch at least once a minute to signal "
-            "liveness to the framework."
-        ),
+        help="Shared working dir (owned by the pod).",
+    )
+    parser.add_argument(
+        "--work-dir",
+        "-w",
+        default=None,
+        metavar="PATH",
+        help="Private working dir (owned by the container).",
     )
     parser.add_argument(
         "--log-config",
@@ -194,6 +202,16 @@ def build_parser(
         metavar="PATH",
         help=(
             "Path to a logging config YAML. When omitted, the bundled default is used."
+        ),
+    )
+    parser.add_argument(
+        "--liveness",
+        "-l",
+        required=True,
+        metavar="PATH",
+        help=(
+            "File the command must touch at least once a minute to signal "
+            "liveness to the framework."
         ),
     )
     parser.add_argument(
@@ -244,7 +262,7 @@ def run_command(main_fn: Callable[[], int | None]) -> int:
     wait=wait_fixed(_RESPONDER_RETRY_WAIT_SECONDS),
     reraise=True,
 )
-def _send_responder_request(request: urllib.request.Request) -> None:
+def _failure_to_responder_request(request: urllib.request.Request) -> None:
     with urllib.request.urlopen(request) as response:
         response.read()
 
@@ -289,7 +307,7 @@ def _failure_to_responder(
         logger.warning(
             f"Posting responder failure: {method} {url} exit_code={exit_code}"
         )
-        _send_responder_request(request)
+        _failure_to_responder_request(request)
         logger.warning(
             f"Posted responder failure: {method} {url} exit_code={exit_code}"
         )

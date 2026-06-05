@@ -87,6 +87,10 @@ impl Provider for EksProvider {
         unreachable!("eks provider not yet implemented")
     }
 
+    async fn create_images(&self, _reporter: &dyn Reporter) -> CommandResult {
+        unreachable!("eks provider not yet implemented")
+    }
+
     async fn cluster_alive(&self) -> bool {
         unreachable!("eks provider not yet implemented")
     }

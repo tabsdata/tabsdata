@@ -45,12 +45,13 @@ INFO = (
 )
 MAN = (
     "localize-fn-bundle --request <PATH> --bundle-dir <PATH> "
-    "--scratch-dir <PATH> --liveness <PATH>\n\n"
-    "Reads the bundle URI from --request, downloads the tarball via "
-    "td_transporter, and extracts it to --bundle-dir. Intermediate "
-    "files (bundle archive, transporter request/report) are written "
-    "under --scratch-dir; the caller owns its lifecycle. Step 3 of the "
-    "publisher init-container chain."
+    "--bundle-archive <PATH> --transporter-request <PATH> "
+    "--transporter-response <PATH> --liveness <PATH>\n\n"
+    "Reads the bundle URI from --request, downloads the tarball to "
+    "--bundle-archive via td_transporter (using --transporter-request "
+    "and --transporter-response), and extracts the archive into "
+    "--bundle-dir. The caller owns the lifecycle of every path. Step "
+    "3 of the publisher init-container chain."
 )
 
 # Command-specific exit codes (>= 10 per docs/01-CommandBasics.md).
@@ -71,28 +72,36 @@ def _build_parser():
     parser.add_argument(
         "--bundle-dir",
         required=True,
-        help="Destination dir for bundle extraction",
+        help="Destination dir for bundle extraction.",
     )
     parser.add_argument(
-        "--scratch-dir",
+        "--bundle-archive",
         required=True,
-        dest="scratch_dir",
-        help=(
-            "Directory where the command stages the bundle archive, the "
-            "transporter request and the transporter report. Caller owns "
-            "its lifecycle (the command does not clean it up)."
-        ),
+        help="Path to the downloaded bundle archive (e.g. bundle.tar.zst).",
+    )
+    parser.add_argument(
+        "--transporter-request",
+        required=True,
+        help="Path to write the transporter request yaml.",
+    )
+    parser.add_argument(
+        "--transporter-response",
+        required=True,
+        help="Path to write the transporter response yaml.",
     )
     return parser
 
 
 def _fetch_via_transporter(
-    request, target: Path, transporter_yaml: Path, report: Path
+    request,
+    bundle_archive: Path,
+    transporter_request: Path,
+    transporter_response: Path,
 ) -> None:
-    copy_req = build_bundle_fetch_request(request, target)
-    write_transporter_request(copy_req, transporter_yaml)
+    copy_req = build_bundle_fetch_request(request, bundle_archive)
+    write_transporter_request(copy_req, transporter_request)
     try:
-        rc = run_transporter(transporter_yaml, report)
+        rc = run_transporter(transporter_request, transporter_response)
     except TransporterNotFoundError as exc:
         raise CommandSpecificError(
             EXIT_TRANSPORTER_FAILED, f"td_transporter not found: {exc}"
@@ -120,16 +129,16 @@ def _extract(archive: Path, dest_dir: Path) -> None:
 @command(name="td_localize_fn_bundle", parser=_build_parser)
 def main(args: argparse.Namespace) -> int:
     request_path = Path(args.request)
-    dest_dir = Path(args.bundle_dir)
-    scratch_dir = Path(args.scratch_dir)
+    bundle_dir = Path(args.bundle_dir)
+    bundle_archive = Path(args.bundle_archive)
+    transporter_request = Path(args.transporter_request)
+    transporter_response = Path(args.transporter_response)
 
     request = load_request_or_fail(request_path, EXIT_BAD_REQUEST)
-    scratch_dir.mkdir(parents=True, exist_ok=True)
-    bundle_local = scratch_dir / "bundle.tar.zst"
-    transporter_yaml = scratch_dir / "transporter.yaml"
-    transporter_report = scratch_dir / "transporter-report.yaml"
-    _fetch_via_transporter(request, bundle_local, transporter_yaml, transporter_report)
-    _extract(bundle_local, dest_dir)
+    _fetch_via_transporter(
+        request, bundle_archive, transporter_request, transporter_response
+    )
+    _extract(bundle_archive, bundle_dir)
     return 0
 
 

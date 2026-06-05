@@ -246,6 +246,10 @@ impl Provider for DockerProvider {
         Ok(())
     }
 
+    async fn create_images(&self, _reporter: &dyn Reporter) -> CommandResult {
+        Ok(())
+    }
+
     async fn cluster_alive(&self) -> bool {
         self.cluster.is_alive().await
     }

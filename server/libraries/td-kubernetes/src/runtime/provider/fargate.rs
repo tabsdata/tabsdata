@@ -87,6 +87,10 @@ impl Provider for FargateProvider {
         unreachable!("fargate provider not yet implemented")
     }
 
+    async fn create_images(&self, _reporter: &dyn Reporter) -> CommandResult {
+        unreachable!("fargate provider not yet implemented")
+    }
+
     async fn cluster_alive(&self) -> bool {
         unreachable!("fargate provider not yet implemented")
     }

@@ -68,6 +68,7 @@ pub async fn command_create(
     let tx = provider.create_cluster_hook(&reporter).await?;
     provider.create_database(&reporter).await?;
     provider.create_runtimes(&reporter).await?;
+    provider.create_images(&reporter).await?;
     tx.commit();
     report::server::created_server(&provider.summary());
 
