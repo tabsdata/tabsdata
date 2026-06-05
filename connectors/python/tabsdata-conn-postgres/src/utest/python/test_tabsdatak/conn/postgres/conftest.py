@@ -489,8 +489,6 @@ _POSTGRES_CDC_FLAGS = [
     "-c", "max_logical_replication_workers=4",
 ]
 
-_REPLICATION_SLOT = "tdcdc_slot"
-
 
 def _install_wal2json(container) -> None:
     """``wal2json`` is shipped as ``postgresql-17-wal2json`` on
@@ -510,10 +508,17 @@ def _install_wal2json(container) -> None:
         )
 
 
-def _grant_replication_and_create_slot(cfg: "DBConfig") -> None:
+def _grant_replication(cfg: "DBConfig") -> None:
     """Postgres logical replication needs a role with the
-    ``REPLICATION`` attribute and a slot using the wal2json output
-    plugin. The test role gets both at session-startup time."""
+    ``REPLICATION`` attribute. The test role gets it at
+    session-startup time.
+
+    The replication *slot* is no longer created here: each CDC test
+    owns a per-worker slot whose full lifecycle (force-release +
+    create on setup, force-release on teardown) lives in the
+    ``fresh_postgres_cdc_with_slot`` fixture. Centralizing the slot
+    in the fixture keeps a single owner of the slot and avoids a
+    session-wide shared slot that tests would contend on."""
     from sqlalchemy import create_engine, text
 
     engine = create_engine(
@@ -524,15 +529,6 @@ def _grant_replication_and_create_slot(cfg: "DBConfig") -> None:
             conn.execute(text(
                 f"alter role {cfg.user} with replication"
             ))
-            row = conn.execute(text(
-                "select slot_name from pg_replication_slots "
-                "where slot_name = :slot"
-            ), {"slot": _REPLICATION_SLOT}).fetchone()
-            if not row:
-                conn.execute(text(
-                    "select pg_create_logical_replication_slot("
-                    ":slot, 'wal2json')"
-                ), {"slot": _REPLICATION_SLOT})
     finally:
         engine.dispose()
 
@@ -584,7 +580,7 @@ def _build_cdc_config() -> tuple["DBConfig", object | None]:
     client = docker.from_env()
     container = client.containers.get(_POSTGRES_CDC_CONTAINER)
     _install_wal2json(container)
-    _grant_replication_and_create_slot(cfg)
+    _grant_replication(cfg)
     _seed_cdc_schema(cfg)
     return cfg, container
 
@@ -600,7 +596,7 @@ def postgres_cdc_config(tmp_path_factory, worker_id) -> Iterator[DBConfig]:
     )
     if external is not None:
         if _should_reseed_external("POSTGRESCDC0", "POSTGRESCDC"):
-            _grant_replication_and_create_slot(external)
+            _grant_replication(external)
             _seed_cdc_schema(external)
         yield external
         return

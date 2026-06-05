@@ -601,7 +601,7 @@ def test_plugin_messages_rollover_creates_multiple_parquet_batches(
     serde = variant.build_producer_serde(kafka_config, tmp_path)
     _produce(kafka_config, fresh_kafka_topic, serde, variant.messages(8))
 
-    src = _make_src(
+    conn, src = _make_src(
         kafka_config=kafka_config,
         topic=fresh_kafka_topic,
         variant=variant,
@@ -613,7 +613,7 @@ def test_plugin_messages_rollover_creates_multiple_parquet_batches(
         },
     )
 
-    _run_plugin_in_thread(ctx, src, timeout_s=60.0)
+    _run_plugin_in_thread(ctx, conn, src, timeout_s=60.0)
 
     committed = [sm for sm in ctx.staged if sm.committed]
     assert len(committed) >= 2, (
@@ -639,7 +639,7 @@ def test_plugin_schema_change_rollover_segregates_buffers(
     batch_b = [{"name": "carol", "city": "NYC"}]
     _produce(kafka_config, fresh_kafka_topic, serde, batch_a + batch_b)
 
-    src = _make_src(
+    conn, src = _make_src(
         kafka_config=kafka_config,
         topic=fresh_kafka_topic,
         variant=_Variant(

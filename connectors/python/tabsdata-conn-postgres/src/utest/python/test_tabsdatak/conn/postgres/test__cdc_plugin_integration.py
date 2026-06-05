@@ -22,6 +22,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -46,10 +47,25 @@ logger = logging.getLogger(__name__)
 pytestmark = [pytest.mark.postgres, pytest.mark.xdist_group("postgres-cdc_plugin_integration_seq")]
 
 
-# The replication slot the conftest pre-creates. Keep in sync with
-# ``conftest._REPLICATION_SLOT`` -- duplicating the literal keeps
-# this test module from importing private conftest helpers.
-_REPLICATION_SLOT = "tdcdc_slot"
+# Each CDC test owns a unique replication slot named
+# ``tdcdc_slot_<worker>_<uuid>``. A logical replication slot can have
+# only one active consumer, and Postgres pins all WAL from the slot's
+# restart_lsn while the slot exists -- so a slot reused across tests is
+# a correctness hazard (the next consumer hits ``ObjectInUse``). The
+# unique name makes reuse structurally impossible: the fixture creates
+# the slot on setup and drops it (terminating any lingering consumer
+# first) on teardown -- no contention to wait out, no shared name.
+_REPLICATION_SLOT_PREFIX = "tdcdc_slot"
+
+
+@dataclass
+class _CdcSlot:
+    """What ``fresh_postgres_cdc_with_slot`` hands a test: the DB
+    config plus the unique replication slot name the fixture created
+    for this test (and drops on teardown)."""
+
+    cfg: Any
+    slot: str
 
 
 # ---------------------------------------------------------------------------
@@ -169,28 +185,53 @@ def _make_cdc_conn(cfg) -> PostgresCdcStreamSrcConn:
     return PostgresCdcStreamSrcConn(uri=cfg.uri, credentials=cfg.credentials)
 
 
-def _drop_replication_slot(cfg) -> None:
-    """Drop + recreate the slot between tests so each starts
-    from a clean LSN and slot retention doesn't pile up.
-    AUTOCOMMIT because ``pg_drop_replication_slot`` cannot run
-    inside a transaction block."""
+def _create_replication_slot(cfg, slot: str) -> None:
+    """Create ``slot`` with the wal2json output plugin. The slot name
+    is unique per test, so this is an unconditional create -- no prior
+    slot of this name can exist. AUTOCOMMIT because logical-slot
+    functions cannot run inside a transaction block."""
+    eng = create_engine(
+        cfg.uri_with_credentials, isolation_level="AUTOCOMMIT",
+    )
+    try:
+        with eng.connect() as conn:
+            conn.execute(text(
+                "select pg_create_logical_replication_slot("
+                ":slot, 'wal2json')"
+            ), {"slot": slot})
+    finally:
+        eng.dispose()
+
+
+def _drop_replication_slot(cfg, slot: str) -> None:
+    """Drop ``slot`` at test teardown. The test's plugin closes its
+    replication connection client-side, but Postgres may not have
+    released the server-side walsender yet, in which case
+    ``pg_drop_replication_slot`` raises ``ObjectInUse``. So we first
+    terminate any backend still attached to the slot, then drop it.
+    No polling is needed: the slot name is unique to this test, so
+    nothing else can be using or recreating it. AUTOCOMMIT because
+    ``pg_drop_replication_slot`` cannot run inside a transaction
+    block."""
     eng = create_engine(
         cfg.uri_with_credentials, isolation_level="AUTOCOMMIT",
     )
     try:
         with eng.connect() as conn:
             row = conn.execute(text(
-                "select slot_name from pg_replication_slots "
+                "select active_pid from pg_replication_slots "
                 "where slot_name = :slot"
-            ), {"slot": _REPLICATION_SLOT}).fetchone()
-            if row:
+            ), {"slot": slot}).fetchone()
+            if row is None:
+                return  # already gone
+            active_pid = row[0]
+            if active_pid is not None:
                 conn.execute(text(
-                    "select pg_drop_replication_slot(:slot)"
-                ), {"slot": _REPLICATION_SLOT})
+                    "select pg_terminate_backend(:pid)"
+                ), {"pid": active_pid})
             conn.execute(text(
-                "select pg_create_logical_replication_slot("
-                ":slot, 'wal2json')"
-            ), {"slot": _REPLICATION_SLOT})
+                "select pg_drop_replication_slot(:slot)"
+            ), {"slot": slot})
     finally:
         eng.dispose()
 
@@ -295,12 +336,19 @@ def _run_plugin_in_thread(
 
 
 @pytest.fixture
-def fresh_postgres_cdc_with_slot(fresh_postgres_cdc):
-    """Per-test: in addition to the truncated ``users`` table, drop
-    + recreate the replication slot so every test starts from a
-    clean LSN."""
-    _drop_replication_slot(fresh_postgres_cdc)
-    return fresh_postgres_cdc
+def fresh_postgres_cdc_with_slot(fresh_postgres_cdc, worker_id):
+    """Per-test: on top of the truncated ``users`` table, create a
+    replication slot whose name is unique to this test
+    (``tdcdc_slot_<worker>_<uuid>``) and drop it on teardown. The
+    unique name means no two tests ever share a slot, so there is no
+    contention to wait out: just create on setup, drop on teardown."""
+    cfg = fresh_postgres_cdc
+    slot = f"{_REPLICATION_SLOT_PREFIX}_{worker_id}_{uuid.uuid4().hex[:8]}"
+    _create_replication_slot(cfg, slot)
+    try:
+        yield _CdcSlot(cfg, slot)
+    finally:
+        _drop_replication_slot(cfg, slot)
 
 
 # ---------------------------------------------------------------------------
@@ -311,7 +359,8 @@ def fresh_postgres_cdc_with_slot(fresh_postgres_cdc):
 def test_cdc_insert_events_stage_a_committed_manifest(
     fresh_postgres_cdc_with_slot, tmp_path,
 ):
-    cfg = fresh_postgres_cdc_with_slot
+    cfg = fresh_postgres_cdc_with_slot.cfg
+    slot = fresh_postgres_cdc_with_slot.slot
     work = tmp_path / "work"
     work.mkdir()
     ctx = _CdcCtx(work, active_polls=8)
@@ -319,7 +368,7 @@ def test_cdc_insert_events_stage_a_committed_manifest(
     conn = _make_cdc_conn(cfg)
     src = PostgresCdcStreamSrc(
         tables=[f"public.users"],
-        replication_slot=_REPLICATION_SLOT,
+        replication_slot=slot,
         replication_slot_behavior="reuse",
         start_from="head",
         src_cfg={
@@ -358,7 +407,8 @@ def test_cdc_insert_events_stage_a_committed_manifest(
 def test_cdc_update_and_delete_events_surface(
     fresh_postgres_cdc_with_slot, tmp_path,
 ):
-    cfg = fresh_postgres_cdc_with_slot
+    cfg = fresh_postgres_cdc_with_slot.cfg
+    slot = fresh_postgres_cdc_with_slot.slot
     work = tmp_path / "work"
     work.mkdir()
     ctx = _CdcCtx(work, active_polls=10)
@@ -368,7 +418,7 @@ def test_cdc_update_and_delete_events_surface(
     conn = _make_cdc_conn(cfg)
     src = PostgresCdcStreamSrc(
         tables=["public.users"],
-        replication_slot=_REPLICATION_SLOT,
+        replication_slot=slot,
         replication_slot_behavior="reuse",
         start_from="head",
         src_cfg={
@@ -408,7 +458,8 @@ def test_cdc_update_and_delete_events_surface(
 def test_cdc_tail_skips_pre_existing_events(
     fresh_postgres_cdc_with_slot, tmp_path,
 ):
-    cfg = fresh_postgres_cdc_with_slot
+    cfg = fresh_postgres_cdc_with_slot.cfg
+    slot = fresh_postgres_cdc_with_slot.slot
     work = tmp_path / "work"
     work.mkdir()
     ctx = _CdcCtx(work, active_polls=8)
@@ -421,7 +472,7 @@ def test_cdc_tail_skips_pre_existing_events(
     conn = _make_cdc_conn(cfg)
     src = PostgresCdcStreamSrc(
         tables=["public.users"],
-        replication_slot=_REPLICATION_SLOT,
+        replication_slot=slot,
         replication_slot_behavior="reuse",
         start_from="tail",
         src_cfg={
@@ -462,7 +513,8 @@ def test_cdc_keeps_offset_in_slot_not_ctx_state(
     """Postgres owns the resume offset in its replication slot
     (external-offset mode), so the plugin commits via the slot and keeps
     *no* Tabsdata stream state -- unlike mysql/db2, which persist it."""
-    cfg = fresh_postgres_cdc_with_slot
+    cfg = fresh_postgres_cdc_with_slot.cfg
+    slot = fresh_postgres_cdc_with_slot.slot
     work = tmp_path / "work"
     work.mkdir()
     ctx = _CdcCtx(work, active_polls=8)
@@ -472,7 +524,7 @@ def test_cdc_keeps_offset_in_slot_not_ctx_state(
     conn = _make_cdc_conn(cfg)
     src = PostgresCdcStreamSrc(
         tables=["public.users"],
-        replication_slot=_REPLICATION_SLOT,
+        replication_slot=slot,
         replication_slot_behavior="reuse",
         start_from="head",
         src_cfg={
@@ -499,7 +551,8 @@ def test_cdc_keeps_offset_in_slot_not_ctx_state(
 def test_cdc_wal2json_v1_emits_inserted_row(
     fresh_postgres_cdc_with_slot, tmp_path,
 ):
-    cfg = fresh_postgres_cdc_with_slot
+    cfg = fresh_postgres_cdc_with_slot.cfg
+    slot = fresh_postgres_cdc_with_slot.slot
     work = tmp_path / "work"
     work.mkdir()
     ctx = _CdcCtx(work, active_polls=10)
@@ -507,7 +560,7 @@ def test_cdc_wal2json_v1_emits_inserted_row(
     conn = _make_cdc_conn(cfg)
     src = PostgresCdcStreamSrc(
         tables=["public.users"],
-        replication_slot=_REPLICATION_SLOT,
+        replication_slot=slot,
         replication_slot_behavior="reuse",
         start_from="head",
         src_cfg={
