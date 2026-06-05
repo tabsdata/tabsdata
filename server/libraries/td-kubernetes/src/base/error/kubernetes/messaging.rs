@@ -14,4 +14,8 @@ pub enum KubeMessagingError {
     UnsupportedTemplateKind { component: String, kind: String } = 5000,
     #[error("Pod template configmap '{configmap}' entry '{key}' is not valid UTF-8.")]
     TemplateNotUtf8 { configmap: String, key: String } = 5001,
+    #[error(
+        "Start message for worker '{worker}' run '{runid}' carries a callback variant other than HTTP."
+    )]
+    UnsupportedCallbackVariant { worker: String, runid: String } = 5002,
 }

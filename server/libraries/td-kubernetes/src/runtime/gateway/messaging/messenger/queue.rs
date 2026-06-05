@@ -18,6 +18,9 @@ use crate::base::naming::to_kube_identifier;
 use crate::kube::api::job::{create_job, delete_job};
 use crate::kube::api::pod::{create_pod, delete_pod};
 use crate::kube::context::KubeContext;
+use crate::runtime::gateway::messaging::messenger::kit::{
+    FunctionRunKit, build_function_run_kit, inject_envfrom_into_job, inject_envfrom_into_pod,
+};
 use crate::runtime::gateway::messaging::messenger::template::{
     PodTemplate, PodTemplateIndex, TemplateKind,
 };
@@ -95,6 +98,26 @@ fn lookup_template<'a>(
     })
 }
 
+fn kit_for_payload(
+    pod_name: &str,
+    namespace: &str,
+    payload: &OrchestratorMessagePayload<Value>,
+) -> Result<Option<FunctionRunKit>, QueueError> {
+    match payload {
+        OrchestratorMessagePayload::OrchestratorFunctionRequestMessagePayload(
+            FunctionRequest::Start(start),
+        ) => {
+            let kit = build_function_run_kit(pod_name, namespace, start).map_err(|error| {
+                QueueError::BackendError {
+                    cause: error.to_string(),
+                }
+            })?;
+            Ok(Some(kit))
+        }
+        _ => Ok(None),
+    }
+}
+
 fn derive_kube_name(id: &str, worker: &str) -> Result<String, QueueError> {
     to_kube_identifier(worker, id, None).map_err(|error| {
         error!(
@@ -144,36 +167,45 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
         let routing = derive_routing(&id, &payload)?;
         let template = lookup_template(&self.templates, &id, &routing.template_key)?;
         let name = derive_kube_name(&id, &routing.worker)?;
+        let kit = kit_for_payload(&name, self.context.namespace(), &payload)?;
         match template.kind {
             TemplateKind::Pod => {
-                let pod = self.manifest_pod(template, &name)?;
-                create_pod(
-                    &self.context,
-                    &pod,
-                    &routing.template_key,
-                    None,
-                    Vec::new(),
-                    Vec::new(),
-                )
-                .await
-                .map_err(|error| QueueError::BackendError {
-                    cause: error.to_string(),
-                })?;
+                let mut pod = self.manifest_pod(template, &name)?;
+                let (configmaps, secrets, latch) = match kit {
+                    Some(kit) => {
+                        inject_envfrom_into_pod(&mut pod, &kit.envfrom);
+                        (
+                            vec![kit.main_configmap],
+                            vec![kit.main_secret],
+                            Some(kit.latch_configmap),
+                        )
+                    }
+                    None => (Vec::new(), Vec::new(), None),
+                };
+                create_pod(&self.context, &pod, configmaps, secrets, latch)
+                    .await
+                    .map_err(|error| QueueError::BackendError {
+                        cause: error.to_string(),
+                    })?;
             }
             TemplateKind::Job => {
-                let job = self.manifest_job(template, &name)?;
-                create_job(
-                    &self.context,
-                    &job,
-                    &routing.template_key,
-                    None,
-                    Vec::new(),
-                    Vec::new(),
-                )
-                .await
-                .map_err(|error| QueueError::BackendError {
-                    cause: error.to_string(),
-                })?;
+                let mut job = self.manifest_job(template, &name)?;
+                let (configmaps, secrets, latch) = match kit {
+                    Some(kit) => {
+                        inject_envfrom_into_job(&mut job, &kit.envfrom);
+                        (
+                            vec![kit.main_configmap],
+                            vec![kit.main_secret],
+                            Some(kit.latch_configmap),
+                        )
+                    }
+                    None => (Vec::new(), Vec::new(), None),
+                };
+                create_job(&self.context, &job, configmaps, secrets, latch)
+                    .await
+                    .map_err(|error| QueueError::BackendError {
+                        cause: error.to_string(),
+                    })?;
             }
         }
         let message = OrchestratorMessage::new(id.clone(), id, PathBuf::new(), payload);

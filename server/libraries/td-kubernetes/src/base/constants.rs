@@ -58,7 +58,7 @@ pub const PART_OF_TABSDATA: &str = "tabsdata";
 
 pub const POD_YAML_COMPONENT_LABEL: &str = concatcp!(KUBERNETES_LABEL_NAMESPACE, "component");
 pub const POD_YAML_DECORATOR_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "decorator");
-pub const POD_YAML_PHASE_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "phase");
+pub const POD_YAML_WORKER_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "worker");
 
 pub const TABSDATA_NAME_PREFIX: &str = "td-";
 

@@ -2,29 +2,23 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-use std::collections::BTreeMap;
-
 use k8s_openapi::api::batch::v1::Job;
+use k8s_openapi::api::core::v1::{ConfigMap, Secret};
 use kube::Api;
 use kube::api::{DeleteParams, ListParams, PostParams, PropagationPolicy};
 use kube::runtime::wait::{Condition, await_condition};
 
 use crate::base::error::kubernetes::{KubeJobError, KubernetesError};
-use crate::base::naming::to_kube_identifier;
-use crate::kube::api::secret::create_secret;
-use crate::kube::api::{
-    ConfigMapSpec, SecretSpec, component_from_job, create_configmap, label_tabsdata,
-    owner_ref_for_job, tabsdata_selector,
-};
+use crate::kube::api::companions::attach_companions;
+use crate::kube::api::{label_tabsdata, owner_ref_for_job, tabsdata_selector};
 use crate::kube::context::KubeContext;
 
 pub async fn create_job(
     context: &KubeContext,
     job: &Job,
-    template: &str,
-    runid: Option<&str>,
-    configmaps: Vec<ConfigMapSpec>,
-    secrets: Vec<SecretSpec>,
+    configmaps: Vec<ConfigMap>,
+    secrets: Vec<Secret>,
+    latch: Option<ConfigMap>,
 ) -> Result<Job, KubernetesError> {
     let api: Api<Job> = Api::namespaced(context.client().clone(), context.namespace());
     let mut job = job.clone();
@@ -38,35 +32,11 @@ pub async fn create_job(
                 cause: error.to_string(),
             })
         })?;
-    if configmaps.is_empty() && secrets.is_empty() {
+    if configmaps.is_empty() && secrets.is_empty() && latch.is_none() {
         return Ok(created);
     }
-    let component = component_from_job(&created, template)?;
-    let owner = owner_ref_for_job(&created, template)?;
-    for spec in configmaps {
-        let name = to_kube_identifier(&component, &spec.name, runid)?;
-        create_configmap(
-            context,
-            &name,
-            spec.data,
-            BTreeMap::new(),
-            Some(owner.clone()),
-            None,
-        )
-        .await?;
-    }
-    for spec in secrets {
-        let name = to_kube_identifier(&component, &spec.name, runid)?;
-        create_secret(
-            context,
-            &name,
-            spec.data,
-            BTreeMap::new(),
-            Some(owner.clone()),
-            None,
-        )
-        .await?;
-    }
+    let owner = owner_ref_for_job(&created)?;
+    attach_companions(context, owner, configmaps, secrets, latch).await?;
     Ok(created)
 }
 

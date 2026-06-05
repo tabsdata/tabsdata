@@ -27,6 +27,7 @@
 
 pub mod client;
 pub mod cluster;
+pub mod companions;
 pub mod configmap;
 pub mod job;
 pub mod namespace;
@@ -43,7 +44,6 @@ use kube::core::{Expression, Selector};
 
 use crate::base::constants::{
     KUBE_METADATA_FIELD_NAME, KUBE_METADATA_FIELD_UID, PART_OF_LABEL, PART_OF_TABSDATA,
-    POD_YAML_COMPONENT_LABEL,
 };
 use crate::base::error::naming::NamingError;
 
@@ -58,18 +58,6 @@ pub use secret::{
     create_secret, delete_secret, exists_secret, get_secret, get_secrets, list_secrets,
     replace_secret, require_secret, upsert_secret,
 };
-
-#[derive(Debug, Clone)]
-pub struct ConfigMapSpec {
-    pub name: String,
-    pub data: BTreeMap<String, String>,
-}
-
-#[derive(Debug, Clone)]
-pub struct SecretSpec {
-    pub name: String,
-    pub data: BTreeMap<String, String>,
-}
 
 #[derive(Debug, Clone, Copy)]
 pub struct LabelFilter<'a> {
@@ -106,13 +94,12 @@ pub fn tabsdata_selector(label: Option<LabelFilter<'_>>) -> Selector {
     selector
 }
 
-pub fn owner_ref_for_pod(pod: &Pod, template: &str) -> Result<OwnerReference, NamingError> {
+pub fn owner_ref_for_pod(pod: &Pod) -> Result<OwnerReference, NamingError> {
     let name = pod
         .metadata
         .name
         .clone()
         .ok_or_else(|| NamingError::PodMissingOwnerMetadata {
-            template: template.to_owned(),
             field: KUBE_METADATA_FIELD_NAME.to_owned(),
         })?;
     let uid = pod
@@ -120,7 +107,6 @@ pub fn owner_ref_for_pod(pod: &Pod, template: &str) -> Result<OwnerReference, Na
         .uid
         .clone()
         .ok_or_else(|| NamingError::PodMissingOwnerMetadata {
-            template: template.to_owned(),
             field: KUBE_METADATA_FIELD_UID.to_owned(),
         })?;
     Ok(OwnerReference {
@@ -133,13 +119,12 @@ pub fn owner_ref_for_pod(pod: &Pod, template: &str) -> Result<OwnerReference, Na
     })
 }
 
-pub fn owner_ref_for_job(job: &Job, template: &str) -> Result<OwnerReference, NamingError> {
+pub fn owner_ref_for_job(job: &Job) -> Result<OwnerReference, NamingError> {
     let name = job
         .metadata
         .name
         .clone()
         .ok_or_else(|| NamingError::JobMissingOwnerMetadata {
-            template: template.to_owned(),
             field: KUBE_METADATA_FIELD_NAME.to_owned(),
         })?;
     let uid = job
@@ -147,7 +132,6 @@ pub fn owner_ref_for_job(job: &Job, template: &str) -> Result<OwnerReference, Na
         .uid
         .clone()
         .ok_or_else(|| NamingError::JobMissingOwnerMetadata {
-            template: template.to_owned(),
             field: KUBE_METADATA_FIELD_UID.to_owned(),
         })?;
     Ok(OwnerReference {
@@ -158,26 +142,4 @@ pub fn owner_ref_for_job(job: &Job, template: &str) -> Result<OwnerReference, Na
         controller: Some(true),
         block_owner_deletion: Some(false),
     })
-}
-
-pub(crate) fn component_from_pod(pod: &Pod, template: &str) -> Result<String, NamingError> {
-    component_from_labels(pod.metadata.labels.as_ref()).ok_or_else(|| {
-        NamingError::PodMissingComponentLabel {
-            template: template.to_owned(),
-            label: POD_YAML_COMPONENT_LABEL.to_owned(),
-        }
-    })
-}
-
-pub(crate) fn component_from_job(job: &Job, template: &str) -> Result<String, NamingError> {
-    component_from_labels(job.metadata.labels.as_ref()).ok_or_else(|| {
-        NamingError::JobMissingComponentLabel {
-            template: template.to_owned(),
-            label: POD_YAML_COMPONENT_LABEL.to_owned(),
-        }
-    })
-}
-
-fn component_from_labels(labels: Option<&BTreeMap<String, String>>) -> Option<String> {
-    labels?.get(POD_YAML_COMPONENT_LABEL).cloned()
 }

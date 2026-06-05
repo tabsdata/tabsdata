@@ -15,18 +15,10 @@ pub enum NameSegment {
 
 #[td_error]
 pub enum NamingError {
-    #[error(
-        "Pod template '{template}' is missing the '{label}' label required for resource naming."
-    )]
-    PodMissingComponentLabel { template: String, label: String } = 0,
-    #[error(
-        "Job template '{template}' is missing the '{label}' label required for resource naming."
-    )]
-    JobMissingComponentLabel { template: String, label: String } = 1,
-    #[error("Pod created from template '{template}' is missing metadata field '{field}'.")]
-    PodMissingOwnerMetadata { template: String, field: String } = 2,
-    #[error("Job created from template '{template}' is missing metadata field '{field}'.")]
-    JobMissingOwnerMetadata { template: String, field: String } = 3,
+    #[error("Pod is missing metadata field '{field}'.")]
+    PodMissingOwnerMetadata { field: String } = 2,
+    #[error("Job is missing metadata field '{field}'.")]
+    JobMissingOwnerMetadata { field: String } = 3,
     #[error("Name segment '{segment}' value '{value}' is invalid: {reason}.")]
     InvalidNameSegment {
         segment: NameSegment,

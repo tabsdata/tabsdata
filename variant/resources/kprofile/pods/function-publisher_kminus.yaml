@@ -19,7 +19,7 @@ metadata:
     app.kubernetes.io/managed-by: tdkserver
     tabsdata.com/tier: ephemeral
     tabsdata.com/decorator: publisher
-    tabsdata.com/phase: function
+    tabsdata.com/worker: function
 spec:
   backoffLimit: 0
   ttlSecondsAfterFinished: 300
@@ -34,7 +34,7 @@ spec:
         app.kubernetes.io/managed-by: tdkserver
         tabsdata.com/tier: ephemeral
         tabsdata.com/decorator: publisher
-        tabsdata.com/phase: function
+        tabsdata.com/worker: function
     spec:
       restartPolicy: Never
       serviceAccountName: default
