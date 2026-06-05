@@ -81,21 +81,21 @@ spec:
           projected:
             sources:
               - configMap:
-                  name: tabsdata-pod-apiserver.yaml
+                  name: td-sys-apiserver-pod-apiserver.yaml
               - configMap:
-                  name: tabsdata-pod-crontrigger.yaml
+                  name: td-sys-crontrigger-pod-crontrigger.yaml
               - configMap:
-                  name: tabsdata-pod-function.yaml
+                  name: td-sys-function-pod-function.yaml
               - configMap:
-                  name: tabsdata-pod-inspector.yaml
+                  name: td-sys-inspector-pod-inspector.yaml
               - configMap:
-                  name: tabsdata-pod-stagetrigger.yaml
+                  name: td-sys-stagetrigger-pod-stagetrigger.yaml
         - name: configs
           projected:
             sources:
               - configMap:
-                  name: tabsdata-config-apiserver.yaml
+                  name: td-app-apiserver-config-apiserver.yaml
               - configMap:
-                  name: tabsdata-config-apiserver.log.yaml
+                  name: td-app-apiserver-config-apiserver.log.yaml
               - configMap:
-                  name: tabsdata-config-tabsdata.yaml
+                  name: td-app-tabsdata-config-tabsdata.yaml

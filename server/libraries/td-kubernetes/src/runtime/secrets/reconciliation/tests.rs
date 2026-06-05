@@ -13,7 +13,7 @@ fn no_leaves_and_no_secret_is_ok() {
     let input = Reconciliation {
         config: "noseed.yaml",
         config_yaml: "name: noseed\nhost: example.com\n",
-        secret: "tabsdata-secret-config-noseed.yaml",
+        secret: "td-app-noseed-secret-config-noseed.yaml",
         actual_keys: None,
     };
     reconcile_secret_keys(&input).expect("ok when no leaves and no secret");
@@ -24,7 +24,7 @@ fn no_leaves_but_secret_exists_fails() {
     let input = Reconciliation {
         config: "noseed.yaml",
         config_yaml: "name: noseed\nhost: example.com\n",
-        secret: "tabsdata-secret-config-noseed.yaml",
+        secret: "td-app-noseed-secret-config-noseed.yaml",
         actual_keys: Some(keys(&["STRAY"])),
     };
     let error = reconcile_secret_keys(&input).expect_err("unexpected secret");
@@ -39,7 +39,7 @@ fn leaves_and_no_secret_fails() {
     let input = Reconciliation {
         config: "apiserver.yaml",
         config_yaml: "database:\n  postgres:\n    password: ${secret}\n",
-        secret: "tabsdata-secret-config-apiserver.yaml",
+        secret: "td-app-apiserver-secret-config-apiserver.yaml",
         actual_keys: None,
     };
     let error = reconcile_secret_keys(&input).expect_err("missing secret");
@@ -54,7 +54,7 @@ fn matching_keys_pass() {
     let input = Reconciliation {
         config: "apiserver.yaml",
         config_yaml: "database:\n  postgres:\n    password: ${secret}\n",
-        secret: "tabsdata-secret-config-apiserver.yaml",
+        secret: "td-app-apiserver-secret-config-apiserver.yaml",
         actual_keys: Some(keys(&["DATABASE__POSTGRES__PASSWORD"])),
     };
     reconcile_secret_keys(&input).expect("keys match");
@@ -65,7 +65,7 @@ fn extra_keys_fail() {
     let input = Reconciliation {
         config: "apiserver.yaml",
         config_yaml: "database:\n  postgres:\n    password: ${secret}\n",
-        secret: "tabsdata-secret-config-apiserver.yaml",
+        secret: "td-app-apiserver-secret-config-apiserver.yaml",
         actual_keys: Some(keys(&["DATABASE__POSTGRES__PASSWORD", "EXTRA"])),
     };
     let error = reconcile_secret_keys(&input).expect_err("mismatch");
@@ -83,7 +83,7 @@ fn missing_keys_fail() {
     let input = Reconciliation {
         config: "apiserver.yaml",
         config_yaml: "database:\n  postgres:\n    password: ${secret}\n  user: ${secret}\n",
-        secret: "tabsdata-secret-config-apiserver.yaml",
+        secret: "td-app-apiserver-secret-config-apiserver.yaml",
         actual_keys: Some(keys(&["DATABASE__POSTGRES__PASSWORD"])),
     };
     let error = reconcile_secret_keys(&input).expect_err("mismatch");
@@ -101,7 +101,7 @@ fn malformed_config_yaml_fails() {
     let input = Reconciliation {
         config: "broken.yaml",
         config_yaml: "not: : valid: yaml",
-        secret: "tabsdata-secret-config-broken.yaml",
+        secret: "td-app-broken-secret-config-broken.yaml",
         actual_keys: None,
     };
     let error = reconcile_secret_keys(&input).expect_err("parse fail");

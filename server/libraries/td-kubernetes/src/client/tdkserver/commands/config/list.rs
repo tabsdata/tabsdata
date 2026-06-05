@@ -25,7 +25,7 @@ pub async fn command_list(arguments: ListArguments, globals: &GlobalArguments) -
 
     let provider = provider_for_or_tdkcontext(cluster, instance, globals.verbose).await?;
     let context = provider.kube_context().await?;
-    let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY.item);
+    let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY.kind);
     let configs = list_configmaps(&context, Some(filter)).await?;
 
     for (_name, keys) in configs {

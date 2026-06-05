@@ -163,9 +163,7 @@ fn read_and_resolve(path: &Path) -> String {
         .build()
         .expect("tokio runtime for resolver");
     match runtime.block_on(resolver.resolve(&raw)) {
-        Ok(resolved) => {
-            resolved
-        }
+        Ok(resolved) => resolved,
         Err(error) => {
             error!(
                 "Failed to resolve placeholders in config file '{}': {error:?}",

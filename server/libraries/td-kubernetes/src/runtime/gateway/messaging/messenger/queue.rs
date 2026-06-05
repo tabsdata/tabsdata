@@ -14,12 +14,13 @@ use td_common::server::{
 };
 use tracing::error;
 
-use crate::base::naming::to_kube_identifier;
+use crate::base::naming::to_fn_pod_name;
 use crate::kube::api::job::{create_job, delete_job};
 use crate::kube::api::pod::{create_pod, delete_pod};
 use crate::kube::context::KubeContext;
 use crate::runtime::gateway::messaging::messenger::kit::{
     FunctionRunKit, build_function_run_kit, inject_envfrom_into_job, inject_envfrom_into_pod,
+    inject_labels_into_job, inject_labels_into_pod,
 };
 use crate::runtime::gateway::messaging::messenger::template::{
     PodTemplate, PodTemplateIndex, TemplateKind,
@@ -119,7 +120,7 @@ fn kit_for_payload(
 }
 
 fn derive_kube_name(id: &str, worker: &str) -> Result<String, QueueError> {
-    to_kube_identifier(worker, id, None).map_err(|error| {
+    to_fn_pod_name(worker, id).map_err(|error| {
         error!(
             id = %id,
             worker = %worker,
@@ -174,6 +175,7 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                 let (configmaps, secrets, latch) = match kit {
                     Some(kit) => {
                         inject_envfrom_into_pod(&mut pod, &kit.envfrom);
+                        inject_labels_into_pod(&mut pod, &kit.labels);
                         (
                             vec![kit.main_configmap],
                             vec![kit.main_secret],
@@ -193,6 +195,7 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                 let (configmaps, secrets, latch) = match kit {
                     Some(kit) => {
                         inject_envfrom_into_job(&mut job, &kit.envfrom);
+                        inject_labels_into_job(&mut job, &kit.labels);
                         (
                             vec![kit.main_configmap],
                             vec![kit.main_secret],

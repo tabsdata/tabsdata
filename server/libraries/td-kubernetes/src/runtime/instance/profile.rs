@@ -270,7 +270,7 @@ pub async fn read_family_configmaps(
     context: &KubeContext,
     family: &Family,
 ) -> Result<RenderedConfigmap, ProfileError> {
-    let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, family.item);
+    let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, family.kind);
     let configmaps = get_configmaps(context, Some(filter)).await?;
     let mut merged: RenderedConfigmap = BTreeMap::new();
     for (configmap_name, entries) in configmaps {

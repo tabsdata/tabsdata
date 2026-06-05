@@ -285,6 +285,10 @@ pub async fn create_locked_function_runner_workers_start_request(
                         decorator: f.decorator.to_message(),
                         resolver,
                         responder,
+                        collection_id: f.collection_id.to_string(),
+                        collection: f.collection.to_string(),
+                        function_id: f.function_id.to_string(),
+                        function: f.name.to_string(),
                     }),
                 )
             }

@@ -87,28 +87,28 @@ spec:
           projected:
             sources:
               - configMap:
-                  name: tabsdata-config-apiserver.yaml
+                  name: td-app-apiserver-config-apiserver.yaml
               - configMap:
-                  name: tabsdata-config-apiserver.log.yaml
+                  name: td-app-apiserver-config-apiserver.log.yaml
               - configMap:
-                  name: tabsdata-config-tabsdata.yaml
+                  name: td-app-tabsdata-config-tabsdata.yaml
         - name: pods
           projected:
             sources:
               - configMap:
-                  name: tabsdata-pod-apiserver.yaml
+                  name: td-sys-apiserver-pod-apiserver.yaml
               - configMap:
-                  name: tabsdata-pod-crontrigger.yaml
+                  name: td-sys-crontrigger-pod-crontrigger.yaml
               - configMap:
-                  name: tabsdata-pod-function-publisher.yaml
+                  name: td-sys-function-publisher-pod-function-publisher.yaml
               - configMap:
-                  name: tabsdata-pod-function-subscriber.yaml
+                  name: td-sys-function-subscriber-pod-function-subscriber.yaml
               - configMap:
-                  name: tabsdata-pod-function-transformer.yaml
+                  name: td-sys-function-transformer-pod-function-transformer.yaml
               - configMap:
-                  name: tabsdata-pod-inspector.yaml
+                  name: td-sys-inspector-pod-inspector.yaml
               - configMap:
-                  name: tabsdata-pod-stagetrigger.yaml
+                  name: td-sys-stagetrigger-pod-stagetrigger.yaml
         - name: pyenv
           hostPath:
             path: "${sys:TDK_PYENV_TD_ROOT}"

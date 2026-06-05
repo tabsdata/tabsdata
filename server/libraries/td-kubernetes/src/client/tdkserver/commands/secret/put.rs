@@ -11,12 +11,11 @@ use td_error::TdError;
 use tracing::{info, warn};
 
 use crate::base::constants::{
-    CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY, KUBE_NAME_SEPARATOR, SECRET_FAMILY_CONFIG,
-    TABSDATA_CONFIGMAP_PREFIX, TABSDATA_SECRET_PREFIX,
+    CONFIGMAP_FAMILY_LABEL, KIND_SECRET_CONFIG, KPROFILE_CONFIGS_FAMILY, SECRET_FAMILY_CONFIG,
 };
 use crate::base::error::cli::CliError;
 use crate::base::error::secret::SecretError;
-use crate::base::naming::to_configmap_file;
+use crate::base::naming::{id_from_file, name_from_kube_resource_name, to_kube_resource_name};
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
 use crate::core::system::exit::{CommandError, CommandResult, abort_with};
 use crate::core::system::file::is_hidden_or_system;
@@ -156,7 +155,7 @@ pub fn ensure_source(source: &PutSource) -> CommandResult {
 }
 
 async fn list_known_configs(context: &KubeContext) -> CommandResult<BTreeSet<String>> {
-    let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY.item);
+    let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY.kind);
     let configmaps = list_configmaps(context, Some(filter))
         .await?
         .into_iter()
@@ -235,27 +234,33 @@ async fn process_candidate(
     path: &Path,
 ) -> CommandResult<Outcome> {
     let parsed = parse_secret_manifest(path)?;
-    let expected_secret_prefix = format!(
-        "{TABSDATA_SECRET_PREFIX}{}{KUBE_NAME_SEPARATOR}",
-        KPROFILE_CONFIGS_FAMILY.item
-    );
-    let Some(file_segment) = parsed.name.strip_prefix(expected_secret_prefix.as_str()) else {
-        return Ok(Outcome::Skipped(format!(
-            "Manifest '{file_name}' has Secret name '{}' which does not start with '{expected_secret_prefix}'; ignored.",
-            parsed.name
-        )));
+    let file_segment = match name_from_kube_resource_name(
+        &parsed.name,
+        KPROFILE_CONFIGS_FAMILY.scope,
+        KIND_SECRET_CONFIG,
+    ) {
+        Ok(segment) => segment,
+        Err(_) => {
+            return Ok(Outcome::Skipped(format!(
+                "Manifest '{file_name}' has Secret name '{}' which does not belong to a kprofile config secret; ignored.",
+                parsed.name
+            )));
+        }
     };
-    let configmap_name = format!(
-        "{TABSDATA_CONFIGMAP_PREFIX}{}{KUBE_NAME_SEPARATOR}{file_segment}",
-        KPROFILE_CONFIGS_FAMILY.item
-    );
+    let id = id_from_file(file_segment);
+    let configmap_name = to_kube_resource_name(
+        KPROFILE_CONFIGS_FAMILY.scope,
+        id,
+        KPROFILE_CONFIGS_FAMILY.kind,
+        file_segment,
+    )?;
     if !known_configs.contains(&configmap_name) {
         return Ok(Outcome::Skipped(format!(
             "Manifest '{file_name}' targets Secret '{}' but no matching config '{configmap_name}' exists; ignored.",
             parsed.name
         )));
     }
-    let config_file = to_configmap_file(&KPROFILE_CONFIGS_FAMILY, &configmap_name)?.to_owned();
+    let config_file = file_segment.to_owned();
     let config_yaml = load_config_yaml(context, &configmap_name, &config_file).await?;
     let actual_keys: BTreeSet<String> = parsed.data.keys().cloned().collect();
     reconcile_secret_keys(&Reconciliation {

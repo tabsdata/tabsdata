@@ -248,6 +248,10 @@ where
     pub payload: OrchestratorMessagePayload<T>,
 }
 
+// The FunctionRequest variant has its own allow on the inner enum (rare path,
+// boxed allocation isn't worth it); we adopt the same stance at this outer
+// level for the same reason.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum OrchestratorMessagePayload<T = Value>
 where
@@ -309,6 +313,14 @@ pub struct FunctionStartRequest {
     pub resolver: Callback,
     /// POST endpoint the worker reports status back on.
     pub responder: Callback,
+    /// Collection id of the function being run.
+    pub collection_id: String,
+    /// Collection name of the function being run.
+    pub collection: String,
+    /// Function id of the function being run.
+    pub function_id: String,
+    /// Function name of the function being run.
+    pub function: String,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]

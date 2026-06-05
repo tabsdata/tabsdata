@@ -395,7 +395,7 @@ impl Provider for KminusProvider {
         })?;
         let context = self.kube_context().await?;
         auto_fill_generated_secrets(&context).await?;
-        let apiserver_secret_name = to_secret_name(APISERVER_CONFIG_KEY);
+        let apiserver_secret_name = to_secret_name(APISERVER_CONFIG_KEY)?;
         let secret_env: Vec<(String, String)> = match get_secret(&context, &apiserver_secret_name)
             .await?
         {

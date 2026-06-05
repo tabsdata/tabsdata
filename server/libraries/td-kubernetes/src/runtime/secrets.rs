@@ -72,7 +72,7 @@
 //!                                                        ↓
 //!                                   kube/api/secret.rs ::upsert_secret
 //!                                       → cluster.namespace.Secret
-//!                                         name: "tabsdata-secret-kubeconfig"
+//!                                         name: "td-sys-tabsdata-secret-kubeconfig"
 //!                                         data: { kubeconfig: <encoded> }
 //!
 //! Startup sequence (kminus)::
@@ -96,7 +96,7 @@
 //!             │              ← reads kubefile, encodes bytes
 //!             │          upsert_secret(client, ns, name, data)
 //!             │              ← creates or replaces
-//!             │                  Secret "tabsdata-secret-kubeconfig"
+//!             │                  Secret "td-sys-tabsdata-secret-kubeconfig"
 //!             ↓
 //!       start_instance()            stage configmaps, apply pods
 //!                                   apiserver pod boots with env:

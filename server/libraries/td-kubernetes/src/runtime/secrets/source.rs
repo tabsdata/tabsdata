@@ -6,12 +6,12 @@ use std::fs;
 use std::path::Path;
 
 use crate::base::constants::{
-    CONFIGMAP_FAMILY_LABEL, Family, KPROFILE_CONFIGS_FAMILY, KUBE_NAME_SEPARATOR,
-    TABSDATA_SECRET_PREFIX,
+    CONFIGMAP_FAMILY_LABEL, Family, KIND_SECRET_CONFIG, KPROFILE_CONFIGS_FAMILY,
 };
+use crate::base::error::naming::NamingError;
 use crate::base::error::provider::ProviderError;
 use crate::base::error::secret::SecretError;
-use crate::base::naming::to_configmap_file;
+use crate::base::naming::{id_from_file, name_from_kube_resource_name, to_kube_resource_name};
 use crate::core::system::exit::CommandError;
 use crate::core::system::file::is_hidden_or_system;
 use crate::kube::api::{LabelFilter, get_configmaps};
@@ -81,15 +81,14 @@ fn read_configs_from_kprofile(
     verbose: bool,
 ) -> Result<Vec<ConfigEntry>, SecretError> {
     let profile = load_profile(provider.cluster_provider(), verbose)?;
-    let mut entries: Vec<ConfigEntry> = profile
-        .configs
-        .into_iter()
-        .map(|(file, yaml)| ConfigEntry {
-            secret: to_secret_name(&file),
+    let mut entries: Vec<ConfigEntry> = Vec::with_capacity(profile.configs.len());
+    for (file, yaml) in profile.configs {
+        entries.push(ConfigEntry {
+            secret: to_secret_name(&file)?,
             file,
             yaml,
-        })
-        .collect();
+        });
+    }
     entries.sort_by(|left, right| left.file.cmp(&right.file));
     Ok(entries)
 }
@@ -114,7 +113,7 @@ fn read_configs_from_stage(provider: &dyn Provider) -> Result<Vec<ConfigEntry>, 
             cause: error.to_string(),
         })?;
         entries.push(ConfigEntry {
-            secret: to_secret_name(&file),
+            secret: to_secret_name(&file)?,
             file,
             yaml,
         });
@@ -139,11 +138,12 @@ async fn read_configs_via_context(
     context: &KubeContext,
     family: &Family,
 ) -> Result<Vec<ConfigEntry>, SecretError> {
-    let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, family.item);
+    let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, family.kind);
     let configmaps = get_configmaps(context, Some(filter)).await?;
     let mut entries = Vec::new();
     for (configmap_name, items) in configmaps {
-        let file = to_configmap_file(family, &configmap_name)?.to_owned();
+        let file =
+            name_from_kube_resource_name(&configmap_name, family.scope, family.kind)?.to_owned();
         for (_key, value) in items {
             let yaml =
                 String::from_utf8(value).map_err(|error| SecretError::ConfigmapEntryNotUtf8 {
@@ -151,7 +151,7 @@ async fn read_configs_via_context(
                     cause: error.to_string(),
                 })?;
             entries.push(ConfigEntry {
-                secret: to_secret_name(&file),
+                secret: to_secret_name(&file)?,
                 file: file.clone(),
                 yaml,
             });
@@ -161,11 +161,9 @@ async fn read_configs_via_context(
     Ok(entries)
 }
 
-pub fn to_secret_name(file: &str) -> String {
-    format!(
-        "{TABSDATA_SECRET_PREFIX}{}{KUBE_NAME_SEPARATOR}{file}",
-        KPROFILE_CONFIGS_FAMILY.item
-    )
+pub fn to_secret_name(file: &str) -> Result<String, NamingError> {
+    let id = id_from_file(file);
+    to_kube_resource_name(KPROFILE_CONFIGS_FAMILY.scope, id, KIND_SECRET_CONFIG, file)
 }
 
 fn read_sorted_files(folder: &Path) -> Result<Vec<fs::DirEntry>, SecretError> {

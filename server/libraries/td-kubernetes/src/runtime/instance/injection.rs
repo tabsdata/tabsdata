@@ -10,6 +10,7 @@ use k8s_openapi::api::core::v1::{
 };
 
 use crate::base::constants::{SECRET_FAMILY_CONFIG, SECRET_FAMILY_LABEL};
+use crate::base::error::kubernetes::KubernetesError;
 use crate::base::error::launcher::LauncherError;
 use crate::base::error::secret::SecretError;
 use crate::kube::api::{LabelFilter, list_secrets};
@@ -91,7 +92,7 @@ fn collect_env_entries(
         if leaves.is_empty() {
             continue;
         }
-        let secret_name = to_secret_name(config_file);
+        let secret_name = to_secret_name(config_file).map_err(KubernetesError::from)?;
         if !available_secrets.contains(&secret_name) {
             missing_secrets.push(secret_name);
             continue;

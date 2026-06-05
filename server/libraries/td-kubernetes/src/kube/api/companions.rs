@@ -22,7 +22,12 @@ pub(super) async fn attach_companions(
         Api::namespaced(context.client().clone(), context.namespace());
     let secret_api: Api<Secret> = Api::namespaced(context.client().clone(), context.namespace());
     for configmap in configmaps {
-        attach_configmap(context, &configmap_api, prepare_configmap(configmap, &owner)).await?;
+        attach_configmap(
+            context,
+            &configmap_api,
+            prepare_configmap(configmap, &owner),
+        )
+        .await?;
     }
     for secret in secrets {
         attach_secret(context, &secret_api, prepare_secret(secret, &owner)).await?;

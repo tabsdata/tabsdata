@@ -107,8 +107,8 @@ spec:
       projected:
         sources:
           - configMap:
-              name: tabsdata-config-apiserver.yaml
+              name: td-app-apiserver-config-apiserver.yaml
           - configMap:
-              name: tabsdata-config-apiserver.log.yaml
+              name: td-app-apiserver-config-apiserver.log.yaml
           - configMap:
-              name: tabsdata-config-tabsdata.yaml
+              name: td-app-tabsdata-config-tabsdata.yaml

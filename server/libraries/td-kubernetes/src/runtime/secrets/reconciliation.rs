@@ -8,7 +8,7 @@ use crate::base::constants::{
     CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY, SECRET_FAMILY_CONFIG,
 };
 use crate::base::error::secret::SecretError;
-use crate::base::naming::to_configmap_file;
+use crate::base::naming::name_from_kube_resource_name;
 use crate::kube::api::{LabelFilter, get_configmaps, get_secret, upsert_secret};
 use crate::kube::context::KubeContext;
 use crate::runtime::secrets::discovery::{Generator, SecretLeaf, extract_secret_leaves};
@@ -60,10 +60,15 @@ pub fn reconcile_secret_keys(input: &Reconciliation<'_>) -> Result<(), SecretErr
 }
 
 pub async fn auto_fill_generated_secrets(context: &KubeContext) -> Result<(), SecretError> {
-    let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY.item);
+    let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY.kind);
     let configmaps = get_configmaps(context, Some(filter)).await?;
     for (configmap_name, entries) in configmaps {
-        let config_file = to_configmap_file(&KPROFILE_CONFIGS_FAMILY, &configmap_name)?.to_owned();
+        let config_file = name_from_kube_resource_name(
+            &configmap_name,
+            KPROFILE_CONFIGS_FAMILY.scope,
+            KPROFILE_CONFIGS_FAMILY.kind,
+        )?
+        .to_owned();
         let Some((_, bytes)) = entries.into_iter().next() else {
             continue;
         };
@@ -77,7 +82,7 @@ pub async fn auto_fill_generated_secrets(context: &KubeContext) -> Result<(), Se
             }
         })?;
         let leaves = extract_secret_leaves(&config_file, &mut yaml)?;
-        let secret_name = to_secret_name(&config_file);
+        let secret_name = to_secret_name(&config_file)?;
         fill_generated_keys(context, &secret_name, &leaves).await?;
     }
     Ok(())
@@ -139,11 +144,16 @@ async fn fill_generated_keys(
 pub async fn reconcile_cluster_configs_and_secrets(
     context: &KubeContext,
 ) -> Result<(), SecretError> {
-    let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY.item);
+    let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY.kind);
     let configmaps = get_configmaps(context, Some(filter)).await?;
     let mut failures: Vec<SecretError> = Vec::new();
     for (configmap_name, entries) in configmaps {
-        let config_file = to_configmap_file(&KPROFILE_CONFIGS_FAMILY, &configmap_name)?.to_owned();
+        let config_file = name_from_kube_resource_name(
+            &configmap_name,
+            KPROFILE_CONFIGS_FAMILY.scope,
+            KPROFILE_CONFIGS_FAMILY.kind,
+        )?
+        .to_owned();
         let Some((_, bytes)) = entries.into_iter().next() else {
             failures.push(SecretError::ConfigYamlParseFailed {
                 config: config_file,
@@ -161,7 +171,7 @@ pub async fn reconcile_cluster_configs_and_secrets(
                 continue;
             }
         };
-        let secret_name = to_secret_name(&config_file);
+        let secret_name = to_secret_name(&config_file)?;
         let live = get_secret(context, &secret_name).await?;
         let actual_keys = live.map(|data| data.into_keys().collect::<BTreeSet<String>>());
         if let Err(error) = reconcile_secret_keys(&Reconciliation {

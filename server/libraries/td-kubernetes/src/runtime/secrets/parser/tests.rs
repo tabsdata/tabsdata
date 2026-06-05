@@ -20,7 +20,7 @@ fn parses_name_data_and_labels() {
         r#"apiVersion: v1
 kind: Secret
 metadata:
-  name: tabsdata-secret-config-apiserver.yaml
+  name: td-app-apiserver-secret-config-apiserver.yaml
   labels:
     app.kubernetes.io/part-of: tabsdata
     tabsdata.com/secret-family: config
@@ -32,7 +32,7 @@ stringData:
 "#,
     );
     let parsed = parse_secret_manifest(file.path()).expect("parses");
-    assert_eq!(parsed.name, "tabsdata-secret-config-apiserver.yaml");
+    assert_eq!(parsed.name, "td-app-apiserver-secret-config-apiserver.yaml");
     assert_eq!(parsed.data.len(), 2);
     assert_eq!(
         parsed

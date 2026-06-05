@@ -64,7 +64,7 @@ pub async fn command_get(arguments: GetArguments, globals: &GlobalArguments) -> 
 
     let provider = provider_for_or_tdkcontext(cluster, instance, globals.verbose).await?;
     let context = provider.kube_context().await?;
-    let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY.item);
+    let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY.kind);
     let configmaps = get_configmaps(&context, Some(filter)).await?;
 
     let mut count = 0usize;

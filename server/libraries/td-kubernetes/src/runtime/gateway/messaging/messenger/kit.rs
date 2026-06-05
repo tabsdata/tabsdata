@@ -12,7 +12,16 @@ use k8s_openapi::api::core::v1::{
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use td_common::server::{Callback, FunctionStartRequest, HttpCallback};
 
+use crate::base::constants::TABSDATA_LABEL_NAMESPACE;
 use crate::base::error::kubernetes::messaging::KubeMessagingError;
+
+use const_format::concatcp;
+
+const LABEL_COLLECTION_ID: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "collection-id");
+const LABEL_COLLECTION: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "collection");
+const LABEL_FUNCTION_ID: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "function-id");
+const LABEL_FUNCTION: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "function");
+const LABEL_RUNID: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "runid");
 
 const ENV_TD_WORKER: &str = "TD_WORKER";
 const ENV_TD_RUNID: &str = "TD_RUNID";
@@ -27,15 +36,18 @@ const ENV_TD_RESPONDER_AUTHORIZATION: &str = "TD_RESPONDER_AUTHORIZATION";
 
 const HEADER_AUTHORIZATION: &str = "authorization";
 
+const MAIN_NAME_SUFFIX: &str = "-main";
 const LATCH_NAME_SUFFIX: &str = "-latch";
 const ENV_TD_LATCH: &str = "TD_LATCH";
 const LATCH_VALUE_READY: &str = "ready";
+const SECRET_ENV_PREFIX: &str = "SECRET__";
 
 pub struct FunctionRunKit {
     pub main_configmap: ConfigMap,
     pub main_secret: Secret,
     pub latch_configmap: ConfigMap,
     pub envfrom: Vec<EnvFromSource>,
+    pub labels: Vec<(String, String)>,
 }
 
 pub fn build_function_run_kit(
@@ -62,9 +74,17 @@ pub fn build_function_run_kit(
         resolver.method.as_str(),
     );
     if let Some(authorization) = resolver.headers.get(HEADER_AUTHORIZATION) {
-        insert_secret_entry(&mut secret_data, ENV_TD_RESOLVER_AUTHORIZATION, authorization);
+        insert_secret_entry(
+            &mut secret_data,
+            ENV_TD_RESOLVER_AUTHORIZATION,
+            authorization,
+        );
     }
-    insert_secret_entry(&mut secret_data, ENV_TD_RESPONDER_URL, responder.url.as_str());
+    insert_secret_entry(
+        &mut secret_data,
+        ENV_TD_RESPONDER_URL,
+        responder.url.as_str(),
+    );
     insert_secret_entry(
         &mut secret_data,
         ENV_TD_RESPONDER_METHOD,
@@ -81,18 +101,53 @@ pub fn build_function_run_kit(
     let mut latch_data = BTreeMap::new();
     latch_data.insert(ENV_TD_LATCH.to_owned(), LATCH_VALUE_READY.to_owned());
 
+    let main_name = format!("{pod_name}{MAIN_NAME_SUFFIX}");
     let latch_name = format!("{pod_name}{LATCH_NAME_SUFFIX}");
 
+    let labels = vec![
+        (
+            LABEL_COLLECTION_ID.to_owned(),
+            request.collection_id.clone(),
+        ),
+        (LABEL_COLLECTION.to_owned(), request.collection.clone()),
+        (LABEL_FUNCTION_ID.to_owned(), request.function_id.clone()),
+        (LABEL_FUNCTION.to_owned(), request.function.clone()),
+        (LABEL_RUNID.to_owned(), request.run_id.clone()),
+    ];
+
     Ok(FunctionRunKit {
-        main_configmap: build_configmap(pod_name, namespace, config_data),
-        main_secret: build_secret(pod_name, namespace, secret_data),
+        main_configmap: build_configmap(&main_name, namespace, config_data),
+        main_secret: build_secret(&main_name, namespace, secret_data),
         latch_configmap: build_configmap(&latch_name, namespace, latch_data),
         envfrom: vec![
-            envfrom_configmap(pod_name),
-            envfrom_secret(pod_name),
+            envfrom_configmap(&main_name),
+            envfrom_secret(&main_name),
             envfrom_configmap(&latch_name),
         ],
+        labels,
     })
+}
+
+pub fn inject_labels_into_pod(pod: &mut Pod, labels: &[(String, String)]) {
+    apply_labels(&mut pod.metadata, labels);
+}
+
+pub fn inject_labels_into_job(job: &mut Job, labels: &[(String, String)]) {
+    apply_labels(&mut job.metadata, labels);
+    if let Some(spec) = job.spec.as_mut() {
+        let template_metadata = spec
+            .template
+            .metadata
+            .get_or_insert_with(ObjectMeta::default);
+        apply_labels(template_metadata, labels);
+    }
+}
+
+fn apply_labels(metadata: &mut ObjectMeta, labels: &[(String, String)]) {
+    let entry = metadata.labels.get_or_insert_with(BTreeMap::new);
+    for (key, value) in labels {
+        entry.insert(key.clone(), value.clone());
+    }
 }
 
 pub fn inject_envfrom_into_pod(pod: &mut Pod, envfrom: &[EnvFromSource]) {
@@ -104,7 +159,11 @@ pub fn inject_envfrom_into_pod(pod: &mut Pod, envfrom: &[EnvFromSource]) {
 }
 
 pub fn inject_envfrom_into_job(job: &mut Job, envfrom: &[EnvFromSource]) {
-    let Some(template) = job.spec.as_mut().and_then(|spec| spec.template.spec.as_mut()) else {
+    let Some(template) = job
+        .spec
+        .as_mut()
+        .and_then(|spec| spec.template.spec.as_mut())
+    else {
         return;
     };
     inject_envfrom_into_containers(template.init_containers.as_mut(), envfrom);
@@ -186,7 +245,7 @@ fn envfrom_secret(name: &str) -> EnvFromSource {
             name: name.to_owned(),
             optional: Some(false),
         }),
-        prefix: None,
+        prefix: Some(SECRET_ENV_PREFIX.to_owned()),
         config_map_ref: None,
     }
 }

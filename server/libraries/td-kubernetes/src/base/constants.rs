@@ -23,19 +23,46 @@ pub const FILE_KUBECONFIG: &str = "config";
 
 pub const RESOURCE_KPROFILE: &str = "resources/kprofile";
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Scope {
+    Sys,
+    App,
+    Fn,
+}
+
+impl Scope {
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Scope::Sys => "sys",
+            Scope::App => "app",
+            Scope::Fn => "fn",
+        }
+    }
+}
+
 pub struct Family {
     pub folder: &'static str,
-    pub item: &'static str,
+    pub scope: Scope,
+    pub kind: &'static str,
 }
 
 pub const KPROFILE_PODS_FAMILY: Family = Family {
     folder: "pods",
-    item: "pod",
+    scope: Scope::Sys,
+    kind: "pod",
 };
 pub const KPROFILE_CONFIGS_FAMILY: Family = Family {
     folder: "configs",
-    item: "config",
+    scope: Scope::App,
+    kind: "config",
 };
+
+pub const KIND_SECRET: &str = "secret";
+pub const KIND_SECRET_CONFIG: &str = "secret-config";
+pub const KIND_MANIFEST: &str = "manifest";
+
+pub const SINGLETON_ID_TABSDATA: &str = "tabsdata";
+pub const SINGLETON_NAME_MANIFEST: &str = "manifest.yaml";
 
 pub const PROGRAM_TD_RESOURCE: &str = "td_resource";
 
@@ -47,7 +74,7 @@ pub const KUBERNETES_LABEL_NAMESPACE: &str = "app.kubernetes.io/";
 pub const TIER_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "tier");
 pub const CONFIGMAP_FAMILY_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "configmap-family");
 pub const SECRET_FAMILY_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "secret-family");
-pub const SECRET_FAMILY_CONFIG: &str = "config";
+pub const SECRET_FAMILY_CONFIG: &str = "secret-config";
 
 pub const SECRET_GENERATOR_JWT_SIGNING_KEY: &str = "jwt_signing_key";
 pub const SECRET_GENERATOR_POSTGRES_USER: &str = "postgres_user";
@@ -62,11 +89,8 @@ pub const POD_YAML_WORKER_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "wor
 
 pub const TABSDATA_NAME_PREFIX: &str = "td-";
 
-pub const TABSDATA_CONFIGMAP_PREFIX: &str = "tabsdata-";
-pub const CONFIGMAP_TABSDATA_MANIFEST: &str = concatcp!(TABSDATA_CONFIGMAP_PREFIX, "manifest.yaml");
-
-pub const TABSDATA_SECRET_PREFIX: &str = "tabsdata-secret-";
-pub const SECRET_TABSDATA_KUBECONFIG: &str = concatcp!(TABSDATA_SECRET_PREFIX, "kubeconfig");
+pub const CONFIGMAP_TABSDATA_MANIFEST: &str = "td-sys-tabsdata-manifest-manifest.yaml";
+pub const SECRET_TABSDATA_KUBECONFIG: &str = "td-sys-tabsdata-secret-kubeconfig";
 pub const SECRET_KEY_KUBECONFIG: &str = "kubeconfig";
 
 pub const KUBE_NAME_SEPARATOR: &str = "-";

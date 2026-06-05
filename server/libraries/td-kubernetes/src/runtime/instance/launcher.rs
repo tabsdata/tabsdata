@@ -70,17 +70,16 @@ pub async fn apply_init_phase(
     let mut applied: Vec<String> = Vec::new();
     for (key, job) in prepared {
         let bar = phase.add_resource(&key);
-        let created = match job_api::create_job(context, &job, Vec::new(), Vec::new(), None).await
-        {
-                Ok(created) => {
-                    bar.finish_with_message(format!("{key} (applied)"));
-                    created
-                }
-                Err(error) => {
-                    bar.finish_with_message(format!("{key} (failed)"));
-                    return Err(error.into());
-                }
-            };
+        let created = match job_api::create_job(context, &job, Vec::new(), Vec::new(), None).await {
+            Ok(created) => {
+                bar.finish_with_message(format!("{key} (applied)"));
+                created
+            }
+            Err(error) => {
+                bar.finish_with_message(format!("{key} (failed)"));
+                return Err(error.into());
+            }
+        };
         let name = created
             .metadata
             .name

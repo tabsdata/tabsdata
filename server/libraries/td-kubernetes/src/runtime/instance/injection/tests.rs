@@ -61,7 +61,7 @@ fn worker_with_matching_config_injects_secret_keys() {
     )]);
     let mut spec = build_pod_spec_with(&["apiserver"]);
     let mut secrets: BTreeSet<String> = BTreeSet::new();
-    secrets.insert("tabsdata-secret-config-apiserver.yaml".to_owned());
+    secrets.insert("td-app-apiserver-secret-config-apiserver.yaml".to_owned());
     inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &secrets).expect("ok");
     let injected = names(&spec, "apiserver");
     assert!(injected.contains(&"DATABASE__PASSWORD".to_owned()));
@@ -76,7 +76,7 @@ fn worker_with_matching_config_targets_all_containers() {
     )]);
     let mut spec = build_pod_spec_with(&["apiserver", "sidecar"]);
     let mut secrets: BTreeSet<String> = BTreeSet::new();
-    secrets.insert("tabsdata-secret-config-apiserver.yaml".to_owned());
+    secrets.insert("td-app-apiserver-secret-config-apiserver.yaml".to_owned());
     inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &secrets).expect("ok");
     assert_eq!(names(&spec, "apiserver"), vec!["DATABASE__PASSWORD"]);
     assert_eq!(names(&spec, "sidecar"), vec!["DATABASE__PASSWORD"]);
@@ -94,9 +94,9 @@ fn worker_pulls_dotted_sibling_configs() {
     ]);
     let mut spec = build_pod_spec_with(&["apiserver"]);
     let mut secrets: BTreeSet<String> = BTreeSet::new();
-    secrets.insert("tabsdata-secret-config-apiserver.yaml".to_owned());
-    secrets.insert("tabsdata-secret-config-apiserver.log.yaml".to_owned());
-    secrets.insert("tabsdata-secret-config-tabsdata.yaml".to_owned());
+    secrets.insert("td-app-apiserver-secret-config-apiserver.yaml".to_owned());
+    secrets.insert("td-app-apiserver-secret-config-apiserver.log.yaml".to_owned());
+    secrets.insert("td-app-tabsdata-secret-config-tabsdata.yaml".to_owned());
     inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &secrets).expect("ok");
     let injected = names(&spec, "apiserver");
     assert!(injected.contains(&"DATABASE__PASSWORD".to_owned()));
@@ -147,7 +147,7 @@ fn already_present_env_var_is_not_duplicated() {
         }]);
     }
     let mut secrets: BTreeSet<String> = BTreeSet::new();
-    secrets.insert("tabsdata-secret-config-apiserver.yaml".to_owned());
+    secrets.insert("td-app-apiserver-secret-config-apiserver.yaml".to_owned());
     inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &secrets).expect("ok");
     let injected = names(&spec, "apiserver");
     assert_eq!(injected, vec!["DATABASE__PASSWORD"]);

@@ -12,7 +12,7 @@ use tracing::{info, warn};
 
 use crate::base::constants::{CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY};
 use crate::base::error::cli::CliError;
-use crate::base::naming::to_configmap_name;
+use crate::base::naming::{id_from_file, to_kube_resource_name};
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
 use crate::core::system::exit::{CommandError, CommandResult, abort_with};
 use crate::core::system::file::is_hidden_or_system;
@@ -168,7 +168,7 @@ fn report_summary(replaced: &[String], warnings: &[String], noun_singular: &str)
 }
 
 async fn list_known_configs(context: &KubeContext) -> CommandResult<BTreeSet<String>> {
-    let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY.item);
+    let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY.kind);
     let configs = get_configmaps(context, Some(filter))
         .await?
         .into_iter()
@@ -240,7 +240,13 @@ async fn process_candidate(
     file_name: &str,
     path: &Path,
 ) -> CommandResult<Outcome> {
-    let configmap_name = match to_configmap_name(&KPROFILE_CONFIGS_FAMILY, file_name) {
+    let id = id_from_file(file_name);
+    let configmap_name = match to_kube_resource_name(
+        KPROFILE_CONFIGS_FAMILY.scope,
+        id,
+        KPROFILE_CONFIGS_FAMILY.kind,
+        file_name,
+    ) {
         Ok(name) => name,
         Err(error) => {
             return Ok(Outcome::Skipped(format!(
@@ -272,7 +278,7 @@ async fn process_candidate(
         &configmap_name,
         data,
         BTreeMap::new(),
-        Some(KPROFILE_CONFIGS_FAMILY.item),
+        Some(KPROFILE_CONFIGS_FAMILY.kind),
     )
     .await?;
     Ok(Outcome::Replaced)

@@ -20,7 +20,7 @@ fn leaves(keys: &[(&str, &str)]) -> Vec<SecretLeaf> {
 fn manifest_carries_name_type_and_labels_but_no_namespace() {
     let leaves = leaves(&[("database.postgres.password", "DATABASE__POSTGRES__PASSWORD")]);
     let secret = build_secret_manifest(
-        "tabsdata-secret-apiserver.yaml",
+        "td-app-apiserver-secret-config-apiserver.yaml",
         SECRET_FAMILY_CONFIG,
         &leaves,
         None,
@@ -28,7 +28,7 @@ fn manifest_carries_name_type_and_labels_but_no_namespace() {
     let metadata = &secret.metadata;
     assert_eq!(
         metadata.name.as_deref(),
-        Some("tabsdata-secret-apiserver.yaml")
+        Some("td-app-apiserver-secret-config-apiserver.yaml")
     );
     assert!(metadata.namespace.is_none());
     assert_eq!(secret.type_.as_deref(), Some("Opaque"));
@@ -39,7 +39,7 @@ fn manifest_carries_name_type_and_labels_but_no_namespace() {
     );
     assert_eq!(
         labels.get("tabsdata.com/secret-family").map(String::as_str),
-        Some("config")
+        Some("secret-config")
     );
 }
 
@@ -89,7 +89,7 @@ fn manifest_serializes_to_kubectl_applyable_yaml() {
     values.insert("DATABASE__POSTGRES__PASSWORD".to_owned(), "pgpw".to_owned());
     values.insert("AUTH__JWT_SIGNING_KEY".to_owned(), "jwtkey".to_owned());
     let secret = build_secret_manifest(
-        "tabsdata-secret-apiserver.yaml",
+        "td-app-apiserver-secret-config-apiserver.yaml",
         SECRET_FAMILY_CONFIG,
         &leaves,
         Some(&values),
@@ -97,19 +97,19 @@ fn manifest_serializes_to_kubectl_applyable_yaml() {
     let yaml = serialize_secret_manifest(&secret).expect("serializes");
 
     assert!(yaml.contains("kind: Secret"));
-    assert!(yaml.contains("name: tabsdata-secret-apiserver.yaml"));
+    assert!(yaml.contains("name: td-app-apiserver-secret-config-apiserver.yaml"));
     assert!(!yaml.contains("namespace:"));
     assert!(yaml.contains("type: Opaque"));
     assert!(yaml.contains("stringData:"));
     assert!(yaml.contains("DATABASE__POSTGRES__PASSWORD: pgpw"));
     assert!(yaml.contains("AUTH__JWT_SIGNING_KEY: jwtkey"));
     assert!(yaml.contains("app.kubernetes.io/part-of: tabsdata"));
-    assert!(yaml.contains("tabsdata.com/secret-family: config"));
+    assert!(yaml.contains("tabsdata.com/secret-family: secret-config"));
 
     let reparsed: Secret = serde_yaml::from_str(&yaml).expect("yaml reparses as Secret");
     assert_eq!(
         reparsed.metadata.name.as_deref(),
-        Some("tabsdata-secret-apiserver.yaml")
+        Some("td-app-apiserver-secret-config-apiserver.yaml")
     );
 }
 

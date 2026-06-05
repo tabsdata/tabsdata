@@ -108,18 +108,18 @@ spec:
         - name: TDK_KUBECONFIG
           valueFrom:
             secretKeyRef:
-              name: tabsdata-secret-kubeconfig
+              name: td-sys-tabsdata-secret-kubeconfig
               key: kubeconfig
   volumes:
     - name: config
       projected:
         sources:
           - configMap:
-              name: tabsdata-config-apiserver.yaml
+              name: td-app-apiserver-config-apiserver.yaml
           - configMap:
-              name: tabsdata-config-apiserver.log.yaml
+              name: td-app-apiserver-config-apiserver.log.yaml
           - configMap:
-              name: tabsdata-config-tabsdata.yaml
+              name: td-app-tabsdata-config-tabsdata.yaml
     - name: pyenv
       hostPath:
         path: "${sys:TDK_PYENV_TD_ROOT}"

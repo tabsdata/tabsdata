@@ -15,7 +15,7 @@ use crate::base::constants::{
     KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY,
 };
 use crate::base::error::provider::ProviderError;
-use crate::base::naming::to_configmap_name;
+use crate::base::naming::{id_from_file, to_kube_resource_name};
 use crate::core::system::exit::CommandResult;
 use crate::core::system::file::is_hidden_or_system;
 use crate::kube::api::pod::list_pods;
@@ -130,13 +130,14 @@ async fn replace_family_configmaps(
     family: &Family,
     files: RenderedConfigmap,
 ) -> CommandResult {
-    let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, family.item);
+    let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, family.kind);
     let existing = list_configmaps(context, Some(filter)).await?;
     for (name, _) in existing {
         delete_configmap(context, &name).await?;
     }
     for (file, content) in files {
-        let name = to_configmap_name(family, &file)?;
+        let id = id_from_file(&file);
+        let name = to_kube_resource_name(family.scope, id, family.kind, &file)?;
         let mut data = BTreeMap::new();
         data.insert(file, content);
         create_configmap(
@@ -145,7 +146,7 @@ async fn replace_family_configmaps(
             data,
             BTreeMap::new(),
             None,
-            Some(family.item),
+            Some(family.kind),
         )
         .await?;
     }
