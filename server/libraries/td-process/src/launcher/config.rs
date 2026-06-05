@@ -164,10 +164,6 @@ fn read_and_resolve(path: &Path) -> String {
         .expect("tokio runtime for resolver");
     match runtime.block_on(resolver.resolve(&raw)) {
         Ok(resolved) => {
-            info!(
-                "Resolved configuration from '{}':\n{resolved}",
-                path.display()
-            );
             resolved
         }
         Err(error) => {

@@ -5,7 +5,9 @@
 use once_cell::sync::Lazy;
 use regex::Regex;
 
-use crate::base::constants::{Family, KUBE_NAME_SEPARATOR, TABSDATA_CONFIGMAP_PREFIX};
+use crate::base::constants::{
+    Family, KUBE_NAME_SEPARATOR, TABSDATA_CONFIGMAP_PREFIX, TABSDATA_NAME_PREFIX,
+};
 use crate::base::error::naming::{NameSegment, NamingError};
 
 const KUBE_IDENTIFIER_MAX_LENGTH: usize = 253;
@@ -56,7 +58,8 @@ pub fn to_kube_identifier(
     name: &str,
     runid: Option<&str>,
 ) -> Result<String, NamingError> {
-    let mut identifier = normalize_segment(NameSegment::Component, component)?;
+    let mut identifier = String::from(TABSDATA_NAME_PREFIX);
+    identifier.push_str(&normalize_segment(NameSegment::Component, component)?);
     identifier.push_str(KUBE_NAME_SEPARATOR);
     identifier.push_str(&normalize_segment(NameSegment::Name, name)?);
     if let Some(runid) = runid {
@@ -75,7 +78,13 @@ pub fn to_kube_identifier(
 pub fn from_kube_identifier(
     identifier: &str,
 ) -> Result<(String, String, Option<String>), NamingError> {
-    let segments: Vec<&str> = identifier.split(KUBE_NAME_SEPARATOR).collect();
+    let body = identifier.strip_prefix(TABSDATA_NAME_PREFIX).ok_or_else(|| {
+        NamingError::InvalidSegmentCount {
+            identifier: identifier.to_owned(),
+            qsegments: 0,
+        }
+    })?;
+    let segments: Vec<&str> = body.split(KUBE_NAME_SEPARATOR).collect();
     match segments.as_slice() {
         [component, name] => Ok((
             normalize_segment(NameSegment::Component, component)?,

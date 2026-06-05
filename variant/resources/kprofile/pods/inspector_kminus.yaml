@@ -100,7 +100,11 @@ spec:
               - configMap:
                   name: tabsdata-pod-crontrigger.yaml
               - configMap:
-                  name: tabsdata-pod-function.yaml
+                  name: tabsdata-pod-function-publisher.yaml
+              - configMap:
+                  name: tabsdata-pod-function-subscriber.yaml
+              - configMap:
+                  name: tabsdata-pod-function-transformer.yaml
               - configMap:
                   name: tabsdata-pod-inspector.yaml
               - configMap:

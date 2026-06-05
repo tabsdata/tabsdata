@@ -5,6 +5,7 @@
 use std::collections::HashMap;
 
 use serde_yaml::Value;
+use tracing::{info, warn};
 
 use crate::base::constants::{
     CONFIGMAP_FAMILY_LABEL, KPROFILE_PODS_FAMILY, POD_YAML_COMPONENT_LABEL, POD_YAML_FIELD_KIND,
@@ -22,7 +23,7 @@ pub enum TemplateKind {
 
 #[derive(Debug, Clone)]
 pub struct PodTemplate {
-    pub worker: String,
+    pub component: String,
     pub kind: TemplateKind,
     pub manifest: String,
 }
@@ -36,7 +37,7 @@ impl PodTemplateIndex {
     pub async fn load(context: &KubeContext) -> Result<Self, KubernetesError> {
         let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, KPROFILE_PODS_FAMILY.item);
         let configmaps = get_configmaps(context, Some(filter)).await?;
-        let mut worker_map: HashMap<String, PodTemplate> = HashMap::new();
+        let mut map: HashMap<String, PodTemplate> = HashMap::new();
         for (configmap_name, entries) in configmaps {
             for (key, value) in entries {
                 let text = match String::from_utf8(value) {
@@ -52,18 +53,29 @@ impl PodTemplateIndex {
                 let Some(template) = parse_template(&text)? else {
                     continue;
                 };
-                worker_map.insert(template.worker.clone(), template);
+                map.insert(template.component.clone(), template);
             }
         }
-        Ok(Self { map: worker_map })
+        Ok(Self { map })
     }
 
-    pub fn lookup(&self, worker: &str) -> Result<&PodTemplate, KubeMessagingError> {
-        self.map
-            .get(worker)
-            .ok_or_else(|| KubeMessagingError::TemplateNotFound {
-                worker: worker.to_owned(),
-            })
+    pub fn lookup(&self, component: &str) -> Result<&PodTemplate, KubeMessagingError> {
+        info!(component = %component, "Looking up pod template");
+        match self.map.get(component) {
+            Some(template) => Ok(template),
+            None => {
+                let mut available: Vec<&str> = self.map.keys().map(String::as_str).collect();
+                available.sort();
+                warn!(
+                    component = %component,
+                    available = %available.join(", "),
+                    "Pod template not found"
+                );
+                Err(KubeMessagingError::TemplateNotFound {
+                    component: component.to_owned(),
+                })
+            }
+        }
     }
 }
 
@@ -72,7 +84,7 @@ fn parse_template(manifest: &str) -> Result<Option<PodTemplate>, KubernetesError
         Ok(value) => value,
         Err(_) => return Ok(None),
     };
-    let Some(worker) = read_component_label(&document) else {
+    let Some(component) = read_label(&document, POD_YAML_COMPONENT_LABEL) else {
         return Ok(None);
     };
     let kind_text = document
@@ -85,24 +97,24 @@ fn parse_template(manifest: &str) -> Result<Option<PodTemplate>, KubernetesError
         POD_YAML_KIND_JOB => TemplateKind::Job,
         other => {
             return Err(KubeMessagingError::UnsupportedTemplateKind {
-                worker,
+                component,
                 kind: other.to_owned(),
             }
             .into());
         }
     };
     Ok(Some(PodTemplate {
-        worker,
+        component,
         kind,
         manifest: manifest.to_owned(),
     }))
 }
 
-fn read_component_label(document: &Value) -> Option<String> {
+fn read_label(document: &Value, label: &str) -> Option<String> {
     document
         .get(POD_YAML_FIELD_METADATA)?
         .get(POD_YAML_FIELD_LABELS)?
-        .get(POD_YAML_COMPONENT_LABEL)?
+        .get(label)?
         .as_str()
         .map(str::to_owned)
 }

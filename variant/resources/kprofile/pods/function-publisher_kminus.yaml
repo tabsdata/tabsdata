@@ -14,11 +14,12 @@ metadata:
     app.kubernetes.io/name: tabsdata
     app.kubernetes.io/instance: tabsdata
     app.kubernetes.io/version: "2.0.0"
-    app.kubernetes.io/component: function
+    app.kubernetes.io/component: function-publisher
     app.kubernetes.io/part-of: tabsdata
     app.kubernetes.io/managed-by: tdkserver
     tabsdata.com/tier: ephemeral
     tabsdata.com/decorator: publisher
+    tabsdata.com/phase: function
 spec:
   backoffLimit: 0
   ttlSecondsAfterFinished: 300
@@ -28,11 +29,12 @@ spec:
         app.kubernetes.io/name: tabsdata
         app.kubernetes.io/instance: tabsdata
         app.kubernetes.io/version: "2.0.0"
-        app.kubernetes.io/component: function
+        app.kubernetes.io/component: function-publisher
         app.kubernetes.io/part-of: tabsdata
         app.kubernetes.io/managed-by: tdkserver
         tabsdata.com/tier: ephemeral
         tabsdata.com/decorator: publisher
+        tabsdata.com/phase: function
     spec:
       restartPolicy: Never
       serviceAccountName: default

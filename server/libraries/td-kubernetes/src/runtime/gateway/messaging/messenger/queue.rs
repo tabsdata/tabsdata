@@ -38,23 +38,32 @@ fn unexpected(id: &str, kind: &str, payload: &OrchestratorMessagePayload<Value>)
     }
 }
 
-fn derive_template_stem(
+struct PayloadRouting {
+    template_key: String,
+    worker: String,
+}
+
+fn derive_routing(
     id: &str,
     payload: &OrchestratorMessagePayload<Value>,
-) -> Result<String, QueueError> {
+) -> Result<PayloadRouting, QueueError> {
     match payload {
         OrchestratorMessagePayload::OrchestratorFunctionRequestMessagePayload(request) => {
             match request {
-                FunctionRequest::Start(start) => {
-                    Ok(format!("{}-{}", start.worker, start.decorator.as_ref()))
-                }
+                FunctionRequest::Start(start) => Ok(PayloadRouting {
+                    template_key: format!("{}-{}", start.worker, start.decorator.as_ref()),
+                    worker: start.worker.clone(),
+                }),
                 FunctionRequest::Stop => Err(unsupported(id, "Stop")),
                 FunctionRequest::Notify => Err(unsupported(id, "Notify")),
             }
         }
         OrchestratorMessagePayload::OrchestratorRequestMessagePayload(request) => {
             match request.action {
-                MessageAction::Start => Ok(request.worker.clone()),
+                MessageAction::Start => Ok(PayloadRouting {
+                    template_key: request.worker.clone(),
+                    worker: request.worker.clone(),
+                }),
                 MessageAction::Stop => Err(unsupported(id, "Stop")),
                 MessageAction::Notify => Err(unsupported(id, "Notify")),
             }
@@ -71,14 +80,14 @@ fn derive_template_stem(
 fn lookup_template<'a>(
     templates: &'a PodTemplateIndex,
     id: &str,
-    stem: &str,
+    template_key: &str,
 ) -> Result<&'a PodTemplate, QueueError> {
-    templates.lookup(stem).map_err(|error| {
+    templates.lookup(template_key).map_err(|error| {
         error!(
             id = %id,
-            stem = %stem,
+            template_key = %template_key,
             error = %error,
-            "Template not found for stem."
+            "Template not found."
         );
         QueueError::BackendError {
             cause: error.to_string(),
@@ -86,13 +95,13 @@ fn lookup_template<'a>(
     })
 }
 
-fn derive_kube_name(id: &str, stem: &str) -> Result<String, QueueError> {
-    to_kube_identifier(stem, id, None).map_err(|error| {
+fn derive_kube_name(id: &str, worker: &str) -> Result<String, QueueError> {
+    to_kube_identifier(worker, id, None).map_err(|error| {
         error!(
             id = %id,
-            stem = %stem,
+            worker = %worker,
             error = %error,
-            "Failed to derive kube name from stem and id."
+            "Failed to derive kube name from worker and id."
         );
         QueueError::BackendError {
             cause: error.to_string(),
@@ -132,25 +141,39 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
         id: String,
         payload: OrchestratorMessagePayload<Value>,
     ) -> Result<OrchestratorMessage<Value>, QueueError> {
-        let stem = derive_template_stem(&id, &payload)?;
-        let template = lookup_template(&self.templates, &id, &stem)?;
-        let name = derive_kube_name(&id, &stem)?;
+        let routing = derive_routing(&id, &payload)?;
+        let template = lookup_template(&self.templates, &id, &routing.template_key)?;
+        let name = derive_kube_name(&id, &routing.worker)?;
         match template.kind {
             TemplateKind::Pod => {
                 let pod = self.manifest_pod(template, &name)?;
-                create_pod(&self.context, &pod, &stem, None, Vec::new(), Vec::new())
-                    .await
-                    .map_err(|error| QueueError::BackendError {
-                        cause: error.to_string(),
-                    })?;
+                create_pod(
+                    &self.context,
+                    &pod,
+                    &routing.template_key,
+                    None,
+                    Vec::new(),
+                    Vec::new(),
+                )
+                .await
+                .map_err(|error| QueueError::BackendError {
+                    cause: error.to_string(),
+                })?;
             }
             TemplateKind::Job => {
                 let job = self.manifest_job(template, &name)?;
-                create_job(&self.context, &job, &stem, None, Vec::new(), Vec::new())
-                    .await
-                    .map_err(|error| QueueError::BackendError {
-                        cause: error.to_string(),
-                    })?;
+                create_job(
+                    &self.context,
+                    &job,
+                    &routing.template_key,
+                    None,
+                    Vec::new(),
+                    Vec::new(),
+                )
+                .await
+                .map_err(|error| QueueError::BackendError {
+                    cause: error.to_string(),
+                })?;
             }
         }
         let message = OrchestratorMessage::new(id.clone(), id, PathBuf::new(), payload);
@@ -162,9 +185,9 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
     }
 
     async fn rollback(&self, message: &OrchestratorMessage<Value>) -> Result<(), QueueError> {
-        let stem = derive_template_stem(&message.id, &message.payload)?;
-        let template = lookup_template(&self.templates, &message.id, &stem)?;
-        let name = derive_kube_name(&message.id, &stem)?;
+        let routing = derive_routing(&message.id, &message.payload)?;
+        let template = lookup_template(&self.templates, &message.id, &routing.template_key)?;
+        let name = derive_kube_name(&message.id, &routing.worker)?;
         match template.kind {
             TemplateKind::Pod => {
                 delete_pod(&self.context, &name).await.map_err(|error| {
