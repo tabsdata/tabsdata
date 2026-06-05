@@ -13,7 +13,7 @@ with the spec's common options:
 * ``--version`` / ``-v``
 * ``--info`` / ``-i``
 * ``--liveness`` / ``-l``
-    * ``--log-config`` / ``-c``
+* ``--log-config`` / ``-c``
 * ``--responder-url``
 * ``--responder-method``
 * ``--responder-authorization``
