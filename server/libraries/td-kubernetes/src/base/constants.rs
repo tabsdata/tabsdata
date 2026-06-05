@@ -21,6 +21,8 @@ pub const FOLDER_PROFILE: &str = "profile";
 pub const FOLDER_KUBE: &str = ".kube";
 pub const FILE_KUBECONFIG: &str = "config";
 
+pub const LIBEXEC_TABSDATA: &str = "libexec/tabsdata";
+
 pub const RESOURCE_KPROFILE: &str = "resources/kprofile";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

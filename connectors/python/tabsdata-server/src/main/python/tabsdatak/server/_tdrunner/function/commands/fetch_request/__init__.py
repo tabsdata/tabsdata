@@ -4,9 +4,10 @@
 
 """fetch-request command.
 
-Step 1 of the publisher init-container chain. Performs `GET <url>` with
-`Authorization: Bearer <token>` and writes the response body to `--out`.
-See `docs/02-PublisherInitContainers.md` for the chain context.
+Performs `<resolver-method> <resolver-url>` with the given Authorization
+header and writes the response body to `--out`. Used to materialize the
+function-run request envelope from the apiserver's resolver endpoint
+before the rest of the chain runs.
 """
 
 from __future__ import annotations
@@ -16,6 +17,12 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+)
+
 from tabsdatak.server._tdrunner.function._lib.cli import (
     build_parser,
     command,
@@ -23,16 +30,15 @@ from tabsdatak.server._tdrunner.function._lib.cli import (
 )
 from tabsdatak.server._tdrunner.function._lib.errors import CommandSpecificError
 
-VERSION = "0.1.0"
+VERSION = "2.0.0"
 INFO = (
     "fetch-request — fetch a function-run definition (request.yaml) from the API server"
 )
 MAN = (
-    "fetch-request --url <URL> --token <TOKEN> --out <PATH> "
-    "--liveness <PATH>\n\n"
-    "Performs a GET on --url with `Authorization: Bearer <token>` and "
-    "writes the response body to --out. Used as the first step of the "
-    "function-run pod chain."
+    "fetch-request --resolver-url <URL> --resolver-method <METHOD> "
+    "--resolver-authorization <AUTH> --out <PATH> --liveness <PATH>\n\n"
+    "Performs the resolver request with the given Authorization header "
+    "and writes the response body to --out."
 )
 
 # Command-specific exit codes (>= 10 per docs/01-CommandBasics.md).
@@ -48,19 +54,45 @@ def _build_parser():
         info=INFO,
         man=MAN,
     )
-    parser.add_argument("--url", required=True, help="URL or env:VAR / val:VALUE")
     parser.add_argument(
-        "--token", required=True, help="Bearer token or env:VAR / val:VALUE"
+        "--resolver-url",
+        required=True,
+        help="Resolver endpoint URL.",
     )
-    parser.add_argument("--out", required=True, help="Output file path")
+    parser.add_argument(
+        "--resolver-method",
+        required=True,
+        help="Resolver HTTP method.",
+    )
+    parser.add_argument(
+        "--resolver-authorization",
+        required=True,
+        help="Resolver Authorization header value.",
+    )
+    parser.add_argument(
+        "--out",
+        required=True,
+        help="Output file path.",
+    )
     return parser
 
 
-def _fetch(url: str, token: str) -> bytes:
-    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+@retry(
+    stop=stop_after_attempt(5),
+    wait=wait_exponential(multiplier=1, min=1, max=30),
+    reraise=True,
+)
+def _http_request(url: str, method: str, authorization: str) -> bytes:
+    req = urllib.request.Request(
+        url, method=method, headers={"Authorization": authorization}
+    )
+    with urllib.request.urlopen(req) as resp:
+        return resp.read()
+
+
+def _fetch(url: str, method: str, authorization: str) -> bytes:
     try:
-        with urllib.request.urlopen(req) as resp:
-            return resp.read()
+        return _http_request(url, method, authorization)
     except urllib.error.HTTPError as exc:
         raise CommandSpecificError(
             EXIT_HTTP_ERROR, f"HTTP {exc.code} from {url}: {exc.reason}"
@@ -74,11 +106,12 @@ def _fetch(url: str, token: str) -> bytes:
 
 @command(name="td_fetch_request", parser=_build_parser)
 def main(args: argparse.Namespace) -> int:
-    url = resolve_value(args.url)
-    token = resolve_value(args.token)
+    url = resolve_value(args.resolver_url)
+    method = resolve_value(args.resolver_method)
+    authorization = resolve_value(args.resolver_authorization)
     out_path = Path(args.out)
 
-    body = _fetch(url, token)
+    body = _fetch(url, method, authorization)
     try:
         out_path.write_bytes(body)
     except OSError as exc:

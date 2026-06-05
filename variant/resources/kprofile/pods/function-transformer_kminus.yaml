@@ -22,7 +22,7 @@ metadata:
     tabsdata.com/worker: function
 spec:
   backoffLimit: 0
-  ttlSecondsAfterFinished: 300
+  ttlSecondsAfterFinished: 604800
   template:
     metadata:
       labels:
@@ -46,15 +46,21 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       initContainers:
-        - name: env-dump
+        - name: inspect-function
           image: /dev/null
           imagePullPolicy: IfNotPresent
-          command: ["/bin/sh", "-c"]
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:TDK_PYENV_SCRIPTS_FOLDER}/td_inspect_function"]
           args:
-            - |
-              echo "[function-transformer env-dump] step=env-dump pod=$POD_NAME"
-              env | sort
-              echo "[function-transformer env-dump] done"
+            - --log-config
+            - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
+            - --liveness
+            - $(CONTAINER_ROOT)/tabsdata/scratch/liveness
+            - --responder-url
+            - env:SECRET__TD_RESPONDER_URL
+            - --responder-method
+            - env:SECRET__TD_RESPONDER_METHOD
+            - --responder-authorization
+            - env:SECRET__TD_RESPONDER_AUTHORIZATION
           resources:
             requests:
               cpu: "50m"
@@ -64,6 +70,8 @@ spec:
             capabilities:
               drop: ["ALL"]
           env:
+            - name: CONTAINER_ROOT
+              value: "$(KM_CONTAINER_ROOT)"
             - name: POD_NAME
               valueFrom:
                 fieldRef:
@@ -74,6 +82,72 @@ spec:
                   fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
               value: "${sys:TDK_INSTANCE_NAME}"
+          volumeMounts:
+            - name: config
+              mountPath: /tabsdata/config
+              readOnly: true
+            - name: pyenv
+              mountPath: /tabsdata/pyenv
+              readOnly: true
+            - name: work
+              mountPath: /tabsdata/work
+            - name: scratch-inspect-function
+              mountPath: /tabsdata/scratch
+        - name: fetch-request
+          image: /dev/null
+          imagePullPolicy: IfNotPresent
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:TDK_PYENV_SCRIPTS_FOLDER}/td_fetch_request"]
+          args:
+            - --log-config
+            - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
+            - --liveness
+            - $(CONTAINER_ROOT)/tabsdata/scratch/liveness
+            - --resolver-url
+            - env:SECRET__TD_RESOLVER_URL
+            - --resolver-method
+            - env:SECRET__TD_RESOLVER_METHOD
+            - --resolver-authorization
+            - env:SECRET__TD_RESOLVER_AUTHORIZATION
+            - --responder-url
+            - env:SECRET__TD_RESPONDER_URL
+            - --responder-method
+            - env:SECRET__TD_RESPONDER_METHOD
+            - --responder-authorization
+            - env:SECRET__TD_RESPONDER_AUTHORIZATION
+            - --out
+            - $(CONTAINER_ROOT)/tabsdata/work/request.yaml
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: CONTAINER_ROOT
+              value: "$(KM_CONTAINER_ROOT)"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_TABSDATA_INSTANCE
+              value: "${sys:TDK_INSTANCE_NAME}"
+          volumeMounts:
+            - name: config
+              mountPath: /tabsdata/config
+              readOnly: true
+            - name: pyenv
+              mountPath: /tabsdata/pyenv
+              readOnly: true
+            - name: work
+              mountPath: /tabsdata/work
+            - name: scratch-fetch-request
+              mountPath: /tabsdata/scratch
       containers:
         - name: report
           image: /dev/null
@@ -102,3 +176,29 @@ spec:
                   fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
               value: "${sys:TDK_INSTANCE_NAME}"
+          volumeMounts:
+            - name: config
+              mountPath: /tabsdata/config
+              readOnly: true
+            - name: work
+              mountPath: /tabsdata/work
+              readOnly: true
+            - name: scratch-report
+              mountPath: /tabsdata/scratch
+      volumes:
+        - name: config
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+        - name: pyenv
+          hostPath:
+            path: "${sys:TDK_PYENV_TD_ROOT}"
+        - name: work
+          emptyDir: {}
+        - name: scratch-inspect-function
+          emptyDir: {}
+        - name: scratch-fetch-request
+          emptyDir: {}
+        - name: scratch-report
+          emptyDir: {}

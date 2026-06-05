@@ -181,7 +181,8 @@ def discover_libexec_specs(
 
 
 libexec_specs = discover_libexec_specs(LIBEXEC_COMMANDS_SOURCES)
-libexec_launchers = build_launchers(libexec_specs, LIBEXEC_BUILD_FOLDER)
+# libexec_launchers = build_launchers(libexec_specs, LIBEXEC_BUILD_FOLDER)
+libexec_launchers: list[str] = []
 libexec_datafiles: list[tuple[str, list[str]]] = (
     [(LIBEXEC_INSTALL_FOLDER, libexec_launchers)] if libexec_launchers else []
 )
@@ -234,6 +235,9 @@ console_scripts: list[str] = [
     "tdorachk = tabsdata._tabsserver.tools.x_oracle_check:cli",
 ]
 console_scripts.extend(load_console_scripts())
+console_scripts.extend(
+    f"{script_name} = {module}:main" for script_name, module in libexec_specs
+)
 
 create_editable_binary_symlinks(datafiles)
 ensure_egg_folder()

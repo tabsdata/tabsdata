@@ -22,7 +22,7 @@ use tracing::info;
 use crate::base::constants::{
     FOLDER_CLUSTER, FOLDER_DATABASE, FOLDER_PYENV_AG, FOLDER_PYENV_TD, FOLDER_PYTHON,
     FOLDER_REPOSITORY, FOLDER_RUNTIMES, FOLDER_STORAGE, KPROFILE_CONFIGS_FAMILY,
-    KPROFILE_PODS_FAMILY,
+    KPROFILE_PODS_FAMILY, LIBEXEC_TABSDATA,
 };
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
@@ -282,6 +282,7 @@ impl Provider for KminusProvider {
             .into());
         };
         let pyenv_scripts_folder = Some(scripts_name.to_string());
+        let pyenv_libexec_folder = Some(LIBEXEC_TABSDATA.to_owned());
         let instance_name = self
             .folder
             .file_name()
@@ -297,6 +298,7 @@ impl Provider for KminusProvider {
             pyenv_td_root,
             pyenv_ag_root,
             pyenv_scripts_folder,
+            pyenv_libexec_folder,
             instance_name,
         })
     }

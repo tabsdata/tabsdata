@@ -49,8 +49,8 @@ google-resumable-media==2.9.0
 googleapis-common-protos==1.75.0
 greenlet==3.5.1 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
 grpc-google-iam-v1==0.14.4
-grpcio==1.80.0
-grpcio-status==1.80.0
+grpcio==1.81.0
+grpcio-status==1.81.0
 grpcio-tools==1.80.0
 h11==0.16.0
 httpcore==1.0.9
@@ -64,7 +64,7 @@ ijson==3.5.0
 importlib-metadata==8.7.1
 isodate==0.7.2
 jmespath==1.1.0
-joserfc==1.6.8
+joserfc==1.7.0
 jsonschema==4.26.0
 jsonschema-specifications==2025.9.1
 lxml==6.1.1

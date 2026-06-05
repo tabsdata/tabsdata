@@ -15,7 +15,7 @@ from tabsdatax.setup.tabsdata.parser import (
 
 logger = logging.getLogger(__name__)
 
-COMMAND_DECORATOR = "tabsdata_command"
+COMMAND_DECORATOR = "command"
 COMMAND_ENTRY_FUNCTION = "main"
 COMMAND_NAME_KEYWORD = "name"
 
