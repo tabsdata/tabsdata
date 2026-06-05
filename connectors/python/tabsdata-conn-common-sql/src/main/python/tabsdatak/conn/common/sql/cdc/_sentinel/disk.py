@@ -140,10 +140,7 @@ class DiskSentinel:
         ``i`` since the last :meth:`clear`, or an empty list when that
         table produced no files this batch.
         """
-        return [
-            list(self._files.get(table_key, []))
-            for table_key in self._tables
-        ]
+        return [list(self._files.get(table_key, [])) for table_key in self._tables]
 
     def clear(self) -> None:
         """Drop the staged file bookkeeping and reset the counters /

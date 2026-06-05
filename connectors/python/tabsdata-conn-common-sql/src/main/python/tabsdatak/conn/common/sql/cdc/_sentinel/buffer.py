@@ -9,7 +9,6 @@ import sys
 import time
 from collections.abc import Iterable
 
-from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode
 from tabsdatak.conn.common.sql.cdc._model import (
     CdcChange,
     CdcDataChange,
@@ -19,6 +18,7 @@ from tabsdatak.conn.common.sql.cdc._model import (
 from tabsdatak.conn.common.sql.cdc._sentinel import CdcBuffer
 from tabsdatak.conn.common.sql.cdc._sentinel.disk import DiskSentinel
 from tabsdatak.conn.common.sql.cdc._utils import TRACE
+from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

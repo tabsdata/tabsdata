@@ -53,7 +53,6 @@ from tabsdatak.spi import (
     StreamSrcDef,
 )
 
-
 # Allowed CDC src_cfg keys -- the Literal annotation gates typos at
 # schema-construction time. ``_build_cdc_run_config`` reads from
 # src_cfg and falls back to common-sql defaults.

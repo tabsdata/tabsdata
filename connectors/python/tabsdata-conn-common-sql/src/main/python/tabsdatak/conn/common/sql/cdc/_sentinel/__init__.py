@@ -108,6 +108,8 @@ def row_to_record(
                 default=_orjson_default,
             ).decode()
         case _:
-            raise ValueError(f"Unsupported values format: {cdc_format.columns_format!r}")
+            raise ValueError(
+                f"Unsupported values format: {cdc_format.columns_format!r}"
+            )
 
     return record

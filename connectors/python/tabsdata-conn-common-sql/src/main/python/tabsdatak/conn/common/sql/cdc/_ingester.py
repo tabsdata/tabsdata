@@ -22,12 +22,12 @@ from tabsdatak.conn.common.sql.cdc._model import (
     TrackedColumn,
     TrackedTable,
 )
-from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode
 from tabsdatak.conn.common.sql.cdc._schema import SchemaRegistry
 from tabsdatak.conn.common.sql.cdc.dialect import (
     CdcIngesterType,
     Dialect,
 )
+from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode
 from tabsdatak.conn.common.sql.cdc.typing import CdcFormat, QualifiedTablesSpec
 from tabsdatak.spi import CommitStateSpec, StoreStreamState
 

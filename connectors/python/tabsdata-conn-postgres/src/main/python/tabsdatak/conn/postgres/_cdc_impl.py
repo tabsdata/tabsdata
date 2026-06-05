@@ -55,12 +55,12 @@ from tabsdatak.conn.common.sql.cdc.constants import (
 )
 from tabsdatak.conn.common.sql.cdc.dialect import CdcIngesterType, Dialect
 from tabsdatak.conn.common.sql.cdc.typing import QualifiedTablesSpec
-from tabsdatak.spi import CommitStateSpec
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.postgres import LsnPosition
 from tabsdatak.conn.postgres.error import PostgresErrorCode
+from tabsdatak.spi import CommitStateSpec
 
 logger = logging.getLogger(__name__)
 

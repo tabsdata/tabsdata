@@ -23,8 +23,11 @@ from __future__ import annotations
 from functools import wraps
 from typing import Any, Callable
 
-from pydantic import ConfigDict, ValidationError
-from pydantic import validate_call as _pydantic_validate_call
+from pydantic import (
+    ConfigDict,
+    ValidationError,
+    validate_call as _pydantic_validate_call,
+)
 
 from tabsdatak.conn.common.error import ConnException
 from tabsdatak.error import ErrorCode, ErrorDef

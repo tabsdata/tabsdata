@@ -7,8 +7,8 @@ import importlib.metadata
 from tabsdatak.conn.common.sql.cdc._connection import CdcConn
 from tabsdatak.conn.common.sql.cdc._runner import CdcPlugin, CdcRunConfig
 from tabsdatak.conn.common.sql.cdc.typing import (
-    CdcFormat,
     CdcColumnsFormatSpec,
+    CdcFormat,
     QualifiedTableSpec,
     QualifiedTablesSpec,
     RelativePositionSpec,

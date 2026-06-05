@@ -26,9 +26,9 @@ pub(crate) fn ping_router() -> OpenApiRouter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::Router;
     use axum::body::Body;
     use axum::extract::Request;
-    use axum::Router;
     use http::Method;
     use td_objects::rest_urls::{BASE_API_URL, V1};
     use tower::ServiceExt;

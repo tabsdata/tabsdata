@@ -240,9 +240,7 @@ class KafkaStreamSrcPlugin(StreamSrcPlugin[KafkaStreamSrcConn, KafkaStreamSrc]):
         # ``time_rollover_secs`` may be shorter).
         time_rollover_secs = cfg["time_rollover_secs"]
         if ctx.flush_interval_mins > 0:
-            time_rollover_secs = min(
-                time_rollover_secs, ctx.flush_interval_mins * 60
-            )
+            time_rollover_secs = min(time_rollover_secs, ctx.flush_interval_mins * 60)
         deadline_window_start = time.time()
         reset_on_next_consume = False
         try:

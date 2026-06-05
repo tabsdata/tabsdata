@@ -47,7 +47,6 @@ from tabsdatax.setup.tabsdata.editable import (
     create_editable_binary_symlinks,
     create_editable_libexec_links,
 )
-from tabsdatax.setup.tabsdata.launcher import build_launchers
 from tabsdatax.setup.tabsdata.requirements import build_extras_require
 from tabsdatax.setup.tabsdata.scripts import load_console_scripts
 

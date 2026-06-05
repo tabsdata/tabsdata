@@ -92,7 +92,9 @@ def build_pa_schema(
         case "map":
             fields.append(pa.field(CDC_DATA_MAP_OLD, pa.utf8(), nullable=True))
         case _:
-            raise ValueError(f"Unsupported columns_format: {cdc_format.columns_format!r}")
+            raise ValueError(
+                f"Unsupported columns_format: {cdc_format.columns_format!r}"
+            )
 
     return pa.schema(fields)
 

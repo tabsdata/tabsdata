@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Callable, cast
 
 from tabsdatak.conn.common.file import _input, _output, _transporter

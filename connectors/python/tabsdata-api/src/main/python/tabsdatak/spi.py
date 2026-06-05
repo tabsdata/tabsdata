@@ -51,7 +51,6 @@ from tabsdatak.api import (
 )
 from tabsdatak.error import ApiErrorCode
 
-
 # All in-flight tables travel between framework and plugin as Parquet
 # files on disk (a plain ``pathlib.Path``). Plugins materialise rows to
 # these paths during reads and consume them during writes.

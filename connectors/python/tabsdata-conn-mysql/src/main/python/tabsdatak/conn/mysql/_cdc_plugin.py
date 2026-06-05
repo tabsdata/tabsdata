@@ -53,7 +53,6 @@ from tabsdatak.spi import (
     StreamSrcDef,
 )
 
-
 # Allowed CDC src_cfg keys -- the Literal annotation gates typos at
 # schema-construction time. ``_resolve_*`` reads from src_cfg and
 # falls back to common-sql defaults.
@@ -105,9 +104,7 @@ def _build_cdc_run_config(
     )
 
 
-class MySQLCdcStreamSrcPlugin(
-    CdcPlugin[MySQLCdcStreamSrcConn, MySQLCdcStreamSrc]
-):
+class MySQLCdcStreamSrcPlugin(CdcPlugin[MySQLCdcStreamSrcConn, MySQLCdcStreamSrc]):
     """Drives a :class:`MySQLCdcStreamSrc` via the dialect-agnostic
     :class:`~tabsdatak.conn.common.sql.cdc._runner.CdcPlugin` loop, backed
     by a :class:`~tabsdatak.conn.mysql._cdc_impl.BinlogIngester`."""

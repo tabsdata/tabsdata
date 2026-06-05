@@ -10,19 +10,19 @@
 //! validates it against the actual request, then injects the system
 //! `RequestContext` the internal handlers expect.
 
+use axum::RequestExt;
 use axum::extract::{MatchedPath, RawPathParams, Request, State};
 use axum::http;
 use axum::middleware::Next;
 use axum::response::Response;
-use axum::RequestExt;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use ta_apiserver::status::error_status::ErrorStatus;
-use td_authz::jwt::{decode_internal_token, InternalTokenClaims, JwtConfig};
-use td_error::{td_error, TdError};
+use td_authz::jwt::{InternalTokenClaims, JwtConfig, decode_internal_token};
+use td_error::{TdError, td_error};
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
-use tracing::{error, span, warn, Instrument, Level};
+use tracing::{Instrument, Level, error, span, warn};
 
 #[td_error]
 enum InternalTokenError {
@@ -110,14 +110,14 @@ fn token_authorizes_request(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::Router;
     use axum::body::Body;
     use axum::http::Request;
     use axum::http::StatusCode;
     use axum::middleware::from_fn_with_state;
     use axum::routing::get;
-    use axum::Router;
     use std::collections::BTreeMap;
-    use td_authz::jwt::{encode_internal_token, INTERNAL_TOKEN_KIND};
+    use td_authz::jwt::{INTERNAL_TOKEN_KIND, encode_internal_token};
     use td_common::id;
     use td_objects::rest_urls::internal::RESOLVE_FUNCTION_RUN_WORKER;
     use td_objects::rest_urls::{BASE_API_URL, BASE_URL, V1};

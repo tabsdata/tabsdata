@@ -509,7 +509,9 @@ def subscriber[C: Conn](
     """
 
     def _subscriber(func):
-        return _info_cls("SubscriberInfo")(func, conn, destination, input_tables, trigger_by)
+        return _info_cls("SubscriberInfo")(
+            func, conn, destination, input_tables, trigger_by
+        )
 
     return _subscriber
 
