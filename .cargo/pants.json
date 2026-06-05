@@ -27,6 +27,14 @@
     {
       "id": "CVE-2026-27887",
       "reason": "Spin may in some cases attempt to buffer the entire response before delivering it to the guest, which can lead to the host process running out of memory, panicking, and crashing."
+    },
+    {
+      "id": "CVE-2026-40034",
+      "reason": "Improper Neutralization of Special Elements used in a Command ('Command Injection')."
+    },
+    {
+      "id": "CVE-2026-44471",
+      "reason": "Improper Link Resolution Before File Access ('Link Following')."
     }
   ]
 }
