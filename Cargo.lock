@@ -8897,7 +8897,6 @@ dependencies = [
  "futures-util",
  "openssl",
  "postgresql_embedded",
- "rand 0.10.1",
  "sea-query",
  "sea-query-sqlx",
  "serde",
