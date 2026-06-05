@@ -1,25 +1,63 @@
-info:
-  collection: my_collection
-  collection_id: 19
-  execution_id: 24
-  transaction_id: 42
-  function_run_id: 60
-  function_bundle:
-    uri: s3://bucket/bundle.tar.gz
-    env_prefix: AWS_
-input: []
-output:
-  - name: customers
-    location:
-      uri: s3://bucket/out/customers.parquet
+FunctionV2:
+  info:
+    collection_id: 19
+    collection: my_collection
+    function_version_id: FV-1
+    function_defined_on: 1780000000000
+    function: publish_people
+    function_run_id: 60
+    function_bundle:
+      uri: s3://bucket/bundle.tar.gz
       env_prefix: AWS_
-system_input:
-  - name: td-initial-values
-    location:
-      uri: s3://bucket/state/in.parquet
-      env_prefix: AWS_
-system_output:
-  - name: td-initial-values
-    location:
-      uri: s3://bucket/state/out.parquet
-      env_prefix: AWS_
+    function_stage:
+      uri: file:///tmp/stage
+      env_prefix: ROOT
+    triggered_on: 1780000000100
+    transaction_id: 42
+    execution_id: 24
+    execution_name: null
+    function_data:
+      uri: file:///tmp/data
+      env_prefix: ROOT
+    scheduled_on: 1780000000200
+  input: []
+  output:
+    - Table:
+        name: customers
+        collection_id: 19
+        collection: my_collection
+        table_id: T-2
+        table_version_id: TV-2
+        table_data_version_id: PDV-1
+        location:
+          uri: s3://bucket/out/customers.parquet
+          env_prefix: AWS_
+        table_pos: 0
+  system_input:
+    - Table:
+        name: td-initial-values
+        collection_id: 19
+        collection: my_collection
+        table_id: T-1
+        table_version_id: TV-1
+        execution_id: null
+        transaction_id: null
+        function_run_id: null
+        triggered_on: null
+        table_data_version_id: null
+        location: null
+        input_idx: 0
+        table_pos: -1
+        version_pos: -1
+  system_output:
+    - Table:
+        name: td-initial-values
+        collection_id: 19
+        collection: my_collection
+        table_id: T-1
+        table_version_id: TV-1
+        table_data_version_id: PDV-0
+        location:
+          uri: s3://bucket/state/out.parquet
+          env_prefix: AWS_
+        table_pos: -1

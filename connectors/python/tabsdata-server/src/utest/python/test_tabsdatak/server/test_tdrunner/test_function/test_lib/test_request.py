@@ -5,14 +5,17 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
+import yaml
 
 from tabsdatak.server._tdrunner.function._lib.request import (
+    InputTable,
     InvalidRequestError,
     Location,
+    OutputTable,
     Request,
-    Table,
     load_request,
 )
 
@@ -22,10 +25,106 @@ pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 RESOURCES = Path(__file__).parent / "resources"
 
 
-def _write(tmp_path: Path, body: str, name: str = "request.yaml") -> Path:
+def _info_payload(**overrides: Any) -> dict:
+    """A complete, valid `info` payload with overridable fields."""
+    base: dict[str, Any] = {
+        "collection_id": 19,
+        "collection": "my_collection",
+        "function_version_id": "FV-1",
+        "function_defined_on": 1780000000000,
+        "function": "publish_people",
+        "function_run_id": 60,
+        "function_bundle": {
+            "uri": "s3://bucket/bundle.tar.gz",
+            "env_prefix": "AWS_",
+        },
+        "function_stage": {
+            "uri": "file:///tmp/stage",
+            "env_prefix": "ROOT",
+        },
+        "triggered_on": 1780000000100,
+        "transaction_id": 42,
+        "execution_id": 24,
+        "execution_name": None,
+        "function_data": {
+            "uri": "file:///tmp/data",
+            "env_prefix": "ROOT",
+        },
+        "scheduled_on": 1780000000200,
+    }
+    base.update(overrides)
+    return base
+
+
+def _input_table_payload(**overrides: Any) -> dict:
+    """A complete, valid InputTable payload (variant tag included)."""
+    base: dict[str, Any] = {
+        "name": "td-initial-values",
+        "collection_id": 19,
+        "collection": "my_collection",
+        "table_id": "T-1",
+        "table_version_id": "TV-1",
+        "execution_id": None,
+        "transaction_id": None,
+        "function_run_id": None,
+        "triggered_on": None,
+        "table_data_version_id": None,
+        "location": None,
+        "input_idx": 0,
+        "table_pos": -1,
+        "version_pos": -1,
+    }
+    base.update(overrides)
+    return {"Table": base}
+
+
+def _output_table_payload(**overrides: Any) -> dict:
+    """A complete, valid OutputTable payload (variant tag included)."""
+    base: dict[str, Any] = {
+        "name": "customers",
+        "collection_id": 19,
+        "collection": "my_collection",
+        "table_id": "T-2",
+        "table_version_id": "TV-2",
+        "table_data_version_id": "PDV-1",
+        "location": {
+            "uri": "s3://bucket/out/customers.parquet",
+            "env_prefix": "AWS_",
+        },
+        "table_pos": 0,
+    }
+    base.update(overrides)
+    return {"Table": base}
+
+
+def _envelope(payload: dict) -> dict:
+    return {"FunctionV2": payload}
+
+
+def _write(tmp_path: Path, body: Any, name: str = "request.yaml") -> Path:
     p = tmp_path / name
-    p.write_text(body)
+    if isinstance(body, str):
+        p.write_text(body)
+    else:
+        p.write_text(yaml.safe_dump(body))
     return p
+
+
+def _request_payload(
+    *,
+    info: dict | None = None,
+    input: list | None = None,
+    output: list | None = None,
+    system_input: list | None = None,
+    system_output: list | None = None,
+) -> dict:
+    return _envelope({
+        "info": info if info is not None else _info_payload(),
+        "input": input if input is not None else [],
+        "output": output if output is not None else [],
+        "system_input": system_input if system_input is not None else [],
+        "system_output": system_output if system_output is not None else [],
+    })
 
 
 # --- happy path ---
@@ -45,29 +144,25 @@ def test_load_minimal_fixture():
     assert req.input == ()
     assert len(req.output) == 1
     assert req.output[0].name == "customers"
-    assert req.output[0].location == Location(
-        uri="s3://bucket/out/customers.parquet", env_prefix="AWS_"
-    )
+    assert req.output[0].location.uri == "s3://bucket/out/customers.parquet"
     assert req.system_input[0].name == "td-initial-values"
     assert req.system_output[0].location.uri == "s3://bucket/state/out.parquet"
 
 
 def test_load_string_ids(tmp_path):
-    yaml_text = """
-info:
-  collection: c
-  collection_id: collection-uuid
-  execution_id: exec-uuid
-  transaction_id: tx-uuid
-  function_run_id: run-uuid
-  function_bundle:
-    uri: file:///tmp/b.tgz
-input: []
-output: []
-system_input: []
-system_output: []
-"""
-    req = load_request(_write(tmp_path, yaml_text))
+    p = _write(
+        tmp_path,
+        _request_payload(
+            info=_info_payload(
+                collection_id="collection-uuid",
+                execution_id="exec-uuid",
+                transaction_id="tx-uuid",
+                function_run_id="run-uuid",
+                function_version_id="fv-uuid",
+            ),
+        ),
+    )
+    req = load_request(p)
     assert req.info.collection_id == "collection-uuid"
     assert req.info.execution_id == "exec-uuid"
     assert req.info.transaction_id == "tx-uuid"
@@ -75,102 +170,143 @@ system_output: []
 
 
 def test_load_bundle_without_env_prefix(tmp_path):
-    yaml_text = """
-info:
-  collection: c
-  collection_id: 1
-  execution_id: 2
-  transaction_id: 3
-  function_run_id: 4
-  function_bundle:
-    uri: file:///tmp/b.tgz
-input: []
-output: []
-system_input: []
-system_output: []
-"""
-    req = load_request(_write(tmp_path, yaml_text))
+    p = _write(
+        tmp_path,
+        _request_payload(
+            info=_info_payload(
+                function_bundle={"uri": "file:///tmp/b.tgz"},
+            ),
+        ),
+    )
+    req = load_request(p)
     assert req.info.function_bundle.env_prefix is None
 
 
 def test_load_bundle_with_explicit_null_env_prefix(tmp_path):
-    yaml_text = """
-info:
-  collection: c
-  collection_id: 1
-  execution_id: 2
-  transaction_id: 3
-  function_run_id: 4
-  function_bundle:
-    uri: file:///tmp/b.tgz
-    env_prefix: null
-input: []
-output: []
-system_input: []
-system_output: []
-"""
-    req = load_request(_write(tmp_path, yaml_text))
+    p = _write(
+        tmp_path,
+        _request_payload(
+            info=_info_payload(
+                function_bundle={"uri": "file:///tmp/b.tgz", "env_prefix": None},
+            ),
+        ),
+    )
+    req = load_request(p)
     assert req.info.function_bundle.env_prefix is None
 
 
-def test_load_table_without_location_key(tmp_path):
-    yaml_text = """
-info:
-  collection: c
-  collection_id: 1
-  execution_id: 2
-  transaction_id: 3
-  function_run_id: 4
-  function_bundle:
-    uri: file:///b
-output:
-  - name: bare_table
-input: []
-system_input: []
-system_output: []
-"""
-    req = load_request(_write(tmp_path, yaml_text))
-    assert req.output == (Table(name="bare_table", location=None),)
+def test_load_input_table_without_location_key(tmp_path):
+    """Input tables can omit `location` entirely (it's optional)."""
+    p = _write(
+        tmp_path,
+        _request_payload(
+            input=[
+                {
+                    "Table": {
+                        "name": "bare_input",
+                        "collection_id": 1,
+                        "collection": "c",
+                        "table_id": "T-x",
+                        "table_version_id": "TV-x",
+                        "input_idx": 0,
+                        "table_pos": 0,
+                        "version_pos": 0,
+                    }
+                }
+            ],
+        ),
+    )
+    req = load_request(p)
+    assert req.input == (
+        InputTable(
+            name="bare_input",
+            collection_id=1,
+            collection="c",
+            table_id="T-x",
+            table_version_id="TV-x",
+            input_idx=0,
+            table_pos=0,
+            version_pos=0,
+        ),
+    )
 
 
-def test_load_table_with_explicit_null_location(tmp_path):
-    yaml_text = """
-info:
-  collection: c
-  collection_id: 1
-  execution_id: 2
-  transaction_id: 3
-  function_run_id: 4
-  function_bundle:
-    uri: file:///b
-output:
-  - name: bare_table
-    location: null
-input: []
-system_input: []
-system_output: []
-"""
-    req = load_request(_write(tmp_path, yaml_text))
-    assert req.output[0].location is None
+def test_load_input_table_with_explicit_null_location(tmp_path):
+    p = _write(
+        tmp_path,
+        _request_payload(input=[_input_table_payload(location=None)]),
+    )
+    req = load_request(p)
+    assert req.input[0].location is None
 
 
 def test_load_omits_table_lists_default_to_empty(tmp_path):
     """If a top-level table list key is missing, treat as empty."""
-    yaml_text = """
-info:
-  collection: c
-  collection_id: 1
-  execution_id: 2
-  transaction_id: 3
-  function_run_id: 4
-  function_bundle:
-    uri: file:///b
-"""
-    req = load_request(_write(tmp_path, yaml_text))
+    p = _write(tmp_path, _envelope({"info": _info_payload()}))
+    req = load_request(p)
     assert req.input == ()
     assert req.output == ()
     assert req.system_input == ()
     assert req.system_output == ()
+
+
+# --- envelope handling ---
+
+
+def test_load_unknown_top_level_variant(tmp_path):
+    """A variant tag not in REQUEST_ENVELOPE_KNOWN is reported as unknown."""
+    p = _write(tmp_path, {"FunctionV3": {"info": _info_payload()}})
+    with pytest.raises(
+        InvalidRequestError,
+        match=r"unknown variant 'FunctionV3'; expected one of: FunctionV2",
+    ):
+        load_request(p)
+
+
+def test_load_top_level_multi_key_envelope(tmp_path):
+    p = _write(tmp_path, {"FunctionV2": {}, "extra": 1})
+    with pytest.raises(InvalidRequestError, match="single-key variant envelope"):
+        load_request(p)
+
+
+def test_load_known_but_unsupported_table_variant(tmp_path):
+    """Variants Rust knows about (e.g. PartitionedTable) but we don't yet
+    handle are reported as recognized-but-not-supported."""
+    p = _write(
+        tmp_path,
+        _request_payload(input=[{"PartitionedTable": {"name": "x"}}]),
+    )
+    with pytest.raises(
+        InvalidRequestError,
+        match=r"variant 'PartitionedTable' is recognized but not yet supported",
+    ):
+        load_request(p)
+
+
+def test_load_truly_unknown_table_variant(tmp_path):
+    """Variants outside the known set are reported as unknown with the
+    list of known variants."""
+    p = _write(
+        tmp_path,
+        _request_payload(input=[{"NotARealVariant": {"name": "x"}}]),
+    )
+    with pytest.raises(
+        InvalidRequestError,
+        match=(
+            r"unknown variant 'NotARealVariant'; expected one of: "
+            r"Table, TableVersions, PartitionedTable, PartitionedTableVersions"
+        ),
+    ):
+        load_request(p)
+
+
+def test_load_table_variant_payload_not_a_mapping(tmp_path):
+    p = _write(
+        tmp_path,
+        _request_payload(input=[{"Table": "scalar"}]),
+    )
+    with pytest.raises(InvalidRequestError, match="payload must be a mapping"):
+        load_request(p)
 
 
 # --- file / yaml errors ---
@@ -197,13 +333,13 @@ def test_load_top_level_not_a_mapping(tmp_path):
 
 
 def test_load_missing_info(tmp_path):
-    p = _write(tmp_path, "input: []\n")
+    p = _write(tmp_path, _envelope({"input": []}))
     with pytest.raises(InvalidRequestError, match="info"):
         load_request(p)
 
 
 def test_load_info_not_a_mapping(tmp_path):
-    p = _write(tmp_path, "info: not-a-dict\n")
+    p = _write(tmp_path, _envelope({"info": "not-a-dict"}))
     with pytest.raises(InvalidRequestError, match="info"):
         load_request(p)
 
@@ -217,222 +353,153 @@ def test_load_info_not_a_mapping(tmp_path):
         "transaction_id",
         "function_run_id",
         "function_bundle",
+        "function_version_id",
+        "function_defined_on",
+        "function",
+        "function_stage",
+        "triggered_on",
+        "function_data",
+        "scheduled_on",
     ],
 )
 def test_load_missing_required_info_field(tmp_path, missing_field):
-    fields = {
-        "collection": "c",
-        "collection_id": 1,
-        "execution_id": 2,
-        "transaction_id": 3,
-        "function_run_id": 4,
-        "function_bundle": {"uri": "file:///b"},
-    }
-    fields.pop(missing_field)
-    import yaml as pyyaml
-
-    p = _write(tmp_path, pyyaml.safe_dump({"info": fields}))
+    info = _info_payload()
+    info.pop(missing_field)
+    p = _write(tmp_path, _envelope({"info": info}))
     with pytest.raises(InvalidRequestError) as exc_info:
         load_request(p)
     assert missing_field in str(exc_info.value)
 
 
 def test_load_collection_wrong_type(tmp_path):
-    yaml_text = """
-info:
-  collection: 12345
-  collection_id: 1
-  execution_id: 2
-  transaction_id: 3
-  function_run_id: 4
-  function_bundle:
-    uri: file:///b
-"""
+    p = _write(
+        tmp_path,
+        _envelope({"info": _info_payload(collection=12345)}),
+    )
     with pytest.raises(InvalidRequestError, match="info.collection"):
-        load_request(_write(tmp_path, yaml_text))
+        load_request(p)
 
 
 def test_load_collection_id_wrong_type(tmp_path):
-    yaml_text = """
-info:
-  collection: c
-  collection_id: [1, 2, 3]
-  execution_id: 2
-  transaction_id: 3
-  function_run_id: 4
-  function_bundle:
-    uri: file:///b
-"""
+    p = _write(
+        tmp_path,
+        _envelope({"info": _info_payload(collection_id=[1, 2, 3])}),
+    )
     with pytest.raises(InvalidRequestError, match="info.collection_id"):
-        load_request(_write(tmp_path, yaml_text))
+        load_request(p)
 
 
 def test_load_function_bundle_not_a_mapping(tmp_path):
-    yaml_text = """
-info:
-  collection: c
-  collection_id: 1
-  execution_id: 2
-  transaction_id: 3
-  function_run_id: 4
-  function_bundle: just-a-string
-"""
+    p = _write(
+        tmp_path,
+        _envelope({"info": _info_payload(function_bundle="just-a-string")}),
+    )
     with pytest.raises(InvalidRequestError, match="function_bundle"):
-        load_request(_write(tmp_path, yaml_text))
+        load_request(p)
 
 
 def test_load_location_missing_uri(tmp_path):
-    yaml_text = """
-info:
-  collection: c
-  collection_id: 1
-  execution_id: 2
-  transaction_id: 3
-  function_run_id: 4
-  function_bundle:
-    env_prefix: AWS_
-"""
+    p = _write(
+        tmp_path,
+        _envelope({"info": _info_payload(function_bundle={"env_prefix": "AWS_"})}),
+    )
     with pytest.raises(InvalidRequestError, match="uri"):
-        load_request(_write(tmp_path, yaml_text))
+        load_request(p)
 
 
 def test_load_location_uri_wrong_type(tmp_path):
-    yaml_text = """
-info:
-  collection: c
-  collection_id: 1
-  execution_id: 2
-  transaction_id: 3
-  function_run_id: 4
-  function_bundle:
-    uri: 42
-"""
+    p = _write(
+        tmp_path,
+        _envelope({"info": _info_payload(function_bundle={"uri": 42})}),
+    )
     with pytest.raises(InvalidRequestError, match="uri"):
-        load_request(_write(tmp_path, yaml_text))
+        load_request(p)
 
 
 def test_load_location_env_prefix_wrong_type(tmp_path):
-    yaml_text = """
-info:
-  collection: c
-  collection_id: 1
-  execution_id: 2
-  transaction_id: 3
-  function_run_id: 4
-  function_bundle:
-    uri: file:///b
-    env_prefix: 42
-"""
+    p = _write(
+        tmp_path,
+        _envelope({
+            "info": _info_payload(
+                function_bundle={"uri": "file:///b", "env_prefix": 42},
+            ),
+        }),
+    )
     with pytest.raises(InvalidRequestError, match="env_prefix"):
-        load_request(_write(tmp_path, yaml_text))
+        load_request(p)
+
+
+def test_load_output_table_requires_location(tmp_path):
+    """OutputTable has a non-optional location (unlike InputTable)."""
+    payload = _output_table_payload()
+    payload["Table"].pop("location")
+    p = _write(tmp_path, _request_payload(output=[payload]))
+    with pytest.raises(InvalidRequestError, match="location"):
+        load_request(p)
+
+
+def test_load_output_table_requires_table_data_version_id(tmp_path):
+    payload = _output_table_payload()
+    payload["Table"].pop("table_data_version_id")
+    p = _write(tmp_path, _request_payload(output=[payload]))
+    with pytest.raises(InvalidRequestError, match="table_data_version_id"):
+        load_request(p)
 
 
 # --- table-list errors ---
 
 
 def test_load_table_list_not_a_list(tmp_path):
-    yaml_text = """
-info:
-  collection: c
-  collection_id: 1
-  execution_id: 2
-  transaction_id: 3
-  function_run_id: 4
-  function_bundle:
-    uri: file:///b
-output: not-a-list
-"""
+    p = _write(tmp_path, _request_payload(output="not-a-list"))
     with pytest.raises(InvalidRequestError, match="output"):
-        load_request(_write(tmp_path, yaml_text))
+        load_request(p)
 
 
 def test_load_table_entry_not_a_mapping(tmp_path):
-    yaml_text = """
-info:
-  collection: c
-  collection_id: 1
-  execution_id: 2
-  transaction_id: 3
-  function_run_id: 4
-  function_bundle:
-    uri: file:///b
-output:
-  - just-a-string
-"""
+    p = _write(tmp_path, _request_payload(output=["just-a-string"]))
     with pytest.raises(InvalidRequestError, match="output"):
-        load_request(_write(tmp_path, yaml_text))
+        load_request(p)
 
 
 def test_load_table_missing_name(tmp_path):
-    yaml_text = """
-info:
-  collection: c
-  collection_id: 1
-  execution_id: 2
-  transaction_id: 3
-  function_run_id: 4
-  function_bundle:
-    uri: file:///b
-output:
-  - location:
-      uri: file:///t
-"""
+    payload = _output_table_payload()
+    payload["Table"].pop("name")
+    p = _write(tmp_path, _request_payload(output=[payload]))
     with pytest.raises(InvalidRequestError, match="name"):
-        load_request(_write(tmp_path, yaml_text))
+        load_request(p)
 
 
 def test_load_nested_table_location_uri_wrong_type(tmp_path):
-    yaml_text = """
-info:
-  collection: c
-  collection_id: 1
-  execution_id: 2
-  transaction_id: 3
-  function_run_id: 4
-  function_bundle:
-    uri: file:///b
-input:
-  - name: a
-    location:
-      uri: 42
-"""
+    payload = _input_table_payload(
+        location={"uri": 42},
+    )
+    p = _write(tmp_path, _request_payload(input=[payload]))
     with pytest.raises(InvalidRequestError, match="uri"):
-        load_request(_write(tmp_path, yaml_text))
+        load_request(p)
 
 
 # --- extra="forbid": unknown fields are rejected ---
 
 
 def test_load_extra_field_at_top_level_is_forbidden(tmp_path):
-    yaml_text = """
-info:
-  collection: c
-  collection_id: 1
-  execution_id: 2
-  transaction_id: 3
-  function_run_id: 4
-  function_bundle:
-    uri: file:///b
-unknown_top_level: hi
-"""
+    p = _write(
+        tmp_path,
+        _envelope({
+            "info": _info_payload(),
+            "unknown_top_level": "hi",
+        }),
+    )
     with pytest.raises(InvalidRequestError, match="unknown_top_level"):
-        load_request(_write(tmp_path, yaml_text))
+        load_request(p)
 
 
 def test_load_extra_field_in_info_is_forbidden(tmp_path):
-    yaml_text = """
-info:
-  collection: c
-  collection_id: 1
-  execution_id: 2
-  transaction_id: 3
-  function_run_id: 4
-  function_bundle:
-    uri: file:///b
-  surprise: 1
-"""
+    p = _write(
+        tmp_path,
+        _envelope({"info": _info_payload(surprise=1)}),
+    )
     with pytest.raises(InvalidRequestError, match="surprise"):
-        load_request(_write(tmp_path, yaml_text))
+        load_request(p)
 
 
 # --- frozen ---
@@ -441,7 +508,6 @@ info:
 def test_request_is_frozen():
     req = load_request(RESOURCES / "minimal_publisher_request.yaml")
     with pytest.raises(Exception):
-        # frozen pydantic model: assignment raises ValidationError
         req.input = ()  # type: ignore[misc]
 
 
@@ -451,7 +517,31 @@ def test_location_is_frozen():
         loc.uri = "other"  # type: ignore[misc]
 
 
-def test_table_is_frozen():
-    t = Table(name="x")
+def test_input_table_is_frozen():
+    t = InputTable(
+        name="x",
+        collection_id=1,
+        collection="c",
+        table_id="T",
+        table_version_id="TV",
+        input_idx=0,
+        table_pos=0,
+        version_pos=0,
+    )
+    with pytest.raises(Exception):
+        t.name = "other"  # type: ignore[misc]
+
+
+def test_output_table_is_frozen():
+    t = OutputTable(
+        name="x",
+        collection_id=1,
+        collection="c",
+        table_id="T",
+        table_version_id="TV",
+        table_data_version_id="PDV",
+        location=Location(uri="s3://x"),
+        table_pos=0,
+    )
     with pytest.raises(Exception):
         t.name = "other"  # type: ignore[misc]

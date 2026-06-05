@@ -54,9 +54,10 @@ from tabsdatak.server._tdrunner.function._lib.initial_values import (
 )
 from tabsdatak.server._tdrunner.function._lib.request import (
     Info,
+    InputTable,
     Location,
+    OutputTable,
     Request,
-    Table,
 )
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
@@ -144,18 +145,67 @@ def built_bundle(tmp_path, user_project, fixture_publisher) -> Path:
     return extracted
 
 
+def _info_payload(bundle_uri: str = "file:///bundle.tgz") -> dict:
+    return {
+        "collection_id": 1,
+        "collection": "c",
+        "function_version_id": "FV-1",
+        "function_defined_on": 1780000000000,
+        "function": "fn",
+        "function_run_id": 4,
+        "function_bundle": {"uri": bundle_uri},
+        "function_stage": {"uri": "file:///stage"},
+        "triggered_on": 1780000000100,
+        "transaction_id": 3,
+        "execution_id": 2,
+        "execution_name": None,
+        "function_data": {"uri": "file:///data"},
+        "scheduled_on": 1780000000200,
+    }
+
+
+def _input_table_payload(name: str, *, location: dict | None = None) -> dict:
+    return {
+        "Table": {
+            "name": name,
+            "collection_id": 1,
+            "collection": "c",
+            "table_id": f"T-{name}",
+            "table_version_id": f"TV-{name}",
+            "location": location,
+            "input_idx": 0,
+            "table_pos": -1,
+            "version_pos": -1,
+        }
+    }
+
+
+def _output_table_payload(name: str, *, location: dict) -> dict:
+    return {
+        "Table": {
+            "name": name,
+            "collection_id": 1,
+            "collection": "c",
+            "table_id": f"T-{name}",
+            "table_version_id": f"TV-{name}",
+            "table_data_version_id": f"PDV-{name}",
+            "location": location,
+            "table_pos": 0,
+        }
+    }
+
+
 def _write_request(path: Path, bundle_uri: str = "file:///bundle.tgz") -> Path:
     path.write_text(
         yaml.safe_dump({
-            "info": {
-                "collection": "c",
-                "collection_id": 1,
-                "execution_id": 2,
-                "transaction_id": 3,
-                "function_run_id": 4,
-                "function_bundle": {"uri": bundle_uri},
-            },
-            "output": [{"name": "my_table"}],
+            "FunctionV2": {
+                "info": _info_payload(bundle_uri=bundle_uri),
+                "output": [
+                    _output_table_payload(
+                        "my_table", location={"uri": "file:///out/my_table"}
+                    )
+                ],
+            }
         })
     )
     return path
@@ -553,21 +603,59 @@ def _bare_ctx() -> _SrcContext:
     )
 
 
+def _bare_info() -> Info:
+    return Info(
+        collection_id=1,
+        collection="c",
+        function_version_id="FV-1",
+        function_defined_on=1780000000000,
+        function="fn",
+        function_run_id=4,
+        function_bundle=Location(uri="file:///bundle.tgz"),
+        function_stage=Location(uri="file:///stage"),
+        triggered_on=1780000000100,
+        transaction_id=3,
+        execution_id=2,
+        execution_name=None,
+        function_data=Location(uri="file:///data"),
+        scheduled_on=1780000000200,
+    )
+
+
+def _input_table(name: str, *, location: Location | None) -> InputTable:
+    return InputTable(
+        name=name,
+        collection_id=1,
+        collection="c",
+        table_id=f"T-{name}",
+        table_version_id=f"TV-{name}",
+        location=location,
+        input_idx=0,
+        table_pos=-1,
+        version_pos=-1,
+    )
+
+
+def _output_table(name: str, *, location: Location) -> OutputTable:
+    return OutputTable(
+        name=name,
+        collection_id=1,
+        collection="c",
+        table_id=f"T-{name}",
+        table_version_id=f"TV-{name}",
+        table_data_version_id=f"PDV-{name}",
+        location=location,
+        table_pos=-1,
+    )
+
+
 def _bare_request(
     *,
     system_input=(),
     system_output=(),
 ) -> Request:
-    info = Info(
-        collection="c",
-        collection_id=1,
-        execution_id=2,
-        transaction_id=3,
-        function_run_id=4,
-        function_bundle=Location(uri="file:///bundle.tgz"),
-    )
     return Request(
-        info=info,
+        info=_bare_info(),
         system_input=system_input,
         system_output=system_output,
     )
@@ -583,7 +671,7 @@ def test_hydrate_noop_when_system_input_empty(tmp_path):
 
 def test_hydrate_noop_when_slot_has_no_location(tmp_path):
     ctx = _bare_ctx()
-    req = _bare_request(system_input=(Table(name="iv", location=None),))
+    req = _bare_request(system_input=(_input_table("iv", location=None),))
     hydrate_ctx_from_state(ctx, req, tmp_path, exit_code=EXIT_BAD_INITIAL_VALUES)
     assert ctx.drain() == {}
 
@@ -594,7 +682,7 @@ def test_hydrate_noop_when_state_file_missing(tmp_path):
     e.g. first time the flow runs. Start with empty scratch."""
     ctx = _bare_ctx()
     req = _bare_request(
-        system_input=(Table(name="iv", location=Location(uri="file:///x")),),
+        system_input=(_input_table("iv", location=Location(uri="file:///x")),),
     )
     hydrate_ctx_from_state(ctx, req, tmp_path, exit_code=EXIT_BAD_INITIAL_VALUES)
     assert ctx.drain() == {}
@@ -605,7 +693,7 @@ def test_hydrate_loads_values_when_state_file_present(tmp_path):
     write_initial_values({"last-modified": "2026-05-27T00:00:00Z"}, state_file)
     ctx = _bare_ctx()
     req = _bare_request(
-        system_input=(Table(name="iv", location=Location(uri="file:///x")),),
+        system_input=(_input_table("iv", location=Location(uri="file:///x")),),
     )
     hydrate_ctx_from_state(ctx, req, tmp_path, exit_code=EXIT_BAD_INITIAL_VALUES)
     assert ctx.drain() == {"last-modified": "2026-05-27T00:00:00Z"}
@@ -616,7 +704,7 @@ def test_hydrate_malformed_state_file_raises_bad_initial_values(tmp_path):
     state_file.write_bytes(b"not parquet")
     ctx = _bare_ctx()
     req = _bare_request(
-        system_input=(Table(name="iv", location=Location(uri="file:///x")),),
+        system_input=(_input_table("iv", location=Location(uri="file:///x")),),
     )
     with pytest.raises(CommandSpecificError) as exc_info:
         hydrate_ctx_from_state(ctx, req, tmp_path, exit_code=EXIT_BAD_INITIAL_VALUES)
@@ -632,19 +720,11 @@ def test_drain_noop_when_system_output_empty(tmp_path):
     assert list(tmp_path.iterdir()) == []
 
 
-def test_drain_noop_when_slot_has_no_location(tmp_path):
-    ctx = _bare_ctx()
-    ctx.store_attr("foo", "bar")
-    req = _bare_request(system_output=(Table(name="iv", location=None),))
-    drain_ctx_to_state(ctx, req, tmp_path, exit_code=EXIT_BAD_INITIAL_VALUES)
-    assert list(tmp_path.iterdir()) == []
-
-
 def test_drain_writes_state_file_when_slot_present(tmp_path):
     ctx = _bare_ctx()
     ctx.store_attr("last-modified", "2026-05-28T00:00:00Z")
     req = _bare_request(
-        system_output=(Table(name="iv", location=Location(uri="file:///x")),),
+        system_output=(_output_table("iv", location=Location(uri="file:///x")),),
     )
     drain_ctx_to_state(ctx, req, tmp_path, exit_code=EXIT_BAD_INITIAL_VALUES)
     written = tmp_path / "iv.parquet"
@@ -657,7 +737,7 @@ def test_drain_writes_empty_file_when_ctx_empty(tmp_path):
     plugin explicitly didn't want to persist anything this run."""
     ctx = _bare_ctx()
     req = _bare_request(
-        system_output=(Table(name="iv", location=Location(uri="file:///x")),),
+        system_output=(_output_table("iv", location=Location(uri="file:///x")),),
     )
     drain_ctx_to_state(ctx, req, tmp_path, exit_code=EXIT_BAD_INITIAL_VALUES)
     written = tmp_path / "iv.parquet"
@@ -671,7 +751,7 @@ def test_drain_creates_state_dir_if_missing(tmp_path):
     ctx = _bare_ctx()
     ctx.store_attr("k", "v")
     req = _bare_request(
-        system_output=(Table(name="iv", location=Location(uri="file:///x")),),
+        system_output=(_output_table("iv", location=Location(uri="file:///x")),),
     )
     drain_ctx_to_state(ctx, req, state_dir, exit_code=EXIT_BAD_INITIAL_VALUES)
     assert (state_dir / "iv.parquet").is_file()
@@ -685,7 +765,7 @@ def test_drain_bad_value_raises_bad_initial_values(tmp_path, monkeypatch):
     # directly into the underlying scratch dict.
     ctx._scratch["k"] = object()  # type: ignore[assignment]
     req = _bare_request(
-        system_output=(Table(name="iv", location=Location(uri="file:///x")),),
+        system_output=(_output_table("iv", location=Location(uri="file:///x")),),
     )
     with pytest.raises(CommandSpecificError) as exc_info:
         drain_ctx_to_state(ctx, req, tmp_path, exit_code=EXIT_BAD_INITIAL_VALUES)
@@ -715,21 +795,24 @@ def test_main_hydrates_and_drains_initial_values(tmp_path, built_bundle, monkeyp
     req_path = tmp_path / "request.yaml"
     req_path.write_text(
         yaml.safe_dump({
-            "info": {
-                "collection": "c",
-                "collection_id": 1,
-                "execution_id": 2,
-                "transaction_id": 3,
-                "function_run_id": 4,
-                "function_bundle": {"uri": "file:///bundle.tgz"},
-            },
-            "output": [{"name": "my_table"}],
-            "system_input": [
-                {"name": "iv-in", "location": {"uri": "file:///irrelevant"}}
-            ],
-            "system_output": [
-                {"name": "iv-out", "location": {"uri": "file:///irrelevant"}}
-            ],
+            "FunctionV2": {
+                "info": _info_payload(),
+                "output": [
+                    _output_table_payload(
+                        "my_table", location={"uri": "file:///out/my_table"}
+                    )
+                ],
+                "system_input": [
+                    _input_table_payload(
+                        "iv-in", location={"uri": "file:///irrelevant"}
+                    )
+                ],
+                "system_output": [
+                    _output_table_payload(
+                        "iv-out", location={"uri": "file:///irrelevant"}
+                    )
+                ],
+            }
         })
     )
     manifest = tmp_path / "manifest.yaml"

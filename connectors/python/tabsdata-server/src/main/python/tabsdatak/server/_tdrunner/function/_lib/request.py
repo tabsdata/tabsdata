@@ -2,11 +2,28 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
-"""Publisher `request.yaml` model.
+"""Function-run `request.yaml` model.
 
-Loads the resolved function-run request that the API Server writes for a
-publisher run. Pydantic handles validation; the YAML is plain (no custom
-tags) and parsed with `yaml.safe_load`.
+Loads the resolved function-run request that the API Server writes for
+function run, then validates it against the pydantic models below.
+
+The wire format wraps the payload in two variant envelopes (single-key
+dicts whose key is the Rust enum variant tag):
+
+* a top-level envelope (the request variant);
+* a per-table envelope on every entry in
+  ``input``/``output``/``system_input``/``system_output``.
+
+For each envelope we track two sets:
+
+* a ``*_SUPPORTED`` tuple: variants this code actually handles today.
+  Anything outside it is rejected.
+* a ``*_KNOWN`` tuple: variants the wire format defines (mirrors the
+  Rust enum). A tag in ``KNOWN`` but not in ``SUPPORTED`` is rejected
+  with a "recognized but not yet supported" message; a tag in neither
+  is rejected with "unknown variant; expected one of: ...".
+
+Today the supported sets are ``FunctionV2`` and ``Table``.
 """
 
 from __future__ import annotations
@@ -17,6 +34,17 @@ import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from tabsdatak.server._tdrunner.function._lib.errors import CommandSpecificError
+
+REQUEST_ENVELOPE_SUPPORTED = ("FunctionV2",)
+REQUEST_ENVELOPE_KNOWN = REQUEST_ENVELOPE_SUPPORTED
+
+TABLE_VARIANT_SUPPORTED = ("Table",)
+TABLE_VARIANT_KNOWN = (
+    "Table",
+    "TableVersions",
+    "PartitionedTable",
+    "PartitionedTableVersions",
+)
 
 
 class InvalidRequestError(ValueError):
@@ -30,51 +58,146 @@ class Location(BaseModel):
     env_prefix: str | None = None
 
 
-class Table(BaseModel):
+class InputTable(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     name: str
+    collection_id: str | int
+    collection: str
+    table_id: str | int
+    table_version_id: str | int
+    execution_id: str | int | None = None
+    transaction_id: str | int | None = None
+    function_run_id: str | int | None = None
+    triggered_on: int | None = None
+    table_data_version_id: str | int | None = None
     location: Location | None = None
+    input_idx: int
+    table_pos: int
+    version_pos: int
+
+
+class OutputTable(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    collection_id: str | int
+    collection: str
+    table_id: str | int
+    table_version_id: str | int
+    table_data_version_id: str | int
+    location: Location
+    table_pos: int
 
 
 class Info(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    collection: str
     collection_id: str | int
-    execution_id: str | int
-    transaction_id: str | int
+    collection: str
+    function_version_id: str | int
+    function_defined_on: int
+    function: str
     function_run_id: str | int
     function_bundle: Location
+    function_stage: Location
+    triggered_on: int
+    transaction_id: str | int
+    execution_id: str | int
+    execution_name: str | None = None
+    function_data: Location
+    scheduled_on: int
 
 
 class Request(BaseModel):
-    """Publisher-shaped subset of the resolved request.yaml."""
+    """Resolved request.yaml for a function-run."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     info: Info
-    input: tuple[Table, ...] = ()
-    output: tuple[Table, ...] = ()
-    system_input: tuple[Table, ...] = ()
-    system_output: tuple[Table, ...] = ()
+    input: tuple[InputTable, ...] = ()
+    output: tuple[OutputTable, ...] = ()
+    system_input: tuple[InputTable, ...] = ()
+    system_output: tuple[OutputTable, ...] = ()
+
+
+def _strip_variant(
+    value: object,
+    supported: tuple[str, ...],
+    known: tuple[str, ...],
+    where: str,
+) -> dict:
+    if not isinstance(value, dict) or len(value) != 1:
+        raise InvalidRequestError(
+            f"{where}: expected single-key variant envelope, got {type(value).__name__}"
+        )
+    [(tag, payload)] = value.items()
+    if tag not in supported:
+        if tag in known:
+            raise InvalidRequestError(
+                f"{where}: variant {tag!r} is recognized but not yet supported"
+            )
+        raise InvalidRequestError(
+            f"{where}: unknown variant {tag!r}; expected one of: {', '.join(known)}"
+        )
+    if not isinstance(payload, dict):
+        raise InvalidRequestError(f"{where}: variant {tag!r} payload must be a mapping")
+    return payload
+
+
+def _strip_variants(entries: object, slot: str) -> list[dict]:
+    if entries is None:
+        return []
+    if not isinstance(entries, list):
+        raise InvalidRequestError(
+            f"{slot}: expected a list, got {type(entries).__name__}"
+        )
+    return [
+        _strip_variant(
+            entry,
+            TABLE_VARIANT_SUPPORTED,
+            TABLE_VARIANT_KNOWN,
+            f"{slot}[{index}]",
+        )
+        for index, entry in enumerate(entries)
+    ]
 
 
 def load_request(path: Path) -> Request:
-    """Load and validate a publisher request.yaml.
+    """Load and validate a function-run request.yaml.
+
+    Validates and strips the request envelope and each per-table
+    envelope (see the module docstring for the supported/known model)
+    before validating the inner payload against :class:`Request`.
 
     Raises:
         FileNotFoundError: if `path` does not exist.
         InvalidRequestError: if the YAML is malformed or the structure
             fails schema validation (missing required fields, wrong
-            types, unknown fields).
+            types, unknown fields, unsupported variant tags).
     """
     try:
         raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     except yaml.YAMLError as exc:
         raise InvalidRequestError(f"malformed YAML in {path}: {exc}") from exc
+
     try:
-        return Request.model_validate(raw)
+        payload = _strip_variant(
+            raw,
+            REQUEST_ENVELOPE_SUPPORTED,
+            REQUEST_ENVELOPE_KNOWN,
+            "request",
+        )
+        for slot in ("input", "output", "system_input", "system_output"):
+            if slot in payload:
+                payload[slot] = _strip_variants(payload[slot], slot)
+    except InvalidRequestError as exc:
+        raise InvalidRequestError(
+            f"invalid request structure in {path}: {exc}"
+        ) from exc
+
+    try:
+        return Request.model_validate(payload)
     except ValidationError as exc:
         raise InvalidRequestError(
             f"invalid request structure in {path}: {exc}"

@@ -40,7 +40,11 @@ from tabsdatak.api import ContextKeySpec, ContextValueSpec
 from tabsdatak.server._tdrunner.function._lib.errors import CommandSpecificError
 
 if TYPE_CHECKING:
-    from tabsdatak.server._tdrunner.function._lib.request import Request, Table
+    from tabsdatak.server._tdrunner.function._lib.request import (
+        InputTable,
+        OutputTable,
+        Request,
+    )
     from tabsdatak.server._tdrunner.function._lib.request_ctx import (
         FromRequestCtx,
     )
@@ -240,7 +244,7 @@ def _resolve_state_file(
 
 
 def _state_candidate(
-    slots: tuple[Table, ...],
+    slots: tuple[InputTable, ...] | tuple[OutputTable, ...],
     state_dir: Path,
 ) -> Path | None:
     """Return the on-disk state file for ``slots[0]``, or ``None`` if no

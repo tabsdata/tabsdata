@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 import yaml
 
@@ -21,9 +23,10 @@ from tabsdatak.server._tdrunner.function._lib.endpoint import (
 )
 from tabsdatak.server._tdrunner.function._lib.request import (
     Info,
+    InputTable,
     Location,
+    OutputTable,
     Request,
-    Table,
 )
 from tabsdatak.server._tdrunner.function._lib.transporter_request import (
     CopyPair,
@@ -38,22 +41,76 @@ from tabsdatak.server._tdrunner.function._lib.transporter_request import (
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
 
+def _info(**overrides: Any) -> Info:
+    fields: dict[str, Any] = {
+        "collection_id": 1,
+        "collection": "c",
+        "function_version_id": "FV-1",
+        "function_defined_on": 1780000000000,
+        "function": "fn",
+        "function_run_id": 4,
+        "function_bundle": Location(uri="file:///bundle.tgz"),
+        "function_stage": Location(uri="file:///stage"),
+        "triggered_on": 1780000000100,
+        "transaction_id": 3,
+        "execution_id": 2,
+        "execution_name": None,
+        "function_data": Location(uri="file:///data"),
+        "scheduled_on": 1780000000200,
+    }
+    fields.update(overrides)
+    return Info(**fields)
+
+
+def _input_table(
+    name: str,
+    *,
+    location: Location | None = None,
+    table_pos: int = 0,
+    version_pos: int = 0,
+    input_idx: int = 0,
+) -> InputTable:
+    return InputTable(
+        name=name,
+        collection_id=1,
+        collection="c",
+        table_id=f"T-{name}",
+        table_version_id=f"TV-{name}",
+        location=location,
+        input_idx=input_idx,
+        table_pos=table_pos,
+        version_pos=version_pos,
+    )
+
+
+def _output_table(
+    name: str,
+    *,
+    location: Location,
+    table_pos: int = 0,
+) -> OutputTable:
+    return OutputTable(
+        name=name,
+        collection_id=1,
+        collection="c",
+        table_id=f"T-{name}",
+        table_version_id=f"TV-{name}",
+        table_data_version_id=f"PDV-{name}",
+        location=location,
+        table_pos=table_pos,
+    )
+
+
 def _request(
     *,
-    inputs: tuple[Table, ...] = (),
-    outputs: tuple[Table, ...] = (),
-    system_input: tuple[Table, ...] = (),
-    system_output: tuple[Table, ...] = (),
+    inputs: tuple[InputTable, ...] = (),
+    outputs: tuple[OutputTable, ...] = (),
+    system_input: tuple[InputTable, ...] = (),
+    system_output: tuple[OutputTable, ...] = (),
+    info: Info | None = None,
 ) -> Request:
     return Request(
-        info=Info(
-            collection="c",
-            collection_id=1,
-            execution_id=2,
-            transaction_id=3,
-            function_run_id=4,
-            function_bundle=Location(uri="file:///bundle.tgz"),
-        ),
+        info=info or _info(),
         input=inputs,
         output=outputs,
         system_input=system_input,
@@ -79,8 +136,8 @@ def test_upload_empty_request_yields_no_pairs(tmp_path):
 def test_localize_skips_system_input_table_without_location(tmp_path):
     r = _request(
         system_input=(
-            Table(name="t1", location=Location(uri="s3://b/t1.parquet")),
-            Table(name="t2", location=None),
+            _input_table("t1", location=Location(uri="s3://b/t1.parquet")),
+            _input_table("t2", location=None),
         )
     )
     out = build_localize_state_request(r, tmp_path / "in", tmp_path / "state")
@@ -91,8 +148,8 @@ def test_localize_skips_system_input_table_without_location(tmp_path):
 def test_localize_skips_input_table_without_location(tmp_path):
     r = _request(
         inputs=(
-            Table(name="i1", location=None),
-            Table(name="i2", location=Location(uri="s3://b/i2.parquet")),
+            _input_table("i1", location=None),
+            _input_table("i2", location=Location(uri="s3://b/i2.parquet")),
         )
     )
     out = build_localize_state_request(r, tmp_path / "in", tmp_path / "state")
@@ -100,21 +157,24 @@ def test_localize_skips_input_table_without_location(tmp_path):
     assert "in/i2.parquet" in out.pairs[0].target.url
 
 
-def test_upload_skips_table_without_location(tmp_path):
+def test_upload_outputs_all_system_outputs(tmp_path):
+    """`OutputTable.location` is required, so every system_output gets a pair."""
     r = _request(
         system_output=(
-            Table(name="t1", location=Location(uri="s3://b/t1.parquet")),
-            Table(name="t2", location=None),
+            _output_table("t1", location=Location(uri="s3://b/t1.parquet")),
+            _output_table("t2", location=Location(uri="s3://b/t2.parquet")),
         )
     )
     out = build_upload_state_request(r, tmp_path / "state")
-    assert len(out.pairs) == 1
+    assert len(out.pairs) == 2
 
 
 def test_localize_handles_input_and_system_input_in_order(tmp_path):
     r = _request(
-        inputs=(Table(name="i1", location=Location(uri="s3://b/i1.parquet")),),
-        system_input=(Table(name="s1", location=Location(uri="s3://b/s1.parquet")),),
+        inputs=(_input_table("i1", location=Location(uri="s3://b/i1.parquet")),),
+        system_input=(
+            _input_table("s1", location=Location(uri="s3://b/s1.parquet")),
+        ),
     )
     out = build_localize_state_request(r, tmp_path / "in", tmp_path / "state")
     assert len(out.pairs) == 2
@@ -127,7 +187,7 @@ def test_localize_handles_input_and_system_input_in_order(tmp_path):
 
 @pytest.mark.parametrize("uri", ["s3://b/x.parquet"])
 def test_s3_endpoint(uri, tmp_path):
-    r = _request(system_input=(Table(name="t", location=Location(uri=uri)),))
+    r = _request(system_input=(_input_table("t", location=Location(uri=uri)),))
     out = build_localize_state_request(r, tmp_path / "in", tmp_path / "state")
     src = out.pairs[0].source
     assert isinstance(src, S3Endpoint)
@@ -142,7 +202,7 @@ def test_s3_endpoint(uri, tmp_path):
     ["az://acct/cont/x.parquet", "abfs://c/x", "abfss://c/x"],
 )
 def test_azure_endpoint(uri, tmp_path):
-    r = _request(system_input=(Table(name="t", location=Location(uri=uri)),))
+    r = _request(system_input=(_input_table("t", location=Location(uri=uri)),))
     out = build_localize_state_request(r, tmp_path / "in", tmp_path / "state")
     src = out.pairs[0].source
     assert isinstance(src, AzureEndpoint)
@@ -153,7 +213,9 @@ def test_azure_endpoint(uri, tmp_path):
 
 def test_gcs_endpoint(tmp_path):
     r = _request(
-        system_input=(Table(name="t", location=Location(uri="gs://bucket/x.parquet")),)
+        system_input=(
+            _input_table("t", location=Location(uri="gs://bucket/x.parquet")),
+        )
     )
     out = build_localize_state_request(r, tmp_path / "in", tmp_path / "state")
     src = out.pairs[0].source
@@ -163,7 +225,9 @@ def test_gcs_endpoint(tmp_path):
 
 def test_local_file_endpoint(tmp_path):
     r = _request(
-        system_input=(Table(name="t", location=Location(uri="file:///foo/x.parquet")),)
+        system_input=(
+            _input_table("t", location=Location(uri="file:///foo/x.parquet")),
+        )
     )
     out = build_localize_state_request(r, tmp_path / "in", tmp_path / "state")
     src = out.pairs[0].source
@@ -173,7 +237,7 @@ def test_local_file_endpoint(tmp_path):
 
 def test_unsupported_scheme_raises(tmp_path):
     r = _request(
-        system_input=(Table(name="t", location=Location(uri="ftp://x/y.parquet")),)
+        system_input=(_input_table("t", location=Location(uri="ftp://x/y.parquet")),)
     )
     with pytest.raises(UnsupportedSchemeError, match="ftp"):
         build_localize_state_request(r, tmp_path / "in", tmp_path / "state")
@@ -185,8 +249,8 @@ def test_unsupported_scheme_raises(tmp_path):
 def test_env_prefix_canonical_when_none(tmp_path):
     r = _request(
         system_input=(
-            Table(
-                name="t",
+            _input_table(
+                "t",
                 location=Location(uri="s3://b/x.parquet", env_prefix=None),
             ),
         )
@@ -199,8 +263,8 @@ def test_env_prefix_canonical_when_none(tmp_path):
 def test_env_prefix_prepended(tmp_path):
     r = _request(
         system_input=(
-            Table(
-                name="t",
+            _input_table(
+                "t",
                 location=Location(uri="s3://b/x.parquet", env_prefix="STAGE"),
             ),
         )
@@ -228,19 +292,10 @@ def test_build_bundle_fetch_request_local(tmp_path):
 
 
 def test_build_bundle_fetch_request_s3(tmp_path):
-    r = Request(
-        info=Info(
-            collection="c",
-            collection_id=1,
-            execution_id=2,
-            transaction_id=3,
-            function_run_id=4,
+    r = _request(
+        info=_info(
             function_bundle=Location(uri="s3://b/bundle.tgz", env_prefix="STAGE"),
         ),
-        input=(),
-        output=(),
-        system_input=(),
-        system_output=(),
     )
     target = tmp_path / "bundle.tar.gz"
     out = build_bundle_fetch_request(r, target)
@@ -256,8 +311,8 @@ def test_build_bundle_fetch_request_s3(tmp_path):
 def test_upload_uses_system_output(tmp_path):
     r = _request(
         system_output=(
-            Table(
-                name="td-initial-values",
+            _output_table(
+                "td-initial-values",
                 location=Location(uri="s3://b/state/out.parquet"),
             ),
         )
@@ -275,7 +330,7 @@ def test_upload_uses_system_output(tmp_path):
 
 def test_yaml_emits_copy_v1_tag(tmp_path):
     r = _request(
-        system_input=(Table(name="t", location=Location(uri="s3://b/t.parquet")),)
+        system_input=(_input_table("t", location=Location(uri="s3://b/t.parquet")),)
     )
     req = build_localize_state_request(r, tmp_path / "in", tmp_path / "state")
     text = dump_transporter_request(req)
