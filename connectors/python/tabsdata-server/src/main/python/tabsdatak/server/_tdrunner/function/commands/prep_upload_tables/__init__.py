@@ -29,15 +29,17 @@ from pathlib import Path
 
 from tabsdatak.server._tdrunner.function._lib.cli import build_parser, command
 from tabsdatak.server._tdrunner.function._lib.endpoint import UnsupportedSchemeError
-from tabsdatak.server._tdrunner.function._lib.errors import CommandSpecificError
 from tabsdatak.server._tdrunner.function._lib.outputs_manifest import (
-    load_outputs_manifest_or_fail,
+    load_outputs_manifest_or_raise,
 )
-from tabsdatak.server._tdrunner.function._lib.request import load_request_or_fail
+from tabsdatak.server._tdrunner.function._lib.request import load_request_or_raise
 from tabsdatak.server._tdrunner.function._lib.transporter_request import (
     OutputTableNotInManifestError,
     build_upload_tables_request,
     write_transporter_request,
+)
+from tabsdatak.server._tdrunner.function.commands.prep_upload_tables.error import (
+    PrepUploadTablesErrorCode,
 )
 
 VERSION = "0.1.0"
@@ -55,12 +57,6 @@ MAN = (
     "did not modify (manifest entry with file: null) and tables with "
     "no apiserver-allocated Location are skipped."
 )
-
-EXIT_BAD_REQUEST = 10
-EXIT_BAD_MANIFEST = 11
-EXIT_MANIFEST_MISMATCH = 12
-EXIT_UNSUPPORTED_SCHEME = 13
-EXIT_WRITE_FAILED = 14
 
 
 def _build_parser():
@@ -92,24 +88,24 @@ def main(args: argparse.Namespace) -> int:
     outputs_manifest_path = Path(args.outputs_manifest)
     out_path = Path(args.out)
 
-    request = load_request_or_fail(request_path, EXIT_BAD_REQUEST)
-    manifest_entries = load_outputs_manifest_or_fail(
-        outputs_manifest_path, EXIT_BAD_MANIFEST
+    request = load_request_or_raise(request_path, PrepUploadTablesErrorCode.PUT_1)
+    manifest_entries = load_outputs_manifest_or_raise(
+        outputs_manifest_path, PrepUploadTablesErrorCode.PUT_2
     )
 
     try:
         copy_req = build_upload_tables_request(request, manifest_entries)
     except OutputTableNotInManifestError as exc:
-        raise CommandSpecificError(EXIT_MANIFEST_MISMATCH, str(exc)) from exc
+        raise PrepUploadTablesErrorCode.PUT_3.exception(cause=exc, detail=str(exc))
     except UnsupportedSchemeError as exc:
-        raise CommandSpecificError(EXIT_UNSUPPORTED_SCHEME, str(exc)) from exc
+        raise PrepUploadTablesErrorCode.PUT_4.exception(cause=exc, detail=str(exc))
 
     try:
         write_transporter_request(copy_req, out_path)
     except OSError as exc:
-        raise CommandSpecificError(
-            EXIT_WRITE_FAILED, f"failed to write {out_path}: {exc}"
-        ) from exc
+        raise PrepUploadTablesErrorCode.PUT_5.exception(
+            cause=exc, path=out_path, detail=str(exc)
+        )
     return 0
 
 

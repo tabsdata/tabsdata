@@ -10,13 +10,13 @@ from pathlib import Path
 import pytest
 import yaml
 
-from tabsdatak.server._tdrunner.function.commands.prep_upload_tables import (
-    EXIT_BAD_MANIFEST,
-    EXIT_BAD_REQUEST,
-    EXIT_MANIFEST_MISMATCH,
-    EXIT_UNSUPPORTED_SCHEME,
-    EXIT_WRITE_FAILED,
-    main,
+from tabsdatak.server._tdrunner.function.commands.prep_upload_tables import main
+from tabsdatak.server._tdrunner.function.commands.prep_upload_tables.error import (
+    BadEndpointSchemeError,
+    BadManifestError,
+    BadRequestError,
+    ManifestMismatchError,
+    WriteFailedError,
 )
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
@@ -269,7 +269,7 @@ def test_main_missing_request_returns_bad_request(monkeypatch, tmp_path, http_ok
         tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert rc == EXIT_BAD_REQUEST
+    assert rc == BadRequestError.exit_code
 
 
 def test_main_malformed_request_returns_bad_request(monkeypatch, tmp_path, http_ok_url):
@@ -284,7 +284,7 @@ def test_main_malformed_request_returns_bad_request(monkeypatch, tmp_path, http_
         tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert rc == EXIT_BAD_REQUEST
+    assert rc == BadRequestError.exit_code
 
 
 def test_main_missing_manifest_returns_bad_manifest(monkeypatch, tmp_path, http_ok_url):
@@ -297,7 +297,7 @@ def test_main_missing_manifest_returns_bad_manifest(monkeypatch, tmp_path, http_
         tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert rc == EXIT_BAD_MANIFEST
+    assert rc == BadManifestError.exit_code
 
 
 def test_main_malformed_manifest_returns_bad_manifest(
@@ -314,7 +314,7 @@ def test_main_malformed_manifest_returns_bad_manifest(
         tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert rc == EXIT_BAD_MANIFEST
+    assert rc == BadManifestError.exit_code
 
 
 def test_main_table_missing_from_manifest_returns_mismatch(
@@ -335,7 +335,7 @@ def test_main_table_missing_from_manifest_returns_mismatch(
         tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert rc == EXIT_MANIFEST_MISMATCH
+    assert rc == ManifestMismatchError.exit_code
 
 
 def test_main_unsupported_scheme_returns_unsupported_scheme(
@@ -359,7 +359,7 @@ def test_main_unsupported_scheme_returns_unsupported_scheme(
         tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert rc == EXIT_UNSUPPORTED_SCHEME
+    assert rc == BadEndpointSchemeError.exit_code
 
 
 def test_main_write_error_returns_write_failed(monkeypatch, tmp_path, http_ok_url):
@@ -375,7 +375,7 @@ def test_main_write_error_returns_write_failed(monkeypatch, tmp_path, http_ok_ur
         tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert rc == EXIT_WRITE_FAILED
+    assert rc == WriteFailedError.exit_code
 
 
 def test_main_invalid_options_returns_1(monkeypatch):
