@@ -14,6 +14,7 @@ use td_error::TdError;
 use td_objects::Buildable;
 use td_objects::dxo::metrics::{
     EdgeRow, InflightRequest, InflightResponse, MetricsRequest, MetricsResponse, NodeKind, NodeRow,
+    SnapshotRequest, SnapshotResponse,
 };
 use td_objects::dxo::query_filters::{
     MAX_GAP_FILLED_ROWS, TimeWindowError, WindowUnit, expected_buckets,
@@ -29,16 +30,39 @@ pub async fn build_inflight_response(
     req: Ref<InflightRequest>,
     mut conn: MutRef<DynamicConnection<'static>>,
 ) -> Result<InflightResponse, TdError> {
-    let rows = conn.metrics().inflight(&req).await?;
-    Ok(InflightResponse::builder().rows(rows).build()?)
+    inflight_response(&req, &mut conn).await
 }
 
 pub async fn build_metrics_response(
     req: Ref<MetricsRequest>,
     mut conn: MutRef<DynamicConnection<'static>>,
 ) -> Result<MetricsResponse, TdError> {
-    let raw_nodes = conn.metrics().metrics_nodes(&req).await?;
-    let raw_edges = conn.metrics().metrics_edges(&req).await?;
+    metrics_response(&req, &mut conn).await
+}
+
+pub async fn build_snapshot_response(
+    req: Ref<SnapshotRequest>,
+    mut conn: MutRef<DynamicConnection<'static>>,
+) -> Result<SnapshotResponse, TdError> {
+    let metrics = metrics_response(&req.metrics, &mut conn).await?;
+    let inflight = inflight_response(&req.inflight, &mut conn).await?;
+    Ok(SnapshotResponse { metrics, inflight })
+}
+
+async fn inflight_response(
+    req: &InflightRequest,
+    conn: &mut DynamicConnection<'static>,
+) -> Result<InflightResponse, TdError> {
+    let rows = conn.metrics().inflight(req).await?;
+    Ok(InflightResponse::builder().rows(rows).build()?)
+}
+
+async fn metrics_response(
+    req: &MetricsRequest,
+    conn: &mut DynamicConnection<'static>,
+) -> Result<MetricsResponse, TdError> {
+    let raw_nodes = conn.metrics().metrics_nodes(req).await?;
+    let raw_edges = conn.metrics().metrics_edges(req).await?;
     let mut nodes = fold_to_coarse(raw_nodes, req.unit)?;
     let edges = fold_to_coarse(raw_edges, req.unit)?;
     nodes.extend(synthesize_nodes_from_edges(&edges)?);

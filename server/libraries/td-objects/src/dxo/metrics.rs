@@ -138,11 +138,6 @@ mod definitions {
         pub edges: Vec<EdgeRow>,
     }
 
-    /// Domain request for `GET /metrics`. Carries the resolved window,
-    /// the dim selection, the dimension filters, and the single status
-    /// to aggregate. Filters apply target-only to nodes and
-    /// either-endpoint to real edges (target-only to synthetic edges,
-    /// since they have no source dim to filter).
     pub struct MetricsRequest {
         pub dim: Dim,
         pub window: TimeWindow,
@@ -152,19 +147,23 @@ mod definitions {
         pub statuses: Vec<LogicalFunctionRunStatus>,
     }
 
-    /// Domain request for `GET /inflight`. Point-in-time, no window.
     pub struct InflightRequest {
         pub collections: DimensionFilter<CollectionId>,
         pub groups: DimensionFilter<GroupId>,
         pub statuses: Vec<LogicalFunctionRunStatus>,
     }
 
-    /// URL-query view of `MetricsRequest`.
-    ///
-    /// Window grammar: `unit` (default `day`), `align` (default
-    /// `calendar`), `from` (default server-now), `span` (default 1).
-    /// `unit` is also the GROUP BY grain — `unit=hour&span=24` returns
-    /// 24 hourly rows. `dim` defaults to `collection`.
+    pub struct SnapshotRequest {
+        pub metrics: MetricsRequest,
+        pub inflight: InflightRequest,
+    }
+
+    #[ta_objects::Dto]
+    pub struct SnapshotResponse {
+        pub metrics: MetricsResponse,
+        pub inflight: InflightResponse,
+    }
+
     #[ta_objects::QueryParam]
     pub struct MetricsQuery {
         /// Breakout dimension (`collection` (default) | `group`).
@@ -220,7 +219,6 @@ mod definitions {
         pub status: Option<LogicalFunctionRunStatus>,
     }
 
-    /// URL-query view of `InflightRequest`. Point-in-time, no window.
     #[ta_objects::QueryParam]
     pub struct InflightQuery {
         #[serde(default, rename = "collection")]
@@ -240,6 +238,38 @@ mod definitions {
         #[builder(default)]
         pub status: Vec<LogicalFunctionRunStatus>,
     }
+
+    #[ta_objects::QueryParam]
+    pub struct SnapshotQuery {
+        /// Breakout dimension on the metrics sub-response.
+        #[serde(default)]
+        #[builder(default)]
+        pub dim: Option<Dim>,
+        #[serde(default)]
+        #[builder(default)]
+        pub unit: Option<WindowUnit>,
+        #[serde(default)]
+        #[builder(default)]
+        pub align: Option<WindowAlign>,
+        #[serde(default)]
+        #[builder(default)]
+        pub from: Option<i64>,
+        #[serde(default)]
+        #[builder(default)]
+        pub span: Option<u32>,
+        #[serde(default, rename = "collection")]
+        #[builder(default)]
+        pub collection: Vec<CollectionId>,
+        #[serde(default, rename = "collection_exclude")]
+        #[builder(default)]
+        pub collection_exclude: Vec<CollectionId>,
+        #[serde(default, rename = "group")]
+        #[builder(default)]
+        pub group: Vec<GroupId>,
+        #[serde(default, rename = "group_exclude")]
+        #[builder(default)]
+        pub group_exclude: Vec<GroupId>,
+    }
 }
 
 pub use definitions::*;
@@ -258,6 +288,16 @@ impl MetricsRequest {
 }
 
 impl InflightRequest {
+    /// Scope this request to a project, producing the service input.
+    pub fn in_project(self, project: impl Into<ProjectId>) -> Scoped<Self, ProjectId> {
+        Scoped {
+            project: project.into(),
+            request: self,
+        }
+    }
+}
+
+impl SnapshotRequest {
     /// Scope this request to a project, producing the service input.
     pub fn in_project(self, project: impl Into<ProjectId>) -> Scoped<Self, ProjectId> {
         Scoped {

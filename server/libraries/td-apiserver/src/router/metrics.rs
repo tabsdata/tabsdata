@@ -17,12 +17,12 @@ mod routes {
     use td_error::TdError;
     use td_objects::dxo::metrics::{
         Dim, InflightQuery, InflightRequest, InflightResponse, MetricsQuery, MetricsRequest,
-        MetricsResponse, StatusFilterError,
+        MetricsResponse, SnapshotQuery, SnapshotRequest, SnapshotResponse, StatusFilterError,
     };
     use td_objects::dxo::query_filters::{
         DimensionFilter, TimeWindow, WindowAlign, WindowSpec, WindowUnit,
     };
-    use td_objects::rest_urls::{INFLIGHT, METRICS};
+    use td_objects::rest_urls::{INFLIGHT, METRICS, SNAPSHOT};
     use td_objects::types::basic::{EpochMs, LogicalFunctionRunStatus, ProjectId};
     use td_services::metrics::services::OperationalMetricsServices;
     use tower::ServiceExt;
@@ -69,6 +69,30 @@ mod routes {
         })
     }
 
+    /// Build the combined request. Metrics defaults to `Committed`
+    /// (matching `/metrics`); inflight passes empty statuses so the SQL
+    /// returns all IN_FLIGHT variants.
+    fn snapshot_query_into_request(q: SnapshotQuery) -> Result<SnapshotRequest, TdError> {
+        let (window, unit) = resolve_window(q.unit, q.align, q.from, q.span)?;
+        let collections = DimensionFilter::new(q.collection.clone(), q.collection_exclude.clone());
+        let groups = DimensionFilter::new(q.group.clone(), q.group_exclude.clone());
+        Ok(SnapshotRequest {
+            metrics: MetricsRequest {
+                dim: q.dim.unwrap_or(Dim::Collection),
+                window,
+                unit,
+                collections: collections.clone(),
+                groups: groups.clone(),
+                statuses: vec![LogicalFunctionRunStatus::Committed],
+            },
+            inflight: InflightRequest {
+                collections,
+                groups,
+                statuses: vec![],
+            },
+        })
+    }
+
     fn inflight_query_into_request(q: InflightQuery) -> Result<InflightRequest, TdError> {
         for status in &q.status {
             if !LogicalFunctionRunStatus::IN_FLIGHT.contains(status) {
@@ -107,6 +131,18 @@ mod routes {
     ) -> Result<GetStatus<InflightResponse>, ErrorStatus> {
         let request = inflight_query_into_request(query)?.in_project(project_id);
         let response = state.inflight.service().oneshot(request).await?;
+        Ok(GetStatus::OK(response))
+    }
+
+    #[apiserver_path(method = get, path = SNAPSHOT, tag = METRICS_TAG)]
+    #[doc = "Combined `/metrics` + `/inflight` on one DB connection"]
+    pub async fn get_snapshot(
+        State(state): State<Arc<OperationalMetricsServices>>,
+        Extension(project_id): Extension<ProjectId>,
+        Query(query): Query<SnapshotQuery>,
+    ) -> Result<GetStatus<SnapshotResponse>, ErrorStatus> {
+        let request = snapshot_query_into_request(query)?.in_project(project_id);
+        let response = state.snapshot.service().oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }
 

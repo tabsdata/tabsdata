@@ -167,11 +167,13 @@ pub const DELETE_GROUP: &str = url!(GROUP);
 
 // Operational metrics. `/metrics` is the consolidated nodes+edges
 // endpoint, parameterised by `dim=collection|group`. `/inflight` is
-// the point-in-time complement (no window). Both are tenant-scoped: the
+// the point-in-time complement (no window); `/snapshot` returns both in one
+// response over a single DB connection. All three are tenant-scoped: the
 // `{project}` segment drives the connection GUC and RLS filters the
 // aggregation to that project (the queries carry no project predicate).
 pub const METRICS: &str = url!(SCOPED, "/metrics");
 pub const INFLIGHT: &str = url!(SCOPED, "/inflight");
+pub const SNAPSHOT: &str = url!(SCOPED, "/snapshot");
 
 // Permissions
 pub const PERMISSIONS: &str = url!(ROLE, "/permissions");
