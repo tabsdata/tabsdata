@@ -21,19 +21,23 @@ from urllib.request import url2pathname
 from tabsdatak._connectors import get_src
 from tabsdatak._info import KIND_PUBLISHER_DEF, PublisherInfo, _unwrap_info
 from tabsdatak.server._tdrunner.function._lib.cli import build_parser, command
-from tabsdatak.server._tdrunner.function._lib.errors import CommandSpecificError
-from tabsdatak.server._tdrunner.function._lib.function_def import load_function_def
+from tabsdatak.server._tdrunner.function._lib.function_def import (
+    load_function_def_or_raise,
+)
 from tabsdatak.server._tdrunner.function._lib.initial_values import (
-    drain_ctx_to_state,
-    hydrate_ctx_from_state,
+    drain_ctx_to_state_or_raise,
+    hydrate_ctx_from_state_or_raise,
 )
 from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
     MANIFEST_FILES_KEY,
     MANIFEST_NAME_KEY,
     write_inputs_manifest,
 )
-from tabsdatak.server._tdrunner.function._lib.request import load_request_or_fail
+from tabsdatak.server._tdrunner.function._lib.request import load_request_or_raise
 from tabsdatak.server._tdrunner.function._lib.request_ctx import FromRequestCtx
+from tabsdatak.server._tdrunner.function.commands.run_source_plugin.error import (
+    RunSourcePluginErrorCode,
+)
 from tabsdatak.spi import SrcPluginCtx
 
 # TODO: After all commands are done, version will be unified in a single source of
@@ -52,18 +56,6 @@ MAN = (
     "declaration order) to the parquet files the plugin produced for "
     "it; consumed by the function runner."
 )
-
-# Command-specific exit codes (>= 10 per docs/01-CommandBasics.md).
-# TODO: Implementing this for now for easy errors, awaiting end of conversation
-#  regarding errors to refactor
-EXIT_BAD_REQUEST = 10
-EXIT_BAD_BUNDLE = 11
-EXIT_BAD_USER_CODE = 12
-EXIT_WRONG_KIND = 13
-EXIT_NO_PLUGIN = 14
-EXIT_PLUGIN_FAILED = 15
-EXIT_MANIFEST_WRITE_FAILED = 16
-EXIT_BAD_INITIAL_VALUES = 17
 
 
 def _build_parser():
@@ -110,14 +102,14 @@ def _build_parser():
 
 def _load_function_def(bundle_dir: Path) -> PublisherInfo:
     """Load the publisher's ``function_def.json`` -- thin wrapper over
-    :func:`load_function_def` pinning the accepted kind set and the
-    command's exit codes."""
-    return load_function_def(
+    :func:`load_function_def_or_raise` pinning the accepted kind set
+    and the command's per-site error codes."""
+    return load_function_def_or_raise(
         bundle_dir,
         allowed_kinds={KIND_PUBLISHER_DEF: PublisherInfo},
-        exit_bad_bundle=EXIT_BAD_BUNDLE,
-        exit_bad_user_code=EXIT_BAD_USER_CODE,
-        exit_wrong_kind=EXIT_WRONG_KIND,
+        bad_bundle_code=RunSourcePluginErrorCode.RSP_2,
+        bad_user_code_code=RunSourcePluginErrorCode.RSP_3,
+        wrong_kind_code=RunSourcePluginErrorCode.RSP_4,
     )
 
 
@@ -134,23 +126,23 @@ def _resolve_plugin(info: PublisherInfo):
     try:
         src_def = get_src(type(info.source))
     except KeyError as exc:
-        raise CommandSpecificError(EXIT_NO_PLUGIN, str(exc)) from exc
+        raise RunSourcePluginErrorCode.RSP_5.exception(
+            cause=exc, src_type=type(info.source).__name__, detail=str(exc)
+        )
     return src_def.plugin()
 
 
-def _invoke_read_in(plugin, ctx: SrcPluginCtx, conn, src) -> list[list[Path]]:
+def _invoke_read_in(plugin, ctx: SrcPluginCtx, src) -> list[list[Path]]:
     try:
-        return plugin.read_in(ctx, conn, src)
+        return plugin.read_in(ctx, src)
     except Exception as exc:
-        raise CommandSpecificError(
-            EXIT_PLUGIN_FAILED, f"plugin read_in failed: {exc}"
-        ) from exc
+        raise RunSourcePluginErrorCode.RSP_6.exception(cause=exc, detail=str(exc))
 
 
 def _normalise_table_file(p) -> str:
     """Render a `TableFileSpec` as an absolute filesystem path string.
 
-    `TableFileSpec` is declared as `Path` (a `Path` subclass),
+    `TableFileSpec` is declared as `ParquetFile` (a `Path` subclass),
     which should mean a real filesystem path. In practice some
     connector plugins (e.g. `LocalFileSrcPlugin`) return the path
     parsed verbatim from the transporter report's `to:` field — i.e.
@@ -198,7 +190,7 @@ def _write_inputs_manifest(
               - <absolute path>
               - ...
 
-    Plugin-contract check (→ `EXIT_PLUGIN_FAILED`): the plugin must
+    Plugin-contract check (→ `PluginFailedError`): the plugin must
     have produced exactly `cardinality(source)` outer slots. The
     function-signature side (function must declare at least that many
     parameters) is owned by `PublisherInfo._check_func_signature` and
@@ -211,10 +203,8 @@ def _write_inputs_manifest(
     parameters = list(inspect.signature(func).parameters)
 
     if len(produced) != cardinality:
-        raise CommandSpecificError(
-            EXIT_PLUGIN_FAILED,
-            f"plugin returned {len(produced)} input slot(s); source "
-            f"cardinality is {cardinality}",
+        raise RunSourcePluginErrorCode.RSP_7.exception(
+            returned=len(produced), expected=cardinality
         )
 
     entries = [
@@ -228,10 +218,9 @@ def _write_inputs_manifest(
     try:
         write_inputs_manifest(entries, path)
     except OSError as exc:
-        raise CommandSpecificError(
-            EXIT_MANIFEST_WRITE_FAILED,
-            f"failed to write inputs manifest {path}: {exc}",
-        ) from exc
+        raise RunSourcePluginErrorCode.RSP_8.exception(
+            cause=exc, path=path, detail=str(exc)
+        )
 
 
 @command(name="td_run_source_plugin", parser=_build_parser)
@@ -242,7 +231,7 @@ def main(args: argparse.Namespace) -> int:
     inputs_manifest = Path(args.inputs_manifest)
     state_dir = Path(args.state_dir)
 
-    request = load_request_or_fail(request_path, EXIT_BAD_REQUEST)
+    request = load_request_or_raise(request_path, RunSourcePluginErrorCode.RSP_1)
     info = _load_function_def(bundle_dir)
     plugin = _resolve_plugin(info)
     ctx = _SrcContext(
@@ -255,9 +244,13 @@ def main(args: argparse.Namespace) -> int:
         function_id=str(request.info.function_run_id),
         function_name=request.info.function,
     )
-    hydrate_ctx_from_state(ctx, request, state_dir, exit_code=EXIT_BAD_INITIAL_VALUES)
-    produced = _invoke_read_in(plugin, ctx, info.conn, info.source)
-    drain_ctx_to_state(ctx, request, state_dir, exit_code=EXIT_BAD_INITIAL_VALUES)
+    hydrate_ctx_from_state_or_raise(
+        ctx, request, state_dir, error_code=RunSourcePluginErrorCode.RSP_9
+    )
+    produced = _invoke_read_in(plugin, ctx, info.source)
+    drain_ctx_to_state_or_raise(
+        ctx, request, state_dir, error_code=RunSourcePluginErrorCode.RSP_9
+    )
     _write_inputs_manifest(info, produced, inputs_manifest)
     return 0
 

@@ -30,21 +30,14 @@ from tabsdatak.common._archive.bundle import BUNDLE_MANIFEST_FILENAME, build_bun
 from tabsdatak._info import PublisherInfo
 from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
 from tabsdatak.server._tdrunner.function._lib.errors import CommandSpecificError
-from tabsdatak.server._tdrunner.function.commands.run_source_plugin import (
-    EXIT_BAD_BUNDLE,
-    EXIT_BAD_INITIAL_VALUES,
-    EXIT_BAD_REQUEST,
-    EXIT_BAD_USER_CODE,
-    EXIT_MANIFEST_WRITE_FAILED,
-    EXIT_NO_PLUGIN,
-    EXIT_PLUGIN_FAILED,
-    _SrcContext,
-    _invoke_read_in,
-    _load_function_def,
-    _normalise_table_file,
-    _resolve_plugin,
-    _write_inputs_manifest,
-    main,
+from tabsdatak.server._tdrunner.function.commands.run_source_plugin.error import (
+    BadBundleError,
+    BadInitialValuesError,
+    BadRequestError,
+    BadUserCodeError,
+    ManifestWriteFailedError,
+    NoPluginError,
+    PluginFailedError,
 )
 from tabsdatak.server._tdrunner.function._lib.initial_values import (
     drain_ctx_to_state,
@@ -59,6 +52,22 @@ from tabsdatak.server._tdrunner.function._lib.request import (
     OutputTable,
     Request,
 )
+from tabsdatak.server._tdrunner.function.commands.run_source_plugin import (
+    _SrcContext,
+    _invoke_read_in,
+    _load_function_def,
+    _normalise_table_file,
+    _resolve_plugin,
+    _write_inputs_manifest,
+    main,
+)
+
+# Legacy unit-tests for the still-present ``hydrate_ctx_from_state`` /
+# ``drain_ctx_to_state`` helpers (further below) pass this sentinel as
+# the int ``exit_code`` arg. The wired (typed) path now uses
+# ``BadInitialValuesError`` instead; this constant only survives until
+# the legacy helpers are removed in the TD-2263 cleanup PR.
+EXIT_BAD_INITIAL_VALUES = BadInitialValuesError.exit_code
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
@@ -75,13 +84,13 @@ from __future__ import annotations
 from tabsdatak.api import TableFrameSpec, TableFramesSpec, publisher
 from tabsdatak.conn.localfile import LocalFileSrcConn, LocalFileSrc
 
-_CONN = LocalFileSrcConn(base_path={base_path!r})
 _SRC = LocalFileSrc(
+    conn=LocalFileSrcConn(base_path={base_path!r}),
     paths=["*.parquet"],
 )
 
 
-@publisher(conn=_CONN, source=_SRC, output_tables=["my_table"])
+@publisher(source=_SRC, output_tables=["my_table"])
 def my_publisher(in_1: TableFramesSpec) -> tuple[TableFrameSpec]:
     return (None,)
 """
@@ -377,18 +386,16 @@ def test_load_function_def_happy(built_bundle):
 def test_load_function_def_missing_manifest_raises_bad_bundle(tmp_path):
     empty = tmp_path / "empty-bundle"
     empty.mkdir()
-    with pytest.raises(CommandSpecificError) as exc_info:
+    with pytest.raises(BadBundleError):
         _load_function_def(empty)
-    assert exc_info.value.exit_code == EXIT_BAD_BUNDLE
 
 
 def test_load_function_def_malformed_json_raises_bad_bundle(tmp_path):
     bad = tmp_path / "bad-bundle"
     bad.mkdir()
     (bad / BUNDLE_MANIFEST_FILENAME).write_text("{ not json")
-    with pytest.raises(CommandSpecificError) as exc_info:
+    with pytest.raises(BadBundleError):
         _load_function_def(bad)
-    assert exc_info.value.exit_code == EXIT_BAD_BUNDLE
 
 
 def test_load_function_def_unresolvable_func_raises_bad_user_code(
@@ -396,15 +403,14 @@ def test_load_function_def_unresolvable_func_raises_bad_user_code(
 ):
     """Edit the manifest to point at a non-existent module; the import
     failure surfaces via the pydantic validator as `ValidationError`,
-    which the command maps to `EXIT_BAD_USER_CODE`."""
+    which the command maps to `BadUserCodeError`."""
     manifest = built_bundle / BUNDLE_MANIFEST_FILENAME
     data = json.loads(manifest.read_text())
     data["spec"]["func"] = "nonexistent.module:nope"
     manifest.write_text(json.dumps(data))
 
-    with pytest.raises(CommandSpecificError) as exc_info:
+    with pytest.raises(BadUserCodeError):
         _load_function_def(built_bundle)
-    assert exc_info.value.exit_code == EXIT_BAD_USER_CODE
 
 
 # --- unit: _resolve_plugin -----------------------------------------------
@@ -419,15 +425,14 @@ def test_resolve_plugin_happy(fixture_publisher):
 
 def test_resolve_plugin_unknown_source_raises_no_plugin(fixture_publisher, monkeypatch):
     """When `get_src` raises `KeyError`, the runner surfaces
-    `EXIT_NO_PLUGIN`."""
+    `NoPluginError`."""
 
     def _raise(_):
         raise KeyError("no connector registered")
 
     monkeypatch.setattr(f"{_MOD}.get_src", _raise)
-    with pytest.raises(CommandSpecificError) as exc_info:
+    with pytest.raises(NoPluginError):
         _resolve_plugin(fixture_publisher)
-    assert exc_info.value.exit_code == EXIT_NO_PLUGIN
 
 
 # --- unit: _invoke_read_in ----------------------------------------------
@@ -435,21 +440,20 @@ def test_resolve_plugin_unknown_source_raises_no_plugin(fixture_publisher, monke
 
 def test_invoke_read_in_returns_plugin_result():
     class _FakePlugin:
-        def read_in(self, ctx, conn, src):
+        def read_in(self, ctx, src):
             return [[Path("/x.parquet")]]
 
-    out = _invoke_read_in(_FakePlugin(), object(), object(), object())
+    out = _invoke_read_in(_FakePlugin(), object(), object())
     assert out == [[Path("/x.parquet")]]
 
 
 def test_invoke_read_in_wraps_exceptions_as_plugin_failed():
     class _BrokenPlugin:
-        def read_in(self, ctx, conn, src):
+        def read_in(self, ctx, src):
             raise RuntimeError("boom")
 
-    with pytest.raises(CommandSpecificError) as exc_info:
-        _invoke_read_in(_BrokenPlugin(), object(), object(), object())
-    assert exc_info.value.exit_code == EXIT_PLUGIN_FAILED
+    with pytest.raises(PluginFailedError):
+        _invoke_read_in(_BrokenPlugin(), object(), object())
 
 
 # --- unit: _write_inputs_manifest ----------------------------------------
@@ -486,9 +490,8 @@ def test_write_inputs_manifest_cardinality_mismatch_raises(tmp_path, fixture_pub
     that returns two slots is a contract violation."""
     out = tmp_path / "manifest.yaml"
     produced = [[Path("/x.parquet")], [Path("/y.parquet")]]
-    with pytest.raises(CommandSpecificError) as exc_info:
+    with pytest.raises(PluginFailedError):
         _write_inputs_manifest(fixture_publisher, produced, out)
-    assert exc_info.value.exit_code == EXIT_PLUGIN_FAILED
 
 
 def test_write_inputs_manifest_oserror_raises_manifest_write_failed(
@@ -499,9 +502,8 @@ def test_write_inputs_manifest_oserror_raises_manifest_write_failed(
     a_dir = tmp_path / "i-am-a-dir"
     a_dir.mkdir()
     produced = [[Path("/x.parquet")]]
-    with pytest.raises(CommandSpecificError) as exc_info:
+    with pytest.raises(ManifestWriteFailedError):
         _write_inputs_manifest(fixture_publisher, produced, a_dir)
-    assert exc_info.value.exit_code == EXIT_MANIFEST_WRITE_FAILED
 
 
 # --- main: error paths via argparse ---------------------------------------
@@ -517,7 +519,7 @@ def test_main_missing_request_returns_bad_request(tmp_path, monkeypatch, http_ok
         tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert main() == EXIT_BAD_REQUEST
+    assert main() == BadRequestError.exit_code
 
 
 def test_main_missing_bundle_returns_bad_bundle(tmp_path, monkeypatch, http_ok_url):
@@ -531,7 +533,7 @@ def test_main_missing_bundle_returns_bad_bundle(tmp_path, monkeypatch, http_ok_u
         tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert main() == EXIT_BAD_BUNDLE
+    assert main() == BadBundleError.exit_code
 
 
 def test_main_invalid_options_returns_1(monkeypatch):

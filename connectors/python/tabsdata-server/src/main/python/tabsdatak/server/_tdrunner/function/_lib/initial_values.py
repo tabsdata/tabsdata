@@ -37,6 +37,7 @@ import polars as pl
 from pydantic import ConfigDict, TypeAdapter, ValidationError
 
 from tabsdatak.api import ContextKeySpec, ContextValueSpec
+from tabsdatak.error import ErrorCode
 from tabsdatak.server._tdrunner.function._lib.errors import CommandSpecificError
 
 if TYPE_CHECKING:
@@ -299,3 +300,53 @@ def drain_ctx_to_state(
         raise CommandSpecificError(
             exit_code, f"unwritable state-out {state_file}: {exc}"
         ) from exc
+
+
+def hydrate_ctx_from_state_or_raise(
+    ctx: FromRequestCtx,
+    request: Request,
+    state_dir: Path,
+    *,
+    error_code: ErrorCode,
+    prefer_output: bool = False,
+) -> None:
+    """Typed-error counterpart of :func:`hydrate_ctx_from_state`.
+
+    Takes the per-command ``error_code`` enum variant instead of an
+    integer ``exit_code``. The bound exception template can reference
+    ``{state_file}`` and ``{detail}`` placeholders.
+    """
+    state_file = _resolve_state_file(prefer_output, request, state_dir)
+    if state_file is None:
+        return
+    try:
+        values = read_initial_values(state_file)
+    except InvalidInitialValuesError as exc:
+        raise error_code.exception(cause=exc, state_file=state_file, detail=str(exc))
+    ctx.hydrate(values)
+
+
+def drain_ctx_to_state_or_raise(
+    ctx: FromRequestCtx,
+    request: Request,
+    state_dir: Path,
+    *,
+    error_code: ErrorCode,
+) -> None:
+    """Typed-error counterpart of :func:`drain_ctx_to_state`.
+
+    Takes the per-command ``error_code`` enum variant instead of an
+    integer ``exit_code``. The bound exception template can reference
+    ``{state_file}`` and ``{detail}`` placeholders.
+    """
+    if not request.system_output:
+        return
+    slot = request.system_output[0]
+    if slot.location is None:
+        return
+    state_dir.mkdir(parents=True, exist_ok=True)
+    state_file = state_dir / f"{slot.name}.parquet"
+    try:
+        write_initial_values(ctx.drain(), state_file)
+    except InvalidInitialValuesError as exc:
+        raise error_code.exception(cause=exc, state_file=state_file, detail=str(exc))
