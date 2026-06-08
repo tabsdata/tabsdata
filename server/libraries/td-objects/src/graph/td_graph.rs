@@ -10,7 +10,7 @@ use crate::dxo::graph::{
 use crate::dxo::table::TableDBWithNames;
 use crate::dxo::trigger::TriggerDBWithNames;
 use crate::transaction::map::TransactionMapper;
-use crate::types::basic::{FunctionId, TableId, TransactionKey};
+use crate::types::basic::{FunctionId, InputIdx, TableId, TransactionKey};
 use crate::types::table_ref::Versions;
 use petgraph::dot::{Config, Dot};
 use petgraph::prelude::{DiGraph, EdgeRef, NodeIndex};
@@ -22,7 +22,7 @@ use std::fmt::Display;
 use std::hash::Hash;
 use std::ops::Deref;
 use ta_objects::Buildable;
-use td_error::{TdError, td_error};
+use td_error::{td_error, TdError};
 
 #[td_error]
 enum GraphError {
@@ -112,7 +112,15 @@ impl<'a> TdGraphBuilder<'a> {
 
     /// Adds dependency edges between functions.
     pub fn with_dependencies(mut self, deps: &[DependencyDBWithNames]) -> Result<Self, TdError> {
-        for dep in deps {
+        // Provenance `input_idx`: a single global index across the plan's
+        // dependency edges. Building the edges in a deterministic
+        // `(function_id, dep_pos)` order lets the index fall out of the
+        // enumeration in one pass — no lookup table — and makes it reproducible
+        // whenever the plan is rebuilt.
+        let mut deps: Vec<&DependencyDBWithNames> = deps.iter().collect();
+        deps.sort_by_key(|dep| (dep.function_id, dep.dep_pos));
+
+        for (input_idx, dep) in deps.into_iter().enumerate() {
             let table = self
                 .all_tables_map
                 .get(&dep.table_id)
@@ -129,6 +137,7 @@ impl<'a> TdGraphBuilder<'a> {
             let graph_dep = GraphDependency::builder()
                 .dep_pos(dep.dep_pos)
                 .self_dependency(function.id == table.function_version_id)
+                .input_idx(InputIdx::try_from(input_idx as i32)?)
                 .build()?;
 
             // note it is inverted in output edges
@@ -399,7 +408,7 @@ mod tests {
     use super::*;
     use crate::graph::MapGraph;
     use crate::test_utils::graph::{
-        FUNCTION_NAMES, TABLE_NAMES, function_node, table_node, test_graph,
+        function_node, table_node, test_graph, FUNCTION_NAMES, TABLE_NAMES,
     };
     use crate::test_utils::transaction::TestTransactionBy;
     use itertools::Itertools;

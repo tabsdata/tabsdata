@@ -7,7 +7,7 @@ use crate::dxo::physical_table_data_version::ExecutionTableDataVersionRead;
 use crate::dxo::table::TableDBWithNames;
 use crate::types::basic::{
     CollectionId, CollectionName, DependencyPos, Enabled, FunctionId, FunctionName,
-    FunctionVersionId, SelfDependency, System, TableFunctionParamPos, TableId, TableName,
+    FunctionVersionId, InputIdx, SelfDependency, System, TableFunctionParamPos, TableId, TableName,
     TableVersionId,
 };
 use crate::types::composed::TableVersions;
@@ -114,6 +114,7 @@ impl GraphNode<FunctionNode, TableNode> {
 pub struct GraphDependency {
     pub dep_pos: DependencyPos,
     pub self_dependency: SelfDependency,
+    pub input_idx: InputIdx,
 }
 
 /// Adds contextual information to dependency graph edges.
@@ -241,7 +242,7 @@ impl Display for ResolvedVersion {
 mod tests {
     use super::*;
     use crate::test_utils::graph::{
-        FUNCTION_NAMES, TABLE_NAMES, dependency, function, table, trigger,
+        dependency, function, table, trigger, FUNCTION_NAMES, TABLE_NAMES,
     };
 
     #[tokio::test]

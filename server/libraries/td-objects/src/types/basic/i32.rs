@@ -21,7 +21,7 @@ pub struct StatusCount;
 pub struct TableFunctionParamPos;
 
 #[ta_objects::typed(i32(min = 0, default = 0))]
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct InputIdx;
 
 #[ta_objects::typed(i32(default = 0))]

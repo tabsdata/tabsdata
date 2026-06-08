@@ -31,10 +31,9 @@ use td_objects::dxo::transaction::{TransactionDB, TransactionDBBuilder};
 use td_objects::graph::{MapGraph, TdGraph};
 use td_objects::transaction::map::{TransactionMap, TransactionMapper};
 use td_objects::types::basic::{
-    AtTime, Depth, Dot, FunctionId, FunctionOnly, FunctionStatus, InputIdx,
-    LogicalFunctionRunStatus, LogicalPointerReason, LogicalPointerStatus,
-    LogicalTableDataVersionId, OverrideDisabledTrigger, PhysicalTableDataVersionId, TableId,
-    Trigger, TriggerType, VersionPos,
+    AtTime, Depth, Dot, FunctionId, FunctionOnly, FunctionStatus, LogicalFunctionRunStatus,
+    LogicalPointerReason, LogicalPointerStatus, LogicalTableDataVersionId, OverrideDisabledTrigger,
+    PhysicalTableDataVersionId, TableId, Trigger, TriggerType, VersionPos,
 };
 use td_objects::types::recursion::RecursionOptions;
 use td_objects::types::table_ref::Versions;
@@ -533,7 +532,6 @@ pub async fn build_logical_function_run_inputs(
     > = HashMap::new();
 
     let mut rows = Vec::new();
-    let mut input_idx_counter: i32 = 0;
     for (function, table, edge) in execution_plan.function_table_input_versions() {
         let Some(consumer_lfr_id) = lfr_id_by_function.get(&function.function_id) else {
             return Err(api_error!(
@@ -544,13 +542,12 @@ pub async fn build_logical_function_run_inputs(
         };
         let transaction = transaction_map.get(&transaction_by.key(function)?)?;
 
+        // `input_idx` was assigned onto the dependency edge at plan-build
+        // (`assign_requirement_input_idx`); trigger edges carry neither.
         let dependency_pos = edge.dependency_pos().cloned();
-        let requirement_input_idx = if dependency_pos.is_some() {
-            let i = input_idx_counter;
-            input_idx_counter += 1;
-            Some(InputIdx::try_from(i)?)
-        } else {
-            None
+        let requirement_input_idx = match edge {
+            GraphEdge::Dependency { dependency, .. } => Some(dependency.input_idx),
+            _ => None,
         };
 
         // Self-dependency: read the *previous* version, not the current one.
