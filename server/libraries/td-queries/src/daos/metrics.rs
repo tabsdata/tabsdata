@@ -600,13 +600,6 @@ fn edge_real_branch(req: &MetricsRequest) -> SelectStatement {
                 LogicalTableDataVersionDBIden::FunctionParamPos,
             ))
             .gte(0),
-        )
-        // Self-loops dropped.
-        .and_where(
-            Expr::col((TableDataVersionDBWithNamesIden::Table, source_dim_iden)).ne(Expr::col((
-                FunctionRunDBWithNamesIden::Table,
-                target_dim_iden,
-            ))),
         );
 
     apply_ended_on_window(&mut stmt, req.window.start_ms, req.window.end_ms);
@@ -668,7 +661,10 @@ fn edge_synth_branch(req: &MetricsRequest) -> SelectStatement {
         Expr::col((FunctionRunDBWithNamesIden::Table, bucket_iden)),
         Alias::new("bucket"),
     )
-    .expr_as(kind_lit(NodeKind::ExternalSource), Alias::new("source_kind"))
+    .expr_as(
+        kind_lit(NodeKind::ExternalSource),
+        Alias::new("source_kind"),
+    )
     .expr_as(null_source, Alias::new("source"))
     .expr_as(null_source_name, Alias::new("source_name"))
     .expr_as(kind_lit(NodeKind::Dim), Alias::new("target_kind"))
