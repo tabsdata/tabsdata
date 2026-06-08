@@ -14,7 +14,7 @@ function produced.
 The destination plugin consumes the parquets positionally — one entry
 per slot, in `info.destination.cardinality(info.destination)` order.
 Null entries (the user function returned `None` for that slot)
-surface as `EXIT_BAD_MANIFEST` since the `DestPlugin.write_out` API
+surface as `BadManifestError` since the `DestPlugin.write_out` API
 takes `list[TableFileSpec]` (no `None`s); subscribers must return
 concrete frames for every output slot.
 """
@@ -27,16 +27,20 @@ from pathlib import Path
 from tabsdatak._connectors import get_dest
 from tabsdatak._info import KIND_SUBSCRIBER_DEF, SubscriberInfo
 from tabsdatak.server._tdrunner.function._lib.cli import build_parser, command
-from tabsdatak.server._tdrunner.function._lib.errors import CommandSpecificError
-from tabsdatak.server._tdrunner.function._lib.function_def import load_function_def
+from tabsdatak.server._tdrunner.function._lib.function_def import (
+    load_function_def_or_raise,
+)
 from tabsdatak.server._tdrunner.function._lib.outputs_manifest import (
     MANIFEST_FILE_KEY,
     MANIFEST_NAME_KEY,
-    load_outputs_manifest_or_fail,
+    load_outputs_manifest_or_raise,
 )
-from tabsdatak.server._tdrunner.function._lib.request import load_request_or_fail
+from tabsdatak.server._tdrunner.function._lib.request import load_request_or_raise
 from tabsdatak.server._tdrunner.function._lib.request_ctx import FromRequestCtx
-from tabsdatak.spi import DestContext
+from tabsdatak.server._tdrunner.function.commands.run_destination_plugin.error import (
+    RunDestinationPluginErrorCode,
+)
+from tabsdatak.spi import DestContext, ParquetFile
 
 VERSION = "0.1.0"
 INFO = (
@@ -51,15 +55,6 @@ MAN = (
     "plugin via the tabsdatak connectors registry, and invokes "
     "write_out() with the list of parquet paths the function produced."
 )
-
-# Command-specific exit codes (>= 10 per docs/01-CommandBasics.md).
-EXIT_BAD_REQUEST = 10
-EXIT_BAD_BUNDLE = 11
-EXIT_BAD_USER_CODE = 12
-EXIT_WRONG_KIND = 13
-EXIT_NO_PLUGIN = 14
-EXIT_PLUGIN_FAILED = 15
-EXIT_BAD_MANIFEST = 16
 
 
 def _build_parser():
@@ -90,14 +85,14 @@ def _build_parser():
 
 def _load_function_def(bundle_dir: Path) -> SubscriberInfo:
     """Load the subscriber's ``function_def.json`` -- thin wrapper over
-    :func:`load_function_def` pinning the accepted kind set and the
-    command's exit codes."""
-    return load_function_def(
+    :func:`load_function_def_or_raise` pinning the accepted kind set
+    and the command's per-site error codes."""
+    return load_function_def_or_raise(
         bundle_dir,
         allowed_kinds={KIND_SUBSCRIBER_DEF: SubscriberInfo},
-        exit_bad_bundle=EXIT_BAD_BUNDLE,
-        exit_bad_user_code=EXIT_BAD_USER_CODE,
-        exit_wrong_kind=EXIT_WRONG_KIND,
+        bad_bundle_code=RunDestinationPluginErrorCode.RDP_2,
+        bad_user_code_code=RunDestinationPluginErrorCode.RDP_3,
+        wrong_kind_code=RunDestinationPluginErrorCode.RDP_4,
     )
 
 
@@ -114,41 +109,39 @@ def _resolve_plugin(info: SubscriberInfo):
     try:
         dest_def = get_dest(type(info.destination))
     except KeyError as exc:
-        raise CommandSpecificError(EXIT_NO_PLUGIN, str(exc)) from exc
+        raise RunDestinationPluginErrorCode.RDP_5.exception(
+            cause=exc,
+            dest_type=type(info.destination).__name__,
+            detail=str(exc),
+        )
     return dest_def.plugin()
 
 
-def _tables_from_manifest(entries: list[dict]) -> list[Path]:
+def _tables_from_manifest(entries: list[dict]) -> list[ParquetFile]:
     """Convert outputs-manifest entries to a positional list of
     `TableFileSpec` (parquet) paths for `DestPlugin.write_out`.
 
     Subscribers must produce a concrete frame for every slot; an
     entry with `file: null` is a contract violation here and surfaces
-    as `EXIT_BAD_MANIFEST`. (`DestPlugin.write_out`'s signature does
+    as `BadManifestError`. (`DestPlugin.write_out`'s signature does
     not allow None entries, so the framework cannot pass them
     through.)
     """
-    tables: list[Path] = []
+    tables: list[ParquetFile] = []
     for i, entry in enumerate(entries):
         file = entry.get(MANIFEST_FILE_KEY)
         name = entry.get(MANIFEST_NAME_KEY, f"slot{i}")
         if file is None:
-            raise CommandSpecificError(
-                EXIT_BAD_MANIFEST,
-                f"output slot {i} ({name!r}) is null — subscribers "
-                f"must return a concrete frame for every output slot",
-            )
-        tables.append(Path(file))
+            raise RunDestinationPluginErrorCode.RDP_8.exception(slot=i, name=name)
+        tables.append(ParquetFile(file))
     return tables
 
 
-def _invoke_write_out(plugin, ctx: DestContext, conn, dest, tables) -> None:
+def _invoke_write_out(plugin, ctx: DestContext, dest, tables) -> None:
     try:
-        plugin.write_out(ctx, conn, dest, tables)
+        plugin.write_out(ctx, dest, tables)
     except Exception as exc:
-        raise CommandSpecificError(
-            EXIT_PLUGIN_FAILED, f"plugin write_out failed: {exc}"
-        ) from exc
+        raise RunDestinationPluginErrorCode.RDP_6.exception(cause=exc, detail=str(exc))
 
 
 @command(name="td_run_destination_plugin", parser=_build_parser)
@@ -157,11 +150,13 @@ def main(args: argparse.Namespace) -> int:
     bundle_dir = Path(args.bundle_dir)
     outputs_manifest_path = Path(args.outputs_manifest)
 
-    request = load_request_or_fail(request_path, EXIT_BAD_REQUEST)
+    request = load_request_or_raise(request_path, RunDestinationPluginErrorCode.RDP_1)
     info = _load_function_def(bundle_dir)
     plugin = _resolve_plugin(info)
 
-    entries = load_outputs_manifest_or_fail(outputs_manifest_path, EXIT_BAD_MANIFEST)
+    entries = load_outputs_manifest_or_raise(
+        outputs_manifest_path, RunDestinationPluginErrorCode.RDP_7
+    )
     tables = _tables_from_manifest(entries)
 
     ctx = _DestContext(
@@ -174,7 +169,7 @@ def main(args: argparse.Namespace) -> int:
         function_id=str(request.info.function_run_id),
         function_name=request.info.function,
     )
-    _invoke_write_out(plugin, ctx, info.conn, info.destination, tables)
+    _invoke_write_out(plugin, ctx, info.destination, tables)
     return 0
 
 

@@ -28,20 +28,12 @@ import yaml
 from tabsdatak.common._archive.bundle import BUNDLE_MANIFEST_FILENAME, build_bundle
 from tabsdatak._info import SubscriberInfo
 from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
-from tabsdatak.server._tdrunner.function._lib.errors import CommandSpecificError
 from tabsdatak.server._tdrunner.function._lib.outputs_manifest import (
     MANIFEST_FILE_KEY,
     MANIFEST_NAME_KEY,
     write_outputs_manifest,
 )
 from tabsdatak.server._tdrunner.function.commands.run_destination_plugin import (
-    EXIT_BAD_BUNDLE,
-    EXIT_BAD_MANIFEST,
-    EXIT_BAD_REQUEST,
-    EXIT_BAD_USER_CODE,
-    EXIT_NO_PLUGIN,
-    EXIT_PLUGIN_FAILED,
-    EXIT_WRONG_KIND,
     _DestContext,
     _invoke_write_out,
     _load_function_def,
@@ -49,7 +41,16 @@ from tabsdatak.server._tdrunner.function.commands.run_destination_plugin import 
     _tables_from_manifest,
     main,
 )
-
+from tabsdatak.server._tdrunner.function.commands.run_destination_plugin.error import (
+    BadBundleError,
+    BadManifestError,
+    BadRequestError,
+    BadUserCodeError,
+    NoPluginError,
+    PluginFailedError,
+    WrongKindError,
+)
+from tabsdatak.spi import ParquetFile
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
@@ -66,13 +67,13 @@ from __future__ import annotations
 from tabsdatak.api import TableFrameSpec, subscriber
 from tabsdatak.conn.localfile import LocalFileDestConn, LocalFileDest
 
-_CONN = LocalFileDestConn(base_path={base_path!r})
 _DEST = LocalFileDest(
+    conn=LocalFileDestConn(base_path={base_path!r}),
     paths=["sink.parquet"],
 )
 
 
-@subscriber(conn=_CONN, destination=_DEST, input_tables=["c1/t_in"])
+@subscriber(destination=_DEST, input_tables=["c1/t_in"])
 def my_subscriber(in_1: TableFrameSpec) -> tuple[TableFrameSpec]:
     return (in_1,)
 """
@@ -240,42 +241,38 @@ def test_load_function_def_happy(built_bundle):
 def test_load_function_def_missing_manifest_raises_bad_bundle(tmp_path):
     empty = tmp_path / "empty"
     empty.mkdir()
-    with pytest.raises(CommandSpecificError) as ei:
+    with pytest.raises(BadBundleError):
         _load_function_def(empty)
-    assert ei.value.exit_code == EXIT_BAD_BUNDLE
 
 
 def test_load_function_def_malformed_json_raises_bad_bundle(tmp_path):
     bad = tmp_path / "bad-bundle"
     bad.mkdir()
     (bad / BUNDLE_MANIFEST_FILENAME).write_text("{ not json")
-    with pytest.raises(CommandSpecificError) as ei:
+    with pytest.raises(BadBundleError):
         _load_function_def(bad)
-    assert ei.value.exit_code == EXIT_BAD_BUNDLE
 
 
 def test_load_function_def_wrong_kind_raises_wrong_kind(built_bundle):
     """A bundle whose kind is not subscriberDef must surface as
-    EXIT_WRONG_KIND so the orchestrator routes it elsewhere."""
+    WrongKindError so the orchestrator routes it elsewhere."""
     manifest = built_bundle / BUNDLE_MANIFEST_FILENAME
     data = json.loads(manifest.read_text())
     data["kind"] = "publisherDef"
     manifest.write_text(json.dumps(data))
-    with pytest.raises(CommandSpecificError) as ei:
+    with pytest.raises(WrongKindError):
         _load_function_def(built_bundle)
-    assert ei.value.exit_code == EXIT_WRONG_KIND
 
 
 def test_load_function_def_unresolvable_func_raises_bad_user_code(built_bundle):
     """A `func` pointing at a missing module surfaces as
-    EXIT_BAD_USER_CODE via pydantic's ValidationError chain."""
+    BadUserCodeError via pydantic's ValidationError chain."""
     manifest = built_bundle / BUNDLE_MANIFEST_FILENAME
     data = json.loads(manifest.read_text())
     data["spec"]["func"] = "nonexistent.module:nope"
     manifest.write_text(json.dumps(data))
-    with pytest.raises(CommandSpecificError) as ei:
+    with pytest.raises(BadUserCodeError):
         _load_function_def(built_bundle)
-    assert ei.value.exit_code == EXIT_BAD_USER_CODE
 
 
 # --- unit: _resolve_plugin ----------------------------------------------
@@ -292,9 +289,8 @@ def test_resolve_plugin_unknown_dest_raises_no_plugin(fixture_subscriber, monkey
         raise KeyError("no DestDef registered")
 
     monkeypatch.setattr(f"{_MOD}.get_dest", _raise)
-    with pytest.raises(CommandSpecificError) as ei:
+    with pytest.raises(NoPluginError):
         _resolve_plugin(fixture_subscriber)
-    assert ei.value.exit_code == EXIT_NO_PLUGIN
 
 
 # --- unit: _tables_from_manifest ---------------------------------------
@@ -306,8 +302,8 @@ def test_tables_from_manifest_happy():
         {MANIFEST_NAME_KEY: "out_1", MANIFEST_FILE_KEY: "/b.parquet"},
     ]
     tables = _tables_from_manifest(entries)
-    assert tables == [Path("/a.parquet"), Path("/b.parquet")]
-    assert all(isinstance(t, Path) for t in tables)
+    assert tables == [ParquetFile("/a.parquet"), ParquetFile("/b.parquet")]
+    assert all(isinstance(t, ParquetFile) for t in tables)
 
 
 def test_tables_from_manifest_empty_entries_yields_empty_list():
@@ -321,9 +317,8 @@ def test_tables_from_manifest_null_entry_raises_bad_manifest():
         {MANIFEST_NAME_KEY: "out_0", MANIFEST_FILE_KEY: "/a.parquet"},
         {MANIFEST_NAME_KEY: "out_1", MANIFEST_FILE_KEY: None},
     ]
-    with pytest.raises(CommandSpecificError) as ei:
+    with pytest.raises(BadManifestError):
         _tables_from_manifest(entries)
-    assert ei.value.exit_code == EXIT_BAD_MANIFEST
 
 
 # --- unit: _invoke_write_out -------------------------------------------
@@ -333,8 +328,8 @@ def test_invoke_write_out_returns_normally(tmp_path):
     calls = []
 
     class _Plugin:
-        def write_out(self, ctx, conn, dest, tables):
-            calls.append((ctx, conn, dest, tables))
+        def write_out(self, ctx, dest, tables):
+            calls.append((ctx, dest, tables))
 
     ctx = _DestContext(
         work_dir=tmp_path,
@@ -346,13 +341,13 @@ def test_invoke_write_out_returns_normally(tmp_path):
         function_id="fn",
         function_name="publish_people",
     )
-    _invoke_write_out(_Plugin(), ctx, object(), object(), [Path("/x.parquet")])
+    _invoke_write_out(_Plugin(), ctx, object(), [Path("/x.parquet")])
     assert len(calls) == 1
 
 
 def test_invoke_write_out_wraps_plugin_exception(tmp_path):
     class _Plugin:
-        def write_out(self, ctx, conn, dest, tables):
+        def write_out(self, ctx, dest, tables):
             raise RuntimeError("boom")
 
     ctx = _DestContext(
@@ -365,9 +360,8 @@ def test_invoke_write_out_wraps_plugin_exception(tmp_path):
         function_id="fn",
         function_name="publish_people",
     )
-    with pytest.raises(CommandSpecificError) as ei:
-        _invoke_write_out(_Plugin(), ctx, object(), object(), [])
-    assert ei.value.exit_code == EXIT_PLUGIN_FAILED
+    with pytest.raises(PluginFailedError):
+        _invoke_write_out(_Plugin(), ctx, object(), [])
 
 
 # --- main: error paths --------------------------------------------------
@@ -382,7 +376,7 @@ def test_main_missing_request_returns_bad_request(tmp_path, monkeypatch, http_ok
         tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert main() == EXIT_BAD_REQUEST
+    assert main() == BadRequestError.exit_code
 
 
 def test_main_missing_bundle_returns_bad_bundle(tmp_path, monkeypatch, http_ok_url):
@@ -395,7 +389,7 @@ def test_main_missing_bundle_returns_bad_bundle(tmp_path, monkeypatch, http_ok_u
         tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert main() == EXIT_BAD_BUNDLE
+    assert main() == BadBundleError.exit_code
 
 
 def test_main_invalid_options_returns_1(monkeypatch):
@@ -415,7 +409,7 @@ def test_main_missing_outputs_manifest_returns_bad_manifest(
         tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert main() == EXIT_BAD_MANIFEST
+    assert main() == BadManifestError.exit_code
 
 
 def test_main_null_file_in_manifest_returns_bad_manifest(
@@ -435,7 +429,7 @@ def test_main_null_file_in_manifest_returns_bad_manifest(
         tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert main() == EXIT_BAD_MANIFEST
+    assert main() == BadManifestError.exit_code
 
 
 # --- main: end-to-end --------------------------------------------------
