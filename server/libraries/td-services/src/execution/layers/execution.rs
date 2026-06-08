@@ -207,6 +207,7 @@ pub fn initial_mint_lfr_pointer(
     lfr: &LogicalFunctionRunDB,
 ) -> Result<LogicalFunctionRunPointerDB, TdError> {
     Ok(LogicalFunctionRunPointerDB::builder()
+        .project_id(lfr.project_id.clone())
         .logical_function_run_id(lfr.id.clone())
         .status(LogicalPointerStatus::Pending)
         .physical_function_run_id(None)
@@ -243,7 +244,12 @@ pub async fn build_logical_table_data_versions(
     // construction to the LFR's, with no second `all_functions_map` lookup.
     let ffr_by_function: HashMap<_, _> = logical_function_runs
         .iter()
-        .map(|lfr| (lfr.function_id, (lfr.id.clone(), lfr.group_id)))
+        .map(|lfr| {
+            (
+                lfr.function_id,
+                (lfr.id.clone(), lfr.group_id, lfr.project_id.clone()),
+            )
+        })
         .collect();
 
     execution_plan
@@ -251,14 +257,16 @@ pub async fn build_logical_table_data_versions(
         .iter()
         .map(|(t, f, edge)| {
             let transaction = transaction_map.get(&transaction_by.key(f)?)?;
-            let (producer, group_id) = ffr_by_function.get(&f.function_id).ok_or_else(|| {
-                api_error!(
-                    ApiError::InternalError,
-                    "Producer LFR not found for function_id {} while building LTDVs",
-                    f.function_id
-                )
-            })?;
+            let (producer, group_id, project_id) =
+                ffr_by_function.get(&f.function_id).ok_or_else(|| {
+                    api_error!(
+                        ApiError::InternalError,
+                        "Producer LFR not found for function_id {} while building LTDVs",
+                        f.function_id
+                    )
+                })?;
             LogicalTableDataVersionDB::builder()
+                .project_id(project_id.clone())
                 .collection_id(f.collection_id)
                 .execution_id(transaction.execution_id.clone())
                 .transaction_id(transaction.id.clone())
@@ -279,6 +287,7 @@ pub fn initial_mint_ltdv_pointer(
     ltdv: &LogicalTableDataVersionDB,
 ) -> Result<LogicalTableDataVersionPointerDB, TdError> {
     Ok(LogicalTableDataVersionPointerDB::builder()
+        .project_id(ltdv.project_id.clone())
         .logical_table_data_version_id(ltdv.id.clone())
         .status(LogicalPointerStatus::Pending)
         .physical_table_data_version_id(None)

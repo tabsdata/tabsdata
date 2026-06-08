@@ -29,7 +29,9 @@ use td_database::sea_query::builder::SeaQueryExt;
 use td_error::{ApiError, TdError, api_error};
 use td_objects::SeaValue;
 use td_objects::dxo::logical::LogicalPointerDao;
-use td_objects::types::basic::{AtTime, LogicalPointerReason, LogicalPointerStatus, UserId};
+use td_objects::types::basic::{
+    AtTime, LogicalPointerReason, LogicalPointerStatus, ProjectId, UserId,
+};
 
 /// Pointer-event log handle, type-pinned to a specific
 /// [`LogicalPointerDao`] `P`. Reached from the entity handle via
@@ -103,6 +105,7 @@ where
     /// `Requested → Bound`).
     pub async fn bind_with_known_state(
         self,
+        project_id: &ProjectId,
         logical_id: &P::LogicalId,
         new_concrete_id: &P::ConcreteId,
         latest: &P,
@@ -134,6 +137,7 @@ where
             LogicalPointerStatus::Pending => {}
         }
         let event = P::build_event(
+            project_id.clone(),
             logical_id,
             LogicalPointerStatus::Bound,
             Some(new_concrete_id.clone()),
@@ -238,6 +242,7 @@ fn bound_concrete<P: LogicalPointerDao>(row: Option<P>) -> Option<P::ConcreteId>
 /// from worker-finish replay redirects (`ReplayRedirect`,
 /// `set_by_id` = the FR's `triggered_by_id`).
 pub fn redirect_event<P: LogicalPointerDao>(
+    project_id: &ProjectId,
     latest: &P,
     logical_id: &P::LogicalId,
     new_concrete_id: &P::ConcreteId,
@@ -251,6 +256,7 @@ pub fn redirect_event<P: LogicalPointerDao>(
         return Ok(None);
     }
     let event = P::build_event(
+        project_id.clone(),
         logical_id,
         LogicalPointerStatus::Bound,
         Some(new_concrete_id.clone()),
@@ -285,6 +291,7 @@ pub fn redirect_event<P: LogicalPointerDao>(
 /// requires `set_by_id` = operator user id) from replay failure-side
 /// voids (`ReplayVoid`, `set_by_id` = the FR's `triggered_by_id`).
 pub fn void_event<P: LogicalPointerDao>(
+    project_id: &ProjectId,
     latest: &P,
     logical_id: &P::LogicalId,
     set_on: &AtTime,
@@ -295,6 +302,7 @@ pub fn void_event<P: LogicalPointerDao>(
         return Ok(None);
     }
     let event = P::build_event(
+        project_id.clone(),
         logical_id,
         LogicalPointerStatus::Voided,
         None,
@@ -310,7 +318,9 @@ mod tests {
     use super::*;
     use ta_objects::Buildable;
     use td_objects::dxo::logical::LogicalFunctionRunPointerDB;
-    use td_objects::types::basic::{LogicalFunctionRunId, PhysicalFunctionRunId, UserId};
+    use td_objects::types::basic::{
+        LogicalFunctionRunId, PhysicalFunctionRunId, ProjectId, UserId,
+    };
 
     fn build_pointer(
         logical_id: LogicalFunctionRunId,
@@ -318,6 +328,7 @@ mod tests {
         concrete: Option<PhysicalFunctionRunId>,
     ) -> LogicalFunctionRunPointerDB {
         LogicalFunctionRunPointerDB::builder()
+            .project_id(ProjectId::sandbox())
             .logical_function_run_id(logical_id)
             .status(status)
             .physical_function_run_id(concrete)
@@ -334,6 +345,7 @@ mod tests {
         let fr = PhysicalFunctionRunId::new();
         let latest = build_pointer(id.clone(), LogicalPointerStatus::Bound, Some(fr.clone()));
         let result = redirect_event::<LogicalFunctionRunPointerDB>(
+            &ProjectId::sandbox(),
             &latest,
             &id,
             &fr,
@@ -355,6 +367,7 @@ mod tests {
         let new = PhysicalFunctionRunId::new();
         let latest = build_pointer(id.clone(), LogicalPointerStatus::Bound, Some(old));
         let result = redirect_event::<LogicalFunctionRunPointerDB>(
+            &ProjectId::sandbox(),
             &latest,
             &id,
             &new,
@@ -375,6 +388,7 @@ mod tests {
         let new = PhysicalFunctionRunId::new();
         let latest = build_pointer(id.clone(), LogicalPointerStatus::Pending, None);
         let result = redirect_event::<LogicalFunctionRunPointerDB>(
+            &ProjectId::sandbox(),
             &latest,
             &id,
             &new,
@@ -392,6 +406,7 @@ mod tests {
         let new = PhysicalFunctionRunId::new();
         let latest = build_pointer(id.clone(), LogicalPointerStatus::Voided, None);
         let result = redirect_event::<LogicalFunctionRunPointerDB>(
+            &ProjectId::sandbox(),
             &latest,
             &id,
             &new,
@@ -408,6 +423,7 @@ mod tests {
         let id = LogicalFunctionRunId::new();
         let latest = build_pointer(id.clone(), LogicalPointerStatus::Voided, None);
         let result = void_event::<LogicalFunctionRunPointerDB>(
+            &ProjectId::sandbox(),
             &latest,
             &id,
             &AtTime::now(),
@@ -424,6 +440,7 @@ mod tests {
         let fr = PhysicalFunctionRunId::new();
         let latest = build_pointer(id.clone(), LogicalPointerStatus::Bound, Some(fr));
         let result = void_event::<LogicalFunctionRunPointerDB>(
+            &ProjectId::sandbox(),
             &latest,
             &id,
             &AtTime::now(),
@@ -442,6 +459,7 @@ mod tests {
         let id = LogicalFunctionRunId::new();
         let latest = build_pointer(id.clone(), LogicalPointerStatus::Pending, None);
         let result = void_event::<LogicalFunctionRunPointerDB>(
+            &ProjectId::sandbox(),
             &latest,
             &id,
             &AtTime::now(),
@@ -541,6 +559,7 @@ mod tests {
             let bind_at = AtTime::now();
             let fr_id = PhysicalFunctionRunId::new();
             let bind_event = LogicalFunctionRunPointerDB::build_event(
+                lfr.project_id.clone(),
                 &lfr.id,
                 LogicalPointerStatus::Bound,
                 Some(fr_id.clone()),
@@ -620,6 +639,7 @@ mod tests {
             let before_mint = AtTime::now();
             let table_id = TableId::default();
             let ltdv = LogicalTableDataVersionDB::builder()
+                .project_id(function.project_id.clone())
                 .collection_id(collection.id)
                 .execution_id(execution.id.clone())
                 .transaction_id(transaction.id.clone())
@@ -647,6 +667,7 @@ mod tests {
             let bind_at = AtTime::now();
             let tdv_id = PhysicalTableDataVersionId::new();
             let bind_event = LogicalTableDataVersionPointerDB::build_event(
+                ltdv.project_id.clone(),
                 &ltdv.id,
                 LogicalPointerStatus::Bound,
                 Some(tdv_id.clone()),

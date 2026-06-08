@@ -440,6 +440,7 @@ mod tests {
             .build()?;
         db.live().insert::<LogicalFunctionRunDB>(&lfr).await?;
         let pending = LogicalFunctionRunPointerDB::build_event(
+            lfr.project_id.clone(),
             &lfr.id,
             LogicalPointerStatus::Pending,
             None,

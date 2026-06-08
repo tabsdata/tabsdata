@@ -486,6 +486,7 @@ mod tests {
             .await
             .unwrap();
         let pointer = LogicalTableDataVersionPointerDB::builder()
+            .project_id(ltdv.project_id.clone())
             .logical_table_data_version_id(ltdv.id.clone())
             .status(LogicalPointerStatus::Bound)
             .physical_table_data_version_id(Some(bound_to.clone()))
@@ -559,6 +560,7 @@ mod tests {
 
             let synthetic_tdv_id = PhysicalTableDataVersionId::new();
             let ltdv = LogicalTableDataVersionDB::builder()
+                .project_id(collection.project_id.clone())
                 .collection_id(collection.id)
                 .execution_id(execution.id.clone())
                 .transaction_id(transaction.id.clone())
@@ -604,6 +606,7 @@ mod tests {
         // Build an in-plan LTDV that is NOT yet inserted in the DB; the
         // resolver should still hand it back for `None` lookups.
         let in_plan_ftdv = LogicalTableDataVersionDB::builder()
+            .project_id(collection.project_id.clone())
             .collection_id(collection.id)
             .execution_id(ExecutionId::new())
             .transaction_id(TransactionId::new())
@@ -934,6 +937,7 @@ mod tests {
                 .transaction(&execution, &TransactionKey::try_from("ANY")?)
                 .await?;
             let ltdv = LogicalTableDataVersionDB::builder()
+                .project_id(collection.project_id.clone())
                 .collection_id(collection.id)
                 .execution_id(execution.id.clone())
                 .transaction_id(transaction.id.clone())
@@ -991,6 +995,7 @@ mod tests {
         let tx = db.begin().await.unwrap();
         let mut conn = tx.into_connection();
         let void_event = LogicalTableDataVersionPointerDB::build_event(
+            ltdvs[1].project_id.clone(),
             &ltdvs[1].id,
             LogicalPointerStatus::Voided,
             None,

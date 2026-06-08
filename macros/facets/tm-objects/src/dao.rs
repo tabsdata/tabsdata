@@ -753,6 +753,7 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
                         self.#concrete_id_field.as_ref()
                     }
                     fn build_event(
+                        project_id: td_objects::types::basic::ProjectId,
                         logical_id: &Self::LogicalId,
                         status: td_objects::types::basic::LogicalPointerStatus,
                         concrete_id: Option<Self::ConcreteId>,
@@ -762,6 +763,7 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
                     ) -> Result<Self, td_error::TdError> {
                         use ta_objects::Buildable;
                         Ok(Self::builder()
+                            .project_id(project_id)
                             .#logical_id_field(logical_id.clone())
                             .status(status)
                             .#concrete_id_field(concrete_id)
@@ -774,6 +776,7 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
                         identity: &Self::IdentityDB,
                     ) -> Result<Self, td_error::TdError> {
                         Self::build_event(
+                            identity.project_id.clone(),
                             &identity.id,
                             td_objects::types::basic::LogicalPointerStatus::Pending,
                             None,

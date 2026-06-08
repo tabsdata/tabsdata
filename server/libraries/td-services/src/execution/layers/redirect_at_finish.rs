@@ -155,6 +155,7 @@ pub async fn redirect_pointers_at_finish(
         }
 
         if let Some(event) = redirect_event::<LogicalFunctionRunPointerDB>(
+            &lfr.project_id,
             latest_lfr,
             lfr_id,
             &fr.id,
@@ -185,6 +186,7 @@ pub async fn redirect_pointers_at_finish(
                 continue;
             };
             if let Some(event) = redirect_event::<LogicalTableDataVersionPointerDB>(
+                &ltdv.project_id,
                 latest_ltdv,
                 &ltdv.id,
                 &tdv.id,
@@ -255,6 +257,7 @@ mod tests {
         set_on: AtTime,
     ) -> LogicalFunctionRunPointerDB {
         LogicalFunctionRunPointerDB::build_event(
+            ProjectId::sandbox(),
             &LogicalFunctionRunId::new(),
             status,
             pfr,

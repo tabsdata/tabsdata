@@ -23,7 +23,7 @@
 //! V1-born concrete TDV inserts the LTDV identity row and a single
 //! `Bound` `InitialMaterialization` event.
 
-use crate::types::basic::{AtTime, LogicalPointerReason, LogicalPointerStatus, UserId};
+use crate::types::basic::{AtTime, LogicalPointerReason, LogicalPointerStatus, ProjectId, UserId};
 use ta_objects::{Dao, SeaValue, VersionedDao};
 use td_error::TdError;
 
@@ -84,8 +84,12 @@ pub trait LogicalPointerDao:
     /// Concrete id at this event row (`None` for Pending / Voided).
     fn concrete_id(&self) -> Option<&Self::ConcreteId>;
 
-    /// Build a fresh pointer-event row.
+    /// Build a fresh pointer-event row. `project_id` is the project of the
+    /// logical identity this event belongs to — passed in (not derived from
+    /// `logical_id`) so the scheduler's bypass dispatch tick can stamp it
+    /// explicitly rather than leaning on the connection GUC default.
     fn build_event(
+        project_id: ProjectId,
         logical_id: &Self::LogicalId,
         status: LogicalPointerStatus,
         concrete_id: Option<Self::ConcreteId>,
@@ -354,6 +358,11 @@ mod definitions {
     pub struct LogicalFunctionRunPointerDB {
         #[builder(default)]
         pub id: LogicalFunctionRunPointerId,
+        // Project of the LFR this event belongs to. Carried explicitly so the
+        // scheduler's cross-project dispatch tick (project_scope = bypass, no
+        // request GUC) can append bind events without relying on the
+        // `app.project_id` column default — fail-closed.
+        pub project_id: ProjectId,
         pub logical_function_run_id: LogicalFunctionRunId,
         pub status: LogicalPointerStatus,
         // NULL on Pending and Voided rows; populated on Bound rows with the
@@ -380,6 +389,10 @@ mod definitions {
         #[builder(default = "LogicalTableDataVersionId::new()")]
         #[dxo(extractor)]
         pub id: LogicalTableDataVersionId,
+        /// The project this version belongs to. Inherited from the producing
+        /// LFR at mint; threaded forward to the pointer-event rows so the RLS
+        /// GUC matches end-to-end on the cross-project scheduler dispatch tick.
+        pub project_id: ProjectId,
         pub collection_id: CollectionId,
         pub execution_id: ExecutionId,
         pub transaction_id: TransactionId,
@@ -546,6 +559,9 @@ mod definitions {
     pub struct LogicalTableDataVersionPointerDB {
         #[builder(default)]
         pub id: LogicalTableDataVersionPointerId,
+        // Project of the LTDV this event belongs to. Carried explicitly for
+        // the same fail-closed reason as the LFR pointer above.
+        pub project_id: ProjectId,
         pub logical_table_data_version_id: LogicalTableDataVersionId,
         pub status: LogicalPointerStatus,
         // NULL on Pending and Voided rows; populated on Bound rows with the

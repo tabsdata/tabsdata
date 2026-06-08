@@ -95,6 +95,7 @@ pub async fn _seed_physical_table_data_version(
         ))
         .await?;
     let logical = LogicalTableDataVersionDB::builder()
+        .project_id(producer_lfr.project_id.clone())
         .collection_id(collection.id)
         .execution_id(&execution.id)
         .transaction_id(&transaction.id)
@@ -110,6 +111,7 @@ pub async fn _seed_physical_table_data_version(
         .insert::<LogicalTableDataVersionDB>(&logical)
         .await?;
     let pointer = LogicalTableDataVersionPointerDB::build_event(
+        logical.project_id.clone(),
         &logical.id,
         LogicalPointerStatus::Bound,
         Some(table_data_version_db.id.clone()),

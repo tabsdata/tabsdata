@@ -90,6 +90,7 @@ pub(crate) async fn seed_physical_function_run(
         .insert::<PhysicalFunctionRunDB>(&function_db)
         .await?;
     let pointer = LogicalFunctionRunPointerDB::build_event(
+        logical.project_id.clone(),
         &logical.id,
         LogicalPointerStatus::Bound,
         Some(function_db.id.clone()),
@@ -113,6 +114,7 @@ pub(crate) async fn seed_physical_function_run(
         .await?;
     for t in &tables {
         let ltdv = LogicalTableDataVersionDB::builder()
+            .project_id(logical.project_id.clone())
             .collection_id(collection.id)
             .execution_id(&execution.id)
             .transaction_id(&transaction.id)
@@ -124,6 +126,7 @@ pub(crate) async fn seed_physical_function_run(
             .build()?;
         db.live().insert::<LogicalTableDataVersionDB>(&ltdv).await?;
         let ltdv_pointer = LogicalTableDataVersionPointerDB::build_event(
+            ltdv.project_id.clone(),
             &ltdv.id,
             LogicalPointerStatus::Pending,
             None,

@@ -1158,6 +1158,7 @@ mod tests {
             .insert::<PhysicalTableDataVersionDB>(&ptdv)
             .await?;
         let pointer = LogicalTableDataVersionPointerDB::build_event(
+            ltdv.project_id.clone(),
             &ltdv.id,
             LogicalPointerStatus::Bound,
             Some(ptdv.id.clone()),
