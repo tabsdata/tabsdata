@@ -6,9 +6,8 @@
 
 Covers:
   * Helper-function unit tests (`_load_function_def`,
-    `_load_inputs_manifest_or_fail`, `_infer_table_modes`,
-    `_materialise_input_slot`, `_invoke_user_function`,
-    `_sink_outputs`).
+    `_infer_table_modes`, `_materialise_input_slot`,
+    `_invoke_user_function`, `_sink_outputs`).
   * `main()` error paths and end-to-end happy path: bundle a real
     publisher, write an inputs manifest pointing at a real parquet,
     invoke `main()`, verify the output parquet contents + the
@@ -30,11 +29,9 @@ from tabsdatak.common._archive.bundle import BUNDLE_MANIFEST_FILENAME, build_bun
 from tabsdatak._info import PublisherInfo
 from tabsdatak.api import TableFrameSpec, TableFramesSpec
 from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
-from tabsdatak.server._tdrunner.function._lib.errors import CommandSpecificError
 from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
     MANIFEST_FILES_KEY,
     MANIFEST_NAME_KEY as INPUTS_NAME_KEY,
-    load_inputs_manifest_or_fail,
     write_inputs_manifest,
 )
 from tabsdatak.server._tdrunner.function.commands.run_function import (
@@ -66,14 +63,6 @@ from tabsdatak.server._tdrunner.function.commands.run_function.error import (
     UserFunctionFailedError,
 )
 from tabsdatak.spi import DestContext, FunctionCtx, SrcPluginCtx, TableMode
-
-# Legacy unit-tests for the still-present ``load_inputs_manifest_or_fail`` /
-# ``hydrate_ctx_from_state`` / ``drain_ctx_to_state`` helpers (further
-# below) pass these int sentinels. The wired (typed) path now uses the
-# matching ``*Error`` classes; these constants only survive until the
-# legacy helpers are removed in the TD-2263 cleanup PR.
-EXIT_BAD_MANIFEST = BadManifestError.exit_code
-EXIT_BAD_INITIAL_VALUES = BadInitialValuesError.exit_code
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
@@ -569,25 +558,6 @@ def test_output_table_names_subscriber_unregistered_dest_raises_no_plugin(
     monkeypatch.setattr(f"{_MOD}.get_dest", _raise)
     with pytest.raises(NoPluginError):
         _output_table_names(info)
-
-
-# --- unit: load_inputs_manifest_or_fail (shared helper) -----------------
-
-
-def test_load_inputs_manifest_happy(tmp_path):
-    m = tmp_path / "m.yaml"
-    write_inputs_manifest(
-        [{INPUTS_NAME_KEY: "in_1", MANIFEST_FILES_KEY: ["/x.parquet"]}], m
-    )
-    assert load_inputs_manifest_or_fail(m, EXIT_BAD_MANIFEST) == [
-        {"name": "in_1", "files": ["/x.parquet"]}
-    ]
-
-
-def test_load_inputs_manifest_missing_maps_to_bad_manifest(tmp_path):
-    with pytest.raises(CommandSpecificError) as ei:
-        load_inputs_manifest_or_fail(tmp_path / "nope.yaml", EXIT_BAD_MANIFEST)
-    assert ei.value.exit_code == EXIT_BAD_MANIFEST
 
 
 # --- unit: _infer_table_modes ------------------------------------------

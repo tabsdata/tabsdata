@@ -24,6 +24,13 @@ class WriteFailedError(CommandRuntimeException):
     exit_code = 11
 
 
+class BadPayloadError(CommandRuntimeException):
+    """The body returned by the resolver wasn't valid JSON, or was JSON
+    but didn't carry the expected ``{"data": ...}`` envelope shape."""
+
+    exit_code = 12
+
+
 class FetchRequestErrorCode(ErrorCode):
     FR_1 = ErrorDef(
         HttpFetchError,
@@ -45,3 +52,11 @@ class FetchRequestErrorCode(ErrorCode):
         "failed to write {path}: {detail}",
     )
     # Raised when ``Path.write_bytes`` hits an ``OSError``.
+
+    FR_4 = ErrorDef(
+        BadPayloadError,
+        "response from {url} is not a valid {expected} envelope: {detail}",
+    )
+    # Raised when the resolver body fails ``json.loads`` (``detail`` is
+    # the JSON parser message) or parses to JSON without the expected
+    # ``data`` field (``detail`` describes the missing field).

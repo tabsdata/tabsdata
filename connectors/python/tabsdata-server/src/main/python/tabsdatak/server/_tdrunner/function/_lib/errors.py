@@ -21,23 +21,15 @@ Same three-layer pattern as :mod:`tabsdatak.error`:
 
 Exit-code semantics (per ``docs/01-CommandBasics.md``):
 
-* ``1``       -- invalid or missing options.
-* ``2``       -- undefined env in an ``env:<VAR>`` option.
-* ``3``       -- unhandled / unexpected exception.
-* ``4``       -- inconsistent state (e.g. ``CommandError`` raised with
-  ``exit_code=0``).
-* ``5``       -- premature exit (``SystemExit`` intercepted in command body).
+* ``1``       -- invalid or missing options (:class:`InvalidOptionsError`).
+* ``2``       -- undefined env in an ``env:<VAR>`` option (:class:`UndefinedEnvError`).
+* ``3``       -- unhandled / unexpected exception (:class:`UnexpectedError`).
+* ``4``       -- inconsistent state, e.g. ``CommandException`` raised with
+  ``exit_code=0`` (:class:`InconsistentError`).
+* ``5``       -- premature exit, ``SystemExit`` intercepted in command body
+  (:class:`PrematureError`).
 * ``6..9``    -- reserved.
 * ``10..``    -- command-specific (see ``commands/<command>/error.py``).
-
-Legacy shim layer
------------------
-
-Pre-existing command modules raise ``CommandSpecificError(exit_code,
-message)`` directly. Until each command moves to its own ``error.py``
-(TD-2263), :class:`CommandError` and :class:`CommandSpecificError`
-stay alive as plain ``Exception`` subclasses; ``run_command`` catches
-both bases.
 """
 
 from __future__ import annotations
@@ -48,9 +40,6 @@ from tabsdatak.error import (
     TabsdataException,
 )
 
-# Legacy public constants. Kept for back-compat with command modules
-# that import them directly; new code should reach the same numbers
-# via the bound exception class's ``exit_code`` attribute.
 EXIT_INVALID_OPTIONS: int = 1
 EXIT_UNDEFINED_ENV: int = 2
 EXIT_UNEXPECTED: int = 3
@@ -104,6 +93,40 @@ class UndefinedEnvError(CommandRuntimeException):
     exit_code = EXIT_UNDEFINED_ENV
 
 
+# --- orchestration-boundary exceptions ---------------------------------
+#
+# These are raised by the ``command`` decorator's outer try/except
+# wrapper in :mod:`tabsdatak.server._tdrunner.function._lib.cli`. A
+# command body should normally raise a per-command typed exception
+# (its own ``<Cmd>ErrorCode`` enum); these three are the fallback
+# classes for failures that escape that contract.
+
+
+class UnexpectedError(CommandInternalException):
+    """An unhandled, non-:class:`CommandException` exception escaped
+    the command body. The decorator's outer ``except Exception`` arm
+    wraps it and exits with code 3."""
+
+    exit_code = EXIT_UNEXPECTED
+
+
+class InconsistentError(CommandInternalException):
+    """A :class:`CommandException` reached the orchestration layer
+    with ``exit_code=0``. Treated as an internal-bug exit code so the
+    pod reports a non-zero status to the responder."""
+
+    exit_code = EXIT_INCONSISTENT
+
+
+class PrematureError(CommandInternalException):
+    """``SystemExit`` reached the orchestration layer (the command
+    body called ``sys.exit`` or a library short-circuited the
+    interpreter). The decorator promotes it to exit code 5 so the
+    pod's failure-reporting path runs."""
+
+    exit_code = EXIT_PREMATURE
+
+
 # --- enum binding the shared templates ---------------------------------
 
 
@@ -124,52 +147,3 @@ class CommandErrorCode(ErrorCode):
     )
     # Raised by ``_lib.cli.resolve_value`` when an ``env:<VAR>`` reference
     # resolves to an unset variable.
-
-
-# --- legacy shim layer --------------------------------------------------
-#
-# Old command modules raise ``CommandSpecificError(EXIT_X, message)``
-# directly. Until each command migrates to its own ``error.py`` per
-# TD-2263, these shims keep them working. ``run_command`` catches both
-# bases.
-
-
-class CommandError(Exception):
-    """Legacy base for errors with an explicit exit code.
-
-    Kept for back-compat while command modules migrate to
-    :class:`CommandException` (see TD-2263). New code should raise the
-    bound exception via ``<Cmd>ErrorCode.<CODE>.exception(...)`` instead.
-    """
-
-    def __init__(self, exit_code: int, message: str = "") -> None:
-        super().__init__(message)
-        self.exit_code = exit_code
-
-    def __str__(self) -> str:
-        message = super().__str__()
-        if message:
-            return f"[exit {self.exit_code}] {message}"
-        return f"[exit {self.exit_code}]"
-
-
-class CommandSpecificError(CommandError):
-    """Legacy command-specific error with an explicit exit code.
-
-    Kept for back-compat. New code should declare per-site exception
-    classes in ``commands/<name>/error.py`` and raise via the matching
-    ``<Cmd>ErrorCode`` enum.
-
-    Raises:
-        ValueError: if ``exit_code`` is below
-            :data:`COMMAND_SPECIFIC_MIN_EXIT_CODE`. Codes ``1..9`` are
-            reserved by the command-basics spec.
-    """
-
-    def __init__(self, exit_code: int, message: str = "") -> None:
-        if exit_code < COMMAND_SPECIFIC_MIN_EXIT_CODE:
-            raise ValueError(
-                "command-specific exit codes must be >= "
-                f"{COMMAND_SPECIFIC_MIN_EXIT_CODE}, got {exit_code}"
-            )
-        super().__init__(exit_code, message)

@@ -37,7 +37,6 @@ from typing import Any
 import yaml
 
 from tabsdatak.error import ErrorCode
-from tabsdatak.server._tdrunner.function._lib.errors import CommandSpecificError
 
 
 class InvalidManifestError(ValueError):
@@ -85,19 +84,6 @@ def load_inputs_manifest(path: Path) -> list[dict[str, Any]]:
             f"{_MANIFEST_INPUTS_KEY!r} must be a list, got {type(entries).__name__}"
         )
     return entries
-
-
-def load_inputs_manifest_or_fail(path: Path, exit_code: int) -> list[dict[str, Any]]:
-    """:func:`load_inputs_manifest` with the legacy command-side error wrap.
-
-    Deprecated alongside ``CommandSpecificError``: new command code
-    should prefer :func:`load_inputs_manifest_or_raise`. Removed once
-    every command migrates (TD-2263).
-    """
-    try:
-        return load_inputs_manifest(path)
-    except (FileNotFoundError, InvalidManifestError) as exc:
-        raise CommandSpecificError(exit_code, str(exc)) from exc
 
 
 def load_inputs_manifest_or_raise(

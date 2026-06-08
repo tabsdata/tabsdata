@@ -31,7 +31,6 @@ from tabsdatak.server._tdrunner.function._lib.cli import (
     command,
     resolve_value,
 )
-from tabsdatak.server._tdrunner.function._lib.errors import CommandSpecificError
 from tabsdatak.server._tdrunner.function.commands.fetch_request.error import (
     FetchRequestErrorCode,
 )
@@ -57,13 +56,6 @@ MAN = (
     "extracts the 'data' field from the JSON envelope, and writes it as "
     "YAML to --request-file."
 )
-
-# EXIT_BAD_PAYLOAD stays here for the JSON-envelope checks below; the
-# HTTP-error and write-error codes moved to ``FetchRequestErrorCode``
-# (FR_1/2/3) in ``error.py`` once the per-site error classes landed
-# (TD-2270). The BAD_PAYLOAD migration is left as legacy shim until a
-# matching FR_* code is added.
-EXIT_BAD_PAYLOAD = 12
 
 RESOLVER_RETRY_WAIT_SECONDS = 2
 RESOLVER_RETRY_TOTAL_SECONDS = 32
@@ -138,13 +130,12 @@ def main(args: argparse.Namespace) -> int:
     try:
         envelope = json.loads(body)
     except json.JSONDecodeError as exc:
-        raise CommandSpecificError(
-            EXIT_BAD_PAYLOAD, f"response from {url} is not valid JSON: {exc}"
-        ) from exc
+        raise FetchRequestErrorCode.FR_4.exception(
+            cause=exc, url=url, expected="JSON", detail=str(exc)
+        )
     if not isinstance(envelope, dict) or "data" not in envelope:
-        raise CommandSpecificError(
-            EXIT_BAD_PAYLOAD,
-            f"response from {url} has no 'data' field",
+        raise FetchRequestErrorCode.FR_4.exception(
+            url=url, expected="JSON", detail="missing 'data' field"
         )
     data = envelope["data"]
     try:

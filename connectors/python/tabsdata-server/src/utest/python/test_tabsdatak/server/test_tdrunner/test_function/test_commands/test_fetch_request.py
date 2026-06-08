@@ -12,13 +12,9 @@ import urllib.request
 import pytest
 import yaml
 
-from tabsdatak.server._tdrunner.function._lib.errors import CommandSpecificError
-from tabsdatak.server._tdrunner.function.commands.fetch_request import (
-    EXIT_BAD_PAYLOAD,
-    _fetch,
-    main,
-)
+from tabsdatak.server._tdrunner.function.commands.fetch_request import _fetch, main
 from tabsdatak.server._tdrunner.function.commands.fetch_request.error import (
+    BadPayloadError,
     HttpFetchError,
     WriteFailedError,
 )
@@ -228,7 +224,7 @@ def test_main_http_error_returns_command_specific_exit(
 def test_main_write_error_returns_command_specific_exit(monkeypatch, tmp_path):
     _stub_urlopen(monkeypatch, body=_envelope_bytes({}))
     # Parent path component is an existing file → mkdir(parents=True) fails
-    # with NotADirectoryError (subclass of OSError) → EXIT_WRITE_ERROR.
+    # with NotADirectoryError (subclass of OSError) → WriteFailedError.
     blocker = tmp_path / "blocker"
     blocker.write_text("not a directory")
     _required_args(
@@ -260,7 +256,7 @@ def test_main_malformed_json_returns_bad_payload(monkeypatch, tmp_path):
         request_file=tmp_path / "out",
         liveness=tmp_path / "live",
     )
-    assert main() == EXIT_BAD_PAYLOAD
+    assert main() == BadPayloadError.exit_code
 
 
 def test_main_envelope_missing_data_field_returns_bad_payload(monkeypatch, tmp_path):
@@ -273,7 +269,7 @@ def test_main_envelope_missing_data_field_returns_bad_payload(monkeypatch, tmp_p
         request_file=tmp_path / "out",
         liveness=tmp_path / "live",
     )
-    assert main() == EXIT_BAD_PAYLOAD
+    assert main() == BadPayloadError.exit_code
 
 
 def test_main_missing_required_option_returns_1(monkeypatch, tmp_path):

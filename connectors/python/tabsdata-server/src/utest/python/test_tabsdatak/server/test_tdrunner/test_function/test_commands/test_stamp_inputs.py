@@ -22,7 +22,6 @@ import polars as pl
 import pytest
 import yaml
 
-from tabsdatak.server._tdrunner.function._lib.errors import CommandSpecificError
 from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
     MANIFEST_FILES_KEY,
     MANIFEST_NAME_KEY,
@@ -38,9 +37,6 @@ from tabsdatak.server._tdrunner.function._lib.system_columns import (
     TD_VER_TRANSACTION,
     TD_VER_VERSION,
 )
-from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
-    load_inputs_manifest_or_fail,
-)
 from tabsdatak.server._tdrunner.function.commands.stamp_inputs import _stamp_file, main
 from tabsdatak.server._tdrunner.function.commands.stamp_inputs.error import (
     BadInputParquetError,
@@ -48,12 +44,6 @@ from tabsdatak.server._tdrunner.function.commands.stamp_inputs.error import (
     BadRequestError,
     StampFailedError,
 )
-
-# Legacy unit-tests for the still-present ``load_inputs_manifest_or_fail``
-# helper (further below) pass this int sentinel. The wired (typed) path
-# now uses ``BadManifestError`` instead; this constant only survives
-# until the legacy helper is removed in the TD-2263 cleanup PR.
-EXIT_BAD_MANIFEST = BadManifestError.exit_code
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
@@ -132,40 +122,6 @@ def _set_argv(
             responder_authorization,
         ],
     )
-
-
-# --- unit: _load_inputs_manifest_or_fail ---------------------------------
-
-
-def test_load_manifest_shim_happy_path(tmp_path):
-    m = tmp_path / "m.yaml"
-    write_inputs_manifest(
-        [{MANIFEST_NAME_KEY: "in_1", MANIFEST_FILES_KEY: ["/x.parquet"]}], m
-    )
-    out = load_inputs_manifest_or_fail(m, EXIT_BAD_MANIFEST)
-    assert out == [{"name": "in_1", "files": ["/x.parquet"]}]
-
-
-def test_load_manifest_shim_missing_file_maps_to_bad_manifest(tmp_path):
-    with pytest.raises(CommandSpecificError) as exc_info:
-        load_inputs_manifest_or_fail(tmp_path / "nope.yaml", EXIT_BAD_MANIFEST)
-    assert exc_info.value.exit_code == EXIT_BAD_MANIFEST
-
-
-def test_load_manifest_shim_malformed_maps_to_bad_manifest(tmp_path):
-    m = tmp_path / "m.yaml"
-    m.write_text("inputs: [{unclosed")
-    with pytest.raises(CommandSpecificError) as exc_info:
-        load_inputs_manifest_or_fail(m, EXIT_BAD_MANIFEST)
-    assert exc_info.value.exit_code == EXIT_BAD_MANIFEST
-
-
-def test_load_manifest_shim_bad_shape_maps_to_bad_manifest(tmp_path):
-    m = tmp_path / "m.yaml"
-    m.write_text(yaml.safe_dump({"other": []}))
-    with pytest.raises(CommandSpecificError) as exc_info:
-        load_inputs_manifest_or_fail(m, EXIT_BAD_MANIFEST)
-    assert exc_info.value.exit_code == EXIT_BAD_MANIFEST
 
 
 # --- unit: _stamp_file --------------------------------------------------
@@ -266,7 +222,7 @@ def test_main_missing_inputs_manifest_returns_bad_manifest(
         tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert main() == EXIT_BAD_MANIFEST
+    assert main() == BadManifestError.exit_code
 
 
 def test_main_invalid_options_returns_1(monkeypatch):

@@ -29,7 +29,6 @@ import yaml
 from tabsdatak.common._archive.bundle import BUNDLE_MANIFEST_FILENAME, build_bundle
 from tabsdatak._info import PublisherInfo
 from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
-from tabsdatak.server._tdrunner.function._lib.errors import CommandSpecificError
 from tabsdatak.server._tdrunner.function.commands.run_source_plugin.error import (
     BadBundleError,
     BadInitialValuesError,
@@ -38,10 +37,11 @@ from tabsdatak.server._tdrunner.function.commands.run_source_plugin.error import
     ManifestWriteFailedError,
     NoPluginError,
     PluginFailedError,
+    RunSourcePluginErrorCode,
 )
 from tabsdatak.server._tdrunner.function._lib.initial_values import (
-    drain_ctx_to_state,
-    hydrate_ctx_from_state,
+    drain_ctx_to_state_or_raise,
+    hydrate_ctx_from_state_or_raise,
     read_initial_values,
     write_initial_values,
 )
@@ -61,13 +61,6 @@ from tabsdatak.server._tdrunner.function.commands.run_source_plugin import (
     _write_inputs_manifest,
     main,
 )
-
-# Legacy unit-tests for the still-present ``hydrate_ctx_from_state`` /
-# ``drain_ctx_to_state`` helpers (further below) pass this sentinel as
-# the int ``exit_code`` arg. The wired (typed) path now uses
-# ``BadInitialValuesError`` instead; this constant only survives until
-# the legacy helpers are removed in the TD-2263 cleanup PR.
-EXIT_BAD_INITIAL_VALUES = BadInitialValuesError.exit_code
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
@@ -683,8 +676,8 @@ def _bare_request(
 
 def test_hydrate_noop_when_system_input_empty(tmp_path):
     ctx = _bare_ctx()
-    hydrate_ctx_from_state(
-        ctx, _bare_request(), tmp_path, exit_code=EXIT_BAD_INITIAL_VALUES
+    hydrate_ctx_from_state_or_raise(
+        ctx, _bare_request(), tmp_path, error_code=RunSourcePluginErrorCode.RSP_9
     )
     assert ctx.drain() == {}
 
@@ -692,7 +685,9 @@ def test_hydrate_noop_when_system_input_empty(tmp_path):
 def test_hydrate_noop_when_slot_has_no_location(tmp_path):
     ctx = _bare_ctx()
     req = _bare_request(system_input=(_input_table("iv", location=None),))
-    hydrate_ctx_from_state(ctx, req, tmp_path, exit_code=EXIT_BAD_INITIAL_VALUES)
+    hydrate_ctx_from_state_or_raise(
+        ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_9
+    )
     assert ctx.drain() == {}
 
 
@@ -704,7 +699,7 @@ def test_hydrate_noop_when_state_file_missing(tmp_path):
     req = _bare_request(
         system_input=(_input_table("iv", location=Location(uri="file:///x")),),
     )
-    hydrate_ctx_from_state(ctx, req, tmp_path, exit_code=EXIT_BAD_INITIAL_VALUES)
+    hydrate_ctx_from_state_or_raise(ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_9)
     assert ctx.drain() == {}
 
 
@@ -715,7 +710,7 @@ def test_hydrate_loads_values_when_state_file_present(tmp_path):
     req = _bare_request(
         system_input=(_input_table("iv", location=Location(uri="file:///x")),),
     )
-    hydrate_ctx_from_state(ctx, req, tmp_path, exit_code=EXIT_BAD_INITIAL_VALUES)
+    hydrate_ctx_from_state_or_raise(ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_9)
     assert ctx.drain() == {"last-modified": "2026-05-27T00:00:00Z"}
 
 
@@ -726,18 +721,28 @@ def test_hydrate_malformed_state_file_raises_bad_initial_values(tmp_path):
     req = _bare_request(
         system_input=(_input_table("iv", location=Location(uri="file:///x")),),
     )
-    with pytest.raises(CommandSpecificError) as exc_info:
-        hydrate_ctx_from_state(ctx, req, tmp_path, exit_code=EXIT_BAD_INITIAL_VALUES)
-    assert exc_info.value.exit_code == EXIT_BAD_INITIAL_VALUES
+    with pytest.raises(BadInitialValuesError):
+        hydrate_ctx_from_state_or_raise(ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_9)
 
 
 def test_drain_noop_when_system_output_empty(tmp_path):
     ctx = _bare_ctx()
     ctx.store_attr("foo", "bar")  # has state but nowhere to send it.
-    drain_ctx_to_state(
-        ctx, _bare_request(), tmp_path, exit_code=EXIT_BAD_INITIAL_VALUES
+    drain_ctx_to_state_or_raise(
+        ctx, _bare_request(), tmp_path, error_code=RunSourcePluginErrorCode.RSP_9
     )
     assert list(tmp_path.iterdir()) == []
+
+
+def test_drain_noop_when_slot_has_no_location(tmp_path):
+    ctx = _bare_ctx()
+    ctx.store_attr("foo", "bar")
+    req = _bare_request(system_output=(_output_table("iv", location=None),))
+    drain_ctx_to_state_or_raise(
+        ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_9
+    )
+    assert list(tmp_path.iterdir()) == []
+
 
 
 def test_drain_writes_state_file_when_slot_present(tmp_path):
@@ -746,7 +751,7 @@ def test_drain_writes_state_file_when_slot_present(tmp_path):
     req = _bare_request(
         system_output=(_output_table("iv", location=Location(uri="file:///x")),),
     )
-    drain_ctx_to_state(ctx, req, tmp_path, exit_code=EXIT_BAD_INITIAL_VALUES)
+    drain_ctx_to_state_or_raise(ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_9)
     written = tmp_path / "iv.parquet"
     assert written.is_file()
     assert read_initial_values(written) == {"last-modified": "2026-05-28T00:00:00Z"}
@@ -759,7 +764,7 @@ def test_drain_writes_empty_file_when_ctx_empty(tmp_path):
     req = _bare_request(
         system_output=(_output_table("iv", location=Location(uri="file:///x")),),
     )
-    drain_ctx_to_state(ctx, req, tmp_path, exit_code=EXIT_BAD_INITIAL_VALUES)
+    drain_ctx_to_state_or_raise(ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_9)
     written = tmp_path / "iv.parquet"
     assert written.is_file()
     assert read_initial_values(written) == {}
@@ -773,13 +778,13 @@ def test_drain_creates_state_dir_if_missing(tmp_path):
     req = _bare_request(
         system_output=(_output_table("iv", location=Location(uri="file:///x")),),
     )
-    drain_ctx_to_state(ctx, req, state_dir, exit_code=EXIT_BAD_INITIAL_VALUES)
+    drain_ctx_to_state_or_raise(ctx, req, state_dir, error_code=RunSourcePluginErrorCode.RSP_9)
     assert (state_dir / "iv.parquet").is_file()
 
 
 def test_drain_bad_value_raises_bad_initial_values(tmp_path, monkeypatch):
     """If something poisons the ctx with a non-ContextValueSpec value,
-    the codec rejects it and the command surfaces EXIT_BAD_INITIAL_VALUES."""
+    the codec rejects it and the command surfaces BadInitialValuesError."""
     ctx = _bare_ctx()
     # Bypass store_attr's type-friendly surface to inject a bad value
     # directly into the underlying scratch dict.
@@ -787,9 +792,8 @@ def test_drain_bad_value_raises_bad_initial_values(tmp_path, monkeypatch):
     req = _bare_request(
         system_output=(_output_table("iv", location=Location(uri="file:///x")),),
     )
-    with pytest.raises(CommandSpecificError) as exc_info:
-        drain_ctx_to_state(ctx, req, tmp_path, exit_code=EXIT_BAD_INITIAL_VALUES)
-    assert exc_info.value.exit_code == EXIT_BAD_INITIAL_VALUES
+    with pytest.raises(BadInitialValuesError):
+        drain_ctx_to_state_or_raise(ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_9)
 
 
 # --- main: end-to-end with initial_values round-trip --------------------

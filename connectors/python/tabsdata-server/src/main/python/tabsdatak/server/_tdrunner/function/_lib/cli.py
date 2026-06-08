@@ -44,12 +44,11 @@ from tenacity import retry, stop_after_delay, wait_fixed
 
 from tabsdatak._logging import setup_logging
 from tabsdatak.server._tdrunner.function._lib.errors import (
-    EXIT_INCONSISTENT,
-    EXIT_PREMATURE,
-    EXIT_UNEXPECTED,
-    CommandError,
     CommandErrorCode,
     CommandException,
+    InconsistentError,
+    PrematureError,
+    UnexpectedError,
 )
 from tabsdatak.server._tdrunner.function._lib.liveness import install_liveness_handler
 from tabsdatak.server._tdrunner.function.commands import tabsdata_command
@@ -234,8 +233,7 @@ def build_parser(
 
 def run_command(main_fn: Callable[[], int | None]) -> int:
     """Run a command's ``main_fn``, mapping a raised
-    :class:`CommandException` (new) or :class:`CommandError` (legacy
-    shim) to the matching process exit code.
+    :class:`CommandException` to the matching process exit code.
 
     Each mapped exception is printed to stderr first, then the
     declared ``exit_code`` is returned. A return value of ``None`` is
@@ -249,12 +247,6 @@ def run_command(main_fn: Callable[[], int | None]) -> int:
     try:
         result = main_fn()
     except CommandException as exc:
-        print(str(exc), file=sys.stderr)
-        return exc.exit_code
-    except CommandError as exc:
-        # Legacy shim path: command modules still raising
-        # ``CommandSpecificError(exit_code, msg)``. Removed once every
-        # command has migrated to its own ``error.py`` (TD-2263).
         print(str(exc), file=sys.stderr)
         return exc.exit_code
     if result is None:
@@ -339,13 +331,14 @@ def command(
     The whole run lives inside one ``try`` with three ``except`` arms,
     so the decorated body never needs its own top-level try/except:
 
-    * :class:`CommandError` — logged at ERROR with traceback; posted to
+    * :class:`CommandException` — logged at ERROR with traceback; posted to
       the responder; ``exit_code`` is promoted to
-      :data:`EXIT_INCONSISTENT` if the error claimed ``exit_code=0``.
-    * :class:`Exception` — logged at ERROR with traceback; posted to
-      the responder; returns :data:`EXIT_UNEXPECTED`.
-    * :class:`SystemExit` — logged at ERROR (no traceback); posted to
-      the responder; returns :data:`EXIT_PREMATURE`.
+      :class:`InconsistentError`'s ``exit_code`` (4) if the raised
+      exception claimed ``exit_code=0``.
+    * :class:`Exception` — logged at ERROR with traceback; wrapped in
+      :class:`UnexpectedError` (exit 3); posted to the responder.
+    * :class:`SystemExit` — logged at ERROR (no traceback); wrapped in
+      :class:`PrematureError` (exit 5); posted to the responder.
 
     The result is additionally tagged with :func:`tabsdata_command` so
     the SDK packager picks it up as a console-script entry point.
@@ -376,24 +369,24 @@ def command(
                 result = body(parsed)
                 exit_code = 0 if result is None else int(result)
                 return exit_code
-            except CommandError as error:
+            except CommandException as error:
                 exit_code = error.exit_code
                 logger.exception("Handled exception caught by command")
                 if exit_code == 0:
                     logger.error(
-                        f"CommandError raised with exit_code=0; "
-                        f"promoting to {EXIT_INCONSISTENT}"
+                        f"CommandException raised with exit_code=0; "
+                        f"promoting to {InconsistentError.exit_code}"
                     )
-                    exit_code = EXIT_INCONSISTENT
+                    exit_code = InconsistentError.exit_code
                 _failure_to_responder(args, exit_code, error)
                 return exit_code
             except Exception as exception:
-                exit_code = EXIT_UNEXPECTED
+                exit_code = UnexpectedError.exit_code
                 logger.exception("Unhandled exception caught by command")
                 _failure_to_responder(args, exit_code, exception)
                 return exit_code
             except SystemExit as exit_event:
-                exit_code = EXIT_PREMATURE
+                exit_code = PrematureError.exit_code
                 logger.error(
                     f"Exit ({exit_event.code}) intercepted by command; "
                     f"promoting to {exit_code}"

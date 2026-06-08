@@ -16,7 +16,6 @@ from tabsdatak.server._tdrunner.function._lib.cli import (
 )
 from tabsdatak.server._tdrunner.function._lib.errors import (
     CommandErrorCode,
-    CommandSpecificError,
     InvalidOptionsError,
     UndefinedEnvError,
 )
@@ -261,10 +260,3 @@ def test_run_command_undefined_env(capsys):
     assert "FOO" in captured.err
 
 
-def test_run_command_command_specific(capsys):
-    def main():
-        raise CommandSpecificError(42, "boom")
-
-    assert run_command(main) == 42
-    captured = capsys.readouterr()
-    assert "boom" in captured.err

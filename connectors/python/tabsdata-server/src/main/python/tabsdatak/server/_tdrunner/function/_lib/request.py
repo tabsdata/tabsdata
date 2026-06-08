@@ -35,7 +35,6 @@ import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from tabsdatak.error import ErrorCode
-from tabsdatak.server._tdrunner.function._lib.errors import CommandSpecificError
 
 REQUEST_ENVELOPE_SUPPORTED = ("FunctionV2",)
 REQUEST_ENVELOPE_KNOWN = REQUEST_ENVELOPE_SUPPORTED
@@ -224,28 +223,6 @@ def load_request(path: Path) -> Request:
         ) from exc
 
 
-def load_request_or_fail(path: Path, exit_code: int) -> Request:
-    """:func:`load_request` with the legacy command-side error wrap.
-
-    Catches ``FileNotFoundError`` and :class:`InvalidRequestError` and
-    re-raises as
-    :class:`~tabsdatak.server._tdrunner.function._lib.errors.CommandSpecificError`
-    so :func:`~tabsdatak.server._tdrunner.function._lib.cli.run_command`
-    can map it to an exit code.
-
-    Deprecated alongside ``CommandSpecificError``: new command code
-    should prefer :func:`load_request_or_raise`, which carries a typed
-    per-command exception instead of an integer exit code. Kept until
-    every command has migrated to its own ``error.py`` (TD-2263).
-    """
-    try:
-        return load_request(path)
-    except (FileNotFoundError, InvalidRequestError) as exc:
-        raise CommandSpecificError(
-            exit_code, f"unreadable request.yaml: {exc}"
-        ) from exc
-
-
 def load_request_or_raise(path: Path, error_code: ErrorCode) -> Request:
     """:func:`load_request` with a per-command typed-error wrap.
 
@@ -259,10 +236,6 @@ def load_request_or_raise(path: Path, error_code: ErrorCode) -> Request:
 
     Templates that bind ``error_code`` can reference ``{path}`` and
     ``{detail}`` as placeholders.
-
-    Typed counterpart of :func:`load_request_or_fail`; once every
-    command in ``commands/`` migrates to its own ``error.py``
-    (TD-2263), the legacy form is removed.
     """
     try:
         return load_request(path)
