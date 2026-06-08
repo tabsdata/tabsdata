@@ -222,7 +222,7 @@ mod tests {
             .status(FunctionStatus::Active)
             .build()
             .unwrap();
-        db.live().insert::<FunctionPatchDB>(&patch).await.unwrap();
+        db.seed().insert(&patch).await.unwrap();
         patch.id
     }
 
@@ -431,7 +431,7 @@ mod tests {
         // Build the LFR directly (skip seed_function_run, which appends a
         // Bound event we don't want here) and append InitialMint Pending.
         let lfr = LogicalFunctionRunDB::builder()
-            .project_id(coll.project_id.clone())
+            .project_id(coll.project_id)
             .group_id(coll.group_id)
             .collection_id(coll.id)
             .execution_id(&exec.id)
@@ -445,7 +445,7 @@ mod tests {
             .build()?;
         db.live().insert::<LogicalFunctionRunDB>(&lfr).await?;
         let pending = LogicalFunctionRunPointerDB::build_event(
-            lfr.project_id.clone(),
+            lfr.project_id,
             &lfr.id,
             LogicalPointerStatus::Pending,
             None,

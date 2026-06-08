@@ -142,7 +142,7 @@ pub(crate) async fn seed_function(
         // `WorkerDB.project_id` is no longer mapped from `FunctionDB`; stamp it
         // from the collection.
         let mut builder = WorkerDBBuilder::try_from(&function_db)?;
-        builder.project_id(collection.project_id.clone());
+        builder.project_id(collection.project_id);
 
         for (worker_type, worker_config) in workers {
             let worker = builder

@@ -39,7 +39,7 @@ pub fn build_function_run(
     // dispatch tx, and the per-attempt status mirrors that the worker
     // has been queued. Worker callbacks then advance Running → Done/Failed.
     Ok(PhysicalFunctionRunDB::builder()
-        .project_id(lfr.project_id.clone())
+        .project_id(lfr.project_id)
         .collection_id(lfr.collection_id)
         .function_id(lfr.function_id)
         .function_version_id(&runnable.function_version_id)
@@ -79,7 +79,7 @@ pub fn build_output_table_data_versions(
             .function_param_pos
             .unwrap_or(TableFunctionParamPos::try_from(0)?);
         let tdv = PhysicalTableDataVersionDB::builder()
-            .project_id(lfr.project_id.clone())
+            .project_id(lfr.project_id)
             .collection_id(lfr.collection_id)
             .table_id(t.table_id)
             .name(t.name.clone())
@@ -194,7 +194,7 @@ mod tests {
             .private(Private::TRUE)
             .status(TableStatus::Active)
             .build()?;
-        db.live().insert::<TableDB>(&private).await?;
+        db.seed().insert(&private).await?;
 
         let tables: Vec<TableDB> = db.live().fetch_all::<TableDB>(&func.id).await?;
         let exec = db.seed().execution(&func).await?;

@@ -137,7 +137,7 @@ where
             LogicalPointerStatus::Pending => {}
         }
         let event = P::build_event(
-            project_id.clone(),
+            *project_id,
             logical_id,
             LogicalPointerStatus::Bound,
             Some(new_concrete_id.clone()),
@@ -256,7 +256,7 @@ pub fn redirect_event<P: LogicalPointerDao>(
         return Ok(None);
     }
     let event = P::build_event(
-        project_id.clone(),
+        *project_id,
         logical_id,
         LogicalPointerStatus::Bound,
         Some(new_concrete_id.clone()),
@@ -302,7 +302,7 @@ pub fn void_event<P: LogicalPointerDao>(
         return Ok(None);
     }
     let event = P::build_event(
-        project_id.clone(),
+        *project_id,
         logical_id,
         LogicalPointerStatus::Voided,
         None,
@@ -531,7 +531,7 @@ mod tests {
 
             let before_mint = AtTime::now();
             let lfr = LogicalFunctionRunDB::builder()
-                .project_id(collection.project_id.clone())
+                .project_id(collection.project_id)
                 .group_id(collection.group_id)
                 .collection_id(collection.id)
                 .execution_id(execution.id.clone())
@@ -560,7 +560,7 @@ mod tests {
             let bind_at = AtTime::now();
             let fr_id = PhysicalFunctionRunId::new();
             let bind_event = LogicalFunctionRunPointerDB::build_event(
-                lfr.project_id.clone(),
+                lfr.project_id,
                 &lfr.id,
                 LogicalPointerStatus::Bound,
                 Some(fr_id.clone()),
@@ -640,7 +640,7 @@ mod tests {
             let before_mint = AtTime::now();
             let table_id = TableId::default();
             let ltdv = LogicalTableDataVersionDB::builder()
-                .project_id(collection.project_id.clone())
+                .project_id(collection.project_id)
                 .group_id(collection.group_id)
                 .collection_id(collection.id)
                 .execution_id(execution.id.clone())
@@ -669,7 +669,7 @@ mod tests {
             let bind_at = AtTime::now();
             let tdv_id = PhysicalTableDataVersionId::new();
             let bind_event = LogicalTableDataVersionPointerDB::build_event(
-                ltdv.project_id.clone(),
+                ltdv.project_id,
                 &ltdv.id,
                 LogicalPointerStatus::Bound,
                 Some(tdv_id.clone()),

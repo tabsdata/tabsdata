@@ -184,15 +184,15 @@ where
                 m.created_type("ProjectScopeProviderService", type_of::<R>());
                 m.created_type("ProjectScopeProviderService", type_of::<P>());
                 let mut result = inner.call(handler).await;
-                if let Ok(ref mut h) = result {
-                    if let Some(m) = crate::metadata::Metadata::extract(h) {
-                        // The project id is ambient scope (like the connection):
-                        // handed to every downstream layer but not necessarily
-                        // consumed — a service relying on RLS never extracts it.
-                        // Drop it from the accounting so it isn't reported as an
-                        // unused output.
-                        m.remove_created("ProjectScopeProviderService", type_of::<P>());
-                    }
+                if let Ok(ref mut h) = result
+                    && let Some(m) = crate::metadata::Metadata::extract(h)
+                {
+                    // The project id is ambient scope (like the connection):
+                    // handed to every downstream layer but not necessarily
+                    // consumed — a service relying on RLS never extracts it.
+                    // Drop it from the accounting so it isn't reported as an
+                    // unused output.
+                    m.remove_created("ProjectScopeProviderService", type_of::<P>());
                 }
                 return result;
             }

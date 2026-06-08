@@ -1629,7 +1629,7 @@ mod tests {
         data_bytes: i64,
     ) -> Result<PhysicalTableDataVersionDB, TdError> {
         let ptdv = PhysicalTableDataVersionDB::builder()
-            .project_id(pfr.project_id.clone())
+            .project_id(pfr.project_id)
             .collection_id(ltdv.collection_id)
             .table_id(table.table_id)
             .name(table.name.clone())
@@ -1652,7 +1652,7 @@ mod tests {
             .insert::<PhysicalTableDataVersionDB>(&ptdv)
             .await?;
         let pointer = LogicalTableDataVersionPointerDB::build_event(
-            ltdv.project_id.clone(),
+            ltdv.project_id,
             &ltdv.id,
             LogicalPointerStatus::Bound,
             Some(ptdv.id.clone()),
@@ -1878,9 +1878,7 @@ mod tests {
             .requirement_dependency_pos(Some(DependencyPos::try_from(0)?))
             .requirement_version_pos(VersionPos::try_from(0)?)
             .build()?;
-        db.live()
-            .insert::<LogicalFunctionRunInputDB>(&input)
-            .await?;
+        db.seed().insert(&input).await?;
 
         let req = empty_request(Dim::Collection);
         let mut conn = db.acquire().await.unwrap();
@@ -1970,9 +1968,7 @@ mod tests {
             .requirement_dependency_pos(Some(DependencyPos::try_from(0)?))
             .requirement_version_pos(VersionPos::try_from(0)?)
             .build()?;
-        db.live()
-            .insert::<LogicalFunctionRunInputDB>(&input)
-            .await?;
+        db.seed().insert(&input).await?;
 
         let req = empty_request(Dim::Collection);
         let mut conn = db.acquire().await.unwrap();

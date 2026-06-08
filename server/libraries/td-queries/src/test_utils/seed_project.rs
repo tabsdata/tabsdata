@@ -58,7 +58,7 @@ pub(crate) async fn seed_project(db: &TdPool, name: ProjectName) -> Result<Proje
         ),
     ];
     db.seed()
-        .in_project(project_db.id.clone())
+        .in_project(project_db.id)
         .scoped(async |conn| {
             for (group_name, group_description) in system_groups {
                 let group_create = GroupCreate::builder()

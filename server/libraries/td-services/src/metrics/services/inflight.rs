@@ -241,7 +241,7 @@ mod tests {
                         .description(&Description::try_from("d")?)
                         .build()?,
                 )
-                .in_project(project_b.id.clone()),
+                .in_project(project_b.id),
             )
             .await?;
         let coll_b: CollectionDB = db.live().fetch_one::<CollectionDB>(&coll_b_name).await?;

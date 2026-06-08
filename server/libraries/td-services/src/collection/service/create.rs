@@ -219,8 +219,8 @@ mod tests {
         // each project.
         for (project, name) in [(&project_a, "ca"), (&project_b, "cb")] {
             let create = CollectionCreate::builder()
-                .name(&CollectionName::try_from(name).unwrap())
-                .description(&Description::try_from("d").unwrap())
+                .name(CollectionName::try_from(name).unwrap())
+                .description(Description::try_from("d").unwrap())
                 .build()
                 .unwrap();
             let request = RequestContext::with(
@@ -229,7 +229,7 @@ mod tests {
                 RoleId::sys_admin(),
             )
             .create((), create)
-            .in_project(project.clone());
+            .in_project(*project);
             CreateCollectionService::with_defaults(db.clone())
                 .service()
                 .raw_oneshot(request)
@@ -243,7 +243,7 @@ mod tests {
             let request =
                 RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
                     .list((), ListParams::default())
-                    .in_project(project.clone());
+                    .in_project(*project);
             let list = ListCollectionsService::with_defaults(db.clone())
                 .service()
                 .raw_oneshot(request)

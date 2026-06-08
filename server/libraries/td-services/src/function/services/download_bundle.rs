@@ -66,7 +66,6 @@ mod tests {
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionVersionId, ProjectId, RoleId,
         UserId,
     };
-    use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
     use td_tower::project_scope::InProject;
@@ -142,7 +141,7 @@ mod tests {
             .bundle_id(bundle_b_id)
             .defined_on(AtTime::now())
             .build()?;
-        db.live().insert(&v2).await?;
+        db.seed().insert(&v2).await?;
 
         let function_param = FunctionParam::builder()
             .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)

@@ -24,8 +24,8 @@ mod routes {
     };
     use td_objects::rest_urls::{INFLIGHT, METRICS, SNAPSHOT};
     use td_objects::types::basic::{EpochMs, LogicalFunctionRunStatus, ProjectId};
-    use td_tower::project_scope::InProject;
     use td_services::metrics::services::OperationalMetricsServices;
+    use td_tower::project_scope::InProject;
     use tower::ServiceExt;
 
     const METRICS_TAG: &str = "Metrics";
@@ -95,7 +95,9 @@ mod routes {
         })
     }
 
-    pub(crate) fn inflight_query_into_request(q: InflightQuery) -> Result<InflightRequest, TdError> {
+    pub(crate) fn inflight_query_into_request(
+        q: InflightQuery,
+    ) -> Result<InflightRequest, TdError> {
         for status in &q.status {
             if !LogicalFunctionRunStatus::IN_FLIGHT.contains(status) {
                 return Err(StatusFilterError::NotInFlight {

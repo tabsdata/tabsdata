@@ -61,7 +61,7 @@ use itertools::Itertools;
 use std::collections::HashMap;
 use td_database::dynamic::DynamicConnection;
 use td_error::DisplayVec;
-use td_error::{TdError, td_error};
+use td_error::{td_error, TdError};
 use td_objects::dxo::logical::ActiveLogicalTableDataVersionDB;
 use td_objects::types::basic::{FunctionId, LogicalTableDataVersionId, TableId, TriggeredOn};
 use td_objects::types::table_ref::{Version, Versions};
@@ -168,7 +168,9 @@ impl<'a> VersionResolver<'a> {
         let rn = conn
             .versioned(self.triggered_on)
             .data_version(self.table_id)
-            .fetch_relative_offset::<ActiveLogicalTableDataVersionDB>(&Version::Fixed(ltdv_id.clone()))
+            .fetch_relative_offset::<ActiveLogicalTableDataVersionDB>(&Version::Fixed(
+                ltdv_id.clone(),
+            ))
             .await?
             .ok_or_else(|| {
                 VersionResolverError::FixedTableDataVersionsNotFound(vec![ltdv_id.clone()].into())
@@ -213,7 +215,9 @@ impl<'a> VersionResolver<'a> {
                 })
                 .collect();
             let by_id: HashMap<_, _> = conn
-                .fetch_all_chunked::<ActiveLogicalTableDataVersionDB, LogicalTableDataVersionId>(&ids)
+                .fetch_all_chunked::<ActiveLogicalTableDataVersionDB, LogicalTableDataVersionId>(
+                    &ids,
+                )
                 .await?
                 .into_iter()
                 .map(|f| (f.id.clone(), f))
@@ -442,7 +446,6 @@ impl<'a> VersionResolver<'a> {
 mod tests {
     use super::*;
     use td_database::pool::TdPool;
-    use td_objects::Buildable;
     use td_objects::and;
     use td_objects::dxo::collection::CollectionDB;
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
@@ -457,6 +460,7 @@ mod tests {
         AtTime, BundleId, CollectionName, Decorator, LogicalPointerReason, LogicalPointerStatus,
         PhysicalTableDataVersionId, TableName, TableNameDto, TransactionKey, UserId,
     };
+    use td_objects::Buildable;
     use td_queries::test_utils::SeedEntry;
     use td_queries::{CurrentEntry, LtdvEntry};
 
@@ -476,7 +480,7 @@ mod tests {
             .await
             .unwrap();
         let pointer = LogicalTableDataVersionPointerDB::builder()
-            .project_id(ltdv.project_id.clone())
+            .project_id(ltdv.project_id)
             .logical_table_data_version_id(ltdv.id.clone())
             .status(LogicalPointerStatus::Bound)
             .physical_table_data_version_id(Some(bound_to.clone()))
@@ -550,7 +554,7 @@ mod tests {
 
             let synthetic_tdv_id = PhysicalTableDataVersionId::new();
             let ltdv = LogicalTableDataVersionDB::builder()
-                .project_id(collection.project_id.clone())
+                .project_id(collection.project_id)
                 .group_id(collection.group_id)
                 .collection_id(collection.id)
                 .execution_id(execution.id.clone())
@@ -822,7 +826,7 @@ mod tests {
         // Consumer LFR aligned with run 1 — the only cutoff a correct
         // resolver could use.
         let lfr_run1 = LogicalFunctionRunDB::builder()
-            .project_id(consumer.project_id.clone())
+            .project_id(collection.project_id)
             .group_id(collection.group_id)
             .collection_id(collection.id)
             .execution_id(&ltdvs[0].execution_id)
@@ -893,7 +897,7 @@ mod tests {
                 .transaction(&execution, &TransactionKey::try_from("ANY")?)
                 .await?;
             let ltdv = LogicalTableDataVersionDB::builder()
-                .project_id(collection.project_id.clone())
+                .project_id(collection.project_id)
                 .group_id(collection.group_id)
                 .collection_id(collection.id)
                 .execution_id(execution.id.clone())
@@ -952,7 +956,7 @@ mod tests {
         let tx = db.begin().await.unwrap();
         let mut conn = tx.into_connection();
         let void_event = LogicalTableDataVersionPointerDB::build_event(
-            ltdvs[1].project_id.clone(),
+            ltdvs[1].project_id,
             &ltdvs[1].id,
             LogicalPointerStatus::Voided,
             None,
@@ -1001,7 +1005,7 @@ mod tests {
             .await
             .unwrap();
         let canceled_lfr = LogicalFunctionRunDB::builder()
-            .project_id(collection.project_id.clone())
+            .project_id(collection.project_id)
             .group_id(collection.group_id)
             .collection_id(collection.id)
             .execution_id(execution.id.clone())
@@ -1019,7 +1023,7 @@ mod tests {
             .await
             .unwrap();
         let canceled_ltdv = LogicalTableDataVersionDB::builder()
-            .project_id(collection.project_id.clone())
+            .project_id(collection.project_id)
             .group_id(collection.group_id)
             .collection_id(collection.id)
             .execution_id(execution.id)

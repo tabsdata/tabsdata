@@ -70,7 +70,7 @@ pub async fn _seed_physical_table_data_version(
     has_data: Option<&HasData>,
 ) -> Result<PhysicalTableDataVersionDB, TdError> {
     let table_data_version_db = PhysicalTableDataVersionDB::builder()
-        .project_id(physical_function_run.project_id.clone())
+        .project_id(physical_function_run.project_id)
         .collection_id(collection.id)
         .table_id(table.table_id)
         .name(table.name.clone())
@@ -95,7 +95,7 @@ pub async fn _seed_physical_table_data_version(
         ))
         .await?;
     let logical = LogicalTableDataVersionDB::builder()
-        .project_id(producer_lfr.project_id.clone())
+        .project_id(producer_lfr.project_id)
         .group_id(producer_lfr.group_id)
         .collection_id(collection.id)
         .execution_id(&execution.id)
@@ -112,7 +112,7 @@ pub async fn _seed_physical_table_data_version(
         .insert::<LogicalTableDataVersionDB>(&logical)
         .await?;
     let pointer = LogicalTableDataVersionPointerDB::build_event(
-        logical.project_id.clone(),
+        logical.project_id,
         &logical.id,
         LogicalPointerStatus::Bound,
         Some(table_data_version_db.id.clone()),

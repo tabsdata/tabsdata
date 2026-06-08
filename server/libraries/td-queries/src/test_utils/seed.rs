@@ -31,7 +31,9 @@ use crate::test_utils::seed_system_tables::seed_system_tables;
 use crate::test_utils::seed_transaction::seed_transaction;
 use crate::test_utils::seed_user::seed_user;
 use crate::test_utils::seed_user_role::seed_user_role;
+use crate::LiveEntry;
 use crate::test_utils::seed_worker::{seed_function_runner_worker, seed_worker};
+use ta_objects::Dao;
 use td_database::dynamic::DynamicConnection;
 use td_database::pool::TdPool;
 use td_error::TdError;
@@ -82,7 +84,7 @@ pub struct Seed<E> {
 // Seeds operate on a pool: the field-less ones scope their writes via
 // `in_project` (which must `begin` a transaction), so the executor is the
 // concrete `&TdPool` rather than an arbitrary `QueryExecutor`.
-impl<'a> Seed<&'a TdPool> {
+impl Seed<&TdPool> {
     /// Target a project for this handle's field-less seeds (default `sandbox`).
     /// `db.seed().in_project(p).collection(..)` lands the collection in `p`.
     pub fn in_project(mut self, project: ProjectId) -> Self {
@@ -128,6 +130,22 @@ impl<'a> Seed<&'a TdPool> {
                 Err(err)
             }
         }
+    }
+
+    /// Insert a single pre-built row scoped to this handle's project — the
+    /// test analog of how production defaults `project_id` from the
+    /// connection's `app.project_id`. For bespoke test rows that don't warrant
+    /// a named seed method but whose DAO is field-less (`FunctionPatchDB`,
+    /// `TableDB`, `LogicalFunctionRunInputDB`, …): those default their
+    /// `project_id` from the scope, so a plain unscoped `conn.live().insert`
+    /// would NULL-violate. DAOs that carry an explicit `project_id` can be
+    /// inserted directly without this.
+    pub async fn insert<D: Dao>(&self, dao: &D) -> Result<(), TdError> {
+        self.scoped(async |conn| {
+            conn.live().insert::<D>(dao).await?;
+            Ok(())
+        })
+        .await
     }
 
     pub async fn collection(

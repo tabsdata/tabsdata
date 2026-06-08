@@ -398,7 +398,7 @@ pub(crate) mod tests {
                         .description(&Description::try_from("c")?)
                         .build()?,
                 )
-                .in_project(project.id.clone()),
+                .in_project(project.id),
             )
             .await?;
 

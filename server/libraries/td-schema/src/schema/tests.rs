@@ -573,11 +573,8 @@ fn test_maintain_current_trigger_columns_match_tables() {
 /// the SQLite-derived `COLS_BY_TABLE` is authoritative for membership.
 #[test]
 fn test_project_scoped_tables_match_project_id_columns() {
-    let with_project_id: HashSet<&str> = COLS_BY_TABLE
-        .iter()
-        .filter(|(_, cols)| cols.iter().any(|c| c == "project_id"))
-        .map(|(t, _)| t.as_str())
-        .collect();
+    let with_project_id: HashSet<&str> =
+        COLS_BY_TABLE.iter().filter(|(_, cols)| cols.iter().any(|c| c == "project_id")).map(|(t, _)| t.as_str()).collect();
     let listed: HashSet<&str> = current::PROJECT_SCOPED_TABLES.iter().copied().collect();
 
     let missing: Vec<&str> = with_project_id.difference(&listed).copied().collect();

@@ -67,7 +67,7 @@ pub(crate) async fn seed_logical_input(
             .await?;
         let producer_lfr_id = producer_lfr.id.clone();
         let ltdv = LogicalTableDataVersionDB::builder()
-            .project_id(producer_lfr.project_id.clone())
+            .project_id(producer_lfr.project_id)
             .group_id(producer_lfr.group_id)
             .collection_id(collection.id)
             .execution_id(&execution.id)
@@ -82,7 +82,7 @@ pub(crate) async fn seed_logical_input(
             .await?;
 
         let pointer = LogicalTableDataVersionPointerDB::build_event(
-            ltdv.project_id.clone(),
+            ltdv.project_id,
             &ltdv.id,
             LogicalPointerStatus::Bound,
             Some(req_tdv.id.clone()),

@@ -173,7 +173,7 @@ pub async fn build_logical_function_runs(
             };
             LogicalFunctionRunDB::builder()
                 // ProjectScopeProvider put the request's project on the handler.
-                .project_id((*project_id).clone())
+                .project_id(*project_id)
                 .collection_id(f.collection_id)
                 .execution_id(execution.id.clone())
                 .transaction_id(transaction.id.clone())
@@ -198,7 +198,7 @@ pub fn initial_mint_lfr_pointer(
     lfr: &LogicalFunctionRunDB,
 ) -> Result<LogicalFunctionRunPointerDB, TdError> {
     Ok(LogicalFunctionRunPointerDB::builder()
-        .project_id(lfr.project_id.clone())
+        .project_id(lfr.project_id)
         .logical_function_run_id(lfr.id.clone())
         .status(LogicalPointerStatus::Pending)
         .physical_function_run_id(None)
@@ -238,7 +238,7 @@ pub async fn build_logical_table_data_versions(
         .map(|lfr| {
             (
                 lfr.function_id,
-                (lfr.id.clone(), lfr.group_id, lfr.project_id.clone()),
+                (lfr.id.clone(), lfr.group_id, lfr.project_id),
             )
         })
         .collect();
@@ -257,7 +257,7 @@ pub async fn build_logical_table_data_versions(
                     )
                 })?;
             LogicalTableDataVersionDB::builder()
-                .project_id(project_id.clone())
+                .project_id(*project_id)
                 .collection_id(f.collection_id)
                 .execution_id(transaction.execution_id.clone())
                 .transaction_id(transaction.id.clone())
@@ -278,7 +278,7 @@ pub fn initial_mint_ltdv_pointer(
     ltdv: &LogicalTableDataVersionDB,
 ) -> Result<LogicalTableDataVersionPointerDB, TdError> {
     Ok(LogicalTableDataVersionPointerDB::builder()
-        .project_id(ltdv.project_id.clone())
+        .project_id(ltdv.project_id)
         .logical_table_data_version_id(ltdv.id.clone())
         .status(LogicalPointerStatus::Pending)
         .physical_table_data_version_id(None)

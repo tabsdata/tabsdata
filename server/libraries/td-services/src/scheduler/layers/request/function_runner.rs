@@ -15,6 +15,7 @@ use td_common::server::{
 };
 use td_database::dynamic::DynamicConnection;
 use td_error::{ApiError, TdError, api_error};
+use td_objects::TaggedExt;
 use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, PhysicalFunctionRunToExecute};
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
@@ -26,7 +27,6 @@ use td_objects::types::basic::{
     AtTime, Enabled, ExecutionId, LogicalFunctionRunId, PhysicalFunctionRunId, ProjectIdName,
     WorkerId, WorkerMessageStatus, WorkerStatus, WorkerType,
 };
-use td_objects::TaggedExt;
 use td_queries::{ChunkedQueries, LfrEntry, PfrEntry};
 use td_storage::Storage;
 use td_tower::extractors::{MutRef, Ref};
@@ -304,7 +304,7 @@ pub async fn create_locked_function_runner_workers_start_request(
         // project so its callbacks land in the right RLS scope.
         let message = WorkerDB {
             id: worker_id,
-            project_id: f.project_id.clone(),
+            project_id: f.project_id,
             collection_id: f.collection_id,
             execution_id: Some(f.execution_id.clone()),
             transaction_id: Some(f.transaction_id.clone()),

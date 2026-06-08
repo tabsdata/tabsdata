@@ -45,7 +45,7 @@ google-cloud-core==2.6.0
 google-cloud-storage==3.10.0
 google-cloud-storage-control==1.10.0
 google-crc32c==1.8.0
-google-resumable-media==2.9.0
+google-resumable-media==2.10.0
 googleapis-common-protos==1.75.0
 greenlet==3.5.1 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
 grpc-google-iam-v1==0.14.4

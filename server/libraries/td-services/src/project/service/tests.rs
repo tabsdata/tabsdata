@@ -104,7 +104,7 @@ async fn test_project_name_must_be_unique(db: TdPool) -> Result<(), TdError> {
     let create = || {
         ProjectCreate::builder()
             .name(&name)
-            .description(&Description::try_from("Billing").unwrap())
+            .description(Description::try_from("Billing").unwrap())
             .build()
             .unwrap()
     };
@@ -165,8 +165,8 @@ mod sqlite_single_project {
         let db = td_database::test_utils::sqlite::pool().await;
         db.upgrade().await.unwrap();
         let create = ProjectCreate::builder()
-            .name(&ProjectName::try_from("anything").unwrap())
-            .description(&Description::try_from("nope").unwrap())
+            .name(ProjectName::try_from("anything").unwrap())
+            .description(Description::try_from("nope").unwrap())
             .build()
             .unwrap();
         let err = CreateProjectService::with_defaults(db)

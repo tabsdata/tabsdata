@@ -166,7 +166,6 @@ mod tests {
         BundleId, CollectionName, Decorator, Description, FunctionRuntimeValues, FunctionStatus,
         Snippet, TableNameDto, UserId,
     };
-    use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
 
     async fn seed_head(
@@ -212,7 +211,7 @@ mod tests {
             .defined_by_id(UserId::admin())
             .status(FunctionStatus::Active)
             .build()?;
-        db.live().insert::<FunctionPatchDB>(&patch).await?;
+        db.seed().insert(&patch).await?;
         Ok(patch.id)
     }
 

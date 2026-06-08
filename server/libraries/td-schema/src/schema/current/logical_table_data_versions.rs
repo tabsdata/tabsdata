@@ -174,115 +174,126 @@ impl Entity for Defs {
         .into_subquery();
 
         let groups_alias = Alias::new("groups_for_ltdv");
-        vec![ViewDef::new(
-            TableDataVersionsWithNames,
-            Query::select()
-                .expr(Expr::col((LogicalTableDataVersions::Table, Asterisk)))
-                .expr_as(Expr::col((Collections::Table, Collections::Name)), Alias::new("collection"))
-                .expr_as(Expr::col((Executions::Table, Executions::Name)), Alias::new("execution"))
-                .expr_as(
-                    b.name_or_id((Users::Table, Users::Name), (LogicalTableDataVersions::Table, LogicalTableDataVersions::TriggeredById)),
-                    Alias::new("triggered_by"),
-                )
-                .expr_as(Expr::col((groups_alias.clone(), Groups::Name)), Alias::new("group"))
-                // PTDV-derived columns (bound pointer → PTDV).
-                .expr_as(
-                    Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::Id)),
-                    Alias::new("physical_table_data_version_id"),
-                )
-                .expr_as(Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::Name)), Alias::new("name"))
-                .expr_as(
-                    Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::TableVersionId)),
-                    Alias::new("table_version_id"),
-                )
-                .expr_as(
-                    Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::FunctionVersionId)),
-                    Alias::new("function_version_id"),
-                )
-                .expr_as(
-                    Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::FunctionVersionPatchId)),
-                    Alias::new("function_version_patch_id"),
-                )
-                .expr_as(Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::HasData)), Alias::new("has_data"))
-                .expr_as(
-                    Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::SchemaChanged)),
-                    Alias::new("schema_changed"),
-                )
-                .expr_as(Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::ColumnCount)), Alias::new("column_count"))
-                .expr_as(Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::RowCount)), Alias::new("row_count"))
-                .expr_as(Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::DataBytes)), Alias::new("data_bytes"))
-                .expr_as(Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::SchemaHash)), Alias::new("schema_hash"))
-                .expr_as(
-                    Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::WithDataTableDataVersionId)),
-                    Alias::new("with_data_table_data_version_id"),
-                )
-                .expr_as(
-                    Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::PhysicalFunctionRunId)),
-                    Alias::new("physical_function_run_id"),
-                )
-                // PFR-side audit reached through the PTDV's producer.
-                .expr_as(Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::StartedOn)), Alias::new("started_on"))
-                .expr_as(Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::EndedOn)), Alias::new("ended_on"))
-                // Canonical LFR-side status of the LTDV's producer LFR
-                // (sticky-Committed). Use this for committed-only filters.
-                .expr_as(Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::Status)), Alias::new("status"))
-                // PFR-side per-attempt status (Running, Done, Error, …).
-                .expr_as(Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::Status)), Alias::new("physical_status"))
-                .expr_as(Expr::col((Functions::Table, Functions::Name)), Alias::new("function"))
-                .expr_as(Expr::col((Functions::Table, Functions::DataLocation)), Alias::new("data_location"))
-                .expr_as(Expr::col((Functions::Table, Functions::StorageVersion)), Alias::new("storage_version"))
-                .from(LogicalTableDataVersions::Table)
-                .join(
-                    JoinType::LeftJoin,
-                    Collections::Table,
-                    Expr::col((LogicalTableDataVersions::Table, LogicalTableDataVersions::CollectionId))
-                        .equals((Collections::Table, Collections::Id)),
-                )
-                .join(
-                    JoinType::LeftJoin,
-                    Executions::Table,
-                    Expr::col((LogicalTableDataVersions::Table, LogicalTableDataVersions::ExecutionId))
-                        .equals((Executions::Table, Executions::Id)),
-                )
-                .join(
-                    JoinType::LeftJoin,
-                    Users::Table,
-                    Expr::col((LogicalTableDataVersions::Table, LogicalTableDataVersions::TriggeredById)).equals((Users::Table, Users::Id)),
-                )
-                .join(
-                    JoinType::LeftJoin,
-                    PhysicalTableDataVersions::Table,
-                    Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::Id))
-                        .eq(Expr::SubQuery(None, Box::new(SubQueryStatement::SelectStatement(bound_ptdv_subquery)))),
-                )
-                .join(
-                    JoinType::LeftJoin,
-                    PhysicalFunctionRuns::Table,
-                    Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::Id))
-                        .equals((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::PhysicalFunctionRunId)),
-                )
-                // Producer LFR — the LTDV-level canonical status comes
-                // from here (sticky-Committed); separate from the
-                // PFR's per-attempt status reached via PTDV above.
-                .join(
-                    JoinType::LeftJoin,
-                    LogicalFunctionRuns::Table,
-                    Expr::col((LogicalTableDataVersions::Table, LogicalTableDataVersions::ProducerLogicalFunctionRunId))
-                        .equals((LogicalFunctionRuns::Table, LogicalFunctionRuns::Id)),
-                )
-                .join(
-                    JoinType::LeftJoin,
-                    Functions::Table,
-                    Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::FunctionVersionId))
-                        .equals((Functions::Table, Functions::Id)),
-                )
-                .join_as(
-                    JoinType::LeftJoin,
-                    Groups::Table,
-                    groups_alias.clone(),
-                    Expr::col((LogicalTableDataVersions::Table, LogicalTableDataVersions::GroupId)).equals((groups_alias, Groups::Id)),
-                )
-                .to_owned(),
+        vec![
+            ViewDef::new(
+                TableDataVersionsWithNames,
+                Query::select()
+                    .expr(Expr::col((LogicalTableDataVersions::Table, Asterisk)))
+                    .expr_as(Expr::col((Collections::Table, Collections::Name)), Alias::new("collection"))
+                    .expr_as(Expr::col((Executions::Table, Executions::Name)), Alias::new("execution"))
+                    .expr_as(
+                        b.name_or_id(
+                            (Users::Table, Users::Name),
+                            (LogicalTableDataVersions::Table, LogicalTableDataVersions::TriggeredById),
+                        ),
+                        Alias::new("triggered_by"),
+                    )
+                    .expr_as(Expr::col((groups_alias.clone(), Groups::Name)), Alias::new("group"))
+                    // PTDV-derived columns (bound pointer → PTDV).
+                    .expr_as(
+                        Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::Id)),
+                        Alias::new("physical_table_data_version_id"),
+                    )
+                    .expr_as(Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::Name)), Alias::new("name"))
+                    .expr_as(
+                        Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::TableVersionId)),
+                        Alias::new("table_version_id"),
+                    )
+                    .expr_as(
+                        Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::FunctionVersionId)),
+                        Alias::new("function_version_id"),
+                    )
+                    .expr_as(
+                        Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::FunctionVersionPatchId)),
+                        Alias::new("function_version_patch_id"),
+                    )
+                    .expr_as(Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::HasData)), Alias::new("has_data"))
+                    .expr_as(
+                        Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::SchemaChanged)),
+                        Alias::new("schema_changed"),
+                    )
+                    .expr_as(
+                        Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::ColumnCount)),
+                        Alias::new("column_count"),
+                    )
+                    .expr_as(Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::RowCount)), Alias::new("row_count"))
+                    .expr_as(Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::DataBytes)), Alias::new("data_bytes"))
+                    .expr_as(
+                        Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::SchemaHash)),
+                        Alias::new("schema_hash"),
+                    )
+                    .expr_as(
+                        Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::WithDataTableDataVersionId)),
+                        Alias::new("with_data_table_data_version_id"),
+                    )
+                    .expr_as(
+                        Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::PhysicalFunctionRunId)),
+                        Alias::new("physical_function_run_id"),
+                    )
+                    // PFR-side audit reached through the PTDV's producer.
+                    .expr_as(Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::StartedOn)), Alias::new("started_on"))
+                    .expr_as(Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::EndedOn)), Alias::new("ended_on"))
+                    // Canonical LFR-side status of the LTDV's producer LFR
+                    // (sticky-Committed). Use this for committed-only filters.
+                    .expr_as(Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::Status)), Alias::new("status"))
+                    // PFR-side per-attempt status (Running, Done, Error, …).
+                    .expr_as(Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::Status)), Alias::new("physical_status"))
+                    .expr_as(Expr::col((Functions::Table, Functions::Name)), Alias::new("function"))
+                    .expr_as(Expr::col((Functions::Table, Functions::DataLocation)), Alias::new("data_location"))
+                    .expr_as(Expr::col((Functions::Table, Functions::StorageVersion)), Alias::new("storage_version"))
+                    .from(LogicalTableDataVersions::Table)
+                    .join(
+                        JoinType::LeftJoin,
+                        Collections::Table,
+                        Expr::col((LogicalTableDataVersions::Table, LogicalTableDataVersions::CollectionId))
+                            .equals((Collections::Table, Collections::Id)),
+                    )
+                    .join(
+                        JoinType::LeftJoin,
+                        Executions::Table,
+                        Expr::col((LogicalTableDataVersions::Table, LogicalTableDataVersions::ExecutionId))
+                            .equals((Executions::Table, Executions::Id)),
+                    )
+                    .join(
+                        JoinType::LeftJoin,
+                        Users::Table,
+                        Expr::col((LogicalTableDataVersions::Table, LogicalTableDataVersions::TriggeredById))
+                            .equals((Users::Table, Users::Id)),
+                    )
+                    .join(
+                        JoinType::LeftJoin,
+                        PhysicalTableDataVersions::Table,
+                        Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::Id))
+                            .eq(Expr::SubQuery(None, Box::new(SubQueryStatement::SelectStatement(bound_ptdv_subquery)))),
+                    )
+                    .join(
+                        JoinType::LeftJoin,
+                        PhysicalFunctionRuns::Table,
+                        Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::Id))
+                            .equals((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::PhysicalFunctionRunId)),
+                    )
+                    // Producer LFR — the LTDV-level canonical status comes
+                    // from here (sticky-Committed); separate from the
+                    // PFR's per-attempt status reached via PTDV above.
+                    .join(
+                        JoinType::LeftJoin,
+                        LogicalFunctionRuns::Table,
+                        Expr::col((LogicalTableDataVersions::Table, LogicalTableDataVersions::ProducerLogicalFunctionRunId))
+                            .equals((LogicalFunctionRuns::Table, LogicalFunctionRuns::Id)),
+                    )
+                    .join(
+                        JoinType::LeftJoin,
+                        Functions::Table,
+                        Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::FunctionVersionId))
+                            .equals((Functions::Table, Functions::Id)),
+                    )
+                    .join_as(
+                        JoinType::LeftJoin,
+                        Groups::Table,
+                        groups_alias.clone(),
+                        Expr::col((LogicalTableDataVersions::Table, LogicalTableDataVersions::GroupId)).equals((groups_alias, Groups::Id)),
+                    )
+                    .to_owned(),
             ),
             // logical_table_data_versions__active — LTDVs whose producer
             // LFR is not Canceled/Yanked (NULL producer = lazy-mint, kept).
@@ -315,9 +326,11 @@ impl Entity for Defs {
                     // literals). A divergent rename is caught by the canary
                     // test `test_sticky_terminal_codes_pinned` in td-objects.
                     .and_where(
-                        Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::Status))
-                            .is_null()
-                            .or(Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::Status)).is_not_in(["Y", "X"])),
+                        Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::Status)).is_null().or(Expr::col((
+                            LogicalFunctionRuns::Table,
+                            LogicalFunctionRuns::Status,
+                        ))
+                        .is_not_in(["Y", "X"])),
                     )
                     .to_owned(),
             ),
