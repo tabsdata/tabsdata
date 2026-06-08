@@ -1161,9 +1161,37 @@ pub fn typed_tag(args: TokenStream, item: TokenStream) -> TokenStream {
         quote! { #(#attrs)* #ident #fields }
     });
 
-    // Display: prefix tag + inner Display.
-    let display_arms = variant_data.iter().map(|(ident, tag, _)| {
-        quote! { Self::#ident(inner) => write!(f, "{}{}", #tag, inner), }
+    // `Tagged` for the inner type of each non-empty-tag variant: lets a caller
+    // holding the inner id (e.g. a `ProjectId`) render it in this enum's id
+    // spelling (`~<id>`) so `FromStr` parses it back as an id, not a name. The
+    // empty-tag variant is skipped — it has no prefix, and its inner type often
+    // coincides with the id variant's (which would collide). Two *non-empty*-tag
+    // variants over the same inner type would emit conflicting impls (a hard
+    // coherence error); no such enum exists today.
+    let tagged_impls = variant_data
+        .iter()
+        .filter(|(_, tag, _)| !tag.is_empty())
+        .map(|(_, tag, ty)| {
+            quote! {
+                impl ta_objects::Tagged<#name> for #ty {
+                    const PREFIX: &'static str = #tag;
+                }
+            }
+        });
+
+    // Display: the prefix is sourced from the variant's `Tagged<#name>` impl
+    // (single source — Display and `tagged()` can't drift), written straight to
+    // the formatter so `fmt` allocates nothing. The empty-tag variant has no
+    // `Tagged` impl, so it renders the inner value as-is — exactly as before.
+    let display_arms = variant_data.iter().map(|(ident, tag, ty)| {
+        if tag.is_empty() {
+            quote! { Self::#ident(inner) => write!(f, "{}", inner), }
+        } else {
+            quote! {
+                Self::#ident(inner) =>
+                    write!(f, "{}{}", <#ty as ta_objects::Tagged<#name>>::PREFIX, inner),
+            }
+        }
     });
 
     // SeaValue: delegate as_sea_value and type_id to the active inner variant.
@@ -1239,6 +1267,8 @@ pub fn typed_tag(args: TokenStream, item: TokenStream) -> TokenStream {
                 }
             }
         }
+
+        #(#tagged_impls)*
 
         impl ta_objects::SeaValue for #name {
             fn as_sea_value(&self) -> sea_query::Value {

@@ -23,9 +23,10 @@ use td_objects::dxo::yaml::WorkerInput;
 use td_objects::rest_urls::internal::{RESOLVE_FUNCTION_RUN_WORKER, UPDATE_FUNCTION_RUN_WORKER};
 use td_objects::types::addresses::InternalServerAddresses;
 use td_objects::types::basic::{
-    AtTime, Enabled, ExecutionId, LogicalFunctionRunId, PhysicalFunctionRunId, WorkerId,
-    WorkerMessageStatus, WorkerStatus, WorkerType,
+    AtTime, Enabled, ExecutionId, LogicalFunctionRunId, PhysicalFunctionRunId, ProjectIdName,
+    WorkerId, WorkerMessageStatus, WorkerStatus, WorkerType,
 };
+use td_objects::TaggedExt;
 use td_queries::{ChunkedQueries, LfrEntry, PfrEntry};
 use td_storage::Storage;
 use td_tower::extractors::{MutRef, Ref};
@@ -237,7 +238,12 @@ pub async fn create_locked_function_runner_workers_start_request(
         let server_address = server_addresses.first();
         let fr_id = f.id.to_string();
         let w_id = worker_id.to_string();
+        // The internal callback URLs are project-scoped
+        // (`/internal/projects/{project}/...`); bind the function-run's project
+        // so the URL resolves and the minted token authorizes that segment.
+        let proj = f.project_id.tagged::<ProjectIdName>();
         let bindings = [
+            ("project", proj.as_str()),
             ("function_run_id", fr_id.as_str()),
             ("worker_id", w_id.as_str()),
         ];

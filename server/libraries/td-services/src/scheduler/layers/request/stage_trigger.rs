@@ -23,7 +23,8 @@ use td_objects::rest_urls::internal::{
     UPDATE_WORKER,
 };
 use td_objects::types::addresses::InternalServerAddresses;
-use td_objects::types::basic::{AtTime, FunctionVersionId, WorkerConfig};
+use td_objects::types::basic::{AtTime, FunctionVersionId, ProjectIdName, WorkerConfig};
+use td_objects::TaggedExt;
 use td_queries::ChunkedQueries;
 use td_storage::Storage;
 use td_storage::location::StorageLocation;
@@ -61,16 +62,22 @@ pub async fn create_locked_stage_trigger_workers_start_request(
 
     for stage_trigger_worker in stage_trigger_workers.iter() {
         let worker_id = stage_trigger_worker.id.to_string();
+        // Internal callback URLs are project-scoped; bind the worker's project
+        // so each URL resolves and its token authorizes the {project} segment.
+        let proj = stage_trigger_worker.project_id.tagged::<ProjectIdName>();
         let server_address = server_addresses.first();
         let callback = internal_post_callback(
             &jwt,
             server_address,
             UPDATE_WORKER,
-            &[("worker_id", &worker_id)],
+            &[("project", proj.as_str()), ("worker_id", &worker_id)],
         )?;
 
         let function_version_id = stage_trigger_worker.function_version_id.to_string();
-        let fv_binding = [("function_version_id", function_version_id.as_str())];
+        let fv_binding = [
+            ("project", proj.as_str()),
+            ("function_version_id", function_version_id.as_str()),
+        ];
 
         // Build fn_trigger / fn_state / fn_status requests (tokenized).
         let fn_trigger = internal_request(
@@ -207,11 +214,12 @@ pub async fn create_locked_stage_trigger_workers_stop_request(
             async move {
                 let server_address = server_addresses.first();
                 let worker_id = stage_trigger_worker.id.to_string();
+                let proj = stage_trigger_worker.project_id.tagged::<ProjectIdName>();
                 let callback = internal_post_callback(
                     &jwt,
                     server_address,
                     UPDATE_WORKER,
-                    &[("worker_id", &worker_id)],
+                    &[("project", proj.as_str()), ("worker_id", &worker_id)],
                 )?;
 
                 // Different message ID than the worker ID for STOP — current

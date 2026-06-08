@@ -17,7 +17,8 @@ use td_objects::dxo::yaml::cron_trigger::v1::CronTriggerInput;
 use td_objects::dxo::yaml::{WorkerInput, cron_trigger};
 use td_objects::rest_urls::internal::{FUNCTION_VERSION_EXECUTE, UPDATE_WORKER};
 use td_objects::types::addresses::InternalServerAddresses;
-use td_objects::types::basic::{AtTime, WorkerConfig};
+use td_objects::types::basic::{AtTime, ProjectIdName, WorkerConfig};
+use td_objects::TaggedExt;
 use td_tower::extractors::Ref;
 use tracing::instrument;
 
@@ -41,12 +42,13 @@ pub async fn create_locked_cron_trigger_workers_start_request(
             let jwt = jwt.clone();
             async move {
                 let worker_id = cron_trigger_worker.id.to_string();
+                let proj = cron_trigger_worker.project_id.tagged::<ProjectIdName>();
                 let server_address = server_addresses.first();
                 let callback = internal_post_callback(
                     &jwt,
                     server_address,
                     UPDATE_WORKER,
-                    &[("worker_id", &worker_id)],
+                    &[("project", proj.as_str()), ("worker_id", &worker_id)],
                 )?;
 
                 let function_version_id = cron_trigger_worker.function_version_id.to_string();
@@ -57,7 +59,10 @@ pub async fn create_locked_cron_trigger_workers_start_request(
                     server_address,
                     Method::POST,
                     FUNCTION_VERSION_EXECUTE,
-                    &[("function_version_id", &function_version_id)],
+                    &[
+                        ("project", proj.as_str()),
+                        ("function_version_id", &function_version_id),
+                    ],
                     HashMap::from([("content-type".to_string(), "application/json".to_string())]),
                     true,
                 )?;
@@ -131,12 +136,13 @@ pub async fn create_locked_cron_trigger_workers_stop_request(
             let jwt = jwt.clone();
             async move {
                 let worker_id = cron_trigger_worker.id.to_string();
+                let proj = cron_trigger_worker.project_id.tagged::<ProjectIdName>();
                 let server_address = server_addresses.first();
                 let callback = internal_post_callback(
                     &jwt,
                     server_address,
                     UPDATE_WORKER,
-                    &[("worker_id", &worker_id)],
+                    &[("project", proj.as_str()), ("worker_id", &worker_id)],
                 )?;
 
                 // Different message ID than the worker ID for STOP — current

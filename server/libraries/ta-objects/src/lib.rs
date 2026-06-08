@@ -12,6 +12,7 @@ pub mod list_condition;
 mod list_filter;
 mod sea_value;
 pub mod sql_condition;
+mod tagged;
 
 pub use {
     composed_string::ComposedString,
@@ -19,6 +20,7 @@ pub use {
     list_condition::{ListFilter, ListFilterExtract, ListRef, NoFilter},
     list_filter::ListFilterStr,
     sea_value::{NullableSeaValue, SeaValue},
+    tagged::{Tagged, TaggedExt},
 };
 
 // external macros
