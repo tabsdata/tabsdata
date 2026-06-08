@@ -146,15 +146,6 @@ class SalesforceTokenCredentials(SalesforceCredentials):
         """
         self._security_token = build_secret(security_token)
 
-    def __repr__(self) -> str:
-        """
-        Returns a string representation of the S3AccessKeyCredentials.
-
-        Returns:
-            str: A string representation of the S3AccessKeyCredentials.
-        """
-        return f"{self.__class__.__name__}({self._to_dict()[self.IDENTIFIER]})"
-
 
 class SalesforceSource(SourcePlugin):
     """Legacy: Read from Salesforce. Use SalesforceSrc instead.

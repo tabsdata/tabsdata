@@ -19,3 +19,16 @@ class ClickHouseConfig:
     username: str = "default"
     password: str = ""
     secure: bool = False
+
+    def __repr__(self) -> str:
+        username = "***redacted***" if self.username else ""
+        password = "***redacted***" if self.password else ""
+        return (
+            f"ClickHouseConfig("
+            f"host={self.host!r}, "
+            f"port={self.port!r}, "
+            f"database={self.database!r}, "
+            f"username={username!r}, "
+            f"password={password!r}, "
+            f"secure={self.secure!r})"
+        )

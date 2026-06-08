@@ -28,6 +28,16 @@ class CdcConnectionSettings:
     user: str
     password: str
 
+    def __repr__(self) -> str:
+        return (
+            f"CdcConnectionSettings("
+            f"host={self.host!r}, "
+            f"port={self.port!r}, "
+            f"dbname={self.dbname!r}, "
+            f"user='***redacted***', "
+            f"password='***redacted***')"
+        )
+
 
 class CdcConn(Conn, ABC):
     """

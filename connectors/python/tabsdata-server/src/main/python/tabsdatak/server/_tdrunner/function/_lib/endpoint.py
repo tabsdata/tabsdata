@@ -47,6 +47,12 @@ class LiteralRef(BaseModel):
 
     value: str
 
+    def __repr_args__(self):
+        # The literal value is a credential; never render it. This covers
+        # repr()/str() and pydantic's rendering of any model that nests a
+        # LiteralRef.
+        return [("value", "***redacted***")]
+
 
 CredRef = Union[EnvRef, LiteralRef]
 

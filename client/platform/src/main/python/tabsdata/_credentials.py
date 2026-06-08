@@ -5,8 +5,28 @@
 from abc import ABC, abstractmethod
 from enum import Enum
 
-from tabsdata._secret import Secret, build_secret
+from tabsdata._secret import DirectSecret, Secret, SecretIdentifier, build_secret
 from tabsdata.exceptions import CredentialsConfigurationError, ErrorCode
+
+_SECRET_IDENTIFIERS = {member.value for member in SecretIdentifier}
+
+
+def _redact_secrets(value):
+    """Walk a ``_to_dict`` result and mask the raw value of any nested
+    DirectSecret, leaving everything else intact. A secret is any dict
+    with a single key that is a SecretIdentifier."""
+    if isinstance(value, dict):
+        if len(value) == 1 and next(iter(value)) in _SECRET_IDENTIFIERS:
+            identifier, body = next(iter(value.items()))
+            if identifier == SecretIdentifier.DIRECT_SECRET.value:
+                return {
+                    identifier: {
+                        DirectSecret.SECRET_DIRECT_VALUE_KEY: "***redacted***",
+                    }
+                }
+            return value
+        return {key: _redact_secrets(val) for key, val in value.items()}
+    return value
 
 
 class CredentialIdentifier(Enum):
@@ -29,6 +49,10 @@ class Credentials(ABC):
         if not isinstance(other, Credentials):
             return False
         return self._to_dict() == other._to_dict()
+
+    def __repr__(self) -> str:
+        redacted = _redact_secrets(self._to_dict())
+        return f"{self.__class__.__name__}({redacted[self.IDENTIFIER]})"
 
 
 class AzureCredentials(Credentials, ABC):
@@ -123,15 +147,6 @@ class AzureAccountKeyCredentials(AzureCredentials):
         """
         self._account_key = build_secret(account_key)
 
-    def __repr__(self) -> str:
-        """
-        Returns a string representation of the S3AccessKeyCredentials.
-
-        Returns:
-            str: A string representation of the S3AccessKeyCredentials.
-        """
-        return f"{self.__class__.__name__}({self._to_dict()[self.IDENTIFIER]})"
-
 
 class GCPCredentials(Credentials, ABC):
     """
@@ -200,15 +215,6 @@ class GCPServiceAccountKeyCredentials(GCPCredentials):
             service_account_key (str | Secret): The GCS service account key.
         """
         self._service_account_key = build_secret(service_account_key)
-
-    def __repr__(self) -> str:
-        """
-        Returns a string representation of the GCPServiceAccountKeyCredentials.
-
-        Returns:
-            str: A string representation of the GCPServiceAccountKeyCredentials.
-        """
-        return f"{self.__class__.__name__}({self._to_dict()[self.IDENTIFIER]})"
 
 
 class HMACCredentials(Credentials):
@@ -296,15 +302,6 @@ class HMACCredentials(Credentials):
             secret_key (str | Secret): The HMAC secret key.
         """
         self._secret_key = build_secret(secret_key)
-
-    def __repr__(self) -> str:
-        """
-        Returns a string representation of the HMACCredentials.
-
-        Returns:
-            str: A string representation of the HMACCredentials.
-        """
-        return f"{self.__class__.__name__}({self._to_dict()[self.IDENTIFIER]})"
 
 
 class S3Credentials(Credentials, ABC):
@@ -396,15 +393,6 @@ class S3AccessKeyCredentials(S3Credentials):
         """
         self._aws_secret_access_key = build_secret(aws_secret_access_key)
 
-    def __repr__(self) -> str:
-        """
-        Returns a string representation of the S3AccessKeyCredentials.
-
-        Returns:
-            str: A string representation of the S3AccessKeyCredentials.
-        """
-        return f"{self.__class__.__name__}({self._to_dict()[self.IDENTIFIER]})"
-
 
 class UserPasswordCredentials(Credentials):
     """
@@ -485,15 +473,6 @@ class UserPasswordCredentials(Credentials):
             password (str | Secret): The password.
         """
         self._password = build_secret(password)
-
-    def __repr__(self) -> str:
-        """
-        Returns a string representation of the UserPasswordCredentials.
-
-        Returns:
-            str: A string representation of the UserPasswordCredentials.
-        """
-        return f"{self.__class__.__name__}({self._to_dict()[self.IDENTIFIER]})"
 
 
 def build_credentials(configuration: dict | Credentials) -> Credentials:

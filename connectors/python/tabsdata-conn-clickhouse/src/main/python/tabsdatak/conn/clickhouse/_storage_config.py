@@ -17,6 +17,15 @@ class S3Config:
     access_key_id: str
     secret_access_key: str
 
+    def __repr__(self) -> str:
+        return (
+            f"S3Config(bucket={self.bucket!r}, "
+            f"region={self.region!r}, "
+            f"base_path={self.base_path!r}, "
+            f"access_key_id='***redacted***', "
+            f"secret_access_key='***redacted***')"
+        )
+
 
 @dataclass(frozen=True)
 class AzureConfig:
@@ -26,6 +35,15 @@ class AzureConfig:
     base_path: str
     account_name: str
     account_key: str
+
+    def __repr__(self) -> str:
+        return (
+            f"AzureConfig("
+            f"container={self.container!r}, "
+            f"base_path={self.base_path!r}, "
+            f"account_name={self.account_name!r}, "
+            f"account_key='***redacted***')"
+        )
 
 
 @dataclass(frozen=True)
@@ -47,3 +65,12 @@ class GCSConfig:
     service_account_json: str
     hmac_access_key: str
     hmac_secret_key: str
+
+    def __repr__(self) -> str:
+        return (
+            f"GCSConfig(bucket={self.bucket!r}, "
+            f"base_path={self.base_path!r}, "
+            f"service_account_json='***redacted***', "
+            f"hmac_access_key='***redacted***', "
+            f"hmac_secret_key='***redacted***')"
+        )

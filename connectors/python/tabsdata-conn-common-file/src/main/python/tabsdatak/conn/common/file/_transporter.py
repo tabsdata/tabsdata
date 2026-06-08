@@ -160,6 +160,9 @@ class TransporterEnv:
 class TransporterLiteral:
     value: str
 
+    def __repr__(self) -> str:
+        return "TransporterLiteral(value='***redacted***')"
+
 
 @dataclass(frozen=True, slots=True)
 class TransporterS3(TransporterLocation):

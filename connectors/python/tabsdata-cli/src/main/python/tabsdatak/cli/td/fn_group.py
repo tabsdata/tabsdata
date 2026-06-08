@@ -20,6 +20,7 @@ from tabsdatak.cli.cli_utils import (
     show_hint,
     verify_login_or_prompt,
 )
+from tabsdatak.sdk._apiserver import APIServerError
 from tabsdatak.sdk.status_utils.execution import EXECUTION_FINAL_STATUSES
 from tabsdatak.sdk.status_utils.function_run import (
     FUNCTION_RUN_SUCCESSFUL_FINAL_STATUSES,
@@ -344,7 +345,9 @@ def register(
                 "update'",
                 final_empty_line=True,
             )
-            function_name = getattr(info.func, "__name__", None) or info.__class__.__name__
+            function_name = (
+                getattr(info.func, "__name__", None) or info.__class__.__name__
+            )
             try:
                 server.get_function(coll, function_name)
                 click.echo(

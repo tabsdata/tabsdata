@@ -108,7 +108,7 @@ class MongoDBConn(Conn):
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}("
-            f"uri={self.uri!r}, "
+            f"uri='***redacted***', "
             f"credentials={self.credentials}, "
             f"connection_options={self.connection_options})"
         )

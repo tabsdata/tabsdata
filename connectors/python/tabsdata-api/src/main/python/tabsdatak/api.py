@@ -277,6 +277,14 @@ class _LiteralSecret(Secret):
         # Literal: ``_s`` is the value verbatim, not a secret ref.
         return self._s
 
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}(_s='***redacted***')"
+
+    __str__ = __repr__
+
+    def __repr_args__(self):
+        return [("_s", "***redacted***")]
+
     @model_validator(mode="after")
     def _check_literal_pattern(self):
         self._validate(self._s)

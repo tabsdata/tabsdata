@@ -290,7 +290,7 @@ class MSSQLSource(SourcePlugin):
             str: A string representation of the instance.
         """
         return (
-            f"{self.__class__.__name__}(connection_string='{self._connection_string}', "
+            f"{self.__class__.__name__}(connection_string='***redacted***', "
             f"query={self.query})"
         )
 
@@ -585,7 +585,7 @@ class MSSQLDestination(DestinationPlugin):
             str: A string representation of the instance.
         """
         return (
-            f"{self.__class__.__name__}(connection_string='{self._connection_string}', "
+            f"{self.__class__.__name__}(connection_string='***redacted***', "
             f"destination_table={self.destination_table})"
         )
 

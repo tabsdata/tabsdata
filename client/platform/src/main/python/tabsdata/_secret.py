@@ -27,6 +27,12 @@ class Secret(ABC):
     def _to_dict(self) -> dict:
         """Convert the secret object to a dictionary."""
 
+    def _to_redacted_dict(self) -> dict:
+        """Like ``_to_dict`` but with any secret value masked. Used for
+        ``repr`` only; ``_to_dict`` stays unredacted for serialization
+        and equality."""
+        return self._to_dict()
+
     @property
     @abstractmethod
     def secret_value(self) -> str:
@@ -45,7 +51,7 @@ class Secret(ABC):
         Returns:
             str: A string representation of the DirectSecret.
         """
-        return f"{self.__class__.__name__}({self._to_dict()[self.IDENTIFIER]})"
+        return f"{self.__class__.__name__}({self._to_redacted_dict()[self.IDENTIFIER]})"
 
 
 class HashiCorpSecret(Secret):
@@ -209,6 +215,13 @@ class DirectSecret(Secret):
         return {
             self.IDENTIFIER: {
                 self.SECRET_DIRECT_VALUE_KEY: self.secret_direct_value,
+            }
+        }
+
+    def _to_redacted_dict(self) -> dict:
+        return {
+            self.IDENTIFIER: {
+                self.SECRET_DIRECT_VALUE_KEY: "***redacted***",
             }
         }
 
