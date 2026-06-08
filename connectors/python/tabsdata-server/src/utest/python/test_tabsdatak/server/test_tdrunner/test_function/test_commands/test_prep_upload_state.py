@@ -217,11 +217,13 @@ def test_main_unsupported_scheme_returns_unsupported_scheme(
 
 def test_main_write_error_returns_write_failed(monkeypatch, tmp_path, http_ok_url):
     request_yaml = _write_request(tmp_path / "request.yaml")
+    out_dir = tmp_path / "out-is-a-dir"
+    out_dir.mkdir()
     rc = main_with_args(
         monkeypatch,
         request_yaml,
         tmp_path / "state",
-        tmp_path / "no" / "such" / "out.yaml",
+        out_dir,
         tmp_path / "live",
         responder_url=http_ok_url,
     )
