@@ -6,7 +6,8 @@
 mod definitions {
     use crate::dxo::crudl::RequestContext;
     use crate::types::basic::{
-        AtTime, CollectionId, CollectionName, Description, GroupId, GroupName, UserId, UserName,
+        AtTime, CollectionId, CollectionName, Description, GroupId, GroupName, ProjectId, UserId,
+        UserName,
     };
     use td_common::id::Id;
 
@@ -20,6 +21,12 @@ mod definitions {
         #[dxo(extractor)]
         #[builder(default)]
         pub id: CollectionId,
+        /// The project that owns this collection. Sourced from the
+        /// `RequestContext.project_id` set by the apiserver's resolver — a
+        /// collection always belongs to the operator's current project.
+        /// Required: a system context (no project) cannot create collections.
+        #[dxo(setter)]
+        pub project_id: ProjectId,
         #[dxo(builder(include), extractor)]
         pub name: CollectionName,
         #[dxo(builder(include))]
@@ -45,6 +52,11 @@ mod definitions {
     pub struct CollectionDB {
         #[dxo(extractor)]
         pub id: CollectionId,
+        /// The project that owns this collection. Inherited from the create
+        /// request's context; read from the DB column when SELECT'd so
+        /// downstream constructions (functions, runs, workers) can propagate.
+        #[dxo(extractor)]
+        pub project_id: ProjectId,
         #[dxo(extractor)]
         pub name: CollectionName,
         pub description: Description,

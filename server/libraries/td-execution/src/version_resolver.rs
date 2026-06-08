@@ -864,6 +864,7 @@ mod tests {
         // Consumer LFR aligned with run 1 — the only cutoff a correct
         // resolver could use.
         let lfr_run1 = LogicalFunctionRunDB::builder()
+            .project_id(consumer.project_id.clone())
             .collection_id(collection.id)
             .execution_id(&ltdvs[0].execution_id)
             .transaction_id(&ltdvs[0].transaction_id)

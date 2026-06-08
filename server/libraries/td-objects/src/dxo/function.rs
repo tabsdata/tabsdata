@@ -8,8 +8,8 @@ mod definitions {
     use crate::types::basic::{
         AtTime, BundleId, CollectionId, CollectionName, Connector, DataLocation, Decorator,
         Description, Enabled, FunctionId, FunctionName, FunctionRuntimeValues, FunctionStatus,
-        FunctionVersionId, GroupId, ReuseFrozen, Snippet, StorageVersion, TableName, TableNameDto,
-        TableType, UserId, UserName, WorkerConfig, WorkerId, WorkerTypeDto,
+        FunctionVersionId, GroupId, ProjectId, ReuseFrozen, Snippet, StorageVersion, TableName,
+        TableNameDto, TableType, UserId, UserName, WorkerConfig, WorkerId, WorkerTypeDto,
     };
     use crate::types::composed::{
         TableDependency, TableDependencyDto, TableTrigger, TableTriggerDto,
@@ -134,6 +134,10 @@ mod definitions {
         #[builder(default = "FunctionVersionId::new()")]
         #[dxo(extractor)]
         pub id: FunctionVersionId,
+        /// The project this function belongs to. Inherited from the parent
+        /// collection at function registration; required at construction.
+        #[dxo(extractor, setter)]
+        pub project_id: ProjectId,
         #[dxo(setter)]
         pub collection_id: CollectionId,
         #[dxo(builder(include))]

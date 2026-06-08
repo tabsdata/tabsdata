@@ -110,8 +110,8 @@ mod definitions {
         LogicalFunctionRunInputId, LogicalFunctionRunPointerId, LogicalFunctionRunStatus,
         LogicalPointerReason, LogicalPointerStatus, LogicalTableDataVersionId,
         LogicalTableDataVersionPointerId, PhysicalFunctionRunId, PhysicalFunctionRunStatus,
-        PhysicalTableDataVersionId, RowCount, SchemaChanged, SchemaDataChanged, SchemaHash,
-        StorageVersion, TableFunctionParamPos, TableId, TableName, TableVersionCount,
+        PhysicalTableDataVersionId, ProjectId, RowCount, SchemaChanged, SchemaDataChanged,
+        SchemaHash, StorageVersion, TableFunctionParamPos, TableId, TableName, TableVersionCount,
         TableVersionId, TransactionId, Trigger, TriggeredOn, UserId, UserName, VersionPos,
     };
     use td_error::TdError;
@@ -145,6 +145,11 @@ mod definitions {
         #[builder(default = "LogicalFunctionRunId::new()")]
         #[dxo(extractor)]
         pub id: LogicalFunctionRunId,
+        /// The project this run belongs to. Inherited from the parent
+        /// collection at LFR mint; threaded forward to the FR + worker rows
+        /// the LFR spawns so the RLS GUC matches end-to-end.
+        #[dxo(extractor)]
+        pub project_id: ProjectId,
         pub collection_id: CollectionId,
         // (execution_id, function_id) is the natural key for an LFR —
         // one LFR per logical run within an execution. The FR → LFR

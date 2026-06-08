@@ -5,7 +5,7 @@
 use crate::dxo::table::TableDBWithNames;
 use crate::parse::{
     DATA_LOCATION_REGEX, parse_collection, parse_email, parse_entity, parse_execution,
-    parse_function, parse_group, parse_role, parse_table, parse_user,
+    parse_function, parse_group, parse_project, parse_role, parse_table, parse_user,
 };
 use std::fmt::Debug;
 use td_error::{ApiError, api_error};
@@ -26,6 +26,10 @@ pub struct BundleHash;
 #[ta_objects::typed(string(parser = parse_collection), try_from = ToCollectionName)]
 #[derive(Eq, PartialEq, Hash)]
 pub struct CollectionName;
+
+#[ta_objects::typed(string(parser = parse_project))]
+#[derive(Eq, PartialEq, Hash)]
+pub struct ProjectName;
 
 #[ta_objects::typed(string)]
 #[derive(Eq, PartialEq)]

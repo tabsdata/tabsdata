@@ -11,7 +11,7 @@ use crate::graph::{TdGraph, TdGraphBuilder};
 use crate::types::basic::{
     AtTime, BundleId, CollectionId, CollectionName, DataLocation, Decorator, DependencyId,
     DependencyPos, DependencyStatus, DependencyVersionId, Description, Enabled, FunctionId,
-    FunctionName, FunctionRuntimeValues, FunctionStatus, FunctionVersionId, Snippet,
+    FunctionName, FunctionRuntimeValues, FunctionStatus, FunctionVersionId, ProjectId, Snippet,
     StorageVersion, TableId, TableName, TableStatus, TableType, TableVersionId, TriggerId,
     TriggerStatus, TriggerVersionId, UserId, UserName,
 };
@@ -200,6 +200,7 @@ pub async fn table(function: &FunctionName, table: &TableName) -> TableDBWithNam
 pub async fn function(function: &FunctionName) -> FunctionDBWithNames {
     FunctionDBWithNames::builder()
         .id(FUNCTION_VERSION_IDS.get(function).unwrap())
+        .project_id(ProjectId::sandbox())
         .collection_id(*COLLECTION_ID)
         .name(function.clone())
         .description(Description::default())

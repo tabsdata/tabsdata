@@ -42,6 +42,7 @@ pub mod metrics;
 pub mod permission;
 pub mod physical_function_run;
 pub mod physical_table_data_version;
+pub mod project;
 pub mod query_filters;
 pub mod role;
 pub mod run_metrics;

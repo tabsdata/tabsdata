@@ -513,6 +513,7 @@ mod tests {
 
             let before_mint = AtTime::now();
             let lfr = LogicalFunctionRunDB::builder()
+                .project_id(function.project_id.clone())
                 .collection_id(collection.id)
                 .execution_id(execution.id.clone())
                 .transaction_id(transaction.id.clone())

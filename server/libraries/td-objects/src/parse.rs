@@ -247,6 +247,10 @@ pub fn parse_collection(s: impl Into<String>) -> Result<String, TdError> {
     parse_name(s, "Collection name")
 }
 
+pub fn parse_project(s: impl Into<String>) -> Result<String, TdError> {
+    parse_name(s, "Project name")
+}
+
 pub fn parse_entity(s: impl Into<String>) -> Result<String, TdError> {
     parse_name(s, "Entity name")
 }

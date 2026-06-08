@@ -2,12 +2,13 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::types::basic::{AccessTokenId, AtTime, RoleId, UserId};
+use crate::types::basic::{AccessTokenId, AtTime, ProjectId, RoleId, UserId};
 use serde::{Deserialize, Serialize};
 use serde_valid::Validate;
 use std::fmt::Debug;
 use td_error::td_error;
 use td_tower::error::{ConnectionError, FromHandlerError};
+use td_tower::project_scope::{ProjectScope, ProjectScoped};
 
 /// Request context for the logical layer.
 #[ta_objects::Dlo]
@@ -24,9 +25,29 @@ pub struct RequestContext {
     /// The time the request was made.
     #[dxo(extractor)]
     pub time: AtTime,
+    /// The project (tenant) this request targets — set by the apiserver's
+    /// `project_resolver_layer` from the `{project}` URL path segment on the
+    /// tenant subtree. `Some` scopes the request's connection to that project;
+    /// `None` (system / scheduler / unscoped work) runs in bypass scope. See
+    /// [`ProjectScoped`].
+    #[dxo(extractor)]
+    #[builder(default)]
+    pub project_id: Option<ProjectId>,
 }
 
 impl RequestContext {
+    /// Construct an authenticated request context. Defaults `project_id` to
+    /// `Some(sandbox)`. This default is never load-bearing in production:
+    /// HTTP tenant routes have it overridden by `project_resolver_layer` from
+    /// the `{project}` URL segment before any service runs, and HTTP global
+    /// routes (no `{project}`) only touch non-RLS tables, so the GUC value is
+    /// not consulted. It is a fail-closed convenience for tests and stray
+    /// in-process callers: if a tenant-scoped service is ever reached via
+    /// `with()` without `with_project`, it scopes to sandbox (seeing only
+    /// sandbox rows, or none if sandbox was deleted) rather than spanning all
+    /// projects. In-process callers that legitimately span all projects use
+    /// [`RequestContext::system`] instead. Note sandbox is deletable on
+    /// postgres — nothing here assumes it still exists.
     pub fn with(
         access_token_id: impl Into<AccessTokenId>,
         user_id: impl Into<UserId>,
@@ -37,7 +58,80 @@ impl RequestContext {
             user_id: user_id.into(),
             role_id: role_id.into(),
             time: AtTime::default(),
+            project_id: Some(ProjectId::sandbox()),
         }
+    }
+
+    /// Construct a system request context — `project_id = None`, which
+    /// `ProjectScope` reads as `Bypass`. Reserved for in-process callers
+    /// (scheduler, bootstrap, internal jobs) that legitimately act across
+    /// all projects.
+    pub fn system(
+        access_token_id: impl Into<AccessTokenId>,
+        user_id: impl Into<UserId>,
+        role_id: impl Into<RoleId>,
+    ) -> Self {
+        Self {
+            access_token_id: access_token_id.into(),
+            user_id: user_id.into(),
+            role_id: role_id.into(),
+            time: AtTime::default(),
+            project_id: None,
+        }
+    }
+
+    /// Override the request's target project. The apiserver's
+    /// `project_resolver_layer` uses this to stamp the resolved id from
+    /// the `{project}` URL segment.
+    pub fn with_project(mut self, project_id: Option<ProjectId>) -> Self {
+        self.project_id = project_id;
+        self
+    }
+}
+
+impl ProjectScoped for RequestContext {
+    /// A `project_id` set on the context — by the apiserver's resolver, from
+    /// the `{project}` URL segment on every tenant-scoped HTTP request —
+    /// scopes the connection to that project. `None` is only seen for
+    /// `RequestContext` values constructed *outside* the tenant subtree (the
+    /// scheduler, the loopback admin filter, internal jobs) and means "no
+    /// request scope": run in bypass scope so the system code can act across
+    /// projects.
+    fn project_scope(&self) -> ProjectScope {
+        match &self.project_id {
+            Some(p) => ProjectScope::Project(p.to_string()),
+            None => ProjectScope::Bypass,
+        }
+    }
+}
+
+impl<N: Clone, C: Clone> ProjectScoped for CreateRequest<N, C> {
+    fn project_scope(&self) -> ProjectScope {
+        self.context.project_scope()
+    }
+}
+
+impl<N: Clone, U: Clone> ProjectScoped for UpdateRequest<N, U> {
+    fn project_scope(&self) -> ProjectScope {
+        self.context.project_scope()
+    }
+}
+
+impl<N: Clone> ProjectScoped for DeleteRequest<N> {
+    fn project_scope(&self) -> ProjectScope {
+        self.context.project_scope()
+    }
+}
+
+impl<N: Clone> ProjectScoped for ReadRequest<N> {
+    fn project_scope(&self) -> ProjectScope {
+        self.context.project_scope()
+    }
+}
+
+impl<N: Clone> ProjectScoped for ListRequest<N> {
+    fn project_scope(&self) -> ProjectScope {
+        self.context.project_scope()
     }
 }
 

@@ -70,6 +70,7 @@ pub async fn _seed_physical_table_data_version(
     has_data: Option<&HasData>,
 ) -> Result<PhysicalTableDataVersionDB, TdError> {
     let table_data_version_db = PhysicalTableDataVersionDB::builder()
+        .project_id(physical_function_run.project_id.clone())
         .collection_id(collection.id)
         .table_id(table.table_id)
         .name(table.name.clone())

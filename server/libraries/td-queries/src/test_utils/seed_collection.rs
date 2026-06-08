@@ -6,7 +6,7 @@ use crate::{LiveEntry, QueryExecutor};
 use ta_objects::Buildable;
 use td_error::TdError;
 use td_objects::dxo::collection::{CollectionCreateDB, CollectionDB, CollectionDBBuilder};
-use td_objects::types::basic::{AtTime, CollectionName, Description, GroupId, UserId};
+use td_objects::types::basic::{AtTime, CollectionName, Description, GroupId, ProjectId, UserId};
 
 pub(crate) async fn seed_collection(
     db: impl QueryExecutor,
@@ -28,6 +28,7 @@ pub(crate) async fn seed_collection_in_group(
     let collection = CollectionCreateDB::builder()
         .name(collection_name.clone())
         .description(Description::default())
+        .project_id(ProjectId::sandbox())
         .created_on(created_on)
         .created_by_id(created_by)
         .modified_on(created_on)

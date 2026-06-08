@@ -35,6 +35,7 @@ pub(crate) async fn seed_function(
     let mut builder = FunctionDBBuilder::try_from(function_create)?;
     let function_db = builder
         .try_update_from(&request_context)?
+        .project_id(collection.project_id.clone())
         .collection_id(collection.id)
         .data_location(DataLocation::default())
         .storage_version(StorageVersion::default())

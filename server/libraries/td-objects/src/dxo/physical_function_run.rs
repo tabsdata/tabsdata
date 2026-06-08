@@ -7,9 +7,9 @@ mod definitions {
     use crate::dxo::execution::ExecutionDB;
     use crate::dxo::worker::UpdateWorkerExecution;
     use crate::types::basic::{
-        AtTime, BundleId, ByteCount, CollectionId, CollectionName, DataLocation, Decorator,
-        EpochMs, ExecutionId, ExecutionName, FunctionId, FunctionName, FunctionVersionId,
-        PhysicalFunctionRunId, PhysicalFunctionRunStatus, RowCount, StorageVersion,
+        AtTime, BundleId, ByteCount, CollectionId, CollectionName, DataLocation, Decorator, EpochMs,
+        ExecutionId, ExecutionName, FunctionId, FunctionName, FunctionVersionId,
+        PhysicalFunctionRunId, PhysicalFunctionRunStatus, ProjectId, RowCount, StorageVersion,
         TableVersionCount, TransactionId, Trigger, TriggeredOn, UserId, UserName,
     };
 
@@ -22,6 +22,12 @@ mod definitions {
     pub struct PhysicalFunctionRunDB {
         #[builder(default = "PhysicalFunctionRunId::new()")]
         pub id: PhysicalFunctionRunId,
+        /// The project this run belongs to. Inherited from the parent LFR
+        /// at mint; required at construction — there is no "default to
+        /// sandbox" fallback because that would mask a builder forgetting to
+        /// thread the project from upstream.
+        #[dxo(extractor)]
+        pub project_id: ProjectId,
         pub collection_id: CollectionId,
         #[dxo(extractor)]
         pub function_id: FunctionId,

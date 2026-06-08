@@ -22,6 +22,7 @@ pub(crate) async fn seed_worker(
     message_status: &WorkerMessageStatus,
 ) -> Result<WorkerDB, TdError> {
     let worker_db = WorkerDB::builder()
+        .project_id(function.project_id.clone())
         .collection_id(collection.id)
         .execution_id(None)
         .transaction_id(None)
@@ -48,6 +49,7 @@ pub(crate) async fn seed_function_runner_worker(
     status: &WorkerMessageStatus,
 ) -> Result<WorkerDB, TdError> {
     let worker_db = WorkerDB::builder()
+        .project_id(physical_function_run.project_id.clone())
         .collection_id(execution.collection_id)
         .execution_id(Some(execution.id.clone()))
         .transaction_id(Some(transaction.id.clone()))

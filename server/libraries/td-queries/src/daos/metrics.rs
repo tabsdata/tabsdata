@@ -1054,7 +1054,7 @@ mod tests {
         LogicalFunctionRunStatus, LogicalPointerReason, LogicalPointerStatus, RowCount,
         TableFunctionParamPos, TableNameDto, TableVersionCount, TransactionKey, VersionPos,
     };
-    use td_objects::types::basic::{CollectionName, UserId};
+    use td_objects::types::basic::{CollectionName, ProjectId, UserId};
     use td_security::ENCODED_ID_SYSTEM;
 
     const WINDOW_DAY_START: i64 = 1_700_000_000_000; // arbitrary day in Nov 2023
@@ -1069,6 +1069,9 @@ mod tests {
 
     fn empty_request(dim: Dim) -> MetricsRequest {
         MetricsRequest {
+            // Inert for the query (RLS scopes rows, not this field); the raw test
+            // connection is superuser so RLS is bypassed anyway.
+            project_id: ProjectId::sandbox(),
             dim,
             window: day_window(),
             unit: WindowUnit::Day,
@@ -1132,6 +1135,7 @@ mod tests {
         data_bytes: i64,
     ) -> Result<PhysicalTableDataVersionDB, TdError> {
         let ptdv = PhysicalTableDataVersionDB::builder()
+            .project_id(pfr.project_id.clone())
             .collection_id(ltdv.collection_id)
             .table_id(table.table_id)
             .name(table.name.clone())
@@ -1228,6 +1232,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_inflight_empty_table(db: TdPool) -> Result<(), TdError> {
         let req = InflightRequest {
+            project_id: ProjectId::sandbox(),
             collections: DimensionFilter::default(),
             groups: DimensionFilter::default(),
             statuses: vec![],

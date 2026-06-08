@@ -4,8 +4,8 @@
 
 use crate::types::basic::{
     CollectionId, CollectionName, ExecutionId, FunctionId, FunctionName, GroupId, GroupName,
-    InterCollectionPermissionId, PermissionId, RoleId, RoleName, TableId, TableName, TransactionId,
-    UserId, UserName, WorkerId,
+    InterCollectionPermissionId, PermissionId, ProjectId, ProjectName, RoleId, RoleName, TableId,
+    TableName, TransactionId, UserId, UserName, WorkerId,
 };
 
 #[ta_objects::typed_tag]
@@ -14,6 +14,14 @@ pub enum CollectionIdName {
     Id(CollectionId),
     #[tag("")]
     Name(CollectionName),
+}
+
+#[ta_objects::typed_tag]
+pub enum ProjectIdName {
+    #[tag("~")]
+    Id(ProjectId),
+    #[tag("")]
+    Name(ProjectName),
 }
 
 // ExecutionName is not UNIQUE nor NOT NULL. We cannot use it as a primary key to lookup.

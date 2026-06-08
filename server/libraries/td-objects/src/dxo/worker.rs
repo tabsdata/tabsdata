@@ -10,8 +10,9 @@ mod definitions {
     use crate::types::basic::{
         AtTime, ByteCount, CollectionId, CollectionName, CronMask, Enabled, ExecutionId,
         ExecutionName, FunctionName, FunctionVersionId, LogicalFunctionRunId,
-        PhysicalFunctionRunId, RowCount, SizeThreshold, TableVersionCount, TimeoutThresholdMin,
-        TransactionId, WorkerConfig, WorkerId, WorkerMessageStatus, WorkerStatus, WorkerType,
+        PhysicalFunctionRunId, ProjectId, RowCount, SizeThreshold, TableVersionCount,
+        TimeoutThresholdMin, TransactionId, WorkerConfig, WorkerId, WorkerMessageStatus,
+        WorkerStatus, WorkerType,
     };
     use chrono::{DateTime, Utc};
     use ta_objects::Buildable;
@@ -28,6 +29,13 @@ mod definitions {
         #[builder(default)]
         #[dxo(extractor)]
         pub id: WorkerId,
+        /// The project this worker belongs to. Inherited from the worker's
+        /// parent function-run at creation — workers always belong to the
+        /// same project as the function-run they're processing. No builder
+        /// default: a missing setter is a programmer error, not a silent
+        /// sandbox fallback.
+        #[dxo(extractor, builder(include))]
+        pub project_id: ProjectId,
         #[dxo(builder(include), extractor)]
         pub collection_id: CollectionId,
         #[builder(default)]

@@ -7,7 +7,7 @@ mod definitions {
     use crate::types::basic::{
         AtTime, ByteCount, CollectionId, CollectionName, ColumnCount, DataChanged, DataLocation,
         ExecutionId, FunctionName, FunctionVersionId, HasData, PhysicalFunctionRunId,
-        PhysicalFunctionRunStatus, PhysicalTableDataVersionId, RowCount, SchemaChanged,
+        PhysicalFunctionRunStatus, PhysicalTableDataVersionId, ProjectId, RowCount, SchemaChanged,
         SchemaDataChanged, SchemaHash, StorageVersion, TableFunctionParamPos, TableId, TableName,
         TableVersionId, TransactionId, TriggeredOn, UserId, UserName,
     };
@@ -27,6 +27,11 @@ mod definitions {
         #[builder(default = "PhysicalTableDataVersionId::new()")]
         #[dxo(extractor)]
         pub id: PhysicalTableDataVersionId,
+        /// The project this version belongs to. Inherited from the parent
+        /// LFR/PFR at mint; required at construction — there is no "default to
+        /// sandbox" fallback, which would mask a builder forgetting to thread
+        /// the project through the (bypass-scoped) dispatch insert.
+        pub project_id: ProjectId,
         pub collection_id: CollectionId,
         pub table_id: TableId,
         pub name: TableName,

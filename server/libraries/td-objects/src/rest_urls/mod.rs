@@ -7,9 +7,9 @@ pub mod params;
 use crate::types::basic::{
     AllowDisabled, AtTime, CollectionIdName, ExecutionIdName, FunctionIdName, FunctionVersionId,
     GroupIdName, InterCollectionPermissionIdName, LogicalFunctionRunId, LogsCastNumber,
-    PermissionIdName, PhysicalFunctionRunId, PhysicalTableDataVersionId, RoleIdName, SampleLen,
-    SampleOffset, Sql, TableIdName, TransactionIdName, UncommittedStatus, UserIdName, WorkerId,
-    WorkerIdName,
+    PermissionIdName, PhysicalFunctionRunId, PhysicalTableDataVersionId, ProjectIdName, RoleIdName,
+    SampleLen, SampleOffset, Sql, TableIdName, TransactionIdName, UncommittedStatus, UserIdName,
+    WorkerId, WorkerIdName,
 };
 use td_common::logging::LOG_EXTENSION;
 use td_common::server::{ERR_LOG_FILE_NAME, FN_LOG_FILE_NAME, OUT_LOG_FILE_NAME, TD_LOG_FILE_NAME};
@@ -33,7 +33,13 @@ pub const BASE_URL: &str = BASE_URL_V1;
 pub mod internal {
     use super::*;
 
-    pub const INTERNAL_PREFIX: &str = url!("/internal");
+    // Loopback-only callbacks served by the `InternalServer` (not the public
+    // apiserver). The `{project}` segment lets the InternalServer's resolver
+    // populate `RequestContext.project_id` so worker callbacks update
+    // project-scoped tables under proper RLS isolation — instead of bypassing
+    // it as infrastructure. The scheduler stamps each row's `project_id` into
+    // the outbound callback URL it builds.
+    pub const INTERNAL_PREFIX: &str = url!("/internal", SCOPED);
 
     pub const FUNCTION_VERSIONS: &str = url!("/function-versions");
     pub const FUNCTION_VERSION: &str = url!(FUNCTION_VERSIONS, "/{function_version_id}");
@@ -161,9 +167,11 @@ pub const DELETE_GROUP: &str = url!(GROUP);
 
 // Operational metrics. `/metrics` is the consolidated nodes+edges
 // endpoint, parameterised by `dim=collection|group`. `/inflight` is
-// the point-in-time complement (no window).
-pub const METRICS: &str = url!("/metrics");
-pub const INFLIGHT: &str = url!("/inflight");
+// the point-in-time complement (no window). Both are tenant-scoped: the
+// `{project}` segment drives the connection GUC and RLS filters the
+// aggregation to that project (the queries carry no project predicate).
+pub const METRICS: &str = url!(SCOPED, "/metrics");
+pub const INFLIGHT: &str = url!(SCOPED, "/inflight");
 
 // Permissions
 pub const PERMISSIONS: &str = url!(ROLE, "/permissions");
@@ -198,8 +206,28 @@ pub const GET_USER_ROLE: &str = url!(USER_ROLE);
 pub const CREATE_USER_ROLE: &str = url!(USER_ROLES);
 pub const DELETE_USER_ROLE: &str = url!(USER_ROLE);
 
-// Collections
-pub const COLLECTIONS: &str = url!("/collections");
+// Projects — the projects CRUDL itself lives at top level (system-scoped).
+// `SCOPED` is the prefix every tenant-scoped resource nests under so the
+// project is required in the URL and resolved before any project-scoped
+// table is touched.
+pub const PROJECTS: &str = url!("/projects");
+pub const PROJECT: &str = url!(PROJECTS, "/{project}");
+pub const SCOPED: &str = PROJECT;
+
+#[ta_objects::UrlParam]
+pub struct ProjectParam {
+    #[dxo(extractor)]
+    project: ProjectIdName,
+}
+
+pub const LIST_PROJECTS: &str = url!(PROJECTS);
+pub const GET_PROJECT: &str = url!(PROJECT);
+pub const CREATE_PROJECT: &str = url!(PROJECTS);
+pub const UPDATE_PROJECT: &str = url!(PROJECT);
+pub const DELETE_PROJECT: &str = url!(PROJECT);
+
+// Collections (tenant-scoped)
+pub const COLLECTIONS: &str = url!(SCOPED, "/collections");
 pub const COLLECTION: &str = url!(COLLECTIONS, "/{collection}");
 
 #[ta_objects::UrlParam]
@@ -245,7 +273,7 @@ pub const FUNCTION_CREATE: &str = url!(FUNCTIONS);
 pub const FUNCTION_GET: &str = url!(FUNCTION);
 pub const FUNCTION_DELETE: &str = url!(FUNCTION);
 pub const FUNCTION_LIST_BY_COLL: &str = url!(FUNCTIONS);
-pub const FUNCTION_LIST: &str = url!("/functions");
+pub const FUNCTION_LIST: &str = url!(SCOPED, "/functions");
 pub const FUNCTION_UPDATE: &str = url!(FUNCTION);
 pub const FUNCTION_ENABLE: &str = url!(FUNCTION, "/enable");
 pub const FUNCTION_UPLOAD: &str = url!(COLLECTION, "/function-bundle-upload");
@@ -337,7 +365,7 @@ pub struct TableParam {
 }
 
 pub const LIST_TABLES_BY_COLL: &str = url!(TABLES);
-pub const LIST_TABLES: &str = url!("/tables");
+pub const LIST_TABLES: &str = url!(SCOPED, "/tables");
 pub const LIST_TABLE_DATA_VERSIONS: &str = url!(TABLE, "/data-versions");
 pub const SCHEMA_TABLE: &str = url!(TABLE, "/schema");
 pub const SAMPLE_TABLE: &str = url!(TABLE, "/sample");
@@ -349,8 +377,8 @@ pub const TABLE_DELETE: &str = url!(TABLE);
 pub const SERVER_STATUS: &str = url!("/status");
 pub const RUNTIME_INFO: &str = url!("/runtime-info");
 
-// Executions
-pub const EXECUTIONS: &str = url!("/executions");
+// Executions (tenant-scoped)
+pub const EXECUTIONS: &str = url!(SCOPED, "/executions");
 pub const EXECUTION: &str = url!(EXECUTIONS, "/{execution}");
 
 #[ta_objects::UrlParam]
@@ -376,9 +404,9 @@ pub const EXECUTION_RECOVER: &str = url!(EXECUTION, "/recover");
 pub const EXECUTION_DETAILS: &str = url!(EXECUTION, "/details");
 pub const EXECUTION_LIST: &str = url!(EXECUTIONS);
 pub const EXECUTION_LIST_BY_FUNCTION_VERSION: &str =
-    url!("/function-versions/{function_version_id}/executions");
+    url!(SCOPED, "/function-versions/{function_version_id}/executions");
 pub const EXECUTION_LIST_BY_TABLE_DATA_VERSION: &str =
-    url!("/table-data-versions/{table_data_version}/executions");
+    url!(SCOPED, "/table-data-versions/{table_data_version}/executions");
 
 #[ta_objects::QueryParam]
 pub struct AllowDisabledParam {
@@ -388,8 +416,8 @@ pub struct AllowDisabledParam {
 
 pub const EXECUTION_READ: &str = url!(EXECUTION);
 
-// Transactions
-pub const TRANSACTIONS: &str = url!("/transactions");
+// Transactions (tenant-scoped)
+pub const TRANSACTIONS: &str = url!(SCOPED, "/transactions");
 pub const TRANSACTION: &str = url!(TRANSACTIONS, "/{transaction}");
 
 #[ta_objects::UrlParam]
@@ -402,11 +430,11 @@ pub const TRANSACTION_CANCEL: &str = url!(TRANSACTION, "/cancel");
 pub const TRANSACTION_RECOVER: &str = url!(TRANSACTION, "/recover");
 pub const TRANSACTIONS_LIST: &str = url!(TRANSACTIONS);
 
-// Synchrotron
-pub const SYNCHROTRON_READ: &str = url!("/synchrotron");
+// Synchrotron (tenant-scoped)
+pub const SYNCHROTRON_READ: &str = url!(SCOPED, "/synchrotron");
 
-// Worker messages
-pub const WORKERS: &str = url!("/workers");
+// Worker messages (tenant-scoped)
+pub const WORKERS: &str = url!(SCOPED, "/workers");
 pub const WORKER: &str = url!(WORKERS, "/{worker}");
 
 #[ta_objects::UrlParam]
@@ -523,7 +551,7 @@ pub struct PhysicalFunctionRunParam {
 }
 
 pub const FUNCTION_RUN_GET: &str = url!(FUNCTION_RUN);
-pub const FUNCTION_RUN_LIST: &str = url!("/function_runs");
+pub const FUNCTION_RUN_LIST: &str = url!(SCOPED, "/function_runs");
 
 // Table lineage graph
 pub const TABLE_FLOW_GRAPH: &str = url!(TABLE, "/flow");
