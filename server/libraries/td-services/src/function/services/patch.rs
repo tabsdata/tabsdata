@@ -73,8 +73,8 @@ mod tests {
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::project_scope::InProject;
-    use td_tower::project_scope::Scoped;
+    use td_database::scoped::InProject;
+    use td_database::scoped::Scoped;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -121,7 +121,8 @@ mod tests {
     }
 
     async fn seed_collection_helper(db: &TdPool, name: &str) -> CollectionDB {
-        db.seed()
+        db.scoped(ProjectId::sandbox())
+            .seed()
             .collection(&CollectionName::try_from(name).unwrap(), &UserId::admin())
             .await
             .unwrap()
@@ -148,7 +149,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()
             .unwrap();
-        db.seed().function(collection, &register).await.unwrap()
+        db.scoped(ProjectId::sandbox())
+            .seed()
+            .function(collection, &register)
+            .await
+            .unwrap()
     }
 
     async fn seed_function(db: &TdPool, collection_name: &str, function_name: &str) -> FunctionDB {

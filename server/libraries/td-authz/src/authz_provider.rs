@@ -148,7 +148,7 @@ mod tests {
     use td_common::provider::Provider;
     use td_database::pool::TdPool;
     use td_error::TdError;
-    use td_objects::types::basic::{CollectionName, RoleId, ToCollectionId, UserId};
+    use td_objects::types::basic::{CollectionName, ProjectId, RoleId, ToCollectionId, UserId};
     use td_queries::test_utils::SeedEntry;
 
     #[td_test::test(db)]
@@ -166,25 +166,29 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_get_inter_collection_permissions(db: TdPool) -> Result<(), TdError> {
-        let c0 = db
+        let scope = db.scoped(ProjectId::sandbox());
+        let c0 = scope
             .seed()
             .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
-        let c1 = db
+        let c1 = scope
             .seed()
             .collection(&CollectionName::try_from("c1")?, &UserId::admin())
             .await?;
-        let c2 = db
+        let c2 = scope
             .seed()
             .collection(&CollectionName::try_from("c2")?, &UserId::admin())
             .await?;
-        db.seed()
+        scope
+            .seed()
             .inter_collection_permission(&c0.id, &ToCollectionId::try_from(c1.id)?)
             .await?;
-        db.seed()
+        scope
+            .seed()
             .inter_collection_permission(&c0.id, &ToCollectionId::try_from(c2.id)?)
             .await?;
-        db.seed()
+        scope
+            .seed()
             .inter_collection_permission(&c1.id, &ToCollectionId::try_from(c2.id)?)
             .await?;
 
@@ -201,25 +205,29 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_provider_get(db: TdPool) -> Result<(), TdError> {
-        let c0 = db
+        let scope = db.scoped(ProjectId::sandbox());
+        let c0 = scope
             .seed()
             .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
-        let c1 = db
+        let c1 = scope
             .seed()
             .collection(&CollectionName::try_from("c1")?, &UserId::admin())
             .await?;
-        let c2 = db
+        let c2 = scope
             .seed()
             .collection(&CollectionName::try_from("c2")?, &UserId::admin())
             .await?;
-        db.seed()
+        scope
+            .seed()
             .inter_collection_permission(&c0.id, &ToCollectionId::try_from(&c1.id)?)
             .await?;
-        db.seed()
+        scope
+            .seed()
             .inter_collection_permission(&c0.id, &ToCollectionId::try_from(&c2.id)?)
             .await?;
-        db.seed()
+        scope
+            .seed()
             .inter_collection_permission(&c1.id, &ToCollectionId::try_from(&c2.id)?)
             .await?;
 

@@ -104,13 +104,13 @@ mod tests {
     use td_objects::types::composed::TableDependencyDto;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_delete_table(db: TdPool) {
         use td_tower::metadata::type_of_val;
-        use td_tower::project_scope::Scoped;
+        use td_database::scoped::Scoped;
 
         TableDeleteService::with_defaults(db)
             .metadata()
@@ -174,6 +174,7 @@ mod tests {
     async fn test_delete_table(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -195,7 +196,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _ = db.seed().function(&collection, &create).await?;
+        let _ = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         // Update the function to remove the tables (set it to frozen).
         let update = FunctionUpdate::builder()
@@ -255,6 +260,7 @@ mod tests {
     async fn test_delete_function_with_dependency(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -276,7 +282,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _ = db.seed().function(&collection, &create).await?;
+        let _ = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         // Create a function depending on it.
         let create = FunctionRegister::builder()
@@ -292,7 +302,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _ = db.seed().function(&collection, &create).await?;
+        let _ = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         // Update the function to remove the tables (set it to frozen).
         let update = FunctionUpdate::builder()

@@ -73,13 +73,13 @@ mod tests {
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_update_collection(db: TdPool) {
         use td_tower::metadata::type_of_val;
-        use td_tower::project_scope::Scoped;
+        use td_database::scoped::Scoped;
 
         UpdateCollectionService::with_defaults(db)
             .metadata()
@@ -122,7 +122,11 @@ mod tests {
     #[td_test::test(db)]
     async fn test_update_collection(db: TdPool) {
         let create_name = CollectionName::try_from("ds0").unwrap();
-        let _ = db.seed().collection(&create_name, &UserId::admin()).await;
+        let _ = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .collection(&create_name, &UserId::admin())
+            .await;
 
         let before_update = AtTime::now();
 

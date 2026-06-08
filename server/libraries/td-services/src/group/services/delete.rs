@@ -57,11 +57,12 @@ mod tests {
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
 
     #[td_test::test(db)]
     async fn test_delete_group(db: TdPool) -> Result<(), TdError> {
         let group = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .group(
                 GroupName::try_from("analytics")?,

@@ -57,14 +57,14 @@ mod tests {
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_list_executions_by_table_data_version(db: TdPool) {
         use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
-        use td_tower::project_scope::Scoped;
+        use td_database::scoped::Scoped;
 
         ExecutionListByPhysicalTableDataVersionService::with_defaults(db)
             .metadata()
@@ -90,6 +90,7 @@ mod tests {
     async fn test_list_executions_by_table_data_version(db: TdPool) -> Result<(), TdError> {
         // Create collection and function with an output table.
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -107,16 +108,26 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let function_version = db.seed().function(&collection, &create).await?;
+        let function_version = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
 
         // Create an execution that produces a table data version.
-        let execution_1 = db.seed().execution(&function_version).await?;
+        let execution_1 = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .execution(&function_version)
+            .await?;
         let transaction_1 = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .transaction(&execution_1, &transaction_key)
             .await?;
         let function_run_1 = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_function_run(
                 &collection,
@@ -136,6 +147,7 @@ mod tests {
             .await?;
 
         let tdv = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -159,15 +171,25 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let consumer_function_version = db.seed().function(&collection, &create_consumer).await?;
+        let consumer_function_version = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create_consumer)
+            .await?;
 
         // Create a second execution with a function requirement pointing to the TDV.
-        let execution_2 = db.seed().execution(&consumer_function_version).await?;
+        let execution_2 = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .execution(&consumer_function_version)
+            .await?;
         let transaction_2 = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .transaction(&execution_2, &transaction_key)
             .await?;
         let function_run_2 = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_function_run(
                 &collection,
@@ -179,7 +201,8 @@ mod tests {
             .await?;
 
         // Seed a function requirement that references the TDV as input.
-        db.seed()
+        db.scoped(ProjectId::sandbox())
+            .seed()
             .logical_input(
                 &collection,
                 &execution_2,
@@ -194,7 +217,11 @@ mod tests {
             .await?;
 
         // Create a third execution that does NOT reference the TDV.
-        let _execution_3 = db.seed().execution(&function_version).await?;
+        let _execution_3 = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .execution(&function_version)
+            .await?;
 
         // Call the service.
         let service =
@@ -221,6 +248,7 @@ mod tests {
     async fn test_list_executions_by_table_data_version_empty(db: TdPool) -> Result<(), TdError> {
         // Create a TDV with no function requirements pointing to it.
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -238,12 +266,25 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let function_version = db.seed().function(&collection, &create).await?;
+        let function_version = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
 
-        let execution = db.seed().execution(&function_version).await?;
-        let transaction = db.seed().transaction(&execution, &transaction_key).await?;
+        let execution = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .execution(&function_version)
+            .await?;
+        let transaction = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .transaction(&execution, &transaction_key)
+            .await?;
         let physical_function_run = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_function_run(
                 &collection,
@@ -263,6 +304,7 @@ mod tests {
             .await?;
 
         let tdv = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_table_data_version(
                 &collection,

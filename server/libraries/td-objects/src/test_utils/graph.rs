@@ -23,6 +23,9 @@ use ta_objects::Buildable;
 static COLLECTION_ID: LazyLock<CollectionId> = LazyLock::new(CollectionId::default);
 static COLLECTION_NAME: LazyLock<CollectionName> =
     LazyLock::new(|| CollectionName::try_from("test").unwrap());
+// Synthetic in-memory nodes; the specific group is irrelevant, only that it's
+// stable across the graph the test builds.
+static GROUP_ID: LazyLock<GroupId> = LazyLock::new(GroupId::default);
 
 pub static FUNCTION_NAMES: LazyLock<Vec<FunctionName>> = LazyLock::new(|| {
     vec![
@@ -152,7 +155,7 @@ pub fn function_node(function: &FunctionName) -> FunctionNode {
         .function_version_id(FUNCTION_VERSION_IDS.get(function).unwrap())
         .name(function.clone())
         .enabled(Enabled::TRUE)
-        .group_id(GroupId::default_group())
+        .group_id(*GROUP_ID)
         .build()
         .unwrap()
 }
@@ -201,7 +204,7 @@ pub async fn table(function: &FunctionName, table: &TableName) -> TableDBWithNam
 pub async fn function(function: &FunctionName) -> FunctionDBWithNames {
     FunctionDBWithNames::builder()
         .id(FUNCTION_VERSION_IDS.get(function).unwrap())
-        .group_id(GroupId::default_group())
+        .group_id(*GROUP_ID)
         .collection_id(*COLLECTION_ID)
         .name(function.clone())
         .description(Description::default())

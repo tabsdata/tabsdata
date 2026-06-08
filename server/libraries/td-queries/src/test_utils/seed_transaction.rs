@@ -3,8 +3,8 @@
 //
 
 use crate::LiveEntry;
+use crate::QueryExecutor;
 use ta_objects::Buildable;
-use td_database::dynamic::DynamicConnection;
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::execution::ExecutionDB;
@@ -12,14 +12,15 @@ use td_objects::dxo::transaction::TransactionDB;
 use td_objects::types::basic::{TransactionId, TransactionKey};
 
 pub(crate) async fn seed_transaction(
-    conn: &mut DynamicConnection<'_>,
+    mut executor: impl QueryExecutor,
     execution: &ExecutionDB,
     transaction_key: &TransactionKey,
 ) -> Result<TransactionDB, TdError> {
     // A transaction's group is a snapshot of its collection's group at mint —
     // resolve it from the collection rather than assuming the global default,
     // which only exists in `sandbox`.
-    let collection: CollectionDB = conn
+    let collection: CollectionDB = executor
+        .reuse()
         .live()
         .fetch_one::<CollectionDB>(&execution.collection_id)
         .await?;
@@ -36,7 +37,7 @@ pub(crate) async fn seed_transaction(
 
     // Field-less row; runs on a project-scoped connection so `project_id`
     // defaults from the scope.
-    conn.live().insert(&transaction_db).await?;
+    executor.reuse().live().insert(&transaction_db).await?;
     Ok(transaction_db)
 }
 
@@ -46,12 +47,15 @@ mod tests {
     use ta_objects::Buildable;
     use td_database::pool::TdPool;
     use td_objects::dxo::function::FunctionRegister;
-    use td_objects::types::basic::{BundleId, CollectionName, Decorator, TransactionKey, UserId};
+    use td_objects::types::basic::{
+        BundleId, CollectionName, Decorator, ProjectId, TransactionKey, UserId,
+    };
     use td_security::ENCODED_ID_SYSTEM;
 
     #[td_test::test(db)]
     async fn test_seed_transaction(db: TdPool) {
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(
                 &CollectionName::try_from("collection").unwrap(),
@@ -82,12 +86,23 @@ mod tests {
             .build()
             .unwrap();
 
-        let function_version = db.seed().function(&collection, &create).await.unwrap();
+        let function_version = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await
+            .unwrap();
 
-        let execution = db.seed().execution(&function_version).await.unwrap();
+        let execution = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .execution(&function_version)
+            .await
+            .unwrap();
 
         let transaction_key = TransactionKey::try_from("ANY").unwrap();
         let transaction = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .transaction(&execution, &transaction_key)
             .await

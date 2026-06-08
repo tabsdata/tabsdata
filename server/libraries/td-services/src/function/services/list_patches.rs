@@ -71,13 +71,13 @@ mod tests {
     use td_queries::CurrentEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_list_patches(db: TdPool) {
         use td_tower::metadata::type_of_val;
-        use td_tower::project_scope::Scoped;
+        use td_database::scoped::Scoped;
 
         ListFunctionPatchesService::with_defaults(db)
             .metadata()
@@ -113,6 +113,7 @@ mod tests {
 
     async fn seed_patches_fixture(db: &TdPool) -> CollectionDB {
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&CollectionName::try_from("c0").unwrap(), &UserId::admin())
             .await
@@ -133,7 +134,12 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()
             .unwrap();
-        let _ = db.seed().function(&collection, &register).await.unwrap();
+        let _ = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &register)
+            .await
+            .unwrap();
         collection
     }
 

@@ -2,7 +2,8 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::{CurrentEntry, LiveEntry, QueryExecutor};
+use crate::QueryExecutor;
+use crate::{CurrentEntry, LiveEntry};
 use ta_objects::{Buildable, and};
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionDB;
@@ -21,7 +22,7 @@ use td_objects::types::basic::{
 };
 
 pub(crate) async fn seed_physical_function_run(
-    db: impl QueryExecutor + Copy,
+    mut executor: impl QueryExecutor,
     collection: &CollectionDB,
     function_version: &FunctionDB,
     execution: &ExecutionDB,
@@ -36,7 +37,8 @@ pub(crate) async fn seed_physical_function_run(
     // existing LFR is in a sticky state and the new `status` differs —
     // which is the right failure mode for a test trying to violate the
     // invariant.
-    let existing: Option<LogicalFunctionRunDB> = db
+    let existing: Option<LogicalFunctionRunDB> = executor
+        .reuse()
         .live()
         .fetch_optional(and!(&execution.id, &function_version.function_id))
         .await?;
@@ -46,7 +48,9 @@ pub(crate) async fn seed_physical_function_run(
                 let update = UpdateLogicalFunctionRunDB::builder()
                     .status(status)
                     .build()?;
-                db.live()
+                executor
+                    .reuse()
+                    .live()
                     .update::<_, LogicalFunctionRunDB>(&update, &existing.id)
                     .await?;
             }
@@ -69,7 +73,11 @@ pub(crate) async fn seed_physical_function_run(
                 .triggered_by_id(transaction.triggered_by_id)
                 .status(status)
                 .build()?;
-            db.live().insert::<LogicalFunctionRunDB>(&lfr).await?;
+            executor
+                .reuse()
+                .live()
+                .insert::<LogicalFunctionRunDB>(&lfr)
+                .await?;
             lfr
         }
     };
@@ -87,7 +95,9 @@ pub(crate) async fn seed_physical_function_run(
         .status(PhysicalFunctionRunStatus::from(status))
         .build()?;
 
-    db.live()
+    executor
+        .reuse()
+        .live()
         .insert::<PhysicalFunctionRunDB>(&function_db)
         .await?;
     let pointer = LogicalFunctionRunPointerDB::build_event(
@@ -99,7 +109,9 @@ pub(crate) async fn seed_physical_function_run(
         transaction.triggered_by_id,
         LogicalPointerReason::InitialDispatch,
     )?;
-    db.live()
+    executor
+        .reuse()
+        .live()
         .insert::<LogicalFunctionRunPointerDB>(&pointer)
         .await?;
 
@@ -109,7 +121,8 @@ pub(crate) async fn seed_physical_function_run(
     // these rows, downstream layers that walk LFR → LTDV (replay
     // append-Requested, callback redirect, etc.) trip over missing
     // identity rows.
-    let tables: Vec<TableDB> = db
+    let tables: Vec<TableDB> = executor
+        .reuse()
         .current()
         .fetch_all::<TableDB>(&function_version.id)
         .await?;
@@ -126,7 +139,11 @@ pub(crate) async fn seed_physical_function_run(
             .triggered_on(transaction.triggered_on)
             .triggered_by_id(transaction.triggered_by_id)
             .build()?;
-        db.live().insert::<LogicalTableDataVersionDB>(&ltdv).await?;
+        executor
+            .reuse()
+            .live()
+            .insert::<LogicalTableDataVersionDB>(&ltdv)
+            .await?;
         let ltdv_pointer = LogicalTableDataVersionPointerDB::build_event(
             ltdv.project_id,
             &ltdv.id,
@@ -136,7 +153,9 @@ pub(crate) async fn seed_physical_function_run(
             transaction.triggered_by_id,
             LogicalPointerReason::InitialMint,
         )?;
-        db.live()
+        executor
+            .reuse()
+            .live()
             .insert::<LogicalTableDataVersionPointerDB>(&ltdv_pointer)
             .await?;
     }
@@ -151,14 +170,15 @@ mod tests {
     use td_database::pool::TdPool;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
-        BundleId, CollectionName, Decorator, LogicalFunctionRunStatus, TransactionKey, Trigger,
-        UserId,
+        BundleId, CollectionName, Decorator, LogicalFunctionRunStatus, ProjectId, TransactionKey,
+        Trigger, UserId,
     };
     use td_security::ENCODED_ID_SYSTEM;
 
     #[td_test::test(db)]
     async fn test_seed_function_run(db: TdPool) {
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(
                 &CollectionName::try_from("collection").unwrap(),
@@ -189,18 +209,30 @@ mod tests {
             .build()
             .unwrap();
 
-        let function_version = db.seed().function(&collection, &create).await.unwrap();
+        let function_version = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await
+            .unwrap();
 
-        let execution = db.seed().execution(&function_version).await.unwrap();
+        let execution = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .execution(&function_version)
+            .await
+            .unwrap();
 
         let transaction_key = TransactionKey::try_from("ANY").unwrap();
         let transaction = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .transaction(&execution, &transaction_key)
             .await
             .unwrap();
 
         let physical_function_run = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_function_run(
                 &collection,

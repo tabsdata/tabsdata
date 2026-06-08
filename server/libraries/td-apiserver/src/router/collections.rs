@@ -25,7 +25,7 @@ mod routes {
     };
     use td_objects::types::basic::ProjectId;
     use td_services::collection::service::CollectionServices;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
     use tower::ServiceExt;
 
     const COLLECTIONS_TAG: &str = "Collections";

@@ -60,14 +60,14 @@ mod tests {
     use td_objects::types::basic::{AccessTokenId, CollectionName, ProjectId, RoleId, UserId};
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_list_inter_collection_permission(db: TdPool) {
         use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
-        use td_tower::project_scope::Scoped;
+        use td_database::scoped::Scoped;
 
         ListInterCollectionPermissionService::with_defaults(db)
             .metadata()
@@ -97,14 +97,17 @@ mod tests {
         let service = ListInterCollectionPermissionService::with_defaults(db.clone()).service();
 
         let c0 = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
         let c1 = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&CollectionName::try_from("c1")?, &UserId::admin())
             .await?;
-        db.seed()
+        db.scoped(ProjectId::sandbox())
+            .seed()
             .inter_collection_permission(&c0.id, &(*c1.id).into())
             .await?;
 
@@ -132,10 +135,12 @@ mod tests {
     async fn test_list_permission_authz_err(db: TdPool) -> Result<(), TdError> {
         let service = ListInterCollectionPermissionService::with_defaults(db.clone()).service();
 
-        db.seed()
+        db.scoped(ProjectId::sandbox())
+            .seed()
             .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
-        db.seed()
+        db.scoped(ProjectId::sandbox())
+            .seed()
             .collection(&CollectionName::try_from("c1")?, &UserId::admin())
             .await?;
 

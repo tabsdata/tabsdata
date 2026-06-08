@@ -70,11 +70,12 @@ mod tests {
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
 
     #[td_test::test(db)]
     async fn test_update_group(db: TdPool) -> Result<(), TdError> {
         let _ = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .group(
                 GroupName::try_from("analytics")?,
@@ -120,6 +121,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_update_rename_to_existing_name_rejected(db: TdPool) {
         let _ = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .group(
                 GroupName::try_from("analytics").unwrap(),
@@ -127,6 +129,7 @@ mod tests {
             )
             .await;
         let _ = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .group(
                 GroupName::try_from("ml").unwrap(),

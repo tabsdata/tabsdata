@@ -107,7 +107,7 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::types::basic::{AccessTokenId, ProjectId, RoleId, UserId};
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -115,7 +115,7 @@ mod tests {
         use crate::graph::layers::build::GraphBuilder;
         use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
-        use td_tower::project_scope::Scoped;
+        use td_database::scoped::Scoped;
 
         ExecutionReadService::<{ FunctionDB::Executable }>::with_defaults(db)
             .metadata()

@@ -419,7 +419,7 @@ pub(crate) mod tests {
     use td_objects::dxo::worker::WorkerDB;
     use td_objects::types::basic::{
         BundleId, CollectionName, Decorator, DependencyPos, ExecutionStatus, FunctionName,
-        FunctionRuntimeValues, LogicalFunctionRunStatus, TableName, TableNameDto,
+        FunctionRuntimeValues, LogicalFunctionRunStatus, ProjectId, TableName, TableNameDto,
         TransactionStatus, UserId, VersionPos, WorkerMessageStatus,
     };
     use td_objects::types::composed::TableDependencyDto;
@@ -482,7 +482,14 @@ pub(crate) mod tests {
                     if let Some(existing) = existing {
                         (c, existing)
                     } else {
-                        (c, db.seed().collection(c, &UserId::admin()).await.unwrap())
+                        (
+                            c,
+                            db.scoped(ProjectId::sandbox())
+                                .seed()
+                                .collection(c, &UserId::admin())
+                                .await
+                                .unwrap(),
+                        )
                     }
                 }
             })
@@ -531,7 +538,11 @@ pub(crate) mod tests {
                     .reuse_frozen_tables(false)
                     .build()?;
 
-                let function_version = db.seed().function(collection, &create).await?;
+                let function_version = db
+                    .scoped(ProjectId::sandbox())
+                    .seed()
+                    .function(collection, &create)
+                    .await?;
                 function_versions.insert(test_function, function_version);
             }
         }
@@ -547,7 +558,15 @@ pub(crate) mod tests {
                         // use first as the function version for the execution is informational
                         let (_, function) =
                             function_versions.iter().find_or_first(|_| false).unwrap();
-                        (e, value.seed().execution(function).await.unwrap())
+                        (
+                            e,
+                            value
+                                .scoped(ProjectId::sandbox())
+                                .seed()
+                                .execution(function)
+                                .await
+                                .unwrap(),
+                        )
                     }
                 }
             })
@@ -572,7 +591,8 @@ pub(crate) mod tests {
                     async move {
                         (
                             *t,
-                            db.seed()
+                            db.scoped(ProjectId::sandbox())
+                                .seed()
                                 .transaction(
                                     executions.get(e).unwrap(),
                                     &i.to_string().try_into().unwrap(),
@@ -606,6 +626,7 @@ pub(crate) mod tests {
                 let transactions = transactions.clone();
                 async move {
                     let physical_function_run = db
+                        .scoped(ProjectId::sandbox())
                         .seed()
                         .physical_function_run(
                             collections.get(&f.collection).unwrap(),
@@ -625,6 +646,7 @@ pub(crate) mod tests {
 
                     for table in &tables {
                         let _ = db
+                            .scoped(ProjectId::sandbox())
                             .seed()
                             .physical_table_data_version(
                                 collections.get(&f.collection).unwrap(),
@@ -638,6 +660,7 @@ pub(crate) mod tests {
                     }
 
                     let _ = db
+                        .scoped(ProjectId::sandbox())
                         .seed()
                         .logical_input(
                             collections.get(&f.collection).unwrap(),
@@ -716,6 +739,7 @@ pub(crate) mod tests {
                         .collect::<HashMap<_, _>>();
 
                     let req = db
+                        .scoped(ProjectId::sandbox())
                         .seed()
                         .logical_input(
                             collections.get(&f.collection).unwrap(),
@@ -757,6 +781,7 @@ pub(crate) mod tests {
                 let physical_function_runs = physical_function_runs.clone();
                 async move {
                     let req = db
+                        .scoped(ProjectId::sandbox())
                         .seed()
                         .function_runner_worker(
                             executions.get(e).unwrap(),

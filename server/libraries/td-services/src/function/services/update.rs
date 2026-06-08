@@ -168,7 +168,7 @@ mod tests {
     use td_queries::test_utils::SeedEntry;
     use td_queries::{CurrentEntry, HistoricEntry, LiveEntry};
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -189,7 +189,7 @@ mod tests {
         use td_queries::insert_vec;
 
         use td_tower::metadata::type_of_val;
-        use td_tower::project_scope::Scoped;
+        use td_database::scoped::Scoped;
 
         UpdateFunctionService::with_defaults(db)
             .metadata()
@@ -309,6 +309,7 @@ mod tests {
     async fn test_update_fields(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -326,7 +327,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let created_function = db.seed().function(&collection, &create).await?;
+        let created_function = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         let update = FunctionUpdate::builder()
             .name(Some("foo_updated".try_into()?))
@@ -367,6 +372,7 @@ mod tests {
     async fn test_update_add_new_table(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -384,7 +390,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let created_function = db.seed().function(&collection, &create).await?;
+        let created_function = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         let update = FunctionUpdate::builder()
             .name(Some("joaquin_workout_updated".try_into()?))
@@ -427,6 +437,7 @@ mod tests {
     async fn test_update_remove_table(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -444,7 +455,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let created_function = db.seed().function(&collection, &create).await?;
+        let created_function = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         let update = FunctionUpdate::builder()
             .name(Some("joaquin_workout_updated".try_into()?))
@@ -489,6 +504,7 @@ mod tests {
     async fn test_update_maintain_table(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -506,7 +522,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let created_function = db.seed().function(&collection, &create).await?;
+        let created_function = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         let update = FunctionUpdate::builder()
             .name(Some("joaquin_workout_updated".try_into()?))
@@ -562,6 +582,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_update_reset_state(db: TdPool) -> Result<(), TdError> {
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&CollectionName::try_from("reset_coll")?, &UserId::admin())
             .await?;
@@ -632,6 +653,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_update_no_reset_state_reuses_state_id(db: TdPool) -> Result<(), TdError> {
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&CollectionName::try_from("noreset_coll")?, &UserId::admin())
             .await?;
@@ -694,6 +716,7 @@ mod tests {
     async fn test_update_add_dependencies(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -711,7 +734,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let created_function = db.seed().function(&collection, &create).await?;
+        let created_function = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         let update = FunctionUpdate::builder()
             .name(Some("joaquin_workout_updated".try_into()?))
@@ -755,6 +782,7 @@ mod tests {
     async fn test_update_remove_dependencies(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -772,7 +800,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let created_function = db.seed().function(&collection, &create).await?;
+        let created_function = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         let update = FunctionUpdate::builder()
             .name(Some("joaquin_workout_updated".try_into()?))
@@ -815,6 +847,7 @@ mod tests {
     async fn test_update_maintain_dependencies(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -832,7 +865,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let created_function = db.seed().function(&collection, &create).await?;
+        let created_function = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         let update = FunctionUpdate::builder()
             .name(Some("joaquin_workout_updated".try_into()?))
@@ -876,6 +913,7 @@ mod tests {
     async fn test_update_add_trigger(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -893,7 +931,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _ = db.seed().function(&collection, &trigger_create).await?;
+        let _ = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &trigger_create)
+            .await?;
 
         // Actual test
         let create = FunctionRegister::builder()
@@ -909,7 +951,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let created_function = db.seed().function(&collection, &create).await?;
+        let created_function = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         let update = FunctionUpdate::builder()
             .name(Some("joaquin_workout_updated".try_into()?))
@@ -952,6 +998,7 @@ mod tests {
     async fn test_update_remove_trigger(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -969,7 +1016,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _ = db.seed().function(&collection, &trigger_create).await?;
+        let _ = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &trigger_create)
+            .await?;
 
         // Actual test
         let create = FunctionRegister::builder()
@@ -985,7 +1036,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let created_function = db.seed().function(&collection, &create).await?;
+        let created_function = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         let update = FunctionUpdate::builder()
             .name(Some("joaquin_workout_updated".try_into()?))
@@ -1030,6 +1085,7 @@ mod tests {
     async fn test_update_maintain_trigger(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -1047,7 +1103,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _ = db.seed().function(&collection, &trigger_create).await?;
+        let _ = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &trigger_create)
+            .await?;
 
         // Actual test
         let create = FunctionRegister::builder()
@@ -1063,7 +1123,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let created_function = db.seed().function(&collection, &create).await?;
+        let created_function = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         let update = FunctionUpdate::builder()
             .name(Some("joaquin_workout_updated".try_into()?))
@@ -1106,6 +1170,7 @@ mod tests {
     async fn test_update_change_everything(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -1126,7 +1191,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _ = db.seed().function(&collection, &trigger_create).await?;
+        let _ = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &trigger_create)
+            .await?;
 
         // Actual test
         let create = FunctionRegister::builder()
@@ -1145,7 +1214,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let created_function = db.seed().function(&collection, &create).await?;
+        let created_function = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         let update = FunctionUpdate::builder()
             .name(Some("joaquin_workout_updated".try_into()?))
@@ -1196,6 +1269,7 @@ mod tests {
     async fn test_update_freeze_unfreeze(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -1213,7 +1287,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _created_function = db.seed().function(&collection, &create).await?;
+        let _created_function = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         let update = FunctionUpdate::builder()
             .name(Some("joaquin_workout".try_into()?))
@@ -1315,6 +1393,7 @@ mod tests {
     async fn test_update_same_name(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -1336,7 +1415,11 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
-        let created_function = db.seed().function(&collection, &create).await?;
+        let created_function = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         let update = FunctionUpdate::builder()
             .name(Some("function_foo_2".try_into()?))
@@ -1415,16 +1498,19 @@ mod tests {
     ) -> Result<(), TdError> {
         let collection_name_1 = CollectionName::try_from("collection_1")?;
         let collection_1 = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&collection_name_1, &UserId::admin())
             .await?;
         let collection_name_2 = CollectionName::try_from("collection_2")?;
         let collection_2 = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&collection_name_2, &UserId::admin())
             .await?;
 
-        db.seed()
+        db.scoped(ProjectId::sandbox())
+            .seed()
             .inter_collection_permission(
                 &collection_1.id,
                 &ToCollectionId::try_from(collection_2.id)?,
@@ -1452,7 +1538,10 @@ mod tests {
                 .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
                 .reuse_frozen_tables(false)
                 .build()?;
-            db.seed().function(collection, &create).await?;
+            db.scoped(ProjectId::sandbox())
+                .seed()
+                .function(collection, &create)
+                .await?;
         }
 
         let dependencies = Some(vec![
@@ -1478,7 +1567,10 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
-        db.seed().function(&collection_2, &create).await?;
+        db.scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection_2, &create)
+            .await?;
 
         // Actual test
 
@@ -1546,6 +1638,7 @@ mod tests {
     async fn test_private_table_flag(db: TdPool) -> Result<(), TdError> {
         let collection_name_1 = CollectionName::try_from("collection_1")?;
         let collection_1 = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&collection_name_1, &UserId::admin())
             .await?;
@@ -1565,7 +1658,10 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
-        db.seed().function(&collection_1, &create).await?;
+        db.scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection_1, &create)
+            .await?;
 
         let tables = Some(vec![
             TableNameDto::try_from("table0")?,
@@ -1610,6 +1706,7 @@ mod tests {
     async fn test_update_maintain_triggers_dependencies(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -1627,7 +1724,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let created_function = db.seed().function(&collection, &create).await?;
+        let created_function = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         let dependant = FunctionRegister::builder()
             .try_name("function_2")?
@@ -1642,7 +1743,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _ = db.seed().function(&collection, &dependant).await?;
+        let _ = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &dependant)
+            .await?;
 
         let update = FunctionUpdate::builder()
             .name(Some("function_1".try_into()?))
@@ -1722,6 +1827,7 @@ mod tests {
     async fn test_update_remove_triggers_dependencies(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -1739,7 +1845,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _ = db.seed().function(&collection, &create).await?;
+        let _ = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         let dependant = FunctionRegister::builder()
             .try_name("function_2")?
@@ -1754,7 +1864,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let dependant_function = db.seed().function(&collection, &dependant).await?;
+        let dependant_function = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &dependant)
+            .await?;
 
         let update = FunctionUpdate::builder()
             .name(Some("function_2".try_into()?))
@@ -1815,6 +1929,7 @@ mod tests {
     async fn test_workers_created(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -1833,7 +1948,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .workers(None)
             .build()?;
-        let function_db = db.seed().function(&collection, &create).await?;
+        let function_db = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
         let workers: Vec<WorkerDB> = db
             .live()
             .fetch_all::<WorkerDB>(&function_db.id)
@@ -2045,6 +2164,7 @@ mod tests {
     async fn test_multiple_workers_error(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -2063,7 +2183,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .workers(None)
             .build()?;
-        let function_db = db.seed().function(&collection, &create).await?;
+        let function_db = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
         let workers: Vec<WorkerDB> = db
             .live()
             .fetch_all::<WorkerDB>(&function_db.id)

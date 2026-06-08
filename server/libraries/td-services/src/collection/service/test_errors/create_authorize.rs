@@ -12,7 +12,7 @@ use td_objects::dxo::crudl::RequestContext;
 use td_objects::types::basic::{
     AccessTokenId, CollectionName, Description, ProjectId, RoleId, UserId,
 };
-use td_tower::project_scope::InProject;
+use td_database::scoped::InProject;
 
 #[td_test::test(db)]
 async fn test_not_allowed_to_create_collection(db: TdPool) {

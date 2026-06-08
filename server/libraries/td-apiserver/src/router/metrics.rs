@@ -25,7 +25,7 @@ mod routes {
     use td_objects::rest_urls::{INFLIGHT, METRICS, SNAPSHOT};
     use td_objects::types::basic::{EpochMs, LogicalFunctionRunStatus, ProjectId};
     use td_services::metrics::services::OperationalMetricsServices;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
     use tower::ServiceExt;
 
     const METRICS_TAG: &str = "Metrics";

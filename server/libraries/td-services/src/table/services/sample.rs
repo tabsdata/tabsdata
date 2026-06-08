@@ -92,7 +92,7 @@ mod tests {
     use td_storage::location::StorageLocation;
     use td_storage::{MountDef, Storage};
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
     use url::Url;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -104,7 +104,7 @@ mod tests {
         use td_objects::types::basic::{Sql, TableId, TableIdName, TriggeredOn, UncommittedStatus};
 
         use td_tower::metadata::type_of_val;
-        use td_tower::project_scope::Scoped;
+        use td_database::scoped::Scoped;
 
         fn dummy_file() -> String {
             if cfg!(target_os = "windows") {
@@ -183,6 +183,7 @@ mod tests {
         let storage = Arc::new(storage);
 
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -203,19 +204,32 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let function_version = db.seed().function(&collection, &create).await?;
+        let function_version = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         let storage_location = StorageVersion::default();
 
         // 3 function runs, 2 with data and 1 without, per table
         let mut at_times = vec![AtTime::now()];
         for i in 0..3 {
-            let execution = db.seed().execution(&function_version).await?;
+            let execution = db
+                .scoped(ProjectId::sandbox())
+                .seed()
+                .execution(&function_version)
+                .await?;
             let transaction_key = TransactionKey::try_from("ANY")?;
-            let transaction = db.seed().transaction(&execution, &transaction_key).await?;
+            let transaction = db
+                .scoped(ProjectId::sandbox())
+                .seed()
+                .transaction(&execution, &transaction_key)
+                .await?;
 
             at_times.push(AtTime::now());
             let physical_function_run = db
+                .scoped(ProjectId::sandbox())
                 .seed()
                 .physical_function_run(
                     &collection,
@@ -233,6 +247,7 @@ mod tests {
 
                 if i % 2 == 0 {
                     let physical_table_data_version = db
+                        .scoped(ProjectId::sandbox())
                         .seed()
                         .physical_table_data_version_with_data(
                             &collection,
@@ -289,7 +304,8 @@ mod tests {
                     .collect()
                     .unwrap();
                 } else {
-                    db.seed()
+                    db.scoped(ProjectId::sandbox())
+                        .seed()
                         .physical_table_data_version(
                             &collection,
                             &execution,

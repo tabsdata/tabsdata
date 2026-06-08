@@ -7,8 +7,8 @@
 //! per-DAO seed method:
 //!
 //! ```ignore
-//! let collection = db.seed().collection(&name, &user).await?;
-//! let function = db.seed().function(&collection, &create).await?;
+//! let collection = db.scoped(ProjectId::sandbox()).seed().collection(&name, &user).await?;
+//! let function = db.scoped(ProjectId::sandbox()).seed().function(&collection, &create).await?;
 //! ```
 //!
 //! Only the `test-utils` feature exposes this surface — production code
@@ -31,10 +31,8 @@ use crate::test_utils::seed_system_tables::seed_system_tables;
 use crate::test_utils::seed_transaction::seed_transaction;
 use crate::test_utils::seed_user::seed_user;
 use crate::test_utils::seed_user_role::seed_user_role;
-use crate::LiveEntry;
 use crate::test_utils::seed_worker::{seed_function_runner_worker, seed_worker};
-use ta_objects::Dao;
-use td_database::dynamic::DynamicConnection;
+use crate::QueryExecutor;
 use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionDB;
@@ -55,106 +53,38 @@ use td_objects::dxo::user_role::UserRoleDB;
 use td_objects::dxo::worker::WorkerDB;
 use td_objects::types::basic::{
     CollectionId, CollectionName, DependencyPos, Description, EntityId, EntityName, GroupId,
-    GroupName, LogicalFunctionRunStatus, PermissionType, ProjectId, ProjectName, RoleId, RoleName,
+    GroupName, LogicalFunctionRunStatus, PermissionType, ProjectName, RoleId, RoleName,
     ToCollectionId, TransactionKey, UserEnabled, UserId, UserName, VersionPos, WorkerMessageStatus,
     WorkerStatus, WorkerType,
 };
-use td_tower::error::ConnectionError;
 
 query_handle! {
     /// Entry trait providing [`seed`](SeedEntry::seed) on every
-    /// [`QueryExecutor`](crate::QueryExecutor). Returns a [`Seed`] handle.
+    /// [`QueryExecutor`](crate::QueryExecutor) — exactly like
+    /// [`live`](crate::LiveEntry::live) / [`current`](crate::CurrentEntry::current).
+    /// Returns a [`Seed`] handle that delegates straight to the executor: it
+    /// adds **no** scope of its own. Whether the writes are project-scoped is
+    /// the caller's choice of executor — `db.scoped(p).seed()` scopes to `p`,
+    /// while a bare pool `seed()` (no surrounding `.scoped`) runs unscoped, so
+    /// field-less, RLS-defaulted seeds fail unless the caller scoped it.
     pub trait SeedEntry {
         fn seed(self) -> Seed<Self> {
-            Seed {
-                executor: self,
-                project: td_objects::types::basic::ProjectId::sandbox(),
-            }
+            Seed { executor: self }
         }
     }
 }
 
 pub struct Seed<E> {
     pub(crate) executor: E,
-    /// Project the field-less seeds scope their writes to. Defaults to
-    /// `sandbox`; override with [`Seed::in_project`].
-    pub(crate) project: ProjectId,
 }
 
-// Seeds operate on a pool: the field-less ones scope their writes via
-// `in_project` (which must `begin` a transaction), so the executor is the
-// concrete `&TdPool` rather than an arbitrary `QueryExecutor`.
-impl Seed<&TdPool> {
-    /// Target a project for this handle's field-less seeds (default `sandbox`).
-    /// `db.seed().in_project(p).collection(..)` lands the collection in `p`.
-    pub fn in_project(mut self, project: ProjectId) -> Self {
-        self.project = project;
-        self
-    }
-
-    /// Run `f` in a transaction scoped to this handle's project (`SET LOCAL
-    /// app.project_id`), committing on `Ok` and rolling back on `Err`. Field-
-    /// less seeds route through here so their rows default `project_id` to it;
-    /// `seed_project` reuses it (with `in_project(new_project)`) for the system
-    /// groups of a freshly-created project. No-op scope on non-PostgreSQL.
-    pub(crate) async fn scoped<F, T>(&self, f: F) -> Result<T, TdError>
-    where
-        F: AsyncFnOnce(&mut DynamicConnection<'_>) -> Result<T, TdError>,
-    {
-        let tx = self
-            .executor
-            .begin()
-            .await
-            .map_err(ConnectionError::CannotBeginTransaction)?;
-        // Own the transaction inside the connection so it can be recovered and
-        // committed once the closure's borrow ends.
-        let mut conn = tx.into_connection();
-        conn.set_project_scope(&self.project.to_string())
-            .await
-            .map_err(ConnectionError::CannotSetProjectScope)?;
-
-        match f(&mut conn).await {
-            Ok(value) => {
-                let tx = conn
-                    .into_transaction()
-                    .expect("scoped connection always owns its transaction");
-                tx.commit()
-                    .await
-                    .map_err(ConnectionError::CannotCommitTransaction)?;
-                Ok(value)
-            }
-            Err(err) => {
-                if let Some(tx) = conn.into_transaction() {
-                    let _ = tx.rollback().await;
-                }
-                Err(err)
-            }
-        }
-    }
-
-    /// Insert a single pre-built row scoped to this handle's project — the
-    /// test analog of how production defaults `project_id` from the
-    /// connection's `app.project_id`. For bespoke test rows that don't warrant
-    /// a named seed method but whose DAO is field-less (`FunctionPatchDB`,
-    /// `TableDB`, `LogicalFunctionRunInputDB`, …): those default their
-    /// `project_id` from the scope, so a plain unscoped `conn.live().insert`
-    /// would NULL-violate. DAOs that carry an explicit `project_id` can be
-    /// inserted directly without this.
-    pub async fn insert<D: Dao>(&self, dao: &D) -> Result<(), TdError> {
-        self.scoped(async |conn| {
-            conn.live().insert::<D>(dao).await?;
-            Ok(())
-        })
-        .await
-    }
-
+impl<E: QueryExecutor> Seed<E> {
     pub async fn collection(
         self,
         collection_name: &CollectionName,
         created_by: &UserId,
     ) -> Result<CollectionDB, TdError> {
-        self.scoped(async |conn| seed_collection(conn, collection_name, created_by).await)
-            .await
+        seed_collection(self.executor, collection_name, created_by).await
     }
 
     pub async fn collection_in_group(
@@ -163,23 +93,18 @@ impl Seed<&TdPool> {
         created_by: &UserId,
         group_id: GroupId,
     ) -> Result<CollectionDB, TdError> {
-        self.scoped(async |conn| {
-            seed_collection_in_group(conn, collection_name, created_by, group_id).await
-        })
-        .await
+        seed_collection_in_group(self.executor, collection_name, created_by, group_id).await
     }
 
     pub async fn execution(self, function_version: &FunctionDB) -> Result<ExecutionDB, TdError> {
-        self.scoped(async |conn| seed_execution(conn, function_version).await)
-            .await
+        seed_execution(self.executor, function_version).await
     }
 
     pub async fn cron_execution(
         self,
         function_version: &FunctionDB,
     ) -> Result<ExecutionDB, TdError> {
-        self.scoped(async |conn| seed_cron_execution(conn, function_version).await)
-            .await
+        seed_cron_execution(self.executor, function_version).await
     }
 
     pub async fn function(
@@ -187,8 +112,7 @@ impl Seed<&TdPool> {
         collection: &CollectionDB,
         function_create: &FunctionRegister,
     ) -> Result<FunctionDB, TdError> {
-        self.scoped(async |conn| seed_function(conn, collection, function_create).await)
-            .await
+        seed_function(self.executor, collection, function_create).await
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -204,21 +128,18 @@ impl Seed<&TdPool> {
         requirement_dependency_pos: Option<&DependencyPos>,
         requirement_version_pos: &VersionPos,
     ) -> Result<LogicalFunctionRunInputDB, TdError> {
-        self.scoped(async |conn| {
-            seed_logical_input(
-                conn,
-                collection,
-                execution,
-                transaction,
-                physical_function_run,
-                requirement_table,
-                requirement_function_run,
-                requirement_table_data_version,
-                requirement_dependency_pos,
-                requirement_version_pos,
-            )
-            .await
-        })
+        seed_logical_input(
+            self.executor,
+            collection,
+            execution,
+            transaction,
+            physical_function_run,
+            requirement_table,
+            requirement_function_run,
+            requirement_table_data_version,
+            requirement_dependency_pos,
+            requirement_version_pos,
+        )
         .await
     }
 
@@ -246,10 +167,7 @@ impl Seed<&TdPool> {
         from_collection: &CollectionId,
         to_collection: &ToCollectionId,
     ) -> Result<InterCollectionPermissionDB, TdError> {
-        self.scoped(async |conn| {
-            seed_inter_collection_permission(conn, from_collection, to_collection).await
-        })
-        .await
+        seed_inter_collection_permission(self.executor, from_collection, to_collection).await
     }
 
     pub async fn permission(
@@ -273,22 +191,16 @@ impl Seed<&TdPool> {
         seed_role(self.executor, name, description).await
     }
 
-    pub async fn project(self, name: ProjectName) -> Result<ProjectDB, TdError> {
-        seed_project(self.executor, name).await
-    }
-
     pub async fn group(
         self,
         name: GroupName,
         description: Description,
     ) -> Result<GroupDB, TdError> {
-        self.scoped(async |conn| seed_group(conn, name, description).await)
-            .await
+        seed_group(self.executor, name, description).await
     }
 
     pub async fn system_tables(self, function: &FunctionDB) -> Result<Vec<TableDB>, TdError> {
-        self.scoped(async |conn| seed_system_tables(conn, function).await)
-            .await
+        seed_system_tables(self.executor, function).await
     }
 
     pub async fn physical_table_data_version(
@@ -334,8 +246,7 @@ impl Seed<&TdPool> {
         execution: &ExecutionDB,
         transaction_key: &TransactionKey,
     ) -> Result<TransactionDB, TdError> {
-        self.scoped(async |conn| seed_transaction(conn, execution, transaction_key).await)
-            .await
+        seed_transaction(self.executor, execution, transaction_key).await
     }
 
     pub async fn user(self, name: &UserName, enabled: &UserEnabled) -> Result<UserDB, TdError> {
@@ -380,5 +291,14 @@ impl Seed<&TdPool> {
             status,
         )
         .await
+    }
+}
+
+// `project` seeds the global `projects` registry and scopes its own group
+// inserts to the new project, so it needs the concrete pool (not a scoped
+// executor) — hence it lives only on `db.scoped(ProjectId::sandbox()).seed()`.
+impl Seed<&TdPool> {
+    pub async fn project(self, name: ProjectName) -> Result<ProjectDB, TdError> {
+        seed_project(self.executor, name).await
     }
 }

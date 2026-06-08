@@ -468,6 +468,12 @@ mod tests {
         CollectionId::try_from("00000000000000000000000C00").unwrap()
     }
 
+    /// Stable group id for the synthetic rows (same rationale as
+    /// [`fixed_collection_id`]); the value is arbitrary, only stability matters.
+    fn fixed_group_id() -> GroupId {
+        GroupId::try_from("00000000000000000000000208").unwrap()
+    }
+
     fn node(bucket_ms: i64, status: LogicalFunctionRunStatus, fn_runs: i64) -> NodeRow {
         NodeRow {
             bucket: EpochMs::try_from(bucket_ms).unwrap(),
@@ -476,7 +482,7 @@ mod tests {
             kind: NodeKind::Dim,
             collection_id: Some(fixed_collection_id()),
             collection_name: Some(CollectionName::try_from("test_coll").unwrap()),
-            group_id: Some(GroupId::default_group()),
+            group_id: Some(fixed_group_id()),
             group_name: Some(GroupName::default_group()),
             status,
             fn_runs,
@@ -840,7 +846,7 @@ mod tests {
                 kind: NodeKind::Dim,
                 collection_id: Some(CollectionId::default()),
                 collection_name: Some(CollectionName::try_from("test_coll").unwrap()),
-                group_id: Some(GroupId::default_group()),
+                group_id: Some(fixed_group_id()),
                 group_name: Some(GroupName::default_group()),
                 status: LogicalFunctionRunStatus::Done,
                 fn_runs: 1,

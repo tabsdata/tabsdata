@@ -55,7 +55,7 @@ mod tests {
             .function_version_id(&key)
             .name(FunctionName::try_from("name")?)
             .enabled(Enabled::TRUE)
-            .group_id(GroupId::default_group())
+            .group_id(GroupId::default())
             .build()?;
 
         assert_eq!(

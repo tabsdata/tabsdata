@@ -125,8 +125,9 @@ mod tests {
     use td_objects::dxo::table::TableDBBuilder;
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BundleId, CollectionName, Decorator, FunctionRuntimeValues,
-        FunctionVersionId, LogicalFunctionRunStatus, Private, RoleId, TableFunctionParamPos,
-        TableId, TableName, TableNameDto, TableStatus, TransactionKey, UserId,
+        FunctionVersionId, LogicalFunctionRunStatus, Private, ProjectId, RoleId,
+        TableFunctionParamPos, TableId, TableName, TableNameDto, TableStatus, TransactionKey,
+        UserId,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
@@ -159,6 +160,7 @@ mod tests {
     /// private row is inserted via `TableDBBuilder` directly.
     async fn seed_mint_fixture(db: &TdPool) -> Result<MintFixture, TdError> {
         let coll = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
@@ -174,8 +176,15 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("rv")?)
             .reuse_frozen_tables(false)
             .build()?;
-        let func = db.seed().function(&coll, &create).await?;
-        db.seed().system_tables(&func).await?;
+        let func = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&coll, &create)
+            .await?;
+        db.scoped(ProjectId::sandbox())
+            .seed()
+            .system_tables(&func)
+            .await?;
 
         let request_context = td_objects::dxo::crudl::RequestContext::with(
             AccessTokenId::default(),
@@ -194,15 +203,24 @@ mod tests {
             .private(Private::TRUE)
             .status(TableStatus::Active)
             .build()?;
-        db.seed().insert(&private).await?;
+        db.scoped(ProjectId::sandbox())
+            .live()
+            .insert(&private)
+            .await?;
 
         let tables: Vec<TableDB> = db.live().fetch_all::<TableDB>(&func.id).await?;
-        let exec = db.seed().execution(&func).await?;
+        let exec = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .execution(&func)
+            .await?;
         let txn = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .transaction(&exec, &TransactionKey::try_from("ANY")?)
             .await?;
         let pfr = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_function_run(
                 &coll,

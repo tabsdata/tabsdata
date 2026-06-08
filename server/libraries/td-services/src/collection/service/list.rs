@@ -40,6 +40,7 @@ mod tests {
     use ta_services::service::TdService;
     use td_authz::AuthzContext;
     use td_database::pool::TdPool;
+    use td_database::scoped::InProject;
     use td_error::TdError;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::types::basic::{
@@ -48,13 +49,12 @@ mod tests {
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::project_scope::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_list_collections(db: TdPool) {
+        use td_database::scoped::Scoped;
         use td_tower::metadata::type_of_val;
-        use td_tower::project_scope::Scoped;
 
         ListCollectionsService::with_defaults(db)
             .metadata()
@@ -73,7 +73,12 @@ mod tests {
     #[td_test::test(db)]
     async fn test_list_collection(db: TdPool) {
         let name = CollectionName::try_from("ds0").unwrap();
-        let _ = db.seed().collection(&name, &UserId::admin()).await.unwrap();
+        let _ = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .collection(&name, &UserId::admin())
+            .await
+            .unwrap();
 
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
@@ -106,7 +111,11 @@ mod tests {
 
         // Create a collection
         let name = CollectionName::try_from("ds0")?;
-        let _ = db.seed().collection(&name, &UserId::admin()).await?;
+        let _ = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .collection(&name, &UserId::admin())
+            .await?;
 
         // All collections are visible to authorized users
         let request =

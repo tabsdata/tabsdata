@@ -131,13 +131,13 @@ mod tests {
     use td_objects::types::composed::{TableDependency, TableDependencyDto, TableTriggerDto};
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_read_function_version(db: TdPool) {
         use td_tower::metadata::type_of_val;
-        use td_tower::project_scope::Scoped;
+        use td_database::scoped::Scoped;
 
         ReadFunctionService::with_defaults(db)
             .metadata()
@@ -230,6 +230,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_read(db: TdPool) -> Result<(), TdError> {
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&CollectionName::try_from("cofnig")?, &UserId::admin())
             .await?;
@@ -255,7 +256,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let function = db.seed().function(&collection, &create).await?;
+        let function = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())

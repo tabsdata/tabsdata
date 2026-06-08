@@ -3,26 +3,37 @@
 //
 
 use crate::LiveEntry;
+use crate::QueryExecutor;
 use ta_objects::Buildable;
-use td_database::dynamic::DynamicConnection;
 use td_error::TdError;
 use td_objects::dxo::collection::{CollectionCreateDB, CollectionDB};
-use td_objects::types::basic::{AtTime, CollectionName, Description, GroupId, UserId};
+use td_objects::dxo::group::GroupDB;
+use td_objects::types::basic::{AtTime, CollectionName, Description, GroupId, GroupName, UserId};
 
 pub(crate) async fn seed_collection(
-    conn: &mut DynamicConnection<'_>,
+    mut executor: impl QueryExecutor,
     collection_name: &CollectionName,
     created_by: &UserId,
 ) -> Result<CollectionDB, TdError> {
-    seed_collection_in_group(conn, collection_name, created_by, GroupId::default_group()).await
+    // Assign the collection to its project's own `default` group. If the caller
+    // runs this on a project-scoped executor (`db.scoped(p)`), the group
+    // resolves by name within that project — each project mints its own
+    // `default` group with a distinct id (only `sandbox`'s is the fixed
+    // bootstrap id), so a hardcoded id would belong to the wrong project.
+    let default_group = executor
+        .reuse()
+        .live()
+        .fetch_one::<GroupDB>(&GroupName::default_group())
+        .await?;
+    seed_collection_in_group(executor, collection_name, created_by, default_group.id).await
 }
 
 /// Seed a collection assigned to a specific group. The plain
-/// [`seed_collection`] entrypoint delegates here with the `default` group.
-/// Runs on a project-scoped connection (see [`Seed::scoped`]); the field-less
-/// `CollectionCreateDB` defaults its `project_id` from that scope.
+/// [`seed_collection`] entrypoint delegates here with the `default` group. The
+/// field-less `CollectionCreateDB` defaults its `project_id` from the
+/// executor's scope, so the caller picks the project via `db.scoped(p)`.
 pub(crate) async fn seed_collection_in_group(
-    conn: &mut DynamicConnection<'_>,
+    mut executor: impl QueryExecutor,
     collection_name: &CollectionName,
     created_by: &UserId,
     group_id: GroupId,
@@ -38,12 +49,12 @@ pub(crate) async fn seed_collection_in_group(
         .group_id(group_id)
         .build()?;
 
-    conn.live().insert(&collection).await?;
+    executor.reuse().live().insert(&collection).await?;
 
     // Read the row back so the returned model carries the DB-assigned
     // `project_id` (the scope's project), rather than guessing it. The `?`
     // converts `SqlError` into `TdError`.
-    Ok(conn
+    Ok(executor
         .live()
         .fetch_one::<CollectionDB>(&collection.id)
         .await?)
@@ -55,12 +66,13 @@ mod tests {
     use crate::test_utils::SeedEntry;
     use td_database::pool::TdPool;
     use td_objects::dxo::collection::CollectionDB;
-    use td_objects::types::basic::{CollectionName, UserId};
+    use td_objects::types::basic::{CollectionName, ProjectId, UserId};
     use td_security::ENCODED_ID_SYSTEM;
 
     #[td_test::test(db)]
     async fn test_seed_collection(db: TdPool) {
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(
                 &CollectionName::try_from("collection").unwrap(),
@@ -69,6 +81,8 @@ mod tests {
             .await
             .unwrap();
 
+        // Read it back through a project-scoped executor: serving connections
+        // run as `td_app` under RLS, so an unscoped `db.live()` would see nothing.
         let found = db
             .live()
             .fetch_one::<CollectionDB>(&collection.id)

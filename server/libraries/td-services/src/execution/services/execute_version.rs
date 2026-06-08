@@ -90,7 +90,7 @@ mod tests {
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -136,7 +136,7 @@ mod tests {
         use td_objects::types::recursion::RecursionOptions;
         use td_queries::{insert, insert_vec};
         use td_tower::metadata::type_of_val;
-        use td_tower::project_scope::Scoped;
+        use td_database::scoped::Scoped;
 
         ExecuteFunctionVersionService::with_defaults(db)
             .metadata()
@@ -402,6 +402,7 @@ mod tests {
         skip_if_running: SkipIfRunning,
     ) -> Result<(FunctionDB, ExecutionResponse), TdError> {
         let collection_0 = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&CollectionName::try_from("collection_0")?, &UserId::admin())
             .await?;
@@ -420,18 +421,37 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
-        let function = db.seed().function(&collection_0, &create).await?;
+        let function = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection_0, &create)
+            .await?;
 
         if let Some(previous_run) = previous_run {
             let execution = match previous_run.trigger_type {
-                TriggerType::Manual => db.seed().execution(&function).await?,
-                TriggerType::CronTrigger => db.seed().cron_execution(&function).await?,
+                TriggerType::Manual => {
+                    db.scoped(ProjectId::sandbox())
+                        .seed()
+                        .execution(&function)
+                        .await?
+                }
+                TriggerType::CronTrigger => {
+                    db.scoped(ProjectId::sandbox())
+                        .seed()
+                        .cron_execution(&function)
+                        .await?
+                }
                 _ => panic!("Unexpected trigger type"),
             };
             let transaction_key = TransactionKey::try_from("ANY")?;
-            let transaction = db.seed().transaction(&execution, &transaction_key).await?;
+            let transaction = db
+                .scoped(ProjectId::sandbox())
+                .seed()
+                .transaction(&execution, &transaction_key)
+                .await?;
 
             let _function_run = db
+                .scoped(ProjectId::sandbox())
                 .seed()
                 .physical_function_run(
                     &collection_0,
@@ -466,6 +486,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_execute_version_previous_version_err(db: TdPool) -> Result<(), TdError> {
         let collection_0 = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&CollectionName::try_from("collection_0")?, &UserId::admin())
             .await?;
@@ -484,7 +505,11 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
-        let function = db.seed().function(&collection_0, &create).await?;
+        let function = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection_0, &create)
+            .await?;
 
         // Dummy update to create new version
         let update = FunctionUpdate::builder().name(function_0).build()?;
@@ -535,6 +560,7 @@ mod tests {
 
     async fn seed_dedup_function(db: &TdPool) -> Result<FunctionDB, TdError> {
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&CollectionName::try_from("dedup_coll")?, &UserId::admin())
             .await?;
@@ -550,7 +576,10 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("rv")?)
             .reuse_frozen_tables(false)
             .build()?;
-        db.seed().function(&collection, &create).await
+        db.scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await
     }
 
     async fn trigger_with_external_uid(

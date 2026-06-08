@@ -48,23 +48,23 @@ mod tests {
     use super::*;
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
+    use td_database::scoped::InProject;
     use td_error::TdError;
-    use td_objects::Buildable;
     use td_objects::dxo::crudl::ListParams;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, Description, FunctionName, ProjectId,
         RoleId, RoleName, UserEnabled, UserId, UserName,
     };
+    use td_objects::Buildable;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::project_scope::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_list_function_versions(db: TdPool) {
+        use td_database::scoped::Scoped;
         use td_tower::metadata::type_of_val;
-        use td_tower::project_scope::Scoped;
 
         FunctionListService::with_defaults(db)
             .metadata()
@@ -93,6 +93,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_list_current_functions(db: TdPool) -> Result<(), TdError> {
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -110,7 +111,11 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let _ = db.seed().function(&collection, &create).await?;
+        let _ = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         // Create function_2
         let create = FunctionRegister::builder()
@@ -125,7 +130,11 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let _ = db.seed().function(&collection, &create).await?;
+        let _ = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         // List current functions
         let request =
@@ -162,6 +171,7 @@ mod tests {
 
         // Create collection
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -179,7 +189,11 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let _ = db.seed().function(&collection, &create).await?;
+        let _ = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         // Create function_2
         let create = FunctionRegister::builder()
@@ -194,7 +208,11 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let _ = db.seed().function(&collection, &create).await?;
+        let _ = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         // All functions should be listed for authorized user
         let request = RequestContext::with(

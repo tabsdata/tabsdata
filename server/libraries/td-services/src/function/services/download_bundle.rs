@@ -66,15 +66,16 @@ mod tests {
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionVersionId, ProjectId, RoleId,
         UserId,
     };
+    use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_download_bundle(db: TdPool) {
         use td_tower::metadata::type_of_val;
-        use td_tower::project_scope::Scoped;
+        use td_database::scoped::Scoped;
 
         DownloadBundleService::with_defaults(db)
             .metadata()
@@ -103,6 +104,7 @@ mod tests {
 
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -123,7 +125,11 @@ mod tests {
             .try_runtime_values("rv")?
             .reuse_frozen_tables(false)
             .build()?;
-        let v1 = db.seed().function(&collection, &create_v1).await?;
+        let v1 = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create_v1)
+            .await?;
 
         // Snapshot time after v1 but before v2 — historic ranked-CTE at this
         // time must see v1 only.
@@ -141,7 +147,7 @@ mod tests {
             .bundle_id(bundle_b_id)
             .defined_on(AtTime::now())
             .build()?;
-        db.seed().insert(&v2).await?;
+        db.scoped(ProjectId::sandbox()).live().insert(&v2).await?;
 
         let function_param = FunctionParam::builder()
             .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)

@@ -127,13 +127,13 @@ mod tests {
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_delete_function(db: TdPool) {
         use td_tower::metadata::type_of_val;
-        use td_tower::project_scope::Scoped;
+        use td_database::scoped::Scoped;
 
         use crate::function::layers::register::{
             build_dependency_versions, build_table_versions, build_tables_trigger_versions,
@@ -235,6 +235,7 @@ mod tests {
     async fn test_delete_function(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -252,7 +253,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let created_function = db.seed().function(&collection, &create).await?;
+        let created_function = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
@@ -281,6 +286,7 @@ mod tests {
     async fn test_delete_function_with_tables(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -301,7 +307,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let created_function = db.seed().function(&collection, &create).await?;
+        let created_function = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
@@ -330,6 +340,7 @@ mod tests {
     async fn test_delete_function_with_dependencies(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -347,7 +358,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _ = db.seed().function(&collection, &trigger_create).await?;
+        let _ = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &trigger_create)
+            .await?;
 
         let create = FunctionRegister::builder()
             .try_name("joaquin_workout")?
@@ -362,7 +377,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let created_function = db.seed().function(&collection, &create).await?;
+        let created_function = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
@@ -391,6 +410,7 @@ mod tests {
     async fn test_delete_function_with_triggers(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -408,7 +428,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _ = db.seed().function(&collection, &trigger_create).await?;
+        let _ = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &trigger_create)
+            .await?;
 
         let create = FunctionRegister::builder()
             .try_name("joaquin_workout")?
@@ -423,7 +447,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let created_function = db.seed().function(&collection, &create).await?;
+        let created_function = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
@@ -452,6 +480,7 @@ mod tests {
     async fn test_delete_function_unique(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -469,7 +498,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _ = db.seed().function(&collection, &trigger_create).await?;
+        let _ = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &trigger_create)
+            .await?;
 
         let create_1 = FunctionRegister::builder()
             .try_name("joaquin_workout_1")?
@@ -511,7 +544,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let created_function_2 = db.seed().function(&collection, &create_2).await?;
+        let created_function_2 = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create_2)
+            .await?;
 
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
@@ -556,6 +593,7 @@ mod tests {
     async fn test_delete_workers(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;

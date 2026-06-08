@@ -29,7 +29,7 @@ mod routes {
     };
     use td_objects::types::basic::ProjectId;
     use td_services::execution::services::ExecutionServices;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
     use tower::ServiceExt;
 
     const EXECUTION_TAG: &str = "Execution";

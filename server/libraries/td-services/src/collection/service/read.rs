@@ -50,13 +50,13 @@ mod tests {
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_read_collection(db: TdPool) {
         use td_tower::metadata::type_of_val;
-        use td_tower::project_scope::Scoped;
+        use td_database::scoped::Scoped;
 
         ReadCollectionService::with_defaults(db)
             .metadata()
@@ -79,7 +79,11 @@ mod tests {
     async fn test_read_collection(db: TdPool) {
         let before = AtTime::now();
         let name = CollectionName::try_from("ds0").unwrap();
-        let _ = db.seed().collection(&name, &UserId::admin()).await;
+        let _ = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .collection(&name, &UserId::admin())
+            .await;
 
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())

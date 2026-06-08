@@ -48,7 +48,7 @@ mod tests {
     use td_objects::dxo::query_filters::{DimensionFilter, TimeWindow, WindowUnit};
     use td_objects::types::basic::ProjectId;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
 
     #[td_test::test(db)]
     async fn test_snapshot_empty_window(db: TdPool) -> Result<(), TdError> {

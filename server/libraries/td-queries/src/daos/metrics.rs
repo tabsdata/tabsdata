@@ -42,8 +42,8 @@ use sea_query::{
     Alias, Expr, ExprTrait, Func, IntoIden, JoinType, NullOrdering, Order, Query, SelectStatement,
     SimpleExpr, UnionType, Value,
 };
-use ta_objects::SeaValue;
 use ta_objects::errors::SqlError;
+use ta_objects::SeaValue;
 use td_database::sea_query::builder::SeaQueryExt;
 use td_objects::dxo::collection::CollectionDBIden;
 use td_objects::dxo::group::GroupDBIden;
@@ -1526,13 +1526,14 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::SeedEntry;
     use crate::CurrentEntry;
     use crate::LiveEntry;
-    use crate::test_utils::SeedEntry;
-    use ta_objects::Buildable;
     use ta_objects::and;
+    use ta_objects::Buildable;
     use td_database::pool::TdPool;
     use td_error::TdError;
+    use td_objects::dxo::collection::CollectionDB;
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
     use td_objects::dxo::logical::{
         LogicalFunctionRunDB, LogicalFunctionRunInputDB, LogicalPointerDao,
@@ -1551,7 +1552,7 @@ mod tests {
         LogicalFunctionRunStatus, LogicalPointerReason, LogicalPointerStatus, RowCount,
         TableFunctionParamPos, TableNameDto, TableVersionCount, TransactionKey, VersionPos,
     };
-    use td_objects::types::basic::{CollectionName, UserId};
+    use td_objects::types::basic::{CollectionName, ProjectId, UserId};
     use td_security::ENCODED_ID_SYSTEM;
 
     const WINDOW_DAY_START: i64 = 1_700_000_000_000; // arbitrary day in Nov 2023
@@ -1592,7 +1593,10 @@ mod tests {
             .try_runtime_values("rv")?
             .reuse_frozen_tables(false)
             .build()?;
-        db.seed().function(collection, &create).await
+        db.scoped(ProjectId::sandbox())
+            .seed()
+            .function(collection, &create)
+            .await
     }
 
     async fn stamp_buckets_on_pfr(db: &TdPool, pfr: &PhysicalFunctionRunDB) -> Result<(), TdError> {
@@ -1609,7 +1613,8 @@ mod tests {
             .metric_rows(Some(RowCount::try_from(10)?))
             .metric_data_bytes(Some(ByteCount::try_from(100)?))
             .build()?;
-        db.live()
+        db.scoped(ProjectId::sandbox())
+            .live()
             .update::<_, PhysicalFunctionRunDB>(&update, &pfr.id)
             .await?;
         Ok(())
@@ -1648,7 +1653,8 @@ mod tests {
             )
             .triggered_on(pfr.triggered_on)
             .build()?;
-        db.live()
+        db.scoped(ProjectId::sandbox())
+            .live()
             .insert::<PhysicalTableDataVersionDB>(&ptdv)
             .await?;
         let pointer = LogicalTableDataVersionPointerDB::build_event(
@@ -1660,7 +1666,8 @@ mod tests {
             ltdv.triggered_by_id,
             LogicalPointerReason::InitialDispatch,
         )?;
-        db.live()
+        db.scoped(ProjectId::sandbox())
+            .live()
             .insert::<LogicalTableDataVersionPointerDB>(&pointer)
             .await?;
         Ok(ptdv)
@@ -1675,13 +1682,14 @@ mod tests {
         fn_name: &str,
     ) -> Result<
         (
-            td_objects::dxo::collection::CollectionDB,
+            CollectionDB,
             LogicalFunctionRunDB,
             LogicalTableDataVersionDB,
         ),
         TdError,
     > {
         let coll = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(
                 &CollectionName::try_from(coll_name)?,
@@ -1689,12 +1697,18 @@ mod tests {
             )
             .await?;
         let func = make_publisher_function(db, &coll, fn_name).await?;
-        let exec = db.seed().execution(&func).await?;
+        let exec = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .execution(&func)
+            .await?;
         let trx = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .transaction(&exec, &TransactionKey::try_from("ANY")?)
             .await?;
         let pfr = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_function_run(&coll, &func, &exec, &trx, &LogicalFunctionRunStatus::Done)
             .await?;
@@ -1731,8 +1745,7 @@ mod tests {
             groups: DimensionFilter::default(),
             statuses: vec![],
         };
-        let mut conn = db.acquire().await.unwrap();
-        let rows = conn.metrics().inflight(&req).await?;
+        let rows = db.metrics().inflight(&req).await?;
         assert!(rows.is_empty(), "no runs yet, got {rows:?}");
         Ok(())
     }
@@ -1742,8 +1755,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_nodes_empty_window(db: TdPool) -> Result<(), TdError> {
         let req = empty_request(Dim::Collection);
-        let mut conn = db.acquire().await.unwrap();
-        let nodes = conn.metrics().metrics_nodes(&req).await?;
+        let nodes = db.metrics().metrics_nodes(&req).await?;
         assert!(nodes.is_empty(), "empty DB → empty nodes, got {nodes:?}");
         Ok(())
     }
@@ -1753,8 +1765,7 @@ mod tests {
         let (coll, _lfr, _ltdv) = seed_publisher_with_ltdv(&db, "pub_coll", "pub_fn").await?;
 
         let req = empty_request(Dim::Collection);
-        let mut conn = db.acquire().await.unwrap();
-        let nodes = conn.metrics().metrics_nodes(&req).await?;
+        let nodes = db.metrics().metrics_nodes(&req).await?;
 
         assert_eq!(
             nodes.len(),
@@ -1780,8 +1791,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_edges_empty_window(db: TdPool) -> Result<(), TdError> {
         let req = empty_request(Dim::Collection);
-        let mut conn = db.acquire().await.unwrap();
-        let edges = conn.metrics().metrics_edges(&req).await?;
+        let edges = db.metrics().metrics_edges(&req).await?;
         assert!(edges.is_empty(), "empty DB → empty edges, got {edges:?}");
         Ok(())
     }
@@ -1796,8 +1806,7 @@ mod tests {
         let (coll, _, _ltdv) = seed_publisher_with_ltdv(&db, "pub_synth", "pub_synth_fn").await?;
 
         let req = empty_request(Dim::Collection);
-        let mut conn = db.acquire().await.unwrap();
-        let edges = conn.metrics().metrics_edges(&req).await?;
+        let edges = db.metrics().metrics_edges(&req).await?;
 
         let ingress: Vec<_> = edges
             .iter()
@@ -1840,6 +1849,7 @@ mod tests {
             seed_publisher_with_ltdv(&db, "real_prod", "real_prod_fn").await?;
 
         let consumer_coll = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(
                 &CollectionName::try_from("real_cons")?,
@@ -1847,12 +1857,18 @@ mod tests {
             )
             .await?;
         let consumer_fn = make_publisher_function(&db, &consumer_coll, "real_cons_fn").await?;
-        let consumer_exec = db.seed().execution(&consumer_fn).await?;
+        let consumer_exec = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .execution(&consumer_fn)
+            .await?;
         let consumer_trx = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .transaction(&consumer_exec, &TransactionKey::try_from("ANY")?)
             .await?;
         let consumer_pfr = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_function_run(
                 &consumer_coll,
@@ -1878,11 +1894,13 @@ mod tests {
             .requirement_dependency_pos(Some(DependencyPos::try_from(0)?))
             .requirement_version_pos(VersionPos::try_from(0)?)
             .build()?;
-        db.seed().insert(&input).await?;
+        db.scoped(ProjectId::sandbox())
+            .live()
+            .insert(&input)
+            .await?;
 
         let req = empty_request(Dim::Collection);
-        let mut conn = db.acquire().await.unwrap();
-        let edges = conn.metrics().metrics_edges(&req).await?;
+        let edges = db.metrics().metrics_edges(&req).await?;
 
         let real: Vec<_> = edges
             .iter()
@@ -1914,6 +1932,7 @@ mod tests {
             seed_publisher_with_ltdv(&db, "egress_prod", "egress_prod_fn").await?;
 
         let consumer_coll = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(
                 &CollectionName::try_from("egress_cons")?,
@@ -1935,14 +1954,23 @@ mod tests {
                 .try_runtime_values("rv")?
                 .reuse_frozen_tables(false)
                 .build()?;
-            db.seed().function(&consumer_coll, &create).await?
+            db.scoped(ProjectId::sandbox())
+                .seed()
+                .function(&consumer_coll, &create)
+                .await?
         };
-        let consumer_exec = db.seed().execution(&consumer_fn).await?;
+        let consumer_exec = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .execution(&consumer_fn)
+            .await?;
         let consumer_trx = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .transaction(&consumer_exec, &TransactionKey::try_from("ANY")?)
             .await?;
         let consumer_pfr = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_function_run(
                 &consumer_coll,
@@ -1968,11 +1996,13 @@ mod tests {
             .requirement_dependency_pos(Some(DependencyPos::try_from(0)?))
             .requirement_version_pos(VersionPos::try_from(0)?)
             .build()?;
-        db.seed().insert(&input).await?;
+        db.scoped(ProjectId::sandbox())
+            .live()
+            .insert(&input)
+            .await?;
 
         let req = empty_request(Dim::Collection);
-        let mut conn = db.acquire().await.unwrap();
-        let edges = conn.metrics().metrics_edges(&req).await?;
+        let edges = db.metrics().metrics_edges(&req).await?;
 
         let egress: Vec<_> = edges
             .iter()

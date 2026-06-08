@@ -94,7 +94,7 @@ pub(crate) mod tests {
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -137,7 +137,7 @@ pub(crate) mod tests {
         use td_objects::types::recursion::RecursionOptions;
         use td_queries::{insert, insert_vec};
         use td_tower::metadata::type_of_val;
-        use td_tower::project_scope::Scoped;
+        use td_database::scoped::Scoped;
 
         ExecuteFunctionService::with_defaults(db)
             .metadata()
@@ -322,8 +322,8 @@ pub(crate) mod tests {
 
     /// Grouping is project-scoped end to end: a function in a non-sandbox
     /// project mints its runs and transaction with that project's *own*
-    /// default group — never the global `GroupId::default_group()`, which
-    /// exists only in `sandbox`. Postgres-only: resolving the per-project
+    /// default group — never `sandbox`'s default group (the only one with the
+    /// fixed bootstrap id). Postgres-only: resolving the per-project
     /// `default` group relies on RLS to disambiguate it from every other
     /// project's identically-named group.
     #[td_test::test(db)]
@@ -362,13 +362,14 @@ pub(crate) mod tests {
             .await?;
 
         let collection: CollectionDB = db
+            .scoped(project.id)
             .live()
             .fetch_one::<CollectionDB>(&collection_name)
             .await?;
         assert_eq!(collection.project_id, project.id);
         assert_ne!(
             collection.group_id,
-            GroupId::default_group(),
+            GroupId::try_from(td_security::ENCODED_ID_GROUP_DEFAULT).unwrap(),
             "collection must resolve its project's own default group, not sandbox's",
         );
 
@@ -387,13 +388,17 @@ pub(crate) mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("rt")?)
             .reuse_frozen_tables(false)
             .build()?;
-        let function = db.seed().function(&collection, &create).await?;
-        let execution = db.seed().execution(&function).await?;
+        // Seed the run chain in the project the collection belongs to.
+        let p = &project.id;
+        let function = db.scoped(p).seed().function(&collection, &create).await?;
+        let execution = db.scoped(p).seed().execution(&function).await?;
         let transaction = db
+            .scoped(p)
             .seed()
             .transaction(&execution, &TransactionKey::try_from("ANY")?)
             .await?;
-        db.seed()
+        db.scoped(p)
+            .seed()
             .physical_function_run(
                 &collection,
                 &function,
@@ -408,6 +413,7 @@ pub(crate) mod tests {
 
         // The minted LFR carries the project's group and project — not sandbox's.
         let lfrs: Vec<LogicalFunctionRunDB> = db
+            .scoped(p)
             .live()
             .fetch_all::<LogicalFunctionRunDB>(&function.function_id)
             .await?;
@@ -443,26 +449,31 @@ pub(crate) mod tests {
         single_function: bool,
     ) -> Result<ExecutionResponse, TdError> {
         let collection_0 = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&COLLECTION_NAMES[0], &UserId::admin())
             .await?;
         let collection_1 = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&COLLECTION_NAMES[1], &UserId::admin())
             .await?;
         let collection_2 = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&COLLECTION_NAMES[2], &UserId::admin())
             .await?;
 
-        db.seed()
+        db.scoped(ProjectId::sandbox())
+            .seed()
             .inter_collection_permission(
                 &collection_0.id,
                 &ToCollectionId::try_from(&collection_1.id)?,
             )
             .await?;
 
-        db.seed()
+        db.scoped(ProjectId::sandbox())
+            .seed()
             .inter_collection_permission(
                 &collection_0.id,
                 &ToCollectionId::try_from(&collection_2.id)?,
@@ -470,7 +481,8 @@ pub(crate) mod tests {
             .await?;
 
         if with_permission {
-            db.seed()
+            db.scoped(ProjectId::sandbox())
+                .seed()
                 .inter_collection_permission(
                     &collection_1.id,
                     &ToCollectionId::try_from(&collection_2.id)?,
@@ -499,7 +511,11 @@ pub(crate) mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _ = db.seed().function(&collection_0, &create).await?;
+        let _ = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection_0, &create)
+            .await?;
 
         let create = FunctionRegister::builder()
             .name(FUNCTION_NAMES[1].clone())
@@ -520,7 +536,11 @@ pub(crate) mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _ = db.seed().function(&collection_1, &create).await?;
+        let _ = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection_1, &create)
+            .await?;
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister::builder()
@@ -542,7 +562,11 @@ pub(crate) mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _ = db.seed().function(&collection_2, &create).await?;
+        let _ = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection_2, &create)
+            .await?;
 
         let deps_collection = if deps_diff_collection {
             &COLLECTION_NAMES[1]
@@ -577,7 +601,11 @@ pub(crate) mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _ = db.seed().function(&collection_2, &create).await?;
+        let _ = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection_2, &create)
+            .await?;
 
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
@@ -787,6 +815,7 @@ pub(crate) mod tests {
         expected_initial_status: LogicalFunctionRunStatus,
     ) -> Result<(), TdError> {
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&COLLECTION_NAMES[0], &UserId::admin())
             .await?;
@@ -804,7 +833,11 @@ pub(crate) mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let function_0 = db.seed().function(&collection, &create).await?;
+        let function_0 = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         let create = FunctionRegister::builder()
             .name(FUNCTION_NAMES[1].clone())
@@ -819,7 +852,11 @@ pub(crate) mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let function_1 = db.seed().function(&collection, &create).await?;
+        let function_1 = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         let create = FunctionRegister::builder()
             .name(FUNCTION_NAMES[2].clone())
@@ -840,13 +877,26 @@ pub(crate) mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _function_2 = db.seed().function(&collection, &create).await?;
+        let _function_2 = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         // seed a physical_function_run for function_0, with OnHold status
-        let execution = db.seed().execution(&function_0).await?;
+        let execution = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .execution(&function_0)
+            .await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
-        let transaction = db.seed().transaction(&execution, &transaction_key).await?;
+        let transaction = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .transaction(&execution, &transaction_key)
+            .await?;
         let physical_function_run = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_function_run(
                 &collection,
@@ -862,6 +912,7 @@ pub(crate) mod tests {
             .fetch_one::<TableDB>(and!(&collection.id, &table_name))
             .await?;
         let _table_data_version = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -873,10 +924,19 @@ pub(crate) mod tests {
             .await?;
 
         // seed a physical_function_run for function_1, with Done status
-        let execution = db.seed().execution(&function_1).await?;
+        let execution = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .execution(&function_1)
+            .await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
-        let transaction = db.seed().transaction(&execution, &transaction_key).await?;
+        let transaction = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .transaction(&execution, &transaction_key)
+            .await?;
         let physical_function_run = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_function_run(
                 &collection,
@@ -892,6 +952,7 @@ pub(crate) mod tests {
             .fetch_one::<TableDB>(and!(&collection.id, &table_name))
             .await?;
         let _table_data_version = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -1008,6 +1069,7 @@ pub(crate) mod tests {
         override_disabled_trigger: OverrideDisabledTrigger,
     ) -> Result<Result<ExecutionResponse, TdError>, TdError> {
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&COLLECTION_NAMES[0], &UserId::admin())
             .await?;
@@ -1025,7 +1087,11 @@ pub(crate) mod tests {
             .reuse_frozen_tables(false)
             .enabled(Enabled::FALSE)
             .build()?;
-        let _function_0 = db.seed().function(&collection, &create).await?;
+        let _function_0 = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         let create = FunctionRegister::builder()
             .name(FUNCTION_NAMES[1].clone())
@@ -1039,7 +1105,11 @@ pub(crate) mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("foo runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
-        let _function_1 = db.seed().function(&collection, &create).await?;
+        let _function_1 = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
@@ -1067,6 +1137,7 @@ pub(crate) mod tests {
         use td_objects::types::basic::ExternalUid;
 
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&COLLECTION_NAMES[0], &UserId::admin())
             .await?;
@@ -1082,7 +1153,11 @@ pub(crate) mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("rv")?)
             .reuse_frozen_tables(false)
             .build()?;
-        let _function = db.seed().function(&collection, &create).await?;
+        let _function = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         let trigger = |external_uid: Option<ExternalUid>| {
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())

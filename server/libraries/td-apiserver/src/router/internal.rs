@@ -34,7 +34,7 @@ mod routes {
     use td_services::table::services::TableServices;
     use td_services::worker::services::WorkerServices;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
     use tower::ServiceExt;
 
     const INTERNAL_TAG: &str = "Internal";

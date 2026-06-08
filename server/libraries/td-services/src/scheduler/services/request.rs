@@ -276,7 +276,7 @@ mod tests {
     use td_queries::{LiveEntry, VersionedEntry};
     use td_storage::SPath;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
     use tower::ServiceExt;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -400,6 +400,7 @@ mod tests {
     async fn test_schedule_request(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -421,7 +422,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _ = db.seed().function(&collection, &create).await?;
+        let _ = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
@@ -616,6 +621,7 @@ mod tests {
         // also seeds the LTDV identity rows + InitialMint Pending
         // pointer events the append-Requested layer relies on.
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&CollectionName::try_from("c_replay")?, &UserId::admin())
             .await?;
@@ -631,13 +637,23 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("rv")?)
             .reuse_frozen_tables(false)
             .build()?;
-        let function = db.seed().function(&collection, &create).await?;
-        let execution = db.seed().execution(&function).await?;
+        let function = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
+        let execution = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .execution(&function)
+            .await?;
         let txn = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .transaction(&execution, &TransactionKey::try_from("ANY")?)
             .await?;
         let fr_old = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_function_run(
                 &collection,
@@ -766,6 +782,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_schedule_request_kubernetes(db: TdPool) -> Result<(), TdError> {
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&CollectionName::try_from("c_k8s")?, &UserId::admin())
             .await?;
@@ -781,7 +798,11 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("rv")?)
             .reuse_frozen_tables(false)
             .build()?;
-        let _ = db.seed().function(&collection, &create).await?;
+        let _ = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())

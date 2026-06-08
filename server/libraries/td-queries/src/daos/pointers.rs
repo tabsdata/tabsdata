@@ -488,8 +488,8 @@ mod tests {
         };
         use td_objects::types::basic::{
             AtTime, BundleId, CollectionName, Decorator, LogicalPointerReason,
-            LogicalPointerStatus, PhysicalFunctionRunId, PhysicalTableDataVersionId, TableId,
-            TableNameDto, TransactionKey, Trigger, UserId,
+            LogicalPointerStatus, PhysicalFunctionRunId, PhysicalTableDataVersionId, ProjectId,
+            TableId, TableNameDto, TransactionKey, Trigger, UserId,
         };
 
         /// `function_run_at` walks the pointer event log:
@@ -500,6 +500,7 @@ mod tests {
         #[td_test::test(db)]
         async fn test_function_run_at_walks_pointers(db: TdPool) {
             let collection = db
+                .scoped(ProjectId::sandbox())
                 .seed()
                 .collection(&CollectionName::try_from("c0").unwrap(), &UserId::admin())
                 .await
@@ -521,9 +522,20 @@ mod tests {
                 .reuse_frozen_tables(false)
                 .build()
                 .unwrap();
-            let function = db.seed().function(&collection, &create).await.unwrap();
-            let execution = db.seed().execution(&function).await.unwrap();
+            let function = db
+                .scoped(ProjectId::sandbox())
+                .seed()
+                .function(&collection, &create)
+                .await
+                .unwrap();
+            let execution = db
+                .scoped(ProjectId::sandbox())
+                .seed()
+                .execution(&function)
+                .await
+                .unwrap();
             let transaction = db
+                .scoped(ProjectId::sandbox())
                 .seed()
                 .transaction(&execution, &TransactionKey::try_from("ANY").unwrap())
                 .await
@@ -544,15 +556,14 @@ mod tests {
                 .build()
                 .unwrap();
 
-            let tx = db.begin().await.unwrap();
-            let mut conn = tx.into_connection();
-            let conn = &mut conn;
-            conn.live()
+            let mut db = db.begin().await.unwrap().into_connection();
+
+            db.live()
                 .insert::<LogicalFunctionRunDB>(&lfr)
                 .await
                 .unwrap();
             let mint = LogicalFunctionRunPointerDB::initial_mint_for(&lfr).unwrap();
-            conn.live()
+            db.live()
                 .insert::<LogicalFunctionRunPointerDB>(&mint)
                 .await
                 .unwrap();
@@ -569,12 +580,12 @@ mod tests {
                 LogicalPointerReason::InitialDispatch,
             )
             .unwrap();
-            conn.live()
+            db.live()
                 .insert::<LogicalFunctionRunPointerDB>(&bind_event)
                 .await
                 .unwrap();
 
-            let pre_mint = conn
+            let pre_mint = db
                 .lfr()
                 .pointers()
                 .at(&before_mint)
@@ -583,7 +594,7 @@ mod tests {
                 .unwrap();
             assert!(pre_mint.is_none());
 
-            let after_bind = conn
+            let after_bind = db
                 .lfr()
                 .pointers()
                 .at(&bind_at)
@@ -593,7 +604,7 @@ mod tests {
             assert_eq!(after_bind, Some(fr_id.clone()));
 
             let later = AtTime::now();
-            let after_later = conn
+            let after_later = db
                 .lfr()
                 .pointers()
                 .at(&later)
@@ -608,6 +619,7 @@ mod tests {
         #[td_test::test(db)]
         async fn test_table_data_version_at_walks_pointers(db: TdPool) {
             let collection = db
+                .scoped(ProjectId::sandbox())
                 .seed()
                 .collection(&CollectionName::try_from("c0").unwrap(), &UserId::admin())
                 .await
@@ -629,9 +641,20 @@ mod tests {
                 .reuse_frozen_tables(false)
                 .build()
                 .unwrap();
-            let function = db.seed().function(&collection, &create).await.unwrap();
-            let execution = db.seed().execution(&function).await.unwrap();
+            let function = db
+                .scoped(ProjectId::sandbox())
+                .seed()
+                .function(&collection, &create)
+                .await
+                .unwrap();
+            let execution = db
+                .scoped(ProjectId::sandbox())
+                .seed()
+                .execution(&function)
+                .await
+                .unwrap();
             let transaction = db
+                .scoped(ProjectId::sandbox())
                 .seed()
                 .transaction(&execution, &TransactionKey::try_from("ANY").unwrap())
                 .await
@@ -653,9 +676,8 @@ mod tests {
                 .build()
                 .unwrap();
 
-            let tx = db.begin().await.unwrap();
-            let mut conn = tx.into_connection();
-            let conn = &mut conn;
+            let mut conn = db.begin().await.unwrap().into_connection();
+
             conn.live()
                 .insert::<LogicalTableDataVersionDB>(&ltdv)
                 .await

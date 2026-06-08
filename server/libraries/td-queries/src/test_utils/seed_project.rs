@@ -3,7 +3,6 @@
 //
 
 use crate::LiveEntry;
-use crate::test_utils::SeedEntry;
 use ta_objects::{Buildable, TryUpdater};
 use td_database::pool::TdPool;
 use td_error::TdError;
@@ -22,11 +21,10 @@ use td_objects::types::basic::{
 /// its group within its own project, so a project without these cannot host a
 /// collection.
 ///
-/// The system groups belong to the *new* project, so they are seeded through a
-/// project-scoped handle (`db.seed().in_project(new)`) — each field-less
-/// `GroupDB` defaults its `project_id` from that scope, mirroring
-/// `seed_default_groups`. The `projects` row itself is not RLS-scoped, so it is
-/// inserted directly on the pool.
+/// The system groups belong to the *new* project, so each is seeded through
+/// `db.scoped(new_project)` — the field-less `GroupDB` defaults its `project_id`
+/// from that scope, mirroring `seed_default_groups`. The `projects` row itself
+/// is not RLS-scoped, so it is inserted directly on the pool.
 pub(crate) async fn seed_project(db: &TdPool, name: ProjectName) -> Result<ProjectDB, TdError> {
     let request_context = RequestContext::with(
         AccessTokenId::default(),
@@ -57,31 +55,31 @@ pub(crate) async fn seed_project(db: &TdPool, name: ProjectName) -> Result<Proje
             "Destination group — assigned to publisher collections.",
         ),
     ];
-    db.seed()
-        .in_project(project_db.id)
-        .scoped(async |conn| {
-            for (group_name, group_description) in system_groups {
-                let group_create = GroupCreate::builder()
-                    .name(group_name)
-                    .description(Description::try_from(group_description)?)
-                    .build()?;
-                let group = GroupDBBuilder::try_from(&group_create)?
-                    .try_update_from(&request_context)?
-                    .system(System::from(true))
-                    .build()?;
-                conn.live().insert::<GroupDB>(&group).await?;
-            }
-            Ok(())
-        })
-        .await?;
+    // Seed the system groups into the *new* project: scope each insert to it so
+    // the field-less `GroupDB` defaults its `project_id` from the GUC (and RLS
+    // `WITH CHECK` enforces the match).
+    for (group_name, group_description) in system_groups {
+        let group_create = GroupCreate::builder()
+            .name(group_name)
+            .description(Description::try_from(group_description)?)
+            .build()?;
+        let group = GroupDBBuilder::try_from(&group_create)?
+            .try_update_from(&request_context)?
+            .system(System::from(true))
+            .build()?;
+        db.scoped(project_db.id)
+            .live()
+            .insert::<GroupDB>(&group)
+            .await?;
+    }
 
     Ok(ProjectDBBuilder::try_from(&project_db)?.build()?)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::LiveEntry;
     use crate::test_utils::SeedEntry;
+    use crate::LiveEntry;
     use td_database::pool::TdPool;
     use td_objects::dxo::group::GroupDB;
     use td_objects::dxo::project::ProjectDB;
@@ -108,7 +106,12 @@ mod tests {
             GroupName::source(),
             GroupName::destination(),
         ] {
-            let group: GroupDB = db.live().fetch_one::<GroupDB>(&name).await.unwrap();
+            let group: GroupDB = db
+                .scoped(project.id)
+                .live()
+                .fetch_one::<GroupDB>(&name)
+                .await
+                .unwrap();
             assert!(*group.system);
         }
     }

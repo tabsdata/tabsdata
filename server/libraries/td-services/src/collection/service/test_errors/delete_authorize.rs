@@ -15,12 +15,16 @@ use td_objects::types::basic::{
     AccessTokenId, CollectionIdName, CollectionName, ProjectId, RoleId, UserId,
 };
 use td_queries::test_utils::SeedEntry;
-use td_tower::project_scope::InProject;
+use td_database::scoped::InProject;
 
 #[td_test::test(db)]
 async fn test_not_allowed_to_delete_collection(db: TdPool) {
     let name = CollectionName::try_from("ds0").unwrap();
-    let _ = db.seed().collection(&name, &UserId::admin()).await;
+    let _ = db
+        .scoped(ProjectId::sandbox())
+        .seed()
+        .collection(&name, &UserId::admin())
+        .await;
 
     let service = DeleteCollectionService::with_defaults(db.clone()).service();
 

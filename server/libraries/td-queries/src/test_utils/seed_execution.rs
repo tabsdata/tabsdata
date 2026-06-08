@@ -3,29 +3,29 @@
 //
 
 use crate::LiveEntry;
+use crate::QueryExecutor;
 use ta_objects::Buildable;
-use td_database::dynamic::DynamicConnection;
 use td_error::TdError;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::function::FunctionDB;
 use td_objects::types::basic::{ExecutionName, TriggerType, TriggeredOn, UserId};
 
 pub(crate) async fn seed_execution(
-    conn: &mut DynamicConnection<'_>,
+    executor: impl QueryExecutor,
     function_version: &FunctionDB,
 ) -> Result<ExecutionDB, TdError> {
-    _seed_execution(conn, function_version, TriggerType::Manual).await
+    _seed_execution(executor, function_version, TriggerType::Manual).await
 }
 
 pub(crate) async fn seed_cron_execution(
-    conn: &mut DynamicConnection<'_>,
+    executor: impl QueryExecutor,
     function_version: &FunctionDB,
 ) -> Result<ExecutionDB, TdError> {
-    _seed_execution(conn, function_version, TriggerType::CronTrigger).await
+    _seed_execution(executor, function_version, TriggerType::CronTrigger).await
 }
 
 async fn _seed_execution(
-    conn: &mut DynamicConnection<'_>,
+    executor: impl QueryExecutor,
     function_version: &FunctionDB,
     trigger_type: TriggerType,
 ) -> Result<ExecutionDB, TdError> {
@@ -42,7 +42,7 @@ async fn _seed_execution(
 
     // Field-less row; runs on a project-scoped connection so `project_id`
     // defaults from the scope.
-    conn.live().insert::<ExecutionDB>(&execution_db).await?;
+    executor.live().insert::<ExecutionDB>(&execution_db).await?;
     Ok(execution_db)
 }
 
@@ -53,13 +53,14 @@ mod tests {
     use td_database::pool::TdPool;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
-        BundleId, CollectionName, Decorator, ExecutionName, TriggeredOn, UserId,
+        BundleId, CollectionName, Decorator, ExecutionName, ProjectId, TriggeredOn, UserId,
     };
     use td_security::ENCODED_ID_SYSTEM;
 
     #[td_test::test(db)]
     async fn test_seed_execution(db: TdPool) {
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(
                 &CollectionName::try_from("collection").unwrap(),
@@ -90,9 +91,19 @@ mod tests {
             .build()
             .unwrap();
 
-        let function_version = db.seed().function(&collection, &create).await.unwrap();
+        let function_version = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await
+            .unwrap();
 
-        let execution = db.seed().execution(&function_version).await.unwrap();
+        let execution = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .execution(&function_version)
+            .await
+            .unwrap();
         assert_eq!(
             execution.name,
             Some(ExecutionName::try_from("test_execution").unwrap())

@@ -88,13 +88,13 @@ mod tests {
     use td_queries::test_utils::SeedEntry;
     use td_storage::location::StorageLocation;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_upload_function(db: TdPool) -> Result<(), TdError> {
         use td_tower::metadata::type_of_val;
-        use td_tower::project_scope::Scoped;
+        use td_database::scoped::Scoped;
 
         UploadFunctionService::with_defaults(db)
             .metadata()
@@ -147,6 +147,7 @@ mod tests {
     async fn test_upload(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;

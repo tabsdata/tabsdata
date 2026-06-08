@@ -76,7 +76,7 @@ mod tests {
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -90,7 +90,7 @@ mod tests {
 
         use td_objects::And;
         use td_tower::metadata::type_of_val;
-        use td_tower::project_scope::Scoped;
+        use td_database::scoped::Scoped;
 
         TableStateDownloadService::with_defaults(db)
             .metadata()
@@ -151,6 +151,7 @@ mod tests {
 
         let collection = context
             .db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -171,8 +172,18 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let function = context.db.seed().function(&collection, &create).await?;
-        let system_tables = context.db.seed().system_tables(&function).await?;
+        let function = context
+            .db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
+        let system_tables = context
+            .db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .system_tables(&function)
+            .await?;
         let td_fn_state_table = system_tables
             .iter()
             .find(|t| t.name.starts_with(TD_FN_STATE_PREFIX))

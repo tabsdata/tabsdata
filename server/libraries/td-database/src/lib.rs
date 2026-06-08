@@ -46,6 +46,8 @@ mod tests {
     #[cfg(postgres)]
     use crate::APP_ROLE;
     #[cfg(postgres)]
+    use crate::APP_SCHEMA;
+    #[cfg(postgres)]
     use crate::dynamic::DynamicConnection;
     use crate::dynamic::DynamicPool;
     use crate::error::DbError;
@@ -85,11 +87,11 @@ mod tests {
             .await
             .unwrap(),
             #[cfg(postgres)]
-            DynamicPool::Postgres { ro, .. } => sqlx::query_scalar(
+            DynamicPool::Postgres { ro, .. } => sqlx::query_scalar(&format!(
                 "SELECT table_name FROM information_schema.tables \
-                 WHERE table_schema = 'public' AND table_type = 'BASE TABLE' \
-                 ORDER BY table_name",
-            )
+                 WHERE table_schema = '{APP_SCHEMA}' AND table_type = 'BASE TABLE' \
+                 ORDER BY table_name"
+            ))
             .fetch_all(ro)
             .await
             .unwrap(),
@@ -117,10 +119,10 @@ mod tests {
             .await
             .unwrap(),
             #[cfg(postgres)]
-            DynamicPool::Postgres { ro, .. } => sqlx::query_scalar(
+            DynamicPool::Postgres { ro, .. } => sqlx::query_scalar(&format!(
                 "SELECT table_name FROM information_schema.views \
-                 WHERE table_schema = 'public' ORDER BY table_name",
-            )
+                 WHERE table_schema = '{APP_SCHEMA}' ORDER BY table_name"
+            ))
             .fetch_all(ro)
             .await
             .unwrap(),
@@ -154,17 +156,17 @@ mod tests {
             .await
             .unwrap(),
             #[cfg(postgres)]
-            DynamicPool::Postgres { ro, .. } => sqlx::query_scalar(
+            DynamicPool::Postgres { ro, .. } => sqlx::query_scalar(&format!(
                 // Excludes postgres-auto-generated indexes:
                 //  - `_pkey` — automatic primary key index.
                 //  - `_key`  — automatic UNIQUE constraint index.
                 // We only assert on indexes the schema explicitly declared.
                 "SELECT indexname FROM pg_indexes \
-                 WHERE schemaname = 'public' \
+                 WHERE schemaname = '{APP_SCHEMA}' \
                    AND indexname NOT LIKE '%_pkey' \
                    AND indexname NOT LIKE '%_key' \
-                 ORDER BY indexname",
-            )
+                 ORDER BY indexname"
+            ))
             .fetch_all(ro)
             .await
             .unwrap(),
@@ -867,13 +869,12 @@ mod tests {
 
     /// Row-level security end to end on real Postgres.
     ///
-    /// The test pool connects as the embedded superuser, which *bypasses* RLS,
-    /// so we provision a dedicated `NOBYPASSRLS` role through it and connect a
-    /// second pool as that role — the same posture the app must use in
-    /// production. Then, with `app.project_id` set per transaction, we assert:
-    /// reads are scoped to the project, `WITH CHECK` rejects a cross-project
-    /// insert, an unset GUC fails closed (zero rows), and `app.bypass_rls`
-    /// spans projects.
+    /// We provision a dedicated `NOBYPASSRLS` role and connect a second pool as
+    /// that role — the same posture the serving pool uses (its `after_connect`
+    /// switches to a NOBYPASSRLS role). Then, with `app.project_id` set per
+    /// transaction, we assert: reads are scoped to the project, `WITH CHECK`
+    /// rejects a cross-project insert, an unset GUC fails closed (zero rows),
+    /// and `app.bypass_rls` spans projects.
     #[cfg(postgres)]
     #[tokio::test]
     async fn test_rls_project_isolation() {
@@ -886,18 +887,21 @@ mod tests {
         let db = crate::test_utils::postgres::pool().await;
         db.upgrade().await.unwrap();
 
-        // Provision a non-superuser, NOBYPASSRLS app role (as superuser).
-        let mut tx = db.begin().await.unwrap();
-        tx.as_mut_conn()
-            .execute_batch(&[
-                "CREATE ROLE app_user LOGIN PASSWORD 'app_pw' NOBYPASSRLS".to_string(),
-                "GRANT USAGE ON SCHEMA public TO app_user".to_string(),
-                "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_user"
-                    .to_string(),
-            ])
+        // Provision a NOBYPASSRLS app role. `db.begin()` now runs as the
+        // non-privileged `td_app` role, so provision through a raw connection as
+        // the pool's bootstrap (superuser) role, taken from the pool URL.
+        let su = PgPoolOptions::new()
+            .max_connections(1)
+            .connect(db.url().as_str())
             .await
             .unwrap();
-        tx.commit().await.unwrap();
+        for stmt in [
+            "CREATE ROLE app_user LOGIN PASSWORD 'app_pw' NOBYPASSRLS",
+            "GRANT USAGE ON SCHEMA public TO app_user",
+            "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_user",
+        ] {
+            sqlx::query(stmt).execute(&su).await.unwrap();
+        }
 
         // Connect a second pool as the app role.
         let mut url = db.url().clone();
@@ -1007,139 +1011,45 @@ mod tests {
         t.rollback().await.unwrap();
     }
 
-    /// RLS enforced from a *superuser* connection via `SET LOCAL ROLE`.
-    ///
-    /// The pool authenticates as the embedded superuser (which bypasses RLS),
-    /// but switching to a non-superuser role per transaction makes the policy
-    /// apply — the mechanism that lets the app enforce isolation without
-    /// connecting as a dedicated role. Asserts a project sees only its own rows
-    /// and that staying superuser (no SET ROLE) bypasses.
+    /// `check()` refuses to start if the **serving** role bypasses RLS. Serving
+    /// connections switch to [`APP_ROLE`] in `after_connect`, so the risk isn't
+    /// the *connecting* role anymore but a misconfigured app role: if `td_app`
+    /// were granted `BYPASSRLS`, project isolation would silently collapse.
+    /// `check_rls_posture` runs on the serving pool and must catch it.
     #[cfg(postgres)]
     #[tokio::test]
-    #[allow(irrefutable_let_patterns)] // only the Postgres variant exists in a postgres-only build
-    async fn test_rls_enforced_via_set_role() {
-        const INSERT: &str = "INSERT INTO collections \
-            (id, name, description, created_on, created_by_id, modified_on, modified_by_id, group_id) \
-            VALUES ($1, $2, 'd', now(), 'u', now(), 'u', 'g')";
-        const COUNT: &str = "SELECT count(*) FROM collections";
-
-        let db = crate::test_utils::postgres::pool().await;
-        db.upgrade().await.unwrap(); // also auto-provisions the `td_app` role (embedded)
-
-        // As td_app in project A, insert a collection (project_id defaults to the GUC).
-        let mut tx = db.begin().await.unwrap();
-        {
-            let mut c = tx.as_mut_conn();
-            c.set_rls_role("td_app").await.unwrap();
-            c.set_project_scope("A").await.unwrap();
-            let DynamicConnection::Postgres(h) = &mut c else {
-                unreachable!()
-            };
-            sqlx::query(INSERT)
-                .bind("c_a")
-                .bind("ca")
-                .execute(&mut **h)
-                .await
-                .unwrap();
-            let n: i64 = sqlx::query_scalar(COUNT).fetch_one(&mut **h).await.unwrap();
-            assert_eq!(n, 1, "project A sees its own row under SET ROLE");
-        }
-        tx.commit().await.unwrap();
-
-        // As td_app in project B: cannot see A's row.
-        let mut tx = db.begin().await.unwrap();
-        {
-            let mut c = tx.as_mut_conn();
-            c.set_rls_role("td_app").await.unwrap();
-            c.set_project_scope("B").await.unwrap();
-            let DynamicConnection::Postgres(h) = &mut c else {
-                unreachable!()
-            };
-            let n: i64 = sqlx::query_scalar(COUNT).fetch_one(&mut **h).await.unwrap();
-            assert_eq!(
-                n, 0,
-                "SET ROLE makes RLS apply: project B sees no project A rows"
-            );
-        }
-        tx.rollback().await.unwrap();
-
-        // Without SET ROLE the session stays superuser and bypasses RLS.
-        let mut tx = db.begin().await.unwrap();
-        {
-            let mut c = tx.as_mut_conn();
-            c.set_project_scope("B").await.unwrap();
-            let DynamicConnection::Postgres(h) = &mut c else {
-                unreachable!()
-            };
-            let n: i64 = sqlx::query_scalar(COUNT).fetch_one(&mut **h).await.unwrap();
-            assert_eq!(
-                n, 1,
-                "a superuser session (no SET ROLE) bypasses RLS and sees all rows"
-            );
-        }
-        tx.rollback().await.unwrap();
-    }
-
-    /// `check()` refuses to start when the app role can't be switched to — the
-    /// startup precondition that catches a misconfigured external deployment
-    /// (operator forgot to create `td_app` or grant the connecting role
-    /// membership) at boot, instead of letting the first request fail
-    /// mid-flight with an opaque error.
-    #[cfg(postgres)]
-    #[tokio::test]
-    async fn test_check_app_role_switchable_fails_when_role_missing() {
-        let db = crate::test_utils::postgres::pool().await;
-        db.upgrade().await.unwrap(); // creates schema + td_app (embedded)
-
-        // Sanity: with td_app in place, `check` succeeds.
-        db.check()
-            .await
-            .expect("check should pass with td_app present");
-
-        // Simulate the external-deploy misconfig: remove the role and verify
-        // `check` rejects the database with a clear error.
-        let mut tx = db.begin().await.unwrap();
-        tx.as_mut_conn()
-            .execute_batch(&[
-                "DROP OWNED BY td_app".to_string(),
-                "DROP ROLE td_app".to_string(),
-            ])
-            .await
-            .unwrap();
-        tx.commit().await.unwrap();
-
-        let res = db.check().await;
-        assert!(
-            matches!(res, Err(DbError::AppRoleNotSwitchable(ref r, _)) if r == APP_ROLE),
-            "expected AppRoleNotSwitchable({APP_ROLE:?}), got {res:?}"
-        );
-    }
-
-    /// `check()` refuses to start an **external** deployment whose connecting
-    /// role bypasses RLS (superuser / BYPASSRLS) — project isolation rests
-    /// entirely on RLS, so such a role would silently expose every tenant to
-    /// every other. Embedded (a known dev/test superuser) is exempt.
-    #[cfg(postgres)]
-    #[tokio::test]
-    async fn test_check_rejects_rls_bypassing_role_on_external_deploy() {
+    async fn test_check_rejects_bypassing_serving_role() {
         use crate::config::{BackendConfig, DatabaseConfig};
 
-        let db = crate::test_utils::postgres::pool().await; // embedded superuser
+        let db = crate::test_utils::postgres::pool().await;
         db.upgrade().await.unwrap();
-        // Embedded is exempt: the posture issue is a debug note, not fatal.
-        db.check().await.expect("embedded check should pass");
+        // The serving role is NOBYPASSRLS, so check passes.
+        db.check()
+            .await
+            .expect("NOBYPASSRLS serving role should pass");
 
-        // Connect to the SAME server as a non-embedded pool, still as the
-        // bootstrap superuser (which bypasses RLS). check() must refuse.
+        // Misconfigure: grant the app role BYPASSRLS, via a raw connection as the
+        // pool's bootstrap (superuser) role.
+        let su = PgPoolOptions::new()
+            .max_connections(1)
+            .connect(db.url().as_str())
+            .await
+            .unwrap();
+        sqlx::query(&format!("ALTER ROLE \"{APP_ROLE}\" BYPASSRLS"))
+            .execute(&su)
+            .await
+            .unwrap();
+
+        // A fresh pool's serving connections switch to td_app — now bypassing.
         let cfg = DatabaseConfig {
             conn: Some(BackendConfig::from_url(db.url().clone()).unwrap()),
             pool: Default::default(),
         };
-        let external = TdPool::connect(&cfg).await.unwrap();
-        let res = external.check().await;
+        let other = TdPool::connect(&cfg).await.unwrap();
+        let res = other.check().await;
         assert!(
             matches!(res, Err(DbError::ConnectedRoleBypassesRls)),
-            "external superuser deploy must be rejected, got {res:?}"
+            "a BYPASSRLS serving role must be rejected, got {res:?}"
         );
     }
 
@@ -1163,7 +1073,6 @@ mod tests {
         let mut tx = db.begin().await.unwrap();
         {
             let mut c = tx.as_mut_conn();
-            c.set_rls_role("td_app").await.unwrap();
             c.set_project_scope("A").await.unwrap();
             let DynamicConnection::Postgres(h) = &mut c else {
                 unreachable!()
@@ -1206,7 +1115,6 @@ mod tests {
         let mut tx = db.begin().await.unwrap();
         {
             let mut c = tx.as_mut_conn();
-            c.set_rls_role("td_app").await.unwrap();
             c.set_project_scope("B").await.unwrap();
             let DynamicConnection::Postgres(h) = &mut c else {
                 unreachable!()
@@ -1228,9 +1136,10 @@ mod tests {
         tx.rollback().await.unwrap();
     }
 
-    /// The `DynamicConnection` GUC primitives set the expected PostgreSQL
-    /// session variables on their transaction. (Connection-layer wiring will
-    /// call these per request; this checks the primitive in isolation.)
+    /// The `DynamicConnection` scope GUC primitives set the expected PostgreSQL
+    /// session variables on their transaction, and `set_project_scope` clears a
+    /// prior bypass (project scope means *exactly* that project). (Connection
+    /// wiring calls these per request; this checks the primitives in isolation.)
     #[cfg(postgres)]
     #[tokio::test]
     #[allow(irrefutable_let_patterns)] // only the Postgres variant exists in a postgres-only build
@@ -1238,23 +1147,43 @@ mod tests {
         let db = crate::test_utils::postgres::pool().await;
         db.upgrade().await.unwrap();
 
-        let mut tx = db.begin().await.unwrap();
-        let mut conn = tx.as_mut_conn();
-        conn.set_project_scope("PROJ_X").await.unwrap();
-        conn.bypass_project_scope().await.unwrap();
+        // set_project_scope sets app.project_id AND clears any prior bypass.
+        {
+            let mut tx = db.begin().await.unwrap();
+            let mut conn = tx.as_mut_conn();
+            conn.bypass_project_scope().await.unwrap();
+            conn.set_project_scope("PROJ_X").await.unwrap();
+            let DynamicConnection::Postgres(h) = &mut conn else {
+                unreachable!()
+            };
+            let project: String =
+                sqlx::query_scalar("SELECT current_setting('app.project_id', true)")
+                    .fetch_one(&mut **h)
+                    .await
+                    .unwrap();
+            let bypass: String =
+                sqlx::query_scalar("SELECT current_setting('app.bypass_rls', true)")
+                    .fetch_one(&mut **h)
+                    .await
+                    .unwrap();
+            assert_eq!(project, "PROJ_X");
+            assert_eq!(bypass, "off", "set_project_scope must clear bypass");
+        }
 
-        let DynamicConnection::Postgres(h) = &mut conn else {
-            unreachable!()
-        };
-        let project: String = sqlx::query_scalar("SELECT current_setting('app.project_id', true)")
-            .fetch_one(&mut **h)
-            .await
-            .unwrap();
-        let bypass: String = sqlx::query_scalar("SELECT current_setting('app.bypass_rls', true)")
-            .fetch_one(&mut **h)
-            .await
-            .unwrap();
-        assert_eq!(project, "PROJ_X");
-        assert_eq!(bypass, "on");
+        // bypass_project_scope alone turns bypass on.
+        {
+            let mut tx = db.begin().await.unwrap();
+            let mut conn = tx.as_mut_conn();
+            conn.bypass_project_scope().await.unwrap();
+            let DynamicConnection::Postgres(h) = &mut conn else {
+                unreachable!()
+            };
+            let bypass: String =
+                sqlx::query_scalar("SELECT current_setting('app.bypass_rls', true)")
+                    .fetch_one(&mut **h)
+                    .await
+                    .unwrap();
+            assert_eq!(bypass, "on");
+        }
     }
 }

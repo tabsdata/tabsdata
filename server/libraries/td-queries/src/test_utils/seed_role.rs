@@ -35,8 +35,8 @@ pub(crate) async fn seed_role(
 
 #[cfg(test)]
 pub mod tests {
-    use crate::LiveEntry;
     use crate::test_utils::SeedEntry;
+    use crate::LiveEntry;
     use td_database::pool::TdPool;
     use td_objects::dxo::role::RoleDB;
     use td_objects::types::basic::{Description, RoleName};

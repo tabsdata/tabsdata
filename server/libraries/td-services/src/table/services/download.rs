@@ -80,7 +80,7 @@ pub(crate) mod tests {
     use td_queries::test_utils::SeedEntry;
     use td_storage::location::StorageLocation;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -91,7 +91,7 @@ pub(crate) mod tests {
 
         use td_objects::And;
         use td_tower::metadata::type_of_val;
-        use td_tower::project_scope::Scoped;
+        use td_database::scoped::Scoped;
 
         TableDownloadService::with_defaults(db)
             .metadata()
@@ -138,6 +138,7 @@ pub(crate) mod tests {
 
         let collection = context
             .db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -158,7 +159,12 @@ pub(crate) mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let function = context.db.seed().function(&collection, &create).await?;
+        let function = context
+            .db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         let (collection_name, collection_id) = (collection.name.clone(), collection.id);
         let get_download = async move |context: &Context,
@@ -233,10 +239,16 @@ pub(crate) mod tests {
         // 3 function runs, 2 with data and 1 without, per table
         let mut at_times = vec![AtTime::now()];
         for i in 0..3 {
-            let execution = context.db.seed().execution(function).await?;
+            let execution = context
+                .db
+                .scoped(ProjectId::sandbox())
+                .seed()
+                .execution(function)
+                .await?;
             let transaction_key = TransactionKey::try_from("ANY")?;
             let transaction = context
                 .db
+                .scoped(ProjectId::sandbox())
                 .seed()
                 .transaction(&execution, &transaction_key)
                 .await?;
@@ -244,6 +256,7 @@ pub(crate) mod tests {
             at_times.push(AtTime::now());
             let physical_function_run = context
                 .db
+                .scoped(ProjectId::sandbox())
                 .seed()
                 .physical_function_run(
                     collection,
@@ -264,6 +277,7 @@ pub(crate) mod tests {
                 if i % 2 == 0 {
                     let physical_table_data_version = context
                         .db
+                        .scoped(ProjectId::sandbox())
                         .seed()
                         .physical_table_data_version_with_data(
                             collection,
@@ -322,6 +336,7 @@ pub(crate) mod tests {
                 } else {
                     context
                         .db
+                        .scoped(ProjectId::sandbox())
                         .seed()
                         .physical_table_data_version(
                             collection,

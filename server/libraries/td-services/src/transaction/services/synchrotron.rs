@@ -50,13 +50,13 @@ mod tests {
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_synchrotron(db: TdPool) {
         use td_tower::metadata::type_of_val;
-        use td_tower::project_scope::Scoped;
+        use td_database::scoped::Scoped;
 
         SynchrotronService::with_defaults(db)
             .metadata()
@@ -74,6 +74,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_synchrotron(db: TdPool) -> Result<(), TdError> {
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -94,15 +95,38 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let function_version = db.seed().function(&collection, &create).await?;
-        let execution = db.seed().execution(&function_version).await?;
+        let function_version = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
+        let execution = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .execution(&function_version)
+            .await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
         let transactions = [
-            db.seed().transaction(&execution, &transaction_key).await?,
-            db.seed().transaction(&execution, &transaction_key).await?,
-            db.seed().transaction(&execution, &transaction_key).await?,
-            db.seed().transaction(&execution, &transaction_key).await?,
-            db.seed().transaction(&execution, &transaction_key).await?,
+            db.scoped(ProjectId::sandbox())
+                .seed()
+                .transaction(&execution, &transaction_key)
+                .await?,
+            db.scoped(ProjectId::sandbox())
+                .seed()
+                .transaction(&execution, &transaction_key)
+                .await?,
+            db.scoped(ProjectId::sandbox())
+                .seed()
+                .transaction(&execution, &transaction_key)
+                .await?,
+            db.scoped(ProjectId::sandbox())
+                .seed()
+                .transaction(&execution, &transaction_key)
+                .await?,
+            db.scoped(ProjectId::sandbox())
+                .seed()
+                .transaction(&execution, &transaction_key)
+                .await?,
         ];
 
         let service = SynchrotronService::with_defaults(db.clone()).service();

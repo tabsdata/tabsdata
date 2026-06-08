@@ -65,7 +65,7 @@ mod tests {
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
 
     use crate::collection::service::list::ListCollectionsService;
     use td_database::sea_query::kind::{DatabaseBackend, DatabaseKind};
@@ -75,7 +75,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_tower_metadata_create_collection(db: TdPool) {
         use td_tower::metadata::type_of_val;
-        use td_tower::project_scope::Scoped;
+        use td_database::scoped::Scoped;
 
         CreateCollectionService::with_defaults(db)
             .metadata()
@@ -145,7 +145,7 @@ mod tests {
 
         let found: Vec<CollectionCreateDB> = db
             .live()
-            .fetch_all::<CollectionCreateDB>(&(&name))
+            .fetch_all::<CollectionCreateDB>(&name)
             .await
             .unwrap();
         assert_eq!(found.len(), 1);
@@ -154,6 +154,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_create_collection_resolves_group_by_name(db: TdPool) {
         let group = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .group(
                 GroupName::try_from("analytics").unwrap(),

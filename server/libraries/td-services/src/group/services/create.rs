@@ -69,7 +69,7 @@ mod tests {
     use td_database::sea_query::kind::{DatabaseBackend, DatabaseKind};
     use td_objects::dxo::project::ProjectCreate;
     use td_objects::types::basic::ProjectName;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
 
     #[td_test::test(db)]
     async fn test_create_group(db: TdPool) -> Result<(), TdError> {
@@ -113,6 +113,7 @@ mod tests {
     async fn test_create_duplicate_name_rejected(db: TdPool) {
         let name = GroupName::try_from("analytics").unwrap();
         let _ = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .group(name.clone(), Description::try_from("first one").unwrap())
             .await;

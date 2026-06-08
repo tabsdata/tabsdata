@@ -10,12 +10,13 @@ use td_objects::Buildable;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::user::UserCreate;
 use td_objects::errors::SqlError;
-use td_objects::types::basic::{AccessTokenId, RoleId, UserEnabled, UserId, UserName};
+use td_objects::types::basic::{AccessTokenId, ProjectId, RoleId, UserEnabled, UserId, UserName};
 use td_queries::test_utils::SeedEntry;
 
 #[td_test::test(db)]
 async fn test_create_already_existing(db: TdPool) {
     let _ = db
+        .scoped(ProjectId::sandbox())
         .seed()
         .user(&UserName::try_from("u0").unwrap(), &UserEnabled::from(true))
         .await;

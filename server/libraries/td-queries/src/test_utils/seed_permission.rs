@@ -47,8 +47,8 @@ pub async fn seed_permission(
 
 #[cfg(test)]
 mod tests {
-    use crate::LiveEntry;
     use crate::test_utils::SeedEntry;
+    use crate::LiveEntry;
     use td_database::pool::TdPool;
     use td_objects::dxo::permission::PermissionDB;
     use td_objects::types::basic::{Description, PermissionType, RoleName};

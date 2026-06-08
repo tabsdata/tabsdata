@@ -86,14 +86,14 @@ mod tests {
     use td_queries::CurrentEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_table_flow_graph(db: TdPool) {
         use crate::graph::layers::build::GraphBuilder;
         use td_tower::metadata::type_of_val;
-        use td_tower::project_scope::Scoped;
+        use td_database::scoped::Scoped;
 
         TableFlowGraphService::with_defaults(db)
             .metadata()
@@ -152,6 +152,7 @@ mod tests {
     async fn test_table_graph_no_deps(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("collection_0")?;
         let collection_0 = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -172,7 +173,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let function_0 = db.seed().function(&collection_0, &create).await?;
+        let function_0 = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection_0, &create)
+            .await?;
 
         // Actual test
         let service = TableFlowGraphService::with_defaults(db.clone()).service();
@@ -242,6 +247,7 @@ mod tests {
     async fn test_table_graph_downstream(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("collection_0")?;
         let collection_0 = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -259,7 +265,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let function_0 = db.seed().function(&collection_0, &create).await?;
+        let function_0 = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection_0, &create)
+            .await?;
 
         let create = FunctionRegister::builder()
             .name(FUNCTION_NAMES[1].clone())
@@ -277,7 +287,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let function_1 = db.seed().function(&collection_0, &create).await?;
+        let function_1 = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection_0, &create)
+            .await?;
 
         let create = FunctionRegister::builder()
             .name(FUNCTION_NAMES[2].clone())
@@ -292,7 +306,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let function_2 = db.seed().function(&collection_0, &create).await?;
+        let function_2 = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection_0, &create)
+            .await?;
 
         // Actual test
         let service = TableFlowGraphService::with_defaults(db.clone()).service();
@@ -385,6 +403,7 @@ mod tests {
     async fn test_table_graph_upstream(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("collection_0")?;
         let collection_0 = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -402,7 +421,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let function_0 = db.seed().function(&collection_0, &create).await?;
+        let function_0 = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection_0, &create)
+            .await?;
 
         let create = FunctionRegister::builder()
             .name(FUNCTION_NAMES[1].clone())
@@ -420,7 +443,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _function_1 = db.seed().function(&collection_0, &create).await?;
+        let _function_1 = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection_0, &create)
+            .await?;
 
         let create = FunctionRegister::builder()
             .name(FUNCTION_NAMES[2].clone())
@@ -435,7 +462,11 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let function_2 = db.seed().function(&collection_0, &create).await?;
+        let function_2 = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection_0, &create)
+            .await?;
 
         // Actual test
         let service = TableFlowGraphService::with_defaults(db.clone()).service();

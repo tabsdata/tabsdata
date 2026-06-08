@@ -43,10 +43,10 @@ mod tests {
     use std::str::FromStr;
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
-    use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::rest_urls::UserParam;
     use td_objects::types::basic::{AccessTokenId, RoleId, UserEnabled, UserName};
+    use td_objects::Buildable;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 

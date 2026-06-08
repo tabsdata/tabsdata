@@ -82,7 +82,7 @@ mod tests {
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
 
     #[td_test::test(db)]
     async fn test_resolve_table_location_non_existing(db: TdPool) -> Result<(), TdError> {
@@ -95,6 +95,7 @@ mod tests {
             _setup_table(db.clone()).await?;
 
         let dv = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_table_data_version_with_data(
                 &collection,
@@ -113,6 +114,7 @@ mod tests {
             _setup_table(db.clone()).await?;
 
         let dv = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -133,6 +135,7 @@ mod tests {
             _setup_table(db.clone()).await?;
 
         let previous_with_data = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_table_data_version_with_data(
                 &collection,
@@ -143,6 +146,7 @@ mod tests {
             )
             .await?;
         let current_without_data = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -163,6 +167,7 @@ mod tests {
             _setup_table(db.clone()).await?;
 
         let previous_with_data = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_table_data_version_with_data(
                 &collection,
@@ -175,6 +180,7 @@ mod tests {
         let (execution, transaction, physical_function_run, table) =
             _update_table_version(db.clone(), &collection).await?;
         let current_without_data = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -199,6 +205,7 @@ mod tests {
             _setup_table(db.clone()).await?;
 
         let _previous_with_data = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -209,6 +216,7 @@ mod tests {
             )
             .await;
         let current_without_data = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -229,6 +237,7 @@ mod tests {
             _setup_table(db.clone()).await?;
 
         let previous_with_data = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -241,6 +250,7 @@ mod tests {
         let (execution, transaction, physical_function_run, table) =
             _update_table_version(db.clone(), &collection).await?;
         let current_without_data = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -270,6 +280,7 @@ mod tests {
         TdError,
     > {
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -287,12 +298,25 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let function = db.seed().function(&collection, &create).await?;
-        let execution = db.seed().execution(&function).await?;
+        let function = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
+        let execution = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .execution(&function)
+            .await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
-        let transaction = db.seed().transaction(&execution, &transaction_key).await?;
+        let transaction = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .transaction(&execution, &transaction_key)
+            .await?;
 
         let physical_function_run = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_function_run(
                 &collection,
@@ -341,11 +365,20 @@ mod tests {
         let response = response?;
 
         let function: FunctionDB = db.live().fetch_one(&(response.id)).await?;
-        let execution = db.seed().execution(&function).await?;
+        let execution = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .execution(&function)
+            .await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
-        let transaction = db.seed().transaction(&execution, &transaction_key).await?;
+        let transaction = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .transaction(&execution, &transaction_key)
+            .await?;
 
         let physical_function_run = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_function_run(
                 collection,
@@ -369,7 +402,10 @@ mod tests {
         table_id: TableId,
         uncommitted: bool,
     ) -> Result<Option<SPath>, TdError> {
-        let connection = db.acquire().await.unwrap();
+        // The resolver reads RLS-scoped tables. In tests the serving pool
+        // defaults the session scope to sandbox, where the seeds land, so a
+        // plain connection already reads the right rows.
+        let connection = db.begin().await.unwrap().into_connection();
         resolve_table_location(
             MutRef::new(connection),
             Ref::new(TriggeredOn::now()),
@@ -419,6 +455,7 @@ mod tests {
         TdError,
     > {
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -436,12 +473,25 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let function = db.seed().function(&collection, &create).await?;
-        let execution = db.seed().execution(&function).await?;
+        let function = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
+        let execution = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .execution(&function)
+            .await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
-        let transaction = db.seed().transaction(&execution, &transaction_key).await?;
+        let transaction = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .transaction(&execution, &transaction_key)
+            .await?;
 
         let physical_function_run = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_function_run(
                 &collection,
@@ -473,6 +523,7 @@ mod tests {
             _setup_committed_table(db.clone()).await?;
 
         let dv = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_table_data_version_with_data(
                 &collection,
@@ -497,6 +548,7 @@ mod tests {
             _setup_committed_table(db.clone()).await?;
 
         let dv = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_table_data_version_with_data(
                 &collection,
@@ -521,6 +573,7 @@ mod tests {
             _setup_table(db.clone()).await?;
 
         let dv = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_table_data_version_with_data(
                 &collection,
@@ -545,6 +598,7 @@ mod tests {
             _setup_table(db.clone()).await?;
 
         let dv = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_table_data_version_with_data(
                 &collection,

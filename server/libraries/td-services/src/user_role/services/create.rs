@@ -12,10 +12,10 @@ use td_objects::dxo::user_role::{
     UserRole, UserRoleBuilder, UserRoleCreate, UserRoleDB, UserRoleDBBuilder, UserRoleDBWithNames,
 };
 use td_objects::rest_urls::RoleParam;
-use td_objects::tower_service::with::{With, builder};
+use td_objects::tower_service::with::{builder, With};
 use td_objects::types::basic::{RoleId, RoleIdName, UserId, UserName, UserRoleId};
-use td_queries::By;
 use td_queries::insert;
+use td_queries::By;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -61,10 +61,10 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
     use td_error::TdError;
-    use td_objects::Buildable;
     use td_objects::types::basic::{AccessTokenId, Description, RoleName, UserEnabled};
-    use td_queries::LiveEntry;
+    use td_objects::Buildable;
     use td_queries::test_utils::SeedEntry;
+    use td_queries::LiveEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]

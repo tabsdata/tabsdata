@@ -164,7 +164,7 @@ mod tests {
     use td_objects::dxo::function::{FunctionDB, FunctionPatchDB, FunctionRegister};
     use td_objects::types::basic::{
         BundleId, CollectionName, Decorator, Description, FunctionRuntimeValues, FunctionStatus,
-        Snippet, TableNameDto, UserId,
+        ProjectId, Snippet, TableNameDto, UserId,
     };
     use td_queries::test_utils::SeedEntry;
 
@@ -174,6 +174,7 @@ mod tests {
         fn_name: &str,
     ) -> Result<(CollectionDB, FunctionDB), TdError> {
         let coll = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&CollectionName::try_from(coll_name)?, &UserId::admin())
             .await?;
@@ -189,7 +190,11 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("rv")?)
             .reuse_frozen_tables(false)
             .build()?;
-        let head = db.seed().function(&coll, &create).await?;
+        let head = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&coll, &create)
+            .await?;
         Ok((coll, head))
     }
 
@@ -211,7 +216,10 @@ mod tests {
             .defined_by_id(UserId::admin())
             .status(FunctionStatus::Active)
             .build()?;
-        db.seed().insert(&patch).await?;
+        db.scoped(ProjectId::sandbox())
+            .live()
+            .insert(&patch)
+            .await?;
         Ok(patch.id)
     }
 
@@ -233,8 +241,7 @@ mod tests {
         let p1 = insert_patch(&db, &head, t1, "p1").await?;
         let p2 = insert_patch(&db, &head, t2, "p2").await?;
 
-        let tx = db.begin().await.unwrap();
-        let mut conn = tx.into_connection();
+        let mut conn = db.begin().await.unwrap().into_connection();
 
         // At T1: p1 exists; p2 does not yet.
         let at_t1 = latest_patch_or_head(&mut conn, &head.id, &t1).await?;
@@ -267,8 +274,7 @@ mod tests {
         let p_a = insert_patch(&db, &head_a, now, "p-a").await?;
         let p_b = insert_patch(&db, &head_b, now, "p-b").await?;
 
-        let tx = db.begin().await.unwrap();
-        let mut conn = tx.into_connection();
+        let mut conn = db.begin().await.unwrap().into_connection();
         let map =
             latest_patch_or_head_batch(&mut conn, vec![head_a.id.clone(), head_b.id.clone()], &now)
                 .await?;

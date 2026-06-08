@@ -2,10 +2,10 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::permission::layers::{PermissionBuildService, is_permission_on_a_single_collection};
+use crate::permission::layers::{is_permission_on_a_single_collection, PermissionBuildService};
 use ta_services::factory::service_factory;
 use td_authz::tower::{AuthzOn, CollAdmin, SecAdmin, System};
-use td_authz::{Authz, AuthzContext, refresh_authz_context};
+use td_authz::{refresh_authz_context, Authz, AuthzContext};
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
 use td_objects::dxo::permission::{
     Permission, PermissionBuilder, PermissionCreate, PermissionDB, PermissionDBBuilder,
@@ -15,9 +15,9 @@ use td_objects::dxo::role::RoleDB;
 use td_objects::rest_urls::RoleParam;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{CollectionId, EntityId, PermissionId, RoleIdName};
-use td_queries::By;
 use td_queries::insert;
-use td_tower::default_services::{Do, Else, If, TransactionProvider, conditional};
+use td_queries::By;
+use td_tower::default_services::{conditional, Do, Else, If, TransactionProvider};
 use td_tower::from_fn::from_fn;
 use td_tower::{layers, service};
 
@@ -78,15 +78,15 @@ mod tests {
     use ta_services::service::TdService;
     use td_authz::tower::AuthzError;
     use td_database::pool::TdPool;
-    use td_error::{TdError, assert_service_error};
-    use td_objects::Buildable;
+    use td_error::{assert_service_error, TdError};
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::types::basic::{
-        AccessTokenId, CollectionName, Description, EntityName, PermissionType, RoleId, RoleName,
-        UserId,
+        AccessTokenId, CollectionName, Description, EntityName, PermissionType, ProjectId, RoleId,
+        RoleName, UserId,
     };
-    use td_queries::LiveEntry;
+    use td_objects::Buildable;
     use td_queries::test_utils::SeedEntry;
+    use td_queries::LiveEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -177,6 +177,7 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let coll0 = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
@@ -232,10 +233,12 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let coll0 = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
         let _ = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&CollectionName::try_from("c1")?, &UserId::admin())
             .await?;

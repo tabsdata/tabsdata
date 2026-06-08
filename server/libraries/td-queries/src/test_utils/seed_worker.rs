@@ -2,7 +2,8 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::{LiveEntry, QueryExecutor};
+use crate::LiveEntry;
+use crate::QueryExecutor;
 use ta_objects::Buildable;
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionDB;
@@ -14,7 +15,7 @@ use td_objects::dxo::worker::WorkerDB;
 use td_objects::types::basic::{WorkerMessageStatus, WorkerStatus, WorkerType};
 
 pub(crate) async fn seed_worker(
-    db: impl QueryExecutor,
+    mut executor: impl QueryExecutor,
     collection: &CollectionDB,
     function: &FunctionDB,
     worker_type: &WorkerType,
@@ -37,12 +38,16 @@ pub(crate) async fn seed_worker(
         .worker_config(None)
         .build()?;
 
-    db.live().insert::<WorkerDB>(&worker_db).await?;
+    executor
+        .reuse()
+        .live()
+        .insert::<WorkerDB>(&worker_db)
+        .await?;
     Ok(worker_db)
 }
 
 pub(crate) async fn seed_function_runner_worker(
-    db: impl QueryExecutor,
+    mut executor: impl QueryExecutor,
     execution: &ExecutionDB,
     transaction: &TransactionDB,
     physical_function_run: &PhysicalFunctionRunDB,
@@ -64,7 +69,11 @@ pub(crate) async fn seed_function_runner_worker(
         .worker_config(None)
         .build()?;
 
-    db.live().insert::<WorkerDB>(&worker_db).await?;
+    executor
+        .reuse()
+        .live()
+        .insert::<WorkerDB>(&worker_db)
+        .await?;
     Ok(worker_db)
 }
 
@@ -75,12 +84,14 @@ mod tests {
     use td_database::pool::TdPool;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
-        BundleId, CollectionName, Decorator, LogicalFunctionRunStatus, TransactionKey, UserId,
+        BundleId, CollectionName, Decorator, LogicalFunctionRunStatus, ProjectId, TransactionKey,
+        UserId,
     };
 
     #[td_test::test(db)]
     async fn test_seed_worker(db: TdPool) {
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(
                 &CollectionName::try_from("collection").unwrap(),
@@ -111,18 +122,30 @@ mod tests {
             .build()
             .unwrap();
 
-        let function_version = db.seed().function(&collection, &create).await.unwrap();
+        let function_version = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await
+            .unwrap();
 
-        let execution = db.seed().execution(&function_version).await.unwrap();
+        let execution = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .execution(&function_version)
+            .await
+            .unwrap();
 
         let transaction_key = TransactionKey::try_from("ANY").unwrap();
         let transaction = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .transaction(&execution, &transaction_key)
             .await
             .unwrap();
 
         let physical_function_run = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_function_run(
                 &collection,
@@ -135,6 +158,7 @@ mod tests {
             .unwrap();
 
         let worker = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .function_runner_worker(
                 &execution,

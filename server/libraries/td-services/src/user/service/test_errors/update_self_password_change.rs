@@ -13,13 +13,14 @@ use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::user::UserUpdate;
 use td_objects::rest_urls::UserParam;
 use td_objects::types::basic::{
-    AccessTokenId, Email, FullName, Password, RoleId, UserEnabled, UserIdName, UserName,
+    AccessTokenId, Email, FullName, Password, ProjectId, RoleId, UserEnabled, UserIdName, UserName,
 };
 use td_queries::test_utils::SeedEntry;
 
 #[td_test::test(db)]
 async fn test_update_user_self(db: TdPool) {
     let user = db
+        .scoped(ProjectId::sandbox())
         .seed()
         .user(&UserName::try_from("u0").unwrap(), &UserEnabled::from(true))
         .await

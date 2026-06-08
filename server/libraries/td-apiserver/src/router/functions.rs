@@ -37,7 +37,7 @@ mod routes {
     use td_objects::types::basic::ProjectId;
     use td_services::function::services::FunctionServices;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
     use tower::ServiceExt;
 
     const FUNCTIONS_TAG: &str = "Functions";

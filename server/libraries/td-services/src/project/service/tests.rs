@@ -232,7 +232,7 @@ mod postgres_delete_guards {
     use td_error::TdDomainError;
     use td_objects::dxo::collection::CollectionCreate;
     use td_objects::types::basic::CollectionName;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
 
     /// On Postgres sandbox is an ordinary project: deletable once empty (a
     /// fresh DB seeds it with no collections). Nothing in the schema requires

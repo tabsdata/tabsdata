@@ -454,12 +454,12 @@ mod tests {
     use td_objects::dxo::logical::LogicalTableDataVersionDB;
     use td_objects::dxo::logical::LogicalTableDataVersionPointerDB;
     use td_objects::dxo::table::TableDB;
-    use td_objects::types::basic::LogicalFunctionRunStatus;
     use td_objects::types::basic::Trigger;
     use td_objects::types::basic::{
         AtTime, BundleId, CollectionName, Decorator, LogicalPointerReason, LogicalPointerStatus,
         PhysicalTableDataVersionId, TableName, TableNameDto, TransactionKey, UserId,
     };
+    use td_objects::types::basic::{LogicalFunctionRunStatus, ProjectId};
     use td_objects::Buildable;
     use td_queries::test_utils::SeedEntry;
     use td_queries::{CurrentEntry, LtdvEntry};
@@ -473,9 +473,7 @@ mod tests {
         bound_to: &PhysicalTableDataVersionId,
         triggered_by_id: &UserId,
     ) {
-        let tx = db.begin().await.unwrap();
-        let mut conn = tx.into_connection();
-        conn.live()
+        db.live()
             .insert::<LogicalTableDataVersionDB>(ltdv)
             .await
             .unwrap();
@@ -489,11 +487,10 @@ mod tests {
             .reason(LogicalPointerReason::InitialMaterialization)
             .build()
             .unwrap();
-        conn.live()
+        db.live()
             .insert::<LogicalTableDataVersionPointerDB>(&pointer)
             .await
             .unwrap();
-        conn.into_transaction().unwrap().commit().await.unwrap();
     }
 
     /// Seed a collection / function / single table, then insert `n` LTDVs
@@ -511,6 +508,7 @@ mod tests {
         Vec<LogicalTableDataVersionDB>,
     ) {
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&CollectionName::try_from("c0").unwrap(), &UserId::admin())
             .await
@@ -534,7 +532,12 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()
             .unwrap();
-        let function = db.seed().function(&collection, &create).await.unwrap();
+        let function = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await
+            .unwrap();
 
         let table_name_typed = TableName::try_from(&table_name).unwrap();
         let table = db
@@ -545,8 +548,14 @@ mod tests {
 
         let mut ltdvs = Vec::with_capacity(n);
         for _ in 0..n {
-            let execution = db.seed().execution(&function).await.unwrap();
+            let execution = db
+                .scoped(ProjectId::sandbox())
+                .seed()
+                .execution(&function)
+                .await
+                .unwrap();
             let transaction = db
+                .scoped(ProjectId::sandbox())
                 .seed()
                 .transaction(&execution, &TransactionKey::try_from("ANY").unwrap())
                 .await
@@ -821,7 +830,11 @@ mod tests {
             .try_runtime_values("rt")?
             .reuse_frozen_tables(false)
             .build()?;
-        let consumer = db.seed().function(&collection, &consumer_create).await?;
+        let consumer = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &consumer_create)
+            .await?;
 
         // Consumer LFR aligned with run 1 — the only cutoff a correct
         // resolver could use.
@@ -868,7 +881,7 @@ mod tests {
     /// scope leaks.
     #[td_test::test(db)]
     async fn test_resolve_logical_partition_isolation(db: TdPool) -> Result<(), TdError> {
-        let (collection, function, table_a_id, ftdvs_a) = seed_ftdv_timeline(&db, 2).await;
+        let (collection, _function, table_a_id, ftdvs_a) = seed_ftdv_timeline(&db, 2).await;
 
         // Mint two LTDVs for an unrelated table B in the same collection.
         let table_b_name = TableNameDto::try_from("table_b")?;
@@ -884,15 +897,24 @@ mod tests {
             .try_runtime_values("rt")?
             .reuse_frozen_tables(false)
             .build()?;
-        let function_b = db.seed().function(&collection, &table_b_create).await?;
+        let function_b = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &table_b_create)
+            .await?;
         let table_b_typed = TableName::try_from(&table_b_name)?;
         let table_b = db
             .current()
             .fetch_one::<TableDB>(and!(&collection.id, &table_b_typed))
             .await?;
         for _ in 0..2 {
-            let execution = db.seed().execution(&function_b).await?;
+            let execution = db
+                .scoped(ProjectId::sandbox())
+                .seed()
+                .execution(&function_b)
+                .await?;
             let transaction = db
+                .scoped(ProjectId::sandbox())
                 .seed()
                 .transaction(&execution, &TransactionKey::try_from("ANY")?)
                 .await?;
@@ -916,10 +938,6 @@ mod tests {
             )
             .await;
         }
-        // function_b avoids the unused warning while documenting the seed
-        // path; we don't reference it again.
-        let _ = function;
-        let _ = function_b;
 
         // Resolve the full timeline for table A — only A's LTDVs come back.
         let mut conn = db.acquire().await.unwrap();
@@ -998,8 +1016,14 @@ mod tests {
         function: &FunctionDB,
         table_id: TableId,
     ) -> LogicalTableDataVersionDB {
-        let execution = db.seed().execution(function).await.unwrap();
+        let execution = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .execution(function)
+            .await
+            .unwrap();
         let transaction = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .transaction(&execution, &TransactionKey::try_from("ANY").unwrap())
             .await

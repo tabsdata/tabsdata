@@ -118,7 +118,7 @@ mod tests {
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
 
     /// Seed a publisher + a Locked function-runner worker, then resolve its
     /// message via the endpoint service: it returns a resolved FunctionV2
@@ -126,6 +126,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_resolve_worker_message(db: TdPool) -> Result<(), TdError> {
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&CollectionName::try_from("c_resolve")?, &UserId::admin())
             .await?;
@@ -141,13 +142,23 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("rv")?)
             .reuse_frozen_tables(false)
             .build()?;
-        let function = db.seed().function(&collection, &create).await?;
-        let execution = db.seed().execution(&function).await?;
+        let function = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
+        let execution = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .execution(&function)
+            .await?;
         let transaction = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .transaction(&execution, &TransactionKey::try_from("ANY")?)
             .await?;
         let pfr = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_function_run(
                 &collection,
@@ -158,6 +169,7 @@ mod tests {
             )
             .await?;
         let worker = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .function_runner_worker(&execution, &transaction, &pfr, &WorkerMessageStatus::Locked)
             .await?;

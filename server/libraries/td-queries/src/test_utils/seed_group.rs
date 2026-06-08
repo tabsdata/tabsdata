@@ -3,15 +3,15 @@
 //
 
 use crate::LiveEntry;
+use crate::QueryExecutor;
 use ta_objects::{Buildable, TryUpdater};
-use td_database::dynamic::DynamicConnection;
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::group::{GroupCreate, GroupDB, GroupDBBuilder};
 use td_objects::types::basic::{AccessTokenId, Description, GroupName, RoleId, UserId};
 
 pub(crate) async fn seed_group(
-    conn: &mut DynamicConnection<'_>,
+    mut executor: impl QueryExecutor,
     name: GroupName,
     description: Description,
 ) -> Result<GroupDB, TdError> {
@@ -32,7 +32,7 @@ pub(crate) async fn seed_group(
 
     // Runs on a project-scoped connection; the field-less `GroupDB` defaults
     // its `project_id` from that scope.
-    conn.live().insert(&group_db).await?;
+    executor.reuse().live().insert(&group_db).await?;
     Ok(group_db)
 }
 
@@ -42,11 +42,12 @@ pub mod tests {
     use crate::test_utils::SeedEntry;
     use td_database::pool::TdPool;
     use td_objects::dxo::group::GroupDB;
-    use td_objects::types::basic::{Description, GroupName};
+    use td_objects::types::basic::{Description, GroupName, ProjectId};
 
     #[td_test::test(db)]
     async fn test_seed_group(db: TdPool) {
         let group = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .group(
                 GroupName::try_from("test_group").unwrap(),

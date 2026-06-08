@@ -45,14 +45,14 @@ mod tests {
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_list_execution(db: TdPool) {
         use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
-        use td_tower::project_scope::Scoped;
+        use td_database::scoped::Scoped;
 
         ExecutionListService::with_defaults(db)
             .metadata()
@@ -68,6 +68,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_list_execution(db: TdPool) -> Result<(), TdError> {
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -88,13 +89,32 @@ mod tests {
             .try_runtime_values("mock runtime values")?
             .reuse_frozen_tables(false)
             .build()?;
-        let function_version = db.seed().function(&collection, &create).await?;
+        let function_version = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
         let executions = [
-            db.seed().execution(&function_version).await?,
-            db.seed().execution(&function_version).await?,
-            db.seed().execution(&function_version).await?,
-            db.seed().execution(&function_version).await?,
-            db.seed().execution(&function_version).await?,
+            db.scoped(ProjectId::sandbox())
+                .seed()
+                .execution(&function_version)
+                .await?,
+            db.scoped(ProjectId::sandbox())
+                .seed()
+                .execution(&function_version)
+                .await?,
+            db.scoped(ProjectId::sandbox())
+                .seed()
+                .execution(&function_version)
+                .await?,
+            db.scoped(ProjectId::sandbox())
+                .seed()
+                .execution(&function_version)
+                .await?,
+            db.scoped(ProjectId::sandbox())
+                .seed()
+                .execution(&function_version)
+                .await?,
         ];
 
         let service = ExecutionListService::with_defaults(db.clone()).service();

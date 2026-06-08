@@ -2,7 +2,8 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::{LiveEntry, QueryExecutor};
+use crate::LiveEntry;
+use crate::QueryExecutor;
 use ta_objects::Buildable;
 use td_error::TdError;
 use td_objects::and;
@@ -21,7 +22,7 @@ use td_objects::types::basic::{
 };
 
 pub(crate) async fn seed_physical_table_data_version_with_data(
-    db: impl QueryExecutor + Copy,
+    mut executor: impl QueryExecutor,
     collection: &CollectionDB,
     execution: &ExecutionDB,
     transaction: &TransactionDB,
@@ -29,7 +30,7 @@ pub(crate) async fn seed_physical_table_data_version_with_data(
     table: &TableDB,
 ) -> Result<PhysicalTableDataVersionDB, TdError> {
     _seed_physical_table_data_version(
-        db,
+        executor.reuse(),
         collection,
         execution,
         transaction,
@@ -41,7 +42,7 @@ pub(crate) async fn seed_physical_table_data_version_with_data(
 }
 
 pub(crate) async fn seed_physical_table_data_version(
-    db: impl QueryExecutor + Copy,
+    mut executor: impl QueryExecutor,
     collection: &CollectionDB,
     execution: &ExecutionDB,
     transaction: &TransactionDB,
@@ -49,7 +50,7 @@ pub(crate) async fn seed_physical_table_data_version(
     table: &TableDB,
 ) -> Result<PhysicalTableDataVersionDB, TdError> {
     _seed_physical_table_data_version(
-        db,
+        executor.reuse(),
         collection,
         execution,
         transaction,
@@ -61,7 +62,7 @@ pub(crate) async fn seed_physical_table_data_version(
 }
 
 pub async fn _seed_physical_table_data_version(
-    db: impl QueryExecutor + Copy,
+    mut executor: impl QueryExecutor,
     collection: &CollectionDB,
     execution: &ExecutionDB,
     transaction: &TransactionDB,
@@ -87,7 +88,8 @@ pub async fn _seed_physical_table_data_version(
     // Mint the LTDV identity row + a Bound pointer event so the seed
     // mirrors what plan-build + dispatch produce. The producer LFR is
     // derived via (execution_id, function_id) from the FR.
-    let producer_lfr: LogicalFunctionRunDB = db
+    let producer_lfr: LogicalFunctionRunDB = executor
+        .reuse()
         .live()
         .fetch_one(and!(
             &physical_function_run.execution_id,
@@ -107,8 +109,14 @@ pub async fn _seed_physical_table_data_version(
         .triggered_by_id(transaction.triggered_by_id)
         .build()?;
 
-    db.live().insert(&table_data_version_db).await?;
-    db.live()
+    executor
+        .reuse()
+        .live()
+        .insert(&table_data_version_db)
+        .await?;
+    executor
+        .reuse()
+        .live()
         .insert::<LogicalTableDataVersionDB>(&logical)
         .await?;
     let pointer = LogicalTableDataVersionPointerDB::build_event(
@@ -120,7 +128,9 @@ pub async fn _seed_physical_table_data_version(
         transaction.triggered_by_id,
         LogicalPointerReason::InitialMaterialization,
     )?;
-    db.live()
+    executor
+        .reuse()
+        .live()
         .insert::<LogicalTableDataVersionPointerDB>(&pointer)
         .await?;
     Ok(table_data_version_db)
@@ -136,14 +146,15 @@ mod tests {
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::table::TableDB;
     use td_objects::types::basic::{
-        BundleId, CollectionName, Decorator, LogicalFunctionRunStatus, TableName, TableNameDto,
-        TransactionKey, UserId,
+        BundleId, CollectionName, Decorator, LogicalFunctionRunStatus, ProjectId, TableName,
+        TableNameDto, TransactionKey, UserId,
     };
     use td_security::ENCODED_ID_SYSTEM;
 
     #[td_test::test(db)]
     async fn test_seed_physical_table_data_version(db: TdPool) {
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(
                 &CollectionName::try_from("collection").unwrap(),
@@ -176,18 +187,30 @@ mod tests {
             .build()
             .unwrap();
 
-        let function_version = db.seed().function(&collection, &create).await.unwrap();
+        let function_version = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await
+            .unwrap();
 
-        let execution = db.seed().execution(&function_version).await.unwrap();
+        let execution = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .execution(&function_version)
+            .await
+            .unwrap();
 
         let transaction_key = TransactionKey::try_from("ANY").unwrap();
         let transaction = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .transaction(&execution, &transaction_key)
             .await
             .unwrap();
 
         let physical_function_run = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_function_run(
                 &collection,
@@ -209,6 +232,7 @@ mod tests {
             .unwrap();
 
         let physical_table_data_version = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_table_data_version(
                 &collection,

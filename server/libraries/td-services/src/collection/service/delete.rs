@@ -116,13 +116,13 @@ mod tests {
     use td_queries::test_utils::SeedEntry;
     use td_queries::{CurrentEntry, LiveEntry};
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_delete_collection(db: TdPool) {
         use td_tower::metadata::type_of_val;
-        use td_tower::project_scope::Scoped;
+        use td_database::scoped::Scoped;
 
         DeleteCollectionService::with_defaults(db)
             .metadata()
@@ -204,7 +204,11 @@ mod tests {
     async fn test_delete_collection(db: TdPool) -> Result<(), TdError> {
         // Create 3 functions and 3 tables in the same collection
         let name = CollectionName::try_from("c")?;
-        let collection = db.seed().collection(&name, &UserId::admin()).await?;
+        let collection = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .collection(&name, &UserId::admin())
+            .await?;
 
         for i in 0..3 {
             let create = FunctionRegister::builder()
@@ -219,7 +223,11 @@ mod tests {
                 .runtime_values(FunctionRuntimeValues::default())
                 .reuse_frozen_tables(false)
                 .build()?;
-            let _ = db.seed().function(&collection, &create).await?;
+            let _ = db
+                .scoped(ProjectId::sandbox())
+                .seed()
+                .function(&collection, &create)
+                .await?;
         }
 
         // Create another one with triggers and dependencies
@@ -238,10 +246,15 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::default())
             .reuse_frozen_tables(false)
             .build()?;
-        let function = db.seed().function(&collection, &create).await?;
+        let function = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
 
         // Create workers for function_3
         let _cron_worker = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .worker(
                 &collection,
@@ -253,10 +266,19 @@ mod tests {
             .await?;
 
         // Create function runner worker
-        let execution = db.seed().execution(&function).await?;
+        let execution = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .execution(&function)
+            .await?;
         let transaction_key = TransactionKey::try_from("ANY").unwrap();
-        let transaction = db.seed().transaction(&execution, &transaction_key).await?;
+        let transaction = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .transaction(&execution, &transaction_key)
+            .await?;
         let physical_function_run = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_function_run(
                 &collection,
@@ -267,6 +289,7 @@ mod tests {
             )
             .await?;
         let _function_worker = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .function_runner_worker(
                 &execution,
@@ -349,7 +372,11 @@ mod tests {
     #[td_test::test(db)]
     async fn test_delete_collection_downstream_frozen(db: TdPool) -> Result<(), TdError> {
         let name_c_0 = CollectionName::try_from("c_0")?;
-        let collection_0 = db.seed().collection(&name_c_0, &UserId::admin()).await?;
+        let collection_0 = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .collection(&name_c_0, &UserId::admin())
+            .await?;
         let create = FunctionRegister::builder()
             .try_name("function_0")?
             .try_description("description")?
@@ -362,10 +389,18 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::default())
             .reuse_frozen_tables(false)
             .build()?;
-        let _ = db.seed().function(&collection_0, &create).await?;
+        let _ = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection_0, &create)
+            .await?;
 
         let name_c_1 = CollectionName::try_from("c_1")?;
-        let collection_1 = db.seed().collection(&name_c_1, &UserId::admin()).await?;
+        let collection_1 = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .collection(&name_c_1, &UserId::admin())
+            .await?;
         let create = FunctionRegister::builder()
             .try_name("function_1")?
             .try_description("description")?
@@ -381,7 +416,11 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::default())
             .reuse_frozen_tables(false)
             .build()?;
-        let _ = db.seed().function(&collection_1, &create).await?;
+        let _ = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection_1, &create)
+            .await?;
 
         let request = RequestContext::with(
             AccessTokenId::default(),

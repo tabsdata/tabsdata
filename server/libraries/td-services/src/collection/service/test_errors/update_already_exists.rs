@@ -16,14 +16,22 @@ use td_objects::types::basic::{
     AccessTokenId, CollectionIdName, CollectionName, ProjectId, RoleId, UserId,
 };
 use td_queries::test_utils::SeedEntry;
-use td_tower::project_scope::InProject;
+use td_database::scoped::InProject;
 
 #[td_test::test(db)]
 async fn test_update_already_existing(db: TdPool) {
     let name0 = CollectionName::try_from("ds0").unwrap();
-    let _ = db.seed().collection(&name0, &UserId::admin()).await;
+    let _ = db
+        .scoped(ProjectId::sandbox())
+        .seed()
+        .collection(&name0, &UserId::admin())
+        .await;
     let name1 = CollectionName::try_from("ds1").unwrap();
-    let _ = db.seed().collection(&name1, &UserId::admin()).await;
+    let _ = db
+        .scoped(ProjectId::sandbox())
+        .seed()
+        .collection(&name1, &UserId::admin())
+        .await;
 
     let service = UpdateCollectionService::with_defaults(db).service();
 

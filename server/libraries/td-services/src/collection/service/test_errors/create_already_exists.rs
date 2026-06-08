@@ -14,12 +14,16 @@ use td_objects::types::basic::{
     AccessTokenId, CollectionName, Description, ProjectId, RoleId, UserId,
 };
 use td_queries::test_utils::SeedEntry;
-use td_tower::project_scope::InProject;
+use td_database::scoped::InProject;
 
 #[td_test::test(db)]
 async fn test_create_already_existing(db: TdPool) {
     let name = CollectionName::try_from("ds0").unwrap();
-    let _ = db.seed().collection(&name, &UserId::admin()).await;
+    let _ = db
+        .scoped(ProjectId::sandbox())
+        .seed()
+        .collection(&name, &UserId::admin())
+        .await;
 
     let service = CreateCollectionService::with_defaults(db.clone()).service();
 

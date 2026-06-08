@@ -2,10 +2,10 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::QueryExecutor;
 use crate::{CurrentEntry, LiveEntry};
 use ta_objects::TryUpdater;
 use ta_objects::and;
-use td_database::dynamic::DynamicConnection;
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::dependency::DependencyDBBuilder;
@@ -22,11 +22,11 @@ use td_objects::types::composed::TableVersions;
 use td_objects::types::table_ref::Versions;
 
 // Very similar to seed_function or build_table_versions, but to seed system
-// tables. Runs on a project-scoped connection (see `Seed::scoped`); the field-
-// less rows default their `project_id` from that scope, and reads run on the
-// same connection.
+// tables. Runs on the caller's executor: if it is project-scoped
+// (`db.scoped(p)`), the field-less rows default their `project_id` from that
+// scope.
 pub(crate) async fn seed_system_tables(
-    conn: &mut DynamicConnection<'_>,
+    mut executor: impl QueryExecutor,
     function: &FunctionDB,
 ) -> Result<Vec<TableDB>, TdError> {
     let request_context = RequestContext::with(
@@ -52,7 +52,7 @@ pub(crate) async fn seed_system_tables(
             .status(TableStatus::Active)
             .build()?;
 
-        conn.live().insert(&table).await?;
+        executor.reuse().live().insert(&table).await?;
         system_tables.push(table);
     }
 
@@ -66,7 +66,8 @@ pub(crate) async fn seed_system_tables(
             TableName::try_from(format!("{prefix}__{}", function.function_id))?,
         );
 
-        let table_db = conn
+        let table_db = executor
+            .reuse()
             .current()
             .fetch_one::<TableDBWithNames>(and!(table_collection, table_name))
             .await?;
@@ -82,7 +83,7 @@ pub(crate) async fn seed_system_tables(
             .system(true)
             .build()?;
 
-        conn.live().insert(&dependency).await?;
+        executor.reuse().live().insert(&dependency).await?;
     }
 
     Ok(system_tables)
@@ -96,12 +97,13 @@ mod tests {
     use td_database::pool::TdPool;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::table::TableDB;
-    use td_objects::types::basic::{BundleId, CollectionName, Decorator, UserId};
+    use td_objects::types::basic::{BundleId, CollectionName, Decorator, ProjectId, UserId};
     use td_security::ENCODED_ID_SYSTEM;
 
     #[td_test::test(db)]
     async fn test_seed_system_tables(db: TdPool) {
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(
                 &CollectionName::try_from("collection").unwrap(),
@@ -132,8 +134,18 @@ mod tests {
             .build()
             .unwrap();
 
-        let function = db.seed().function(&collection, &create).await.unwrap();
-        let system_tables = db.seed().system_tables(&function).await.unwrap();
+        let function = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await
+            .unwrap();
+        let system_tables = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .system_tables(&function)
+            .await
+            .unwrap();
 
         assert_eq!(system_tables.len(), 1);
         for table in system_tables {

@@ -61,7 +61,7 @@ mod tests {
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
 
     #[td_test::test(db)]
     async fn test_inflight_empty_db(db: TdPool) -> Result<(), TdError> {
@@ -82,8 +82,8 @@ mod tests {
     /// no project predicate and leans entirely on the per-request GUC + RLS, so a
     /// request scoped to a different project must observe none of another
     /// project's in-flight runs. Postgres-only (SQLite/MySQL have no RLS).
-    /// `db.seed()` writes into `sandbox`, so we seed an in-flight run there and
-    /// confirm a freshly-created empty project cannot see it.
+    /// We seed an in-flight run scoped to `sandbox` and confirm a freshly-created
+    /// empty project cannot see it.
     #[td_test::test(db)]
     async fn test_inflight_isolated_by_project(db: TdPool) -> Result<(), TdError> {
         if !matches!(db.kind(), DatabaseBackend::Postgres) {
@@ -98,6 +98,7 @@ mod tests {
 
         // An in-flight run in `sandbox`.
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(
                 &CollectionName::try_from("inflight_iso_coll")?,
@@ -116,13 +117,23 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("rv")?)
             .reuse_frozen_tables(false)
             .build()?;
-        let function = db.seed().function(&collection, &create).await?;
-        let execution = db.seed().execution(&function).await?;
+        let function = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
+        let execution = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .execution(&function)
+            .await?;
         let transaction = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .transaction(&execution, &TransactionKey::try_from("ANY")?)
             .await?;
-        db.seed()
+        db.scoped(ProjectId::sandbox())
+            .seed()
             .physical_function_run(
                 &collection,
                 &function,
@@ -183,13 +194,16 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("rv")?)
             .reuse_frozen_tables(false)
             .build()?;
-        let function = db.seed().function(collection, &create).await?;
-        let execution = db.seed().execution(&function).await?;
+        let p = &collection.project_id;
+        let function = db.scoped(p).seed().function(collection, &create).await?;
+        let execution = db.scoped(p).seed().execution(&function).await?;
         let transaction = db
+            .scoped(p)
             .seed()
             .transaction(&execution, &TransactionKey::try_from("ANY")?)
             .await?;
-        db.seed()
+        db.scoped(p)
+            .seed()
             .physical_function_run(
                 collection,
                 &function,
@@ -213,6 +227,7 @@ mod tests {
 
         // Project A = sandbox: an in-flight run in a sandbox collection.
         let coll_a = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&CollectionName::try_from("g_inflight_a")?, &UserId::admin())
             .await?;
@@ -225,6 +240,7 @@ mod tests {
             .project(ProjectName::try_from("g_inflight_b")?)
             .await?;
         let coll_b_name = CollectionName::try_from("g_inflight_b_coll")?;
+        let project_b_id = project_b.id.to_string();
         CollectionServices::build(&Context::with_defaults(db.clone()))
             .create
             .service()
@@ -244,7 +260,11 @@ mod tests {
                 .in_project(project_b.id),
             )
             .await?;
-        let coll_b: CollectionDB = db.live().fetch_one::<CollectionDB>(&coll_b_name).await?;
+        let coll_b: CollectionDB = db
+            .scoped(&project_b_id)
+            .live()
+            .fetch_one::<CollectionDB>(&coll_b_name)
+            .await?;
         seed_inflight_run(&db, &coll_b).await?;
 
         // Global request is project-free (bare InflightRequest) → bypass RLS →

@@ -3,8 +3,8 @@
 //
 
 use crate::LiveEntry;
+use crate::QueryExecutor;
 use ta_objects::Buildable;
-use td_database::dynamic::DynamicConnection;
 use td_error::TdError;
 use td_objects::and;
 use td_objects::dxo::collection::CollectionDB;
@@ -24,12 +24,13 @@ use td_objects::types::basic::{
 /// Seed an LFR_input row mirroring a `(consumer FR, upstream FR + TDV)`
 /// dependency edge into the logical layer. When upstream is non-NULL
 /// also seeds the LTDV identity row + a Bound pointer event so cascade
-/// walks see a complete chain. Runs on a project-scoped connection (see
-/// [`Seed::scoped`]): the field-less `LogicalFunctionRunInputDB` defaults its
-/// `project_id` from the scope; the LTDV / pointer rows carry it explicitly.
+/// walks see a complete chain. Runs on the caller's executor: if it is
+/// project-scoped (`db.scoped(p)`), the field-less `LogicalFunctionRunInputDB`
+/// defaults its `project_id` from the scope; the LTDV / pointer rows carry it
+/// explicitly.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn seed_logical_input(
-    conn: &mut DynamicConnection<'_>,
+    mut executor: impl QueryExecutor,
     collection: &CollectionDB,
     execution: &ExecutionDB,
     transaction: &TransactionDB,
@@ -40,7 +41,8 @@ pub(crate) async fn seed_logical_input(
     requirement_dependency_pos: Option<&DependencyPos>,
     requirement_version_pos: &VersionPos,
 ) -> Result<LogicalFunctionRunInputDB, TdError> {
-    let consumer_lfr: LogicalFunctionRunDB = conn
+    let consumer_lfr: LogicalFunctionRunDB = executor
+        .reuse()
         .live()
         .fetch_one(and!(
             &physical_function_run.execution_id,
@@ -61,7 +63,8 @@ pub(crate) async fn seed_logical_input(
     if let (Some(req_fr), Some(req_tdv)) =
         (requirement_function_run, requirement_table_data_version)
     {
-        let producer_lfr: LogicalFunctionRunDB = conn
+        let producer_lfr: LogicalFunctionRunDB = executor
+            .reuse()
             .live()
             .fetch_one(and!(&req_fr.execution_id, &req_fr.function_id))
             .await?;
@@ -77,7 +80,9 @@ pub(crate) async fn seed_logical_input(
             .triggered_on(transaction.triggered_on)
             .triggered_by_id(transaction.triggered_by_id)
             .build()?;
-        conn.live()
+        executor
+            .reuse()
+            .live()
             .insert::<LogicalTableDataVersionDB>(&ltdv)
             .await?;
 
@@ -90,7 +95,9 @@ pub(crate) async fn seed_logical_input(
             transaction.triggered_by_id,
             LogicalPointerReason::InitialDispatch,
         )?;
-        conn.live()
+        executor
+            .reuse()
+            .live()
             .insert::<LogicalTableDataVersionPointerDB>(&pointer)
             .await?;
 
@@ -98,7 +105,9 @@ pub(crate) async fn seed_logical_input(
     }
 
     let ffr_input = input_builder.build()?;
-    conn.live()
+    executor
+        .reuse()
+        .live()
         .insert::<LogicalFunctionRunInputDB>(&ffr_input)
         .await?;
     Ok(ffr_input)
@@ -115,14 +124,15 @@ mod tests {
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::table::TableDB;
     use td_objects::types::basic::{
-        BundleId, CollectionName, Decorator, DependencyPos, LogicalFunctionRunStatus, TableNameDto,
-        TransactionKey, UserId, VersionPos,
+        BundleId, CollectionName, Decorator, DependencyPos, LogicalFunctionRunStatus, ProjectId,
+        TableNameDto, TransactionKey, UserId, VersionPos,
     };
     use td_security::ENCODED_ID_SYSTEM;
 
     #[td_test::test(db)]
     async fn test_seed_logical_input(db: TdPool) {
         let collection = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(
                 &CollectionName::try_from("collection").unwrap(),
@@ -149,16 +159,28 @@ mod tests {
             .build()
             .unwrap();
 
-        let function = db.seed().function(&collection, &create).await.unwrap();
-        let execution = db.seed().execution(&function).await.unwrap();
+        let function = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await
+            .unwrap();
+        let execution = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .execution(&function)
+            .await
+            .unwrap();
         let transaction_key = TransactionKey::try_from("ANY").unwrap();
         let transaction = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .transaction(&execution, &transaction_key)
             .await
             .unwrap();
 
         let physical_function_run = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_function_run(
                 &collection,
@@ -179,6 +201,7 @@ mod tests {
         let requirement_table = &requirement_tables[0];
 
         let requirement_table_data_version = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -208,15 +231,27 @@ mod tests {
             .build()
             .unwrap();
 
-        let function = db.seed().function(&collection, &create).await.unwrap();
-        let execution = db.seed().execution(&function).await.unwrap();
+        let function = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await
+            .unwrap();
+        let execution = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .execution(&function)
+            .await
+            .unwrap();
         let transaction = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .transaction(&execution, &transaction_key)
             .await
             .unwrap();
 
         let requirement_function_run = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_function_run(
                 &collection,
@@ -229,6 +264,7 @@ mod tests {
             .unwrap();
 
         let ffri = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .logical_input(
                 &collection,

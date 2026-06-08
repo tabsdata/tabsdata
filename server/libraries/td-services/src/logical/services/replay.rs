@@ -93,8 +93,8 @@ mod tests {
     use td_queries::test_utils::SeedEntry;
     use td_queries::{LiveEntry, VersionedEntry};
     use td_tower::ctx_service::RawOneshot;
-    use td_tower::project_scope::InProject;
-    use td_tower::project_scope::Scoped;
+    use td_database::scoped::InProject;
+    use td_database::scoped::Scoped;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -164,6 +164,7 @@ mod tests {
         FunctionVersionId,
     ) {
         let coll = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(
                 &CollectionName::try_from(coll_name).unwrap(),
@@ -187,11 +188,27 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()
             .unwrap();
-        let func = db.seed().function(&coll, &create).await.unwrap();
-        let exec = db.seed().execution(&func).await.unwrap();
+        let func = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&coll, &create)
+            .await
+            .unwrap();
+        let exec = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .execution(&func)
+            .await
+            .unwrap();
         let txn_key = TransactionKey::try_from("ANY").unwrap();
-        let txn = db.seed().transaction(&exec, &txn_key).await.unwrap();
+        let txn = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .transaction(&exec, &txn_key)
+            .await
+            .unwrap();
         let fr = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_function_run(&coll, &func, &exec, &txn, &status)
             .await
@@ -222,7 +239,11 @@ mod tests {
             .status(FunctionStatus::Active)
             .build()
             .unwrap();
-        db.seed().insert(&patch).await.unwrap();
+        db.scoped(ProjectId::sandbox())
+            .live()
+            .insert(&patch)
+            .await
+            .unwrap();
         patch.id
     }
 
@@ -327,6 +348,7 @@ mod tests {
     async fn test_replay_picks_up_latest_patch(db: TdPool) -> Result<(), TdError> {
         // Seed a Committed LFR for a head function.
         let coll = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
@@ -342,13 +364,23 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("rv")?)
             .reuse_frozen_tables(false)
             .build()?;
-        let head = db.seed().function(&coll, &create).await?;
-        let exec = db.seed().execution(&head).await?;
+        let head = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&coll, &create)
+            .await?;
+        let exec = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .execution(&head)
+            .await?;
         let txn = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .transaction(&exec, &TransactionKey::try_from("ANY")?)
             .await?;
         let fr_old = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .physical_function_run(
                 &coll,
@@ -407,6 +439,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_replay_not_bound_refused(db: TdPool) -> Result<(), TdError> {
         let coll = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
@@ -422,9 +455,18 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("rv")?)
             .reuse_frozen_tables(false)
             .build()?;
-        let head = db.seed().function(&coll, &create).await?;
-        let exec = db.seed().execution(&head).await?;
+        let head = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&coll, &create)
+            .await?;
+        let exec = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .execution(&head)
+            .await?;
         let txn = db
+            .scoped(ProjectId::sandbox())
             .seed()
             .transaction(&exec, &TransactionKey::try_from("ANY")?)
             .await?;
@@ -443,7 +485,10 @@ mod tests {
             .triggered_by_id(txn.triggered_by_id)
             .status(LogicalFunctionRunStatus::Committed)
             .build()?;
-        db.live().insert::<LogicalFunctionRunDB>(&lfr).await?;
+        db.scoped(ProjectId::sandbox())
+            .live()
+            .insert::<LogicalFunctionRunDB>(&lfr)
+            .await?;
         let pending = LogicalFunctionRunPointerDB::build_event(
             lfr.project_id,
             &lfr.id,
@@ -453,7 +498,8 @@ mod tests {
             txn.triggered_by_id,
             LogicalPointerReason::InitialMint,
         )?;
-        db.live()
+        db.scoped(ProjectId::sandbox())
+            .live()
             .insert::<LogicalFunctionRunPointerDB>(&pending)
             .await?;
 

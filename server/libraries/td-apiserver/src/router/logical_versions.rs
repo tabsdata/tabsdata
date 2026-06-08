@@ -18,7 +18,7 @@ mod routes {
     use td_objects::rest_urls::{LOGICAL_FUNCTION_RUN_REPLAY, LogicalFunctionRunParam};
     use td_objects::types::basic::ProjectId;
     use td_services::logical::services::LogicalServices;
-    use td_tower::project_scope::InProject;
+    use td_database::scoped::InProject;
     use tower::ServiceExt;
 
     const LOGICAL_VERSIONS_TAG: &str = "Logical Versions";
