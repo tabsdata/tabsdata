@@ -10,13 +10,13 @@ from pathlib import Path
 import pytest
 import yaml
 
-from tabsdatak.server._tdrunner.function.commands.prep_localize_state import (
-    EXIT_BAD_REQUEST,
-    EXIT_INPUTS_MANIFEST_WRITE_FAILED,
-    EXIT_STATE_MANIFEST_WRITE_FAILED,
-    EXIT_UNSUPPORTED_SCHEME,
-    EXIT_WRITE_FAILED,
-    main,
+from tabsdatak.server._tdrunner.function.commands.prep_localize_state import main
+from tabsdatak.server._tdrunner.function.commands.prep_localize_state.error import (
+    BadEndpointSchemeError,
+    BadRequestError,
+    InputsManifestWriteFailedError,
+    StateManifestWriteFailedError,
+    WriteFailedError,
 )
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
@@ -379,7 +379,7 @@ def test_main_missing_request_returns_bad_request(monkeypatch, tmp_path, http_ok
         tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert rc == EXIT_BAD_REQUEST
+    assert rc == BadRequestError.exit_code
 
 
 def test_main_malformed_request_returns_bad_request(monkeypatch, tmp_path, http_ok_url):
@@ -396,7 +396,7 @@ def test_main_malformed_request_returns_bad_request(monkeypatch, tmp_path, http_
         tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert rc == EXIT_BAD_REQUEST
+    assert rc == BadRequestError.exit_code
 
 
 def test_main_unsupported_scheme_returns_unsupported_scheme(
@@ -422,7 +422,7 @@ def test_main_unsupported_scheme_returns_unsupported_scheme(
         tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert rc == EXIT_UNSUPPORTED_SCHEME
+    assert rc == BadEndpointSchemeError.exit_code
 
 
 def test_main_write_error_returns_write_failed(monkeypatch, tmp_path, http_ok_url):
@@ -440,7 +440,7 @@ def test_main_write_error_returns_write_failed(monkeypatch, tmp_path, http_ok_ur
         tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert rc == EXIT_WRITE_FAILED
+    assert rc == WriteFailedError.exit_code
 
 
 def test_main_inputs_manifest_write_failure_maps_to_inputs_manifest_failed(
@@ -461,7 +461,7 @@ def test_main_inputs_manifest_write_failure_maps_to_inputs_manifest_failed(
         tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert rc == EXIT_INPUTS_MANIFEST_WRITE_FAILED
+    assert rc == InputsManifestWriteFailedError.exit_code
 
 
 def test_main_state_manifest_write_failure_maps_to_state_manifest_failed(
@@ -482,7 +482,7 @@ def test_main_state_manifest_write_failure_maps_to_state_manifest_failed(
         tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert rc == EXIT_STATE_MANIFEST_WRITE_FAILED
+    assert rc == StateManifestWriteFailedError.exit_code
 
 
 def test_main_invalid_options_returns_1(monkeypatch):

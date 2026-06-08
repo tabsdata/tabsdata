@@ -29,7 +29,6 @@ from pathlib import Path
 
 from tabsdatak.server._tdrunner.function._lib.cli import build_parser, command
 from tabsdatak.server._tdrunner.function._lib.endpoint import UnsupportedSchemeError
-from tabsdatak.server._tdrunner.function._lib.errors import CommandSpecificError
 from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
     MANIFEST_FILES_KEY,
     MANIFEST_NAME_KEY,
@@ -37,12 +36,15 @@ from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
 )
 from tabsdatak.server._tdrunner.function._lib.request import (
     Request,
-    load_request_or_fail,
+    load_request_or_raise,
 )
 from tabsdatak.server._tdrunner.function._lib.state_manifest import write_state_manifest
 from tabsdatak.server._tdrunner.function._lib.transporter_request import (
     build_localize_state_request,
     write_transporter_request,
+)
+from tabsdatak.server._tdrunner.function.commands.prep_localize_state.error import (
+    PrepLocalizeStateErrorCode,
 )
 
 VERSION = "0.1.0"
@@ -61,13 +63,6 @@ MAN = (
     "state manifest at --state-manifest with one entry per "
     "request.system_input table (files at <state_dir>/<name>.parquet)."
 )
-
-# Command-specific exit codes (>= 10).
-EXIT_BAD_REQUEST = 10
-EXIT_UNSUPPORTED_SCHEME = 11
-EXIT_WRITE_FAILED = 12
-EXIT_INPUTS_MANIFEST_WRITE_FAILED = 13
-EXIT_STATE_MANIFEST_WRITE_FAILED = 14
 
 
 def _build_parser():
@@ -162,37 +157,35 @@ def main(args: argparse.Namespace) -> int:
     inputs_manifest_path = Path(args.inputs_manifest)
     state_manifest_path = Path(args.state_manifest)
 
-    request = load_request_or_fail(request_path, EXIT_BAD_REQUEST)
+    request = load_request_or_raise(request_path, PrepLocalizeStateErrorCode.PLS_1)
 
     try:
         copy_req = build_localize_state_request(request, in_dir, state_dir)
     except UnsupportedSchemeError as exc:
-        raise CommandSpecificError(EXIT_UNSUPPORTED_SCHEME, str(exc)) from exc
+        raise PrepLocalizeStateErrorCode.PLS_2.exception(cause=exc, detail=str(exc))
 
     try:
         write_transporter_request(copy_req, out_path)
     except OSError as exc:
-        raise CommandSpecificError(
-            EXIT_WRITE_FAILED, f"failed to write {out_path}: {exc}"
-        ) from exc
+        raise PrepLocalizeStateErrorCode.PLS_3.exception(
+            cause=exc, path=out_path, detail=str(exc)
+        )
 
     inputs_entries = _build_inputs_manifest_entries(request, in_dir)
     try:
         write_inputs_manifest(inputs_entries, inputs_manifest_path)
     except OSError as exc:
-        raise CommandSpecificError(
-            EXIT_INPUTS_MANIFEST_WRITE_FAILED,
-            f"failed to write {inputs_manifest_path}: {exc}",
-        ) from exc
+        raise PrepLocalizeStateErrorCode.PLS_4.exception(
+            cause=exc, path=inputs_manifest_path, detail=str(exc)
+        )
 
     state_entries = _build_state_manifest_entries(request, state_dir)
     try:
         write_state_manifest(state_entries, state_manifest_path)
     except OSError as exc:
-        raise CommandSpecificError(
-            EXIT_STATE_MANIFEST_WRITE_FAILED,
-            f"failed to write {state_manifest_path}: {exc}",
-        ) from exc
+        raise PrepLocalizeStateErrorCode.PLS_5.exception(
+            cause=exc, path=state_manifest_path, detail=str(exc)
+        )
     return 0
 
 
