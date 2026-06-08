@@ -17,13 +17,13 @@ import pyarrow.parquet as pq
 import pytest
 import yaml
 
-from tabsdatak.server._tdrunner.function.commands.report_completion import (
-    EXIT_BAD_MANIFEST,
-    EXIT_BAD_REQUEST,
-    EXIT_HTTP_ERROR,
-    EXIT_MANIFEST_MISMATCH,
-    EXIT_WRITE_FAILED,
-    main,
+from tabsdatak.server._tdrunner.function.commands.report_completion import main
+from tabsdatak.server._tdrunner.function.commands.report_completion.error import (
+    BadManifestError,
+    BadRequestError,
+    HttpPostError,
+    ManifestMismatchError,
+    WriteFailedError,
 )
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
@@ -326,7 +326,7 @@ def test_main_missing_request_returns_bad_request(
         liveness=tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert main() == EXIT_BAD_REQUEST
+    assert main() == BadRequestError.exit_code
 
 
 def test_main_missing_manifest_returns_bad_manifest(
@@ -345,7 +345,7 @@ def test_main_missing_manifest_returns_bad_manifest(
         liveness=tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert main() == EXIT_BAD_MANIFEST
+    assert main() == BadManifestError.exit_code
 
 
 def test_main_malformed_manifest_returns_bad_manifest(
@@ -366,7 +366,7 @@ def test_main_malformed_manifest_returns_bad_manifest(
         liveness=tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert main() == EXIT_BAD_MANIFEST
+    assert main() == BadManifestError.exit_code
 
 
 def test_main_output_table_missing_from_manifest_returns_mismatch(
@@ -386,7 +386,7 @@ def test_main_output_table_missing_from_manifest_returns_mismatch(
         liveness=tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert main() == EXIT_MANIFEST_MISMATCH
+    assert main() == ManifestMismatchError.exit_code
 
 
 def test_main_http_error_returns_http_error_but_writes_out(
@@ -408,13 +408,13 @@ def test_main_http_error_returns_http_error_but_writes_out(
         liveness=tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert main() == EXIT_HTTP_ERROR
+    assert main() == HttpPostError.exit_code
     # --out is written before POST so it survives the failure.
     assert out.exists()
 
 
 def test_main_url_error_returns_http_error(monkeypatch, tmp_path, http_ok_url):
-    """URLError (network unreachable) is mapped to EXIT_HTTP_ERROR."""
+    """URLError (network unreachable) is mapped to HttpPostError."""
 
     real_urlopen = urllib.request.urlopen
 
@@ -437,7 +437,7 @@ def test_main_url_error_returns_http_error(monkeypatch, tmp_path, http_ok_url):
         liveness=tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert main() == EXIT_HTTP_ERROR
+    assert main() == HttpPostError.exit_code
 
 
 def test_main_write_error_returns_write_failed(
@@ -457,7 +457,7 @@ def test_main_write_error_returns_write_failed(
         liveness=tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert main() == EXIT_WRITE_FAILED
+    assert main() == WriteFailedError.exit_code
 
 
 def test_main_invalid_options_returns_1(monkeypatch):

@@ -22,7 +22,7 @@ otherwise.
 
 A `request.output` table that has no entry in the outputs manifest is
 treated as a config mismatch (the function definition declared fewer
-outputs than the request expects) and surfaces `EXIT_MANIFEST_MISMATCH`.
+outputs than the request expects) and surfaces `ManifestMismatchError`.
 """
 
 from __future__ import annotations
@@ -40,21 +40,23 @@ from tabsdatak.server._tdrunner.function._lib.cli import (
     command,
     resolve_value,
 )
-from tabsdatak.server._tdrunner.function._lib.errors import CommandSpecificError
 from tabsdatak.server._tdrunner.function._lib.outputs_manifest import (
     MANIFEST_FILE_KEY,
     MANIFEST_NAME_KEY,
-    load_outputs_manifest_or_fail,
+    load_outputs_manifest_or_raise,
 )
 from tabsdatak.server._tdrunner.function._lib.request import (
     Request,
-    load_request_or_fail,
+    load_request_or_raise,
 )
 from tabsdatak.server._tdrunner.function._lib.response import (
     Response,
     TableEntry,
     TableInfo,
     write_response,
+)
+from tabsdatak.server._tdrunner.function.commands.report_completion.error import (
+    ReportCompletionErrorCode,
 )
 
 VERSION = "0.1.0"
@@ -67,12 +69,6 @@ MAN = (
     "and the --state-dir parquets (for request.system_output), writes a "
     "copy to --out, and POSTs the body to --url."
 )
-
-EXIT_BAD_REQUEST = 10
-EXIT_HTTP_ERROR = 11
-EXIT_WRITE_FAILED = 12
-EXIT_BAD_MANIFEST = 13
-EXIT_MANIFEST_MISMATCH = 14
 
 
 def _build_parser():
@@ -143,8 +139,8 @@ def _build_response_payload(
     tables are resolved against `state_dir/<name>.parquet`.
 
     Raises:
-        CommandSpecificError(EXIT_MANIFEST_MISMATCH): a `request.output`
-            table has no matching entry in the manifest.
+        ManifestMismatchError: a `request.output` table has no
+            matching entry in the manifest.
     """
     files_by_name: dict[str, str | None] = {
         e[MANIFEST_NAME_KEY]: e.get(MANIFEST_FILE_KEY) for e in manifest_entries
@@ -152,11 +148,7 @@ def _build_response_payload(
     entries: list[TableEntry] = []
     for table in request.output:
         if table.name not in files_by_name:
-            raise CommandSpecificError(
-                EXIT_MANIFEST_MISMATCH,
-                f"output table {table.name!r} declared in request "
-                f"has no entry in the outputs manifest",
-            )
+            raise ReportCompletionErrorCode.RC_3.exception(table=table.name)
         entries.append(_entry_from_manifest(table.name, files_by_name[table.name]))
     for table in request.system_output:
         entries.append(_entry_from_state_dir(table.name, state_dir))
@@ -177,14 +169,13 @@ def _post(url: str, token: str, body: bytes) -> None:
         with urllib.request.urlopen(req) as resp:
             resp.read()
     except urllib.error.HTTPError as exc:
-        raise CommandSpecificError(
-            EXIT_HTTP_ERROR, f"HTTP {exc.code} from {url}: {exc.reason}"
-        ) from exc
+        raise ReportCompletionErrorCode.RC_5.exception(
+            cause=exc, url=url, status=exc.code, detail=exc.reason
+        )
     except urllib.error.URLError as exc:
-        raise CommandSpecificError(
-            EXIT_HTTP_ERROR,
-            f"network error contacting {url}: {exc.reason}",
-        ) from exc
+        raise ReportCompletionErrorCode.RC_6.exception(
+            cause=exc, url=url, detail=str(exc.reason)
+        )
 
 
 @command(name="td_report_completion", parser=_build_parser)
@@ -196,9 +187,9 @@ def main(args: argparse.Namespace) -> int:
     state_dir = Path(args.state_dir)
     out_path = Path(args.out)
 
-    request = load_request_or_fail(request_path, EXIT_BAD_REQUEST)
-    manifest_entries = load_outputs_manifest_or_fail(
-        outputs_manifest_path, EXIT_BAD_MANIFEST
+    request = load_request_or_raise(request_path, ReportCompletionErrorCode.RC_1)
+    manifest_entries = load_outputs_manifest_or_raise(
+        outputs_manifest_path, ReportCompletionErrorCode.RC_2
     )
 
     response = _build_response_payload(request, manifest_entries, state_dir)
@@ -208,9 +199,9 @@ def main(args: argparse.Namespace) -> int:
     try:
         write_response(response, out_path)
     except OSError as exc:
-        raise CommandSpecificError(
-            EXIT_WRITE_FAILED, f"failed to write {out_path}: {exc}"
-        ) from exc
+        raise ReportCompletionErrorCode.RC_4.exception(
+            cause=exc, path=out_path, detail=str(exc)
+        )
 
     body = out_path.read_bytes()
     _post(url, token, body)
