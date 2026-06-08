@@ -16,11 +16,16 @@ from pathlib import Path
 import pytest
 import yaml
 
+from tabsdatak.error import ErrorCode, ErrorDef
+from tabsdatak.server._tdrunner.function._lib.errors import (
+    CommandRuntimeException,
+)
 from tabsdatak.server._tdrunner.function._lib.outputs_manifest import (
     MANIFEST_FILE_KEY,
     MANIFEST_NAME_KEY,
     InvalidOutputsManifestError,
     load_outputs_manifest,
+    load_outputs_manifest_or_raise,
     write_outputs_manifest,
 )
 
@@ -174,3 +179,37 @@ def test_write_to_directory_path_raises_oserror(tmp_path):
     d.mkdir()
     with pytest.raises(OSError):
         write_outputs_manifest([], d)
+
+
+# --- load_outputs_manifest_or_raise --------------------------------------
+
+
+class _ProbeManifestError(CommandRuntimeException):
+    exit_code = 98
+
+
+class _ProbeManifestErrorCode(ErrorCode):
+    PROBE_1 = ErrorDef(_ProbeManifestError, "probe: {path} {detail}")
+
+
+def test_load_outputs_manifest_or_raise_happy_path(tmp_path):
+    p = tmp_path / "m.yaml"
+    p.write_text("outputs:\n  - {name: t, file: /a.parquet}\n")
+    entries = load_outputs_manifest_or_raise(p, _ProbeManifestErrorCode.PROBE_1)
+    assert entries == [{"name": "t", "file": "/a.parquet"}]
+
+
+def test_load_outputs_manifest_or_raise_wraps_missing(tmp_path):
+    missing = tmp_path / "missing.yaml"
+    with pytest.raises(_ProbeManifestError) as exc_info:
+        load_outputs_manifest_or_raise(missing, _ProbeManifestErrorCode.PROBE_1)
+    assert exc_info.value.exit_code == 98
+    assert isinstance(exc_info.value.__cause__, FileNotFoundError)
+
+
+def test_load_outputs_manifest_or_raise_wraps_invalid(tmp_path):
+    bad = tmp_path / "m.yaml"
+    bad.write_text("not-a-mapping")
+    with pytest.raises(_ProbeManifestError) as exc_info:
+        load_outputs_manifest_or_raise(bad, _ProbeManifestErrorCode.PROBE_1)
+    assert isinstance(exc_info.value.__cause__, InvalidOutputsManifestError)
