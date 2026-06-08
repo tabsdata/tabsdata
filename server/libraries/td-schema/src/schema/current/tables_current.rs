@@ -21,8 +21,8 @@ pub struct TablesCurrentWithNames;
 #[iden = "tables_current"]
 pub enum TablesCurrent {
     Table,
-    ProjectId,
     Id,
+    ProjectId,
     CollectionId,
     TableId,
     Name,
@@ -47,6 +47,7 @@ impl Entity for Defs {
             Table::create()
                 .table(TablesCurrent::Table)
                 .col(ColumnDef::new(TablesCurrent::Id).text().not_null().primary_key())
+                .col(ColumnDef::new(TablesCurrent::ProjectId).text().not_null())
                 .col(ColumnDef::new(TablesCurrent::CollectionId).text().not_null())
                 .col(ColumnDef::new(TablesCurrent::TableId).text().not_null().unique_key())
                 .col(ColumnDef::new(TablesCurrent::Name).text().not_null())
@@ -59,7 +60,6 @@ impl Entity for Defs {
                 .col(ColumnDef::new(TablesCurrent::DefinedById).text().not_null())
                 .col(ColumnDef::new(TablesCurrent::Status).text().not_null())
                 .col(ColumnDef::new(TablesCurrent::TableType).text().not_null().default("R"))
-                .col(ColumnDef::new(TablesCurrent::ProjectId).text().not_null())
                 .to_owned(),
         ]
     }

@@ -16,8 +16,8 @@ use crate::schema::Entity;
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
 pub enum LogicalFunctionRunInputs {
     Table,
-    ProjectId,
     Id,
+    ProjectId,
     CollectionId,
     ExecutionId,
     TransactionId,
@@ -37,6 +37,7 @@ impl Entity for Defs {
             Table::create()
                 .table(LogicalFunctionRunInputs::Table)
                 .col(ColumnDef::new(LogicalFunctionRunInputs::Id).text().not_null().primary_key())
+                .col(ColumnDef::new(LogicalFunctionRunInputs::ProjectId).text().not_null())
                 .col(ColumnDef::new(LogicalFunctionRunInputs::CollectionId).text().not_null())
                 .col(ColumnDef::new(LogicalFunctionRunInputs::ExecutionId).text().not_null())
                 .col(ColumnDef::new(LogicalFunctionRunInputs::TransactionId).text().not_null())
@@ -86,7 +87,6 @@ impl Entity for Defs {
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
-                .col(ColumnDef::new(LogicalFunctionRunInputs::ProjectId).text().not_null())
                 .to_owned(),
         ]
     }

@@ -21,8 +21,8 @@ pub struct FunctionsWithNames;
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
 pub enum Functions {
     Table,
-    ProjectId,
     Id,
+    ProjectId,
     CollectionId,
     Name,
     Description,
@@ -48,6 +48,7 @@ impl Entity for Defs {
             Table::create()
                 .table(Functions::Table)
                 .col(ColumnDef::new(Functions::Id).text().not_null().primary_key())
+                .col(ColumnDef::new(Functions::ProjectId).text().not_null())
                 .col(ColumnDef::new(Functions::CollectionId).text().not_null())
                 .col(ColumnDef::new(Functions::Name).text().not_null())
                 .col(ColumnDef::new(Functions::Description).text().not_null())
@@ -70,7 +71,6 @@ impl Entity for Defs {
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
-                .col(ColumnDef::new(Functions::ProjectId).text().not_null())
                 .to_owned(),
         ]
     }

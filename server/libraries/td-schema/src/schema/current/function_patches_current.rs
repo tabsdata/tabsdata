@@ -10,8 +10,8 @@ use crate::schema::Entity;
 #[iden = "function_patches_current"]
 pub enum FunctionPatchesCurrent {
     Table,
-    ProjectId,
     Id,
+    ProjectId,
     ParentFunctionVersionId,
     FunctionId,
     CollectionId,
@@ -36,6 +36,7 @@ impl Entity for Defs {
             Table::create()
                 .table(FunctionPatchesCurrent::Table)
                 .col(ColumnDef::new(FunctionPatchesCurrent::Id).text().not_null().primary_key())
+                .col(ColumnDef::new(FunctionPatchesCurrent::ProjectId).text().not_null())
                 .col(ColumnDef::new(FunctionPatchesCurrent::ParentFunctionVersionId).text().not_null().unique_key())
                 .col(ColumnDef::new(FunctionPatchesCurrent::FunctionId).text().not_null())
                 .col(ColumnDef::new(FunctionPatchesCurrent::CollectionId).text().not_null())
@@ -46,7 +47,6 @@ impl Entity for Defs {
                 .col(ColumnDef::new(FunctionPatchesCurrent::DefinedOn).timestamp_with_time_zone().not_null())
                 .col(ColumnDef::new(FunctionPatchesCurrent::DefinedById).text().not_null())
                 .col(ColumnDef::new(FunctionPatchesCurrent::Status).text().not_null())
-                .col(ColumnDef::new(FunctionPatchesCurrent::ProjectId).text().not_null())
                 .to_owned(),
         ]
     }

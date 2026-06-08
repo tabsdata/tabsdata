@@ -32,8 +32,8 @@ pub struct TriggersRead;
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
 pub enum Triggers {
     Table,
-    ProjectId,
     Id,
+    ProjectId,
     CollectionId,
     TriggerId,
     FunctionId,
@@ -54,6 +54,7 @@ impl Entity for Defs {
             Table::create()
                 .table(Triggers::Table)
                 .col(ColumnDef::new(Triggers::Id).text().not_null().primary_key())
+                .col(ColumnDef::new(Triggers::ProjectId).text().not_null())
                 .col(ColumnDef::new(Triggers::CollectionId).text().not_null())
                 .col(ColumnDef::new(Triggers::TriggerId).text().not_null())
                 .col(ColumnDef::new(Triggers::FunctionId).text().not_null())
@@ -71,7 +72,6 @@ impl Entity for Defs {
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
-                .col(ColumnDef::new(Triggers::ProjectId).text().not_null())
                 .to_owned(),
         ]
     }

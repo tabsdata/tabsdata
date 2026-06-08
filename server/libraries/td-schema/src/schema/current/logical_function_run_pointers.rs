@@ -18,8 +18,8 @@ use crate::schema::sql::{ImmutableTriggerDef, TriggerSpec};
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
 pub enum LogicalFunctionRunPointers {
     Table,
-    ProjectId,
     Id,
+    ProjectId,
     LogicalFunctionRunId,
     Status,
     PhysicalFunctionRunId,
@@ -37,6 +37,7 @@ impl Entity for Defs {
             Table::create()
                 .table(LogicalFunctionRunPointers::Table)
                 .col(ColumnDef::new(LogicalFunctionRunPointers::Id).text().not_null().primary_key())
+                .col(ColumnDef::new(LogicalFunctionRunPointers::ProjectId).text().not_null())
                 .col(ColumnDef::new(LogicalFunctionRunPointers::LogicalFunctionRunId).text().not_null())
                 .col(ColumnDef::new(LogicalFunctionRunPointers::Status).text().not_null())
                 // Nullable: NULL on Pending (mint-time) and Voided rows.
@@ -51,7 +52,6 @@ impl Entity for Defs {
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
-                .col(ColumnDef::new(LogicalFunctionRunPointers::ProjectId).text().not_null())
                 .to_owned(),
         ]
     }

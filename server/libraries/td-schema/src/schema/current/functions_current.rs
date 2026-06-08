@@ -20,8 +20,8 @@ pub struct FunctionsCurrentWithNames;
 #[iden = "functions_current"]
 pub enum FunctionsCurrent {
     Table,
-    ProjectId,
     Id,
+    ProjectId,
     CollectionId,
     Name,
     Description,
@@ -49,6 +49,7 @@ impl Entity for Defs {
             Table::create()
                 .table(FunctionsCurrent::Table)
                 .col(ColumnDef::new(FunctionsCurrent::Id).text().not_null().primary_key())
+                .col(ColumnDef::new(FunctionsCurrent::ProjectId).text().not_null())
                 .col(ColumnDef::new(FunctionsCurrent::CollectionId).text().not_null())
                 .col(ColumnDef::new(FunctionsCurrent::Name).text().not_null())
                 .col(ColumnDef::new(FunctionsCurrent::Description).text().not_null())
@@ -64,7 +65,6 @@ impl Entity for Defs {
                 .col(ColumnDef::new(FunctionsCurrent::Status).text().not_null())
                 .col(ColumnDef::new(FunctionsCurrent::Connector).text().null())
                 .col(ColumnDef::new(FunctionsCurrent::Enabled).boolean().default(true))
-                .col(ColumnDef::new(FunctionsCurrent::ProjectId).text().not_null())
                 .to_owned(),
         ]
     }

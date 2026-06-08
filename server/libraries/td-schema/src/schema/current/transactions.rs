@@ -23,8 +23,8 @@ pub struct TransactionsWithNames;
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
 pub enum Transactions {
     Table,
-    ProjectId,
     Id,
+    ProjectId,
     CollectionId,
     ExecutionId,
     TransactionBy,
@@ -41,6 +41,7 @@ impl Entity for Defs {
             Table::create()
                 .table(Transactions::Table)
                 .col(ColumnDef::new(Transactions::Id).text().not_null().primary_key())
+                .col(ColumnDef::new(Transactions::ProjectId).text().not_null())
                 .col(ColumnDef::new(Transactions::CollectionId).text().not_null())
                 .col(ColumnDef::new(Transactions::ExecutionId).text().not_null())
                 .col(ColumnDef::new(Transactions::TransactionBy).text().not_null())
@@ -61,7 +62,6 @@ impl Entity for Defs {
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
-                .col(ColumnDef::new(Transactions::ProjectId).text().not_null())
                 .to_owned(),
         ]
     }

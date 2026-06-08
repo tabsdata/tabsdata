@@ -35,8 +35,8 @@ pub struct TableDataVersionsWithNames;
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
 pub enum LogicalTableDataVersions {
     Table,
-    ProjectId,
     Id,
+    ProjectId,
     CollectionId,
     ExecutionId,
     TransactionId,
@@ -60,6 +60,7 @@ impl Entity for Defs {
             Table::create()
                 .table(LogicalTableDataVersions::Table)
                 .col(ColumnDef::new(LogicalTableDataVersions::Id).text().not_null().primary_key())
+                .col(ColumnDef::new(LogicalTableDataVersions::ProjectId).text().not_null())
                 .col(ColumnDef::new(LogicalTableDataVersions::CollectionId).text().not_null())
                 .col(ColumnDef::new(LogicalTableDataVersions::ExecutionId).text().not_null())
                 .col(ColumnDef::new(LogicalTableDataVersions::TransactionId).text().not_null())
@@ -111,7 +112,6 @@ impl Entity for Defs {
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
-                .col(ColumnDef::new(LogicalTableDataVersions::ProjectId).text().not_null())
                 .to_owned(),
         ]
     }

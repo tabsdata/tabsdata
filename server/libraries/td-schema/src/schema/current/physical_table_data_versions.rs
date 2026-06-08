@@ -34,8 +34,8 @@ pub struct PtdvWithNames;
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
 pub enum PhysicalTableDataVersions {
     Table,
-    ProjectId,
     Id,
+    ProjectId,
     CollectionId,
     TableId,
     Name,
@@ -64,6 +64,7 @@ impl Entity for Defs {
             Table::create()
                 .table(PhysicalTableDataVersions::Table)
                 .col(ColumnDef::new(PhysicalTableDataVersions::Id).text().not_null().primary_key())
+                .col(ColumnDef::new(PhysicalTableDataVersions::ProjectId).text().not_null())
                 .col(ColumnDef::new(PhysicalTableDataVersions::CollectionId).text().not_null())
                 .col(ColumnDef::new(PhysicalTableDataVersions::TableId).text().not_null())
                 .col(ColumnDef::new(PhysicalTableDataVersions::Name).text().not_null())
@@ -126,7 +127,6 @@ impl Entity for Defs {
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
-                .col(ColumnDef::new(PhysicalTableDataVersions::ProjectId).text().not_null())
                 .to_owned(),
         ]
     }

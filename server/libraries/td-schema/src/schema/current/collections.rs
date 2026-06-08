@@ -16,6 +16,7 @@ use crate::schema::sql::ViewDef;
 pub enum Collections {
     Table,
     Id,
+    ProjectId,
     Name,
     Description,
     CreatedOn,
@@ -24,7 +25,6 @@ pub enum Collections {
     ModifiedById,
     NameWhenDeleted,
     GroupId,
-    ProjectId,
 }
 
 #[derive(Iden, Clone, Copy)]
@@ -43,6 +43,12 @@ impl Entity for Defs {
             Table::create()
                 .table(Collections::Table)
                 .col(ColumnDef::new(Collections::Id).text().not_null().primary_key())
+                // Tenant tag. No base default — fail-closed on every backend: a
+                // write that omits it hits NOT NULL. On postgres the RLS phase
+                // sets the column default to read `app.project_id` (the request's
+                // project); the no-RLS single-project backends (sqlite/mysql) keep
+                // no default at all, so writes there must set `project_id`.
+                .col(ColumnDef::new(Collections::ProjectId).text().not_null())
                 .col(ColumnDef::new(Collections::Name).text().not_null())
                 .col(ColumnDef::new(Collections::Description).text().not_null())
                 .col(ColumnDef::new(Collections::CreatedOn).timestamp_with_time_zone().not_null())
@@ -51,12 +57,6 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Collections::ModifiedById).text().not_null())
                 .col(ColumnDef::new(Collections::NameWhenDeleted).text().null())
                 .col(ColumnDef::new(Collections::GroupId).text().not_null())
-                // Tenant tag. No base default — fail-closed on every backend: a
-                // write that omits it hits NOT NULL. On postgres the RLS phase
-                // sets the column default to read `app.project_id` (the request's
-                // project); the no-RLS single-project backends (sqlite/mysql) keep
-                // no default at all, so writes there must set `project_id`.
-                .col(ColumnDef::new(Collections::ProjectId).text().not_null())
                 .to_owned(),
         ]
     }

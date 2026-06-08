@@ -21,8 +21,8 @@ pub struct DependenciesWithNames;
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
 pub enum Dependencies {
     Table,
-    ProjectId,
     Id,
+    ProjectId,
     CollectionId,
     DependencyId,
     FunctionId,
@@ -45,6 +45,7 @@ impl Entity for Defs {
             Table::create()
                 .table(Dependencies::Table)
                 .col(ColumnDef::new(Dependencies::Id).text().not_null().primary_key())
+                .col(ColumnDef::new(Dependencies::ProjectId).text().not_null())
                 .col(ColumnDef::new(Dependencies::CollectionId).text().not_null())
                 .col(ColumnDef::new(Dependencies::DependencyId).text().not_null())
                 .col(ColumnDef::new(Dependencies::FunctionId).text().not_null())
@@ -64,7 +65,6 @@ impl Entity for Defs {
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
-                .col(ColumnDef::new(Dependencies::ProjectId).text().not_null())
                 .to_owned(),
         ]
     }

@@ -12,8 +12,8 @@ use crate::schema::Entity;
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
 pub enum TablePartitions {
     Table,
-    ProjectId,
     Id,
+    ProjectId,
     CollectionId,
     TableId,
     TableVersionId,
@@ -31,6 +31,7 @@ impl Entity for Defs {
             Table::create()
                 .table(TablePartitions::Table)
                 .col(ColumnDef::new(TablePartitions::Id).text().not_null().primary_key())
+                .col(ColumnDef::new(TablePartitions::ProjectId).text().not_null())
                 .col(ColumnDef::new(TablePartitions::CollectionId).text().not_null())
                 .col(ColumnDef::new(TablePartitions::TableId).text().not_null())
                 .col(ColumnDef::new(TablePartitions::TableVersionId).text().not_null())
@@ -59,7 +60,6 @@ impl Entity for Defs {
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
-                .col(ColumnDef::new(TablePartitions::ProjectId).text().not_null())
                 .to_owned(),
         ]
     }

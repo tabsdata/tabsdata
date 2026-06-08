@@ -19,8 +19,8 @@ pub struct WorkersWithNames;
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
 pub enum Workers {
     Table,
-    ProjectId,
     Id,
+    ProjectId,
     CollectionId,
     ExecutionId,
     TransactionId,
@@ -43,6 +43,7 @@ impl Entity for Defs {
             Table::create()
                 .table(Workers::Table)
                 .col(ColumnDef::new(Workers::Id).text().not_null().primary_key())
+                .col(ColumnDef::new(Workers::ProjectId).text().not_null())
                 .col(ColumnDef::new(Workers::CollectionId).text().not_null())
                 .col(ColumnDef::new(Workers::ExecutionId).text().null())
                 .col(ColumnDef::new(Workers::TransactionId).text().null())
@@ -59,7 +60,6 @@ impl Entity for Defs {
                 // rejects text→BYTEA on INSERT ("column is of type bytea but
                 // expression is of type text").
                 .col(ColumnDef::new(Workers::WorkerConfig).text().null())
-                .col(ColumnDef::new(Workers::ProjectId).text().not_null())
                 .to_owned(),
         ]
     }

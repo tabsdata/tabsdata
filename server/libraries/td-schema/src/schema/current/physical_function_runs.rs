@@ -23,8 +23,8 @@ pub struct PhysicalFunctionRunsWithNames;
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
 pub enum PhysicalFunctionRuns {
     Table,
-    ProjectId,
     Id,
+    ProjectId,
     CollectionId,
     FunctionVersionId,
     // Patch id used at this attempt, if any. NULL → ran the head fvid
@@ -63,6 +63,7 @@ impl Entity for Defs {
             Table::create()
                 .table(PhysicalFunctionRuns::Table)
                 .col(ColumnDef::new(PhysicalFunctionRuns::Id).text().not_null().primary_key())
+                .col(ColumnDef::new(PhysicalFunctionRuns::ProjectId).text().not_null())
                 .col(ColumnDef::new(PhysicalFunctionRuns::CollectionId).text().not_null())
                 .col(ColumnDef::new(PhysicalFunctionRuns::FunctionVersionId).text().not_null())
                 // Patch id used at this attempt, if any. NULL → the head
@@ -122,7 +123,6 @@ impl Entity for Defs {
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
-                .col(ColumnDef::new(PhysicalFunctionRuns::ProjectId).text().not_null())
                 .to_owned(),
         ]
     }
