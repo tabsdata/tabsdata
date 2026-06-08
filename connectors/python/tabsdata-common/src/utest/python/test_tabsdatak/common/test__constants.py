@@ -33,8 +33,8 @@ def test_connectors_table_keys_are_dashed_package_names():
 
 def test_packages_list_contains_known_members():
     assert c.TABSDATA_MODULE_NAME in c.TABSDATA_PACKAGES
-    assert c.TABSDATA_TOOLKIT_MODULE_NAME in c.TABSDATA_PACKAGES
-    assert c.TABSDATA_AGENT_MODULE_NAME in c.TABSDATA_PACKAGES
+    assert c.TABSDATA_TOOLKIT_PACKAGE_NAME in c.TABSDATA_PACKAGES
+    assert c.TABSDATA_AGENT_PACKAGE_NAME in c.TABSDATA_PACKAGES
     assert "tabsdata-api" in c.TABSDATA_PACKAGES
 
 

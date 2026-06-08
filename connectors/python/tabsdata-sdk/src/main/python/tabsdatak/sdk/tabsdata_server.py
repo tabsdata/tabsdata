@@ -34,7 +34,6 @@ from typing import Generator, List, Union
 import polars as pl
 import requests
 
-from tabsdatak.common._archive.bundle import build_bundle, capture_source_snippet
 from tabsdatak._info import (
     KIND_PUBLISHER_DEF,
     KIND_STREAM_PUBLISHER_DEF,
@@ -46,6 +45,7 @@ from tabsdatak._info import (
     TransformerInfo,
 )
 from tabsdatak.api import CronTrigger, TablesTrigger
+from tabsdatak.common._archive.bundle import build_bundle, capture_source_snippet
 
 # noinspection PyProtectedMember
 from tabsdatak.common._datetime import _convert_timestamp_to_string

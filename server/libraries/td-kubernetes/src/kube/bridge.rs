@@ -7,9 +7,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use serde::Serialize;
 use td_common::crypto::install_crypto_provider;
-use td_common::server::{
-    BridgeProvider, EtcContent, EtcError, ServerCatalog, ServerCatalogHandle,
-};
+use td_common::server::{BridgeProvider, EtcContent, EtcError, ServerCatalog, ServerCatalogHandle};
 
 use crate::base::error::kubernetes::KubernetesError;
 use crate::client::session::pod::PodContext;

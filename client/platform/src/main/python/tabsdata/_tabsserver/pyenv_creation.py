@@ -68,12 +68,12 @@ from tabsdata._utils.constants import (
     FALSE_FALSE,
     PYTHON_EDITABLE_PACKAGE_PREFIX,
     PYTHON_EDITABLE_PACKAGE_SUFFIX,
-    TABSDATA_AGENT_MODULE_NAME,
+    TABSDATA_AGENT_PACKAGE_NAME,
     TABSDATA_CONNECTORS,
     TABSDATA_CONNECTORS_NAMES,
     TABSDATA_MODULE_NAME,
     TABSDATA_PACKAGES,
-    TABSDATA_TOOLKIT_MODULE_NAME,
+    TABSDATA_TOOLKIT_PACKAGE_NAME,
     TD_TABSDATA_AGENT_DEV_PKG,
     TD_TABSDATA_DEV_PKG,
     TD_TABSDATA_TOOLKIT_DEV_PKG,
@@ -889,17 +889,17 @@ def inject_tabsdata_version(required_modules: list[str]) -> list[str]:  # noqa: 
 
     packages_to_inject.append(canonicalize_name(TABSDATA_MODULE_NAME))
 
-    if canonicalize_name(TABSDATA_TOOLKIT_MODULE_NAME) in original_tabsdata_packages:
-        packages_to_inject.append(canonicalize_name(TABSDATA_TOOLKIT_MODULE_NAME))
+    if canonicalize_name(TABSDATA_TOOLKIT_PACKAGE_NAME) in original_tabsdata_packages:
+        packages_to_inject.append(canonicalize_name(TABSDATA_TOOLKIT_PACKAGE_NAME))
 
-    if canonicalize_name(TABSDATA_AGENT_MODULE_NAME) in original_tabsdata_packages:
-        packages_to_inject.append(canonicalize_name(TABSDATA_AGENT_MODULE_NAME))
+    if canonicalize_name(TABSDATA_AGENT_PACKAGE_NAME) in original_tabsdata_packages:
+        packages_to_inject.append(canonicalize_name(TABSDATA_AGENT_PACKAGE_NAME))
 
     for package in TABSDATA_PACKAGES:
         if canonicalize_name(package) not in [
             canonicalize_name(TABSDATA_MODULE_NAME),
-            canonicalize_name(TABSDATA_TOOLKIT_MODULE_NAME),
-            canonicalize_name(TABSDATA_AGENT_MODULE_NAME),
+            canonicalize_name(TABSDATA_TOOLKIT_PACKAGE_NAME),
+            canonicalize_name(TABSDATA_AGENT_PACKAGE_NAME),
         ]:
             packages_to_inject.append(canonicalize_name(package))
 
@@ -1376,10 +1376,10 @@ def atomic_environment_creation(
                 f"\n'{str(result.stdout)}'"
                 f"\n'{str(result.stderr)}'"
             )
-            delete_virtual_environment(
-                logical_environment_name=logical_environment_name,
-                real_environment_name=real_environment_name,
-            )
+            # delete_virtual_environment(
+            #     logical_environment_name=logical_environment_name,
+            #     real_environment_name=real_environment_name,
+            # )
             return None
     logger.info(
         "pip upgraded successfully for the virtual environment "
@@ -1425,7 +1425,7 @@ def atomic_environment_creation(
                 with open(pyproject_path, "rb") as f:
                     data = tomllib.load(f)
                 package_name = data.get("tool", {}).get("tabsdata", {}).get("name")
-                if package_name == TABSDATA_TOOLKIT_MODULE_NAME:
+                if package_name == TABSDATA_TOOLKIT_PACKAGE_NAME:
                     is_toolkit = True
             if is_toolkit:
                 tabsdata_toolkit_local_packages.append(package_folder)
@@ -1434,7 +1434,7 @@ def atomic_environment_creation(
 
     if development_packages:
         tabsdata_toolkit_package_canonical_name = canonicalize_name(
-            TABSDATA_TOOLKIT_MODULE_NAME
+            TABSDATA_TOOLKIT_PACKAGE_NAME
         )
         for (
             development_package_location,
@@ -1578,10 +1578,10 @@ def install_requirements(
             f"\n'{str(result.stdout)}'"
             f"\n'{str(result.stderr)}'"
         )
-        delete_virtual_environment(
-            logical_environment_name=logical_environment_name,
-            real_environment_name=real_environment_name,
-        )
+        # delete_virtual_environment(
+        #     logical_environment_name=logical_environment_name,
+        #     real_environment_name=real_environment_name,
+        # )
         return False
     else:
         logger.info(
@@ -1778,7 +1778,7 @@ def install_host_package(  # noqa: C901
                         f"'{package_location}' - '{package_name}'"
                     )
                 if package_name and package_name in TABSDATA_PACKAGES:
-                    if package_name == TABSDATA_TOOLKIT_MODULE_NAME:
+                    if package_name == TABSDATA_TOOLKIT_PACKAGE_NAME:
                         logger.info(
                             f"Identified tabsdata toolkit local package: "
                             f"'{package_location}' - '{package_name}'. "
@@ -1862,10 +1862,10 @@ def install_host_package(  # noqa: C901
                 f"\n'{str(result.stdout)}'"
                 f"\n'{str(result.stderr)}'"
             )
-            delete_virtual_environment(
-                logical_environment_name=logical_environment_name,
-                real_environment_name=real_environment_name,
-            )
+            # delete_virtual_environment(
+            #     logical_environment_name=logical_environment_name,
+            #     real_environment_name=real_environment_name,
+            # )
             return None
         else:
             logger.info(
@@ -2163,7 +2163,7 @@ def retrieve_tabsdata_toolkit_package() -> Tuple[
 ]:
     tabsdata_toolkit_development_packages: list[tuple[str, PackageProvider]] = []
     provider, location = get_tabsdata_package_metadata(
-        TABSDATA_TOOLKIT_MODULE_NAME,
+        TABSDATA_TOOLKIT_PACKAGE_NAME,
         TD_TABSDATA_TOOLKIT_DEV_PKG,
     )
     logger.info(
@@ -2188,7 +2188,7 @@ def retrieve_tabsdata_agent_package() -> Tuple[
 ]:
     tabsdata_agent_development_packages: list[tuple[str, PackageProvider]] = []
     provider, location = get_tabsdata_package_metadata(
-        TABSDATA_AGENT_MODULE_NAME,
+        TABSDATA_AGENT_PACKAGE_NAME,
         TD_TABSDATA_AGENT_DEV_PKG,
     )
     logger.info(

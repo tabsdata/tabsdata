@@ -24,7 +24,7 @@ from xdist.workermanage import WorkerController
 # noinspection PyProtectedMember
 import tabsdata._utils.tableframe._constants as td_constants
 from tabsdata._tdfunction import TableInput, TableOutput, TabsdataFunction
-from tabsdata._utils.constants import TABSDATA_TOOLKIT_MODULE_NAME
+from tabsdata._utils.constants import TABSDATA_TOOLKIT_PACKAGE_NAME
 
 # noinspection PyProtectedMember
 from tabsdata._utils.tableframe._generators import _id
@@ -285,7 +285,7 @@ LOCAL_PACKAGES_LIST = [
         "automation",
         "tasks",
         "python",
-        TABSDATA_TOOLKIT_MODULE_NAME,
+        TABSDATA_TOOLKIT_PACKAGE_NAME,
     ),
 ]
 
