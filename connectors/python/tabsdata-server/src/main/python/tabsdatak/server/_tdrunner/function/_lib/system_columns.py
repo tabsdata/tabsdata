@@ -73,9 +73,8 @@ SYSTEM_COLUMNS: tuple[str, ...] = (
 
 # --- empty / sentinel defaults --------------------------------------------
 #
-# Used when a real value isn't available yet. `EMPTY_TIMESTAMP` is the
-# placeholder for `request.info.triggered_on` until that field is added
-# to `request.yaml` (see third TODO, in `commands/stamp_inputs/__init__.py`).
+# Used when a real value isn't available yet (e.g. fixture parquets in
+# tests, or downstream consumers that need a stable "no data" sentinel).
 
 _EMPTY_UUID_V7 = "00000000-0000-0000-0000-000000000000"
 

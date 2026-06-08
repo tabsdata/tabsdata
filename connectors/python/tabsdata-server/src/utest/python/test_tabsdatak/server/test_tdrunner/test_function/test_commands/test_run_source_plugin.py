@@ -304,9 +304,11 @@ def _ctx(**kwargs) -> _SrcContext:
         work_dir=Path("/work"),
         exec_plan_id="exec1",
         trx_id="tx1",
+        exec_plan_ts="2026-06-04T07:14:28.376000+00:00",
         collection_id="c_id",
         collection_name="c_name",
         function_id="fn_run_42",
+        function_name="publish_people",
     )
     defaults.update(kwargs)
     return _SrcContext(**defaults)
@@ -336,18 +338,12 @@ def test_src_context_exposes_function_id():
     assert _ctx().function_id == "fn_run_42"
 
 
-def test_src_context_function_name_raises_notimplemented():
-    """``function_name`` is declared but intentionally unimplemented
-    until ``request.yaml`` carries it."""
-    with pytest.raises(NotImplementedError, match="function_name"):
-        _ = _ctx().function_name
+def test_src_context_exposes_function_name():
+    assert _ctx().function_name == "publish_people"
 
 
-def test_src_context_exec_plan_ts_raises_notimplemented():
-    """``exec_plan_ts`` is declared but intentionally unimplemented
-    until ``request.yaml`` carries a timestamp."""
-    with pytest.raises(NotImplementedError, match="exec_plan_ts"):
-        _ = _ctx().exec_plan_ts
+def test_src_context_exposes_exec_plan_ts():
+    assert _ctx().exec_plan_ts == "2026-06-04T07:14:28.376000+00:00"
 
 
 def test_src_context_get_attr_returns_none_for_unset_key():
@@ -617,9 +613,11 @@ def _bare_ctx() -> _SrcContext:
         work_dir=Path("/work"),
         exec_plan_id="ep",
         trx_id="tx",
+        exec_plan_ts="2026-06-04T07:14:28.376000+00:00",
         collection_id="cid",
         collection_name="c",
         function_id="fn",
+        function_name="publish_people",
     )
 
 

@@ -18,9 +18,11 @@ TD-2124) yet shares the same backing data.
 
 State plumbed today:
   * ``work_dir``, ``collection_id``, ``collection_name``,
-    ``function_id``, ``exec_plan_id``, ``trx_id`` — populated from
-    ``request.info`` (``function_id`` borrows ``function_run_id``,
-    the closest identifier the schema carries today).
+    ``function_id``, ``function_name``, ``exec_plan_id``, ``trx_id``,
+    ``exec_plan_ts`` — populated from ``request.info``.
+    (``function_id`` borrows ``function_run_id``, ``function_name``
+    borrows ``function``, and ``exec_plan_ts`` is the ISO-8601 form of
+    ``triggered_on`` — the closest identifiers the schema carries.)
   * ``get_attr`` / ``store_attr`` — per-flow scratch state backed by
     an in-memory dict. The runtime populates the dict at invocation
     start (:meth:`hydrate`) and reads it back at the end
@@ -29,10 +31,6 @@ State plumbed today:
     happens at the call site.
 
 State *not yet* plumbed (each falls back to a documented stub):
-  * ``function_name`` and ``exec_plan_ts`` raise
-    ``NotImplementedError`` — they're missing from ``request.yaml``;
-    raising surfaces the gap loudly rather than letting consumers
-    silently use a placeholder.
   * ``add_metadata`` is a no-op — the trx-level observability sink
     isn't wired through tdrunner yet, but consumers that touch it
     shouldn't crash.
@@ -45,8 +43,8 @@ declared on the abstract bases (:class:`tabsdatak.api.TrxCtx`,
 them via autocomplete or static analysis. The runtime, which
 constructs concrete ``FromRequestCtx`` instances, is the only caller.
 
-When the gaps above land in ``request.yaml`` / the runner, fix them
-once here and every concrete context inherits the upgrade.
+When the gap above lands in the runner, fix it once here and every
+concrete context inherits the upgrade.
 """
 
 from __future__ import annotations
@@ -88,16 +86,20 @@ class FromRequestCtx(TrxCtx, FlowCtx):
         work_dir: Path,
         exec_plan_id: str,
         trx_id: str,
+        exec_plan_ts: str,
         collection_id: str,
         collection_name: str,
         function_id: str,
+        function_name: str,
     ):
         self._work_dir = work_dir
         self._exec_plan_id = exec_plan_id
         self._trx_id = trx_id
+        self._exec_plan_ts = exec_plan_ts
         self._collection_id = collection_id
         self._collection_name = collection_name
         self._function_id = function_id
+        self._function_name = function_name
         self._scratch: dict[str, ContextValueSpec] = {}
 
     @property
@@ -118,13 +120,7 @@ class FromRequestCtx(TrxCtx, FlowCtx):
 
     @property
     def function_name(self) -> str:
-        # TODO: thread function_name through request.yaml's info block
-        # and populate at construction. Raising rather than returning
-        # a placeholder so consumers surface the gap.
-        raise NotImplementedError(
-            "function_name is not yet plumbed through request.yaml; "
-            "see _lib.request_ctx.FromRequestCtx"
-        )
+        return self._function_name
 
     @property
     def exec_plan_id(self) -> str:
@@ -136,13 +132,7 @@ class FromRequestCtx(TrxCtx, FlowCtx):
 
     @property
     def exec_plan_ts(self) -> str:
-        # TODO: add `exec_plan_ts` to request.yaml's `info` block and
-        # plumb it through here. Raising rather than returning a
-        # placeholder so any consumer reading it gets pointed at the gap.
-        raise NotImplementedError(
-            "exec_plan_ts is not yet plumbed through request.yaml; "
-            "see _lib.request_ctx.FromRequestCtx"
-        )
+        return self._exec_plan_ts
 
     def get_attr(self, attr: ContextKeySpec) -> ContextValueSpec | None:
         """Read a per-flow scratch value. Returns ``None`` for keys

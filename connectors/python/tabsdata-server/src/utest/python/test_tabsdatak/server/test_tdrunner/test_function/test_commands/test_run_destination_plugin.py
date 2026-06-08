@@ -176,9 +176,11 @@ def _dest_ctx(**kwargs) -> _DestContext:
         work_dir=Path("/work"),
         exec_plan_id="exec1",
         trx_id="tx1",
+        exec_plan_ts="2026-06-04T07:14:28.376000+00:00",
         collection_id="c_id",
         collection_name="c_name",
         function_id="fn_run_42",
+        function_name="publish_people",
     )
     defaults.update(kwargs)
     return _DestContext(**defaults)
@@ -189,19 +191,11 @@ def test_dest_context_exposes_fields():
     assert ctx.work_dir == Path("/work")
     assert ctx.exec_plan_id == "exec1"
     assert ctx.trx_id == "tx1"
+    assert ctx.exec_plan_ts == "2026-06-04T07:14:28.376000+00:00"
     assert ctx.collection_id == "c_id"
     assert ctx.collection_name == "c_name"
     assert ctx.function_id == "fn_run_42"
-
-
-def test_dest_context_function_name_raises_notimplemented():
-    with pytest.raises(NotImplementedError, match="function_name"):
-        _ = _dest_ctx().function_name
-
-
-def test_dest_context_exec_plan_ts_raises_notimplemented():
-    with pytest.raises(NotImplementedError, match="exec_plan_ts"):
-        _ = _dest_ctx().exec_plan_ts
+    assert ctx.function_name == "publish_people"
 
 
 def test_dest_context_get_attr_returns_none_for_unset_key():
@@ -334,9 +328,11 @@ def test_invoke_write_out_returns_normally(tmp_path):
         work_dir=tmp_path,
         exec_plan_id="e",
         trx_id="t",
+        exec_plan_ts="2026-06-04T07:14:28.376000+00:00",
         collection_id="c_id",
         collection_name="c_name",
         function_id="fn",
+        function_name="publish_people",
     )
     _invoke_write_out(_Plugin(), ctx, object(), object(), [Path("/x.parquet")])
     assert len(calls) == 1
@@ -351,9 +347,11 @@ def test_invoke_write_out_wraps_plugin_exception(tmp_path):
         work_dir=tmp_path,
         exec_plan_id="e",
         trx_id="t",
+        exec_plan_ts="2026-06-04T07:14:28.376000+00:00",
         collection_id="c_id",
         collection_name="c_name",
         function_id="fn",
+        function_name="publish_people",
     )
     with pytest.raises(CommandSpecificError) as ei:
         _invoke_write_out(_Plugin(), ctx, object(), object(), [])

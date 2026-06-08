@@ -1040,9 +1040,11 @@ def test_function_context_is_a_function_ctx_subclass():
         work_dir=Path("/work"),
         exec_plan_id="ep",
         trx_id="tx",
+        exec_plan_ts="2026-06-04T07:14:28.376000+00:00",
         collection_id="cid",
         collection_name="c",
         function_id="fn",
+        function_name="publish_people",
     )
     assert isinstance(c, FunctionCtx)
     assert not isinstance(c, SrcPluginCtx)

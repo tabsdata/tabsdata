@@ -168,9 +168,11 @@ def main(args: argparse.Namespace) -> int:
         work_dir=bundle_dir,
         exec_plan_id=str(request.info.execution_id),
         trx_id=str(request.info.transaction_id),
+        exec_plan_ts=request.info.triggered_on_iso,
         collection_id=str(request.info.collection_id),
         collection_name=request.info.collection,
         function_id=str(request.info.function_run_id),
+        function_name=request.info.function,
     )
     _invoke_write_out(plugin, ctx, info.conn, info.destination, tables)
     return 0

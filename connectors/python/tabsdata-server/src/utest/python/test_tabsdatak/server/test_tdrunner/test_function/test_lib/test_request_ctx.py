@@ -23,9 +23,11 @@ def _ctx() -> FromRequestCtx:
         work_dir=Path("/tmp/work"),
         exec_plan_id="ep-1",
         trx_id="trx-1",
+        exec_plan_ts="2026-06-04T07:14:28.376000+00:00",
         collection_id="c-1",
         collection_name="col",
         function_id="fn-1",
+        function_name="publish_people",
     )
 
 
@@ -37,19 +39,11 @@ def test_identifier_properties_round_trip():
     assert c.work_dir == Path("/tmp/work")
     assert c.exec_plan_id == "ep-1"
     assert c.trx_id == "trx-1"
+    assert c.exec_plan_ts == "2026-06-04T07:14:28.376000+00:00"
     assert c.collection_id == "c-1"
     assert c.collection_name == "col"
     assert c.function_id == "fn-1"
-
-
-def test_function_name_raises_notimplemented():
-    with pytest.raises(NotImplementedError, match="function_name"):
-        _ = _ctx().function_name
-
-
-def test_exec_plan_ts_raises_notimplemented():
-    with pytest.raises(NotImplementedError, match="exec_plan_ts"):
-        _ = _ctx().exec_plan_ts
+    assert c.function_name == "publish_people"
 
 
 # --- get_attr / store_attr (real impl) ----------------------------------

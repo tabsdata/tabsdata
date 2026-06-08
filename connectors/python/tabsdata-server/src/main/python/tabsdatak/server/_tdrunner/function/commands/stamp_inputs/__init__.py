@@ -17,25 +17,6 @@ store_source_raw_data` — the legacy `_tabsserver` ran this in-process
 as part of the function-execution wrapper. We extract it into its own
 runner step so the data-shape boundary between "plugin output" and
 "framework-managed input to user function" is explicit.
-
--------------------------------------------------------------------
-TODO (MIGRATION GAP — DO NOT FORGET): triggered_on missing from request.yaml
--------------------------------------------------------------------
-`request.yaml`'s `info` block does not yet carry a `triggered_on` (or
-similarly-named) timestamp. The framework's `$td.ver.timestamp`
-system column is therefore stamped with `EMPTY_TIMESTAMP` here. The
-same gap also forces `_SrcContext.exec_plan_ts` in `run_source_plugin`
-to raise `NotImplementedError`.
-
-When the request schema is extended to carry the trigger timestamp:
-  1. Add the field to `tabsdatak.server._tdrunner.function._lib.request.Info`
-     (matching whatever name the API server emits).
-  2. Replace `timestamp = EMPTY_TIMESTAMP` below with
-     `timestamp = request.info.<that_field>`.
-  3. Drop this TODO.
-  4. Resolve the matching TODO inside `run_source_plugin._SrcContext.
-     exec_plan_ts` at the same time.
--------------------------------------------------------------------
 """
 
 from __future__ import annotations
@@ -56,7 +37,6 @@ from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
 )
 from tabsdatak.server._tdrunner.function._lib.request import load_request_or_fail
 from tabsdatak.server._tdrunner.function._lib.system_columns import (
-    EMPTY_TIMESTAMP,
     EMPTY_VERSION,
     stamp_system_columns,
 )
@@ -175,11 +155,7 @@ def main(args: argparse.Namespace) -> int:
 
     execution = str(request.info.execution_id)
     transaction = str(request.info.transaction_id)
-    # TODO: replace EMPTY_TIMESTAMP with `request.info.triggered_on`
-    # (or whatever the field ends up being named) once it lands in
-    # request.yaml's schema. See module docstring for the full
-    # cleanup plan.
-    timestamp = EMPTY_TIMESTAMP
+    timestamp = request.info.triggered_on_datetime
 
     enriched_entries: list[dict] = []
     for slot_idx, entry in enumerate(entries):
