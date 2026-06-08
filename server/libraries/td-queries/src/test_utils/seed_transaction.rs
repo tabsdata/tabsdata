@@ -7,7 +7,7 @@ use ta_objects::Buildable;
 use td_error::TdError;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::transaction::TransactionDB;
-use td_objects::types::basic::{TransactionId, TransactionKey};
+use td_objects::types::basic::{GroupId, TransactionId, TransactionKey};
 
 pub(crate) async fn seed_transaction(
     db: impl QueryExecutor,
@@ -22,6 +22,7 @@ pub(crate) async fn seed_transaction(
         .transaction_key(transaction_key.clone())
         .triggered_on(execution.triggered_on)
         .triggered_by_id(execution.triggered_by_id)
+        .group_id(GroupId::default_group())
         .build()?;
 
     db.live().insert(&transaction_db).await?;

@@ -35,7 +35,7 @@ mod tests {
     use td_objects::transaction::map::TransactionMapperError;
     use td_objects::types::basic::{
         CollectionId, CollectionName, Enabled, FunctionId, FunctionName, FunctionVersionId,
-        TransactionKey,
+        GroupId, TransactionKey,
     };
 
     #[test]
@@ -55,6 +55,7 @@ mod tests {
             .function_version_id(&key)
             .name(FunctionName::try_from("name")?)
             .enabled(Enabled::TRUE)
+            .group_id(GroupId::default_group())
             .build()?;
 
         assert_eq!(

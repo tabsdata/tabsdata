@@ -34,7 +34,7 @@ use td_objects::transaction::map::{TransactionMap, TransactionMapper};
 use td_objects::types::basic::{
     AtTime, Depth, Dot, FunctionId, FunctionOnly, FunctionStatus, LogicalFunctionRunStatus,
     LogicalPointerReason, LogicalPointerStatus, LogicalTableDataVersionId, OverrideDisabledTrigger,
-    PhysicalTableDataVersionId, TableId, Trigger, TriggerType, VersionPos,
+    PhysicalTableDataVersionId, ProjectId, TableId, Trigger, TriggerType, VersionPos,
 };
 use td_objects::types::recursion::RecursionOptions;
 use td_objects::types::table_ref::Versions;
@@ -139,6 +139,7 @@ pub async fn build_transactions(
                 .collection_id(transaction.collection_id)
                 .transaction_by(transaction.transaction_by.clone())
                 .transaction_key(transaction.transaction_key.clone())
+                .group_id(transaction.group_id)
                 .build()
                 .map_err(TdError::from)
         })
@@ -157,7 +158,7 @@ pub async fn build_logical_function_runs(
     transaction_map: Ref<TransactionMap<TransactionBy>>,
     execution_plan: Ref<ExecutionPlan>,
     execution: Ref<ExecutionDB>,
-    all_functions_map: Ref<HashMap<FunctionId, FunctionDBWithNames>>,
+    project_id: Ref<ProjectId>,
 ) -> Result<Vec<LogicalFunctionRunDB>, TdError> {
     let main_trigger = execution_plan.main_trigger();
     execution_plan
@@ -170,19 +171,9 @@ pub async fn build_logical_function_runs(
             } else {
                 Trigger::Dependency
             };
-            // Group snapshot from the planner's `all_functions_map`
-            // (view-joined `collections.group_id`). Map was populated
-            // upstream from these same function_ids — missing entry is
-            // an internal invariant violation.
-            let function = all_functions_map.get(&f.function_id).ok_or_else(|| {
-                api_error!(
-                    ApiError::InternalError,
-                    "Function {} missing from all_functions_map while stamping LFR group_id",
-                    f.function_id
-                )
-            })?;
             LogicalFunctionRunDB::builder()
-                .project_id(function.project_id.clone())
+                // ProjectScopeProvider put the request's project on the handler.
+                .project_id((*project_id).clone())
                 .collection_id(f.collection_id)
                 .execution_id(execution.id.clone())
                 .transaction_id(transaction.id.clone())
@@ -191,7 +182,7 @@ pub async fn build_logical_function_runs(
                 .trigger(trigger)
                 .triggered_on(execution.triggered_on)
                 .triggered_by_id(execution.triggered_by_id)
-                .group_id(function.group_id)
+                .group_id(f.group_id)
                 .build()
                 .map_err(TdError::from)
         })

@@ -64,6 +64,7 @@ impl<T: TransactionMapper> TransactionMap<T> {
                 execution_id: e.id.clone(),
                 transaction_by: self.mapper.transaction_by()?,
                 transaction_key: key.clone(),
+                group_id: v.group_id,
             };
             self.map.insert(key, value);
         }

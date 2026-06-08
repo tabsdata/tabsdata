@@ -11,7 +11,8 @@ use crate::graph::{TdGraph, TdGraphBuilder};
 use crate::types::basic::{
     AtTime, BundleId, CollectionId, CollectionName, DataLocation, Decorator, DependencyId,
     DependencyPos, DependencyStatus, DependencyVersionId, Description, Enabled, FunctionId,
-    FunctionName, FunctionRuntimeValues, FunctionStatus, FunctionVersionId, ProjectId, Snippet,
+    FunctionName, FunctionRuntimeValues, FunctionStatus, FunctionVersionId, GroupId, ProjectId,
+    Snippet,
     StorageVersion, TableId, TableName, TableStatus, TableType, TableVersionId, TriggerId,
     TriggerStatus, TriggerVersionId, UserId, UserName,
 };
@@ -152,6 +153,7 @@ pub fn function_node(function: &FunctionName) -> FunctionNode {
         .function_version_id(FUNCTION_VERSION_IDS.get(function).unwrap())
         .name(function.clone())
         .enabled(Enabled::TRUE)
+        .group_id(GroupId::default_group())
         .build()
         .unwrap()
 }

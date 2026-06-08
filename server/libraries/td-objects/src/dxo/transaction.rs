@@ -6,9 +6,9 @@
 mod definitions {
     use crate::dxo::execution::ExecutionDB;
     use crate::types::basic::{
-        AtTime, CollectionId, CollectionName, ExecutionId, ExecutionName, LogicalFunctionRunStatus,
-        StatusCount, TransactionByStr, TransactionId, TransactionKey, TransactionStatus,
-        TriggeredOn, UserId, UserName,
+        AtTime, CollectionId, CollectionName, ExecutionId, ExecutionName, GroupId, GroupName,
+        LogicalFunctionRunStatus, StatusCount, TransactionByStr, TransactionId, TransactionKey,
+        TransactionStatus, TriggeredOn, UserId, UserName,
     };
     use crate::types::json::Json;
     use crate::types::status_count::FunctionRunStatusCount;
@@ -30,6 +30,10 @@ mod definitions {
         pub triggered_on: TriggeredOn,
         #[dxo(builder(include))]
         pub triggered_by_id: UserId,
+        // Group snapshot copied from collections.group_id at transaction
+        // mint; immutable thereafter so a collection's later group
+        // reassignment doesn't shift historical transactions.
+        pub group_id: GroupId,
     }
 
     #[ta_objects::Dlo]
@@ -42,6 +46,7 @@ mod definitions {
         pub execution_id: ExecutionId,
         pub transaction_by: TransactionByStr,
         pub transaction_key: TransactionKey,
+        pub group_id: GroupId,
     }
 
     #[ta_objects::Dao]
@@ -54,6 +59,7 @@ mod definitions {
         pub collection: CollectionName,
         pub execution: Option<ExecutionName>,
         pub triggered_by: UserName,
+        pub group: Option<GroupName>,
 
         pub function_run_status_count: Json<HashMap<LogicalFunctionRunStatus, StatusCount>>,
     }
@@ -84,6 +90,10 @@ mod definitions {
         pub execution: Option<ExecutionName>,
         #[dto(list(filter, filter_like, order_by))]
         pub triggered_by: UserName,
+        #[dto(list(filter))]
+        pub group_id: GroupId,
+        #[dto(list(filter, filter_like))]
+        pub group: Option<GroupName>,
 
         pub function_run_status_count: FunctionRunStatusCount,
     }

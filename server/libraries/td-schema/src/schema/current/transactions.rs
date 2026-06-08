@@ -9,6 +9,7 @@ use sea_query::{
 
 use super::collections::Collections;
 use super::executions::Executions;
+use super::groups::Groups;
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::backend::Backend;
@@ -31,6 +32,7 @@ pub enum Transactions {
     TransactionKey,
     TriggeredOn,
     TriggeredById,
+    GroupId,
 }
 
 pub(super) struct Defs;
@@ -48,6 +50,7 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Transactions::TransactionKey).text().not_null())
                 .col(ColumnDef::new(Transactions::TriggeredOn).timestamp_with_time_zone().not_null())
                 .col(ColumnDef::new(Transactions::TriggeredById).text().not_null())
+                .col(ColumnDef::new(Transactions::GroupId).text().not_null())
                 .foreign_key(
                     ForeignKey::create()
                         .from(Transactions::Table, Transactions::CollectionId)
@@ -59,6 +62,13 @@ impl Entity for Defs {
                     ForeignKey::create()
                         .from(Transactions::Table, Transactions::ExecutionId)
                         .to(Executions::Table, Executions::Id)
+                        .on_delete(ForeignKeyAction::Restrict)
+                        .on_update(ForeignKeyAction::Restrict),
+                )
+                .foreign_key(
+                    ForeignKey::create()
+                        .from(Transactions::Table, Transactions::GroupId)
+                        .to(Groups::Table, Groups::Id)
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
@@ -74,10 +84,17 @@ impl Entity for Defs {
                 .col(Transactions::CollectionId)
                 .to_owned(),
             Index::create().name("transactions___execution_id___idx").table(Transactions::Table).col(Transactions::ExecutionId).to_owned(),
+            Index::create()
+                .name("transactions___group_id__collection_id___idx")
+                .table(Transactions::Table)
+                .col(Transactions::GroupId)
+                .col(Transactions::CollectionId)
+                .to_owned(),
         ]
     }
 
     fn create_views(&self, b: &Backend) -> Vec<ViewDef> {
+        let groups_alias = Alias::new("groups_for_transactions");
         vec![ViewDef::new(
             TransactionsWithNames,
             Query::select()
@@ -88,6 +105,7 @@ impl Entity for Defs {
                     b.name_or_id((Users::Table, Users::Name), (Transactions::Table, Transactions::TriggeredById)),
                     Alias::new("triggered_by"),
                 )
+                .expr_as(Expr::col((groups_alias.clone(), Groups::Name)), Alias::new("group"))
                 .from(Transactions::Table)
                 .join(
                     JoinType::LeftJoin,
@@ -103,6 +121,12 @@ impl Entity for Defs {
                     JoinType::LeftJoin,
                     Users::Table,
                     Expr::col((Transactions::Table, Transactions::TriggeredById)).equals((Users::Table, Users::Id)),
+                )
+                .join_as(
+                    JoinType::LeftJoin,
+                    Groups::Table,
+                    groups_alias.clone(),
+                    Expr::col((Transactions::Table, Transactions::GroupId)).equals((groups_alias, Groups::Id)),
                 )
                 .to_owned(),
         )]

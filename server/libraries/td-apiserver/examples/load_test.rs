@@ -274,6 +274,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 function_version_id: function.id.clone(),
                 name: function.name.clone(),
                 enabled: Default::default(),
+                group_id: collection.group_id,
             };
 
             let transaction = db

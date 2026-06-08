@@ -7,7 +7,7 @@ use crate::dxo::physical_table_data_version::ExecutionTableDataVersionRead;
 use crate::dxo::table::TableDBWithNames;
 use crate::types::basic::{
     CollectionId, CollectionName, DependencyPos, Enabled, FunctionId, FunctionName,
-    FunctionVersionId, InputIdx, SelfDependency, System, TableFunctionParamPos, TableId, TableName,
+    FunctionVersionId, InputIdx, SelfDependency, System, TableFunctionParamPos, TableId, TableName, GroupId,
     TableVersionId,
 };
 use crate::types::composed::TableVersions;
@@ -19,8 +19,6 @@ use td_error::TdError;
 use utoipa::ToSchema;
 
 /// Represents a function version to perform graph resolution.
-/// Identity only — per-collection metadata is looked up at use sites,
-/// not threaded through the node.
 #[ta_objects::Dto]
 #[derive(Eq, PartialEq, Hash)]
 #[dxo(builder(try_from = FunctionDBWithNames))]
@@ -32,6 +30,7 @@ pub struct FunctionNode {
     pub function_version_id: FunctionVersionId,
     pub name: FunctionName,
     pub enabled: Enabled,
+    pub group_id: GroupId,
 }
 
 impl Display for FunctionNode {
@@ -91,6 +90,7 @@ impl GraphNode<FunctionNode, TableNode> {
                     .function_version_id(function.id.clone())
                     .name(function.name.clone())
                     .enabled(function.enabled)
+                    .group_id(function.group_id)
                     .build()?,
             ),
             GraphNode::Table(
