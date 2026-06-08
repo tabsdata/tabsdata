@@ -12,36 +12,69 @@ use std::fmt::{Debug, Display, Formatter};
 use strum::AsRefStr;
 
 /// Error class enum for conversion to API errors.
+///
+/// This is the transport-agnostic seam between domain errors and the outside world: it
+/// carries the *semantic* class of an error, never an HTTP type. Transports map it to
+/// their own representation (the API server maps it to an HTTP status; the Kubernetes
+/// layer maps it to a process exit code). `td-error` therefore does NOT depend on `http`.
+///
+/// The named variants cover the common classes; [`ApiError::Any`] is a passthrough that
+/// lets a domain error select an explicit status code that has no dedicated named class.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, AsRefStr)]
 pub enum ApiError {
-    /// Discriminants from 0 to 999 are reserved for input errors
-    InputError = 0,
-    /// Discriminants from 1000 to 1999 are reserved for not found errors
-    NotFound = 1000,
-    /// Discriminants from 2000 to 2999 are reserved for not allowed errors
-    NotAllowed = 2000,
-    /// Discriminants from 3000 to 3999 are reserved for not forbidden errors
-    Forbidden = 3000,
-    /// Discriminants from 4000 to 4999 are reserved for authorization errors
-    NotAuthorized = 4000,
-    /// Discriminants from 5000 to 5999 are reserved for internal errors
-    InternalError = 5000,
-    /// Discriminants from 6000 to 6999 are reserved for not implemented errors
-    NotImplemented = 6000,
-    /// Discriminants from 7000 to u16::MAX are unexpected
-    Unexpected = u16::MAX as isize,
+    /// Invalid input (range fallback: discriminants 0 to 999).
+    InputError,
+    /// Resource not found (range fallback: 1000 to 1999).
+    NotFound,
+    /// Operation not allowed (range fallback: 2000 to 2999).
+    NotAllowed,
+    /// Forbidden (range fallback: 3000 to 3999).
+    Forbidden,
+    /// Authorization error (range fallback: 4000 to 4999).
+    NotAuthorized,
+    /// Internal error (range fallback: 5000 to 5999).
+    InternalError,
+    /// Not implemented (range fallback: 6000 to 6999).
+    NotImplemented,
+    /// Unexpected / invariant violation (range fallback: 7000 and up).
+    Unexpected,
+    /// Passthrough for an explicit code with no dedicated named class.
+    ///
+    /// `td-error` treats the value as an opaque integer and does not ascribe any transport
+    /// meaning to it; each transport interprets it (e.g. the API server treats it as an HTTP
+    /// status). This lets a caller select any code without it having to be enumerated as a
+    /// named class here.
+    Any(u16),
+}
+
+impl ApiError {
+    /// Coarse predicate: does this class represent an internal/server-side failure?
+    ///
+    /// Used to mask user-facing messages, pick the log level, and classify process exit
+    /// codes — so consumers do not have to enumerate every variant.
+    pub fn is_internal(&self) -> bool {
+        match self {
+            ApiError::InternalError | ApiError::NotImplemented | ApiError::Unexpected => true,
+            // `Any` holds a raw code; treat >= 500 as server-side (the usual convention)
+            // for masking and log-level purposes.
+            ApiError::Any(code) => *code >= 500,
+            _ => false,
+        }
+    }
 }
 
 impl From<u16> for ApiError {
+    /// Maps a `#[td_error]` variant's discriminant to its error class by range. Never returns
+    /// [`ApiError::Any`].
     fn from(discriminant: u16) -> Self {
         match discriminant {
-            i if i < Self::InputError as u16 + 1000 => Self::InputError,
-            i if i < Self::NotFound as u16 + 1000 => Self::NotFound,
-            i if i < Self::NotAllowed as u16 + 1000 => Self::NotAllowed,
-            i if i < Self::Forbidden as u16 + 1000 => Self::Forbidden,
-            i if i < Self::NotAuthorized as u16 + 1000 => Self::NotAuthorized,
-            i if i < Self::InternalError as u16 + 1000 => Self::InternalError,
-            i if i < Self::NotImplemented as u16 + 1000 => Self::NotImplemented,
+            i if i < 1000 => Self::InputError,
+            i if i < 2000 => Self::NotFound,
+            i if i < 3000 => Self::NotAllowed,
+            i if i < 4000 => Self::Forbidden,
+            i if i < 5000 => Self::NotAuthorized,
+            i if i < 6000 => Self::InternalError,
+            i if i < 7000 => Self::NotImplemented,
             _i => Self::Unexpected,
         }
     }
@@ -119,11 +152,10 @@ impl TdError {
     /// - For InternalError / Unexpected / NotImplemented: returns a generic message.
     /// - For all other error classes: returns the domain error's Display message.
     pub fn user_message(&self) -> String {
-        match self.api_error {
-            ApiError::InternalError | ApiError::Unexpected | ApiError::NotImplemented => {
-                "An internal error occurred".to_string()
-            }
-            _ => self.td_error.to_string(),
+        if self.api_error.is_internal() {
+            "An internal error occurred".to_string()
+        } else {
+            self.td_error.to_string()
         }
     }
 }
@@ -160,18 +192,41 @@ impl From<UninitializedFieldError> for TdError {
 
 /// Macro to create an inline error with a specific API error code. This macro is used to create
 /// errors without the need to define a specific error type.
+///
+/// It accepts any of:
+/// - an [`ApiError`] class: `api_error!(ApiError::NotFound, "...")`
+/// - a bare status constant: `api_error!(StatusCode::LOCKED, "...")`
+/// - any status expression: `api_error!(status = some_status, "...")`,
+///   `api_error!(status = http::StatusCode::from_u16(x)?, "...")`
+///
+/// The status forms lower to the [`ApiError::Any`] passthrough. Every `StatusCode`/`http`
+/// reference is resolved in the *caller's* scope (which already has `http` to name it), so
+/// `td-error` itself never depends on `http`.
+///
+/// Each invocation gets a unique `code` derived from its call site (`module_path!()::line!()`),
+/// mirroring how `#[td_error]` enums give every variant a unique `EnumName::NNNN` identifier.
+/// The public arms forward to a single `@build` arm; the location macros there resolve to the
+/// original call site (inherited through the one-level forward).
 #[macro_export]
 macro_rules! api_error {
-    ($api_error:expr, $($arg:tt)*) => {{
+    // Explicit status expression — resilient to full paths, `from_u16`, variables, etc.
+    (status = $status:expr, $($arg:tt)*) => {
+        $crate::api_error!(@build $crate::ApiError::Any(($status).as_u16()), $($arg)*)
+    };
+    // Terse sugar for a bare `StatusCode::VARIANT` constant.
+    (StatusCode::$status:ident, $($arg:tt)*) => {
+        $crate::api_error!(@build $crate::ApiError::Any((StatusCode::$status).as_u16()), $($arg)*)
+    };
+    // An `ApiError` class (InputError, NotFound, ...).
+    ($api_error:expr, $($arg:tt)*) => {
+        $crate::api_error!(@build $api_error, $($arg)*)
+    };
+    // Internal builder shared by the arms above.
+    (@build $api_error:expr, $($arg:tt)*) => {{
         $crate::TdError::new($crate::InlineError {
             msg: format!($($arg)*),
-            domain: format!(
-                "{}:{}[{}]",
-                module_path!(),
-                file!(),
-                line!(),
-            ),
-            code: format!("Error::{:04}", $api_error as u16),
+            domain: format!("{}:{}[{}]", module_path!(), file!(), line!()),
+            code: format!("{}::{}", module_path!(), line!()),
             api_error: $api_error,
         })
     }};
@@ -246,15 +301,6 @@ mod tests {
 
     #[test]
     fn test_api_error_ranges() {
-        assert_eq!(ApiError::InputError as u16, 0);
-        assert_eq!(ApiError::NotFound as u16, 1000);
-        assert_eq!(ApiError::NotAllowed as u16, 2000);
-        assert_eq!(ApiError::Forbidden as u16, 3000);
-        assert_eq!(ApiError::NotAuthorized as u16, 4000);
-        assert_eq!(ApiError::InternalError as u16, 5000);
-        assert_eq!(ApiError::NotImplemented as u16, 6000);
-        assert_eq!(ApiError::Unexpected as u16, u16::MAX);
-
         assert_eq!(ApiError::from(0), ApiError::InputError);
         assert_eq!(ApiError::from(999), ApiError::InputError);
         assert_eq!(ApiError::from(1000), ApiError::NotFound);
@@ -271,6 +317,28 @@ mod tests {
         assert_eq!(ApiError::from(6999), ApiError::NotImplemented);
         assert_eq!(ApiError::from(7000), ApiError::Unexpected);
         assert_eq!(ApiError::from(u16::MAX), ApiError::Unexpected);
+    }
+
+    #[test]
+    fn test_api_error_http_passthrough() {
+        // `From<u16>` is the legacy range fallback and never yields `Any`.
+        assert!(!matches!(ApiError::from(429), ApiError::Any(_)));
+        assert!(matches!(ApiError::from(429), ApiError::InputError));
+    }
+
+    #[test]
+    fn test_api_error_is_internal() {
+        assert!(ApiError::InternalError.is_internal());
+        assert!(ApiError::NotImplemented.is_internal());
+        assert!(ApiError::Unexpected.is_internal());
+        assert!(!ApiError::InputError.is_internal());
+        assert!(!ApiError::NotFound.is_internal());
+        assert!(!ApiError::NotAuthorized.is_internal());
+        // Any passthrough is internal iff it is a 5xx status.
+        assert!(ApiError::Any(503).is_internal());
+        assert!(ApiError::Any(500).is_internal());
+        assert!(!ApiError::Any(409).is_internal());
+        assert!(!ApiError::Any(429).is_internal());
     }
 
     #[td_error]

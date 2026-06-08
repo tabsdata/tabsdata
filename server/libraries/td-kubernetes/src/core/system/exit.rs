@@ -3,7 +3,7 @@
 //
 
 use td_common::status::ExitStatus;
-use td_error::{ApiError, TdDomainError, TdError};
+use td_error::{TdDomainError, TdError};
 
 use crate::base::error::kubernetes::{KubeconfigError, KubernetesError};
 use crate::base::error::launcher::LauncherError;
@@ -44,15 +44,13 @@ impl CommandError {
 }
 
 fn exit_status_for(error: &TdError) -> ExitStatus {
-    match error.api_error() {
-        ApiError::InputError
-        | ApiError::NotFound
-        | ApiError::NotAllowed
-        | ApiError::Forbidden
-        | ApiError::NotAuthorized => ExitStatus::TabsDataError,
-        ApiError::InternalError | ApiError::NotImplemented | ApiError::Unexpected => {
-            ExitStatus::GeneralError
-        }
+    // Internal/server-side failures are general errors; client-facing errors are
+    // tabsdata errors. Using the coarse predicate keeps this stable as new error
+    // classes (e.g. `ApiError::Any`) are added.
+    if error.api_error().is_internal() {
+        ExitStatus::GeneralError
+    } else {
+        ExitStatus::TabsDataError
     }
 }
 

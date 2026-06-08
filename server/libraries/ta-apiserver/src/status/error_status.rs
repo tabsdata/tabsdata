@@ -2,71 +2,138 @@
 //  Copyright 2024 Tabs Data Inc.
 //
 
-//! This module generates the default error responses an API Server can generate.
-//! We also create types to reuse them across the application, in different contexts.
+//! The error response type shared by every API endpoint.
 //!
-//! Http statuses are determined by the ErrorResponse Status. But the mapping between the status
-//! and the actual response might differ. For example, if the response has a NOT_FOUND, but the
-//! status does not allow that, it has to be converted to another status such as BAD_REQUEST.
-//!
-//! Default errors -> BAD_REQUEST(400), UNAUTHORIZED(401) and INTERNAL_SERVER_ERROR(500)
-//! Not found with default -> NOT_FOUND(404) and default errors.
+//! [`ErrorStatus`] carries the real [`StatusCode`] computed when a `TdError` is converted
+//! (see `td_error_status.rs`) and emits it verbatim — any HTTP status can be returned.
+//! For OpenAPI it documents a single honest `default` response; per-endpoint specifics
+//! are conveyed by the body `code` field (and, optionally, the `errors(...)` argument of
+//! `apiserver_path`).
 
-#![allow(non_camel_case_types, clippy::upper_case_acronyms)]
-
-use derive_builder::Builder;
-use getset::Getters;
 use http::StatusCode;
 use serde::Serialize;
 
 /// Generic API Server Error response.
-#[derive(utoipa::ToSchema, Debug, Default, Builder, Serialize, Getters)]
-#[builder(setter(into))]
-#[getset(get = "pub")]
+#[derive(utoipa::ToSchema, Debug, Default, Serialize)]
 pub struct ErrorResponse {
     #[serde(skip_serializing)]
-    status: StatusCode,
-    code: String,
-    error: Option<String>,
+    pub status: StatusCode,
+    pub code: String,
+    pub error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    error_description: Option<String>,
+    pub error_description: Option<String>,
 }
 
 #[derive(utoipa::ToSchema, utoipa::IntoResponses, serde::Serialize)]
-pub enum ErrorStatus {
-    #[response(status = StatusCode::NOT_FOUND, description = "NOT_FOUND")]
-    NOT_FOUND(ErrorResponse),
-    #[response(status = StatusCode::BAD_REQUEST, description = "BAD_REQUEST")]
-    BAD_REQUEST(ErrorResponse),
-    #[response(status = StatusCode::UNAUTHORIZED, description = "UNAUTHORIZED")]
-    UNAUTHORIZED(ErrorResponse),
-    #[response(status = StatusCode::FORBIDDEN, description = "FORBIDDEN")]
-    FORBIDDEN(ErrorResponse),
-    #[response(status = StatusCode::INTERNAL_SERVER_ERROR, description = "INTERNAL_SERVER_ERROR")]
-    INTERNAL_SERVER_ERROR(ErrorResponse),
-}
+#[response(
+    status = "default",
+    description = "Error response. Any HTTP error status may be returned; the `code` field identifies the specific error."
+)]
+pub struct ErrorStatus(ErrorResponse);
 
 impl axum::response::IntoResponse for ErrorStatus {
     fn into_response(self) -> axum::response::Response {
-        let (status, error) = match self {
-            ErrorStatus::NOT_FOUND(e) => (StatusCode::NOT_FOUND, e),
-            ErrorStatus::BAD_REQUEST(e) => (StatusCode::BAD_REQUEST, e),
-            ErrorStatus::UNAUTHORIZED(e) => (StatusCode::UNAUTHORIZED, e),
-            ErrorStatus::FORBIDDEN(e) => (StatusCode::FORBIDDEN, e),
-            ErrorStatus::INTERNAL_SERVER_ERROR(e) => (StatusCode::INTERNAL_SERVER_ERROR, e),
-        };
-        (status, axum::Json(serde_json::json!(error))).into_response()
+        let status = self.0.status;
+        (status, axum::Json(serde_json::json!(self.0))).into_response()
     }
 }
 
 impl From<ErrorResponse> for ErrorStatus {
     fn from(error: ErrorResponse) -> Self {
-        match error.status {
-            StatusCode::NOT_FOUND => ErrorStatus::NOT_FOUND(error),
-            StatusCode::BAD_REQUEST => ErrorStatus::BAD_REQUEST(error),
-            StatusCode::UNAUTHORIZED => ErrorStatus::UNAUTHORIZED(error),
-            StatusCode::FORBIDDEN => ErrorStatus::FORBIDDEN(error),
-            _ => ErrorStatus::INTERNAL_SERVER_ERROR(error),
-        }
+        ErrorStatus(error)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::response::IntoResponse;
+    use td_error::{api_error, ApiError, TdError};
+
+    async fn run(td_error: TdError) -> (StatusCode, serde_json::Value) {
+        let response = ErrorStatus::from(td_error).into_response();
+        let status = response.status();
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body = serde_json::from_slice(&bytes).unwrap();
+        (status, body)
+    }
+
+    #[tokio::test]
+    async fn test_http_passthrough_returns_arbitrary_status() {
+        // A status with no dedicated named class is emitted verbatim (not collapsed to 500).
+        let (status, body) = run(api_error!(ApiError::Any(409), "clash")).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(body["error_description"], "clash");
+
+        let (status, _) = run(api_error!(ApiError::Any(429), "slow down")).await;
+        assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    #[tokio::test]
+    async fn test_api_error_macro_accepts_status_code() {
+        // Terse `StatusCode::VARIANT` sugar.
+        let (status, body) = run(api_error!(StatusCode::LOCKED, "held by {}", "alice")).await;
+        assert_eq!(status, StatusCode::LOCKED);
+        assert_eq!(body["error_description"], "held by alice");
+
+        let (status, _) = run(api_error!(StatusCode::TOO_MANY_REQUESTS, "slow down")).await;
+        assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    #[tokio::test]
+    async fn test_api_error_macro_status_expr_is_resilient() {
+        // `status = <expr>` accepts forms the bare sugar can't: full paths, `from_u16`, vars.
+        let (status, _) = run(api_error!(status = http::StatusCode::CONFLICT, "clash")).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+
+        let (status, _) = run(api_error!(
+            status = StatusCode::from_u16(451).unwrap(),
+            "blocked"
+        ))
+        .await;
+        assert_eq!(status.as_u16(), 451);
+
+        let chosen = StatusCode::SERVICE_UNAVAILABLE;
+        let (status, body) = run(api_error!(status = chosen, "down")).await;
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+        // 5xx is masked.
+        assert_eq!(body["error_description"], "An internal error occurred");
+    }
+
+    #[tokio::test]
+    async fn test_inline_errors_have_unique_call_site_codes() {
+        // Like typed errors' `EnumName::NNNN`, each `api_error!` call site gets a unique,
+        // namespaced `code` (module path + line) so a given inline error is pinpointable.
+        let (_, a) = run(api_error!(ApiError::InternalError, "one")).await;
+        let (_, b) = run(api_error!(ApiError::InternalError, "two")).await;
+        let ca = a["code"].as_str().unwrap();
+        let cb = b["code"].as_str().unwrap();
+        assert!(ca.contains("::"), "code should be namespaced: {ca}");
+        assert!(
+            ca.starts_with("ta_apiserver::status::error_status"),
+            "code should carry the call-site module: {ca}"
+        );
+        assert_ne!(ca, cb, "distinct call sites must get distinct codes");
+    }
+
+    #[tokio::test]
+    async fn test_client_error_status_and_message() {
+        let (status, body) = run(api_error!(ApiError::InputError, "bad field")).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["error"], "invalid_request");
+        assert_eq!(body["error_description"], "bad field");
+    }
+
+    #[tokio::test]
+    async fn test_internal_error_is_masked() {
+        // 5xx (named or passthrough) must not leak the internal message.
+        let (status, body) = run(api_error!(ApiError::InternalError, "secret detail")).await;
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(body["error_description"], "An internal error occurred");
+
+        let (status, body) = run(api_error!(ApiError::Any(503), "db down internals")).await;
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(body["error_description"], "An internal error occurred");
     }
 }
