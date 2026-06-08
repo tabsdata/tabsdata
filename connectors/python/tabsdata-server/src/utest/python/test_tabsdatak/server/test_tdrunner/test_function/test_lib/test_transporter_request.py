@@ -464,10 +464,14 @@ def test_write_transporter_request(tmp_path):
     assert out.read_text().startswith("!CopyV1")
 
 
-def test_write_to_missing_parent_raises_oserror(tmp_path):
+def test_write_creates_missing_parent_dirs(tmp_path):
+    # Under the publisher init-container chain, prep-* commands write into
+    # `shared/shuttle/request/` which starts empty (overlaid by an emptyDir);
+    # the writer creates the chain on demand rather than raising OSError.
     req = TransporterCopyRequest(pairs=())
-    with pytest.raises(OSError):
-        write_transporter_request(req, tmp_path / "no" / "such" / "x.yaml")
+    out = tmp_path / "no" / "such" / "x.yaml"
+    write_transporter_request(req, out)
+    assert out.read_text().startswith("!CopyV1")
 
 
 # --- frozen ---

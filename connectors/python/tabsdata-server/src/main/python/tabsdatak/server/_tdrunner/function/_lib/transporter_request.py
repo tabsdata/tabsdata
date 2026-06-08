@@ -203,9 +203,16 @@ def write_transporter_request(req: TransporterCopyRequest, path: Path) -> None:
     (`!CopyV1`, `!S3`, `!Azure`, `!GCS`, `!LocalFile`, `!Env`, `!Literal`)
     the transporter binary consumes.
 
+    Parent directories of `path` are created if missing — under the
+    publisher init-container chain, prep-* commands write to subpaths
+    of the `shared/shuttle/` emptyDir which start out empty (the
+    image-template-provided `shared/shuttle/` subdirs are overlaid by
+    the emptyDir mount).
+
     Raises:
         OSError: if `path` is not writable.
     """
+    path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as fh:
         yaml.dump(req, fh, Dumper=_make_dumper(), sort_keys=False)
 
