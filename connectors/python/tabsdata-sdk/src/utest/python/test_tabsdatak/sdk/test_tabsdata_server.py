@@ -219,7 +219,7 @@ def test_trigger_string_list_returns_none_when_no_trigger():
 # ---------------------------------------------------------------------------
 # _create_archive: metadata extraction (bundle producer mocked out)
 #
-# ``tabsdatak._bundle.build_bundle`` has its own dedicated tests in the
+# ``tabsdatak.common._archive.bundle.build_bundle`` has its own dedicated tests in the
 # tabsdata-api package; here we monkeypatch it so the metadata
 # extraction can be tested in isolation against simple Info stubs.
 # ---------------------------------------------------------------------------

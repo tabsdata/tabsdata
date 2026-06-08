@@ -53,8 +53,8 @@ from tabsdatak._info import (
     TransformerInfo,
     _unwrap_info,
 )
+from tabsdatak.common._interpreter.python.venv import PythonEnvironment
 from tabsdatak.error import ApiErrorCode
-from tabsdatak.server._tdruntime.python.venv import PythonEnvironment
 
 log = logging.getLogger(__name__)
 
@@ -308,7 +308,7 @@ def build_bundle(
             )
 
         # zstd-compressed tar stream. Same shape as
-        # ``_tdruntime.python.venv.archive``: write the raw zstd stream
+        # ``interpreter.python.venv.archive``: write the raw zstd stream
         # through a ``stream_writer`` and feed it to a streaming-mode
         # tarfile. ``closefd=False`` keeps the outer file handle
         # owned by the outer ``with``, so the stream is flushed on

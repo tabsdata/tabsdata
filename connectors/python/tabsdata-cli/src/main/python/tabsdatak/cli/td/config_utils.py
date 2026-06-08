@@ -4,11 +4,14 @@
 
 from __future__ import annotations
 
+import logging
 import os
 
 import yaml
 
 from tabsdatak.cli.cli_utils import td_resource
+
+logger = logging.getLogger(__name__)
 
 ACTIONS_DIRECTORY = "resources/cli/actions"
 
@@ -36,16 +39,23 @@ class Action:
         return self.__str__()
 
 
-def create_action(action_name: str, action_definition: dict) -> Action:
-    # TODO(tabsdatak-migration): the `tabsdata.extensions.variant.cli`
-    # package (which provides `ACTION_CLASSES`) has not yet been ported
-    # to the v2 `tabsdatak` namespace. Once migrated, replace this stub
-    # with the original lookup against
-    # `tabsdatak.extensions.variant.cli.config_utils.ACTION_CLASSES`.
-    raise RuntimeError(
-        f"Cannot create action {action_name!r}: the variant CLI extensions "
-        "package has not yet been migrated to the tabsdatak namespace."
-    )
+def variant_action_classes() -> dict[str, type[Action]]:
+    try:
+        from tabsdatak.extensions.variant.cli.config_utils import ACTION_CLASSES
+    except ImportError:
+        return {}
+    return ACTION_CLASSES
+
+
+def create_action(action_name: str, action_definition: dict) -> Action | None:
+    action_cls = variant_action_classes().get(action_name)
+    if not action_cls:
+        logger.warning(
+            f"Skipping action {action_name!r}: no implementation available in "
+            "the current variant."
+        )
+        return None
+    return action_cls(action_name, action_definition)
 
 
 def load_actions_from_config(config: dict) -> list[Action]:
@@ -54,7 +64,8 @@ def load_actions_from_config(config: dict) -> list[Action]:
     for action_configuration in raw_actions:
         action_name, action_definition = next(iter(action_configuration.items()))
         action = create_action(action_name, action_definition)
-        actions.append(action)
+        if action is not None:
+            actions.append(action)
     return actions
 
 

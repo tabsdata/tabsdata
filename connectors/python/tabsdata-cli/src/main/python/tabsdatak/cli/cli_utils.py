@@ -11,7 +11,7 @@ legacy ``tabsdata._utils.internal._about.tdabout`` surface so the
 (see TODO block below).
 
 :func:`td_resource` is the proper v2 resolver re-exported from
-``tabsdatak.server._tdruntime.python.resource`` — it honours the
+``tabsdatak.common._resources.reader`` — it honours the
 editable-install overlay that lets resources live under the repo's
 ``variant/`` tree.
 """
@@ -33,6 +33,8 @@ import requests
 import rich_click as click
 from rich_click import Option, UsageError
 
+from tabsdatak.common._resources.reader import td_resource  # noqa: F401
+
 # noinspection PyProtectedMember
 from tabsdatak.sdk._apiserver import (
     BASE_API_URL,
@@ -42,7 +44,6 @@ from tabsdatak.sdk._apiserver import (
     obtain_connection,
 )
 from tabsdatak.sdk.tabsdata_server import Function, TabsdataServer
-from tabsdatak.server._tdruntime.python.resource import td_resource  # noqa: F401
 
 CONNECTION_FILE = "connection.json"
 

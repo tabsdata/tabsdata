@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from tabsdatak.server._tdruntime.python.pyvenv import (
+from tabsdatak.common._interpreter.python.pyvenv import (
     VENV_AG,
     VENV_TD,
     build_connector_recipe,
@@ -16,12 +16,12 @@ from tabsdatak.server._tdruntime.python.pyvenv import (
     build_recipes,
     render_package,
 )
-from tabsdatak.server._tdruntime.python.recipe import (
+from tabsdatak.common._interpreter.python.recipe import (
     InstallRecipe,
     PackageRecipe,
     TabsdataEdition,
 )
-from tabsdatak.server._tdruntime.python.venv import (
+from tabsdatak.common._interpreter.python.venv import (
     CONNECTORS_RELATIVE_PATH,
     TABSDATA_AGENT_PACKAGE,
     TABSDATA_CONNECTORS_NAMES,

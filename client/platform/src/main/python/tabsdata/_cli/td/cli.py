@@ -45,9 +45,9 @@ from tabsdata._utils.compatibility import (
     PackageVersionError,
     check_sticky_version_packages,
 )
-from tabsdata._utils.internal._about import tdabout
-from tabsdata._utils.internal._resources import td_resource
 from tabsdata.api.apiserver import DEFAULT_TABSDATA_DIRECTORY
+from tabsdatak.common._information.about import tdabout
+from tabsdatak.common._resources.reader import td_resource
 
 CYAN = "[cyan]"
 NO_CYAN = "[/cyan]"

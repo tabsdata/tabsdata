@@ -8,7 +8,7 @@ import os
 
 import yaml
 
-from tabsdata._utils.internal._resources import td_resource
+from tabsdatak.common._resources.reader import td_resource
 
 ACTIONS_DIRECTORY = "resources/cli/actions"
 

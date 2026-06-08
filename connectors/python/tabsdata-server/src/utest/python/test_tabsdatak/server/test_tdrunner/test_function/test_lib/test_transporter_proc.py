@@ -16,7 +16,7 @@ from tabsdatak.server._tdrunner.function._lib.transporter_proc import (
     TransporterNotFoundError,
     run_transporter,
 )
-from tabsdatak.server._tdruntime.python.error import BinaryNotFoundError
+from tabsdatak.common._interpreter.python.error import BinaryNotFoundError
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 

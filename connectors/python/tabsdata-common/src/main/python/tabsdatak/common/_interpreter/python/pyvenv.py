@@ -9,13 +9,13 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from tabsdatak.server._tdruntime.python.recipe import (
+from tabsdatak.common._interpreter.python.recipe import (
     InstallRecipe,
     PackageRecipe,
     TabsdataEdition,
     VenvRecipe,
 )
-from tabsdatak.server._tdruntime.python.venv import (
+from tabsdatak.common._interpreter.python.venv import (
     CONNECTORS_RELATIVE_PATH,
     TABSDATA_AGENT_PACKAGE,
     TABSDATA_CONNECTORS_NAMES,

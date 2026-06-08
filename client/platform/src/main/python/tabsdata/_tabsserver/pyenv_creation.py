@@ -82,11 +82,11 @@ from tabsdata._utils.constants import (
 
 # noinspection PyProtectedMember
 from tabsdata._utils.id import encode_id
-from tabsdata._utils.internal._resources import td_resource
 
 # noinspection PyProtectedMember
 from tabsdata._utils.tableframe._constants import PYTEST_CONTEXT_ACTIVE
 from tabsdata._utils.temps import tabsdata_temp_folder
+from tabsdatak.common._resources.reader import td_resource
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)

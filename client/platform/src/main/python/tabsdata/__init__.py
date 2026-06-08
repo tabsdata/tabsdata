@@ -337,7 +337,9 @@ Registering and Executing Functions
 
 # This must be done early, as other imports might be importing packages that require
 # having some system libraries already loaded.
-import tabsdata._utils.internal._libraries  # noqa: F401, E402  # isort: skip
+from tabsdatak.common._runtime.libraries import load as _load_libraries  # isort: skip
+
+_load_libraries()
 
 import importlib.metadata
 import logging

@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from tabsdatak.server._tdruntime.python.binary import Binary
-from tabsdatak.server._tdruntime.python.recipe import (
+from tabsdatak.common._interpreter.python.binary import Binary
+from tabsdatak.common._interpreter.python.recipe import (
     SUPPORTED_INSTALL_RECIPES,
     InstallRecipe,
     PackageRecipe,

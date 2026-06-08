@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from tabsdatak.server._tdruntime.python.binary import (
+from tabsdatak.common._interpreter.python.binary import (
     Binary,
     binaries_from_setup_toml,
     current_scripts_dir,

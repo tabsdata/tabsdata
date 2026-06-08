@@ -29,7 +29,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from tabsdatak._bundle import BUNDLE_MANIFEST_FILENAME, BUNDLE_USER_CODE_DIRNAME
+from tabsdatak.common._archive.bundle import BUNDLE_MANIFEST_FILENAME, BUNDLE_USER_CODE_DIRNAME
 from tabsdatak._info import (
     PublisherInfo,
     SubscriberInfo,

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 from importlib.resources import as_file, files
 from pathlib import Path, PurePosixPath
 
@@ -16,8 +17,8 @@ from tabsdatak.common._constants import (
     TABSDATAK_MODULE_NAME,
     VARIANT,
 )
-from tabsdatak.server._tdruntime.python.package import Package
-from tabsdatak.server._tdruntime.python.recipe import InstallRecipe
+from tabsdatak.common._interpreter.python.package import Package
+from tabsdatak.common._interpreter.python.recipe import InstallRecipe
 
 logger = logging.getLogger(__name__)
 
@@ -87,8 +88,6 @@ def editable_source_root(package: str) -> Path | None:
 
 
 def main() -> None:
-    import sys
-
     if len(sys.argv) != 2:
         print("Usage: td_resource <resource-path>", file=sys.stderr)
         sys.exit(2)

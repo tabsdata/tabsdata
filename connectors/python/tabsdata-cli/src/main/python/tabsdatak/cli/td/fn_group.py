@@ -314,7 +314,7 @@ def register(
     a tabsdatak ``PublisherInfo`` / ``TransformerInfo`` /
     ``SubscriberInfo`` produced by a ``@publisher`` / ``@transformer``
     / ``@subscriber`` decorator) and registers it via the v2 bundle
-    producer (``tabsdatak._bundle.build_bundle``).
+    producer (``tabsdatak.common._archive.bundle.build_bundle``).
 
     With ``--update``, behaves idempotently: if the function already
     exists in the collection it is updated; otherwise it is registered.
@@ -707,7 +707,7 @@ def update(
 
     Dynamically imports the symbol named by ``--path`` (a tabsdatak
     ``*Info`` descriptor) and updates the existing function via the
-    v2 bundle producer (``tabsdatak._bundle.build_bundle``).
+    v2 bundle producer (``tabsdatak.common._archive.bundle.build_bundle``).
     """
     verify_login_or_prompt(ctx)
     local_pkg_list = list(local_pkg) if local_pkg else None

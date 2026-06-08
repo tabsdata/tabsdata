@@ -9,8 +9,8 @@ from importlib.metadata import metadata as get_package_metadata
 
 import yaml
 
-from tabsdata._utils.constants import TABSDATA_MODULE_NAME
-from tabsdata._utils.internal._resources import td_resource
+from tabsdatak.common._constants import TABSDATA_MODULE_NAME
+from tabsdatak.common._resources.reader import td_resource
 
 
 def load_repositories():

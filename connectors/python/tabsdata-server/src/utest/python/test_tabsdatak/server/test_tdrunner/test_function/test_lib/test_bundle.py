@@ -19,7 +19,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 def _write_tar_zst(path: Path, files: dict[str, bytes]) -> None:
     """Write a `.tar.zst` (zstandard-compressed tar) containing `files`.
 
-    Matches the shape of the producer at ``tabsdatak._bundle.build_bundle``:
+    Matches the shape of the producer at ``tabsdatak.common._archive.bundle.build_bundle``:
     raw file → zstd stream_writer → streaming tarfile.
     """
     compressor = zstandard.ZstdCompressor()

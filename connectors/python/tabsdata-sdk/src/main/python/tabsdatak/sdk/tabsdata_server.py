@@ -14,7 +14,7 @@ Function registration in v2 uses the tabsdatak bundle producer:
 ``register_function`` / ``patch_function`` accept a
 ``PublisherInfo`` / ``TransformerInfo`` / ``SubscriberInfo`` (the
 descriptor your ``@publisher``/``@transformer``/``@subscriber``
-decorator produced), call :func:`tabsdatak._bundle.build_bundle` to
+decorator produced), call :func:`tabsdatak.common._archive.bundle.build_bundle` to
 produce the ``.tar.zst``, and POST it to the server. The legacy
 ``function_path``-based registration that re-imported the user's
 module and assembled the bundle from scratch is gone — bring an
@@ -34,7 +34,7 @@ from typing import Generator, List, Union
 import polars as pl
 import requests
 
-from tabsdatak._bundle import build_bundle, capture_source_snippet
+from tabsdatak.common._archive.bundle import build_bundle, capture_source_snippet
 from tabsdatak._info import (
     KIND_PUBLISHER_DEF,
     KIND_STREAM_PUBLISHER_DEF,
@@ -5366,7 +5366,7 @@ class _FunctionArchive:
     their existing payload schema unchanged. The v2 difference: every
     field is derived from the :class:`FunctionInfo` rather than from
     legacy ``TabsdataFunction`` attributes, and the bundle itself is
-    produced by :func:`tabsdatak._bundle.build_bundle`.
+    produced by :func:`tabsdatak.common._archive.bundle.build_bundle`.
     """
 
     tables: list[str]
@@ -5458,7 +5458,7 @@ def _create_archive(
 ) -> _FunctionArchive:
     """Bundle ``info`` (a :class:`FunctionInfo`) for registration.
 
-    Calls :func:`tabsdatak._bundle.build_bundle` to produce the
+    Calls :func:`tabsdatak.common._archive.bundle.build_bundle` to produce the
     ``.tar.zst`` and assembles the metadata fields the legacy
     ``function_register`` API still expects from the SDK side.
 
@@ -5633,5 +5633,5 @@ def _complete_utc_datetime(incomplete_datetime: str | None) -> int | None:
 # the user's decorated function from a "path/to/file.py::name" string
 # to assemble the bundle) are gone in v2. Callers pass a ready-made
 # ``FunctionInfo`` (PublisherInfo / TransformerInfo / SubscriberInfo)
-# directly; the bundle is produced by ``tabsdatak._bundle.build_bundle``
+# directly; the bundle is produced by ``tabsdatak.common._archive.bundle.build_bundle``
 # and the runner reads ``function_def.json`` from the bundle root.

@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 
-from tabsdatak.server._tdruntime.python.binary import Binary
+from tabsdatak.common._interpreter.python.binary import Binary
 
 
 class TabsdataEdition(str, Enum):

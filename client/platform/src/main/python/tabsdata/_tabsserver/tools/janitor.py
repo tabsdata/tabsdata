@@ -14,7 +14,7 @@ from typing import List
 from tabsdata._tabsserver.function.global_utils import setup_logging
 
 # noinspection PyProtectedMember
-from tabsdata._utils.internal._process import TaskRunner
+from tabsdatak.common._runtime.process import TaskRunner
 
 ABSOLUTE_LOCATION = os.path.dirname(os.path.abspath(__file__))
 

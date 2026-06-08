@@ -39,8 +39,10 @@ def setup_ibm_db():
                 logger.debug("The ibm_db package is not available")
 
 
-def setup():
-    setup_ibm_db()
-
-
-setup()
+def load():
+    """Initialize platform-specific libraries, swallowing any error."""
+    # noinspection PyBroadException
+    try:
+        setup_ibm_db()
+    except Exception:
+        pass

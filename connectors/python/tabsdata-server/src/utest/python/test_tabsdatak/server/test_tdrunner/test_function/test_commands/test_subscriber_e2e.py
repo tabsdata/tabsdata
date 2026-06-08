@@ -49,7 +49,7 @@ import polars as pl
 import pytest
 import yaml
 
-from tabsdatak._bundle import build_bundle
+from tabsdatak.common._archive.bundle import build_bundle
 
 pytestmark = [
     pytest.mark.unit,

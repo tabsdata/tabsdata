@@ -11,7 +11,7 @@ from ruamel.yaml import YAML
 
 from tabsdata._tabsserver.server.upgrader.editors.yaml.yaml_e import YamlEditor
 from tabsdata._tabsserver.server.upgrader.entity import Upgrade
-from tabsdata._utils.internal._resources import td_resource
+from tabsdatak.common._resources.reader import td_resource
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)

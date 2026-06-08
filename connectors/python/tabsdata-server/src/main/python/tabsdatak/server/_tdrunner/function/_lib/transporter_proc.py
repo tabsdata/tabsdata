@@ -46,8 +46,8 @@ import threading
 from pathlib import Path
 from typing import IO, Sequence
 
-from tabsdatak.server._tdruntime.python.error import BinaryNotFoundError
-from tabsdatak.server._tdruntime.python.venv import PythonEnvironment
+from tabsdatak.common._interpreter.python.error import BinaryNotFoundError
+from tabsdatak.common._interpreter.python.venv import PythonEnvironment
 
 logger = logging.getLogger(__name__)
 

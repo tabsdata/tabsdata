@@ -11,12 +11,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from tabsdatak.server._tdruntime.python.error import (
+from tabsdatak.common._interpreter.python.error import (
     PackageNotInstalledError,
     UnsupportedInstallMethodError,
 )
-from tabsdatak.server._tdruntime.python.package import Package
-from tabsdatak.server._tdruntime.python.recipe import InstallRecipe
+from tabsdatak.common._interpreter.python.package import Package
+from tabsdatak.common._interpreter.python.recipe import InstallRecipe
 
 pytestmark = pytest.mark.unit
 

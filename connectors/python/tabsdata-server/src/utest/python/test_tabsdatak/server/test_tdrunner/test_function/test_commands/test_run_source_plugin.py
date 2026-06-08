@@ -26,7 +26,7 @@ import pyarrow.parquet as pq
 import pytest
 import yaml
 
-from tabsdatak._bundle import BUNDLE_MANIFEST_FILENAME, build_bundle
+from tabsdatak.common._archive.bundle import BUNDLE_MANIFEST_FILENAME, build_bundle
 from tabsdatak._info import PublisherInfo
 from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
 from tabsdatak.server._tdrunner.function._lib.errors import CommandSpecificError

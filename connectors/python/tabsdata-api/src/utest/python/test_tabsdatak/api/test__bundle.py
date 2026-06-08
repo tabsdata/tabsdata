@@ -13,7 +13,7 @@ import pytest
 import yaml
 import zstandard
 
-from tabsdatak._bundle import (
+from tabsdatak.common._archive.bundle import (
     BUNDLE_LOCAL_PACKAGES_DIRNAME,
     BUNDLE_MANIFEST_FILENAME,
     BUNDLE_REQUIREMENTS_FILENAME,

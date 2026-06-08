@@ -8,13 +8,13 @@ from pathlib import Path
 
 import pytest
 
-from tabsdatak.server._tdruntime.python.error import FeatureDetectionError
-from tabsdatak.server._tdruntime.python.recipe import (
+from tabsdatak.common._interpreter.python.error import FeatureDetectionError
+from tabsdatak.common._interpreter.python.recipe import (
     InstallRecipe,
     PackageRecipe,
     TabsdataEdition,
 )
-from tabsdatak.server._tdruntime.python.venv import (
+from tabsdatak.common._interpreter.python.venv import (
     TABSDATA_PACKAGE,
     TABSDATA_TOOLKIT_PACKAGE,
     PythonEnvironment,
@@ -220,17 +220,17 @@ def patch_environment(
                 raise AssertionError(f"unexpected Package lookup: {self.name}")
             return installed[self.name]
 
-    monkeypatch.setattr("tabsdatak.server._tdruntime.python.venv.Package", PackageStub)
+    monkeypatch.setattr("tabsdatak.common._interpreter.python.venv.Package", PackageStub)
     monkeypatch.setattr(
-        "tabsdatak.server._tdruntime.python.venv.PythonEnvironment.installed_packages",
+        "tabsdatak.common._interpreter.python.venv.PythonEnvironment.installed_packages",
         staticmethod(lambda: frozenset(installed.keys())),
     )
     monkeypatch.setattr(
-        "tabsdatak.server._tdruntime.python.venv.PythonEnvironment.locked_packages",
+        "tabsdatak.common._interpreter.python.venv.PythonEnvironment.locked_packages",
         staticmethod(lambda: locked),
     )
     monkeypatch.setattr(
-        "tabsdatak.server._tdruntime.python.venv.PythonEnvironment.uv",
+        "tabsdatak.common._interpreter.python.venv.PythonEnvironment.uv",
         staticmethod(lambda arguments, *, stdin=None: stdin or ""),
     )
 
@@ -340,7 +340,7 @@ def test_synthesise_excludes_tabsdata_prefixed_packages(monkeypatch):
 def test_synthesise_falls_back_to_online_when_offline_uv_fails(monkeypatch):
     """First uv call uses --offline; a VenvCreationError triggers a retry
     without --offline. The fallback path must still produce results."""
-    from tabsdatak.server._tdruntime.python.error import VenvCreationError
+    from tabsdatak.common._interpreter.python.error import VenvCreationError
 
     calls: list[list[str]] = []
 
@@ -351,15 +351,15 @@ def test_synthesise_falls_back_to_online_when_offline_uv_fails(monkeypatch):
         return stdin or ""
 
     monkeypatch.setattr(
-        "tabsdatak.server._tdruntime.python.venv.PythonEnvironment.uv",
+        "tabsdatak.common._interpreter.python.venv.PythonEnvironment.uv",
         staticmethod(fake_uv),
     )
     monkeypatch.setattr(
-        "tabsdatak.server._tdruntime.python.venv.PythonEnvironment.installed_packages",
+        "tabsdatak.common._interpreter.python.venv.PythonEnvironment.installed_packages",
         staticmethod(lambda: frozenset({"polars"})),
     )
     monkeypatch.setattr(
-        "tabsdatak.server._tdruntime.python.venv.PythonEnvironment.locked_packages",
+        "tabsdatak.common._interpreter.python.venv.PythonEnvironment.locked_packages",
         staticmethod(lambda: frozenset()),
     )
 
@@ -370,7 +370,7 @@ def test_synthesise_falls_back_to_online_when_offline_uv_fails(monkeypatch):
         def recipe(self):
             return stub_recipe(InstallRecipe.REGISTRY)
 
-    monkeypatch.setattr("tabsdatak.server._tdruntime.python.venv.Package", PackageStub)
+    monkeypatch.setattr("tabsdatak.common._interpreter.python.venv.Package", PackageStub)
 
     requirements, _ = PythonEnvironment.synthesise()
     assert requirements == ["polars==1.2.3"]
@@ -393,11 +393,11 @@ def test_installed_packages_returns_canonical_names(
     (site_packages / "not-a-dist").mkdir()
 
     monkeypatch.setattr(
-        "tabsdatak.server._tdruntime.python.venv.site.getsitepackages",
+        "tabsdatak.common._interpreter.python.venv.site.getsitepackages",
         lambda: [str(site_packages)],
     )
     monkeypatch.setattr(
-        "tabsdatak.server._tdruntime.python.venv.site.getusersitepackages",
+        "tabsdatak.common._interpreter.python.venv.site.getusersitepackages",
         lambda: "",
     )
 
@@ -436,9 +436,9 @@ def patch_locks(
                 return tabsdata_recipe
             raise AssertionError(f"unexpected Package lookup: {self.name}")
 
-    monkeypatch.setattr("tabsdatak.server._tdruntime.python.venv.Package", PackageStub)
+    monkeypatch.setattr("tabsdatak.common._interpreter.python.venv.Package", PackageStub)
     monkeypatch.setattr(
-        "tabsdatak.server._tdruntime.python.venv.td_resource", fake_td_resource
+        "tabsdatak.common._interpreter.python.venv.td_resource", fake_td_resource
     )
 
 

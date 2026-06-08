@@ -349,7 +349,7 @@ class ApiErrorCode(ErrorCode):
     API_21 = ErrorDef(ApiInitException, "Cannot create StageManifestEntry")
     # StageManifestEntry
 
-    # --- Bundle production (tabsdatak._bundle) ----------------------
+    # --- Bundle production (tabsdatak.common._archive.bundle) ----------------------
     # Raised by `build_bundle` and its helpers at registration time
     # when filesystem or environment preconditions aren't met. These
     # are runtime conditions (path doesn't exist, version mismatch),

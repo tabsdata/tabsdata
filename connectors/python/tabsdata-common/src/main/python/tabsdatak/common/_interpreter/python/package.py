@@ -14,12 +14,12 @@ from typing import cast
 import yaml
 from packaging.utils import canonicalize_name
 
-from tabsdatak.server._tdruntime.python.binary import Binary, binaries_from_setup_toml
-from tabsdatak.server._tdruntime.python.error import (
+from tabsdatak.common._interpreter.python.binary import Binary, binaries_from_setup_toml
+from tabsdatak.common._interpreter.python.error import (
     PackageNotInstalledError,
     UnsupportedInstallMethodError,
 )
-from tabsdatak.server._tdruntime.python.recipe import (
+from tabsdatak.common._interpreter.python.recipe import (
     SUPPORTED_INSTALL_RECIPES,
     InstallRecipe,
     PackageRecipe,

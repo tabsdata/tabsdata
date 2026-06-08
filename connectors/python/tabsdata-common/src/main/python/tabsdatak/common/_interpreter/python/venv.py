@@ -18,21 +18,21 @@ import zstandard
 from packaging.requirements import InvalidRequirement, Requirement
 from packaging.utils import canonicalize_name
 
-from tabsdatak.server._tdruntime.python.binary import SYSCONFIG_VAR_EXE
-from tabsdatak.server._tdruntime.python.error import (
+from tabsdatak.common._interpreter.python.binary import SYSCONFIG_VAR_EXE
+from tabsdatak.common._interpreter.python.error import (
     BinaryNotFoundError,
     FeatureDetectionError,
     VenvCreationError,
     WheelFileMissingError,
 )
-from tabsdatak.server._tdruntime.python.package import Package
-from tabsdatak.server._tdruntime.python.recipe import (
+from tabsdatak.common._interpreter.python.package import Package
+from tabsdatak.common._interpreter.python.recipe import (
     InstallRecipe,
     PackageRecipe,
     TabsdataEdition,
     VenvRecipe,
 )
-from tabsdatak.server._tdruntime.python.resource import td_resource
+from tabsdatak.common._resources.reader import td_resource
 
 logger = logging.getLogger(__name__)
 

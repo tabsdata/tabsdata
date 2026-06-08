@@ -10,7 +10,7 @@ from packaging.version import Version
 
 from tabsdata._tabsserver.server.upgrader.entity import Upgrade
 from tabsdata._utils.constants import TABSDATA_MODULE_NAME
-from tabsdata._utils.internal._resources import td_resource
+from tabsdatak.common._resources.reader import td_resource
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)

@@ -26,7 +26,7 @@ import polars as pl
 import pytest
 import yaml
 
-from tabsdatak._bundle import BUNDLE_MANIFEST_FILENAME, build_bundle
+from tabsdatak.common._archive.bundle import BUNDLE_MANIFEST_FILENAME, build_bundle
 from tabsdatak._info import PublisherInfo
 from tabsdatak.api import TableFrameSpec, TableFramesSpec
 from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
