@@ -72,8 +72,17 @@ CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
         "the command will fail."
     ),
 )
+@click.option(
+    "--project",
+    "-P",
+    help=(
+        "Project to target for project-scoped commands (collection, fn, table, "
+        "exe, ...). Overrides the pinned project for this invocation. See "
+        "'td project pin'."
+    ),
+)
 @click.pass_context
-def cli(ctx: click.Context, no_prompt: bool):
+def cli(ctx: click.Context, no_prompt: bool, project: str):
     """Main CLI for the Tabsdata system"""
     try:
         os.makedirs(DEFAULT_TABSDATA_DIRECTORY, exist_ok=True)
@@ -84,6 +93,14 @@ def cli(ctx: click.Context, no_prompt: bool):
         initialise_tabsdata_server_connection(ctx)
         load_pinned_objects(ctx)
         load_cli_options(ctx)
+        # The active project rides on the connection: the `--project` override
+        # wins, else the pinned project. Project-scoped commands never thread
+        # it -- the connection injects it into every tenant path.
+        server = ctx.obj.get("tabsdataserver")
+        if server is not None:
+            server.connection.project = project or ctx.obj["pinned_objects"].get(
+                "project"
+            )
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to initialize CLI: {e}")

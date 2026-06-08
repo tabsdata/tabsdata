@@ -141,6 +141,22 @@ class APIServerError(Exception):
         )
 
 
+class NoProjectSelectedError(Exception):
+    """Raised when a tenant-scoped call has no active project.
+
+    Tenant resources (collections, functions, tables, executions, ...) live
+    under ``/projects/{project}/...``. The active project rides on the
+    connection, set from the pinned project or the ``--project`` override;
+    when neither is present there is no tenant to target.
+    """
+
+    def __init__(self):
+        super().__init__(
+            "No project selected. Run 'td project pin <name>' or pass "
+            "'--project <name>'."
+        )
+
+
 def process_url(url: str) -> str:
     """
     A helper function to process the url string. It adds the protocol and the
@@ -157,6 +173,26 @@ def process_url(url: str) -> str:
 
 
 class APIServer:
+    # Endpoint prefixes that are global (system-scoped) and never carry a
+    # project. Everything else is tenant-scoped: `_resolve_path` injects the
+    # active project as `/projects/{project}/...`. Defaulting to scoped is the
+    # safe bias for a multitenant client -- a forgotten exemption surfaces as
+    # an obvious 404, while a forgotten scope would leak across tenants.
+    #
+    # Source of truth is the server: in td-objects `rest_urls`, every tenant
+    # route is built under `SCOPED` (= `/projects/{project}`) and these globals
+    # are exactly the routes declared without it. Keep this in sync whenever the
+    # server adds a top-level (non-`SCOPED`) resource.
+    _GLOBAL_PREFIXES = (
+        "/auth",
+        "/groups",
+        "/projects",
+        "/roles",
+        "/runtime-info",
+        "/status",
+        "/users",
+    )
+
     def __init__(self, url: str, credentials_file: str = None):
         url = process_url(url)
         self.url = url
@@ -166,6 +202,26 @@ class APIServer:
         self.expires_in = None
         self.expiration_time = None
         self.credentials_file = credentials_file
+        # Active project for tenant-scoped requests. Set once per CLI run from
+        # the pinned project or the `--project` override; the connection then
+        # carries it into every tenant path, so callers never thread it.
+        self.project = None
+
+    def _resolve_path(self, path: str) -> str:
+        """Inject the active project into tenant-scoped endpoints.
+
+        Tenant resources live under ``/projects/{project}/...``; the active
+        project rides on the connection, so individual callers never thread
+        it. Global endpoints (auth, users, roles, groups, projects, status)
+        are left untouched. With no project selected a tenant call fails fast
+        rather than guessing a default -- defaulting, if any, is the server's
+        job.
+        """
+        if any(path == p or path.startswith(p + "/") for p in self._GLOBAL_PREFIXES):
+            return path
+        if not self.project:
+            raise NoProjectSelectedError()
+        return f"/projects/{self.project}{path}"
 
     @property
     def certificate_file(self) -> str | None:
@@ -208,7 +264,7 @@ class APIServer:
 
         if os.environ.get(PYTEST_CONTEXT_ACTIVE) is None:
             return requests.get(
-                self.url + path,
+                self.url + self._resolve_path(path),
                 headers=headers,
                 timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
                 params=params,
@@ -216,7 +272,7 @@ class APIServer:
             )
         else:
             return GET_HTTP_SESSION.get(
-                self.url + path,
+                self.url + self._resolve_path(path),
                 headers=headers,
                 timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
                 params=params,
@@ -243,7 +299,7 @@ class APIServer:
 
         if os.environ.get(PYTEST_CONTEXT_ACTIVE) is None:
             return requests.post(
-                self.url + path,
+                self.url + self._resolve_path(path),
                 headers=headers,
                 timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
                 json=json,
@@ -253,7 +309,7 @@ class APIServer:
             )
         else:
             return DEFAULT_HTTP_SESSION.post(
-                self.url + path,
+                self.url + self._resolve_path(path),
                 headers=headers,
                 timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
                 json=json,
@@ -273,7 +329,7 @@ class APIServer:
 
         if os.environ.get(PYTEST_CONTEXT_ACTIVE) is None:
             return requests.post(
-                self.url + path,
+                self.url + self._resolve_path(path),
                 headers=headers,
                 timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
                 data=data,
@@ -281,7 +337,7 @@ class APIServer:
             )
         else:
             return DEFAULT_HTTP_SESSION.post(
-                self.url + path,
+                self.url + self._resolve_path(path),
                 headers=headers,
                 timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
                 data=data,
@@ -298,14 +354,14 @@ class APIServer:
 
         if os.environ.get(PYTEST_CONTEXT_ACTIVE) is None:
             return requests.delete(
-                self.url + path,
+                self.url + self._resolve_path(path),
                 headers=headers,
                 timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
                 verify=self.certificate_file,
             )
         else:
             return DEFAULT_HTTP_SESSION.delete(
-                self.url + path,
+                self.url + self._resolve_path(path),
                 headers=headers,
                 timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
                 verify=self.certificate_file,
