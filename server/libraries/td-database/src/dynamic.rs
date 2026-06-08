@@ -63,6 +63,38 @@ impl DynamicPool {
         }
     }
 
+    /// Begin a transaction on the read-only pool. Used by the read path so a
+    /// per-request `SET LOCAL` (role / RLS GUC) has a transaction to scope to;
+    /// the caller rolls it back (reads make no changes to commit).
+    pub async fn begin_ro<'c>(&self) -> Result<DynamicTransaction<'c>, Error> {
+        match self {
+            #[cfg(sqlite)]
+            DynamicPool::Sqlite { ro, .. } => Ok(DynamicTransaction::Sqlite(ro.begin().await?)),
+            #[cfg(postgres)]
+            DynamicPool::Postgres { ro, .. } => Ok(DynamicTransaction::Postgres(ro.begin().await?)),
+            #[cfg(mysql)]
+            DynamicPool::MySql { ro, .. } => Ok(DynamicTransaction::MySql(ro.begin().await?)),
+        }
+    }
+
+    /// Acquire a connection from the read-only pool in the form the per-request
+    /// read path needs. On PostgreSQL this is a read-only transaction (so a
+    /// per-request `SET LOCAL` for RLS has a transaction to scope to); it makes
+    /// no changes and auto-rolls-back when the returned [`DynamicConnection`]
+    /// drops. On SQLite/MySQL — which have no RLS — it is the bare pooled
+    /// connection, preserving the original autocommit read semantics.
+    ///
+    /// Keeps backend dispatch inside this crate so the tower providers stay
+    /// backend-agnostic.
+    pub async fn acquire_for_read<'c>(&self) -> Result<DynamicConnection<'c>, Error> {
+        match self {
+            #[cfg(postgres)]
+            DynamicPool::Postgres { .. } => Ok(self.begin_ro().await?.into_connection()),
+            #[allow(unreachable_patterns)]
+            _ => self.acquire().await,
+        }
+    }
+
     /// Begin a transaction on the read-write pool
     pub async fn begin<'c>(&self) -> Result<DynamicTransaction<'c>, Error> {
         match self {
@@ -169,6 +201,15 @@ pub enum DynamicConnection<'c> {
     MySql(ConnectionHolder<'c, MySql, PoolConnection<MySql>>),
 }
 
+/// Quote a trusted SQL identifier for interpolation (doubles embedded `"`).
+/// Single source of the `SET LOCAL ROLE` quoting rule shared by
+/// [`DynamicConnection::set_rls_role`] and
+/// [`DynamicConnection::enter_project_scope`].
+#[cfg(postgres)]
+fn quote_ident(ident: &str) -> String {
+    format!("\"{}\"", ident.replace('"', "\"\""))
+}
+
 impl<'c> DynamicConnection<'c> {
     pub async fn ping(&mut self) -> Result<(), Error> {
         match self {
@@ -218,6 +259,123 @@ impl<'c> DynamicConnection<'c> {
                     sqlx::query(stmt).execute(&mut **h).await?;
                 }
             };
+        }
+        Ok(())
+    }
+
+    /// Switch this connection's transaction to `role` (PostgreSQL
+    /// `SET LOCAL ROLE`). Row-level security is enforced against the *current*
+    /// role, so switching to a non-superuser, non-`BYPASSRLS` role makes RLS
+    /// apply even when the pool authenticated as a superuser — letting the
+    /// bootstrap/superuser connection still serve RLS-scoped requests. No-op on
+    /// SQLite/MySQL. Must run inside a transaction (the `LOCAL` scope resets on
+    /// commit/rollback). `role` is a trusted identifier, quoted defensively.
+    #[cfg_attr(not(postgres), allow(unused_variables))]
+    pub async fn set_rls_role(&mut self, role: &str) -> Result<(), Error> {
+        match self {
+            #[cfg(postgres)]
+            Self::Postgres(h) => {
+                let sql = format!("SET LOCAL ROLE {}", quote_ident(role));
+                sqlx::query(&sql).execute(&mut **h).await?;
+            }
+            #[allow(unreachable_patterns)]
+            _ => {}
+        }
+        Ok(())
+    }
+
+    /// Whether this connection is backed by PostgreSQL. Lets a service layer
+    /// branch on backend without taking a `DatabaseBackend` dependency — e.g.
+    /// to gate features that only make sense under RLS.
+    pub fn is_postgres(&self) -> bool {
+        match self {
+            #[cfg(postgres)]
+            Self::Postgres(_) => true,
+            #[allow(unreachable_patterns)]
+            _ => false,
+        }
+    }
+
+    /// Bind this connection's transaction to a project: PostgreSQL
+    /// `SET LOCAL app.project_id = <project_id>`. Under row-level security
+    /// rows are then visible/writable only for that project (see the
+    /// `project_isolation` policy). No-op on SQLite/MySQL, which have no RLS.
+    ///
+    /// Uses `set_config(..., is_local => true)`, so the binding is scoped to the
+    /// surrounding transaction and cleared on commit/rollback — safe on a pooled
+    /// connection. **Must** be called inside a transaction; on an autocommit
+    /// connection the `true` (local) setting would not persist to later queries.
+    #[cfg_attr(not(postgres), allow(unused_variables))]
+    pub async fn set_project_scope(&mut self, project_id: &str) -> Result<(), Error> {
+        match self {
+            #[cfg(postgres)]
+            Self::Postgres(h) => {
+                sqlx::query("SELECT set_config('app.project_id', $1, true)")
+                    .bind(project_id)
+                    .execute(&mut **h)
+                    .await?;
+            }
+            #[allow(unreachable_patterns)]
+            _ => {}
+        }
+        Ok(())
+    }
+
+    /// Switch this connection's transaction to project-scope bypass:
+    /// PostgreSQL `SET LOCAL app.bypass_rls = 'on'`, which the row-level
+    /// security policies admit for cross-project (system / scheduler / admin)
+    /// work. No-op on SQLite/MySQL. Like
+    /// [`set_project_scope`](Self::set_project_scope), must run inside a
+    /// transaction.
+    pub async fn bypass_project_scope(&mut self) -> Result<(), Error> {
+        match self {
+            #[cfg(postgres)]
+            Self::Postgres(h) => {
+                sqlx::query("SELECT set_config('app.bypass_rls', 'on', true)").execute(&mut **h).await?;
+            }
+            #[allow(unreachable_patterns)]
+            _ => {}
+        }
+        Ok(())
+    }
+
+    /// Enter the per-request project scope in a single round trip: switch this
+    /// connection's transaction to `role` (`SET LOCAL ROLE`) and set the scope
+    /// GUC — `app.project_id = <project_id>` when `project_id` is `Some`, or
+    /// `app.bypass_rls = on` when `None` (cross-project system / scheduler /
+    /// admin work).
+    ///
+    /// Combines what would otherwise be two separate statements (and two
+    /// network round trips) into one simple-query batch. `role` and
+    /// `project_id` are trusted identifiers, escaped defensively. No-op on
+    /// SQLite/MySQL (no RLS). **Must** run inside a transaction — the `LOCAL`
+    /// scope resets on commit/rollback, so on an autocommit connection the
+    /// settings would not persist to later queries.
+    #[cfg_attr(not(postgres), allow(unused_variables))]
+    pub async fn enter_project_scope(
+        &mut self,
+        role: &str,
+        project_id: Option<&str>,
+    ) -> Result<(), Error> {
+        match self {
+            #[cfg(postgres)]
+            Self::Postgres(h) => {
+                let guc = match project_id {
+                    Some(id) => {
+                        let id = id.replace('\'', "''");
+                        format!("SELECT set_config('app.project_id', '{id}', true)")
+                    }
+                    None => "SELECT set_config('app.bypass_rls', 'on', true)".to_string(),
+                };
+                // Simple-query protocol (a `&str` query) sends both statements
+                // in one round trip; the extended/prepared path `sqlx::query`
+                // uses would reject a multi-statement string.
+                use sqlx::Executor;
+                let sql = format!("SET LOCAL ROLE {}; {guc}", quote_ident(role));
+                (&mut **h).execute(sql.as_str()).await?;
+            }
+            #[allow(unreachable_patterns)]
+            _ => {}
         }
         Ok(())
     }

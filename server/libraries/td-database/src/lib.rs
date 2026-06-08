@@ -9,6 +9,13 @@ use crate::config::DatabaseConfig;
 use crate::error::DbError;
 use crate::pool::TdPool;
 
+/// Non-superuser, `NOBYPASSRLS` PostgreSQL role the app switches to per
+/// transaction (`SET LOCAL ROLE`) so row-level security is enforced even when
+/// the pool authenticated as a superuser (e.g. embedded). On embedded it is
+/// auto-provisioned at startup; external deployments pre-create it and grant
+/// the connecting role membership.
+pub const APP_ROLE: &str = "td_app";
+
 pub mod config;
 pub mod dynamic;
 #[cfg(feature = "embedded-postgres")]
@@ -27,10 +34,15 @@ pub async fn db(config: &DatabaseConfig) -> Result<TdPool, DbError> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(postgres)]
+    use crate::APP_ROLE;
+    #[cfg(postgres)]
+    use crate::dynamic::DynamicConnection;
     use crate::dynamic::DynamicPool;
-    #[cfg(sqlite)]
     use crate::error::DbError;
     use crate::pool::TdPool;
+    #[cfg(postgres)]
+    use sqlx::postgres::PgPoolOptions;
     use crate::raw_query;
     use crate::sea_query::builder::SeaQueryExt;
     use crate::sea_query::kind::{DatabaseBackend, DatabaseKind};
@@ -584,6 +596,7 @@ mod tests {
             "permissions",
             "physical_function_runs",
             "physical_table_data_versions",
+            "projects",
             "roles",
             "sessions",
             "table_partitions",
@@ -638,6 +651,8 @@ mod tests {
             "physical_table_data_versions__active",
             "physical_table_data_versions__with_function",
             "physical_table_data_versions__with_names",
+            "projects__with_names",
+            "projects_active",
             "roles__with_names",
             "sessions__with_names",
             "table_data_versions__with_names",
@@ -684,7 +699,7 @@ mod tests {
         let expected_full = vec![
             "bundles___collection_id___idx",
             "collections___group_id___idx",
-            "collections___name___idx",
+            "collections___project_id__name___idx",
             "dependencies___dependency_id__defined_on__id___idx",
             "dependencies___function_id___idx",
             "dependencies___table_function_id___idx",
@@ -734,6 +749,7 @@ mod tests {
             "physical_table_data_versions___physical_function_run_id___idx",
             "physical_table_data_versions___table_id___has_data___idx",
             "physical_table_data_versions___table_id__triggered_on__id___idx",
+            "projects___name___idx",
             "roles___name___idx",
             "roles___user_id__role_id___idx",
             "sessions___expires_on___idx",
@@ -836,5 +852,297 @@ mod tests {
             matches!(res, Err(DbError::IncompatibleMajorVersion(1, _))),
             "expected IncompatibleMajorVersion(1, _), got {res:?}"
         );
+    }
+
+    /// Row-level security end to end on real Postgres.
+    ///
+    /// The test pool connects as the embedded superuser, which *bypasses* RLS,
+    /// so we provision a dedicated `NOBYPASSRLS` role through it and connect a
+    /// second pool as that role — the same posture the app must use in
+    /// production. Then, with `app.project_id` set per transaction, we assert:
+    /// reads are scoped to the project, `WITH CHECK` rejects a cross-project
+    /// insert, an unset GUC fails closed (zero rows), and `app.bypass_rls`
+    /// spans projects.
+    #[cfg(postgres)]
+    #[tokio::test]
+    async fn test_rls_project_isolation() {
+        const INSERT: &str = "INSERT INTO collections \
+            (id, name, description, created_on, created_by_id, modified_on, modified_by_id, group_id) \
+            VALUES ($1, $2, 'd', now(), 'u', now(), 'u', 'g')";
+        const SET_PROJECT: &str = "SELECT set_config('app.project_id', $1, true)";
+        const COUNT: &str = "SELECT count(*) FROM collections";
+
+        let db = crate::test_utils::postgres::pool().await;
+        db.upgrade().await.unwrap();
+
+        // Provision a non-superuser, NOBYPASSRLS app role (as superuser).
+        let mut tx = db.begin().await.unwrap();
+        tx.as_mut_conn()
+            .execute_batch(&[
+                "CREATE ROLE app_user LOGIN PASSWORD 'app_pw' NOBYPASSRLS".to_string(),
+                "GRANT USAGE ON SCHEMA public TO app_user".to_string(),
+                "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_user".to_string(),
+            ])
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+
+        // Connect a second pool as the app role.
+        let mut url = db.url().clone();
+        url.set_username("app_user").unwrap();
+        url.set_password(Some("app_pw")).unwrap();
+        let app = PgPoolOptions::new().max_connections(2).connect(url.as_str()).await.unwrap();
+
+        // Project A inserts a collection, omitting project_id — the column
+        // default reads app.project_id, so the row is tagged 'A'.
+        let mut t = app.begin().await.unwrap();
+        sqlx::query(SET_PROJECT).bind("A").execute(&mut *t).await.unwrap();
+        sqlx::query(INSERT).bind("c_a").bind("ca").execute(&mut *t).await.unwrap();
+        let pid: String = sqlx::query_scalar("SELECT project_id FROM collections WHERE id = 'c_a'").fetch_one(&mut *t).await.unwrap();
+        assert_eq!(pid, "A", "omitted project_id should default to the GUC");
+        t.commit().await.unwrap();
+
+        // Project B cannot see A's row.
+        let mut t = app.begin().await.unwrap();
+        sqlx::query(SET_PROJECT).bind("B").execute(&mut *t).await.unwrap();
+        let n: i64 = sqlx::query_scalar(COUNT).fetch_one(&mut *t).await.unwrap();
+        assert_eq!(n, 0, "project B must not see project A rows");
+        t.rollback().await.unwrap();
+
+        // WITH CHECK rejects an insert tagged for another project.
+        let mut t = app.begin().await.unwrap();
+        sqlx::query(SET_PROJECT).bind("B").execute(&mut *t).await.unwrap();
+        let bad = sqlx::query(
+            "INSERT INTO collections \
+             (id, name, description, created_on, created_by_id, modified_on, modified_by_id, group_id, project_id) \
+             VALUES ('x', 'x', 'd', now(), 'u', now(), 'u', 'g', 'A')",
+        )
+        .execute(&mut *t)
+        .await;
+        assert!(bad.is_err(), "WITH CHECK must reject a cross-project insert");
+        t.rollback().await.unwrap();
+
+        // Project B inserts its own collection.
+        let mut t = app.begin().await.unwrap();
+        sqlx::query(SET_PROJECT).bind("B").execute(&mut *t).await.unwrap();
+        sqlx::query(INSERT).bind("c_b").bind("cb").execute(&mut *t).await.unwrap();
+        t.commit().await.unwrap();
+
+        // Project A sees only its own row.
+        let mut t = app.begin().await.unwrap();
+        sqlx::query(SET_PROJECT).bind("A").execute(&mut *t).await.unwrap();
+        let n: i64 = sqlx::query_scalar(COUNT).fetch_one(&mut *t).await.unwrap();
+        assert_eq!(n, 1, "project A should see exactly its own collection");
+        t.rollback().await.unwrap();
+
+        // Unset GUC fails closed: zero rows, no error.
+        let mut t = app.begin().await.unwrap();
+        let n: i64 = sqlx::query_scalar(COUNT).fetch_one(&mut *t).await.unwrap();
+        assert_eq!(n, 0, "an unset app.project_id must see no rows (fail-closed)");
+        t.rollback().await.unwrap();
+
+        // Bypass spans projects.
+        let mut t = app.begin().await.unwrap();
+        sqlx::query("SELECT set_config('app.bypass_rls', 'on', true)").execute(&mut *t).await.unwrap();
+        let n: i64 = sqlx::query_scalar(COUNT).fetch_one(&mut *t).await.unwrap();
+        assert_eq!(n, 2, "bypass should see every project's rows");
+        t.rollback().await.unwrap();
+    }
+
+    /// RLS enforced from a *superuser* connection via `SET LOCAL ROLE`.
+    ///
+    /// The pool authenticates as the embedded superuser (which bypasses RLS),
+    /// but switching to a non-superuser role per transaction makes the policy
+    /// apply — the mechanism that lets the app enforce isolation without
+    /// connecting as a dedicated role. Asserts a project sees only its own rows
+    /// and that staying superuser (no SET ROLE) bypasses.
+    #[cfg(postgres)]
+    #[tokio::test]
+    #[allow(irrefutable_let_patterns)] // only the Postgres variant exists in a postgres-only build
+    async fn test_rls_enforced_via_set_role() {
+        const INSERT: &str = "INSERT INTO collections \
+            (id, name, description, created_on, created_by_id, modified_on, modified_by_id, group_id) \
+            VALUES ($1, $2, 'd', now(), 'u', now(), 'u', 'g')";
+        const COUNT: &str = "SELECT count(*) FROM collections";
+
+        let db = crate::test_utils::postgres::pool().await;
+        db.upgrade().await.unwrap(); // also auto-provisions the `td_app` role (embedded)
+
+        // As td_app in project A, insert a collection (project_id defaults to the GUC).
+        let mut tx = db.begin().await.unwrap();
+        {
+            let mut c = tx.as_mut_conn();
+            c.set_rls_role("td_app").await.unwrap();
+            c.set_project_scope("A").await.unwrap();
+            let DynamicConnection::Postgres(h) = &mut c else { unreachable!() };
+            sqlx::query(INSERT).bind("c_a").bind("ca").execute(&mut **h).await.unwrap();
+            let n: i64 = sqlx::query_scalar(COUNT).fetch_one(&mut **h).await.unwrap();
+            assert_eq!(n, 1, "project A sees its own row under SET ROLE");
+        }
+        tx.commit().await.unwrap();
+
+        // As td_app in project B: cannot see A's row.
+        let mut tx = db.begin().await.unwrap();
+        {
+            let mut c = tx.as_mut_conn();
+            c.set_rls_role("td_app").await.unwrap();
+            c.set_project_scope("B").await.unwrap();
+            let DynamicConnection::Postgres(h) = &mut c else { unreachable!() };
+            let n: i64 = sqlx::query_scalar(COUNT).fetch_one(&mut **h).await.unwrap();
+            assert_eq!(n, 0, "SET ROLE makes RLS apply: project B sees no project A rows");
+        }
+        tx.rollback().await.unwrap();
+
+        // Without SET ROLE the session stays superuser and bypasses RLS.
+        let mut tx = db.begin().await.unwrap();
+        {
+            let mut c = tx.as_mut_conn();
+            c.set_project_scope("B").await.unwrap();
+            let DynamicConnection::Postgres(h) = &mut c else { unreachable!() };
+            let n: i64 = sqlx::query_scalar(COUNT).fetch_one(&mut **h).await.unwrap();
+            assert_eq!(n, 1, "a superuser session (no SET ROLE) bypasses RLS and sees all rows");
+        }
+        tx.rollback().await.unwrap();
+    }
+
+    /// `check()` refuses to start when the app role can't be switched to — the
+    /// startup precondition that catches a misconfigured external deployment
+    /// (operator forgot to create `td_app` or grant the connecting role
+    /// membership) at boot, instead of letting the first request fail
+    /// mid-flight with an opaque error.
+    #[cfg(postgres)]
+    #[tokio::test]
+    async fn test_check_app_role_switchable_fails_when_role_missing() {
+        let db = crate::test_utils::postgres::pool().await;
+        db.upgrade().await.unwrap(); // creates schema + td_app (embedded)
+
+        // Sanity: with td_app in place, `check` succeeds.
+        db.check().await.expect("check should pass with td_app present");
+
+        // Simulate the external-deploy misconfig: remove the role and verify
+        // `check` rejects the database with a clear error.
+        let mut tx = db.begin().await.unwrap();
+        tx.as_mut_conn()
+            .execute_batch(&["DROP OWNED BY td_app".to_string(), "DROP ROLE td_app".to_string()])
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+
+        let res = db.check().await;
+        assert!(
+            matches!(res, Err(DbError::AppRoleNotSwitchable(ref r, _)) if r == APP_ROLE),
+            "expected AppRoleNotSwitchable({APP_ROLE:?}), got {res:?}"
+        );
+    }
+
+    /// `check()` refuses to start an **external** deployment whose connecting
+    /// role bypasses RLS (superuser / BYPASSRLS) — project isolation rests
+    /// entirely on RLS, so such a role would silently expose every tenant to
+    /// every other. Embedded (a known dev/test superuser) is exempt.
+    #[cfg(postgres)]
+    #[tokio::test]
+    async fn test_check_rejects_rls_bypassing_role_on_external_deploy() {
+        use crate::config::{BackendConfig, DatabaseConfig};
+
+        let db = crate::test_utils::postgres::pool().await; // embedded superuser
+        db.upgrade().await.unwrap();
+        // Embedded is exempt: the posture issue is a debug note, not fatal.
+        db.check().await.expect("embedded check should pass");
+
+        // Connect to the SAME server as a non-embedded pool, still as the
+        // bootstrap superuser (which bypasses RLS). check() must refuse.
+        let cfg = DatabaseConfig {
+            conn: Some(BackendConfig::from_url(db.url().clone()).unwrap()),
+            pool: Default::default(),
+        };
+        let external = TdPool::connect(&cfg).await.unwrap();
+        let res = external.check().await;
+        assert!(
+            matches!(res, Err(DbError::ConnectedRoleBypassesRls)),
+            "external superuser deploy must be rejected, got {res:?}"
+        );
+    }
+
+    /// A maintain-current trigger's write into the `_current` table succeeds
+    /// under RLS, and FK validation across RLS tables works.
+    ///
+    /// When the app role inserts into `functions` (project A), the AFTER INSERT
+    /// trigger inserts into `functions_current` as the same (invoker) role — its
+    /// `WITH CHECK` must pass because the copied `project_id` matches the GUC.
+    /// The function also FK-references `collections`, exercising referential
+    /// integrity against an RLS-protected parent. Project B then sees neither row.
+    #[cfg(postgres)]
+    #[tokio::test]
+    #[allow(irrefutable_let_patterns)] // only the Postgres variant exists in a postgres-only build
+    async fn test_rls_maintain_current_trigger_under_role() {
+        let db = crate::test_utils::postgres::pool().await;
+        db.upgrade().await.unwrap(); // also auto-provisions the `td_app` role (embedded)
+
+        // Project A: a collection and a function. The function insert fires the
+        // maintain-current trigger into functions_current.
+        let mut tx = db.begin().await.unwrap();
+        {
+            let mut c = tx.as_mut_conn();
+            c.set_rls_role("td_app").await.unwrap();
+            c.set_project_scope("A").await.unwrap();
+            let DynamicConnection::Postgres(h) = &mut c else { unreachable!() };
+            sqlx::query(
+                "INSERT INTO collections (id, name, description, created_on, created_by_id, modified_on, modified_by_id, group_id) \
+                 VALUES ('col', 'c', 'd', now(), 'u', now(), 'u', 'g')",
+            )
+            .execute(&mut **h)
+            .await
+            .unwrap();
+            sqlx::query(
+                "INSERT INTO functions \
+                 (id, collection_id, name, description, decorator, runtime_values, function_id, data_location, \
+                  storage_version, bundle_id, snippet, defined_on, defined_by_id, status) \
+                 VALUES ('fn1', 'col', 'f', 'd', 'dec', '{}', 'fid', 'loc', '1', 'bun', 'snip', now(), 'u', 'active')",
+            )
+            .execute(&mut **h)
+            .await
+            .unwrap();
+            let cur: i64 = sqlx::query_scalar("SELECT count(*) FROM functions_current").fetch_one(&mut **h).await.unwrap();
+            assert_eq!(cur, 1, "maintain-current trigger wrote functions_current under RLS");
+            let pid: String =
+                sqlx::query_scalar("SELECT project_id FROM functions_current WHERE function_id = 'fid'").fetch_one(&mut **h).await.unwrap();
+            assert_eq!(pid, "A", "trigger copied the source project_id");
+        }
+        tx.commit().await.unwrap();
+
+        // Project B sees neither the function nor its current snapshot.
+        let mut tx = db.begin().await.unwrap();
+        {
+            let mut c = tx.as_mut_conn();
+            c.set_rls_role("td_app").await.unwrap();
+            c.set_project_scope("B").await.unwrap();
+            let DynamicConnection::Postgres(h) = &mut c else { unreachable!() };
+            let f: i64 = sqlx::query_scalar("SELECT count(*) FROM functions").fetch_one(&mut **h).await.unwrap();
+            let fc: i64 = sqlx::query_scalar("SELECT count(*) FROM functions_current").fetch_one(&mut **h).await.unwrap();
+            assert_eq!((f, fc), (0, 0), "project B sees neither functions nor functions_current rows");
+        }
+        tx.rollback().await.unwrap();
+    }
+
+    /// The `DynamicConnection` GUC primitives set the expected PostgreSQL
+    /// session variables on their transaction. (Connection-layer wiring will
+    /// call these per request; this checks the primitive in isolation.)
+    #[cfg(postgres)]
+    #[tokio::test]
+    #[allow(irrefutable_let_patterns)] // only the Postgres variant exists in a postgres-only build
+    async fn test_set_rls_guc_primitive() {
+        let db = crate::test_utils::postgres::pool().await;
+        db.upgrade().await.unwrap();
+
+        let mut tx = db.begin().await.unwrap();
+        let mut conn = tx.as_mut_conn();
+        conn.set_project_scope("PROJ_X").await.unwrap();
+        conn.bypass_project_scope().await.unwrap();
+
+        let DynamicConnection::Postgres(h) = &mut conn else { unreachable!() };
+        let project: String = sqlx::query_scalar("SELECT current_setting('app.project_id', true)").fetch_one(&mut **h).await.unwrap();
+        let bypass: String = sqlx::query_scalar("SELECT current_setting('app.bypass_rls', true)").fetch_one(&mut **h).await.unwrap();
+        assert_eq!(project, "PROJ_X");
+        assert_eq!(bypass, "on");
     }
 }

@@ -49,4 +49,30 @@ pub enum DbError {
     CannotUpgradeEdition(String) = 5016,
     #[error("Failed to start embedded postgres: {0}")]
     EmbeddedPostgres(String) = 5018,
+    #[error(
+        "Cannot switch the connection to the row-level-security app role '{0}'. \
+         The role must exist and the connecting role must be a member of it. Run: \
+         CREATE ROLE \"{0}\" NOBYPASSRLS; GRANT \"{0}\" TO <connecting role>; \
+         GRANT USAGE ON SCHEMA public TO \"{0}\"; \
+         GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO \"{0}\". \
+         (Underlying error: {1})"
+    )]
+    AppRoleNotSwitchable(String, #[source] sqlx::Error) = 5019,
+    #[error(
+        "PostgreSQL server version is too old: server_version_num={0}, but project \
+         isolation requires {1} or newer. Views are created `WITH (security_invoker = true)` \
+         (PostgreSQL 15+) so row-level security is evaluated as the querying role rather \
+         than the view owner; without it, views over RLS tables would bypass project \
+         isolation. Upgrade the PostgreSQL server to 15 or newer."
+    )]
+    UnsupportedPostgresVersion(i32, i32) = 5020,
+    #[error(
+        "The connecting PostgreSQL role bypasses row-level security (it is a \
+         SUPERUSER or has BYPASSRLS). Project isolation rests entirely on RLS, \
+         so such a role would let every project read and write every other \
+         project's rows — with no error. Refusing to start. Connect as a \
+         non-superuser, NOBYPASSRLS role (e.g. the dedicated app role) that is a \
+         member of the row-level-security app role."
+    )]
+    ConnectedRoleBypassesRls = 5021,
 }

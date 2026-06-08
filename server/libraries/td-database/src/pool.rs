@@ -7,9 +7,10 @@ use crate::dynamic::{DynamicConnection, DynamicPool, DynamicTransaction};
 #[cfg(feature = "embedded-postgres")]
 use crate::embedded::EmbeddedPostgres;
 use crate::error::DbError;
+use crate::APP_ROLE;
 use crate::sea_query::builder::SeaQueryExt;
-use crate::sea_query::kind::DatabaseKind;
-use sea_query::{Expr, ExprTrait, Iden, Query};
+use crate::sea_query::kind::{DatabaseBackend, DatabaseKind};
+use sea_query::{Alias, Expr, ExprTrait, Iden, Query};
 use sqlx::Error;
 use std::cmp::Ordering;
 use std::fmt::Display;
@@ -90,14 +91,167 @@ impl TdPool {
         debug!("db.pool.check: db version OK");
         self.check_tabsdata_edition().await?;
         debug!("db.pool.check: edition OK");
+        self.check_pg_min_version().await?;
+        self.check_rls_posture().await?;
+        self.check_app_role_switchable().await?;
         Ok(())
+    }
+
+    /// PostgreSQL major version required for `CREATE VIEW … WITH
+    /// (security_invoker = true)`, which the schema relies on so views over
+    /// RLS tables are evaluated as the querying role (project isolation) rather
+    /// than the view owner.
+    const MIN_PG_VERSION_NUM: i32 = 150_000; // 15.0
+
+    /// Refuse to run on a PostgreSQL server older than 15. The schema build
+    /// emits `security_invoker` views (15+); on an older server the upgrade
+    /// would fail with an opaque `CREATE VIEW` syntax error, and — worse — a
+    /// hand-built older schema without `security_invoker` would silently
+    /// evaluate views as their (superuser) owner and bypass project isolation.
+    /// Probe the version explicitly and fail with a clear, actionable error.
+    /// PostgreSQL only.
+    async fn check_pg_min_version(&self) -> Result<(), DbError> {
+        if !matches!(self.kind(), DatabaseBackend::Postgres) {
+            return Ok(());
+        }
+        let version: Option<i32> = Query::select()
+            .expr(Expr::cust("current_setting('server_version_num')::int"))
+            .build_query_scalar()
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(DbError::SqlError)?;
+        let version = version.unwrap_or(0);
+        if version < Self::MIN_PG_VERSION_NUM {
+            return Err(DbError::UnsupportedPostgresVersion(version, Self::MIN_PG_VERSION_NUM));
+        }
+        debug!(server_version_num = version, "db.pool.check: postgres version OK");
+        Ok(())
+    }
+
+    /// Verify that the connection can switch to the row-level-security app role
+    /// ([`APP_ROLE`]) — the precondition for the per-request `SET LOCAL ROLE`
+    /// to succeed. Runs a probe transaction (`SET LOCAL ROLE … ; ROLLBACK`),
+    /// which fails with PostgreSQL's own error if either the role does not
+    /// exist or the connecting role is not a member of it. Caught here at
+    /// startup, surfaced as [`DbError::AppRoleNotSwitchable`] with the deploy
+    /// step inlined, instead of failing the first request mid-flight.
+    ///
+    /// PostgreSQL only. Embedded auto-provisions the role in
+    /// [`ensure_app_role`](Self::ensure_app_role); external deployments
+    /// pre-create it.
+    async fn check_app_role_switchable(&self) -> Result<(), DbError> {
+        if !matches!(self.kind(), DatabaseBackend::Postgres) {
+            return Ok(());
+        }
+        let mut tx = self.pool.begin().await.map_err(DbError::SqlError)?;
+        // Reuse the same primitive the per-request connection layer uses, so
+        // identifier quoting lives in one place (`DynamicConnection::set_rls_role`).
+        let res = tx.as_mut_conn().set_rls_role(APP_ROLE).await;
+        let _ = tx.rollback().await;
+        match res {
+            Ok(()) => {
+                debug!(role = APP_ROLE, "db.pool.check: app role switchable");
+                Ok(())
+            }
+            Err(e) => Err(DbError::AppRoleNotSwitchable(APP_ROLE.to_string(), e)),
+        }
+    }
+
+    /// Warn if the connected PostgreSQL role bypasses row-level security.
+    ///
+    /// Project isolation relies on RLS policies, which **superusers and roles
+    /// with `BYPASSRLS` ignore entirely** — `FORCE ROW LEVEL SECURITY` only
+    /// reaches a non-superuser table owner. If the app connects as such a role,
+    /// every project sees every other project's rows with no error: the most
+    /// dangerous possible failure mode, and a silent one. So we surface it at
+    /// startup.
+    ///
+    /// PostgreSQL only (no RLS elsewhere). Embedded Postgres always runs as the
+    /// bootstrap superuser — that is a known dev/test convenience, not a
+    /// misconfiguration — so there it is downgraded to `debug!`. On an external
+    /// deployment it is a **fatal misconfiguration**: project isolation rests
+    /// entirely on RLS, so a bypassing role silently disables all tenant
+    /// isolation. We refuse to start ([`DbError::ConnectedRoleBypassesRls`])
+    /// rather than serve every tenant every other tenant's data.
+    async fn check_rls_posture(&self) -> Result<(), DbError> {
+        if !matches!(self.kind(), DatabaseBackend::Postgres) {
+            return Ok(());
+        }
+        let bypasses: Option<bool> = Query::select()
+            .expr(Expr::cust("rolsuper OR rolbypassrls"))
+            .from(Alias::new("pg_roles"))
+            .and_where(Expr::cust("rolname = current_user"))
+            .build_query_scalar()
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(DbError::SqlError)?;
+        if matches!(bypasses, Some(true)) {
+            if self.is_embedded() {
+                debug!(
+                    "db.pool.check: connected role bypasses row-level security \
+                     (embedded dev/test server runs as the bootstrap superuser)"
+                );
+            } else {
+                return Err(DbError::ConnectedRoleBypassesRls);
+            }
+        } else {
+            debug!("db.pool.check: RLS posture OK");
+        }
+        Ok(())
+    }
+
+    /// Whether this pool is backed by the in-process embedded Postgres server.
+    fn is_embedded(&self) -> bool {
+        #[cfg(feature = "embedded-postgres")]
+        {
+            self._embedded.is_some()
+        }
+        #[cfg(not(feature = "embedded-postgres"))]
+        {
+            false
+        }
     }
 
     pub async fn upgrade(&self) -> Result<(), DbError> {
         info!("Starting database upgrade");
         self.upgrade_db_version().await?;
         self.upgrade_tabsdata_edition().await?;
+        self.ensure_app_role().await?;
         info!("Database upgrade complete");
+        Ok(())
+    }
+
+    /// Provision the row-level-security app role ([`APP_ROLE`]) and its grants.
+    ///
+    /// Idempotent. Runs only on **embedded** PostgreSQL (dev/test), where the
+    /// pool is the bootstrap superuser and can create roles. External
+    /// deployments pre-create the role and grant the connecting role membership
+    /// in it (so `SET LOCAL ROLE` succeeds); the startup posture check warns if
+    /// the connecting role itself bypasses RLS. No-op on SQLite/MySQL.
+    async fn ensure_app_role(&self) -> Result<(), DbError> {
+        if !matches!(self.kind(), DatabaseBackend::Postgres) || !self.is_embedded() {
+            return Ok(());
+        }
+        let stmts = vec![
+            format!(
+                "DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{APP_ROLE}') \
+                 THEN CREATE ROLE \"{APP_ROLE}\" NOBYPASSRLS; END IF; END $$"
+            ),
+            format!("GRANT USAGE ON SCHEMA public TO \"{APP_ROLE}\""),
+            format!("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO \"{APP_ROLE}\""),
+            // Future tables created by this (bootstrap) role auto-grant to the
+            // app role, so a later migration that adds a table doesn't silently
+            // leave td_app without access. `ALTER DEFAULT PRIVILEGES` applies
+            // only to tables created after it runs, by the role running it.
+            format!(
+                "ALTER DEFAULT PRIVILEGES IN SCHEMA public \
+                 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO \"{APP_ROLE}\""
+            ),
+        ];
+        let mut tx = self.pool.begin().await.map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
+        tx.as_mut_conn().execute_batch(&stmts).await.map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
+        tx.commit().await.map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
+        debug!(role = APP_ROLE, "Ensured RLS app role");
         Ok(())
     }
 
@@ -358,6 +512,11 @@ impl TdPool {
             warn!(elapsed_ms, "db.pool.acquire: slow acquisition");
         }
         result
+    }
+
+    /// Delegates to [`DynamicPool::acquire_for_read`].
+    pub async fn acquire_for_read<'c>(&self) -> Result<DynamicConnection<'c>, Error> {
+        self.pool.acquire_for_read().await
     }
 
     /// Delegates to the read-write pool's [`Pool::begin`] method.

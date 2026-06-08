@@ -38,6 +38,19 @@ use crate::pool::TdPool;
 /// of its clones) drops — `EmbeddedConfig::persistent = false` makes the
 /// underlying `postgresql_embedded` handle treat the data dir as temporary,
 /// so `pg_ctl stop` runs and the data dir is removed on `Drop`.
+///
+/// # Project scope in tests
+///
+/// The server connection path is fail-closed (no session `app.project_id`). In
+/// test builds the `td-test` feature is on, so `connect_postgres`'s
+/// `after_connect` runs `SET app.project_id = sandbox` on every connection (the
+/// statement is `#[cfg(feature = "td-test")]`, compiled out in production). Thus
+/// **direct** `db.seed()` / `db.live()` writes land in the `sandbox` project via
+/// the column default. To exercise a *different* project, or true cross-project
+/// isolation, go through a service: the per-request `ProjectScopeProvider` sets
+/// `SET LOCAL app.project_id` from the request's project (e.g.
+/// `RequestContext::with_project(...)`), which overrides this default for that
+/// transaction. Seeding two projects via raw `db.seed()` puts both in `sandbox`.
 pub async fn pool() -> TdPool {
     let config = DatabaseConfig {
         conn: Some(BackendConfig::embedded_postgres(EmbeddedConfig {

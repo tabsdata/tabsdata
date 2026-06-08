@@ -350,6 +350,8 @@ impl DatabaseConfig {
             BackendConfig::Postgres(c) => {
                 let url = (*c.url).clone();
                 let conn_options = self.conn_options(&url)?;
+                // No session default — strict, per-request GUC only. An unscoped
+                // write into a project-scoped table fails closed (NOT NULL).
                 let (rw, ro) = tokio::try_join!(
                     self.connect_postgres(&conn_options, false),
                     self.connect_postgres(&conn_options, true),
@@ -366,6 +368,8 @@ impl DatabaseConfig {
                 let (pg, url) = crate::embedded::start(ecfg).await?;
                 tracing::info!("Embedded postgres listening at {}", url);
                 let conn_options = self.conn_options(&url)?;
+                // Same as external: no session default (fail-closed). The
+                // td-test pool init re-adds a sandbox session default for tests.
                 let (rw, ro) = tokio::try_join!(
                     self.connect_postgres(&conn_options, false),
                     self.connect_postgres(&conn_options, true),
@@ -469,12 +473,17 @@ impl DatabaseConfig {
             .pool_options(read_only)
             .after_connect(move |conn, _meta| {
                 Box::pin(async move {
+
+                    #[cfg(feature = "td-test")]
+                    sqlx::query(&format!("SET app.project_id = '{}'", td_security::ENCODED_ID_PROJECT_SANDBOX))
+                        .execute(&mut *conn)
+                        .await?;
+
                     if read_only {
                         sqlx::query("SET default_transaction_read_only = on")
                             .execute(&mut *conn)
                             .await?;
                     }
-
                     Ok(())
                 })
             });
