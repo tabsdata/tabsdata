@@ -10,11 +10,11 @@ from pathlib import Path
 import pytest
 import yaml
 
-from tabsdatak.server._tdrunner.function.commands.prep_upload_state import (
-    EXIT_BAD_REQUEST,
-    EXIT_UNSUPPORTED_SCHEME,
-    EXIT_WRITE_FAILED,
-    main,
+from tabsdatak.server._tdrunner.function.commands.prep_upload_state import main
+from tabsdatak.server._tdrunner.function.commands.prep_upload_state.error import (
+    BadEndpointSchemeError,
+    BadRequestError,
+    WriteFailedError,
 )
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
@@ -176,7 +176,7 @@ def test_main_missing_request_returns_bad_request(monkeypatch, tmp_path, http_ok
         tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert rc == EXIT_BAD_REQUEST
+    assert rc == BadRequestError.exit_code
 
 
 def test_main_malformed_request_returns_bad_request(
@@ -192,7 +192,7 @@ def test_main_malformed_request_returns_bad_request(
         tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert rc == EXIT_BAD_REQUEST
+    assert rc == BadRequestError.exit_code
 
 
 def test_main_unsupported_scheme_returns_unsupported_scheme(
@@ -212,7 +212,7 @@ def test_main_unsupported_scheme_returns_unsupported_scheme(
         tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert rc == EXIT_UNSUPPORTED_SCHEME
+    assert rc == BadEndpointSchemeError.exit_code
 
 
 def test_main_write_error_returns_write_failed(monkeypatch, tmp_path, http_ok_url):
@@ -227,7 +227,7 @@ def test_main_write_error_returns_write_failed(monkeypatch, tmp_path, http_ok_ur
         tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert rc == EXIT_WRITE_FAILED
+    assert rc == WriteFailedError.exit_code
 
 
 def test_main_invalid_options_returns_1(monkeypatch):

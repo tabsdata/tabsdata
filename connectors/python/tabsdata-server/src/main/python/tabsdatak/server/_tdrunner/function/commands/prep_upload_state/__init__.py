@@ -17,11 +17,16 @@ from pathlib import Path
 
 from tabsdatak.server._tdrunner.function._lib.cli import build_parser, command
 from tabsdatak.server._tdrunner.function._lib.endpoint import UnsupportedSchemeError
-from tabsdatak.server._tdrunner.function._lib.errors import CommandSpecificError
-from tabsdatak.server._tdrunner.function._lib.request import load_request_or_fail
+from tabsdatak.server._tdrunner.function._lib.request import (
+    InvalidRequestError,
+    load_request,
+)
 from tabsdatak.server._tdrunner.function._lib.transporter_request import (
     build_upload_state_request,
     write_transporter_request,
+)
+from tabsdatak.server._tdrunner.function.commands.prep_upload_state.error import (
+    PrepUploadStateErrorCode,
 )
 
 VERSION = "0.1.0"
@@ -35,10 +40,6 @@ MAN = (
     "Reads request.yaml, generates the transporter copy YAML for "
     "uploading the state-out tables, and writes it to --out."
 )
-
-EXIT_BAD_REQUEST = 10
-EXIT_UNSUPPORTED_SCHEME = 11
-EXIT_WRITE_FAILED = 12
 
 
 def _build_parser():
@@ -70,19 +71,22 @@ def main(args: argparse.Namespace) -> int:
     state_dir = Path(args.state_dir)
     out_path = Path(args.out)
 
-    request = load_request_or_fail(request_path, EXIT_BAD_REQUEST)
+    try:
+        request = load_request(request_path)
+    except (FileNotFoundError, InvalidRequestError) as exc:
+        raise PrepUploadStateErrorCode.PUS_1.exception(cause=exc, detail=str(exc))
 
     try:
         copy_req = build_upload_state_request(request, state_dir)
     except UnsupportedSchemeError as exc:
-        raise CommandSpecificError(EXIT_UNSUPPORTED_SCHEME, str(exc)) from exc
+        raise PrepUploadStateErrorCode.PUS_2.exception(cause=exc, detail=str(exc))
 
     try:
         write_transporter_request(copy_req, out_path)
     except OSError as exc:
-        raise CommandSpecificError(
-            EXIT_WRITE_FAILED, f"failed to write {out_path}: {exc}"
-        ) from exc
+        raise PrepUploadStateErrorCode.PUS_3.exception(
+            cause=exc, path=out_path, detail=str(exc)
+        )
     return 0
 
 
