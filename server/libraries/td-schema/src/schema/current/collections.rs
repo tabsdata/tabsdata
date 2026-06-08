@@ -28,7 +28,6 @@ pub enum Collections {
 }
 
 #[derive(Iden, Clone, Copy)]
-#[iden = "collections_active"]
 pub struct CollectionsActive;
 
 #[derive(Iden, Clone, Copy)]

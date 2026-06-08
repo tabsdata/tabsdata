@@ -7,7 +7,6 @@ use sea_query::{ColumnDef, Iden, Table, TableCreateStatement};
 use crate::schema::Entity;
 
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
-#[iden = "function_patches_current"]
 pub enum FunctionPatchesCurrent {
     Table,
     Id,

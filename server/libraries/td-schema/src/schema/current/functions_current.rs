@@ -17,7 +17,6 @@ use crate::schema::sql::ViewDef;
 pub struct FunctionsCurrentWithNames;
 
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
-#[iden = "functions_current"]
 pub enum FunctionsCurrent {
     Table,
     Id,

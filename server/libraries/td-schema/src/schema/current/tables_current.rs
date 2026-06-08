@@ -18,7 +18,6 @@ use crate::schema::sql::ViewDef;
 pub struct TablesCurrentWithNames;
 
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
-#[iden = "tables_current"]
 pub enum TablesCurrent {
     Table,
     Id,

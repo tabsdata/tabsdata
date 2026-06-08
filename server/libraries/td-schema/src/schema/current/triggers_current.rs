@@ -17,7 +17,6 @@ use crate::schema::sql::ViewDef;
 pub struct TriggersCurrentWithNames;
 
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
-#[iden = "triggers_current"]
 pub enum TriggersCurrent {
     Table,
     Id,

@@ -2,13 +2,29 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-use sea_query::{Alias, DynIden, Expr, Func, Order, OverStatement, Query, WindowStatement};
+use sea_query::{DynIden, Expr, ExprTrait, Func, Iden, Order, OverStatement, Query, WindowStatement};
 
 use crate::schema::backend::Backend;
 
+/// Synthetic alias for the ranked subquery in the wrapping `INSERT … SELECT`.
+#[derive(Iden, Clone, Copy)]
+struct Ranked;
+
+/// Window-function output column carrying the per-partition rank.
+#[derive(Iden, Clone, Copy)]
+struct Rn;
+
+/// Tiebreaker column appended to the ranking order.
+#[derive(Iden, Clone, Copy)]
+struct Id;
+
+/// `row_number()` ranking window function.
+#[derive(Iden, Clone, Copy)]
+struct RowNumber;
+
 /// Declarative spec for seeding a `_current` snapshot table from its event-log
 /// source via `ROW_NUMBER` ranking. Renders to a single
-/// `INSERT INTO {target} ({cols}) SELECT {cols} FROM (ranked CTE) WHERE rn = 1`
+/// `INSERT INTO {target} ({cols}) SELECT {cols} FROM (ranked subquery) WHERE rn = 1`
 /// statement. Tables and columns are typed as [`DynIden`] so callers source
 /// them from the same `Iden` enums that declare the schema.
 pub(crate) struct SeedCurrent {
@@ -25,35 +41,42 @@ pub(crate) struct SeedCurrent {
 }
 
 impl SeedCurrent {
-    /// Render this spec for `b`. The wrapping `INSERT…SELECT` uses `format!`
-    /// because dialect quoting differs; the inner ranked CTE is built through
-    /// sea_query.
+    /// Render this spec for `b`. The whole statement — ranked subquery, the
+    /// wrapping `INSERT … SELECT`, and the subquery alias — is built through
+    /// sea_query so identifier quoting and dialect differences are the query
+    /// builder's responsibility, not a hand-assembled `format!` string.
     pub(crate) fn render(&self, b: &Backend) -> String {
-        let window = WindowStatement::new()
-            .partition_by(Alias::new(self.partition_col.to_string()))
-            .order_by_expr(Expr::col(Alias::new(self.version_col.to_string())), Order::Desc)
-            .order_by_expr(Expr::col(Alias::new("id")), Order::Desc)
-            .take();
+        let mut window = WindowStatement::new();
+        window.partition_by(self.partition_col.clone()).order_by(self.version_col.clone(), Order::Desc).order_by(Id, Order::Desc);
 
         let mut ranked = Query::select();
         for c in &self.columns {
-            ranked.column(Alias::new(c.to_string()));
+            ranked.column(c.clone());
         }
-        ranked.from(Alias::new(self.source.to_string())).expr_window_as(
-            Func::cust(Alias::new("ROW_NUMBER")).args(vec![]),
-            window,
-            Alias::new("rn"),
-        );
-        let ranked_sql = b.build_query(ranked.take());
+        ranked.from(self.source.clone()).expr_window_as(Func::cust(RowNumber).args(vec![]), window, Rn);
 
-        let cols_csv = self.columns.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(", ");
-        format!("INSERT INTO {target} ({cols_csv}) SELECT {cols_csv} FROM ({ranked_sql}) WHERE rn = 1", target = self.target,)
+        let mut selected = Query::select();
+        for c in &self.columns {
+            selected.column(c.clone());
+        }
+        selected.from_subquery(ranked.take(), Ranked).and_where(Expr::col(Rn).eq(Expr::val(1)));
+
+        let mut insert = Query::insert();
+        insert
+            .into_table(self.target.clone())
+            .columns(self.columns.iter().cloned())
+            // The select list is built from the same `self.columns`, so the
+            // column/value counts always match and this never errors.
+            .select_from(selected.take())
+            .expect("seed INSERT columns match the ranked SELECT by construction");
+
+        b.build_query(insert.take())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use sea_query::IntoIden;
+    use sea_query::{Alias, IntoIden};
 
     use super::*;
 
@@ -75,16 +98,18 @@ mod tests {
     fn render_emits_insert_select_with_rn_filter() {
         let sql = sample().render(&Backend::Sqlite);
         assert!(
-            sql.starts_with("INSERT INTO foos_current (id, foo_id, name, defined_on) SELECT id, foo_id, name, defined_on FROM ("),
+            sql.starts_with(
+                r#"INSERT INTO "foos_current" ("id", "foo_id", "name", "defined_on") SELECT "id", "foo_id", "name", "defined_on" FROM ("#
+            ),
             "{sql}"
         );
-        assert!(sql.ends_with(") WHERE rn = 1"), "{sql}");
+        assert!(sql.ends_with(r#") AS "ranked" WHERE "rn" = 1"#), "{sql}");
     }
 
     #[test]
     fn render_uses_row_number_partition_and_order() {
         let sql = sample().render(&Backend::Sqlite);
-        assert!(sql.contains("ROW_NUMBER()"), "{sql}");
+        assert!(sql.contains("row_number()"), "{sql}");
         assert!(sql.contains("PARTITION BY \"foo_id\""), "{sql}");
         assert!(sql.contains("ORDER BY \"defined_on\" DESC, \"id\" DESC"), "{sql}");
     }

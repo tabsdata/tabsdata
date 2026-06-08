@@ -46,7 +46,6 @@ mod tests {
     use super::*;
 
     #[derive(Iden, Clone, Copy)]
-    #[iden = "my_view"]
     struct MyView;
 
     fn sample() -> ViewDef {
