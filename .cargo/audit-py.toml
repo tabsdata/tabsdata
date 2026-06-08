@@ -5,6 +5,7 @@
 [advisories]
 
 ignore = [
+    "GHSA-4gg8-gxpx-9rph",
     "GHSA-4xh5-x5gv-qwph",
     "GHSA-5239-wwwm-4pmq",
     "GHSA-58qw-9mgm-455v",
@@ -36,4 +37,5 @@ ignore = [
     "PYSEC-2023-163",
     "PYSEC-2026-2",
     "PYSEC-2026-161",
+    "PYSEC-2026-165",
 ]
