@@ -31,6 +31,10 @@ def _set_argv(
     inputs_manifest,
     state_manifest,
     liveness,
+    *,
+    responder_url,
+    responder_method="POST",
+    responder_authorization="Bearer tok",
 ):
     monkeypatch.setattr(
         sys,
@@ -51,6 +55,12 @@ def _set_argv(
             str(state_manifest),
             "--liveness",
             str(liveness),
+            "--responder-url",
+            responder_url,
+            "--responder-method",
+            responder_method,
+            "--responder-authorization",
+            responder_authorization,
         ],
     )
 
@@ -81,7 +91,7 @@ def _write_request(
 # --- happy path ---
 
 
-def test_main_writes_transporter_yaml(monkeypatch, tmp_path):
+def test_main_writes_transporter_yaml(monkeypatch, tmp_path, http_ok_url):
     request_yaml = _write_request(
         tmp_path / "request.yaml",
         system_input=[
@@ -103,6 +113,7 @@ def test_main_writes_transporter_yaml(monkeypatch, tmp_path):
         inputs_manifest,
         state_manifest,
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert rc == 0
     text = out.read_text()
@@ -115,7 +126,7 @@ def test_main_writes_transporter_yaml(monkeypatch, tmp_path):
     assert data == {"inputs": []}
 
 
-def test_main_handles_empty_system_input(monkeypatch, tmp_path):
+def test_main_handles_empty_system_input(monkeypatch, tmp_path, http_ok_url):
     """A request with no system_input still produces a valid (empty) request."""
     request_yaml = _write_request(tmp_path / "request.yaml")
     out = tmp_path / "transporter.yaml"
@@ -130,12 +141,13 @@ def test_main_handles_empty_system_input(monkeypatch, tmp_path):
         inputs_manifest,
         state_manifest,
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert rc == 0
     assert "source_target_pairs: []" in out.read_text()
 
 
-def test_main_inputs_manifest_lists_input_tables(monkeypatch, tmp_path):
+def test_main_inputs_manifest_lists_input_tables(monkeypatch, tmp_path, http_ok_url):
     """One inputs-manifest entry per request.input table, files pointing
     at <in_dir>/<name>.parquet."""
     request_yaml = _write_request(
@@ -163,6 +175,7 @@ def test_main_inputs_manifest_lists_input_tables(monkeypatch, tmp_path):
         inputs_manifest,
         state_manifest,
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert rc == 0
     data = yaml.safe_load(inputs_manifest.read_text())
@@ -175,7 +188,9 @@ def test_main_inputs_manifest_lists_input_tables(monkeypatch, tmp_path):
     ]
 
 
-def test_main_inputs_manifest_empty_files_for_null_location(monkeypatch, tmp_path):
+def test_main_inputs_manifest_empty_files_for_null_location(
+    monkeypatch, tmp_path, http_ok_url
+):
     """A request.input entry with `location is None` produces a manifest
     entry with an empty `files` list."""
     request_yaml = _write_request(
@@ -193,13 +208,16 @@ def test_main_inputs_manifest_empty_files_for_null_location(monkeypatch, tmp_pat
         inputs_manifest,
         state_manifest,
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert rc == 0
     data = yaml.safe_load(inputs_manifest.read_text())
     assert data["inputs"] == [{"name": "t_x", "files": []}]
 
 
-def test_main_state_manifest_lists_system_input_tables(monkeypatch, tmp_path):
+def test_main_state_manifest_lists_system_input_tables(
+    monkeypatch, tmp_path, http_ok_url
+):
     """One state-manifest entry per request.system_input table, files
     pointing at <state_dir>/<name>.parquet."""
     request_yaml = _write_request(
@@ -226,6 +244,7 @@ def test_main_state_manifest_lists_system_input_tables(monkeypatch, tmp_path):
         tmp_path / "inputs.yaml",
         state_manifest,
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert rc == 0
     data = yaml.safe_load(state_manifest.read_text())
@@ -241,7 +260,9 @@ def test_main_state_manifest_lists_system_input_tables(monkeypatch, tmp_path):
     ]
 
 
-def test_main_state_manifest_empty_when_no_system_input(monkeypatch, tmp_path):
+def test_main_state_manifest_empty_when_no_system_input(
+    monkeypatch, tmp_path, http_ok_url
+):
     request_yaml = _write_request(tmp_path / "request.yaml")
     state_manifest = tmp_path / "state.yaml"
     rc = main_with_args(
@@ -253,12 +274,15 @@ def test_main_state_manifest_empty_when_no_system_input(monkeypatch, tmp_path):
         tmp_path / "inputs.yaml",
         state_manifest,
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert rc == 0
     assert yaml.safe_load(state_manifest.read_text()) == {"state": []}
 
 
-def test_main_state_manifest_empty_files_for_null_location(monkeypatch, tmp_path):
+def test_main_state_manifest_empty_files_for_null_location(
+    monkeypatch, tmp_path, http_ok_url
+):
     """A system_input entry with `location is None` produces a state
     manifest entry with an empty `files` list."""
     request_yaml = _write_request(
@@ -275,6 +299,7 @@ def test_main_state_manifest_empty_files_for_null_location(monkeypatch, tmp_path
         tmp_path / "inputs.yaml",
         state_manifest,
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert rc == 0
     data = yaml.safe_load(state_manifest.read_text())
@@ -290,6 +315,8 @@ def main_with_args(
     inputs_manifest,
     state_manifest,
     liveness,
+    *,
+    responder_url,
 ):
     _set_argv(
         monkeypatch,
@@ -300,6 +327,7 @@ def main_with_args(
         inputs_manifest,
         state_manifest,
         liveness,
+        responder_url=responder_url,
     )
     return main()
 
@@ -307,7 +335,7 @@ def main_with_args(
 # --- error paths ---
 
 
-def test_main_missing_request_returns_bad_request(monkeypatch, tmp_path):
+def test_main_missing_request_returns_bad_request(monkeypatch, tmp_path, http_ok_url):
     rc = main_with_args(
         monkeypatch,
         tmp_path / "no-request.yaml",
@@ -317,11 +345,12 @@ def test_main_missing_request_returns_bad_request(monkeypatch, tmp_path):
         tmp_path / "inputs.yaml",
         tmp_path / "state.yaml",
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert rc == EXIT_BAD_REQUEST
 
 
-def test_main_malformed_request_returns_bad_request(monkeypatch, tmp_path):
+def test_main_malformed_request_returns_bad_request(monkeypatch, tmp_path, http_ok_url):
     bad = tmp_path / "request.yaml"
     bad.write_text("info: { unclosed")
     rc = main_with_args(
@@ -333,11 +362,14 @@ def test_main_malformed_request_returns_bad_request(monkeypatch, tmp_path):
         tmp_path / "inputs.yaml",
         tmp_path / "state.yaml",
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert rc == EXIT_BAD_REQUEST
 
 
-def test_main_unsupported_scheme_returns_unsupported_scheme(monkeypatch, tmp_path):
+def test_main_unsupported_scheme_returns_unsupported_scheme(
+    monkeypatch, tmp_path, http_ok_url
+):
     request_yaml = _write_request(
         tmp_path / "request.yaml",
         system_input=[
@@ -356,11 +388,12 @@ def test_main_unsupported_scheme_returns_unsupported_scheme(monkeypatch, tmp_pat
         tmp_path / "inputs.yaml",
         tmp_path / "state.yaml",
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert rc == EXIT_UNSUPPORTED_SCHEME
 
 
-def test_main_write_error_returns_write_failed(monkeypatch, tmp_path):
+def test_main_write_error_returns_write_failed(monkeypatch, tmp_path, http_ok_url):
     request_yaml = _write_request(tmp_path / "request.yaml")
     rc = main_with_args(
         monkeypatch,
@@ -371,12 +404,13 @@ def test_main_write_error_returns_write_failed(monkeypatch, tmp_path):
         tmp_path / "inputs.yaml",
         tmp_path / "state.yaml",
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert rc == EXIT_WRITE_FAILED
 
 
 def test_main_inputs_manifest_write_failure_maps_to_inputs_manifest_failed(
-    monkeypatch, tmp_path
+    monkeypatch, tmp_path, http_ok_url
 ):
     """Pointing --inputs-manifest at an existing directory makes the write fail."""
     request_yaml = _write_request(tmp_path / "request.yaml")
@@ -391,12 +425,13 @@ def test_main_inputs_manifest_write_failure_maps_to_inputs_manifest_failed(
         bad_target,
         tmp_path / "state.yaml",
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert rc == EXIT_INPUTS_MANIFEST_WRITE_FAILED
 
 
 def test_main_state_manifest_write_failure_maps_to_state_manifest_failed(
-    monkeypatch, tmp_path
+    monkeypatch, tmp_path, http_ok_url
 ):
     """Pointing --state-manifest at an existing directory makes the write fail."""
     request_yaml = _write_request(tmp_path / "request.yaml")
@@ -411,6 +446,7 @@ def test_main_state_manifest_write_failure_maps_to_state_manifest_failed(
         tmp_path / "inputs.yaml",
         bad_target,
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert rc == EXIT_STATE_MANIFEST_WRITE_FAILED
 

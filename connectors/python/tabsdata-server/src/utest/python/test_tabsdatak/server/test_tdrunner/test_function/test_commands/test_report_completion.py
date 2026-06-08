@@ -42,6 +42,9 @@ def _set_argv(
     state_dir,
     out,
     liveness,
+    responder_url,
+    responder_method="POST",
+    responder_authorization="Bearer tok",
 ):
     monkeypatch.setattr(
         sys,
@@ -62,6 +65,12 @@ def _set_argv(
             str(out),
             "--liveness",
             str(liveness),
+            "--responder-url",
+            responder_url,
+            "--responder-method",
+            responder_method,
+            "--responder-authorization",
+            responder_authorization,
         ],
     )
 
@@ -137,7 +146,9 @@ def http_server():
 # --- happy path ---
 
 
-def test_main_writes_response_and_posts(monkeypatch, tmp_path, http_server):
+def test_main_writes_response_and_posts(
+    monkeypatch, tmp_path, http_server, http_ok_url
+):
     base_url, request_log, _ = http_server
     request_yaml = _write_request(
         tmp_path / "request.yaml",
@@ -163,6 +174,7 @@ def test_main_writes_response_and_posts(monkeypatch, tmp_path, http_server):
         state_dir=state_dir,
         out=out,
         liveness=tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert main() == 0
 
@@ -183,7 +195,9 @@ def test_main_writes_response_and_posts(monkeypatch, tmp_path, http_server):
     assert posted["body"] == body
 
 
-def test_main_no_info_when_manifest_file_is_null(monkeypatch, tmp_path, http_server):
+def test_main_no_info_when_manifest_file_is_null(
+    monkeypatch, tmp_path, http_server, http_ok_url
+):
     """A manifest entry with `file: null` (user returned None for that
     slot) yields a NoData entry in the response."""
     base_url, _, _ = http_server
@@ -204,13 +218,16 @@ def test_main_no_info_when_manifest_file_is_null(monkeypatch, tmp_path, http_ser
         state_dir=tmp_path / "state",
         out=out,
         liveness=tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert main() == 0
     parsed = yaml.safe_load(out.read_text())
     assert parsed["output"][0] == {"table": "missing"}
 
 
-def test_main_no_info_when_state_parquet_missing(monkeypatch, tmp_path, http_server):
+def test_main_no_info_when_state_parquet_missing(
+    monkeypatch, tmp_path, http_server, http_ok_url
+):
     """A request.system_output table whose parquet doesn't exist in
     state_dir yields a NoData entry."""
     base_url, _, _ = http_server
@@ -229,13 +246,14 @@ def test_main_no_info_when_state_parquet_missing(monkeypatch, tmp_path, http_ser
         state_dir=tmp_path / "state",
         out=out,
         liveness=tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert main() == 0
     parsed = yaml.safe_load(out.read_text())
     assert parsed["output"][0] == {"table": "unwritten-state"}
 
 
-def test_main_resolves_env_refs(monkeypatch, tmp_path, http_server):
+def test_main_resolves_env_refs(monkeypatch, tmp_path, http_server, http_ok_url):
     base_url, request_log, _ = http_server
     monkeypatch.setenv("TD_TEST_RC_URL", f"{base_url}/done")
     monkeypatch.setenv("TD_TEST_RC_TOK", "secret")
@@ -250,6 +268,7 @@ def test_main_resolves_env_refs(monkeypatch, tmp_path, http_server):
         state_dir=tmp_path / "state",
         out=tmp_path / "response.yaml",
         liveness=tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert main() == 0
     assert request_log[0]["headers"]["Authorization"] == "Bearer secret"
@@ -258,7 +277,9 @@ def test_main_resolves_env_refs(monkeypatch, tmp_path, http_server):
 # --- error paths ---
 
 
-def test_main_missing_request_returns_bad_request(monkeypatch, tmp_path, http_server):
+def test_main_missing_request_returns_bad_request(
+    monkeypatch, tmp_path, http_server, http_ok_url
+):
     base_url, _, _ = http_server
     manifest = _write_manifest(tmp_path / "outputs_manifest.yaml", [])
     _set_argv(
@@ -270,11 +291,14 @@ def test_main_missing_request_returns_bad_request(monkeypatch, tmp_path, http_se
         state_dir=tmp_path / "state",
         out=tmp_path / "response.yaml",
         liveness=tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert main() == EXIT_BAD_REQUEST
 
 
-def test_main_missing_manifest_returns_bad_manifest(monkeypatch, tmp_path, http_server):
+def test_main_missing_manifest_returns_bad_manifest(
+    monkeypatch, tmp_path, http_server, http_ok_url
+):
     base_url, _, _ = http_server
     request_yaml = _write_request(tmp_path / "request.yaml")
     _set_argv(
@@ -286,12 +310,13 @@ def test_main_missing_manifest_returns_bad_manifest(monkeypatch, tmp_path, http_
         state_dir=tmp_path / "state",
         out=tmp_path / "response.yaml",
         liveness=tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert main() == EXIT_BAD_MANIFEST
 
 
 def test_main_malformed_manifest_returns_bad_manifest(
-    monkeypatch, tmp_path, http_server
+    monkeypatch, tmp_path, http_server, http_ok_url
 ):
     base_url, _, _ = http_server
     request_yaml = _write_request(tmp_path / "request.yaml")
@@ -306,12 +331,13 @@ def test_main_malformed_manifest_returns_bad_manifest(
         state_dir=tmp_path / "state",
         out=tmp_path / "response.yaml",
         liveness=tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert main() == EXIT_BAD_MANIFEST
 
 
 def test_main_output_table_missing_from_manifest_returns_mismatch(
-    monkeypatch, tmp_path, http_server
+    monkeypatch, tmp_path, http_server, http_ok_url
 ):
     base_url, _, _ = http_server
     request_yaml = _write_request(tmp_path / "request.yaml", output=[{"name": "ghost"}])
@@ -325,12 +351,13 @@ def test_main_output_table_missing_from_manifest_returns_mismatch(
         state_dir=tmp_path / "state",
         out=tmp_path / "response.yaml",
         liveness=tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert main() == EXIT_MANIFEST_MISMATCH
 
 
 def test_main_http_error_returns_http_error_but_writes_out(
-    monkeypatch, tmp_path, http_server
+    monkeypatch, tmp_path, http_server, http_ok_url
 ):
     base_url, _, server = http_server
     server.next_status = 500
@@ -346,16 +373,21 @@ def test_main_http_error_returns_http_error_but_writes_out(
         state_dir=tmp_path / "state",
         out=out,
         liveness=tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert main() == EXIT_HTTP_ERROR
     # --out is written before POST so it survives the failure.
     assert out.exists()
 
 
-def test_main_url_error_returns_http_error(monkeypatch, tmp_path):
+def test_main_url_error_returns_http_error(monkeypatch, tmp_path, http_ok_url):
     """URLError (network unreachable) is mapped to EXIT_HTTP_ERROR."""
 
-    def fake(req):
+    real_urlopen = urllib.request.urlopen
+
+    def fake(req, *args, **kwargs):
+        if req.full_url.startswith(http_ok_url):
+            return real_urlopen(req, *args, **kwargs)
         raise urllib.error.URLError("connection refused")
 
     monkeypatch.setattr(urllib.request, "urlopen", fake)
@@ -370,11 +402,14 @@ def test_main_url_error_returns_http_error(monkeypatch, tmp_path):
         state_dir=tmp_path / "state",
         out=tmp_path / "response.yaml",
         liveness=tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert main() == EXIT_HTTP_ERROR
 
 
-def test_main_write_error_returns_write_failed(monkeypatch, tmp_path, http_server):
+def test_main_write_error_returns_write_failed(
+    monkeypatch, tmp_path, http_server, http_ok_url
+):
     base_url, _, _ = http_server
     request_yaml = _write_request(tmp_path / "request.yaml")
     manifest = _write_manifest(tmp_path / "outputs_manifest.yaml", [])
@@ -387,6 +422,7 @@ def test_main_write_error_returns_write_failed(monkeypatch, tmp_path, http_serve
         state_dir=tmp_path / "state",
         out=tmp_path / "no" / "such" / "response.yaml",
         liveness=tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert main() == EXIT_WRITE_FAILED
 

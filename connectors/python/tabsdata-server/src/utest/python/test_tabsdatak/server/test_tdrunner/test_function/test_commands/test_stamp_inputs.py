@@ -91,6 +91,10 @@ def _set_argv(
     enriched_dir: Path,
     enriched_manifest: Path,
     liveness: Path,
+    *,
+    responder_url: str,
+    responder_method: str = "POST",
+    responder_authorization: str = "Bearer tok",
 ) -> None:
     monkeypatch.setattr(
         sys,
@@ -107,6 +111,12 @@ def _set_argv(
             str(enriched_manifest),
             "--liveness",
             str(liveness),
+            "--responder-url",
+            responder_url,
+            "--responder-method",
+            responder_method,
+            "--responder-authorization",
+            responder_authorization,
         ],
     )
 
@@ -219,7 +229,7 @@ def test_stamp_file_write_to_directory_raises_stamp_failed(tmp_path):
 # --- main: error paths --------------------------------------------------
 
 
-def test_main_missing_request_returns_bad_request(tmp_path, monkeypatch):
+def test_main_missing_request_returns_bad_request(tmp_path, monkeypatch, http_ok_url):
     _set_argv(
         monkeypatch,
         tmp_path / "no-such-request.yaml",
@@ -227,11 +237,14 @@ def test_main_missing_request_returns_bad_request(tmp_path, monkeypatch):
         tmp_path / "enriched",
         tmp_path / "enriched.yaml",
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert main() == EXIT_BAD_REQUEST
 
 
-def test_main_missing_inputs_manifest_returns_bad_manifest(tmp_path, monkeypatch):
+def test_main_missing_inputs_manifest_returns_bad_manifest(
+    tmp_path, monkeypatch, http_ok_url
+):
     req = _write_request(tmp_path / "request.yaml")
     _set_argv(
         monkeypatch,
@@ -240,6 +253,7 @@ def test_main_missing_inputs_manifest_returns_bad_manifest(tmp_path, monkeypatch
         tmp_path / "enriched",
         tmp_path / "enriched.yaml",
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert main() == EXIT_BAD_MANIFEST
 
@@ -253,7 +267,7 @@ def test_main_invalid_options_returns_1(monkeypatch):
 # --- main: end-to-end ---------------------------------------------------
 
 
-def test_main_end_to_end_happy_path(tmp_path, monkeypatch):
+def test_main_end_to_end_happy_path(tmp_path, monkeypatch, http_ok_url):
     """Lay down a raw parquet + inputs manifest, invoke main(), verify
     the enriched parquet has the five system columns and that the
     enriched manifest points to it."""
@@ -282,6 +296,7 @@ def test_main_end_to_end_happy_path(tmp_path, monkeypatch):
         enriched_dir,
         enriched_manifest,
         liveness,
+        responder_url=http_ok_url,
     )
     rc = main()
     assert rc == 0, f"main() returned {rc}"
@@ -322,7 +337,7 @@ def test_main_end_to_end_happy_path(tmp_path, monkeypatch):
     assert liveness.exists()
 
 
-def test_main_empty_slot_passes_through(tmp_path, monkeypatch):
+def test_main_empty_slot_passes_through(tmp_path, monkeypatch, http_ok_url):
     """If a slot has zero files, the enriched manifest mirrors that:
     same slot name, empty files list. No parquet rewritten."""
     request_path = _write_request(tmp_path / "request.yaml")
@@ -344,6 +359,7 @@ def test_main_empty_slot_passes_through(tmp_path, monkeypatch):
         enriched_dir,
         enriched_manifest,
         liveness,
+        responder_url=http_ok_url,
     )
     assert main() == 0
 

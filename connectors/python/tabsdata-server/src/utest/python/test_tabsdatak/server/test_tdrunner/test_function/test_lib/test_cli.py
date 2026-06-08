@@ -115,13 +115,31 @@ def test_build_parser_returns_argparse_parser():
 
 def test_build_parser_required_liveness_long():
     parser = build_parser("cmd", "desc")
-    args = parser.parse_args(["--liveness", "/tmp/x"])
+    args = parser.parse_args([
+        "--liveness",
+        "/tmp/x",
+        "--responder-url",
+        "http://localhost/responder",
+        "--responder-method",
+        "POST",
+        "--responder-authorization",
+        "Bearer tok",
+    ])
     assert args.liveness == "/tmp/x"
 
 
 def test_build_parser_required_liveness_short():
     parser = build_parser("cmd", "desc")
-    args = parser.parse_args(["-l", "/tmp/x"])
+    args = parser.parse_args([
+        "-l",
+        "/tmp/x",
+        "--responder-url",
+        "http://localhost/responder",
+        "--responder-method",
+        "POST",
+        "--responder-authorization",
+        "Bearer tok",
+    ])
     assert args.liveness == "/tmp/x"
 
 

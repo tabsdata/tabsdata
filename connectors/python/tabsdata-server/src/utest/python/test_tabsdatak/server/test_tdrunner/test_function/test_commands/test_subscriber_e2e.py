@@ -70,13 +70,13 @@ from __future__ import annotations
 from tabsdatak.api import TableFrameSpec, TableFramesSpec, subscriber
 from tabsdatak.conn.localfile import LocalFileDestConn, LocalFileDest
 
+_CONN = LocalFileDestConn(base_path={dest_base_path!r})
 _DEST = LocalFileDest(
-    conn=LocalFileDestConn(base_path={dest_base_path!r}),
     paths=["out_a.parquet", "out_b.parquet"],
 )
 
 
-@subscriber(destination=_DEST, input_tables=["c1/t_a", "c1/t_b"])
+@subscriber(conn=_CONN, destination=_DEST, input_tables=["c1/t_a", "c1/t_b"])
 def my_subscriber(
     a: TableFrameSpec, b: TableFramesSpec
 ) -> tuple[TableFrameSpec, TableFrameSpec]:
@@ -217,8 +217,22 @@ def _write_request(path: Path, *, bundle_uri: str, a_uri: str, b_uri: str) -> Pa
 # --- command invocation helper -------------------------------------------
 
 
-def _invoke(monkeypatch, main_fn, argv: list[str]) -> int:
-    monkeypatch.setattr(sys, "argv", argv)
+def _invoke(
+    monkeypatch, main_fn, argv: list[str], *, responder_url: str
+) -> int:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        argv
+        + [
+            "--responder-url",
+            responder_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
+        ],
+    )
     return main_fn()
 
 
@@ -231,6 +245,7 @@ def test_subscriber_full_chain(
     staged_inputs,
     dest_out,
     mock_apiserver,
+    http_ok_url,
     monkeypatch,
 ):
     """Walk every step of the subscriber chain and verify the
@@ -279,6 +294,7 @@ def test_subscriber_full_chain(
             "--liveness",
             str(tmp_path / "liveness-localize"),
         ],
+        responder_url=http_ok_url,
     )
     assert rc == 0
     assert (extracted / "function_def.json").is_file()
@@ -308,6 +324,7 @@ def test_subscriber_full_chain(
             "--liveness",
             str(tmp_path / "liveness-prep-loc-state"),
         ],
+        responder_url=http_ok_url,
     )
     assert rc == 0
 
@@ -328,6 +345,7 @@ def test_subscriber_full_chain(
             "--liveness",
             str(tmp_path / "liveness-rt-loc"),
         ],
+        responder_url=http_ok_url,
     )
     assert rc == 0
     assert (in_dir / "t_a.parquet").is_file()
@@ -358,6 +376,7 @@ def test_subscriber_full_chain(
             "--liveness",
             str(tmp_path / "liveness-fn"),
         ],
+        responder_url=http_ok_url,
     )
     assert rc == 0
 
@@ -389,6 +408,7 @@ def test_subscriber_full_chain(
             "--liveness",
             str(tmp_path / "liveness-rdp"),
         ],
+        responder_url=http_ok_url,
     )
     assert rc == 0
 
@@ -425,6 +445,7 @@ def test_subscriber_full_chain(
             "--liveness",
             str(tmp_path / "liveness-prep-up-state"),
         ],
+        responder_url=http_ok_url,
     )
     assert rc == 0
     assert "source_target_pairs: []" in upload_state_req.read_text()
@@ -442,6 +463,7 @@ def test_subscriber_full_chain(
             "--liveness",
             str(tmp_path / "liveness-rt-up-state"),
         ],
+        responder_url=http_ok_url,
     )
     assert rc == 0
 
@@ -470,6 +492,7 @@ def test_subscriber_full_chain(
             "--liveness",
             str(tmp_path / "liveness-rc"),
         ],
+        responder_url=http_ok_url,
     )
     assert rc == 0
 

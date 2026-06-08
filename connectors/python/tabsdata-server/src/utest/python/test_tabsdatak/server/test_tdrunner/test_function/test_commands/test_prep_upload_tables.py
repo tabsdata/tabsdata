@@ -22,7 +22,9 @@ from tabsdatak.server._tdrunner.function.commands.prep_upload_tables import (
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
 
-def _set_argv(monkeypatch, request_path, manifest_path, out, liveness):
+def _set_argv(
+    monkeypatch, request_path, manifest_path, out, liveness, *, responder_url
+):
     monkeypatch.setattr(
         sys,
         "argv",
@@ -36,6 +38,12 @@ def _set_argv(monkeypatch, request_path, manifest_path, out, liveness):
             str(out),
             "--liveness",
             str(liveness),
+            "--responder-url",
+            responder_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer wtok",
         ],
     )
 
@@ -66,15 +74,24 @@ def _write_manifest(path: Path, entries: list) -> Path:
     return path
 
 
-def main_with_args(monkeypatch, request_path, manifest_path, out, liveness):
-    _set_argv(monkeypatch, request_path, manifest_path, out, liveness)
+def main_with_args(
+    monkeypatch, request_path, manifest_path, out, liveness, *, responder_url
+):
+    _set_argv(
+        monkeypatch,
+        request_path,
+        manifest_path,
+        out,
+        liveness,
+        responder_url=responder_url,
+    )
     return main()
 
 
 # --- happy path -----------------------------------------------------------
 
 
-def test_main_writes_transporter_yaml(monkeypatch, tmp_path):
+def test_main_writes_transporter_yaml(monkeypatch, tmp_path, http_ok_url):
     request_yaml = _write_request(
         tmp_path / "request.yaml",
         output=[
@@ -86,7 +103,14 @@ def test_main_writes_transporter_yaml(monkeypatch, tmp_path):
         [{"name": "t1", "file": "/data/slot0/t1.parquet"}],
     )
     out = tmp_path / "transporter.yaml"
-    rc = main_with_args(monkeypatch, request_yaml, manifest, out, tmp_path / "live")
+    rc = main_with_args(
+        monkeypatch,
+        request_yaml,
+        manifest,
+        out,
+        tmp_path / "live",
+        responder_url=http_ok_url,
+    )
     assert rc == 0
     text = out.read_text()
     assert text.startswith("!CopyV1")
@@ -97,7 +121,7 @@ def test_main_writes_transporter_yaml(monkeypatch, tmp_path):
     assert (tmp_path / "live").exists()
 
 
-def test_main_skips_null_file(monkeypatch, tmp_path):
+def test_main_skips_null_file(monkeypatch, tmp_path, http_ok_url):
     request_yaml = _write_request(
         tmp_path / "request.yaml",
         output=[
@@ -113,7 +137,14 @@ def test_main_skips_null_file(monkeypatch, tmp_path):
         ],
     )
     out = tmp_path / "transporter.yaml"
-    rc = main_with_args(monkeypatch, request_yaml, manifest, out, tmp_path / "live")
+    rc = main_with_args(
+        monkeypatch,
+        request_yaml,
+        manifest,
+        out,
+        tmp_path / "live",
+        responder_url=http_ok_url,
+    )
     assert rc == 0
     text = out.read_text()
     assert "/data/t1.parquet" in text
@@ -121,7 +152,7 @@ def test_main_skips_null_file(monkeypatch, tmp_path):
     assert "s3://bucket/t2.parquet" not in text
 
 
-def test_main_skips_location_none(monkeypatch, tmp_path):
+def test_main_skips_location_none(monkeypatch, tmp_path, http_ok_url):
     request_yaml = _write_request(
         tmp_path / "request.yaml",
         output=[
@@ -133,21 +164,35 @@ def test_main_skips_location_none(monkeypatch, tmp_path):
         [{"name": "t1", "file": "/data/t1.parquet"}],
     )
     out = tmp_path / "transporter.yaml"
-    rc = main_with_args(monkeypatch, request_yaml, manifest, out, tmp_path / "live")
+    rc = main_with_args(
+        monkeypatch,
+        request_yaml,
+        manifest,
+        out,
+        tmp_path / "live",
+        responder_url=http_ok_url,
+    )
     assert rc == 0
     assert "source_target_pairs: []" in out.read_text()
 
 
-def test_main_handles_empty_output_and_manifest(monkeypatch, tmp_path):
+def test_main_handles_empty_output_and_manifest(monkeypatch, tmp_path, http_ok_url):
     request_yaml = _write_request(tmp_path / "request.yaml")
     manifest = _write_manifest(tmp_path / "outputs_manifest.yaml", [])
     out = tmp_path / "transporter.yaml"
-    rc = main_with_args(monkeypatch, request_yaml, manifest, out, tmp_path / "live")
+    rc = main_with_args(
+        monkeypatch,
+        request_yaml,
+        manifest,
+        out,
+        tmp_path / "live",
+        responder_url=http_ok_url,
+    )
     assert rc == 0
     assert "source_target_pairs: []" in out.read_text()
 
 
-def test_main_preserves_request_order(monkeypatch, tmp_path):
+def test_main_preserves_request_order(monkeypatch, tmp_path, http_ok_url):
     request_yaml = _write_request(
         tmp_path / "request.yaml",
         output=[
@@ -163,7 +208,14 @@ def test_main_preserves_request_order(monkeypatch, tmp_path):
         ],
     )
     out = tmp_path / "transporter.yaml"
-    rc = main_with_args(monkeypatch, request_yaml, manifest, out, tmp_path / "live")
+    rc = main_with_args(
+        monkeypatch,
+        request_yaml,
+        manifest,
+        out,
+        tmp_path / "live",
+        responder_url=http_ok_url,
+    )
     assert rc == 0
     text = out.read_text()
     # t2 must appear before t1 — the upload order follows request.output
@@ -173,7 +225,7 @@ def test_main_preserves_request_order(monkeypatch, tmp_path):
 # --- error paths ----------------------------------------------------------
 
 
-def test_main_missing_request_returns_bad_request(monkeypatch, tmp_path):
+def test_main_missing_request_returns_bad_request(monkeypatch, tmp_path, http_ok_url):
     manifest = _write_manifest(tmp_path / "outputs_manifest.yaml", [])
     rc = main_with_args(
         monkeypatch,
@@ -181,11 +233,12 @@ def test_main_missing_request_returns_bad_request(monkeypatch, tmp_path):
         manifest,
         tmp_path / "out.yaml",
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert rc == EXIT_BAD_REQUEST
 
 
-def test_main_malformed_request_returns_bad_request(monkeypatch, tmp_path):
+def test_main_malformed_request_returns_bad_request(monkeypatch, tmp_path, http_ok_url):
     bad = tmp_path / "request.yaml"
     bad.write_text("info: { unclosed")
     manifest = _write_manifest(tmp_path / "outputs_manifest.yaml", [])
@@ -195,11 +248,12 @@ def test_main_malformed_request_returns_bad_request(monkeypatch, tmp_path):
         manifest,
         tmp_path / "out.yaml",
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert rc == EXIT_BAD_REQUEST
 
 
-def test_main_missing_manifest_returns_bad_manifest(monkeypatch, tmp_path):
+def test_main_missing_manifest_returns_bad_manifest(monkeypatch, tmp_path, http_ok_url):
     request_yaml = _write_request(tmp_path / "request.yaml")
     rc = main_with_args(
         monkeypatch,
@@ -207,11 +261,14 @@ def test_main_missing_manifest_returns_bad_manifest(monkeypatch, tmp_path):
         tmp_path / "no.yaml",
         tmp_path / "out.yaml",
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert rc == EXIT_BAD_MANIFEST
 
 
-def test_main_malformed_manifest_returns_bad_manifest(monkeypatch, tmp_path):
+def test_main_malformed_manifest_returns_bad_manifest(
+    monkeypatch, tmp_path, http_ok_url
+):
     request_yaml = _write_request(tmp_path / "request.yaml")
     bad = tmp_path / "outputs_manifest.yaml"
     bad.write_text("outputs: [{unclosed")
@@ -221,11 +278,14 @@ def test_main_malformed_manifest_returns_bad_manifest(monkeypatch, tmp_path):
         bad,
         tmp_path / "out.yaml",
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert rc == EXIT_BAD_MANIFEST
 
 
-def test_main_table_missing_from_manifest_returns_mismatch(monkeypatch, tmp_path):
+def test_main_table_missing_from_manifest_returns_mismatch(
+    monkeypatch, tmp_path, http_ok_url
+):
     request_yaml = _write_request(
         tmp_path / "request.yaml",
         output=[
@@ -239,11 +299,14 @@ def test_main_table_missing_from_manifest_returns_mismatch(monkeypatch, tmp_path
         manifest,
         tmp_path / "out.yaml",
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert rc == EXIT_MANIFEST_MISMATCH
 
 
-def test_main_unsupported_scheme_returns_unsupported_scheme(monkeypatch, tmp_path):
+def test_main_unsupported_scheme_returns_unsupported_scheme(
+    monkeypatch, tmp_path, http_ok_url
+):
     request_yaml = _write_request(
         tmp_path / "request.yaml",
         output=[
@@ -260,11 +323,12 @@ def test_main_unsupported_scheme_returns_unsupported_scheme(monkeypatch, tmp_pat
         manifest,
         tmp_path / "out.yaml",
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert rc == EXIT_UNSUPPORTED_SCHEME
 
 
-def test_main_write_error_returns_write_failed(monkeypatch, tmp_path):
+def test_main_write_error_returns_write_failed(monkeypatch, tmp_path, http_ok_url):
     request_yaml = _write_request(tmp_path / "request.yaml")
     manifest = _write_manifest(tmp_path / "outputs_manifest.yaml", [])
     rc = main_with_args(
@@ -273,6 +337,7 @@ def test_main_write_error_returns_write_failed(monkeypatch, tmp_path):
         manifest,
         tmp_path / "no" / "such" / "out.yaml",
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert rc == EXIT_WRITE_FAILED
 

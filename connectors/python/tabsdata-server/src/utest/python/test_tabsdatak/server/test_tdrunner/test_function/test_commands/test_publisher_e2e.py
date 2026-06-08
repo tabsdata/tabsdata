@@ -335,7 +335,9 @@ def _invoke(monkeypatch, main_fn, argv: list[str]) -> int:
 # --- end-to-end test ------------------------------------------------------
 
 
-def test_publisher_full_chain(tmp_path, bundle_path, mock_apiserver, monkeypatch):
+def test_publisher_full_chain(
+    tmp_path, bundle_path, mock_apiserver, monkeypatch, http_ok_url
+):
     """Walk every step of the publisher chain (except prepare-py-env)
     and verify the artifacts each command produces."""
     base_url, requests_log = mock_apiserver
@@ -385,6 +387,12 @@ def test_publisher_full_chain(tmp_path, bundle_path, mock_apiserver, monkeypatch
             str(tmp_path / "localize-scratch"),
             "--liveness",
             str(tmp_path / "liveness-localize"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -417,6 +425,12 @@ def test_publisher_full_chain(tmp_path, bundle_path, mock_apiserver, monkeypatch
             str(prep_loc_state_manifest),
             "--liveness",
             str(tmp_path / "liveness-prep-loc-state"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -443,6 +457,12 @@ def test_publisher_full_chain(tmp_path, bundle_path, mock_apiserver, monkeypatch
             str(tmp_path / "transporter-report-loc.yaml"),
             "--liveness",
             str(tmp_path / "liveness-rt-loc"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -469,6 +489,12 @@ def test_publisher_full_chain(tmp_path, bundle_path, mock_apiserver, monkeypatch
             str(state_dir),
             "--liveness",
             str(tmp_path / "liveness-rsp"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -498,6 +524,12 @@ def test_publisher_full_chain(tmp_path, bundle_path, mock_apiserver, monkeypatch
             str(enriched_inputs_manifest),
             "--liveness",
             str(tmp_path / "liveness-stamp"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -539,6 +571,12 @@ def test_publisher_full_chain(tmp_path, bundle_path, mock_apiserver, monkeypatch
             str(state_dir),
             "--liveness",
             str(tmp_path / "liveness-fn"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -579,6 +617,12 @@ def test_publisher_full_chain(tmp_path, bundle_path, mock_apiserver, monkeypatch
             str(upload_tables_req),
             "--liveness",
             str(tmp_path / "liveness-prep-up-tbl"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -601,6 +645,12 @@ def test_publisher_full_chain(tmp_path, bundle_path, mock_apiserver, monkeypatch
             str(tmp_path / "transporter-report-up-tbl.yaml"),
             "--liveness",
             str(tmp_path / "liveness-rt-up-tbl"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -629,6 +679,12 @@ def test_publisher_full_chain(tmp_path, bundle_path, mock_apiserver, monkeypatch
             str(upload_state_req),
             "--liveness",
             str(tmp_path / "liveness-prep-up-state"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -646,6 +702,12 @@ def test_publisher_full_chain(tmp_path, bundle_path, mock_apiserver, monkeypatch
             str(tmp_path / "transporter-report-up-state.yaml"),
             "--liveness",
             str(tmp_path / "liveness-rt-up-state"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -674,6 +736,12 @@ def test_publisher_full_chain(tmp_path, bundle_path, mock_apiserver, monkeypatch
             str(response_yaml),
             "--liveness",
             str(tmp_path / "liveness-rc"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -699,7 +767,7 @@ def test_publisher_full_chain(tmp_path, bundle_path, mock_apiserver, monkeypatch
 
 
 def test_publisher_full_chain_multi_input_path(
-    tmp_path, multi_bundle_path, mock_apiserver, monkeypatch
+    tmp_path, multi_bundle_path, mock_apiserver, monkeypatch, http_ok_url
 ):
     """End-to-end with a publisher whose source has 2 paths
     (cardinality 2 → 2 input slots / 2 function parameters) and
@@ -757,6 +825,12 @@ def test_publisher_full_chain_multi_input_path(
             str(tmp_path / "localize-scratch"),
             "--liveness",
             str(tmp_path / "liveness-localize"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -785,6 +859,12 @@ def test_publisher_full_chain_multi_input_path(
             str(tmp_path / "prep_loc_state.yaml"),
             "--liveness",
             str(tmp_path / "liveness-prep-loc-state"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -805,6 +885,12 @@ def test_publisher_full_chain_multi_input_path(
             str(tmp_path / "transporter-report-loc.yaml"),
             "--liveness",
             str(tmp_path / "liveness-rt-loc"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -831,6 +917,12 @@ def test_publisher_full_chain_multi_input_path(
             str(state_dir),
             "--liveness",
             str(tmp_path / "liveness-rsp"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -858,6 +950,12 @@ def test_publisher_full_chain_multi_input_path(
             str(enriched_inputs_manifest),
             "--liveness",
             str(tmp_path / "liveness-stamp"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -886,6 +984,12 @@ def test_publisher_full_chain_multi_input_path(
             str(state_dir),
             "--liveness",
             str(tmp_path / "liveness-fn"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -931,6 +1035,12 @@ def test_publisher_full_chain_multi_input_path(
             str(upload_tables_req),
             "--liveness",
             str(tmp_path / "liveness-prep-up-tbl"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -954,6 +1064,12 @@ def test_publisher_full_chain_multi_input_path(
             str(tmp_path / "transporter-report-up-tbl.yaml"),
             "--liveness",
             str(tmp_path / "liveness-rt-up-tbl"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -979,6 +1095,12 @@ def test_publisher_full_chain_multi_input_path(
             str(upload_state_req),
             "--liveness",
             str(tmp_path / "liveness-prep-up-state"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -995,6 +1117,12 @@ def test_publisher_full_chain_multi_input_path(
             str(tmp_path / "transporter-report-up-state.yaml"),
             "--liveness",
             str(tmp_path / "liveness-rt-up-state"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -1023,6 +1151,12 @@ def test_publisher_full_chain_multi_input_path(
             str(response_yaml),
             "--liveness",
             str(tmp_path / "liveness-rc"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0

@@ -80,13 +80,13 @@ from __future__ import annotations
 from tabsdatak.api import TableFrameSpec, TableFramesSpec, publisher
 from tabsdatak.conn.localfile import LocalFileSrcConn, LocalFileSrc
 
+_CONN = LocalFileSrcConn(base_path={base_path!r})
 _SRC = LocalFileSrc(
-    conn=LocalFileSrcConn(base_path={base_path!r}),
     paths=["*.parquet"],
 )
 
 
-@publisher(source=_SRC, output_tables=["my_table", "untouched"])
+@publisher(conn=_CONN, source=_SRC, output_tables=["my_table", "untouched"])
 def my_publisher(in_1: TableFramesSpec) -> tuple[TableFrameSpec, TableFrameSpec]:
     # Append a marker column to the first input frame; second output
     # is None to exercise the "not modified" branch of the outputs
@@ -195,13 +195,13 @@ from __future__ import annotations
 from tabsdatak.api import TableFrameSpec, subscriber
 from tabsdatak.conn.localfile import LocalFileDestConn, LocalFileDest
 
+_CONN = LocalFileDestConn(base_path="/tmp/sub_out")
 _DEST = LocalFileDest(
-    conn=LocalFileDestConn(base_path="/tmp/sub_out"),
     paths=["sink.parquet"],
 )
 
 
-@subscriber(destination=_DEST, input_tables=["c1/t_in"])
+@subscriber(conn=_CONN, destination=_DEST, input_tables=["c1/t_in"])
 def my_subscriber(in_1: TableFrameSpec) -> tuple[TableFrameSpec]:
     return (in_1,)
 """
@@ -242,13 +242,13 @@ from __future__ import annotations
 from tabsdatak.api import TableFrameSpec, TableFramesSpec, publisher
 from tabsdatak.conn.localfile import LocalFileSrcConn, LocalFileSrc
 
+_CONN = LocalFileSrcConn(base_path={base_path!r})
 _SRC = LocalFileSrc(
-    conn=LocalFileSrcConn(base_path={base_path!r}),
     paths=["a.parquet", "b.parquet"],
 )
 
 
-@publisher(source=_SRC, output_tables=["concat"])
+@publisher(conn=_CONN, source=_SRC, output_tables=["concat"])
 def multi_publisher(
     in_a: TableFramesSpec, in_b: TableFramesSpec
 ) -> tuple[TableFrameSpec]:
@@ -376,6 +376,10 @@ def _set_argv(
     outputs_manifest: Path,
     liveness: Path,
     state_dir: Path | None = None,
+    *,
+    responder_url: str,
+    responder_method: str = "POST",
+    responder_authorization: str = "Bearer tok",
 ) -> None:
     if state_dir is None:
         state_dir = out_dir.parent / "state"
@@ -399,6 +403,12 @@ def _set_argv(
             str(liveness),
             "--state-dir",
             str(state_dir),
+            "--responder-url",
+            responder_url,
+            "--responder-method",
+            responder_method,
+            "--responder-authorization",
+            responder_authorization,
         ],
     )
 
@@ -752,7 +762,7 @@ def test_sink_outputs_write_failure_maps_to_output_write_failed(tmp_path, monkey
 # --- main: error paths --------------------------------------------------
 
 
-def test_main_missing_request_returns_bad_request(tmp_path, monkeypatch):
+def test_main_missing_request_returns_bad_request(tmp_path, monkeypatch, http_ok_url):
     _set_argv(
         monkeypatch,
         tmp_path / "no-such.yaml",
@@ -761,11 +771,12 @@ def test_main_missing_request_returns_bad_request(tmp_path, monkeypatch):
         tmp_path / "out",
         tmp_path / "outputs.yaml",
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert main() == EXIT_BAD_REQUEST
 
 
-def test_main_missing_bundle_returns_bad_bundle(tmp_path, monkeypatch):
+def test_main_missing_bundle_returns_bad_bundle(tmp_path, monkeypatch, http_ok_url):
     req = _write_request(tmp_path / "request.yaml")
     _set_argv(
         monkeypatch,
@@ -775,6 +786,7 @@ def test_main_missing_bundle_returns_bad_bundle(tmp_path, monkeypatch):
         tmp_path / "out",
         tmp_path / "outputs.yaml",
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert main() == EXIT_BAD_BUNDLE
 
@@ -787,7 +799,7 @@ def test_main_invalid_options_returns_1(monkeypatch):
 # --- main: end-to-end ---------------------------------------------------
 
 
-def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch):
+def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch, http_ok_url):
     """Real publisher, real bundle, real inputs manifest pointing at a
     real parquet. Invoke main(); verify outputs."""
     # Write the request.
@@ -814,6 +826,7 @@ def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch):
         out_dir,
         outputs_manifest,
         liveness,
+        responder_url=http_ok_url,
     )
     rc = main()
     assert rc == 0, f"main() returned {rc}"
@@ -846,7 +859,9 @@ def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch):
     assert liveness.exists()
 
 
-def test_main_outputs_manifest_write_failure(tmp_path, built_bundle, monkeypatch):
+def test_main_outputs_manifest_write_failure(
+    tmp_path, built_bundle, monkeypatch, http_ok_url
+):
     """If the outputs-manifest write fails, surface EXIT_OUTPUTS_MANIFEST_WRITE_FAILED."""
     request_path = _write_request(tmp_path / "request.yaml")
     raw_parquet = tmp_path / "raw" / "rows.parquet"
@@ -869,6 +884,7 @@ def test_main_outputs_manifest_write_failure(tmp_path, built_bundle, monkeypatch
         tmp_path / "fn_out",
         bad_target,
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert main() == EXIT_OUTPUTS_MANIFEST_WRITE_FAILED
 
@@ -877,7 +893,7 @@ def test_main_outputs_manifest_write_failure(tmp_path, built_bundle, monkeypatch
 
 
 def test_main_multi_cardinality_publisher_concatenates_two_slots(
-    tmp_path, multi_publisher_bundle, monkeypatch
+    tmp_path, multi_publisher_bundle, monkeypatch, http_ok_url
 ):
     """A publisher whose source has 2 paths produces 2 input slots, and
     the user function declares 2 parameters. Exercises the full _run()
@@ -912,6 +928,7 @@ def test_main_multi_cardinality_publisher_concatenates_two_slots(
         out_dir,
         outputs_manifest,
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     rc = main()
     assert rc == 0, f"main() returned {rc}"
@@ -925,7 +942,7 @@ def test_main_multi_cardinality_publisher_concatenates_two_slots(
 
 
 def test_main_multi_cardinality_transformer_with_mixed_modes(
-    tmp_path, multi_transformer_bundle, monkeypatch
+    tmp_path, multi_transformer_bundle, monkeypatch, http_ok_url
 ):
     """A transformer with 3 input_tables (mixed SINGLE/ARRAY/SINGLE) and
     one output. Exercises the full _run() flow with input_count > 1 on
@@ -962,6 +979,7 @@ def test_main_multi_cardinality_transformer_with_mixed_modes(
         out_dir,
         outputs_manifest,
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     rc = main()
     assert rc == 0, f"main() returned {rc}"
@@ -974,7 +992,7 @@ def test_main_multi_cardinality_transformer_with_mixed_modes(
 
 
 def test_main_manifest_length_mismatch_returns_bad_manifest(
-    tmp_path, multi_publisher_bundle, monkeypatch
+    tmp_path, multi_publisher_bundle, monkeypatch, http_ok_url
 ):
     """The multi-cardinality publisher declares 2 input slots; feeding
     it a 1-entry manifest must surface EXIT_BAD_MANIFEST rather than
@@ -998,6 +1016,7 @@ def test_main_manifest_length_mismatch_returns_bad_manifest(
         tmp_path / "fn_out",
         tmp_path / "outputs.yaml",
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert main() == EXIT_BAD_MANIFEST
 
@@ -1063,13 +1082,13 @@ from __future__ import annotations
 from tabsdatak.api import TableFrameSpec, TableFramesSpec, TrxCtx, publisher
 from tabsdatak.conn.localfile import LocalFileSrcConn, LocalFileSrc
 
+_CONN = LocalFileSrcConn(base_path={base_path!r})
 _SRC = LocalFileSrc(
-    conn=LocalFileSrcConn(base_path={base_path!r}),
     paths=["*.parquet"],
 )
 
 
-@publisher(source=_SRC, output_tables=["my_table"])
+@publisher(conn=_CONN, source=_SRC, output_tables=["my_table"])
 def my_publisher(in_1: TableFramesSpec, ctx: TrxCtx) -> tuple[TableFrameSpec]:
     seen = ctx.get_attr("my-key")
     new = "from-user-fn" if seen is None else "again-after-" + str(seen)
@@ -1148,7 +1167,7 @@ def _request_with_state_slots(
 
 
 def test_main_ctx_aware_function_hydrates_from_state_in_first_run(
-    tmp_path, ctx_aware_built_bundle, monkeypatch
+    tmp_path, ctx_aware_built_bundle, monkeypatch, http_ok_url
 ):
     """First run for the flow: no state-out parquet exists yet. The
     ctx hydrates from state-in. The user function sees ``None`` for
@@ -1170,6 +1189,7 @@ def test_main_ctx_aware_function_hydrates_from_state_in_first_run(
         outputs_manifest,
         tmp_path / "live",
         state_dir=state_dir,
+        responder_url=http_ok_url,
     )
     rc = main()
     assert rc == 0, rc
@@ -1182,7 +1202,7 @@ def test_main_ctx_aware_function_hydrates_from_state_in_first_run(
 
 
 def test_main_ctx_aware_function_hydrates_from_state_out_when_present(
-    tmp_path, ctx_aware_built_bundle, monkeypatch
+    tmp_path, ctx_aware_built_bundle, monkeypatch, http_ok_url
 ):
     """``prefer_output=True`` — when state-out already exists (as
     would be the case mid-chain after run-source-plugin drained), the
@@ -1209,6 +1229,7 @@ def test_main_ctx_aware_function_hydrates_from_state_out_when_present(
         outputs_manifest,
         tmp_path / "live",
         state_dir=state_dir,
+        responder_url=http_ok_url,
     )
     rc = main()
     assert rc == 0, rc
@@ -1220,7 +1241,7 @@ def test_main_ctx_aware_function_hydrates_from_state_out_when_present(
 
 
 def test_main_ctx_aware_function_falls_back_to_state_in(
-    tmp_path, ctx_aware_built_bundle, monkeypatch
+    tmp_path, ctx_aware_built_bundle, monkeypatch, http_ok_url
 ):
     """``prefer_output=True`` — when state-out doesn't exist (e.g.
     transformer / subscriber chain), the user function hydrates from
@@ -1245,6 +1266,7 @@ def test_main_ctx_aware_function_falls_back_to_state_in(
         outputs_manifest,
         tmp_path / "live",
         state_dir=state_dir,
+        responder_url=http_ok_url,
     )
     rc = main()
     assert rc == 0, rc
@@ -1255,7 +1277,7 @@ def test_main_ctx_aware_function_falls_back_to_state_in(
 
 
 def test_main_function_without_ctx_does_not_touch_state(
-    tmp_path, built_bundle, monkeypatch
+    tmp_path, built_bundle, monkeypatch, http_ok_url
 ):
     """The original publisher (no ctx param) must not produce a
     state-out file -- a function with no ctx is signaling that it
@@ -1277,6 +1299,7 @@ def test_main_function_without_ctx_does_not_touch_state(
         outputs_manifest,
         tmp_path / "live",
         state_dir=state_dir,
+        responder_url=http_ok_url,
     )
     rc = main()
     assert rc == 0, rc
@@ -1301,7 +1324,9 @@ def _seed_input_parquet(tmp_path: Path) -> Path:
 # --- mkdir ordering: out_dir exists before the user function runs --------
 
 
-def test_main_creates_out_dir_before_invoking_user_function(tmp_path, monkeypatch):
+def test_main_creates_out_dir_before_invoking_user_function(
+    tmp_path, monkeypatch, http_ok_url
+):
     """A ctx-aware user function may surface ``ctx.work_dir`` (==
     ``out_dir`` for run-function) and try to write a sidecar there;
     the runtime must create the directory before the call, not after.
@@ -1321,13 +1346,13 @@ from __future__ import annotations
 from tabsdatak.api import TableFrameSpec, TableFramesSpec, TrxCtx, publisher
 from tabsdatak.conn.localfile import LocalFileSrcConn, LocalFileSrc
 
+_CONN = LocalFileSrcConn(base_path={str(srcdata)!r})
 _SRC = LocalFileSrc(
-    conn=LocalFileSrcConn(base_path={str(srcdata)!r}),
     paths=["*.parquet"],
 )
 
 
-@publisher(source=_SRC, output_tables=["my_table"])
+@publisher(conn=_CONN, source=_SRC, output_tables=["my_table"])
 def my_publisher(
     in_1: TableFramesSpec, ctx: TrxCtx
 ) -> tuple[TableFrameSpec]:
@@ -1367,6 +1392,7 @@ def my_publisher(
         outputs_manifest,
         tmp_path / "live",
         state_dir=state_dir,
+        responder_url=http_ok_url,
     )
     rc = main()
     # Cleanup: the temporary `my_pkg` import lingers in sys.modules.
@@ -1408,13 +1434,13 @@ from __future__ import annotations
 from tabsdatak.api import TableFrameSpec, TrxCtx, subscriber
 from tabsdatak.conn.localfile import LocalFileDestConn, LocalFileDest
 
+_CONN = LocalFileDestConn(base_path={base_path!r})
 _DEST = LocalFileDest(
-    conn=LocalFileDestConn(base_path={base_path!r}),
     paths=["sink.parquet"],
 )
 
 
-@subscriber(destination=_DEST, input_tables=["c1/t_in"])
+@subscriber(conn=_CONN, destination=_DEST, input_tables=["c1/t_in"])
 def my_subscriber(
     in_1: TableFrameSpec, ctx: TrxCtx
 ) -> tuple[TableFrameSpec]:
@@ -1463,7 +1489,9 @@ def _build_extracted_bundle(
     return extracted
 
 
-def test_main_ctx_aware_transformer_hydrates_and_drains(tmp_path, monkeypatch, request):
+def test_main_ctx_aware_transformer_hydrates_and_drains(
+    tmp_path, monkeypatch, request, http_ok_url
+):
     """A @transformer that declares a trailing ``ctx: TrxCtx`` gets the
     same hydrate-from-state-out / drain-to-state-out treatment as a
     publisher. Verifies the runtime is kind-agnostic."""
@@ -1499,6 +1527,7 @@ def test_main_ctx_aware_transformer_hydrates_and_drains(tmp_path, monkeypatch, r
         outputs_manifest,
         tmp_path / "live",
         state_dir=state_dir,
+        responder_url=http_ok_url,
     )
     rc = main()
     assert rc == 0, rc
@@ -1507,7 +1536,9 @@ def test_main_ctx_aware_transformer_hydrates_and_drains(tmp_path, monkeypatch, r
     }
 
 
-def test_main_ctx_aware_subscriber_hydrates_and_drains(tmp_path, monkeypatch, request):
+def test_main_ctx_aware_subscriber_hydrates_and_drains(
+    tmp_path, monkeypatch, request, http_ok_url
+):
     """A @subscriber that declares a trailing ``ctx: TrxCtx`` also
     round-trips state cleanly. Pins kind-agnostic runtime behaviour
     for the third decorator kind."""
@@ -1543,6 +1574,7 @@ def test_main_ctx_aware_subscriber_hydrates_and_drains(tmp_path, monkeypatch, re
         outputs_manifest,
         tmp_path / "live",
         state_dir=state_dir,
+        responder_url=http_ok_url,
     )
     rc = main()
     assert rc == 0, rc

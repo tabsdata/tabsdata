@@ -20,7 +20,17 @@ from tabsdatak.server._tdrunner.function.commands.prep_upload_state import (
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
 
-def _set_argv(monkeypatch, request_path, state_dir, out, liveness):
+def _set_argv(
+    monkeypatch,
+    request_path,
+    state_dir,
+    out,
+    liveness,
+    *,
+    responder_url,
+    responder_method="POST",
+    responder_authorization="Bearer tok",
+):
     monkeypatch.setattr(
         sys,
         "argv",
@@ -34,6 +44,12 @@ def _set_argv(monkeypatch, request_path, state_dir, out, liveness):
             str(out),
             "--liveness",
             str(liveness),
+            "--responder-url",
+            responder_url,
+            "--responder-method",
+            responder_method,
+            "--responder-authorization",
+            responder_authorization,
         ],
     )
 
@@ -59,15 +75,24 @@ def _write_request(
     return path
 
 
-def main_with_args(monkeypatch, request_path, state_dir, out, liveness):
-    _set_argv(monkeypatch, request_path, state_dir, out, liveness)
+def main_with_args(
+    monkeypatch, request_path, state_dir, out, liveness, *, responder_url
+):
+    _set_argv(
+        monkeypatch,
+        request_path,
+        state_dir,
+        out,
+        liveness,
+        responder_url=responder_url,
+    )
     return main()
 
 
 # --- happy path ---
 
 
-def test_main_writes_transporter_yaml(monkeypatch, tmp_path):
+def test_main_writes_transporter_yaml(monkeypatch, tmp_path, http_ok_url):
     request_yaml = _write_request(
         tmp_path / "request.yaml",
         system_output=[
@@ -84,6 +109,7 @@ def test_main_writes_transporter_yaml(monkeypatch, tmp_path):
         tmp_path / "state",
         out,
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert rc == 0
     text = out.read_text()
@@ -94,7 +120,7 @@ def test_main_writes_transporter_yaml(monkeypatch, tmp_path):
     assert (tmp_path / "live").exists()
 
 
-def test_main_handles_empty_system_output(monkeypatch, tmp_path):
+def test_main_handles_empty_system_output(monkeypatch, tmp_path, http_ok_url):
     request_yaml = _write_request(tmp_path / "request.yaml")
     out = tmp_path / "transporter.yaml"
     rc = main_with_args(
@@ -103,6 +129,7 @@ def test_main_handles_empty_system_output(monkeypatch, tmp_path):
         tmp_path / "state",
         out,
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert rc == 0
     assert "source_target_pairs: []" in out.read_text()
@@ -111,18 +138,21 @@ def test_main_handles_empty_system_output(monkeypatch, tmp_path):
 # --- error paths ---
 
 
-def test_main_missing_request_returns_bad_request(monkeypatch, tmp_path):
+def test_main_missing_request_returns_bad_request(monkeypatch, tmp_path, http_ok_url):
     rc = main_with_args(
         monkeypatch,
         tmp_path / "no-request.yaml",
         tmp_path / "state",
         tmp_path / "out.yaml",
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert rc == EXIT_BAD_REQUEST
 
 
-def test_main_malformed_request_returns_bad_request(monkeypatch, tmp_path):
+def test_main_malformed_request_returns_bad_request(
+    monkeypatch, tmp_path, http_ok_url
+):
     bad = tmp_path / "request.yaml"
     bad.write_text("info: { unclosed")
     rc = main_with_args(
@@ -131,11 +161,14 @@ def test_main_malformed_request_returns_bad_request(monkeypatch, tmp_path):
         tmp_path / "state",
         tmp_path / "out.yaml",
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert rc == EXIT_BAD_REQUEST
 
 
-def test_main_unsupported_scheme_returns_unsupported_scheme(monkeypatch, tmp_path):
+def test_main_unsupported_scheme_returns_unsupported_scheme(
+    monkeypatch, tmp_path, http_ok_url
+):
     request_yaml = _write_request(
         tmp_path / "request.yaml",
         system_output=[
@@ -148,11 +181,12 @@ def test_main_unsupported_scheme_returns_unsupported_scheme(monkeypatch, tmp_pat
         tmp_path / "state",
         tmp_path / "out.yaml",
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert rc == EXIT_UNSUPPORTED_SCHEME
 
 
-def test_main_write_error_returns_write_failed(monkeypatch, tmp_path):
+def test_main_write_error_returns_write_failed(monkeypatch, tmp_path, http_ok_url):
     request_yaml = _write_request(tmp_path / "request.yaml")
     rc = main_with_args(
         monkeypatch,
@@ -160,6 +194,7 @@ def test_main_write_error_returns_write_failed(monkeypatch, tmp_path):
         tmp_path / "state",
         tmp_path / "no" / "such" / "out.yaml",
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert rc == EXIT_WRITE_FAILED
 

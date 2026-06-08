@@ -293,7 +293,7 @@ def _invoke(monkeypatch, main_fn, argv: list[str]) -> int:
 
 
 def test_transformer_full_chain(
-    tmp_path, bundle_path, staged_inputs, mock_apiserver, monkeypatch
+    tmp_path, bundle_path, staged_inputs, mock_apiserver, http_ok_url, monkeypatch
 ):
     """Walk every step of the transformer chain and verify the
     artifacts each command produces."""
@@ -344,6 +344,12 @@ def test_transformer_full_chain(
             str(tmp_path / "localize-scratch"),
             "--liveness",
             str(tmp_path / "liveness-localize"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -374,6 +380,12 @@ def test_transformer_full_chain(
             str(state_manifest),
             "--liveness",
             str(tmp_path / "liveness-prep-loc-state"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -410,6 +422,12 @@ def test_transformer_full_chain(
             str(tmp_path / "transporter-report-loc.yaml"),
             "--liveness",
             str(tmp_path / "liveness-rt-loc"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -441,6 +459,12 @@ def test_transformer_full_chain(
             str(state_dir),
             "--liveness",
             str(tmp_path / "liveness-fn"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -479,6 +503,12 @@ def test_transformer_full_chain(
             str(upload_tables_req),
             "--liveness",
             str(tmp_path / "liveness-prep-up-tbl"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -500,6 +530,12 @@ def test_transformer_full_chain(
             str(tmp_path / "transporter-report-up-tbl.yaml"),
             "--liveness",
             str(tmp_path / "liveness-rt-up-tbl"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -526,6 +562,12 @@ def test_transformer_full_chain(
             str(upload_state_req),
             "--liveness",
             str(tmp_path / "liveness-prep-up-state"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -543,6 +585,12 @@ def test_transformer_full_chain(
             str(tmp_path / "transporter-report-up-state.yaml"),
             "--liveness",
             str(tmp_path / "liveness-rt-up-state"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -571,6 +619,12 @@ def test_transformer_full_chain(
             str(response_yaml),
             "--liveness",
             str(tmp_path / "liveness-rc"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -641,6 +695,7 @@ def test_transformer_full_chain_different_cardinalities(
     diff_card_bundle_path,
     diff_card_staged_inputs,
     mock_apiserver,
+    http_ok_url,
     monkeypatch,
 ):
     """End-to-end with a transformer whose input cardinality (3) is
@@ -693,6 +748,12 @@ def test_transformer_full_chain_different_cardinalities(
             str(tmp_path / "localize-scratch"),
             "--liveness",
             str(tmp_path / "liveness-localize"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -721,6 +782,12 @@ def test_transformer_full_chain_different_cardinalities(
             str(state_manifest),
             "--liveness",
             str(tmp_path / "liveness-prep-loc-state"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -748,6 +815,12 @@ def test_transformer_full_chain_different_cardinalities(
             str(tmp_path / "transporter-report-loc.yaml"),
             "--liveness",
             str(tmp_path / "liveness-rt-loc"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -779,6 +852,12 @@ def test_transformer_full_chain_different_cardinalities(
             str(state_dir),
             "--liveness",
             str(tmp_path / "liveness-fn"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -815,6 +894,12 @@ def test_transformer_full_chain_different_cardinalities(
             str(upload_tables_req),
             "--liveness",
             str(tmp_path / "liveness-prep-up-tbl"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -833,6 +918,12 @@ def test_transformer_full_chain_different_cardinalities(
             str(tmp_path / "transporter-report-up-tbl.yaml"),
             "--liveness",
             str(tmp_path / "liveness-rt-up-tbl"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -856,6 +947,12 @@ def test_transformer_full_chain_different_cardinalities(
             str(upload_state_req),
             "--liveness",
             str(tmp_path / "liveness-prep-up-state"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -872,6 +969,12 @@ def test_transformer_full_chain_different_cardinalities(
             str(tmp_path / "transporter-report-up-state.yaml"),
             "--liveness",
             str(tmp_path / "liveness-rt-up-state"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0
@@ -900,6 +1003,12 @@ def test_transformer_full_chain_different_cardinalities(
             str(response_yaml),
             "--liveness",
             str(tmp_path / "liveness-rc"),
+            "--responder-url",
+            http_ok_url,
+            "--responder-method",
+            "POST",
+            "--responder-authorization",
+            "Bearer tok",
         ],
     )
     assert rc == 0

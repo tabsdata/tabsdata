@@ -138,6 +138,10 @@ def _set_argv(
     bundle_dir: Path,
     outputs_manifest: Path,
     liveness: Path,
+    *,
+    responder_url: str,
+    responder_method: str = "POST",
+    responder_authorization: str = "Bearer tok",
 ) -> None:
     monkeypatch.setattr(
         sys,
@@ -152,6 +156,12 @@ def _set_argv(
             str(outputs_manifest),
             "--liveness",
             str(liveness),
+            "--responder-url",
+            responder_url,
+            "--responder-method",
+            responder_method,
+            "--responder-authorization",
+            responder_authorization,
         ],
     )
 
@@ -353,18 +363,19 @@ def test_invoke_write_out_wraps_plugin_exception(tmp_path):
 # --- main: error paths --------------------------------------------------
 
 
-def test_main_missing_request_returns_bad_request(tmp_path, monkeypatch):
+def test_main_missing_request_returns_bad_request(tmp_path, monkeypatch, http_ok_url):
     _set_argv(
         monkeypatch,
         tmp_path / "no.yaml",
         tmp_path / "bundle",
         tmp_path / "outputs.yaml",
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert main() == EXIT_BAD_REQUEST
 
 
-def test_main_missing_bundle_returns_bad_bundle(tmp_path, monkeypatch):
+def test_main_missing_bundle_returns_bad_bundle(tmp_path, monkeypatch, http_ok_url):
     req = _write_request(tmp_path / "request.yaml")
     _set_argv(
         monkeypatch,
@@ -372,6 +383,7 @@ def test_main_missing_bundle_returns_bad_bundle(tmp_path, monkeypatch):
         tmp_path / "no-bundle",
         tmp_path / "outputs.yaml",
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert main() == EXIT_BAD_BUNDLE
 
@@ -382,7 +394,7 @@ def test_main_invalid_options_returns_1(monkeypatch):
 
 
 def test_main_missing_outputs_manifest_returns_bad_manifest(
-    tmp_path, built_bundle, monkeypatch
+    tmp_path, built_bundle, monkeypatch, http_ok_url
 ):
     req = _write_request(tmp_path / "request.yaml")
     _set_argv(
@@ -391,12 +403,13 @@ def test_main_missing_outputs_manifest_returns_bad_manifest(
         built_bundle,
         tmp_path / "no-outputs.yaml",
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert main() == EXIT_BAD_MANIFEST
 
 
 def test_main_null_file_in_manifest_returns_bad_manifest(
-    tmp_path, built_bundle, monkeypatch
+    tmp_path, built_bundle, monkeypatch, http_ok_url
 ):
     req = _write_request(tmp_path / "request.yaml")
     outputs_manifest = tmp_path / "outputs.yaml"
@@ -410,6 +423,7 @@ def test_main_null_file_in_manifest_returns_bad_manifest(
         built_bundle,
         outputs_manifest,
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert main() == EXIT_BAD_MANIFEST
 
@@ -417,7 +431,7 @@ def test_main_null_file_in_manifest_returns_bad_manifest(
 # --- main: end-to-end --------------------------------------------------
 
 
-def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch):
+def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch, http_ok_url):
     """Real subscriber, real LocalFileDestPlugin. Write a parquet on
     disk, point the outputs manifest at it, invoke main(); verify the
     destination plugin actually copied the file into the dest dir.
@@ -440,7 +454,14 @@ def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch):
     )
 
     liveness = tmp_path / "live"
-    _set_argv(monkeypatch, request_path, built_bundle, outputs_manifest, liveness)
+    _set_argv(
+        monkeypatch,
+        request_path,
+        built_bundle,
+        outputs_manifest,
+        liveness,
+        responder_url=http_ok_url,
+    )
 
     rc = main()
     assert rc == 0, f"main() returned {rc}"

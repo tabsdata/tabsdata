@@ -218,6 +218,10 @@ def _set_argv(
     out_dir: Path,
     inputs_manifest: Path,
     liveness: Path,
+    *,
+    responder_url: str,
+    responder_method: str = "POST",
+    responder_authorization: str = "Bearer tok",
     state_dir: Path | None = None,
 ) -> None:
     if state_dir is None:
@@ -242,6 +246,12 @@ def _set_argv(
             str(liveness),
             "--state-dir",
             str(state_dir),
+            "--responder-url",
+            responder_url,
+            "--responder-method",
+            responder_method,
+            "--responder-authorization",
+            responder_authorization,
         ],
     )
 
@@ -501,7 +511,7 @@ def test_write_inputs_manifest_oserror_raises_manifest_write_failed(
 # --- main: error paths via argparse ---------------------------------------
 
 
-def test_main_missing_request_returns_bad_request(tmp_path, monkeypatch):
+def test_main_missing_request_returns_bad_request(tmp_path, monkeypatch, http_ok_url):
     _set_argv(
         monkeypatch,
         tmp_path / "no-such.yaml",
@@ -509,11 +519,12 @@ def test_main_missing_request_returns_bad_request(tmp_path, monkeypatch):
         tmp_path / "out",
         tmp_path / "manifest.yaml",
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert main() == EXIT_BAD_REQUEST
 
 
-def test_main_missing_bundle_returns_bad_bundle(tmp_path, monkeypatch):
+def test_main_missing_bundle_returns_bad_bundle(tmp_path, monkeypatch, http_ok_url):
     req = _write_request(tmp_path / "request.yaml")
     _set_argv(
         monkeypatch,
@@ -522,6 +533,7 @@ def test_main_missing_bundle_returns_bad_bundle(tmp_path, monkeypatch):
         tmp_path / "out",
         tmp_path / "manifest.yaml",
         tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert main() == EXIT_BAD_BUNDLE
 
@@ -535,7 +547,7 @@ def test_main_invalid_options_returns_1(monkeypatch):
 # --- main: end-to-end happy path -----------------------------------------
 
 
-def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch):
+def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch, http_ok_url):
     """Real LocalFile publisher, real plugin, real td_transporter.
 
     Mirrors `donotmerge.py`. Requires `td_transporter` on PATH and
@@ -548,7 +560,15 @@ def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch):
     manifest = tmp_path / "manifest.yaml"
     liveness = tmp_path / "live"
 
-    _set_argv(monkeypatch, req, built_bundle, out_dir, manifest, liveness)
+    _set_argv(
+        monkeypatch,
+        req,
+        built_bundle,
+        out_dir,
+        manifest,
+        liveness,
+        responder_url=http_ok_url,
+    )
 
     rc = main()
     assert rc == 0, f"main() returned {rc} (non-zero)"
@@ -775,7 +795,9 @@ def test_drain_bad_value_raises_bad_initial_values(tmp_path, monkeypatch):
 # --- main: end-to-end with initial_values round-trip --------------------
 
 
-def test_main_hydrates_and_drains_initial_values(tmp_path, built_bundle, monkeypatch):
+def test_main_hydrates_and_drains_initial_values(
+    tmp_path, built_bundle, monkeypatch, http_ok_url
+):
     """Wire a previous-run state file into system_input[0], let main()
     run the plugin (which is unaware of state), and verify drain
     produced an output state file. The publisher plugin doesn't itself
@@ -824,6 +846,7 @@ def test_main_hydrates_and_drains_initial_values(tmp_path, built_bundle, monkeyp
         out_dir,
         manifest,
         liveness,
+        responder_url=http_ok_url,
         state_dir=state_dir,
     )
 
