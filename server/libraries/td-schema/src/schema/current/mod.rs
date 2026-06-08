@@ -99,6 +99,7 @@ pub(crate) const ENTITIES: &[&dyn Entity] = &[
 /// itself is intentionally absent — it is keyed by `id`, not `project_id`, and
 /// the app never lists it (the active project arrives in the request).
 const PROJECT_SCOPED_TABLES: &[&str] = &[
+    "groups",
     "collections",
     "bundles",
     "functions",
@@ -131,9 +132,9 @@ impl SchemaVersion for Schema {
     // Refresh via `cargo test -p td-schema --lib print_schema_fingerprints --
     // --ignored --nocapture` after any intentional change to current/.
     const FINGERPRINTS: [&'static str; 3] = [
-        "30754b206b7f352b5a517d6278f6b445f75e9feddd7fe98d4497e6dbe3a1fe6a", // Sqlite
-        "211fc997c459c51e9d8ecd527a887b1ed0c7ad7a1ae1b8295b514d6d14a1d66f", // Postgres
-        "990f2b4b0c241167fe1f4fb724bb7f77a05db49aa4578583e8675a41a1006e54", // MySql
+        "2faed7f6aecce6dbe96ba2e8ac95e8525e73ca5793d0df690287230312ff9a82", // Sqlite
+        "2c4b4f5ab15e5106556f5aad4c5a74d6ca64972fde4d6046c885625fa0abfe54", // Postgres
+        "b30303782ae6fd7f00887e5aa88fa95489eb5b937880ebe5dfb78e4cc80eca86", // MySql
     ];
 
     fn build(backend: impl Into<Backend>) -> Vec<String> {

@@ -150,7 +150,7 @@ pub const UPDATE_ROLE: &str = url!(ROLE);
 pub const DELETE_ROLE: &str = url!(ROLE);
 
 // Groups
-pub const GROUPS: &str = url!("/groups");
+pub const GROUPS: &str = url!(SCOPED, "/groups");
 pub const GROUP: &str = url!(GROUPS, "/{group}");
 
 #[ta_objects::UrlParam]

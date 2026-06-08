@@ -20,7 +20,7 @@ use td_tower::layers;
     request = ReadRequest<GroupParam>,
     response = Group,
     connection = ConnectionProvider,
-    scope = "Global",
+    scope = "Project",
     context = AuthzContext,
 )]
 fn service() {
@@ -48,7 +48,9 @@ mod tests {
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::group::GroupDB;
-    use td_objects::types::basic::{AccessTokenId, Description, GroupName, RoleId, UserId};
+    use td_objects::types::basic::{
+        AccessTokenId, Description, GroupName, ProjectId, RoleId, UserId,
+    };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
@@ -72,7 +74,8 @@ mod tests {
             GroupParam::builder()
                 .group(GroupIdName::from_str("analytics")?)
                 .build()?,
-        );
+        )
+        .in_project(ProjectId::sandbox());
 
         let service = ReadGroupService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await?;
@@ -97,7 +100,8 @@ mod tests {
             GroupParam::builder()
                 .group(GroupIdName::from_str("default")?)
                 .build()?,
-        );
+        )
+        .in_project(ProjectId::sandbox());
 
         let service = ReadGroupService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await?;

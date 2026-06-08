@@ -2,6 +2,7 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+use crate::project::service::layer::seed_groups::seed_default_groups;
 use crate::project::service::layer::single_project::reject_create_on_single_project_backend;
 use ta_services::factory::service_factory;
 use td_authz::tower::{AuthzOn, SysAdmin, System};
@@ -38,6 +39,9 @@ fn service() {
         from_fn(With::<ProjectCreateDBBuilder>::build::<ProjectCreateDB>),
         from_fn(insert::<ProjectCreateDB>),
         from_fn(With::<ProjectCreateDB>::extract::<ProjectId>),
+        // A collection resolves its group within its own project, so seed the
+        // system groups (default/source/destination) into the new project.
+        from_fn(seed_default_groups),
         from_fn(By::<ProjectId>::fetch_one::<ProjectDBWithNames>),
         from_fn(With::<ProjectDBWithNames>::try_convert_to::<ProjectReadBuilder, _>),
         from_fn(With::<ProjectReadBuilder>::build::<ProjectRead>),
@@ -69,6 +73,7 @@ mod tests {
                 type_of_val(&With::<ProjectCreateDBBuilder>::build::<ProjectCreateDB>),
                 type_of_val(&insert::<ProjectCreateDB>),
                 type_of_val(&With::<ProjectCreateDB>::extract::<ProjectId>),
+                type_of_val(&seed_default_groups),
                 type_of_val(&By::<ProjectId>::fetch_one::<ProjectDBWithNames>),
                 type_of_val(&With::<ProjectDBWithNames>::try_convert_to::<ProjectReadBuilder, _>),
                 type_of_val(&With::<ProjectReadBuilder>::build::<ProjectRead>),

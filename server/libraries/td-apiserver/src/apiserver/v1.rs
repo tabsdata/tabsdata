@@ -87,9 +87,10 @@ impl ApiServerV1 {
                 )
                 // secure endpoints — split into:
                 //   - global subtree: system-scoped routes that do not nest
-                //     under a project (auth, users, roles, groups, projects
-                //     CRUDL itself, server status, role permissions).
+                //     under a project (auth, users, roles, projects CRUDL
+                //     itself, server status, role permissions).
                 //   - tenant subtree: routes under `/projects/{project}/...`
+                //     (collections, functions, tables, groups, ...)
                 //     where the project_resolver_layer turns the URL segment
                 //     into a real ProjectId on the RequestContext, which the
                 //     ProjectScopeProvider then uses to set the RLS GUC.
@@ -97,7 +98,6 @@ impl ApiServerV1 {
                 .merge({
                     let global = utoipa_axum::router::OpenApiRouter::default()
                         .merge(SecureAuthRouter::router(context.services.clone()))
-                        .merge(GroupsRouter::router(context.services.clone()))
                         .merge(PermissionsRouter::router(context.services.clone()))
                         .merge(ProjectsRouter::router(context.services.clone()))
                         .merge(RolesRouter::router(context.services.clone()))
@@ -109,6 +109,7 @@ impl ApiServerV1 {
                         ));
 
                     let tenant = utoipa_axum::router::OpenApiRouter::default()
+                        .merge(GroupsRouter::router(context.services.clone()))
                         .merge(CollectionsRouter::router(context.services.clone()))
                         .merge(ExecutionsRouter::router(context.services.clone()))
                         .merge(FunctionsRouter::router(context.services.clone()))

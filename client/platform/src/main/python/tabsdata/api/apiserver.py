@@ -185,7 +185,6 @@ class APIServer:
     # server adds a top-level (non-`SCOPED`) resource.
     _GLOBAL_PREFIXES = (
         "/auth",
-        "/groups",
         "/projects",
         "/roles",
         "/runtime-info",
@@ -212,7 +211,7 @@ class APIServer:
 
         Tenant resources live under ``/projects/{project}/...``; the active
         project rides on the connection, so individual callers never thread
-        it. Global endpoints (auth, users, roles, groups, projects, status)
+        it. Global endpoints (auth, users, roles, projects, status)
         are left untouched. With no project selected a tenant call fails fast
         rather than guessing a default -- defaulting, if any, is the server's
         job.

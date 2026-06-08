@@ -20,7 +20,7 @@ use td_tower::layers;
     request = ListRequest<()>,
     response = ListResponse<Group>,
     connection = ConnectionProvider,
-    scope = "Global",
+    scope = "Project",
     context = AuthzContext,
 )]
 fn service() {
@@ -42,7 +42,9 @@ mod tests {
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
-    use td_objects::types::basic::{AccessTokenId, Description, GroupName, RoleId, UserId};
+    use td_objects::types::basic::{
+        AccessTokenId, Description, GroupName, ProjectId, RoleId, UserId,
+    };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
@@ -61,7 +63,8 @@ mod tests {
             UserId::admin(),
             RoleId::sys_admin(),
         )
-        .list((), ListParams::default());
+        .list((), ListParams::default())
+        .in_project(ProjectId::sandbox());
 
         let service = ListGroupService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await?;

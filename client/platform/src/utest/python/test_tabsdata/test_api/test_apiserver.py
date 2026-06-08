@@ -1424,7 +1424,7 @@ class TestResolvePathScoping:
     """`_resolve_path` injects the active project into tenant endpoints.
 
     Tenant resources live under ``/projects/{project}/...``; global endpoints
-    (auth, users, roles, groups, projects, status, runtime-info) never carry a
+    (auth, users, roles, projects, status, runtime-info) never carry a
     project. With no project selected a tenant call must fail fast rather than
     guessing a default.
     """
@@ -1434,7 +1434,6 @@ class TestResolvePathScoping:
         "/users",
         "/users/bob",
         "/roles/r/permissions",
-        "/groups",
         "/projects",
         "/projects/acme",
         "/status",
@@ -1444,6 +1443,7 @@ class TestResolvePathScoping:
         "/collections",
         "/collections/c1/functions",
         "/executions",
+        "/groups",
         "/metrics",
         "/inflight",
         "/function_runs",
@@ -1535,6 +1535,7 @@ class TestEndpointPrefixClassification:
     EXPECTED_TENANT_PREFIXES = {
         "/collections",
         "/executions",
+        "/groups",
         "/transactions",
         "/workers",
         "/function_runs",

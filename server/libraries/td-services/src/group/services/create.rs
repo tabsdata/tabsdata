@@ -10,9 +10,9 @@ use td_objects::dxo::group::{
     Group, GroupBuilder, GroupCreate, GroupDB, GroupDBBuilder, GroupDBWithNames,
 };
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::GroupId;
-use td_queries::By;
+use td_objects::types::basic::{GroupId, ProjectId};
 use td_queries::insert;
+use td_queries::By;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -22,7 +22,7 @@ use td_tower::layers;
     request = CreateRequest<(), GroupCreate>,
     response = Group,
     connection = TransactionProvider,
-    scope = "Global",
+    scope = "Project",
     context = AuthzContext,
 )]
 fn service() {
@@ -33,10 +33,13 @@ fn service() {
         from_fn(With::<CreateRequest<(), GroupCreate>>::extract_data::<GroupCreate>),
         from_fn(With::<GroupCreate>::try_convert_to::<GroupDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<GroupDBBuilder, _>),
+        // The Project scope put the resolved project on the handler; stamp it.
+        from_fn(With::<ProjectId>::set::<GroupDBBuilder>),
         from_fn(With::<GroupDBBuilder>::build::<GroupDB>),
-        // Duplicate names are rejected by the `groups___name___idx`
-        // UNIQUE index — the insert surfaces a `SqlError::UniqueViolation`
-        // to the caller, same pattern as `collections.create`.
+        // Duplicate names within a project are rejected by the
+        // `groups___project_id__name___idx` UNIQUE index — the insert surfaces
+        // a `SqlError::UniqueViolation` to the caller, same pattern as
+        // `collections.create`.
         from_fn(insert::<GroupDB>),
         from_fn(With::<GroupDB>::extract::<GroupId>),
         from_fn(By::<GroupId>::fetch_one::<GroupDBWithNames>),
@@ -50,15 +53,24 @@ mod tests {
     use super::*;
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
-    use td_error::TdError;
     use td_error::assert_service_error;
-    use td_objects::Buildable;
+    use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::errors::SqlError;
-    use td_objects::types::basic::{AccessTokenId, Description, GroupName, RoleId, UserId};
-    use td_queries::LiveEntry;
+    use td_objects::types::basic::{
+        AccessTokenId, Description, GroupName, ProjectId, RoleId, UserId,
+    };
+    use td_objects::Buildable;
     use td_queries::test_utils::SeedEntry;
+    use td_queries::LiveEntry;
     use td_tower::ctx_service::RawOneshot;
+
+    use crate::project::service::ProjectServices;
+    use crate::Context;
+    use ta_services::factory::ServiceFactory;
+    use td_database::sea_query::kind::{DatabaseBackend, DatabaseKind};
+    use td_objects::dxo::project::ProjectCreate;
+    use td_objects::types::basic::ProjectName;
 
     #[td_test::test(db)]
     async fn test_create_group(db: TdPool) -> Result<(), TdError> {
@@ -72,7 +84,8 @@ mod tests {
             UserId::admin(),
             RoleId::sys_admin(),
         )
-        .create((), create);
+        .create((), create)
+        .in_project(ProjectId::sandbox());
 
         let service = CreateGroupService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await?;
@@ -91,9 +104,10 @@ mod tests {
         Ok(())
     }
 
-    /// Creating a group with a name that already exists is rejected by
-    /// the `groups___name___idx` UNIQUE constraint, surfacing as
-    /// `SqlError::UniqueViolation` — same pattern as `collections.create`.
+    /// Creating a group with a name that already exists in the project is
+    /// rejected by the `groups___project_id__name___idx` UNIQUE constraint,
+    /// surfacing as `SqlError::UniqueViolation` — same pattern as
+    /// `collections.create`.
     /// (Case-insensitive uniqueness is a follow-up; for now the DB
     /// constraint is exact-match, matching the collections convention.)
     #[td_test::test(db)]
@@ -115,12 +129,70 @@ mod tests {
             UserId::admin(),
             RoleId::sys_admin(),
         )
-        .create((), create);
+        .create((), create)
+        .in_project(ProjectId::sandbox());
 
         assert_service_error(service, request, |err| match err {
             SqlError::UniqueViolation(_, _, _) => {}
             other => panic!("Expected 'UniqueViolation', got {other:?}"),
         })
         .await;
+    }
+
+    /// Group names are unique *within* a project, not globally — the
+    /// `groups___project_id__name___idx` is on `(project_id, name)`. Two projects
+    /// can each hold a group of the same name. (The within-project rejection is
+    /// covered by `test_create_duplicate_name_rejected`.) PostgreSQL only
+    /// (multi-project needs RLS).
+    #[td_test::test(db)]
+    async fn test_group_name_unique_per_project(db: TdPool) -> Result<(), TdError> {
+        if !matches!(db.kind(), DatabaseBackend::Postgres) {
+            return Ok(());
+        }
+
+        let ctx = || {
+            RequestContext::with(
+                AccessTokenId::default(),
+                UserId::admin(),
+                RoleId::sys_admin(),
+            )
+        };
+        let dup = || {
+            GroupCreate::builder()
+                .try_name("dup")
+                .unwrap()
+                .try_description("d")
+                .unwrap()
+                .build()
+                .unwrap()
+        };
+
+        // `dup` in sandbox.
+        CreateGroupService::with_defaults(db.clone())
+            .service()
+            .raw_oneshot(ctx().create((), dup()).in_project(ProjectId::sandbox()))
+            .await?;
+
+        // A second project, then the same group name within it — succeeds
+        // because uniqueness is scoped by `project_id`.
+        let p2 = ProjectServices::build(&Context::with_defaults(db.clone()))
+            .create
+            .service()
+            .raw_oneshot(
+                ctx().create(
+                    (),
+                    ProjectCreate::builder()
+                        .name(&ProjectName::try_from("p2")?)
+                        .description(&Description::try_from("p2")?)
+                        .build()?,
+                ),
+            )
+            .await?;
+
+        CreateGroupService::with_defaults(db.clone())
+            .service()
+            .raw_oneshot(ctx().create((), dup()).in_project(p2.id))
+            .await?;
+        Ok(())
     }
 }

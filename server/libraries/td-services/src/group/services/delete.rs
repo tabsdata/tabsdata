@@ -21,7 +21,7 @@ use td_tower::layers;
     request = DeleteRequest<GroupParam>,
     response = (),
     connection = TransactionProvider,
-    scope = "Global",
+    scope = "Project",
     context = AuthzContext,
 )]
 fn service() {
@@ -51,7 +51,9 @@ mod tests {
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::types::basic::{AccessTokenId, Description, GroupName, RoleId, UserId};
+    use td_objects::types::basic::{
+        AccessTokenId, Description, GroupName, ProjectId, RoleId, UserId,
+    };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
@@ -75,7 +77,8 @@ mod tests {
             GroupParam::builder()
                 .group(GroupIdName::from_str(&format!("~{}", group.id))?)
                 .build()?,
-        );
+        )
+        .in_project(ProjectId::sandbox());
 
         let service = DeleteGroupService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
@@ -102,7 +105,8 @@ mod tests {
             GroupParam::builder()
                 .group(GroupIdName::from_str("source")?)
                 .build()?,
-        );
+        )
+        .in_project(ProjectId::sandbox());
 
         let service = DeleteGroupService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;

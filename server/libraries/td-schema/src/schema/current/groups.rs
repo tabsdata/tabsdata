@@ -20,6 +20,7 @@ pub struct GroupsWithNames;
 pub enum Groups {
     Table,
     Id,
+    ProjectId,
     Name,
     Description,
     CreatedOn,
@@ -29,7 +30,7 @@ pub enum Groups {
     System,
 }
 
-use td_security::ENCODED_ID_SYSTEM as SYSTEM_USER_ID;
+use td_security::{ENCODED_ID_PROJECT_SANDBOX, ENCODED_ID_SYSTEM as SYSTEM_USER_ID};
 
 pub(super) struct Defs;
 
@@ -39,7 +40,13 @@ impl Entity for Defs {
             Table::create()
                 .table(Groups::Table)
                 .col(ColumnDef::new(Groups::Id).text().not_null().primary_key())
-                .col(ColumnDef::new(Groups::Name).text().not_null().unique_key())
+                // Tenant tag. No base default — fail-closed on every backend: a
+                // write that omits it hits NOT NULL. On postgres the RLS phase
+                // sets the column default to read `app.project_id` (the request's
+                // project); the no-RLS single-project backends (sqlite/mysql) keep
+                // no default at all, so writes there must set `project_id`.
+                .col(ColumnDef::new(Groups::ProjectId).text().not_null())
+                .col(ColumnDef::new(Groups::Name).text().not_null())
                 .col(ColumnDef::new(Groups::Description).text().not_null())
                 .col(ColumnDef::new(Groups::CreatedOn).timestamp_with_time_zone().not_null())
                 .col(ColumnDef::new(Groups::CreatedById).text().not_null())
@@ -51,7 +58,17 @@ impl Entity for Defs {
     }
 
     fn create_indices(&self) -> Vec<IndexCreateStatement> {
-        vec![Index::create().name("groups___name___idx").table(Groups::Table).col(Groups::Name).unique().to_owned()]
+        // Leads with project_id so it serves the RLS predicate; unique makes
+        // group names unique within a project, not globally.
+        vec![
+            Index::create()
+                .name("groups___project_id__name___idx")
+                .table(Groups::Table)
+                .col(Groups::ProjectId)
+                .col(Groups::Name)
+                .unique()
+                .to_owned(),
+        ]
     }
 
     fn create_views(&self, b: &Backend) -> Vec<ViewDef> {
@@ -61,6 +78,7 @@ impl Entity for Defs {
             GroupsWithNames,
             Query::select()
                 .expr(Expr::col((Groups::Table, Groups::Id)))
+                .expr(Expr::col((Groups::Table, Groups::ProjectId)))
                 .expr(Expr::col((Groups::Table, Groups::Name)))
                 .expr(Expr::col((Groups::Table, Groups::Description)))
                 .expr(Expr::col((Groups::Table, Groups::CreatedOn)))
@@ -107,6 +125,7 @@ impl Entity for Defs {
                     .into_table(Groups::Table)
                     .columns([
                         Groups::Id,
+                        Groups::ProjectId,
                         Groups::Name,
                         Groups::Description,
                         Groups::CreatedOn,
@@ -117,6 +136,7 @@ impl Entity for Defs {
                     ])
                     .values_panic([
                         (*id).into(),
+                        ENCODED_ID_PROJECT_SANDBOX.into(),
                         (*name).into(),
                         (*desc).into(),
                         Keyword::CurrentTimestamp.into(),
