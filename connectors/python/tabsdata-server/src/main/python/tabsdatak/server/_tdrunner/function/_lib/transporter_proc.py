@@ -77,6 +77,11 @@ def run_transporter(request_yaml: Path, report: Path) -> int:
         binary = PythonEnvironment().binary(TRANSPORTER_BINARY_NAME)
     except BinaryNotFoundError as error:
         raise TransporterNotFoundError() from error
+    # The report path's parent dir may not exist yet under the
+    # publisher init-container chain — the `shared/shuttle/response/`
+    # subdir of the shared emptyDir starts out empty (the
+    # image-template-provided dir is overlaid by the emptyDir mount).
+    report.parent.mkdir(parents=True, exist_ok=True)
     cmd = [
         str(binary),
         "--request",
