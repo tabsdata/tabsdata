@@ -15,6 +15,7 @@ from tabsdatak.server._tdrunner.function._lib.cli import (
     run_command,
 )
 from tabsdatak.server._tdrunner.function._lib.errors import (
+    CommandErrorCode,
     CommandSpecificError,
     InvalidOptionsError,
     UndefinedEnvError,
@@ -244,7 +245,7 @@ def test_run_command_main_returns_int():
 
 def test_run_command_invalid_options(capsys):
     def main():
-        raise InvalidOptionsError("bad args")
+        raise CommandErrorCode.CMD_1.exception(detail="bad args")
 
     assert run_command(main) == 1
     captured = capsys.readouterr()
@@ -253,11 +254,11 @@ def test_run_command_invalid_options(capsys):
 
 def test_run_command_undefined_env(capsys):
     def main():
-        raise UndefinedEnvError("FOO unset")
+        raise CommandErrorCode.CMD_2.exception(var="FOO")
 
     assert run_command(main) == 2
     captured = capsys.readouterr()
-    assert "FOO unset" in captured.err
+    assert "FOO" in captured.err
 
 
 def test_run_command_command_specific(capsys):

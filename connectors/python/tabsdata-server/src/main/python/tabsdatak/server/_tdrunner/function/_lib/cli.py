@@ -48,8 +48,8 @@ from tabsdatak.server._tdrunner.function._lib.errors import (
     EXIT_PREMATURE,
     EXIT_UNEXPECTED,
     CommandError,
-    InvalidOptionsError,
-    UndefinedEnvError,
+    CommandErrorCode,
+    CommandException,
 )
 from tabsdatak.server._tdrunner.function._lib.liveness import install_liveness_handler
 from tabsdatak.server._tdrunner.function.commands import tabsdata_command
@@ -83,9 +83,7 @@ def resolve_value(arg: str) -> str:
         try:
             return os.environ[var_name]
         except KeyError as exc:
-            raise UndefinedEnvError(
-                f"environment variable {var_name!r} is not set"
-            ) from exc
+            raise CommandErrorCode.CMD_2.exception(cause=exc, var=var_name)
     return arg
 
 
@@ -106,8 +104,10 @@ def resolve_flag(arg: str) -> bool:
         return True
     if lower == "false":
         return False
-    raise InvalidOptionsError(
-        f"flag value must be 'true' or 'false' (case insensitive), got {value!r}"
+    raise CommandErrorCode.CMD_1.exception(
+        detail=(
+            f"flag value must be 'true' or 'false' (case insensitive), got {value!r}"
+        ),
     )
 
 
@@ -115,7 +115,7 @@ class _Parser(argparse.ArgumentParser):
     """ArgumentParser that turns parse errors into InvalidOptionsError."""
 
     def error(self, message: str) -> NoReturn:  # type: ignore[override]
-        raise InvalidOptionsError(message)
+        raise CommandErrorCode.CMD_1.exception(detail=message)
 
 
 def _make_print_action(text: str) -> type[argparse.Action]:
@@ -233,10 +233,12 @@ def build_parser(
 
 
 def run_command(main_fn: Callable[[], int | None]) -> int:
-    """Run ``main_fn`` and turn its result into an exit code.
+    """Run a command's ``main_fn``, mapping a raised
+    :class:`CommandException` (new) or :class:`CommandError` (legacy
+    shim) to the matching process exit code.
 
-    ``CommandError`` is mapped to its declared ``exit_code`` (after
-    printing the message to stderr). A return value of ``None`` is
+    Each mapped exception is printed to stderr first, then the
+    declared ``exit_code`` is returned. A return value of ``None`` is
     treated as success (0); anything else is coerced via ``int()``.
 
     Test-only helper: production commands go through the ``command``
@@ -246,12 +248,15 @@ def run_command(main_fn: Callable[[], int | None]) -> int:
     """
     try:
         result = main_fn()
-    except CommandError as error:
-        print(
-            str(error),
-            file=sys.stderr,
-        )
-        return error.exit_code
+    except CommandException as exc:
+        print(str(exc), file=sys.stderr)
+        return exc.exit_code
+    except CommandError as exc:
+        # Legacy shim path: command modules still raising
+        # ``CommandSpecificError(exit_code, msg)``. Removed once every
+        # command has migrated to its own ``error.py`` (TD-2263).
+        print(str(exc), file=sys.stderr)
+        return exc.exit_code
     if result is None:
         return 0
     return int(result)
