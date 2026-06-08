@@ -12,9 +12,9 @@ import pytest
 from tabsdatak.server._tdrunner.function._lib.transporter_proc import (
     TransporterNotFoundError,
 )
-from tabsdatak.server._tdrunner.function.commands.run_transporter import (
-    EXIT_BINARY_MISSING,
-    main,
+from tabsdatak.server._tdrunner.function.commands.run_transporter import main
+from tabsdatak.server._tdrunner.function.commands.run_transporter.error import (
+    BinaryMissingError,
 )
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
@@ -100,7 +100,7 @@ def test_main_missing_binary_returns_command_specific(monkeypatch, tmp_path, htt
         tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert main() == EXIT_BINARY_MISSING
+    assert main() == BinaryMissingError.exit_code
 
 
 def test_main_invalid_options_returns_1(monkeypatch):

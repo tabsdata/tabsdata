@@ -14,10 +14,12 @@ import argparse
 from pathlib import Path
 
 from tabsdatak.server._tdrunner.function._lib.cli import build_parser, command
-from tabsdatak.server._tdrunner.function._lib.errors import CommandSpecificError
 from tabsdatak.server._tdrunner.function._lib.transporter_proc import (
     TransporterNotFoundError,
     run_transporter,
+)
+from tabsdatak.server._tdrunner.function.commands.run_transporter.error import (
+    RunTransporterErrorCode,
 )
 
 VERSION = "0.1.0"
@@ -29,8 +31,6 @@ MAN = (
     "returned. The report file must not already exist; the binary "
     "writes its execution report there."
 )
-
-EXIT_BINARY_MISSING = 10
 
 
 def _build_parser():
@@ -63,9 +63,7 @@ def main(args: argparse.Namespace) -> int:
     try:
         return run_transporter(request_yaml, report)
     except TransporterNotFoundError as exc:
-        raise CommandSpecificError(
-            EXIT_BINARY_MISSING, f"td_transporter not found: {exc}"
-        ) from exc
+        raise RunTransporterErrorCode.RUN_TR_1.exception(cause=exc, detail=str(exc))
 
 
 if __name__ == "__main__":  # pragma: no cover
