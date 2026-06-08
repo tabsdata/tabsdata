@@ -75,18 +75,51 @@ def _set_argv(
     )
 
 
+def _info():
+    return {
+        "collection": "c",
+        "collection_id": 1,
+        "function_version_id": "FV-1",
+        "function_defined_on": 1780000000000,
+        "function": "fn",
+        "function_run_id": 4,
+        "function_bundle": {"uri": "file:///bundle.tgz", "env_prefix": "ROOT"},
+        "function_stage": {"uri": "file:///stage", "env_prefix": "ROOT"},
+        "triggered_on": 1780000000100,
+        "transaction_id": 3,
+        "execution_id": 2,
+        "function_data": {"uri": "file:///data", "env_prefix": "ROOT"},
+        "scheduled_on": 1780000000200,
+    }
+
+
+def _output_table(entry, index):
+    table = {
+        "collection_id": 1,
+        "collection": "c",
+        "table_id": "T-1",
+        "table_version_id": "TV-1",
+        "table_data_version_id": "TDV-1",
+        "location": {"uri": "file:///out.parquet", "env_prefix": "ROOT"},
+        "table_pos": index,
+        **entry,
+    }
+    return {"Table": table}
+
+
 def _write_request(path, *, output=None, system_output=None):
     body = {
-        "info": {
-            "collection": "c",
-            "collection_id": 1,
-            "execution_id": 2,
-            "transaction_id": 3,
-            "function_run_id": 4,
-            "function_bundle": {"uri": "file:///bundle.tgz"},
-        },
-        "output": output or [],
-        "system_output": system_output or [],
+        "FunctionV2": {
+            "info": _info(),
+            "output": [
+                _output_table(entry, index)
+                for index, entry in enumerate(output or [])
+            ],
+            "system_output": [
+                _output_table(entry, index)
+                for index, entry in enumerate(system_output or [])
+            ],
+        }
     }
     path.write_text(yaml.safe_dump(body))
     return path

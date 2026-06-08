@@ -63,14 +63,23 @@ def _write_request(path: Path) -> Path:
     path.write_text(
         yaml.safe_dump(
             {
-                "info": {
-                    "collection": "c",
-                    "collection_id": 1,
-                    "execution_id": "exec-42",
-                    "transaction_id": "tx-42",
-                    "function_run_id": 7,
-                    "function_bundle": {"uri": "file:///bundle.tgz"},
-                },
+                "FunctionV2": {
+                    "info": {
+                        "collection": "c",
+                        "collection_id": 1,
+                        "function_version_id": "FV-1",
+                        "function_defined_on": 1780000000000,
+                        "function": "fn",
+                        "function_run_id": 7,
+                        "function_bundle": {"uri": "file:///bundle.tgz"},
+                        "function_stage": {"uri": "file:///stage"},
+                        "triggered_on": 1780000000100,
+                        "transaction_id": "tx-42",
+                        "execution_id": "exec-42",
+                        "function_data": {"uri": "file:///data"},
+                        "scheduled_on": 1780000000200,
+                    },
+                }
             }
         )
     )

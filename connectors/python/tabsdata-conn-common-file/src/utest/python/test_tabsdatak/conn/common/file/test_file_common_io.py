@@ -32,10 +32,11 @@ def test_transporter_env_repr_carries_name():
     assert "FOO_BAR" in repr(e)
 
 
-def test_transporter_literal_repr_carries_value():
+def test_transporter_literal_repr_redacts_value():
     lit = _transporter.TransporterLiteral("us-east-1")
     assert lit.value == "us-east-1"
-    assert "us-east-1" in repr(lit)
+    assert "us-east-1" not in repr(lit)
+    assert "***redacted***" in repr(lit)
 
 
 # --- Location classes --------------------------------------------

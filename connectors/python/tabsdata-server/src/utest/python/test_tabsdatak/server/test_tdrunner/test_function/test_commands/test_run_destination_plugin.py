@@ -116,17 +116,29 @@ def built_bundle(tmp_path, user_project, fixture_subscriber) -> Path:
     return extracted
 
 
-def _write_request(path: Path) -> Path:
+def _write_request(path: Path, bundle_uri: str = "file:///bundle.tgz") -> Path:
     path.write_text(
         yaml.safe_dump({
-            "info": {
-                "collection": "c",
-                "collection_id": 1,
-                "execution_id": 42,
-                "transaction_id": 99,
-                "function_run_id": 7,
-                "function_bundle": {"uri": "file:///bundle.tgz"},
-            },
+            "FunctionV2": {
+                "info": {
+                    "collection": "c",
+                    "collection_id": 1,
+                    "function_version_id": "FV-1",
+                    "function_defined_on": 1780000000000,
+                    "function": "fn",
+                    "function_run_id": 7,
+                    "function_bundle": {"uri": bundle_uri, "env_prefix": "ROOT"},
+                    "function_stage": {
+                        "uri": "file:///stage",
+                        "env_prefix": "ROOT",
+                    },
+                    "triggered_on": 1780000000100,
+                    "transaction_id": 99,
+                    "execution_id": 42,
+                    "function_data": {"uri": "file:///data", "env_prefix": "ROOT"},
+                    "scheduled_on": 1780000000200,
+                },
+            }
         })
     )
     return path

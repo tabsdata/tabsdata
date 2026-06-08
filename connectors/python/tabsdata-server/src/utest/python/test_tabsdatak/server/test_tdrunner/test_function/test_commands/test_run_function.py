@@ -351,19 +351,54 @@ def multi_transformer_bundle(tmp_path, monkeypatch) -> Path:
             del sys.modules[name]
 
 
+def _info(bundle_uri: str = "file:///bundle.tgz") -> dict:
+    return {
+        "collection": "c",
+        "collection_id": 1,
+        "function_version_id": "FV-1",
+        "function_defined_on": 1780000000000,
+        "function": "fn",
+        "function_run_id": 7,
+        "function_bundle": {"uri": bundle_uri, "env_prefix": "ROOT"},
+        "function_stage": {"uri": "file:///stage", "env_prefix": "ROOT"},
+        "triggered_on": 1780000000100,
+        "transaction_id": 99,
+        "execution_id": 42,
+        "function_data": {"uri": "file:///data", "env_prefix": "ROOT"},
+        "scheduled_on": 1780000000200,
+    }
+
+
+def _input_table(entry: dict, index: int) -> dict:
+    table = {
+        "collection_id": 1,
+        "collection": "c",
+        "table_id": "T-1",
+        "table_version_id": "TV-1",
+        "input_idx": index,
+        "table_pos": index,
+        "version_pos": 0,
+        **entry,
+    }
+    return {"Table": table}
+
+
+def _output_table(entry: dict, index: int) -> dict:
+    table = {
+        "collection_id": 1,
+        "collection": "c",
+        "table_id": "T-1",
+        "table_version_id": "TV-1",
+        "table_data_version_id": "PDV-1",
+        "location": {"uri": "file:///irrelevant", "env_prefix": "ROOT"},
+        "table_pos": index,
+        **entry,
+    }
+    return {"Table": table}
+
+
 def _write_request(path: Path) -> Path:
-    path.write_text(
-        yaml.safe_dump({
-            "info": {
-                "collection": "c",
-                "collection_id": 1,
-                "execution_id": 42,
-                "transaction_id": 99,
-                "function_run_id": 7,
-                "function_bundle": {"uri": "file:///bundle.tgz"},
-            },
-        })
-    )
+    path.write_text(yaml.safe_dump({"FunctionV2": {"info": _info()}}))
     return path
 
 
@@ -1140,29 +1175,34 @@ def _write_inputs_manifest_for(input_files: list[str], path: Path) -> None:
 def _request_with_state_slots(
     path: Path, *, state_in_name: str = "iv-in", state_out_name: str = "iv-out"
 ) -> Path:
+    info = _info()
+    info["execution_id"] = 2
+    info["transaction_id"] = 3
+    info["function_run_id"] = 4
     path.write_text(
         yaml.safe_dump({
-            "info": {
-                "collection": "c",
-                "collection_id": 1,
-                "execution_id": 2,
-                "transaction_id": 3,
-                "function_run_id": 4,
-                "function_bundle": {"uri": "file:///bundle.tgz"},
-            },
-            "output": [{"name": "my_table"}],
-            "system_input": [
-                {
-                    "name": state_in_name,
-                    "location": {"uri": "file:///irrelevant"},
-                }
-            ],
-            "system_output": [
-                {
-                    "name": state_out_name,
-                    "location": {"uri": "file:///irrelevant"},
-                }
-            ],
+            "FunctionV2": {
+                "info": info,
+                "output": [_output_table({"name": "my_table"}, 0)],
+                "system_input": [
+                    _input_table(
+                        {
+                            "name": state_in_name,
+                            "location": {"uri": "file:///irrelevant"},
+                        },
+                        0,
+                    )
+                ],
+                "system_output": [
+                    _output_table(
+                        {
+                            "name": state_out_name,
+                            "location": {"uri": "file:///irrelevant"},
+                        },
+                        0,
+                    )
+                ],
+            }
         })
     )
     return path

@@ -26,6 +26,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from tenacity import (
+    retry,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_fixed,
+)
+
 from tabsdatak.conn.common._validation import fqn, unfqn
 from tabsdatak.conn.databricks import DatabricksDestConn, DatabricksSrcConn
 from tabsdatak.conn.databricks._validation import _DATABRICKS_FQN_DEF
@@ -52,6 +59,8 @@ _DOWNLOAD_READ_TIMEOUT_SECONDS = 300
 _DOWNLOAD_RETRY_ATTEMPTS = 12
 _DOWNLOAD_RETRY_WAIT_SECONDS = 5
 _PARQUET_COMPRESSION = "snappy"
+_COPY_INTO_RETRY_ATTEMPTS = 6
+_COPY_INTO_RETRY_WAIT_SECONDS = 5
 
 
 # --- Read cfg / write cfg dataclasses -------------------------------
@@ -466,11 +475,29 @@ def upload_file_to_volume(
     """Upload ``local_path`` to the conn's volume and return the
     in-volume absolute path (suitable for ``read_files`` /
     ``COPY INTO``)."""
-    target = f"{_volume_path(conn, fq_table)}/{local_path.name}"
+    staged_name = f"{uuid.uuid4().hex}_{local_path.name}"
+    target = f"{_volume_path(conn, fq_table)}/{staged_name}"
     logger.debug("Uploading %s to volume %s", local_path, target)
     with open(local_path, "rb") as f:
         ws_client.files.upload(target, f)
     return target
+
+
+def _is_volume_path_not_found(exc: BaseException) -> bool:
+    from databricks.sql.exc import ServerOperationError
+
+    return isinstance(exc, ServerOperationError) and "PATH_NOT_FOUND" in str(exc)
+
+
+@retry(
+    retry=retry_if_exception(_is_volume_path_not_found),
+    stop=stop_after_attempt(_COPY_INTO_RETRY_ATTEMPTS),
+    wait=wait_fixed(_COPY_INTO_RETRY_WAIT_SECONDS),
+    reraise=True,
+)
+def _execute_volume_statement(cursor, statement: str, parameters: dict) -> None:
+    logger.debug("Executing: %s", statement)
+    cursor.execute(statement, **parameters)
 
 
 def copy_into_table(
@@ -496,10 +523,8 @@ def copy_into_table(
             f"FILEFORMAT = PARQUET"
             f"{cfg.support_replace_copy_options}"
         )
-        logger.debug("Executing: %s", create_stmt)
-        cursor.execute(create_stmt, **cfg.support_replace_create_table)
-        logger.debug("Executing: %s", copy_stmt)
-        cursor.execute(copy_stmt, **cfg.support_replace_copy_into)
+        _execute_volume_statement(cursor, create_stmt, cfg.support_replace_create_table)
+        _execute_volume_statement(cursor, copy_stmt, cfg.support_replace_copy_into)
         return
     if cfg.if_table_exists == "append":
         merge = (
@@ -517,10 +542,8 @@ def copy_into_table(
             f"FILEFORMAT = PARQUET "
             f"COPY_OPTIONS ({merge}{cfg.support_append_copy_options})"
         )
-        logger.debug("Executing: %s", create_stmt)
-        cursor.execute(create_stmt, **cfg.support_append_create_table)
-        logger.debug("Executing: %s", copy_stmt)
-        cursor.execute(copy_stmt, **cfg.support_append_copy_into)
+        _execute_volume_statement(cursor, create_stmt, cfg.support_append_create_table)
+        _execute_volume_statement(cursor, copy_stmt, cfg.support_append_copy_into)
         return
     raise ValueError(
         f"Invalid if_table_exists {cfg.if_table_exists!r}: "

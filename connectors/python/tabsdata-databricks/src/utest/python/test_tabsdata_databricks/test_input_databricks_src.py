@@ -35,6 +35,8 @@ from test_tabsdata_databricks.test_input_databricks_named_conn.example import (
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+pytestmark = pytest.mark.xdist_group("databricks-plugin_integration_seq")
+
 DATABRICKS_NAMED_CONN_NAME = "test_databricks_named"
 
 

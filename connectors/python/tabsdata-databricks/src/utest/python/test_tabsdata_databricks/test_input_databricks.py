@@ -23,6 +23,7 @@ from test_tabsdata.fntest import tdfnrun
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+pytestmark = pytest.mark.xdist_group("databricks-plugin_integration_seq")
 
 DATABRICKS_BUDGET_SAFETY_TIMEOUT = 600
 

@@ -54,6 +54,8 @@ from test_tabsdata_databricks.test_output_databricks_none.example import (
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+pytestmark = pytest.mark.xdist_group("databricks-plugin_integration_seq")
+
 ROOT_PROJECT_DIR = ROOT_FOLDER
 RESPONSE_FOLDER = "response_folder"
 

@@ -48,22 +48,56 @@ def _set_argv(
     )
 
 
+def _info(bundle_uri: str) -> dict:
+    return {
+        "collection": "c",
+        "collection_id": 1,
+        "function_version_id": "FV-1",
+        "function_defined_on": 1780000000000,
+        "function": "fn",
+        "function_run_id": 4,
+        "function_bundle": {"uri": bundle_uri, "env_prefix": "ROOT"},
+        "function_stage": {"uri": "file:///stage", "env_prefix": "ROOT"},
+        "triggered_on": 1780000000100,
+        "transaction_id": 3,
+        "execution_id": 2,
+        "function_data": {"uri": "file:///data", "env_prefix": "ROOT"},
+        "scheduled_on": 1780000000200,
+    }
+
+
+def _output_table(entry: dict, index: int) -> dict | None:
+    # An output table with no apiserver-allocated Location is not part of
+    # request.output on the wire (OutputTable requires a Location), so a
+    # location-less entry contributes no table at all.
+    if "location" not in entry:
+        return None
+    table = {
+        "collection_id": 1,
+        "collection": "c",
+        "table_id": "T-1",
+        "table_version_id": "TV-1",
+        "table_data_version_id": "PDV-1",
+        "table_pos": index,
+        **entry,
+    }
+    return {"Table": table}
+
+
 def _write_request(
     path: Path,
     *,
     output: list | None = None,
     bundle_uri: str = "file:///bundle.tgz",
 ) -> Path:
+    wrapped = [
+        _output_table(entry, index) for index, entry in enumerate(output or [])
+    ]
     body = {
-        "info": {
-            "collection": "c",
-            "collection_id": 1,
-            "execution_id": 2,
-            "transaction_id": 3,
-            "function_run_id": 4,
-            "function_bundle": {"uri": bundle_uri},
-        },
-        "output": output or [],
+        "FunctionV2": {
+            "info": _info(bundle_uri),
+            "output": [table for table in wrapped if table is not None],
+        }
     }
     path.write_text(yaml.safe_dump(body))
     return path
