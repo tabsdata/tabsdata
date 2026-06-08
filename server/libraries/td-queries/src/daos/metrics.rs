@@ -421,6 +421,7 @@ fn edge_aggregates_query(req: &MetricsRequest) -> SelectStatement {
 
     let mut inner = edge_real_branch(req);
     inner.union(UnionType::All, edge_synth_branch(req));
+    inner.union(UnionType::All, edge_egress_branch(req));
 
     let mut outer = Query::select();
     outer
@@ -778,6 +779,196 @@ fn edge_synth_branch(req: &MetricsRequest) -> SelectStatement {
         ),
     );
     // Synthetic edges have no source dim → target-only dim filters.
+    apply_dim_filter(
+        &mut stmt,
+        &req.collections,
+        (
+            FunctionRunDBWithNamesIden::Table,
+            FunctionRunDBWithNamesIden::CollectionId,
+        ),
+    );
+    apply_dim_filter(
+        &mut stmt,
+        &req.groups,
+        (
+            FunctionRunDBWithNamesIden::Table,
+            FunctionRunDBWithNamesIden::GroupId,
+        ),
+    );
+
+    stmt
+}
+
+/// Egress-edges branch: each row is a (consumer LFR, source LTDV) pair
+/// where the consumer LFR is topologically a "subscriber" — has user
+/// inputs but emits no non-system output LTDV. `target_kind` is
+/// `ExternalDestination` and `target` / `target_name` are NULL.
+///
+/// The edge's `source` is the **subscriber LFR's** collection/group —
+/// where the egress departs from. The real edge upstream
+/// (producer → subscriber's-collection) is reported separately.
+/// Sankey flow: producer → subscriber-coll (real) → ExternalDestination
+/// (egress). Magnitudes are source-LTDV-attributed (same as real edges:
+/// "the data flowing on this edge is the source LTDV's").
+fn edge_egress_branch(req: &MetricsRequest) -> SelectStatement {
+    let bucket_iden = bucket_column(req.unit);
+    // The egress edge's `source` is the subscriber LFR's own dim
+    // (where the egress departs). In real edges the consumer LFR's
+    // dim is the *target*, so we project via `target_dim_iden` —
+    // here it happens to coincide with the egress edge's source.
+    let lfr_dim_iden = target_dim_iden(req.dim);
+    let lfr_dim_name_iden = target_dim_name_iden(req.dim);
+
+    let null_target: SimpleExpr = Expr::value(Value::String(None));
+    let null_target_name: SimpleExpr = Expr::value(Value::String(None));
+
+    let mut stmt = Query::select();
+    stmt.distinct()
+        .expr_as(
+            Expr::col((FunctionRunDBWithNamesIden::Table, bucket_iden)),
+            Alias::new("bucket"),
+        )
+        .expr_as(kind_lit(NodeKind::Dim), Alias::new("source_kind"))
+        .expr_as(
+            Expr::col((FunctionRunDBWithNamesIden::Table, lfr_dim_iden)),
+            Alias::new("source"),
+        )
+        .expr_as(
+            Expr::col((FunctionRunDBWithNamesIden::Table, lfr_dim_name_iden)),
+            Alias::new("source_name"),
+        )
+        .expr_as(
+            kind_lit(NodeKind::ExternalDestination),
+            Alias::new("target_kind"),
+        )
+        .expr_as(null_target, Alias::new("target"))
+        .expr_as(null_target_name, Alias::new("target_name"))
+        .expr_as(
+            Expr::col((
+                FunctionRunDBWithNamesIden::Table,
+                FunctionRunDBWithNamesIden::Status,
+            )),
+            Alias::new("status"),
+        )
+        .expr_as(
+            Expr::col((
+                FunctionRunDBWithNamesIden::Table,
+                FunctionRunDBWithNamesIden::Id,
+            )),
+            Alias::new("lfr_id"),
+        )
+        .expr_as(
+            Expr::col((
+                TableDataVersionDBWithNamesIden::Table,
+                LogicalTableDataVersionDBIden::Id,
+            )),
+            Alias::new("source_ltdv_id"),
+        )
+        .expr_as(
+            Expr::col((
+                TableDataVersionDBWithNamesIden::Table,
+                TableDataVersionDBWithNamesIden::RowCount,
+            )),
+            Alias::new("source_row_count"),
+        )
+        .expr_as(
+            Expr::col((
+                TableDataVersionDBWithNamesIden::Table,
+                TableDataVersionDBWithNamesIden::DataBytes,
+            )),
+            Alias::new("source_data_bytes"),
+        )
+        .from(FunctionRunDBWithNamesIden::Table)
+        .join(
+            JoinType::InnerJoin,
+            LogicalFunctionRunInputDBIden::Table,
+            Expr::col((
+                LogicalFunctionRunInputDBIden::Table,
+                LogicalFunctionRunInputDBIden::LogicalFunctionRunId,
+            ))
+            .equals((
+                FunctionRunDBWithNamesIden::Table,
+                FunctionRunDBWithNamesIden::Id,
+            )),
+        )
+        .join(
+            JoinType::InnerJoin,
+            TableDataVersionDBWithNamesIden::Table,
+            Expr::col((
+                TableDataVersionDBWithNamesIden::Table,
+                LogicalTableDataVersionDBIden::Id,
+            ))
+            .equals((
+                LogicalFunctionRunInputDBIden::Table,
+                LogicalFunctionRunInputDBIden::RequirementLogicalTableDataVersionId,
+            )),
+        )
+        // Qualifying LFRI: dep_pos >= 0 and ltdv id not null.
+        .and_where(
+            Expr::col((
+                LogicalFunctionRunInputDBIden::Table,
+                LogicalFunctionRunInputDBIden::RequirementLogicalTableDataVersionId,
+            ))
+            .is_not_null(),
+        )
+        .and_where(
+            Expr::col((
+                LogicalFunctionRunInputDBIden::Table,
+                LogicalFunctionRunInputDBIden::RequirementDependencyPos,
+            ))
+            .gte(0),
+        )
+        // System-table exclusion on source LTDV.
+        .and_where(
+            Expr::col((
+                TableDataVersionDBWithNamesIden::Table,
+                LogicalTableDataVersionDBIden::FunctionParamPos,
+            ))
+            .gte(0),
+        )
+        // Topological subscriber: LFR has no non-system output LTDV.
+        // Correlated NOT EXISTS lets the planner use the LTDV
+        // (producer_lfr_id) index and short-circuit on first match,
+        // unlike a NOT IN over a non-NULL-checked subquery.
+        .and_where(
+            Expr::exists({
+                let mut sub = Query::select();
+                sub.expr(Expr::val(1))
+                    .from(LogicalTableDataVersionDBIden::Table)
+                    .and_where(
+                        Expr::col((
+                            LogicalTableDataVersionDBIden::Table,
+                            LogicalTableDataVersionDBIden::ProducerLogicalFunctionRunId,
+                        ))
+                        .equals((
+                            FunctionRunDBWithNamesIden::Table,
+                            FunctionRunDBWithNamesIden::Id,
+                        )),
+                    )
+                    .and_where(
+                        Expr::col((
+                            LogicalTableDataVersionDBIden::Table,
+                            LogicalTableDataVersionDBIden::FunctionParamPos,
+                        ))
+                        .gte(0),
+                    );
+                sub
+            })
+            .not(),
+        );
+
+    apply_ended_on_window(&mut stmt, req.window.start_ms, req.window.end_ms);
+    apply_status_filter(
+        &mut stmt,
+        &req.statuses,
+        (
+            FunctionRunDBWithNamesIden::Table,
+            FunctionRunDBWithNamesIden::Status,
+        ),
+    );
+    // Egress edges have no target dim → source-only dim filters on
+    // the subscriber LFR's collection/group (the egress departure
+    // node). Mirror of synth-source's target-only filter.
     apply_dim_filter(
         &mut stmt,
         &req.collections,
@@ -1421,6 +1612,100 @@ mod tests {
         // output LTDV (not consumer's own 10 — same number here, but
         // attribution is source-side).
         assert_eq!(*e.row_count.as_ref(), 10);
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_edges_egress_for_subscriber(db: TdPool) -> Result<(), TdError> {
+        // Topological subscriber: consumes a producer's LTDV via LFRI
+        // and produces NO output LTDVs of its own. Should emit an
+        // egress edge (consumer_coll → ExternalDestination) with
+        // source-LTDV-attributed magnitudes.
+        let (producer_coll, _, producer_ltdv) =
+            seed_publisher_with_ltdv(&db, "egress_prod", "egress_prod_fn").await?;
+
+        let consumer_coll = db
+            .seed()
+            .collection(
+                &CollectionName::try_from("egress_cons")?,
+                &UserId::try_from(ENCODED_ID_SYSTEM)?,
+            )
+            .await?;
+        // Subscriber function: same shape as publisher but no output
+        // tables → no LTDVs minted at plan-build.
+        let consumer_fn = {
+            let create = td_objects::dxo::function::FunctionRegister::builder()
+                .try_name("egress_cons_fn")?
+                .try_description("test fn")?
+                .bundle_id(BundleId::default())
+                .try_snippet("snippet")?
+                .decorator(Decorator::Subscriber)
+                .dependencies(None)
+                .triggers(None)
+                .tables(Vec::<TableNameDto>::new())
+                .try_runtime_values("rv")?
+                .reuse_frozen_tables(false)
+                .build()?;
+            db.seed().function(&consumer_coll, &create).await?
+        };
+        let consumer_exec = db.seed().execution(&consumer_fn).await?;
+        let consumer_trx = db
+            .seed()
+            .transaction(&consumer_exec, &TransactionKey::try_from("ANY")?)
+            .await?;
+        let consumer_pfr = db
+            .seed()
+            .physical_function_run(
+                &consumer_coll,
+                &consumer_fn,
+                &consumer_exec,
+                &consumer_trx,
+                &LogicalFunctionRunStatus::Done,
+            )
+            .await?;
+        stamp_buckets_on_pfr(&db, &consumer_pfr).await?;
+        let consumer_lfr: LogicalFunctionRunDB = db
+            .live()
+            .fetch_one(and!(&consumer_pfr.execution_id, &consumer_pfr.function_id))
+            .await?;
+
+        let input = LogicalFunctionRunInputDB::builder()
+            .collection_id(consumer_coll.id)
+            .execution_id(&consumer_exec.id)
+            .transaction_id(&consumer_trx.id)
+            .logical_function_run_id(consumer_lfr.id.clone())
+            .requirement_logical_table_data_version_id(Some(producer_ltdv.id))
+            .requirement_input_idx(Some(InputIdx::try_from(0)?))
+            .requirement_dependency_pos(Some(DependencyPos::try_from(0)?))
+            .requirement_version_pos(VersionPos::try_from(0)?)
+            .build()?;
+        db.live()
+            .insert::<LogicalFunctionRunInputDB>(&input)
+            .await?;
+
+        let req = empty_request(Dim::Collection);
+        let mut conn = db.acquire().await.unwrap();
+        let edges = conn.metrics().metrics_edges(&req).await?;
+
+        let egress: Vec<_> = edges
+            .iter()
+            .filter(|e| e.target_kind == NodeKind::ExternalDestination)
+            .collect();
+        assert_eq!(egress.len(), 1, "expected one egress edge, got {edges:?}");
+        let e = egress[0];
+        assert_eq!(e.source_kind, NodeKind::Dim);
+        assert_eq!(e.source, Some(consumer_coll.id.to_string()));
+        assert!(e.target.is_none());
+        assert_eq!(e.fn_runs, 1);
+        assert_eq!(e.tables, 1);
+        assert_eq!(*e.row_count.as_ref(), 10);
+        // Producer is still ingress (no upstream).
+        let ingress: Vec<_> = edges
+            .iter()
+            .filter(|e| e.source_kind == NodeKind::ExternalSource)
+            .collect();
+        assert_eq!(ingress.len(), 1);
+        assert_eq!(ingress[0].target, Some(producer_coll.id.to_string()));
         Ok(())
     }
 }
