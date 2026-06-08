@@ -326,6 +326,65 @@ spec:
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
+        - name: run-source-plugin
+          image: function
+          imagePullPolicy: IfNotPresent
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:TDK_PYENV_SCRIPTS_FOLDER}/td_run_source_plugin"]
+          args:
+            - --shared-dir
+            - $(CONTAINER_ROOT)/tabsdata/shared
+            - --work-dir
+            - $(CONTAINER_ROOT)/tabsdata/work
+            - --log-config
+            - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
+            - --liveness
+            - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
+            - --responder-url
+            - env:SECRET__TD_RESPONDER_URL
+            - --responder-method
+            - env:SECRET__TD_RESPONDER_METHOD
+            - --responder-authorization
+            - env:SECRET__TD_RESPONDER_AUTHORIZATION
+            - --request
+            - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
+            - --bundle-dir
+            - $(CONTAINER_ROOT)/tabsdata/shared/bundle/folder
+            - --out-dir
+            - $(CONTAINER_ROOT)/tabsdata/shared/in
+            - --inputs-manifest
+            - $(CONTAINER_ROOT)/tabsdata/shared/inputs-manifest.yaml
+            - --state-dir
+            - $(CONTAINER_ROOT)/tabsdata/shared/state
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: CONTAINER_ROOT
+              value: "$(KM_CONTAINER_ROOT)"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_TABSDATA_INSTANCE
+              value: "${sys:TDK_INSTANCE_NAME}"
+          volumeMounts:
+            - name: config-run-source-plugin
+              mountPath: /tabsdata/config
+              readOnly: true
+            - name: pyenv
+              mountPath: /tabsdata/pyenv
+              readOnly: true
+            - name: shared
+              mountPath: /tabsdata/shared
       containers:
         - name: report
           image: function
@@ -383,6 +442,11 @@ spec:
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
         - name: config-run-transporter-state-download
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+        - name: config-run-source-plugin
           projected:
             sources:
               - configMap:
