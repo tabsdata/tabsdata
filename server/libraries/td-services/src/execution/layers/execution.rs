@@ -21,11 +21,12 @@ use td_objects::dxo::execution::{
 use td_objects::dxo::function::FunctionDBWithNames;
 use td_objects::dxo::graph::{FunctionNodeBuilder, GraphEdge, GraphNode, ResolvedVersion};
 use td_objects::dxo::logical::{
-    LogicalFunctionRunDB, LogicalFunctionRunInputDB, LogicalFunctionRunPointerDB,
-    LogicalTableDataVersionDB, LogicalTableDataVersionPointerDB, UpdateLogicalFunctionRunDB,
+    ActiveLogicalTableDataVersionDB, LogicalFunctionRunDB, LogicalFunctionRunInputDB,
+    LogicalFunctionRunPointerDB, LogicalTableDataVersionDB, LogicalTableDataVersionPointerDB,
+    UpdateLogicalFunctionRunDB,
 };
 use td_objects::dxo::physical_table_data_version::{
-    ActiveTableDataVersionDB, ExecutionTableDataVersionReadBuilder,
+    ExecutionTableDataVersionReadBuilder, PhysicalTableDataVersionDBWithFunction,
 };
 use td_objects::dxo::transaction::{TransactionDB, TransactionDBBuilder};
 use td_objects::graph::{MapGraph, TdGraph};
@@ -322,7 +323,7 @@ pub async fn resolve_execution_plan_versions(
         cache_key: (TableId, Versions),
     }
     let mut edge_meta: Vec<EdgeMeta> = Vec::new();
-    let mut ltdv_cache: HashMap<(TableId, Versions), Vec<Option<LogicalTableDataVersionDB>>> =
+    let mut ltdv_cache: HashMap<(TableId, Versions), Vec<Option<ActiveLogicalTableDataVersionDB>>> =
         HashMap::new();
 
     // Pass 1 — resolve LTDVs once per (table, versions). Pointer→TDV
@@ -376,7 +377,7 @@ pub async fn resolve_execution_plan_versions(
     }
 
     // Pass 2 — translate every LTDV referenced anywhere in the plan to
-    // its currently-bound `ActiveTableDataVersionDB` in two batched
+    // its currently-bound `PhysicalTableDataVersionDBWithFunction` in two batched
     // queries: latest pointer event per LTDV at `at_time`, then the TDV
     // rows for every distinct bound id.
     let all_ftdv_ids: Vec<LogicalTableDataVersionId> = ltdv_cache
@@ -410,23 +411,23 @@ pub async fn resolve_execution_plan_versions(
         .collect::<HashSet<_>>()
         .into_iter()
         .collect();
-    let tdvs: Vec<ActiveTableDataVersionDB> = if all_tdv_ids.is_empty() {
+    let tdvs: Vec<PhysicalTableDataVersionDBWithFunction> = if all_tdv_ids.is_empty() {
         Vec::new()
     } else {
-        conn.fetch_all_chunked::<ActiveTableDataVersionDB, _>(&all_tdv_ids)
+        conn.fetch_all_chunked::<PhysicalTableDataVersionDBWithFunction, _>(&all_tdv_ids)
             .await?
     };
-    let tdv_by_id: HashMap<PhysicalTableDataVersionId, ActiveTableDataVersionDB> =
+    let tdv_by_id: HashMap<PhysicalTableDataVersionId, PhysicalTableDataVersionDBWithFunction> =
         tdvs.into_iter().map(|t| (t.id.clone(), t)).collect();
 
     // Per-cache-key resolved TDV vector, computed once.
-    let resolved_cache: HashMap<(TableId, Versions), Vec<Option<ActiveTableDataVersionDB>>> =
+    let resolved_cache: HashMap<(TableId, Versions), Vec<Option<PhysicalTableDataVersionDBWithFunction>>> =
         ltdv_cache
             .into_iter()
             .map(|(k, ltdvs)| {
-                let resolved: Vec<Option<ActiveTableDataVersionDB>> = ltdvs
+                let resolved: Vec<Option<PhysicalTableDataVersionDBWithFunction>> = ltdvs
                     .into_iter()
-                    .map(|ftdv_opt| -> Option<ActiveTableDataVersionDB> {
+                    .map(|ftdv_opt| -> Option<PhysicalTableDataVersionDBWithFunction> {
                         let ltdv = ftdv_opt?;
                         let tdv_id = bound_tdv_id_by_ftdv.get(&ltdv.id)?;
                         Some(tdv_by_id.get(tdv_id)?.clone())
@@ -504,7 +505,6 @@ pub async fn build_logical_function_run_inputs(
     execution_plan: Ref<ExecutionPlan>,
     execution: Ref<ExecutionDB>,
     logical_function_runs: Ref<Vec<LogicalFunctionRunDB>>,
-    logical_table_data_versions: Ref<Vec<LogicalTableDataVersionDB>>,
 ) -> Result<Vec<LogicalFunctionRunInputDB>, TdError> {
     let triggered_on = execution.triggered_on;
 
@@ -514,21 +514,13 @@ pub async fn build_logical_function_run_inputs(
         .map(|lfr| (lfr.function_id, lfr.id.clone()))
         .collect();
 
-    // In-plan LTDV map keyed by table_id, consumed by VersionResolver for
-    // `Versions::None` / `Head(0)` resolution. Each table has at most one
-    // output LTDV in a typical plan; on collision the last entry wins.
-    let in_plan_by_table: HashMap<TableId, LogicalTableDataVersionDB> = logical_table_data_versions
-        .iter()
-        .map(|ltdv| (ltdv.table_id, ltdv.clone()))
-        .collect();
-
     // Resolves are deterministic for a given `(function_id, table_id,
-    // versions)` triple at this `triggered_on` and `in_plan_by_table`,
-    // so dedupe across edges that ask for the same upstream slice —
-    // common with multi-consumer plans.
+    // versions)` triple at this `triggered_on`, so dedupe across edges
+    // that ask for the same upstream slice — common with multi-consumer
+    // plans.
     let mut resolve_cache: HashMap<
         (FunctionId, TableId, Versions),
-        Vec<Option<LogicalTableDataVersionDB>>,
+        Vec<Option<ActiveLogicalTableDataVersionDB>>,
     > = HashMap::new();
 
     let mut rows = Vec::new();
@@ -571,7 +563,6 @@ pub async fn build_logical_function_run_inputs(
                 .table_id(&table.table_id)
                 .versions(&lookup_versions)
                 .triggered_on(&triggered_on)
-                .in_plan(Some(&in_plan_by_table))
                 .build()?
                 .resolve(&mut conn)
                 .await?;

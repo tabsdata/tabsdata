@@ -417,6 +417,13 @@ mod definitions {
         pub group_id: GroupId,
     }
 
+    // LTDV identity rows whose producer LFR is not Canceled/Yanked — the
+    // version resolver's "active" timeline.
+    #[ta_objects::Dao]
+    #[dao(sql_table = "logical_table_data_versions__active")]
+    #[inherits(LogicalTableDataVersionDB)]
+    pub struct ActiveLogicalTableDataVersionDB {}
+
     // Names-joined view of the LTDV identity row, merged with the
     // currently-bound PTDV's per-attempt fields (and the producer PFR's
     // started/ended/status reached through the PTDV). PTDV/PFR-derived

@@ -11,23 +11,19 @@
 //! construction: in-plan plan-build mints them eagerly, and the v9→v10
 //! eager migration backfilled LTDVs for all pre-existing direct rows.
 //!
-//! ### Two sources for an LTDV
+//! ### Resolution source
 //!
-//! 1. **In-plan** — an LTDV minted earlier in this same pass, not yet
-//!    queryable via the DB partition scan. The caller supplies `in_plan`
-//!    keyed by `table_id`, which is consulted first for "latest" lookups.
-//! 2. **Cross-plan** — the LTDV is in `logical_table_data_versions` from
-//!    a prior plan-build (or a v9→v10 mirror row). The
-//!    `Version::Fixed(<TDV-id>)` lookup queries
-//!    `logical_table_data_version_pointers` for the earliest pointer
-//!    event referencing the concrete TDV id and follows it to the LTDV
-//!    identity row.
+//! Every version resolves against the `logical_table_data_versions`
+//! timeline, read through `logical_table_data_versions__active` (which
+//! hides Canceled/Yanked-produced rows). Same-plan minted LTDVs are
+//! persisted before inputs are resolved, so they are reached through that
+//! same query — there is no separate in-memory source.
 //!
 //! ### Versions semantics
 //!
 //! | Version op            | resolution                                                                  |
 //! |-----------------------|-----------------------------------------------------------------------------|
-//! | `None`                | latest LTDV at `triggered_on` (in-plan map first, else committed timeline)  |
+//! | `None`                | latest LTDV at `triggered_on` in the timeline                               |
 //! | `Single(Head(0))`     | identical to `None`                                                         |
 //! | `Single(Head(-k))`    | (k+1)-th most recent LTDV in the committed timeline                         |
 //! | `Single(Initial(k))`  | (k+1)-th oldest LTDV                                                        |
@@ -47,16 +43,18 @@
 //! no `PhysicalTableDataVersionId` column, and the macro emits a runtime
 //! `TypeNotFound` for that resolution path.
 //!
-//! ### Voided LTDVs are visible to the planner
+//! ### Voided LTDVs are visible; Canceled/Yanked-produced ones disappear
 //!
-//! The resolver uses the `All` state filter — Voided LTDVs are returned
-//! exactly like Pending and Bound ones. The planner pins whatever is the
-//! latest LTDV at `triggered_on` regardless of pointer status; the gate
-//! against running a plan with voided inputs lives at dispatch (an LFR
-//! cannot flip Pending → Bound while any of its input LTDVs' latest
-//! pointer is Voided). This matches A5 / `CancelPropagation::Manual`:
-//! operators decide whether to redirect a Voided LTDV to a previous-valid
-//! concrete; the planner does not silently substitute older versions.
+//! Voided is a pointer-layer state and stays visible: the planner pins
+//! the latest LTDV regardless of pointer status, and the dispatch gate
+//! handles voided inputs (operators redirect — `CancelPropagation::Manual`).
+//! A Canceled/Yanked *producer*, by contrast, produced no data, so its
+//! LTDV disappears from resolution: the timeline reads below go through
+//! `logical_table_data_versions__active` (via `ActiveLogicalTableDataVersionDB`),
+//! so `Head(0)` falls back to the previous live version — a cancel "resets
+//! the table to that point". `Version::Fixed(<id>)` is filtered too: a pin
+//! to a Canceled/Yanked-produced LTDV resolves to
+//! `FixedTableDataVersionsNotFound`.
 
 use derive_builder::Builder;
 use itertools::Itertools;
@@ -64,7 +62,7 @@ use std::collections::HashMap;
 use td_database::dynamic::DynamicConnection;
 use td_error::DisplayVec;
 use td_error::{TdError, td_error};
-use td_objects::dxo::logical::LogicalTableDataVersionDB;
+use td_objects::dxo::logical::ActiveLogicalTableDataVersionDB;
 use td_objects::types::basic::{FunctionId, LogicalTableDataVersionId, TableId, TriggeredOn};
 use td_objects::types::table_ref::{Version, Versions};
 use td_queries::{ChunkedQueries, LfrEntry, LiveEntry, VersionedEntry};
@@ -79,10 +77,8 @@ pub enum VersionResolverError {
 
 /// Resolver for logical table-data versions.
 ///
-/// Mirrors the `VersionResolver` API surface. The `in_plan` map carries
-/// the LTDVs minted earlier in this same plan-build pass (keyed by
-/// `table_id`), which `Versions::None` and `Single(Head(0))` resolution
-/// consults before reaching the DB.
+/// Resolves a table's logical-version timeline through the active view,
+/// so Canceled/Yanked-produced rows are excluded from every lookup.
 #[derive(Builder)]
 #[builder(build_fn(error = "TdError"))]
 pub struct VersionResolver<'a> {
@@ -92,8 +88,6 @@ pub struct VersionResolver<'a> {
     triggered_on: &'a TriggeredOn,
     #[builder(default = "false")]
     error_on_desc_range: bool,
-    #[builder(default)]
-    in_plan: Option<&'a HashMap<TableId, LogicalTableDataVersionDB>>,
 }
 
 impl<'a> VersionResolver<'a> {
@@ -105,25 +99,20 @@ impl<'a> VersionResolver<'a> {
     ///
     /// Returns one entry per requested version; the entry is `None` when
     /// the requested coordinate doesn't exist (e.g. an `Initial(0)` on an
-    /// empty timeline). For `Versions::None` and `Single(Head(0))`, the
-    /// in-plan map is consulted first.
+    /// empty timeline).
     pub async fn resolve(
         &self,
         conn: &mut DynamicConnection<'_>,
-    ) -> Result<Vec<Option<LogicalTableDataVersionDB>>, TdError> {
+    ) -> Result<Vec<Option<ActiveLogicalTableDataVersionDB>>, TdError> {
         let table_id = self.table_id;
         let triggered_on = self.triggered_on;
-        let in_plan_latest = self.in_plan.and_then(|m| m.get(table_id).cloned());
 
         let resolved = match self.versions {
             Versions::None | Versions::Single(Version::Head(0)) => {
-                if let Some(ltdv) = in_plan_latest {
-                    return Ok(vec![Some(ltdv)]);
-                }
                 let v = conn
                     .versioned(triggered_on)
                     .data_version(table_id)
-                    .fetch_optional::<LogicalTableDataVersionDB>(self.versions)
+                    .fetch_optional::<ActiveLogicalTableDataVersionDB>(self.versions)
                     .await?;
                 vec![v]
             }
@@ -131,7 +120,7 @@ impl<'a> VersionResolver<'a> {
                 let v = conn
                     .versioned(triggered_on)
                     .data_version(table_id)
-                    .fetch_optional::<LogicalTableDataVersionDB>(self.versions)
+                    .fetch_optional::<ActiveLogicalTableDataVersionDB>(self.versions)
                     .await?;
                 vec![v]
             }
@@ -149,17 +138,18 @@ impl<'a> VersionResolver<'a> {
 
     /// Fetch the LTDV identity row for a `Version::Fixed(ltdv_id)`. The
     /// id IS the logical identity now, so this is a direct lookup — no
-    /// pointer-log traversal. Reports a domain error when the LTDV
-    /// doesn't exist so callers (e.g. register-time validation) can match
-    /// on it.
+    /// pointer-log traversal. Reads the active view, so a pin to a
+    /// Canceled/Yanked-produced LTDV (or a missing id) yields the
+    /// not-found domain error — callers like register-time validation
+    /// match on it.
     async fn fetch_ftdv_for_fixed(
         &self,
         conn: &mut DynamicConnection<'_>,
         ltdv_id: &LogicalTableDataVersionId,
-    ) -> Result<LogicalTableDataVersionDB, TdError> {
+    ) -> Result<ActiveLogicalTableDataVersionDB, TdError> {
         let ltdv = conn
             .live()
-            .fetch_optional::<LogicalTableDataVersionDB>(ltdv_id)
+            .fetch_optional::<ActiveLogicalTableDataVersionDB>(ltdv_id)
             .await?
             .ok_or_else(|| {
                 VersionResolverError::FixedTableDataVersionsNotFound(vec![ltdv_id.clone()].into())
@@ -178,7 +168,7 @@ impl<'a> VersionResolver<'a> {
         let rn = conn
             .versioned(self.triggered_on)
             .data_version(self.table_id)
-            .fetch_relative_offset::<LogicalTableDataVersionDB>(&Version::Fixed(ltdv_id.clone()))
+            .fetch_relative_offset::<ActiveLogicalTableDataVersionDB>(&Version::Fixed(ltdv_id.clone()))
             .await?
             .ok_or_else(|| {
                 VersionResolverError::FixedTableDataVersionsNotFound(vec![ltdv_id.clone()].into())
@@ -196,7 +186,7 @@ impl<'a> VersionResolver<'a> {
         &self,
         conn: &mut DynamicConnection<'_>,
         versions: &[Version],
-    ) -> Result<Vec<Option<LogicalTableDataVersionDB>>, TdError> {
+    ) -> Result<Vec<Option<ActiveLogicalTableDataVersionDB>>, TdError> {
         let table_id = self.table_id;
         let triggered_on = self.triggered_on;
 
@@ -222,8 +212,8 @@ impl<'a> VersionResolver<'a> {
                     _ => unreachable!(),
                 })
                 .collect();
-            let by_id: HashMap<LogicalTableDataVersionId, LogicalTableDataVersionDB> = conn
-                .fetch_all_chunked::<LogicalTableDataVersionDB, LogicalTableDataVersionId>(&ids)
+            let by_id: HashMap<_, _> = conn
+                .fetch_all_chunked::<ActiveLogicalTableDataVersionDB, LogicalTableDataVersionId>(&ids)
                 .await?
                 .into_iter()
                 .map(|f| (f.id.clone(), f))
@@ -262,10 +252,10 @@ impl<'a> VersionResolver<'a> {
                 .map(|(min, max)| (min.clone(), max.clone()));
 
             let resolved = if let Some((min, max)) = minmax {
-                let mut found = conn
+                let mut found: Vec<ActiveLogicalTableDataVersionDB> = conn
                     .versioned(triggered_on)
                     .data_version(table_id)
-                    .fetch_all::<LogicalTableDataVersionDB>(&Versions::Range(min, max))
+                    .fetch_all::<ActiveLogicalTableDataVersionDB>(&Versions::Range(min, max))
                     .await?;
                 if reverse {
                     found.reverse();
@@ -312,7 +302,7 @@ impl<'a> VersionResolver<'a> {
     async fn resolve_range(
         &self,
         conn: &mut DynamicConnection<'_>,
-    ) -> Result<Vec<Option<LogicalTableDataVersionDB>>, TdError> {
+    ) -> Result<Vec<Option<ActiveLogicalTableDataVersionDB>>, TdError> {
         let table_id = self.table_id;
         let triggered_on = self.triggered_on;
         let (from, to) = match self.versions {
@@ -349,7 +339,7 @@ impl<'a> VersionResolver<'a> {
         let mut found = conn
             .versioned(triggered_on)
             .data_version(table_id)
-            .fetch_all::<LogicalTableDataVersionDB>(&substituted)
+            .fetch_all::<ActiveLogicalTableDataVersionDB>(&substituted)
             .await?
             .into_iter()
             .map(Some)
@@ -388,7 +378,7 @@ impl<'a> VersionResolver<'a> {
     async fn resolve_new(
         &self,
         conn: &mut DynamicConnection<'_>,
-    ) -> Result<Vec<Option<LogicalTableDataVersionDB>>, TdError> {
+    ) -> Result<Vec<Option<ActiveLogicalTableDataVersionDB>>, TdError> {
         let table_id = self.table_id;
         let triggered_on = self.triggered_on;
 
@@ -401,7 +391,7 @@ impl<'a> VersionResolver<'a> {
             Some(last) => {
                 conn.versioned(&last.triggered_on)
                     .data_version(table_id)
-                    .fetch_optional::<LogicalTableDataVersionDB>(&Versions::None)
+                    .fetch_optional::<ActiveLogicalTableDataVersionDB>(&Versions::None)
                     .await?
             }
             None => None,
@@ -422,7 +412,7 @@ impl<'a> VersionResolver<'a> {
                 } else {
                     conn.versioned(triggered_on)
                         .data_version(table_id)
-                        .fetch_all::<LogicalTableDataVersionDB>(&Versions::Range(
+                        .fetch_all::<ActiveLogicalTableDataVersionDB>(&Versions::Range(
                             Version::Head(-((boundary_pos - 1) as isize)),
                             Version::Head(0),
                         ))
@@ -435,7 +425,7 @@ impl<'a> VersionResolver<'a> {
             None => conn
                 .versioned(triggered_on)
                 .data_version(table_id)
-                .fetch_all::<LogicalTableDataVersionDB>(&Versions::Range(
+                .fetch_all::<ActiveLogicalTableDataVersionDB>(&Versions::Range(
                     Version::Initial(0),
                     Version::Head(0),
                 ))
@@ -458,14 +448,14 @@ mod tests {
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
     use td_objects::dxo::logical::LogicalFunctionRunDB;
     use td_objects::dxo::logical::LogicalPointerDao;
+    use td_objects::dxo::logical::LogicalTableDataVersionDB;
     use td_objects::dxo::logical::LogicalTableDataVersionPointerDB;
     use td_objects::dxo::table::TableDB;
     use td_objects::types::basic::LogicalFunctionRunStatus;
     use td_objects::types::basic::Trigger;
     use td_objects::types::basic::{
-        AtTime, BundleId, CollectionName, Decorator, ExecutionId, LogicalPointerReason,
-        LogicalPointerStatus, PhysicalTableDataVersionId, TableName, TableNameDto, TransactionId,
-        TransactionKey, UserId,
+        AtTime, BundleId, CollectionName, Decorator, LogicalPointerReason, LogicalPointerStatus,
+        PhysicalTableDataVersionId, TableName, TableNameDto, TransactionKey, UserId,
     };
     use td_queries::test_utils::SeedEntry;
     use td_queries::{CurrentEntry, LtdvEntry};
@@ -595,42 +585,6 @@ mod tests {
             .await?;
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].as_ref().unwrap().id, ltdvs[0].id);
-        Ok(())
-    }
-
-    /// `Versions::None` consults the in-plan map first when present.
-    #[td_test::test(db)]
-    async fn test_resolve_logical_none_in_plan_overrides(db: TdPool) -> Result<(), TdError> {
-        let (collection, _function, table_id, _ftdvs) = seed_ftdv_timeline(&db, 1).await;
-
-        // Build an in-plan LTDV that is NOT yet inserted in the DB; the
-        // resolver should still hand it back for `None` lookups.
-        let in_plan_ftdv = LogicalTableDataVersionDB::builder()
-            .project_id(collection.project_id.clone())
-            .collection_id(collection.id)
-            .execution_id(ExecutionId::new())
-            .transaction_id(TransactionId::new())
-            .table_id(table_id)
-            .producer_logical_function_run_id(None)
-            .function_param_pos(None)
-            .triggered_on(TriggeredOn::now())
-            .triggered_by_id(UserId::admin())
-            .build()
-            .unwrap();
-        let in_plan = HashMap::from([(table_id, in_plan_ftdv.clone())]);
-
-        let mut conn = db.acquire().await.unwrap();
-        let found = VersionResolver::builder()
-            .function_id(&FunctionId::default())
-            .table_id(&table_id)
-            .versions(&Versions::None)
-            .triggered_on(&TriggeredOn::now())
-            .in_plan(Some(&in_plan))
-            .build()?
-            .resolve(&mut conn)
-            .await?;
-        assert_eq!(found.len(), 1);
-        assert_eq!(found[0].as_ref().unwrap().id, in_plan_ftdv.id);
         Ok(())
     }
 
@@ -1025,6 +979,125 @@ mod tests {
         // concrete TDV id reachable via the temporal view).
         let latest = conn.ltdv().pointers().concrete(&ltdv.id).await?;
         assert!(latest.is_none());
+        Ok(())
+    }
+
+    /// Seed a Canceled-producer LTDV for `table_id`: a fresh LFR with
+    /// status Canceled plus its output LTDV, both inserted. The producer
+    /// being Canceled is what makes the active view hide the returned LTDV.
+    async fn seed_canceled_ltdv(
+        db: &TdPool,
+        collection: &CollectionDB,
+        function: &FunctionDB,
+        table_id: TableId,
+    ) -> LogicalTableDataVersionDB {
+        let execution = db.seed().execution(function).await.unwrap();
+        let transaction = db
+            .seed()
+            .transaction(&execution, &TransactionKey::try_from("ANY").unwrap())
+            .await
+            .unwrap();
+        let canceled_lfr = LogicalFunctionRunDB::builder()
+            .collection_id(collection.id)
+            .execution_id(execution.id.clone())
+            .transaction_id(transaction.id.clone())
+            .function_id(function.function_id)
+            .function_version_id(&function.id)
+            .trigger(Trigger::Manual)
+            .triggered_on(TriggeredOn::now())
+            .triggered_by_id(UserId::admin())
+            .status(LogicalFunctionRunStatus::Canceled)
+            .build()
+            .unwrap();
+        db.live()
+            .insert::<LogicalFunctionRunDB>(&canceled_lfr)
+            .await
+            .unwrap();
+        let canceled_ltdv = LogicalTableDataVersionDB::builder()
+            .collection_id(collection.id)
+            .execution_id(execution.id)
+            .transaction_id(transaction.id)
+            .table_id(table_id)
+            .producer_logical_function_run_id(Some(canceled_lfr.id.clone()))
+            .function_param_pos(None)
+            .triggered_on(canceled_lfr.triggered_on)
+            .triggered_by_id(canceled_lfr.triggered_by_id)
+            .build()
+            .unwrap();
+        db.live()
+            .insert::<LogicalTableDataVersionDB>(&canceled_ltdv)
+            .await
+            .unwrap();
+        canceled_ltdv
+    }
+
+    /// Canceled-producer LTDV disappears from resolution: HEAD falls back
+    /// to the previous live version (cancel + re-trigger).
+    #[td_test::test(db)]
+    async fn test_resolve_logical_skips_canceled_producer(db: TdPool) -> Result<(), TdError> {
+        let (collection, function, table_id, ltdvs) = seed_ftdv_timeline(&db, 1).await;
+        let good = &ltdvs[0];
+
+        // A newer version produced by a Canceled run — must disappear.
+        seed_canceled_ltdv(&db, &collection, &function, table_id).await;
+
+        let mut conn = db.acquire().await.unwrap();
+        let found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
+            .table_id(&table_id)
+            .versions(&Versions::None)
+            .triggered_on(&TriggeredOn::now())
+            .build()?
+            .resolve(&mut conn)
+            .await?;
+        assert_eq!(found.len(), 1);
+        assert_eq!(
+            found[0].as_ref().unwrap().id,
+            good.id,
+            "canceled-producer version must disappear; HEAD falls back to the previous live version",
+        );
+        Ok(())
+    }
+
+    /// A `Fixed` pin is filtered too (not exempt): a pin to a
+    /// Canceled/Yanked-produced LTDV misses the active-view lookup and
+    /// resolves to `FixedTableDataVersionsNotFound`, while a pin to a live
+    /// version still resolves.
+    #[td_test::test(db)]
+    async fn test_resolve_logical_fixed_skips_canceled_producer(db: TdPool) -> Result<(), TdError> {
+        let (collection, function, table_id, ltdvs) = seed_ftdv_timeline(&db, 1).await;
+        let good = &ltdvs[0];
+
+        let canceled_ltdv = seed_canceled_ltdv(&db, &collection, &function, table_id).await;
+
+        let mut conn = db.acquire().await.unwrap();
+
+        // Fixed pin to the live version resolves.
+        let found = VersionResolver::builder()
+            .function_id(&FunctionId::default())
+            .table_id(&table_id)
+            .versions(&Versions::Single(Version::Fixed(good.id.clone())))
+            .triggered_on(&TriggeredOn::now())
+            .build()?
+            .resolve(&mut conn)
+            .await?;
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].as_ref().unwrap().id, good.id);
+
+        // Fixed pin to the canceled version is filtered out -> not found.
+        let err = VersionResolver::builder()
+            .function_id(&FunctionId::default())
+            .table_id(&table_id)
+            .versions(&Versions::Single(Version::Fixed(canceled_ltdv.id.clone())))
+            .triggered_on(&TriggeredOn::now())
+            .build()?
+            .resolve(&mut conn)
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            err.domain_err::<VersionResolverError>(),
+            VersionResolverError::FixedTableDataVersionsNotFound(_)
+        ));
         Ok(())
     }
 }

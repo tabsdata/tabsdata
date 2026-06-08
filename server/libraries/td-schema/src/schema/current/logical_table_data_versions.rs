@@ -32,6 +32,10 @@ use crate::schema::sql::{LatestBoundPointer, ViewDef};
 #[iden = "table_data_versions__with_names"]
 pub struct TableDataVersionsWithNames;
 
+#[derive(Iden, Clone, Copy)]
+#[iden = "logical_table_data_versions__active"]
+pub struct LtdvActive;
+
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
 pub enum LogicalTableDataVersions {
     Table,
@@ -279,6 +283,38 @@ impl Entity for Defs {
                     Expr::col((LogicalTableDataVersions::Table, LogicalTableDataVersions::GroupId)).equals((groups_alias, Groups::Id)),
                 )
                 .to_owned(),
-        )]
+            ),
+            // logical_table_data_versions__active — LTDVs whose producer
+            // LFR is not Canceled/Yanked (NULL producer = lazy-mint, kept).
+            // A cancel "resets the table to that point": the version
+            // resolver reads this view, so a cancelled head disappears and
+            // HEAD falls back to the previous live version. Cancel/Yank are
+            // logical-only statuses, so the filter lives here, not on the
+            // physical side (which has no such statuses).
+            ViewDef::new(
+                LtdvActive,
+                Query::select()
+                    .expr(Expr::col((LogicalTableDataVersions::Table, Asterisk)))
+                    .from(LogicalTableDataVersions::Table)
+                    .join(
+                        JoinType::LeftJoin,
+                        LogicalFunctionRuns::Table,
+                        Expr::col((LogicalTableDataVersions::Table, LogicalTableDataVersions::ProducerLogicalFunctionRunId))
+                            .equals((LogicalFunctionRuns::Table, LogicalFunctionRuns::Id)),
+                    )
+                    // "Y" = LogicalFunctionRunStatus::Yanked, "X" =
+                    // ::Canceled. These are raw codes, not the enum: this
+                    // crate is below td-objects in the dependency graph and
+                    // can't reference it (same reason the physical views use
+                    // literals). A divergent rename is caught by the canary
+                    // test `test_sticky_terminal_codes_pinned` in td-objects.
+                    .and_where(
+                        Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::Status))
+                            .is_null()
+                            .or(Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::Status)).is_not_in(["Y", "X"])),
+                    )
+                    .to_owned(),
+            ),
+        ]
     }
 }

@@ -24,10 +24,6 @@ use crate::schema::sql::ViewDef;
 pub struct PtdvWithFunction;
 
 #[derive(Iden, Clone, Copy)]
-#[iden = "physical_table_data_versions__active"]
-pub struct PtdvActive;
-
-#[derive(Iden, Clone, Copy)]
 #[iden = "physical_table_data_versions__with_names"]
 pub struct PtdvWithNames;
 
@@ -199,15 +195,6 @@ impl Entity for Defs {
                         Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::PhysicalFunctionRunId))
                             .equals((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::Id)),
                     )
-                    .to_owned(),
-            ),
-            // physical_table_data_versions__active
-            ViewDef::new(
-                PtdvActive,
-                Query::select()
-                    .expr(Expr::col(Asterisk))
-                    .from(PtdvWithFunction)
-                    .and_where(Expr::col(Alias::new("status")).is_not_in(["Y", "X"]))
                     .to_owned(),
             ),
             // physical_table_data_versions__with_names

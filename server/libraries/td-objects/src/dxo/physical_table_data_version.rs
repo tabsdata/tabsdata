@@ -99,14 +99,9 @@ mod definitions {
         pub storage_version: StorageVersion,
     }
 
-    #[ta_objects::Dao]
-    #[dao(sql_table = "physical_table_data_versions__active")]
-    #[inherits(PhysicalTableDataVersionDBWithFunction)]
-    pub struct ActiveTableDataVersionDB {}
-
     #[ta_objects::Dto]
-    #[dxo(builder(try_from = ActiveTableDataVersionDB))]
-    #[inherits(ActiveTableDataVersionDB)]
+    #[dxo(builder(try_from = PhysicalTableDataVersionDBWithFunction))]
+    #[inherits(PhysicalTableDataVersionDBWithFunction)]
     #[derive(Eq, PartialEq, Hash)]
     pub struct ExecutionTableDataVersionRead {}
 
