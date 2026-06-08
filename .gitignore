@@ -59,6 +59,9 @@ lerna-debug.log*
 *.local
 !**/utest/resources/**/*.log
 !**/*.log.yaml
+!**/*.log.py.yaml
+!**/*.log.rs.yaml
+!**/*.log.ts.yaml
 CLAUDE.md
 .claude/
 MANIFEST

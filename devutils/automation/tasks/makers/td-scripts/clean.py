@@ -208,6 +208,9 @@ def clean_py(project_folder):
         "source_1.log",
         "source_2.log",
         "*.log.yaml",
+        "*.log.py.yaml",
+        "*.log.rs.yaml",
+        "*.log.ts.yaml",
     ]
 
     clean(project_folder, inclusion_patterns, exclusion_patterns)
@@ -231,6 +234,9 @@ def clean_rs(project_folder):
         "source_1.log",
         "source_2.log",
         "*.log.yaml",
+        "*.log.py.yaml",
+        "*.log.rs.yaml",
+        "*.log.ts.yaml",
     ]
 
     clean(project_folder, inclusion_patterns, exclusion_patterns)
@@ -254,6 +260,9 @@ def clean_ts(project_folder):
         "source_1.log",
         "source_2.log",
         "*.log.yaml",
+        "*.log.py.yaml",
+        "*.log.rs.yaml",
+        "*.log.ts.yaml",
     ]
 
     clean(project_folder, inclusion_patterns, exclusion_patterns)
