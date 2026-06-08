@@ -4,44 +4,44 @@
 
 //! Per-request project scope.
 //!
-//! The service-factory macro inserts a [`ProjectScopeProvider`] layer
-//! immediately after the connection provider. On each request it switches the
-//! connection's transaction to the non-superuser
-//! [`APP_ROLE`](td_database::APP_ROLE) (so postgres row-level security is
-//! enforced even on a superuser pool) and sets the session GUC for the
-//! request's [`ProjectScope`].
+//! A service declares its scope in the `service_factory` macro (`scope =
+//! Project` or `scope = Global`); the macro inserts the matching provider right
+//! after the connection provider. Both providers switch the connection's
+//! transaction to the non-superuser [`APP_ROLE`](td_database::APP_ROLE) (so
+//! postgres row-level security is enforced even on a superuser pool) and set
+//! the session GUC.
 //!
-//! The request type drives the scope via [`ProjectScoped`]; td-tower stays
-//! free of any `RequestContext` dependency (that lives in `td-objects`, which
-//! depends on this crate, not the reverse).
+//! * **`scope = Project`** services take their project as part of the service
+//!   input: the request is wrapped in [`Scoped`] (`{ project, request }`) by the
+//!   caller via [`InProject::in_project`]. [`ProjectScopeProvider`] unwraps it,
+//!   runs `SET LOCAL app.project_id`, then puts the bare request and the project
+//!   id back on the handler — so downstream layers see the clean request and can
+//!   extract the project id directly. The project never lives on the request
+//!   type.
+//! * **`scope = Global`** services span all projects: [`GlobalScopeProvider`]
+//!   runs `SET LOCAL app.bypass_rls = on` and touches nothing else. They are the
+//!   audit list of cross-project escape hatches.
+//!
+//! td-tower stays free of any concrete id type: [`Scoped`] is generic over the
+//! project type `P` (only `Display`, to format the GUC).
 //!
 //! # Writing project-scoped rows — the invariant
 //!
 //! The project lives on the *connection* (the `app.project_id` GUC). Two modes:
 //!
-//! * **Tenant work** runs on a connection scoped to one project (this provider
-//!   sets the GUC). Inserts into project-scoped tables may omit `project_id` —
-//!   the column default reads the GUC, and RLS `WITH CHECK` enforces the match.
-//!   Don't thread `project_id` by hand.
-//! * **System / bypass work** (`project_scope = bypass`) spans projects, so
-//!   there is no single GUC project. Any insert it makes into a project-scoped
-//!   table **must set `project_id` explicitly** (e.g. the scheduler stamps each
-//!   `WorkerDB` with the project of the function-run it serves). A bypass insert
-//!   that omits `project_id` hits the NOT NULL constraint — fail-closed.
+//! * **Project work** runs on a connection scoped to one project (the provider
+//!   sets the GUC from the request's project). Inserts into project-scoped
+//!   tables may omit `project_id` — the column default reads the GUC, and RLS
+//!   `WITH CHECK` enforces the match. Don't thread `project_id` by hand.
+//! * **Global work** spans projects, so there is no single GUC project. Any
+//!   insert it makes into a project-scoped table **must set `project_id`
+//!   explicitly** (e.g. the scheduler stamps each `WorkerDB` with the project of
+//!   the function-run it serves). A global insert that omits `project_id` hits
+//!   the NOT NULL constraint — fail-closed.
 //!
 //! There is no `sandbox` fallback on the column default (external production);
 //! the embedded dev/test server carries a session-level `app.project_id =
 //! sandbox` so direct seed/bootstrap writes resolve.
-//!
-//! A few tenant-entry DAOs (collection/function create) still set `project_id`
-//! explicitly from the request even though the GUC default would produce the
-//! same value: it costs nothing (same `RequestContext` source, so no divergence)
-//! and the surrounding `unwrap` layer doubles as a guard that rejects a
-//! project-less context at the app boundary with a clear error. Everything
-//! downstream relies on the GUC default.
-//!
-//! `grep "project_scope = bypass"` is the audit list of cross-project escape
-//! hatches; each must satisfy the bypass rule above.
 
 use std::future::Future;
 use std::marker::PhantomData;
@@ -55,118 +55,115 @@ use tower::{Layer, Service};
 use crate::error::ConnectionError;
 use crate::handler::Handler;
 
-/// The project a request scopes its DB work to.
-pub enum ProjectScope {
-    /// Scope every query to this project (`SET LOCAL app.project_id`).
-    Project(String),
-    /// Span all projects (`SET LOCAL app.bypass_rls = on`) — system, scheduler,
-    /// auth, and other non-tenant work.
-    Bypass,
+/// A service input that carries the request together with the project it is
+/// scoped to. `scope = "Project"` services receive this; the request type
+/// itself stays project-free.
+#[derive(Debug, Clone)]
+pub struct Scoped<R, P> {
+    pub project: P,
+    pub request: R,
 }
 
-/// Apply `scope` to the connection the connection-provider placed in the
-/// handler, switching to [`APP_ROLE`] and setting the scope GUC in one round
-/// trip. Shared by both providers below.
-///
-/// Fail-closed: the role is *always* switched (so the worst case is an empty,
-/// RLS-filtered result set, never a superuser-wide leak), and a `None` scope —
-/// a tenant service whose request type carries no resolvable scope — is a hard
-/// error rather than an unscoped run.
-async fn apply_scope<Err>(handler: &mut Handler, scope: Option<ProjectScope>) -> Result<(), Err>
+/// Wrap any service input with the project it targets, producing the [`Scoped`]
+/// input a `scope = Project` service expects.
+pub trait InProject: Sized {
+    fn in_project<P>(self, project: P) -> Scoped<Self, P> {
+        Scoped {
+            project,
+            request: self,
+        }
+    }
+}
+
+impl<T> InProject for T {}
+
+/// Switch the handler's connection to [`APP_ROLE`] and bypass project scope
+/// (`SET LOCAL app.bypass_rls = on`). Fail-closed: the role is always switched
+/// first, so a lost connection can never leak rows under the pool's role.
+async fn enter_global_scope<Err>(handler: &mut Handler) -> Result<(), Err>
 where
     Err: From<TdError>,
 {
     let conn = handler
         .get_mut::<DynamicConnection<'static>>()
         .ok_or_else(|| Err::from(TdError::from(ConnectionError::ConnectionLost)))?;
-    let project = match &scope {
-        Some(ProjectScope::Project(id)) => Some(id.as_str()),
-        Some(ProjectScope::Bypass) => None,
-        None => {
-            // Switch the role anyway so a forgotten scope fails closed (RLS
-            // sees no rows) instead of running as the pool's (possibly
-            // superuser) role, then refuse to proceed.
-            conn.set_rls_role(APP_ROLE)
-                .await
-                .map_err(|e| Err::from(TdError::from(ConnectionError::CannotSetProjectScope(e))))?;
-            return Err(Err::from(TdError::from(ConnectionError::ProjectScopeUnresolved)));
-        }
-    };
-    conn.enter_project_scope(APP_ROLE, project)
+    conn.enter_project_scope(APP_ROLE, None)
         .await
         .map_err(|e| Err::from(TdError::from(ConnectionError::CannotSetProjectScope(e))))
 }
 
-/// Implemented by service request types to declare their project scope. CRUD
-/// requests delegate to their `RequestContext` project (Some → `Project`,
-/// None → `Bypass`); auth/system requests return `Bypass`.
-pub trait ProjectScoped {
-    fn project_scope(&self) -> ProjectScope;
+// ---------------------------------------------------------------------------
+// ProjectScopeProvider — scope = Project
+// ---------------------------------------------------------------------------
+
+/// Layer for `scope = Project` services. Unwraps the [`Scoped`] input, scopes
+/// the connection to its project (`SET LOCAL app.project_id`), and puts the
+/// bare request and the project id back on the handler for downstream layers.
+pub struct ProjectScopeProvider<R, P> {
+    _marker: PhantomData<(R, P)>,
 }
 
-// Note: there is no blanket `impl ProjectScoped for ()` or for any other
-// always-bypass request type. Services that intentionally span all projects
-// declare so at the service-factory level (`project_scope = bypass`), which
-// routes through [`BypassProjectScopeProvider`] below. A single
-// `grep "project_scope = bypass"` returns the audit list of cross-project
-// escape hatches.
-
-/// Layer that applies the request's [`ProjectScope`] to the connection the
-/// connection-provider placed in the handler. Inserted by the service-factory
-/// macro right after that provider.
-pub struct ProjectScopeProvider<Req> {
-    _req: PhantomData<Req>,
-}
-
-impl<Req> ProjectScopeProvider<Req> {
+impl<R, P> ProjectScopeProvider<R, P> {
     pub fn new() -> Self {
-        Self { _req: PhantomData }
+        Self {
+            _marker: PhantomData,
+        }
     }
 }
 
-impl<Req> Default for ProjectScopeProvider<Req> {
+impl<R, P> Default for ProjectScopeProvider<R, P> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<Req> Clone for ProjectScopeProvider<Req> {
+impl<R, P> Clone for ProjectScopeProvider<R, P> {
     fn clone(&self) -> Self {
         Self::new()
     }
 }
 
-impl<S, Req> Layer<S> for ProjectScopeProvider<Req> {
-    type Service = ProjectScopeProviderService<S, Req>;
+impl<S, R, P> Layer<S> for ProjectScopeProvider<R, P> {
+    type Service = ProjectScopeProviderService<S, R, P>;
 
     fn layer(&self, inner: S) -> Self::Service {
-        ProjectScopeProviderService { inner, _req: PhantomData }
+        ProjectScopeProviderService {
+            inner,
+            _marker: PhantomData,
+        }
     }
 }
 
-pub struct ProjectScopeProviderService<S, Req> {
+pub struct ProjectScopeProviderService<S, R, P> {
     inner: S,
-    _req: PhantomData<Req>,
+    _marker: PhantomData<(R, P)>,
 }
 
-impl<S: Clone, Req> Clone for ProjectScopeProviderService<S, Req> {
+impl<S: Clone, R, P> Clone for ProjectScopeProviderService<S, R, P> {
     fn clone(&self) -> Self {
-        Self { inner: self.inner.clone(), _req: PhantomData }
+        Self {
+            inner: self.inner.clone(),
+            _marker: PhantomData,
+        }
     }
 }
 
-impl<S, Req, Err> Service<Handler> for ProjectScopeProviderService<S, Req>
+impl<S, R, P, Err> Service<Handler> for ProjectScopeProviderService<S, R, P>
 where
     S: Service<Handler, Response = Handler, Error = Err> + Clone + Send + 'static,
     S::Future: Send,
-    Req: ProjectScoped + Send + Sync + 'static,
+    R: Send + Sync + 'static,
+    P: std::fmt::Display + Send + Sync + 'static,
     Err: From<TdError>,
 {
     type Response = Handler;
     type Error = Err;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
-    fn poll_ready(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
+    fn poll_ready(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
         self.inner.poll_ready(cx)
     }
 
@@ -174,63 +171,69 @@ where
         let clone = self.inner.clone();
         let mut inner = std::mem::replace(&mut self.inner, clone);
 
-        // `get` returns an owned Arc clone, so this does not borrow `handler`.
-        let scope = handler.get::<Req>().map(|req| req.project_scope());
-
         Box::pin(async move {
-            apply_scope::<Err>(&mut handler, scope).await?;
+            let scoped = handler
+                .take::<Scoped<R, P>>()
+                .ok_or_else(|| Err::from(TdError::from(ConnectionError::ProjectScopeUnresolved)))?;
+
+            let conn = handler
+                .get_mut::<DynamicConnection<'static>>()
+                .ok_or_else(|| Err::from(TdError::from(ConnectionError::ConnectionLost)))?;
+            let project = scoped.project.to_string();
+            conn.enter_project_scope(APP_ROLE, Some(&project))
+                .await
+                .map_err(|e| Err::from(TdError::from(ConnectionError::CannotSetProjectScope(e))))?;
+
+            // Hand the bare request and the resolved project to the rest of the
+            // stack: the request as the service sees it, the project id for any
+            // layer that stamps it.
+            handler.set(scoped.request);
+            handler.set(scoped.project);
+
             inner.call(handler).await
         })
     }
 }
 
 // ---------------------------------------------------------------------------
-// BypassProjectScopeProvider
+// GlobalScopeProvider — scope = Global
 // ---------------------------------------------------------------------------
 
-/// Layer that unconditionally applies project-scope bypass to the connection.
-/// Injected by the service-factory macro when a service is declared with
-/// `project_scope = bypass`.
-///
-/// Unlike [`ProjectScopeProvider`] it carries no `Req` generic and adds no
-/// `ProjectScoped` bound on the request type — services declared bypass do
-/// not need their request types to participate in the scope-resolution
-/// trait at all. This is the "I really do span all projects" escape hatch;
-/// `grep "project_scope = bypass"` returns every one.
-pub struct BypassProjectScopeProvider;
+/// Layer for `scope = Global` services. Unconditionally bypasses project scope.
+pub struct GlobalScopeProvider;
 
-impl BypassProjectScopeProvider {
+impl GlobalScopeProvider {
     pub fn new() -> Self {
         Self
     }
 }
 
-impl Default for BypassProjectScopeProvider {
+impl Default for GlobalScopeProvider {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Clone for BypassProjectScopeProvider {
+impl Clone for GlobalScopeProvider {
     fn clone(&self) -> Self {
         Self
     }
 }
 
-impl<S> Layer<S> for BypassProjectScopeProvider {
-    type Service = BypassProjectScopeProviderService<S>;
+impl<S> Layer<S> for GlobalScopeProvider {
+    type Service = GlobalScopeProviderService<S>;
 
     fn layer(&self, inner: S) -> Self::Service {
-        BypassProjectScopeProviderService { inner }
+        GlobalScopeProviderService { inner }
     }
 }
 
 #[derive(Clone)]
-pub struct BypassProjectScopeProviderService<S> {
+pub struct GlobalScopeProviderService<S> {
     inner: S,
 }
 
-impl<S, Err> Service<Handler> for BypassProjectScopeProviderService<S>
+impl<S, Err> Service<Handler> for GlobalScopeProviderService<S>
 where
     S: Service<Handler, Response = Handler, Error = Err> + Clone + Send + 'static,
     S::Future: Send,
@@ -240,7 +243,10 @@ where
     type Error = Err;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
-    fn poll_ready(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
+    fn poll_ready(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
         self.inner.poll_ready(cx)
     }
 
@@ -249,7 +255,7 @@ where
         let mut inner = std::mem::replace(&mut self.inner, clone);
 
         Box::pin(async move {
-            apply_scope::<Err>(&mut handler, Some(ProjectScope::Bypass)).await?;
+            enter_global_scope::<Err>(&mut handler).await?;
             inner.call(handler).await
         })
     }

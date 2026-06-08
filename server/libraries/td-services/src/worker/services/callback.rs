@@ -21,6 +21,7 @@ use td_tower::layers;
     request = UpdateRequest<WorkerIdParam, CallbackRequest>,
     response = (),
     connection = TransactionProvider,
+    scope = "Project",
 )]
 fn service() {
     layers!(
@@ -60,8 +61,8 @@ mod tests {
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::worker::WorkerDBWithNames;
     use td_objects::types::basic::{
-        AccessTokenId, AtTime, BundleId, CollectionName, Decorator, FunctionRuntimeValues, RoleId,
-        UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
+        AccessTokenId, AtTime, BundleId, CollectionName, Decorator, FunctionRuntimeValues,
+        ProjectId, RoleId, UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
@@ -70,12 +71,14 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_worker_callback(db: TdPool) {
+        use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         WorkerCallbackService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<UpdateRequest<WorkerIdParam, CallbackRequest>, ()>(&[
+            .assert_service::<Scoped<UpdateRequest<WorkerIdParam, CallbackRequest>, ProjectId>, ()>(&[
                 // Extract from request.
                 type_of_val(
                     &With::<UpdateRequest<WorkerIdParam, CallbackRequest>>::extract_name::<
@@ -153,12 +156,14 @@ mod tests {
             .unwrap();
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
-                WorkerIdParam {
-                    worker_id: worker.id,
-                },
-                response,
-            );
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .update(
+                    WorkerIdParam {
+                        worker_id: worker.id,
+                    },
+                    response,
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = WorkerCallbackService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
@@ -191,12 +196,14 @@ mod tests {
             .unwrap();
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
-                WorkerIdParam {
-                    worker_id: worker.id,
-                },
-                response,
-            );
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .update(
+                    WorkerIdParam {
+                        worker_id: worker.id,
+                    },
+                    response,
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = WorkerCallbackService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;

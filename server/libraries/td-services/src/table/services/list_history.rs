@@ -22,6 +22,7 @@ use td_tower::layers;
     request = ListRequest<AtTimeParam>,
     response = ListResponse<Table>,
     connection = ConnectionProvider,
+    scope = "Project",
     context = AuthzContext,
 )]
 fn service() {
@@ -61,7 +62,7 @@ mod tests {
     use td_objects::rest_urls::{FunctionParam, TableParam};
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, FunctionIdName,
-        RoleId, TableIdName, TableName, TableNameDto, UserId,
+        ProjectId, RoleId, TableIdName, TableName, TableNameDto, UserId,
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
@@ -70,11 +71,12 @@ mod tests {
     #[td_test::test(db)]
     async fn test_tower_metadata_list_table_versions_history(db: TdPool) {
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         TableListHistoryService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<ListRequest<AtTimeParam>, ListResponse<Table>>(&[
+            .assert_service::<Scoped<ListRequest<AtTimeParam>, ProjectId>, ListResponse<Table>>(&[
                 type_of_val(&With::<ListRequest<AtTimeParam>>::extract::<RequestContext>),
                 type_of_val(&With::<ListRequest<AtTimeParam>>::extract_name::<AtTimeParam>),
                 type_of_val(&With::<AtTimeParam>::extract::<AtTime>),
@@ -143,7 +145,7 @@ mod tests {
                     .function(FunctionIdName::from_str("joaquin")?)
                     .build()?,
                 update.clone(),
-            );
+            ).in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -156,7 +158,7 @@ mod tests {
                     .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
                     .table(TableIdName::from_str("table_2")?)
                     .build()?,
-            );
+            ).in_project(ProjectId::sandbox());
 
         TableDeleteService::with_defaults(db.clone())
             .service()
@@ -172,7 +174,7 @@ mod tests {
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
                 AtTimeParam::builder().at(t0).build()?,
                 ListParams::default(),
-            );
+            ).in_project(ProjectId::sandbox());
 
         let service = TableListHistoryService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -188,7 +190,7 @@ mod tests {
                 ListParamsBuilder::default()
                     .order_by("name".to_string())
                     .build()?,
-            );
+            ).in_project(ProjectId::sandbox());
 
         let service = TableListHistoryService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -204,7 +206,7 @@ mod tests {
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
                 AtTimeParam::builder().at(t2).build()?,
                 ListParams::default(),
-            );
+            ).in_project(ProjectId::sandbox());
 
         let service = TableListHistoryService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;

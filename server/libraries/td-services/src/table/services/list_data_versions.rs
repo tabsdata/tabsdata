@@ -27,6 +27,7 @@ use td_tower::layers;
     request = ListRequest<TableDataVersionAtIdName>,
     response = ListResponse<TableDataVersion>,
     connection = ConnectionProvider,
+    scope = "Project",
     context = AuthzContext,
 )]
 fn service() {

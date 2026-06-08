@@ -21,6 +21,7 @@ mod routes {
         SYNCHROTRON_READ, TRANSACTION_CANCEL, TRANSACTION_RECOVER, TRANSACTIONS_LIST,
         TransactionParam,
     };
+    use td_objects::types::basic::ProjectId;
     use td_services::transaction::services::TransactionServices;
     use tower::ServiceExt;
 
@@ -31,9 +32,10 @@ mod routes {
     pub async fn cancel(
         State(transaction): State<Arc<TransactionServices>>,
         Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Path(param): Path<TransactionParam>,
     ) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
-        let request = context.update(param, ());
+        let request = context.update(param, ()).in_project(project_id);
         let response = transaction.cancel.service().oneshot(request).await?;
         Ok(UpdateStatus::OK(response))
     }
@@ -43,9 +45,10 @@ mod routes {
     pub async fn list(
         State(transaction): State<Arc<TransactionServices>>,
         Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<Transaction>, ErrorStatus> {
-        let request = context.list((), query_params);
+        let request = context.list((), query_params).in_project(project_id);
         let response = transaction.list.service().oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
@@ -55,9 +58,10 @@ mod routes {
     pub async fn recover(
         State(transaction): State<Arc<TransactionServices>>,
         Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Path(param): Path<TransactionParam>,
     ) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
-        let request = context.update(param, ());
+        let request = context.update(param, ()).in_project(project_id);
         let response = transaction.recover.service().oneshot(request).await?;
         Ok(UpdateStatus::OK(response))
     }
@@ -67,9 +71,10 @@ mod routes {
     pub async fn synchrotron(
         State(transaction): State<Arc<TransactionServices>>,
         Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<SynchrotronResponse>, ErrorStatus> {
-        let request = context.list((), query_params);
+        let request = context.list((), query_params).in_project(project_id);
         let response = transaction.synchrotron.service().oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }

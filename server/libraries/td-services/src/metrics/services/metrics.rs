@@ -13,14 +13,15 @@ use td_tower::layers;
 /// `(nodes, edges)` over a window, parameterised by `dim`
 /// (`collection` | `group`). System tables are excluded at the SQL
 /// layer (see `td-queries/src/daos/metrics.rs`).
-// Tenant-scoped: the request carries the resolved project (ProjectScoped), so
-// the connection GUC is set and RLS filters the aggregation to that project —
-// the queries carry no project predicate of their own.
+///
+/// The connection GUC is set to the request's project and RLS filters the
+/// aggregation to it — the queries carry no project predicate of their own.
 #[service_factory(
     name = MetricsService,
     request = MetricsRequest,
     response = MetricsResponse,
     connection = ConnectionProvider,
+    scope = "Project",
 )]
 fn service() {
     layers!(from_fn(build_metrics_response))
@@ -40,7 +41,6 @@ mod tests {
     #[td_test::test(db)]
     async fn test_metrics_empty_window(db: TdPool) -> Result<(), TdError> {
         let request = MetricsRequest {
-            project_id: ProjectId::sandbox(),
             dim: Dim::Collection,
             window: TimeWindow::new(0, 86_400_000),
             unit: WindowUnit::Day,
@@ -49,7 +49,9 @@ mod tests {
             statuses: vec![],
         };
         let service = MetricsService::with_defaults(db).service();
-        let response = service.raw_oneshot(request).await?;
+        let response = service
+            .raw_oneshot(request.in_project(ProjectId::sandbox()))
+            .await?;
         assert_eq!(response.dim, Dim::Collection);
         assert_eq!(response.unit, WindowUnit::Day);
         assert_eq!(response.start_ms, 0);

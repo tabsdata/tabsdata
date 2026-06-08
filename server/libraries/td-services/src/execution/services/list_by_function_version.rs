@@ -19,6 +19,7 @@ use td_tower::layers;
     request = ListRequest<FunctionVersionIdParam>,
     response = ListResponse<Execution>,
     connection = ConnectionProvider,
+    scope = "Project",
 )]
 fn service() {
     layers!(
@@ -46,7 +47,7 @@ mod tests {
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::table::TableDB;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus, RoleId,
+        AccessTokenId, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus, ProjectId, RoleId,
         TableNameDto, TransactionKey, UserId, VersionPos,
     };
     use td_queries::LiveEntry;
@@ -56,12 +57,14 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_list_executions_by_function_version(db: TdPool) {
+        use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         ExecutionListByFunctionVersionService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<ListRequest<FunctionVersionIdParam>, ListResponse<Execution>>(&[
+            .assert_service::<Scoped<ListRequest<FunctionVersionIdParam>, ProjectId>, ListResponse<Execution>>(&[
                 // Extract FunctionVersionId from request.
                 type_of_val(
                     &With::<ListRequest<FunctionVersionIdParam>>::extract_name::<
@@ -203,7 +206,7 @@ mod tests {
                     .function_version_id(function_version_a.id.clone())
                     .build()?,
                 ListParams::default(),
-            );
+            ).in_project(ProjectId::sandbox());
         let response = service.raw_oneshot(request).await?;
 
         assert_eq!(response.len, 1);
@@ -241,7 +244,7 @@ mod tests {
                     .function_version_id(function_version.id.clone())
                     .build()?,
                 ListParams::default(),
-            );
+            ).in_project(ProjectId::sandbox());
         let response = service.raw_oneshot(request).await?;
 
         assert_eq!(response.len, 0);

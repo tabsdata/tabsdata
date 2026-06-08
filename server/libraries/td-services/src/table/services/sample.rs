@@ -28,6 +28,7 @@ use td_tower::layers;
     request = ReadRequest<TableSampleAtName>,
     response = BoxedSyncStream,
     connection = ConnectionProvider,
+    scope = "Project",
     context = AuthzContext,
     context = Storage,
 )]
@@ -82,8 +83,8 @@ mod tests {
     };
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus,
-        RoleId, StorageVersion, TableIdName, TableNameDto, TransactionKey, UncommittedStatus,
-        UserId,
+        ProjectId, RoleId, StorageVersion, TableIdName, TableNameDto, TransactionKey,
+        UncommittedStatus, UserId,
     };
     use td_objects::{Buildable, and};
     use td_queries::LiveEntry;
@@ -102,6 +103,7 @@ mod tests {
         use td_objects::types::basic::{Sql, TableId, TableIdName, TriggeredOn, UncommittedStatus};
 
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         fn dummy_file() -> String {
             if cfg!(target_os = "windows") {
@@ -121,7 +123,7 @@ mod tests {
         TableSampleService::new(db, Arc::new(AuthzContext::default()), Arc::new(storage))
             .metadata()
             .await
-            .assert_service::<ReadRequest<TableSampleAtName>, BoxedSyncStream>(&[
+            .assert_service::<Scoped<ReadRequest<TableSampleAtName>, ProjectId>, BoxedSyncStream>(&[
                 // Extract parameters
                 type_of_val(&With::<ReadRequest<TableSampleAtName>>::extract::<RequestContext>),
                 type_of_val(
@@ -326,7 +328,7 @@ mod tests {
                             .format(FileFormat::Parquet)
                             .build()?,
                         SqlParam::builder().sql(None).build()?,
-                    ));
+                    )).in_project(ProjectId::sandbox());
             let response = service.raw_oneshot(request).await;
             match response {
                 Ok(response) => {

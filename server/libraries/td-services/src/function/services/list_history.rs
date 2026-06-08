@@ -22,6 +22,7 @@ use td_tower::layers;
     request = ListRequest<AtTimeParam>,
     response = ListResponse<Function>,
     connection = ConnectionProvider,
+    scope = "Project",
     context = AuthzContext,
 )]
 fn service() {
@@ -60,6 +61,7 @@ mod tests {
     use td_objects::dxo::function::{FunctionRegister, FunctionUpdate};
     use td_objects::rest_urls::FunctionParam;
     use td_objects::types::basic::{
+        ProjectId,
         AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, FunctionIdName,
         FunctionName, RoleId, UserId,
     };
@@ -70,11 +72,12 @@ mod tests {
     #[td_test::test(db)]
     async fn test_tower_metadata_list_function_versions_history(db: TdPool) {
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         FunctionListHistoryService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<ListRequest<AtTimeParam>, ListResponse<Function>>(&[
+            .assert_service::<Scoped<ListRequest<AtTimeParam>, ProjectId>, ListResponse<Function>>(&[
                 type_of_val(&With::<ListRequest<AtTimeParam>>::extract::<RequestContext>),
                 type_of_val(&With::<ListRequest<AtTimeParam>>::extract_name::<AtTimeParam>),
                 type_of_val(&With::<AtTimeParam>::extract::<AtTime>),
@@ -154,7 +157,8 @@ mod tests {
                     .function(FunctionIdName::from_str("function_1")?)
                     .build()?,
                 update.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -169,7 +173,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
                     .function(FunctionIdName::from_str("function_2")?)
                     .build()?,
-            );
+            )
+            .in_project(ProjectId::sandbox());
         let service = DeleteFunctionService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
 
@@ -198,7 +203,8 @@ mod tests {
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
                 AtTimeParam::builder().at(t0).build()?,
                 ListParams::default(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = FunctionListHistoryService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -215,7 +221,8 @@ mod tests {
                     .order_by("name".to_string())
                     .build()
                     .unwrap(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = FunctionListHistoryService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -230,7 +237,8 @@ mod tests {
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
                 AtTimeParam::builder().at(t2).build()?,
                 ListParams::default(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = FunctionListHistoryService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -246,7 +254,8 @@ mod tests {
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
                 AtTimeParam::builder().at(t3).build()?,
                 ListParams::default(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = FunctionListHistoryService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -262,7 +271,8 @@ mod tests {
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
                 AtTimeParam::builder().at(t4).build()?,
                 ListParams::default(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = FunctionListHistoryService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -277,7 +287,8 @@ mod tests {
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
                 AtTimeParam::builder().at(t5).build()?,
                 ListParams::default(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = FunctionListHistoryService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;

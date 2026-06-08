@@ -6,7 +6,7 @@ use crate::{CurrentEntry, LiveEntry, QueryExecutor};
 use ta_objects::TryUpdater;
 use ta_objects::and;
 use td_error::TdError;
-use td_objects::dxo::crudl::{ReadRequest, RequestContext};
+use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::dependency::DependencyDBBuilder;
 use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::table::{TableDB, TableDBBuilder, TableDBWithNames};
@@ -25,13 +25,11 @@ pub(crate) async fn seed_system_tables(
     db: impl QueryExecutor + Copy,
     function: &FunctionDB,
 ) -> Result<Vec<TableDB>, TdError> {
-    let request_context: ReadRequest<String> = RequestContext::with(
+    let request_context = RequestContext::with(
         AccessTokenId::default(),
         UserId::admin(),
         RoleId::sec_admin(),
-    )
-    .read("");
-    let request_context = request_context.context;
+    );
 
     // System tables
     let mut system_tables = vec![];

@@ -23,6 +23,7 @@ mod routes {
         CREATE_COLLECTION, CollectionParam, DELETE_COLLECTION, GET_COLLECTION, LIST_COLLECTIONS,
         UPDATE_COLLECTION,
     };
+    use td_objects::types::basic::ProjectId;
     use td_services::collection::service::CollectionServices;
     use tower::ServiceExt;
 
@@ -33,9 +34,10 @@ mod routes {
     pub async fn list_collections(
         State(collection_state): State<Arc<CollectionServices>>,
         Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<CollectionRead>, ErrorStatus> {
-        let request = context.list((), query_params);
+        let request = context.list((), query_params).in_project(project_id);
         let response = collection_state.list.service().oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
@@ -45,9 +47,10 @@ mod routes {
     pub async fn get_collection(
         State(collection_state): State<Arc<CollectionServices>>,
         Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Path(collection_param): Path<CollectionParam>,
     ) -> Result<GetStatus<CollectionRead>, ErrorStatus> {
-        let request = context.read(collection_param);
+        let request = context.read(collection_param).in_project(project_id);
         let response = collection_state.read.service().oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }
@@ -57,9 +60,10 @@ mod routes {
     pub async fn create_collection(
         State(collection_state): State<Arc<CollectionServices>>,
         Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Json(request): Json<CollectionCreate>,
     ) -> Result<CreateStatus<CollectionRead>, ErrorStatus> {
-        let request = context.create((), request);
+        let request = context.create((), request).in_project(project_id);
         let response = collection_state.create.service().oneshot(request).await?;
         Ok(CreateStatus::CREATED(response))
     }
@@ -69,10 +73,11 @@ mod routes {
     pub async fn update_collection(
         State(collection_state): State<Arc<CollectionServices>>,
         Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Path(collection_param): Path<CollectionParam>,
         Json(request): Json<CollectionUpdate>,
     ) -> Result<UpdateStatus<CollectionRead>, ErrorStatus> {
-        let request = context.update(collection_param, request);
+        let request = context.update(collection_param, request).in_project(project_id);
         let response = collection_state.update.service().oneshot(request).await?;
         Ok(UpdateStatus::OK(response))
     }
@@ -82,9 +87,10 @@ mod routes {
     pub async fn delete_collection(
         State(collection_state): State<Arc<CollectionServices>>,
         Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Path(collection_param): Path<CollectionParam>,
     ) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
-        let request = context.delete(collection_param);
+        let request = context.delete(collection_param).in_project(project_id);
         let response = collection_state.delete.service().oneshot(request).await?;
         Ok(DeleteStatus::OK(response))
     }

@@ -14,8 +14,7 @@ mod routes {
     use ta_apiserver::status::ok_status::GetStatus;
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
-    use td_error::{ApiError, TdError, api_error};
-    use td_objects::dxo::crudl::RequestContext;
+    use td_error::TdError;
     use td_objects::dxo::metrics::{
         Dim, InflightQuery, InflightRequest, InflightResponse, MetricsQuery, MetricsRequest,
         MetricsResponse, StatusFilterError,
@@ -50,10 +49,7 @@ mod routes {
         Ok((window, unit))
     }
 
-    fn metrics_query_into_request(
-        project_id: ProjectId,
-        q: MetricsQuery,
-    ) -> Result<MetricsRequest, TdError> {
+    fn metrics_query_into_request(q: MetricsQuery) -> Result<MetricsRequest, TdError> {
         let (window, unit) = resolve_window(q.unit, q.align, q.from, q.span)?;
         let status = q.status.unwrap_or(LogicalFunctionRunStatus::Committed);
         if !status.is_ended() {
@@ -64,7 +60,6 @@ mod routes {
             .into());
         }
         Ok(MetricsRequest {
-            project_id,
             dim: q.dim.unwrap_or(Dim::Collection),
             window,
             unit,
@@ -74,10 +69,7 @@ mod routes {
         })
     }
 
-    fn inflight_query_into_request(
-        project_id: ProjectId,
-        q: InflightQuery,
-    ) -> Result<InflightRequest, TdError> {
+    fn inflight_query_into_request(q: InflightQuery) -> Result<InflightRequest, TdError> {
         for status in &q.status {
             if !LogicalFunctionRunStatus::IN_FLIGHT.contains(status) {
                 return Err(StatusFilterError::NotInFlight {
@@ -88,19 +80,9 @@ mod routes {
             }
         }
         Ok(InflightRequest {
-            project_id,
             collections: DimensionFilter::new(q.collection, q.collection_exclude),
             groups: DimensionFilter::new(q.group, q.group_exclude),
             statuses: q.status,
-        })
-    }
-
-    /// The request's resolved project, set by `project_resolver_layer` from the
-    /// `{project}` URL segment. Tenant routes always carry it; absence is an
-    /// internal error.
-    fn require_project(context: &RequestContext) -> Result<ProjectId, TdError> {
-        context.project_id.clone().ok_or_else(|| {
-            api_error!(ApiError::InternalError, "metrics endpoint reached without a resolved project")
         })
     }
 
@@ -108,10 +90,10 @@ mod routes {
     #[doc = "Consolidated operational metrics: nodes + edges over a window"]
     pub async fn get_metrics(
         State(state): State<Arc<OperationalMetricsServices>>,
-        Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Query(query): Query<MetricsQuery>,
     ) -> Result<GetStatus<MetricsResponse>, ErrorStatus> {
-        let request = metrics_query_into_request(require_project(&context)?, query)?;
+        let request = metrics_query_into_request(query)?.in_project(project_id);
         let response = state.metrics.service().oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }
@@ -120,10 +102,10 @@ mod routes {
     #[doc = "Point-in-time count of in-flight runs"]
     pub async fn get_inflight(
         State(state): State<Arc<OperationalMetricsServices>>,
-        Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Query(query): Query<InflightQuery>,
     ) -> Result<GetStatus<InflightResponse>, ErrorStatus> {
-        let request = inflight_query_into_request(require_project(&context)?, query)?;
+        let request = inflight_query_into_request(query)?.in_project(project_id);
         let response = state.inflight.service().oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }
@@ -190,14 +172,14 @@ mod routes {
 
         #[test]
         fn metrics_default_status_is_committed() {
-            let req = metrics_query_into_request(ProjectId::default(), metrics_query(None)).unwrap();
+            let req = metrics_query_into_request(metrics_query(None)).unwrap();
             assert_eq!(req.statuses, vec![LogicalFunctionRunStatus::Committed]);
         }
 
         #[test]
         fn metrics_accepts_ended_status() {
             for s in LogicalFunctionRunStatus::ENDED {
-                let req = metrics_query_into_request(ProjectId::default(), metrics_query(Some(*s))).unwrap();
+                let req = metrics_query_into_request(metrics_query(Some(*s))).unwrap();
                 assert_eq!(req.statuses, vec![*s]);
             }
         }
@@ -205,7 +187,7 @@ mod routes {
         #[test]
         fn metrics_rejects_non_ended_status() {
             for s in LogicalFunctionRunStatus::IN_FLIGHT {
-                let Err(err) = metrics_query_into_request(ProjectId::default(), metrics_query(Some(*s))) else {
+                let Err(err) = metrics_query_into_request(metrics_query(Some(*s))) else {
                     panic!("expected NotEnded rejection for {s}");
                 };
                 assert!(err.to_string().contains("not ENDED"), "got: {err}");
@@ -214,21 +196,21 @@ mod routes {
 
         #[test]
         fn inflight_accepts_empty_status() {
-            let req = inflight_query_into_request(ProjectId::default(), inflight_query(vec![])).unwrap();
+            let req = inflight_query_into_request(inflight_query(vec![])).unwrap();
             assert!(req.statuses.is_empty());
         }
 
         #[test]
         fn inflight_accepts_in_flight_statuses() {
             let qs: Vec<_> = LogicalFunctionRunStatus::IN_FLIGHT.to_vec();
-            let req = inflight_query_into_request(ProjectId::default(), inflight_query(qs.clone())).unwrap();
+            let req = inflight_query_into_request(inflight_query(qs.clone())).unwrap();
             assert_eq!(req.statuses, qs);
         }
 
         #[test]
         fn inflight_rejects_ended_status() {
             for s in LogicalFunctionRunStatus::ENDED {
-                let Err(err) = inflight_query_into_request(ProjectId::default(), inflight_query(vec![*s])) else {
+                let Err(err) = inflight_query_into_request(inflight_query(vec![*s])) else {
                     panic!("expected NotInFlight rejection for {s}");
                 };
                 assert!(err.to_string().contains("not IN_FLIGHT"), "got: {err}");

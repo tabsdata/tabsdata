@@ -22,6 +22,7 @@ use td_tower::layers;
     request = ReadRequest<WorkerLogsParams>,
     response = BoxedSyncStream,
     connection = ConnectionProvider,
+    scope = "Project",
     context = AuthzContext,
 )]
 fn service() {
@@ -60,8 +61,8 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus, RoleId,
-        TransactionKey, UserId, WorkerMessageStatus,
+        AccessTokenId, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus, ProjectId,
+        RoleId, TransactionKey, UserId, WorkerMessageStatus,
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
@@ -69,12 +70,14 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_read_workers_logs(db: TdPool) {
+        use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         WorkerLogService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<ReadRequest<WorkerLogsParams>, BoxedSyncStream>(&[
+            .assert_service::<Scoped<ReadRequest<WorkerLogsParams>, ProjectId>, BoxedSyncStream>(&[
                 // Extract parameters
                 type_of_val(&With::<ReadRequest<WorkerLogsParams>>::extract::<RequestContext>),
                 type_of_val(
@@ -175,7 +178,8 @@ mod tests {
                             .extension(vec![LogsExtension::All])
                             .retry(vec![])
                             .build()?,
-                    );
+                    )
+                    .in_project(ProjectId::sandbox());
 
                     let response = service.raw_oneshot(request).await?;
                     Ok::<_, TdError>(response)

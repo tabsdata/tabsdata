@@ -33,6 +33,7 @@ use td_tower::layers;
     request = UpdateRequest<FunctionParam, FunctionEnable>,
     response = Function,
     connection = TransactionProvider,
+    scope = "Project",
     context = AuthzContext,
     context = SchedulerNotify,
 )]
@@ -111,6 +112,7 @@ mod tests {
     use td_objects::types::basic::BundleId;
     use td_objects::types::basic::CollectionName;
     use td_objects::types::basic::{
+        ProjectId,
         AccessTokenId, Decorator, Enabled, FunctionRuntimeValues, RoleId, TableNameDto, UserId,
     };
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
@@ -126,11 +128,12 @@ mod tests {
         use td_objects::dxo::worker::{WorkerDB, WorkerDBBuilder};
         use td_queries::insert_vec;
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         EnableFunctionService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<UpdateRequest<FunctionParam, FunctionEnable>, Function>(
+            .assert_service::<Scoped<UpdateRequest<FunctionParam, FunctionEnable>, ProjectId>, Function>(
             &[
                 type_of_val(&With::<UpdateRequest<FunctionParam, FunctionEnable>>::extract::<RequestContext>),
                 type_of_val(&
@@ -315,7 +318,8 @@ mod tests {
                 FunctionEnable {
                     enabled: enabled_update,
                 },
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = EnableFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;

@@ -37,8 +37,4 @@ pub enum ProjectError {
          the rows remain but become unreachable once the project is gone.)"
     )]
     ProjectNotEmpty(String) = 2001,
-
-    // 5000-5999: InternalError — surfaces as 5xx.
-    #[error("Request reached the project resolver without an authenticated context")]
-    ResolverMissingContext = 5000,
 }

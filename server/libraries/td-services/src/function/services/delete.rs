@@ -38,6 +38,7 @@ use td_tower::layers;
     request = DeleteRequest<FunctionParam>,
     response = (),
     connection = TransactionProvider,
+    scope = "Project",
     context = AuthzContext,
     context = SchedulerNotify,
 )]
@@ -117,6 +118,7 @@ mod tests {
     use td_objects::dxo::worker::WorkerDB;
     use td_objects::rest_urls::CollectionParam;
     use td_objects::types::basic::{
+        ProjectId,
         AccessTokenId, BundleId, Decorator, FunctionRuntimeValues, RoleId, UserId,
         WorkerMessageStatus, WorkerStatus, WorkerType,
     };
@@ -128,6 +130,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_tower_metadata_delete_function(db: TdPool) {
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         use crate::function::layers::register::{
             build_dependency_versions, build_table_versions, build_tables_trigger_versions,
@@ -143,7 +146,7 @@ mod tests {
         DeleteFunctionService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<DeleteRequest<FunctionParam>, ()>(&[
+            .assert_service::<Scoped<DeleteRequest<FunctionParam>, ProjectId>, ()>(&[
                 type_of_val(&With::<DeleteRequest<FunctionParam>>::extract::<RequestContext>),
                 type_of_val(&With::<DeleteRequest<FunctionParam>>::extract_name::<FunctionParam>),
                 // Extract collection and function from request.
@@ -252,7 +255,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
                     .function(FunctionIdName::from_str("joaquin_workout")?)
                     .build()?,
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = DeleteFunctionService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
@@ -299,7 +303,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
                     .function(FunctionIdName::from_str("joaquin_workout")?)
                     .build()?,
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = DeleteFunctionService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
@@ -358,7 +363,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
                     .function(FunctionIdName::from_str("joaquin_workout")?)
                     .build()?,
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = DeleteFunctionService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
@@ -417,7 +423,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
                     .function(FunctionIdName::from_str("joaquin_workout")?)
                     .build()?,
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = DeleteFunctionService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
@@ -474,7 +481,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(collection_name.as_str())?)
                     .build()?,
                 create_1.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -501,7 +509,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
                     .function(FunctionIdName::from_str("joaquin_workout_2")?)
                     .build()?,
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = DeleteFunctionService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
@@ -563,7 +572,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(collection_name.as_str())?)
                     .build()?,
                 create,
-            );
+            )
+            .in_project(ProjectId::sandbox());
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let function = service.raw_oneshot(request).await?;
 
@@ -574,7 +584,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
                     .function(FunctionIdName::from_str("function_1")?)
                     .build()?,
-            );
+            )
+            .in_project(ProjectId::sandbox());
         let service = DeleteFunctionService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
 

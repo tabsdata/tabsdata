@@ -26,6 +26,7 @@ use td_tower::{layers, service};
     request = CreateRequest<RoleParam, PermissionCreate>,
     response = Permission,
     connection = TransactionProvider,
+    scope = "Global",
     context = AuthzContext,
 )]
 fn service() {

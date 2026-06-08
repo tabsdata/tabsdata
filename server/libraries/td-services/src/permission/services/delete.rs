@@ -26,6 +26,7 @@ use td_tower::{layers, service};
     request = DeleteRequest<RolePermissionParam>,
     response = (),
     connection = TransactionProvider,
+    scope = "Global",
     context = AuthzContext,
 )]
 fn service() {

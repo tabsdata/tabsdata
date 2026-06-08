@@ -25,6 +25,10 @@ use tracing::instrument;
     request = ReadRequest<PhysicalFunctionRunWorkerIdParam>,
     response = WorkerInput,
     connection = TransactionProvider,
+    // Internal worker-callback handler; the apiserver's project_resolver sets
+    // the request's project from the URL, so it runs project-scoped like its
+    // siblings (worker callback/list/logs).
+    scope = "Project",
     context = Storage,
 )]
 fn service() {
@@ -108,7 +112,7 @@ mod tests {
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues,
-        LogicalFunctionRunStatus, RoleId, TableNameDto, TransactionKey, UserId,
+        LogicalFunctionRunStatus, ProjectId, RoleId, TableNameDto, TransactionKey, UserId,
         WorkerMessageStatus,
     };
     use td_queries::LiveEntry;
@@ -163,7 +167,8 @@ mod tests {
             worker_id: worker.id,
         };
         let read = RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
-            .read(param);
+            .read(param)
+            .in_project(ProjectId::sandbox());
         let response = ResolveWorkerMessageService::with_defaults(db.clone())
             .service()
             .raw_oneshot(read)

@@ -18,16 +18,13 @@ use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
 
-// Creating a tenant is a system-scoped operation: the `projects` registry is
-// not RLS-protected and the create must not be pinned to any single project's
-// scope. Spans all projects.
 #[service_factory(
     name = CreateProjectService,
     request = CreateRequest<(), ProjectCreate>,
     response = ProjectRead,
     connection = TransactionProvider,
+    scope = "Global",
     context = AuthzContext,
-    project_scope = bypass,
 )]
 fn service() {
     layers!(

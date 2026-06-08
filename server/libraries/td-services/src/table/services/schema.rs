@@ -23,6 +23,7 @@ use td_tower::layers;
     request = ReadRequest<TableAtIdName>,
     response = TableSchema,
     connection = ConnectionProvider,
+    scope = "Project",
     context = AuthzContext,
     context = Storage,
 )]
@@ -68,7 +69,7 @@ mod tests {
     use td_objects::rest_urls::{AtTimeParam, TableParam, UncommittedParam};
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus,
-        RoleId, StorageVersion, TableIdName, TableName, TableNameDto, TransactionKey,
+        ProjectId, RoleId, StorageVersion, TableIdName, TableName, TableNameDto, TransactionKey,
         UncommittedStatus, UserId,
     };
     use td_objects::{Buildable, and};
@@ -88,11 +89,12 @@ mod tests {
         use td_objects::types::basic::{TableId, TableIdName, TriggeredOn, UncommittedStatus};
 
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         TableSchemaService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<ReadRequest<TableAtIdName>, TableSchema>(&[
+            .assert_service::<Scoped<ReadRequest<TableAtIdName>, ProjectId>, TableSchema>(&[
                 type_of_val(&With::<ReadRequest<TableAtIdName>>::extract::<RequestContext>),
                 type_of_val(&With::<ReadRequest<TableAtIdName>>::extract_name::<TableAtIdName>),
                 type_of_val(&With::<TableAtIdName>::extract::<CollectionIdName>),
@@ -279,7 +281,7 @@ mod tests {
                         UncommittedParam::builder()
                             .uncommitted(UncommittedStatus::TRUE)
                             .build()?,
-                    ));
+                    )).in_project(ProjectId::sandbox());
             service.raw_oneshot(request).await
         }
 

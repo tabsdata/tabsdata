@@ -9,7 +9,7 @@ use td_error::assert_service_error;
 use td_objects::Buildable;
 use td_objects::dxo::collection::CollectionCreate;
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::types::basic::{AccessTokenId, CollectionName, Description, RoleId, UserId};
+use td_objects::types::basic::{ProjectId, AccessTokenId, CollectionName, Description, RoleId, UserId};
 
 #[td_test::test(db)]
 async fn test_not_allowed_to_create_collection(db: TdPool) {
@@ -23,7 +23,8 @@ async fn test_not_allowed_to_create_collection(db: TdPool) {
         .unwrap();
 
     let request = RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
-        .create((), create);
+        .create((), create)
+        .in_project(ProjectId::sandbox());
 
     let service = CreateCollectionService::with_defaults(db.clone()).service();
 

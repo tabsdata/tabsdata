@@ -28,6 +28,7 @@ use td_tower::layers;
     request = CreateRequest<FunctionParam, FunctionPatch>,
     response = FunctionPatchRecord,
     connection = TransactionProvider,
+    scope = "Project",
     context = AuthzContext,
 )]
 fn service() {
@@ -66,12 +67,14 @@ mod tests {
     use td_objects::Buildable;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
+        ProjectId,
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues, RoleId,
         TableNameDto, UserId,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::Scoped;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -81,7 +84,7 @@ mod tests {
         CreateFunctionPatchService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<CreateRequest<FunctionParam, FunctionPatch>, FunctionPatchRecord>(&[
+            .assert_service::<Scoped<CreateRequest<FunctionParam, FunctionPatch>, ProjectId>, FunctionPatchRecord>(&[
                 type_of_val(
                     &With::<CreateRequest<FunctionParam, FunctionPatch>>::extract::<RequestContext>,
                 ),
@@ -157,7 +160,7 @@ mod tests {
         collection: &str,
         function: &str,
         body: FunctionPatch,
-    ) -> CreateRequest<FunctionParam, FunctionPatch> {
+    ) -> Scoped<CreateRequest<FunctionParam, FunctionPatch>, ProjectId> {
         let param = FunctionParam::builder()
             .collection(CollectionIdName::from_str(collection).unwrap())
             .function(FunctionIdName::from_str(function).unwrap())
@@ -165,6 +168,7 @@ mod tests {
             .unwrap();
         RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
             .create(param, body)
+            .in_project(ProjectId::sandbox())
     }
 
     #[td_test::test(db)]

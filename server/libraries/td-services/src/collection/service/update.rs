@@ -26,6 +26,7 @@ use td_tower::layers;
     request = UpdateRequest<CollectionParam, CollectionUpdate>,
     response = CollectionRead,
     connection = TransactionProvider,
+    scope = "Project",
     context = AuthzContext,
 )]
 fn service() {
@@ -68,6 +69,7 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::rest_urls::CollectionParam;
     use td_objects::types::basic::{
+        ProjectId,
         AccessTokenId, AtTime, CollectionName, Description, RoleId, UserId, UserName,
     };
     use td_queries::test_utils::SeedEntry;
@@ -77,11 +79,12 @@ mod tests {
     #[td_test::test(db)]
     async fn test_tower_metadata_update_collection(db: TdPool) {
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         UpdateCollectionService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<UpdateRequest<CollectionParam, CollectionUpdate>, CollectionRead>(&[
+            .assert_service::<Scoped<UpdateRequest<CollectionParam, CollectionUpdate>, ProjectId>, CollectionRead>(&[
                 type_of_val(
                     &With::<UpdateRequest<CollectionParam, CollectionUpdate>>::extract::<
                         RequestContext,
@@ -143,7 +146,8 @@ mod tests {
                 .build()
                 .unwrap(),
             update,
-        );
+        )
+        .in_project(ProjectId::sandbox());
 
         let service = UpdateCollectionService::with_defaults(db).service();
         let response = service.raw_oneshot(request).await;

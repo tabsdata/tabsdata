@@ -26,6 +26,7 @@ use td_tower::layers;
     request = CreateRequest<FunctionParam, ExecutionRequest>,
     response = ExecutionResponse,
     connection = TransactionProvider,
+    scope = "Project",
     context = AuthzContext,
     context = TransactionBy,
     context = SchedulerNotify,
@@ -76,7 +77,7 @@ pub(crate) mod tests {
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, Depth, Enabled, ExecutionName,
         ExecutionStatus, FunctionName, FunctionRuntimeValues, LogicalFunctionRunStatus,
-        OverrideDisabledTrigger, RoleId, TableName, TableNameDto, ToCollectionId, TransactionKey,
+        OverrideDisabledTrigger, ProjectId, RoleId, TableName, TableNameDto, ToCollectionId, TransactionKey,
         TransactionStatus, TriggeredOn, UserId,
     };
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
@@ -116,14 +117,16 @@ pub(crate) mod tests {
         use td_objects::dxo::trigger::TriggerDBWithNames;
         use td_objects::tower_service::with::With;
         use td_objects::types::basic::{CollectionId, FunctionId, FunctionOnly, TriggerType};
+        use td_objects::types::basic::ProjectId;
         use td_objects::types::recursion::RecursionOptions;
         use td_queries::{insert, insert_vec};
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         ExecuteFunctionService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<CreateRequest<FunctionParam, ExecutionRequest>, ExecutionResponse>(
+            .assert_service::<Scoped<CreateRequest<FunctionParam, ExecutionRequest>, ProjectId>, ExecutionResponse>(
                 &[
                     // Extract from request.
                     type_of_val(
@@ -460,7 +463,7 @@ pub(crate) mod tests {
                     .name(Some(ExecutionName::try_from("test_execution")?))
                     .function_only(single_function)
                     .build()?,
-            );
+            ).in_project(ProjectId::sandbox());
 
         let service = ExecuteFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -779,7 +782,7 @@ pub(crate) mod tests {
                 ExecutionRequest::builder()
                     .name(Some(ExecutionName::try_from("test_execution")?))
                     .build()?,
-            );
+            ).in_project(ProjectId::sandbox());
 
         let service = ExecuteFunctionService::with_defaults(db.clone()).service();
         let _response = service.raw_oneshot(request).await?;
@@ -916,7 +919,7 @@ pub(crate) mod tests {
                     .name(Some(ExecutionName::try_from("test_execution")?))
                     .override_disabled_trigger(override_disabled_trigger)
                     .build()?,
-            );
+            ).in_project(ProjectId::sandbox());
 
         let service = ExecuteFunctionService::with_defaults(db.clone()).service();
 

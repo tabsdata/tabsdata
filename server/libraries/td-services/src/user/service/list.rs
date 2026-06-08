@@ -20,6 +20,7 @@ use td_tower::layers;
     request = ListRequest<()>,
     response = ListResponse<UserRead>,
     connection = ConnectionProvider,
+    scope = "Global",
     context = AuthzContext,
 )]
 fn service() {

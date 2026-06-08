@@ -19,6 +19,7 @@ use td_tower::layers;
     request = UpdateRequest<(), ()>,
     response = (),
     connection = TransactionProvider,
+    scope = "Global",
     context = Sessions,
 )]
 fn service() {

@@ -33,6 +33,7 @@ use td_tower::layers;
     request = ReadRequest<FunctionParam>,
     response = FunctionWithTables,
     connection = ConnectionProvider,
+    scope = "Project",
     context = AuthzContext,
 )]
 fn service() {
@@ -124,6 +125,7 @@ mod tests {
     use td_objects::Buildable;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
+        ProjectId,
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues, RoleId,
         TableNameDto, UserId, UserName, WorkerConfig,
     };
@@ -135,11 +137,12 @@ mod tests {
     #[td_test::test(db)]
     async fn test_tower_metadata_read_function_version(db: TdPool) {
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         ReadFunctionService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<ReadRequest<FunctionParam>, FunctionWithTables>(&[
+            .assert_service::<Scoped<ReadRequest<FunctionParam>, ProjectId>, FunctionWithTables>(&[
                 type_of_val(&With::<ReadRequest<FunctionParam>>::extract::<RequestContext>),
                 type_of_val(&With::<ReadRequest<FunctionParam>>::extract_name::<FunctionParam>),
                 // Extract from request.
@@ -261,7 +264,8 @@ mod tests {
                     ))?)
                     .function(FunctionIdName::from_str("joaquin_workout")?)
                     .build()?,
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = ReadFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;

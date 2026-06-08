@@ -31,6 +31,7 @@ use td_tower::layers;
     request = DeleteRequest<CollectionParam>,
     response = (),
     connection = TransactionProvider,
+    scope = "Project",
     context = AuthzContext,
 )]
 fn service() {
@@ -106,6 +107,7 @@ mod tests {
     use td_objects::dxo::worker::WorkerDB;
     use td_objects::rest_urls::CollectionParam;
     use td_objects::types::basic::{
+        ProjectId,
         AccessTokenId, BundleId, CollectionName, Decorator, DependencyStatus, FunctionName,
         FunctionRuntimeValues, FunctionStatus, LogicalFunctionRunStatus, RoleId, TableName,
         TableNameDto, TableStatus, TransactionKey, TriggerStatus, UserId, WorkerMessageStatus,
@@ -120,11 +122,12 @@ mod tests {
     #[td_test::test(db)]
     async fn test_tower_metadata_delete_collection(db: TdPool) {
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         DeleteCollectionService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<DeleteRequest<CollectionParam>, ()>(&[
+            .assert_service::<Scoped<DeleteRequest<CollectionParam>, ProjectId>, ()>(&[
                 type_of_val(&With::<DeleteRequest<CollectionParam>>::extract::<RequestContext>),
                 type_of_val(&AuthzOn::<System>::set),
                 type_of_val(&Authz::<SysAdmin>::check),
@@ -283,7 +286,8 @@ mod tests {
             CollectionParam::builder()
                 .collection(CollectionIdName::from_str(&name.to_string())?)
                 .build()?,
-        );
+        )
+        .in_project(ProjectId::sandbox());
 
         DeleteCollectionService::with_defaults(db.clone())
             .service()
@@ -388,7 +392,8 @@ mod tests {
             CollectionParam::builder()
                 .collection(CollectionIdName::from_str(&name_c_0.to_string())?)
                 .build()?,
-        );
+        )
+        .in_project(ProjectId::sandbox());
 
         DeleteCollectionService::with_defaults(db.clone())
             .service()

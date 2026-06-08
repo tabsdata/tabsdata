@@ -26,6 +26,7 @@ use td_tower::layers;
     request = ListRequest<FunctionAtIdName>,
     response = ListResponse<Function>,
     connection = ConnectionProvider,
+    scope = "Project",
     context = AuthzContext,
 )]
 fn service() {
@@ -78,6 +79,7 @@ mod tests {
     use td_objects::dxo::function::{FunctionRegister, FunctionUpdate};
     use td_objects::rest_urls::FunctionParam;
     use td_objects::types::basic::{
+        ProjectId,
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionName, RoleId, UserId,
     };
     use td_queries::test_utils::SeedEntry;
@@ -87,11 +89,12 @@ mod tests {
     #[td_test::test(db)]
     async fn test_tower_metadata_function_history(db: TdPool) {
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         FunctionHistoryService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<ListRequest<FunctionAtIdName>, ListResponse<Function>>(&[
+            .assert_service::<Scoped<ListRequest<FunctionAtIdName>, ProjectId>, ListResponse<Function>>(&[
                 type_of_val(&With::<ListRequest<FunctionAtIdName>>::extract::<RequestContext>),
                 type_of_val(
                     &With::<ListRequest<FunctionAtIdName>>::extract_name::<FunctionAtIdName>,
@@ -169,7 +172,8 @@ mod tests {
                     .function(FunctionIdName::from_str("function_1")?)
                     .build()?,
                 update.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -184,7 +188,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
                     .function(FunctionIdName::from_str("function_2")?)
                     .build()?,
-            );
+            )
+            .in_project(ProjectId::sandbox());
         let service = DeleteFunctionService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
 
@@ -217,7 +222,8 @@ mod tests {
                     .at(t0)
                     .build()?,
                 ListParams::default(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = FunctionHistoryService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -234,7 +240,8 @@ mod tests {
                 ListParamsBuilder::default()
                     .order_by("name".to_string())
                     .build()?,
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = FunctionHistoryService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -253,7 +260,8 @@ mod tests {
                     .at(t2)
                     .build()?,
                 ListParams::default(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = FunctionHistoryService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -272,7 +280,8 @@ mod tests {
                     .at(t3)
                     .build()?,
                 ListParams::default(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = FunctionHistoryService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -290,7 +299,8 @@ mod tests {
                     .order_by("name".to_string())
                     .build()
                     .unwrap(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = FunctionHistoryService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;

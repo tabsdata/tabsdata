@@ -24,6 +24,7 @@ use td_tower::layers;
     request = ReadRequest<TableAtIdName>,
     response = BoxedSyncStream,
     connection = ConnectionProvider,
+    scope = "Project",
     context = AuthzContext,
     context = Storage,
 )]
@@ -71,7 +72,7 @@ pub(crate) mod tests {
     use td_objects::rest_urls::{AtTimeParam, TableParam, UncommittedParam};
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus,
-        RoleId, StorageVersion, TableIdName, TableName, TableNameDto, TransactionKey,
+        ProjectId, RoleId, StorageVersion, TableIdName, TableName, TableNameDto, TransactionKey,
         UncommittedStatus, UserId,
     };
     use td_objects::{Buildable, and};
@@ -89,11 +90,12 @@ pub(crate) mod tests {
 
         use td_objects::And;
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         TableDownloadService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<ReadRequest<TableAtIdName>, BoxedSyncStream>(&[
+            .assert_service::<Scoped<ReadRequest<TableAtIdName>, ProjectId>, BoxedSyncStream>(&[
                 // Extract parameters
                 type_of_val(&With::<ReadRequest<TableAtIdName>>::extract::<RequestContext>),
                 type_of_val(&With::<ReadRequest<TableAtIdName>>::extract_name::<TableAtIdName>),
@@ -174,7 +176,7 @@ pub(crate) mod tests {
                         UncommittedParam::builder()
                             .uncommitted(UncommittedStatus::TRUE)
                             .build()?,
-                    ));
+                    )).in_project(ProjectId::sandbox());
             let service = TableDownloadService::build(context);
             let response = service.service().raw_oneshot(request).await?;
             let mut stream = response.into_inner();
@@ -197,7 +199,7 @@ pub(crate) mod tests {
                         UncommittedParam::builder()
                             .uncommitted(UncommittedStatus::TRUE)
                             .build()?,
-                    ));
+                    )).in_project(ProjectId::sandbox());
             let service = TableDownloadService::build(context);
             let response = service.service().raw_oneshot(request).await?;
             let mut stream = response.into_inner();

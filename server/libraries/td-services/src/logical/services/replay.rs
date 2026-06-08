@@ -27,6 +27,7 @@ use td_tower::layers;
     request = CreateRequest<LogicalFunctionRunParam, ()>,
     response = LogicalFunctionRunReplayResponse,
     connection = TransactionProvider,
+    scope = "Project",
     context = AuthzContext,
     context = SchedulerNotify,
 )]
@@ -86,12 +87,13 @@ mod tests {
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, Description,
         FunctionRuntimeValues, FunctionStatus, FunctionVersionId, LogicalFunctionRunStatus,
-        LogicalPointerReason, LogicalPointerStatus, PhysicalFunctionRunStatus, RoleId, Snippet,
-        TableNameDto, TransactionKey, UserId,
+        LogicalPointerReason, LogicalPointerStatus, PhysicalFunctionRunStatus, ProjectId, RoleId,
+        Snippet, TableNameDto, TransactionKey, UserId,
     };
     use td_queries::test_utils::SeedEntry;
     use td_queries::{LiveEntry, VersionedEntry};
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::Scoped;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -101,7 +103,7 @@ mod tests {
         ReplayLogicalFunctionRunService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<CreateRequest<LogicalFunctionRunParam, ()>, LogicalFunctionRunReplayResponse,>(&[
+            .assert_service::<Scoped<CreateRequest<LogicalFunctionRunParam, ()>, ProjectId>, LogicalFunctionRunReplayResponse,>(&[
                 // Pull the request envelope apart.
                 type_of_val(&With::<CreateRequest<LogicalFunctionRunParam, ()>>::extract::<RequestContext>),
                 type_of_val(&With::<RequestContext>::extract::<AtTime>),
@@ -136,7 +138,7 @@ mod tests {
     fn replay_request(
         collection: &CollectionName,
         lfr_id: &LogicalFunctionRunId,
-    ) -> CreateRequest<LogicalFunctionRunParam, ()> {
+    ) -> Scoped<CreateRequest<LogicalFunctionRunParam, ()>, ProjectId> {
         let param = LogicalFunctionRunParam::builder()
             .collection(CollectionIdName::from_str(&collection.to_string()).unwrap())
             .logical_function_run(lfr_id.clone())
@@ -144,6 +146,7 @@ mod tests {
             .unwrap();
         RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
             .create(param, ())
+            .in_project(ProjectId::sandbox())
     }
 
     /// Seed a function with one output table, run plan-build proxy (seed

@@ -37,6 +37,7 @@ impl GraphConfig for GraphOpts {
     request = ReadRequest<TableParam>,
     response = TableFlowGraphResponse,
     connection = ConnectionProvider,
+    scope = "Project",
 )]
 fn service() {
     layers!(
@@ -78,7 +79,7 @@ mod tests {
     use td_objects::dxo::graph::GraphEdge;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionName, FunctionRuntimeValues,
-        RoleId, TableName, TableNameDto, UserId,
+        ProjectId, RoleId, TableName, TableNameDto, UserId,
     };
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
     use td_objects::{Buildable, and};
@@ -91,11 +92,12 @@ mod tests {
     async fn test_tower_metadata_table_flow_graph(db: TdPool) {
         use crate::graph::layers::build::GraphBuilder;
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         TableFlowGraphService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<ReadRequest<TableParam>, TableFlowGraphResponse>(&[
+            .assert_service::<Scoped<ReadRequest<TableParam>, ProjectId>, TableFlowGraphResponse>(&[
                 // Extract from request.
                 type_of_val(&With::<ReadRequest<TableParam>>::extract_name::<TableParam>),
                 type_of_val(&With::<ReadRequest<TableParam>>::extract::<RequestContext>),
@@ -177,7 +179,7 @@ mod tests {
                     .collection(CollectionIdName::from_str(&collection_name.to_string())?)
                     .table(TableIdName::from_str("table_0")?)
                     .build()?,
-            );
+            ).in_project(ProjectId::sandbox());
 
         let response = service.raw_oneshot(request).await?;
 
@@ -295,7 +297,7 @@ mod tests {
                     .collection(CollectionIdName::from_str(&collection_name.to_string())?)
                     .table(TableIdName::from_str("table_0")?)
                     .build()?,
-            );
+            ).in_project(ProjectId::sandbox());
 
         let response = service.raw_oneshot(request).await?;
 
@@ -436,7 +438,7 @@ mod tests {
                     .collection(CollectionIdName::from_str(&collection_name.to_string())?)
                     .table(TableIdName::from_str("table_3")?)
                     .build()?,
-            );
+            ).in_project(ProjectId::sandbox());
 
         let response = service.raw_oneshot(request).await?;
 

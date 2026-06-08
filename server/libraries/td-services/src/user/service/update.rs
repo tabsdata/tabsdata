@@ -28,6 +28,7 @@ use td_tower::layers;
     request = UpdateRequest<UserParam, UserUpdate>,
     response = UserRead,
     connection = TransactionProvider,
+    scope = "Global",
     context = AuthzContext,
     context = PasswordHashingConfig,
 )]

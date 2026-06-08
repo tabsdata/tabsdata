@@ -27,6 +27,7 @@ use td_tower::layers;
     request = CreateRequest<(), UserCreate>,
     response = UserRead,
     connection = TransactionProvider,
+    scope = "Global",
     context = AuthzContext,
     context = PasswordHashingConfig,
 )]

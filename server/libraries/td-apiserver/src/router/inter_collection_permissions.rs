@@ -23,6 +23,7 @@ mod routes {
         CREATE_INTER_COLLECTION_PERMISSION, CollectionParam, DELETE_INTER_COLLECTION_PERMISSION,
         InterCollectionPermissionParam, LIST_INTER_COLLECTION_PERMISSIONS,
     };
+    use td_objects::types::basic::ProjectId;
     use td_services::inter_coll_permission::services::InterCollectionPermissionServices;
     use tower::ServiceExt;
 
@@ -33,10 +34,11 @@ mod routes {
     pub async fn create(
         State(state): State<Arc<InterCollectionPermissionServices>>,
         Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Path(role_param): Path<CollectionParam>,
         Json(request): Json<InterCollectionPermissionCreate>,
     ) -> Result<CreateStatus<InterCollectionPermission>, ErrorStatus> {
-        let request = context.create(role_param, request);
+        let request = context.create(role_param, request).in_project(project_id);
         let response = state.create.service().oneshot(request).await?;
         Ok(CreateStatus::CREATED(response))
     }
@@ -46,9 +48,10 @@ mod routes {
     pub async fn delete(
         State(state): State<Arc<InterCollectionPermissionServices>>,
         Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Path(param): Path<InterCollectionPermissionParam>,
     ) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
-        let request = context.delete(param);
+        let request = context.delete(param).in_project(project_id);
         let response = state.delete.service().oneshot(request).await?;
         Ok(DeleteStatus::OK(response))
     }
@@ -58,10 +61,11 @@ mod routes {
     pub async fn list(
         State(state): State<Arc<InterCollectionPermissionServices>>,
         Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Query(query_params): Query<ListParams>,
         Path(path_params): Path<CollectionParam>,
     ) -> Result<ListStatus<InterCollectionPermission>, ErrorStatus> {
-        let request = context.list(path_params, query_params);
+        let request = context.list(path_params, query_params).in_project(project_id);
         let response = state.list.service().oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }

@@ -26,6 +26,7 @@ mod routes {
         LIST_TABLES, LIST_TABLES_BY_COLL, SAMPLE_TABLE, SCHEMA_TABLE, SampleOffsetLenParam,
         SqlParam, TABLE_DELETE, TABLE_FLOW_GRAPH, TableParam, UncommittedParam,
     };
+    use td_objects::types::basic::ProjectId;
     use td_services::table::services::TableServices;
     use td_tower::ctx_service::RawOneshot;
     use tower::ServiceExt;
@@ -37,9 +38,10 @@ mod routes {
     pub async fn delete(
         State(state): State<Arc<TableServices>>,
         Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Path(table_path): Path<TableParam>,
     ) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
-        let request = context.delete(table_path);
+        let request = context.delete(table_path).in_project(project_id);
         let response = state.delete.service().oneshot(request).await?;
         Ok(DeleteStatus::OK(response))
     }
@@ -54,12 +56,13 @@ mod routes {
     pub async fn download(
         State(tables): State<Arc<TableServices>>,
         Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Path(table_param): Path<TableParam>,
         Query(at_param): Query<AtTimeParam>,
         Query(uncommitted_status): Query<UncommittedParam>,
     ) -> Result<DownloadResponse, ErrorStatus> {
         let name = TableAtIdName::new(table_param, at_param, uncommitted_status);
-        let request = context.read(name);
+        let request = context.read(name).in_project(project_id);
         let stream = tables.download.service().raw_oneshot(request).await?;
         Ok(DownloadResponse::parquet(stream))
     }
@@ -69,9 +72,10 @@ mod routes {
     pub async fn list(
         State(state): State<Arc<TableServices>>,
         Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<Table>, ErrorStatus> {
-        let request = context.list((), query_params);
+        let request = context.list((), query_params).in_project(project_id);
         let response = state.list.service().oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
@@ -81,10 +85,11 @@ mod routes {
     pub async fn list_by_collection(
         State(state): State<Arc<TableServices>>,
         Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Path(collection_param): Path<CollectionParam>,
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<Table>, ErrorStatus> {
-        let request = context.list(collection_param, query_params);
+        let request = context.list(collection_param, query_params).in_project(project_id);
         let response = state.list_by_collection.service().oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
@@ -99,12 +104,13 @@ mod routes {
     pub async fn list_data_versions(
         State(state): State<Arc<TableServices>>,
         Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Path(table_param): Path<TableParam>,
         Query(query_params): Query<ListParams>,
         Query(at_param): Query<AtTimeParam>,
     ) -> Result<ListStatus<TableDataVersion>, ErrorStatus> {
         let name = TableDataVersionAtIdName::new(table_param, at_param);
-        let request = context.list(name, query_params);
+        let request = context.list(name, query_params).in_project(project_id);
         let response = state.list_data_versions.service().oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
@@ -120,6 +126,7 @@ mod routes {
     pub async fn sample(
         State(tables): State<Arc<TableServices>>,
         Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Path(table_param): Path<TableParam>,
         Query(at_param): Query<AtTimeParam>,
         Query(offset_len_param): Query<SampleOffsetLenParam>,
@@ -135,7 +142,7 @@ mod routes {
             file_format_param,
             sql_param,
         );
-        let request = context.read(name);
+        let request = context.read(name).in_project(project_id);
         let stream = tables.sample.service().raw_oneshot(request).await?;
         Ok(DownloadResponse::csv(stream))
     }
@@ -145,12 +152,13 @@ mod routes {
     pub async fn schema(
         State(state): State<Arc<TableServices>>,
         Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Path(table_param): Path<TableParam>,
         Query(at_param): Query<AtTimeParam>,
         Query(uncommitted_status): Query<UncommittedParam>,
     ) -> Result<GetStatus<TableSchema>, ErrorStatus> {
         let name = TableAtIdName::new(table_param, at_param, uncommitted_status);
-        let request = context.read(name);
+        let request = context.read(name).in_project(project_id);
         let response = state.schema.service().oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }
@@ -160,9 +168,10 @@ mod routes {
     pub async fn graph(
         State(state): State<Arc<TableServices>>,
         Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Path(table_path): Path<TableParam>,
     ) -> Result<GetStatus<TableFlowGraphResponse>, ErrorStatus> {
-        let request = context.read(table_path);
+        let request = context.read(table_path).in_project(project_id);
         let response = state.flow_graph.service().oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }

@@ -18,6 +18,7 @@ mod routes {
     use td_objects::dxo::logical::FunctionRun;
     use td_objects::dxo::physical_function_run::PhysicalFunctionRun;
     use td_objects::rest_urls::{FUNCTION_RUN_GET, FUNCTION_RUN_LIST, PhysicalFunctionRunParam};
+    use td_objects::types::basic::ProjectId;
     use td_services::function_run::services::FunctionRunServices;
     use tower::ServiceExt;
 
@@ -31,9 +32,10 @@ mod routes {
     pub async fn list(
         State(physical_function_runs): State<Arc<FunctionRunServices>>,
         Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<FunctionRun>, ErrorStatus> {
-        let request = context.list((), query_params);
+        let request = context.list((), query_params).in_project(project_id);
         let response = physical_function_runs
             .list
             .service()
@@ -47,9 +49,10 @@ mod routes {
     pub async fn read_run(
         State(state): State<Arc<FunctionRunServices>>,
         Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Path(param): Path<PhysicalFunctionRunParam>,
     ) -> Result<GetStatus<PhysicalFunctionRun>, ErrorStatus> {
-        let request = context.read(param);
+        let request = context.read(param).in_project(project_id);
         let response = state.read.service().oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }

@@ -24,6 +24,7 @@ use td_tower::layers;
     request = UpdateRequest<GroupParam, GroupUpdate>,
     response = Group,
     connection = TransactionProvider,
+    scope = "Global",
     context = AuthzContext,
 )]
 fn service() {

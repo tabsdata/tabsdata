@@ -22,6 +22,7 @@ use td_tower::layers;
     request = ReadRequest<ExecutionParam>,
     response = ExecutionDetails,
     connection = ConnectionProvider,
+    scope = "Project",
 )]
 fn service() {
     layers!(
@@ -62,18 +63,20 @@ mod tests {
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
+    use td_objects::types::basic::{AccessTokenId, ProjectId, RoleId, UserId};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_execution_details(db: TdPool) {
+        use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         ExecutionDetailsService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<ReadRequest<ExecutionParam>, ExecutionDetails>(&[
+            .assert_service::<Scoped<ReadRequest<ExecutionParam>, ProjectId>, ExecutionDetails>(&[
                 // Extract from request.
                 type_of_val(&With::<ReadRequest<ExecutionParam>>::extract_name::<ExecutionParam>),
                 // Find Plan and its ID.
@@ -110,7 +113,7 @@ mod tests {
                 ExecutionParam::builder()
                     .execution(ExecutionIdName::from_str(&execution.id.to_string())?)
                     .build()?,
-            );
+            ).in_project(ProjectId::sandbox());
         let response = service.raw_oneshot(request).await?;
 
         assert_eq!(response.execution.id, execution.id);

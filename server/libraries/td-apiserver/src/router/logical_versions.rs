@@ -16,6 +16,7 @@ mod routes {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::logical::LogicalFunctionRunReplayResponse;
     use td_objects::rest_urls::{LOGICAL_FUNCTION_RUN_REPLAY, LogicalFunctionRunParam};
+    use td_objects::types::basic::ProjectId;
     use td_services::logical::services::LogicalServices;
     use tower::ServiceExt;
 
@@ -26,9 +27,10 @@ mod routes {
     pub async fn replay(
         State(state): State<Arc<LogicalServices>>,
         Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Path(param): Path<LogicalFunctionRunParam>,
     ) -> Result<CreateStatus<LogicalFunctionRunReplayResponse>, ErrorStatus> {
-        let request = context.create(param, ());
+        let request = context.create(param, ()).in_project(project_id);
         let response = state.replay().service().oneshot(request).await?;
         Ok(CreateStatus::CREATED(response))
     }

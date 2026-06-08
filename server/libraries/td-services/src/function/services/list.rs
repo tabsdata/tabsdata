@@ -20,6 +20,7 @@ use td_tower::layers;
     request = ListRequest<()>,
     response = ListResponse<Function>,
     connection = ConnectionProvider,
+    scope = "Project",
     context = AuthzContext,
 )]
 fn service() {
@@ -52,6 +53,7 @@ mod tests {
     use td_objects::dxo::crudl::ListParams;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
+        ProjectId,
         AccessTokenId, BundleId, CollectionName, Decorator, Description, FunctionName, RoleId,
         RoleName, UserEnabled, UserId, UserName,
     };
@@ -62,11 +64,12 @@ mod tests {
     #[td_test::test(db)]
     async fn test_tower_metadata_list_function_versions(db: TdPool) {
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         FunctionListService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<ListRequest<()>, ListResponse<Function>>(&[
+            .assert_service::<Scoped<ListRequest<()>, ProjectId>, ListResponse<Function>>(&[
                 type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
                 // get allowed collections
                 type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::visible_collections),
@@ -127,7 +130,8 @@ mod tests {
         // List current functions
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
-                .list((), ListParams::default());
+                .list((), ListParams::default())
+                .in_project(ProjectId::sandbox());
 
         let service = FunctionListService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -198,7 +202,8 @@ mod tests {
             UserId::admin(),
             RoleId::sys_admin(),
         )
-        .list((), ListParams::default());
+        .list((), ListParams::default())
+        .in_project(ProjectId::sandbox());
 
         let service = FunctionListService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -211,7 +216,8 @@ mod tests {
 
         // No functions should be listed for unauthorized user
         let request = RequestContext::with(AccessTokenId::default(), user.id, role.id)
-            .list((), ListParams::default());
+            .list((), ListParams::default())
+            .in_project(ProjectId::sandbox());
 
         let service = FunctionListService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;

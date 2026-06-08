@@ -28,6 +28,7 @@ use td_tower::layers;
     request = CreateRequest<CollectionParam, FunctionUpload>,
     response = Bundle,
     connection = TransactionProvider,
+    scope = "Project",
     context = AuthzContext,
     context = Storage,
 )]
@@ -80,7 +81,7 @@ mod tests {
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::Buildable;
-    use td_objects::types::basic::{AccessTokenId, CollectionName, DataLocation, RoleId, UserId};
+    use td_objects::types::basic::{ProjectId, AccessTokenId, CollectionName, DataLocation, RoleId, UserId};
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_storage::location::StorageLocation;
@@ -90,11 +91,12 @@ mod tests {
     #[td_test::test(db)]
     async fn test_tower_metadata_upload_function(db: TdPool) -> Result<(), TdError> {
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         UploadFunctionService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<CreateRequest<CollectionParam, FunctionUpload>, Bundle>(&[
+            .assert_service::<Scoped<CreateRequest<CollectionParam, FunctionUpload>, ProjectId>, Bundle>(&[
                 type_of_val(
                     &With::<CreateRequest<CollectionParam, FunctionUpload>>::extract::<
                         RequestContext,
@@ -158,7 +160,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
                     .build()?,
                 function_upload,
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let context = Context::with_defaults(db.clone());
         let service = UploadFunctionService::build(&context).service();

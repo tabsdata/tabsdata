@@ -23,7 +23,7 @@ mod definitions {
     use crate::dxo::query_filters::{DimensionFilter, TimeWindow, WindowAlign, WindowUnit};
     use crate::types::basic::{
         ByteCount, CollectionId, CollectionName, EpochMs, GroupId, GroupName,
-        LogicalFunctionRunStatus, ProjectId, RowCount, TableVersionCount,
+        LogicalFunctionRunStatus, RowCount, TableVersionCount,
     };
 
     /// One row of `/inflight`: count of in-flight runs broken out by
@@ -137,11 +137,6 @@ mod definitions {
     /// either-endpoint to real edges (target-only to synthetic edges,
     /// since they have no source dim to filter).
     pub struct MetricsRequest {
-        /// Tenant scope, resolved by the apiserver from the `{project}` URL
-        /// segment. Drives the connection GUC (see `ProjectScoped` below); the
-        /// aggregation queries themselves carry no project filter — RLS scopes
-        /// them to this project.
-        pub project_id: ProjectId,
         pub dim: Dim,
         pub window: TimeWindow,
         pub unit: WindowUnit,
@@ -152,8 +147,6 @@ mod definitions {
 
     /// Domain request for `GET /inflight`. Point-in-time, no window.
     pub struct InflightRequest {
-        /// Tenant scope — see [`MetricsRequest::project_id`].
-        pub project_id: ProjectId,
         pub collections: DimensionFilter<CollectionId>,
         pub groups: DimensionFilter<GroupId>,
         pub statuses: Vec<LogicalFunctionRunStatus>,
@@ -244,20 +237,25 @@ mod definitions {
 
 pub use definitions::*;
 
-use td_tower::project_scope::{ProjectScope, ProjectScoped};
+use crate::types::basic::ProjectId;
+use td_tower::project_scope::Scoped;
 
-// Metrics/inflight are tenant-scoped: the resolved project drives the
-// connection GUC and RLS filters the aggregation queries to that project — the
-// queries carry no project predicate of their own. (Cross-project operational
-// metrics, if ever needed, would be a separate bypass-scoped endpoint.)
-impl ProjectScoped for MetricsRequest {
-    fn project_scope(&self) -> ProjectScope {
-        ProjectScope::Project(self.project_id.to_string())
+impl MetricsRequest {
+    /// Scope this request to a project, producing the service input.
+    pub fn in_project(self, project: impl Into<ProjectId>) -> Scoped<Self, ProjectId> {
+        Scoped {
+            project: project.into(),
+            request: self,
+        }
     }
 }
 
-impl ProjectScoped for InflightRequest {
-    fn project_scope(&self) -> ProjectScope {
-        ProjectScope::Project(self.project_id.to_string())
+impl InflightRequest {
+    /// Scope this request to a project, producing the service input.
+    pub fn in_project(self, project: impl Into<ProjectId>) -> Scoped<Self, ProjectId> {
+        Scoped {
+            project: project.into(),
+            request: self,
+        }
     }
 }

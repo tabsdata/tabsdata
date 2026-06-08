@@ -19,17 +19,13 @@ use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
 
-// Project management is a system-scoped operation, not tenant work: the
-// `projects` registry is not RLS-protected, and the non-empty guard below
-// must see the *target* project's collections regardless of the caller's own
-// scope. So this service spans all projects.
 #[service_factory(
     name = DeleteProjectService,
     request = DeleteRequest<ProjectParam>,
     response = (),
     connection = TransactionProvider,
+    scope = "Global",
     context = AuthzContext,
-    project_scope = bypass,
 )]
 fn service() {
     layers!(

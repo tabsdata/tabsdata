@@ -21,6 +21,7 @@ use td_tower::layers;
     request = ReadRequest<()>,
     response = UserInfo,
     connection = ConnectionProvider,
+    scope = "Global",
 )]
 fn service() {
     layers!(

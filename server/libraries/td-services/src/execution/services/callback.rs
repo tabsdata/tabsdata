@@ -97,6 +97,7 @@ async fn update_function_run_audit(
     request = UpdateRequest<PhysicalFunctionRunWorkerIdParam, CallbackRequest>,
     response = (),
     connection = TransactionProvider,
+    scope = "Project",
     context = SchedulerNotify,
 )]
 fn service() {
@@ -175,7 +176,7 @@ mod tests {
     use td_objects::dxo::yaml::function_runner::v2::{FunctionOutput, TableInfo, WrittenTable};
     use td_objects::types::basic::{
         AccessTokenId, CollectionName, ColumnCount, ExecutionStatus, FunctionName, HasData,
-        LogicalFunctionRunStatus, RoleId, RowCount, SchemaChanged, SchemaHash, TableName,
+        LogicalFunctionRunStatus, ProjectId, RoleId, RowCount, SchemaChanged, SchemaHash, TableName,
         TableNameDto, TransactionStatus, UserId,
     };
     use td_objects::types::composed::TableDependencyDto;
@@ -185,12 +186,14 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_execution_callback(db: TdPool) {
+        use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         ExecutionCallbackService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<UpdateRequest<PhysicalFunctionRunWorkerIdParam, CallbackRequest>, ()>(&[
+            .assert_service::<Scoped<UpdateRequest<PhysicalFunctionRunWorkerIdParam, CallbackRequest>, ProjectId>, ()>(&[
                 // Extract from request.
                 type_of_val(&
                     With::<UpdateRequest<PhysicalFunctionRunWorkerIdParam, CallbackRequest>>::extract::<
@@ -286,7 +289,7 @@ mod tests {
                                 worker_id: worker.into(),
                             },
                             response,
-                        );
+                        ).in_project(ProjectId::sandbox());
 
                 let service = ExecutionCallbackService::with_defaults(db.clone()).service();
                 service.raw_oneshot(request).await

@@ -14,9 +14,8 @@ use td_tower::{layer, layers};
     request = (),
     response = (),
     connection = TransactionProvider,
+    scope = "Global",
     context = OrchestratorMessageQueueHandle,
-    // Scheduler dispatch crosses all projects by design.
-    project_scope = bypass,
 )]
 fn service() {
     layers!(commit())
@@ -55,7 +54,7 @@ mod tests {
     use td_objects::rest_urls::FunctionParam;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, ExecutionName,
-        FunctionIdName, FunctionRuntimeValues, RoleId, TableNameDto, UserId, WorkerId,
+        FunctionIdName, FunctionRuntimeValues, ProjectId, RoleId, TableNameDto, UserId, WorkerId,
         WorkerMessageStatus,
     };
     use td_objects::types::composed::TableDependencyDto;
@@ -104,15 +103,17 @@ mod tests {
         let _ = db.seed().function(&collection, &create).await?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                    .function(FunctionIdName::from_str("function_1")?)
-                    .build()?,
-                ExecutionRequest::builder()
-                    .name(Some(ExecutionName::try_from("test_execution")?))
-                    .build()?,
-            );
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    FunctionParam::builder()
+                        .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                        .function(FunctionIdName::from_str("function_1")?)
+                        .build()?,
+                    ExecutionRequest::builder()
+                        .name(Some(ExecutionName::try_from("test_execution")?))
+                        .build()?,
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = ExecuteFunctionService::with_defaults(db.clone()).service();
         let _ = service.raw_oneshot(request).await?;

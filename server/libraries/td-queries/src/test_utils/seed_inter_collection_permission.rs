@@ -5,7 +5,7 @@
 use crate::{LiveEntry, QueryExecutor};
 use ta_objects::{Buildable, TryUpdater};
 use td_error::TdError;
-use td_objects::dxo::crudl::{ReadRequest, RequestContext};
+use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::inter_collection_permission::InterCollectionPermissionDB;
 use td_objects::types::basic::{AccessTokenId, CollectionId, RoleId, ToCollectionId, UserId};
 
@@ -14,13 +14,11 @@ pub(crate) async fn seed_inter_collection_permission(
     from_collection: &CollectionId,
     to_collection: &ToCollectionId,
 ) -> Result<InterCollectionPermissionDB, TdError> {
-    let request_context: ReadRequest<String> = RequestContext::with(
+    let request_context = RequestContext::with(
         AccessTokenId::default(),
         UserId::admin(),
         RoleId::sec_admin(),
-    )
-    .read("");
-    let request_context = request_context.context;
+    );
 
     let permission_db = InterCollectionPermissionDB::builder()
         .try_update_from(&request_context)?

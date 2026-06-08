@@ -23,6 +23,7 @@ use td_tower::layers;
     request = ListRequest<CollectionAtName>,
     response = ListResponse<Table>,
     connection = ConnectionProvider,
+    scope = "Project",
     context = AuthzContext,
 )]
 fn service() {
@@ -61,8 +62,8 @@ mod tests {
     use td_objects::dxo::function::{FunctionRegister, FunctionUpdate};
     use td_objects::rest_urls::{FunctionParam, TableParam};
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, FunctionIdName, RoleId, TableIdName,
-        TableName, TableNameDto, UserId,
+        AccessTokenId, BundleId, CollectionName, Decorator, FunctionIdName, ProjectId, RoleId,
+        TableIdName, TableName, TableNameDto, UserId,
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
@@ -71,11 +72,12 @@ mod tests {
     #[td_test::test(db)]
     async fn test_tower_metadata_list_table_versions_history_by_collection(db: TdPool) {
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         TableListHistoryByCollectionService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<ListRequest<CollectionAtName>, ListResponse<Table>>(&[
+            .assert_service::<Scoped<ListRequest<CollectionAtName>, ProjectId>, ListResponse<Table>>(&[
                 type_of_val(&With::<ListRequest<CollectionAtName>>::extract::<RequestContext>),
                 type_of_val(
                     &With::<ListRequest<CollectionAtName>>::extract_name::<CollectionAtName>,
@@ -148,7 +150,7 @@ mod tests {
                     .function(FunctionIdName::from_str("joaquin")?)
                     .build()?,
                 update.clone(),
-            );
+            ).in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -161,7 +163,7 @@ mod tests {
                     .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
                     .table(TableIdName::from_str("table_2")?)
                     .build()?,
-            );
+            ).in_project(ProjectId::sandbox());
 
         TableDeleteService::with_defaults(db.clone())
             .service()
@@ -180,7 +182,7 @@ mod tests {
                     .at(t0)
                     .build()?,
                 ListParams::default(),
-            );
+            ).in_project(ProjectId::sandbox());
 
         let service = TableListHistoryByCollectionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -199,7 +201,7 @@ mod tests {
                 ListParamsBuilder::default()
                     .order_by("name".to_string())
                     .build()?,
-            );
+            ).in_project(ProjectId::sandbox());
 
         let service = TableListHistoryByCollectionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -218,7 +220,7 @@ mod tests {
                     .at(t2)
                     .build()?,
                 ListParams::default(),
-            );
+            ).in_project(ProjectId::sandbox());
 
         let service = TableListHistoryByCollectionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;

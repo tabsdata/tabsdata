@@ -34,6 +34,7 @@ mod routes {
         FUNCTION_PATCH, FUNCTION_PATCHES, FUNCTION_UPDATE, FUNCTION_UPLOAD, FunctionParam,
         OptionalAtTimeParam,
     };
+    use td_objects::types::basic::ProjectId;
     use td_services::function::services::FunctionServices;
     use td_tower::ctx_service::RawOneshot;
     use tower::ServiceExt;
@@ -44,9 +45,10 @@ mod routes {
     pub async fn delete(
         State(state): State<Arc<FunctionServices>>,
         Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Path(function_param): Path<FunctionParam>,
     ) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
-        let request = context.delete(function_param);
+        let request = context.delete(function_param).in_project(project_id);
         let response = state.delete.service().oneshot(request).await?;
         Ok(DeleteStatus::OK(response))
     }
@@ -55,12 +57,13 @@ mod routes {
     pub async fn history(
         State(state): State<Arc<FunctionServices>>,
         Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Path(function_param): Path<FunctionParam>,
         Query(query_params): Query<ListParams>,
         Query(at_param): Query<AtTimeParam>,
     ) -> Result<ListStatus<Function>, ErrorStatus> {
         let name = FunctionAtIdName::new(function_param, at_param);
-        let request = context.list(name, query_params);
+        let request = context.list(name, query_params).in_project(project_id);
         let response = state.history.service().oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
@@ -70,9 +73,10 @@ mod routes {
     pub async fn list(
         State(state): State<Arc<FunctionServices>>,
         Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<Function>, ErrorStatus> {
-        let request = context.list((), query_params);
+        let request = context.list((), query_params).in_project(project_id);
         let response = state.list.service().oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
@@ -82,10 +86,11 @@ mod routes {
     pub async fn list_by_collection(
         State(state): State<Arc<FunctionServices>>,
         Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Path(collection_param): Path<CollectionParam>,
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<Function>, ErrorStatus> {
-        let request = context.list(collection_param, query_params);
+        let request = context.list(collection_param, query_params).in_project(project_id);
         let response = state.list_by_collection.service().oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
@@ -95,9 +100,10 @@ mod routes {
     pub async fn read(
         State(state): State<Arc<FunctionServices>>,
         Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Path(param): Path<FunctionParam>,
     ) -> Result<GetStatus<FunctionWithTables>, ErrorStatus> {
-        let request = context.read(param);
+        let request = context.read(param).in_project(project_id);
         let response = state.read_version.service().oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }
@@ -107,10 +113,11 @@ mod routes {
     pub async fn register(
         State(state): State<Arc<FunctionServices>>,
         Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Path(collection_param): Path<CollectionParam>,
         Json(request): Json<FunctionRegister>,
     ) -> Result<CreateStatus<Function>, ErrorStatus> {
-        let request = context.create(collection_param, request);
+        let request = context.create(collection_param, request).in_project(project_id);
         let response = state.register.service().oneshot(request).await?;
         Ok(CreateStatus::CREATED(response))
     }
@@ -120,10 +127,11 @@ mod routes {
     pub async fn update(
         State(state): State<Arc<FunctionServices>>,
         Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Path(function_param): Path<FunctionParam>,
         Json(request): Json<FunctionUpdate>,
     ) -> Result<UpdateStatus<Function>, ErrorStatus> {
-        let request = context.update(function_param, request);
+        let request = context.update(function_param, request).in_project(project_id);
         let response = state.update.service().oneshot(request).await?;
         Ok(UpdateStatus::OK(response))
     }
@@ -133,10 +141,11 @@ mod routes {
     pub async fn enable(
         State(state): State<Arc<FunctionServices>>,
         Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Path(function_param): Path<FunctionParam>,
         Json(request): Json<FunctionEnable>,
     ) -> Result<UpdateStatus<Function>, ErrorStatus> {
-        let request = context.update(function_param, request);
+        let request = context.update(function_param, request).in_project(project_id);
         let response = state.enable.service().oneshot(request).await?;
         Ok(UpdateStatus::OK(response))
     }
@@ -146,10 +155,11 @@ mod routes {
     pub async fn patch(
         State(state): State<Arc<FunctionServices>>,
         Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Path(function_param): Path<FunctionParam>,
         Json(request): Json<FunctionPatch>,
     ) -> Result<CreateStatus<FunctionPatchRecord>, ErrorStatus> {
-        let request = context.create(function_param, request);
+        let request = context.create(function_param, request).in_project(project_id);
         let response = state.patch.service().oneshot(request).await?;
         Ok(CreateStatus::CREATED(response))
     }
@@ -159,10 +169,11 @@ mod routes {
     pub async fn list_patches(
         State(state): State<Arc<FunctionServices>>,
         Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Path(function_param): Path<FunctionParam>,
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<FunctionPatchRecord>, ErrorStatus> {
-        let request = context.list(function_param, query_params);
+        let request = context.list(function_param, query_params).in_project(project_id);
         let response = state.list_patches.service().oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
@@ -178,11 +189,12 @@ mod routes {
     pub async fn upload(
         State(state): State<Arc<FunctionServices>>,
         Extension(request_context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Path(param): Path<CollectionParam>,
         request: Request,
     ) -> Result<CreateStatus<Bundle>, ErrorStatus> {
         let request = FunctionUpload::new(request);
-        let request = request_context.create(param, request);
+        let request = request_context.create(param, request).in_project(project_id);
         let response = state.upload.service().oneshot(request).await?;
         Ok(CreateStatus::CREATED(response))
     }
@@ -199,12 +211,13 @@ mod routes {
     pub async fn download_bundle(
         State(state): State<Arc<FunctionServices>>,
         Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
         Path(function_param): Path<FunctionParam>,
         Query(at_param): Query<OptionalAtTimeParam>,
         if_none_match: Option<TypedHeader<IfNoneMatch>>,
     ) -> Result<DownloadResponse, ErrorStatus> {
         let request = FunctionMaybeAtIdName::new(function_param, at_param);
-        let request = context.read(request);
+        let request = context.read(request).in_project(project_id);
         let d = state.download_bundle.service().raw_oneshot(request).await?;
         Ok(DownloadResponse::octet_stream(d.stream)
             .attachment(format_args!(

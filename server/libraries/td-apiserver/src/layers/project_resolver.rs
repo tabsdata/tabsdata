@@ -2,16 +2,15 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-//! Resolves the `{project}` URL path segment to a `ProjectId` and stamps the
-//! resolved id onto the request's `RequestContext` extension before the
-//! service stack runs.
+//! Resolves the `{project}` URL path segment to a `ProjectId` and inserts it
+//! as a request extension before the service stack runs.
 //!
-//! The id flowing into `RequestContext.project_id` is what the
-//! `ProjectScopeProvider` later turns into `SET LOCAL app.project_id = <id>`
-//! for row-level security. Resolving here ensures the GUC carries a real
-//! registry id, never a raw user-supplied string — and that an unknown
-//! project is rejected with 404 long before any project-scoped table is
-//! touched.
+//! Tenant handlers read that `ProjectId` extension and attach it to their
+//! request (e.g. `RequestContext::create(..).in_project(project_id)`), which
+//! the `ProjectScopeProvider` later turns into `SET LOCAL app.project_id =
+//! <id>` for row-level security. Resolving here ensures the GUC carries a real
+//! registry id, never a raw user-supplied string — and that an unknown project
+//! is rejected with 404 long before any project-scoped table is touched.
 //!
 //! The lookup hits `projects_active` (the soft-delete-filtering view), which
 //! is NOT under RLS — so no GUC manipulation is needed to read it.
@@ -25,7 +24,6 @@ use ta_apiserver::status::error_status::ErrorStatus;
 use td_database::error::DbError;
 use td_database::pool::TdPool;
 use td_error::TdError;
-use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::project::ProjectDB;
 use td_objects::types::basic::{ProjectId, ProjectIdName};
 use td_queries::LiveEntry;
@@ -54,13 +52,7 @@ pub async fn project_resolver_layer(
         .ok_or_else(|| TdError::from(ProjectError::ProjectNotFound(raw.clone())))?;
 
     let mut request = request;
-    let ctx = request
-        .extensions()
-        .get::<RequestContext>()
-        .cloned()
-        .ok_or_else(|| TdError::from(ProjectError::ResolverMissingContext))?
-        .with_project(Some(resolved_id));
-    request.extensions_mut().insert(ctx);
+    request.extensions_mut().insert(resolved_id);
 
     Ok(next.run(request).await)
 }

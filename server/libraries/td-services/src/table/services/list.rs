@@ -20,6 +20,7 @@ use td_tower::layers;
     request = ListRequest<()>,
     response = ListResponse<Table>,
     connection = ConnectionProvider,
+    scope = "Project",
     context = AuthzContext,
 )]
 fn service() {
@@ -48,7 +49,7 @@ mod tests {
     use td_objects::dxo::crudl::ListParams;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, Description, RoleId, RoleName,
+        AccessTokenId, BundleId, CollectionName, Decorator, Description, ProjectId, RoleId, RoleName,
         TableName, TableNameDto, UserEnabled, UserId, UserName,
     };
     use td_queries::test_utils::SeedEntry;
@@ -58,11 +59,12 @@ mod tests {
     #[td_test::test(db)]
     async fn test_tower_metadata_list_table_versions(db: TdPool) {
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         TableListService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<ListRequest<()>, ListResponse<Table>>(&[
+            .assert_service::<Scoped<ListRequest<()>, ProjectId>, ListResponse<Table>>(&[
                 type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
                 // get allowed collections
                 type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::visible_collections),
@@ -112,7 +114,7 @@ mod tests {
         // List current tables
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
-                .list((), ListParams::default());
+                .list((), ListParams::default()).in_project(ProjectId::sandbox());
 
         let service = TableListService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -169,7 +171,7 @@ mod tests {
         // All tables are visible to authorized users
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
-                .list((), ListParams::default());
+                .list((), ListParams::default()).in_project(ProjectId::sandbox());
 
         let service = TableListService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -182,7 +184,7 @@ mod tests {
 
         // No tables are visible to authorized users
         let request = RequestContext::with(AccessTokenId::default(), user.id, role.id)
-            .list((), ListParams::default());
+            .list((), ListParams::default()).in_project(ProjectId::sandbox());
 
         let service = TableListService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;

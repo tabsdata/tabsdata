@@ -26,6 +26,7 @@ use td_tower::layers;
     request = ListRequest<FunctionParam>,
     response = ListResponse<FunctionPatchRecord>,
     connection = ConnectionProvider,
+    scope = "Project",
     context = AuthzContext,
 )]
 fn service() {
@@ -61,9 +62,9 @@ mod tests {
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::dxo::collection::CollectionDB;
-    use td_objects::dxo::crudl::CreateRequest;
     use td_objects::dxo::function::{FunctionPatch, FunctionRegister};
     use td_objects::types::basic::{
+        ProjectId,
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionName, FunctionRuntimeValues,
         RoleId, TableNameDto, UserId,
     };
@@ -76,11 +77,12 @@ mod tests {
     #[td_test::test(db)]
     async fn test_tower_metadata_list_patches(db: TdPool) {
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         ListFunctionPatchesService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<ListRequest<FunctionParam>, ListResponse<FunctionPatchRecord>>(&[
+            .assert_service::<Scoped<ListRequest<FunctionParam>, ProjectId>, ListResponse<FunctionPatchRecord>>(&[
                 type_of_val(&With::<ListRequest<FunctionParam>>::extract::<RequestContext>),
                 type_of_val(&With::<ListRequest<FunctionParam>>::extract_name::<FunctionParam>),
                 type_of_val(&With::<FunctionParam>::extract::<CollectionIdName>),
@@ -144,7 +146,8 @@ mod tests {
             .build()?;
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
-                .list(param, ListParams::default());
+                .list(param, ListParams::default())
+                .in_project(ProjectId::sandbox());
         let response = ListFunctionPatchesService::with_defaults(db.clone())
             .service()
             .raw_oneshot(request)
@@ -172,7 +175,7 @@ mod tests {
                 .bundle_id(BundleId::default())
                 .try_snippet(&format!("v{i}"))?
                 .build()?;
-            let req: CreateRequest<FunctionParam, FunctionPatch> =
+            let req =
                 RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
                     .create(
                         FunctionParam::builder()
@@ -180,7 +183,8 @@ mod tests {
                             .function(FunctionIdName::from_str("f0")?)
                             .build()?,
                         body,
-                    );
+                    )
+                    .in_project(ProjectId::sandbox());
             let _ = CreateFunctionPatchService::with_defaults(db.clone())
                 .service()
                 .raw_oneshot(req)
@@ -194,7 +198,8 @@ mod tests {
                     .function(FunctionIdName::from_str("f0")?)
                     .build()?,
                 ListParams::default(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
         let response = ListFunctionPatchesService::with_defaults(db.clone())
             .service()
             .raw_oneshot(read_request)

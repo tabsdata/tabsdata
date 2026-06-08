@@ -56,6 +56,7 @@ where
     request = ReadRequest<ExecutionParam>,
     response = ExecutionResponse,
     connection = ConnectionProvider,
+    scope = "Project",
     context = TransactionBy,
 )]
 fn service<const FUNCTION_STATE: u8>()
@@ -104,19 +105,21 @@ mod tests {
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
+    use td_objects::types::basic::{AccessTokenId, ProjectId, RoleId, UserId};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_read_execution(db: TdPool) {
         use crate::graph::layers::build::GraphBuilder;
+        use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         ExecutionReadService::<{ FunctionDB::Executable }>::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<ReadRequest<ExecutionParam>, ExecutionResponse>(&[
+            .assert_service::<Scoped<ReadRequest<ExecutionParam>, ProjectId>, ExecutionResponse>(&[
                 // Extract from request.
                 type_of_val(&With::<ReadRequest<ExecutionParam>>::extract_name::<ExecutionParam>),
                 // Find Plan and its TriggeredOn (and convert to AtTime).
@@ -173,7 +176,7 @@ mod tests {
                 ExecutionParam::builder()
                     .execution(ExecutionIdName::from_str(&execution.id.to_string())?)
                     .build()?,
-            );
+            ).in_project(ProjectId::sandbox());
 
         let response = service.raw_oneshot(request).await?;
         assert_eq!(execution.id, response.id);

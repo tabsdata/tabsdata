@@ -29,6 +29,7 @@ use td_tower::layers;
     request = UpdateRequest<(), RefreshToken>,
     response = TokenResponseX,
     connection = TransactionProvider,
+    scope = "Global",
     context = JwtConfig,
     context = Sessions,
 )]

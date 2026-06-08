@@ -5,7 +5,7 @@
 use crate::{LiveEntry, QueryExecutor};
 use ta_objects::{Buildable, TryUpdater};
 use td_error::TdError;
-use td_objects::dxo::crudl::{ReadRequest, RequestContext};
+use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::group::{GroupCreate, GroupDB, GroupDBBuilder};
 use td_objects::types::basic::{AccessTokenId, Description, GroupName, RoleId, UserId};
 
@@ -19,13 +19,11 @@ pub(crate) async fn seed_group(
         .description(description)
         .build()?;
 
-    let request_context: ReadRequest<String> = RequestContext::with(
+    let request_context = RequestContext::with(
         AccessTokenId::default(),
         UserId::admin(),
         RoleId::sys_admin(),
-    )
-    .read("");
-    let request_context = request_context.context;
+    );
 
     let group_db = GroupDBBuilder::try_from(&group_create)?
         .try_update_from(&request_context)?

@@ -23,6 +23,7 @@ use td_tower::layers;
     request = ListRequest<CollectionParam>,
     response = ListResponse<Function>,
     connection = ConnectionProvider,
+    scope = "Project",
     context = AuthzContext,
 )]
 fn service() {
@@ -60,6 +61,7 @@ mod tests {
     use td_objects::dxo::crudl::ListParams;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
+        ProjectId,
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionName, RoleId, UserId,
     };
     use td_queries::test_utils::SeedEntry;
@@ -69,11 +71,12 @@ mod tests {
     #[td_test::test(db)]
     async fn test_tower_metadata_list_function_versions_by_collection(db: TdPool) {
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         FunctionListByCollectionService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<ListRequest<CollectionParam>, ListResponse<Function>>(&[
+            .assert_service::<Scoped<ListRequest<CollectionParam>, ProjectId>, ListResponse<Function>>(&[
                 type_of_val(&With::<ListRequest<CollectionParam>>::extract::<RequestContext>),
                 type_of_val(&With::<ListRequest<CollectionParam>>::extract_name::<CollectionParam>),
                 type_of_val(&With::<CollectionParam>::extract::<CollectionIdName>),
@@ -140,7 +143,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
                     .build()?,
                 ListParams::default(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = FunctionListByCollectionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;

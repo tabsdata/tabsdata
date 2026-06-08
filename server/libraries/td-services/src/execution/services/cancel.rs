@@ -24,6 +24,7 @@ use td_tower::layers;
     request = UpdateRequest<ExecutionParam, ()>,
     response = (),
     connection = TransactionProvider,
+    scope = "Project",
     context = AuthzContext,
     context = SchedulerNotify,
 )]
@@ -65,7 +66,7 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::types::basic::{
         AccessTokenId, CollectionName, ExecutionStatus, FunctionName, LogicalFunctionRunStatus,
-        RoleId, TableNameDto, TransactionStatus, UserId,
+        ProjectId, RoleId, TableNameDto, TransactionStatus, UserId,
     };
     use td_objects::types::composed::TableDependencyDto;
     use td_tower::ctx_service::RawOneshot;
@@ -73,12 +74,14 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_cancel_execution(db: TdPool) {
+        use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         ExecutionCancelService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<UpdateRequest<ExecutionParam, ()>, ()>(&[
+            .assert_service::<Scoped<UpdateRequest<ExecutionParam, ()>, ProjectId>, ()>(&[
                 // Extract from request.
                 type_of_val(&With::<UpdateRequest<ExecutionParam, ()>>::extract::<RequestContext>),
                 type_of_val(
@@ -121,7 +124,7 @@ mod tests {
                                 .execution(ExecutionIdName::from_str(&execution)?)
                                 .build()?,
                             (),
-                        );
+                        ).in_project(ProjectId::sandbox());
 
                 ExecutionCancelService::with_defaults(db.clone())
                     .service()

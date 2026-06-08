@@ -23,6 +23,7 @@ use td_tower::layers;
     request = ListRequest<CollectionParam>,
     response = ListResponse<InterCollectionPermission>,
     connection = TransactionProvider,
+    scope = "Project",
     context = AuthzContext,
 )]
 fn service() {
@@ -56,19 +57,21 @@ mod tests {
     use td_objects::Buildable;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::rest_urls::CollectionParam;
-    use td_objects::types::basic::{AccessTokenId, CollectionName, RoleId, UserId};
+    use td_objects::types::basic::{AccessTokenId, CollectionName, ProjectId, RoleId, UserId};
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_list_inter_collection_permission(db: TdPool) {
+        use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         ListInterCollectionPermissionService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<ListRequest<CollectionParam>, ListResponse<InterCollectionPermission>>(&[
+            .assert_service::<Scoped<ListRequest<CollectionParam>, ProjectId>, ListResponse<InterCollectionPermission>>(&[
                 type_of_val(&With::<ListRequest<CollectionParam>>::extract::<RequestContext>),
                 type_of_val(&With::<ListRequest<CollectionParam>>::extract_name::<CollectionParam>),
 
@@ -114,7 +117,8 @@ mod tests {
                 .collection(CollectionIdName::from_str("c0")?)
                 .build()?,
             ListParams::default(),
-        );
+        )
+        .in_project(ProjectId::sandbox());
 
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
@@ -135,12 +139,14 @@ mod tests {
             .await?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
-                CollectionParam::builder()
-                    .collection(CollectionIdName::from_str("c1")?)
-                    .build()?,
-                ListParams::default(),
-            );
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .list(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str("c1")?)
+                        .build()?,
+                    ListParams::default(),
+                )
+                .in_project(ProjectId::sandbox());
 
         assert_service_error(service, request, |err| match err {
             AuthzError::Forbidden(_) => {}

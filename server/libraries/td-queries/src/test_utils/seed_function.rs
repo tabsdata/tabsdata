@@ -7,7 +7,7 @@ use ta_objects::TryUpdater;
 use ta_objects::and;
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionDB;
-use td_objects::dxo::crudl::{ReadRequest, RequestContext};
+use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::dependency::DependencyDBBuilder;
 use td_objects::dxo::function::{FunctionDB, FunctionDBBuilder, FunctionRegister};
 use td_objects::dxo::table::{TableDBBuilder, TableDBWithNames};
@@ -23,13 +23,11 @@ pub(crate) async fn seed_function(
     collection: &CollectionDB,
     function_create: &FunctionRegister,
 ) -> Result<FunctionDB, TdError> {
-    let request_context: ReadRequest<String> = RequestContext::with(
+    let request_context = RequestContext::with(
         AccessTokenId::default(),
         UserId::admin(),
         RoleId::sec_admin(),
-    )
-    .read("");
-    let request_context = request_context.context;
+    );
 
     // Function version builder
     let mut builder = FunctionDBBuilder::try_from(function_create)?;

@@ -46,6 +46,7 @@ use td_tower::layers;
     request = UpdateRequest<FunctionParam, FunctionUpdate>,
     response = Function,
     connection = TransactionProvider,
+    scope = "Project",
     context = AuthzContext,
     context = SchedulerNotify,
 )]
@@ -155,6 +156,7 @@ mod tests {
     use td_objects::dxo::worker::WorkerDB;
     use td_objects::rest_urls::CollectionParam;
     use td_objects::types::basic::{
+        ProjectId,
         AccessTokenId, Decorator, Depth, FunctionRuntimeValues, RoleId, TableName, TableStatus,
         ToCollectionId, UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
     };
@@ -183,11 +185,12 @@ mod tests {
         use td_queries::insert_vec;
 
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         UpdateFunctionService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<UpdateRequest<FunctionParam, FunctionUpdate>, Function>(
+            .assert_service::<Scoped<UpdateRequest<FunctionParam, FunctionUpdate>, ProjectId>, Function>(
             &[
                 type_of_val(&With::<UpdateRequest<FunctionParam, FunctionUpdate>>::extract::<RequestContext>),
                 type_of_val(&With::<UpdateRequest<FunctionParam, FunctionUpdate>>::extract_name::<FunctionParam>),
@@ -333,7 +336,8 @@ mod tests {
                     .function(FunctionIdName::from_str("foo")?)
                     .build()?,
                 update.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -391,7 +395,8 @@ mod tests {
                     .function(FunctionIdName::from_str("joaquin_workout")?)
                     .build()?,
                 update.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -452,7 +457,8 @@ mod tests {
                 .function(FunctionIdName::from_str("joaquin_workout")?)
                 .build()?,
             update.clone(),
-        );
+        )
+        .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -510,7 +516,8 @@ mod tests {
                     .function(FunctionIdName::from_str("joaquin_workout")?)
                     .build()?,
                 update.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -569,7 +576,8 @@ mod tests {
                     .function(FunctionIdName::from_str("joaquin_workout")?)
                     .build()?,
                 update.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -627,7 +635,8 @@ mod tests {
                     .function(FunctionIdName::from_str("joaquin_workout")?)
                     .build()?,
                 update.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -686,7 +695,8 @@ mod tests {
                     .function(FunctionIdName::from_str("joaquin_workout")?)
                     .build()?,
                 update.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -760,7 +770,8 @@ mod tests {
                     .function(FunctionIdName::from_str("joaquin_workout")?)
                     .build()?,
                 update.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -837,7 +848,8 @@ mod tests {
                 .function(FunctionIdName::from_str("joaquin_workout")?)
                 .build()?,
             update.clone(),
-        );
+        )
+        .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -911,7 +923,8 @@ mod tests {
                     .function(FunctionIdName::from_str("joaquin_workout")?)
                     .build()?,
                 update.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -999,7 +1012,8 @@ mod tests {
                     .function(FunctionIdName::from_str("joaquin_workout")?)
                     .build()?,
                 update.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -1056,7 +1070,8 @@ mod tests {
                     .function(FunctionIdName::from_str("joaquin_workout")?)
                     .build()?,
                 update.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -1083,7 +1098,8 @@ mod tests {
                     .function(FunctionIdName::from_str("joaquin_workout")?)
                     .build()?,
                 update.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -1110,7 +1126,8 @@ mod tests {
                     .function(FunctionIdName::from_str("joaquin_workout")?)
                     .build()?,
                 update.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -1169,7 +1186,8 @@ mod tests {
                     .function(FunctionIdName::from_str("function_foo")?)
                     .build()?,
                 update.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(update_request).await;
@@ -1181,7 +1199,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(collection_name.as_str())?)
                     .build()?,
                 create.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         let create_response = response?;
@@ -1342,7 +1361,8 @@ mod tests {
                     .function(FunctionIdName::from_str("function_2")?)
                     .build()?,
                 update.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;
@@ -1401,7 +1421,8 @@ mod tests {
                     .function(FunctionIdName::from_str("function")?)
                     .build()?,
                 update.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;
@@ -1473,7 +1494,8 @@ mod tests {
                     .function(FunctionIdName::from_str("function_1")?)
                     .build()?,
                 update.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -1578,7 +1600,8 @@ mod tests {
                     .function(FunctionIdName::from_str("function_2")?)
                     .build()?,
                 update.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -1662,7 +1685,8 @@ mod tests {
                     .function(FunctionIdName::from_str("function_1")?)
                     .build()?,
                 update.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let updated_function_1 = service.raw_oneshot(request).await?;
         let workers: Vec<WorkerDB> = db
@@ -1693,7 +1717,8 @@ mod tests {
                     .function(FunctionIdName::from_str("function_1")?)
                     .build()?,
                 update.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let updated_function_2 = service.raw_oneshot(request).await?;
 
@@ -1751,7 +1776,8 @@ mod tests {
                     .function(FunctionIdName::from_str("function_1")?)
                     .build()?,
                 update.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let updated_function_3 = service.raw_oneshot(request).await?;
 
@@ -1806,7 +1832,8 @@ mod tests {
                     .function(FunctionIdName::from_str("function_1")?)
                     .build()?,
                 update.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let updated_function_4 = service.raw_oneshot(request).await?;
 
@@ -1884,7 +1911,8 @@ mod tests {
                     .function(FunctionIdName::from_str("function_1")?)
                     .build()?,
                 update.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;
         assert!(res.is_err());

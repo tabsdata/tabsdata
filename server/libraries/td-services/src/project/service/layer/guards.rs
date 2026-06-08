@@ -43,8 +43,9 @@ pub async fn reject_delete_sandbox_on_single_project_backend(
 /// unreachable — the resolver reads `projects_active`, so once the project is
 /// soft-deleted no request can ever set the GUC back to it.
 ///
-/// Runs under `project_scope = bypass`, so the `By::<ProjectId>` fetch sees the
-/// target project's collections regardless of the request's own scope.
+/// The delete-project service spans projects (bypass scope), so the
+/// `By::<ProjectId>` fetch sees the target project's collections regardless of
+/// the request's own scope.
 pub async fn reject_delete_non_empty_project(
     project_id: Ref<ProjectId>,
     collections: Ref<Vec<CollectionDB>>,

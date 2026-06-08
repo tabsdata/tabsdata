@@ -27,6 +27,7 @@ use td_tower::layers;
     request = ListRequest<()>,
     response = ListResponse<FunctionRun>,
     connection = ConnectionProvider,
+    scope = "Project",
 )]
 fn service() {
     layers!(

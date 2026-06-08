@@ -5,7 +5,7 @@
 use crate::{LiveEntry, QueryExecutor};
 use ta_objects::{Buildable, TryUpdater};
 use td_error::TdError;
-use td_objects::dxo::crudl::{ReadRequest, RequestContext};
+use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::role::{RoleCreate, RoleDB, RoleDBBuilder};
 use td_objects::types::basic::{AccessTokenId, Description, RoleId, RoleName, UserId};
 
@@ -19,13 +19,11 @@ pub(crate) async fn seed_role(
         .description(description)
         .build()?;
 
-    let request_context: ReadRequest<String> = RequestContext::with(
+    let request_context = RequestContext::with(
         AccessTokenId::default(),
         UserId::admin(),
         RoleId::sec_admin(),
-    )
-    .read("");
-    let request_context = request_context.context;
+    );
 
     let role_db = RoleDBBuilder::try_from(&role_create)?
         .try_update_from(&request_context)?

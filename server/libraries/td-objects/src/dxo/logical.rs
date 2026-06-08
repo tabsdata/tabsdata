@@ -359,9 +359,9 @@ mod definitions {
         #[builder(default)]
         pub id: LogicalFunctionRunPointerId,
         // Project of the LFR this event belongs to. Carried explicitly so the
-        // scheduler's cross-project dispatch tick (project_scope = bypass, no
-        // request GUC) can append bind events without relying on the
-        // `app.project_id` column default — fail-closed.
+        // scheduler's cross-project dispatch tick (bypass scope, no request
+        // GUC) can append bind events without relying on the `app.project_id`
+        // column default — fail-closed.
         pub project_id: ProjectId,
         pub logical_function_run_id: LogicalFunctionRunId,
         pub status: LogicalPointerStatus,

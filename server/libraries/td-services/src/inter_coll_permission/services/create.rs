@@ -30,6 +30,7 @@ use td_tower::layers;
     request = CreateRequest<CollectionParam, InterCollectionPermissionCreate>,
     response = InterCollectionPermission,
     connection = TransactionProvider,
+    scope = "Project",
     context = AuthzContext,
 )]
 fn service() {
@@ -106,7 +107,7 @@ mod tests {
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::rest_urls::CollectionParam;
-    use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
+    use td_objects::types::basic::{AccessTokenId, ProjectId, RoleId, UserId};
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
@@ -114,12 +115,14 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_create_inter_collection_permission(db: TdPool) {
+        use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         CreateInterCollectionPermissionService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<CreateRequest<CollectionParam, InterCollectionPermissionCreate>, InterCollectionPermission>(&[
+            .assert_service::<Scoped<CreateRequest<CollectionParam, InterCollectionPermissionCreate>, ProjectId>, InterCollectionPermission>(&[
                 type_of_val(&With::<CreateRequest<CollectionParam, InterCollectionPermissionCreate>>::extract::<RequestContext>),
                 type_of_val(&With::<CreateRequest<CollectionParam, InterCollectionPermissionCreate>>::extract_name::<CollectionParam>),
                 type_of_val(&With::<CreateRequest<CollectionParam, InterCollectionPermissionCreate>>::extract_data::<InterCollectionPermissionCreate>),
@@ -197,7 +200,8 @@ mod tests {
                 .collection(CollectionIdName::from_str("c0")?)
                 .build()?,
             create,
-        );
+        )
+        .in_project(ProjectId::sandbox());
 
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
@@ -234,7 +238,8 @@ mod tests {
                 .collection(CollectionIdName::from_str("c0")?)
                 .build()?,
             create,
-        );
+        )
+        .in_project(ProjectId::sandbox());
 
         assert_service_error(service, request, |err| match err {
             InterCollectionPermissionError::CannotGivePermissionToItself => {}
@@ -260,12 +265,14 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
-                CollectionParam::builder()
-                    .collection(CollectionIdName::from_str("c1")?)
-                    .build()?,
-                create,
-            );
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str("c1")?)
+                        .build()?,
+                    create,
+                )
+                .in_project(ProjectId::sandbox());
 
         assert_service_error(service, request, |err| match err {
             AuthzError::Forbidden(_) => {}

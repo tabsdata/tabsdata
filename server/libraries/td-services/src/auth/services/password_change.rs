@@ -31,10 +31,9 @@ use tower::util::MapErrLayer;
     request = PasswordChange,
     response = (),
     connection = TransactionProvider,
+    scope = "Global",
     context = PasswordHashingConfig,
     context = Sessions,
-    // Operates on the global `users` table.
-    project_scope = bypass,
 )]
 fn service() {
     layers!(

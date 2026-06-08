@@ -21,15 +21,13 @@ use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
 
-// System-scoped: the `projects` registry is global, not RLS-scoped. Spans all
-// projects (see CreateProjectService).
 #[service_factory(
     name = UpdateProjectService,
     request = UpdateRequest<ProjectParam, ProjectUpdate>,
     response = ProjectRead,
     connection = TransactionProvider,
+    scope = "Global",
     context = AuthzContext,
-    project_scope = bypass,
 )]
 fn service() {
     layers!(

@@ -18,6 +18,7 @@ use td_tower::layers;
     request = ListRequest<()>,
     response = ListResponse<Worker>,
     connection = ConnectionProvider,
+    scope = "Project",
 )]
 fn service() {
     layers!(
@@ -40,8 +41,8 @@ mod tests {
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus, RoleId,
-        TransactionKey, UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
+        AccessTokenId, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus, ProjectId,
+        RoleId, TransactionKey, UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
@@ -49,12 +50,14 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_list_workers(db: TdPool) {
+        use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         WorkerListService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<ListRequest<()>, ListResponse<Worker>>(&[
+            .assert_service::<Scoped<ListRequest<()>, ProjectId>, ListResponse<Worker>>(&[
                 // List all Workers.
                 type_of_val(&With::<ListRequest<()>>::extract::<ListParams>),
                 type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<Worker>, _>),
@@ -148,7 +151,8 @@ mod tests {
         let service = WorkerListService::with_defaults(db.clone()).service();
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
-                .list((), ListParams::default());
+                .list((), ListParams::default())
+                .in_project(ProjectId::sandbox());
 
         let response = service.raw_oneshot(request).await?;
         assert_eq!(response.len, workers.len());

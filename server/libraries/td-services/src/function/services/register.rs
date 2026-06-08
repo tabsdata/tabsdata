@@ -43,6 +43,7 @@ use td_tower::layers;
     request = CreateRequest<CollectionParam, FunctionRegister>,
     response = Function,
     connection = TransactionProvider,
+    scope = "Project",
     context = AuthzContext,
     context = SchedulerNotify,
 )]
@@ -153,6 +154,7 @@ mod tests {
     use td_objects::dxo::worker::WorkerDB;
     use td_objects::errors::SqlError;
     use td_objects::types::basic::{
+        ProjectId,
         AccessTokenId, Decorator, FunctionRuntimeValues, RoleId, ToCollectionId, UserId,
         WorkerMessageStatus, WorkerStatus, WorkerType,
     };
@@ -179,11 +181,12 @@ mod tests {
         use td_queries::insert_vec;
 
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         RegisterFunctionService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<CreateRequest<CollectionParam, FunctionRegister>, Function>(&[
+            .assert_service::<Scoped<CreateRequest<CollectionParam, FunctionRegister>, ProjectId>, Function>(&[
                 type_of_val(
                     &With::<CreateRequest<CollectionParam, FunctionRegister>>::extract::<
                         RequestContext,
@@ -340,7 +343,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(collection_name.as_str())?)
                     .build()?,
                 create.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -381,7 +385,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(collection_name.as_str())?)
                     .build()?,
                 create.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -422,7 +427,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(collection_name.as_str())?)
                     .build()?,
                 create.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -468,7 +474,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(collection_name.as_str())?)
                     .build()?,
                 create.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -518,7 +525,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(collection_name.as_str())?)
                     .build()?,
                 create.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -584,7 +592,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(collection_name.as_str())?)
                     .build()?,
                 create.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let _response = service.raw_oneshot(request).await?;
@@ -619,7 +628,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(collection_name.as_str())?)
                     .build()?,
                 create.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -663,7 +673,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(collection_name.as_str())?)
                     .build()?,
                 create.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let _response = service.raw_oneshot(request).await?;
@@ -702,7 +713,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(collection_name.as_str())?)
                     .build()?,
                 create.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -796,7 +808,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(collection_name_1.as_str())?)
                     .build()?,
                 create.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let _response = service.raw_oneshot(request).await?;
@@ -828,7 +841,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(collection_name_2.as_str())?)
                     .build()?,
                 create.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let _ = service.raw_oneshot(request).await?;
@@ -881,7 +895,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(collection_name_2.as_str())?)
                     .build()?,
                 create.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;
@@ -930,7 +945,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(collection_name.as_str())?)
                     .build()?,
                 create.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request.clone()).await;
@@ -1054,7 +1070,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(collection_name_2.as_str())?)
                     .build()?,
                 create.clone(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;
@@ -1100,7 +1117,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(collection_name_1.as_str())?)
                     .build()?,
                 create,
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;
@@ -1145,7 +1163,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(collection_name_1.as_str())?)
                     .build()?,
                 create,
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;
@@ -1179,7 +1198,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(collection_name_1.as_str())?)
                     .build()?,
                 create,
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;
@@ -1223,7 +1243,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(collection_name_1.as_str())?)
                     .build()?,
                 create,
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;
@@ -1265,7 +1286,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(collection_name.as_str())?)
                     .build()?,
                 create,
-            );
+            )
+            .in_project(ProjectId::sandbox());
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await?;
 
@@ -1316,7 +1338,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(collection_name.as_str())?)
                     .build()?,
                 create,
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;

@@ -23,6 +23,7 @@ use td_tower::layers;
     request = ReadRequest<FunctionVersionExecution>,
     response = PhysicalFunctionRun,
     connection = ConnectionProvider,
+    scope = "Project",
 )]
 fn service() {
     layers!(
@@ -58,7 +59,7 @@ mod tests {
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionName, LogicalFunctionRunStatus,
-        PhysicalFunctionRunStatus, RoleId, TableNameDto, TransactionKey, UserId, UserName,
+        PhysicalFunctionRunStatus, ProjectId, RoleId, TableNameDto, TransactionKey, UserId, UserName,
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
@@ -66,12 +67,14 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_read_version_execution(db: TdPool) {
+        use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         FunctionVersionExecutionReadService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<ReadRequest<FunctionVersionExecution>, PhysicalFunctionRun>(&[
+            .assert_service::<Scoped<ReadRequest<FunctionVersionExecution>, ProjectId>, PhysicalFunctionRun>(&[
                 type_of_val(
                     &With::<ReadRequest<FunctionVersionExecution>>::extract_name::<
                         FunctionVersionExecution,
@@ -142,7 +145,7 @@ mod tests {
                     .function_version_id(function_version.id)
                     .execution(ExecutionIdName::from_str(&format!("~{}", execution.id))?)
                     .build()?,
-            );
+            ).in_project(ProjectId::sandbox());
 
         let service = FunctionVersionExecutionReadService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;

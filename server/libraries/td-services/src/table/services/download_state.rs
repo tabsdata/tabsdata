@@ -25,6 +25,7 @@ use td_tower::layers;
     request = ReadRequest<FunctionVersionAtId>,
     response = BoxedSyncStream,
     connection = ConnectionProvider,
+    scope = "Project",
     context = Storage,
 )]
 fn service() {
@@ -71,7 +72,7 @@ mod tests {
     use td_objects::system::TD_FN_STATE_PREFIX;
     use td_objects::types::basic::{AccessTokenId, RoleId};
     use td_objects::types::basic::{
-        AtTime, BundleId, CollectionName, Decorator, TableNameDto, UserId,
+        AtTime, BundleId, CollectionName, Decorator, ProjectId, TableNameDto, UserId,
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
@@ -88,11 +89,12 @@ mod tests {
 
         use td_objects::And;
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         TableStateDownloadService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<ReadRequest<FunctionVersionAtId>, BoxedSyncStream>(&[
+            .assert_service::<Scoped<ReadRequest<FunctionVersionAtId>, ProjectId>, BoxedSyncStream>(&[
                 // Extract parameters
                 type_of_val(
                     &With::<ReadRequest<FunctionVersionAtId>>::extract_name::<FunctionVersionAtId>,
@@ -183,7 +185,7 @@ mod tests {
                     .read(FunctionVersionAtId {
                         function_version_id: function_version_id.clone(),
                         at: *at_time,
-                    });
+                    }).in_project(ProjectId::sandbox());
             let service = TableStateDownloadService::build(context);
             let response = service.service().raw_oneshot(request).await?;
             let mut stream = response.into_inner();
@@ -197,7 +199,7 @@ mod tests {
                     .read(FunctionVersionAtId {
                         function_version_id: function_version_id.clone(),
                         at: *at_time,
-                    });
+                    }).in_project(ProjectId::sandbox());
             let service = TableStateDownloadService::build(context);
             let response = service.service().raw_oneshot(request).await?;
             let mut stream = response.into_inner();

@@ -12,7 +12,7 @@ use td_objects::Buildable;
 use td_objects::dxo::collection::CollectionUpdate;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::rest_urls::CollectionParam;
-use td_objects::types::basic::{AccessTokenId, CollectionIdName, CollectionName, RoleId, UserId};
+use td_objects::types::basic::{ProjectId, AccessTokenId, CollectionIdName, CollectionName, RoleId, UserId};
 use td_queries::test_utils::SeedEntry;
 
 #[td_test::test(db)]
@@ -37,7 +37,8 @@ async fn test_not_allowed_to_update_collection(db: TdPool) {
                 .build()
                 .unwrap(),
             update,
-        );
+        )
+        .in_project(ProjectId::sandbox());
 
     assert_service_error(service, request, |err| match err {
         AuthzError::Forbidden(_) => {}

@@ -29,6 +29,7 @@ use td_tower::{layers, service};
     request = CreateRequest<FunctionVersionIdParam, ExecutionRequestInternal>,
     response = ExecutionResponseInternal,
     connection = TransactionProvider,
+    scope = "Project",
     context = AuthzContext,
     context = TransactionBy,
 )]
@@ -100,7 +101,7 @@ mod tests {
     use td_objects::rest_urls::FunctionParam;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, ExecutionName,
-        FunctionIdName, FunctionName, FunctionRuntimeValues, LogicalFunctionRunStatus, RoleId,
+        FunctionIdName, FunctionName, FunctionRuntimeValues, LogicalFunctionRunStatus, ProjectId, RoleId,
         TableNameDto, TransactionKey, UserId,
     };
     use td_queries::LiveEntry;
@@ -142,14 +143,16 @@ mod tests {
         use td_objects::types::basic::{
             CollectionId, FunctionId, FunctionOnly, OverrideDisabledTrigger, TriggerType,
         };
+        use td_objects::types::basic::ProjectId;
         use td_objects::types::recursion::RecursionOptions;
         use td_queries::{insert, insert_vec};
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         ExecuteFunctionVersionService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<CreateRequest<FunctionVersionIdParam, ExecutionRequestInternal>, ExecutionResponseInternal>(&[
+            .assert_service::<Scoped<CreateRequest<FunctionVersionIdParam, ExecutionRequestInternal>, ProjectId>, ExecutionResponseInternal>(&[
                 // Extract from request.
                 type_of_val(&
                     With::<CreateRequest<FunctionVersionIdParam, ExecutionRequestInternal>>::extract::<
@@ -490,7 +493,7 @@ mod tests {
                     .skip_if_running(skip_if_running)
                     .trigger_type(TriggerType::CronTrigger)
                     .build()?,
-            );
+            ).in_project(ProjectId::sandbox());
 
         let service = ExecuteFunctionVersionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await?;
@@ -535,7 +538,7 @@ mod tests {
                     ))?)
                     .build()?,
                 update.clone(),
-            );
+            ).in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let updated = service.raw_oneshot(request).await?;
@@ -550,7 +553,7 @@ mod tests {
                     .name(Some(ExecutionName::try_from("test_execution")?))
                     .trigger_type(TriggerType::CronTrigger)
                     .build()?,
-            );
+            ).in_project(ProjectId::sandbox());
 
         let service = ExecuteFunctionVersionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;

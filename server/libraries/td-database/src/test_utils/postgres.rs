@@ -48,9 +48,9 @@ use crate::pool::TdPool;
 /// **direct** `db.seed()` / `db.live()` writes land in the `sandbox` project via
 /// the column default. To exercise a *different* project, or true cross-project
 /// isolation, go through a service: the per-request `ProjectScopeProvider` sets
-/// `SET LOCAL app.project_id` from the request's project (e.g.
-/// `RequestContext::with_project(...)`), which overrides this default for that
-/// transaction. Seeding two projects via raw `db.seed()` puts both in `sandbox`.
+/// `SET LOCAL app.project_id` from the request's project (a request scoped via
+/// `.in_project(..)`), which overrides this default for that transaction.
+/// Seeding two projects via raw `db.seed()` puts both in `sandbox`.
 pub async fn pool() -> TdPool {
     let config = DatabaseConfig {
         conn: Some(BackendConfig::embedded_postgres(EmbeddedConfig {

@@ -19,6 +19,7 @@ use td_tower::layers;
     request = ListRequest<PhysicalTableDataVersionParam>,
     response = ListResponse<Execution>,
     connection = ConnectionProvider,
+    scope = "Project",
 )]
 fn service() {
     layers!(
@@ -50,7 +51,7 @@ mod tests {
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::table::TableDB;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus, RoleId,
+        AccessTokenId, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus, ProjectId, RoleId,
         TableNameDto, TransactionKey, UserId, VersionPos,
     };
     use td_queries::LiveEntry;
@@ -60,12 +61,14 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_list_executions_by_table_data_version(db: TdPool) {
+        use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         ExecutionListByPhysicalTableDataVersionService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<ListRequest<PhysicalTableDataVersionParam>, ListResponse<Execution>>(&[
+            .assert_service::<Scoped<ListRequest<PhysicalTableDataVersionParam>, ProjectId>, ListResponse<Execution>>(&[
                 // Extract PhysicalTableDataVersionId from request.
                 type_of_val(
                     &With::<ListRequest<PhysicalTableDataVersionParam>>::extract_name::<
@@ -201,7 +204,7 @@ mod tests {
                     .table_data_version(tdv.id.clone())
                     .build()?,
                 ListParams::default(),
-            );
+            ).in_project(ProjectId::sandbox());
         let response = service.raw_oneshot(request).await?;
 
         // Only execution_2 should appear (it has the function requirement referencing the TDV).
@@ -276,7 +279,7 @@ mod tests {
                     .table_data_version(tdv.id.clone())
                     .build()?,
                 ListParams::default(),
-            );
+            ).in_project(ProjectId::sandbox());
         let response = service.raw_oneshot(request).await?;
 
         assert_eq!(response.len, 0);

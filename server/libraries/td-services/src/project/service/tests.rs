@@ -256,7 +256,7 @@ mod postgres_delete_guards {
         collections
             .create
             .service()
-            .raw_oneshot(admin_ctx().with_project(Some(project.id)).create((), coll))
+            .raw_oneshot(admin_ctx().create((), coll).in_project(project.id))
             .await?;
 
         // Delete is refused while the project still owns a collection.

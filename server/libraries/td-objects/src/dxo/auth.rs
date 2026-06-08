@@ -127,6 +127,4 @@ mod definitions {
 }
 
 // Auth requests operate on global identity tables (users/sessions), not
-// project-scoped data — so their services are declared `project_scope = bypass`
-// at the service-factory level (see `td-services::auth::services::*`). No
-// per-request `ProjectScoped` impl needed.
+// project-scoped data; their services declare `scope = Global`.

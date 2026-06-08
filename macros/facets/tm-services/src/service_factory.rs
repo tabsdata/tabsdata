@@ -13,19 +13,15 @@ use syn::{
     FnArg, GenericParam, Ident, ItemFn, ReturnType, Token, Type, parse_macro_input, parse_quote,
 };
 
-/// Service-level project-scope policy. Omitted → tenant (read scope from the
-/// request via `ProjectScoped`); `project_scope = bypass` → explicit
-/// cross-project bypass, no `ProjectScoped` bound on the request type.
-///
-/// A `grep "project_scope = bypass"` returns the canonical audit list: every
-/// service that intentionally spans all projects.
-#[derive(Default)]
-enum ProjectScopePolicy {
-    /// Read the project from `Req` via `ProjectScoped` (default).
-    #[default]
-    Tenant,
-    /// Always bypass project scope.
-    Bypass,
+/// Project scope of a service, declared as `scope = "Project"` or `scope =
+/// "Global"`. Required for any service with a `connection`. `Project` services
+/// take their target project as part of the input (a `Scoped<Request>`) and run
+/// every query under `SET LOCAL app.project_id`; `Global` services span all
+/// projects (`SET LOCAL app.bypass_rls = on`). A `grep 'scope = "Global"'` is
+/// the audit list of cross-project escape hatches.
+enum Scope {
+    Project,
+    Global,
 }
 
 struct ProviderArgs {
@@ -34,7 +30,7 @@ struct ProviderArgs {
     response: Type,
     connection: Option<Type>,
     context: Vec<Type>,
-    project_scope: ProjectScopePolicy,
+    scope: Option<Scope>,
 }
 
 impl Parse for ProviderArgs {
@@ -44,7 +40,7 @@ impl Parse for ProviderArgs {
         let mut response = None;
         let mut connection = None;
         let mut context = Vec::new();
-        let mut project_scope = ProjectScopePolicy::default();
+        let mut scope = None;
 
         while !input.is_empty() {
             let key: Ident = input.parse()?;
@@ -59,18 +55,18 @@ impl Parse for ProviderArgs {
                     let ctx: Type = input.parse()?;
                     context.push(ctx);
                 }
-                "project_scope" => {
-                    let value: Ident = input.parse()?;
-                    project_scope = match value.to_string().as_str() {
-                        "bypass" => ProjectScopePolicy::Bypass,
-                        "tenant" => ProjectScopePolicy::Tenant,
+                "scope" => {
+                    let value: syn::LitStr = input.parse()?;
+                    scope = Some(match value.value().as_str() {
+                        "Project" => Scope::Project,
+                        "Global" => Scope::Global,
                         _ => {
                             return Err(syn::Error::new(
                                 value.span(),
-                                "`project_scope` must be `tenant` (default) or `bypass`",
+                                "`scope` must be \"Project\" or \"Global\"",
                             ));
                         }
-                    };
+                    });
                 }
                 _ => return Err(syn::Error::new(key.span(), "Unknown attribute key")),
             }
@@ -80,6 +76,23 @@ impl Parse for ProviderArgs {
             }
         }
 
+        let connection = connection;
+        let scope = scope;
+        // `scope` is mandatory exactly when the service owns a connection: that
+        // is when there is a transaction whose `app.project_id` GUC must be set.
+        if connection.is_some() && scope.is_none() {
+            return Err(syn::Error::new(
+                input.span(),
+                "a service with a `connection` must declare `scope = Project` or `scope = Global`",
+            ));
+        }
+        if connection.is_none() && scope.is_some() {
+            return Err(syn::Error::new(
+                input.span(),
+                "`scope` is only meaningful with a `connection`",
+            ));
+        }
+
         Ok(ProviderArgs {
             name: name.ok_or_else(|| syn::Error::new(input.span(), "Missing `name`"))?,
             request: request.ok_or_else(|| syn::Error::new(input.span(), "Missing `request`"))?,
@@ -87,7 +100,7 @@ impl Parse for ProviderArgs {
                 .ok_or_else(|| syn::Error::new(input.span(), "Missing `response`"))?,
             connection,
             context,
-            project_scope,
+            scope,
         })
     }
 }
@@ -175,21 +188,26 @@ pub fn service_factory(attr: TokenStream, item: TokenStream) -> TokenStream {
     let req_ty = &args.request;
     let res_ty = &args.response;
 
-    // When a connection provider is present, inject a project-scope layer
-    // right after it. The service-level `project_scope` flag picks which:
-    //   - default / tenant: read the scope from the request type via the
-    //     `ProjectScoped` trait — Some project → set GUC, None → bypass.
-    //   - bypass: unconditional cross-project bypass; no trait bound on Req.
-    //     Grep for "project_scope = bypass" to audit every cross-project
-    //     escape hatch.
-    let project_scope_provider = match (&args.connection, &args.project_scope) {
-        (None, _) => vec![],
-        (Some(_), ProjectScopePolicy::Tenant) => {
-            vec![quote! { ::td_tower::project_scope::ProjectScopeProvider::<#req_ty>::new() }]
-        }
-        (Some(_), ProjectScopePolicy::Bypass) => {
-            vec![quote! { ::td_tower::project_scope::BypassProjectScopeProvider::new() }]
-        }
+    // Derive the service's actual input type and its scope layer from `scope`
+    // (validated against `connection` at parse time):
+    //   - Project: the input is `Scoped<Request, ProjectId>` — the caller pairs
+    //     the request with its target project. The provider unwraps it, runs
+    //     `SET LOCAL app.project_id`, and hands the bare request + project id to
+    //     the rest of the stack.
+    //   - Global: the input is the bare request; the provider bypasses scope.
+    //   - no scope (no connection): no scope layer, bare request.
+    let (actual_req, project_scope_provider) = match &args.scope {
+        None => (quote! { #req_ty }, vec![]),
+        Some(Scope::Project) => (
+            quote! { ::td_tower::project_scope::Scoped<#req_ty, ::td_objects::types::basic::ProjectId> },
+            vec![quote! {
+                ::td_tower::project_scope::ProjectScopeProvider::<#req_ty, ::td_objects::types::basic::ProjectId>::new()
+            }],
+        ),
+        Some(Scope::Global) => (
+            quote! { #req_ty },
+            vec![quote! { ::td_tower::project_scope::GlobalScopeProvider::new() }],
+        ),
     };
 
     let (mut factory_args, mut factory_types) = (vec![], vec![]);
@@ -281,7 +299,7 @@ pub fn service_factory(attr: TokenStream, item: TokenStream) -> TokenStream {
     // Generate provider struct
     TokenStream::from(quote! {
         pub struct #name #impl_generics {
-            provider: ::td_tower::service_provider::ServiceProvider<#req_ty, #res_ty, td_error::TdError>,
+            provider: ::td_tower::service_provider::ServiceProvider<#actual_req, #res_ty, td_error::TdError>,
             #[cfg(feature = "test_tower_metadata")]
             metadata: ::td_tower::service_provider::ServiceProvider<(), td_tower::metadata::Metadata, td_error::TdError>,
             #phantom_data
@@ -323,7 +341,7 @@ pub fn service_factory(attr: TokenStream, item: TokenStream) -> TokenStream {
 
 
         impl #impl_generics ::ta_services::service::TdService for #name #ty_generics #where_clause {
-            type Request = #req_ty;
+            type Request = #actual_req;
             type Response = #res_ty;
             type Error = td_error::TdError;
 

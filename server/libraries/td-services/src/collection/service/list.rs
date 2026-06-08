@@ -20,6 +20,7 @@ use td_tower::layers;
     request = ListRequest<()>,
     response = ListResponse<CollectionRead>,
     connection = ConnectionProvider,
+    scope = "Project",
     context = AuthzContext,
 )]
 fn service() {
@@ -42,6 +43,7 @@ mod tests {
     use td_error::TdError;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::types::basic::{
+        ProjectId,
         AccessTokenId, CollectionName, Description, RoleId, RoleName, UserEnabled, UserId, UserName,
     };
     use td_queries::test_utils::SeedEntry;
@@ -51,11 +53,12 @@ mod tests {
     #[td_test::test(db)]
     async fn test_tower_metadata_list_collections(db: TdPool) {
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         ListCollectionsService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<ListRequest<()>, ListResponse<CollectionRead>>(&[
+            .assert_service::<Scoped<ListRequest<()>, ProjectId>, ListResponse<CollectionRead>>(&[
                 type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
                 type_of_val(&Authz::<NoPermissions>::visible_collections),
                 type_of_val(&With::<ListRequest<()>>::extract::<ListParams>),
@@ -73,7 +76,8 @@ mod tests {
 
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
-                .list((), ListParams::default());
+                .list((), ListParams::default())
+                .in_project(ProjectId::sandbox());
 
         let service = ListCollectionsService::new(db, Arc::new(AuthzContext::default())).service();
         let response = service.raw_oneshot(request).await;
@@ -106,7 +110,8 @@ mod tests {
         // All collections are visible to authorized users
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
-                .list((), ListParams::default());
+                .list((), ListParams::default())
+                .in_project(ProjectId::sandbox());
 
         let service = ListCollectionsService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -117,7 +122,8 @@ mod tests {
 
         // No collections are visible to unauthorized users
         let request = RequestContext::with(AccessTokenId::default(), user.id, role.id)
-            .list((), ListParams::default());
+            .list((), ListParams::default())
+            .in_project(ProjectId::sandbox());
 
         let service = ListCollectionsService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;

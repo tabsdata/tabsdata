@@ -18,6 +18,7 @@ use td_tower::layers;
     request = ListRequest<()>,
     response = ListResponse<Transaction>,
     connection = ConnectionProvider,
+    scope = "Project",
 )]
 fn service() {
     layers!(
@@ -40,7 +41,8 @@ mod tests {
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, RoleId, TransactionKey, UserId,
+        AccessTokenId, BundleId, CollectionName, Decorator, ProjectId, RoleId, TransactionKey,
+        UserId,
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
@@ -49,11 +51,12 @@ mod tests {
     #[td_test::test(db)]
     async fn test_tower_metadata_list_transaction(db: TdPool) {
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         TransactionListService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<ListRequest<()>, ListResponse<Transaction>>(&[
+            .assert_service::<Scoped<ListRequest<()>, ProjectId>, ListResponse<Transaction>>(&[
                 // List all transactions in the system.
                 type_of_val(&With::<ListRequest<()>>::extract::<ListParams>),
                 type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<Transaction>, _>),
@@ -98,7 +101,7 @@ mod tests {
         let service = TransactionListService::with_defaults(db.clone()).service();
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
-                .list((), ListParams::default());
+                .list((), ListParams::default()).in_project(ProjectId::sandbox());
 
         let response = service.raw_oneshot(request).await?;
         assert_eq!(response.len, transactions.len());

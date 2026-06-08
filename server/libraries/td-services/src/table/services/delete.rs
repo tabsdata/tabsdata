@@ -32,6 +32,7 @@ use td_tower::layers;
     request = DeleteRequest<TableParam>,
     response = (),
     connection = TransactionProvider,
+    scope = "Project",
     context = AuthzContext,
 )]
 fn service() {
@@ -97,8 +98,8 @@ mod tests {
     use td_objects::dxo::function::{FunctionRegister, FunctionUpdate};
     use td_objects::rest_urls::FunctionParam;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, Decorator, FunctionIdName, FunctionRuntimeValues, RoleId,
-        TableName, TableNameDto, UserId,
+        AccessTokenId, BundleId, Decorator, FunctionIdName, FunctionRuntimeValues, ProjectId,
+        RoleId, TableName, TableNameDto, UserId,
     };
     use td_objects::types::composed::TableDependencyDto;
     use td_queries::test_utils::SeedEntry;
@@ -108,11 +109,12 @@ mod tests {
     #[td_test::test(db)]
     async fn test_tower_metadata_delete_table(db: TdPool) {
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         TableDeleteService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<DeleteRequest<TableParam>, ()>(&[
+            .assert_service::<Scoped<DeleteRequest<TableParam>, ProjectId>, ()>(&[
                 type_of_val(&With::<DeleteRequest<TableParam>>::extract::<RequestContext>),
                 type_of_val(&With::<DeleteRequest<TableParam>>::extract_name::<TableParam>),
                 // Extract collection and table from request.
@@ -215,7 +217,7 @@ mod tests {
                 .function(FunctionIdName::from_str("joaquin_workout")?)
                 .build()?,
             update.clone(),
-        );
+        ).in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -232,7 +234,7 @@ mod tests {
                 .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
                 .table(TableIdName::from_str("super_table")?)
                 .build()?,
-        );
+        ).in_project(ProjectId::sandbox());
 
         let service = TableDeleteService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
@@ -310,7 +312,7 @@ mod tests {
                 .function(FunctionIdName::from_str("joaquin_workout")?)
                 .build()?,
             update.clone(),
-        );
+        ).in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -327,7 +329,7 @@ mod tests {
                 .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
                 .table(TableIdName::from_str("super_table")?)
                 .build()?,
-        );
+        ).in_project(ProjectId::sandbox());
 
         let service = TableDeleteService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;

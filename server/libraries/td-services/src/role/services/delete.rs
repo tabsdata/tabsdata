@@ -23,6 +23,7 @@ use td_tower::layers;
     request = DeleteRequest<RoleParam>,
     response = (),
     connection = TransactionProvider,
+    scope = "Global",
     context = AuthzContext,
 )]
 fn service() {

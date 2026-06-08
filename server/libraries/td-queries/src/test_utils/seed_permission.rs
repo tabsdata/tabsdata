@@ -5,7 +5,7 @@
 use crate::{LiveEntry, QueryExecutor};
 use ta_objects::{Buildable, TryUpdater};
 use td_error::TdError;
-use td_objects::dxo::crudl::{ReadRequest, RequestContext};
+use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::permission::{PermissionCreate, PermissionDB, PermissionDBBuilder};
 use td_objects::dxo::role::RoleDB;
 use td_objects::types::basic::{
@@ -24,13 +24,11 @@ pub async fn seed_permission(
         .entity_name(entity_name)
         .build()?;
 
-    let request_context: ReadRequest<String> = RequestContext::with(
+    let request_context = RequestContext::with(
         AccessTokenId::default(),
         UserId::admin(),
         RoleId::sec_admin(),
-    )
-    .read("");
-    let request_context = request_context.context;
+    );
 
     let mut builder = PermissionDBBuilder::try_from(&permission_create)?;
     let builder = builder

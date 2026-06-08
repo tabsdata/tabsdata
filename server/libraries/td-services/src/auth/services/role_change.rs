@@ -33,6 +33,7 @@ use tower::util::MapErrLayer;
     request = UpdateRequest<(), RoleChange>,
     response = TokenResponseX,
     connection = TransactionProvider,
+    scope = "Global",
     context = JwtConfig,
     context = Sessions,
 )]

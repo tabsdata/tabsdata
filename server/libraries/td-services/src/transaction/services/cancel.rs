@@ -24,6 +24,7 @@ use td_tower::layers;
     request = UpdateRequest<TransactionParam, ()>,
     response = (),
     connection = TransactionProvider,
+    scope = "Project",
     context = AuthzContext,
     context = SchedulerNotify,
 )]
@@ -65,7 +66,7 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::types::basic::{
         AccessTokenId, CollectionName, ExecutionStatus, FunctionName, LogicalFunctionRunStatus,
-        RoleId, TableNameDto, TransactionStatus, UserId,
+        ProjectId, RoleId, TableNameDto, TransactionStatus, UserId,
     };
     use td_objects::types::composed::TableDependencyDto;
     use td_tower::ctx_service::RawOneshot;
@@ -74,11 +75,12 @@ mod tests {
     #[td_test::test(db)]
     async fn test_tower_metadata_cancel_transaction(db: TdPool) {
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         TransactionCancelService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<UpdateRequest<TransactionParam, ()>, ()>(&[
+            .assert_service::<Scoped<UpdateRequest<TransactionParam, ()>, ProjectId>, ()>(&[
                 // Extract from request.
                 type_of_val(
                     &With::<UpdateRequest<TransactionParam, ()>>::extract::<RequestContext>,
@@ -128,7 +130,7 @@ mod tests {
                                 .transaction(TransactionIdName::from_str(&transaction)?)
                                 .build()?,
                             (),
-                        );
+                        ).in_project(ProjectId::sandbox());
 
                 TransactionCancelService::with_defaults(db.clone())
                     .service()

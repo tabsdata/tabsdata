@@ -20,6 +20,7 @@ use td_tower::layers;
     request = ReadRequest<CollectionParam>,
     response = CollectionRead,
     connection = ConnectionProvider,
+    scope = "Project",
     context = AuthzContext,
 )]
 fn service() {
@@ -45,6 +46,7 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::rest_urls::CollectionParam;
     use td_objects::types::basic::{
+        ProjectId,
         AccessTokenId, AtTime, CollectionName, Description, RoleId, UserId, UserName,
     };
     use td_queries::test_utils::SeedEntry;
@@ -54,11 +56,12 @@ mod tests {
     #[td_test::test(db)]
     async fn test_tower_metadata_read_collection(db: TdPool) {
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         ReadCollectionService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<ReadRequest<CollectionParam>, CollectionRead>(&[
+            .assert_service::<Scoped<ReadRequest<CollectionParam>, ProjectId>, CollectionRead>(&[
                 type_of_val(&With::<ReadRequest<CollectionParam>>::extract::<RequestContext>),
                 type_of_val(&AuthzOn::<System>::set),
                 type_of_val(&Authz::<NoPermissions>::check), // no permission required
@@ -84,7 +87,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(&name.to_string()).unwrap())
                     .build()
                     .unwrap(),
-            );
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = ReadCollectionService::with_defaults(db).service();
         let response = service.raw_oneshot(request).await;

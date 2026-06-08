@@ -11,13 +11,13 @@ use td_tower::layers;
 
 /// `GET /inflight` — point-in-time count of in-flight LFRs broken
 /// out by `(collection_id, group_id, status)`. Inflight is defined by
-/// status, not by `ended_on IS NULL`.
-// Tenant-scoped (see `MetricsService`): RLS filters to the request's project.
+/// status, not by `ended_on IS NULL`. RLS filters to the request's project.
 #[service_factory(
     name = InflightService,
     request = InflightRequest,
     response = InflightResponse,
     connection = ConnectionProvider,
+    scope = "Project",
 )]
 fn service() {
     layers!(from_fn(build_inflight_response))
@@ -36,13 +36,14 @@ mod tests {
     #[td_test::test(db)]
     async fn test_inflight_empty_db(db: TdPool) -> Result<(), TdError> {
         let request = InflightRequest {
-            project_id: ProjectId::sandbox(),
             collections: DimensionFilter::default(),
             groups: DimensionFilter::default(),
             statuses: vec![],
         };
         let service = InflightService::with_defaults(db).service();
-        let response = service.raw_oneshot(request).await?;
+        let response = service
+            .raw_oneshot(request.in_project(ProjectId::sandbox()))
+            .await?;
         assert!(response.rows.is_empty());
         Ok(())
     }

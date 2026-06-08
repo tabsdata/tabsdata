@@ -24,6 +24,7 @@ use td_tower::layers;
     request = ReadRequest<FunctionMaybeAtIdName>,
     response = BundleDownload,
     connection = ConnectionProvider,
+    scope = "Project",
     context = AuthzContext,
     context = Storage,
 )]
@@ -62,6 +63,7 @@ mod tests {
     use td_objects::dxo::function_upload::FunctionUpload;
     use td_objects::rest_urls::{CollectionParam, FunctionParam, OptionalAtTimeParam};
     use td_objects::types::basic::{
+        ProjectId,
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionVersionId, RoleId, UserId,
     };
     use td_queries::LiveEntry;
@@ -72,11 +74,12 @@ mod tests {
     #[td_test::test(db)]
     async fn test_tower_metadata_download_bundle(db: TdPool) {
         use td_tower::metadata::type_of_val;
+        use td_tower::project_scope::Scoped;
 
         DownloadBundleService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<ReadRequest<FunctionMaybeAtIdName>, BundleDownload>(&[
+            .assert_service::<Scoped<ReadRequest<FunctionMaybeAtIdName>, ProjectId>, BundleDownload>(&[
                 type_of_val(&With::<ReadRequest<FunctionMaybeAtIdName>>::extract::<RequestContext>),
                 type_of_val(
                     &With::<ReadRequest<FunctionMaybeAtIdName>>::extract_name::<
@@ -159,7 +162,8 @@ mod tests {
                     .read(FunctionMaybeAtIdName::new(
                         function_param.clone(),
                         OptionalAtTimeParam { at },
-                    ));
+                    ))
+                    .in_project(ProjectId::sandbox());
             let response = service.clone().raw_oneshot(download_request).await?;
 
             assert_eq!(response.function_version_id, expected_fn.id);
@@ -190,7 +194,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(&format!("{}", collection))?)
                     .build()?,
                 upload,
-            );
+            )
+            .in_project(ProjectId::sandbox());
         let bundle = UploadFunctionService::build(context)
             .service()
             .raw_oneshot(request)
