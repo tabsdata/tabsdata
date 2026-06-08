@@ -28,8 +28,7 @@ import zstandard
 
 from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
 from tabsdatak.server._tdrunner.function._lib.cli import build_parser, command
-from tabsdatak.server._tdrunner.function._lib.errors import CommandSpecificError
-from tabsdatak.server._tdrunner.function._lib.request import load_request_or_fail
+from tabsdatak.server._tdrunner.function._lib.request import load_request_or_raise
 from tabsdatak.server._tdrunner.function._lib.transporter_proc import (
     TransporterNotFoundError,
     run_transporter,
@@ -37,6 +36,9 @@ from tabsdatak.server._tdrunner.function._lib.transporter_proc import (
 from tabsdatak.server._tdrunner.function._lib.transporter_request import (
     build_bundle_fetch_request,
     write_transporter_request,
+)
+from tabsdatak.server._tdrunner.function.commands.localize_fn_bundle.error import (
+    LocalizeFnBundleErrorCode,
 )
 
 VERSION = "0.1.0"
@@ -53,11 +55,6 @@ MAN = (
     "--bundle-dir. The caller owns the lifecycle of every path. Step "
     "3 of the publisher init-container chain."
 )
-
-# Command-specific exit codes (>= 10 per docs/01-CommandBasics.md).
-EXIT_BAD_REQUEST = 10
-EXIT_TRANSPORTER_FAILED = 12
-EXIT_EXTRACT_FAILED = 13
 
 
 def _build_parser():
@@ -103,14 +100,9 @@ def _fetch_via_transporter(
     try:
         rc = run_transporter(transporter_request, transporter_response)
     except TransporterNotFoundError as exc:
-        raise CommandSpecificError(
-            EXIT_TRANSPORTER_FAILED, f"td_transporter not found: {exc}"
-        ) from exc
+        raise LocalizeFnBundleErrorCode.LFB_2.exception(cause=exc, detail=str(exc))
     if rc != 0:
-        raise CommandSpecificError(
-            EXIT_TRANSPORTER_FAILED,
-            f"td_transporter exited {rc} fetching bundle",
-        )
+        raise LocalizeFnBundleErrorCode.LFB_3.exception(rc=rc)
 
 
 def _extract(archive: Path, dest_dir: Path) -> None:
@@ -121,9 +113,7 @@ def _extract(archive: Path, dest_dir: Path) -> None:
         FileNotFoundError,
         zstandard.ZstdError,
     ) as exc:
-        raise CommandSpecificError(
-            EXIT_EXTRACT_FAILED, f"failed to extract bundle: {exc}"
-        ) from exc
+        raise LocalizeFnBundleErrorCode.LFB_4.exception(cause=exc, detail=str(exc))
 
 
 @command(name="td_localize_fn_bundle", parser=_build_parser)
@@ -134,7 +124,7 @@ def main(args: argparse.Namespace) -> int:
     transporter_request = Path(args.transporter_request)
     transporter_response = Path(args.transporter_response)
 
-    request = load_request_or_fail(request_path, EXIT_BAD_REQUEST)
+    request = load_request_or_raise(request_path, LocalizeFnBundleErrorCode.LFB_1)
     _fetch_via_transporter(
         request, bundle_archive, transporter_request, transporter_response
     )

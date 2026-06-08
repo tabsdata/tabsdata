@@ -16,11 +16,11 @@ import zstandard
 from tabsdatak.server._tdrunner.function._lib.transporter_proc import (
     TransporterNotFoundError,
 )
-from tabsdatak.server._tdrunner.function.commands.localize_fn_bundle import (
-    EXIT_BAD_REQUEST,
-    EXIT_EXTRACT_FAILED,
-    EXIT_TRANSPORTER_FAILED,
-    main,
+from tabsdatak.server._tdrunner.function.commands.localize_fn_bundle import main
+from tabsdatak.server._tdrunner.function.commands.localize_fn_bundle.error import (
+    BadRequestError,
+    ExtractFailedError,
+    TransporterFailedError,
 )
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
@@ -178,7 +178,7 @@ def test_main_missing_request_returns_bad_request(monkeypatch, paths, http_ok_ur
         liveness=paths.liveness,
         responder_url=http_ok_url,
     )
-    assert main() == EXIT_BAD_REQUEST
+    assert main() == BadRequestError.exit_code
 
 
 def test_main_malformed_request_returns_bad_request(monkeypatch, paths, http_ok_url):
@@ -193,7 +193,7 @@ def test_main_malformed_request_returns_bad_request(monkeypatch, paths, http_ok_
         liveness=paths.liveness,
         responder_url=http_ok_url,
     )
-    assert main() == EXIT_BAD_REQUEST
+    assert main() == BadRequestError.exit_code
 
 
 def test_main_transporter_not_found_returns_transporter_failed(
@@ -215,7 +215,7 @@ def test_main_transporter_not_found_returns_transporter_failed(
         liveness=paths.liveness,
         responder_url=http_ok_url,
     )
-    assert main() == EXIT_TRANSPORTER_FAILED
+    assert main() == TransporterFailedError.exit_code
 
 
 def test_main_transporter_nonzero_returns_transporter_failed(
@@ -235,7 +235,7 @@ def test_main_transporter_nonzero_returns_transporter_failed(
         liveness=paths.liveness,
         responder_url=http_ok_url,
     )
-    assert main() == EXIT_TRANSPORTER_FAILED
+    assert main() == TransporterFailedError.exit_code
 
 
 def test_main_corrupt_bundle_returns_extract_failed(monkeypatch, paths, http_ok_url):
@@ -256,7 +256,7 @@ def test_main_corrupt_bundle_returns_extract_failed(monkeypatch, paths, http_ok_
         liveness=paths.liveness,
         responder_url=http_ok_url,
     )
-    assert main() == EXIT_EXTRACT_FAILED
+    assert main() == ExtractFailedError.exit_code
 
 
 def test_main_missing_bundle_after_transporter_returns_extract_failed(
@@ -277,7 +277,7 @@ def test_main_missing_bundle_after_transporter_returns_extract_failed(
         liveness=paths.liveness,
         responder_url=http_ok_url,
     )
-    assert main() == EXIT_EXTRACT_FAILED
+    assert main() == ExtractFailedError.exit_code
 
 
 def test_main_invalid_options_returns_1(monkeypatch):
