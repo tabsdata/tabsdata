@@ -28,17 +28,19 @@ from pathlib import Path
 import polars as pl
 
 from tabsdatak.server._tdrunner.function._lib.cli import build_parser, command
-from tabsdatak.server._tdrunner.function._lib.errors import CommandSpecificError
 from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
     MANIFEST_FILES_KEY,
     MANIFEST_NAME_KEY,
-    load_inputs_manifest_or_fail,
+    load_inputs_manifest_or_raise,
     write_inputs_manifest,
 )
-from tabsdatak.server._tdrunner.function._lib.request import load_request_or_fail
+from tabsdatak.server._tdrunner.function._lib.request import load_request_or_raise
 from tabsdatak.server._tdrunner.function._lib.system_columns import (
     EMPTY_VERSION,
     stamp_system_columns,
+)
+from tabsdatak.server._tdrunner.function.commands.stamp_inputs.error import (
+    StampInputsErrorCode,
 )
 
 # TODO: After all commands are done, version will be unified in a single
@@ -59,14 +61,6 @@ MAN = (
     "updated inputs manifest at --enriched-inputs-manifest for "
     "run-function to consume."
 )
-
-# Command-specific exit codes (>= 10 per docs/01-CommandBasics.md).
-# TODO: Pending error code rework.
-EXIT_BAD_REQUEST = 10
-EXIT_BAD_MANIFEST = 11
-EXIT_BAD_INPUT_PARQUET = 12
-EXIT_STAMP_FAILED = 13
-EXIT_MANIFEST_WRITE_FAILED = 14
 
 
 def _build_parser():
@@ -114,10 +108,9 @@ def _stamp_file(
     try:
         df = pl.read_parquet(src_path)
     except Exception as exc:
-        raise CommandSpecificError(
-            EXIT_BAD_INPUT_PARQUET,
-            f"failed to read input parquet {src_path}: {exc}",
-        ) from exc
+        raise StampInputsErrorCode.SI_3.exception(
+            cause=exc, path=src_path, detail=str(exc)
+        )
 
     try:
         stamped = stamp_system_columns(
@@ -128,19 +121,17 @@ def _stamp_file(
             timestamp=timestamp,
         )
     except Exception as exc:
-        raise CommandSpecificError(
-            EXIT_STAMP_FAILED,
-            f"failed to stamp system columns on {src_path}: {exc}",
-        ) from exc
+        raise StampInputsErrorCode.SI_4.exception(
+            cause=exc, path=src_path, detail=str(exc)
+        )
 
     try:
         dest_path.parent.mkdir(parents=True, exist_ok=True)
         stamped.write_parquet(dest_path)
     except OSError as exc:
-        raise CommandSpecificError(
-            EXIT_STAMP_FAILED,
-            f"failed to write enriched parquet {dest_path}: {exc}",
-        ) from exc
+        raise StampInputsErrorCode.SI_5.exception(
+            cause=exc, path=dest_path, detail=str(exc)
+        )
 
 
 @command(name="td_stamp_inputs", parser=_build_parser)
@@ -150,8 +141,8 @@ def main(args: argparse.Namespace) -> int:
     enriched_dir = Path(args.enriched_dir)
     enriched_manifest = Path(args.enriched_inputs_manifest)
 
-    request = load_request_or_fail(request_path, EXIT_BAD_REQUEST)
-    entries = load_inputs_manifest_or_fail(inputs_manifest, EXIT_BAD_MANIFEST)
+    request = load_request_or_raise(request_path, StampInputsErrorCode.SI_1)
+    entries = load_inputs_manifest_or_raise(inputs_manifest, StampInputsErrorCode.SI_2)
 
     execution = str(request.info.execution_id)
     transaction = str(request.info.transaction_id)
@@ -185,10 +176,9 @@ def main(args: argparse.Namespace) -> int:
     try:
         write_inputs_manifest(enriched_entries, enriched_manifest)
     except OSError as exc:
-        raise CommandSpecificError(
-            EXIT_MANIFEST_WRITE_FAILED,
-            f"failed to write enriched inputs manifest {enriched_manifest}: {exc}",
-        ) from exc
+        raise StampInputsErrorCode.SI_6.exception(
+            cause=exc, path=enriched_manifest, detail=str(exc)
+        )
     return 0
 
 

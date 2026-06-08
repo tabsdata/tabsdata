@@ -41,15 +41,19 @@ from tabsdatak.server._tdrunner.function._lib.system_columns import (
 from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
     load_inputs_manifest_or_fail,
 )
-from tabsdatak.server._tdrunner.function.commands.stamp_inputs import (
-    EXIT_BAD_INPUT_PARQUET,
-    EXIT_BAD_MANIFEST,
-    EXIT_BAD_REQUEST,
-    EXIT_MANIFEST_WRITE_FAILED,
-    EXIT_STAMP_FAILED,
-    _stamp_file,
-    main,
+from tabsdatak.server._tdrunner.function.commands.stamp_inputs import _stamp_file, main
+from tabsdatak.server._tdrunner.function.commands.stamp_inputs.error import (
+    BadInputParquetError,
+    BadManifestError,
+    BadRequestError,
+    StampFailedError,
 )
+
+# Legacy unit-tests for the still-present ``load_inputs_manifest_or_fail``
+# helper (further below) pass this int sentinel. The wired (typed) path
+# now uses ``BadManifestError`` instead; this constant only survives
+# until the legacy helper is removed in the TD-2263 cleanup PR.
+EXIT_BAD_MANIFEST = BadManifestError.exit_code
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
@@ -207,7 +211,7 @@ def test_stamp_file_unreadable_src_raises_bad_input_parquet(tmp_path):
     bogus = tmp_path / "not-a-parquet.parquet"
     bogus.write_bytes(b"this is not parquet")
     dest = tmp_path / "out.parquet"
-    with pytest.raises(CommandSpecificError) as exc_info:
+    with pytest.raises(BadInputParquetError):
         _stamp_file(
             bogus,
             dest,
@@ -216,14 +220,13 @@ def test_stamp_file_unreadable_src_raises_bad_input_parquet(tmp_path):
             version=EMPTY_VERSION,
             timestamp=EMPTY_TIMESTAMP,
         )
-    assert exc_info.value.exit_code == EXIT_BAD_INPUT_PARQUET
 
 
 def test_stamp_file_write_to_directory_raises_stamp_failed(tmp_path):
     src = _write_user_parquet(tmp_path / "src.parquet")
     a_dir = tmp_path / "i-am-a-dir"
     a_dir.mkdir()
-    with pytest.raises(CommandSpecificError) as exc_info:
+    with pytest.raises(StampFailedError):
         _stamp_file(
             src,
             a_dir,  # writing to a directory triggers OSError
@@ -232,7 +235,6 @@ def test_stamp_file_write_to_directory_raises_stamp_failed(tmp_path):
             version=EMPTY_VERSION,
             timestamp=EMPTY_TIMESTAMP,
         )
-    assert exc_info.value.exit_code == EXIT_STAMP_FAILED
 
 
 # --- main: error paths --------------------------------------------------
@@ -248,7 +250,7 @@ def test_main_missing_request_returns_bad_request(tmp_path, monkeypatch, http_ok
         tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert main() == EXIT_BAD_REQUEST
+    assert main() == BadRequestError.exit_code
 
 
 def test_main_missing_inputs_manifest_returns_bad_manifest(

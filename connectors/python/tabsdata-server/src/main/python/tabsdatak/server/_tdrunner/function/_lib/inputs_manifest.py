@@ -36,6 +36,7 @@ from typing import Any
 
 import yaml
 
+from tabsdatak.error import ErrorCode
 from tabsdatak.server._tdrunner.function._lib.errors import CommandSpecificError
 
 
@@ -87,19 +88,35 @@ def load_inputs_manifest(path: Path) -> list[dict[str, Any]]:
 
 
 def load_inputs_manifest_or_fail(path: Path, exit_code: int) -> list[dict[str, Any]]:
-    """:func:`load_inputs_manifest` with the canonical command-side error wrap.
+    """:func:`load_inputs_manifest` with the legacy command-side error wrap.
 
-    Every command that takes ``--inputs-manifest`` had the same try/except
-    boilerplate around :func:`load_inputs_manifest`. This helper folds it
-    into one call; ``exit_code`` is passed by the caller so each command
-    keeps its own exit-code numbering (the convention is some
-    ``EXIT_BAD_MANIFEST`` value, but the helper doesn't enforce a
-    specific number).
+    Deprecated alongside ``CommandSpecificError``: new command code
+    should prefer :func:`load_inputs_manifest_or_raise`. Removed once
+    every command migrates (TD-2263).
     """
     try:
         return load_inputs_manifest(path)
     except (FileNotFoundError, InvalidManifestError) as exc:
         raise CommandSpecificError(exit_code, str(exc)) from exc
+
+
+def load_inputs_manifest_or_raise(
+    path: Path, error_code: ErrorCode
+) -> list[dict[str, Any]]:
+    """:func:`load_inputs_manifest` with a per-command typed-error wrap.
+
+    Typed counterpart of :func:`load_inputs_manifest_or_fail`. Catches
+    ``FileNotFoundError`` and :class:`InvalidManifestError` and
+    re-raises via ``error_code.exception(cause=exc, path=path,
+    detail=str(exc))``.
+
+    Templates that bind ``error_code`` can reference ``{path}`` and
+    ``{detail}`` placeholders.
+    """
+    try:
+        return load_inputs_manifest(path)
+    except (FileNotFoundError, InvalidManifestError) as exc:
+        raise error_code.exception(cause=exc, path=path, detail=str(exc))
 
 
 def write_inputs_manifest(entries: list[dict[str, Any]], path: Path) -> None:
