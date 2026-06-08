@@ -184,7 +184,7 @@ mod tests {
     use strum::IntoEnumIterator;
 
     use td_objects::types::basic::FunctionVersionId;
-    use td_objects::types::basic::{Enabled, WorkerMessageStatus, WorkerStatus};
+    use td_objects::types::basic::{Enabled, ProjectId, WorkerMessageStatus, WorkerStatus};
 
     #[test]
     fn test_sort_logs_by_filename_and_rotation() {
@@ -301,6 +301,7 @@ mod tests {
         let test_dir = td_common::tdtestdir!();
         let worker_db = WorkerDB {
             id: Default::default(),
+            project_id: ProjectId::sandbox(),
             collection_id: Default::default(),
             execution_id: None,
             transaction_id: None,

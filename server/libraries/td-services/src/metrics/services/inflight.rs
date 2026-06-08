@@ -12,6 +12,7 @@ use td_tower::layers;
 /// `GET /inflight` — point-in-time count of in-flight LFRs broken
 /// out by `(collection_id, group_id, status)`. Inflight is defined by
 /// status, not by `ended_on IS NULL`.
+// Tenant-scoped (see `MetricsService`): RLS filters to the request's project.
 #[service_factory(
     name = InflightService,
     request = InflightRequest,
@@ -29,11 +30,13 @@ mod tests {
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::dxo::query_filters::DimensionFilter;
+    use td_objects::types::basic::ProjectId;
     use td_tower::ctx_service::RawOneshot;
 
     #[td_test::test(db)]
     async fn test_inflight_empty_db(db: TdPool) -> Result<(), TdError> {
         let request = InflightRequest {
+            project_id: ProjectId::sandbox(),
             collections: DimensionFilter::default(),
             groups: DimensionFilter::default(),
             statuses: vec![],

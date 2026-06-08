@@ -12,7 +12,7 @@ use td_objects::dxo::collection::{
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
 use td_objects::dxo::group::GroupDB;
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::{CollectionId, GroupId, GroupName};
+use td_objects::types::basic::{CollectionId, GroupId, GroupName, ProjectId};
 use td_queries::By;
 use td_queries::insert;
 use td_tower::default_services::TransactionProvider;
@@ -36,9 +36,16 @@ fn service() {
         from_fn(With::<CollectionCreate>::extract::<GroupName>),
         from_fn(By::<GroupName>::fetch_one::<GroupDB>),
         from_fn(With::<GroupDB>::extract::<GroupId>),
+        // The request's project (resolved by the apiserver from the URL
+        // `{project}` segment) becomes the collection's project. A system
+        // context (no project on the RC) cannot create collections — the
+        // unwrap layer turns missing into `WithError::OptionHasNoValue`.
+        from_fn(With::<RequestContext>::extract::<Option<ProjectId>>),
+        from_fn(With::<Option<ProjectId>>::unwrap),
         from_fn(With::<CollectionCreate>::try_convert_to::<CollectionCreateDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<CollectionCreateDBBuilder, _>),
         from_fn(With::<GroupId>::set::<CollectionCreateDBBuilder>),
+        from_fn(With::<ProjectId>::set::<CollectionCreateDBBuilder>),
         from_fn(With::<CollectionCreateDBBuilder>::build::<CollectionCreateDB>),
         from_fn(insert::<CollectionCreateDB>),
         from_fn(With::<CollectionCreateDB>::extract::<CollectionId>),
@@ -56,11 +63,16 @@ mod tests {
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::types::basic::{
-        AccessTokenId, AtTime, CollectionName, Description, GroupName, RoleId, UserId, UserName,
+        AccessTokenId, AtTime, CollectionName, Description, GroupName, ProjectId, RoleId, UserId,
+        UserName,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
+
+    use crate::collection::service::list::ListCollectionsService;
+    use td_database::sea_query::kind::{DatabaseBackend, DatabaseKind};
+    use td_objects::dxo::crudl::ListParams;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -177,5 +189,120 @@ mod tests {
         assert_eq!(found.group_id, group.id);
         assert_eq!(found.group, group.name);
         let _: GroupDB = db.live().fetch_one::<GroupDB>(&group.id).await.unwrap();
+    }
+
+    /// End-to-end: a request carrying a project (as the `X-Project-Id` header
+    /// would) is isolated to that project through the real service stack — the
+    /// connection switches to the app role and `SET LOCAL app.project_id`, so RLS
+    /// tags writes and filters reads. PostgreSQL only (sqlite/mysql have no RLS);
+    /// the body is skipped on other backends.
+    #[td_test::test(db)]
+    async fn test_collection_rls_scoped_by_project(db: TdPool) {
+        if !matches!(db.kind(), DatabaseBackend::Postgres) {
+            return;
+        }
+
+        // Two distinct project ids — RLS only compares the GUC against the
+        // row's project_id, so any valid `ProjectId` works for this test.
+        let project_a = ProjectId::default();
+        let project_b = ProjectId::default();
+
+        // Create one collection in each of two projects, via the create service
+        // with the request's project set.
+        for (project, name) in [(&project_a, "ca"), (&project_b, "cb")] {
+            let create = CollectionCreate::builder()
+                .name(&CollectionName::try_from(name).unwrap())
+                .description(&Description::try_from("d").unwrap())
+                .build()
+                .unwrap();
+            let request = RequestContext::with(
+                AccessTokenId::default(),
+                UserId::admin(),
+                RoleId::sys_admin(),
+            )
+            .with_project(Some(project.clone()))
+            .create((), create);
+            CreateCollectionService::with_defaults(db.clone())
+                .service()
+                .raw_oneshot(request)
+                .await
+                .unwrap();
+        }
+
+        // Listing within each project sees only that project's collection — the
+        // app applies no collection filter; RLS does the isolation.
+        for (project, name) in [(&project_a, "ca"), (&project_b, "cb")] {
+            let request = RequestContext::with(
+                AccessTokenId::default(),
+                UserId::admin(),
+                RoleId::user(),
+            )
+            .with_project(Some(project.clone()))
+            .list((), ListParams::default());
+            let list = ListCollectionsService::with_defaults(db.clone())
+                .service()
+                .raw_oneshot(request)
+                .await
+                .unwrap();
+            assert_eq!(list.len, 1, "project {project} must see exactly its own collection");
+            assert_eq!(list.data[0].name, CollectionName::try_from(name).unwrap());
+        }
+    }
+
+    /// A `RequestContext` constructed outside the HTTP layer — without
+    /// `with_project` — is a system context (scheduler, loopback admin, jobs).
+    /// It bypasses RLS so the system code can act across all projects.
+    /// HTTP requests can't reach this path: the apiserver coerces a missing
+    /// `X-Project-Id` to the default project id, so every request that comes
+    /// through it arrives here with `Some(project_id)`.
+    #[td_test::test(db)]
+    async fn test_collection_rls_system_context_bypasses(db: TdPool) {
+        if !matches!(db.kind(), DatabaseBackend::Postgres) {
+            return;
+        }
+
+        // Seed one collection in each of two distinct projects.
+        let project_a = ProjectId::default();
+        let project_b = ProjectId::default();
+        for (project, name) in [(&project_a, "ca"), (&project_b, "cb")] {
+            let create = CollectionCreate::builder()
+                .name(&CollectionName::try_from(name).unwrap())
+                .description(&Description::try_from("d").unwrap())
+                .build()
+                .unwrap();
+            let request = RequestContext::with(
+                AccessTokenId::default(),
+                UserId::admin(),
+                RoleId::sys_admin(),
+            )
+            .with_project(Some(project.clone()))
+            .create((), create);
+            CreateCollectionService::with_defaults(db.clone())
+                .service()
+                .raw_oneshot(request)
+                .await
+                .unwrap();
+        }
+
+        // System context: explicitly constructed via `RequestContext::system`,
+        // which sets `project_id = None` — the only way to opt into RLS
+        // bypass at request-context level. `RequestContext::with` defaults
+        // to sandbox so accidental in-process callers don't widen scope.
+        let request =
+            RequestContext::system(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .list((), ListParams::default());
+        let list = ListCollectionsService::with_defaults(db.clone())
+            .service()
+            .raw_oneshot(request)
+            .await
+            .unwrap();
+        assert_eq!(list.len, 2, "system context (project_id = None) must see all projects");
+        for name in ["ca", "cb"] {
+            let expected = CollectionName::try_from(name).unwrap();
+            assert!(
+                list.data.iter().any(|c| c.name == expected),
+                "system context should see {expected:?} across projects"
+            );
+        }
     }
 }

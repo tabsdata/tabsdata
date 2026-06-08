@@ -43,6 +43,8 @@ use td_tower::{layer, layers};
     context = SchedulerNotify,
     context = Orchestrator,
     context = JwtConfig,
+    // Scheduler request-dispatch crosses all projects by design.
+    project_scope = bypass,
 )]
 fn service() {
     layers!(

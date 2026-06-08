@@ -13,6 +13,7 @@ use crate::inter_coll_permission::services::InterCollectionPermissionServices;
 use crate::logical::services::LogicalServices;
 use crate::metrics::services::OperationalMetricsServices;
 use crate::permission::services::PermissionServices;
+use crate::project::service::ProjectServices;
 use crate::role::services::RoleServices;
 use crate::system::services::SystemServices;
 use crate::table::services::TableServices;
@@ -45,6 +46,7 @@ pub mod inter_coll_permission;
 pub mod logical;
 pub mod metrics;
 pub mod permission;
+pub mod project;
 pub mod role;
 pub mod scheduler;
 pub mod system;
@@ -68,6 +70,7 @@ pub struct Services {
     inter_coll_permission: Arc<InterCollectionPermissionServices>,
     operational_metrics: Arc<OperationalMetricsServices>,
     permission: Arc<PermissionServices>,
+    project: Arc<ProjectServices>,
     role: Arc<RoleServices>,
     system: Arc<SystemServices>,
     table: Arc<TableServices>,

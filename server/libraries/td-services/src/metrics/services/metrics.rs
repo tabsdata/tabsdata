@@ -13,6 +13,9 @@ use td_tower::layers;
 /// `(nodes, edges)` over a window, parameterised by `dim`
 /// (`collection` | `group`). System tables are excluded at the SQL
 /// layer (see `td-queries/src/daos/metrics.rs`).
+// Tenant-scoped: the request carries the resolved project (ProjectScoped), so
+// the connection GUC is set and RLS filters the aggregation to that project —
+// the queries carry no project predicate of their own.
 #[service_factory(
     name = MetricsService,
     request = MetricsRequest,
@@ -31,11 +34,13 @@ mod tests {
     use td_error::TdError;
     use td_objects::dxo::metrics::Dim;
     use td_objects::dxo::query_filters::{DimensionFilter, TimeWindow, WindowUnit};
+    use td_objects::types::basic::ProjectId;
     use td_tower::ctx_service::RawOneshot;
 
     #[td_test::test(db)]
     async fn test_metrics_empty_window(db: TdPool) -> Result<(), TdError> {
         let request = MetricsRequest {
+            project_id: ProjectId::sandbox(),
             dim: Dim::Collection,
             window: TimeWindow::new(0, 86_400_000),
             unit: WindowUnit::Day,

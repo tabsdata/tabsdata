@@ -427,6 +427,7 @@ mod tests {
         // Build the LFR directly (skip seed_function_run, which appends a
         // Bound event we don't want here) and append InitialMint Pending.
         let lfr = LogicalFunctionRunDB::builder()
+            .project_id(head.project_id.clone())
             .collection_id(coll.id)
             .execution_id(&exec.id)
             .transaction_id(&txn.id)

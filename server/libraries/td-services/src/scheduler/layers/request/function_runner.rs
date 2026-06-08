@@ -294,9 +294,11 @@ pub async fn create_locked_function_runner_workers_start_request(
             }
         };
 
-        // Create worker message
+        // Create worker message. The worker inherits the function-run's
+        // project so its callbacks land in the right RLS scope.
         let message = WorkerDB {
             id: worker_id,
+            project_id: f.project_id.clone(),
             collection_id: f.collection_id,
             execution_id: Some(f.execution_id.clone()),
             transaction_id: Some(f.transaction_id.clone()),

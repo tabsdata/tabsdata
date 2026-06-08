@@ -34,6 +34,8 @@ use tower::util::MapErrLayer;
     connection = TransactionProvider,
     context = JwtConfig,
     context = Sessions,
+    // Login predates a session/project; operates on global users/sessions.
+    project_scope = bypass,
 )]
 fn service() {
     layers!(

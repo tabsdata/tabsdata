@@ -182,6 +182,7 @@ pub async fn build_logical_function_runs(
                 )
             })?;
             LogicalFunctionRunDB::builder()
+                .project_id(function.project_id.clone())
                 .collection_id(f.collection_id)
                 .execution_id(execution.id.clone())
                 .transaction_id(transaction.id.clone())

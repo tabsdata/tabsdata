@@ -14,6 +14,8 @@ use td_tower::layers;
     request = (),
     response = ApiStatus,
     connection = ConnectionProvider,
+    // Server status is server-wide, not per-project.
+    project_scope = bypass,
 )]
 fn service() {
     layers!(from_fn(database_status))

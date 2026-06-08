@@ -15,6 +15,8 @@ use td_tower::{layer, layers};
     response = (),
     connection = TransactionProvider,
     context = OrchestratorMessageQueueHandle,
+    // Scheduler dispatch crosses all projects by design.
+    project_scope = bypass,
 )]
 fn service() {
     layers!(commit())

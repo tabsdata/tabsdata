@@ -241,7 +241,7 @@ mod tests {
     use td_objects::types::basic::{
         AtTime, CollectionId, ExecutionId, FunctionId, FunctionVersionId, LogicalFunctionRunId,
         LogicalPointerReason, LogicalPointerStatus, PhysicalFunctionRunId,
-        PhysicalFunctionRunStatus, TransactionId, Trigger, TriggeredOn, UserId,
+        PhysicalFunctionRunStatus, ProjectId, TransactionId, Trigger, TriggeredOn, UserId,
     };
 
     fn at(ms: i64) -> AtTime {
@@ -268,6 +268,7 @@ mod tests {
     fn mk_pfr_at(id: PhysicalFunctionRunId, triggered_on: AtTime) -> PhysicalFunctionRunDB {
         PhysicalFunctionRunDB::builder()
             .id(id)
+            .project_id(ProjectId::sandbox())
             .collection_id(CollectionId::default())
             .function_id(FunctionId::default())
             .function_version_id(FunctionVersionId::new())

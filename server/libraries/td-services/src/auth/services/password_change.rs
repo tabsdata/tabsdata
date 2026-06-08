@@ -33,6 +33,8 @@ use tower::util::MapErrLayer;
     connection = TransactionProvider,
     context = PasswordHashingConfig,
     context = Sessions,
+    // Operates on the global `users` table.
+    project_scope = bypass,
 )]
 fn service() {
     layers!(

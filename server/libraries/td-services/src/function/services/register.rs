@@ -28,8 +28,8 @@ use td_objects::rest_urls::CollectionParam;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
     AtTime, BundleId, CollectionId, CollectionIdName, CollectionName, DataLocation, Enabled,
-    FunctionId, FunctionName, FunctionVersionId, ReuseFrozen, StorageVersion, TableNameDto,
-    TableType, WorkerConfig, WorkerTypeDto,
+    FunctionId, FunctionName, FunctionVersionId, ProjectId, ReuseFrozen, StorageVersion,
+    TableNameDto, TableType, WorkerConfig, WorkerTypeDto,
 };
 use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
 use td_queries::By;
@@ -85,10 +85,14 @@ fn service() {
         // Get enabled flag
         from_fn(With::<FunctionRegister>::extract::<Option<Enabled>>),
         from_fn(With::<Option<Enabled>>::unwrap_or_default),
-        // Insert into function_versions(sql) status=Active.
+        // Insert into function_versions(sql) status=Active. The function
+        // inherits the collection's project — there's no path where a
+        // function's project differs from its collection's.
+        from_fn(With::<CollectionDB>::extract::<ProjectId>),
         from_fn(With::<FunctionRegister>::try_convert_to::<FunctionDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<FunctionDBBuilder, _>),
         from_fn(With::<CollectionId>::set::<FunctionDBBuilder>),
+        from_fn(With::<ProjectId>::set::<FunctionDBBuilder>),
         from_fn(With::<StorageVersion>::set::<FunctionDBBuilder>),
         from_fn(With::<DataLocation>::set::<FunctionDBBuilder>),
         from_fn(With::<Enabled>::set::<FunctionDBBuilder>),

@@ -52,6 +52,8 @@ ignored = ["openssl", "td-services", "thiserror"]
 
 # Internal dependencies
 
+td-build = { workspace = true }
+
 # External dependencies
 
 [dependencies]

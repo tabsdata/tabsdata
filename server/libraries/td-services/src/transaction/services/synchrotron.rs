@@ -108,16 +108,20 @@ mod tests {
 
         let response = service.raw_oneshot(request).await?;
         assert_eq!(response.len, transactions.len());
-        assert_eq!(response.data[0].id, transactions[0].id);
-        assert_eq!(response.data[0].triggered_on, transactions[0].triggered_on);
-        assert_eq!(response.data[1].id, transactions[1].id);
-        assert_eq!(response.data[1].triggered_on, transactions[1].triggered_on);
-        assert_eq!(response.data[2].id, transactions[2].id);
-        assert_eq!(response.data[2].triggered_on, transactions[2].triggered_on);
-        assert_eq!(response.data[3].id, transactions[3].id);
-        assert_eq!(response.data[3].triggered_on, transactions[3].triggered_on);
-        assert_eq!(response.data[4].id, transactions[4].id);
-        assert_eq!(response.data[4].triggered_on, transactions[4].triggered_on);
+        // All transactions share `triggered_on` (the pagination key), so their
+        // relative order is unspecified — assert membership, not position. (A
+        // plan-stable total order would need the list query to append the unique
+        // id as a final tiebreak; tracked as a follow-up.)
+        for seeded in &transactions {
+            assert!(
+                response.data.iter().any(|t| t.id == seeded.id),
+                "transaction {:?} missing from synchrotron list",
+                seeded.id
+            );
+        }
+        for t in &response.data {
+            assert_eq!(t.triggered_on, transactions[0].triggered_on);
+        }
         Ok(())
     }
 }
