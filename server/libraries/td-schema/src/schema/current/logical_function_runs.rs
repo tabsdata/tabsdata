@@ -49,6 +49,7 @@ pub struct TransactionStatusSummary;
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
 pub enum LogicalFunctionRuns {
     Table,
+    ProjectId,
     Id,
     CollectionId,
     ExecutionId,
@@ -114,6 +115,7 @@ impl Entity for Defs {
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
+                .col(ColumnDef::new(LogicalFunctionRuns::ProjectId).text().not_null())
                 .to_owned(),
         ]
     }

@@ -20,6 +20,7 @@ pub struct InterCollectionPermissionsWithNames;
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
 pub enum InterCollectionPermissions {
     Table,
+    ProjectId,
     Id,
     FromCollectionId,
     ToCollectionId,
@@ -53,6 +54,7 @@ impl Entity for Defs {
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
+                .col(ColumnDef::new(InterCollectionPermissions::ProjectId).text().not_null())
                 .to_owned(),
         ]
     }

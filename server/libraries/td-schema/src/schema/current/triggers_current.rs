@@ -20,6 +20,7 @@ pub struct TriggersCurrentWithNames;
 #[iden = "triggers_current"]
 pub enum TriggersCurrent {
     Table,
+    ProjectId,
     Id,
     CollectionId,
     TriggerId,
@@ -53,6 +54,7 @@ impl Entity for Defs {
                 .col(ColumnDef::new(TriggersCurrent::DefinedOn).timestamp_with_time_zone().not_null())
                 .col(ColumnDef::new(TriggersCurrent::DefinedById).text().not_null())
                 .col(ColumnDef::new(TriggersCurrent::System).boolean().not_null())
+                .col(ColumnDef::new(TriggersCurrent::ProjectId).text().not_null())
                 .to_owned(),
         ]
     }

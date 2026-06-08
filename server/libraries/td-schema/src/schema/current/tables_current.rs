@@ -21,6 +21,7 @@ pub struct TablesCurrentWithNames;
 #[iden = "tables_current"]
 pub enum TablesCurrent {
     Table,
+    ProjectId,
     Id,
     CollectionId,
     TableId,
@@ -58,6 +59,7 @@ impl Entity for Defs {
                 .col(ColumnDef::new(TablesCurrent::DefinedById).text().not_null())
                 .col(ColumnDef::new(TablesCurrent::Status).text().not_null())
                 .col(ColumnDef::new(TablesCurrent::TableType).text().not_null().default("R"))
+                .col(ColumnDef::new(TablesCurrent::ProjectId).text().not_null())
                 .to_owned(),
         ]
     }

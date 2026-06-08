@@ -9,6 +9,7 @@
 //! and small expression helpers (`name_or_id`, `json_object_agg`, etc.).
 
 pub(crate) mod latest_bound_pointer;
+pub(crate) mod rls;
 pub(crate) mod seed_current;
 pub(crate) mod trigger;
 pub(crate) mod view;

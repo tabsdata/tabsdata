@@ -20,6 +20,7 @@ pub struct DependenciesCurrentWithNames;
 #[iden = "dependencies_current"]
 pub enum DependenciesCurrent {
     Table,
+    ProjectId,
     Id,
     CollectionId,
     DependencyId,
@@ -57,6 +58,7 @@ impl Entity for Defs {
                 .col(ColumnDef::new(DependenciesCurrent::DefinedOn).timestamp_with_time_zone().not_null())
                 .col(ColumnDef::new(DependenciesCurrent::DefinedById).text().not_null())
                 .col(ColumnDef::new(DependenciesCurrent::System).boolean().not_null())
+                .col(ColumnDef::new(DependenciesCurrent::ProjectId).text().not_null())
                 .to_owned(),
         ]
     }

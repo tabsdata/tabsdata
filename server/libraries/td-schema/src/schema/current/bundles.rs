@@ -10,6 +10,7 @@ use crate::schema::Entity;
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
 pub enum Bundles {
     Table,
+    ProjectId,
     Id,
     CollectionId,
     Hash,
@@ -36,6 +37,7 @@ impl Entity for Defs {
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
+                .col(ColumnDef::new(Bundles::ProjectId).text().not_null())
                 .to_owned(),
         ]
     }

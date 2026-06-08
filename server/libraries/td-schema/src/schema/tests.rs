@@ -339,6 +339,7 @@ enum Phase {
     View = 2,
     Index = 3,
     Insert = 4,
+    Rls = 5,
 }
 
 fn phase_name(idx: usize) -> &'static str {
@@ -348,6 +349,7 @@ fn phase_name(idx: usize) -> &'static str {
         2 => "View",
         3 => "Index",
         4 => "Insert",
+        5 => "Rls",
         _ => "?",
     }
 }
@@ -366,6 +368,10 @@ fn classify_stmt(sql: &str) -> Phase {
         Phase::Index
     } else if s.starts_with("INSERT") {
         Phase::Insert
+    } else if s.starts_with("ALTER TABLE") || s.starts_with("CREATE POLICY") {
+        // Phase 6: PostgreSQL row-level security (ALTER TABLE … RLS / SET
+        // DEFAULT, CREATE POLICY). Postgres-only; emitted after seeds.
+        Phase::Rls
     } else {
         panic!("unrecognized statement kind in Schema::build output: {sql}");
     }

@@ -12,6 +12,7 @@ use crate::schema::Entity;
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
 pub enum TablePartitions {
     Table,
+    ProjectId,
     Id,
     CollectionId,
     TableId,
@@ -58,6 +59,7 @@ impl Entity for Defs {
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
+                .col(ColumnDef::new(TablePartitions::ProjectId).text().not_null())
                 .to_owned(),
         ]
     }

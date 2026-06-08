@@ -21,6 +21,7 @@ pub struct FunctionsWithNames;
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
 pub enum Functions {
     Table,
+    ProjectId,
     Id,
     CollectionId,
     Name,
@@ -69,6 +70,7 @@ impl Entity for Defs {
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
+                .col(ColumnDef::new(Functions::ProjectId).text().not_null())
                 .to_owned(),
         ]
     }

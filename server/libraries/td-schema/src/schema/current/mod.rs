@@ -21,6 +21,7 @@ mod logical_table_data_versions;
 mod permissions;
 mod physical_function_runs;
 mod physical_table_data_versions;
+mod projects;
 mod roles;
 mod sessions;
 mod system;
@@ -38,6 +39,7 @@ mod workers;
 use tracing::{debug, info};
 
 use crate::schema::backend::Backend;
+use crate::schema::sql;
 use crate::schema::{Entity, SchemaVersion};
 
 /// Marker type for the current schema version.
@@ -59,6 +61,7 @@ pub(crate) const ENTITIES: &[&dyn Entity] = &[
     &system::Defs,
     &users::Defs,
     &groups::Defs,
+    &projects::Defs,
     &collections::Defs,
     &roles::Defs,
     &users_roles::Defs,
@@ -90,15 +93,47 @@ pub(crate) const ENTITIES: &[&dyn Entity] = &[
     &with_status_views::Defs,
 ];
 
+/// Tables that carry a `project_id` and get PostgreSQL row-level security
+/// (Phase 6). These are exactly the tables to which `project_id` was added in
+/// `current/`; keep this list in sync with that column. The `projects` registry
+/// itself is intentionally absent — it is keyed by `id`, not `project_id`, and
+/// the app never lists it (the active project arrives in the request).
+const PROJECT_SCOPED_TABLES: &[&str] = &[
+    "collections",
+    "bundles",
+    "functions",
+    "functions_current",
+    "function_patches",
+    "function_patches_current",
+    "tables",
+    "tables_current",
+    "dependencies",
+    "dependencies_current",
+    "triggers",
+    "triggers_current",
+    "executions",
+    "transactions",
+    "physical_function_runs",
+    "physical_table_data_versions",
+    "table_partitions",
+    "workers",
+    "logical_function_runs",
+    "logical_table_data_versions",
+    "logical_function_run_inputs",
+    "logical_function_run_pointers",
+    "logical_table_data_version_pointers",
+    "inter_collection_permissions",
+];
+
 impl SchemaVersion for Schema {
     const VERSION: usize = 1;
 
     // Refresh via `cargo test -p td-schema --lib print_schema_fingerprints --
     // --ignored --nocapture` after any intentional change to current/.
     const FINGERPRINTS: [&'static str; 3] = [
-        "70cadef1a70230038330e1d21c32114c3759d35386ccb05aa9cc457f988bb6be", // Sqlite
-        "59e6bd9fa1b502c517033c8d2823caa6633d20fd3428f6fe945d0cef8cf1367f", // Postgres
-        "10def0e3b9c707dae0fd4440a8fb69c987a997aad2be7c91db8c2ec67abf840d", // MySql
+        "6e6043aecf9c6a37238e25a96602ce8b6dab8d549c97a878a9043423275d3bd7", // Sqlite
+        "6b08a0e3d01bd13291910efe35b949fd1b0b02aa1d77f6df6d4384c4af36e6af", // Postgres
+        "527f9017901e9c4fbf4a177bfcca9edf1d6af594d253c6f47db402c923e30a94", // MySql
     ];
 
     fn build(backend: impl Into<Backend>) -> Vec<String> {
@@ -160,6 +195,19 @@ impl SchemaVersion for Schema {
             }
         }
         debug!(count = out.len() - before, "Seed rows inserted");
+
+        // Phase 6: PostgreSQL row-level security — enable + force RLS and a
+        // project-isolation policy on every project-scoped table, and override
+        // the `project_id` default to read `app.project_id`. PostgreSQL only;
+        // SQLite/MySQL have no RLS. Runs last so FORCE RLS + WITH CHECK never
+        // reject the un-scoped seed inserts emitted above.
+        if matches!(b, Backend::Postgres) {
+            let before = out.len();
+            for table in PROJECT_SCOPED_TABLES {
+                out.extend(sql::rls::policy_statements(table));
+            }
+            debug!(count = out.len() - before, "RLS statements emitted");
+        }
 
         info!(version = Self::VERSION, total = out.len(), "Schema built");
         out

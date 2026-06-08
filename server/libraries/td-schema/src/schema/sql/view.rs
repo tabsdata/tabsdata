@@ -24,8 +24,18 @@ impl ViewDef {
     }
 
     /// Render this view to a `CREATE VIEW name AS …` statement for `b`.
+    ///
+    /// On PostgreSQL the view is created `WITH (security_invoker = true)` so it
+    /// runs with the querying role's row-level security, not the view owner's.
+    /// Without this a view over an RLS table would be evaluated as its owner and
+    /// bypass project isolation. The option is inert on views over non-RLS
+    /// tables, so it is applied uniformly. (PostgreSQL 15+.)
     pub(crate) fn render(&self, b: &Backend) -> String {
-        format!("CREATE VIEW {} AS {}", self.name, b.build_query(self.select.clone()))
+        let body = b.build_query(self.select.clone());
+        match b {
+            Backend::Postgres => format!("CREATE VIEW {} WITH (security_invoker = true) AS {}", self.name, body),
+            _ => format!("CREATE VIEW {} AS {}", self.name, body),
+        }
     }
 }
 

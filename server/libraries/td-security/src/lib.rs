@@ -113,7 +113,18 @@ pub const ENCODED_ID_CR_ALL_USER: &str = "00000000000000000000000200";
 pub const ID_ALL_ENTITIES: [u8; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1];
 pub const ENCODED_ID_ALL_ENTITIES: &str = "00000000000000000000000204";
 
-pub const DEFAULT_IDS: [[u8; 16]; 22] = [
+/// Id of the `sandbox` project — the one project the bootstrap seeds. Further
+/// projects are created through the projects CRUD API; this row is the fallback
+/// for the per-table `project_id` column default (system inserts that arrive
+/// without a session GUC, e.g. trigger functions during seeds) and is the only
+/// project the system uses on SQLite/MySQL (which have no row-level security).
+///
+/// Bytes 22..=24 are taken by the seeded groups (default/source/destination),
+/// so this is byte 25.
+pub const ID_PROJECT_SANDBOX: [u8; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 5];
+pub const ENCODED_ID_PROJECT_SANDBOX: &str = "0000000000000000000000020K";
+
+pub const DEFAULT_IDS: [[u8; 16]; 23] = [
     ID_SYSTEM,
     ID_USER_ADMIN,
     ID_ROLE_SYS_ADMIN,
@@ -136,9 +147,10 @@ pub const DEFAULT_IDS: [[u8; 16]; 22] = [
     ID_CRR_ALL_USER,
     ID_CR_ALL_USER,
     ID_ALL_ENTITIES,
+    ID_PROJECT_SANDBOX,
 ];
 
-pub const DEFAULT_ENCODED_IDS: [&str; 22] = [
+pub const DEFAULT_ENCODED_IDS: [&str; 23] = [
     ENCODED_ID_SYSTEM,
     ENCODED_ID_USER_ADMIN,
     ENCODED_ID_ROLE_SYS_ADMIN,
@@ -161,4 +173,5 @@ pub const DEFAULT_ENCODED_IDS: [&str; 22] = [
     ENCODED_ID_CRR_ALL_USER,
     ENCODED_ID_CR_ALL_USER,
     ENCODED_ID_ALL_ENTITIES,
+    ENCODED_ID_PROJECT_SANDBOX,
 ];

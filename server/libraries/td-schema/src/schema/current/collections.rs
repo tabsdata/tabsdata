@@ -24,6 +24,7 @@ pub enum Collections {
     ModifiedById,
     NameWhenDeleted,
     GroupId,
+    ProjectId,
 }
 
 #[derive(Iden, Clone, Copy)]
@@ -42,7 +43,7 @@ impl Entity for Defs {
             Table::create()
                 .table(Collections::Table)
                 .col(ColumnDef::new(Collections::Id).text().not_null().primary_key())
-                .col(ColumnDef::new(Collections::Name).text().not_null().unique_key())
+                .col(ColumnDef::new(Collections::Name).text().not_null())
                 .col(ColumnDef::new(Collections::Description).text().not_null())
                 .col(ColumnDef::new(Collections::CreatedOn).timestamp_with_time_zone().not_null())
                 .col(ColumnDef::new(Collections::CreatedById).text().not_null())
@@ -50,13 +51,36 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Collections::ModifiedById).text().not_null())
                 .col(ColumnDef::new(Collections::NameWhenDeleted).text().null())
                 .col(ColumnDef::new(Collections::GroupId).text().not_null())
+                // Tenant tag. No base default — fail-closed on every backend: a
+                // write that omits it hits NOT NULL. On postgres the RLS phase
+                // sets the column default to read `app.project_id` (the request's
+                // project); the no-RLS single-project backends (sqlite/mysql) keep
+                // no default at all, so writes there must set `project_id`.
+                .col(ColumnDef::new(Collections::ProjectId).text().not_null())
                 .to_owned(),
         ]
     }
 
     fn create_indices(&self) -> Vec<IndexCreateStatement> {
         vec![
-            Index::create().name("collections___name___idx").table(Collections::Table).col(Collections::Name).to_owned(),
+            // Leads with project_id so it serves the RLS predicate; unique makes
+            // collection names unique within a project, not globally. This is the
+            // one table with a project-wide scan path (`By::<ProjectId>` in the
+            // project-delete emptiness guard), so it earns a project_id-leading
+            // index. The other project-scoped tables deliberately get *no*
+            // standalone project_id index: they're only ever read by their own
+            // keys (execution_id, transaction_id, function_id, …), where the RLS
+            // `project_id = GUC` check is a low-selectivity residual the planner
+            // would not use such an index for — it would be write-amplifying
+            // dead weight. Revisit per-table only if profiling shows a real
+            // project-scoped scan there.
+            Index::create()
+                .name("collections___project_id__name___idx")
+                .table(Collections::Table)
+                .col(Collections::ProjectId)
+                .col(Collections::Name)
+                .unique()
+                .to_owned(),
             Index::create().name("collections___group_id___idx").table(Collections::Table).col(Collections::GroupId).to_owned(),
         ]
     }
@@ -67,6 +91,7 @@ impl Entity for Defs {
                 CollectionsActive,
                 Query::select()
                     .column(Collections::Id)
+                    .column(Collections::ProjectId)
                     .column(Collections::Name)
                     .column(Collections::Description)
                     .column(Collections::CreatedOn)

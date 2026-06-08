@@ -23,6 +23,7 @@ pub struct ExecutionsWithNames;
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
 pub enum Executions {
     Table,
+    ProjectId,
     Id,
     Name,
     CollectionId,
@@ -68,6 +69,7 @@ impl Entity for Defs {
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
+                .col(ColumnDef::new(Executions::ProjectId).text().not_null())
                 .to_owned(),
         ]
     }

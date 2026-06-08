@@ -16,6 +16,7 @@ use crate::schema::sql::{ImmutableTriggerDef, TriggerSpec, VersionedTriggerDef, 
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
 pub enum FunctionPatches {
     Table,
+    ProjectId,
     Id,
     ParentFunctionVersionId,
     FunctionId,
@@ -59,6 +60,7 @@ impl Entity for Defs {
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
+                .col(ColumnDef::new(FunctionPatches::ProjectId).text().not_null())
                 .to_owned(),
         ]
     }

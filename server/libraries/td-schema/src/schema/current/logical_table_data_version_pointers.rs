@@ -13,6 +13,7 @@ use crate::schema::sql::{ImmutableTriggerDef, TriggerSpec};
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
 pub enum LogicalTableDataVersionPointers {
     Table,
+    ProjectId,
     Id,
     LogicalTableDataVersionId,
     Status,
@@ -45,6 +46,7 @@ impl Entity for Defs {
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
+                .col(ColumnDef::new(LogicalTableDataVersionPointers::ProjectId).text().not_null())
                 .to_owned(),
         ]
     }

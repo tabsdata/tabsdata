@@ -22,6 +22,7 @@ pub struct TablesWithNames;
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
 pub enum Tables {
     Table,
+    ProjectId,
     Id,
     CollectionId,
     TableId,
@@ -71,6 +72,7 @@ impl Entity for Defs {
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
+                .col(ColumnDef::new(Tables::ProjectId).text().not_null())
                 .to_owned(),
         ]
     }

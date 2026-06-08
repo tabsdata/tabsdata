@@ -20,6 +20,7 @@ pub struct FunctionsCurrentWithNames;
 #[iden = "functions_current"]
 pub enum FunctionsCurrent {
     Table,
+    ProjectId,
     Id,
     CollectionId,
     Name,
@@ -63,6 +64,7 @@ impl Entity for Defs {
                 .col(ColumnDef::new(FunctionsCurrent::Status).text().not_null())
                 .col(ColumnDef::new(FunctionsCurrent::Connector).text().null())
                 .col(ColumnDef::new(FunctionsCurrent::Enabled).boolean().default(true))
+                .col(ColumnDef::new(FunctionsCurrent::ProjectId).text().not_null())
                 .to_owned(),
         ]
     }

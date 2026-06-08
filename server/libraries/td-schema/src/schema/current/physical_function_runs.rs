@@ -23,6 +23,7 @@ pub struct PhysicalFunctionRunsWithNames;
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
 pub enum PhysicalFunctionRuns {
     Table,
+    ProjectId,
     Id,
     CollectionId,
     FunctionVersionId,
@@ -121,6 +122,7 @@ impl Entity for Defs {
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
+                .col(ColumnDef::new(PhysicalFunctionRuns::ProjectId).text().not_null())
                 .to_owned(),
         ]
     }

@@ -34,6 +34,7 @@ pub struct PtdvWithNames;
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
 pub enum PhysicalTableDataVersions {
     Table,
+    ProjectId,
     Id,
     CollectionId,
     TableId,
@@ -125,6 +126,7 @@ impl Entity for Defs {
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
+                .col(ColumnDef::new(PhysicalTableDataVersions::ProjectId).text().not_null())
                 .to_owned(),
         ]
     }
