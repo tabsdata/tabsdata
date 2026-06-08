@@ -17,10 +17,7 @@ from pathlib import Path
 
 from tabsdatak.server._tdrunner.function._lib.cli import build_parser, command
 from tabsdatak.server._tdrunner.function._lib.endpoint import UnsupportedSchemeError
-from tabsdatak.server._tdrunner.function._lib.request import (
-    InvalidRequestError,
-    load_request,
-)
+from tabsdatak.server._tdrunner.function._lib.request import load_request_or_raise
 from tabsdatak.server._tdrunner.function._lib.transporter_request import (
     build_upload_state_request,
     write_transporter_request,
@@ -71,10 +68,7 @@ def main(args: argparse.Namespace) -> int:
     state_dir = Path(args.state_dir)
     out_path = Path(args.out)
 
-    try:
-        request = load_request(request_path)
-    except (FileNotFoundError, InvalidRequestError) as exc:
-        raise PrepUploadStateErrorCode.PUS_1.exception(cause=exc, detail=str(exc))
+    request = load_request_or_raise(request_path, PrepUploadStateErrorCode.PUS_1)
 
     try:
         copy_req = build_upload_state_request(request, state_dir)

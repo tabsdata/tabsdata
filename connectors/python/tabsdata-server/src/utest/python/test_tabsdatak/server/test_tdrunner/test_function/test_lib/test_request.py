@@ -11,6 +11,10 @@ from typing import Any
 import pytest
 import yaml
 
+from tabsdatak.error import ErrorCode, ErrorDef
+from tabsdatak.server._tdrunner.function._lib.errors import (
+    CommandRuntimeException,
+)
 from tabsdatak.server._tdrunner.function._lib.request import (
     Info,
     InputTable,
@@ -19,6 +23,7 @@ from tabsdatak.server._tdrunner.function._lib.request import (
     OutputTable,
     Request,
     load_request,
+    load_request_or_raise,
 )
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
@@ -607,3 +612,53 @@ def test_info_triggered_on_iso_matches_datetime_isoformat():
     pin the relationship so callers can rely on it."""
     info = _build_info(triggered_on=1780000000100)
     assert info.triggered_on_iso == info.triggered_on_datetime.isoformat()
+
+
+# --- load_request_or_raise --------------------------------------------
+
+
+class _ProbeError(CommandRuntimeException):
+    """Stand-in per-command bad-request exception for the helper tests."""
+
+    exit_code = 99
+
+
+class _ProbeErrorCode(ErrorCode):
+    PROBE_1 = ErrorDef(_ProbeError, "probe: {path} {detail}")
+
+
+def test_load_request_or_raise_returns_request_on_happy_path():
+    req = load_request_or_raise(
+        RESOURCES / "minimal_publisher_request.yaml",
+        _ProbeErrorCode.PROBE_1,
+    )
+    assert isinstance(req, Request)
+
+
+def test_load_request_or_raise_wraps_file_not_found(tmp_path):
+    missing = tmp_path / "nope.yaml"
+    with pytest.raises(_ProbeError) as exc_info:
+        load_request_or_raise(missing, _ProbeErrorCode.PROBE_1)
+    assert exc_info.value.exit_code == 99
+    assert isinstance(exc_info.value.__cause__, FileNotFoundError)
+    # Both ``path`` and ``detail`` reach the rendered message.
+    rendered = str(exc_info.value)
+    assert str(missing) in rendered
+
+
+def test_load_request_or_raise_wraps_malformed_yaml(tmp_path):
+    bad = tmp_path / "request.yaml"
+    bad.write_text("info: { unclosed")
+    with pytest.raises(_ProbeError) as exc_info:
+        load_request_or_raise(bad, _ProbeErrorCode.PROBE_1)
+    assert exc_info.value.exit_code == 99
+    assert isinstance(exc_info.value.__cause__, InvalidRequestError)
+
+
+def test_load_request_or_raise_stores_path_and_detail_in_extra(tmp_path):
+    missing = tmp_path / "nope.yaml"
+    try:
+        load_request_or_raise(missing, _ProbeErrorCode.PROBE_1)
+    except _ProbeError as exc:
+        assert exc.extra["path"] == missing
+        assert "detail" in exc.extra

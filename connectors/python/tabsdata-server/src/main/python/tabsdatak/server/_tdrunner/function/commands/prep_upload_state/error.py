@@ -35,10 +35,10 @@ class WriteFailedError(CommandRuntimeException):
 class PrepUploadStateErrorCode(ErrorCode):
     PUS_1 = ErrorDef(
         BadRequestError,
-        "unreadable request.yaml: {detail}",
+        "unreadable request.yaml {path}: {detail}",
     )
-    # Raised by ``main()`` when ``load_request`` fails (file missing or
-    # malformed YAML / Pydantic validation error).
+    # Raised by ``load_request_or_raise`` when the request file is
+    # missing, has malformed YAML, or fails Pydantic validation.
 
     PUS_2 = ErrorDef(
         BadEndpointSchemeError,
