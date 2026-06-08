@@ -84,3 +84,16 @@ def editable_source_root(package: str) -> Path | None:
     if recipe is None or recipe.recipe != InstallRecipe.EDITABLE:
         return None
     return recipe.location
+
+
+def main() -> None:
+    import sys
+
+    if len(sys.argv) != 2:
+        print("Usage: td_resource <resource-path>", file=sys.stderr)
+        sys.exit(2)
+    try:
+        print(td_resource(sys.argv[1]))
+    except FileNotFoundError as error:
+        print(f"{error}", file=sys.stderr)
+        sys.exit(1)

@@ -219,12 +219,13 @@ for path in yaml_root_folder_tabsdatak.rglob("*.yaml"):
 
 console_scripts: list[str] = [
     "td = tabsdata._cli.td.cli:cli",
+    "tdk = tabsdatak.cli.td.cli:cli",
     "td_cfgrsv = tabsdata._tabsserver.tools.config_resolver:main",
     "td_function = tabsdata._tabsserver.invoker:main",
     "td_invoker = tabsdata._tabsserver.invoker:main",
     "td_janitor = tabsdata._tabsserver.tools.janitor:main",
     "td_mntext = tabsdata._tabsserver.tools.mount_extractor:main",
-    "td_resource = tabsdata._utils.internal._resources:main",
+    "td_resource = tabsdatak.server._tdruntime.python.resource:main",
     "td_srvinf = tabsdata._tabsserver.tools.server_info:main",
     "td_stagetrigger = tabsdata._tabsserver.invoker:main",
     "td_pyvenv = tabsdatak.server._tdruntime.python.pyvenv:main",
