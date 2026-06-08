@@ -206,9 +206,7 @@ mod tests {
     /// identically-named `default` groups surface as distinct, project-tagged
     /// rows. Postgres-only (bypass-vs-RLS is the whole point).
     #[td_test::test(db)]
-    async fn test_inflight_global_spans_and_attributes_projects(
-        db: TdPool,
-    ) -> Result<(), TdError> {
+    async fn test_inflight_global_spans_and_attributes_projects(db: TdPool) -> Result<(), TdError> {
         if !matches!(db.kind(), DatabaseBackend::Postgres) {
             return Ok(());
         }
@@ -222,7 +220,10 @@ mod tests {
 
         // Project B: a fresh project with its own collection — created through
         // the service so it resolves B's own `default` group — plus a run.
-        let project_b = db.seed().project(ProjectName::try_from("g_inflight_b")?).await?;
+        let project_b = db
+            .seed()
+            .project(ProjectName::try_from("g_inflight_b")?)
+            .await?;
         let coll_b_name = CollectionName::try_from("g_inflight_b_coll")?;
         CollectionServices::build(&Context::with_defaults(db.clone()))
             .create

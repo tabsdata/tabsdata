@@ -3,6 +3,7 @@
 //
 
 pub(crate) mod guards;
+pub(crate) mod scope_to_project;
 pub(crate) mod seed_groups;
 pub(crate) mod single_project;
 pub(crate) mod update;

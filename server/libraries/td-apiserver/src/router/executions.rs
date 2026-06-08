@@ -24,11 +24,12 @@ mod routes {
     use td_objects::rest_urls::{
         AllowDisabledParam, EXECUTION_CANCEL, EXECUTION_DETAILS, EXECUTION_LIST,
         EXECUTION_LIST_BY_FUNCTION_VERSION, EXECUTION_LIST_BY_TABLE_DATA_VERSION, EXECUTION_READ,
-        EXECUTION_RECOVER, ExecutionParam, FUNCTION_EXECUTE, FunctionParam,
-        FunctionVersionIdParam, PhysicalTableDataVersionParam,
+        EXECUTION_RECOVER, ExecutionParam, FUNCTION_EXECUTE, FunctionParam, FunctionVersionIdParam,
+        PhysicalTableDataVersionParam,
     };
     use td_objects::types::basic::ProjectId;
     use td_services::execution::services::ExecutionServices;
+    use td_tower::project_scope::InProject;
     use tower::ServiceExt;
 
     const EXECUTION_TAG: &str = "Execution";
@@ -68,7 +69,9 @@ mod routes {
         Path(function_param): Path<FunctionParam>,
         Json(request): Json<ExecutionRequest>,
     ) -> Result<CreateStatus<ExecutionTriggerResponse>, ErrorStatus> {
-        let request = context.create(function_param, request).in_project(project_id);
+        let request = context
+            .create(function_param, request)
+            .in_project(project_id);
         let response = executions.execute.service().oneshot(request).await?;
         Ok(CreateStatus::CREATED(response))
     }

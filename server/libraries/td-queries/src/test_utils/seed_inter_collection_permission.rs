@@ -2,15 +2,16 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::{LiveEntry, QueryExecutor};
+use crate::LiveEntry;
 use ta_objects::{Buildable, TryUpdater};
+use td_database::dynamic::DynamicConnection;
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::inter_collection_permission::InterCollectionPermissionDB;
 use td_objects::types::basic::{AccessTokenId, CollectionId, RoleId, ToCollectionId, UserId};
 
 pub(crate) async fn seed_inter_collection_permission(
-    db: impl QueryExecutor,
+    conn: &mut DynamicConnection<'_>,
     from_collection: &CollectionId,
     to_collection: &ToCollectionId,
 ) -> Result<InterCollectionPermissionDB, TdError> {
@@ -26,7 +27,9 @@ pub(crate) async fn seed_inter_collection_permission(
         .to_collection_id(to_collection)
         .build()?;
 
-    db.live().insert(&permission_db).await?;
+    // Field-less row; runs on a project-scoped connection so `project_id`
+    // defaults from the scope.
+    conn.live().insert(&permission_db).await?;
     Ok(permission_db)
 }
 

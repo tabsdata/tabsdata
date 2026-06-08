@@ -47,6 +47,7 @@ mod tests {
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::InProject;
 
     #[td_test::test(db)]
     async fn test_list_groups_includes_seeds(db: TdPool) -> Result<(), TdError> {

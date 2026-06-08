@@ -63,12 +63,13 @@ mod tests {
     use td_objects::dxo::function_upload::FunctionUpload;
     use td_objects::rest_urls::{CollectionParam, FunctionParam, OptionalAtTimeParam};
     use td_objects::types::basic::{
-        ProjectId,
-        AccessTokenId, BundleId, CollectionName, Decorator, FunctionVersionId, RoleId, UserId,
+        AccessTokenId, BundleId, CollectionName, Decorator, FunctionVersionId, ProjectId, RoleId,
+        UserId,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -189,13 +190,14 @@ mod tests {
         let request = Request::builder().body(Body::from(payload)).unwrap();
         let upload = FunctionUpload::new(request);
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
-                CollectionParam::builder()
-                    .collection(CollectionIdName::from_str(&format!("{}", collection))?)
-                    .build()?,
-                upload,
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(&format!("{}", collection))?)
+                        .build()?,
+                    upload,
+                )
+                .in_project(ProjectId::sandbox());
         let bundle = UploadFunctionService::build(context)
             .service()
             .raw_oneshot(request)

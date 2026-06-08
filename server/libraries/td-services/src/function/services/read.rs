@@ -125,13 +125,13 @@ mod tests {
     use td_objects::Buildable;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
-        ProjectId,
-        AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues, RoleId,
-        TableNameDto, UserId, UserName, WorkerConfig,
+        AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues, ProjectId,
+        RoleId, TableNameDto, UserId, UserName, WorkerConfig,
     };
     use td_objects::types::composed::{TableDependency, TableDependencyDto, TableTriggerDto};
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -142,87 +142,89 @@ mod tests {
         ReadFunctionService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<Scoped<ReadRequest<FunctionParam>, ProjectId>, FunctionWithTables>(&[
-                type_of_val(&With::<ReadRequest<FunctionParam>>::extract::<RequestContext>),
-                type_of_val(&With::<ReadRequest<FunctionParam>>::extract_name::<FunctionParam>),
-                // Extract from request.
-                type_of_val(&With::<FunctionParam>::extract::<CollectionIdName>),
-                type_of_val(&With::<FunctionParam>::extract::<FunctionIdName>),
-                // Read function version
-                type_of_val(&With::<RequestContext>::extract::<AtTime>),
-                type_of_val(
-                    &By::<And![CollectionIdName, FunctionIdName]>::historic_fetch_one::<
-                        { FunctionDBWithNames::Available },
-                        FunctionDBWithNames,
-                    >,
-                ),
-                // check requester is coll_admin or coll_dev for the function's collection
-                type_of_val(&With::<FunctionDBWithNames>::extract::<CollectionId>),
-                type_of_val(&AuthzOn::<CollectionId>::set),
-                type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
-                // Read function with tables, triggers and dependencies
-                type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
-                type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
-                // Convert to function read
-                type_of_val(&With::<FunctionDBWithNames>::try_convert_to::<FunctionBuilder, _>),
-                type_of_val(&With::<FunctionBuilder>::build::<Function>),
-                type_of_val(&With::<Function>::try_convert_to::<FunctionWithTablesBuilder, _>),
-                // Read tables
-                type_of_val(
-                    &By::<FunctionId>::historic_fetch_all::<
-                        { TableDBWithNames::User },
-                        TableDBWithNames,
-                    >,
-                ),
-                type_of_val(&With::<TableDBWithNames>::vec_convert_to::<TableName, _>),
-                type_of_val(&With::<Vec<TableName>>::set::<FunctionWithTablesBuilder>),
-                // Read triggers and dependencies
-                // Triggers
-                type_of_val(
-                    &By::<FunctionId>::historic_fetch_all::<
-                        { TriggerDBWithNames::Active },
-                        TriggerDBWithNames,
-                    >,
-                ),
-                type_of_val(&With::<Vec<TriggerDBWithNames>>::extract::<Vec<TableId>>),
-                type_of_val(
-                    &By::<Vec<TableId>>::historic_fetch_all_chunked::<
-                        { TableDBWithNames::Available },
-                        TableDBWithNames,
-                    >,
-                ),
-                type_of_val(&With::<TableDBWithNames>::vec_convert_to::<TableTrigger, _>),
-                type_of_val(&With::<Vec<TableTrigger>>::set::<FunctionWithTablesBuilder>),
-                // Dependencies
-                type_of_val(
-                    &By::<FunctionId>::historic_fetch_all::<
-                        { DependencyDBWithNames::User },
-                        DependencyDBWithNames,
-                    >,
-                ),
-                type_of_val(&With::<Vec<DependencyDBWithNames>>::extract::<Vec<TableId>>),
-                type_of_val(
-                    &By::<Vec<TableId>>::historic_fetch_all_chunked::<
-                        { TableDBWithNames::Available },
-                        TableDBWithNames,
-                    >,
-                ),
-                type_of_val(&vec_create_table_dependency),
-                type_of_val(&With::<Vec<TableDependency>>::set::<FunctionWithTablesBuilder>),
-                // Workers
-                type_of_val(
-                    &By::<FunctionVersionId>::fetch_all_in::<
-                        { WorkerDBWithNames::EnabledTriggers },
-                        WorkerDBWithNames,
-                    >,
-                ),
-                type_of_val(&map_create_worker),
-                type_of_val(
-                    &With::<HashMap<WorkerTypeDto, WorkerId>>::set::<FunctionWithTablesBuilder>,
-                ),
-                // Build
-                type_of_val(&With::<FunctionWithTablesBuilder>::build::<FunctionWithTables>),
-            ]);
+            .assert_service::<Scoped<ReadRequest<FunctionParam>, ProjectId>, FunctionWithTables>(
+                &[
+                    type_of_val(&With::<ReadRequest<FunctionParam>>::extract::<RequestContext>),
+                    type_of_val(&With::<ReadRequest<FunctionParam>>::extract_name::<FunctionParam>),
+                    // Extract from request.
+                    type_of_val(&With::<FunctionParam>::extract::<CollectionIdName>),
+                    type_of_val(&With::<FunctionParam>::extract::<FunctionIdName>),
+                    // Read function version
+                    type_of_val(&With::<RequestContext>::extract::<AtTime>),
+                    type_of_val(
+                        &By::<And![CollectionIdName, FunctionIdName]>::historic_fetch_one::<
+                            { FunctionDBWithNames::Available },
+                            FunctionDBWithNames,
+                        >,
+                    ),
+                    // check requester is coll_admin or coll_dev for the function's collection
+                    type_of_val(&With::<FunctionDBWithNames>::extract::<CollectionId>),
+                    type_of_val(&AuthzOn::<CollectionId>::set),
+                    type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
+                    // Read function with tables, triggers and dependencies
+                    type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
+                    type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
+                    // Convert to function read
+                    type_of_val(&With::<FunctionDBWithNames>::try_convert_to::<FunctionBuilder, _>),
+                    type_of_val(&With::<FunctionBuilder>::build::<Function>),
+                    type_of_val(&With::<Function>::try_convert_to::<FunctionWithTablesBuilder, _>),
+                    // Read tables
+                    type_of_val(
+                        &By::<FunctionId>::historic_fetch_all::<
+                            { TableDBWithNames::User },
+                            TableDBWithNames,
+                        >,
+                    ),
+                    type_of_val(&With::<TableDBWithNames>::vec_convert_to::<TableName, _>),
+                    type_of_val(&With::<Vec<TableName>>::set::<FunctionWithTablesBuilder>),
+                    // Read triggers and dependencies
+                    // Triggers
+                    type_of_val(
+                        &By::<FunctionId>::historic_fetch_all::<
+                            { TriggerDBWithNames::Active },
+                            TriggerDBWithNames,
+                        >,
+                    ),
+                    type_of_val(&With::<Vec<TriggerDBWithNames>>::extract::<Vec<TableId>>),
+                    type_of_val(
+                        &By::<Vec<TableId>>::historic_fetch_all_chunked::<
+                            { TableDBWithNames::Available },
+                            TableDBWithNames,
+                        >,
+                    ),
+                    type_of_val(&With::<TableDBWithNames>::vec_convert_to::<TableTrigger, _>),
+                    type_of_val(&With::<Vec<TableTrigger>>::set::<FunctionWithTablesBuilder>),
+                    // Dependencies
+                    type_of_val(
+                        &By::<FunctionId>::historic_fetch_all::<
+                            { DependencyDBWithNames::User },
+                            DependencyDBWithNames,
+                        >,
+                    ),
+                    type_of_val(&With::<Vec<DependencyDBWithNames>>::extract::<Vec<TableId>>),
+                    type_of_val(
+                        &By::<Vec<TableId>>::historic_fetch_all_chunked::<
+                            { TableDBWithNames::Available },
+                            TableDBWithNames,
+                        >,
+                    ),
+                    type_of_val(&vec_create_table_dependency),
+                    type_of_val(&With::<Vec<TableDependency>>::set::<FunctionWithTablesBuilder>),
+                    // Workers
+                    type_of_val(
+                        &By::<FunctionVersionId>::fetch_all_in::<
+                            { WorkerDBWithNames::EnabledTriggers },
+                            WorkerDBWithNames,
+                        >,
+                    ),
+                    type_of_val(&map_create_worker),
+                    type_of_val(
+                        &With::<HashMap<WorkerTypeDto, WorkerId>>::set::<FunctionWithTablesBuilder>,
+                    ),
+                    // Build
+                    type_of_val(&With::<FunctionWithTablesBuilder>::build::<FunctionWithTables>),
+                ],
+            );
     }
 
     #[td_test::test(db)]
@@ -256,16 +258,17 @@ mod tests {
         let function = db.seed().function(&collection, &create).await?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).read(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&format!(
-                        "~{}",
-                        function.collection_id
-                    ))?)
-                    .function(FunctionIdName::from_str("joaquin_workout")?)
-                    .build()?,
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .read(
+                    FunctionParam::builder()
+                        .collection(CollectionIdName::from_str(&format!(
+                            "~{}",
+                            function.collection_id
+                        ))?)
+                        .function(FunctionIdName::from_str("joaquin_workout")?)
+                        .build()?,
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = ReadFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;

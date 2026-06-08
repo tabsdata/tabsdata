@@ -197,7 +197,14 @@ pub async fn mint_function_runs_on_dispatch(
         })?;
         conn.lfr()
             .pointers()
-            .bind_with_known_state(&lfr.project_id, &lfr.id, &fr.id, latest_lfr, at.deref(), &by)
+            .bind_with_known_state(
+                &lfr.project_id,
+                &lfr.id,
+                &fr.id,
+                latest_lfr,
+                at.deref(),
+                &by,
+            )
             .await?;
 
         for tdv in &tdvs {
@@ -224,7 +231,14 @@ pub async fn mint_function_runs_on_dispatch(
             })?;
             conn.ltdv()
                 .pointers()
-                .bind_with_known_state(&ltdv.project_id, &ltdv.id, &tdv.id, latest_ltdv, at.deref(), &by)
+                .bind_with_known_state(
+                    &ltdv.project_id,
+                    &ltdv.id,
+                    &tdv.id,
+                    latest_ltdv,
+                    at.deref(),
+                    &by,
+                )
                 .await?;
         }
 

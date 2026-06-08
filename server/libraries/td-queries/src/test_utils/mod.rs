@@ -16,6 +16,7 @@ mod seed_logical_input;
 mod seed_permission;
 mod seed_physical_function_run;
 mod seed_physical_table_data_version;
+mod seed_project;
 mod seed_role;
 mod seed_system_tables;
 mod seed_transaction;

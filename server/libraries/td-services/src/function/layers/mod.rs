@@ -17,7 +17,7 @@ use td_objects::dxo::table::{TableDB, TableDBBuilder};
 use td_objects::dxo::trigger::{TriggerDB, TriggerDBBuilder};
 use td_objects::dxo::worker::{WorkerDB, WorkerDBBuilder};
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::{CollectionName, TableNameDto};
+use td_objects::types::basic::{CollectionName, ProjectId, TableNameDto};
 use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
 use td_queries::insert_vec;
 use td_tower::extractors::Ref;
@@ -79,6 +79,10 @@ pub fn register_workers() {
         // Set stopped for current workers and insert into workers(sql) new workers.
         from_fn(stop_current_workers),
         from_fn(With::<FunctionDB>::try_convert_to::<WorkerDBBuilder, _>),
+        // `WorkerDB` keeps `project_id` (the scheduler reads it in Global scope),
+        // but it's no longer mapped from `FunctionDB`; stamp it from the request
+        // scope's `ProjectId`, on the handler for every `scope = "Project"` caller.
+        from_fn(With::<ProjectId>::set::<WorkerDBBuilder>),
         from_fn(build_workers),
         from_fn(insert_vec::<WorkerDB>),
     )

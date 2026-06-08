@@ -12,8 +12,11 @@ use td_objects::dxo::collection::CollectionUpdate;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::errors::SqlError;
 use td_objects::rest_urls::CollectionParam;
-use td_objects::types::basic::{ProjectId, AccessTokenId, CollectionIdName, CollectionName, RoleId, UserId};
+use td_objects::types::basic::{
+    AccessTokenId, CollectionIdName, CollectionName, ProjectId, RoleId, UserId,
+};
 use td_queries::test_utils::SeedEntry;
+use td_tower::project_scope::InProject;
 
 #[td_test::test(db)]
 async fn test_update_already_existing(db: TdPool) {

@@ -78,6 +78,7 @@ mod tests {
     use td_storage::location::StorageLocation;
     use td_storage::{MountDef, Storage};
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::InProject;
     use url::Url;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -281,7 +282,8 @@ mod tests {
                         UncommittedParam::builder()
                             .uncommitted(UncommittedStatus::TRUE)
                             .build()?,
-                    )).in_project(ProjectId::sandbox());
+                    ))
+                    .in_project(ProjectId::sandbox());
             service.raw_oneshot(request).await
         }
 

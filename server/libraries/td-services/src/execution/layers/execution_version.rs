@@ -6,9 +6,7 @@ use std::ops::Deref;
 use td_database::dynamic::DynamicConnection;
 use td_error::{ApiError, TdError, api_error};
 use td_objects::and;
-use td_objects::dxo::execution::{
-    ExecutionDB, ExecutionResponse, ExecutionTriggerResponse,
-};
+use td_objects::dxo::execution::{ExecutionDB, ExecutionResponse, ExecutionTriggerResponse};
 use td_objects::dxo::function::FunctionDBWithNames;
 use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
@@ -111,9 +109,50 @@ pub async fn already_running_trigger_response(
     Ok(response)
 }
 
+/// Serialize concurrent triggers sharing a `(function_id, external_uid)` before
+/// the dedup check, closing the check-then-insert race. Without it two identical
+/// tagged triggers can both pass [`dedup_fetch`] under READ COMMITTED and race to
+/// INSERT; the loser then hits the `executions___function_id__external_uid___idx`
+/// unique index and surfaces a 500 instead of the deduped `AlreadyRunning`.
+///
+/// Takes a transaction-scoped advisory lock (Postgres) keyed on the pair, so a
+/// racing second trigger blocks until the first commits and then observes the
+/// committed row in [`dedup_fetch`] → `AlreadyRunning`. No-op when `external_uid`
+/// is `None` (untagged triggers never dedup) and on non-Postgres backends
+/// (single writer; the unique index is the backstop). Must run before
+/// [`dedup_fetch`], inside the request transaction.
+#[instrument(
+    name = "execution.dedup_lock",
+    skip_all,
+    fields(function_id = %*function_id),
+    level = "debug",
+    err(Debug)
+)]
+pub async fn dedup_lock(
+    mut conn: MutRef<DynamicConnection<'static>>,
+    function_id: Ref<FunctionId>,
+    external_uid: Ref<Option<ExternalUid>>,
+) -> Result<(), TdError> {
+    if let Some(external_uid) = external_uid.deref() {
+        let key = format!("execution_dedup:{}:{}", *function_id, external_uid);
+        conn.advisory_xact_lock_text(&key)
+            .await
+            .map_err(|e| api_error!(ApiError::InternalError, "dedup advisory lock failed: {e}"))?;
+    }
+    Ok(())
+}
+
 /// Fetch the execution that already used this `(function_id, external_uid)` for
 /// deduplication. Returns `None` when `external_uid` is absent (untagged
 /// triggers are never deduplicated).
+///
+/// `external_uid` is a **permanent** idempotency key: this lookup has no status
+/// filter, so once a `(function_id, external_uid)` pair has triggered an
+/// execution, later triggers with the same uid always dedup to it — even after
+/// it has finished or failed. This is deliberate and distinct from
+/// `skip_if_running`, which only suppresses while the latest run is still in
+/// flight. [`dedup_lock`] must run before this so the check-then-insert cannot
+/// race.
 #[instrument(
     name = "execution.dedup_fetch",
     skip_all,

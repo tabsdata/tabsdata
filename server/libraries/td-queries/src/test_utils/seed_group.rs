@@ -2,15 +2,16 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-use crate::{LiveEntry, QueryExecutor};
+use crate::LiveEntry;
 use ta_objects::{Buildable, TryUpdater};
+use td_database::dynamic::DynamicConnection;
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::group::{GroupCreate, GroupDB, GroupDBBuilder};
-use td_objects::types::basic::{AccessTokenId, Description, GroupName, ProjectId, RoleId, UserId};
+use td_objects::types::basic::{AccessTokenId, Description, GroupName, RoleId, UserId};
 
 pub(crate) async fn seed_group(
-    db: impl QueryExecutor,
+    conn: &mut DynamicConnection<'_>,
     name: GroupName,
     description: Description,
 ) -> Result<GroupDB, TdError> {
@@ -25,21 +26,20 @@ pub(crate) async fn seed_group(
         RoleId::sys_admin(),
     );
 
-    // Seeds run outside a project scope (direct insert), so stamp the
-    // `sandbox` project explicitly — mirrors `seed_collection`.
     let group_db = GroupDBBuilder::try_from(&group_create)?
         .try_update_from(&request_context)?
-        .project_id(ProjectId::sandbox())
         .build()?;
 
-    db.live().insert(&group_db).await?;
+    // Runs on a project-scoped connection; the field-less `GroupDB` defaults
+    // its `project_id` from that scope.
+    conn.live().insert(&group_db).await?;
     Ok(group_db)
 }
 
 #[cfg(test)]
 pub mod tests {
-    use crate::test_utils::SeedEntry;
     use crate::LiveEntry;
+    use crate::test_utils::SeedEntry;
     use td_database::pool::TdPool;
     use td_objects::dxo::group::GroupDB;
     use td_objects::types::basic::{Description, GroupName};

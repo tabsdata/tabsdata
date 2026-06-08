@@ -104,6 +104,7 @@ mod tests {
     use td_objects::types::composed::TableDependencyDto;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -217,7 +218,8 @@ mod tests {
                 .function(FunctionIdName::from_str("joaquin_workout")?)
                 .build()?,
             update.clone(),
-        ).in_project(ProjectId::sandbox());
+        )
+        .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -234,7 +236,8 @@ mod tests {
                 .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
                 .table(TableIdName::from_str("super_table")?)
                 .build()?,
-        ).in_project(ProjectId::sandbox());
+        )
+        .in_project(ProjectId::sandbox());
 
         let service = TableDeleteService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
@@ -312,7 +315,8 @@ mod tests {
                 .function(FunctionIdName::from_str("joaquin_workout")?)
                 .build()?,
             update.clone(),
-        ).in_project(ProjectId::sandbox());
+        )
+        .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -329,7 +333,8 @@ mod tests {
                 .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
                 .table(TableIdName::from_str("super_table")?)
                 .build()?,
-        ).in_project(ProjectId::sandbox());
+        )
+        .in_project(ProjectId::sandbox());
 
         let service = TableDeleteService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;

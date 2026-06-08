@@ -107,16 +107,16 @@ mod tests {
     use td_objects::dxo::worker::WorkerDB;
     use td_objects::rest_urls::CollectionParam;
     use td_objects::types::basic::{
-        ProjectId,
         AccessTokenId, BundleId, CollectionName, Decorator, DependencyStatus, FunctionName,
-        FunctionRuntimeValues, FunctionStatus, LogicalFunctionRunStatus, RoleId, TableName,
-        TableNameDto, TableStatus, TransactionKey, TriggerStatus, UserId, WorkerMessageStatus,
-        WorkerStatus, WorkerType,
+        FunctionRuntimeValues, FunctionStatus, LogicalFunctionRunStatus, ProjectId, RoleId,
+        TableName, TableNameDto, TableStatus, TransactionKey, TriggerStatus, UserId,
+        WorkerMessageStatus, WorkerStatus, WorkerType,
     };
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
     use td_queries::test_utils::SeedEntry;
     use td_queries::{CurrentEntry, LiveEntry};
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]

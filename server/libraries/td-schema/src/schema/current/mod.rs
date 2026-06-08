@@ -98,7 +98,11 @@ pub(crate) const ENTITIES: &[&dyn Entity] = &[
 /// `current/`; keep this list in sync with that column. The `projects` registry
 /// itself is intentionally absent — it is keyed by `id`, not `project_id`, and
 /// the app never lists it (the active project arrives in the request).
-const PROJECT_SCOPED_TABLES: &[&str] = &[
+///
+/// `test_project_scoped_tables_match_project_id_columns` cross-checks this list
+/// against the tables that actually declare a `project_id` column, so an
+/// omission (which would silently skip RLS for that table) fails the build.
+pub(crate) const PROJECT_SCOPED_TABLES: &[&str] = &[
     "groups",
     "collections",
     "bundles",

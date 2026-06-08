@@ -413,17 +413,20 @@ pub const EXECUTION_CANCEL: &str = url!(EXECUTION, "/cancel");
 pub const EXECUTION_RECOVER: &str = url!(EXECUTION, "/recover");
 pub const EXECUTION_DETAILS: &str = url!(EXECUTION, "/details");
 pub const EXECUTION_LIST: &str = url!(EXECUTIONS);
-pub const EXECUTION_LIST_BY_FUNCTION_VERSION: &str =
-    url!(SCOPED, "/function-versions/{function_version_id}/executions");
-pub const EXECUTION_LIST_BY_TABLE_DATA_VERSION: &str =
-    url!(SCOPED, "/table-data-versions/{table_data_version}/executions");
+pub const EXECUTION_LIST_BY_FUNCTION_VERSION: &str = url!(
+    SCOPED,
+    "/function-versions/{function_version_id}/executions"
+);
+pub const EXECUTION_LIST_BY_TABLE_DATA_VERSION: &str = url!(
+    SCOPED,
+    "/table-data-versions/{table_data_version}/executions"
+);
 
 #[ta_objects::QueryParam]
 pub struct AllowDisabledParam {
     #[serde(default)]
     pub with_disabled: AllowDisabled,
 }
-
 
 pub const EXECUTION_READ: &str = url!(EXECUTION);
 

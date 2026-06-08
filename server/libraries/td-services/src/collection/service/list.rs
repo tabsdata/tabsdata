@@ -43,11 +43,12 @@ mod tests {
     use td_error::TdError;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::types::basic::{
-        ProjectId,
-        AccessTokenId, CollectionName, Description, RoleId, RoleName, UserEnabled, UserId, UserName,
+        AccessTokenId, CollectionName, Description, ProjectId, RoleId, RoleName, UserEnabled,
+        UserId, UserName,
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]

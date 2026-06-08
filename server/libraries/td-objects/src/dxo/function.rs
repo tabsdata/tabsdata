@@ -8,8 +8,7 @@ mod definitions {
     use crate::types::basic::{
         AtTime, BundleId, CollectionId, CollectionName, Connector, DataLocation, Decorator,
         Description, Enabled, FunctionId, FunctionName, FunctionRuntimeValues, FunctionStatus,
-        FunctionVersionId, GroupId, ProjectId, ResetState, ReuseFrozen, Snippet, StorageVersion,
-        TableName,
+        FunctionVersionId, GroupId, ResetState, ReuseFrozen, Snippet, StorageVersion, TableName,
         TableNameDto, TableType, UserId, UserName, WorkerConfig, WorkerId, WorkerTypeDto,
     };
     use crate::types::composed::{
@@ -139,10 +138,6 @@ mod definitions {
         #[builder(default = "FunctionVersionId::new()")]
         #[dxo(extractor)]
         pub id: FunctionVersionId,
-        /// The project this function belongs to. Inherited from the parent
-        /// collection at function registration; required at construction.
-        #[dxo(extractor, setter)]
-        pub project_id: ProjectId,
         #[dxo(setter)]
         pub collection_id: CollectionId,
         #[dxo(builder(include))]
@@ -270,8 +265,7 @@ mod definitions {
         pub collection: CollectionName,
         /// Group snapshot of the function's collection at view-query time.
         /// Threaded into LFR/LTDV stamping via FunctionNode at plan-build.
-        /// Test builders default to `Default`.
-        #[builder(default = "GroupId::default_group()")]
+        /// No default: the group is project-scoped and must be set explicitly.
         pub group_id: GroupId,
         pub defined_by: UserName,
     }

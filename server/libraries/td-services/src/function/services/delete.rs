@@ -121,13 +121,13 @@ mod tests {
     use td_objects::dxo::worker::WorkerDB;
     use td_objects::rest_urls::CollectionParam;
     use td_objects::types::basic::{
-        ProjectId,
-        AccessTokenId, BundleId, Decorator, FunctionRuntimeValues, RoleId, UserId,
+        AccessTokenId, BundleId, Decorator, FunctionRuntimeValues, ProjectId, RoleId, UserId,
         WorkerMessageStatus, WorkerStatus, WorkerType,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -224,6 +224,7 @@ mod tests {
                 // Set stopped for current workers and insert into workers(sql) new workers.
                 type_of_val(&stop_current_workers),
                 type_of_val(&With::<FunctionDB>::try_convert_to::<WorkerDBBuilder, _>),
+                type_of_val(&With::<ProjectId>::set::<WorkerDBBuilder>),
                 type_of_val(&build_workers),
                 type_of_val(&insert_vec::<WorkerDB>),
                 type_of_val(&notify_scheduler),
@@ -254,13 +255,14 @@ mod tests {
         let created_function = db.seed().function(&collection, &create).await?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).delete(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                    .function(FunctionIdName::from_str("joaquin_workout")?)
-                    .build()?,
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .delete(
+                    FunctionParam::builder()
+                        .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                        .function(FunctionIdName::from_str("joaquin_workout")?)
+                        .build()?,
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = DeleteFunctionService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
@@ -302,13 +304,14 @@ mod tests {
         let created_function = db.seed().function(&collection, &create).await?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).delete(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                    .function(FunctionIdName::from_str("joaquin_workout")?)
-                    .build()?,
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .delete(
+                    FunctionParam::builder()
+                        .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                        .function(FunctionIdName::from_str("joaquin_workout")?)
+                        .build()?,
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = DeleteFunctionService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
@@ -362,13 +365,14 @@ mod tests {
         let created_function = db.seed().function(&collection, &create).await?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).delete(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                    .function(FunctionIdName::from_str("joaquin_workout")?)
-                    .build()?,
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .delete(
+                    FunctionParam::builder()
+                        .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                        .function(FunctionIdName::from_str("joaquin_workout")?)
+                        .build()?,
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = DeleteFunctionService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
@@ -422,13 +426,14 @@ mod tests {
         let created_function = db.seed().function(&collection, &create).await?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).delete(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                    .function(FunctionIdName::from_str("joaquin_workout")?)
-                    .build()?,
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .delete(
+                    FunctionParam::builder()
+                        .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                        .function(FunctionIdName::from_str("joaquin_workout")?)
+                        .build()?,
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = DeleteFunctionService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
@@ -480,13 +485,14 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
-                CollectionParam::builder()
-                    .collection(CollectionIdName::from_str(collection_name.as_str())?)
-                    .build()?,
-                create_1.clone(),
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(collection_name.as_str())?)
+                        .build()?,
+                    create_1.clone(),
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -508,13 +514,14 @@ mod tests {
         let created_function_2 = db.seed().function(&collection, &create_2).await?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).delete(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                    .function(FunctionIdName::from_str("joaquin_workout_2")?)
-                    .build()?,
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .delete(
+                    FunctionParam::builder()
+                        .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                        .function(FunctionIdName::from_str("joaquin_workout_2")?)
+                        .build()?,
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = DeleteFunctionService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
@@ -571,25 +578,27 @@ mod tests {
             )])))
             .build()?;
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
-                CollectionParam::builder()
-                    .collection(CollectionIdName::from_str(collection_name.as_str())?)
-                    .build()?,
-                create,
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(collection_name.as_str())?)
+                        .build()?,
+                    create,
+                )
+                .in_project(ProjectId::sandbox());
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let function = service.raw_oneshot(request).await?;
 
         // and then just deleted
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).delete(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                    .function(FunctionIdName::from_str("function_1")?)
-                    .build()?,
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .delete(
+                    FunctionParam::builder()
+                        .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                        .function(FunctionIdName::from_str("function_1")?)
+                        .build()?,
+                )
+                .in_project(ProjectId::sandbox());
         let service = DeleteFunctionService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
 

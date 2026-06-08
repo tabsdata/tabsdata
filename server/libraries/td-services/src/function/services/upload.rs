@@ -81,11 +81,14 @@ mod tests {
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::Buildable;
-    use td_objects::types::basic::{ProjectId, AccessTokenId, CollectionName, DataLocation, RoleId, UserId};
+    use td_objects::types::basic::{
+        AccessTokenId, CollectionName, DataLocation, ProjectId, RoleId, UserId,
+    };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_storage::location::StorageLocation;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -155,13 +158,14 @@ mod tests {
         let function_upload = FunctionUpload::new(request);
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
-                CollectionParam::builder()
-                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                    .build()?,
-                function_upload,
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                        .build()?,
+                    function_upload,
+                )
+                .in_project(ProjectId::sandbox());
 
         let context = Context::with_defaults(db.clone());
         let service = UploadFunctionService::build(&context).service();

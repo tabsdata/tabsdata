@@ -276,6 +276,7 @@ mod tests {
     use td_queries::{LiveEntry, VersionedEntry};
     use td_storage::SPath;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::InProject;
     use tower::ServiceExt;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -786,16 +787,17 @@ mod tests {
         let _ = db.seed().function(&collection, &create).await?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                    .function(FunctionIdName::from_str("function_1")?)
-                    .build()?,
-                ExecutionRequest::builder()
-                    .name(Some(ExecutionName::try_from("e_k8s")?))
-                    .build()?,
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    FunctionParam::builder()
+                        .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                        .function(FunctionIdName::from_str("function_1")?)
+                        .build()?,
+                    ExecutionRequest::builder()
+                        .name(Some(ExecutionName::try_from("e_k8s")?))
+                        .build()?,
+                )
+                .in_project(ProjectId::sandbox());
         ExecuteFunctionService::with_defaults(db.clone())
             .service()
             .raw_oneshot(request)

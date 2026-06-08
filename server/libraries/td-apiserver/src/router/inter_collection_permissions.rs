@@ -25,6 +25,7 @@ mod routes {
     };
     use td_objects::types::basic::ProjectId;
     use td_services::inter_coll_permission::services::InterCollectionPermissionServices;
+    use td_tower::project_scope::InProject;
     use tower::ServiceExt;
 
     const INTER_COLLECTION_PERMISSIONS_TAG: &str = "Inter Collection Permissions";
@@ -65,7 +66,9 @@ mod routes {
         Query(query_params): Query<ListParams>,
         Path(path_params): Path<CollectionParam>,
     ) -> Result<ListStatus<InterCollectionPermission>, ErrorStatus> {
-        let request = context.list(path_params, query_params).in_project(project_id);
+        let request = context
+            .list(path_params, query_params)
+            .in_project(project_id);
         let response = state.list.service().oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }

@@ -551,6 +551,7 @@ mod tests {
             let synthetic_tdv_id = PhysicalTableDataVersionId::new();
             let ltdv = LogicalTableDataVersionDB::builder()
                 .project_id(collection.project_id.clone())
+                .group_id(collection.group_id)
                 .collection_id(collection.id)
                 .execution_id(execution.id.clone())
                 .transaction_id(transaction.id.clone())
@@ -822,6 +823,7 @@ mod tests {
         // resolver could use.
         let lfr_run1 = LogicalFunctionRunDB::builder()
             .project_id(consumer.project_id.clone())
+            .group_id(collection.group_id)
             .collection_id(collection.id)
             .execution_id(&ltdvs[0].execution_id)
             .transaction_id(&ltdvs[0].transaction_id)
@@ -892,6 +894,7 @@ mod tests {
                 .await?;
             let ltdv = LogicalTableDataVersionDB::builder()
                 .project_id(collection.project_id.clone())
+                .group_id(collection.group_id)
                 .collection_id(collection.id)
                 .execution_id(execution.id.clone())
                 .transaction_id(transaction.id.clone())
@@ -998,6 +1001,8 @@ mod tests {
             .await
             .unwrap();
         let canceled_lfr = LogicalFunctionRunDB::builder()
+            .project_id(collection.project_id.clone())
+            .group_id(collection.group_id)
             .collection_id(collection.id)
             .execution_id(execution.id.clone())
             .transaction_id(transaction.id.clone())
@@ -1014,6 +1019,8 @@ mod tests {
             .await
             .unwrap();
         let canceled_ltdv = LogicalTableDataVersionDB::builder()
+            .project_id(collection.project_id.clone())
+            .group_id(collection.group_id)
             .collection_id(collection.id)
             .execution_id(execution.id)
             .transaction_id(transaction.id)

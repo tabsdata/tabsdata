@@ -47,7 +47,10 @@ async fn test_create_read_update_delete_project(db: TdPool) -> Result<(), TdErro
     let updated_desc = Description::try_from("Payments project (renamed)")?;
 
     // Create.
-    let create = ProjectCreate::builder().name(&initial_name).description(&initial_desc).build()?;
+    let create = ProjectCreate::builder()
+        .name(&initial_name)
+        .description(&initial_desc)
+        .build()?;
     let created = CreateProjectService::with_defaults(db.clone())
         .service()
         .raw_oneshot(admin_ctx().create((), create))
@@ -107,10 +110,16 @@ async fn test_project_name_must_be_unique(db: TdPool) -> Result<(), TdError> {
     };
 
     // First create succeeds.
-    CreateProjectService::with_defaults(db.clone()).service().raw_oneshot(admin_ctx().create((), create())).await?;
+    CreateProjectService::with_defaults(db.clone())
+        .service()
+        .raw_oneshot(admin_ctx().create((), create()))
+        .await?;
 
     // Second create with the same name fails (unique constraint).
-    let second = CreateProjectService::with_defaults(db.clone()).service().raw_oneshot(admin_ctx().create((), create())).await;
+    let second = CreateProjectService::with_defaults(db.clone())
+        .service()
+        .raw_oneshot(admin_ctx().create((), create()))
+        .await;
     assert!(second.is_err(), "duplicate project name must be rejected");
 
     // Soft-delete frees the name: the row is renamed to `deleted_<id>` so the
@@ -119,7 +128,10 @@ async fn test_project_name_must_be_unique(db: TdPool) -> Result<(), TdError> {
         .service()
         .raw_oneshot(admin_ctx().delete(project_param("billing")))
         .await?;
-    CreateProjectService::with_defaults(db.clone()).service().raw_oneshot(admin_ctx().create((), create())).await?;
+    CreateProjectService::with_defaults(db.clone())
+        .service()
+        .raw_oneshot(admin_ctx().create((), create()))
+        .await?;
     Ok(())
 }
 
@@ -129,7 +141,10 @@ async fn test_project_name_must_be_unique(db: TdPool) -> Result<(), TdError> {
 #[td_test::test(db)]
 async fn test_sandbox_can_be_renamed(db: TdPool) -> Result<(), TdError> {
     let new_name = ProjectName::try_from("primary")?;
-    let upd = ProjectUpdate::builder().name(Some(new_name.clone())).description(None).build()?;
+    let upd = ProjectUpdate::builder()
+        .name(Some(new_name.clone()))
+        .description(None)
+        .build()?;
     let updated = UpdateProjectService::with_defaults(db.clone())
         .service()
         .raw_oneshot(admin_ctx().update(project_param("sandbox"), upd))
@@ -154,8 +169,17 @@ mod sqlite_single_project {
             .description(&Description::try_from("nope").unwrap())
             .build()
             .unwrap();
-        let err = CreateProjectService::with_defaults(db).service().raw_oneshot(admin_ctx().create((), create)).await.unwrap_err();
-        assert_eq!(err.code(), ProjectError::SingleProjectBackend.code(), "got {}", err.code());
+        let err = CreateProjectService::with_defaults(db)
+            .service()
+            .raw_oneshot(admin_ctx().create((), create))
+            .await
+            .unwrap_err();
+        assert_eq!(
+            err.code(),
+            ProjectError::SingleProjectBackend.code(),
+            "got {}",
+            err.code()
+        );
     }
 
     /// SQLite: sandbox is the only project and cannot be deleted.
@@ -186,7 +210,11 @@ mod sqlite_single_project {
             .description(None)
             .build()
             .unwrap();
-        UpdateProjectService::with_defaults(db).service().raw_oneshot(admin_ctx().update(project_param("sandbox"), upd)).await.unwrap();
+        UpdateProjectService::with_defaults(db)
+            .service()
+            .raw_oneshot(admin_ctx().update(project_param("sandbox"), upd))
+            .await
+            .unwrap();
     }
 }
 
@@ -204,6 +232,7 @@ mod postgres_delete_guards {
     use td_error::TdDomainError;
     use td_objects::dxo::collection::CollectionCreate;
     use td_objects::types::basic::CollectionName;
+    use td_tower::project_scope::InProject;
 
     /// On Postgres sandbox is an ordinary project: deletable once empty (a
     /// fresh DB seeds it with no collections). Nothing in the schema requires
@@ -223,7 +252,10 @@ mod postgres_delete_guards {
             .raw_oneshot(admin_ctx().list((), ListParams::default()))
             .await?;
         assert!(
-            !list.data.iter().any(|p| p.name == ProjectName::try_from("sandbox").unwrap()),
+            !list
+                .data
+                .iter()
+                .any(|p| p.name == ProjectName::try_from("sandbox").unwrap()),
             "sandbox should be gone after delete on postgres"
         );
         Ok(())
@@ -265,7 +297,12 @@ mod postgres_delete_guards {
             .raw_oneshot(admin_ctx().delete(project_param("warehouse")))
             .await
             .unwrap_err();
-        assert_eq!(err.code(), ProjectError::ProjectNotEmpty(String::new()).code(), "got {}", err.code());
+        assert_eq!(
+            err.code(),
+            ProjectError::ProjectNotEmpty(String::new()).code(),
+            "got {}",
+            err.code()
+        );
         Ok(())
     }
 }

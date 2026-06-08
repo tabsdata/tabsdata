@@ -5,7 +5,7 @@
 use crate::execution::layers::execute;
 use crate::execution::layers::execution::trigger_type_manual;
 use crate::execution::layers::execution_version::{
-    already_running_trigger_response, dedup_condition, dedup_fetch,
+    already_running_trigger_response, dedup_condition, dedup_fetch, dedup_lock,
     executed_trigger_response, skip_if_running,
 };
 use crate::scheduler::layers::request::notify_scheduler;
@@ -66,6 +66,7 @@ fn service() {
         conditional(
             If(service!(layers!(
                 from_fn(With::<ExecutionRequest>::extract::<Option<ExternalUid>>),
+                from_fn(dedup_lock),
                 from_fn(dedup_fetch),
                 from_fn(dedup_condition),
             ))),
@@ -102,30 +103,37 @@ fn service() {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use crate::Context;
+    use crate::collection::service::CollectionServices;
     use std::error::Error;
     use std::str::FromStr;
     use std::sync::LazyLock;
+    use ta_services::factory::ServiceFactory;
     use ta_services::service::TdService;
     use td_authz::tower::AuthzError;
     use td_database::pool::TdPool;
+    use td_database::sea_query::kind::{DatabaseBackend, DatabaseKind};
     use td_error::TdError;
     use td_execution::EXECUTION_GRAPH_OPTIONS;
+    use td_objects::dxo::collection::{CollectionCreate, CollectionDB};
     use td_objects::dxo::execution::{ExecutionDBWithStatus, ExecutionResponse};
     use td_objects::dxo::function::{FunctionDBWithNames, FunctionRegister};
     use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalTableDataVersionDB};
     use td_objects::dxo::table::TableDB;
     use td_objects::dxo::transaction::TransactionDBWithStatus;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, Depth, Enabled, ExecutionName,
-        ExecutionStatus, FunctionName, FunctionRuntimeValues, LogicalFunctionRunStatus,
-        OverrideDisabledTrigger, ProjectId, RoleId, TableName, TableNameDto, ToCollectionId, TransactionKey,
-        TransactionStatus, TriggeredOn, UserId,
+        AccessTokenId, BundleId, CollectionName, Decorator, Depth, Description, Enabled,
+        ExecutionName, ExecutionStatus, FunctionName, FunctionRuntimeValues, GroupId,
+        LogicalFunctionRunStatus, OverrideDisabledTrigger, ProjectId, ProjectName, RoleId,
+        TableName, TableNameDto, ToCollectionId, TransactionKey, TransactionStatus, TriggeredOn,
+        UserId,
     };
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
     use td_objects::{Buildable, and};
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -157,8 +165,8 @@ pub(crate) mod tests {
         use td_objects::dxo::transaction::{TransactionDB, TransactionDBBuilder};
         use td_objects::dxo::trigger::TriggerDBWithNames;
         use td_objects::tower_service::with::With;
-        use td_objects::types::basic::{CollectionId, FunctionId, FunctionOnly, TriggerType};
         use td_objects::types::basic::ProjectId;
+        use td_objects::types::basic::{CollectionId, FunctionId, FunctionOnly, TriggerType};
         use td_objects::types::recursion::RecursionOptions;
         use td_queries::{insert, insert_vec};
         use td_tower::metadata::type_of_val;
@@ -200,6 +208,7 @@ pub(crate) mod tests {
                     type_of_val(&trigger_type_manual),
                     // dedup (outer) if
                     type_of_val(&With::<ExecutionRequest>::extract::<Option<ExternalUid>>),
+                    type_of_val(&dedup_lock),
                     type_of_val(&dedup_fetch),
                     type_of_val(&dedup_condition),
                     // dedup do
@@ -349,6 +358,104 @@ pub(crate) mod tests {
     #[td_test::test(db)]
     async fn test_execute_single_function(db: TdPool) -> Result<(), TdError> {
         let _ = test_execute(db, true, false, true, true).await?;
+        Ok(())
+    }
+
+    /// Grouping is project-scoped end to end: a function in a non-sandbox
+    /// project mints its runs and transaction with that project's *own*
+    /// default group — never the global `GroupId::default_group()`, which
+    /// exists only in `sandbox`. Postgres-only: resolving the per-project
+    /// `default` group relies on RLS to disambiguate it from every other
+    /// project's identically-named group.
+    #[td_test::test(db)]
+    async fn test_execute_stamps_project_scoped_group(db: TdPool) -> Result<(), TdError> {
+        if !matches!(db.kind(), DatabaseBackend::Postgres) {
+            return Ok(());
+        }
+
+        // A fresh project, seeded with its own system groups.
+        let project = db
+            .seed()
+            .project(ProjectName::try_from("grp_proj")?)
+            .await?;
+
+        // Create a collection in that project through the real service, which
+        // resolves the `default` group within the project's scope.
+        let collection_name = CollectionName::try_from("grp_coll")?;
+        CollectionServices::build(&Context::with_defaults(db.clone()))
+            .create
+            .service()
+            .raw_oneshot(
+                RequestContext::with(
+                    AccessTokenId::default(),
+                    UserId::admin(),
+                    RoleId::sys_admin(),
+                )
+                .create(
+                    (),
+                    CollectionCreate::builder()
+                        .name(&collection_name)
+                        .description(&Description::try_from("c")?)
+                        .build()?,
+                )
+                .in_project(project.id.clone()),
+            )
+            .await?;
+
+        let collection: CollectionDB = db
+            .live()
+            .fetch_one::<CollectionDB>(&collection_name)
+            .await?;
+        assert_eq!(collection.project_id, project.id);
+        assert_ne!(
+            collection.group_id,
+            GroupId::default_group(),
+            "collection must resolve its project's own default group, not sandbox's",
+        );
+
+        // Register a publisher function in that collection and seed a run
+        // chain on it — every run-level row must inherit the project's group,
+        // never the global default.
+        let create = FunctionRegister::builder()
+            .name(FunctionName::try_from("grp_fn")?)
+            .try_description("grp fn")?
+            .bundle_id(BundleId::default())
+            .try_snippet("grp snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(None)
+            .triggers(None)
+            .tables(vec![TableNameDto::try_from("grp_table")?])
+            .runtime_values(FunctionRuntimeValues::try_from("rt")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+        let function = db.seed().function(&collection, &create).await?;
+        let execution = db.seed().execution(&function).await?;
+        let transaction = db
+            .seed()
+            .transaction(&execution, &TransactionKey::try_from("ANY")?)
+            .await?;
+        db.seed()
+            .physical_function_run(
+                &collection,
+                &function,
+                &execution,
+                &transaction,
+                &LogicalFunctionRunStatus::Scheduled,
+            )
+            .await?;
+
+        // The transaction is stamped with the collection's project group at mint.
+        assert_eq!(transaction.group_id, collection.group_id);
+
+        // The minted LFR carries the project's group and project — not sandbox's.
+        let lfrs: Vec<LogicalFunctionRunDB> = db
+            .live()
+            .fetch_all::<LogicalFunctionRunDB>(&function.function_id)
+            .await?;
+        assert_eq!(lfrs.len(), 1);
+        assert_eq!(lfrs[0].project_id, project.id);
+        assert_eq!(lfrs[0].group_id, collection.group_id);
+
         Ok(())
     }
 
@@ -514,16 +621,18 @@ pub(crate) mod tests {
         let _ = db.seed().function(&collection_2, &create).await?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&collection_0.name.to_string())?)
-                    .function(FunctionIdName::from_str(&FUNCTION_NAMES[0].to_string())?)
-                    .build()?,
-                ExecutionRequest::builder()
-                    .name(Some(ExecutionName::try_from("test_execution")?))
-                    .function_only(single_function)
-                    .build()?,
-            ).in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    FunctionParam::builder()
+                        .collection(CollectionIdName::from_str(&collection_0.name.to_string())?)
+                        .function(FunctionIdName::from_str(&FUNCTION_NAMES[0].to_string())?)
+                        .build()?,
+                    ExecutionRequest::builder()
+                        .name(Some(ExecutionName::try_from("test_execution")?))
+                        .function_only(single_function)
+                        .build()?,
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = ExecuteFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await.map(|r| match r {
@@ -837,15 +946,17 @@ pub(crate) mod tests {
 
         // And then run function_2
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&collection.name.to_string())?)
-                    .function(FunctionIdName::from_str(&FUNCTION_NAMES[2].to_string())?)
-                    .build()?,
-                ExecutionRequest::builder()
-                    .name(Some(ExecutionName::try_from("test_execution")?))
-                    .build()?,
-            ).in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    FunctionParam::builder()
+                        .collection(CollectionIdName::from_str(&collection.name.to_string())?)
+                        .function(FunctionIdName::from_str(&FUNCTION_NAMES[2].to_string())?)
+                        .build()?,
+                    ExecutionRequest::builder()
+                        .name(Some(ExecutionName::try_from("test_execution")?))
+                        .build()?,
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = ExecuteFunctionService::with_defaults(db.clone()).service();
         let _response = service.raw_oneshot(request).await?;
@@ -973,16 +1084,18 @@ pub(crate) mod tests {
         let _function_1 = db.seed().function(&collection, &create).await?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&collection.name.to_string())?)
-                    .function(FunctionIdName::from_str(&FUNCTION_NAMES[0].to_string())?)
-                    .build()?,
-                ExecutionRequest::builder()
-                    .name(Some(ExecutionName::try_from("test_execution")?))
-                    .override_disabled_trigger(override_disabled_trigger)
-                    .build()?,
-            ).in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    FunctionParam::builder()
+                        .collection(CollectionIdName::from_str(&collection.name.to_string())?)
+                        .function(FunctionIdName::from_str(&FUNCTION_NAMES[0].to_string())?)
+                        .build()?,
+                    ExecutionRequest::builder()
+                        .name(Some(ExecutionName::try_from("test_execution")?))
+                        .override_disabled_trigger(override_disabled_trigger)
+                        .build()?,
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = ExecuteFunctionService::with_defaults(db.clone()).service();
 
@@ -1015,19 +1128,22 @@ pub(crate) mod tests {
         let _function = db.seed().function(&collection, &create).await?;
 
         let trigger = |external_uid: Option<ExternalUid>| {
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&collection.name.to_string()).unwrap())
-                    .function(FunctionIdName::from_str(&FUNCTION_NAMES[0].to_string()).unwrap())
-                    .build()
-                    .unwrap(),
-                ExecutionRequest::builder()
-                    .name(Some(ExecutionName::try_from("test_execution").unwrap()))
-                    .external_uid(external_uid)
-                    .build()
-                    .unwrap(),
-            )
-            .in_project(ProjectId::sandbox())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    FunctionParam::builder()
+                        .collection(
+                            CollectionIdName::from_str(&collection.name.to_string()).unwrap(),
+                        )
+                        .function(FunctionIdName::from_str(&FUNCTION_NAMES[0].to_string()).unwrap())
+                        .build()
+                        .unwrap(),
+                    ExecutionRequest::builder()
+                        .name(Some(ExecutionName::try_from("test_execution").unwrap()))
+                        .external_uid(external_uid)
+                        .build()
+                        .unwrap(),
+                )
+                .in_project(ProjectId::sandbox())
         };
 
         let uid = ExternalUid::try_from("uid-abc")?;

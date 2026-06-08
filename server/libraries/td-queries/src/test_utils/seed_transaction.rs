@@ -2,18 +2,27 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::{LiveEntry, QueryExecutor};
+use crate::LiveEntry;
 use ta_objects::Buildable;
+use td_database::dynamic::DynamicConnection;
 use td_error::TdError;
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::transaction::TransactionDB;
-use td_objects::types::basic::{GroupId, TransactionId, TransactionKey};
+use td_objects::types::basic::{TransactionId, TransactionKey};
 
 pub(crate) async fn seed_transaction(
-    db: impl QueryExecutor,
+    conn: &mut DynamicConnection<'_>,
     execution: &ExecutionDB,
     transaction_key: &TransactionKey,
 ) -> Result<TransactionDB, TdError> {
+    // A transaction's group is a snapshot of its collection's group at mint —
+    // resolve it from the collection rather than assuming the global default,
+    // which only exists in `sandbox`.
+    let collection: CollectionDB = conn
+        .live()
+        .fetch_one::<CollectionDB>(&execution.collection_id)
+        .await?;
     let transaction_db = TransactionDB::builder()
         .id(TransactionId::new())
         .collection_id(execution.collection_id)
@@ -22,10 +31,12 @@ pub(crate) async fn seed_transaction(
         .transaction_key(transaction_key.clone())
         .triggered_on(execution.triggered_on)
         .triggered_by_id(execution.triggered_by_id)
-        .group_id(GroupId::default_group())
+        .group_id(collection.group_id)
         .build()?;
 
-    db.live().insert(&transaction_db).await?;
+    // Field-less row; runs on a project-scoped connection so `project_id`
+    // defaults from the scope.
+    conn.live().insert(&transaction_db).await?;
     Ok(transaction_db)
 }
 

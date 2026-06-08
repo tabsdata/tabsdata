@@ -98,9 +98,14 @@ def cli(ctx: click.Context, no_prompt: bool, project: str):
         # it -- the connection injects it into every tenant path.
         server = ctx.obj.get("tabsdataserver")
         if server is not None:
-            server.connection.project = project or ctx.obj["pinned_objects"].get(
-                "project"
-            )
+            active_project = project or ctx.obj["pinned_objects"].get("project")
+            server.connection.project = active_project
+            # Surface an explicit `--project` override so a project-scoped
+            # command can't silently run against the wrong tenant. Pinned-project
+            # use stays quiet (matching pinned-collection behavior); printed to
+            # stderr so stdout-parsing callers are unaffected.
+            if project is not None:
+                click.echo(f"Targeting project: {active_project}", err=True)
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to initialize CLI: {e}")

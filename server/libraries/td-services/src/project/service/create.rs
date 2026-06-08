@@ -2,6 +2,7 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+use crate::project::service::layer::scope_to_project::scope_to_created_project;
 use crate::project::service::layer::seed_groups::seed_default_groups;
 use crate::project::service::layer::single_project::reject_create_on_single_project_backend;
 use ta_services::factory::service_factory;
@@ -39,6 +40,9 @@ fn service() {
         from_fn(With::<ProjectCreateDBBuilder>::build::<ProjectCreateDB>),
         from_fn(insert::<ProjectCreateDB>),
         from_fn(With::<ProjectCreateDB>::extract::<ProjectId>),
+        // Scope the connection to the new project so the group seeds default
+        // `project_id` from the GUC instead of stamping it by hand.
+        from_fn(scope_to_created_project),
         // A collection resolves its group within its own project, so seed the
         // system groups (default/source/destination) into the new project.
         from_fn(seed_default_groups),
@@ -73,6 +77,7 @@ mod tests {
                 type_of_val(&With::<ProjectCreateDBBuilder>::build::<ProjectCreateDB>),
                 type_of_val(&insert::<ProjectCreateDB>),
                 type_of_val(&With::<ProjectCreateDB>::extract::<ProjectId>),
+                type_of_val(&scope_to_created_project),
                 type_of_val(&seed_default_groups),
                 type_of_val(&By::<ProjectId>::fetch_one::<ProjectDBWithNames>),
                 type_of_val(&With::<ProjectDBWithNames>::try_convert_to::<ProjectReadBuilder, _>),

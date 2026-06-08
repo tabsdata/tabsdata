@@ -49,11 +49,12 @@ mod tests {
     use td_objects::dxo::crudl::ListParams;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, Description, ProjectId, RoleId, RoleName,
-        TableName, TableNameDto, UserEnabled, UserId, UserName,
+        AccessTokenId, BundleId, CollectionName, Decorator, Description, ProjectId, RoleId,
+        RoleName, TableName, TableNameDto, UserEnabled, UserId, UserName,
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -114,7 +115,8 @@ mod tests {
         // List current tables
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
-                .list((), ListParams::default()).in_project(ProjectId::sandbox());
+                .list((), ListParams::default())
+                .in_project(ProjectId::sandbox());
 
         let service = TableListService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -171,7 +173,8 @@ mod tests {
         // All tables are visible to authorized users
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
-                .list((), ListParams::default()).in_project(ProjectId::sandbox());
+                .list((), ListParams::default())
+                .in_project(ProjectId::sandbox());
 
         let service = TableListService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -184,7 +187,8 @@ mod tests {
 
         // No tables are visible to authorized users
         let request = RequestContext::with(AccessTokenId::default(), user.id, role.id)
-            .list((), ListParams::default()).in_project(ProjectId::sandbox());
+            .list((), ListParams::default())
+            .in_project(ProjectId::sandbox());
 
         let service = TableListService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;

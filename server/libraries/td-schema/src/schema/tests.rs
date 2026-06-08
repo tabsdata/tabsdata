@@ -563,3 +563,35 @@ fn test_maintain_current_trigger_columns_match_tables() {
         }
     }
 }
+
+/// T11: the hand-maintained `PROJECT_SCOPED_TABLES` list is exactly the set of
+/// tables that declare a `project_id` column. The schema build attaches an RLS
+/// policy to every table in that list, so a table that grows a `project_id`
+/// column but is omitted from the list gets NO row-level-security policy — a
+/// silent cross-tenant leak. This makes that divergence (in either direction)
+/// a build failure. The `project_id` column is identical across backends, so
+/// the SQLite-derived `COLS_BY_TABLE` is authoritative for membership.
+#[test]
+fn test_project_scoped_tables_match_project_id_columns() {
+    let with_project_id: HashSet<&str> = COLS_BY_TABLE
+        .iter()
+        .filter(|(_, cols)| cols.iter().any(|c| c == "project_id"))
+        .map(|(t, _)| t.as_str())
+        .collect();
+    let listed: HashSet<&str> = current::PROJECT_SCOPED_TABLES.iter().copied().collect();
+
+    let missing: Vec<&str> = with_project_id.difference(&listed).copied().collect();
+    assert!(
+        missing.is_empty(),
+        "tables declare a `project_id` column but are absent from \
+         PROJECT_SCOPED_TABLES, so they get NO RLS policy (silent cross-tenant \
+         leak): {missing:?}. Add them to PROJECT_SCOPED_TABLES in current/mod.rs.",
+    );
+
+    let stale: Vec<&str> = listed.difference(&with_project_id).copied().collect();
+    assert!(
+        stale.is_empty(),
+        "PROJECT_SCOPED_TABLES lists tables that have no `project_id` column: \
+         {stale:?}. Remove them from the list or add the column.",
+    );
+}

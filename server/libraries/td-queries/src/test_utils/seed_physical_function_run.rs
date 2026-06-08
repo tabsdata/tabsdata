@@ -57,7 +57,8 @@ pub(crate) async fn seed_physical_function_run(
         }
         None => {
             let lfr = LogicalFunctionRunDB::builder()
-                .project_id(function_version.project_id.clone())
+                .project_id(collection.project_id.clone())
+                .group_id(collection.group_id)
                 .collection_id(collection.id)
                 .execution_id(&execution.id)
                 .transaction_id(&transaction.id)
@@ -74,7 +75,7 @@ pub(crate) async fn seed_physical_function_run(
     };
 
     let function_db = PhysicalFunctionRunDB::builder()
-        .project_id(function_version.project_id.clone())
+        .project_id(collection.project_id.clone())
         .collection_id(collection.id)
         .function_id(function_version.function_id)
         .function_version_id(&function_version.id)
@@ -115,6 +116,7 @@ pub(crate) async fn seed_physical_function_run(
     for t in &tables {
         let ltdv = LogicalTableDataVersionDB::builder()
             .project_id(logical.project_id.clone())
+            .group_id(logical.group_id)
             .collection_id(collection.id)
             .execution_id(&execution.id)
             .transaction_id(&transaction.id)

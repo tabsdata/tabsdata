@@ -86,6 +86,7 @@ mod tests {
     use td_queries::CurrentEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -97,43 +98,45 @@ mod tests {
         TableFlowGraphService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<Scoped<ReadRequest<TableParam>, ProjectId>, TableFlowGraphResponse>(&[
-                // Extract from request.
-                type_of_val(&With::<ReadRequest<TableParam>>::extract_name::<TableParam>),
-                type_of_val(&With::<ReadRequest<TableParam>>::extract::<RequestContext>),
-                type_of_val(&With::<RequestContext>::extract::<AtTime>),
-                type_of_val(&With::<TableParam>::extract::<CollectionIdName>),
-                type_of_val(&With::<TableParam>::extract::<TableIdName>),
-                // Find main table
-                type_of_val(
-                    &By::<And![CollectionIdName, TableIdName]>::historic_fetch_one::<
-                        { TableDBWithNames::Available },
-                        TableDBWithNames,
-                    >,
-                ),
-                // Generate td graph
-                type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
-                type_of_val(&With::<TableId>::convert_to::<FunctionOrTable>),
-                type_of_val(&with_recursion_options),
-                // Find td graph
-                // Find triggers
-                type_of_val(&GraphBuilder::<GraphOpts>::find_recursive_trigger_graph),
-                // Find dependencies. For clarity, we always show the function, even if
-                // generating a table centered graph, the same way we show the tables of
-                // a function centered graph.
-                type_of_val(&GraphBuilder::<GraphOpts>::main_function_id),
-                type_of_val(&GraphBuilder::<GraphOpts>::find_recursive_dependency_graph),
-                type_of_val(&GraphBuilder::<GraphOpts>::unique_function_ids),
-                // Find output tables
-                type_of_val(&GraphBuilder::<GraphOpts>::find_functions_output_tables),
-                // Find all tables and functions
-                type_of_val(&GraphBuilder::<GraphOpts>::find_all_tables_map),
-                type_of_val(&GraphBuilder::<GraphOpts>::find_all_functions_map),
-                // Create td graph and validate it
-                type_of_val(&GraphBuilder::<GraphOpts>::build_td_graph),
-                // Build response
-                type_of_val(&build_response),
-            ]);
+            .assert_service::<Scoped<ReadRequest<TableParam>, ProjectId>, TableFlowGraphResponse>(
+                &[
+                    // Extract from request.
+                    type_of_val(&With::<ReadRequest<TableParam>>::extract_name::<TableParam>),
+                    type_of_val(&With::<ReadRequest<TableParam>>::extract::<RequestContext>),
+                    type_of_val(&With::<RequestContext>::extract::<AtTime>),
+                    type_of_val(&With::<TableParam>::extract::<CollectionIdName>),
+                    type_of_val(&With::<TableParam>::extract::<TableIdName>),
+                    // Find main table
+                    type_of_val(
+                        &By::<And![CollectionIdName, TableIdName]>::historic_fetch_one::<
+                            { TableDBWithNames::Available },
+                            TableDBWithNames,
+                        >,
+                    ),
+                    // Generate td graph
+                    type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
+                    type_of_val(&With::<TableId>::convert_to::<FunctionOrTable>),
+                    type_of_val(&with_recursion_options),
+                    // Find td graph
+                    // Find triggers
+                    type_of_val(&GraphBuilder::<GraphOpts>::find_recursive_trigger_graph),
+                    // Find dependencies. For clarity, we always show the function, even if
+                    // generating a table centered graph, the same way we show the tables of
+                    // a function centered graph.
+                    type_of_val(&GraphBuilder::<GraphOpts>::main_function_id),
+                    type_of_val(&GraphBuilder::<GraphOpts>::find_recursive_dependency_graph),
+                    type_of_val(&GraphBuilder::<GraphOpts>::unique_function_ids),
+                    // Find output tables
+                    type_of_val(&GraphBuilder::<GraphOpts>::find_functions_output_tables),
+                    // Find all tables and functions
+                    type_of_val(&GraphBuilder::<GraphOpts>::find_all_tables_map),
+                    type_of_val(&GraphBuilder::<GraphOpts>::find_all_functions_map),
+                    // Create td graph and validate it
+                    type_of_val(&GraphBuilder::<GraphOpts>::build_td_graph),
+                    // Build response
+                    type_of_val(&build_response),
+                ],
+            );
     }
 
     static FUNCTION_NAMES: LazyLock<Vec<FunctionName>> = LazyLock::new(|| {
@@ -174,12 +177,14 @@ mod tests {
         // Actual test
         let service = TableFlowGraphService::with_defaults(db.clone()).service();
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).read(
-                TableParam::builder()
-                    .collection(CollectionIdName::from_str(&collection_name.to_string())?)
-                    .table(TableIdName::from_str("table_0")?)
-                    .build()?,
-            ).in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .read(
+                    TableParam::builder()
+                        .collection(CollectionIdName::from_str(&collection_name.to_string())?)
+                        .table(TableIdName::from_str("table_0")?)
+                        .build()?,
+                )
+                .in_project(ProjectId::sandbox());
 
         let response = service.raw_oneshot(request).await?;
 
@@ -292,12 +297,14 @@ mod tests {
         // Actual test
         let service = TableFlowGraphService::with_defaults(db.clone()).service();
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).read(
-                TableParam::builder()
-                    .collection(CollectionIdName::from_str(&collection_name.to_string())?)
-                    .table(TableIdName::from_str("table_0")?)
-                    .build()?,
-            ).in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .read(
+                    TableParam::builder()
+                        .collection(CollectionIdName::from_str(&collection_name.to_string())?)
+                        .table(TableIdName::from_str("table_0")?)
+                        .build()?,
+                )
+                .in_project(ProjectId::sandbox());
 
         let response = service.raw_oneshot(request).await?;
 
@@ -433,12 +440,14 @@ mod tests {
         // Actual test
         let service = TableFlowGraphService::with_defaults(db.clone()).service();
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).read(
-                TableParam::builder()
-                    .collection(CollectionIdName::from_str(&collection_name.to_string())?)
-                    .table(TableIdName::from_str("table_3")?)
-                    .build()?,
-            ).in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .read(
+                    TableParam::builder()
+                        .collection(CollectionIdName::from_str(&collection_name.to_string())?)
+                        .table(TableIdName::from_str("table_3")?)
+                        .build()?,
+                )
+                .in_project(ProjectId::sandbox());
 
         let response = service.raw_oneshot(request).await?;
 

@@ -93,6 +93,7 @@ mod tests {
     use td_queries::test_utils::SeedEntry;
     use td_queries::{LiveEntry, VersionedEntry};
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::InProject;
     use td_tower::project_scope::Scoped;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -430,7 +431,8 @@ mod tests {
         // Build the LFR directly (skip seed_function_run, which appends a
         // Bound event we don't want here) and append InitialMint Pending.
         let lfr = LogicalFunctionRunDB::builder()
-            .project_id(head.project_id.clone())
+            .project_id(coll.project_id.clone())
+            .group_id(coll.group_id)
             .collection_id(coll.id)
             .execution_id(&exec.id)
             .transaction_id(&txn.id)

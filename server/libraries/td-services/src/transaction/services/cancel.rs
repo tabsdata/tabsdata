@@ -70,6 +70,7 @@ mod tests {
     };
     use td_objects::types::composed::TableDependencyDto;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -130,7 +131,8 @@ mod tests {
                                 .transaction(TransactionIdName::from_str(&transaction)?)
                                 .build()?,
                             (),
-                        ).in_project(ProjectId::sandbox());
+                        )
+                        .in_project(ProjectId::sandbox());
 
                 TransactionCancelService::with_defaults(db.clone())
                     .service()

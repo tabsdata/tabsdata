@@ -92,6 +92,7 @@ mod tests {
     use td_storage::location::StorageLocation;
     use td_storage::{MountDef, Storage};
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::InProject;
     use url::Url;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -123,48 +124,52 @@ mod tests {
         TableSampleService::new(db, Arc::new(AuthzContext::default()), Arc::new(storage))
             .metadata()
             .await
-            .assert_service::<Scoped<ReadRequest<TableSampleAtName>, ProjectId>, BoxedSyncStream>(&[
-                // Extract parameters
-                type_of_val(&With::<ReadRequest<TableSampleAtName>>::extract::<RequestContext>),
-                type_of_val(
-                    &With::<ReadRequest<TableSampleAtName>>::extract_name::<TableSampleAtName>,
-                ),
-                // find collection ID
-                type_of_val(&With::<TableSampleAtName>::extract::<CollectionIdName>),
-                type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
-                type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
-                // check requester has collection permissions
-                type_of_val(&AuthzOn::<CollectionId>::set),
-                type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check),
-                // Find table data version location.
-                // Extract parameters
-                type_of_val(&With::<TableSampleAtName>::extract::<CollectionIdName>),
-                type_of_val(&With::<TableSampleAtName>::extract::<TableIdName>),
-                type_of_val(&With::<TableSampleAtName>::extract::<AtTime>),
-                type_of_val(&With::<TableSampleAtName>::extract::<UncommittedStatus>),
-                // Only active or frozen tables
-                // Find Table ID, looking at the version at the time
-                type_of_val(
-                    &By::<And![CollectionIdName, TableIdName]>::historic_fetch_one::<
-                        { TableDBWithNames::Available },
-                        TableDBWithNames,
-                    >,
-                ),
-                type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
-                // Only committed transactions, at the triggered on time
-                type_of_val(&With::<AtTime>::try_convert_to::<TriggeredOn, _>),
-                // Find the latest data version of the table ID, at that time
-                // Resolve the location of the data version. This takes into account versions without
-                // data changes (in which the previous version is resolved)
-                type_of_val(&resolve_table_location),
-                // Get sample.
-                type_of_val(&With::<TableSampleAtName>::extract::<SampleOffset>),
-                type_of_val(&With::<TableSampleAtName>::extract::<SampleLen>),
-                type_of_val(&With::<TableSampleAtName>::extract::<FileFormat>),
-                type_of_val(&With::<TableDBWithNames>::extract::<TableName>),
-                type_of_val(&With::<TableSampleAtName>::extract::<Option<Sql>>),
-                type_of_val(&get_table_sample),
-            ]);
+            .assert_service::<Scoped<ReadRequest<TableSampleAtName>, ProjectId>, BoxedSyncStream>(
+                &[
+                    // Extract parameters
+                    type_of_val(&With::<ReadRequest<TableSampleAtName>>::extract::<RequestContext>),
+                    type_of_val(
+                        &With::<ReadRequest<TableSampleAtName>>::extract_name::<TableSampleAtName>,
+                    ),
+                    // find collection ID
+                    type_of_val(&With::<TableSampleAtName>::extract::<CollectionIdName>),
+                    type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
+                    type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
+                    // check requester has collection permissions
+                    type_of_val(&AuthzOn::<CollectionId>::set),
+                    type_of_val(
+                        &Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check,
+                    ),
+                    // Find table data version location.
+                    // Extract parameters
+                    type_of_val(&With::<TableSampleAtName>::extract::<CollectionIdName>),
+                    type_of_val(&With::<TableSampleAtName>::extract::<TableIdName>),
+                    type_of_val(&With::<TableSampleAtName>::extract::<AtTime>),
+                    type_of_val(&With::<TableSampleAtName>::extract::<UncommittedStatus>),
+                    // Only active or frozen tables
+                    // Find Table ID, looking at the version at the time
+                    type_of_val(
+                        &By::<And![CollectionIdName, TableIdName]>::historic_fetch_one::<
+                            { TableDBWithNames::Available },
+                            TableDBWithNames,
+                        >,
+                    ),
+                    type_of_val(&With::<TableDBWithNames>::extract::<TableId>),
+                    // Only committed transactions, at the triggered on time
+                    type_of_val(&With::<AtTime>::try_convert_to::<TriggeredOn, _>),
+                    // Find the latest data version of the table ID, at that time
+                    // Resolve the location of the data version. This takes into account versions without
+                    // data changes (in which the previous version is resolved)
+                    type_of_val(&resolve_table_location),
+                    // Get sample.
+                    type_of_val(&With::<TableSampleAtName>::extract::<SampleOffset>),
+                    type_of_val(&With::<TableSampleAtName>::extract::<SampleLen>),
+                    type_of_val(&With::<TableSampleAtName>::extract::<FileFormat>),
+                    type_of_val(&With::<TableDBWithNames>::extract::<TableName>),
+                    type_of_val(&With::<TableSampleAtName>::extract::<Option<Sql>>),
+                    type_of_val(&get_table_sample),
+                ],
+            );
     }
 
     //noinspection DuplicatedCode
@@ -328,7 +333,8 @@ mod tests {
                             .format(FileFormat::Parquet)
                             .build()?,
                         SqlParam::builder().sql(None).build()?,
-                    )).in_project(ProjectId::sandbox());
+                    ))
+                    .in_project(ProjectId::sandbox());
             let response = service.raw_oneshot(request).await;
             match response {
                 Ok(response) => {

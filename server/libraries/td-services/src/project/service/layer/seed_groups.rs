@@ -7,7 +7,7 @@ use td_database::dynamic::DynamicConnection;
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::group::{GroupCreate, GroupDB, GroupDBBuilder};
-use td_objects::types::basic::{Description, GroupName, ProjectId, System};
+use td_objects::types::basic::{Description, GroupName, System};
 use td_objects::{Buildable, TryUpdater};
 use td_queries::ChunkedQueries;
 use td_tower::extractors::{MutRef, Ref};
@@ -17,12 +17,12 @@ use td_tower::extractors::{MutRef, Ref};
 /// collection resolves its group within its own project, so every project must
 /// carry these or `collection.create` would fail to resolve its group.
 ///
-/// The create service runs bypassed (`Global` scope), so each `GroupDB` is
-/// stamped with the new project's id explicitly — the same way any cross-project
-/// write sets `project_id` by hand; RLS `WITH CHECK` is satisfied under bypass.
+/// `scope_to_created_project` runs first, binding the connection to the new
+/// project (`app.project_id`), so each field-less `GroupDB` defaults its
+/// `project_id` from that GUC. Bypass (`Global` scope) keeps RLS `WITH CHECK`
+/// satisfied; the GUC only feeds the column default.
 pub async fn seed_default_groups(
     mut conn: MutRef<DynamicConnection<'static>>,
-    project_id: Ref<ProjectId>,
     context: Ref<RequestContext>,
 ) -> Result<(), TdError> {
     let system_groups = [
@@ -48,7 +48,6 @@ pub async fn seed_default_groups(
             .build()?;
         let group = GroupDBBuilder::try_from(&group_create)?
             .try_update_from(context.deref())?
-            .project_id((*project_id).clone())
             .system(System::from(true))
             .build()?;
         rows.push(group);

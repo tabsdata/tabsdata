@@ -2,8 +2,9 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::{LiveEntry, QueryExecutor};
+use crate::LiveEntry;
 use ta_objects::Buildable;
+use td_database::dynamic::DynamicConnection;
 use td_error::TdError;
 use td_objects::and;
 use td_objects::dxo::collection::CollectionDB;
@@ -23,10 +24,12 @@ use td_objects::types::basic::{
 /// Seed an LFR_input row mirroring a `(consumer FR, upstream FR + TDV)`
 /// dependency edge into the logical layer. When upstream is non-NULL
 /// also seeds the LTDV identity row + a Bound pointer event so cascade
-/// walks see a complete chain.
+/// walks see a complete chain. Runs on a project-scoped connection (see
+/// [`Seed::scoped`]): the field-less `LogicalFunctionRunInputDB` defaults its
+/// `project_id` from the scope; the LTDV / pointer rows carry it explicitly.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn seed_logical_input(
-    db: impl QueryExecutor + Copy,
+    conn: &mut DynamicConnection<'_>,
     collection: &CollectionDB,
     execution: &ExecutionDB,
     transaction: &TransactionDB,
@@ -37,7 +40,7 @@ pub(crate) async fn seed_logical_input(
     requirement_dependency_pos: Option<&DependencyPos>,
     requirement_version_pos: &VersionPos,
 ) -> Result<LogicalFunctionRunInputDB, TdError> {
-    let consumer_lfr: LogicalFunctionRunDB = db
+    let consumer_lfr: LogicalFunctionRunDB = conn
         .live()
         .fetch_one(and!(
             &physical_function_run.execution_id,
@@ -58,13 +61,14 @@ pub(crate) async fn seed_logical_input(
     if let (Some(req_fr), Some(req_tdv)) =
         (requirement_function_run, requirement_table_data_version)
     {
-        let producer_lfr: LogicalFunctionRunDB = db
+        let producer_lfr: LogicalFunctionRunDB = conn
             .live()
             .fetch_one(and!(&req_fr.execution_id, &req_fr.function_id))
             .await?;
         let producer_lfr_id = producer_lfr.id.clone();
         let ltdv = LogicalTableDataVersionDB::builder()
             .project_id(producer_lfr.project_id.clone())
+            .group_id(producer_lfr.group_id)
             .collection_id(collection.id)
             .execution_id(&execution.id)
             .transaction_id(&transaction.id)
@@ -73,7 +77,9 @@ pub(crate) async fn seed_logical_input(
             .triggered_on(transaction.triggered_on)
             .triggered_by_id(transaction.triggered_by_id)
             .build()?;
-        db.live().insert::<LogicalTableDataVersionDB>(&ltdv).await?;
+        conn.live()
+            .insert::<LogicalTableDataVersionDB>(&ltdv)
+            .await?;
 
         let pointer = LogicalTableDataVersionPointerDB::build_event(
             ltdv.project_id.clone(),
@@ -84,7 +90,7 @@ pub(crate) async fn seed_logical_input(
             transaction.triggered_by_id,
             LogicalPointerReason::InitialDispatch,
         )?;
-        db.live()
+        conn.live()
             .insert::<LogicalTableDataVersionPointerDB>(&pointer)
             .await?;
 
@@ -92,7 +98,7 @@ pub(crate) async fn seed_logical_input(
     }
 
     let ffr_input = input_builder.build()?;
-    db.live()
+    conn.live()
         .insert::<LogicalFunctionRunInputDB>(&ffr_input)
         .await?;
     Ok(ffr_input)

@@ -37,6 +37,7 @@ mod routes {
     use td_objects::types::basic::ProjectId;
     use td_services::function::services::FunctionServices;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::InProject;
     use tower::ServiceExt;
 
     const FUNCTIONS_TAG: &str = "Functions";
@@ -90,7 +91,9 @@ mod routes {
         Path(collection_param): Path<CollectionParam>,
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<Function>, ErrorStatus> {
-        let request = context.list(collection_param, query_params).in_project(project_id);
+        let request = context
+            .list(collection_param, query_params)
+            .in_project(project_id);
         let response = state.list_by_collection.service().oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
@@ -117,7 +120,9 @@ mod routes {
         Path(collection_param): Path<CollectionParam>,
         Json(request): Json<FunctionRegister>,
     ) -> Result<CreateStatus<Function>, ErrorStatus> {
-        let request = context.create(collection_param, request).in_project(project_id);
+        let request = context
+            .create(collection_param, request)
+            .in_project(project_id);
         let response = state.register.service().oneshot(request).await?;
         Ok(CreateStatus::CREATED(response))
     }
@@ -131,7 +136,9 @@ mod routes {
         Path(function_param): Path<FunctionParam>,
         Json(request): Json<FunctionUpdate>,
     ) -> Result<UpdateStatus<Function>, ErrorStatus> {
-        let request = context.update(function_param, request).in_project(project_id);
+        let request = context
+            .update(function_param, request)
+            .in_project(project_id);
         let response = state.update.service().oneshot(request).await?;
         Ok(UpdateStatus::OK(response))
     }
@@ -145,7 +152,9 @@ mod routes {
         Path(function_param): Path<FunctionParam>,
         Json(request): Json<FunctionEnable>,
     ) -> Result<UpdateStatus<Function>, ErrorStatus> {
-        let request = context.update(function_param, request).in_project(project_id);
+        let request = context
+            .update(function_param, request)
+            .in_project(project_id);
         let response = state.enable.service().oneshot(request).await?;
         Ok(UpdateStatus::OK(response))
     }
@@ -159,7 +168,9 @@ mod routes {
         Path(function_param): Path<FunctionParam>,
         Json(request): Json<FunctionPatch>,
     ) -> Result<CreateStatus<FunctionPatchRecord>, ErrorStatus> {
-        let request = context.create(function_param, request).in_project(project_id);
+        let request = context
+            .create(function_param, request)
+            .in_project(project_id);
         let response = state.patch.service().oneshot(request).await?;
         Ok(CreateStatus::CREATED(response))
     }
@@ -173,7 +184,9 @@ mod routes {
         Path(function_param): Path<FunctionParam>,
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<FunctionPatchRecord>, ErrorStatus> {
-        let request = context.list(function_param, query_params).in_project(project_id);
+        let request = context
+            .list(function_param, query_params)
+            .in_project(project_id);
         let response = state.list_patches.service().oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
@@ -194,7 +207,9 @@ mod routes {
         request: Request,
     ) -> Result<CreateStatus<Bundle>, ErrorStatus> {
         let request = FunctionUpload::new(request);
-        let request = request_context.create(param, request).in_project(project_id);
+        let request = request_context
+            .create(param, request)
+            .in_project(project_id);
         let response = state.upload.service().oneshot(request).await?;
         Ok(CreateStatus::CREATED(response))
     }

@@ -2,24 +2,27 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::{LiveEntry, QueryExecutor};
+use crate::LiveEntry;
 use ta_objects::Buildable;
+use td_database::dynamic::DynamicConnection;
 use td_error::TdError;
-use td_objects::dxo::collection::{CollectionCreateDB, CollectionDB, CollectionDBBuilder};
-use td_objects::types::basic::{AtTime, CollectionName, Description, GroupId, ProjectId, UserId};
+use td_objects::dxo::collection::{CollectionCreateDB, CollectionDB};
+use td_objects::types::basic::{AtTime, CollectionName, Description, GroupId, UserId};
 
 pub(crate) async fn seed_collection(
-    db: impl QueryExecutor,
+    conn: &mut DynamicConnection<'_>,
     collection_name: &CollectionName,
     created_by: &UserId,
 ) -> Result<CollectionDB, TdError> {
-    seed_collection_in_group(db, collection_name, created_by, GroupId::default_group()).await
+    seed_collection_in_group(conn, collection_name, created_by, GroupId::default_group()).await
 }
 
 /// Seed a collection assigned to a specific group. The plain
 /// [`seed_collection`] entrypoint delegates here with the `default` group.
+/// Runs on a project-scoped connection (see [`Seed::scoped`]); the field-less
+/// `CollectionCreateDB` defaults its `project_id` from that scope.
 pub(crate) async fn seed_collection_in_group(
-    db: impl QueryExecutor,
+    conn: &mut DynamicConnection<'_>,
     collection_name: &CollectionName,
     created_by: &UserId,
     group_id: GroupId,
@@ -28,7 +31,6 @@ pub(crate) async fn seed_collection_in_group(
     let collection = CollectionCreateDB::builder()
         .name(collection_name.clone())
         .description(Description::default())
-        .project_id(ProjectId::sandbox())
         .created_on(created_on)
         .created_by_id(created_by)
         .modified_on(created_on)
@@ -36,11 +38,15 @@ pub(crate) async fn seed_collection_in_group(
         .group_id(group_id)
         .build()?;
 
-    db.live().insert(&collection).await?;
+    conn.live().insert(&collection).await?;
 
-    Ok(CollectionDBBuilder::try_from(&collection)
-        .unwrap()
-        .build()?)
+    // Read the row back so the returned model carries the DB-assigned
+    // `project_id` (the scope's project), rather than guessing it. The `?`
+    // converts `SqlError` into `TdError`.
+    Ok(conn
+        .live()
+        .fetch_one::<CollectionDB>(&collection.id)
+        .await?)
 }
 
 #[cfg(test)]

@@ -12,7 +12,7 @@ use td_objects::dxo::collection::{
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
 use td_objects::dxo::group::GroupDB;
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::{CollectionId, GroupId, GroupName, ProjectId};
+use td_objects::types::basic::{CollectionId, GroupId, GroupName};
 use td_queries::By;
 use td_queries::insert;
 use td_tower::default_services::TransactionProvider;
@@ -40,8 +40,8 @@ fn service() {
         from_fn(With::<CollectionCreate>::try_convert_to::<CollectionCreateDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<CollectionCreateDBBuilder, _>),
         from_fn(With::<GroupId>::set::<CollectionCreateDBBuilder>),
-        // The Project scope put the resolved project on the handler; stamp it.
-        from_fn(With::<ProjectId>::set::<CollectionCreateDBBuilder>),
+        // `project_id` is no longer stamped: the connection is scoped to the
+        // project, so the column default fills it and RLS `WITH CHECK` enforces it.
         from_fn(With::<CollectionCreateDBBuilder>::build::<CollectionCreateDB>),
         from_fn(insert::<CollectionCreateDB>),
         from_fn(With::<CollectionCreateDB>::extract::<CollectionId>),
@@ -59,12 +59,13 @@ mod tests {
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::types::basic::{
-        AccessTokenId, AtTime, CollectionName, Description, GroupName, ProjectId, RoleId, UserId,
-        UserName,
+        AccessTokenId, AtTime, CollectionName, Description, GroupName, ProjectId, ProjectName,
+        RoleId, UserId, UserName,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::InProject;
 
     use crate::collection::service::list::ListCollectionsService;
     use td_database::sea_query::kind::{DatabaseBackend, DatabaseKind};
@@ -96,7 +97,6 @@ mod tests {
                 ),
                 type_of_val(&With::<RequestContext>::update::<CollectionCreateDBBuilder, _>),
                 type_of_val(&With::<GroupId>::set::<CollectionCreateDBBuilder>),
-                type_of_val(&With::<ProjectId>::set::<CollectionCreateDBBuilder>),
                 type_of_val(&With::<CollectionCreateDBBuilder>::build::<CollectionCreateDB>),
                 type_of_val(&insert::<CollectionCreateDB>),
                 type_of_val(&With::<CollectionCreateDB>::extract::<CollectionId>),
@@ -203,10 +203,17 @@ mod tests {
             return;
         }
 
-        // Two distinct projects to prove isolation. RLS only compares the GUC
-        // against the row's `project_id`, so any two distinct ids work.
+        // Two distinct projects to prove isolation. `sandbox` is bootstrapped
+        // with the system groups; the second is seeded with its own. A
+        // collection resolves its default group within its own project, so both
+        // projects must carry one.
         let project_a = ProjectId::sandbox();
-        let project_b = ProjectId::default();
+        let project_b = db
+            .seed()
+            .project(ProjectName::try_from("project_b").unwrap())
+            .await
+            .unwrap()
+            .id;
 
         // Create one collection in each of two projects, scoping the request to
         // each project.
@@ -233,19 +240,19 @@ mod tests {
         // Listing within each project sees only that project's collection — the
         // app applies no collection filter; RLS does the isolation.
         for (project, name) in [(&project_a, "ca"), (&project_b, "cb")] {
-            let request = RequestContext::with(
-                AccessTokenId::default(),
-                UserId::admin(),
-                RoleId::user(),
-            )
-            .list((), ListParams::default())
-            .in_project(project.clone());
+            let request =
+                RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                    .list((), ListParams::default())
+                    .in_project(project.clone());
             let list = ListCollectionsService::with_defaults(db.clone())
                 .service()
                 .raw_oneshot(request)
                 .await
                 .unwrap();
-            assert_eq!(list.len, 1, "project {project} must see exactly its own collection");
+            assert_eq!(
+                list.len, 1,
+                "project {project} must see exactly its own collection"
+            );
             assert_eq!(list.data[0].name, CollectionName::try_from(name).unwrap());
         }
     }

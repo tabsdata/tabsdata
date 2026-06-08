@@ -11,8 +11,11 @@ use td_error::assert_service_error;
 use td_objects::Buildable;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::rest_urls::CollectionParam;
-use td_objects::types::basic::{ProjectId, AccessTokenId, CollectionIdName, CollectionName, RoleId, UserId};
+use td_objects::types::basic::{
+    AccessTokenId, CollectionIdName, CollectionName, ProjectId, RoleId, UserId,
+};
 use td_queries::test_utils::SeedEntry;
+use td_tower::project_scope::InProject;
 
 #[td_test::test(db)]
 async fn test_not_allowed_to_delete_collection(db: TdPool) {

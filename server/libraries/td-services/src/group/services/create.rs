@@ -10,9 +10,9 @@ use td_objects::dxo::group::{
     Group, GroupBuilder, GroupCreate, GroupDB, GroupDBBuilder, GroupDBWithNames,
 };
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::{GroupId, ProjectId};
-use td_queries::insert;
+use td_objects::types::basic::GroupId;
 use td_queries::By;
+use td_queries::insert;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -33,8 +33,6 @@ fn service() {
         from_fn(With::<CreateRequest<(), GroupCreate>>::extract_data::<GroupCreate>),
         from_fn(With::<GroupCreate>::try_convert_to::<GroupDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<GroupDBBuilder, _>),
-        // The Project scope put the resolved project on the handler; stamp it.
-        from_fn(With::<ProjectId>::set::<GroupDBBuilder>),
         from_fn(With::<GroupDBBuilder>::build::<GroupDB>),
         // Duplicate names within a project are rejected by the
         // `groups___project_id__name___idx` UNIQUE index — the insert surfaces
@@ -53,24 +51,25 @@ mod tests {
     use super::*;
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
-    use td_error::assert_service_error;
     use td_error::TdError;
+    use td_error::assert_service_error;
+    use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::errors::SqlError;
     use td_objects::types::basic::{
         AccessTokenId, Description, GroupName, ProjectId, RoleId, UserId,
     };
-    use td_objects::Buildable;
-    use td_queries::test_utils::SeedEntry;
     use td_queries::LiveEntry;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
-    use crate::project::service::ProjectServices;
     use crate::Context;
+    use crate::project::service::ProjectServices;
     use ta_services::factory::ServiceFactory;
     use td_database::sea_query::kind::{DatabaseBackend, DatabaseKind};
     use td_objects::dxo::project::ProjectCreate;
     use td_objects::types::basic::ProjectName;
+    use td_tower::project_scope::InProject;
 
     #[td_test::test(db)]
     async fn test_create_group(db: TdPool) -> Result<(), TdError> {

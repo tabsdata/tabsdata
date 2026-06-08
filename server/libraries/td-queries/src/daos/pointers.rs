@@ -531,7 +531,8 @@ mod tests {
 
             let before_mint = AtTime::now();
             let lfr = LogicalFunctionRunDB::builder()
-                .project_id(function.project_id.clone())
+                .project_id(collection.project_id.clone())
+                .group_id(collection.group_id)
                 .collection_id(collection.id)
                 .execution_id(execution.id.clone())
                 .transaction_id(transaction.id.clone())
@@ -639,7 +640,8 @@ mod tests {
             let before_mint = AtTime::now();
             let table_id = TableId::default();
             let ltdv = LogicalTableDataVersionDB::builder()
-                .project_id(function.project_id.clone())
+                .project_id(collection.project_id.clone())
+                .group_id(collection.group_id)
                 .collection_id(collection.id)
                 .execution_id(execution.id.clone())
                 .transaction_id(transaction.id.clone())

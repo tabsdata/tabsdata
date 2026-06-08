@@ -59,10 +59,12 @@ mod tests {
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionName, LogicalFunctionRunStatus,
-        PhysicalFunctionRunStatus, ProjectId, RoleId, TableNameDto, TransactionKey, UserId, UserName,
+        PhysicalFunctionRunStatus, ProjectId, RoleId, TableNameDto, TransactionKey, UserId,
+        UserName,
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -140,12 +142,14 @@ mod tests {
 
         // Test
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).read(
-                FunctionVersionExecution::builder()
-                    .function_version_id(function_version.id)
-                    .execution(ExecutionIdName::from_str(&format!("~{}", execution.id))?)
-                    .build()?,
-            ).in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .read(
+                    FunctionVersionExecution::builder()
+                        .function_version_id(function_version.id)
+                        .execution(ExecutionIdName::from_str(&format!("~{}", execution.id))?)
+                        .build()?,
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = FunctionVersionExecutionReadService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;

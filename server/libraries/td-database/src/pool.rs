@@ -2,12 +2,12 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+use crate::APP_ROLE;
 use crate::config::DatabaseConfig;
 use crate::dynamic::{DynamicConnection, DynamicPool, DynamicTransaction};
 #[cfg(feature = "embedded-postgres")]
 use crate::embedded::EmbeddedPostgres;
 use crate::error::DbError;
-use crate::APP_ROLE;
 use crate::sea_query::builder::SeaQueryExt;
 use crate::sea_query::kind::{DatabaseBackend, DatabaseKind};
 use sea_query::{Alias, Expr, ExprTrait, Iden, Query};
@@ -122,9 +122,15 @@ impl TdPool {
             .map_err(DbError::SqlError)?;
         let version = version.unwrap_or(0);
         if version < Self::MIN_PG_VERSION_NUM {
-            return Err(DbError::UnsupportedPostgresVersion(version, Self::MIN_PG_VERSION_NUM));
+            return Err(DbError::UnsupportedPostgresVersion(
+                version,
+                Self::MIN_PG_VERSION_NUM,
+            ));
         }
-        debug!(server_version_num = version, "db.pool.check: postgres version OK");
+        debug!(
+            server_version_num = version,
+            "db.pool.check: postgres version OK"
+        );
         Ok(())
     }
 
@@ -238,7 +244,9 @@ impl TdPool {
                  THEN CREATE ROLE \"{APP_ROLE}\" NOBYPASSRLS; END IF; END $$"
             ),
             format!("GRANT USAGE ON SCHEMA public TO \"{APP_ROLE}\""),
-            format!("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO \"{APP_ROLE}\""),
+            format!(
+                "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO \"{APP_ROLE}\""
+            ),
             // Future tables created by this (bootstrap) role auto-grant to the
             // app role, so a later migration that adds a table doesn't silently
             // leave td_app without access. `ALTER DEFAULT PRIVILEGES` applies
@@ -248,9 +256,18 @@ impl TdPool {
                  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO \"{APP_ROLE}\""
             ),
         ];
-        let mut tx = self.pool.begin().await.map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
-        tx.as_mut_conn().execute_batch(&stmts).await.map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
-        tx.commit().await.map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
+        tx.as_mut_conn()
+            .execute_batch(&stmts)
+            .await
+            .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
+        tx.commit()
+            .await
+            .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
         debug!(role = APP_ROLE, "Ensured RLS app role");
         Ok(())
     }

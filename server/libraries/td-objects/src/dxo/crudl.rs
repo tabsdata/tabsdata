@@ -2,13 +2,12 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::types::basic::{AccessTokenId, AtTime, ProjectId, RoleId, UserId};
+use crate::types::basic::{AccessTokenId, AtTime, RoleId, UserId};
 use serde::{Deserialize, Serialize};
 use serde_valid::Validate;
 use std::fmt::Debug;
 use td_error::td_error;
 use td_tower::error::{ConnectionError, FromHandlerError};
-use td_tower::project_scope::Scoped;
 
 /// Identity of the caller making a request: who, with what role, when. Carries
 /// no project — project scope is a separate, explicit value attached to the
@@ -44,29 +43,6 @@ impl RequestContext {
         }
     }
 }
-
-/// Add `in_project` to a CRUD request: it pairs the request with its target
-/// project, producing the [`Scoped`] input a `scope = Project` service expects.
-/// The project never lives on the request type itself.
-macro_rules! in_project {
-    ($req:ident < $($g:ident),+ >) => {
-        impl<$($g: Clone),+> $req<$($g),+> {
-            /// Scope this request to a project, producing the service input.
-            pub fn in_project(self, project: impl Into<ProjectId>) -> Scoped<Self, ProjectId> {
-                Scoped {
-                    project: project.into(),
-                    request: self,
-                }
-            }
-        }
-    };
-}
-
-in_project!(CreateRequest<N, C>);
-in_project!(UpdateRequest<N, U>);
-in_project!(DeleteRequest<N>);
-in_project!(ReadRequest<N>);
-in_project!(ListRequest<N>);
 
 pub trait IntoName<T> {
     fn into_name(self) -> T;
@@ -190,8 +166,9 @@ impl Default for ListParams {
     }
 }
 
-/// Request to list entities. `P` is the project scope: [`ProjectId`] for a
-/// tenant request, [`NoProject`] for a cross-project one.
+/// Request to list entities. Project-free like the other CRUD requests; a
+/// tenant request pairs it with its project via the blanket `InProject`
+/// trait's `in_project` (see `td_tower::project_scope`).
 #[ta_objects::Dlo]
 pub struct ListRequest<N: Clone> {
     #[dxo(extractor)]

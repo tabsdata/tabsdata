@@ -116,8 +116,8 @@ mod definitions {
         LogicalTableDataVersionPointerId, PhysicalFunctionRunId, PhysicalFunctionRunStatus,
         PhysicalTableDataVersionId, ProjectId, ProjectName, RowCount, SchemaChanged,
         SchemaDataChanged, SchemaHash, StorageVersion, TableFunctionParamPos, TableId, TableName,
-        TableVersionCount,
-        TableVersionId, TransactionId, Trigger, TriggeredOn, UserId, UserName, VersionPos,
+        TableVersionCount, TableVersionId, TransactionId, Trigger, TriggeredOn, UserId, UserName,
+        VersionPos,
     };
     use td_error::TdError;
 
@@ -188,8 +188,10 @@ mod definitions {
         pub status: LogicalFunctionRunStatus,
         // Group snapshot copied from collections.group_id at LFR mint;
         // immutable thereafter so a collection's later group reassignment
-        // doesn't shift historical runs.
-        #[builder(default = "GroupId::default_group()")]
+        // doesn't shift historical runs. No default: the group is
+        // project-scoped, so it must be stamped explicitly from the run's
+        // collection — a global fallback would mis-tag runs in any non-sandbox
+        // project.
         pub group_id: GroupId,
     }
 
@@ -415,8 +417,8 @@ mod definitions {
         pub triggered_on: TriggeredOn,
         pub triggered_by_id: UserId,
         // Equal by construction to the producing LFR's group_id (both
-        // copied off the same FunctionNode at plan-build).
-        #[builder(default = "GroupId::default_group()")]
+        // copied off the same FunctionNode at plan-build). No default: the
+        // group is project-scoped and must be stamped explicitly.
         pub group_id: GroupId,
     }
 

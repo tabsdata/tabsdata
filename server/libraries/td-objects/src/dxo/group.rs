@@ -16,9 +16,7 @@
 #[ta_objects::dxo]
 mod definitions {
     use crate::dxo::crudl::RequestContext;
-    use crate::types::basic::{
-        AtTime, Description, GroupId, GroupName, ProjectId, System, UserId, UserName,
-    };
+    use crate::types::basic::{AtTime, Description, GroupId, GroupName, System, UserId, UserName};
 
     #[ta_objects::Dao]
     #[dao(sql_table = "groups")]
@@ -30,8 +28,6 @@ mod definitions {
         #[builder(default)]
         #[dxo(extractor)]
         pub id: GroupId,
-        #[dxo(setter)]
-        pub project_id: ProjectId,
         #[dxo(builder(include))]
         pub name: GroupName,
         #[dxo(builder(include))]

@@ -67,6 +67,7 @@ mod tests {
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -78,31 +79,35 @@ mod tests {
         WorkerCallbackService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<Scoped<UpdateRequest<WorkerIdParam, CallbackRequest>, ProjectId>, ()>(&[
-                // Extract from request.
-                type_of_val(
-                    &With::<UpdateRequest<WorkerIdParam, CallbackRequest>>::extract_name::<
-                        WorkerIdParam,
-                    >,
-                ),
-                type_of_val(
-                    &With::<UpdateRequest<WorkerIdParam, CallbackRequest>>::extract_data::<
-                        CallbackRequest,
-                    >,
-                ),
-                // Convert callback request to status update request.
-                type_of_val(&With::<CallbackRequest>::try_convert_to::<UpdateWorkerExecution, _>),
-                // Extract worker_id.
-                type_of_val(&With::<WorkerIdParam>::extract::<WorkerId>),
-                // Find worker (we will always have 1).
-                type_of_val(&By::<WorkerId>::assert_exists::<WorkerDB>),
-                // Update worker status.
-                type_of_val(
-                    &With::<UpdateWorkerExecution>::try_convert_to::<UpdateWorkerDBBuilder, _>,
-                ),
-                type_of_val(&With::<UpdateWorkerDBBuilder>::build::<UpdateWorkerDB>),
-                type_of_val(&update_worker_status),
-            ]);
+            .assert_service::<Scoped<UpdateRequest<WorkerIdParam, CallbackRequest>, ProjectId>, ()>(
+                &[
+                    // Extract from request.
+                    type_of_val(
+                        &With::<UpdateRequest<WorkerIdParam, CallbackRequest>>::extract_name::<
+                            WorkerIdParam,
+                        >,
+                    ),
+                    type_of_val(
+                        &With::<UpdateRequest<WorkerIdParam, CallbackRequest>>::extract_data::<
+                            CallbackRequest,
+                        >,
+                    ),
+                    // Convert callback request to status update request.
+                    type_of_val(
+                        &With::<CallbackRequest>::try_convert_to::<UpdateWorkerExecution, _>,
+                    ),
+                    // Extract worker_id.
+                    type_of_val(&With::<WorkerIdParam>::extract::<WorkerId>),
+                    // Find worker (we will always have 1).
+                    type_of_val(&By::<WorkerId>::assert_exists::<WorkerDB>),
+                    // Update worker status.
+                    type_of_val(
+                        &With::<UpdateWorkerExecution>::try_convert_to::<UpdateWorkerDBBuilder, _>,
+                    ),
+                    type_of_val(&With::<UpdateWorkerDBBuilder>::build::<UpdateWorkerDB>),
+                    type_of_val(&update_worker_status),
+                ],
+            );
     }
 
     #[td_test::test(db)]

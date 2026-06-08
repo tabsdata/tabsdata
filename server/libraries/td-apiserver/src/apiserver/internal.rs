@@ -45,11 +45,13 @@ impl InternalServer {
         let inner = {
             // Internal router. Layer order (outermost first): internal-token
             // gate → project_resolver_layer → handler. The token gate validates
-            // the per-request internal-endpoint token and injects a `system()`
-            // RequestContext (project_id = None); the resolver then overrides
-            // project_id with whatever the URL's `{project}` segment resolves
-            // to, so worker callbacks update project-scoped tables under proper
-            // RLS isolation rather than via cross-project bypass.
+            // the per-request internal-endpoint token and injects a system
+            // `RequestContext` (system user / sys-admin role). The resolver then
+            // resolves the URL's `{project}` segment and inserts it as a
+            // `ProjectId` request extension, which handlers pair with their
+            // request via `.in_project(..)`, so worker callbacks update
+            // project-scoped tables under proper RLS isolation rather than via
+            // cross-project bypass.
             let router = utoipa_axum::router::OpenApiRouter::default().merge(
                 utoipa_axum::router::OpenApiRouter::default()
                     .merge(InternalRouter::router(context.services.clone()))

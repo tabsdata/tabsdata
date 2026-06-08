@@ -41,11 +41,11 @@ mod tests {
     use crate::dynamic::DynamicPool;
     use crate::error::DbError;
     use crate::pool::TdPool;
-    #[cfg(postgres)]
-    use sqlx::postgres::PgPoolOptions;
     use crate::raw_query;
     use crate::sea_query::builder::SeaQueryExt;
     use crate::sea_query::kind::{DatabaseBackend, DatabaseKind};
+    #[cfg(postgres)]
+    use sqlx::postgres::PgPoolOptions;
     use td_security::{
         ENCODED_ID_CA_ALL_SEC_ADMIN, ENCODED_ID_CA_ALL_SYS_ADMIN, ENCODED_ID_CD_ALL_SYS_ADMIN,
         ENCODED_ID_CD_ALL_USER, ENCODED_ID_CR_ALL_SYS_ADMIN, ENCODED_ID_CR_ALL_USER,
@@ -706,6 +706,7 @@ mod tests {
             "dependencies_current___function_id___idx",
             "dependencies_current___table_function_id___idx",
             "executions___collection_id___idx",
+            "executions___function_id__external_uid___idx",
             "executions___function_version_id___idx",
             "executions___triggered_by_id___idx",
             "executions___triggered_on___idx",
@@ -722,7 +723,7 @@ mod tests {
             "functions___function_id__defined_on__id___idx",
             "functions_current___collection_id___idx",
             "functions_current___status___idx",
-            "groups___name___idx",
+            "groups___project_id__name___idx",
             "inter_collection_permissions___from_collection_id__to_collection_id__idx",
             "logical_function_run_inputs___execution_id___idx",
             "logical_function_run_inputs___logical_function_run_id___idx",
@@ -762,6 +763,7 @@ mod tests {
             "tables_current___status___idx",
             "transactions___collection_id___idx",
             "transactions___execution_id___idx",
+            "transactions___group_id__collection_id___idx",
             "triggers___collection_id___idx",
             "triggers___function_id___idx",
             "triggers___trigger_by_function_id___idx",
@@ -881,7 +883,8 @@ mod tests {
             .execute_batch(&[
                 "CREATE ROLE app_user LOGIN PASSWORD 'app_pw' NOBYPASSRLS".to_string(),
                 "GRANT USAGE ON SCHEMA public TO app_user".to_string(),
-                "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_user".to_string(),
+                "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_user"
+                    .to_string(),
             ])
             .await
             .unwrap();
@@ -891,27 +894,51 @@ mod tests {
         let mut url = db.url().clone();
         url.set_username("app_user").unwrap();
         url.set_password(Some("app_pw")).unwrap();
-        let app = PgPoolOptions::new().max_connections(2).connect(url.as_str()).await.unwrap();
+        let app = PgPoolOptions::new()
+            .max_connections(2)
+            .connect(url.as_str())
+            .await
+            .unwrap();
 
         // Project A inserts a collection, omitting project_id — the column
         // default reads app.project_id, so the row is tagged 'A'.
         let mut t = app.begin().await.unwrap();
-        sqlx::query(SET_PROJECT).bind("A").execute(&mut *t).await.unwrap();
-        sqlx::query(INSERT).bind("c_a").bind("ca").execute(&mut *t).await.unwrap();
-        let pid: String = sqlx::query_scalar("SELECT project_id FROM collections WHERE id = 'c_a'").fetch_one(&mut *t).await.unwrap();
+        sqlx::query(SET_PROJECT)
+            .bind("A")
+            .execute(&mut *t)
+            .await
+            .unwrap();
+        sqlx::query(INSERT)
+            .bind("c_a")
+            .bind("ca")
+            .execute(&mut *t)
+            .await
+            .unwrap();
+        let pid: String = sqlx::query_scalar("SELECT project_id FROM collections WHERE id = 'c_a'")
+            .fetch_one(&mut *t)
+            .await
+            .unwrap();
         assert_eq!(pid, "A", "omitted project_id should default to the GUC");
         t.commit().await.unwrap();
 
         // Project B cannot see A's row.
         let mut t = app.begin().await.unwrap();
-        sqlx::query(SET_PROJECT).bind("B").execute(&mut *t).await.unwrap();
+        sqlx::query(SET_PROJECT)
+            .bind("B")
+            .execute(&mut *t)
+            .await
+            .unwrap();
         let n: i64 = sqlx::query_scalar(COUNT).fetch_one(&mut *t).await.unwrap();
         assert_eq!(n, 0, "project B must not see project A rows");
         t.rollback().await.unwrap();
 
         // WITH CHECK rejects an insert tagged for another project.
         let mut t = app.begin().await.unwrap();
-        sqlx::query(SET_PROJECT).bind("B").execute(&mut *t).await.unwrap();
+        sqlx::query(SET_PROJECT)
+            .bind("B")
+            .execute(&mut *t)
+            .await
+            .unwrap();
         let bad = sqlx::query(
             "INSERT INTO collections \
              (id, name, description, created_on, created_by_id, modified_on, modified_by_id, group_id, project_id) \
@@ -919,18 +946,34 @@ mod tests {
         )
         .execute(&mut *t)
         .await;
-        assert!(bad.is_err(), "WITH CHECK must reject a cross-project insert");
+        assert!(
+            bad.is_err(),
+            "WITH CHECK must reject a cross-project insert"
+        );
         t.rollback().await.unwrap();
 
         // Project B inserts its own collection.
         let mut t = app.begin().await.unwrap();
-        sqlx::query(SET_PROJECT).bind("B").execute(&mut *t).await.unwrap();
-        sqlx::query(INSERT).bind("c_b").bind("cb").execute(&mut *t).await.unwrap();
+        sqlx::query(SET_PROJECT)
+            .bind("B")
+            .execute(&mut *t)
+            .await
+            .unwrap();
+        sqlx::query(INSERT)
+            .bind("c_b")
+            .bind("cb")
+            .execute(&mut *t)
+            .await
+            .unwrap();
         t.commit().await.unwrap();
 
         // Project A sees only its own row.
         let mut t = app.begin().await.unwrap();
-        sqlx::query(SET_PROJECT).bind("A").execute(&mut *t).await.unwrap();
+        sqlx::query(SET_PROJECT)
+            .bind("A")
+            .execute(&mut *t)
+            .await
+            .unwrap();
         let n: i64 = sqlx::query_scalar(COUNT).fetch_one(&mut *t).await.unwrap();
         assert_eq!(n, 1, "project A should see exactly its own collection");
         t.rollback().await.unwrap();
@@ -938,12 +981,18 @@ mod tests {
         // Unset GUC fails closed: zero rows, no error.
         let mut t = app.begin().await.unwrap();
         let n: i64 = sqlx::query_scalar(COUNT).fetch_one(&mut *t).await.unwrap();
-        assert_eq!(n, 0, "an unset app.project_id must see no rows (fail-closed)");
+        assert_eq!(
+            n, 0,
+            "an unset app.project_id must see no rows (fail-closed)"
+        );
         t.rollback().await.unwrap();
 
         // Bypass spans projects.
         let mut t = app.begin().await.unwrap();
-        sqlx::query("SELECT set_config('app.bypass_rls', 'on', true)").execute(&mut *t).await.unwrap();
+        sqlx::query("SELECT set_config('app.bypass_rls', 'on', true)")
+            .execute(&mut *t)
+            .await
+            .unwrap();
         let n: i64 = sqlx::query_scalar(COUNT).fetch_one(&mut *t).await.unwrap();
         assert_eq!(n, 2, "bypass should see every project's rows");
         t.rollback().await.unwrap();
@@ -974,8 +1023,15 @@ mod tests {
             let mut c = tx.as_mut_conn();
             c.set_rls_role("td_app").await.unwrap();
             c.set_project_scope("A").await.unwrap();
-            let DynamicConnection::Postgres(h) = &mut c else { unreachable!() };
-            sqlx::query(INSERT).bind("c_a").bind("ca").execute(&mut **h).await.unwrap();
+            let DynamicConnection::Postgres(h) = &mut c else {
+                unreachable!()
+            };
+            sqlx::query(INSERT)
+                .bind("c_a")
+                .bind("ca")
+                .execute(&mut **h)
+                .await
+                .unwrap();
             let n: i64 = sqlx::query_scalar(COUNT).fetch_one(&mut **h).await.unwrap();
             assert_eq!(n, 1, "project A sees its own row under SET ROLE");
         }
@@ -987,9 +1043,14 @@ mod tests {
             let mut c = tx.as_mut_conn();
             c.set_rls_role("td_app").await.unwrap();
             c.set_project_scope("B").await.unwrap();
-            let DynamicConnection::Postgres(h) = &mut c else { unreachable!() };
+            let DynamicConnection::Postgres(h) = &mut c else {
+                unreachable!()
+            };
             let n: i64 = sqlx::query_scalar(COUNT).fetch_one(&mut **h).await.unwrap();
-            assert_eq!(n, 0, "SET ROLE makes RLS apply: project B sees no project A rows");
+            assert_eq!(
+                n, 0,
+                "SET ROLE makes RLS apply: project B sees no project A rows"
+            );
         }
         tx.rollback().await.unwrap();
 
@@ -998,9 +1059,14 @@ mod tests {
         {
             let mut c = tx.as_mut_conn();
             c.set_project_scope("B").await.unwrap();
-            let DynamicConnection::Postgres(h) = &mut c else { unreachable!() };
+            let DynamicConnection::Postgres(h) = &mut c else {
+                unreachable!()
+            };
             let n: i64 = sqlx::query_scalar(COUNT).fetch_one(&mut **h).await.unwrap();
-            assert_eq!(n, 1, "a superuser session (no SET ROLE) bypasses RLS and sees all rows");
+            assert_eq!(
+                n, 1,
+                "a superuser session (no SET ROLE) bypasses RLS and sees all rows"
+            );
         }
         tx.rollback().await.unwrap();
     }
@@ -1017,13 +1083,18 @@ mod tests {
         db.upgrade().await.unwrap(); // creates schema + td_app (embedded)
 
         // Sanity: with td_app in place, `check` succeeds.
-        db.check().await.expect("check should pass with td_app present");
+        db.check()
+            .await
+            .expect("check should pass with td_app present");
 
         // Simulate the external-deploy misconfig: remove the role and verify
         // `check` rejects the database with a clear error.
         let mut tx = db.begin().await.unwrap();
         tx.as_mut_conn()
-            .execute_batch(&["DROP OWNED BY td_app".to_string(), "DROP ROLE td_app".to_string()])
+            .execute_batch(&[
+                "DROP OWNED BY td_app".to_string(),
+                "DROP ROLE td_app".to_string(),
+            ])
             .await
             .unwrap();
         tx.commit().await.unwrap();
@@ -1085,7 +1156,9 @@ mod tests {
             let mut c = tx.as_mut_conn();
             c.set_rls_role("td_app").await.unwrap();
             c.set_project_scope("A").await.unwrap();
-            let DynamicConnection::Postgres(h) = &mut c else { unreachable!() };
+            let DynamicConnection::Postgres(h) = &mut c else {
+                unreachable!()
+            };
             sqlx::query(
                 "INSERT INTO collections (id, name, description, created_on, created_by_id, modified_on, modified_by_id, group_id) \
                  VALUES ('col', 'c', 'd', now(), 'u', now(), 'u', 'g')",
@@ -1102,10 +1175,20 @@ mod tests {
             .execute(&mut **h)
             .await
             .unwrap();
-            let cur: i64 = sqlx::query_scalar("SELECT count(*) FROM functions_current").fetch_one(&mut **h).await.unwrap();
-            assert_eq!(cur, 1, "maintain-current trigger wrote functions_current under RLS");
-            let pid: String =
-                sqlx::query_scalar("SELECT project_id FROM functions_current WHERE function_id = 'fid'").fetch_one(&mut **h).await.unwrap();
+            let cur: i64 = sqlx::query_scalar("SELECT count(*) FROM functions_current")
+                .fetch_one(&mut **h)
+                .await
+                .unwrap();
+            assert_eq!(
+                cur, 1,
+                "maintain-current trigger wrote functions_current under RLS"
+            );
+            let pid: String = sqlx::query_scalar(
+                "SELECT project_id FROM functions_current WHERE function_id = 'fid'",
+            )
+            .fetch_one(&mut **h)
+            .await
+            .unwrap();
             assert_eq!(pid, "A", "trigger copied the source project_id");
         }
         tx.commit().await.unwrap();
@@ -1116,10 +1199,22 @@ mod tests {
             let mut c = tx.as_mut_conn();
             c.set_rls_role("td_app").await.unwrap();
             c.set_project_scope("B").await.unwrap();
-            let DynamicConnection::Postgres(h) = &mut c else { unreachable!() };
-            let f: i64 = sqlx::query_scalar("SELECT count(*) FROM functions").fetch_one(&mut **h).await.unwrap();
-            let fc: i64 = sqlx::query_scalar("SELECT count(*) FROM functions_current").fetch_one(&mut **h).await.unwrap();
-            assert_eq!((f, fc), (0, 0), "project B sees neither functions nor functions_current rows");
+            let DynamicConnection::Postgres(h) = &mut c else {
+                unreachable!()
+            };
+            let f: i64 = sqlx::query_scalar("SELECT count(*) FROM functions")
+                .fetch_one(&mut **h)
+                .await
+                .unwrap();
+            let fc: i64 = sqlx::query_scalar("SELECT count(*) FROM functions_current")
+                .fetch_one(&mut **h)
+                .await
+                .unwrap();
+            assert_eq!(
+                (f, fc),
+                (0, 0),
+                "project B sees neither functions nor functions_current rows"
+            );
         }
         tx.rollback().await.unwrap();
     }
@@ -1139,9 +1234,17 @@ mod tests {
         conn.set_project_scope("PROJ_X").await.unwrap();
         conn.bypass_project_scope().await.unwrap();
 
-        let DynamicConnection::Postgres(h) = &mut conn else { unreachable!() };
-        let project: String = sqlx::query_scalar("SELECT current_setting('app.project_id', true)").fetch_one(&mut **h).await.unwrap();
-        let bypass: String = sqlx::query_scalar("SELECT current_setting('app.bypass_rls', true)").fetch_one(&mut **h).await.unwrap();
+        let DynamicConnection::Postgres(h) = &mut conn else {
+            unreachable!()
+        };
+        let project: String = sqlx::query_scalar("SELECT current_setting('app.project_id', true)")
+            .fetch_one(&mut **h)
+            .await
+            .unwrap();
+        let bypass: String = sqlx::query_scalar("SELECT current_setting('app.bypass_rls', true)")
+            .fetch_one(&mut **h)
+            .await
+            .unwrap();
         assert_eq!(project, "PROJ_X");
         assert_eq!(bypass, "on");
     }

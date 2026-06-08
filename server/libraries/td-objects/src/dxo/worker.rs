@@ -29,12 +29,13 @@ mod definitions {
         #[builder(default)]
         #[dxo(extractor)]
         pub id: WorkerId,
-        /// The project this worker belongs to. Inherited from the worker's
-        /// parent function-run at creation — workers always belong to the
-        /// same project as the function-run they're processing. No builder
-        /// default: a missing setter is a programmer error, not a silent
-        /// sandbox fallback.
-        #[dxo(extractor, builder(include))]
+        /// The project this worker belongs to. Workers always belong to the
+        /// same project as the function-run they process. Set explicitly (not
+        /// mapped from `FunctionDB`, which no longer carries `project_id`): the
+        /// scheduler stamps it from the physical run, the register path from the
+        /// request scope. No builder default: a missing setter is a programmer
+        /// error, not a silent sandbox fallback.
+        #[dxo(extractor, setter)]
         pub project_id: ProjectId,
         #[dxo(builder(include), extractor)]
         pub collection_id: CollectionId,

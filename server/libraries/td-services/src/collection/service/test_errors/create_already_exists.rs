@@ -10,8 +10,11 @@ use td_objects::Buildable;
 use td_objects::dxo::collection::CollectionCreate;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::errors::SqlError;
-use td_objects::types::basic::{ProjectId, AccessTokenId, CollectionName, Description, RoleId, UserId};
+use td_objects::types::basic::{
+    AccessTokenId, CollectionName, Description, ProjectId, RoleId, UserId,
+};
 use td_queries::test_utils::SeedEntry;
+use td_tower::project_scope::InProject;
 
 #[td_test::test(db)]
 async fn test_create_already_existing(db: TdPool) {

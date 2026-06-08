@@ -22,7 +22,7 @@ use std::fmt::Display;
 use std::hash::Hash;
 use std::ops::Deref;
 use ta_objects::Buildable;
-use td_error::{td_error, TdError};
+use td_error::{TdError, td_error};
 
 #[td_error]
 enum GraphError {
@@ -408,7 +408,7 @@ mod tests {
     use super::*;
     use crate::graph::MapGraph;
     use crate::test_utils::graph::{
-        function_node, table_node, test_graph, FUNCTION_NAMES, TABLE_NAMES,
+        FUNCTION_NAMES, TABLE_NAMES, function_node, table_node, test_graph,
     };
     use crate::test_utils::transaction::TestTransactionBy;
     use itertools::Itertools;

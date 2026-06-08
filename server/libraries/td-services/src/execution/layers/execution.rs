@@ -412,21 +412,25 @@ pub async fn resolve_execution_plan_versions(
         tdvs.into_iter().map(|t| (t.id.clone(), t)).collect();
 
     // Per-cache-key resolved TDV vector, computed once.
-    let resolved_cache: HashMap<(TableId, Versions), Vec<Option<PhysicalTableDataVersionDBWithFunction>>> =
-        ltdv_cache
-            .into_iter()
-            .map(|(k, ltdvs)| {
-                let resolved: Vec<Option<PhysicalTableDataVersionDBWithFunction>> = ltdvs
-                    .into_iter()
-                    .map(|ftdv_opt| -> Option<PhysicalTableDataVersionDBWithFunction> {
+    let resolved_cache: HashMap<
+        (TableId, Versions),
+        Vec<Option<PhysicalTableDataVersionDBWithFunction>>,
+    > = ltdv_cache
+        .into_iter()
+        .map(|(k, ltdvs)| {
+            let resolved: Vec<Option<PhysicalTableDataVersionDBWithFunction>> = ltdvs
+                .into_iter()
+                .map(
+                    |ftdv_opt| -> Option<PhysicalTableDataVersionDBWithFunction> {
                         let ltdv = ftdv_opt?;
                         let tdv_id = bound_tdv_id_by_ftdv.get(&ltdv.id)?;
                         Some(tdv_by_id.get(tdv_id)?.clone())
-                    })
-                    .collect();
-                (k, resolved)
-            })
-            .collect();
+                    },
+                )
+                .collect();
+            (k, resolved)
+        })
+        .collect();
 
     // Pass 3 — assemble per-edge `ResolvedVersion` rows in plan order.
     let mut edge_results: Vec<ResolvedVersion> = Vec::with_capacity(edge_meta.len());
@@ -526,7 +530,8 @@ pub async fn build_logical_function_run_inputs(
         let transaction = transaction_map.get(&transaction_by.key(function)?)?;
 
         // `input_idx` was assigned onto the dependency edge at plan-build
-        // (`assign_requirement_input_idx`); trigger edges carry neither.
+        // (`TdGraphBuilder::with_dependencies`, in `(function_id, dep_pos)`
+        // order); trigger edges carry neither.
         let dependency_pos = edge.dependency_pos().cloned();
         let requirement_input_idx = match edge {
             GraphEdge::Dependency { dependency, .. } => Some(dependency.input_idx),

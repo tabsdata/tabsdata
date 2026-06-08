@@ -7,8 +7,8 @@ use crate::dxo::physical_table_data_version::ExecutionTableDataVersionRead;
 use crate::dxo::table::TableDBWithNames;
 use crate::types::basic::{
     CollectionId, CollectionName, DependencyPos, Enabled, FunctionId, FunctionName,
-    FunctionVersionId, InputIdx, SelfDependency, System, TableFunctionParamPos, TableId, TableName, GroupId,
-    TableVersionId,
+    FunctionVersionId, GroupId, InputIdx, SelfDependency, System, TableFunctionParamPos, TableId,
+    TableName, TableVersionId,
 };
 use crate::types::composed::TableVersions;
 use serde::{Deserialize, Serialize};
@@ -242,7 +242,7 @@ impl Display for ResolvedVersion {
 mod tests {
     use super::*;
     use crate::test_utils::graph::{
-        dependency, function, table, trigger, FUNCTION_NAMES, TABLE_NAMES,
+        FUNCTION_NAMES, TABLE_NAMES, dependency, function, table, trigger,
     };
 
     #[tokio::test]

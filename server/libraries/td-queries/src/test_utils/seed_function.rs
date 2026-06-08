@@ -2,9 +2,10 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::{CurrentEntry, LiveEntry, QueryExecutor};
+use crate::{CurrentEntry, LiveEntry};
 use ta_objects::TryUpdater;
 use ta_objects::and;
+use td_database::dynamic::DynamicConnection;
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::RequestContext;
@@ -18,8 +19,11 @@ use td_objects::types::basic::{
     TableFunctionParamPos, TableId, TableName, TableStatus, TriggerStatus, UserId,
 };
 
+/// Runs on a project-scoped connection (see [`Seed::scoped`]); the field-less
+/// rows (function, tables, dependencies, triggers) default their `project_id`
+/// from that scope, and the reads run on the same connection.
 pub(crate) async fn seed_function(
-    db: impl QueryExecutor + Copy,
+    conn: &mut DynamicConnection<'_>,
     collection: &CollectionDB,
     function_create: &FunctionRegister,
 ) -> Result<FunctionDB, TdError> {
@@ -33,7 +37,6 @@ pub(crate) async fn seed_function(
     let mut builder = FunctionDBBuilder::try_from(function_create)?;
     let function_db = builder
         .try_update_from(&request_context)?
-        .project_id(collection.project_id.clone())
         .collection_id(collection.id)
         .data_location(DataLocation::default())
         .storage_version(StorageVersion::default())
@@ -41,7 +44,7 @@ pub(crate) async fn seed_function(
         .build()?;
 
     // Insert function version
-    db.live().insert(&function_db).await?;
+    conn.live().insert(&function_db).await?;
 
     // Dependencies, tables, triggers
     // Very similar to build_table_versions
@@ -58,7 +61,7 @@ pub(crate) async fn seed_function(
                 .status(TableStatus::Active)
                 .build()?;
 
-            db.live().insert(&table).await?;
+            conn.live().insert(&table).await?;
         }
     }
 
@@ -79,7 +82,7 @@ pub(crate) async fn seed_function(
                 )
             };
 
-            let table_db: TableDBWithNames = db
+            let table_db: TableDBWithNames = conn
                 .current()
                 .fetch_one::<_>(and!(table_collection, table_name))
                 .await?;
@@ -95,7 +98,7 @@ pub(crate) async fn seed_function(
                 .system(false)
                 .build()?;
 
-            db.live().insert(&dependency).await?;
+            conn.live().insert(&dependency).await?;
         }
     }
 
@@ -116,7 +119,7 @@ pub(crate) async fn seed_function(
                 )
             };
 
-            let table_db: TableDBWithNames = db
+            let table_db: TableDBWithNames = conn
                 .current()
                 .fetch_one::<_>(and!(table_collection, table_name))
                 .await?;
@@ -130,13 +133,16 @@ pub(crate) async fn seed_function(
                 .system(false)
                 .build()?;
 
-            db.live().insert(&trigger).await?;
+            conn.live().insert(&trigger).await?;
         }
     }
 
     // Very similar to build_worker
     if let Some(workers) = &function_create.workers {
-        let builder = WorkerDBBuilder::try_from(&function_db)?;
+        // `WorkerDB.project_id` is no longer mapped from `FunctionDB`; stamp it
+        // from the collection.
+        let mut builder = WorkerDBBuilder::try_from(&function_db)?;
+        builder.project_id(collection.project_id.clone());
 
         for (worker_type, worker_config) in workers {
             let worker = builder
@@ -145,7 +151,7 @@ pub(crate) async fn seed_function(
                 .worker_config(Some(worker_config.clone()))
                 .build()?;
 
-            db.live().insert(&worker).await?;
+            conn.live().insert(&worker).await?;
         }
     }
 

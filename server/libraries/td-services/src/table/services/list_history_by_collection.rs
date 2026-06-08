@@ -67,6 +67,7 @@ mod tests {
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -144,13 +145,15 @@ mod tests {
             .tables(Some(tables))
             .build()?;
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                    .function(FunctionIdName::from_str("joaquin")?)
-                    .build()?,
-                update.clone(),
-            ).in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .update(
+                    FunctionParam::builder()
+                        .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                        .function(FunctionIdName::from_str("joaquin")?)
+                        .build()?,
+                    update.clone(),
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -158,12 +161,14 @@ mod tests {
 
         // Delete table_2
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).delete(
-                TableParam::builder()
-                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                    .table(TableIdName::from_str("table_2")?)
-                    .build()?,
-            ).in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .delete(
+                    TableParam::builder()
+                        .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                        .table(TableIdName::from_str("table_2")?)
+                        .build()?,
+                )
+                .in_project(ProjectId::sandbox());
 
         TableDeleteService::with_defaults(db.clone())
             .service()
@@ -176,13 +181,15 @@ mod tests {
 
         // t0 -> no tables
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
-                CollectionAtName::builder()
-                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                    .at(t0)
-                    .build()?,
-                ListParams::default(),
-            ).in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .list(
+                    CollectionAtName::builder()
+                        .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                        .at(t0)
+                        .build()?,
+                    ListParams::default(),
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = TableListHistoryByCollectionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -193,15 +200,17 @@ mod tests {
 
         // t1 -> table_1 and table_2
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
-                CollectionAtName::builder()
-                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                    .at(t1)
-                    .build()?,
-                ListParamsBuilder::default()
-                    .order_by("name".to_string())
-                    .build()?,
-            ).in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .list(
+                    CollectionAtName::builder()
+                        .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                        .at(t1)
+                        .build()?,
+                    ListParamsBuilder::default()
+                        .order_by("name".to_string())
+                        .build()?,
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = TableListHistoryByCollectionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -214,13 +223,15 @@ mod tests {
 
         // t2 -> table_1
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
-                CollectionAtName::builder()
-                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                    .at(t2)
-                    .build()?,
-                ListParams::default(),
-            ).in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .list(
+                    CollectionAtName::builder()
+                        .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                        .at(t2)
+                        .build()?,
+                    ListParams::default(),
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = TableListHistoryByCollectionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;

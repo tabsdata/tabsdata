@@ -5,7 +5,7 @@
 use crate::execution::layers::execute;
 use crate::execution::layers::execution_version::{
     already_running_trigger_response, assert_function_version, dedup_condition, dedup_fetch,
-    executed_trigger_response, skip_if_running,
+    dedup_lock, executed_trigger_response, skip_if_running,
 };
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
@@ -70,6 +70,7 @@ fn service() {
         conditional(
             If(service!(layers!(
                 from_fn(With::<ExecutionRequestInternal>::extract::<Option<ExternalUid>>),
+                from_fn(dedup_lock),
                 from_fn(dedup_fetch),
                 from_fn(dedup_condition),
             ))),
@@ -119,12 +120,13 @@ mod tests {
     use td_objects::rest_urls::FunctionParam;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, ExecutionName,
-        FunctionIdName, FunctionName, FunctionRuntimeValues, LogicalFunctionRunStatus, ProjectId, RoleId,
-        TableNameDto, TransactionKey, UserId,
+        FunctionIdName, FunctionName, FunctionRuntimeValues, LogicalFunctionRunStatus, ProjectId,
+        RoleId, TableNameDto, TransactionKey, UserId,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -158,10 +160,10 @@ mod tests {
         use td_objects::dxo::transaction::{TransactionDB, TransactionDBBuilder};
         use td_objects::dxo::trigger::TriggerDBWithNames;
         use td_objects::tower_service::with::With;
+        use td_objects::types::basic::ProjectId;
         use td_objects::types::basic::{
             CollectionId, FunctionId, FunctionOnly, OverrideDisabledTrigger, TriggerType,
         };
-        use td_objects::types::basic::ProjectId;
         use td_objects::types::recursion::RecursionOptions;
         use td_queries::{insert, insert_vec};
         use td_tower::metadata::type_of_val;
@@ -201,6 +203,7 @@ mod tests {
 
                 // dedup (outer) if
                 type_of_val(&With::<ExecutionRequestInternal>::extract::<Option<ExternalUid>>),
+                type_of_val(&dedup_lock),
                 type_of_val(&dedup_fetch),
                 type_of_val(&dedup_condition),
 
@@ -511,16 +514,18 @@ mod tests {
 
         // Trigger function
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
-                FunctionVersionIdParam {
-                    function_version_id: function.id.clone(),
-                },
-                ExecutionRequestInternal::builder()
-                    .name(Some(ExecutionName::try_from("test_execution")?))
-                    .skip_if_running(skip_if_running)
-                    .trigger_type(TriggerType::CronTrigger)
-                    .build()?,
-            ).in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    FunctionVersionIdParam {
+                        function_version_id: function.id.clone(),
+                    },
+                    ExecutionRequestInternal::builder()
+                        .name(Some(ExecutionName::try_from("test_execution")?))
+                        .skip_if_running(skip_if_running)
+                        .trigger_type(TriggerType::CronTrigger)
+                        .build()?,
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = ExecuteFunctionVersionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await?;
@@ -553,34 +558,38 @@ mod tests {
         // Dummy update to create new version
         let update = FunctionUpdate::builder().name(function_0).build()?;
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&format!(
-                        "~{}",
-                        collection_0.id
-                    ))?)
-                    .function(FunctionIdName::from_str(&format!(
-                        "~{}",
-                        function.function_id
-                    ))?)
-                    .build()?,
-                update.clone(),
-            ).in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .update(
+                    FunctionParam::builder()
+                        .collection(CollectionIdName::from_str(&format!(
+                            "~{}",
+                            collection_0.id
+                        ))?)
+                        .function(FunctionIdName::from_str(&format!(
+                            "~{}",
+                            function.function_id
+                        ))?)
+                        .build()?,
+                    update.clone(),
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let updated = service.raw_oneshot(request).await?;
 
         // Now, using function.id will fail
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
-                FunctionVersionIdParam {
-                    function_version_id: function.id.clone(),
-                },
-                ExecutionRequestInternal::builder()
-                    .name(Some(ExecutionName::try_from("test_execution")?))
-                    .trigger_type(TriggerType::CronTrigger)
-                    .build()?,
-            ).in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    FunctionVersionIdParam {
+                        function_version_id: function.id.clone(),
+                    },
+                    ExecutionRequestInternal::builder()
+                        .name(Some(ExecutionName::try_from("test_execution")?))
+                        .trigger_type(TriggerType::CronTrigger)
+                        .build()?,
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = ExecuteFunctionVersionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -619,17 +628,18 @@ mod tests {
         external_uid: Option<ExternalUid>,
     ) -> Result<ExecutionTriggerResponse, TdError> {
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
-                FunctionVersionIdParam {
-                    function_version_id: function_version_id.clone(),
-                },
-                ExecutionRequestInternal::builder()
-                    .name(Some(ExecutionName::try_from("test_execution")?))
-                    .external_uid(external_uid)
-                    .trigger_type(TriggerType::CronTrigger)
-                    .build()?,
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    FunctionVersionIdParam {
+                        function_version_id: function_version_id.clone(),
+                    },
+                    ExecutionRequestInternal::builder()
+                        .name(Some(ExecutionName::try_from("test_execution")?))
+                        .external_uid(external_uid)
+                        .trigger_type(TriggerType::CronTrigger)
+                        .build()?,
+                )
+                .in_project(ProjectId::sandbox());
         ExecuteFunctionVersionService::with_defaults(db.clone())
             .service()
             .raw_oneshot(request)
@@ -675,6 +685,53 @@ mod tests {
             .fetch_all::<ExecutionDB>(&function.function_id)
             .await?;
         assert_eq!(executions.len(), 2);
+        Ok(())
+    }
+
+    /// Concurrent identical-`external_uid` triggers must not race into a 500:
+    /// `dedup_lock` serializes them so exactly one inserts (`Executed`) and the
+    /// other dedups (`AlreadyRunning`), leaving a single execution row. Before
+    /// the lock, both could pass `dedup_fetch` and the INSERT loser would hit
+    /// the unique index and surface a 500. Postgres-only — SQLite/MySQL
+    /// serialize writers and the advisory lock is a no-op there.
+    #[td_test::test(db)]
+    async fn test_execute_version_concurrent_external_uid_no_race(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        use td_database::sea_query::kind::{DatabaseBackend, DatabaseKind};
+        if !matches!(db.kind(), DatabaseBackend::Postgres) {
+            return Ok(());
+        }
+        let function = seed_dedup_function(&db).await?;
+        let uid = ExternalUid::try_from("uid-concurrent")?;
+
+        // Fire two identical triggers concurrently on the shared pool.
+        let (a, b) = tokio::join!(
+            trigger_with_external_uid(&db, &function.id, Some(uid.clone())),
+            trigger_with_external_uid(&db, &function.id, Some(uid.clone())),
+        );
+        let a = a?;
+        let b = b?;
+
+        let executed = [&a, &b]
+            .into_iter()
+            .filter(|r| matches!(r, ExecutionTriggerResponse::Executed(_)))
+            .count();
+        let already_running = [&a, &b]
+            .into_iter()
+            .filter(|r| matches!(r, ExecutionTriggerResponse::AlreadyRunning(_)))
+            .count();
+        assert_eq!(executed, 1, "exactly one trigger executes: {a:?} / {b:?}");
+        assert_eq!(
+            already_running, 1,
+            "the racing trigger dedups: {a:?} / {b:?}"
+        );
+
+        let executions: Vec<ExecutionDB> = db
+            .live()
+            .fetch_all::<ExecutionDB>(&function.function_id)
+            .await?;
+        assert_eq!(executions.len(), 1, "only one execution row must exist");
         Ok(())
     }
 }

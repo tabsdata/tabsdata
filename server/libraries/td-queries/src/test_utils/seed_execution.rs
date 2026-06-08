@@ -2,29 +2,30 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::{LiveEntry, QueryExecutor};
+use crate::LiveEntry;
 use ta_objects::Buildable;
+use td_database::dynamic::DynamicConnection;
 use td_error::TdError;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::function::FunctionDB;
 use td_objects::types::basic::{ExecutionName, TriggerType, TriggeredOn, UserId};
 
 pub(crate) async fn seed_execution(
-    db: impl QueryExecutor,
+    conn: &mut DynamicConnection<'_>,
     function_version: &FunctionDB,
 ) -> Result<ExecutionDB, TdError> {
-    _seed_execution(db, function_version, TriggerType::Manual).await
+    _seed_execution(conn, function_version, TriggerType::Manual).await
 }
 
 pub(crate) async fn seed_cron_execution(
-    db: impl QueryExecutor,
+    conn: &mut DynamicConnection<'_>,
     function_version: &FunctionDB,
 ) -> Result<ExecutionDB, TdError> {
-    _seed_execution(db, function_version, TriggerType::CronTrigger).await
+    _seed_execution(conn, function_version, TriggerType::CronTrigger).await
 }
 
 async fn _seed_execution(
-    db: impl QueryExecutor,
+    conn: &mut DynamicConnection<'_>,
     function_version: &FunctionDB,
     trigger_type: TriggerType,
 ) -> Result<ExecutionDB, TdError> {
@@ -39,7 +40,9 @@ async fn _seed_execution(
         .trigger_type(trigger_type)
         .build()?;
 
-    db.live().insert::<ExecutionDB>(&execution_db).await?;
+    // Field-less row; runs on a project-scoped connection so `project_id`
+    // defaults from the scope.
+    conn.live().insert::<ExecutionDB>(&execution_db).await?;
     Ok(execution_db)
 }
 

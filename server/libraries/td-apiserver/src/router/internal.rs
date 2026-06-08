@@ -34,6 +34,7 @@ mod routes {
     use td_services::table::services::TableServices;
     use td_services::worker::services::WorkerServices;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::InProject;
     use tower::ServiceExt;
 
     const INTERNAL_TAG: &str = "Internal";
@@ -88,7 +89,9 @@ mod routes {
         Path(function_param): Path<FunctionVersionIdParam>,
         Json(request): Json<ExecutionRequestInternal>,
     ) -> Result<CreateStatus<ExecutionTriggerResponse>, ErrorStatus> {
-        let request = context.create(function_param, request).in_project(project_id);
+        let request = context
+            .create(function_param, request)
+            .in_project(project_id);
         let response = state.execute_version.service().oneshot(request).await?;
         Ok(CreateStatus::CREATED(response))
     }

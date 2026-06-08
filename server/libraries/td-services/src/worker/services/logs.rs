@@ -66,6 +66,7 @@ mod tests {
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -77,26 +78,28 @@ mod tests {
         WorkerLogService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<Scoped<ReadRequest<WorkerLogsParams>, ProjectId>, BoxedSyncStream>(&[
-                // Extract parameters
-                type_of_val(&With::<ReadRequest<WorkerLogsParams>>::extract::<RequestContext>),
-                type_of_val(
-                    &With::<ReadRequest<WorkerLogsParams>>::extract_name::<WorkerLogsParams>,
-                ),
-                // find collection ID
-                type_of_val(&With::<WorkerLogsParams>::extract::<WorkerIdName>),
-                type_of_val(&By::<WorkerIdName>::fetch_one::<WorkerDB>),
-                type_of_val(&With::<WorkerDB>::extract::<CollectionId>),
-                // check requester has collection permissions
-                type_of_val(&AuthzOn::<CollectionId>::set),
-                type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
-                // Resolve worker message path.
-                type_of_val(&With::<WorkerLogsParams>::extract::<Vec<LogsExtension>>),
-                type_of_val(&With::<WorkerLogsParams>::extract::<Vec<LogsCastNumber>>),
-                type_of_val(&resolve_worker_log_path),
-                // Get worker message logs.
-                type_of_val(&get_worker_logs),
-            ]);
+            .assert_service::<Scoped<ReadRequest<WorkerLogsParams>, ProjectId>, BoxedSyncStream>(
+                &[
+                    // Extract parameters
+                    type_of_val(&With::<ReadRequest<WorkerLogsParams>>::extract::<RequestContext>),
+                    type_of_val(
+                        &With::<ReadRequest<WorkerLogsParams>>::extract_name::<WorkerLogsParams>,
+                    ),
+                    // find collection ID
+                    type_of_val(&With::<WorkerLogsParams>::extract::<WorkerIdName>),
+                    type_of_val(&By::<WorkerIdName>::fetch_one::<WorkerDB>),
+                    type_of_val(&With::<WorkerDB>::extract::<CollectionId>),
+                    // check requester has collection permissions
+                    type_of_val(&AuthzOn::<CollectionId>::set),
+                    type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
+                    // Resolve worker message path.
+                    type_of_val(&With::<WorkerLogsParams>::extract::<Vec<LogsExtension>>),
+                    type_of_val(&With::<WorkerLogsParams>::extract::<Vec<LogsCastNumber>>),
+                    type_of_val(&resolve_worker_log_path),
+                    // Get worker message logs.
+                    type_of_val(&get_worker_logs),
+                ],
+            );
     }
 
     #[td_test::test(db)]

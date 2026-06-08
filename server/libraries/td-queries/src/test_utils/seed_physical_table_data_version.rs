@@ -96,6 +96,7 @@ pub async fn _seed_physical_table_data_version(
         .await?;
     let logical = LogicalTableDataVersionDB::builder()
         .project_id(producer_lfr.project_id.clone())
+        .group_id(producer_lfr.group_id)
         .collection_id(collection.id)
         .execution_id(&execution.id)
         .transaction_id(&transaction.id)

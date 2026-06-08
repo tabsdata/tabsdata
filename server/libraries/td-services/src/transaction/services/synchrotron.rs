@@ -50,6 +50,7 @@ mod tests {
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -107,7 +108,8 @@ mod tests {
         let service = SynchrotronService::with_defaults(db.clone()).service();
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
-                .list((), ListParams::default()).in_project(ProjectId::sandbox());
+                .list((), ListParams::default())
+                .in_project(ProjectId::sandbox());
 
         let response = service.raw_oneshot(request).await?;
         assert_eq!(response.len, transactions.len());

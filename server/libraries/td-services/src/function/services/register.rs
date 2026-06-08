@@ -29,8 +29,7 @@ use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
     AtTime, BundleId, CollectionId, CollectionIdName, CollectionName, DataLocation, Enabled,
     FunctionId, FunctionName, FunctionVersionId, ProjectId, ResetState, ReuseFrozen,
-    StorageVersion,
-    TableNameDto, TableType, WorkerConfig, WorkerTypeDto,
+    StorageVersion, TableNameDto, TableType, WorkerConfig, WorkerTypeDto,
 };
 use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
 use td_queries::By;
@@ -87,14 +86,14 @@ fn service() {
         // Get enabled flag
         from_fn(With::<FunctionRegister>::extract::<Option<Enabled>>),
         from_fn(With::<Option<Enabled>>::unwrap_or_default),
-        // Insert into function_versions(sql) status=Active. The function
-        // inherits the collection's project — there's no path where a
-        // function's project differs from its collection's.
+        // Insert into function_versions(sql) status=Active. The function row no
+        // longer stamps `project_id` (the connection is project-scoped, so the
+        // column default fills it); the resolved `ProjectId` is kept on the
+        // handler for `register_workers` to stamp onto the workers.
         from_fn(With::<CollectionDB>::extract::<ProjectId>),
         from_fn(With::<FunctionRegister>::try_convert_to::<FunctionDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<FunctionDBBuilder, _>),
         from_fn(With::<CollectionId>::set::<FunctionDBBuilder>),
-        from_fn(With::<ProjectId>::set::<FunctionDBBuilder>),
         from_fn(With::<StorageVersion>::set::<FunctionDBBuilder>),
         from_fn(With::<DataLocation>::set::<FunctionDBBuilder>),
         from_fn(With::<Enabled>::set::<FunctionDBBuilder>),
@@ -157,13 +156,13 @@ mod tests {
     use td_objects::dxo::worker::WorkerDB;
     use td_objects::errors::SqlError;
     use td_objects::types::basic::{
-        ProjectId,
-        AccessTokenId, Decorator, FunctionRuntimeValues, RoleId, ToCollectionId, UserId,
+        AccessTokenId, Decorator, FunctionRuntimeValues, ProjectId, RoleId, ToCollectionId, UserId,
         WorkerMessageStatus, WorkerStatus, WorkerType,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -304,6 +303,7 @@ mod tests {
                 // Set stopped for current workers and insert into workers(sql) new workers.
                 type_of_val(&stop_current_workers),
                 type_of_val(&With::<FunctionDB>::try_convert_to::<WorkerDBBuilder, _>),
+                type_of_val(&With::<ProjectId>::set::<WorkerDBBuilder>),
                 type_of_val(&build_workers),
                 type_of_val(&insert_vec::<WorkerDB>),
                 // Response
@@ -342,13 +342,14 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
-                CollectionParam::builder()
-                    .collection(CollectionIdName::from_str(collection_name.as_str())?)
-                    .build()?,
-                create.clone(),
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(collection_name.as_str())?)
+                        .build()?,
+                    create.clone(),
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -384,13 +385,14 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
-                CollectionParam::builder()
-                    .collection(CollectionIdName::from_str(collection_name.as_str())?)
-                    .build()?,
-                create.clone(),
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(collection_name.as_str())?)
+                        .build()?,
+                    create.clone(),
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -426,13 +428,14 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
-                CollectionParam::builder()
-                    .collection(CollectionIdName::from_str(collection_name.as_str())?)
-                    .build()?,
-                create.clone(),
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(collection_name.as_str())?)
+                        .build()?,
+                    create.clone(),
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -473,13 +476,14 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
-                CollectionParam::builder()
-                    .collection(CollectionIdName::from_str(collection_name.as_str())?)
-                    .build()?,
-                create.clone(),
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(collection_name.as_str())?)
+                        .build()?,
+                    create.clone(),
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -524,13 +528,14 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
-                CollectionParam::builder()
-                    .collection(CollectionIdName::from_str(collection_name.as_str())?)
-                    .build()?,
-                create.clone(),
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(collection_name.as_str())?)
+                        .build()?,
+                    create.clone(),
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -591,13 +596,14 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
-                CollectionParam::builder()
-                    .collection(CollectionIdName::from_str(collection_name.as_str())?)
-                    .build()?,
-                create.clone(),
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(collection_name.as_str())?)
+                        .build()?,
+                    create.clone(),
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let _response = service.raw_oneshot(request).await?;
@@ -627,13 +633,14 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
-                CollectionParam::builder()
-                    .collection(CollectionIdName::from_str(collection_name.as_str())?)
-                    .build()?,
-                create.clone(),
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(collection_name.as_str())?)
+                        .build()?,
+                    create.clone(),
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -672,13 +679,14 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
-                CollectionParam::builder()
-                    .collection(CollectionIdName::from_str(collection_name.as_str())?)
-                    .build()?,
-                create.clone(),
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(collection_name.as_str())?)
+                        .build()?,
+                    create.clone(),
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let _response = service.raw_oneshot(request).await?;
@@ -712,13 +720,14 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
-                CollectionParam::builder()
-                    .collection(CollectionIdName::from_str(collection_name.as_str())?)
-                    .build()?,
-                create.clone(),
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(collection_name.as_str())?)
+                        .build()?,
+                    create.clone(),
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -807,13 +816,14 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
-                CollectionParam::builder()
-                    .collection(CollectionIdName::from_str(collection_name_1.as_str())?)
-                    .build()?,
-                create.clone(),
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(collection_name_1.as_str())?)
+                        .build()?,
+                    create.clone(),
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let _response = service.raw_oneshot(request).await?;
@@ -840,13 +850,14 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
-                CollectionParam::builder()
-                    .collection(CollectionIdName::from_str(collection_name_2.as_str())?)
-                    .build()?,
-                create.clone(),
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(collection_name_2.as_str())?)
+                        .build()?,
+                    create.clone(),
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let _ = service.raw_oneshot(request).await?;
@@ -894,13 +905,14 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
-                CollectionParam::builder()
-                    .collection(CollectionIdName::from_str(collection_name_2.as_str())?)
-                    .build()?,
-                create.clone(),
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(collection_name_2.as_str())?)
+                        .build()?,
+                    create.clone(),
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;
@@ -944,13 +956,14 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
-                CollectionParam::builder()
-                    .collection(CollectionIdName::from_str(collection_name.as_str())?)
-                    .build()?,
-                create.clone(),
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(collection_name.as_str())?)
+                        .build()?,
+                    create.clone(),
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request.clone()).await;
@@ -1069,13 +1082,14 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
-                CollectionParam::builder()
-                    .collection(CollectionIdName::from_str(collection_name_2.as_str())?)
-                    .build()?,
-                create.clone(),
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(collection_name_2.as_str())?)
+                        .build()?,
+                    create.clone(),
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;
@@ -1116,13 +1130,14 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
-                CollectionParam::builder()
-                    .collection(CollectionIdName::from_str(collection_name_1.as_str())?)
-                    .build()?,
-                create,
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(collection_name_1.as_str())?)
+                        .build()?,
+                    create,
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;
@@ -1162,13 +1177,14 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
-                CollectionParam::builder()
-                    .collection(CollectionIdName::from_str(collection_name_1.as_str())?)
-                    .build()?,
-                create,
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(collection_name_1.as_str())?)
+                        .build()?,
+                    create,
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;
@@ -1197,13 +1213,14 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
-                CollectionParam::builder()
-                    .collection(CollectionIdName::from_str(collection_name_1.as_str())?)
-                    .build()?,
-                create,
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(collection_name_1.as_str())?)
+                        .build()?,
+                    create,
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;
@@ -1242,13 +1259,14 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
-                CollectionParam::builder()
-                    .collection(CollectionIdName::from_str(collection_name_1.as_str())?)
-                    .build()?,
-                create,
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(collection_name_1.as_str())?)
+                        .build()?,
+                    create,
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;
@@ -1285,13 +1303,14 @@ mod tests {
             )])))
             .build()?;
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
-                CollectionParam::builder()
-                    .collection(CollectionIdName::from_str(collection_name.as_str())?)
-                    .build()?,
-                create,
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(collection_name.as_str())?)
+                        .build()?,
+                    create,
+                )
+                .in_project(ProjectId::sandbox());
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await?;
 
@@ -1337,13 +1356,14 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
-                CollectionParam::builder()
-                    .collection(CollectionIdName::from_str(collection_name.as_str())?)
-                    .build()?,
-                create,
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(collection_name.as_str())?)
+                        .build()?,
+                    create,
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;

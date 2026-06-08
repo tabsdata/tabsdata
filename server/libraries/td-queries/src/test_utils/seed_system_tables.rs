@@ -2,9 +2,10 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::{CurrentEntry, LiveEntry, QueryExecutor};
+use crate::{CurrentEntry, LiveEntry};
 use ta_objects::TryUpdater;
 use ta_objects::and;
+use td_database::dynamic::DynamicConnection;
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::dependency::DependencyDBBuilder;
@@ -20,9 +21,12 @@ use td_objects::types::basic::{
 use td_objects::types::composed::TableVersions;
 use td_objects::types::table_ref::Versions;
 
-// Very similar to seed_function or build_table_versions, but to seed system tables
+// Very similar to seed_function or build_table_versions, but to seed system
+// tables. Runs on a project-scoped connection (see `Seed::scoped`); the field-
+// less rows default their `project_id` from that scope, and reads run on the
+// same connection.
 pub(crate) async fn seed_system_tables(
-    db: impl QueryExecutor + Copy,
+    conn: &mut DynamicConnection<'_>,
     function: &FunctionDB,
 ) -> Result<Vec<TableDB>, TdError> {
     let request_context = RequestContext::with(
@@ -48,7 +52,7 @@ pub(crate) async fn seed_system_tables(
             .status(TableStatus::Active)
             .build()?;
 
-        db.live().insert(&table).await?;
+        conn.live().insert(&table).await?;
         system_tables.push(table);
     }
 
@@ -62,7 +66,7 @@ pub(crate) async fn seed_system_tables(
             TableName::try_from(format!("{prefix}__{}", function.function_id))?,
         );
 
-        let table_db = db
+        let table_db = conn
             .current()
             .fetch_one::<TableDBWithNames>(and!(table_collection, table_name))
             .await?;
@@ -78,7 +82,7 @@ pub(crate) async fn seed_system_tables(
             .system(true)
             .build()?;
 
-        db.live().insert(&dependency).await?;
+        conn.live().insert(&dependency).await?;
     }
 
     Ok(system_tables)

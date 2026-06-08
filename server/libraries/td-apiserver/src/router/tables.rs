@@ -29,6 +29,7 @@ mod routes {
     use td_objects::types::basic::ProjectId;
     use td_services::table::services::TableServices;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::InProject;
     use tower::ServiceExt;
 
     const TABLES_TAG: &str = "Tables";
@@ -89,7 +90,9 @@ mod routes {
         Path(collection_param): Path<CollectionParam>,
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<Table>, ErrorStatus> {
-        let request = context.list(collection_param, query_params).in_project(project_id);
+        let request = context
+            .list(collection_param, query_params)
+            .in_project(project_id);
         let response = state.list_by_collection.service().oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }

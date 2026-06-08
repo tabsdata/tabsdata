@@ -25,6 +25,7 @@ mod routes {
     };
     use td_objects::types::basic::ProjectId;
     use td_services::collection::service::CollectionServices;
+    use td_tower::project_scope::InProject;
     use tower::ServiceExt;
 
     const COLLECTIONS_TAG: &str = "Collections";
@@ -77,7 +78,9 @@ mod routes {
         Path(collection_param): Path<CollectionParam>,
         Json(request): Json<CollectionUpdate>,
     ) -> Result<UpdateStatus<CollectionRead>, ErrorStatus> {
-        let request = context.update(collection_param, request).in_project(project_id);
+        let request = context
+            .update(collection_param, request)
+            .in_project(project_id);
         let response = collection_state.update.service().oneshot(request).await?;
         Ok(UpdateStatus::OK(response))
     }

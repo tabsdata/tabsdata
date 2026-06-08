@@ -118,6 +118,7 @@ mod tests {
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::InProject;
 
     /// Seed a publisher + a Locked function-runner worker, then resolve its
     /// message via the endpoint service: it returns a resolved FunctionV2

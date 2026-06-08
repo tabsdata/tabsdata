@@ -24,6 +24,7 @@ mod routes {
     };
     use td_objects::types::basic::ProjectId;
     use td_services::group::services::GroupServices;
+    use td_tower::project_scope::InProject;
     use tower::ServiceExt;
 
     const GROUPS_TAG: &str = "Groups";

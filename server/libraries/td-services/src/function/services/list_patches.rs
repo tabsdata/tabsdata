@@ -64,14 +64,14 @@ mod tests {
     use td_objects::dxo::collection::CollectionDB;
     use td_objects::dxo::function::{FunctionPatch, FunctionRegister};
     use td_objects::types::basic::{
-        ProjectId,
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionName, FunctionRuntimeValues,
-        RoleId, TableNameDto, UserId,
+        ProjectId, RoleId, TableNameDto, UserId,
     };
     use td_objects::{Buildable, and};
     use td_queries::CurrentEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -192,14 +192,15 @@ mod tests {
         }
 
         let read_request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str("c0")?)
-                    .function(FunctionIdName::from_str("f0")?)
-                    .build()?,
-                ListParams::default(),
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .list(
+                    FunctionParam::builder()
+                        .collection(CollectionIdName::from_str("c0")?)
+                        .function(FunctionIdName::from_str("f0")?)
+                        .build()?,
+                    ListParams::default(),
+                )
+                .in_project(ProjectId::sandbox());
         let response = ListFunctionPatchesService::with_defaults(db.clone())
             .service()
             .raw_oneshot(read_request)

@@ -61,11 +61,11 @@ mod tests {
     use td_objects::dxo::crudl::ListParams;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
-        ProjectId,
-        AccessTokenId, BundleId, CollectionName, Decorator, FunctionName, RoleId, UserId,
+        AccessTokenId, BundleId, CollectionName, Decorator, FunctionName, ProjectId, RoleId, UserId,
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -138,13 +138,14 @@ mod tests {
 
         // List current functions by collection
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
-                CollectionParam::builder()
-                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                    .build()?,
-                ListParams::default(),
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .list(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                        .build()?,
+                    ListParams::default(),
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = FunctionListByCollectionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;

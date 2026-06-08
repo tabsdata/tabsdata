@@ -291,6 +291,12 @@ impl Entity for Defs {
             // HEAD falls back to the previous live version. Cancel/Yank are
             // logical-only statuses, so the filter lives here, not on the
             // physical side (which has no such statuses).
+            //
+            // Caveat: the join reads the producer's *current* status, so the
+            // view is point-in-time correct for plan-time resolution (always
+            // "now") but anachronistic for any historic/audit read — a version
+            // produced by a since-cancelled run would be hidden retroactively.
+            // Don't reuse this view for as-of-then queries without rethinking.
             ViewDef::new(
                 LtdvActive,
                 Query::select()

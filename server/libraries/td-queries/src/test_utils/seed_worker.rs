@@ -22,7 +22,7 @@ pub(crate) async fn seed_worker(
     message_status: &WorkerMessageStatus,
 ) -> Result<WorkerDB, TdError> {
     let worker_db = WorkerDB::builder()
-        .project_id(function.project_id.clone())
+        .project_id(collection.project_id.clone())
         .collection_id(collection.id)
         .execution_id(None)
         .transaction_id(None)

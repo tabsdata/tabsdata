@@ -46,11 +46,11 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::rest_urls::CollectionParam;
     use td_objects::types::basic::{
-        ProjectId,
-        AccessTokenId, AtTime, CollectionName, Description, RoleId, UserId, UserName,
+        AccessTokenId, AtTime, CollectionName, Description, ProjectId, RoleId, UserId, UserName,
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -82,13 +82,14 @@ mod tests {
         let _ = db.seed().collection(&name, &UserId::admin()).await;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).read(
-                CollectionParam::builder()
-                    .collection(CollectionIdName::from_str(&name.to_string()).unwrap())
-                    .build()
-                    .unwrap(),
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .read(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(&name.to_string()).unwrap())
+                        .build()
+                        .unwrap(),
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = ReadCollectionService::with_defaults(db).service();
         let response = service.raw_oneshot(request).await;

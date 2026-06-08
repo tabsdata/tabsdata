@@ -47,7 +47,6 @@ use ta_objects::errors::SqlError;
 use td_database::sea_query::builder::SeaQueryExt;
 use td_objects::dxo::collection::CollectionDBIden;
 use td_objects::dxo::group::GroupDBIden;
-use td_objects::dxo::project::ProjectDBIden;
 use td_objects::dxo::logical::{
     FunctionRunDBWithNames, FunctionRunDBWithNamesIden, LogicalFunctionRunDB,
     LogicalFunctionRunDBIden, LogicalFunctionRunInputDBIden, LogicalTableDataVersionDBIden,
@@ -56,6 +55,7 @@ use td_objects::dxo::logical::{
 use td_objects::dxo::metrics::{
     Dim, EdgeRow, InflightRequest, InflightRow, MetricsRequest, NodeKind, NodeRow,
 };
+use td_objects::dxo::project::ProjectDBIden;
 use td_objects::dxo::query_filters::{DimensionFilter, WindowUnit};
 use td_objects::types::basic::LogicalFunctionRunStatus;
 

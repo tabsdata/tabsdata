@@ -114,10 +114,14 @@ pub const ID_ALL_ENTITIES: [u8; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 pub const ENCODED_ID_ALL_ENTITIES: &str = "00000000000000000000000204";
 
 /// Id of the `sandbox` project — the one project the bootstrap seeds. Further
-/// projects are created through the projects CRUD API; this row is the fallback
-/// for the per-table `project_id` column default (system inserts that arrive
-/// without a session GUC, e.g. trigger functions during seeds) and is the only
-/// project the system uses on SQLite/MySQL (which have no row-level security).
+/// projects are created through the projects CRUD API. On PostgreSQL the
+/// per-table `project_id` default reads the `app.project_id` session GUC
+/// (`NULLIF(current_setting('app.project_id', true), '')`), which is NULL when
+/// the GUC is unset and so fails the NOT NULL constraint — fail-closed, with NO
+/// sandbox fallback. `sandbox` is an ordinary, deletable project: the system
+/// stamps it explicitly only where it has no request GUC (e.g. bootstrap
+/// seeds), and it is the single project the app operates in on SQLite/MySQL
+/// (which have no row-level security).
 ///
 /// Bytes 22..=24 are taken by the seeded groups (default/source/destination),
 /// so this is byte 25.

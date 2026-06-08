@@ -331,7 +331,34 @@ impl<'c> DynamicConnection<'c> {
         match self {
             #[cfg(postgres)]
             Self::Postgres(h) => {
-                sqlx::query("SELECT set_config('app.bypass_rls', 'on', true)").execute(&mut **h).await?;
+                sqlx::query("SELECT set_config('app.bypass_rls', 'on', true)")
+                    .execute(&mut **h)
+                    .await?;
+            }
+            #[allow(unreachable_patterns)]
+            _ => {}
+        }
+        Ok(())
+    }
+
+    /// Take a transaction-scoped PostgreSQL advisory lock keyed on `key`
+    /// (`pg_advisory_xact_lock(hashtextextended(key, 0))`). The lock is held
+    /// until the surrounding transaction commits or rolls back, so it serializes
+    /// concurrent transactions that lock the same `key`. Used to make a
+    /// check-then-insert sequence atomic against racing identical requests
+    /// without escalating the isolation level. No-op on SQLite/MySQL (single
+    /// writer; the table's unique index is the backstop there). **Must** run
+    /// inside a transaction. `key` is hashed in-SQL so any string is safe; a
+    /// hash collision only over-serializes two unrelated keys (harmless).
+    #[cfg_attr(not(postgres), allow(unused_variables))]
+    pub async fn advisory_xact_lock_text(&mut self, key: &str) -> Result<(), Error> {
+        match self {
+            #[cfg(postgres)]
+            Self::Postgres(h) => {
+                sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+                    .bind(key)
+                    .execute(&mut **h)
+                    .await?;
             }
             #[allow(unreachable_patterns)]
             _ => {}

@@ -60,6 +60,7 @@ mod tests {
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -70,29 +71,33 @@ mod tests {
         TableListByCollectionService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<Scoped<ListRequest<CollectionParam>, ProjectId>, ListResponse<Table>>(&[
-                type_of_val(&With::<ListRequest<CollectionParam>>::extract::<RequestContext>),
-                type_of_val(
-                    &With::<ListRequest<CollectionParam>>::extract_name::<CollectionParam>,
-                ),
-                type_of_val(&With::<CollectionParam>::extract::<CollectionIdName>),
-                // find collection ID
-                type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
-                type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
-                // check requester has collection permissions
-                type_of_val(&AuthzOn::<CollectionId>::set),
-                type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check),
-                // list
-                type_of_val(&With::<ListRequest<CollectionParam>>::extract::<ListParams>),
-                type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<Table>, _>),
-                type_of_val(
-                    &By::<CollectionId>::list_current::<
-                        NoFilter,
-                        { TableDBWithNames::User },
-                        Table,
-                    >,
-                ),
-            ]);
+            .assert_service::<Scoped<ListRequest<CollectionParam>, ProjectId>, ListResponse<Table>>(
+                &[
+                    type_of_val(&With::<ListRequest<CollectionParam>>::extract::<RequestContext>),
+                    type_of_val(
+                        &With::<ListRequest<CollectionParam>>::extract_name::<CollectionParam>,
+                    ),
+                    type_of_val(&With::<CollectionParam>::extract::<CollectionIdName>),
+                    // find collection ID
+                    type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
+                    type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
+                    // check requester has collection permissions
+                    type_of_val(&AuthzOn::<CollectionId>::set),
+                    type_of_val(
+                        &Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check,
+                    ),
+                    // list
+                    type_of_val(&With::<ListRequest<CollectionParam>>::extract::<ListParams>),
+                    type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<Table>, _>),
+                    type_of_val(
+                        &By::<CollectionId>::list_current::<
+                            NoFilter,
+                            { TableDBWithNames::User },
+                            Table,
+                        >,
+                    ),
+                ],
+            );
     }
 
     #[td_test::test(db)]
@@ -123,12 +128,14 @@ mod tests {
 
         // List current tables by collection
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).list(
-                CollectionParam::builder()
-                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                    .build()?,
-                ListParams::default(),
-            ).in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .list(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                        .build()?,
+                    ListParams::default(),
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = TableListByCollectionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;

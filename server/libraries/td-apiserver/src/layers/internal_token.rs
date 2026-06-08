@@ -238,6 +238,7 @@ mod tests {
         // Mint the token the same way the scheduler does for this endpoint.
         let scope = format!("{BASE_URL}{RESOLVE_FUNCTION_RUN_WORKER}");
         let bindings = BTreeMap::from([
+            ("project".to_string(), "P".to_string()),
             ("function_run_id".to_string(), "F".to_string()),
             ("worker_id".to_string(), "W".to_string()),
         ]);
@@ -253,7 +254,7 @@ mod tests {
 
         let request = Request::builder()
             .method("GET")
-            .uri("/api/v1/internal/function-runs/F/workers/W/message")
+            .uri("/api/v1/internal/projects/P/function-runs/F/workers/W/message")
             .header("authorization", format!("Bearer {token}"))
             .body(Body::empty())
             .unwrap();
@@ -273,6 +274,7 @@ mod tests {
 
         let scope = format!("{BASE_URL}{RESOLVE_FUNCTION_RUN_WORKER}");
         let bindings = BTreeMap::from([
+            ("project".to_string(), "P".to_string()),
             ("function_run_id".to_string(), "F".to_string()),
             ("worker_id".to_string(), "W".to_string()),
         ]);
@@ -288,7 +290,7 @@ mod tests {
 
         let request = Request::builder()
             .method("GET")
-            .uri("/api/v1/internal/function-runs/F/workers/W2/message")
+            .uri("/api/v1/internal/projects/P/function-runs/F/workers/W2/message")
             .header("authorization", format!("Bearer {token}"))
             .body(Body::empty())
             .unwrap();

@@ -76,6 +76,7 @@ mod tests {
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -87,54 +88,56 @@ mod tests {
         DeleteInterCollectionPermissionService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<Scoped<DeleteRequest<InterCollectionPermissionParam>, ProjectId>, ()>(&[
-                type_of_val(
-                    &With::<DeleteRequest<InterCollectionPermissionParam>>::extract::<
-                        RequestContext,
-                    >,
-                ),
-                type_of_val(
-                    &With::<DeleteRequest<InterCollectionPermissionParam>>::extract_name::<
-                        InterCollectionPermissionParam,
-                    >,
-                ),
-                // check requester is sec_admin or coll_admin, early pre-check
-                type_of_val(&AuthzOn::<System>::set),
-                type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
-                // find permission
-                type_of_val(
-                    &With::<InterCollectionPermissionParam>::extract::<
-                        InterCollectionPermissionIdName,
-                    >,
-                ),
-                type_of_val(
-                    &By::<InterCollectionPermissionIdName>::fetch_one::<
-                        InterCollectionPermissionDBWithNames,
-                    >,
-                ),
-                // Check the role in the request matches the role in permission
-                type_of_val(
-                    &With::<InterCollectionPermissionParam>::extract::<CollectionIdName>,
-                ),
-                type_of_val(&assert_collection_in_permission),
-                // check the request is sec_admin or coll_admin for the collection in the permission
-                type_of_val(
-                    &With::<InterCollectionPermissionDBWithNames>::extract::<CollectionId>,
-                ),
-                type_of_val(&AuthzOn::<CollectionId>::set),
-                type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
-                // delete permission from DB
-                type_of_val(
-                    &With::<InterCollectionPermissionDBWithNames>::extract::<
-                        InterCollectionPermissionId,
-                    >,
-                ),
-                type_of_val(
-                    &By::<InterCollectionPermissionId>::delete::<InterCollectionPermissionDB>,
-                ),
-                // refresh the inter collections authz cache
-                type_of_val(&refresh_authz_context),
-            ]);
+            .assert_service::<Scoped<DeleteRequest<InterCollectionPermissionParam>, ProjectId>, ()>(
+                &[
+                    type_of_val(
+                        &With::<DeleteRequest<InterCollectionPermissionParam>>::extract::<
+                            RequestContext,
+                        >,
+                    ),
+                    type_of_val(
+                        &With::<DeleteRequest<InterCollectionPermissionParam>>::extract_name::<
+                            InterCollectionPermissionParam,
+                        >,
+                    ),
+                    // check requester is sec_admin or coll_admin, early pre-check
+                    type_of_val(&AuthzOn::<System>::set),
+                    type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
+                    // find permission
+                    type_of_val(
+                        &With::<InterCollectionPermissionParam>::extract::<
+                            InterCollectionPermissionIdName,
+                        >,
+                    ),
+                    type_of_val(
+                        &By::<InterCollectionPermissionIdName>::fetch_one::<
+                            InterCollectionPermissionDBWithNames,
+                        >,
+                    ),
+                    // Check the role in the request matches the role in permission
+                    type_of_val(
+                        &With::<InterCollectionPermissionParam>::extract::<CollectionIdName>,
+                    ),
+                    type_of_val(&assert_collection_in_permission),
+                    // check the request is sec_admin or coll_admin for the collection in the permission
+                    type_of_val(
+                        &With::<InterCollectionPermissionDBWithNames>::extract::<CollectionId>,
+                    ),
+                    type_of_val(&AuthzOn::<CollectionId>::set),
+                    type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
+                    // delete permission from DB
+                    type_of_val(
+                        &With::<InterCollectionPermissionDBWithNames>::extract::<
+                            InterCollectionPermissionId,
+                        >,
+                    ),
+                    type_of_val(
+                        &By::<InterCollectionPermissionId>::delete::<InterCollectionPermissionDB>,
+                    ),
+                    // refresh the inter collections authz cache
+                    type_of_val(&refresh_authz_context),
+                ],
+            );
     }
 
     #[td_test::test(db)]

@@ -112,13 +112,14 @@ mod tests {
     use td_objects::types::basic::BundleId;
     use td_objects::types::basic::CollectionName;
     use td_objects::types::basic::{
-        ProjectId,
-        AccessTokenId, Decorator, Enabled, FunctionRuntimeValues, RoleId, TableNameDto, UserId,
+        AccessTokenId, Decorator, Enabled, FunctionRuntimeValues, ProjectId, RoleId, TableNameDto,
+        UserId,
     };
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
     use td_queries::test_utils::SeedEntry;
     use td_queries::{CurrentEntry, LiveEntry};
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -182,6 +183,7 @@ mod tests {
                 // Set stopped for current workers and insert into workers(sql) new workers.
                 type_of_val(&stop_current_workers),
                 type_of_val(&With::<FunctionDB>::try_convert_to::<WorkerDBBuilder, _>),
+                type_of_val(&With::<ProjectId>::set::<WorkerDBBuilder>),
                 type_of_val(&build_workers),
                 type_of_val(&insert_vec::<WorkerDB>),
                 // Response
@@ -310,16 +312,17 @@ mod tests {
         let created_function = db.seed().function(&collection, &create).await?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
-                FunctionParam::builder()
-                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                    .function(FunctionIdName::from_str("foo")?)
-                    .build()?,
-                FunctionEnable {
-                    enabled: enabled_update,
-                },
-            )
-            .in_project(ProjectId::sandbox());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .update(
+                    FunctionParam::builder()
+                        .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                        .function(FunctionIdName::from_str("foo")?)
+                        .build()?,
+                    FunctionEnable {
+                        enabled: enabled_update,
+                    },
+                )
+                .in_project(ProjectId::sandbox());
 
         let service = EnableFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;

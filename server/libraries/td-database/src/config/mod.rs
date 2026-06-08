@@ -409,6 +409,10 @@ impl DatabaseConfig {
     }
 
     fn pool_options<DB: Database>(&self, read_only: bool) -> PoolOptions<DB> {
+        // The write pool is pinned to a single connection, so all writes in this
+        // process serialize through it (in-process check-then-insert can't race).
+        // Cross-process (multiple replicas on one DB) is not serialized here — see
+        // the `dedup_lock` advisory lock.
         PoolOptions::new()
             .min_connections(if read_only {
                 self.pool.min_connections
@@ -473,12 +477,6 @@ impl DatabaseConfig {
             .pool_options(read_only)
             .after_connect(move |conn, _meta| {
                 Box::pin(async move {
-
-                    #[cfg(feature = "td-test")]
-                    sqlx::query(&format!("SET app.project_id = '{}'", td_security::ENCODED_ID_PROJECT_SANDBOX))
-                        .execute(&mut *conn)
-                        .await?;
-
                     if read_only {
                         sqlx::query("SET default_transaction_read_only = on")
                             .execute(&mut *conn)
