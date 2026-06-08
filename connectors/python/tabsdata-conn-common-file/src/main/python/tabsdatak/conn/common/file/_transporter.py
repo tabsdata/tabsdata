@@ -536,6 +536,97 @@ _CSV_DEST_DEFAULTS: dict = {
 }
 
 
+# Extension → format mapping for AUTO inference. Keys are lower-case
+# with the leading dot. `.jsonl` / `.ndjson` are common newline-delimited
+# JSON variants and both round-trip through the JSON transporter format.
+_SRC_EXTENSION_FORMAT: dict[str, SrcFileFormat] = {
+    ".csv": SrcFileFormat.CSV,
+    ".json": SrcFileFormat.JSON,
+    ".jsonl": SrcFileFormat.JSON,
+    ".ndjson": SrcFileFormat.JSON,
+    ".avro": SrcFileFormat.AVRO,
+    ".parquet": SrcFileFormat.PARQUET,
+    ".pq": SrcFileFormat.PARQUET,
+    ".log": SrcFileFormat.LOG,
+}
+
+_DEST_EXTENSION_FORMAT: dict[str, DestFileFormat] = {
+    ".csv": DestFileFormat.CSV,
+    ".json": DestFileFormat.JSON,
+    ".jsonl": DestFileFormat.JSON,
+    ".ndjson": DestFileFormat.JSON,
+    ".avro": DestFileFormat.AVRO,
+    ".parquet": DestFileFormat.PARQUET,
+    ".pq": DestFileFormat.PARQUET,
+}
+
+
+def resolve_auto_src_format(fmt: SrcFileFormat, paths: list[str]) -> SrcFileFormat:
+    """Resolve ``SrcFileFormat.AUTO`` to a concrete format via path
+    extension inspection.
+
+    If ``fmt`` is already concrete it is returned unchanged. Otherwise
+    every path's extension is matched against
+    :data:`_SRC_EXTENSION_FORMAT`; if all paths resolve to the same
+    concrete format that format is returned. If extensions are missing,
+    unknown, or mismatched the caller gets a ``FILE_COMMON_17``
+    ``ConnInitException`` pointing at the offending paths.
+
+    The error is raised at config-build time (``ReaderConf.from_src``)
+    so users see it before any transporter or runner work starts.
+    """
+    if fmt is not SrcFileFormat.AUTO:
+        return fmt
+    detected = {_SRC_EXTENSION_FORMAT.get(_extension(p)) for p in paths}
+    detected_real = {d for d in detected if d is not None}
+    if None in detected:
+        unknown = [p for p in paths if _SRC_EXTENSION_FORMAT.get(_extension(p)) is None]
+        raise FileCommonErrorCode.FILE_COMMON_17.exception(
+            paths=paths,
+            reason=f"no recognised extension on {unknown!r}",
+        )
+    if len(detected_real) > 1:
+        raise FileCommonErrorCode.FILE_COMMON_17.exception(
+            paths=paths,
+            reason=f"mixed formats inferred ({sorted(d.value for d in detected_real)})",
+        )
+    return next(iter(detected_real))
+
+
+def resolve_auto_dest_format(fmt: DestFileFormat, paths: list[str]) -> DestFileFormat:
+    """Resolve ``DestFileFormat.AUTO`` to a concrete format via path
+    extension inspection. Mirrors :func:`resolve_auto_src_format` but
+    against the dest-side enum + extension map. Raises ``FILE_COMMON_18``
+    on missing / unknown / mismatched extensions.
+    """
+    if fmt is not DestFileFormat.AUTO:
+        return fmt
+    detected = {_DEST_EXTENSION_FORMAT.get(_extension(p)) for p in paths}
+    detected_real = {d for d in detected if d is not None}
+    if None in detected:
+        unknown = [
+            p for p in paths if _DEST_EXTENSION_FORMAT.get(_extension(p)) is None
+        ]
+        raise FileCommonErrorCode.FILE_COMMON_18.exception(
+            paths=paths,
+            reason=f"no recognised extension on {unknown!r}",
+        )
+    if len(detected_real) > 1:
+        raise FileCommonErrorCode.FILE_COMMON_18.exception(
+            paths=paths,
+            reason=f"mixed formats inferred ({sorted(d.value for d in detected_real)})",
+        )
+    return next(iter(detected_real))
+
+
+def _extension(path: str) -> str:
+    """Lower-cased ``os.path.splitext`` extension. Includes the leading
+    dot, or ``""`` if the path has no extension. Glob paths like
+    ``*.parquet`` retain the ``.parquet`` extension, which is what the
+    AUTO inference wants."""
+    return os.path.splitext(path)[1].lower()
+
+
 def src_format_to_transporter(
     fmt: SrcFileFormat,
     cfg: dict | None,
@@ -550,8 +641,9 @@ def src_format_to_transporter(
         return TransporterParquetFormat()
     if fmt is SrcFileFormat.LOG:
         return TransporterLogFormat()
-    if fmt is SrcFileFormat.AUTO:
-        return TransporterParquetFormat()
+    # AUTO must be resolved by ``resolve_auto_src_format`` before reaching
+    # here -- the previous behaviour silently returned Parquet, which
+    # masked CSV/JSON/AVRO mismatches as parquet-magic-byte failures.
     # noinspection PyProtectedMember
     raise FileCommonErrorCode.FILE_COMMON_14.exception(format=fmt)
 
@@ -568,7 +660,7 @@ def dest_format_to_transporter(
         return TransporterAvroFormat()
     if fmt is DestFileFormat.PARQUET:
         return TransporterParquetFormat()
-    if fmt is DestFileFormat.AUTO:
-        return TransporterParquetFormat()
+    # AUTO must be resolved by ``resolve_auto_dest_format`` before
+    # reaching here -- see the matching note on the src-side function.
     # noinspection PyProtectedMember
     raise FileCommonErrorCode.FILE_COMMON_15.exception(format=fmt)

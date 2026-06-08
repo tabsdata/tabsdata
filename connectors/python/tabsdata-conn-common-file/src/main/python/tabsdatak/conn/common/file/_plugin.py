@@ -54,12 +54,20 @@ class ReaderConf:
 
     @classmethod
     def from_src(cls, conn: Any, src: Any) -> "ReaderConf":
+        paths = list(src.paths)
+        # Resolve ``format=AUTO`` from the paths' extensions before
+        # mapping to a transporter format. Without this step
+        # ``src_format_to_transporter`` would have silently fallen
+        # back to Parquet for AUTO, which masks CSV/JSON/AVRO
+        # mismatches as parquet-magic-byte failures inside the
+        # transporter binary.
+        resolved_fmt = _transporter.resolve_auto_src_format(src.format, paths)
         return cls(
             conn=conn,
-            paths=list(src.paths),
+            paths=paths,
             format=_transporter.src_format_to_transporter(
-                src.format,
-                src.format_cfg.get(src.format) if src.format_cfg else None,
+                resolved_fmt,
+                src.format_cfg.get(resolved_fmt) if src.format_cfg else None,
             ),
             initial_lastmod=initial_lastmod_to_iso(src.initial_last_modified),
             file_info=file_info_to_str(src.file_info),
@@ -74,12 +82,17 @@ class WriterConf:
 
     @classmethod
     def from_dest(cls, conn: Any, dest: Any) -> "WriterConf":
+        paths = list(dest.paths)
+        # Resolve ``format=AUTO`` from the paths' extensions before
+        # mapping to a transporter format -- see the mirroring note
+        # on :meth:`ReaderConf.from_src`.
+        resolved_fmt = _transporter.resolve_auto_dest_format(dest.format, paths)
         return cls(
             conn=conn,
-            paths=list(dest.paths),
+            paths=paths,
             format=_transporter.dest_format_to_transporter(
-                dest.format,
-                dest.format_cfg.get(dest.format) if dest.format_cfg else None,
+                resolved_fmt,
+                dest.format_cfg.get(resolved_fmt) if dest.format_cfg else None,
             ),
         )
 
