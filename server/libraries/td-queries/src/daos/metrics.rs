@@ -6,8 +6,6 @@
 //!
 //! Backs the consolidated `/metrics` endpoint (nodes + edges per
 //! `(bucket, dim, status)`) and `/inflight` (point-in-time, no window).
-//! All queries are pure SELECT statements built via sea_query — no
-//! `format!`, no dialect-specific syntax.
 //!
 //! ## `/metrics` semantic: LFR-canonical, currently-bound attempt
 //!
@@ -16,25 +14,7 @@
 //! (projected by the `function_runs__with_names` view via the LTDV
 //! pointer). Consequence: a replay rebinds the LFR to a new PFR with a
 //! new `ended_on`, so the LFR's bucket moves — **past-window results
-//! are not stable across replays.** Suitable for "canonical outcome
-//! per logical run" dashboards (success rate, Sankey); NOT suitable
-//! for billing / retry-storm visibility, which need per-attempt
-//! attribution. If/when that use case lands, add a separate
-//! PFR-anchored endpoint rather than reshaping this one.
-//!
-//! `/inflight` queries LFR.status directly; status is the only
-//! race-free "right now" signal (replays can transiently null the
-//! bound PFR's `ended_on` during the bind window).
-//!
-//! ## System-table exclusion invariant
-//!
-//! Anywhere LTDVs/PTDVs are touched we filter
-//! `LTDV.function_param_pos >= 0` (mirrors the `system` derivation in
-//! the schema view). Input-side joins additionally enforce
-//! `LFRI.dep_pos >= 0`, which excludes `td.fn_state__*` plumbing on
-//! the consumer side. Output-side magnitudes use the worker-side
-//! aggregated PFR columns, which exclude `system_output` by
-//! construction.
+//! are not stable across replays.**
 
 use crate::QueryExecutor;
 use chrono::{DateTime, Utc};
@@ -422,6 +402,7 @@ fn edge_aggregates_query(req: &MetricsRequest) -> SelectStatement {
     let mut inner = edge_real_branch(req);
     inner.union(UnionType::All, edge_synth_branch(req));
     inner.union(UnionType::All, edge_egress_branch(req));
+    inner.union(UnionType::All, edge_unused_branch(req));
 
     let mut outer = Query::select();
     outer
@@ -989,6 +970,164 @@ fn edge_egress_branch(req: &MetricsRequest) -> SelectStatement {
     stmt
 }
 
+/// Unused-LTDV edges branch: each row is a (producer LFR, output LTDV)
+/// pair where the LTDV has never been referenced by any user-dep LFRI
+/// (anti-join across the full LFRI table — not window-scoped, since
+/// "unused" is a current-state property).
+///
+/// `target_kind` is `Unused`; magnitudes come from the LTDV itself
+/// (its bound PTDV's row_count / data_bytes via the view).
+///
+/// **Snapshot caveat (parallel to the LFR-canonical replay note at the
+/// top of this file)**: an LTDV reported as unused at query time may
+/// be consumed later, retroactively flipping its bucket's
+/// classification. Past-window results are not stable.
+fn edge_unused_branch(req: &MetricsRequest) -> SelectStatement {
+    let bucket_iden = bucket_column(req.unit);
+    let source_dim_iden = source_dim_iden(req.dim);
+    let source_dim_name_iden = source_dim_name_iden(req.dim);
+
+    let null_target: SimpleExpr = Expr::value(Value::String(None));
+    let null_target_name: SimpleExpr = Expr::value(Value::String(None));
+
+    let mut stmt = Query::select();
+    stmt.expr_as(
+        Expr::col((FunctionRunDBWithNamesIden::Table, bucket_iden)),
+        Alias::new("bucket"),
+    )
+    .expr_as(kind_lit(NodeKind::Dim), Alias::new("source_kind"))
+    .expr_as(
+        Expr::col((TableDataVersionDBWithNamesIden::Table, source_dim_iden)),
+        Alias::new("source"),
+    )
+    .expr_as(
+        Expr::col((TableDataVersionDBWithNamesIden::Table, source_dim_name_iden)),
+        Alias::new("source_name"),
+    )
+    .expr_as(kind_lit(NodeKind::Unused), Alias::new("target_kind"))
+    .expr_as(null_target, Alias::new("target"))
+    .expr_as(null_target_name, Alias::new("target_name"))
+    .expr_as(
+        Expr::col((
+            FunctionRunDBWithNamesIden::Table,
+            FunctionRunDBWithNamesIden::Status,
+        )),
+        Alias::new("status"),
+    )
+    .expr_as(
+        Expr::col((
+            FunctionRunDBWithNamesIden::Table,
+            FunctionRunDBWithNamesIden::Id,
+        )),
+        Alias::new("lfr_id"),
+    )
+    .expr_as(
+        Expr::col((
+            TableDataVersionDBWithNamesIden::Table,
+            LogicalTableDataVersionDBIden::Id,
+        )),
+        Alias::new("source_ltdv_id"),
+    )
+    .expr_as(
+        Expr::col((
+            TableDataVersionDBWithNamesIden::Table,
+            TableDataVersionDBWithNamesIden::RowCount,
+        )),
+        Alias::new("source_row_count"),
+    )
+    .expr_as(
+        Expr::col((
+            TableDataVersionDBWithNamesIden::Table,
+            TableDataVersionDBWithNamesIden::DataBytes,
+        )),
+        Alias::new("source_data_bytes"),
+    )
+    .from(FunctionRunDBWithNamesIden::Table)
+    // Producer's OWN output LTDVs (LTDV.producer_lfr_id = fr.id).
+    .join(
+        JoinType::InnerJoin,
+        TableDataVersionDBWithNamesIden::Table,
+        Expr::col((
+            TableDataVersionDBWithNamesIden::Table,
+            LogicalTableDataVersionDBIden::ProducerLogicalFunctionRunId,
+        ))
+        .equals((
+            FunctionRunDBWithNamesIden::Table,
+            FunctionRunDBWithNamesIden::Id,
+        )),
+    )
+    // System-table exclusion on the producer's output LTDVs.
+    .and_where(
+        Expr::col((
+            TableDataVersionDBWithNamesIden::Table,
+            LogicalTableDataVersionDBIden::FunctionParamPos,
+        ))
+        .gte(0),
+    )
+    // Anti-join across full LFRI: LTDV has never been consumed by a
+    // user-dep LFRI. Correlated NOT EXISTS lets the planner use the
+    // LFRI (requirement_ltdv_id) index and short-circuit on first
+    // match. Trigger-only LFRI rows (dep_pos NULL) are excluded by
+    // the dep_pos>=0 filter — consistent with the convention that
+    // "consumed" means data-consuming, not trigger-only.
+    .and_where(
+        Expr::exists({
+            let mut sub = Query::select();
+            sub.expr(Expr::val(1))
+                .from(LogicalFunctionRunInputDBIden::Table)
+                .and_where(
+                    Expr::col((
+                        LogicalFunctionRunInputDBIden::Table,
+                        LogicalFunctionRunInputDBIden::RequirementLogicalTableDataVersionId,
+                    ))
+                    .equals((
+                        TableDataVersionDBWithNamesIden::Table,
+                        LogicalTableDataVersionDBIden::Id,
+                    )),
+                )
+                .and_where(
+                    Expr::col((
+                        LogicalFunctionRunInputDBIden::Table,
+                        LogicalFunctionRunInputDBIden::RequirementDependencyPos,
+                    ))
+                    .gte(0),
+                );
+            sub
+        })
+        .not(),
+    );
+
+    apply_ended_on_window(&mut stmt, req.window.start_ms, req.window.end_ms);
+    apply_status_filter(
+        &mut stmt,
+        &req.statuses,
+        (
+            FunctionRunDBWithNamesIden::Table,
+            FunctionRunDBWithNamesIden::Status,
+        ),
+    );
+    // Unused edges have no target dim → source-only dim filters
+    // (the LTDV's own collection/group).
+    apply_dim_filter(
+        &mut stmt,
+        &req.collections,
+        (
+            TableDataVersionDBWithNamesIden::Table,
+            LogicalTableDataVersionDBIden::CollectionId,
+        ),
+    );
+    apply_dim_filter(
+        &mut stmt,
+        &req.groups,
+        (
+            TableDataVersionDBWithNamesIden::Table,
+            LogicalTableDataVersionDBIden::GroupId,
+        ),
+    );
+
+    stmt
+}
+
 // ---------------------------------------------------------------------------
 // /inflight
 // ---------------------------------------------------------------------------
@@ -1513,28 +1652,44 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_edges_synthetic_for_publisher(db: TdPool) -> Result<(), TdError> {
+        // A publisher whose output LTDV is never consumed produces TWO
+        // edges in the closed-flow model: an ingress
+        // (ExternalSource → coll) carrying the LTDV's magnitudes, and
+        // an unused (coll → Unused) carrying the same magnitudes — the
+        // bytes arrived and then hit a dead end.
         let (coll, _, _ltdv) = seed_publisher_with_ltdv(&db, "pub_synth", "pub_synth_fn").await?;
 
         let req = empty_request(Dim::Collection);
         let mut conn = db.acquire().await.unwrap();
         let edges = conn.metrics().metrics_edges(&req).await?;
 
-        assert_eq!(edges.len(), 1);
-        let e = &edges[0];
-        assert_eq!(e.source_kind, NodeKind::ExternalSource);
-        assert!(
-            e.source.is_none(),
-            "synth-source edge has source = None; the synthetic-kind tag is the discriminator"
-        );
-        assert_eq!(e.target_kind, NodeKind::Dim);
-        assert_eq!(e.target, Some(coll.id.to_string()));
-        assert_eq!(e.fn_runs, 1);
-        assert_eq!(e.tables, 1, "publisher minted one output LTDV");
-        // Source-LTDV attribution: row_count = LTDV.row_count = 10 (from PTDV via view).
-        assert_eq!(*e.row_count.as_ref(), 10);
-        // data_bytes = LTDV.data_bytes = NULL until the worker plumbs
-        // it through PTDV.data_bytes; for the seed path it's None →
-        // COALESCE'd to 0.
+        let ingress: Vec<_> = edges
+            .iter()
+            .filter(|e| e.source_kind == NodeKind::ExternalSource)
+            .collect();
+        let unused: Vec<_> = edges
+            .iter()
+            .filter(|e| e.target_kind == NodeKind::Unused)
+            .collect();
+        assert_eq!(ingress.len(), 1, "expected one ingress edge, got {edges:?}");
+        assert_eq!(unused.len(), 1, "expected one unused edge, got {edges:?}");
+        assert_eq!(edges.len(), 2, "no other edges expected, got {edges:?}");
+
+        let ie = ingress[0];
+        assert!(ie.source.is_none());
+        assert_eq!(ie.target_kind, NodeKind::Dim);
+        assert_eq!(ie.target, Some(coll.id.to_string()));
+        assert_eq!(ie.fn_runs, 1);
+        assert_eq!(ie.tables, 1);
+        assert_eq!(*ie.row_count.as_ref(), 10);
+
+        let ue = unused[0];
+        assert_eq!(ue.source_kind, NodeKind::Dim);
+        assert_eq!(ue.source, Some(coll.id.to_string()));
+        assert!(ue.target.is_none());
+        assert_eq!(ue.fn_runs, 1);
+        assert_eq!(ue.tables, 1);
+        assert_eq!(*ue.row_count.as_ref(), 10);
         Ok(())
     }
 
@@ -1699,6 +1854,16 @@ mod tests {
         assert_eq!(e.fn_runs, 1);
         assert_eq!(e.tables, 1);
         assert_eq!(*e.row_count.as_ref(), 10);
+        // The producer's LTDV is consumed by the subscriber → NOT
+        // unused. Confirms the anti-join on LFRI works.
+        let unused: Vec<_> = edges
+            .iter()
+            .filter(|e| e.target_kind == NodeKind::Unused)
+            .collect();
+        assert!(
+            unused.is_empty(),
+            "consumed LTDV must not appear as unused, got {unused:?}"
+        );
         // Producer is still ingress (no upstream).
         let ingress: Vec<_> = edges
             .iter()
