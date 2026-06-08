@@ -38,17 +38,6 @@ from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
     write_inputs_manifest,
 )
 from tabsdatak.server._tdrunner.function.commands.run_function import (
-    EXIT_BAD_BUNDLE,
-    EXIT_BAD_INITIAL_VALUES,
-    EXIT_BAD_INPUT_PARQUET,
-    EXIT_BAD_MANIFEST,
-    EXIT_BAD_REQUEST,
-    EXIT_BAD_USER_CODE,
-    EXIT_NO_PLUGIN,
-    EXIT_OUTPUT_SHAPE_MISMATCH,
-    EXIT_OUTPUT_WRITE_FAILED,
-    EXIT_OUTPUTS_MANIFEST_WRITE_FAILED,
-    EXIT_USER_FUNCTION_FAILED,
     _FunctionContext,
     _infer_table_modes,
     _invoke_user_function,
@@ -63,7 +52,28 @@ from tabsdatak.server._tdrunner.function._lib.initial_values import (
     read_initial_values,
     write_initial_values,
 )
-from tabsdatak.spi import FunctionCtx, SrcPluginCtx, DestContext, TableMode
+from tabsdatak.server._tdrunner.function.commands.run_function.error import (
+    BadBundleError,
+    BadInitialValuesError,
+    BadInputParquetError,
+    BadManifestError,
+    BadRequestError,
+    BadUserCodeError,
+    NoPluginError,
+    OutputShapeMismatchError,
+    OutputsManifestWriteFailedError,
+    OutputWriteFailedError,
+    UserFunctionFailedError,
+)
+from tabsdatak.spi import DestContext, FunctionCtx, SrcPluginCtx, TableMode
+
+# Legacy unit-tests for the still-present ``load_inputs_manifest_or_fail`` /
+# ``hydrate_ctx_from_state`` / ``drain_ctx_to_state`` helpers (further
+# below) pass these int sentinels. The wired (typed) path now uses the
+# matching ``*Error`` classes; these constants only survive until the
+# legacy helpers are removed in the TD-2263 cleanup PR.
+EXIT_BAD_MANIFEST = BadManifestError.exit_code
+EXIT_BAD_INITIAL_VALUES = BadInitialValuesError.exit_code
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
@@ -460,31 +470,28 @@ def test_load_function_def_happy(built_bundle):
 def test_load_function_def_missing_manifest_raises_bad_bundle(tmp_path):
     empty = tmp_path / "empty"
     empty.mkdir()
-    with pytest.raises(CommandSpecificError) as ei:
+    with pytest.raises(BadBundleError):
         _load_function_def(empty)
-    assert ei.value.exit_code == EXIT_BAD_BUNDLE
 
 
 def test_load_function_def_malformed_json_raises_bad_bundle(tmp_path):
     bad = tmp_path / "bad-bundle"
     bad.mkdir()
     (bad / BUNDLE_MANIFEST_FILENAME).write_text("{ not json")
-    with pytest.raises(CommandSpecificError) as ei:
+    with pytest.raises(BadBundleError):
         _load_function_def(bad)
-    assert ei.value.exit_code == EXIT_BAD_BUNDLE
 
 
 def test_load_function_def_unresolvable_func_raises_bad_user_code(built_bundle):
     """Edit the manifest's func reference to point at a missing module.
     The import failure surfaces via pydantic ValidationError → mapped
-    to EXIT_BAD_USER_CODE."""
+    to BadUserCodeError."""
     manifest = built_bundle / BUNDLE_MANIFEST_FILENAME
     data = json.loads(manifest.read_text())
     data["spec"]["func"] = "nonexistent.module:nope"
     manifest.write_text(json.dumps(data))
-    with pytest.raises(CommandSpecificError) as ei:
+    with pytest.raises(BadUserCodeError):
         _load_function_def(built_bundle)
-    assert ei.value.exit_code == EXIT_BAD_USER_CODE
 
 
 def test_load_function_def_unknown_kind_raises_bad_bundle(built_bundle):
@@ -494,9 +501,8 @@ def test_load_function_def_unknown_kind_raises_bad_bundle(built_bundle):
     data = json.loads(manifest.read_text())
     data["kind"] = "autoPublisherDef"  # not yet handled here
     manifest.write_text(json.dumps(data))
-    with pytest.raises(CommandSpecificError) as ei:
+    with pytest.raises(BadBundleError):
         _load_function_def(built_bundle)
-    assert ei.value.exit_code == EXIT_BAD_BUNDLE
 
 
 def test_load_function_def_missing_kind_raises_bad_bundle(built_bundle):
@@ -504,9 +510,8 @@ def test_load_function_def_missing_kind_raises_bad_bundle(built_bundle):
     data = json.loads(manifest.read_text())
     del data["kind"]
     manifest.write_text(json.dumps(data))
-    with pytest.raises(CommandSpecificError) as ei:
+    with pytest.raises(BadBundleError):
         _load_function_def(built_bundle)
-    assert ei.value.exit_code == EXIT_BAD_BUNDLE
 
 
 def test_load_function_def_transformer_kind_loads_transformer_info(
@@ -562,9 +567,8 @@ def test_output_table_names_subscriber_unregistered_dest_raises_no_plugin(
         raise KeyError("no DestDef registered")
 
     monkeypatch.setattr(f"{_MOD}.get_dest", _raise)
-    with pytest.raises(CommandSpecificError) as ei:
+    with pytest.raises(NoPluginError):
         _output_table_names(info)
-    assert ei.value.exit_code == EXIT_NO_PLUGIN
 
 
 # --- unit: load_inputs_manifest_or_fail (shared helper) -----------------
@@ -635,15 +639,13 @@ def test_infer_table_modes_no_params_returns_empty():
 
 
 def test_infer_table_modes_unannotated_param_raises_bad_user_code():
-    with pytest.raises(CommandSpecificError) as ei:
+    with pytest.raises(BadUserCodeError):
         _infer_table_modes(_fn_unannotated)
-    assert ei.value.exit_code == EXIT_BAD_USER_CODE
 
 
 def test_infer_table_modes_wrong_annotation_raises_bad_user_code():
-    with pytest.raises(CommandSpecificError) as ei:
+    with pytest.raises(BadUserCodeError):
         _infer_table_modes(_fn_wrong_annotation)
-    assert ei.value.exit_code == EXIT_BAD_USER_CODE
 
 
 # --- unit: _scan_parquet_or_fail ----------------------------------------
@@ -659,9 +661,8 @@ def test_scan_parquet_happy(tmp_path):
 def test_scan_parquet_garbage_raises_bad_input_parquet(tmp_path):
     p = tmp_path / "x.parquet"
     p.write_bytes(b"not a parquet")
-    with pytest.raises(CommandSpecificError) as ei:
+    with pytest.raises(BadInputParquetError):
         _scan_parquet_or_fail(p)
-    assert ei.value.exit_code == EXIT_BAD_INPUT_PARQUET
 
 
 # --- unit: _materialise_input_slot --------------------------------------
@@ -683,9 +684,8 @@ def test_materialise_single_two_files_raises_bad_manifest(tmp_path):
     b = tmp_path / "b.parquet"
     _write_sample_parquet(a)
     _write_sample_parquet(b)
-    with pytest.raises(CommandSpecificError) as ei:
+    with pytest.raises(BadManifestError):
         _materialise_input_slot([str(a), str(b)], table_mode=TableMode.SINGLE)
-    assert ei.value.exit_code == EXIT_BAD_MANIFEST
 
 
 def test_materialise_array_returns_list_of_lazyframes(tmp_path):
@@ -726,36 +726,32 @@ def test_invoke_user_function_raises_maps_to_user_function_failed():
     def fn(in_1):
         raise RuntimeError("boom")
 
-    with pytest.raises(CommandSpecificError) as ei:
+    with pytest.raises(UserFunctionFailedError):
         _invoke_user_function(fn, [_fake_lf()], ["t1"])
-    assert ei.value.exit_code == EXIT_USER_FUNCTION_FAILED
 
 
 def test_invoke_user_function_non_tuple_return_raises_shape_mismatch():
     def fn(in_1):
         return _fake_lf()  # missing tuple wrap
 
-    with pytest.raises(CommandSpecificError) as ei:
+    with pytest.raises(OutputShapeMismatchError):
         _invoke_user_function(fn, [_fake_lf()], ["t1"])
-    assert ei.value.exit_code == EXIT_OUTPUT_SHAPE_MISMATCH
 
 
 def test_invoke_user_function_wrong_length_raises_shape_mismatch():
     def fn(in_1):
         return (_fake_lf(), _fake_lf())  # returns 2, expects 1
 
-    with pytest.raises(CommandSpecificError) as ei:
+    with pytest.raises(OutputShapeMismatchError):
         _invoke_user_function(fn, [_fake_lf()], ["t1"])
-    assert ei.value.exit_code == EXIT_OUTPUT_SHAPE_MISMATCH
 
 
 def test_invoke_user_function_wrong_element_type_raises_shape_mismatch():
     def fn(in_1):
         return ("not a lazyframe",)
 
-    with pytest.raises(CommandSpecificError) as ei:
+    with pytest.raises(OutputShapeMismatchError):
         _invoke_user_function(fn, [_fake_lf()], ["t1"])
-    assert ei.value.exit_code == EXIT_OUTPUT_SHAPE_MISMATCH
 
 
 # --- unit: _sink_outputs ------------------------------------------------
@@ -789,9 +785,8 @@ def test_sink_outputs_write_failure_maps_to_output_write_failed(tmp_path, monkey
         raise RuntimeError("disk full")
 
     monkeypatch.setattr(pl.LazyFrame, "sink_parquet", _broken_sink)
-    with pytest.raises(CommandSpecificError) as ei:
+    with pytest.raises(OutputWriteFailedError):
         _sink_outputs((_fake_lf(),), ["t1"], tmp_path)
-    assert ei.value.exit_code == EXIT_OUTPUT_WRITE_FAILED
 
 
 # --- main: error paths --------------------------------------------------
@@ -808,7 +803,7 @@ def test_main_missing_request_returns_bad_request(tmp_path, monkeypatch, http_ok
         tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert main() == EXIT_BAD_REQUEST
+    assert main() == BadRequestError.exit_code
 
 
 def test_main_missing_bundle_returns_bad_bundle(tmp_path, monkeypatch, http_ok_url):
@@ -823,7 +818,7 @@ def test_main_missing_bundle_returns_bad_bundle(tmp_path, monkeypatch, http_ok_u
         tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert main() == EXIT_BAD_BUNDLE
+    assert main() == BadBundleError.exit_code
 
 
 def test_main_invalid_options_returns_1(monkeypatch):
@@ -897,7 +892,7 @@ def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch, http_ok
 def test_main_outputs_manifest_write_failure(
     tmp_path, built_bundle, monkeypatch, http_ok_url
 ):
-    """If the outputs-manifest write fails, surface EXIT_OUTPUTS_MANIFEST_WRITE_FAILED."""
+    """If the outputs-manifest write fails, surface OutputsManifestWriteFailedError."""
     request_path = _write_request(tmp_path / "request.yaml")
     raw_parquet = tmp_path / "raw" / "rows.parquet"
     _write_sample_parquet(raw_parquet)
@@ -921,7 +916,7 @@ def test_main_outputs_manifest_write_failure(
         tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert main() == EXIT_OUTPUTS_MANIFEST_WRITE_FAILED
+    assert main() == OutputsManifestWriteFailedError.exit_code
 
 
 # --- main: multi-cardinality (regression — see commit history) -----------
@@ -1030,7 +1025,7 @@ def test_main_manifest_length_mismatch_returns_bad_manifest(
     tmp_path, multi_publisher_bundle, monkeypatch, http_ok_url
 ):
     """The multi-cardinality publisher declares 2 input slots; feeding
-    it a 1-entry manifest must surface EXIT_BAD_MANIFEST rather than
+    it a 1-entry manifest must surface BadManifestError rather than
     silently dropping the second slot."""
     request_path = _write_request(tmp_path / "request.yaml")
     a_parquet = tmp_path / "raw" / "a.parquet"
@@ -1053,7 +1048,7 @@ def test_main_manifest_length_mismatch_returns_bad_manifest(
         tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert main() == EXIT_BAD_MANIFEST
+    assert main() == BadManifestError.exit_code
 
 
 # --- decorator metadata -------------------------------------------------

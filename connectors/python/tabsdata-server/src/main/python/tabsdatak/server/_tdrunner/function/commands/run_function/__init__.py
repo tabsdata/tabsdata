@@ -47,23 +47,27 @@ from tabsdatak._info import (
     _unwrap_info,
 )
 from tabsdatak.server._tdrunner.function._lib.cli import build_parser, command
-from tabsdatak.server._tdrunner.function._lib.errors import CommandSpecificError
-from tabsdatak.server._tdrunner.function._lib.function_def import load_function_def
+from tabsdatak.server._tdrunner.function._lib.function_def import (
+    load_function_def_or_raise,
+)
 from tabsdatak.server._tdrunner.function._lib.initial_values import (
-    drain_ctx_to_state,
-    hydrate_ctx_from_state,
+    drain_ctx_to_state_or_raise,
+    hydrate_ctx_from_state_or_raise,
 )
 from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
     MANIFEST_FILES_KEY,
-    load_inputs_manifest_or_fail,
+    load_inputs_manifest_or_raise,
 )
 from tabsdatak.server._tdrunner.function._lib.outputs_manifest import (
     MANIFEST_FILE_KEY,
     MANIFEST_NAME_KEY,
     write_outputs_manifest,
 )
-from tabsdatak.server._tdrunner.function._lib.request import load_request_or_fail
+from tabsdatak.server._tdrunner.function._lib.request import load_request_or_raise
 from tabsdatak.server._tdrunner.function._lib.request_ctx import FromRequestCtx
+from tabsdatak.server._tdrunner.function.commands.run_function.error import (
+    RunFunctionErrorCode,
+)
 from tabsdatak.spi import FunctionCtx, TableMode
 
 # The Info classes this command knows how to invoke. The runner is
@@ -92,19 +96,6 @@ MAN = (
     "table to its parquet (or null if the function returned None). "
     "Handles publisherDef, transformerDef, and subscriberDef bundles."
 )
-
-# Command-specific exit codes (>= 10 per docs/01-CommandBasics.md).
-EXIT_BAD_REQUEST = 10
-EXIT_BAD_BUNDLE = 11
-EXIT_BAD_USER_CODE = 12
-EXIT_BAD_MANIFEST = 14
-EXIT_BAD_INPUT_PARQUET = 15
-EXIT_NO_PLUGIN = 16
-EXIT_USER_FUNCTION_FAILED = 17
-EXIT_OUTPUT_SHAPE_MISMATCH = 18
-EXIT_OUTPUT_WRITE_FAILED = 19
-EXIT_OUTPUTS_MANIFEST_WRITE_FAILED = 20
-EXIT_BAD_INITIAL_VALUES = 21
 
 
 def _build_parser():
@@ -175,18 +166,18 @@ _INFO_BY_KIND: dict[str, type[FunctionInfo]] = {
 
 def _load_function_def(bundle_dir: Path) -> FunctionInfo:
     """Load the bundle's ``function_def.json`` -- thin wrapper over
-    :func:`load_function_def` accepting the three kinds run-function
-    dispatches on.
+    :func:`load_function_def_or_raise` accepting the three kinds
+    run-function dispatches on.
 
     Both bundle-shape failures and unknown-kind failures land on
-    ``EXIT_BAD_BUNDLE`` to preserve the pre-refactor mapping (the
-    test suite expects that)."""
-    return load_function_def(
+    ``BadBundleError`` (same exit code) to preserve the pre-refactor
+    mapping (the test suite expects that)."""
+    return load_function_def_or_raise(
         bundle_dir,
         allowed_kinds=_INFO_BY_KIND,
-        exit_bad_bundle=EXIT_BAD_BUNDLE,
-        exit_bad_user_code=EXIT_BAD_USER_CODE,
-        exit_wrong_kind=EXIT_BAD_BUNDLE,
+        bad_bundle_code=RunFunctionErrorCode.RF_2,
+        bad_user_code_code=RunFunctionErrorCode.RF_3,
+        wrong_kind_code=RunFunctionErrorCode.RF_4,
     )
 
 
@@ -206,16 +197,13 @@ def _infer_table_modes(func: Callable) -> list[TableMode]:
     ``TableFrameSpec`` (single-mode) or ``TableFramesSpec``
     (array-mode). Because the decorator's
     ``_check_callable_signature`` already enforces that, the
-    EXIT_BAD_USER_CODE branches below are defensive fallbacks for
+    BadUserCodeError branches below are defensive fallbacks for
     runtime invariant violations rather than realistic user errors.
     """
     try:
         hints = typing.get_type_hints(func)
     except Exception as exc:
-        raise CommandSpecificError(
-            EXIT_BAD_USER_CODE,
-            f"cannot resolve type hints for user function: {exc}",
-        ) from exc
+        raise RunFunctionErrorCode.RF_6.exception(cause=exc, detail=str(exc))
     params = list(inspect.signature(func).parameters.values())
     # The trailing ``ctx: TrxCtx`` parameter (if declared) is not an
     # input slot -- skip it when inferring slot modes.
@@ -229,12 +217,7 @@ def _infer_table_modes(func: Callable) -> list[TableMode]:
         elif hint is not None and _is_array_slot(hint):
             modes.append(TableMode.ARRAY)
         else:
-            raise CommandSpecificError(
-                EXIT_BAD_USER_CODE,
-                f"parameter {p.name!r} of user function has an "
-                f"unrecognised slot annotation; expected TableFrameSpec "
-                f"or TableFramesSpec",
-            )
+            raise RunFunctionErrorCode.RF_7.exception(param=p.name)
     return modes
 
 
@@ -250,15 +233,17 @@ def _output_table_names(info: FunctionInfo) -> list[str]:
     the parquet list positionally and doesn't depend on the names.
 
     Raises:
-        CommandSpecificError(EXIT_NO_PLUGIN): the subscriber's
-            destination class has no registered DestDef (the
-            connector package isn't installed in the runtime).
+        NoPluginError: the subscriber's destination class has no
+            registered DestDef (the connector package isn't
+            installed in the runtime).
     """
     if isinstance(info, SubscriberInfo):
         try:
             dest_def = get_dest(type(info.destination))
         except KeyError as exc:
-            raise CommandSpecificError(EXIT_NO_PLUGIN, str(exc)) from exc
+            raise RunFunctionErrorCode.RF_8.exception(
+                cause=exc, dest_type=type(info.destination).__name__, detail=str(exc)
+            )
         n = dest_def.cardinality(info.destination)
         return [f"out_{i}" for i in range(n)]
     return list(info.output_tables)
@@ -278,10 +263,7 @@ def _scan_parquet_or_fail(path: Path) -> pl.LazyFrame:
         lf = pl.scan_parquet(path)
         lf.collect_schema()
     except Exception as exc:
-        raise CommandSpecificError(
-            EXIT_BAD_INPUT_PARQUET,
-            f"failed to scan input parquet {path}: {exc}",
-        ) from exc
+        raise RunFunctionErrorCode.RF_9.exception(cause=exc, path=path, detail=str(exc))
     return lf
 
 
@@ -317,10 +299,7 @@ def _materialise_input_slot(files: list[str], *, table_mode: TableMode):
         if len(scans) == 0:
             return None
         if len(scans) > 1:
-            raise CommandSpecificError(
-                EXIT_BAD_MANIFEST,
-                f"SINGLE-mode slot has {len(scans)} files; expected 0 or 1",
-            )
+            raise RunFunctionErrorCode.RF_11.exception(count=len(scans))
         return scans[0]
     # ARRAY mode
     return scans
@@ -335,29 +314,22 @@ def _invoke_user_function(func, call_args: list, output_tables: list[str]) -> tu
     try:
         result = func(*call_args)
     except Exception as exc:
-        raise CommandSpecificError(
-            EXIT_USER_FUNCTION_FAILED, f"user function raised: {exc}"
-        ) from exc
+        raise RunFunctionErrorCode.RF_12.exception(cause=exc, detail=str(exc))
 
     if not isinstance(result, tuple):
-        raise CommandSpecificError(
-            EXIT_OUTPUT_SHAPE_MISMATCH,
-            f"user function must return a tuple, got {type(result).__name__}",
-        )
+        raise RunFunctionErrorCode.RF_13.exception(actual_type=type(result).__name__)
     if len(result) != len(output_tables):
-        raise CommandSpecificError(
-            EXIT_OUTPUT_SHAPE_MISMATCH,
-            f"user function returned {len(result)} value(s); "
-            f"output_tables declares {len(output_tables)} "
-            f"({list(output_tables)})",
+        raise RunFunctionErrorCode.RF_14.exception(
+            returned=len(result),
+            expected=len(output_tables),
+            tables=list(output_tables),
         )
     for i, value in enumerate(result):
         if value is not None and not isinstance(value, pl.LazyFrame):
-            raise CommandSpecificError(
-                EXIT_OUTPUT_SHAPE_MISMATCH,
-                f"output {i} ({output_tables[i]!r}) must be a "
-                f"polars.LazyFrame or None, got "
-                f"{type(value).__name__}",
+            raise RunFunctionErrorCode.RF_15.exception(
+                slot=i,
+                table=output_tables[i],
+                actual_type=type(value).__name__,
             )
     return result
 
@@ -383,10 +355,9 @@ def _sink_outputs(
             slot_dir.mkdir(parents=True, exist_ok=True)
             value.sink_parquet(dest)
         except Exception as exc:
-            raise CommandSpecificError(
-                EXIT_OUTPUT_WRITE_FAILED,
-                f"failed to write output {table_name!r} to {dest}: {exc}",
-            ) from exc
+            raise RunFunctionErrorCode.RF_16.exception(
+                cause=exc, table=table_name, path=dest, detail=str(exc)
+            )
         entries.append({
             MANIFEST_NAME_KEY: table_name,
             MANIFEST_FILE_KEY: str(dest.absolute()),
@@ -403,17 +374,17 @@ def main(args: argparse.Namespace) -> int:
     outputs_manifest_path = Path(args.outputs_manifest)
     state_dir = Path(args.state_dir)
 
-    request = load_request_or_fail(request_path, EXIT_BAD_REQUEST)
+    request = load_request_or_raise(request_path, RunFunctionErrorCode.RF_1)
     info = _load_function_def(bundle_dir)
-    entries = load_inputs_manifest_or_fail(inputs_manifest_path, EXIT_BAD_MANIFEST)
+    entries = load_inputs_manifest_or_raise(
+        inputs_manifest_path, RunFunctionErrorCode.RF_5
+    )
 
     func = _unwrap_info(info.func)
     table_modes = _infer_table_modes(func)
     if len(entries) != len(table_modes):
-        raise CommandSpecificError(
-            EXIT_BAD_MANIFEST,
-            f"inputs manifest has {len(entries)} entries but the "
-            f"user function declares {len(table_modes)} input slots",
+        raise RunFunctionErrorCode.RF_10.exception(
+            entries=len(entries), slots=len(table_modes)
         )
 
     # Make the function's output directory available BEFORE invoking
@@ -450,11 +421,11 @@ def main(args: argparse.Namespace) -> int:
             function_id=str(request.info.function_run_id),
             function_name=request.info.function,
         )
-        hydrate_ctx_from_state(
+        hydrate_ctx_from_state_or_raise(
             ctx,
             request,
             state_dir,
-            exit_code=EXIT_BAD_INITIAL_VALUES,
+            error_code=RunFunctionErrorCode.RF_18,
             prefer_output=True,
         )
         call_args.append(ctx)
@@ -463,17 +434,18 @@ def main(args: argparse.Namespace) -> int:
     result = _invoke_user_function(func, call_args, output_tables)
 
     if ctx is not None:
-        drain_ctx_to_state(ctx, request, state_dir, exit_code=EXIT_BAD_INITIAL_VALUES)
+        drain_ctx_to_state_or_raise(
+            ctx, request, state_dir, error_code=RunFunctionErrorCode.RF_18
+        )
 
     entries_out = _sink_outputs(result, output_tables, out_dir)
 
     try:
         write_outputs_manifest(entries_out, outputs_manifest_path)
     except OSError as exc:
-        raise CommandSpecificError(
-            EXIT_OUTPUTS_MANIFEST_WRITE_FAILED,
-            f"failed to write outputs manifest {outputs_manifest_path}: {exc}",
-        ) from exc
+        raise RunFunctionErrorCode.RF_17.exception(
+            cause=exc, path=outputs_manifest_path, detail=str(exc)
+        )
 
     return 0
 
