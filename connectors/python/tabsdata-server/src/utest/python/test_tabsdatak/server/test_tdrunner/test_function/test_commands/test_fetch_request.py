@@ -15,10 +15,12 @@ import yaml
 from tabsdatak.server._tdrunner.function._lib.errors import CommandSpecificError
 from tabsdatak.server._tdrunner.function.commands.fetch_request import (
     EXIT_BAD_PAYLOAD,
-    EXIT_HTTP_ERROR,
-    EXIT_WRITE_ERROR,
     _fetch,
     main,
+)
+from tabsdatak.server._tdrunner.function.commands.fetch_request.error import (
+    HttpFetchError,
+    WriteFailedError,
 )
 
 
@@ -67,25 +69,25 @@ def test_fetch_returns_body_and_passes_authorization_verbatim(monkeypatch):
     assert captured["headers"]["Authorization"] == "Bearer raw-token"
 
 
-def test_fetch_http_error_raises_command_specific(monkeypatch):
+def test_fetch_http_error_raises_typed_exception(monkeypatch):
     def fake(req):
         raise urllib.error.HTTPError("https://api/r", 404, "Not Found", {}, None)
 
     monkeypatch.setattr(urllib.request, "urlopen", fake)
-    with pytest.raises(CommandSpecificError) as exc_info:
+    with pytest.raises(HttpFetchError) as exc_info:
         _fetch("https://api/r", "GET", "Bearer tok")
-    assert exc_info.value.exit_code == EXIT_HTTP_ERROR
+    assert exc_info.value.exit_code == HttpFetchError.exit_code
     assert "404" in str(exc_info.value)
 
 
-def test_fetch_url_error_raises_command_specific(monkeypatch):
+def test_fetch_url_error_raises_typed_exception(monkeypatch):
     def fake(req):
         raise urllib.error.URLError("connection refused")
 
     monkeypatch.setattr(urllib.request, "urlopen", fake)
-    with pytest.raises(CommandSpecificError) as exc_info:
+    with pytest.raises(HttpFetchError) as exc_info:
         _fetch("https://api/r", "GET", "Bearer tok")
-    assert exc_info.value.exit_code == EXIT_HTTP_ERROR
+    assert exc_info.value.exit_code == HttpFetchError.exit_code
     assert "connection refused" in str(exc_info.value)
 
 
@@ -220,7 +222,7 @@ def test_main_http_error_returns_command_specific_exit(
         liveness=tmp_path / "live",
         responder_url=http_ok_url,
     )
-    assert main() == EXIT_HTTP_ERROR
+    assert main() == HttpFetchError.exit_code
 
 
 def test_main_write_error_returns_command_specific_exit(monkeypatch, tmp_path):
@@ -234,7 +236,7 @@ def test_main_write_error_returns_command_specific_exit(monkeypatch, tmp_path):
         request_file=blocker / "subdir" / "out",
         liveness=tmp_path / "live",
     )
-    assert main() == EXIT_WRITE_ERROR
+    assert main() == WriteFailedError.exit_code
 
 
 def test_main_creates_parent_folders_when_absent(monkeypatch, tmp_path):

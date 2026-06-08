@@ -32,6 +32,9 @@ from tabsdatak.server._tdrunner.function._lib.cli import (
     resolve_value,
 )
 from tabsdatak.server._tdrunner.function._lib.errors import CommandSpecificError
+from tabsdatak.server._tdrunner.function.commands.fetch_request.error import (
+    FetchRequestErrorCode,
+)
 
 VERSION = "2.0.0"
 INFO = (
@@ -55,14 +58,15 @@ MAN = (
     "YAML to --request-file."
 )
 
-# Command-specific exit codes (>= 10 per docs/01-CommandBasics.md).
-EXIT_HTTP_ERROR = 10
-EXIT_WRITE_ERROR = 11
+# EXIT_BAD_PAYLOAD stays here for the JSON-envelope checks below; the
+# HTTP-error and write-error codes moved to ``FetchRequestErrorCode``
+# (FR_1/2/3) in ``error.py`` once the per-site error classes landed
+# (TD-2270). The BAD_PAYLOAD migration is left as legacy shim until a
+# matching FR_* code is added.
 EXIT_BAD_PAYLOAD = 12
 
 RESOLVER_RETRY_WAIT_SECONDS = 2
 RESOLVER_RETRY_TOTAL_SECONDS = 32
-
 
 def _build_parser():
     parser = build_parser(
@@ -114,14 +118,13 @@ def _fetch(url: str, method: str, authorization: str) -> bytes:
     try:
         return _fetch_request(request)
     except urllib.error.HTTPError as exc:
-        raise CommandSpecificError(
-            EXIT_HTTP_ERROR, f"HTTP {exc.code} from {url}: {exc.reason}"
-        ) from exc
+        raise FetchRequestErrorCode.FR_1.exception(
+            cause=exc, url=url, status=exc.code, detail=exc.reason
+        )
     except urllib.error.URLError as exc:
-        raise CommandSpecificError(
-            EXIT_HTTP_ERROR,
-            f"network error contacting {url}: {exc.reason}",
-        ) from exc
+        raise FetchRequestErrorCode.FR_2.exception(
+            cause=exc, url=url, detail=str(exc.reason)
+        )
 
 
 @command(name="td_fetch_request", parser=_build_parser)
@@ -148,9 +151,11 @@ def main(args: argparse.Namespace) -> int:
         request_file.parent.mkdir(parents=True, exist_ok=True)
         request_file.write_text(yaml.safe_dump(data, sort_keys=False))
     except OSError as exc:
-        raise CommandSpecificError(
-            EXIT_WRITE_ERROR, f"failed to write {request_file}: {exc}"
-        ) from exc
+        # TD-2270 introduced this typo (`out_path` ↦ `request_file`);
+        # fixed during the rebase resolution.
+        raise FetchRequestErrorCode.FR_3.exception(
+            cause=exc, path=request_file, detail=str(exc)
+        )
     return 0
 
 
