@@ -28,7 +28,8 @@ use td_objects::rest_urls::CollectionParam;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
     AtTime, BundleId, CollectionId, CollectionIdName, CollectionName, DataLocation, Enabled,
-    FunctionId, FunctionName, FunctionVersionId, ProjectId, ReuseFrozen, StorageVersion,
+    FunctionId, FunctionName, FunctionVersionId, ProjectId, ResetState, ReuseFrozen,
+    StorageVersion,
     TableNameDto, TableType, WorkerConfig, WorkerTypeDto,
 };
 use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
@@ -122,6 +123,8 @@ fn service() {
         from_fn(check_private_tables::<TableTriggerDto>),
         // Extract reuse frozen
         from_fn(With::<FunctionRegister>::extract::<ReuseFrozen>),
+        // Register never resets state (fresh tables get new ids anyway).
+        from_fn(With::<ResetState>::default),
         // And register new ones
         register_tables(),
         register_dependencies::<_, DO_AUTHZ>(),
@@ -265,6 +268,7 @@ mod tests {
                 type_of_val(&check_private_tables::<TableTriggerDto>),
                 // Extract reuse frozen
                 type_of_val(&With::<FunctionRegister>::extract::<ReuseFrozen>),
+                type_of_val(&With::<ResetState>::default),
                 // Insert into table_versions(sql) current function tables status=Active.
                 // Reuse table_id for tables that existed (had status=Frozen)
                 type_of_val(&With::<FunctionDB>::try_convert_to::<TableDBBuilder, _>),

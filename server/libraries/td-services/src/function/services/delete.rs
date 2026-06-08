@@ -24,7 +24,8 @@ use td_objects::rest_urls::FunctionParam;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
     AtTime, CollectionId, CollectionIdName, CollectionName, FunctionId, FunctionIdName,
-    FunctionVersionId, ReuseFrozen, TableNameDto, TableType, WorkerConfig, WorkerTypeDto,
+    FunctionVersionId, ResetState, ReuseFrozen, TableNameDto, TableType, WorkerConfig,
+    WorkerTypeDto,
 };
 use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
 use td_queries::By;
@@ -93,6 +94,8 @@ fn service() {
         from_fn(With::<HashMap<WorkerTypeDto, WorkerConfig>>::some),
         // Extract reuse frozen (default as deletes are not reusing anything)
         from_fn(With::<ReuseFrozen>::default),
+        // Deletes never reset state.
+        from_fn(With::<ResetState>::default),
         // And register new ones
         register_tables(),
         register_dependencies::<_, SKIP_AUTHZ>(),
@@ -140,7 +143,7 @@ mod tests {
         use td_objects::dxo::table::TableDBBuilder;
         use td_objects::dxo::trigger::{TriggerDB, TriggerDBBuilder, TriggerDBWithNames};
         use td_objects::dxo::worker::{WorkerDB, WorkerDBBuilder};
-        use td_objects::types::basic::ReuseFrozen;
+        use td_objects::types::basic::{ResetState, ReuseFrozen};
         use td_queries::insert_vec;
 
         DeleteFunctionService::with_defaults(db)
@@ -198,6 +201,7 @@ mod tests {
                 type_of_val(&With::<HashMap<WorkerTypeDto, WorkerConfig>>::some),
                 // Extract reuse frozen (default as deletes are not reusing anything)
                 type_of_val(&With::<ReuseFrozen>::default),
+                type_of_val(&With::<ResetState>::default),
                 // Insert into table_versions(sql) current function tables status=Active.
                 // Reuse table_id for tables that existed (had status=Frozen)
                 type_of_val(&With::<FunctionDB>::try_convert_to::<TableDBBuilder, _>),

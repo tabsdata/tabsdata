@@ -31,8 +31,8 @@ use td_objects::rest_urls::FunctionParam;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
     AtTime, BundleId, CollectionId, CollectionIdName, CollectionName, DataLocation, FunctionId,
-    FunctionIdName, FunctionVersionId, ReuseFrozen, StorageVersion, TableNameDto, TableType,
-    WorkerConfig, WorkerTypeDto,
+    FunctionIdName, FunctionVersionId, ResetState, ReuseFrozen, StorageVersion, TableNameDto,
+    TableType, WorkerConfig, WorkerTypeDto,
 };
 use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
 use td_queries::By;
@@ -122,6 +122,8 @@ fn service() {
         from_fn(check_private_tables::<TableTriggerDto>),
         // Extract reuse frozen
         from_fn(With::<FunctionUpdate>::extract::<ReuseFrozen>),
+        // Extract reset state (regenerate the function state table id)
+        from_fn(With::<FunctionUpdate>::extract::<ResetState>),
         // And register new ones
         register_tables(),
         register_dependencies::<_, DO_AUTHZ>(),
@@ -155,10 +157,11 @@ mod tests {
     use td_objects::dxo::trigger::TriggerDB;
     use td_objects::dxo::worker::WorkerDB;
     use td_objects::rest_urls::CollectionParam;
+    use td_objects::system::TD_FN_STATE_PREFIX;
     use td_objects::types::basic::{
-        ProjectId,
-        AccessTokenId, Decorator, Depth, FunctionRuntimeValues, RoleId, TableName, TableStatus,
-        ToCollectionId, UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
+        AccessTokenId, Decorator, Depth, FunctionRuntimeValues, ProjectId, RoleId, TableId,
+        TableName, TableStatus, ToCollectionId, UserId, WorkerMessageStatus, WorkerStatus,
+        WorkerType,
     };
     use td_objects::types::recursion::RecursionOptions;
     use td_objects::{Buildable, and};
@@ -181,7 +184,7 @@ mod tests {
         use td_objects::dxo::table::TableDBBuilder;
         use td_objects::dxo::trigger::{TriggerDB, TriggerDBBuilder, TriggerDBWithNames};
         use td_objects::dxo::worker::{WorkerDB, WorkerDBBuilder};
-        use td_objects::types::basic::ReuseFrozen;
+        use td_objects::types::basic::{ResetState, ReuseFrozen};
         use td_queries::insert_vec;
 
         use td_tower::metadata::type_of_val;
@@ -255,6 +258,8 @@ mod tests {
                 type_of_val(&check_private_tables::<TableTriggerDto>),
                 // Extract reuse frozen
                 type_of_val(&With::<FunctionUpdate>::extract::<ReuseFrozen>),
+                // Extract reset state
+                type_of_val(&With::<FunctionUpdate>::extract::<ResetState>),
                 // And register new ones
                 // Insert into table_versions(sql) current function tables status=Active.
                 // Reuse table_id for tables that existed (had status=Frozen)
@@ -533,6 +538,147 @@ mod tests {
             &response,
         )
         .await
+    }
+
+    // Helper: the table_id of the current Active version of a table whose name
+    // matches `pred`, among all active tables.
+    async fn active_table_id(
+        db: &TdPool,
+        pred: impl Fn(&TableName) -> bool,
+    ) -> Result<TableId, TdError> {
+        let active: Vec<TableDB> = db.live().fetch_all::<TableDB>(&TableStatus::Active).await?;
+        let table = active
+            .into_iter()
+            .find(|t| pred(&t.name))
+            .expect("matching active table exists");
+        Ok(table.table_id)
+    }
+
+    #[td_test::test(db)]
+    async fn test_update_reset_state(db: TdPool) -> Result<(), TdError> {
+        let collection = db
+            .seed()
+            .collection(&CollectionName::try_from("reset_coll")?, &UserId::admin())
+            .await?;
+
+        let create = FunctionRegister::builder()
+            .try_name("reset_fn")?
+            .try_description("desc")?
+            .bundle_id(BundleId::default())
+            .try_snippet("snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(None)
+            .triggers(None)
+            .tables(Some(vec![TableNameDto::try_from("user_table")?]))
+            .runtime_values(FunctionRuntimeValues::try_from("rv")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+        // Register via the service so the system state table is created.
+        let register =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
+                CollectionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .build()?,
+                create,
+            );
+        RegisterFunctionService::with_defaults(db.clone())
+            .service()
+            .raw_oneshot(register)
+            .await?;
+
+        let user_table = TableName::try_from("user_table")?;
+        let state_id_before =
+            active_table_id(&db, |n| n.starts_with(TD_FN_STATE_PREFIX)).await?;
+        let user_id_before = active_table_id(&db, |n| *n == user_table).await?;
+
+        let update = FunctionUpdate::builder()
+            .name(Some("reset_fn".try_into()?))
+            .tables(Some(vec![TableNameDto::try_from("user_table")?]))
+            .reset_state(ResetState::TRUE)
+            .build()?;
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .function(FunctionIdName::from_str("reset_fn")?)
+                    .build()?,
+                update,
+            );
+        let service = UpdateFunctionService::with_defaults(db.clone()).service();
+        let _ = service.raw_oneshot(request).await?;
+
+        let state_id_after =
+            active_table_id(&db, |n| n.starts_with(TD_FN_STATE_PREFIX)).await?;
+        let user_id_after = active_table_id(&db, |n| *n == user_table).await?;
+
+        assert_ne!(
+            state_id_before, state_id_after,
+            "reset_state should regenerate the state table id"
+        );
+        assert_eq!(
+            user_id_before, user_id_after,
+            "user table id should be preserved"
+        );
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_update_no_reset_state_reuses_state_id(db: TdPool) -> Result<(), TdError> {
+        let collection = db
+            .seed()
+            .collection(&CollectionName::try_from("noreset_coll")?, &UserId::admin())
+            .await?;
+
+        let create = FunctionRegister::builder()
+            .try_name("noreset_fn")?
+            .try_description("desc")?
+            .bundle_id(BundleId::default())
+            .try_snippet("snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(None)
+            .triggers(None)
+            .tables(Some(vec![TableNameDto::try_from("user_table")?]))
+            .runtime_values(FunctionRuntimeValues::try_from("rv")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+        let register =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
+                CollectionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .build()?,
+                create,
+            );
+        RegisterFunctionService::with_defaults(db.clone())
+            .service()
+            .raw_oneshot(register)
+            .await?;
+
+        let state_id_before =
+            active_table_id(&db, |n| n.starts_with(TD_FN_STATE_PREFIX)).await?;
+
+        // Default reset_state = false.
+        let update = FunctionUpdate::builder()
+            .name(Some("noreset_fn".try_into()?))
+            .tables(Some(vec![TableNameDto::try_from("user_table")?]))
+            .build()?;
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .function(FunctionIdName::from_str("noreset_fn")?)
+                    .build()?,
+                update,
+            );
+        let service = UpdateFunctionService::with_defaults(db.clone()).service();
+        let _ = service.raw_oneshot(request).await?;
+
+        let state_id_after =
+            active_table_id(&db, |n| n.starts_with(TD_FN_STATE_PREFIX)).await?;
+        assert_eq!(
+            state_id_before, state_id_after,
+            "without reset_state the state table id is reused"
+        );
+        Ok(())
     }
 
     #[td_test::test(db)]

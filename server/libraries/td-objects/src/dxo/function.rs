@@ -8,7 +8,8 @@ mod definitions {
     use crate::types::basic::{
         AtTime, BundleId, CollectionId, CollectionName, Connector, DataLocation, Decorator,
         Description, Enabled, FunctionId, FunctionName, FunctionRuntimeValues, FunctionStatus,
-        FunctionVersionId, GroupId, ProjectId, ReuseFrozen, Snippet, StorageVersion, TableName,
+        FunctionVersionId, GroupId, ProjectId, ResetState, ReuseFrozen, Snippet, StorageVersion,
+        TableName,
         TableNameDto, TableType, UserId, UserName, WorkerConfig, WorkerId, WorkerTypeDto,
     };
     use crate::types::composed::{
@@ -76,6 +77,10 @@ mod definitions {
         pub enabled: Option<Enabled>, // added in v4
         #[dxo(extractor)]
         pub workers: Option<HashMap<WorkerTypeDto, WorkerConfig>>, // added in v4
+        /// When true, regenerate the function's state table id instead of
+        /// carrying it forward, so publishers re-read initial config values.
+        #[dxo(extractor)]
+        pub reset_state: ResetState,
     }
 
     #[ta_objects::Dto]

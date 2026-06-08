@@ -15,13 +15,14 @@ use td_objects::dxo::table::{TableDB, TableDBBuilder, TableDBWithNames};
 use td_objects::dxo::trigger::{TriggerDB, TriggerDBBuilder, TriggerDBWithNames};
 use td_objects::dxo::worker::{UpdateWorkerDB, WorkerDB, WorkerDBBuilder};
 use td_objects::system::{
-    SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES, SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES,
+    SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES, SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES, TD_FN_STATE_PREFIX,
 };
 use td_objects::types::basic::{
     AtTime, CollectionId, CollectionName, DataLocation, DependencyId, DependencyPos,
-    DependencyStatus, FunctionId, FunctionVersionId, ReuseFrozen, TableFunctionParamPos, TableId,
-    TableName, TableNameDto, TableStatus, TableType, TriggerId, TriggerStatus, TriggerVersionId,
-    TriggeredOn, WorkerConfig, WorkerStatus, WorkerType, WorkerTypeDto,
+    DependencyStatus, FunctionId, FunctionVersionId, ResetState, ReuseFrozen,
+    TableFunctionParamPos, TableId, TableName, TableNameDto, TableStatus, TableType, TriggerId,
+    TriggerStatus, TriggerVersionId, TriggeredOn, WorkerConfig, WorkerStatus, WorkerType,
+    WorkerTypeDto,
 };
 use td_objects::types::composed::{
     TableDependency, TableDependencyDto, TableTrigger, TableTriggerDto,
@@ -123,6 +124,7 @@ pub async fn build_table_versions(
     new_tables_types: Ref<Option<HashMap<TableNameDto, TableType>>>,
     table_version_builder: Ref<TableDBBuilder>,
     reuse_frozen: Ref<ReuseFrozen>,
+    reset_state: Ref<ResetState>,
 ) -> Result<Vec<TableDB>, TdError> {
     let mut new_table_versions = HashMap::new();
 
@@ -170,7 +172,13 @@ pub async fn build_table_versions(
     for (pos, (table_name, table_type)) in new_tables {
         // Reuse table id if the table is the same
         let existing_version = existing_versions.get(&(&*collection_id, table_name));
-        let table_id = if let Some(existing_version) = existing_version {
+        // `reset_state` forces a fresh id for the function state table so it
+        // starts empty (publishers re-read initial config). User tables keep
+        // their reuse behavior.
+        let reset_fn_state = **reset_state && table_name.starts_with(TD_FN_STATE_PREFIX);
+        let table_id = if reset_fn_state {
+            &TableId::default()
+        } else if let Some(existing_version) = existing_version {
             match existing_version.status {
                 TableStatus::Active => &existing_version.table_id,
                 TableStatus::Frozen => {

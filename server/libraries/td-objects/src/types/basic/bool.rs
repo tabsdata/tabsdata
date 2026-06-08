@@ -56,6 +56,9 @@ pub struct PasswordMustChange;
 pub struct Private;
 
 #[ta_objects::typed(bool(default = false))]
+pub struct ResetState;
+
+#[ta_objects::typed(bool(default = false))]
 pub struct ReuseFrozen;
 
 #[ta_objects::typed(bool(default = false))]
