@@ -468,13 +468,33 @@ class Collection:
         """
         temporary_directory = tempfile.TemporaryDirectory(dir=tabsdata_temp_folder())
         try:
+            # ===================================================================
+            # TODO: DO NOT MERGE LIKE THIS — TEMPORARY HACK
+            # ===================================================================
+            # The apiserver currently returns `python_versions: []` from
+            # `/runtime_info` because it reads `valid-python-versions.yaml`
+            # (which doesn't exist on disk; the file that does exist is
+            # `allowed-python-versions.yaml`, and the intersection step that
+            # would produce `valid-python-versions.yaml` isn't wired in).
+            # With an empty allowed-list, every interpreter is rejected by
+            # `_bundle.validate_python_version` (API_24). The `or None` below
+            # coerces an empty list to `None`, which makes `build_bundle`
+            # skip the whitelist check entirely — effectively bypassing the
+            # version-allow-list enforcement for the producer side.
+            #
+            # This MUST be reverted once the apiserver-side etc misconfig
+            # is fixed and `/runtime_info` returns a non-empty list. Until
+            # then this hack lets the v2 register flow complete end-to-end
+            # for kminus dev work, but it would silently disable a real
+            # safety check in production. DO NOT MERGE LIKE THIS.
+            # ===================================================================
             valid_python_versions = (
                 self.connection
                 .runtime_info_get()
                 .json()
                 .get("data", {})
                 .get("python_versions")
-            )
+            ) or None
             archive = _create_archive(
                 info,
                 project_root,

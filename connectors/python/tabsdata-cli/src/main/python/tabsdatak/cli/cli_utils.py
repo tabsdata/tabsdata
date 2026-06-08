@@ -4,13 +4,17 @@
 
 """Shared helpers for the ``td`` CLI.
 
-Also hosts two **temporary** stand-ins -- :func:`tdabout` and
-:func:`td_resource` -- that mirror the legacy
-``tabsdata._utils.internal._about.tdabout`` and
-``tabsdata._utils.internal._resources.td_resource`` surface so the
+Also hosts a temporary stand-in for :func:`tdabout` that mirrors the
+legacy ``tabsdata._utils.internal._about.tdabout`` surface so the
 ``td`` migration can land without dragging in the explicitly-excluded
-``_utils/internal/`` subtree. Both are placeholders pending proper
-v2 ports in a future ticket (see TODO blocks below)."""
+``_utils/internal/`` subtree. Placeholder pending a proper v2 port
+(see TODO block below).
+
+:func:`td_resource` is the proper v2 resolver re-exported from
+``tabsdatak.server._tdruntime.python.resource`` — it honours the
+editable-install overlay that lets resources live under the repo's
+``variant/`` tree.
+"""
 
 from __future__ import annotations
 
@@ -23,8 +27,6 @@ import platform
 import re
 import sys
 from importlib.metadata import PackageNotFoundError, version
-from importlib.resources import as_file, files
-from pathlib import Path
 from typing import Any
 
 import requests
@@ -40,27 +42,24 @@ from tabsdatak.sdk._apiserver import (
     obtain_connection,
 )
 from tabsdatak.sdk.tabsdata_server import Function, TabsdataServer
+from tabsdatak.server._tdruntime.python.resource import td_resource  # noqa: F401
 
 CONNECTION_FILE = "connection.json"
 
 
 # ---------------------------------------------------------------------------
-# Temporary stand-ins for legacy ``_utils.internal._about.tdabout`` and
-# ``_utils.internal._resources.td_resource``.
+# Temporary stand-in for legacy ``_utils.internal._about.tdabout``.
 #
-# TODO(tabsdatak-migration): these are placeholders so the ``td`` CLI
+# TODO(tabsdatak-migration): this is a placeholder so the ``td`` CLI
 # migration can land without porting the explicitly-excluded
-# ``tabsdata/_utils/internal/`` subtree. Replace with proper v2
-# implementations in a follow-up ticket once the v2 packaging /
-# resource-layout story is settled. Until then:
-#   * ``tdabout`` prints a one-line banner via importlib.metadata.
-#   * ``td_resource`` resolves a packaged resource path via
-#     importlib.resources rooted at the ``tabsdatak.cli`` package.
+# ``tabsdata/_utils/internal/`` subtree. Replace with a proper v2
+# implementation in a follow-up ticket once the v2 packaging story
+# is settled. Until then, ``tdabout`` prints a one-line banner via
+# importlib.metadata.
 # ---------------------------------------------------------------------------
 
 
 _DEFAULT_ABOUT_PACKAGE = "tabsdata-cli"
-_DEFAULT_RESOURCE_PACKAGE = "tabsdatak.cli"
 
 
 def tdabout(package_name: str = _DEFAULT_ABOUT_PACKAGE) -> None:
@@ -76,29 +75,6 @@ def tdabout(package_name: str = _DEFAULT_ABOUT_PACKAGE) -> None:
     except PackageNotFoundError:
         pkg_version = "unknown"
     print(f"{package_name} {pkg_version}", file=sys.stdout)
-
-
-def td_resource(
-    resource: str,
-    *,
-    package: str = _DEFAULT_RESOURCE_PACKAGE,
-) -> Path:
-    """Resolve a packaged resource path using ``importlib.resources``.
-
-    TODO(tabsdatak-migration): replace with the proper v2
-    ``td_resource`` once the legacy
-    ``_utils/internal/_resources.py`` is ported. The current
-    placeholder does NOT implement the editable-package overlay
-    behaviour of the legacy helper.
-    """
-    parts = Path(resource.replace("\\", "/")).parts
-    traversable = files(package).joinpath(*parts)
-    with as_file(traversable) as path:
-        if not path.exists():
-            raise FileNotFoundError(
-                f"Resource '{resource}' not found in package '{package}'"
-            )
-        return path
 
 
 def is_valid_id(possible_id: str) -> bool:
