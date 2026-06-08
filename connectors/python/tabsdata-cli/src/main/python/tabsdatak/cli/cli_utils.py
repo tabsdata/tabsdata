@@ -493,6 +493,23 @@ def _dynamic_import_function_from_path(path: str) -> Any:  # noqa: C901
         raise AttributeError(
             f"Function '{function_name}' not found in module {file_path}."
         )
+
+    # Rewrite the underlying callable's ``__module__`` from the synthetic
+    # ``td_usr_pkg_<sha>.<file>`` package back to the bare ``<file>`` leaf
+    # name. The synthetic prefix is a CLI-process-local trick to avoid
+    # shadowing installed packages (see docstring above); it must NOT leak
+    # into the bundled ``function_def.json``, which is what
+    # ``info.to_json`` serialises via ``callable_to_str`` (uses
+    # ``func.__module__``). At runtime the runner extracts the bundle
+    # under ``user_code/`` and puts that dir on ``sys.path``, so the
+    # stored callable ref needs to be ``<file>:<func>`` -- importable
+    # from ``user_code/<file>.py`` -- not ``td_usr_pkg_<sha>.<file>``,
+    # which only exists in the CLI's process at register time.
+    underlying = getattr(symbol, "func", None)
+    if underlying is not None and hasattr(underlying, "__module__"):
+        underlying.__module__ = folder_name
+    elif hasattr(symbol, "__module__"):
+        symbol.__module__ = folder_name
     return symbol
 
 
