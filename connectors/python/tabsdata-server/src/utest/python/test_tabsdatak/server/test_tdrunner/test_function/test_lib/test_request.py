@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,7 @@ import pytest
 import yaml
 
 from tabsdatak.server._tdrunner.function._lib.request import (
+    Info,
     InputTable,
     InvalidRequestError,
     Location,
@@ -545,3 +547,63 @@ def test_output_table_is_frozen():
     )
     with pytest.raises(Exception):
         t.name = "other"  # type: ignore[misc]
+
+
+# --- Info derived timestamp properties (TD-2313) ----------------------------
+#
+# ``Info.triggered_on`` is epoch milliseconds on the wire. The derived
+# helpers convert that to a tz-aware UTC datetime (consumed by
+# ``stamp-inputs`` to populate ``$td.ver.timestamp``) and to an
+# ISO-8601 string (consumed by ``FromRequestCtx.exec_plan_ts``, which
+# satisfies the public ``TrxCtx.exec_plan_ts`` SPI contract). These
+# tests pin the conversion shape so a future change to the wire format
+# (e.g. epoch seconds instead of milliseconds) breaks loudly here
+# rather than silently corrupting downstream column values.
+
+
+def _build_info(triggered_on: int) -> Info:
+    return Info(
+        collection_id=19,
+        collection="c",
+        function_version_id="FV-1",
+        function_defined_on=1780000000000,
+        function="publish_people",
+        function_run_id=60,
+        function_bundle=Location(uri="s3://b/bundle"),
+        function_stage=Location(uri="file:///tmp/stage"),
+        triggered_on=triggered_on,
+        transaction_id=42,
+        execution_id=24,
+        function_data=Location(uri="file:///tmp/data"),
+        scheduled_on=1780000000200,
+    )
+
+
+def test_info_triggered_on_datetime_returns_utc_aware_datetime():
+    info = _build_info(triggered_on=1780562068376)
+    dt = info.triggered_on_datetime
+    assert isinstance(dt, datetime)
+    assert dt.tzinfo is timezone.utc
+    # 1780562068376 ms == 2026-06-04 08:34:28.376 UTC
+    assert dt.year == 2026
+    assert dt.microsecond == 376000
+
+
+def test_info_triggered_on_datetime_handles_zero_millis():
+    """0 ms epoch maps to the Unix epoch itself."""
+    info = _build_info(triggered_on=0)
+    assert info.triggered_on_datetime == datetime(1970, 1, 1, tzinfo=timezone.utc)
+
+
+def test_info_triggered_on_iso_returns_iso_string():
+    info = _build_info(triggered_on=1780562068376)
+    # Pinned exactly so a wire-format change (e.g. seconds vs millis,
+    # or losing the tz suffix) fails loudly.
+    assert info.triggered_on_iso == "2026-06-04T08:34:28.376000+00:00"
+
+
+def test_info_triggered_on_iso_matches_datetime_isoformat():
+    """The iso helper is just ``triggered_on_datetime.isoformat()``;
+    pin the relationship so callers can rely on it."""
+    info = _build_info(triggered_on=1780000000100)
+    assert info.triggered_on_iso == info.triggered_on_datetime.isoformat()

@@ -20,7 +20,6 @@ import pytest
 
 from tabsdatak.cli import cli_utils
 
-
 # ---------------------------------------------------------------------------
 # Pure helpers
 # ---------------------------------------------------------------------------
@@ -142,6 +141,75 @@ def test_load_info_and_project_root_respects_explicit_dir_to_bundle(tmp_path):
     )
     assert project_root == str(explicit_root)
     assert info.__class__.__name__ == "_Stub"
+
+
+# ---------------------------------------------------------------------------
+# _dynamic_import_function_from_path: synthetic-pkg ``__module__`` rewrite
+#
+# The CLI loads the user's file under a synthetic package name
+# ``td_usr_pkg_<sha>.<file>`` to avoid shadowing installed packages
+# named after the user's file (e.g. ``databricks.py``). The synthetic
+# prefix must NOT leak into the bundle's serialised ``func`` reference --
+# the runner extracts the bundle under ``user_code/`` and resolves
+# ``func`` from there, where it lives as ``<file>.py`` (no synthetic
+# prefix). The loader therefore rewrites ``func.__module__`` (or the
+# raw symbol's ``__module__``) to the bare file leaf-name.
+# ---------------------------------------------------------------------------
+
+
+def test_dynamic_import_rewrites_module_on_wrapper_with_func_attr(tmp_path):
+    """An ``*Info``-shaped wrapper (``getattr(info, 'func')`` is the
+    underlying callable) gets ``info.func.__module__`` rewritten to the
+    file's leaf name."""
+    user_file = tmp_path / "publisher.py"
+    user_file.write_text(
+        "def publish_people():\n"
+        "    pass\n"
+        "\n"
+        "class _Info:\n"
+        "    def __init__(self, fn):\n"
+        "        self.func = fn\n"
+        "\n"
+        "publish = _Info(publish_people)\n",
+        encoding="utf-8",
+    )
+
+    info, _ = cli_utils.load_info_and_project_root(
+        f"{user_file}::publish", dir_to_bundle=None
+    )
+    # The underlying callable's ``__module__`` is the bare file
+    # basename, not the synthetic ``td_usr_pkg_<sha>.publisher``.
+    assert info.func.__module__ == "publisher"
+
+
+def test_dynamic_import_rewrites_module_on_raw_callable(tmp_path):
+    """When the symbol is itself a callable (no ``.func`` wrapper), its
+    own ``__module__`` is rewritten."""
+    user_file = tmp_path / "raw.py"
+    user_file.write_text(
+        "def my_fn():\n    pass\n",
+        encoding="utf-8",
+    )
+
+    fn, _ = cli_utils.load_info_and_project_root(
+        f"{user_file}::my_fn", dir_to_bundle=None
+    )
+    assert fn.__module__ == "raw"
+
+
+def test_dynamic_import_synthetic_prefix_not_observable(tmp_path):
+    """The synthetic ``td_usr_pkg_<sha>`` prefix never appears in the
+    function's ``__module__`` after loading. This is the property the
+    bundle producer relies on -- ``callable_to_str`` writes
+    ``f"{func.__module__}:{qualname}"`` into ``function_def.json``."""
+    user_file = tmp_path / "publisher_x.py"
+    user_file.write_text(
+        "def f():\n    pass\n",
+        encoding="utf-8",
+    )
+
+    fn, _ = cli_utils.load_info_and_project_root(f"{user_file}::f", dir_to_bundle=None)
+    assert "td_usr_pkg_" not in fn.__module__
 
 
 # ---------------------------------------------------------------------------

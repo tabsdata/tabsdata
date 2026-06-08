@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -7,9 +6,7 @@ from pathlib import Path
 import pytest
 
 from tabsdatak.conn.common.error import ConnException, ConnInitException
-from tabsdatak.conn.common.file.error import FileRuntimeException
-from tabsdatak.conn.common.file import _transporter
-from tabsdatak.conn.common.file import _plugin
+from tabsdatak.conn.common.file import _plugin, _transporter
 from tabsdatak.conn.common.file.error import FileCommonErrorCode
 from tabsdatak.conn.common.file.typing_ import (
     DestFileFormat,
@@ -17,7 +14,6 @@ from tabsdatak.conn.common.file.typing_ import (
     SrcFileFormat,
 )
 from tabsdatak.spi import DestContext
-
 
 # --- _transporter.src_format_to_transporter ----------------------------------
 
@@ -30,7 +26,6 @@ from tabsdatak.spi import DestContext
         (SrcFileFormat.AVRO, "TransporterAvroFormat"),
         (SrcFileFormat.PARQUET, "TransporterParquetFormat"),
         (SrcFileFormat.LOG, "TransporterLogFormat"),
-        (SrcFileFormat.AUTO, "TransporterParquetFormat"),
     ],
 )
 def test_src_format_to_transporter_picks_right_class(fmt, expected_cls):
@@ -38,11 +33,84 @@ def test_src_format_to_transporter_picks_right_class(fmt, expected_cls):
     assert type(out).__name__ == expected_cls
 
 
+def test_src_format_to_transporter_rejects_auto():
+    """AUTO must be resolved via ``resolve_auto_src_format`` before
+    reaching the transporter mapping; reaching this function with AUTO
+    is a programming error."""
+    with pytest.raises(ConnInitException):
+        _transporter.src_format_to_transporter(SrcFileFormat.AUTO, None)
+
+
 def test_src_format_csv_carries_options():
     out = _transporter.src_format_to_transporter(SrcFileFormat.CSV, {"separator": 59})
     # User option layered on top of the binary-required defaults.
     assert out.options["separator"] == 59
     assert "has_header" in out.options
+
+
+# --- _transporter.resolve_auto_src_format ------------------------------------
+
+
+@pytest.mark.parametrize(
+    "fmt",
+    [
+        SrcFileFormat.CSV,
+        SrcFileFormat.JSON,
+        SrcFileFormat.AVRO,
+        SrcFileFormat.PARQUET,
+        SrcFileFormat.LOG,
+    ],
+)
+def test_resolve_auto_src_format_passes_explicit_through(fmt):
+    """An already-concrete format is returned unchanged regardless of paths."""
+    assert _transporter.resolve_auto_src_format(fmt, ["whatever.bin"]) is fmt
+
+
+@pytest.mark.parametrize(
+    "path,expected",
+    [
+        ("people.csv", SrcFileFormat.CSV),
+        ("data.json", SrcFileFormat.JSON),
+        ("events.jsonl", SrcFileFormat.JSON),
+        ("events.ndjson", SrcFileFormat.JSON),
+        ("avro_file.avro", SrcFileFormat.AVRO),
+        ("rows.parquet", SrcFileFormat.PARQUET),
+        ("rows.pq", SrcFileFormat.PARQUET),
+        ("app.log", SrcFileFormat.LOG),
+        ("nested/dir/people.csv", SrcFileFormat.CSV),
+        ("People.CSV", SrcFileFormat.CSV),  # case-insensitive
+        ("*.parquet", SrcFileFormat.PARQUET),  # glob keeps the extension
+    ],
+)
+def test_resolve_auto_src_format_infers_from_single_path(path, expected):
+    assert _transporter.resolve_auto_src_format(SrcFileFormat.AUTO, [path]) is expected
+
+
+def test_resolve_auto_src_format_accepts_multiple_paths_with_same_ext():
+    """Multiple paths whose extensions agree resolve to that one format."""
+    out = _transporter.resolve_auto_src_format(
+        SrcFileFormat.AUTO, ["a.csv", "b.csv", "nested/c.csv"]
+    )
+    assert out is SrcFileFormat.CSV
+
+
+def test_resolve_auto_src_format_raises_on_mixed_extensions():
+    with pytest.raises(ConnInitException) as ei:
+        _transporter.resolve_auto_src_format(SrcFileFormat.AUTO, ["a.csv", "b.parquet"])
+    msg = str(ei.value)
+    assert "mixed" in msg.lower()
+
+
+def test_resolve_auto_src_format_raises_on_unknown_extension():
+    with pytest.raises(ConnInitException) as ei:
+        _transporter.resolve_auto_src_format(SrcFileFormat.AUTO, ["data.bin"])
+    assert "no recognised extension" in str(ei.value)
+
+
+def test_resolve_auto_src_format_raises_on_extensionless_path():
+    """A path with no extension can't be inferred."""
+    with pytest.raises(ConnInitException):
+        _transporter.resolve_auto_src_format(SrcFileFormat.AUTO, ["data/"])
 
 
 # --- _transporter.dest_format_to_transporter ---------------------------------
@@ -55,7 +123,6 @@ def test_src_format_csv_carries_options():
         (DestFileFormat.JSON, "TransporterJsonFormat"),
         (DestFileFormat.AVRO, "TransporterAvroFormat"),
         (DestFileFormat.PARQUET, "TransporterParquetFormat"),
-        (DestFileFormat.AUTO, "TransporterParquetFormat"),
     ],
 )
 def test_dest_format_to_transporter_picks_right_class(fmt, expected_cls):
@@ -63,8 +130,60 @@ def test_dest_format_to_transporter_picks_right_class(fmt, expected_cls):
     assert type(out).__name__ == expected_cls
 
 
+def test_dest_format_to_transporter_rejects_auto():
+    with pytest.raises(ConnInitException):
+        _transporter.dest_format_to_transporter(DestFileFormat.AUTO, None)
+
+
+# --- _transporter.resolve_auto_dest_format -----------------------------------
+
+
+@pytest.mark.parametrize(
+    "fmt",
+    [
+        DestFileFormat.CSV,
+        DestFileFormat.JSON,
+        DestFileFormat.AVRO,
+        DestFileFormat.PARQUET,
+    ],
+)
+def test_resolve_auto_dest_format_passes_explicit_through(fmt):
+    assert _transporter.resolve_auto_dest_format(fmt, ["whatever.bin"]) is fmt
+
+
+@pytest.mark.parametrize(
+    "path,expected",
+    [
+        ("out.csv", DestFileFormat.CSV),
+        ("out.json", DestFileFormat.JSON),
+        ("out.avro", DestFileFormat.AVRO),
+        ("out.parquet", DestFileFormat.PARQUET),
+        ("out.pq", DestFileFormat.PARQUET),
+        ("Out.PARQUET", DestFileFormat.PARQUET),
+    ],
+)
+def test_resolve_auto_dest_format_infers_from_single_path(path, expected):
+    assert (
+        _transporter.resolve_auto_dest_format(DestFileFormat.AUTO, [path]) is expected
+    )
+
+
+def test_resolve_auto_dest_format_raises_on_mixed_extensions():
+    with pytest.raises(ConnInitException):
+        _transporter.resolve_auto_dest_format(
+            DestFileFormat.AUTO, ["out.csv", "out.parquet"]
+        )
+
+
+def test_resolve_auto_dest_format_raises_on_unknown_extension():
+    with pytest.raises(ConnInitException):
+        _transporter.resolve_auto_dest_format(DestFileFormat.AUTO, ["weird.bin"])
+
+
 def test_dest_format_csv_carries_options():
-    out = _transporter.dest_format_to_transporter(DestFileFormat.CSV, {"include_header": True})
+    out = _transporter.dest_format_to_transporter(
+        DestFileFormat.CSV, {"include_header": True}
+    )
     assert out.options["include_header"] is True
     # ``separator`` etc. arrive via the defaults layer.
     assert "separator" in out.options
@@ -108,6 +227,7 @@ def test_resolve_dest_tokens_passes_through():
 
 class _BogusFormat:
     """Stand-in for a future enum member none of the helpers handle."""
+
     name = "BOGUS"
     value = "BOGUS"
 
@@ -131,7 +251,6 @@ def test_dest_format_to_transporter_unhandled_raises():
 
 
 class _DestCtx(DestContext):
-
     def __init__(self, work_dir: Path) -> None:
         self._work_dir = work_dir
 
@@ -175,6 +294,7 @@ class _DestCtx(DestContext):
 
     def add_metadata(self, attr, val):
         pass
+
 
 def _stub_build_location(_conn, _entry):  # pragma: no cover - never reached
     raise AssertionError("build_location should not be called on slot-mismatch path")
@@ -252,7 +372,9 @@ def test_writer_conf_from_dest_handles_none_format_cfg():
 
 
 def test_run_write_out_slot_count_mismatch_raises_file_common_16(tmp_path):
-    cfg = _plugin.WriterConf(conn=None, paths=["a", "b"], format=_transporter.TransporterParquetFormat())
+    cfg = _plugin.WriterConf(
+        conn=None, paths=["a", "b"], format=_transporter.TransporterParquetFormat()
+    )
     parquet = Path(tmp_path / "x.parquet")
     with pytest.raises(ConnException) as ei:
         _plugin.copy_out(
@@ -274,16 +396,17 @@ def test_run_write_out_slot_count_mismatch_raises_file_common_16(tmp_path):
 # slot bookkeeping, and error-mapping are exercised in isolation --
 # no real binary needed.
 
-from tabsdatak.spi import SrcPluginCtx
+# noinspection PyProtectedMember
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.file import (
+    _input as _input_module,
+    _output as _output_module,
+)
 from tabsdatak.error import ApiErrorCode
-# noinspection PyProtectedMember
-from tabsdatak.conn.common.file import _input as _input_module
-# noinspection PyProtectedMember
-from tabsdatak.conn.common.file import _output as _output_module
+from tabsdatak.spi import SrcPluginCtx
 
 
 class _SrcCtx(SrcPluginCtx):
-
     def __init__(self, work_dir: Path) -> None:
         self._work_dir = work_dir
 
@@ -481,7 +604,10 @@ def _make_exc(exc_cls):
     ],
 )
 def test_run_read_in_wraps_transporter_failures(
-    monkeypatch, tmp_path, exc_cls, expected_code,
+    monkeypatch,
+    tmp_path,
+    exc_cls,
+    expected_code,
 ):
     def fake_import_one(**_kw):
         raise _make_exc(exc_cls)
@@ -632,7 +758,8 @@ def test_run_read_in_skips_store_when_report_has_no_lastmod(monkeypatch, tmp_pat
     # leave it in place so the next trx still resumes from where the
     # last productive trx left off.
     monkeypatch.setattr(
-        _input_module, "import_one",
+        _input_module,
+        "import_one",
         lambda **_kw: _stub_report([]),  # lastmod_info=None by default
     )
 
@@ -756,7 +883,10 @@ def test_run_write_out_run_env_failure_wraps_as_cred_resolution(monkeypatch, tmp
     ],
 )
 def test_run_write_out_wraps_transporter_failures(
-    monkeypatch, tmp_path, exc_cls, expected_code,
+    monkeypatch,
+    tmp_path,
+    exc_cls,
+    expected_code,
 ):
     def fake_copy_one(**_kw):
         raise _make_exc(exc_cls)
