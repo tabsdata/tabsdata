@@ -2,7 +2,9 @@
 # Copyright 2024 Tabs Data Inc.
 #
 
+import ast
 import hashlib
+import pathlib
 import tempfile
 from http import HTTPStatus
 from unittest.mock import MagicMock, patch
@@ -16,6 +18,7 @@ from tabsdata.api.apiserver import (
     GET_HTTP_SESSION,
     APIServer,
     APIServerError,
+    NoProjectSelectedError,
     _obtain_certificate_file_path,
     obtain_connection,
 )
@@ -1409,4 +1412,212 @@ class TestRegisterFunctionTempDirCleanup:
         assert temp_dir_path is not None
         assert not os.path.exists(temp_dir_path), (
             f"Temp directory {temp_dir_path} was not cleaned up after exception"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for project (tenant) scoping
+# ---------------------------------------------------------------------------
+
+
+class TestResolvePathScoping:
+    """`_resolve_path` injects the active project into tenant endpoints.
+
+    Tenant resources live under ``/projects/{project}/...``; global endpoints
+    (auth, users, roles, groups, projects, status, runtime-info) never carry a
+    project. With no project selected a tenant call must fail fast rather than
+    guessing a default.
+    """
+
+    GLOBAL_SAMPLES = [
+        "/auth/login",
+        "/users",
+        "/users/bob",
+        "/roles/r/permissions",
+        "/groups",
+        "/projects",
+        "/projects/acme",
+        "/status",
+        "/runtime-info",
+    ]
+    TENANT_SAMPLES = [
+        "/collections",
+        "/collections/c1/functions",
+        "/executions",
+        "/metrics",
+        "/inflight",
+        "/function_runs",
+        "/transactions/t1/cancel",
+        "/workers",
+    ]
+
+    def test_globals_pass_through_without_project(self):
+        server = APIServer("http://localhost:0")
+        assert server.project is None
+        for path in self.GLOBAL_SAMPLES:
+            assert server._resolve_path(path) == path
+
+    def test_tenant_paths_require_a_project(self):
+        server = APIServer("http://localhost:0")
+        for path in self.TENANT_SAMPLES:
+            with pytest.raises(NoProjectSelectedError):
+                server._resolve_path(path)
+
+    def test_tenant_paths_get_prefixed_when_project_set(self):
+        server = APIServer("http://localhost:0")
+        server.project = "acme"
+        assert server._resolve_path("/collections") == "/projects/acme/collections"
+        assert (
+            server._resolve_path("/collections/c1/functions")
+            == "/projects/acme/collections/c1/functions"
+        )
+        assert server._resolve_path("/metrics") == "/projects/acme/metrics"
+
+    def test_globals_never_double_scoped(self):
+        server = APIServer("http://localhost:0")
+        server.project = "acme"
+        for path in self.GLOBAL_SAMPLES:
+            assert server._resolve_path(path) == path
+
+    def test_prefix_boundary_is_segment_aware(self):
+        # `/users-export` merely starts with the `/users` characters; it is a
+        # different top-level segment and must be scoped, not exempted.
+        server = APIServer("http://localhost:0")
+        server.project = "acme"
+        assert server._resolve_path("/users-export") == "/projects/acme/users-export"
+
+
+class TestProjectScopingOnTheWire:
+    """The active project rides on the connection into the request URL."""
+
+    @patch.dict("os.environ", {"PYTEST_CURRENT_TEST": "fake_test"})
+    def test_tenant_request_url_carries_project(self):
+        server = APIServer("http://localhost:0")
+        server.project = "acme"
+        mock_response = MagicMock(status_code=200)
+        with patch.object(GET_HTTP_SESSION, "get", return_value=mock_response) as m:
+            server.collection_list(raise_for_status=False)
+        url = m.call_args.args[0]
+        assert url == f"{server.url}/projects/acme/collections"
+
+    @patch.dict("os.environ", {"PYTEST_CURRENT_TEST": "fake_test"})
+    def test_global_request_url_has_no_project(self):
+        server = APIServer("http://localhost:0")
+        server.project = "acme"
+        mock_response = MagicMock(status_code=200)
+        with patch.object(GET_HTTP_SESSION, "get", return_value=mock_response) as m:
+            server.role_list(raise_for_status=False)
+        url = m.call_args.args[0]
+        assert url == f"{server.url}/roles"
+
+    @patch.dict("os.environ", {"PYTEST_CURRENT_TEST": "fake_test"})
+    def test_tenant_request_without_project_fails_fast(self):
+        server = APIServer("http://localhost:0")
+        # No project set and no network call should happen.
+        with patch.object(GET_HTTP_SESSION, "get") as m:
+            with pytest.raises(NoProjectSelectedError):
+                server.collection_list(raise_for_status=False)
+        m.assert_not_called()
+
+
+class TestEndpointPrefixClassification:
+    """Every endpoint the client builds must be consciously classified.
+
+    `_resolve_path` defaults unknown prefixes to tenant (scoped), so a new,
+    unclassified endpoint would be silently scoped and 404 at runtime. This
+    pins the reviewed set: a new top-level prefix fails here until it is added
+    to ``APIServer._GLOBAL_PREFIXES`` (system-scoped) or to
+    ``EXPECTED_TENANT_PREFIXES`` below (project-scoped), each confirmed against
+    the server's ``SCOPED`` routes in td-objects ``rest_urls``.
+    """
+
+    # Tenant top-level prefixes the client currently uses.
+    EXPECTED_TENANT_PREFIXES = {
+        "/collections",
+        "/executions",
+        "/transactions",
+        "/workers",
+        "/function_runs",
+        "/metrics",
+        "/inflight",
+    }
+
+    @staticmethod
+    def _leading_literal(node):
+        """The leading string literal of a str constant or an f-string."""
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return node.value
+        if isinstance(node, ast.JoinedStr) and node.values:
+            head = node.values[0]
+            if isinstance(head, ast.Constant) and isinstance(head.value, str):
+                return head.value
+        return None
+
+    @classmethod
+    def _endpoint_prefixes(cls):
+        """Top-level prefixes of every endpoint built inside `APIServer`.
+
+        Scrapes the source rather than calling each method: collects the
+        leading literal of `endpoint = ...` assignments and of
+        `self.{get,post,delete,post_binary}("/...", ...)` calls, then reduces
+        each to its first path segment.
+        """
+        import tabsdata.api.apiserver as apiserver_module
+
+        source = pathlib.Path(apiserver_module.__file__).read_text()
+        tree = ast.parse(source)
+        api_cls = next(
+            n
+            for n in tree.body
+            if isinstance(n, ast.ClassDef) and n.name == "APIServer"
+        )
+        literals = []
+        for fn in api_cls.body:
+            if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for sub in ast.walk(fn):
+                if isinstance(sub, ast.Assign) and any(
+                    isinstance(t, ast.Name) and t.id == "endpoint"
+                    for t in sub.targets
+                ):
+                    lit = cls._leading_literal(sub.value)
+                    if lit:
+                        literals.append(lit)
+                elif (
+                    isinstance(sub, ast.Call)
+                    and isinstance(sub.func, ast.Attribute)
+                    and sub.func.attr in {"get", "post", "delete", "post_binary"}
+                    and sub.args
+                ):
+                    lit = cls._leading_literal(sub.args[0])
+                    if lit:
+                        literals.append(lit)
+        prefixes = set()
+        for lit in literals:
+            if lit.startswith("/"):
+                seg = lit.lstrip("/").split("/", 1)[0]
+                if seg:
+                    prefixes.add("/" + seg)
+        return prefixes
+
+    def test_no_overlap_between_global_and_tenant(self):
+        overlap = set(APIServer._GLOBAL_PREFIXES) & self.EXPECTED_TENANT_PREFIXES
+        assert not overlap, f"prefixes classified as both global and tenant: {overlap}"
+
+    def test_every_endpoint_prefix_is_classified(self):
+        known = set(APIServer._GLOBAL_PREFIXES) | self.EXPECTED_TENANT_PREFIXES
+        unclassified = self._endpoint_prefixes() - known
+        assert not unclassified, (
+            f"Unclassified endpoint prefixes: {sorted(unclassified)}. Add each to "
+            f"APIServer._GLOBAL_PREFIXES (system-scoped) or to "
+            f"EXPECTED_TENANT_PREFIXES (project-scoped) after confirming against "
+            f"the server's rest_urls SCOPED routes."
+        )
+
+    def test_reviewed_tenant_prefixes_are_actually_used(self):
+        # Keep the reviewed list from rotting: every listed tenant prefix must
+        # still be built somewhere in the client.
+        stale = self.EXPECTED_TENANT_PREFIXES - self._endpoint_prefixes()
+        assert not stale, (
+            f"tenant prefixes no longer used by the client: {sorted(stale)}"
         )
