@@ -580,7 +580,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
                     .build()?,
                 create,
-            );
+            )
+            .in_project(ProjectId::sandbox());
         RegisterFunctionService::with_defaults(db.clone())
             .service()
             .raw_oneshot(register)
@@ -603,7 +604,8 @@ mod tests {
                     .function(FunctionIdName::from_str("reset_fn")?)
                     .build()?,
                 update,
-            );
+            )
+            .in_project(ProjectId::sandbox());
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let _ = service.raw_oneshot(request).await?;
 
@@ -647,7 +649,8 @@ mod tests {
                     .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
                     .build()?,
                 create,
-            );
+            )
+            .in_project(ProjectId::sandbox());
         RegisterFunctionService::with_defaults(db.clone())
             .service()
             .raw_oneshot(register)
@@ -668,7 +671,8 @@ mod tests {
                     .function(FunctionIdName::from_str("noreset_fn")?)
                     .build()?,
                 update,
-            );
+            )
+            .in_project(ProjectId::sandbox());
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let _ = service.raw_oneshot(request).await?;
 

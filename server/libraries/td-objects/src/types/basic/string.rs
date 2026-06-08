@@ -98,6 +98,12 @@ pub struct ExecutionError;
 #[derive(Eq, PartialEq)]
 pub struct ExecutionName;
 
+/// Caller-supplied idempotency key for a trigger. When set, an execution is
+/// deduplicated per function on `(function_id, external_uid)`.
+#[ta_objects::typed(string(min_len = 1, max_len = 64))]
+#[derive(Eq, PartialEq, Hash)]
+pub struct ExternalUid;
+
 #[ta_objects::typed(string)]
 #[derive(Eq, PartialEq)]
 pub struct FullName;

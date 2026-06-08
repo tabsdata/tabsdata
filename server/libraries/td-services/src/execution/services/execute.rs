@@ -4,6 +4,10 @@
 
 use crate::execution::layers::execute;
 use crate::execution::layers::execution::trigger_type_manual;
+use crate::execution::layers::execution_version::{
+    already_running_trigger_response, dedup_condition, dedup_fetch,
+    executed_trigger_response, skip_if_running,
+};
 use crate::scheduler::layers::request::notify_scheduler;
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
@@ -11,20 +15,23 @@ use td_execution::SchedulerNotify;
 use td_execution::TransactionBy;
 use td_objects::And;
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
-use td_objects::dxo::execution::{ExecutionRequest, ExecutionResponse};
+use td_objects::dxo::execution::{ExecutionDB, ExecutionRequest, ExecutionTriggerResponse};
 use td_objects::dxo::function::FunctionDBWithNames;
 use td_objects::rest_urls::FunctionParam;
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::{AtTime, CollectionIdName, FunctionIdName};
+use td_objects::types::basic::{
+    AtTime, CollectionIdName, ExternalUid, FunctionId, FunctionIdName, FunctionVersionId,
+    SkipIfRunning, TriggerType,
+};
 use td_queries::By;
-use td_tower::default_services::TransactionProvider;
+use td_tower::default_services::{Do, Else, If, TransactionProvider, conditional};
 use td_tower::from_fn::from_fn;
-use td_tower::layers;
+use td_tower::{layers, service};
 
 #[service_factory(
     name = ExecuteFunctionService,
     request = CreateRequest<FunctionParam, ExecutionRequest>,
-    response = ExecutionResponse,
+    response = ExecutionTriggerResponse,
     connection = TransactionProvider,
     scope = "Project",
     context = AuthzContext,
@@ -51,10 +58,44 @@ fn service() {
                 FunctionDBWithNames,
             >
         ),
+        from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
+        from_fn(With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
         from_fn(trigger_type_manual),
-        execute(),
-        // Notify scheduler to pick up the newly created function runs.
-        from_fn(notify_scheduler),
+        // Dedup by external_uid (outer): a repeated (function_id, external_uid)
+        // returns the existing execution instead of creating a new one.
+        conditional(
+            If(service!(layers!(
+                from_fn(With::<ExecutionRequest>::extract::<Option<ExternalUid>>),
+                from_fn(dedup_fetch),
+                from_fn(dedup_condition),
+            ))),
+            Do(service!(layers!(
+                // safe to unwrap, only dedup if the execution is there
+                from_fn(With::<Option<ExecutionDB>>::unwrap),
+                from_fn(already_running_trigger_response)
+            ))),
+            Else(service!(layers!(conditional(
+                If(service!(layers!(
+                    // Get latest execution of the same (manual) trigger type, if any
+                    from_fn(
+                        By::<And![FunctionVersionId, TriggerType]>::fetch_optional::<ExecutionDB>
+                    ),
+                    from_fn(With::<ExecutionRequest>::extract::<SkipIfRunning>),
+                    from_fn(skip_if_running),
+                ))),
+                Do(service!(layers!(
+                    // safe to unwrap, only skip if the execution is there
+                    from_fn(With::<Option<ExecutionDB>>::unwrap),
+                    from_fn(already_running_trigger_response)
+                ))),
+                Else(service!(layers!(
+                    execute(),
+                    // Notify scheduler to pick up the newly created function runs.
+                    from_fn(notify_scheduler),
+                    from_fn(executed_trigger_response)
+                )))
+            ))))
+        ),
     )
 }
 
@@ -69,7 +110,7 @@ pub(crate) mod tests {
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_execution::EXECUTION_GRAPH_OPTIONS;
-    use td_objects::dxo::execution::ExecutionDBWithStatus;
+    use td_objects::dxo::execution::{ExecutionDBWithStatus, ExecutionResponse};
     use td_objects::dxo::function::{FunctionDBWithNames, FunctionRegister};
     use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalTableDataVersionDB};
     use td_objects::dxo::table::TableDB;
@@ -126,7 +167,7 @@ pub(crate) mod tests {
         ExecuteFunctionService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<Scoped<CreateRequest<FunctionParam, ExecutionRequest>, ProjectId>, ExecutionResponse>(
+            .assert_service::<Scoped<CreateRequest<FunctionParam, ExecutionRequest>, ProjectId>, ExecutionTriggerResponse>(
                 &[
                     // Extract from request.
                     type_of_val(
@@ -154,8 +195,26 @@ pub(crate) mod tests {
                             FunctionDBWithNames,
                         >,
                     ),
+                    type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
+                    type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
                     type_of_val(&trigger_type_manual),
-                    // execute()
+                    // dedup (outer) if
+                    type_of_val(&With::<ExecutionRequest>::extract::<Option<ExternalUid>>),
+                    type_of_val(&dedup_fetch),
+                    type_of_val(&dedup_condition),
+                    // dedup do
+                    type_of_val(&With::<Option<ExecutionDB>>::unwrap),
+                    type_of_val(&already_running_trigger_response),
+                    // dedup else -> skip if
+                    type_of_val(
+                        &By::<And![FunctionVersionId, TriggerType]>::fetch_optional::<ExecutionDB>,
+                    ),
+                    type_of_val(&With::<ExecutionRequest>::extract::<SkipIfRunning>),
+                    type_of_val(&skip_if_running),
+                    // skip do
+                    type_of_val(&With::<Option<ExecutionDB>>::unwrap),
+                    type_of_val(&already_running_trigger_response),
+                    // skip else -> execute()
                     type_of_val(&With::<ExecutionRequest>::extract::<OverrideDisabledTrigger>),
                     type_of_val(&assert_function_status),
                     // check requester is coll_admin or coll_exec for the function's collection
@@ -250,6 +309,7 @@ pub(crate) mod tests {
                     type_of_val(&build_response),
                     // Notify scheduler of new function runs.
                     type_of_val(&notify_scheduler),
+                    type_of_val(&executed_trigger_response),
                 ],
             );
     }
@@ -466,7 +526,10 @@ pub(crate) mod tests {
             ).in_project(ProjectId::sandbox());
 
         let service = ExecuteFunctionService::with_defaults(db.clone()).service();
-        let response = service.raw_oneshot(request).await;
+        let response = service.raw_oneshot(request).await.map(|r| match r {
+            ExecutionTriggerResponse::Executed(response) => *response,
+            ExecutionTriggerResponse::AlreadyRunning(_) => panic!("Expected executed response"),
+        });
 
         // Test assertions
         let expected_all_functions = match graph_depth {
@@ -923,6 +986,63 @@ pub(crate) mod tests {
 
         let service = ExecuteFunctionService::with_defaults(db.clone()).service();
 
-        Ok(service.raw_oneshot(request).await)
+        Ok(service.raw_oneshot(request).await.map(|r| match r {
+            ExecutionTriggerResponse::Executed(response) => *response,
+            ExecutionTriggerResponse::AlreadyRunning(_) => panic!("Expected executed response"),
+        }))
+    }
+
+    #[td_test::test(db)]
+    async fn test_execute_public_external_uid_dedups(db: TdPool) -> Result<(), TdError> {
+        use td_objects::types::basic::ExternalUid;
+
+        let collection = db
+            .seed()
+            .collection(&COLLECTION_NAMES[0], &UserId::admin())
+            .await?;
+        let create = FunctionRegister::builder()
+            .name(FUNCTION_NAMES[0].clone())
+            .try_description("d")?
+            .bundle_id(BundleId::default())
+            .try_snippet("s")?
+            .decorator(Decorator::Publisher)
+            .dependencies(None)
+            .triggers(None)
+            .tables(vec![TableNameDto::try_from("table_0")?])
+            .runtime_values(FunctionRuntimeValues::try_from("rv")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+        let _function = db.seed().function(&collection, &create).await?;
+
+        let trigger = |external_uid: Option<ExternalUid>| {
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&collection.name.to_string()).unwrap())
+                    .function(FunctionIdName::from_str(&FUNCTION_NAMES[0].to_string()).unwrap())
+                    .build()
+                    .unwrap(),
+                ExecutionRequest::builder()
+                    .name(Some(ExecutionName::try_from("test_execution").unwrap()))
+                    .external_uid(external_uid)
+                    .build()
+                    .unwrap(),
+            )
+            .in_project(ProjectId::sandbox())
+        };
+
+        let uid = ExternalUid::try_from("uid-abc")?;
+        let service = ExecuteFunctionService::with_defaults(db.clone()).service();
+        let first = service.raw_oneshot(trigger(Some(uid.clone()))).await?;
+        let ExecutionTriggerResponse::Executed(first) = first else {
+            panic!("Expected executed response")
+        };
+
+        let service = ExecuteFunctionService::with_defaults(db.clone()).service();
+        let second = service.raw_oneshot(trigger(Some(uid))).await?;
+        let ExecutionTriggerResponse::AlreadyRunning(existing_id) = second else {
+            panic!("Expected already running (deduped) response")
+        };
+        assert_eq!(existing_id, first.id);
+        Ok(())
     }
 }

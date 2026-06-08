@@ -83,6 +83,8 @@ pub fn run() {
                     name: Some(name),
                     function_only: FunctionOnly::FALSE,
                     skip_if_running: SkipIfRunning::FALSE,
+                    // Cron triggers are time-driven, not idempotency-keyed.
+                    external_uid: None,
                     trigger_type: TriggerType::CronTrigger,
                 })
                 .map(|r| serde_json::to_string_pretty(&r).unwrap_or_default())

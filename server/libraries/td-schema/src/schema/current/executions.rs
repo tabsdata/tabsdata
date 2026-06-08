@@ -33,6 +33,7 @@ pub enum Executions {
     RecursionOptions,
     FunctionId,
     TriggerType,
+    ExternalUid,
 }
 
 pub(super) struct Defs;
@@ -56,6 +57,7 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Executions::RecursionOptions).json_binary().null())
                 .col(ColumnDef::new(Executions::FunctionId).text().not_null().default(""))
                 .col(ColumnDef::new(Executions::TriggerType).text().not_null().default("M"))
+                .col(ColumnDef::new(Executions::ExternalUid).text().null())
                 .foreign_key(
                     ForeignKey::create()
                         .from(Executions::Table, Executions::CollectionId)
@@ -84,6 +86,16 @@ impl Entity for Defs {
                 .to_owned(),
             Index::create().name("executions___triggered_by_id___idx").table(Executions::Table).col(Executions::TriggeredById).to_owned(),
             Index::create().name("executions___triggered_on___idx").table(Executions::Table).col(Executions::TriggeredOn).to_owned(),
+            // Dedup key: a non-NULL `external_uid` is unique per function.
+            // NULLs are distinct on all backends, so untagged triggers are
+            // never deduplicated.
+            Index::create()
+                .name("executions___function_id__external_uid___idx")
+                .table(Executions::Table)
+                .col(Executions::FunctionId)
+                .col(Executions::ExternalUid)
+                .unique()
+                .to_owned(),
         ]
     }
 

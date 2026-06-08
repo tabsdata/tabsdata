@@ -4,8 +4,8 @@
 
 use crate::execution::layers::execute;
 use crate::execution::layers::execution_version::{
-    already_running_execute_internal_response, assert_function_version,
-    executed_execute_internal_response, skip_if_running,
+    already_running_trigger_response, assert_function_version, dedup_condition, dedup_fetch,
+    executed_trigger_response, skip_if_running,
 };
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
@@ -13,12 +13,14 @@ use td_execution::TransactionBy;
 use td_objects::And;
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
 use td_objects::dxo::execution::{
-    ExecutionDB, ExecutionRequest, ExecutionRequestInternal, ExecutionResponseInternal,
+    ExecutionDB, ExecutionRequest, ExecutionRequestInternal, ExecutionTriggerResponse,
 };
 use td_objects::dxo::function::FunctionDBWithNames;
 use td_objects::rest_urls::FunctionVersionIdParam;
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::{AtTime, FunctionId, FunctionVersionId, SkipIfRunning, TriggerType};
+use td_objects::types::basic::{
+    AtTime, ExternalUid, FunctionId, FunctionVersionId, SkipIfRunning, TriggerType,
+};
 use td_queries::By;
 use td_tower::default_services::{Do, Else, If, TransactionProvider, conditional};
 use td_tower::from_fn::from_fn;
@@ -27,7 +29,7 @@ use td_tower::{layers, service};
 #[service_factory(
     name = ExecuteFunctionVersionService,
     request = CreateRequest<FunctionVersionIdParam, ExecutionRequestInternal>,
-    response = ExecutionResponseInternal,
+    response = ExecutionTriggerResponse,
     connection = TransactionProvider,
     scope = "Project",
     context = AuthzContext,
@@ -63,25 +65,41 @@ fn service() {
         from_fn(assert_function_version),
         // Extract Trigger type
         from_fn(With::<ExecutionRequestInternal>::extract::<TriggerType>),
+        // Dedup by external_uid (outer): a repeated (function_id, external_uid)
+        // returns the existing execution instead of creating a new one.
         conditional(
             If(service!(layers!(
-                // Get latest function run at the time of executing if any
-                // We only check for executions of the same trigger type
-                from_fn(By::<And![FunctionVersionId, TriggerType]>::fetch_optional::<ExecutionDB>),
-                from_fn(With::<ExecutionRequestInternal>::extract::<SkipIfRunning>),
-                from_fn(skip_if_running),
+                from_fn(With::<ExecutionRequestInternal>::extract::<Option<ExternalUid>>),
+                from_fn(dedup_fetch),
+                from_fn(dedup_condition),
             ))),
             Do(service!(layers!(
-                // safe to unwrap, only skip if the execution is there
+                // safe to unwrap, only dedup if the execution is there
                 from_fn(With::<Option<ExecutionDB>>::unwrap),
-                from_fn(already_running_execute_internal_response)
+                from_fn(already_running_trigger_response)
             ))),
-            Else(service!(layers!(
-                // Extract trigger type and execute
-                from_fn(With::<ExecutionRequestInternal>::convert_to::<ExecutionRequest>),
-                execute(),
-                from_fn(executed_execute_internal_response)
-            )))
+            Else(service!(layers!(conditional(
+                If(service!(layers!(
+                    // Get latest function run at the time of executing if any
+                    // We only check for executions of the same trigger type
+                    from_fn(
+                        By::<And![FunctionVersionId, TriggerType]>::fetch_optional::<ExecutionDB>
+                    ),
+                    from_fn(With::<ExecutionRequestInternal>::extract::<SkipIfRunning>),
+                    from_fn(skip_if_running),
+                ))),
+                Do(service!(layers!(
+                    // safe to unwrap, only skip if the execution is there
+                    from_fn(With::<Option<ExecutionDB>>::unwrap),
+                    from_fn(already_running_trigger_response)
+                ))),
+                Else(service!(layers!(
+                    // Extract trigger type and execute
+                    from_fn(With::<ExecutionRequestInternal>::convert_to::<ExecutionRequest>),
+                    execute(),
+                    from_fn(executed_trigger_response)
+                )))
+            ))))
         ),
     )
 }
@@ -152,7 +170,7 @@ mod tests {
         ExecuteFunctionVersionService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<Scoped<CreateRequest<FunctionVersionIdParam, ExecutionRequestInternal>, ProjectId>, ExecutionResponseInternal>(&[
+            .assert_service::<Scoped<CreateRequest<FunctionVersionIdParam, ExecutionRequestInternal>, ProjectId>, ExecutionTriggerResponse>(&[
                 // Extract from request.
                 type_of_val(&
                     With::<CreateRequest<FunctionVersionIdParam, ExecutionRequestInternal>>::extract::<
@@ -181,7 +199,16 @@ mod tests {
                 type_of_val(&assert_function_version),
                 type_of_val(&With::<ExecutionRequestInternal>::extract::<TriggerType>),
 
-                // if skip when running
+                // dedup (outer) if
+                type_of_val(&With::<ExecutionRequestInternal>::extract::<Option<ExternalUid>>),
+                type_of_val(&dedup_fetch),
+                type_of_val(&dedup_condition),
+
+                // dedup do
+                type_of_val(&With::<Option<ExecutionDB>>::unwrap),
+                type_of_val(&already_running_trigger_response),
+
+                // dedup else -> if skip when running
                 // Get latest function run at the time of executing if any
                 // We only check for executions of the same trigger type
                 type_of_val(&
@@ -190,11 +217,11 @@ mod tests {
                 type_of_val(&With::<ExecutionRequestInternal>::extract::<SkipIfRunning>),
                 type_of_val(&skip_if_running),
 
-                // do
+                // skip do
                 type_of_val(&With::<Option<ExecutionDB>>::unwrap),
-                type_of_val(&already_running_execute_internal_response),
+                type_of_val(&already_running_trigger_response),
 
-                // else
+                // skip else
                 type_of_val(&With::<ExecutionRequestInternal>::convert_to::<ExecutionRequest>),
 
                 // execute()
@@ -279,7 +306,7 @@ mod tests {
                 // Execution plan response
                 type_of_val(&build_response),
 
-                type_of_val(&executed_execute_internal_response),
+                type_of_val(&executed_trigger_response),
             ]);
     }
 
@@ -288,7 +315,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_execute_version_no_previous_execution(db: TdPool) -> Result<(), TdError> {
         let (function, response) = test_execute_version(db, None, SkipIfRunning::FALSE).await?;
-        let ExecutionResponseInternal::Executed(response) = response else {
+        let ExecutionTriggerResponse::Executed(response) = response else {
             panic!("Expected executed response")
         };
         assert_eq!(response.triggered_functions, HashSet::from([function.id]));
@@ -300,7 +327,7 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let (function, response) = test_execute_version(db, None, SkipIfRunning::TRUE).await?;
-        let ExecutionResponseInternal::Executed(response) = response else {
+        let ExecutionTriggerResponse::Executed(response) = response else {
             panic!("Expected executed response")
         };
         assert_eq!(response.triggered_functions, HashSet::from([function.id]));
@@ -318,7 +345,7 @@ mod tests {
             SkipIfRunning::FALSE,
         )
         .await?;
-        let ExecutionResponseInternal::Executed(response) = response else {
+        let ExecutionTriggerResponse::Executed(response) = response else {
             panic!("Expected executed response")
         };
         assert_eq!(response.triggered_functions, HashSet::from([function.id]));
@@ -338,7 +365,7 @@ mod tests {
             SkipIfRunning::TRUE,
         )
         .await?;
-        let ExecutionResponseInternal::AlreadyRunning(response) = response else {
+        let ExecutionTriggerResponse::AlreadyRunning(response) = response else {
             panic!("Expected already running response")
         };
         // There should be only one, the previous one.
@@ -363,7 +390,7 @@ mod tests {
             SkipIfRunning::FALSE,
         )
         .await?;
-        let ExecutionResponseInternal::Executed(response) = response else {
+        let ExecutionTriggerResponse::Executed(response) = response else {
             panic!("Expected executed response")
         };
         assert_eq!(response.triggered_functions, HashSet::from([function.id]));
@@ -383,7 +410,7 @@ mod tests {
             SkipIfRunning::TRUE,
         )
         .await?;
-        let ExecutionResponseInternal::Executed(response) = response else {
+        let ExecutionTriggerResponse::Executed(response) = response else {
             panic!("Expected executed response")
         };
         assert_eq!(response.triggered_functions, HashSet::from([function.id]));
@@ -403,7 +430,7 @@ mod tests {
             SkipIfRunning::FALSE,
         )
         .await?;
-        let ExecutionResponseInternal::Executed(response) = response else {
+        let ExecutionTriggerResponse::Executed(response) = response else {
             panic!("Expected executed response")
         };
         assert_eq!(response.triggered_functions, HashSet::from([function.id]));
@@ -423,7 +450,7 @@ mod tests {
             SkipIfRunning::TRUE,
         )
         .await?;
-        let ExecutionResponseInternal::Executed(response) = response else {
+        let ExecutionTriggerResponse::Executed(response) = response else {
             panic!("Expected executed response")
         };
         assert_eq!(response.triggered_functions, HashSet::from([function.id]));
@@ -439,7 +466,7 @@ mod tests {
         db: TdPool,
         previous_run: Option<PreviousRun>,
         skip_if_running: SkipIfRunning,
-    ) -> Result<(FunctionDB, ExecutionResponseInternal), TdError> {
+    ) -> Result<(FunctionDB, ExecutionTriggerResponse), TdError> {
         let collection_0 = db
             .seed()
             .collection(&CollectionName::try_from("collection_0")?, &UserId::admin())
@@ -563,6 +590,91 @@ mod tests {
             "Requested function version '{}' must be the current version of the function '{}'.",
             function.id, updated.id
         ).as_str()));
+        Ok(())
+    }
+
+    async fn seed_dedup_function(db: &TdPool) -> Result<FunctionDB, TdError> {
+        let collection = db
+            .seed()
+            .collection(&CollectionName::try_from("dedup_coll")?, &UserId::admin())
+            .await?;
+        let create = FunctionRegister::builder()
+            .name(FunctionName::try_from("dedup_fn")?)
+            .try_description("d")?
+            .bundle_id(BundleId::default())
+            .try_snippet("s")?
+            .decorator(Decorator::Publisher)
+            .dependencies(None)
+            .triggers(None)
+            .tables(vec![TableNameDto::try_from("t0")?])
+            .runtime_values(FunctionRuntimeValues::try_from("rv")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+        db.seed().function(&collection, &create).await
+    }
+
+    async fn trigger_with_external_uid(
+        db: &TdPool,
+        function_version_id: &FunctionVersionId,
+        external_uid: Option<ExternalUid>,
+    ) -> Result<ExecutionTriggerResponse, TdError> {
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user()).create(
+                FunctionVersionIdParam {
+                    function_version_id: function_version_id.clone(),
+                },
+                ExecutionRequestInternal::builder()
+                    .name(Some(ExecutionName::try_from("test_execution")?))
+                    .external_uid(external_uid)
+                    .trigger_type(TriggerType::CronTrigger)
+                    .build()?,
+            )
+            .in_project(ProjectId::sandbox());
+        ExecuteFunctionVersionService::with_defaults(db.clone())
+            .service()
+            .raw_oneshot(request)
+            .await
+    }
+
+    #[td_test::test(db)]
+    async fn test_execute_version_external_uid_dedups(db: TdPool) -> Result<(), TdError> {
+        let function = seed_dedup_function(&db).await?;
+        let uid = ExternalUid::try_from("uid-123")?;
+
+        let first = trigger_with_external_uid(&db, &function.id, Some(uid.clone())).await?;
+        let ExecutionTriggerResponse::Executed(first) = first else {
+            panic!("Expected executed response")
+        };
+
+        // Same external_uid returns the existing execution, no new row.
+        let second = trigger_with_external_uid(&db, &function.id, Some(uid)).await?;
+        let ExecutionTriggerResponse::AlreadyRunning(existing_id) = second else {
+            panic!("Expected already running (deduped) response")
+        };
+        assert_eq!(existing_id, first.id);
+
+        let executions: Vec<ExecutionDB> = db
+            .live()
+            .fetch_all::<ExecutionDB>(&function.function_id)
+            .await?;
+        assert_eq!(executions.len(), 1);
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_execute_version_null_external_uid_not_deduped(db: TdPool) -> Result<(), TdError> {
+        let function = seed_dedup_function(&db).await?;
+
+        let first = trigger_with_external_uid(&db, &function.id, None).await?;
+        assert!(matches!(first, ExecutionTriggerResponse::Executed(_)));
+        let second = trigger_with_external_uid(&db, &function.id, None).await?;
+        assert!(matches!(second, ExecutionTriggerResponse::Executed(_)));
+
+        let executions: Vec<ExecutionDB> = db
+            .live()
+            .fetch_all::<ExecutionDB>(&function.function_id)
+            .await?;
+        assert_eq!(executions.len(), 2);
         Ok(())
     }
 }

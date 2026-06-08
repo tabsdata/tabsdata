@@ -6,11 +6,13 @@ use std::ops::Deref;
 use td_database::dynamic::DynamicConnection;
 use td_error::{ApiError, TdError, api_error};
 use td_objects::and;
-use td_objects::dxo::execution::{ExecutionDB, ExecutionResponse, ExecutionResponseInternal};
+use td_objects::dxo::execution::{
+    ExecutionDB, ExecutionResponse, ExecutionTriggerResponse,
+};
 use td_objects::dxo::function::FunctionDBWithNames;
 use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
-use td_objects::types::basic::{FunctionVersionId, SkipIfRunning};
+use td_objects::types::basic::{ExternalUid, FunctionId, FunctionVersionId, SkipIfRunning};
 use td_queries::{LfrEntry, LiveEntry};
 use td_tower::default_services::Condition;
 use td_tower::extractors::{MutRef, Ref};
@@ -95,16 +97,46 @@ pub async fn skip_if_running(
     Ok(Condition(running && **skip_if_running))
 }
 
-pub async fn executed_execute_internal_response(
+pub async fn executed_trigger_response(
     response: Ref<ExecutionResponse>,
-) -> Result<ExecutionResponseInternal, TdError> {
-    let response = ExecutionResponseInternal::Executed(Box::new(response.deref().clone()));
+) -> Result<ExecutionTriggerResponse, TdError> {
+    let response = ExecutionTriggerResponse::Executed(Box::new(response.deref().clone()));
     Ok(response)
 }
 
-pub async fn already_running_execute_internal_response(
+pub async fn already_running_trigger_response(
     latest_execution: Ref<ExecutionDB>,
-) -> Result<ExecutionResponseInternal, TdError> {
-    let response = ExecutionResponseInternal::AlreadyRunning(latest_execution.id.clone());
+) -> Result<ExecutionTriggerResponse, TdError> {
+    let response = ExecutionTriggerResponse::AlreadyRunning(latest_execution.id.clone());
     Ok(response)
+}
+
+/// Fetch the execution that already used this `(function_id, external_uid)` for
+/// deduplication. Returns `None` when `external_uid` is absent (untagged
+/// triggers are never deduplicated).
+#[instrument(
+    name = "execution.dedup_fetch",
+    skip_all,
+    fields(function_id = %*function_id),
+    level = "debug",
+    err(Debug)
+)]
+pub async fn dedup_fetch(
+    mut conn: MutRef<DynamicConnection<'static>>,
+    function_id: Ref<FunctionId>,
+    external_uid: Ref<Option<ExternalUid>>,
+) -> Result<Option<ExecutionDB>, TdError> {
+    let existing = match external_uid.deref() {
+        Some(_) => {
+            conn.live()
+                .fetch_optional(and!(function_id.deref(), external_uid.deref()))
+                .await?
+        }
+        None => None,
+    };
+    Ok(existing)
+}
+
+pub async fn dedup_condition(existing: Ref<Option<ExecutionDB>>) -> Result<Condition, TdError> {
+    Ok(Condition(existing.is_some()))
 }

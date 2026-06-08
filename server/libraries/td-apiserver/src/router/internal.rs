@@ -16,7 +16,7 @@ mod routes {
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::dxo::execution::{ExecutionRequestInternal, ExecutionResponseInternal};
+    use td_objects::dxo::execution::{ExecutionRequestInternal, ExecutionTriggerResponse};
     use td_objects::dxo::file::DownloadResponse;
     use td_objects::dxo::physical_function_run::PhysicalFunctionRun;
     use td_objects::dxo::worker::CallbackRequest;
@@ -87,7 +87,7 @@ mod routes {
         Extension(project_id): Extension<ProjectId>,
         Path(function_param): Path<FunctionVersionIdParam>,
         Json(request): Json<ExecutionRequestInternal>,
-    ) -> Result<CreateStatus<ExecutionResponseInternal>, ErrorStatus> {
+    ) -> Result<CreateStatus<ExecutionTriggerResponse>, ErrorStatus> {
         let request = context.create(function_param, request).in_project(project_id);
         let response = state.execute_version.service().oneshot(request).await?;
         Ok(CreateStatus::CREATED(response))

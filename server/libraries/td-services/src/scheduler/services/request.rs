@@ -259,7 +259,7 @@ mod tests {
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::dxo::execution::ExecutionRequest;
+    use td_objects::dxo::execution::{ExecutionRequest, ExecutionTriggerResponse};
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
     use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDBWithNames;
@@ -436,7 +436,10 @@ mod tests {
                 .in_project(ProjectId::sandbox());
 
         let service = ExecuteFunctionService::with_defaults(db.clone()).service();
-        let execution = service.raw_oneshot(request).await?;
+        let execution = match service.raw_oneshot(request).await? {
+            ExecutionTriggerResponse::Executed(response) => *response,
+            ExecutionTriggerResponse::AlreadyRunning(_) => panic!("Expected executed response"),
+        };
 
         // Actual test
         let context = SchedulerContext::with_defaults(db.clone());

@@ -10,7 +10,7 @@ mod definitions {
     use crate::dxo::physical_table_data_version::ExecutionTableDataVersionRead;
     use crate::types::basic::{
         AtTime, CollectionId, CollectionName, Dot, Enabled, ExecutionId, ExecutionName,
-        ExecutionStatus, FunctionId, FunctionName, FunctionOnly, FunctionVersionId,
+        ExecutionStatus, ExternalUid, FunctionId, FunctionName, FunctionOnly, FunctionVersionId,
         LogicalFunctionRunStatus, OverrideDisabledTrigger, PhysicalTableDataVersionId,
         SkipIfRunning, StatusCount, System, TableName, TableVersionId, TransactionId, TriggerType,
         TriggeredOn, UserId, UserName,
@@ -33,6 +33,14 @@ mod definitions {
         #[serde(default)]
         #[dxo(extractor)]
         pub override_disabled_trigger: OverrideDisabledTrigger,
+        #[builder(default)]
+        #[serde(default)]
+        #[dxo(extractor)]
+        pub skip_if_running: SkipIfRunning,
+        #[builder(default)]
+        #[serde(default)]
+        #[dxo(extractor)]
+        pub external_uid: Option<ExternalUid>,
     }
 
     impl From<&ExecutionRequestInternal> for ExecutionRequest {
@@ -41,6 +49,8 @@ mod definitions {
                 name: value.name.clone(),
                 function_only: value.function_only,
                 override_disabled_trigger: OverrideDisabledTrigger::FALSE,
+                skip_if_running: value.skip_if_running,
+                external_uid: value.external_uid.clone(),
             }
         }
     }
@@ -56,6 +66,10 @@ mod definitions {
         #[serde(default)]
         #[dxo(extractor)]
         pub skip_if_running: SkipIfRunning,
+        #[builder(default)]
+        #[serde(default)]
+        #[dxo(extractor)]
+        pub external_uid: Option<ExternalUid>,
         #[dxo(extractor)]
         pub trigger_type: TriggerType,
     }
@@ -87,6 +101,12 @@ mod definitions {
         pub triggered_by_id: UserId,
         #[dxo(setter)]
         pub trigger_type: TriggerType, // Added in v4
+
+        /// Caller-supplied idempotency key. Unique per `function_id` when set;
+        /// NULL allows multiple executions for the same function.
+        #[builder(default)]
+        #[dxo(updater(try_from = ExecutionRequest, include))]
+        pub external_uid: Option<ExternalUid>,
 
         pub recursion_options: Option<Json<RecursionOptions>>, // Added in v3
     }
@@ -235,8 +255,12 @@ mod definitions {
         pub relations_info: HashMap<PhysicalTableDataVersionId, ExecutionTableDataVersionRead>,
     }
 
+    /// Trigger response, shared by the public `execute` and internal
+    /// `execute_version` endpoints. `AlreadyRunning` is returned when
+    /// `skip_if_running` skips an in-flight execution or when `external_uid`
+    /// deduplicates against an existing one.
     #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
-    pub enum ExecutionResponseInternal {
+    pub enum ExecutionTriggerResponse {
         Executed(Box<ExecutionResponse>),
         AlreadyRunning(ExecutionId),
     }

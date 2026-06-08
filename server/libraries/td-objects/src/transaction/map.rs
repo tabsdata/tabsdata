@@ -100,6 +100,7 @@ mod tests {
             triggered_by_id: Default::default(),
             recursion_options: Default::default(),
             trigger_type: TriggerType::Manual,
+            external_uid: None,
         }
     }
 
