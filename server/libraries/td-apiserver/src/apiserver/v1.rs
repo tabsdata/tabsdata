@@ -36,6 +36,7 @@ use crate::apiserver::server::{Server, ServerBuilder, ServerError};
 use crate::layers::authorization::authorization_layer;
 use crate::layers::compression::CompressionService;
 use crate::layers::cors::CorsService;
+use crate::layers::project_resolver::project_resolver_layer;
 use crate::layers::tracing::TraceService;
 use crate::router::auth::{SecureAuthRouter, UnsecureAuthRouter};
 use crate::router::collections::CollectionsRouter;
@@ -48,6 +49,7 @@ use crate::router::logical_versions::LogicalVersionsRouter;
 use crate::router::metrics::MetricsRouter;
 use crate::router::permissions::PermissionsRouter;
 use crate::router::ping::ping_router;
+use crate::router::projects::ProjectsRouter;
 use crate::router::roles::RolesRouter;
 use crate::router::server_status::ServerStatusRouter;
 use crate::router::tables::TablesRouter;
@@ -83,37 +85,58 @@ impl ApiServerV1 {
                         .merge(UnsecureAuthRouter::router(context.services.clone()))
                         .merge(ping_router()),
                 )
-                // secure endpoints
-                .merge(
-                    utoipa_axum::router::OpenApiRouter::default()
+                // secure endpoints — split into:
+                //   - global subtree: system-scoped routes that do not nest
+                //     under a project (auth, users, roles, groups, projects
+                //     CRUDL itself, server status, role permissions).
+                //   - tenant subtree: routes under `/projects/{project}/...`
+                //     where the project_resolver_layer turns the URL segment
+                //     into a real ProjectId on the RequestContext, which the
+                //     ProjectScopeProvider then uses to set the RLS GUC.
+                // Both subtrees sit behind the shared authorization layer.
+                .merge({
+                    let global = utoipa_axum::router::OpenApiRouter::default()
                         .merge(SecureAuthRouter::router(context.services.clone()))
+                        .merge(GroupsRouter::router(context.services.clone()))
+                        .merge(PermissionsRouter::router(context.services.clone()))
+                        .merge(ProjectsRouter::router(context.services.clone()))
+                        .merge(RolesRouter::router(context.services.clone()))
+                        .merge(ServerStatusRouter::router(context.services.clone()))
+                        .merge(UserRolesRouter::router(context.services.clone()))
+                        .merge(UsersRouter::router(context.services.clone()))
+                        .merge(AuthenticatedExtendedRouter::router(
+                            context.extended_services.clone(),
+                        ));
+
+                    let tenant = utoipa_axum::router::OpenApiRouter::default()
                         .merge(CollectionsRouter::router(context.services.clone()))
                         .merge(ExecutionsRouter::router(context.services.clone()))
                         .merge(FunctionsRouter::router(context.services.clone()))
                         .merge(FunctionRunsRouter::router(context.services.clone()))
-                        .merge(GroupsRouter::router(context.services.clone()))
                         .merge(MetricsRouter::router(context.services.clone()))
                         .merge(LogicalVersionsRouter::router(context.services.clone()))
                         .merge(InterCollectionPermissionsRouter::router(
                             context.services.clone(),
                         ))
-                        .merge(PermissionsRouter::router(context.services.clone()))
-                        .merge(RolesRouter::router(context.services.clone()))
-                        .merge(ServerStatusRouter::router(context.services.clone()))
-                        .merge(UserRolesRouter::router(context.services.clone()))
-                        .merge(UsersRouter::router(context.services.clone()))
                         .merge(TablesRouter::router(context.services.clone()))
                         .merge(TransactionsRouter::router(context.services.clone()))
                         .merge(WorkersRouter::router(context.services.clone()))
-                        .merge(AuthenticatedExtendedRouter::router(
-                            context.extended_services.clone(),
-                        ))
-                        // authorization layer
+                        // resolver runs after auth, before any service stack;
+                        // 404s unknown projects before any RLS-scoped table
+                        // is touched.
+                        .layer(from_fn_with_state(
+                            context.context.clone(),
+                            project_resolver_layer,
+                        ));
+
+                    global
+                        .merge(tenant)
+                        // authorization layer wraps both subtrees.
                         .layer(from_fn_with_state(
                             context.context.clone(),
                             authorization_layer,
-                        )),
-                );
+                        ))
+                });
 
             // Nest the router in the V1 address.
             let router = utoipa_axum::router::OpenApiRouter::default()

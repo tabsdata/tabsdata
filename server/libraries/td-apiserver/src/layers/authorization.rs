@@ -84,7 +84,11 @@ pub async fn authorization_layer(
             TdError::from(AuthError::AuthenticationFailed)
         })?;
 
-    // Insert the context into the request extensions
+    // The target project (tenant) is resolved later by `project_resolver_layer`
+    // — but only on the tenant subtree (`/projects/{project}/...`). For global
+    // routes (auth, users, roles, projects CRUDL, server status, …) the project
+    // stays `None` here, and the connection runs with RLS bypassed, which is
+    // fine because those routes don't touch project-scoped tables.
     let request_context =
         RequestContext::with(&session.access_token_id, &session.user_id, &session.role_id);
     let mut request = request;

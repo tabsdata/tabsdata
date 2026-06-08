@@ -92,9 +92,11 @@ mod routes {
 
 #[cfg(test)]
 mod tests {
+    use crate::layers::project_resolver::project_resolver_layer;
     use crate::router::collections::CollectionsRouter;
     use axum::body::{Body, to_bytes};
     use axum::http::{Request, StatusCode};
+    use axum::middleware::from_fn_with_state;
     use axum::{Extension, Router};
     use http::method::Method;
     use serde_json::json;
@@ -111,29 +113,63 @@ mod tests {
     use td_services::collection::service::CollectionServices;
     use tower::ServiceExt;
 
-    async fn to_route<R: Into<Router> + Clone>(router: &R) -> Router {
+    /// Mounts the same layers the real apiserver wraps tenant routes with:
+    ///   - `project_resolver_layer` to resolve the `{project}` URL segment
+    ///     into a real `ProjectId` and stamp it onto `RequestContext`.
+    ///   - A pre-populated `RequestContext` extension (bypassing the auth
+    ///     layer — these tests don't issue real JWTs).
+    async fn to_route<R: Into<Router> + Clone>(router: &R, db: TdPool) -> Router {
         let context = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
             RoleId::sys_admin(),
         );
         let router = router.clone().into();
-        router.layer(Extension(context.clone()))
+        router
+            .layer(from_fn_with_state(db, project_resolver_layer))
+            .layer(Extension(context))
+    }
+
+    /// Substitute the `{project}` segment with the bootstrap-seeded sandbox.
+    fn url(template: &str) -> String {
+        template.replace("{project}", "sandbox")
+    }
+
+    /// 404 the request if the `{project}` segment doesn't resolve. The
+    /// resolver runs ahead of every tenant-scoped service so the connection's
+    /// RLS GUC is set from a real registry id, never from a raw URL string.
+    #[td_test::test(db)]
+    async fn test_unknown_project_segment_yields_404(db: TdPool) {
+        let router = CollectionsRouter::router(Arc::new(CollectionServices::build(
+            &Context::with_defaults(db.clone()),
+        )));
+        let response = to_route(&router, db)
+            .await
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri(LIST_COLLECTIONS.replace("{project}", "does-not-exist"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
     #[td_test::test(db)]
     async fn test_collections_lifecycle(db: TdPool) {
         let router = CollectionsRouter::router(Arc::new(CollectionServices::build(
-            &Context::with_defaults(db),
+            &Context::with_defaults(db.clone()),
         )));
 
         // List empty collections
-        let response = to_route(&router)
+        let response = to_route(&router, db.clone())
             .await
             .oneshot(
                 Request::builder()
                     .method(Method::GET)
-                    .uri(LIST_COLLECTIONS)
+                    .uri(url(LIST_COLLECTIONS))
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -154,12 +190,12 @@ mod tests {
             }
         );
 
-        let response = to_route(&router)
+        let response = to_route(&router, db.clone())
             .await
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
-                    .uri(CREATE_COLLECTION)
+                    .uri(url(CREATE_COLLECTION))
                     .header("content-type", "application/json")
                     .body(serde_json::to_string(&collection_create).unwrap())
                     .unwrap(),
@@ -174,12 +210,12 @@ mod tests {
         assert_eq!(body["data"]["description"], "mock collection");
 
         // List again and assert we have 2 collections
-        let response = to_route(&router)
+        let response = to_route(&router, db.clone())
             .await
             .oneshot(
                 Request::builder()
                     .method(Method::GET)
-                    .uri(LIST_COLLECTIONS)
+                    .uri(url(LIST_COLLECTIONS))
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -192,12 +228,12 @@ mod tests {
         assert_eq!(body["data"]["len"], 1);
 
         // Get the new collection
-        let response = to_route(&router)
+        let response = to_route(&router, db.clone())
             .await
             .oneshot(
                 Request::builder()
                     .method(Method::GET)
-                    .uri(GET_COLLECTION.replace("{collection}", "joaquin_collection"))
+                    .uri(url(GET_COLLECTION).replace("{collection}", "joaquin_collection"))
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -218,12 +254,12 @@ mod tests {
             }
         );
 
-        let response = to_route(&router)
+        let response = to_route(&router, db.clone())
             .await
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
-                    .uri(UPDATE_COLLECTION.replace("{collection}", "joaquin_collection"))
+                    .uri(url(UPDATE_COLLECTION).replace("{collection}", "joaquin_collection"))
                     .header("content-type", "application/json")
                     .body(serde_json::to_string(&collection_update).unwrap())
                     .unwrap(),
@@ -238,12 +274,12 @@ mod tests {
         assert_eq!(body["data"]["description"], "not a mock anymore");
 
         // Delete the new collection
-        let response = to_route(&router)
+        let response = to_route(&router, db.clone())
             .await
             .oneshot(
                 Request::builder()
                     .method(Method::DELETE)
-                    .uri(DELETE_COLLECTION.replace("{collection}", "joaquin_collection"))
+                    .uri(url(DELETE_COLLECTION).replace("{collection}", "joaquin_collection"))
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -252,12 +288,12 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
 
         // List again and assert we are back to 1 collection
-        let response = to_route(&router)
+        let response = to_route(&router, db.clone())
             .await
             .oneshot(
                 Request::builder()
                     .method(Method::GET)
-                    .uri(LIST_COLLECTIONS)
+                    .uri(url(LIST_COLLECTIONS))
                     .body(Body::empty())
                     .unwrap(),
             )
