@@ -51,7 +51,6 @@ from tabsdatak.server._tdrunner.function._lib.initial_values import (
 )
 from tabsdatak.server._tdrunner.function.commands.run_function.error import (
     BadBundleError,
-    BadInitialValuesError,
     BadInputParquetError,
     BadManifestError,
     BadRequestError,

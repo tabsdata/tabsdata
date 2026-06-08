@@ -9,6 +9,7 @@ from __future__ import annotations
 from tabsdatak.error import ErrorCode, ErrorDef
 from tabsdatak.server._tdrunner.function._lib.errors import (
     CommandRuntimeException,
+    WriteFailedError as _WriteFailedError,
 )
 
 
@@ -18,7 +19,7 @@ class HttpFetchError(CommandRuntimeException):
     exit_code = 10
 
 
-class WriteFailedError(CommandRuntimeException):
+class WriteFailedError(_WriteFailedError):
     """``--out`` could not be written (missing parent dir, permission, ...)."""
 
     exit_code = 11

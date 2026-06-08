@@ -8,51 +8,50 @@ from __future__ import annotations
 
 from tabsdatak.error import ErrorCode, ErrorDef
 from tabsdatak.server._tdrunner.function._lib.errors import (
-    CommandInitException,
-    CommandRuntimeException,
+    BadBundleError as _BadBundleError,
+    BadManifestError as _BadManifestError,
+    BadRequestError as _BadRequestError,
+    BadUserCodeError as _BadUserCodeError,
+    NoPluginError as _NoPluginError,
+    PluginFailedError as _PluginFailedError,
+    WrongKindError as _WrongKindError,
 )
 
 
-class BadRequestError(CommandRuntimeException):
-    """``--request`` file missing, unreadable, or malformed."""
-
+class BadRequestError(_BadRequestError):
     exit_code = 10
 
 
-class BadBundleError(CommandRuntimeException):
+class BadBundleError(_BadBundleError):
     """``function_def.json`` missing, unreadable, or malformed."""
 
     exit_code = 11
 
 
-class BadUserCodeError(CommandInitException):
-    """User function couldn't be resolved from the bundle (pydantic
-    ``ValidationError``, typically because ``callable_from_str``
-    couldn't import the user package)."""
-
+class BadUserCodeError(_BadUserCodeError):
     exit_code = 12
 
 
-class WrongKindError(CommandRuntimeException):
+class WrongKindError(_WrongKindError):
     """Bundle's ``kind`` isn't ``subscriberDef``."""
 
     exit_code = 13
 
 
-class NoPluginError(CommandRuntimeException):
+class NoPluginError(_NoPluginError):
     """No ``DestPlugin`` is registered for the resolved destination
     class."""
 
     exit_code = 14
 
 
-class PluginFailedError(CommandRuntimeException):
+class PluginFailedError(_PluginFailedError):
     """The destination plugin's ``write_out()`` raised an exception."""
 
     exit_code = 15
 
 
-class BadManifestError(CommandRuntimeException):
+class BadManifestError(_BadManifestError):
     """Outputs manifest missing, unreadable, malformed, or contains a
     ``file: null`` entry (subscribers must return concrete frames for
     every slot)."""

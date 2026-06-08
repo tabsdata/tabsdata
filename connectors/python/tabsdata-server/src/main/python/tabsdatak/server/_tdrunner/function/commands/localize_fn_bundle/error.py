@@ -8,13 +8,12 @@ from __future__ import annotations
 
 from tabsdatak.error import ErrorCode, ErrorDef
 from tabsdatak.server._tdrunner.function._lib.errors import (
+    BadRequestError as _BadRequestError,
     CommandRuntimeException,
 )
 
 
-class BadRequestError(CommandRuntimeException):
-    """``--request`` file missing, unreadable, or malformed."""
-
+class BadRequestError(_BadRequestError):
     exit_code = 10
 
 
@@ -37,8 +36,7 @@ class LocalizeFnBundleErrorCode(ErrorCode):
         BadRequestError,
         "unreadable request.yaml {path}: {detail}",
     )
-    # Raised by ``load_request_or_raise`` when the request file is
-    # missing, has malformed YAML, or fails Pydantic validation.
+    # ``load_request_or_raise``.
 
     LFB_2 = ErrorDef(
         TransporterFailedError,

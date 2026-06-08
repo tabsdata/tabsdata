@@ -8,58 +8,65 @@ from __future__ import annotations
 
 from tabsdatak.error import ErrorCode, ErrorDef
 from tabsdatak.server._tdrunner.function._lib.errors import (
-    CommandInitException,
-    CommandRuntimeException,
+    BadBundleError as _BadBundleError,
+    BadRequestError as _BadRequestError,
+    BadStateInError as _BadStateInError,
+    BadStateOutError as _BadStateOutError,
+    BadUserCodeError as _BadUserCodeError,
+    ManifestWriteFailedError as _ManifestWriteFailedError,
+    NoPluginError as _NoPluginError,
+    PluginFailedError as _PluginFailedError,
+    WrongKindError as _WrongKindError,
 )
 
 
-class BadRequestError(CommandRuntimeException):
-    """``--request`` file missing, unreadable, or malformed."""
-
+class BadRequestError(_BadRequestError):
     exit_code = 10
 
 
-class BadBundleError(CommandRuntimeException):
+class BadBundleError(_BadBundleError):
     """``function_def.json`` missing, unreadable, or malformed."""
 
     exit_code = 11
 
 
-class BadUserCodeError(CommandInitException):
-    """User function couldn't be resolved from the bundle (pydantic
-    ``ValidationError``)."""
-
+class BadUserCodeError(_BadUserCodeError):
     exit_code = 12
 
 
-class WrongKindError(CommandRuntimeException):
+class WrongKindError(_WrongKindError):
     """Bundle's ``kind`` isn't ``publisherDef``."""
 
     exit_code = 13
 
 
-class NoPluginError(CommandRuntimeException):
+class NoPluginError(_NoPluginError):
     """No ``SrcPlugin`` is registered for the resolved source class."""
 
     exit_code = 14
 
 
-class PluginFailedError(CommandRuntimeException):
+class PluginFailedError(_PluginFailedError):
     """The source plugin's ``read_in()`` raised, or it produced the
     wrong number of slots."""
 
     exit_code = 15
 
 
-class ManifestWriteFailedError(CommandRuntimeException):
+class ManifestWriteFailedError(_ManifestWriteFailedError):
     """``--inputs-manifest`` could not be written."""
 
     exit_code = 16
 
 
-class BadInitialValuesError(CommandRuntimeException):
-    """The on-disk state file (state-in or state-out) doesn't decode
-    as a valid initial_values Parquet."""
+class BadStateInError(_BadStateInError):
+    """``hydrate_ctx_from_state_or_raise`` failure -- read side."""
+
+    exit_code = 17
+
+
+class BadStateOutError(_BadStateOutError):
+    """``drain_ctx_to_state_or_raise`` failure -- write side."""
 
     exit_code = 17
 
@@ -115,7 +122,16 @@ class RunSourcePluginErrorCode(ErrorCode):
     # ``write_inputs_manifest`` ``OSError``.
 
     RSP_9 = ErrorDef(
-        BadInitialValuesError,
-        "unreadable/unwritable state {state_file}: {detail}",
+        BadStateInError,
+        "unreadable state-in {state_file}: {detail}",
     )
-    # ``hydrate_ctx_from_state_or_raise`` / ``drain_ctx_to_state_or_raise``.
+    # ``hydrate_ctx_from_state_or_raise`` -- previous run's state
+    # parquet exists but couldn't be decoded.
+
+    RSP_10 = ErrorDef(
+        BadStateOutError,
+        "unwritable state-out {state_file}: {detail}",
+    )
+    # ``drain_ctx_to_state_or_raise`` -- ctx scratch couldn't be
+    # persisted (typically a bad value injected past the
+    # ``store_attr`` validator).

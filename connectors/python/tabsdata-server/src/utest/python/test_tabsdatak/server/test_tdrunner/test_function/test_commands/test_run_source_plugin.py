@@ -31,8 +31,9 @@ from tabsdatak._info import PublisherInfo
 from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
 from tabsdatak.server._tdrunner.function.commands.run_source_plugin.error import (
     BadBundleError,
-    BadInitialValuesError,
     BadRequestError,
+    BadStateInError,
+    BadStateOutError,
     BadUserCodeError,
     ManifestWriteFailedError,
     NoPluginError,
@@ -78,12 +79,15 @@ from tabsdatak.api import TableFrameSpec, TableFramesSpec, publisher
 from tabsdatak.conn.localfile import LocalFileSrcConn, LocalFileSrc
 
 _SRC = LocalFileSrc(
-    conn=LocalFileSrcConn(base_path={base_path!r}),
     paths=["*.parquet"],
 )
 
 
-@publisher(source=_SRC, output_tables=["my_table"])
+@publisher(
+    conn=LocalFileSrcConn(base_path={base_path!r}),
+    source=_SRC,
+    output_tables=["my_table"],
+)
 def my_publisher(in_1: TableFramesSpec) -> tuple[TableFrameSpec]:
     return (None,)
 """
@@ -433,20 +437,20 @@ def test_resolve_plugin_unknown_source_raises_no_plugin(fixture_publisher, monke
 
 def test_invoke_read_in_returns_plugin_result():
     class _FakePlugin:
-        def read_in(self, ctx, src):
+        def read_in(self, ctx, conn, src):
             return [[Path("/x.parquet")]]
 
-    out = _invoke_read_in(_FakePlugin(), object(), object())
+    out = _invoke_read_in(_FakePlugin(), object(), object(), object())
     assert out == [[Path("/x.parquet")]]
 
 
 def test_invoke_read_in_wraps_exceptions_as_plugin_failed():
     class _BrokenPlugin:
-        def read_in(self, ctx, src):
+        def read_in(self, ctx, conn, src):
             raise RuntimeError("boom")
 
     with pytest.raises(PluginFailedError):
-        _invoke_read_in(_BrokenPlugin(), object(), object())
+        _invoke_read_in(_BrokenPlugin(), object(), object(), object())
 
 
 # --- unit: _write_inputs_manifest ----------------------------------------
@@ -721,7 +725,7 @@ def test_hydrate_malformed_state_file_raises_bad_initial_values(tmp_path):
     req = _bare_request(
         system_input=(_input_table("iv", location=Location(uri="file:///x")),),
     )
-    with pytest.raises(BadInitialValuesError):
+    with pytest.raises(BadStateInError):
         hydrate_ctx_from_state_or_raise(ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_9)
 
 
@@ -729,7 +733,7 @@ def test_drain_noop_when_system_output_empty(tmp_path):
     ctx = _bare_ctx()
     ctx.store_attr("foo", "bar")  # has state but nowhere to send it.
     drain_ctx_to_state_or_raise(
-        ctx, _bare_request(), tmp_path, error_code=RunSourcePluginErrorCode.RSP_9
+        ctx, _bare_request(), tmp_path, error_code=RunSourcePluginErrorCode.RSP_10
     )
     assert list(tmp_path.iterdir()) == []
 
@@ -737,9 +741,22 @@ def test_drain_noop_when_system_output_empty(tmp_path):
 def test_drain_noop_when_slot_has_no_location(tmp_path):
     ctx = _bare_ctx()
     ctx.store_attr("foo", "bar")
-    req = _bare_request(system_output=(_output_table("iv", location=None),))
+    # OutputTable.location is required by pydantic; bypass validation
+    # with model_construct to exercise the drain function's defensive
+    # ``if slot.location is None: return`` branch.
+    slot = OutputTable.model_construct(
+        name="iv",
+        collection_id=1,
+        collection="c",
+        table_id="T-iv",
+        table_version_id="TV-iv",
+        table_data_version_id="PDV-iv",
+        location=None,
+        table_pos=-1,
+    )
+    req = _bare_request(system_output=(slot,))
     drain_ctx_to_state_or_raise(
-        ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_9
+        ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_10
     )
     assert list(tmp_path.iterdir()) == []
 
@@ -751,7 +768,7 @@ def test_drain_writes_state_file_when_slot_present(tmp_path):
     req = _bare_request(
         system_output=(_output_table("iv", location=Location(uri="file:///x")),),
     )
-    drain_ctx_to_state_or_raise(ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_9)
+    drain_ctx_to_state_or_raise(ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_10)
     written = tmp_path / "iv.parquet"
     assert written.is_file()
     assert read_initial_values(written) == {"last-modified": "2026-05-28T00:00:00Z"}
@@ -764,7 +781,7 @@ def test_drain_writes_empty_file_when_ctx_empty(tmp_path):
     req = _bare_request(
         system_output=(_output_table("iv", location=Location(uri="file:///x")),),
     )
-    drain_ctx_to_state_or_raise(ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_9)
+    drain_ctx_to_state_or_raise(ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_10)
     written = tmp_path / "iv.parquet"
     assert written.is_file()
     assert read_initial_values(written) == {}
@@ -778,13 +795,13 @@ def test_drain_creates_state_dir_if_missing(tmp_path):
     req = _bare_request(
         system_output=(_output_table("iv", location=Location(uri="file:///x")),),
     )
-    drain_ctx_to_state_or_raise(ctx, req, state_dir, error_code=RunSourcePluginErrorCode.RSP_9)
+    drain_ctx_to_state_or_raise(ctx, req, state_dir, error_code=RunSourcePluginErrorCode.RSP_10)
     assert (state_dir / "iv.parquet").is_file()
 
 
 def test_drain_bad_value_raises_bad_initial_values(tmp_path, monkeypatch):
     """If something poisons the ctx with a non-ContextValueSpec value,
-    the codec rejects it and the command surfaces BadInitialValuesError."""
+    the codec rejects it and the command surfaces BadStateOutError."""
     ctx = _bare_ctx()
     # Bypass store_attr's type-friendly surface to inject a bad value
     # directly into the underlying scratch dict.
@@ -792,8 +809,8 @@ def test_drain_bad_value_raises_bad_initial_values(tmp_path, monkeypatch):
     req = _bare_request(
         system_output=(_output_table("iv", location=Location(uri="file:///x")),),
     )
-    with pytest.raises(BadInitialValuesError):
-        drain_ctx_to_state_or_raise(ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_9)
+    with pytest.raises(BadStateOutError):
+        drain_ctx_to_state_or_raise(ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_10)
 
 
 # --- main: end-to-end with initial_values round-trip --------------------

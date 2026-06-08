@@ -39,7 +39,6 @@ from typing import Any
 
 import yaml
 
-
 # Per-entry keys are intentionally the same names as in
 # `inputs_manifest.py` — callers building dicts use whichever
 # constants are nearest their import site. The wire shape lines up
@@ -85,8 +84,6 @@ def load_state_manifest(path: Path) -> list[dict[str, Any]]:
             f"{_MANIFEST_STATE_KEY!r} must be a list, got {type(entries).__name__}"
         )
     return entries
-
-
 
 
 def write_state_manifest(entries: list[dict[str, Any]], path: Path) -> None:

@@ -8,13 +8,15 @@ from __future__ import annotations
 
 from tabsdatak.error import ErrorCode, ErrorDef
 from tabsdatak.server._tdrunner.function._lib.errors import (
+    BadManifestError as _BadManifestError,
+    BadRequestError as _BadRequestError,
     CommandRuntimeException,
+    ManifestMismatchError as _ManifestMismatchError,
+    WriteFailedError as _WriteFailedError,
 )
 
 
-class BadRequestError(CommandRuntimeException):
-    """``--request`` file missing, unreadable, or malformed."""
-
+class BadRequestError(_BadRequestError):
     exit_code = 10
 
 
@@ -25,19 +27,19 @@ class HttpPostError(CommandRuntimeException):
     exit_code = 11
 
 
-class WriteFailedError(CommandRuntimeException):
+class WriteFailedError(_WriteFailedError):
     """``--out`` (the response YAML) could not be written."""
 
     exit_code = 12
 
 
-class BadManifestError(CommandRuntimeException):
+class BadManifestError(_BadManifestError):
     """``--outputs-manifest`` file missing, unreadable, or malformed."""
 
     exit_code = 13
 
 
-class ManifestMismatchError(CommandRuntimeException):
+class ManifestMismatchError(_ManifestMismatchError):
     """A declared ``request.output`` table has no entry in the
     outputs manifest."""
 

@@ -8,36 +8,37 @@ from __future__ import annotations
 
 from tabsdatak.error import ErrorCode, ErrorDef
 from tabsdatak.server._tdrunner.function._lib.errors import (
-    CommandRuntimeException,
+    BadEndpointSchemeError as _BadEndpointSchemeError,
+    BadRequestError as _BadRequestError,
+    ManifestWriteFailedError as _ManifestWriteFailedError,
+    WriteFailedError as _WriteFailedError,
 )
 
 
-class BadRequestError(CommandRuntimeException):
-    """``--request`` file missing, unreadable, or malformed."""
-
+class BadRequestError(_BadRequestError):
     exit_code = 10
 
 
-class BadEndpointSchemeError(CommandRuntimeException):
+class BadEndpointSchemeError(_BadEndpointSchemeError):
     """An input or state-in location uses a URI scheme this command
     doesn't know how to fetch from."""
 
     exit_code = 11
 
 
-class WriteFailedError(CommandRuntimeException):
+class WriteFailedError(_WriteFailedError):
     """``--out`` (the transporter request YAML) could not be written."""
 
     exit_code = 12
 
 
-class InputsManifestWriteFailedError(CommandRuntimeException):
+class InputsManifestWriteFailedError(_ManifestWriteFailedError):
     """``--inputs-manifest`` could not be written."""
 
     exit_code = 13
 
 
-class StateManifestWriteFailedError(CommandRuntimeException):
+class StateManifestWriteFailedError(_ManifestWriteFailedError):
     """``--state-manifest`` could not be written."""
 
     exit_code = 14

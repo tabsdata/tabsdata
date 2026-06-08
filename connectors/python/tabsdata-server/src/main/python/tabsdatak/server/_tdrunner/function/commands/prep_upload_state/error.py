@@ -8,24 +8,24 @@ from __future__ import annotations
 
 from tabsdatak.error import ErrorCode, ErrorDef
 from tabsdatak.server._tdrunner.function._lib.errors import (
-    CommandRuntimeException,
+    BadEndpointSchemeError as _BadEndpointSchemeError,
+    BadRequestError as _BadRequestError,
+    WriteFailedError as _WriteFailedError,
 )
 
 
-class BadRequestError(CommandRuntimeException):
-    """``--request`` file missing, unreadable, or malformed."""
-
+class BadRequestError(_BadRequestError):
     exit_code = 10
 
 
-class BadEndpointSchemeError(CommandRuntimeException):
+class BadEndpointSchemeError(_BadEndpointSchemeError):
     """A ``system_output`` location uses a URI scheme this command
     doesn't know how to upload to."""
 
     exit_code = 11
 
 
-class WriteFailedError(CommandRuntimeException):
+class WriteFailedError(_WriteFailedError):
     """``--out`` could not be written (missing parent dir, permission,
     ...)."""
 
@@ -37,18 +37,16 @@ class PrepUploadStateErrorCode(ErrorCode):
         BadRequestError,
         "unreadable request.yaml {path}: {detail}",
     )
-    # Raised by ``load_request_or_raise`` when the request file is
-    # missing, has malformed YAML, or fails Pydantic validation.
+    # ``load_request_or_raise``.
 
     PUS_2 = ErrorDef(
         BadEndpointSchemeError,
         "unsupported scheme in a system_output location: {detail}",
     )
-    # Raised when ``build_upload_state_request`` rejects a location URI
-    # (``_lib.endpoint.UnsupportedSchemeError``).
+    # ``build_upload_state_request`` ``UnsupportedSchemeError``.
 
     PUS_3 = ErrorDef(
         WriteFailedError,
         "failed to write {path}: {detail}",
     )
-    # Raised when ``write_transporter_request`` hits an ``OSError``.
+    # ``write_transporter_request`` ``OSError``.

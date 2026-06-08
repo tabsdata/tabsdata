@@ -435,7 +435,7 @@ def main(args: argparse.Namespace) -> int:
 
     if ctx is not None:
         drain_ctx_to_state_or_raise(
-            ctx, request, state_dir, error_code=RunFunctionErrorCode.RF_18
+            ctx, request, state_dir, error_code=RunFunctionErrorCode.RF_19
         )
 
     entries_out = _sink_outputs(result, output_tables, out_dir)

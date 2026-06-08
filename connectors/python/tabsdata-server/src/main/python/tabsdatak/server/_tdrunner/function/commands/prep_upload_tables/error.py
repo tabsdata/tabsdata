@@ -8,37 +8,39 @@ from __future__ import annotations
 
 from tabsdatak.error import ErrorCode, ErrorDef
 from tabsdatak.server._tdrunner.function._lib.errors import (
-    CommandRuntimeException,
+    BadEndpointSchemeError as _BadEndpointSchemeError,
+    BadManifestError as _BadManifestError,
+    BadRequestError as _BadRequestError,
+    ManifestMismatchError as _ManifestMismatchError,
+    WriteFailedError as _WriteFailedError,
 )
 
 
-class BadRequestError(CommandRuntimeException):
-    """``--request`` file missing, unreadable, or malformed."""
-
+class BadRequestError(_BadRequestError):
     exit_code = 10
 
 
-class BadManifestError(CommandRuntimeException):
+class BadManifestError(_BadManifestError):
     """``--outputs-manifest`` file missing, unreadable, or malformed."""
 
     exit_code = 11
 
 
-class ManifestMismatchError(CommandRuntimeException):
+class ManifestMismatchError(_ManifestMismatchError):
     """The outputs manifest is missing an entry for a declared
     output table."""
 
     exit_code = 12
 
 
-class BadEndpointSchemeError(CommandRuntimeException):
+class BadEndpointSchemeError(_BadEndpointSchemeError):
     """An output-table destination uses a URI scheme this command
     doesn't know how to upload to."""
 
     exit_code = 13
 
 
-class WriteFailedError(CommandRuntimeException):
+class WriteFailedError(_WriteFailedError):
     """``--out`` could not be written (missing parent dir, permission,
     ...)."""
 

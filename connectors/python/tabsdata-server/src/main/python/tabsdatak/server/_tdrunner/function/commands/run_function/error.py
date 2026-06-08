@@ -8,18 +8,23 @@ from __future__ import annotations
 
 from tabsdatak.error import ErrorCode, ErrorDef
 from tabsdatak.server._tdrunner.function._lib.errors import (
-    CommandInitException,
+    BadBundleError as _BadBundleError,
+    BadInputParquetError as _BadInputParquetError,
+    BadManifestError as _BadManifestError,
+    BadRequestError as _BadRequestError,
+    BadStateInError as _BadStateInError,
+    BadStateOutError as _BadStateOutError,
+    BadUserCodeError as _BadUserCodeError,
     CommandRuntimeException,
+    NoPluginError as _NoPluginError,
 )
 
 
-class BadRequestError(CommandRuntimeException):
-    """``--request`` file missing, unreadable, or malformed."""
-
+class BadRequestError(_BadRequestError):
     exit_code = 10
 
 
-class BadBundleError(CommandRuntimeException):
+class BadBundleError(_BadBundleError):
     """``function_def.json`` missing, unreadable, malformed, or its
     ``kind`` isn't one of publisherDef / transformerDef / subscriberDef.
 
@@ -30,7 +35,7 @@ class BadBundleError(CommandRuntimeException):
     exit_code = 11
 
 
-class BadUserCodeError(CommandInitException):
+class BadUserCodeError(_BadUserCodeError):
     """User function couldn't be resolved (pydantic
     ``ValidationError``), or its slot-parameter annotations are
     unrecognised."""
@@ -38,7 +43,7 @@ class BadUserCodeError(CommandInitException):
     exit_code = 12
 
 
-class BadManifestError(CommandRuntimeException):
+class BadManifestError(_BadManifestError):
     """Inputs manifest missing, unreadable, malformed, or its
     entry-count doesn't match the user function's slot count, or a
     SINGLE-mode slot has multiple files."""
@@ -46,14 +51,14 @@ class BadManifestError(CommandRuntimeException):
     exit_code = 14
 
 
-class BadInputParquetError(CommandRuntimeException):
+class BadInputParquetError(_BadInputParquetError):
     """An input parquet listed in the manifest can't be opened or
     schema-scanned."""
 
     exit_code = 15
 
 
-class NoPluginError(CommandRuntimeException):
+class NoPluginError(_NoPluginError):
     """The subscriber's destination class has no registered DestDef."""
 
     exit_code = 16
@@ -85,9 +90,14 @@ class OutputsManifestWriteFailedError(CommandRuntimeException):
     exit_code = 20
 
 
-class BadInitialValuesError(CommandRuntimeException):
-    """The on-disk state file (state-in or state-out) doesn't decode
-    as a valid initial_values Parquet."""
+class BadStateInError(_BadStateInError):
+    """``hydrate_ctx_from_state_or_raise`` failure -- read side."""
+
+    exit_code = 21
+
+
+class BadStateOutError(_BadStateOutError):
+    """``drain_ctx_to_state_or_raise`` failure -- write side."""
 
     exit_code = 21
 
@@ -212,7 +222,15 @@ class RunFunctionErrorCode(ErrorCode):
     # ``write_outputs_manifest`` ``OSError``.
 
     RF_18 = ErrorDef(
-        BadInitialValuesError,
-        "unreadable/unwritable state {state_file}: {detail}",
+        BadStateInError,
+        "unreadable state-in {state_file}: {detail}",
     )
-    # ``hydrate_ctx_from_state_or_raise`` / ``drain_ctx_to_state_or_raise``.
+    # ``hydrate_ctx_from_state_or_raise`` -- state parquet exists but
+    # couldn't be decoded.
+
+    RF_19 = ErrorDef(
+        BadStateOutError,
+        "unwritable state-out {state_file}: {detail}",
+    )
+    # ``drain_ctx_to_state_or_raise`` -- ctx scratch couldn't be
+    # persisted.

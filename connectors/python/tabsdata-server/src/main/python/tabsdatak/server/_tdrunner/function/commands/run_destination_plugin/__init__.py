@@ -40,7 +40,7 @@ from tabsdatak.server._tdrunner.function._lib.request_ctx import FromRequestCtx
 from tabsdatak.server._tdrunner.function.commands.run_destination_plugin.error import (
     RunDestinationPluginErrorCode,
 )
-from tabsdatak.spi import DestContext, ParquetFile
+from tabsdatak.spi import DestContext
 
 VERSION = "0.1.0"
 INFO = (
@@ -117,7 +117,7 @@ def _resolve_plugin(info: SubscriberInfo):
     return dest_def.plugin()
 
 
-def _tables_from_manifest(entries: list[dict]) -> list[ParquetFile]:
+def _tables_from_manifest(entries: list[dict]) -> list[Path]:
     """Convert outputs-manifest entries to a positional list of
     `TableFileSpec` (parquet) paths for `DestPlugin.write_out`.
 
@@ -127,19 +127,19 @@ def _tables_from_manifest(entries: list[dict]) -> list[ParquetFile]:
     not allow None entries, so the framework cannot pass them
     through.)
     """
-    tables: list[ParquetFile] = []
+    tables: list[Path] = []
     for i, entry in enumerate(entries):
         file = entry.get(MANIFEST_FILE_KEY)
         name = entry.get(MANIFEST_NAME_KEY, f"slot{i}")
         if file is None:
             raise RunDestinationPluginErrorCode.RDP_8.exception(slot=i, name=name)
-        tables.append(ParquetFile(file))
+        tables.append(Path(file))
     return tables
 
 
-def _invoke_write_out(plugin, ctx: DestContext, dest, tables) -> None:
+def _invoke_write_out(plugin, ctx: DestContext, conn, dest, tables) -> None:
     try:
-        plugin.write_out(ctx, dest, tables)
+        plugin.write_out(ctx, conn, dest, tables)
     except Exception as exc:
         raise RunDestinationPluginErrorCode.RDP_6.exception(cause=exc, detail=str(exc))
 
@@ -169,7 +169,7 @@ def main(args: argparse.Namespace) -> int:
         function_id=str(request.info.function_run_id),
         function_name=request.info.function,
     )
-    _invoke_write_out(plugin, ctx, info.destination, tables)
+    _invoke_write_out(plugin, ctx, info.conn, info.destination, tables)
     return 0
 
 

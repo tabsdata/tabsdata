@@ -8,23 +8,25 @@ from __future__ import annotations
 
 from tabsdatak.error import ErrorCode, ErrorDef
 from tabsdatak.server._tdrunner.function._lib.errors import (
+    BadInputParquetError as _BadInputParquetError,
+    BadManifestError as _BadManifestError,
+    BadRequestError as _BadRequestError,
     CommandRuntimeException,
+    ManifestWriteFailedError as _ManifestWriteFailedError,
 )
 
 
-class BadRequestError(CommandRuntimeException):
-    """``--request`` file missing, unreadable, or malformed."""
-
+class BadRequestError(_BadRequestError):
     exit_code = 10
 
 
-class BadManifestError(CommandRuntimeException):
+class BadManifestError(_BadManifestError):
     """``--inputs-manifest`` file missing, unreadable, or malformed."""
 
     exit_code = 11
 
 
-class BadInputParquetError(CommandRuntimeException):
+class BadInputParquetError(_BadInputParquetError):
     """An input parquet listed in the manifest can't be read."""
 
     exit_code = 12
@@ -37,7 +39,7 @@ class StampFailedError(CommandRuntimeException):
     exit_code = 13
 
 
-class ManifestWriteFailedError(CommandRuntimeException):
+class ManifestWriteFailedError(_ManifestWriteFailedError):
     """``--enriched-inputs-manifest`` could not be written."""
 
     exit_code = 14

@@ -132,9 +132,9 @@ def _resolve_plugin(info: PublisherInfo):
     return src_def.plugin()
 
 
-def _invoke_read_in(plugin, ctx: SrcPluginCtx, src) -> list[list[Path]]:
+def _invoke_read_in(plugin, ctx: SrcPluginCtx, conn, src) -> list[list[Path]]:
     try:
-        return plugin.read_in(ctx, src)
+        return plugin.read_in(ctx, conn, src)
     except Exception as exc:
         raise RunSourcePluginErrorCode.RSP_6.exception(cause=exc, detail=str(exc))
 
@@ -247,9 +247,9 @@ def main(args: argparse.Namespace) -> int:
     hydrate_ctx_from_state_or_raise(
         ctx, request, state_dir, error_code=RunSourcePluginErrorCode.RSP_9
     )
-    produced = _invoke_read_in(plugin, ctx, info.source)
+    produced = _invoke_read_in(plugin, ctx, info.conn, info.source)
     drain_ctx_to_state_or_raise(
-        ctx, request, state_dir, error_code=RunSourcePluginErrorCode.RSP_9
+        ctx, request, state_dir, error_code=RunSourcePluginErrorCode.RSP_10
     )
     _write_inputs_manifest(info, produced, inputs_manifest)
     return 0

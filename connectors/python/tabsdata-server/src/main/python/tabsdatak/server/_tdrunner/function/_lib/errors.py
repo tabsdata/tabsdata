@@ -127,6 +127,93 @@ class PrematureError(CommandInternalException):
     exit_code = EXIT_PREMATURE
 
 
+# --- cross-command base classes ----------------------------------------
+#
+# Many command-side failures share their semantics across commands
+# (e.g. "the --request file is missing or malformed" surfaces in 9 of
+# the 11 commands). Declaring these classes here as bases lets each
+# command's ``error.py`` subclass them to pin its own ``exit_code``
+# while keeping the semantic type-identity shared. That lets
+# cross-cutting code write ``except BadRequestError`` once and catch
+# the conceptually-same failure from any command, instead of having
+# to enumerate ``run_function.error.BadRequestError``,
+# ``run_source_plugin.error.BadRequestError``, ... per command.
+#
+# Per-command leaves still pin their own ``exit_code`` class attribute;
+# the bases here intentionally do NOT set one.
+
+
+class BadRequestError(CommandRuntimeException):
+    """``--request`` file missing, unreadable, or malformed."""
+
+
+class BadBundleError(CommandRuntimeException):
+    """Function bundle missing, unreadable, malformed, or the bundle's
+    ``kind`` isn't one the command accepts."""
+
+
+class BadUserCodeError(CommandInitException):
+    """User function couldn't be resolved from the bundle (pydantic
+    ``ValidationError`` -- typically because ``callable_from_str``
+    couldn't import the user package)."""
+
+
+class WrongKindError(CommandRuntimeException):
+    """Bundle's ``kind`` value is well-formed but isn't accepted by
+    this command (e.g. ``publisherDef`` to a subscriber-only
+    command)."""
+
+
+class BadManifestError(CommandRuntimeException):
+    """A manifest file (inputs / outputs / state) is missing,
+    unreadable, malformed, or its content disagrees with what the
+    command expects (entry count, slot shape, ...)."""
+
+
+class ManifestMismatchError(CommandRuntimeException):
+    """Manifest is structurally valid but disagrees with the
+    request -- e.g. a declared output table has no manifest entry."""
+
+
+class ManifestWriteFailedError(CommandRuntimeException):
+    """A manifest could not be written (missing parent dir,
+    permission, ...)."""
+
+
+class WriteFailedError(CommandRuntimeException):
+    """Output file (non-manifest) could not be written."""
+
+
+class BadEndpointSchemeError(CommandRuntimeException):
+    """A request endpoint uses a URI scheme this command doesn't
+    know how to fetch from / upload to."""
+
+
+class NoPluginError(CommandRuntimeException):
+    """No plugin (Src / Dest / ...) is registered for the resolved
+    class -- the connector package isn't installed in the runtime."""
+
+
+class PluginFailedError(CommandRuntimeException):
+    """A plugin call (``read_in`` / ``write_out`` / ...) raised, or
+    the plugin returned a shape that violates its contract."""
+
+
+class BadInputParquetError(CommandRuntimeException):
+    """An input parquet listed in the manifest can't be opened or
+    schema-scanned."""
+
+
+class BadStateInError(CommandRuntimeException):
+    """The on-disk ``state-in`` Parquet (previous run's per-flow
+    scratch) couldn't be hydrated into the ctx. Read-side failure."""
+
+
+class BadStateOutError(CommandRuntimeException):
+    """The ctx's scratch couldn't be drained to its ``state-out``
+    Parquet. Write-side failure."""
+
+
 # --- enum binding the shared templates ---------------------------------
 
 

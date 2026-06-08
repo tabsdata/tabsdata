@@ -60,6 +60,7 @@ MAN = (
 RESOLVER_RETRY_WAIT_SECONDS = 2
 RESOLVER_RETRY_TOTAL_SECONDS = 32
 
+
 def _build_parser():
     parser = build_parser(
         prog="fetch-request",
