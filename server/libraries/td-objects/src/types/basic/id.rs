@@ -2,10 +2,10 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use td_common::id::{ID_LENGTH, Id};
+use td_common::id::{Id, ID_LENGTH};
 use td_security::{
-    ID_ALL_ENTITIES, ID_GROUP_DEFAULT, ID_GROUP_DESTINATION, ID_GROUP_SOURCE, ID_PROJECT_SANDBOX,
-    ID_ROLE_SEC_ADMIN, ID_ROLE_SYS_ADMIN, ID_ROLE_USER, ID_SYSTEM, ID_USER_ADMIN,
+    ID_ALL_ENTITIES, ID_PROJECT_SANDBOX, ID_ROLE_SEC_ADMIN, ID_ROLE_SYS_ADMIN, ID_ROLE_USER,
+    ID_SYSTEM, ID_USER_ADMIN,
 };
 
 #[ta_objects::typed(id)]
@@ -42,6 +42,7 @@ pub struct ProjectId;
 impl ProjectId {
     /// The seeded `sandbox` project — the only project the bootstrap creates;
     /// all others come from the projects CRUD API.
+    #[cfg(feature = "td-test")]
     pub fn sandbox() -> Self {
         Self(Id::_new(ID_PROJECT_SANDBOX))
     }
@@ -84,20 +85,6 @@ pub struct FunctionVersionId;
 
 #[ta_objects::typed(id)]
 pub struct GroupId;
-
-impl GroupId {
-    pub fn default_group() -> Self {
-        Self(Id::_new(ID_GROUP_DEFAULT))
-    }
-
-    pub fn source() -> Self {
-        Self(Id::_new(ID_GROUP_SOURCE))
-    }
-
-    pub fn destination() -> Self {
-        Self(Id::_new(ID_GROUP_DESTINATION))
-    }
-}
 
 #[ta_objects::typed(id)]
 pub struct InterCollectionPermissionId;
@@ -185,28 +172,3 @@ pub struct UserRoleId;
 
 #[ta_objects::typed(id)]
 pub struct WorkerId;
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use td_security::{
-        ENCODED_ID_GROUP_DEFAULT, ENCODED_ID_GROUP_DESTINATION, ENCODED_ID_GROUP_SOURCE,
-    };
-
-    /// Pin the BASE32HEX_NOPAD encoding of the seeded group ids so the byte
-    /// arrays in td-security agree with the encoded strings used in the
-    /// td-schema seeds. Catches manual transcription errors that would
-    /// otherwise silently desync the runtime constructor from the DB seed.
-    #[test]
-    fn seeded_group_ids_round_trip_through_encoding() {
-        assert_eq!(
-            GroupId::default_group().to_string(),
-            ENCODED_ID_GROUP_DEFAULT
-        );
-        assert_eq!(GroupId::source().to_string(), ENCODED_ID_GROUP_SOURCE);
-        assert_eq!(
-            GroupId::destination().to_string(),
-            ENCODED_ID_GROUP_DESTINATION
-        );
-    }
-}

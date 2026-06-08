@@ -41,16 +41,16 @@ use crate::pool::TdPool;
 ///
 /// # Project scope in tests
 ///
-/// The server connection path is fail-closed (no session `app.project_id`). In
-/// test builds the `td-test` feature is on, so `connect_postgres`'s
-/// `after_connect` runs `SET app.project_id = sandbox` on every connection (the
-/// statement is `#[cfg(feature = "td-test")]`, compiled out in production). Thus
-/// **direct** `db.seed()` / `db.live()` writes land in the `sandbox` project via
-/// the column default. To exercise a *different* project, or true cross-project
-/// isolation, go through a service: the per-request `ProjectScopeProvider` sets
-/// `SET LOCAL app.project_id` from the request's project (a request scoped via
-/// `.in_project(..)`), which overrides this default for that transaction.
-/// Seeding two projects via raw `db.seed()` puts both in `sandbox`.
+/// The production connection path is fail-closed (no session GUC). In test
+/// builds the `td-test` feature is on, so `connect_postgres`'s `after_connect`
+/// runs `SET app.bypass_rls = on` on every serving connection (the statement is
+/// `#[cfg(feature = "td-test")]`, compiled out in production). Thus RLS is
+/// **disabled by default** in tests: a plain `db.live()` reads across all
+/// projects, the same as a `scope = Global` request. To scope a query — for a
+/// field-less insert whose `project_id` comes from the GUC, or to exercise true
+/// cross-project isolation — use `db.scoped(p)` (or go through a service, whose
+/// `ProjectScopeProvider` sets `SET LOCAL app.project_id` from the request's
+/// project); either clears the bypass and re-enforces RLS for that transaction.
 pub async fn pool() -> TdPool {
     let config = DatabaseConfig {
         conn: Some(BackendConfig::embedded_postgres(EmbeddedConfig {

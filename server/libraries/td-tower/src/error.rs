@@ -24,6 +24,8 @@ pub enum ConnectionError {
     ConnectionLost = 5003,
     #[error("Cannot set the project scope on the connection: {0}")]
     CannotSetProjectScope(#[source] sqlx::Error) = 5004,
+    #[error("Cannot bypass the project scope on the connection: {0}")]
+    CannotBypassProjectScope(#[source] sqlx::Error) = 5006,
     #[error(
         "Project scope could not be resolved for the request: the request type \
          carries no project scope. A tenant-scoped service must run with a \

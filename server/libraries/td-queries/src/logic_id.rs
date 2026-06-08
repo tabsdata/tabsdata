@@ -12,8 +12,10 @@ use std::fmt::Debug;
 use ta_objects::DaoCore;
 use td_common::logic_id::KeyId;
 use td_database::dynamic::{DynamicDecode, DynamicType};
+use td_database::error::DbError;
 use td_database::pool::TdPool;
 use td_database::sea_query::builder::SeaQueryExt;
+use td_database::sea_query::executor::SeaExecutor;
 use td_error::{TdError, td_error};
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::function::FunctionDB;
@@ -26,6 +28,7 @@ use td_objects::types::basic::{
     LogicalTableDataVersionId, PDV, PFR, PhysicalFunctionRunId, PhysicalTableDataVersionId, TX,
     TransactionId,
 };
+use td_tower::error::ConnectionError;
 
 /// Errors that can occur during logical ID initialization.
 #[td_error]
@@ -53,11 +56,12 @@ where
         .take())
 }
 
-/// Fetches the last logical ID for a given D from the database.
+/// Read a single entity's last-used logical id (the max id in its table).
 ///
-/// This generic function queries the database for the last entry in the table associated with
-/// the `D` type, ordered by ID in descending order. It then extracts and returns the ID.
-async fn find_last_idl<D, ID, K>(db: &TdPool) -> Result<Option<ID>, TdError>
+/// Logical ids are global high-water marks, not per-project, so this must read
+/// across every project: callers run it on a **bypass-scoped** connection
+/// (never a project scope) — see [`initialize_logical_ids`].
+async fn find_last_idl<D, ID, K>(executor: impl SeaExecutor) -> Result<Option<ID>, TdError>
 where
     D: DaoCore,
     ID: DynamicType + DynamicDecode + Send + Unpin + 'static,
@@ -66,7 +70,7 @@ where
     let res = find_last_idl_query::<D, ID>()
         .map_err(|_| LogicIdsError::UnknownIdColumn(K::key().to_string()))?
         .build_query_scalar()
-        .fetch_optional(db)
+        .fetch_optional(executor)
         .await
         .map_err(|e| LogicIdsError::CouldNotFindLastId(K::key().to_string(), Box::new(e)))?;
     Ok(res)
@@ -78,27 +82,44 @@ where
 /// are properly seeded with the last used IDs from the database. This prevents ID collisions
 /// and maintains the integrity of the logical ID system.
 pub async fn initialize_logical_ids(db: &TdPool) -> Result<(), TdError> {
-    let id = find_last_idl::<ExecutionDB, ExecutionId, EP>(db).await?;
+    // Logical IDs are global high-water marks, not per-project: the last-used id
+    // must span every project. The serving role enforces RLS, so all reads share
+    // a single bypass-scoped transaction (the audited system/maintenance escape
+    // hatch) — never scoped.
+    let mut conn = db.acquire().await.map_err(DbError::SqlError)?;
+    conn.bypass_project_scope()
+        .await
+        .map_err(ConnectionError::CannotBypassProjectScope)?;
+
+    let id = find_last_idl::<ExecutionDB, ExecutionId, EP>(&mut conn).await?;
     ExecutionId::init(id)?;
 
-    let id = find_last_idl::<TransactionDB, TransactionId, TX>(db).await?;
+    let id = find_last_idl::<TransactionDB, TransactionId, TX>(&mut conn).await?;
     TransactionId::init(id)?;
 
-    let id = find_last_idl::<FunctionDB, FunctionVersionId, FV>(db).await?;
+    let id = find_last_idl::<FunctionDB, FunctionVersionId, FV>(&mut conn).await?;
     FunctionVersionId::init(id)?;
 
-    let id = find_last_idl::<PhysicalFunctionRunDB, PhysicalFunctionRunId, PFR>(db).await?;
+    let id = find_last_idl::<PhysicalFunctionRunDB, PhysicalFunctionRunId, PFR>(&mut conn).await?;
     PhysicalFunctionRunId::init(id)?;
 
     let id =
-        find_last_idl::<PhysicalTableDataVersionDB, PhysicalTableDataVersionId, PDV>(db).await?;
+        find_last_idl::<PhysicalTableDataVersionDB, PhysicalTableDataVersionId, PDV>(&mut conn)
+            .await?;
     PhysicalTableDataVersionId::init(id)?;
 
-    let id = find_last_idl::<LogicalFunctionRunDB, LogicalFunctionRunId, LFR>(db).await?;
+    let id = find_last_idl::<LogicalFunctionRunDB, LogicalFunctionRunId, LFR>(&mut conn).await?;
     LogicalFunctionRunId::init(id)?;
 
-    let id = find_last_idl::<LogicalTableDataVersionDB, LogicalTableDataVersionId, LDV>(db).await?;
+    let id = find_last_idl::<LogicalTableDataVersionDB, LogicalTableDataVersionId, LDV>(&mut conn)
+        .await?;
     LogicalTableDataVersionId::init(id)?;
+
+    if let Some(tx) = conn.into_transaction() {
+        tx.commit()
+            .await
+            .map_err(ConnectionError::CannotCommitTransaction)?;
+    }
 
     Ok(())
 }

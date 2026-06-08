@@ -31,9 +31,10 @@ use crate::dynamic::DynamicPool;
 #[cfg(all(postgres, feature = "embedded-postgres"))]
 use crate::embedded::EmbeddedPostgres;
 use crate::error::DbError;
+use crate::{APP_ROLE, APP_SCHEMA};
 use serde::{Deserialize, Serialize};
-use serde_with::DurationSeconds;
 use serde_with::serde_as;
+use serde_with::DurationSeconds;
 use sqlx::any::AnyConnectOptions;
 use sqlx::pool::PoolOptions;
 use sqlx::{ConnectOptions, Database};
@@ -283,7 +284,15 @@ impl Default for PoolConfig {
 /// URL it actually connected to and the embedded postgres handle when one
 /// was booted; `TdPool` parks the handle under `Arc`.
 pub struct ConnectOutput {
+    /// Serving pool. On PostgreSQL its connections switch to the non-bypass
+    /// [`APP_ROLE`](crate::APP_ROLE) in `after_connect`, so every request/seed
+    /// runs under row-level security.
     pub pool: DynamicPool,
+    /// Admin/upgrader pool — connects as the raw role (no `SET ROLE`), so it
+    /// keeps the DDL/provisioning privileges the serving pool gives up. All
+    /// bootstrap (`create`/`upgrade`/`check`/role provisioning) runs here. On
+    /// non-PostgreSQL backends (no RLS) it is the serving pool.
+    pub admin: DynamicPool,
     pub url: Url,
     #[cfg(feature = "embedded-postgres")]
     pub embedded: Option<EmbeddedPostgres>,
@@ -339,8 +348,11 @@ impl DatabaseConfig {
                     self.connect_sqlite(&conn_options, false).await?,
                     self.connect_sqlite(&conn_options, true).await?,
                 );
+                // No RLS on SQLite: the admin/upgrader pool is the serving pool.
+                let pool = DynamicPool::Sqlite { ro, rw };
                 Ok(ConnectOutput {
-                    pool: DynamicPool::Sqlite { ro, rw },
+                    admin: pool.clone(),
+                    pool,
                     url: (*c.url).clone(),
                     #[cfg(feature = "embedded-postgres")]
                     embedded: None,
@@ -350,14 +362,24 @@ impl DatabaseConfig {
             BackendConfig::Postgres(c) => {
                 let url = (*c.url).clone();
                 let conn_options = self.conn_options(&url)?;
-                // No session default — strict, per-request GUC only. An unscoped
-                // write into a project-scoped table fails closed (NOT NULL).
+                // Admin/upgrader pool first (raw role: keeps DDL/provisioning
+                // rights). No session default — strict, per-request GUC only; an
+                // unscoped write into a project-scoped table fails closed.
+                let admin_raw = self.connect_postgres(&conn_options, false, false).await?;
+                // The app role must exist before the serving pools' after_connect
+                // `SET ROLE td_app` runs. Idempotent and privilege-free when it
+                // already exists (the external case — ops pre-create it).
+                crate::pool::provision_app_role(&admin_raw).await?;
                 let (rw, ro) = tokio::try_join!(
-                    self.connect_postgres(&conn_options, false),
-                    self.connect_postgres(&conn_options, true),
+                    self.connect_postgres(&conn_options, false, true),
+                    self.connect_postgres(&conn_options, true, true),
                 )?;
                 Ok(ConnectOutput {
                     pool: DynamicPool::Postgres { ro, rw },
+                    admin: DynamicPool::Postgres {
+                        ro: admin_raw.clone(),
+                        rw: admin_raw,
+                    },
                     url,
                     #[cfg(feature = "embedded-postgres")]
                     embedded: None,
@@ -368,14 +390,21 @@ impl DatabaseConfig {
                 let (pg, url) = crate::embedded::start(ecfg).await?;
                 tracing::info!("Embedded postgres listening at {}", url);
                 let conn_options = self.conn_options(&url)?;
-                // Same as external: no session default (fail-closed). The
-                // td-test pool init re-adds a sandbox session default for tests.
+                // Admin/upgrader pool first (raw superuser). Embedded boots empty,
+                // so provision the app role here — before the serving pools'
+                // after_connect `SET ROLE td_app` needs it to exist.
+                let admin_raw = self.connect_postgres(&conn_options, false, false).await?;
+                crate::pool::provision_app_role(&admin_raw).await?;
                 let (rw, ro) = tokio::try_join!(
-                    self.connect_postgres(&conn_options, false),
-                    self.connect_postgres(&conn_options, true),
+                    self.connect_postgres(&conn_options, false, true),
+                    self.connect_postgres(&conn_options, true, true),
                 )?;
                 Ok(ConnectOutput {
                     pool: DynamicPool::Postgres { ro, rw },
+                    admin: DynamicPool::Postgres {
+                        ro: admin_raw.clone(),
+                        rw: admin_raw,
+                    },
                     url,
                     embedded: Some(pg),
                 })
@@ -387,8 +416,11 @@ impl DatabaseConfig {
                     self.connect_mysql(&conn_options, false),
                     self.connect_mysql(&conn_options, true),
                 )?;
+                // No RLS on MySQL: the admin/upgrader pool is the serving pool.
+                let pool = DynamicPool::MySql { ro, rw };
                 Ok(ConnectOutput {
-                    pool: DynamicPool::MySql { ro, rw },
+                    admin: pool.clone(),
+                    pool,
                     url: (*c.url).clone(),
                     #[cfg(feature = "embedded-postgres")]
                     embedded: None,
@@ -464,19 +496,50 @@ impl DatabaseConfig {
         Ok(pool)
     }
 
+    /// Build one PostgreSQL pool.
+    ///
+    /// `app_role`: when true (the **serving** pools), every connection switches
+    /// to the non-bypass [`APP_ROLE`](crate::APP_ROLE) in `after_connect`, so
+    /// requests run under row-level security on a pool that authenticated as a
+    /// superuser (embedded) or schema owner. When false (the **admin/upgrader**
+    /// pool) the connection keeps its raw role and its DDL/provisioning rights.
+    /// The role must already exist for `SET ROLE` to succeed — embedded
+    /// provisions it before building the serving pools; external deployments
+    /// pre-create it.
     #[cfg(postgres)]
     async fn connect_postgres(
         &self,
         conn_options: &AnyConnectOptions,
         read_only: bool,
+        app_role: bool,
     ) -> Result<sqlx::PgPool, sqlx::Error> {
         let conn_options = sqlx::postgres::PgConnectOptions::try_from(conn_options)?;
-        debug!("Database(read_only:{read_only}). Connection options: {conn_options:#?}");
+        debug!(
+            "Database(read_only:{read_only}, app_role:{app_role}). Connection options: {conn_options:#?}"
+        );
 
         let pool_options = self
             .pool_options(read_only)
             .after_connect(move |conn, _meta| {
                 Box::pin(async move {
+                    // Pin the schema the app's objects live in (both pools), so
+                    // DDL, RLS-policy/view resolution, and queries all target it.
+                    sqlx::query(&format!("SET search_path TO \"{APP_SCHEMA}\""))
+                        .execute(&mut *conn)
+                        .await?;
+                    if app_role {
+                        // Session-level: the connection runs as `td_app` for its
+                        // whole pooled lifetime, so every transaction on it is
+                        // RLS-enforced without a per-request role switch.
+                        sqlx::query(&format!("SET ROLE \"{APP_ROLE}\""))
+                            .execute(&mut *conn)
+                            .await?;
+
+                        #[cfg(feature = "td-test")]
+                        sqlx::query("SET app.bypass_rls = on")
+                            .execute(&mut *conn)
+                            .await?;
+                    }
                     if read_only {
                         sqlx::query("SET default_transaction_read_only = on")
                             .execute(&mut *conn)
@@ -485,7 +548,9 @@ impl DatabaseConfig {
                     Ok(())
                 })
             });
-        debug!("Database(read_only:{read_only}). Pool options: {pool_options:#?}");
+        debug!(
+            "Database(read_only:{read_only}, app_role:{app_role}). Pool options: {pool_options:#?}"
+        );
 
         let pool = pool_options.connect_with(conn_options).await?;
         Ok(pool)

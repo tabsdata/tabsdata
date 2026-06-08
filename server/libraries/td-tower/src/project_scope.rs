@@ -6,18 +6,21 @@
 //!
 //! A service declares its scope in the `service_factory` macro (`scope =
 //! Project` or `scope = Global`); the macro inserts the matching provider right
-//! after the connection provider. Both providers switch the connection's
-//! transaction to the non-superuser [`APP_ROLE`](td_database::APP_ROLE) (so
-//! postgres row-level security is enforced even on a superuser pool) and set
-//! the session GUC.
+//! after the connection provider. The connection already runs as the
+//! non-superuser [`APP_ROLE`](td_database::APP_ROLE) — switched once in the
+//! serving pool's `after_connect`, so postgres row-level security is enforced
+//! on every connection — so the providers only need to set the per-request
+//! scope GUC.
 //!
 //! * **`scope = Project`** services take their project as part of the service
-//!   input: the request is wrapped in [`Scoped`] (`{ project, request }`) by the
-//!   caller via [`InProject::in_project`]. [`ProjectScopeProvider`] unwraps it,
-//!   runs `SET LOCAL app.project_id`, then puts the bare request and the project
-//!   id back on the handler — so downstream layers see the clean request and can
-//!   extract the project id directly. The project never lives on the request
-//!   type.
+//!   input: the request is wrapped in [`Scoped`] (`{ project, inner }`) by the
+//!   caller via
+//!   [`InProject::in_project`](td_database::scoped::InProject::in_project).
+//!   [`ProjectScopeProvider`] unwraps it,
+//!   runs `set_project_scope` (`SET LOCAL app.project_id`, clearing any bypass),
+//!   then puts the bare request and the project id back on the handler — so
+//!   downstream layers see the clean request and can extract the project id
+//!   directly. The project never lives on the request type.
 //! * **`scope = Global`** services span all projects: [`GlobalScopeProvider`]
 //!   runs `SET LOCAL app.bypass_rls = on` and touches nothing else. They are the
 //!   audit list of cross-project escape hatches.
@@ -39,47 +42,27 @@
 //!   the function-run it serves). A global insert that omits `project_id` hits
 //!   the NOT NULL constraint — fail-closed.
 //!
-//! There is no `sandbox` fallback on the column default (external production);
-//! the embedded dev/test server carries a session-level `app.project_id =
-//! sandbox` so direct seed/bootstrap writes resolve.
+//! There is no `sandbox` fallback on the column default: production is
+//! fail-closed (an unscoped write hits NOT NULL). Tests default the serving
+//! pool to `app.bypass_rls = on`, so unscoped reads/writes span projects until
+//! a `db.scoped(p)` (or this provider) sets a per-statement scope.
 
 use std::future::Future;
 use std::marker::PhantomData;
 use std::pin::Pin;
 
-use td_database::APP_ROLE;
 use td_database::dynamic::DynamicConnection;
 use td_error::TdError;
 use tower::{Layer, Service};
 
 use crate::error::ConnectionError;
 use crate::handler::Handler;
+use td_database::scoped::Scoped;
 
-/// A service input that carries the request together with the project it is
-/// scoped to. `scope = "Project"` services receive this; the request type
-/// itself stays project-free.
-#[derive(Debug, Clone)]
-pub struct Scoped<R, P> {
-    pub project: P,
-    pub request: R,
-}
-
-/// Wrap any service input with the project it targets, producing the [`Scoped`]
-/// input a `scope = Project` service expects.
-pub trait InProject: Sized {
-    fn in_project<P>(self, project: P) -> Scoped<Self, P> {
-        Scoped {
-            project,
-            request: self,
-        }
-    }
-}
-
-impl<T> InProject for T {}
-
-/// Switch the handler's connection to [`APP_ROLE`] and bypass project scope
-/// (`SET LOCAL app.bypass_rls = on`). Fail-closed: the role is always switched
-/// first, so a lost connection can never leak rows under the pool's role.
+/// Bypass project scope on the handler's connection (`SET LOCAL app.bypass_rls
+/// = on`) for cross-project (global) work. The connection already runs as the
+/// non-bypass [`APP_ROLE`](td_database::APP_ROLE) (set at pool connect), so RLS
+/// is otherwise enforced; this opts the global service out of it.
 async fn enter_global_scope<Err>(handler: &mut Handler) -> Result<(), Err>
 where
     Err: From<TdError>,
@@ -87,9 +70,9 @@ where
     let conn = handler
         .get_mut::<DynamicConnection<'static>>()
         .ok_or_else(|| Err::from(TdError::from(ConnectionError::ConnectionLost)))?;
-    conn.enter_project_scope(APP_ROLE, None)
+    conn.bypass_project_scope()
         .await
-        .map_err(|e| Err::from(TdError::from(ConnectionError::CannotSetProjectScope(e))))
+        .map_err(|e| Err::from(TdError::from(ConnectionError::CannotBypassProjectScope(e))))
 }
 
 // ---------------------------------------------------------------------------
@@ -205,14 +188,14 @@ where
                 .get_mut::<DynamicConnection<'static>>()
                 .ok_or_else(|| Err::from(TdError::from(ConnectionError::ConnectionLost)))?;
             let project = scoped.project.to_string();
-            conn.enter_project_scope(APP_ROLE, Some(&project))
+            conn.set_project_scope(&project)
                 .await
                 .map_err(|e| Err::from(TdError::from(ConnectionError::CannotSetProjectScope(e))))?;
 
             // Hand the bare request and the resolved project to the rest of the
             // stack: the request as the service sees it, the project id for any
             // layer that stamps it.
-            handler.set(scoped.request);
+            handler.set(scoped.inner);
             handler.set(scoped.project);
 
             inner.call(handler).await

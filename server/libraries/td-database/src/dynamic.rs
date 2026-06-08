@@ -4,22 +4,22 @@
 
 use crate::sea_query::kind::DatabaseBackend;
 use sqlx::pool::PoolConnection;
-use sqlx::{Connection, Decode, Error, FromRow, Transaction, Type};
 #[cfg(mysql)]
 use sqlx::{
-    MySql, MySqlPool,
-    mysql::{MySqlQueryResult, MySqlRow},
+    mysql::{MySqlQueryResult, MySqlRow}, MySql,
+    MySqlPool,
 };
 #[cfg(postgres)]
 use sqlx::{
-    PgPool, Postgres,
-    postgres::{PgQueryResult, PgRow},
+    postgres::{PgQueryResult, PgRow}, PgPool,
+    Postgres,
 };
 #[cfg(sqlite)]
 use sqlx::{
-    Sqlite, SqlitePool,
-    sqlite::{SqliteQueryResult, SqliteRow},
+    sqlite::{SqliteQueryResult, SqliteRow}, Sqlite,
+    SqlitePool,
 };
+use sqlx::{Connection, Decode, Error, FromRow, Transaction, Type};
 use std::ops::DerefMut;
 use tracing::debug;
 
@@ -201,15 +201,6 @@ pub enum DynamicConnection<'c> {
     MySql(ConnectionHolder<'c, MySql, PoolConnection<MySql>>),
 }
 
-/// Quote a trusted SQL identifier for interpolation (doubles embedded `"`).
-/// Single source of the `SET LOCAL ROLE` quoting rule shared by
-/// [`DynamicConnection::set_rls_role`] and
-/// [`DynamicConnection::enter_project_scope`].
-#[cfg(postgres)]
-fn quote_ident(ident: &str) -> String {
-    format!("\"{}\"", ident.replace('"', "\"\""))
-}
-
 impl<'c> DynamicConnection<'c> {
     pub async fn ping(&mut self) -> Result<(), Error> {
         match self {
@@ -263,27 +254,6 @@ impl<'c> DynamicConnection<'c> {
         Ok(())
     }
 
-    /// Switch this connection's transaction to `role` (PostgreSQL
-    /// `SET LOCAL ROLE`). Row-level security is enforced against the *current*
-    /// role, so switching to a non-superuser, non-`BYPASSRLS` role makes RLS
-    /// apply even when the pool authenticated as a superuser — letting the
-    /// bootstrap/superuser connection still serve RLS-scoped requests. No-op on
-    /// SQLite/MySQL. Must run inside a transaction (the `LOCAL` scope resets on
-    /// commit/rollback). `role` is a trusted identifier, quoted defensively.
-    #[cfg_attr(not(postgres), allow(unused_variables))]
-    pub async fn set_rls_role(&mut self, role: &str) -> Result<(), Error> {
-        match self {
-            #[cfg(postgres)]
-            Self::Postgres(h) => {
-                let sql = format!("SET LOCAL ROLE {}", quote_ident(role));
-                sqlx::query(&sql).execute(&mut **h).await?;
-            }
-            #[allow(unreachable_patterns)]
-            _ => {}
-        }
-        Ok(())
-    }
-
     /// Whether this connection is backed by PostgreSQL. Lets a service layer
     /// branch on backend without taking a `DatabaseBackend` dependency — e.g.
     /// to gate features that only make sense under RLS.
@@ -296,22 +266,22 @@ impl<'c> DynamicConnection<'c> {
         }
     }
 
-    /// Bind this connection's transaction to a project: PostgreSQL
-    /// `SET LOCAL app.project_id = <project_id>`. Under row-level security
-    /// rows are then visible/writable only for that project (see the
-    /// `project_isolation` policy). No-op on SQLite/MySQL, which have no RLS.
-    ///
-    /// Uses `set_config(..., is_local => true)`, so the binding is scoped to the
-    /// surrounding transaction and cleared on commit/rollback — safe on a pooled
-    /// connection. **Must** be called inside a transaction; on an autocommit
-    /// connection the `true` (local) setting would not persist to later queries.
+    /// Take a transaction-scoped PostgreSQL advisory lock keyed on `key`
+    /// (`pg_advisory_xact_lock(hashtextextended(key, 0))`). The lock is held
+    /// until the surrounding transaction commits or rolls back, so it serializes
+    /// concurrent transactions that lock the same `key`. Used to make a
+    /// check-then-insert sequence atomic against racing identical requests
+    /// without escalating the isolation level. No-op on SQLite/MySQL (single
+    /// writer; the table's unique index is the backstop there). **Must** run
+    /// inside a transaction. `key` is hashed in-SQL so any string is safe; a
+    /// hash collision only over-serializes two unrelated keys (harmless).
     #[cfg_attr(not(postgres), allow(unused_variables))]
-    pub async fn set_project_scope(&mut self, project_id: &str) -> Result<(), Error> {
+    pub async fn advisory_xact_lock_text(&mut self, key: &str) -> Result<(), Error> {
         match self {
             #[cfg(postgres)]
             Self::Postgres(h) => {
-                sqlx::query("SELECT set_config('app.project_id', $1, true)")
-                    .bind(project_id)
+                sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+                    .bind(key)
                     .execute(&mut **h)
                     .await?;
             }
@@ -341,65 +311,37 @@ impl<'c> DynamicConnection<'c> {
         Ok(())
     }
 
-    /// Take a transaction-scoped PostgreSQL advisory lock keyed on `key`
-    /// (`pg_advisory_xact_lock(hashtextextended(key, 0))`). The lock is held
-    /// until the surrounding transaction commits or rolls back, so it serializes
-    /// concurrent transactions that lock the same `key`. Used to make a
-    /// check-then-insert sequence atomic against racing identical requests
-    /// without escalating the isolation level. No-op on SQLite/MySQL (single
-    /// writer; the table's unique index is the backstop there). **Must** run
-    /// inside a transaction. `key` is hashed in-SQL so any string is safe; a
-    /// hash collision only over-serializes two unrelated keys (harmless).
-    #[cfg_attr(not(postgres), allow(unused_variables))]
-    pub async fn advisory_xact_lock_text(&mut self, key: &str) -> Result<(), Error> {
-        match self {
-            #[cfg(postgres)]
-            Self::Postgres(h) => {
-                sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
-                    .bind(key)
-                    .execute(&mut **h)
-                    .await?;
-            }
-            #[allow(unreachable_patterns)]
-            _ => {}
-        }
-        Ok(())
-    }
-
-    /// Enter the per-request project scope in a single round trip: switch this
-    /// connection's transaction to `role` (`SET LOCAL ROLE`) and set the scope
-    /// GUC — `app.project_id = <project_id>` when `project_id` is `Some`, or
-    /// `app.bypass_rls = on` when `None` (cross-project system / scheduler /
-    /// admin work).
+    /// Bind this connection's transaction to a project: set `app.project_id`
+    /// **and clear `app.bypass_rls`**, so row-level security enforces exactly
+    /// this project. The connection already runs as the non-bypass
+    /// [`APP_ROLE`](crate::APP_ROLE) — switched once in the serving pool's
+    /// `after_connect` — so this GUC is all a per-request scope needs.
     ///
-    /// Combines what would otherwise be two separate statements (and two
-    /// network round trips) into one simple-query batch. `role` and
-    /// `project_id` are trusted identifiers, escaped defensively. No-op on
-    /// SQLite/MySQL (no RLS). **Must** run inside a transaction — the `LOCAL`
-    /// scope resets on commit/rollback, so on an autocommit connection the
-    /// settings would not persist to later queries.
+    /// Clearing bypass matters when a connection is re-scoped from an earlier
+    /// global/bypass scope within the same transaction (e.g. project creation,
+    /// which inserts the `projects` registry row under bypass, then scopes to
+    /// the new project for its system-group seeds): the lingering bypass would
+    /// otherwise leave those writes un-isolated. A no-op when bypass was unset.
+    ///
+    /// Both `set_config`s go out as one simple-query batch (one round trip).
+    /// `project_id` is escaped defensively. No-op on SQLite/MySQL (no RLS).
+    /// **Must** run inside a transaction — the `LOCAL` GUC resets on
+    /// commit/rollback, so on an autocommit connection it would not persist.
     #[cfg_attr(not(postgres), allow(unused_variables))]
-    pub async fn enter_project_scope(
-        &mut self,
-        role: &str,
-        project_id: Option<&str>,
-    ) -> Result<(), Error> {
+    pub async fn set_project_scope(&mut self, project_id: &str) -> Result<(), Error> {
         match self {
             #[cfg(postgres)]
             Self::Postgres(h) => {
-                let guc = match project_id {
-                    Some(id) => {
-                        let id = id.replace('\'', "''");
-                        format!("SELECT set_config('app.project_id', '{id}', true)")
-                    }
-                    None => "SELECT set_config('app.bypass_rls', 'on', true)".to_string(),
-                };
+                use sqlx::Executor;
+                let id = project_id.replace('\'', "''");
                 // Simple-query protocol (a `&str` query) sends both statements
                 // in one round trip; the extended/prepared path `sqlx::query`
                 // uses would reject a multi-statement string.
-                use sqlx::Executor;
-                let sql = format!("SET LOCAL ROLE {}; {guc}", quote_ident(role));
-                (&mut **h).execute(sql.as_str()).await?;
+                let sql = format!(
+                    "SELECT set_config('app.project_id', '{id}', true); \
+                     SELECT set_config('app.bypass_rls', 'off', true)"
+                );
+                h.execute(sql.as_str()).await?;
             }
             #[allow(unreachable_patterns)]
             _ => {}

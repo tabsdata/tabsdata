@@ -37,8 +37,9 @@ pub(crate) fn policy_statements(table: &str) -> Vec<String> {
         // that may not exist. An unset `app.project_id` yields NULL, which fails
         // the NOT NULL constraint — fail-closed. The per-request provider always
         // sets the GUC for tenant work; system/bypass writes set `project_id`
-        // explicitly. (Test builds set a session `app.project_id = sandbox` via
-        // the `td-test` feature; the server sets no default and is fail-closed.)
+        // explicitly. (Test builds default the serving pool to `app.bypass_rls =
+        // on` via the `td-test` feature, so unscoped reads/writes span projects;
+        // a field-less insert there must still be scoped so the GUC resolves.)
         // The base column carries no default, so this PostgreSQL-only DEFAULT is
         // the column's sole default; no-RLS backends keep `project_id` defaultless.
         format!(

@@ -9,12 +9,20 @@ use crate::config::DatabaseConfig;
 use crate::error::DbError;
 use crate::pool::TdPool;
 
-/// Non-superuser, `NOBYPASSRLS` PostgreSQL role the app switches to per
-/// transaction (`SET LOCAL ROLE`) so row-level security is enforced even when
-/// the pool authenticated as a superuser (e.g. embedded). On embedded it is
+/// Non-superuser, `NOBYPASSRLS` PostgreSQL role the serving pool switches to in
+/// `after_connect` (`SET ROLE`), so row-level security is enforced even when the
+/// pool authenticated as a superuser (e.g. embedded). On embedded it is
 /// auto-provisioned at startup; external deployments pre-create it and grant
 /// the connecting role membership.
 pub const APP_ROLE: &str = "td_app";
+
+/// PostgreSQL schema the application's objects live in. Single source of truth:
+/// every connection's `search_path` is pinned to it, [`APP_ROLE`] is granted
+/// access to it, the upgrader's privileges are checked against it, and schema
+/// introspection scopes to it. A constant for now (always `public`); promoting
+/// it to a `DatabaseConfig` option is a tracked follow-up — at which point this
+/// becomes the default rather than a hardcoded value.
+pub const APP_SCHEMA: &str = "public";
 
 pub mod config;
 pub mod dynamic;
@@ -22,6 +30,7 @@ pub mod dynamic;
 pub mod embedded;
 pub mod error;
 pub mod pool;
+pub mod scoped;
 pub mod sea_query;
 
 #[cfg(feature = "test-utils")]

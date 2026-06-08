@@ -10,16 +10,18 @@ use td_objects::types::basic::ProjectId;
 use td_tower::error::ConnectionError;
 use td_tower::extractors::{MutRef, Ref};
 
-/// Bind the connection to the freshly-created project so the system-group seeds
-/// (and any later project-scoped write in this service) inherit `project_id`
-/// from the column default instead of stamping it by hand.
+/// Re-scope the connection from global/bypass to the freshly-created project,
+/// so the system-group seeds (and any later project-scoped write in this
+/// service) are written exactly as a normal `Project`-scoped request would: RLS
+/// enforced, `project_id` defaulted from the GUC instead of stamped by hand.
 ///
 /// `CreateProjectService` runs in `Global` scope (bypass) — correct for the
-/// `projects` registry insert itself, but it leaves `app.project_id` unset.
-/// Setting it here, once the project row exists, lets `seed_default_groups`
-/// insert field-less `GroupDB` rows whose `project_id` defaults to the new
-/// project. Bypass stays on, so RLS `WITH CHECK` still admits the writes; the
-/// GUC only feeds the column default. No-op on non-PostgreSQL backends.
+/// `projects` registry insert itself, which has no project context yet. The
+/// connection already runs as the non-bypass `td_app` role (set at pool
+/// connect); once the project row exists, `set_project_scope` switches
+/// `app.project_id` to the new project and clears the global bypass, so
+/// `seed_default_groups`' field-less `GroupDB` rows default to the new project
+/// and RLS `WITH CHECK` genuinely enforces it. No-op on non-PostgreSQL backends.
 pub async fn scope_to_created_project(
     mut conn: MutRef<DynamicConnection<'static>>,
     project_id: Ref<ProjectId>,

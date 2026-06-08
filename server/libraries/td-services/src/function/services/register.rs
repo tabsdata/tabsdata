@@ -14,7 +14,6 @@ use ta_services::factory::service_factory;
 use td_authz::tower::{AuthzOn, CollAdmin, CollDev};
 use td_authz::{Authz, AuthzContext};
 use td_execution::SchedulerNotify;
-use td_objects::And;
 use td_objects::dxo::bundle::BundleDB;
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
@@ -28,12 +27,13 @@ use td_objects::rest_urls::CollectionParam;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
     AtTime, BundleId, CollectionId, CollectionIdName, CollectionName, DataLocation, Enabled,
-    FunctionId, FunctionName, FunctionVersionId, ProjectId, ResetState, ReuseFrozen,
-    StorageVersion, TableNameDto, TableType, WorkerConfig, WorkerTypeDto,
+    FunctionId, FunctionName, FunctionVersionId, ResetState, ReuseFrozen, StorageVersion,
+    TableNameDto, TableType, WorkerConfig, WorkerTypeDto,
 };
 use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
-use td_queries::By;
+use td_objects::And;
 use td_queries::insert;
+use td_queries::By;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -86,11 +86,7 @@ fn service() {
         // Get enabled flag
         from_fn(With::<FunctionRegister>::extract::<Option<Enabled>>),
         from_fn(With::<Option<Enabled>>::unwrap_or_default),
-        // Insert into function_versions(sql) status=Active. The function row no
-        // longer stamps `project_id` (the connection is project-scoped, so the
-        // column default fills it); the resolved `ProjectId` is kept on the
-        // handler for `register_workers` to stamp onto the workers.
-        from_fn(With::<CollectionDB>::extract::<ProjectId>),
+        // Insert into function_versions(sql) status=Active.
         from_fn(With::<FunctionRegister>::try_convert_to::<FunctionDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<FunctionDBBuilder, _>),
         from_fn(With::<CollectionId>::set::<FunctionDBBuilder>),

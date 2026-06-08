@@ -75,9 +75,9 @@ impl<P: DbBackendProvider + Send + Sync> TestSetup<TdPool> for DbTestSetup<P> {
                 .iter()
                 .flat_map(|f| f(backend))
                 .collect();
-            let mut tx = db.pool.begin().await.unwrap();
-            tx.as_mut_conn().execute_batch(&stmts).await.unwrap();
-            tx.commit().await.unwrap();
+            // Fixture DDL is owned by the admin role (the serving role has no
+            // CREATE on the schema), which then grants the app role access.
+            db.install_fixtures(&stmts).await.unwrap();
         }
 
         TestSetupExecution::Run(db)
