@@ -22,9 +22,18 @@ def _split(value: str | None) -> list[str]:
     return [v.strip() for v in value.split(",") if v.strip()]
 
 
+_SYNTHETIC_LABELS = {
+    "ExternalSource": "(external source)",
+    "ExternalDestination": "(external destination)",
+    "Unused": "(unused)",
+}
+
+
 def _render_summary(data: dict) -> None:
     """Single condensed table: one row per
-    `(dim_entity, group, status)`, magnitudes summed across buckets.
+    `(kind, dim_entity, group, status)`, magnitudes summed across
+    buckets. Synthetic nodes (`ExternalSource`, `ExternalDestination`,
+    `Unused`) render as labelled singletons.
     """
     dim = (data.get("dim") or "").lower()
     unit = data.get("unit", "?")
@@ -39,15 +48,16 @@ def _render_summary(data: dict) -> None:
 
     is_collection_dim = dim == "collection"
 
-    agg: dict[tuple[str, str, str], dict] = {}
+    agg: dict[tuple[str, str, str, str], dict] = {}
     for n in nodes:
+        kind = n.get("kind") or "Dim"
         coll_id = (n.get("collection_id") or "") if is_collection_dim else ""
         coll_name = (n.get("collection_name") or "") if is_collection_dim else ""
         grp_id = n.get("group_id") or ""
         grp_name = n.get("group_name") or ""
         status = n.get("status") or ""
         dim_key = coll_id if is_collection_dim else grp_id
-        key = (dim_key, grp_id, status)
+        key = (kind, dim_key, grp_id, status)
         row = agg.setdefault(
             key,
             {
@@ -92,16 +102,20 @@ def _render_summary(data: dict) -> None:
     if show_bytes:
         table.add_column("Bytes out", justify="right")
 
-    # Stable order: by dim_id then status.
-    for key in sorted(agg.keys()):
-        dim_key, grp_id, status = key
+    # Stable order: real `Dim` rows first (by dim id then group id),
+    # then synthetic singletons grouped at the bottom. `grp_id` is in
+    # the agg key so two same-collection-different-group rows must
+    # also tie-break on it to render deterministically across runs.
+    for key in sorted(agg.keys(), key=lambda k: (k[0] != "Dim", k)):
+        kind, dim_key, grp_id, status = key
         r = agg[key]
+        synth_label = _SYNTHETIC_LABELS.get(kind)
         cells: list[str] = []
         if is_collection_dim:
-            cells.append(r["collection_name"] or dim_key or "-")
-            cells.append(r["group_name"] or grp_id)
+            cells.append(synth_label or r["collection_name"] or dim_key or "-")
+            cells.append("" if synth_label else (r["group_name"] or grp_id))
         else:
-            cells.append(r["group_name"] or dim_key)
+            cells.append(synth_label or r["group_name"] or dim_key)
         cells.extend([
             status,
             str(r["fn_runs"]),
