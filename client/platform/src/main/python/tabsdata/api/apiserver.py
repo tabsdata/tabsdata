@@ -922,6 +922,55 @@ class APIServer:
         response = self.post(endpoint, json=data)
         return self.raise_for_status_or_return(raise_for_status, response)
 
+    def project_create(
+        self, name: str, description: str = None, raise_for_status: bool = True
+    ):
+        endpoint = "/projects"
+        data = self.get_params_dict(["name", "description"], [name, description])
+        response = self.post(endpoint, json=data)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def project_delete(self, name: str, raise_for_status: bool = True):
+        endpoint = f"/projects/{name}"
+        response = self.delete(endpoint)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def project_get_by_name(self, name: str, raise_for_status: bool = True):
+        endpoint = f"/projects/{name}"
+        response = self.get(endpoint)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def project_list(
+        self,
+        request_len: int = None,
+        request_filter: List[str] | str = None,
+        order_by: str = None,
+        pagination_id: str = None,
+        next_step: str = None,
+        raise_for_status: bool = True,
+    ):
+        endpoint = "/projects"
+        params = self.get_params_dict(
+            DEFAULT_LIST_ENDPOINT_PARAMETERS,
+            [request_len, request_filter, order_by, pagination_id, next_step],
+        )
+        response = self.get(endpoint, params)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def project_update(
+        self,
+        name: str,
+        new_name: str = None,
+        new_description: str = None,
+        raise_for_status: bool = True,
+    ):
+        endpoint = f"/projects/{name}"
+        data = self.get_params_dict(
+            ["name", "description"], [new_name, new_description]
+        )
+        response = self.post(endpoint, json=data)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
     def metrics_get(
         self,
         params: dict | None = None,

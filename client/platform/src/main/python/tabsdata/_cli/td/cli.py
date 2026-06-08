@@ -35,6 +35,7 @@ from tabsdata._cli.td.exe_group import exe
 from tabsdata._cli.td.fn_group import fn
 from tabsdata._cli.td.group_group import group
 from tabsdata._cli.td.metrics_group import metrics
+from tabsdata._cli.td.project_group import project
 from tabsdata._cli.td.role_group import role
 from tabsdata._cli.td.stage_group import stage
 from tabsdata._cli.td.table_group import table
@@ -95,6 +96,7 @@ cli.add_command(exe)
 cli.add_command(fn)
 cli.add_command(group)
 cli.add_command(metrics)
+cli.add_command(project)
 cli.add_command(role)
 cli.add_command(stage)
 cli.add_command(table)
