@@ -172,6 +172,31 @@ where
         let mut inner = std::mem::replace(&mut self.inner, clone);
 
         Box::pin(async move {
+            // Metadata mode drives the stack with a `()` request, so there is no
+            // `Scoped` to unwrap and no connection to scope. Mirror the real
+            // path's effect on the type bag — consumes the `Scoped<R, P>` input,
+            // produces the bare request `R` and the project `P` — then pass
+            // through.
+            #[cfg(feature = "test_tower_metadata")]
+            if let Some(m) = crate::metadata::Metadata::extract(&mut handler) {
+                use crate::metadata::type_of;
+                m.used_type("ProjectScopeProviderService", type_of::<Scoped<R, P>>());
+                m.created_type("ProjectScopeProviderService", type_of::<R>());
+                m.created_type("ProjectScopeProviderService", type_of::<P>());
+                let mut result = inner.call(handler).await;
+                if let Ok(ref mut h) = result {
+                    if let Some(m) = crate::metadata::Metadata::extract(h) {
+                        // The project id is ambient scope (like the connection):
+                        // handed to every downstream layer but not necessarily
+                        // consumed — a service relying on RLS never extracts it.
+                        // Drop it from the accounting so it isn't reported as an
+                        // unused output.
+                        m.remove_created("ProjectScopeProviderService", type_of::<P>());
+                    }
+                }
+                return result;
+            }
+
             let scoped = handler
                 .take::<Scoped<R, P>>()
                 .ok_or_else(|| Err::from(TdError::from(ConnectionError::ProjectScopeUnresolved)))?;

@@ -50,3 +50,43 @@ fn service() {
         from_fn(With::<ProjectReadBuilder>::build::<ProjectRead>),
     )
 }
+
+#[cfg(all(test, feature = "test_tower_metadata"))]
+mod tests {
+    use super::*;
+    use ta_services::service::TdService;
+    use td_database::pool::TdPool;
+    use td_tower::metadata::type_of_val;
+
+    #[td_test::test(db)]
+    async fn test_tower_metadata_update_project(db: TdPool) {
+        UpdateProjectService::with_defaults(db)
+            .metadata()
+            .await
+            .assert_service::<UpdateRequest<ProjectParam, ProjectUpdate>, ProjectRead>(&[
+                type_of_val(
+                    &With::<UpdateRequest<ProjectParam, ProjectUpdate>>::extract::<RequestContext>,
+                ),
+                type_of_val(&AuthzOn::<System>::set),
+                type_of_val(&Authz::<SysAdmin>::check),
+                type_of_val(
+                    &With::<UpdateRequest<ProjectParam, ProjectUpdate>>::extract_name::<ProjectParam>,
+                ),
+                type_of_val(&With::<ProjectParam>::extract::<ProjectIdName>),
+                type_of_val(&By::<ProjectIdName>::fetch_one::<ProjectDB>),
+                type_of_val(&With::<ProjectDB>::extract::<ProjectId>),
+                type_of_val(
+                    &With::<UpdateRequest<ProjectParam, ProjectUpdate>>::extract_data::<ProjectUpdate>,
+                ),
+                type_of_val(&update_project_validate),
+                type_of_val(&With::<ProjectDB>::try_convert_to::<ProjectUpdateDBBuilder, _>),
+                type_of_val(&With::<RequestContext>::update::<ProjectUpdateDBBuilder, _>),
+                type_of_val(&With::<ProjectUpdate>::update_project_update_db_builder),
+                type_of_val(&With::<ProjectUpdateDBBuilder>::build::<ProjectUpdateDB>),
+                type_of_val(&By::<ProjectId>::update::<ProjectUpdateDB, ProjectDB>),
+                type_of_val(&By::<ProjectId>::fetch_one::<ProjectDBWithNames>),
+                type_of_val(&With::<ProjectDBWithNames>::try_convert_to::<ProjectReadBuilder, _>),
+                type_of_val(&With::<ProjectReadBuilder>::build::<ProjectRead>),
+            ]);
+    }
+}

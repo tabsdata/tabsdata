@@ -43,3 +43,35 @@ fn service() {
         from_fn(With::<ProjectReadBuilder>::build::<ProjectRead>),
     )
 }
+
+#[cfg(all(test, feature = "test_tower_metadata"))]
+mod tests {
+    use super::*;
+    use ta_services::service::TdService;
+    use td_database::pool::TdPool;
+    use td_tower::metadata::type_of_val;
+
+    #[td_test::test(db)]
+    async fn test_tower_metadata_create_project(db: TdPool) {
+        CreateProjectService::with_defaults(db)
+            .metadata()
+            .await
+            .assert_service::<CreateRequest<(), ProjectCreate>, ProjectRead>(&[
+                type_of_val(&With::<CreateRequest<(), ProjectCreate>>::extract::<RequestContext>),
+                type_of_val(&AuthzOn::<System>::set),
+                type_of_val(&Authz::<SysAdmin>::check),
+                type_of_val(&reject_create_on_single_project_backend),
+                type_of_val(
+                    &With::<CreateRequest<(), ProjectCreate>>::extract_data::<ProjectCreate>,
+                ),
+                type_of_val(&With::<ProjectCreate>::try_convert_to::<ProjectCreateDBBuilder, _>),
+                type_of_val(&With::<RequestContext>::update::<ProjectCreateDBBuilder, _>),
+                type_of_val(&With::<ProjectCreateDBBuilder>::build::<ProjectCreateDB>),
+                type_of_val(&insert::<ProjectCreateDB>),
+                type_of_val(&With::<ProjectCreateDB>::extract::<ProjectId>),
+                type_of_val(&By::<ProjectId>::fetch_one::<ProjectDBWithNames>),
+                type_of_val(&With::<ProjectDBWithNames>::try_convert_to::<ProjectReadBuilder, _>),
+                type_of_val(&With::<ProjectReadBuilder>::build::<ProjectRead>),
+            ]);
+    }
+}

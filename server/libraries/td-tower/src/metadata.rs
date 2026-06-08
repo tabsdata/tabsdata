@@ -221,6 +221,7 @@ impl Metadata {
             ty: ty.into(),
         };
         self.created_types.remove(&metadata_type);
+        self.unused_types.remove(&metadata_type);
     }
 
     /// Returns a mutable reference to the `Metadata` stored in the handler.

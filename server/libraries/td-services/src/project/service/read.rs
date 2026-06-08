@@ -37,3 +37,28 @@ fn service() {
         from_fn(With::<ProjectReadBuilder>::build::<ProjectRead>),
     )
 }
+
+#[cfg(all(test, feature = "test_tower_metadata"))]
+mod tests {
+    use super::*;
+    use ta_services::service::TdService;
+    use td_database::pool::TdPool;
+    use td_tower::metadata::type_of_val;
+
+    #[td_test::test(db)]
+    async fn test_tower_metadata_read_project(db: TdPool) {
+        ReadProjectService::with_defaults(db)
+            .metadata()
+            .await
+            .assert_service::<ReadRequest<ProjectParam>, ProjectRead>(&[
+                type_of_val(&With::<ReadRequest<ProjectParam>>::extract::<RequestContext>),
+                type_of_val(&AuthzOn::<System>::set),
+                type_of_val(&Authz::<NoPermissions>::check),
+                type_of_val(&With::<ReadRequest<ProjectParam>>::extract_name::<ProjectParam>),
+                type_of_val(&With::<ProjectParam>::extract::<ProjectIdName>),
+                type_of_val(&By::<ProjectIdName>::fetch_one::<ProjectDBWithNames>),
+                type_of_val(&With::<ProjectDBWithNames>::try_convert_to::<ProjectReadBuilder, _>),
+                type_of_val(&With::<ProjectReadBuilder>::build::<ProjectRead>),
+            ]);
+    }
+}

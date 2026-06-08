@@ -33,3 +33,26 @@ fn service() {
         from_fn(By::<()>::list::<NoFilter, ProjectRead>),
     )
 }
+
+#[cfg(all(test, feature = "test_tower_metadata"))]
+mod tests {
+    use super::*;
+    use ta_services::service::TdService;
+    use td_database::pool::TdPool;
+    use td_tower::metadata::type_of_val;
+
+    #[td_test::test(db)]
+    async fn test_tower_metadata_list_projects(db: TdPool) {
+        ListProjectsService::with_defaults(db)
+            .metadata()
+            .await
+            .assert_service::<ListRequest<()>, ListResponse<ProjectRead>>(&[
+                type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
+                type_of_val(&AuthzOn::<System>::set),
+                type_of_val(&Authz::<NoPermissions>::check),
+                type_of_val(&With::<ListRequest<()>>::extract::<ListParams>),
+                type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<ProjectRead>, _>),
+                type_of_val(&By::<()>::list::<NoFilter, ProjectRead>),
+            ]);
+    }
+}

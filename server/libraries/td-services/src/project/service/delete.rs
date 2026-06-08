@@ -47,3 +47,34 @@ fn service() {
         from_fn(By::<ProjectId>::update::<ProjectDeleteDB, ProjectDB>),
     )
 }
+
+#[cfg(all(test, feature = "test_tower_metadata"))]
+mod tests {
+    use super::*;
+    use ta_services::service::TdService;
+    use td_database::pool::TdPool;
+    use td_tower::metadata::type_of_val;
+
+    #[td_test::test(db)]
+    async fn test_tower_metadata_delete_project(db: TdPool) {
+        DeleteProjectService::with_defaults(db)
+            .metadata()
+            .await
+            .assert_service::<DeleteRequest<ProjectParam>, ()>(&[
+                type_of_val(&With::<DeleteRequest<ProjectParam>>::extract::<RequestContext>),
+                type_of_val(&AuthzOn::<System>::set),
+                type_of_val(&Authz::<SysAdmin>::check),
+                type_of_val(&With::<DeleteRequest<ProjectParam>>::extract_name::<ProjectParam>),
+                type_of_val(&With::<ProjectParam>::extract::<ProjectIdName>),
+                type_of_val(&By::<ProjectIdName>::fetch_one::<ProjectDB>),
+                type_of_val(&With::<ProjectDB>::extract::<ProjectId>),
+                type_of_val(&reject_delete_sandbox_on_single_project_backend),
+                type_of_val(&By::<ProjectId>::fetch_all::<CollectionDB>),
+                type_of_val(&reject_delete_non_empty_project),
+                type_of_val(&With::<ProjectDB>::try_convert_to::<ProjectDeleteDBBuilder, _>),
+                type_of_val(&With::<RequestContext>::update::<ProjectDeleteDBBuilder, _>),
+                type_of_val(&With::<ProjectDeleteDBBuilder>::build::<ProjectDeleteDB>),
+                type_of_val(&By::<ProjectId>::update::<ProjectDeleteDB, ProjectDB>),
+            ]);
+    }
+}
