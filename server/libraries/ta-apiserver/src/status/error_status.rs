@@ -46,6 +46,7 @@ impl From<ErrorResponse> for ErrorStatus {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use axum::response::IntoResponse;
     use td_error::{api_error, ApiError, TdError};
 

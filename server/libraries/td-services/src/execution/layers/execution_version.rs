@@ -2,17 +2,19 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use http::StatusCode;
 use std::ops::Deref;
 use td_database::dynamic::DynamicConnection;
 use td_error::{ApiError, TdError, api_error};
 use td_objects::and;
-use td_objects::dxo::execution::{ExecutionDB, ExecutionResponse, ExecutionTriggerResponse};
+use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::function::FunctionDBWithNames;
 use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
-use td_objects::types::basic::{ExternalUid, FunctionId, FunctionVersionId, SkipIfRunning};
+use td_objects::types::basic::{
+    ExternalUid, FunctionId, FunctionVersionId, LogicalFunctionRunStatus, SkipIfRunning,
+};
 use td_queries::{LfrEntry, LiveEntry};
-use td_tower::default_services::Condition;
 use td_tower::extractors::{MutRef, Ref};
 use tracing::{debug, instrument};
 
@@ -32,95 +34,68 @@ pub async fn assert_function_version(
     Ok(())
 }
 
+/// Trigger gate 1 — `skip_if_running=true` and the trigger function is currently running:
+/// short-circuit with `425 Too Early` rather than starting a concurrent run. No-op when the
+/// flag is unset, there is no prior execution, or the latest run has ended.
+///
+/// The "latest attempt" for an (execution, fvid) is whichever FR the LFR's pointer is
+/// currently bound to — replays leave the prior FR row in `physical_function_runs`, but the
+/// pointer is what consumers (and this gate) should follow.
 #[instrument(
-    name = "execution.version_skip_check",
+    name = "execution.reject_if_running",
     skip_all,
     fields(function_version_id = %*function_version_id),
     level = "debug",
     err(Debug)
 )]
-pub async fn skip_if_running(
+pub async fn reject_if_running(
     mut conn: MutRef<DynamicConnection<'static>>,
     function_version_id: Ref<FunctionVersionId>,
     skip_if_running: Ref<SkipIfRunning>,
     latest_execution: Ref<Option<ExecutionDB>>,
-) -> Result<Condition, TdError> {
-    // The "latest attempt" for an (execution, fvid) is whichever FR the
-    // LFR's pointer is currently bound to — replays leave the prior FR
-    // row in `physical_function_runs` but the pointer is what consumers
-    // (and this gate) should follow.
-    let running = match latest_execution.as_ref() {
-        Some(latest_execution) => {
-            let lfr: Option<LogicalFunctionRunDB> = conn
-                .live()
-                .fetch_optional(and!(&latest_execution.id, function_version_id.deref()))
-                .await?;
-            let bound_fr_id = if let Some(lfr) = lfr {
-                conn.lfr().pointers().concrete(&lfr.id).await?
-            } else {
-                None
-            };
-            let physical_function_run: Option<PhysicalFunctionRunDB> = match bound_fr_id {
-                Some(id) => conn.live().fetch_optional(&id).await?,
-                None => None,
-            };
-            match physical_function_run {
-                Some(fr) if fr.status.is_ended() => {
-                    debug!(
-                        physical_function_run_id = %fr.id,
-                        status = ?fr.status,
-                        "Latest function run not running"
-                    );
-                    false
-                }
-                Some(fr) => {
-                    debug!(
-                        physical_function_run_id = %fr.id,
-                        status = ?fr.status,
-                        "Latest function run running"
-                    );
-                    true
-                }
-                None => {
-                    debug!("No bound FR for latest execution");
-                    false
-                }
-            }
-        }
-        None => {
-            debug!("No latest function run found");
-            false
-        }
+) -> Result<(), TdError> {
+    if !**skip_if_running {
+        return Ok(());
+    }
+    let Some(latest_execution) = latest_execution.as_ref() else {
+        debug!("No latest execution found");
+        return Ok(());
     };
-    Ok(Condition(running && **skip_if_running))
+    let lfr: Option<LogicalFunctionRunDB> = conn
+        .live()
+        .fetch_optional(and!(&latest_execution.id, function_version_id.deref()))
+        .await?;
+    let bound_fr_id = if let Some(lfr) = lfr {
+        conn.lfr().pointers().concrete(&lfr.id).await?
+    } else {
+        None
+    };
+    let physical_function_run: Option<PhysicalFunctionRunDB> = match bound_fr_id {
+        Some(id) => conn.live().fetch_optional(&id).await?,
+        None => None,
+    };
+    match physical_function_run {
+        Some(fr) if !fr.status.is_ended() => {
+            debug!(physical_function_run_id = %fr.id, status = ?fr.status, "Latest function run running");
+            Err(api_error!(
+                StatusCode::TOO_EARLY,
+                "Function is currently running (execution '{}'); retry once it finishes",
+                latest_execution.id
+            ))
+        }
+        _ => Ok(()),
+    }
 }
 
-pub async fn executed_trigger_response(
-    response: Ref<ExecutionResponse>,
-) -> Result<ExecutionTriggerResponse, TdError> {
-    let response = ExecutionTriggerResponse::Executed(Box::new(response.deref().clone()));
-    Ok(response)
-}
-
-pub async fn already_running_trigger_response(
-    latest_execution: Ref<ExecutionDB>,
-) -> Result<ExecutionTriggerResponse, TdError> {
-    let response = ExecutionTriggerResponse::AlreadyRunning(latest_execution.id.clone());
-    Ok(response)
-}
-
-/// Serialize concurrent triggers sharing a `(function_id, external_uid)` before
-/// the dedup check, closing the check-then-insert race. Without it two identical
-/// tagged triggers can both pass [`dedup_fetch`] under READ COMMITTED and race to
-/// INSERT; the loser then hits the `executions___function_id__external_uid___idx`
-/// unique index and surfaces a 500 instead of the deduped `AlreadyRunning`.
+/// Serialize concurrent triggers sharing a `(function_id, external_uid)` before the conflict
+/// check, closing the check-then-insert race. Without it two identical tagged triggers can
+/// both pass [`reject_if_external_uid_in_use`] under READ COMMITTED and race to INSERT.
 ///
-/// Takes a transaction-scoped advisory lock (Postgres) keyed on the pair, so a
-/// racing second trigger blocks until the first commits and then observes the
-/// committed row in [`dedup_fetch`] → `AlreadyRunning`. No-op when `external_uid`
-/// is `None` (untagged triggers never dedup) and on non-Postgres backends
-/// (single writer; the unique index is the backstop). Must run before
-/// [`dedup_fetch`], inside the request transaction.
+/// Takes a transaction-scoped advisory lock (Postgres) keyed on the pair, so a racing second
+/// trigger blocks until the first commits and then observes the committed row. No-op when
+/// `external_uid` is `None` (untagged triggers never dedup) and on non-Postgres backends
+/// (single writer). Must run before [`reject_if_external_uid_in_use`], inside the request
+/// transaction.
 #[instrument(
     name = "execution.dedup_lock",
     skip_all,
@@ -142,40 +117,52 @@ pub async fn dedup_lock(
     Ok(())
 }
 
-/// Fetch the execution that already used this `(function_id, external_uid)` for
-/// deduplication. Returns `None` when `external_uid` is absent (untagged
-/// triggers are never deduplicated).
+/// Trigger gate 2 — the `external_uid` is already in use by a still-live execution:
+/// short-circuit with `409 Conflict`. No-op when `external_uid` is absent (untagged triggers
+/// never dedup) or when the existing execution's run is **canceled or yanked** — those
+/// statuses *release* the key so a fresh trigger may reuse it. Any other status (or a missing
+/// run) keeps the key in use.
 ///
-/// `external_uid` is a **permanent** idempotency key: this lookup has no status
-/// filter, so once a `(function_id, external_uid)` pair has triggered an
-/// execution, later triggers with the same uid always dedup to it — even after
-/// it has finished or failed. This is deliberate and distinct from
-/// `skip_if_running`, which only suppresses while the latest run is still in
-/// flight. [`dedup_lock`] must run before this so the check-then-insert cannot
-/// race.
+/// The status is read from the canonical `LogicalFunctionRunDB` keyed by
+/// `(execution_id, function_id)`. [`dedup_lock`] must run before this so the
+/// check-then-insert cannot race.
 #[instrument(
-    name = "execution.dedup_fetch",
+    name = "execution.reject_if_external_uid_in_use",
     skip_all,
     fields(function_id = %*function_id),
     level = "debug",
     err(Debug)
 )]
-pub async fn dedup_fetch(
+pub async fn reject_if_external_uid_in_use(
     mut conn: MutRef<DynamicConnection<'static>>,
     function_id: Ref<FunctionId>,
     external_uid: Ref<Option<ExternalUid>>,
-) -> Result<Option<ExecutionDB>, TdError> {
-    let existing = match external_uid.deref() {
-        Some(_) => {
-            conn.live()
-                .fetch_optional(and!(function_id.deref(), external_uid.deref()))
-                .await?
-        }
-        None => None,
+) -> Result<(), TdError> {
+    if external_uid.is_none() {
+        return Ok(());
+    }
+    let existing: Option<ExecutionDB> = conn
+        .live()
+        .fetch_optional(and!(function_id.deref(), external_uid.deref()))
+        .await?;
+    let Some(existing) = existing else {
+        return Ok(());
     };
-    Ok(existing)
-}
-
-pub async fn dedup_condition(existing: Ref<Option<ExecutionDB>>) -> Result<Condition, TdError> {
-    Ok(Condition(existing.is_some()))
+    // A canceled/yanked run frees the external_uid so a fresh trigger may reuse it.
+    let lfr: Option<LogicalFunctionRunDB> = conn
+        .live()
+        .fetch_optional(and!(&existing.id, function_id.deref()))
+        .await?;
+    let released = matches!(
+        lfr.map(|lfr| lfr.status),
+        Some(LogicalFunctionRunStatus::Canceled | LogicalFunctionRunStatus::Yanked)
+    );
+    if released {
+        return Ok(());
+    }
+    Err(api_error!(
+        StatusCode::CONFLICT,
+        "external_uid already in use by execution '{}'",
+        existing.id
+    ))
 }

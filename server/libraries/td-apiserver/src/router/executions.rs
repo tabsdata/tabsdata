@@ -19,7 +19,7 @@ mod routes {
     use td_apiforge::apiserver_path;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::execution::{
-        Execution, ExecutionDetails, ExecutionRequest, ExecutionResponse, ExecutionTriggerResponse,
+        Execution, ExecutionDetails, ExecutionRequest, ExecutionResponse,
     };
     use td_objects::rest_urls::{
         AllowDisabledParam, EXECUTION_CANCEL, EXECUTION_DETAILS, EXECUTION_LIST,
@@ -68,7 +68,7 @@ mod routes {
         Extension(project_id): Extension<ProjectId>,
         Path(function_param): Path<FunctionParam>,
         Json(request): Json<ExecutionRequest>,
-    ) -> Result<CreateStatus<ExecutionTriggerResponse>, ErrorStatus> {
+    ) -> Result<CreateStatus<ExecutionResponse>, ErrorStatus> {
         let request = context
             .create(function_param, request)
             .in_project(project_id);

@@ -254,14 +254,4 @@ mod definitions {
         )>,
         pub relations_info: HashMap<PhysicalTableDataVersionId, ExecutionTableDataVersionRead>,
     }
-
-    /// Trigger response, shared by the public `execute` and internal
-    /// `execute_version` endpoints. `AlreadyRunning` is returned when
-    /// `skip_if_running` skips an in-flight execution or when `external_uid`
-    /// deduplicates against an existing one.
-    #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
-    pub enum ExecutionTriggerResponse {
-        Executed(Box<ExecutionResponse>),
-        AlreadyRunning(ExecutionId),
-    }
 }

@@ -10,9 +10,14 @@ use crate::execution::layers::execution::{
     build_transaction_map, build_transactions, resolve_execution_plan_versions,
     update_initial_function_run_status, validate_execution_plan, with_recursion_options,
 };
+use crate::execution::layers::execution_version::{
+    dedup_lock, reject_if_external_uid_in_use, reject_if_running,
+};
 use crate::graph::layers::{FunctionOrTable, GraphConfig, generate_td_graph};
+use crate::scheduler::layers::request::notify_scheduler;
 use td_authz::Authz;
 use td_authz::tower::{AuthzOn, CollAdmin, CollExec};
+use td_objects::And;
 use td_objects::StateFilter;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::execution::{ExecutionDB, ExecutionDBBuilder, ExecutionRequest};
@@ -24,10 +29,11 @@ use td_objects::dxo::logical::{
 use td_objects::dxo::transaction::{TransactionDB, TransactionDBBuilder};
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
-    CollectionId, FunctionId, FunctionOnly, OverrideDisabledTrigger, TriggerType,
+    CollectionId, ExternalUid, FunctionId, FunctionOnly, FunctionVersionId, OverrideDisabledTrigger,
+    SkipIfRunning, TriggerType,
 };
 use td_objects::types::recursion::RecursionOptions;
-use td_queries::{insert, insert_vec};
+use td_queries::{By, insert, insert_vec};
 use td_tower::from_fn::from_fn;
 use td_tower::{layer, layers};
 
@@ -52,15 +58,42 @@ impl GraphConfig for GraphOpts {
     }
 }
 
-// Requires:
+// Pre-execution trigger gates shared by the function- and version-trigger services.
+// Both gates short-circuit (they never branch to a different success response):
+//   1) `skip_if_running` + the function is currently running -> 425 Too Early
+//   2) `external_uid` already in use by a live execution     -> 409 Conflict
+// Evaluated in that order; on the happy path the pipeline falls through to `execute()`.
+// Requires `ExecutionRequest`, `FunctionVersionId`, `FunctionId` and `TriggerType` in scope.
+#[layer]
+pub fn trigger_guards() {
+    layers!(
+        // 1) Latest execution of the same trigger type, then the running gate.
+        from_fn(By::<And![FunctionVersionId, TriggerType]>::fetch_optional::<ExecutionDB>),
+        from_fn(With::<ExecutionRequest>::extract::<SkipIfRunning>),
+        from_fn(reject_if_running),
+        // 2) external_uid conflict gate (advisory-locked to close the insert race).
+        from_fn(With::<ExecutionRequest>::extract::<Option<ExternalUid>>),
+        from_fn(dedup_lock),
+        from_fn(reject_if_external_uid_in_use),
+    )
+}
+
+// The full trigger flow shared by both trigger services: run the trigger gates
+// (`trigger_guards`: 425 if already running, 409 on `external_uid` conflict), then authorize,
+// plan, and insert the execution + its transactions and (logical) function runs, then notify
+// the scheduler of the new runs. Yields the `ExecutionResponse`. Callers supply only the prelude
+// that resolves the trigger function and trigger type. Requires:
 // - Transaction connection
 // - AuthzContext
+// - SchedulerNotify
 // - ExecutionRequest
 // - TransactionBy
-// - FunctionDBWithNames (trigger)
+// - FunctionDBWithNames (trigger), FunctionId, FunctionVersionId, TriggerType
 #[layer]
 pub fn execute() {
     layers!(
+        // Trigger gates (short-circuit with 425 / 409).
+        trigger_guards(),
         from_fn(With::<ExecutionRequest>::extract::<OverrideDisabledTrigger>),
         from_fn(assert_function_status),
         // check requester is coll_admin or coll_exec for the function's collection
@@ -109,7 +142,9 @@ pub fn execute() {
         // pointer → TDV → upstream FR.status) to flip consumers OnHold
         // when upstream is Failed/OnHold.
         from_fn(update_initial_function_run_status),
-        // Execution plan response
+        // Execution plan response — the service's `ExecutionResponse`.
         from_fn(build_response),
+        // Notify scheduler to pick up the newly created function runs.
+        from_fn(notify_scheduler),
     )
 }
