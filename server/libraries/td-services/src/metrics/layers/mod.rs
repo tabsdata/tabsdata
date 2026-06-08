@@ -13,7 +13,7 @@ use td_database::dynamic::DynamicConnection;
 use td_error::TdError;
 use td_objects::Buildable;
 use td_objects::dxo::metrics::{
-    EdgeRow, InflightRequest, InflightResponse, MetricsRequest, MetricsResponse, NodeRow,
+    EdgeRow, InflightRequest, InflightResponse, MetricsRequest, MetricsResponse, NodeKind, NodeRow,
 };
 use td_objects::dxo::query_filters::{
     MAX_GAP_FILLED_ROWS, TimeWindowError, WindowUnit, expected_buckets,
@@ -101,7 +101,13 @@ fn fold_to_coarse<R: FoldRow>(rows: Vec<R>, unit: WindowUnit) -> Result<Vec<R>, 
 }
 
 impl FoldRow for NodeRow {
-    type Key = (i64, Option<CollectionId>, GroupId, LogicalFunctionRunStatus);
+    type Key = (
+        i64,
+        NodeKind,
+        Option<CollectionId>,
+        Option<GroupId>,
+        LogicalFunctionRunStatus,
+    );
 
     fn bucket(&self) -> EpochMs {
         self.bucket
@@ -110,7 +116,13 @@ impl FoldRow for NodeRow {
         self.bucket = b;
     }
     fn key(&self, coarse_ms: i64) -> Self::Key {
-        (coarse_ms, self.collection_id, self.group_id, self.status)
+        (
+            coarse_ms,
+            self.kind,
+            self.collection_id,
+            self.group_id,
+            self.status,
+        )
     }
     fn merge(&mut self, other: Self) -> Result<(), TdError> {
         self.fn_runs += other.fn_runs;
@@ -128,7 +140,14 @@ impl FoldRow for NodeRow {
 }
 
 impl FoldRow for EdgeRow {
-    type Key = (i64, Option<String>, String, LogicalFunctionRunStatus);
+    type Key = (
+        i64,
+        NodeKind,
+        Option<String>,
+        NodeKind,
+        Option<String>,
+        LogicalFunctionRunStatus,
+    );
 
     fn bucket(&self) -> EpochMs {
         self.bucket
@@ -139,7 +158,9 @@ impl FoldRow for EdgeRow {
     fn key(&self, coarse_ms: i64) -> Self::Key {
         (
             coarse_ms,
+            self.source_kind,
             self.source.clone(),
+            self.target_kind,
             self.target.clone(),
             self.status,
         )
@@ -168,6 +189,14 @@ trait GapFillRow: Sized {
     ) -> Result<Self, TdError>;
 }
 
+/// `dim_keys` includes any synthetic-kind singletons present in the
+/// input (ExternalSource / ExternalDestination / Unused each
+/// contribute one dim_key when observed). These count toward the
+/// `MAX_GAP_FILLED_ROWS` cap alongside real Dim keys — three extra
+/// singletons can flip a workspace tuned near the cap into a
+/// `TooManyGapFilledRows` error. If that happens, the error's `dims`
+/// field counts the synthetic singletons too; narrow the window or
+/// dim filter rather than expecting the synthetic kinds to be free.
 fn gap_fill<R: GapFillRow>(
     rows: Vec<R>,
     buckets: &[i64],
@@ -218,9 +247,12 @@ impl GapFillRow for NodeRow {
     // Names are functionally dependent on ids so HashSet cardinality is
     // unchanged; carrying them in the key lets `zero()` reconstruct
     // them for synthesised buckets without a separate id→name side-map.
+    // Synthetic rows have None ids and a singleton dim_key per `kind` —
+    // gap-fill spans them along buckets × statuses only.
     type DimKey = (
+        NodeKind,
         Option<CollectionId>,
-        GroupId,
+        Option<GroupId>,
         Option<CollectionName>,
         Option<GroupName>,
     );
@@ -230,6 +262,7 @@ impl GapFillRow for NodeRow {
     }
     fn dim_key(&self) -> Self::DimKey {
         (
+            self.kind,
             self.collection_id,
             self.group_id,
             self.collection_name.clone(),
@@ -246,10 +279,11 @@ impl GapFillRow for NodeRow {
     ) -> Result<Self, TdError> {
         Ok(NodeRow {
             bucket,
-            collection_id: dim_key.0,
-            collection_name: dim_key.2.clone(),
-            group_id: dim_key.1,
-            group_name: dim_key.3.clone(),
+            kind: dim_key.0,
+            collection_id: dim_key.1,
+            collection_name: dim_key.3.clone(),
+            group_id: dim_key.2,
+            group_name: dim_key.4.clone(),
             status,
             fn_runs: 0,
             transactions: 0,
@@ -264,15 +298,24 @@ impl GapFillRow for NodeRow {
 }
 
 impl GapFillRow for EdgeRow {
-    type DimKey = (Option<String>, Option<String>, String, Option<String>);
+    type DimKey = (
+        NodeKind,
+        Option<String>,
+        Option<String>,
+        NodeKind,
+        Option<String>,
+        Option<String>,
+    );
 
     fn bucket(&self) -> EpochMs {
         self.bucket
     }
     fn dim_key(&self) -> Self::DimKey {
         (
+            self.source_kind,
             self.source.clone(),
             self.source_name.clone(),
+            self.target_kind,
             self.target.clone(),
             self.target_name.clone(),
         )
@@ -287,10 +330,12 @@ impl GapFillRow for EdgeRow {
     ) -> Result<Self, TdError> {
         Ok(EdgeRow {
             bucket,
-            source: dim_key.0.clone(),
-            source_name: dim_key.1.clone(),
-            target: dim_key.2.clone(),
-            target_name: dim_key.3.clone(),
+            source_kind: dim_key.0,
+            source: dim_key.1.clone(),
+            source_name: dim_key.2.clone(),
+            target_kind: dim_key.3,
+            target: dim_key.4.clone(),
+            target_name: dim_key.5.clone(),
             status,
             fn_runs: 0,
             tables: 0,
@@ -325,10 +370,35 @@ mod tests {
     fn node(bucket_ms: i64, status: LogicalFunctionRunStatus, fn_runs: i64) -> NodeRow {
         NodeRow {
             bucket: EpochMs::try_from(bucket_ms).unwrap(),
+            kind: NodeKind::Dim,
             collection_id: Some(fixed_collection_id()),
             collection_name: Some(CollectionName::try_from("test_coll").unwrap()),
-            group_id: GroupId::default_group(),
+            group_id: Some(GroupId::default_group()),
             group_name: Some(GroupName::default_group()),
+            status,
+            fn_runs,
+            transactions: fn_runs,
+            table_versions_out: TableVersionCount::try_from(fn_runs).unwrap(),
+            row_count_out: RowCount::try_from(fn_runs * 10).unwrap(),
+            data_bytes_out: ByteCount::try_from(fn_runs * 100).unwrap(),
+            table_versions_in: TableVersionCount::try_from(0).unwrap(),
+            row_count_in: RowCount::try_from(0).unwrap(),
+            data_bytes_in: ByteCount::try_from(0).unwrap(),
+        }
+    }
+
+    fn synth_source_node(
+        bucket_ms: i64,
+        status: LogicalFunctionRunStatus,
+        fn_runs: i64,
+    ) -> NodeRow {
+        NodeRow {
+            bucket: EpochMs::try_from(bucket_ms).unwrap(),
+            kind: NodeKind::ExternalSource,
+            collection_id: None,
+            collection_name: None,
+            group_id: None,
+            group_name: None,
             status,
             fn_runs,
             transactions: fn_runs,
@@ -344,9 +414,11 @@ mod tests {
     fn edge(bucket_ms: i64, status: LogicalFunctionRunStatus, fn_runs: i64) -> EdgeRow {
         EdgeRow {
             bucket: EpochMs::try_from(bucket_ms).unwrap(),
+            source_kind: NodeKind::ExternalSource,
             source: None,
             source_name: None,
-            target: "tgt".to_string(),
+            target_kind: NodeKind::Dim,
+            target: Some("tgt".to_string()),
             target_name: Some("tgt".to_string()),
             status,
             fn_runs,
@@ -521,15 +593,40 @@ mod tests {
         assert_eq!(out.iter().filter(|r| r.fn_runs == 0).count(), 3);
     }
 
+    /// Synthetic node rows have None ids — gap-fill should treat them
+    /// as a singleton dim_key per kind and span them across buckets ×
+    /// statuses without mixing with real `Dim` rows.
+    #[test]
+    fn gap_fill_synthetic_kind_singleton() {
+        let rows = vec![
+            node(JAN_2026, LogicalFunctionRunStatus::Done, 3),
+            synth_source_node(JAN_2026, LogicalFunctionRunStatus::Done, 7),
+        ];
+        let buckets = day_buckets(JAN_2026, 2);
+        let out = gap_fill(rows, &buckets, &[LogicalFunctionRunStatus::Done]).unwrap();
+        // 2 buckets × 2 dim_keys (Dim + ExternalSource) × 1 status = 4 rows.
+        assert_eq!(out.len(), 4);
+        let dim_rows: Vec<_> = out.iter().filter(|r| r.kind == NodeKind::Dim).collect();
+        let synth_rows: Vec<_> = out
+            .iter()
+            .filter(|r| r.kind == NodeKind::ExternalSource)
+            .collect();
+        assert_eq!(dim_rows.len(), 2);
+        assert_eq!(synth_rows.len(), 2);
+        assert_eq!(dim_rows.iter().filter(|r| r.fn_runs == 3).count(), 1);
+        assert_eq!(synth_rows.iter().filter(|r| r.fn_runs == 7).count(), 1);
+    }
+
     #[test]
     fn gap_fill_rejects_over_cap() {
         // 90 buckets × 1000 dims × 6 statuses = 540k, well over the 50k cap.
         let rows: Vec<NodeRow> = (0..1000)
             .map(|_| NodeRow {
                 bucket: EpochMs::try_from(JAN_2026).unwrap(),
+                kind: NodeKind::Dim,
                 collection_id: Some(CollectionId::default()),
                 collection_name: Some(CollectionName::try_from("test_coll").unwrap()),
-                group_id: GroupId::default_group(),
+                group_id: Some(GroupId::default_group()),
                 group_name: Some(GroupName::default_group()),
                 status: LogicalFunctionRunStatus::Done,
                 fn_runs: 1,

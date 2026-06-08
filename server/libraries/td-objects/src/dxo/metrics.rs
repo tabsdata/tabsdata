@@ -56,29 +56,42 @@ mod definitions {
         Group,
     }
 
-    /// One node row per `(bucket, dim_id, group_id, status)` aggregating
-    /// LFRs whose target is in this node.
-    ///
-    /// `*_out` are this node's LFRs as producers (PFR aggregates from the
-    /// worker, system-excluded by construction); `*_in` are this node's
-    /// LFRs as consumers (sum over source LTDV row_count/data_bytes via
-    /// LFRI with `dep_pos >= 0`, system tables excluded explicitly).
+    #[ta_objects::typed_enum]
+    #[derive(Eq, PartialEq, Hash, Copy)]
+    pub enum NodeKind {
+        /// Real collection/group node
+        Dim,
+        /// Synthetic "outside the system" node where data arrives.
+        ExternalSource,
+        /// Synthetic "outside the system" node where data leaves.
+        ExternalDestination,
+        /// Synthetic dead end node.
+        Unused,
+    }
+
     #[ta_objects::Dlo]
     #[derive(sqlx::FromRow, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
     pub struct NodeRow {
         pub bucket: EpochMs,
-        /// Present iff `dim=collection`. NULL when `dim=group`.
+        /// `Dim` for real nodes; one of the synthetic variants for
+        /// singleton external/unused nodes.
+        pub kind: NodeKind,
+        /// Present if `kind = Dim` and `dim=collection`. `None` on
+        /// synthetic rows and on `dim=group` real rows.
         pub collection_id: Option<CollectionId>,
         /// Display name resolved from `collections.name` at query time;
-        /// NULL when `dim=group` (no collection axis).
+        /// `None` whenever `collection_id` is `None`.
         pub collection_name: Option<CollectionName>,
         /// Snapshot group_id from the LFR's collection at plan-build time.
         /// When `dim=group` this is the dim id; when `dim=collection`
-        /// this is metadata (lets the UI bucket nodes into
-        /// source/destination/etc. without a separate `/groups` call).
-        pub group_id: GroupId,
+        /// this is metadata. `None` on synthetic rows.
+        pub group_id: Option<GroupId>,
         /// Display name resolved from `groups.name` at query time.
         pub group_name: Option<GroupName>,
+        /// Producer-side LFR status for `ExternalSource` / `Unused`;
+        /// consumer-side LFR status for `Dim` / `ExternalDestination`.
+        /// The endpoint's status filter is the semantic gate — see
+        /// the per-branch SQL.
         pub status: LogicalFunctionRunStatus,
 
         pub fn_runs: i64,
@@ -93,25 +106,19 @@ mod definitions {
         pub data_bytes_in: ByteCount,
     }
 
-    /// One edge per `(bucket, source, target, status)` capturing data
-    /// flow between dim entities.
-    ///
-    /// `source` is NULL for synthetic external edges (publisher LFR with
-    /// no user-dep inputs). `tables` counts distinct non-system LTDVs
-    /// flowing on this edge. `row_count` / `data_bytes` are
-    /// source-LTDV-attributed for real edges (input weight that flowed)
-    /// and publisher-LFR-attributed for synthetic edges (data the
-    /// publisher pushed in from outside Tabsdata). `source` / `target`
-    /// are typed by the envelope's `dim`.
     #[ta_objects::Dlo]
     #[derive(sqlx::FromRow, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
     pub struct EdgeRow {
         pub bucket: EpochMs,
+        pub source_kind: NodeKind,
         pub source: Option<String>,
-        /// Display name of the source dim entity; NULL on synthetic
-        /// external edges (publisher with no upstream).
+        /// Display name of the source dim entity; `None` on synthetic
+        /// sources.
         pub source_name: Option<String>,
-        pub target: String,
+        pub target_kind: NodeKind,
+        pub target: Option<String>,
+        /// Display name of the target dim entity; `None` on synthetic
+        /// targets.
         pub target_name: Option<String>,
         pub status: LogicalFunctionRunStatus,
 

@@ -39,8 +39,8 @@
 use crate::QueryExecutor;
 use chrono::{DateTime, Utc};
 use sea_query::{
-    Alias, Expr, ExprTrait, Func, IntoIden, JoinType, Order, Query, SelectStatement, SimpleExpr,
-    UnionType, Value,
+    Alias, Expr, ExprTrait, Func, IntoIden, JoinType, NullOrdering, Order, Query, SelectStatement,
+    SimpleExpr, UnionType, Value,
 };
 use ta_objects::SeaValue;
 use ta_objects::errors::SqlError;
@@ -53,7 +53,7 @@ use td_objects::dxo::logical::{
     TableDataVersionDBWithNamesIden,
 };
 use td_objects::dxo::metrics::{
-    Dim, EdgeRow, InflightRequest, InflightRow, MetricsRequest, NodeRow,
+    Dim, EdgeRow, InflightRequest, InflightRow, MetricsRequest, NodeKind, NodeRow,
 };
 use td_objects::dxo::query_filters::{DimensionFilter, WindowUnit};
 use td_objects::types::basic::LogicalFunctionRunStatus;
@@ -137,6 +137,13 @@ fn node_aggregates_query(req: &MetricsRequest) -> SelectStatement {
         Expr::col((FunctionRunDBWithNamesIden::Table, bucket_iden)),
         Alias::new("bucket"),
     );
+
+    // Real-dim branch — tag every row with NodeKind::Dim. The three
+    // synthetic NodeRow kinds (ExternalSource / ExternalDestination /
+    // Unused) are NOT produced by SQL; they are derived in the
+    // service layer from the edge stream — see
+    // `td_services::metrics::layers::synthesize_nodes_from_edges`.
+    stmt.expr_as(kind_lit(NodeKind::Dim), Alias::new("kind"));
 
     // Dim-conditional projection: collection_id is only present when
     // dim=collection. dim=group rows return NULL.
@@ -418,8 +425,10 @@ fn edge_aggregates_query(req: &MetricsRequest) -> SelectStatement {
     let mut outer = Query::select();
     outer
         .expr(Expr::col((inner_alias.clone(), Alias::new("bucket"))))
+        .expr(Expr::col((inner_alias.clone(), Alias::new("source_kind"))))
         .expr(Expr::col((inner_alias.clone(), Alias::new("source"))))
         .expr(Expr::col((inner_alias.clone(), Alias::new("source_name"))))
+        .expr(Expr::col((inner_alias.clone(), Alias::new("target_kind"))))
         .expr(Expr::col((inner_alias.clone(), Alias::new("target"))))
         .expr(Expr::col((inner_alias.clone(), Alias::new("target_name"))))
         .expr(Expr::col((inner_alias.clone(), Alias::new("status"))))
@@ -445,15 +454,30 @@ fn edge_aggregates_query(req: &MetricsRequest) -> SelectStatement {
         .from_subquery(inner, inner_alias.clone())
         .group_by_columns([
             (inner_alias.clone(), Alias::new("bucket").into_iden()),
+            (inner_alias.clone(), Alias::new("source_kind").into_iden()),
             (inner_alias.clone(), Alias::new("source").into_iden()),
             (inner_alias.clone(), Alias::new("source_name").into_iden()),
+            (inner_alias.clone(), Alias::new("target_kind").into_iden()),
             (inner_alias.clone(), Alias::new("target").into_iden()),
             (inner_alias.clone(), Alias::new("target_name").into_iden()),
             (inner_alias.clone(), Alias::new("status").into_iden()),
         ])
+        // Synthetic-endpoint edges have NULL on one side; force
+        // NULLS LAST so the ordering is dialect-independent
+        // (Postgres defaults to NULLS LAST for ASC, SQLite to
+        // NULLS FIRST). Stable cross-backend ordering matters for
+        // snapshot tests and any client rendering in insertion order.
         .order_by((inner_alias.clone(), Alias::new("bucket")), Order::Desc)
-        .order_by((inner_alias.clone(), Alias::new("source")), Order::Asc)
-        .order_by((inner_alias.clone(), Alias::new("target")), Order::Asc)
+        .order_by_with_nulls(
+            (inner_alias.clone(), Alias::new("source")),
+            Order::Asc,
+            NullOrdering::Last,
+        )
+        .order_by_with_nulls(
+            (inner_alias.clone(), Alias::new("target")),
+            Order::Asc,
+            NullOrdering::Last,
+        )
         .order_by((inner_alias, Alias::new("status")), Order::Asc);
 
     outer
@@ -476,6 +500,7 @@ fn edge_real_branch(req: &MetricsRequest) -> SelectStatement {
             Expr::col((FunctionRunDBWithNamesIden::Table, bucket_iden)),
             Alias::new("bucket"),
         )
+        .expr_as(kind_lit(NodeKind::Dim), Alias::new("source_kind"))
         .expr_as(
             Expr::col((TableDataVersionDBWithNamesIden::Table, source_dim_iden)),
             Alias::new("source"),
@@ -484,6 +509,7 @@ fn edge_real_branch(req: &MetricsRequest) -> SelectStatement {
             Expr::col((TableDataVersionDBWithNamesIden::Table, source_dim_name_iden)),
             Alias::new("source_name"),
         )
+        .expr_as(kind_lit(NodeKind::Dim), Alias::new("target_kind"))
         .expr_as(
             Expr::col((FunctionRunDBWithNamesIden::Table, target_dim_iden)),
             Alias::new("target"),
@@ -642,8 +668,10 @@ fn edge_synth_branch(req: &MetricsRequest) -> SelectStatement {
         Expr::col((FunctionRunDBWithNamesIden::Table, bucket_iden)),
         Alias::new("bucket"),
     )
+    .expr_as(kind_lit(NodeKind::ExternalSource), Alias::new("source_kind"))
     .expr_as(null_source, Alias::new("source"))
     .expr_as(null_source_name, Alias::new("source_name"))
+    .expr_as(kind_lit(NodeKind::Dim), Alias::new("target_kind"))
     .expr_as(
         Expr::col((FunctionRunDBWithNamesIden::Table, target_dim_iden)),
         Alias::new("target"),
@@ -963,6 +991,13 @@ fn apply_ended_on_window(stmt: &mut SelectStatement, start_ms: i64, end_ms: i64)
         .and_where(Expr::col(ended_on).lt(ms_to_dt(end_ms)));
 }
 
+/// Project a `NodeKind` as a string literal so the FromRow decoder
+/// (which decodes through `String`) sees the typed-enum's serialized
+/// form. Used to tag each UNION branch with its synthetic identity.
+fn kind_lit(kind: NodeKind) -> SimpleExpr {
+    Expr::value(Value::String(Some(kind.to_string())))
+}
+
 fn coalesce_sum<C: sea_query::IntoColumnRef + Clone>(col: C) -> SimpleExpr {
     // CAST around the SUM because Postgres widens SUM(BIGINT) to NUMERIC;
     // the DAO column is BIGINT-typed and would fail to decode otherwise.
@@ -1041,7 +1076,7 @@ mod tests {
         LogicalFunctionRunDB, LogicalFunctionRunInputDB, LogicalPointerDao,
         LogicalTableDataVersionDB, LogicalTableDataVersionPointerDB,
     };
-    use td_objects::dxo::metrics::{Dim, MetricsRequest};
+    use td_objects::dxo::metrics::{Dim, MetricsRequest, NodeKind};
     use td_objects::dxo::physical_function_run::{
         PhysicalFunctionRunDB, UpdatePhysicalFunctionRunDB,
     };
@@ -1299,11 +1334,13 @@ mod tests {
 
         assert_eq!(edges.len(), 1);
         let e = &edges[0];
+        assert_eq!(e.source_kind, NodeKind::ExternalSource);
         assert!(
             e.source.is_none(),
-            "publisher → synthetic edge with source=NULL"
+            "synth-source edge has source = None; the synthetic-kind tag is the discriminator"
         );
-        assert_eq!(e.target, coll.id.to_string());
+        assert_eq!(e.target_kind, NodeKind::Dim);
+        assert_eq!(e.target, Some(coll.id.to_string()));
         assert_eq!(e.fn_runs, 1);
         assert_eq!(e.tables, 1, "publisher minted one output LTDV");
         // Source-LTDV attribution: row_count = LTDV.row_count = 10 (from PTDV via view).
@@ -1371,14 +1408,17 @@ mod tests {
         let mut conn = db.acquire().await.unwrap();
         let edges = conn.metrics().metrics_edges(&req).await?;
 
-        let real: Vec<_> = edges.iter().filter(|e| e.source.is_some()).collect();
+        let real: Vec<_> = edges
+            .iter()
+            .filter(|e| e.source_kind == NodeKind::Dim && e.target_kind == NodeKind::Dim)
+            .collect();
         assert_eq!(real.len(), 1, "one real edge expected, got {edges:?}");
         let e = real[0];
         assert_eq!(
             e.source.as_deref(),
             Some(producer_coll.id.to_string().as_str())
         );
-        assert_eq!(e.target, consumer_coll.id.to_string());
+        assert_eq!(e.target, Some(consumer_coll.id.to_string()));
         assert_eq!(e.fn_runs, 1);
         assert_eq!(e.tables, 1);
         // Source-LTDV attribution: 10 rows came from the producer's
