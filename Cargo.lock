@@ -8710,6 +8710,7 @@ dependencies = [
  "headers",
  "http",
  "indicatif",
+ "itertools 0.14.0",
  "nonempty",
  "openssl",
  "rand 0.10.1",

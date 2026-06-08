@@ -154,7 +154,7 @@ mod definitions {
     }
 
     /// Domain request for `GET /metrics`. Carries the resolved window,
-    /// the dim selection, the dimension filters, and the single status
+    /// the dim selection, the dimension filters, and the statuses
     /// to aggregate. Filters apply target-only to nodes and
     /// either-endpoint to real edges (target-only to synthetic edges,
     /// since they have no source dim to filter).
@@ -185,15 +185,11 @@ mod definitions {
         pub inflight: InflightResponse,
     }
 
-    /// URL-query view of `MetricsRequest`.
-    ///
-    /// Window grammar: `unit` (default `day`), `align` (default
-    /// `calendar`), `from` (default server-now), `span` (default 1).
-    /// `unit` is also the GROUP BY grain — `unit=hour&span=24` returns
-    /// 24 hourly rows. `dim` defaults to `collection`.
-    ///
-    /// The `/snapshot` endpoint reuses this query type but ignores
-    /// `status` — its metrics sub-response is fixed to `Committed`.
+    /// URL-query view of `MetricsRequest`. Window grammar: `unit` (default
+    /// `day`, also the GROUP BY grain), `align` (default `calendar`), `from`
+    /// (default server-now), `span` (default 1); `dim` defaults to
+    /// `collection`. Fields are flat — `#[serde(flatten)]` can't deserialize
+    /// the repeated-key `Vec` params under `serde_html_form`.
     #[ta_objects::QueryParam]
     pub struct MetricsQuery {
         /// Breakout dimension (`collection` (default) | `group`).
@@ -240,13 +236,13 @@ mod definitions {
         #[serde(default, rename = "group_exclude")]
         #[builder(default)]
         pub group_exclude: Vec<GroupId>,
-        /// Single status to aggregate. Defaults to `Committed`. Pass
-        /// any [`LogicalFunctionRunStatus`] variant; non-ENDED values
-        /// (e.g. `Running`) will return no rows since the SQL filters
-        /// via `ended_on IS NOT NULL`.
+        /// Statuses to aggregate. Empty defaults to `[Committed]`.
+        /// Repeat the param to pass several (`?status=Done&status=Failed`).
+        /// Every value must be ENDED — non-ENDED variants (e.g. `Running`)
+        /// are rejected, as the SQL filters via `ended_on IS NOT NULL`.
         #[serde(default)]
         #[builder(default)]
-        pub status: Option<LogicalFunctionRunStatus>,
+        pub status: Vec<LogicalFunctionRunStatus>,
     }
 
     /// URL-query view of `InflightRequest`. Point-in-time, no window.
@@ -268,6 +264,17 @@ mod definitions {
         #[serde(default)]
         #[builder(default)]
         pub status: Vec<LogicalFunctionRunStatus>,
+    }
+
+    /// The inflight-half status filter for `GET /snapshot`, read as a second
+    /// `Query` extractor alongside [`MetricsQuery`] so the latter is reused
+    /// rather than re-declared.
+    #[ta_objects::QueryParam]
+    pub struct InflightStatusQuery {
+        /// IN_FLIGHT statuses for the inflight half. Empty = all in-flight.
+        #[serde(default, rename = "inflight_status")]
+        #[builder(default)]
+        pub inflight_status: Vec<LogicalFunctionRunStatus>,
     }
 }
 

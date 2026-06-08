@@ -9,6 +9,7 @@ mod routes {
     use axum::Extension;
     use axum::extract::State;
     use axum_extra::extract::Query;
+    use itertools::Itertools;
     use std::sync::Arc;
     use ta_apiserver::status::error_status::ErrorStatus;
     use ta_apiserver::status::ok_status::GetStatus;
@@ -16,8 +17,8 @@ mod routes {
     use td_apiforge::apiserver_path;
     use td_error::TdError;
     use td_objects::dxo::metrics::{
-        Dim, InflightQuery, InflightRequest, InflightResponse, MetricsQuery, MetricsRequest,
-        MetricsResponse, SnapshotRequest, SnapshotResponse, StatusFilterError,
+        Dim, InflightQuery, InflightRequest, InflightResponse, InflightStatusQuery, MetricsQuery,
+        MetricsRequest, MetricsResponse, SnapshotRequest, SnapshotResponse, StatusFilterError,
     };
     use td_objects::dxo::query_filters::{
         DimensionFilter, TimeWindow, WindowAlign, WindowSpec, WindowUnit,
@@ -52,8 +53,13 @@ mod routes {
 
     pub(crate) fn metrics_query_into_request(q: MetricsQuery) -> Result<MetricsRequest, TdError> {
         let (window, unit) = resolve_window(q.unit, q.align, q.from, q.span)?;
-        let status = q.status.unwrap_or(LogicalFunctionRunStatus::Committed);
-        if !status.is_ended() {
+        // Dedup to bound the SQL `IN (...)` clause against repeated params.
+        let statuses = if q.status.is_empty() {
+            vec![LogicalFunctionRunStatus::Committed]
+        } else {
+            q.status.into_iter().unique().collect()
+        };
+        if let Some(status) = statuses.iter().find(|s| !s.is_ended()) {
             return Err(StatusFilterError::NotEnded {
                 status: status.to_string(),
                 allowed: format!("{:?}", LogicalFunctionRunStatus::ENDED),
@@ -66,51 +72,50 @@ mod routes {
             unit,
             collections: DimensionFilter::new(q.collection, q.collection_exclude),
             groups: DimensionFilter::new(q.group, q.group_exclude),
-            statuses: vec![status],
+            statuses,
         })
     }
 
-    /// Build the combined request from the shared `MetricsQuery`. Metrics
-    /// defaults to `Committed` (matching `/metrics`) — `q.status` is ignored
-    /// here; inflight passes empty statuses so the SQL returns all IN_FLIGHT
-    /// variants.
-    pub(crate) fn snapshot_query_into_request(q: MetricsQuery) -> Result<SnapshotRequest, TdError> {
-        let (window, unit) = resolve_window(q.unit, q.align, q.from, q.span)?;
-        let collections = DimensionFilter::new(q.collection.clone(), q.collection_exclude.clone());
-        let groups = DimensionFilter::new(q.group.clone(), q.group_exclude.clone());
-        Ok(SnapshotRequest {
-            metrics: MetricsRequest {
-                dim: q.dim.unwrap_or(Dim::Collection),
-                window,
-                unit,
-                collections: collections.clone(),
-                groups: groups.clone(),
-                statuses: vec![LogicalFunctionRunStatus::Committed],
-            },
-            inflight: InflightRequest {
-                collections,
-                groups,
-                statuses: vec![],
-            },
-        })
-    }
-
-    pub(crate) fn inflight_query_into_request(
-        q: InflightQuery,
-    ) -> Result<InflightRequest, TdError> {
-        for status in &q.status {
-            if !LogicalFunctionRunStatus::IN_FLIGHT.contains(status) {
-                return Err(StatusFilterError::NotInFlight {
-                    status: status.to_string(),
-                    allowed: format!("{:?}", LogicalFunctionRunStatus::IN_FLIGHT),
-                }
-                .into());
+    /// Dedup and reject any status that isn't IN_FLIGHT.
+    fn checked_inflight_statuses(
+        status: Vec<LogicalFunctionRunStatus>,
+    ) -> Result<Vec<LogicalFunctionRunStatus>, TdError> {
+        let statuses: Vec<_> = status.into_iter().unique().collect();
+        if let Some(status) = statuses
+            .iter()
+            .find(|s| !LogicalFunctionRunStatus::IN_FLIGHT.contains(s))
+        {
+            return Err(StatusFilterError::NotInFlight {
+                status: status.to_string(),
+                allowed: format!("{:?}", LogicalFunctionRunStatus::IN_FLIGHT),
             }
+            .into());
         }
+        Ok(statuses)
+    }
+
+    /// Combine the `/metrics` query with the snapshot-only `inflight_status`
+    /// filter. The inflight half shares the metrics dim filters.
+    pub(crate) fn snapshot_query_into_request(
+        metrics: MetricsQuery,
+        inflight_status: Vec<LogicalFunctionRunStatus>,
+    ) -> Result<SnapshotRequest, TdError> {
+        let inflight_statuses = checked_inflight_statuses(inflight_status)?;
+        let metrics = metrics_query_into_request(metrics)?;
+        let inflight = InflightRequest {
+            collections: metrics.collections.clone(),
+            groups: metrics.groups.clone(),
+            statuses: inflight_statuses,
+        };
+        Ok(SnapshotRequest { metrics, inflight })
+    }
+
+    pub(crate) fn inflight_query_into_request(q: InflightQuery) -> Result<InflightRequest, TdError> {
+        let statuses = checked_inflight_statuses(q.status)?;
         Ok(InflightRequest {
             collections: DimensionFilter::new(q.collection, q.collection_exclude),
             groups: DimensionFilter::new(q.group, q.group_exclude),
-            statuses: q.status,
+            statuses,
         })
     }
 
@@ -143,9 +148,11 @@ mod routes {
     pub async fn get_snapshot(
         State(state): State<Arc<OperationalMetricsServices>>,
         Extension(project_id): Extension<ProjectId>,
-        Query(query): Query<MetricsQuery>,
+        Query(metrics): Query<MetricsQuery>,
+        Query(inflight): Query<InflightStatusQuery>,
     ) -> Result<GetStatus<SnapshotResponse>, ErrorStatus> {
-        let request = snapshot_query_into_request(query)?.in_project(project_id);
+        let request =
+            snapshot_query_into_request(metrics, inflight.inflight_status)?.in_project(project_id);
         let response = state.snapshot.service().oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }
@@ -185,7 +192,7 @@ mod routes {
 
         // -------- Status validation -------------------------------------
 
-        fn metrics_query(status: Option<LogicalFunctionRunStatus>) -> MetricsQuery {
+        fn metrics_query(status: Vec<LogicalFunctionRunStatus>) -> MetricsQuery {
             MetricsQuery {
                 dim: None,
                 unit: None,
@@ -210,28 +217,66 @@ mod routes {
             }
         }
 
+
         #[test]
         fn metrics_default_status_is_committed() {
-            let req = metrics_query_into_request(metrics_query(None)).unwrap();
+            let req = metrics_query_into_request(metrics_query(vec![])).unwrap();
             assert_eq!(req.statuses, vec![LogicalFunctionRunStatus::Committed]);
         }
 
         #[test]
         fn metrics_accepts_ended_status() {
             for s in LogicalFunctionRunStatus::ENDED {
-                let req = metrics_query_into_request(metrics_query(Some(*s))).unwrap();
+                let req = metrics_query_into_request(metrics_query(vec![*s])).unwrap();
                 assert_eq!(req.statuses, vec![*s]);
             }
         }
 
         #[test]
+        fn metrics_accepts_multiple_ended_statuses() {
+            let qs: Vec<_> = LogicalFunctionRunStatus::ENDED.to_vec();
+            let req = metrics_query_into_request(metrics_query(qs.clone())).unwrap();
+            assert_eq!(req.statuses, qs);
+        }
+
+        #[test]
+        fn metrics_dedups_repeated_statuses() {
+            let dupes = vec![
+                LogicalFunctionRunStatus::Done,
+                LogicalFunctionRunStatus::Done,
+                LogicalFunctionRunStatus::Failed,
+                LogicalFunctionRunStatus::Done,
+            ];
+            let req = metrics_query_into_request(metrics_query(dupes)).unwrap();
+            assert_eq!(
+                req.statuses,
+                vec![
+                    LogicalFunctionRunStatus::Done,
+                    LogicalFunctionRunStatus::Failed
+                ]
+            );
+        }
+
+        #[test]
         fn metrics_rejects_non_ended_status() {
             for s in LogicalFunctionRunStatus::IN_FLIGHT {
-                let Err(err) = metrics_query_into_request(metrics_query(Some(*s))) else {
+                let Err(err) = metrics_query_into_request(metrics_query(vec![*s])) else {
                     panic!("expected NotEnded rejection for {s}");
                 };
                 assert!(err.to_string().contains("not ENDED"), "got: {err}");
             }
+        }
+
+        #[test]
+        fn metrics_rejects_mix_of_ended_and_non_ended() {
+            let mix = vec![
+                LogicalFunctionRunStatus::Committed,
+                LogicalFunctionRunStatus::IN_FLIGHT[0],
+            ];
+            let Err(err) = metrics_query_into_request(metrics_query(mix)) else {
+                panic!("expected NotEnded rejection for mixed statuses");
+            };
+            assert!(err.to_string().contains("not ENDED"), "got: {err}");
         }
 
         #[test]
@@ -248,6 +293,13 @@ mod routes {
         }
 
         #[test]
+        fn inflight_dedups_repeated_statuses() {
+            let s = LogicalFunctionRunStatus::IN_FLIGHT[0];
+            let req = inflight_query_into_request(inflight_query(vec![s, s, s])).unwrap();
+            assert_eq!(req.statuses, vec![s]);
+        }
+
+        #[test]
         fn inflight_rejects_ended_status() {
             for s in LogicalFunctionRunStatus::ENDED {
                 let Err(err) = inflight_query_into_request(inflight_query(vec![*s])) else {
@@ -255,6 +307,92 @@ mod routes {
                 };
                 assert!(err.to_string().contains("not IN_FLIGHT"), "got: {err}");
             }
+        }
+
+        #[test]
+        fn snapshot_metrics_honors_multiple_statuses() {
+            let qs = vec![
+                LogicalFunctionRunStatus::Done,
+                LogicalFunctionRunStatus::Failed,
+            ];
+            let req = snapshot_query_into_request(metrics_query(qs.clone()), vec![]).unwrap();
+            assert_eq!(req.metrics.statuses, qs);
+            // Empty inflight_status → all in-flight variants.
+            assert!(req.inflight.statuses.is_empty());
+        }
+
+        #[test]
+        fn snapshot_metrics_defaults_to_committed() {
+            let req = snapshot_query_into_request(metrics_query(vec![]), vec![]).unwrap();
+            assert_eq!(
+                req.metrics.statuses,
+                vec![LogicalFunctionRunStatus::Committed]
+            );
+            assert!(req.inflight.statuses.is_empty());
+        }
+
+        #[test]
+        fn snapshot_inflight_honors_statuses() {
+            let inflight = LogicalFunctionRunStatus::IN_FLIGHT.to_vec();
+            let req = snapshot_query_into_request(metrics_query(vec![]), inflight.clone()).unwrap();
+            assert_eq!(req.inflight.statuses, inflight);
+            // Metrics half still defaults independently.
+            assert_eq!(
+                req.metrics.statuses,
+                vec![LogicalFunctionRunStatus::Committed]
+            );
+        }
+
+        #[test]
+        fn snapshot_inflight_dedups_repeated_statuses() {
+            let s = LogicalFunctionRunStatus::IN_FLIGHT[0];
+            let req = snapshot_query_into_request(metrics_query(vec![]), vec![s, s, s]).unwrap();
+            assert_eq!(req.inflight.statuses, vec![s]);
+        }
+
+        #[test]
+        fn snapshot_rejects_non_ended_metrics_status() {
+            let q = metrics_query(vec![LogicalFunctionRunStatus::IN_FLIGHT[0]]);
+            let Err(err) = snapshot_query_into_request(q, vec![]) else {
+                panic!("expected NotEnded rejection");
+            };
+            assert!(err.to_string().contains("not ENDED"), "got: {err}");
+        }
+
+        #[test]
+        fn snapshot_rejects_ended_inflight_status() {
+            let q = metrics_query(vec![]);
+            let Err(err) = snapshot_query_into_request(q, vec![LogicalFunctionRunStatus::Committed])
+            else {
+                panic!("expected NotInFlight rejection");
+            };
+            assert!(err.to_string().contains("not IN_FLIGHT"), "got: {err}");
+        }
+
+        /// Snapshot's two `Query` extractors split one query string: each
+        /// reads its own params and ignores the other's.
+        #[test]
+        fn snapshot_two_extractors_split_one_query_string() {
+            use axum::http::Uri;
+            // Enums use the lowercased-ident aliases (`group`, `done`, ...).
+            let uri: Uri = "/snapshot?dim=group&unit=hour\
+                &collection=00000000000000000000000C00&collection=00000000000000000000000C00\
+                &status=done&status=failed&inflight_status=running"
+                .parse()
+                .unwrap();
+            let Query(m) = Query::<MetricsQuery>::try_from_uri(&uri).unwrap();
+            assert_eq!(m.dim, Some(Dim::Group));
+            assert_eq!(m.unit, Some(WindowUnit::Hour));
+            assert_eq!(m.collection.len(), 2);
+            assert_eq!(
+                m.status,
+                vec![
+                    LogicalFunctionRunStatus::Done,
+                    LogicalFunctionRunStatus::Failed
+                ]
+            );
+            let Query(i) = Query::<InflightStatusQuery>::try_from_uri(&uri).unwrap();
+            assert_eq!(i.inflight_status, vec![LogicalFunctionRunStatus::Running]);
         }
     }
 }
@@ -275,7 +413,8 @@ mod global_routes {
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
     use td_objects::dxo::metrics::{
-        InflightQuery, InflightResponse, MetricsQuery, MetricsResponse, SnapshotResponse,
+        InflightQuery, InflightResponse, InflightStatusQuery, MetricsQuery, MetricsResponse,
+        SnapshotResponse,
     };
     use td_objects::rest_urls::{GLOBAL_INFLIGHT, GLOBAL_METRICS, GLOBAL_SNAPSHOT};
     use td_services::metrics::services::OperationalMetricsServices;
@@ -313,9 +452,10 @@ mod global_routes {
     #[doc = "Cross-project combined `/metrics` + `/inflight` on one DB connection"]
     pub async fn get_snapshot_global(
         State(state): State<Arc<OperationalMetricsServices>>,
-        Query(query): Query<MetricsQuery>,
+        Query(metrics): Query<MetricsQuery>,
+        Query(inflight): Query<InflightStatusQuery>,
     ) -> Result<GetStatus<SnapshotResponse>, ErrorStatus> {
-        let request = snapshot_query_into_request(query)?;
+        let request = snapshot_query_into_request(metrics, inflight.inflight_status)?;
         let response = state.snapshot_global.service().oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }

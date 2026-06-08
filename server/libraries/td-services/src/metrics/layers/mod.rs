@@ -148,6 +148,7 @@ fn synthesize_nodes_from_edges(edges: &[EdgeRow]) -> Result<Vec<NodeRow>, TdErro
 /// ENDED variants (the SQL filters in-flight LFRs via `ended_on
 /// IS NOT NULL`, so they cannot appear in `/metrics`). Empty filter →
 /// borrow the static `ENDED` slice — zero-alloc on UI-polled defaults.
+/// The filter is already distinct (the router dedups it).
 fn resolve_status_axis(
     filter: &[LogicalFunctionRunStatus],
 ) -> Cow<'static, [LogicalFunctionRunStatus]> {
@@ -679,6 +680,29 @@ mod tests {
         assert_eq!(out.len(), 6);
         assert_eq!(out.iter().filter(|r| r.fn_runs == 5).count(), 1);
         assert_eq!(out.iter().filter(|r| r.fn_runs == 0).count(), 5);
+    }
+
+    #[test]
+    fn gap_fill_spans_multiple_requested_statuses() {
+        // A multi-status request fills every (bucket × dim × status) slot:
+        // the one observed Done row stays, the rest are zeroed.
+        let rows = vec![node(JAN_2026, LogicalFunctionRunStatus::Done, 5)];
+        let buckets = day_buckets(JAN_2026, 2);
+        let statuses = [
+            LogicalFunctionRunStatus::Done,
+            LogicalFunctionRunStatus::Failed,
+        ];
+        let out = gap_fill(rows, &buckets, &statuses).unwrap();
+        // 2 buckets × 1 dim × 2 statuses = 4 rows.
+        assert_eq!(out.len(), 4);
+        assert_eq!(out.iter().filter(|r| r.fn_runs == 5).count(), 1);
+        assert_eq!(out.iter().filter(|r| r.fn_runs == 0).count(), 3);
+        assert_eq!(
+            out.iter()
+                .filter(|r| r.status == LogicalFunctionRunStatus::Failed)
+                .count(),
+            2
+        );
     }
 
     #[test]
