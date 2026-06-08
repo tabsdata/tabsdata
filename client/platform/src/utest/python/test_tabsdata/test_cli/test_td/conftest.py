@@ -16,6 +16,7 @@ from tabsdata._utils.tdlogging import setup_tests_logging
 from test_tabsdata.conftest import (
     ABSOLUTE_TEST_FOLDER_LOCATION,
     APISERVER_URL,
+    TESTING_PROJECT,
     TESTING_RESOURCES_FOLDER,
     setup_temp_folder,
     setup_temp_folder_node,
@@ -69,11 +70,24 @@ def atomic_login():
         ],
     )
     logger.debug(result.output)
-    # Avoid issues with pinned collections by the user before running tests
-    result = runner.invoke(cli, ["--no-prompt", "collection", "unpin"])
+    # Avoid issues with a collection pinned by the user before running tests.
+    # Only the collection is cleared -- never the project: the pinned-objects
+    # file is shared across xdist workers, and bare `pin unset` (which also
+    # clears the project) would race with other modules' tenant commands,
+    # surfacing as spurious NoProjectSelectedError. The project is only ever
+    # set (below), never unset.
+    result = runner.invoke(cli, ["--no-prompt", "pin", "unset", "--coll"])
     logger.debug(result.output)
     assert result.exit_code == 0
     result = runner.invoke(cli, ["--no-prompt", "role", "unpin"])
+    logger.debug(result.output)
+    assert result.exit_code == 0
+    # Pin the bootstrap-seeded `sandbox` project so project-scoped commands have
+    # an active tenant; the CLI carries it into every tenant path. Without it
+    # they fail with NoProjectSelectedError.
+    result = runner.invoke(
+        cli, ["--no-prompt", "pin", "set", "--proj", TESTING_PROJECT]
+    )
     logger.debug(result.output)
     assert result.exit_code == 0
 

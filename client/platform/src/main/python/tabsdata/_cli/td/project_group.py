@@ -10,7 +10,6 @@ from rich.table import Table
 from tabsdata._cli.cli_utils import (
     hint_common_solutions,
     logical_prompt,
-    store_pinned_objects,
     verify_login_or_prompt,
 )
 from tabsdata.api.tabsdata_server import TabsdataServer
@@ -160,53 +159,3 @@ def update(
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to update project: {e}")
-
-
-@project.command()
-@click.option("--name", "-n", help="Name of the project to pin.")
-@click.pass_context
-def pin(ctx: click.Context, name: str):
-    """Pin a project as the active one for project-scoped commands"""
-    name = name or logical_prompt(ctx, "Name of the project to be pinned")
-    click.echo(f"Pinning project: {name}")
-    click.echo("-" * 10)
-    try:
-        previously_pinned = ctx.obj["pinned_objects"].get("project")
-        if previously_pinned:
-            click.echo(f"Unpinning previously pinned project: {previously_pinned}")
-        ctx.obj["pinned_objects"]["project"] = name
-        store_pinned_objects(ctx)
-        click.echo("Project pinned successfully")
-    except Exception as e:
-        hint_common_solutions(ctx, e)
-        raise click.ClickException(f"Failed to pin project: {e}")
-
-
-@project.command()
-@click.pass_context
-def unpin(ctx: click.Context):
-    """Unpin the currently pinned project"""
-    click.echo("Unpinning project")
-    click.echo("-" * 10)
-    try:
-        previously_pinned = ctx.obj["pinned_objects"].get("project")
-        if not previously_pinned:
-            click.echo("No previously pinned project to unpin.")
-        else:
-            ctx.obj["pinned_objects"]["project"] = None
-            store_pinned_objects(ctx)
-            click.echo("Project unpinned successfully")
-    except Exception as e:
-        hint_common_solutions(ctx, e)
-        raise click.ClickException(f"Failed to unpin project: {e}")
-
-
-@project.command()
-@click.pass_context
-def pinned(ctx: click.Context):
-    """Show the currently pinned project"""
-    current = ctx.obj["pinned_objects"].get("project")
-    if current:
-        click.echo(f"Currently pinned project: {current}")
-    else:
-        click.echo("No project is currently pinned.")

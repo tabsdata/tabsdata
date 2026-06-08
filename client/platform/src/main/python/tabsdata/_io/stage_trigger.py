@@ -26,6 +26,11 @@ TRIGGER_FILE_PREFIX = "TD_INTERNAL_TRIGGER_FILE_"
 
 TRIGGER_RETURN_ON_END_ATTRIBUTE = "return_on_end"
 
+# HTTP 425 Too Early: the server skipped the trigger because an execution of the
+# function is already running (we request it with `skip_if_running`). This is not
+# an error; it means the trigger should be marked as pending and retried later.
+ALREADY_RUNNING_STATUS = 425
+
 
 class StageTriggerStatus(IntEnum):
     """
@@ -370,11 +375,10 @@ class LocalFileStageTriggerContext(StageTriggerContext):
     def trigger(self) -> bool:
         self.logger.debug("Requesting trigger of the function")
         result = self.trigger_config.call({
-            "skip_if_running": False,
+            "skip_if_running": True,
             "trigger_type": "ST",
         })
         self.logger.debug(f"Result of the request: {result}")
-        result.raise_for_status()
         success = _check_success(result)
         if not success:
             self.logger.debug(
@@ -406,15 +410,11 @@ class LocalFileStageTriggerContext(StageTriggerContext):
 
 
 def _check_success(result):
-    result_json = result.json()
-    data_dict = result_json.get("data")
-    if not data_dict or len(data_dict.keys()) != 1:
-        # TODO: This is one of the pieces that should be rethought once there
-        #  is a resiliency reimplementation
-        raise ValueError(
-            "Trying to assess the success of a trigger attempt, "
-            "but the resulting JSON does not have the required fields. "
-            f"The JSON is: {result_json}"
-        )
-    result = next(iter(data_dict.keys()))
-    return result == "Executed"
+    # The server skips the trigger (instead of creating a new execution) when an
+    # execution of the function is already running, signalling it with HTTP 425.
+    # Treat that as a non-error "not triggered" outcome; any other non-2xx is an
+    # actual failure and is raised.
+    if result.status_code == ALREADY_RUNNING_STATUS:
+        return False
+    result.raise_for_status()
+    return True

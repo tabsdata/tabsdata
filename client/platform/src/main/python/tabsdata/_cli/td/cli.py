@@ -35,6 +35,7 @@ from tabsdata._cli.td.exe_group import exe
 from tabsdata._cli.td.fn_group import fn
 from tabsdata._cli.td.group_group import group
 from tabsdata._cli.td.metrics_group import metrics
+from tabsdata._cli.td.pin_group import pin
 from tabsdata._cli.td.project_group import project
 from tabsdata._cli.td.role_group import role
 from tabsdata._cli.td.stage_group import stage
@@ -78,7 +79,7 @@ CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
     help=(
         "Project to target for project-scoped commands (collection, fn, table, "
         "exe, ...). Overrides the pinned project for this invocation. See "
-        "'td project pin'."
+        "'td pin set --proj'."
     ),
 )
 @click.pass_context
@@ -118,6 +119,7 @@ cli.add_command(exe)
 cli.add_command(fn)
 cli.add_command(group)
 cli.add_command(metrics)
+cli.add_command(pin)
 cli.add_command(project)
 cli.add_command(role)
 cli.add_command(stage)

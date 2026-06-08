@@ -152,7 +152,7 @@ class NoProjectSelectedError(Exception):
 
     def __init__(self):
         super().__init__(
-            "No project selected. Run 'td project pin <name>' or pass "
+            "No project selected. Run 'td pin set --proj <name>' or pass "
             "'--project <name>'."
         )
 

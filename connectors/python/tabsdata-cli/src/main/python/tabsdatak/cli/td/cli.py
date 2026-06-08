@@ -39,6 +39,8 @@ from tabsdatak.cli.td.exe_group import exe
 from tabsdatak.cli.td.fn_group import fn
 from tabsdatak.cli.td.group_group import group
 from tabsdatak.cli.td.metrics_group import metrics
+from tabsdatak.cli.td.pin_group import pin
+from tabsdatak.cli.td.project_group import project
 from tabsdatak.cli.td.role_group import role
 from tabsdatak.cli.td.stage_group import stage
 from tabsdatak.cli.td.table_group import table
@@ -73,8 +75,17 @@ CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
         "the command will fail."
     ),
 )
+@click.option(
+    "--project",
+    "-P",
+    help=(
+        "Project to target for project-scoped commands (collection, fn, table, "
+        "exe, ...). Overrides the pinned project for this invocation. See "
+        "'td pin set --proj'."
+    ),
+)
 @click.pass_context
-def cli(ctx: click.Context, no_prompt: bool):
+def cli(ctx: click.Context, no_prompt: bool, project: str):
     """Main CLI for the Tabsdata system"""
     try:
         os.makedirs(DEFAULT_TABSDATA_DIRECTORY, exist_ok=True)
@@ -85,6 +96,19 @@ def cli(ctx: click.Context, no_prompt: bool):
         initialise_tabsdata_server_connection(ctx)
         load_pinned_objects(ctx)
         load_cli_options(ctx)
+        # The active project rides on the connection: the `--project` override
+        # wins, else the pinned project. Project-scoped commands never thread
+        # it -- the connection injects it into every tenant path.
+        server = ctx.obj.get("tabsdataserver")
+        if server is not None:
+            active_project = project or ctx.obj["pinned_objects"].get("project")
+            server.connection.project = active_project
+            # Surface an explicit `--project` override so a project-scoped
+            # command can't silently run against the wrong tenant. Pinned-project
+            # use stays quiet (matching pinned-collection behavior); printed to
+            # stderr so stdout-parsing callers are unaffected.
+            if project is not None:
+                click.echo(f"Targeting project: {active_project}", err=True)
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to initialize CLI: {e}")
@@ -97,6 +121,8 @@ cli.add_command(exe)
 cli.add_command(fn)
 cli.add_command(group)
 cli.add_command(metrics)
+cli.add_command(pin)
+cli.add_command(project)
 cli.add_command(role)
 cli.add_command(stage)
 cli.add_command(table)

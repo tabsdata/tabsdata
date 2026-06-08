@@ -10,6 +10,7 @@ import os
 import pathlib
 import re
 import sys
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -254,6 +255,28 @@ APISERVER_URL = (
     TESTING_SUPERVISOR_INSTANCES.get("pytest").get("apiserver").get("address")
 )
 
+# The bootstrap seeds exactly one project, `sandbox`; tenant-scoped tests target
+# it. The client never defaults a project (defaulting, if any, is the server's
+# job), so test connections must select one explicitly.
+TESTING_PROJECT = "sandbox"
+
+
+@contextmanager
+def scoped_project(connection: APIServer, project: str):
+    """Temporarily target `project` on `connection`, restoring the prior one.
+
+    The active project rides on the connection as plain mutable state, so a
+    test can flip between tenants on a single connection. Use this to scope a
+    block of tenant-scoped calls to `project`; the previous project (if any) is
+    restored on exit even when the block raises.
+    """
+    previous = connection.project
+    connection.project = project
+    try:
+        yield
+    finally:
+        connection.project = previous
+
 LOCAL_PACKAGES_LIST = [
     ROOT_PROJECT_DIR,
     os.path.join(
@@ -374,12 +397,19 @@ def clean_polars_df(df, sort=True):
 
 @pytest.fixture(scope="session")
 def apiserver_connection() -> APIServer:
-    return obtain_connection(APISERVER_URL, "admin", "tabsdata", "sys_admin")
+    connection = obtain_connection(APISERVER_URL, "admin", "tabsdata", "sys_admin")
+    # Tenant-scoped calls ride the active project on the connection; the tests
+    # target the bootstrap-seeded `sandbox` project (the only one the server
+    # seeds). Without it every tenant call fails with NoProjectSelectedError.
+    connection.project = TESTING_PROJECT
+    return connection
 
 
 @pytest.fixture(scope="session")
 def tabsserver_connection() -> TabsdataServer:
-    return TabsdataServer(APISERVER_URL, "admin", "tabsdata", "sys_admin")
+    server = TabsdataServer(APISERVER_URL, "admin", "tabsdata", "sys_admin")
+    server.connection.project = TESTING_PROJECT
+    return server
 
 
 def clean_everything():

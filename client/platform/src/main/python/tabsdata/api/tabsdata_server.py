@@ -4581,9 +4581,11 @@ class TabsdataServer:
         """Delete a project by name."""
         Project(self.connection, name).delete(raise_for_status=raise_for_status)
 
-    def get_project(self, name: str) -> Project:
+    def get_project(self, name: str, raise_for_status: bool = True) -> Project:
         """Get a project by name."""
-        project_definition = self.connection.project_get_by_name(name)
+        project_definition = self.connection.project_get_by_name(
+            name, raise_for_status=raise_for_status
+        )
         return Project(
             self.connection,
             **project_definition.json().get("data"),

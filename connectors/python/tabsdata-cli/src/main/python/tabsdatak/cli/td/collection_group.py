@@ -12,7 +12,6 @@ from tabsdatak.cli.cli_utils import (
     get_currently_pinned_object,
     hint_common_solutions,
     logical_prompt,
-    store_pinned_objects,
     verify_login_or_prompt,
 )
 from tabsdatak.sdk.tabsdata_server import TabsdataServer
@@ -311,45 +310,6 @@ def list_perm(ctx: click.Context, name: str):
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list permissions: {e}")
-
-
-@collection.command()
-@click.option("--name", "-n", help="Name of the collection to pin.")
-@click.pass_context
-def pin(ctx: click.Context, name: str):
-    """Pin a collection by name"""
-    name = name or logical_prompt(ctx, "Name of the collection to be pinned")
-    click.echo(f"Pinning collection: {name}")
-    click.echo("-" * 10)
-    try:
-        previously_pinned = ctx.obj["pinned_objects"].get("collection")
-        if previously_pinned:
-            click.echo(f"Unpinning previously pinned collection: {previously_pinned}")
-        ctx.obj["pinned_objects"]["collection"] = name
-        store_pinned_objects(ctx)
-        click.echo("Collection pinned successfully")
-    except Exception as e:
-        hint_common_solutions(ctx, e)
-        raise click.ClickException(f"Failed to pin collection: {e}")
-
-
-@collection.command()
-@click.pass_context
-def unpin(ctx: click.Context):
-    """Unpin the currently pinned collection"""
-    click.echo("Unpinning collection")
-    click.echo("-" * 10)
-    try:
-        previously_pinned = ctx.obj["pinned_objects"].get("collection")
-        if not previously_pinned:
-            click.echo("No previously pinned collection to unpin.")
-        else:
-            ctx.obj["pinned_objects"]["collection"] = None
-            store_pinned_objects(ctx)
-            click.echo("Collection unpinned successfully")
-    except Exception as e:
-        hint_common_solutions(ctx, e)
-        raise click.ClickException(f"Failed to unpin collection: {e}")
 
 
 @collection.command()

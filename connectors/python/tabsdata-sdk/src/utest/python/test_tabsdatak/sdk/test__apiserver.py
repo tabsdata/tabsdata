@@ -170,6 +170,45 @@ def test_apiserver_refresh_invoked_when_within_buffer(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# Project (tenant) scoping: `_resolve_path` injects the active project into
+# tenant endpoints; globals pass through; a tenant call with no project fails
+# fast rather than guessing a default.
+# ---------------------------------------------------------------------------
+
+
+def test_apiserver_starts_with_no_project():
+    assert a.APIServer("host").project is None
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/auth", "/projects", "/projects/acme", "/roles", "/status", "/users"],
+)
+def test_global_paths_pass_through_without_project(path):
+    s = a.APIServer("host")
+    assert s.project is None
+    assert s._resolve_path(path) == path
+
+
+def test_tenant_path_requires_a_project():
+    s = a.APIServer("host")
+    with pytest.raises(a.NoProjectSelectedError):
+        s._resolve_path("/collections")
+
+
+def test_tenant_path_is_prefixed_when_project_set():
+    s = a.APIServer("host")
+    s.project = "acme"
+    assert s._resolve_path("/collections") == "/projects/acme/collections"
+    assert (
+        s._resolve_path("/collections/c1/functions")
+        == "/projects/acme/collections/c1/functions"
+    )
+    # globals stay global even with a project set
+    assert s._resolve_path("/projects") == "/projects"
+
+
+# ---------------------------------------------------------------------------
 # Factory helpers + small static methods
 # ---------------------------------------------------------------------------
 

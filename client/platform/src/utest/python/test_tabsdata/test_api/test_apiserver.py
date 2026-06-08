@@ -1092,8 +1092,10 @@ class TestHttpSessionNotClosedAfterRequest:
         mock_response = MagicMock()
         mock_response.status_code = 200
 
+        # Global path: this test is about session/adapter lifecycle, not tenant
+        # routing, so it deliberately avoids a project-scoped path.
         with patch.object(GET_HTTP_SESSION, "get", return_value=mock_response):
-            server.get("/test")
+            server.get("/status")
 
         adapters_after = _count_adapters(GET_HTTP_SESSION)
         assert adapters_after == adapters_before, (
@@ -1110,10 +1112,11 @@ class TestHttpSessionNotClosedAfterRequest:
         mock_response = MagicMock()
         mock_response.status_code = 200
 
+        # Global path: lifecycle test, not tenant routing.
         with patch.object(
             DEFAULT_HTTP_SESSION, "post", return_value=mock_response
         ):
-            server.post("/test", json={"key": "value"})
+            server.post("/status", json={"key": "value"})
 
         adapters_after = _count_adapters(DEFAULT_HTTP_SESSION)
         assert adapters_after == adapters_before, (
@@ -1130,10 +1133,11 @@ class TestHttpSessionNotClosedAfterRequest:
         mock_response = MagicMock()
         mock_response.status_code = 200
 
+        # Global path: lifecycle test, not tenant routing.
         with patch.object(
             DEFAULT_HTTP_SESSION, "delete", return_value=mock_response
         ):
-            server.delete("/test")
+            server.delete("/status")
 
         adapters_after = _count_adapters(DEFAULT_HTTP_SESSION)
         assert adapters_after == adapters_before, (
@@ -1147,11 +1151,12 @@ class TestHttpSessionNotClosedAfterRequest:
         mock_response = MagicMock()
         mock_response.status_code = 200
 
+        # Global path: lifecycle test, not tenant routing.
         with patch.object(GET_HTTP_SESSION, "get", return_value=mock_response), \
              patch.object(DEFAULT_HTTP_SESSION, "post", return_value=mock_response):
             for _ in range(5):
-                server.get("/test")
-                server.post("/test", json={})
+                server.get("/status")
+                server.post("/status", json={})
 
         assert _count_adapters(GET_HTTP_SESSION) >= 2, (
             "GET session closed after multiple requests"

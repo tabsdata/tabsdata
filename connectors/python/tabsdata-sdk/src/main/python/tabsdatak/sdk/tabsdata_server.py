@@ -2378,6 +2378,116 @@ class Group:
         return f"Name: {self.name!s}"
 
 
+class Project:
+    """A project on the Tabsdata server.
+
+    A project is the tenant boundary for row-level security. On PostgreSQL
+    projects are an ordinary, multi-tenant registry; on single-project
+    backends (SQLite/MySQL) the seeded ``sandbox`` project is the only one
+    and rejects create / delete.
+    """
+
+    created_by = _LazyProperty("created_by")
+    created_on = _LazyProperty("created_on")
+    created_on_str = _LazyProperty("created_on_str", subordinate_time_string=True)
+    description = _LazyProperty("description")
+    id = _LazyProperty("id")
+    modified_by = _LazyProperty("modified_by")
+    modified_by_id = _LazyProperty("modified_by_id")
+    modified_on = _LazyProperty("modified_on")
+    modified_on_str = _LazyProperty("modified_on_str", subordinate_time_string=True)
+
+    def __init__(
+        self,
+        connection: APIServer,
+        name: str,
+        **kwargs,
+    ):
+        self.connection = connection
+        self.name = name
+
+        self.created_by = kwargs.get("created_by")
+        self.created_on = kwargs.get("created_on")
+        self.created_on_str = None
+        self.description = kwargs.get("description")
+        self.id = kwargs.get("id")
+        self.modified_by = kwargs.get("modified_by")
+        self.modified_by_id = kwargs.get("modified_by_id")
+        self.modified_on = kwargs.get("modified_on")
+        self.modified_on_str = None
+
+        self.kwargs = kwargs
+        self._data = None
+
+    @property
+    def _data(self) -> dict:
+        if self._data_dict is None:
+            self._data = (
+                self.connection.project_get_by_name(self.name).json().get("data")
+            )
+        return self._data_dict
+
+    @_data.setter
+    def _data(self, data_dict: dict | None):
+        self._data_dict = data_dict
+
+    def create(self, raise_for_status: bool = True) -> Project:
+        response = self.connection.project_create(
+            self.name,
+            self._description,
+            raise_for_status=raise_for_status,
+        )
+        self.refresh()
+        self._data = response.json().get("data")
+        return self
+
+    def delete(self, raise_for_status: bool = True) -> None:
+        self.connection.project_delete(self.name, raise_for_status=raise_for_status)
+
+    def refresh(self) -> Project:
+        self.created_by = None
+        self.created_on = None
+        self.created_on_str = None
+        self.description = None
+        self.id = None
+        self.modified_by = None
+        self.modified_by_id = None
+        self.modified_on = None
+        self.modified_on_str = None
+        self.kwargs = None
+        self._data = None
+        return self
+
+    def update(
+        self,
+        name: str = None,
+        description: str = None,
+        raise_for_status: bool = True,
+    ) -> Project:
+        response = self.connection.project_update(
+            self.name,
+            new_name=name,
+            new_description=description,
+            raise_for_status=raise_for_status,
+        )
+        data = response.json().get("data")
+        self.refresh()
+        self.name = data.get("name")
+        self._data = data
+        return self
+
+    def __eq__(self, other):
+        if not isinstance(other, Project):
+            return False
+        return self.name == other.name
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(name={self.name!r})"
+
+    def __str__(self) -> str:
+        return f"Name: {self.name!s}"
+
+
 class RolePermissionTypes(Enum):
     """
     Enum for permission types.
@@ -3549,6 +3659,18 @@ class TabsdataServer:
         return self.list_roles()
 
     @property
+    def projects(self) -> List[Project]:
+        """
+        Get the list of projects in the server. This list is obtained every time
+            the property is accessed, so sequential accesses to this property in the
+            same object might yield different results.
+
+        Returns:
+            List[Project]: The list of projects in the server.
+        """
+        return self.list_projects()
+
+    @property
     def status(self) -> ServerStatus:
         """
         Get the status of the server. This status is obtained every time the property is
@@ -4618,6 +4740,86 @@ class TabsdataServer:
         """
         role = Role(self.connection, name)
         return role.update(
+            name=new_name,
+            description=new_description,
+            raise_for_status=raise_for_status,
+        )
+
+    def create_project(
+        self, name: str, description: str = None, raise_for_status: bool = True
+    ) -> Project:
+        """
+        Create a project in the server.
+
+        Args:
+            name (str): The name of the project.
+            description (str, optional): The description of the project.
+            raise_for_status (bool, optional): Whether to raise on a non-2xx response.
+
+        Returns:
+            Project: The created project.
+        """
+        project = Project(self.connection, name, description=description)
+        project.create(raise_for_status=raise_for_status)
+        return project
+
+    def delete_project(self, name: str, raise_for_status: bool = True) -> None:
+        """Delete a project by name."""
+        Project(self.connection, name).delete(raise_for_status=raise_for_status)
+
+    def get_project(self, name: str, raise_for_status: bool = True) -> Project:
+        """Get a project by name."""
+        project_definition = self.connection.project_get_by_name(
+            name, raise_for_status=raise_for_status
+        )
+        return Project(
+            self.connection,
+            **project_definition.json().get("data"),
+        )
+
+    def list_projects(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> List[Project]:
+        """List projects in the server."""
+        return list(self.list_projects_generator(filter, order_by, raise_for_status))
+
+    def list_projects_generator(
+        self,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> Generator[Project]:
+        first_page = True
+        next_pagination_id = None
+        next_step = None
+        while first_page or (next_pagination_id and next_step):
+            response = self.connection.project_list(
+                request_filter=filter,
+                order_by=order_by,
+                pagination_id=next_pagination_id,
+                next_step=next_step,
+                raise_for_status=raise_for_status,
+            )
+            data = response.json().get("data")
+            next_pagination_id = data.get("next_pagination_id")
+            next_step = data.get("next")
+            raw_projects = data.get("data") or []
+            for raw_project in raw_projects:
+                yield Project(self.connection, **raw_project)
+            first_page = False
+
+    def update_project(
+        self,
+        name: str,
+        new_name: str = None,
+        new_description: str = None,
+        raise_for_status: bool = True,
+    ) -> Project:
+        """Update a project's name and/or description."""
+        return Project(self.connection, name).update(
             name=new_name,
             description=new_description,
             raise_for_status=raise_for_status,
