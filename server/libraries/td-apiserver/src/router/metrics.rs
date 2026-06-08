@@ -17,13 +17,14 @@ mod routes {
     use td_error::TdError;
     use td_objects::dxo::metrics::{
         Dim, InflightQuery, InflightRequest, InflightResponse, MetricsQuery, MetricsRequest,
-        MetricsResponse, SnapshotQuery, SnapshotRequest, SnapshotResponse, StatusFilterError,
+        MetricsResponse, SnapshotRequest, SnapshotResponse, StatusFilterError,
     };
     use td_objects::dxo::query_filters::{
         DimensionFilter, TimeWindow, WindowAlign, WindowSpec, WindowUnit,
     };
     use td_objects::rest_urls::{INFLIGHT, METRICS, SNAPSHOT};
     use td_objects::types::basic::{EpochMs, LogicalFunctionRunStatus, ProjectId};
+    use td_tower::project_scope::InProject;
     use td_services::metrics::services::OperationalMetricsServices;
     use tower::ServiceExt;
 
@@ -49,7 +50,7 @@ mod routes {
         Ok((window, unit))
     }
 
-    fn metrics_query_into_request(q: MetricsQuery) -> Result<MetricsRequest, TdError> {
+    pub(crate) fn metrics_query_into_request(q: MetricsQuery) -> Result<MetricsRequest, TdError> {
         let (window, unit) = resolve_window(q.unit, q.align, q.from, q.span)?;
         let status = q.status.unwrap_or(LogicalFunctionRunStatus::Committed);
         if !status.is_ended() {
@@ -69,10 +70,11 @@ mod routes {
         })
     }
 
-    /// Build the combined request. Metrics defaults to `Committed`
-    /// (matching `/metrics`); inflight passes empty statuses so the SQL
-    /// returns all IN_FLIGHT variants.
-    fn snapshot_query_into_request(q: SnapshotQuery) -> Result<SnapshotRequest, TdError> {
+    /// Build the combined request from the shared `MetricsQuery`. Metrics
+    /// defaults to `Committed` (matching `/metrics`) — `q.status` is ignored
+    /// here; inflight passes empty statuses so the SQL returns all IN_FLIGHT
+    /// variants.
+    pub(crate) fn snapshot_query_into_request(q: MetricsQuery) -> Result<SnapshotRequest, TdError> {
         let (window, unit) = resolve_window(q.unit, q.align, q.from, q.span)?;
         let collections = DimensionFilter::new(q.collection.clone(), q.collection_exclude.clone());
         let groups = DimensionFilter::new(q.group.clone(), q.group_exclude.clone());
@@ -93,7 +95,7 @@ mod routes {
         })
     }
 
-    fn inflight_query_into_request(q: InflightQuery) -> Result<InflightRequest, TdError> {
+    pub(crate) fn inflight_query_into_request(q: InflightQuery) -> Result<InflightRequest, TdError> {
         for status in &q.status {
             if !LogicalFunctionRunStatus::IN_FLIGHT.contains(status) {
                 return Err(StatusFilterError::NotInFlight {
@@ -139,7 +141,7 @@ mod routes {
     pub async fn get_snapshot(
         State(state): State<Arc<OperationalMetricsServices>>,
         Extension(project_id): Extension<ProjectId>,
-        Query(query): Query<SnapshotQuery>,
+        Query(query): Query<MetricsQuery>,
     ) -> Result<GetStatus<SnapshotResponse>, ErrorStatus> {
         let request = snapshot_query_into_request(query)?.in_project(project_id);
         let response = state.snapshot.service().oneshot(request).await?;
@@ -252,5 +254,67 @@ mod routes {
                 assert!(err.to_string().contains("not IN_FLIGHT"), "got: {err}");
             }
         }
+    }
+}
+
+/// Global (cross-project) metrics endpoints. Identical query grammar and
+/// responses to the tenant-scoped router, but mounted top-level (no `{project}`
+/// segment) and backed by the `*Global` services, which bypass RLS to aggregate
+/// across every project. The query→request conversion is shared with the scoped
+/// router; the only differences are the absence of a `{project}` (so no
+/// `Extension<ProjectId>` / `.in_project`) and the `*_global` service handle.
+#[router_ext(GlobalMetricsRouter)]
+mod global_routes {
+    use axum::extract::State;
+    use axum_extra::extract::Query;
+    use std::sync::Arc;
+    use ta_apiserver::status::error_status::ErrorStatus;
+    use ta_apiserver::status::ok_status::GetStatus;
+    use ta_services::service::TdService;
+    use td_apiforge::apiserver_path;
+    use td_objects::dxo::metrics::{
+        InflightQuery, InflightResponse, MetricsQuery, MetricsResponse, SnapshotResponse,
+    };
+    use td_objects::rest_urls::{GLOBAL_INFLIGHT, GLOBAL_METRICS, GLOBAL_SNAPSHOT};
+    use td_services::metrics::services::OperationalMetricsServices;
+    use tower::ServiceExt;
+
+    use super::routes::{
+        inflight_query_into_request, metrics_query_into_request, snapshot_query_into_request,
+    };
+
+    const METRICS_TAG: &str = "Metrics";
+
+    #[apiserver_path(method = get, path = GLOBAL_METRICS, tag = METRICS_TAG)]
+    #[doc = "Cross-project operational metrics: nodes + edges over a window"]
+    pub async fn get_metrics_global(
+        State(state): State<Arc<OperationalMetricsServices>>,
+        Query(query): Query<MetricsQuery>,
+    ) -> Result<GetStatus<MetricsResponse>, ErrorStatus> {
+        let request = metrics_query_into_request(query)?;
+        let response = state.metrics_global.service().oneshot(request).await?;
+        Ok(GetStatus::OK(response))
+    }
+
+    #[apiserver_path(method = get, path = GLOBAL_INFLIGHT, tag = METRICS_TAG)]
+    #[doc = "Cross-project point-in-time count of in-flight runs"]
+    pub async fn get_inflight_global(
+        State(state): State<Arc<OperationalMetricsServices>>,
+        Query(query): Query<InflightQuery>,
+    ) -> Result<GetStatus<InflightResponse>, ErrorStatus> {
+        let request = inflight_query_into_request(query)?;
+        let response = state.inflight_global.service().oneshot(request).await?;
+        Ok(GetStatus::OK(response))
+    }
+
+    #[apiserver_path(method = get, path = GLOBAL_SNAPSHOT, tag = METRICS_TAG)]
+    #[doc = "Cross-project combined `/metrics` + `/inflight` on one DB connection"]
+    pub async fn get_snapshot_global(
+        State(state): State<Arc<OperationalMetricsServices>>,
+        Query(query): Query<MetricsQuery>,
+    ) -> Result<GetStatus<SnapshotResponse>, ErrorStatus> {
+        let request = snapshot_query_into_request(query)?;
+        let response = state.snapshot_global.service().oneshot(request).await?;
+        Ok(GetStatus::OK(response))
     }
 }

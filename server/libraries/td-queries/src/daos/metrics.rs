@@ -6,6 +6,8 @@
 //!
 //! Backs the consolidated `/metrics` endpoint (nodes + edges per
 //! `(bucket, dim, status)`) and `/inflight` (point-in-time, no window).
+//! All queries are pure SELECT statements built via sea_query — no
+//! `format!`, no dialect-specific syntax.
 //!
 //! ## `/metrics` semantic: LFR-canonical, currently-bound attempt
 //!
@@ -14,7 +16,25 @@
 //! (projected by the `function_runs__with_names` view via the LTDV
 //! pointer). Consequence: a replay rebinds the LFR to a new PFR with a
 //! new `ended_on`, so the LFR's bucket moves — **past-window results
-//! are not stable across replays.**
+//! are not stable across replays.** Suitable for "canonical outcome
+//! per logical run" dashboards (success rate, Sankey); NOT suitable
+//! for billing / retry-storm visibility, which need per-attempt
+//! attribution. If/when that use case lands, add a separate
+//! PFR-anchored endpoint rather than reshaping this one.
+//!
+//! `/inflight` queries LFR.status directly; status is the only
+//! race-free "right now" signal (replays can transiently null the
+//! bound PFR's `ended_on` during the bind window).
+//!
+//! ## System-table exclusion invariant
+//!
+//! Anywhere LTDVs/PTDVs are touched we filter
+//! `LTDV.function_param_pos >= 0` (mirrors the `system` derivation in
+//! the schema view). Input-side joins additionally enforce
+//! `LFRI.dep_pos >= 0`, which excludes `td.fn_state__*` plumbing on
+//! the consumer side. Output-side magnitudes use the worker-side
+//! aggregated PFR columns, which exclude `system_output` by
+//! construction.
 
 use crate::QueryExecutor;
 use chrono::{DateTime, Utc};
@@ -27,6 +47,7 @@ use ta_objects::errors::SqlError;
 use td_database::sea_query::builder::SeaQueryExt;
 use td_objects::dxo::collection::CollectionDBIden;
 use td_objects::dxo::group::GroupDBIden;
+use td_objects::dxo::project::ProjectDBIden;
 use td_objects::dxo::logical::{
     FunctionRunDBWithNames, FunctionRunDBWithNamesIden, LogicalFunctionRunDB,
     LogicalFunctionRunDBIden, LogicalFunctionRunInputDBIden, LogicalTableDataVersionDBIden,
@@ -165,6 +186,24 @@ fn node_aggregates_query(req: &MetricsRequest) -> SelectStatement {
         Alias::new("group_name"),
     );
 
+    // Owning project — lets the cross-project (global) response distinguish
+    // same-named collections/groups across projects. Constant under the
+    // tenant-scoped path. Functionally dependent on the dim id.
+    stmt.expr_as(
+        Expr::col((
+            FunctionRunDBWithNamesIden::Table,
+            FunctionRunDBWithNamesIden::ProjectId,
+        )),
+        Alias::new("project_id"),
+    );
+    stmt.expr_as(
+        Expr::col((
+            FunctionRunDBWithNamesIden::Table,
+            FunctionRunDBWithNamesIden::Project,
+        )),
+        Alias::new("project_name"),
+    );
+
     stmt.expr_as(
         Expr::col((
             FunctionRunDBWithNamesIden::Table,
@@ -281,6 +320,14 @@ fn node_aggregates_query(req: &MetricsRequest) -> SelectStatement {
     stmt.group_by_col((
         FunctionRunDBWithNamesIden::Table,
         FunctionRunDBWithNamesIden::Group,
+    ));
+    stmt.group_by_col((
+        FunctionRunDBWithNamesIden::Table,
+        FunctionRunDBWithNamesIden::ProjectId,
+    ));
+    stmt.group_by_col((
+        FunctionRunDBWithNamesIden::Table,
+        FunctionRunDBWithNamesIden::Project,
     ));
     stmt.group_by_col((
         FunctionRunDBWithNamesIden::Table,
@@ -414,6 +461,8 @@ fn edge_aggregates_query(req: &MetricsRequest) -> SelectStatement {
         .expr(Expr::col((inner_alias.clone(), Alias::new("target"))))
         .expr(Expr::col((inner_alias.clone(), Alias::new("target_name"))))
         .expr(Expr::col((inner_alias.clone(), Alias::new("status"))))
+        .expr(Expr::col((inner_alias.clone(), Alias::new("project_id"))))
+        .expr(Expr::col((inner_alias.clone(), Alias::new("project_name"))))
         .expr_as(
             Func::count_distinct(Expr::col((inner_alias.clone(), Alias::new("lfr_id")))),
             Alias::new("fn_runs"),
@@ -443,6 +492,8 @@ fn edge_aggregates_query(req: &MetricsRequest) -> SelectStatement {
             (inner_alias.clone(), Alias::new("target").into_iden()),
             (inner_alias.clone(), Alias::new("target_name").into_iden()),
             (inner_alias.clone(), Alias::new("status").into_iden()),
+            (inner_alias.clone(), Alias::new("project_id").into_iden()),
+            (inner_alias.clone(), Alias::new("project_name").into_iden()),
         ])
         // Synthetic-endpoint edges have NULL on one side; force
         // NULLS LAST so the ordering is dialect-independent
@@ -534,6 +585,20 @@ fn edge_real_branch(req: &MetricsRequest) -> SelectStatement {
                 TableDataVersionDBWithNamesIden::DataBytes,
             )),
             Alias::new("source_data_bytes"),
+        )
+        .expr_as(
+            Expr::col((
+                FunctionRunDBWithNamesIden::Table,
+                FunctionRunDBWithNamesIden::ProjectId,
+            )),
+            Alias::new("project_id"),
+        )
+        .expr_as(
+            Expr::col((
+                FunctionRunDBWithNamesIden::Table,
+                FunctionRunDBWithNamesIden::Project,
+            )),
+            Alias::new("project_name"),
         )
         .from(FunctionRunDBWithNamesIden::Table)
         .join(
@@ -693,6 +758,20 @@ fn edge_synth_branch(req: &MetricsRequest) -> SelectStatement {
         )),
         Alias::new("source_data_bytes"),
     )
+    .expr_as(
+        Expr::col((
+            FunctionRunDBWithNamesIden::Table,
+            FunctionRunDBWithNamesIden::ProjectId,
+        )),
+        Alias::new("project_id"),
+    )
+    .expr_as(
+        Expr::col((
+            FunctionRunDBWithNamesIden::Table,
+            FunctionRunDBWithNamesIden::Project,
+        )),
+        Alias::new("project_name"),
+    )
     .from(FunctionRunDBWithNamesIden::Table)
     // Publisher's OWN output LTDVs (LTDV.producer_lfr_id = fr.id).
     .join(
@@ -804,6 +883,13 @@ fn edge_egress_branch(req: &MetricsRequest) -> SelectStatement {
     let null_target_name: SimpleExpr = Expr::value(Value::String(None));
 
     let mut stmt = Query::select();
+    // DISTINCT (as in `edge_real_branch`): a subscriber that consumes the
+    // same source LTDV at more than one input position (distinct
+    // input_idx/version_pos, neither projected here) joins to several LFRI
+    // rows. DISTINCT collapses them so each (subscriber LFR, source LTDV)
+    // pair contributes one egress row — source-LTDV attribution, matching
+    // real edges. The synth/unused branches need no DISTINCT (their
+    // anti-join / producer-LTDV uniqueness already yields one row per pair).
     stmt.distinct()
         .expr_as(
             Expr::col((FunctionRunDBWithNamesIden::Table, bucket_iden)),
@@ -858,6 +944,20 @@ fn edge_egress_branch(req: &MetricsRequest) -> SelectStatement {
                 TableDataVersionDBWithNamesIden::DataBytes,
             )),
             Alias::new("source_data_bytes"),
+        )
+        .expr_as(
+            Expr::col((
+                FunctionRunDBWithNamesIden::Table,
+                FunctionRunDBWithNamesIden::ProjectId,
+            )),
+            Alias::new("project_id"),
+        )
+        .expr_as(
+            Expr::col((
+                FunctionRunDBWithNamesIden::Table,
+                FunctionRunDBWithNamesIden::Project,
+            )),
+            Alias::new("project_name"),
         )
         .from(FunctionRunDBWithNamesIden::Table)
         .join(
@@ -1042,6 +1142,20 @@ fn edge_unused_branch(req: &MetricsRequest) -> SelectStatement {
         )),
         Alias::new("source_data_bytes"),
     )
+    .expr_as(
+        Expr::col((
+            FunctionRunDBWithNamesIden::Table,
+            FunctionRunDBWithNamesIden::ProjectId,
+        )),
+        Alias::new("project_id"),
+    )
+    .expr_as(
+        Expr::col((
+            FunctionRunDBWithNamesIden::Table,
+            FunctionRunDBWithNamesIden::Project,
+        )),
+        Alias::new("project_name"),
+    )
     .from(FunctionRunDBWithNamesIden::Table)
     // Producer's OWN output LTDVs (LTDV.producer_lfr_id = fr.id).
     .join(
@@ -1156,6 +1270,14 @@ fn inflight_query(req: &InflightRequest) -> SelectStatement {
     )
     .column((
         LogicalFunctionRunDBIden::Table,
+        LogicalFunctionRunDBIden::ProjectId,
+    ))
+    .expr_as(
+        Expr::col((ProjectDBIden::Table, ProjectDBIden::Name)),
+        Alias::new("project_name"),
+    )
+    .column((
+        LogicalFunctionRunDBIden::Table,
         LogicalFunctionRunDBIden::Status,
     ))
     .expr_as(Func::count(Expr::val(1)), Alias::new("count"))
@@ -1178,6 +1300,15 @@ fn inflight_query(req: &InflightRequest) -> SelectStatement {
         ))
         .equals((GroupDBIden::Table, GroupDBIden::Id)),
     )
+    .join(
+        JoinType::LeftJoin,
+        ProjectDBIden::Table,
+        Expr::col((
+            LogicalFunctionRunDBIden::Table,
+            LogicalFunctionRunDBIden::ProjectId,
+        ))
+        .equals((ProjectDBIden::Table, ProjectDBIden::Id)),
+    )
     .and_where(
         Expr::col((
             LogicalFunctionRunDBIden::Table,
@@ -1199,6 +1330,11 @@ fn inflight_query(req: &InflightRequest) -> SelectStatement {
         LogicalFunctionRunDBIden::GroupId,
     ))
     .group_by_col((GroupDBIden::Table, GroupDBIden::Name))
+    .group_by_col((
+        LogicalFunctionRunDBIden::Table,
+        LogicalFunctionRunDBIden::ProjectId,
+    ))
+    .group_by_col((ProjectDBIden::Table, ProjectDBIden::Name))
     .group_by_col((
         LogicalFunctionRunDBIden::Table,
         LogicalFunctionRunDBIden::Status,

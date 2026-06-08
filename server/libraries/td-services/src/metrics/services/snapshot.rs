@@ -24,6 +24,20 @@ fn service() {
     layers!(from_fn(build_snapshot_response))
 }
 
+/// `GET /snapshot` (global) — combined `/metrics` + `/inflight` across every
+/// project on one connection. `scope = "Global"` bypasses RLS so the query
+/// spans all tenants; the inner layer is identical (scope-agnostic).
+#[service_factory(
+    name = SnapshotGlobalService,
+    request = SnapshotRequest,
+    response = SnapshotResponse,
+    connection = ConnectionProvider,
+    scope = "Global",
+)]
+fn service_global() {
+    layers!(from_fn(build_snapshot_response))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -34,6 +48,7 @@ mod tests {
     use td_objects::dxo::query_filters::{DimensionFilter, TimeWindow, WindowUnit};
     use td_objects::types::basic::ProjectId;
     use td_tower::ctx_service::RawOneshot;
+    use td_tower::project_scope::InProject;
 
     #[td_test::test(db)]
     async fn test_snapshot_empty_window(db: TdPool) -> Result<(), TdError> {

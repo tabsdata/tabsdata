@@ -46,7 +46,7 @@ use crate::router::functions::FunctionsRouter;
 use crate::router::groups::GroupsRouter;
 use crate::router::inter_collection_permissions::InterCollectionPermissionsRouter;
 use crate::router::logical_versions::LogicalVersionsRouter;
-use crate::router::metrics::MetricsRouter;
+use crate::router::metrics::{GlobalMetricsRouter, MetricsRouter};
 use crate::router::permissions::PermissionsRouter;
 use crate::router::ping::ping_router;
 use crate::router::projects::ProjectsRouter;
@@ -98,6 +98,7 @@ impl ApiServerV1 {
                 .merge({
                     let global = utoipa_axum::router::OpenApiRouter::default()
                         .merge(SecureAuthRouter::router(context.services.clone()))
+                        .merge(GlobalMetricsRouter::router(context.services.clone()))
                         .merge(PermissionsRouter::router(context.services.clone()))
                         .merge(ProjectsRouter::router(context.services.clone()))
                         .merge(RolesRouter::router(context.services.clone()))

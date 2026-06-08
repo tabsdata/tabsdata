@@ -23,7 +23,7 @@ mod definitions {
     use crate::dxo::query_filters::{DimensionFilter, TimeWindow, WindowAlign, WindowUnit};
     use crate::types::basic::{
         ByteCount, CollectionId, CollectionName, EpochMs, GroupId, GroupName,
-        LogicalFunctionRunStatus, RowCount, TableVersionCount,
+        LogicalFunctionRunStatus, ProjectId, ProjectName, RowCount, TableVersionCount,
     };
 
     /// One row of `/inflight`: count of in-flight runs broken out by
@@ -33,6 +33,11 @@ mod definitions {
     #[ta_objects::Dlo]
     #[derive(sqlx::FromRow, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
     pub struct InflightRow {
+        /// Owning project. Cross-project (global) responses carry rows from
+        /// many projects whose collection/group names may collide; the
+        /// project distinguishes them. Constant under the tenant-scoped path.
+        pub project_id: ProjectId,
+        pub project_name: Option<ProjectName>,
         pub collection_id: CollectionId,
         pub collection_name: CollectionName,
         pub group_id: GroupId,
@@ -73,6 +78,11 @@ mod definitions {
     #[derive(sqlx::FromRow, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
     pub struct NodeRow {
         pub bucket: EpochMs,
+        /// Owning project of a real (`Dim`) node — lets cross-project (global)
+        /// responses distinguish same-named collections/groups across projects.
+        /// `None` on synthetic rows (external/unused singletons span projects).
+        pub project_id: Option<ProjectId>,
+        pub project_name: Option<ProjectName>,
         /// `Dim` for real nodes; one of the synthetic variants for
         /// singleton external/unused nodes.
         pub kind: NodeKind,
@@ -110,6 +120,11 @@ mod definitions {
     #[derive(sqlx::FromRow, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
     pub struct EdgeRow {
         pub bucket: EpochMs,
+        /// Owning project of the edge's real dim endpoint(s). Edges never cross
+        /// projects (dependencies are project-scoped), so a single project
+        /// applies. `None` only if both endpoints are synthetic (does not occur).
+        pub project_id: Option<ProjectId>,
+        pub project_name: Option<ProjectName>,
         pub source_kind: NodeKind,
         pub source: Option<String>,
         /// Display name of the source dim entity; `None` on synthetic

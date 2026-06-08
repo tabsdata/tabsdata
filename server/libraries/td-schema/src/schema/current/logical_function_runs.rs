@@ -25,6 +25,7 @@ use super::functions::Functions;
 use super::groups::Groups;
 use super::logical_function_run_pointers::LogicalFunctionRunPointers;
 use super::physical_function_runs::PhysicalFunctionRuns;
+use super::projects::Projects;
 use super::transactions::Transactions;
 use super::users::Users;
 use crate::schema::Entity;
@@ -211,6 +212,7 @@ impl Entity for Defs {
                     Alias::new("triggered_by"),
                 )
                 .expr_as(Expr::col((groups_alias.clone(), Groups::Name)), Alias::new("group"))
+                .expr_as(Expr::col((Projects::Table, Projects::Name)), Alias::new("project"))
                 .expr_as(Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::Id)), Alias::new("physical_function_run_id"))
                 .expr_as(Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::StartedOn)), Alias::new("started_on"))
                 .expr_as(Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::EndedOn)), Alias::new("ended_on"))
@@ -241,6 +243,11 @@ impl Entity for Defs {
                     Groups::Table,
                     groups_alias.clone(),
                     Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::GroupId)).equals((groups_alias, Groups::Id)),
+                )
+                .join(
+                    JoinType::LeftJoin,
+                    Projects::Table,
+                    Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::ProjectId)).equals((Projects::Table, Projects::Id)),
                 )
                 .join(
                     JoinType::LeftJoin,

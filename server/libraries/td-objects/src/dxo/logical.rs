@@ -114,8 +114,9 @@ mod definitions {
         LogicalFunctionRunInputId, LogicalFunctionRunPointerId, LogicalFunctionRunStatus,
         LogicalPointerReason, LogicalPointerStatus, LogicalTableDataVersionId,
         LogicalTableDataVersionPointerId, PhysicalFunctionRunId, PhysicalFunctionRunStatus,
-        PhysicalTableDataVersionId, ProjectId, RowCount, SchemaChanged, SchemaDataChanged,
-        SchemaHash, StorageVersion, TableFunctionParamPos, TableId, TableName, TableVersionCount,
+        PhysicalTableDataVersionId, ProjectId, ProjectName, RowCount, SchemaChanged,
+        SchemaDataChanged, SchemaHash, StorageVersion, TableFunctionParamPos, TableId, TableName,
+        TableVersionCount,
         TableVersionId, TransactionId, Trigger, TriggeredOn, UserId, UserName, VersionPos,
     };
     use td_error::TdError;
@@ -208,6 +209,8 @@ mod definitions {
         pub execution: Option<ExecutionName>,
         pub triggered_by: UserName,
         pub group: Option<GroupName>,
+        /// Display name resolved from `projects.name` via the view join.
+        pub project: Option<ProjectName>,
         // PFR id currently bound to this LFR (resolved from the pointer
         // event log); NULL while Pending/Voided.
         pub physical_function_run_id: Option<PhysicalFunctionRunId>,

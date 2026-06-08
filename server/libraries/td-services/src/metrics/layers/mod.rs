@@ -21,7 +21,7 @@ use td_objects::dxo::query_filters::{
 };
 use td_objects::types::basic::{
     ByteCount, CollectionId, CollectionName, EpochMs, GroupId, GroupName, LogicalFunctionRunStatus,
-    RowCount, TableVersionCount,
+    ProjectId, ProjectName, RowCount, TableVersionCount,
 };
 use td_queries::MetricsEntry;
 use td_tower::extractors::{MutRef, Ref};
@@ -107,6 +107,10 @@ fn synthesize_nodes_from_edges(edges: &[EdgeRow]) -> Result<Vec<NodeRow>, TdErro
             .entry((synth_kind, *e.bucket, e.status))
             .or_insert_with(|| NodeRow {
                 bucket: e.bucket,
+                // Synthetic singletons aggregate external flow across every
+                // project, so they carry no single project.
+                project_id: None,
+                project_name: None,
                 kind: synth_kind,
                 collection_id: None,
                 collection_name: None,
@@ -340,6 +344,8 @@ impl GapFillRow for NodeRow {
         Option<GroupId>,
         Option<CollectionName>,
         Option<GroupName>,
+        Option<ProjectId>,
+        Option<ProjectName>,
     );
 
     fn bucket(&self) -> EpochMs {
@@ -352,6 +358,8 @@ impl GapFillRow for NodeRow {
             self.group_id,
             self.collection_name.clone(),
             self.group_name.clone(),
+            self.project_id,
+            self.project_name.clone(),
         )
     }
     fn status(&self) -> LogicalFunctionRunStatus {
@@ -364,6 +372,8 @@ impl GapFillRow for NodeRow {
     ) -> Result<Self, TdError> {
         Ok(NodeRow {
             bucket,
+            project_id: dim_key.5,
+            project_name: dim_key.6.clone(),
             kind: dim_key.0,
             collection_id: dim_key.1,
             collection_name: dim_key.3.clone(),
@@ -390,6 +400,8 @@ impl GapFillRow for EdgeRow {
         NodeKind,
         Option<String>,
         Option<String>,
+        Option<ProjectId>,
+        Option<ProjectName>,
     );
 
     fn bucket(&self) -> EpochMs {
@@ -403,6 +415,8 @@ impl GapFillRow for EdgeRow {
             self.target_kind,
             self.target.clone(),
             self.target_name.clone(),
+            self.project_id,
+            self.project_name.clone(),
         )
     }
     fn status(&self) -> LogicalFunctionRunStatus {
@@ -415,6 +429,8 @@ impl GapFillRow for EdgeRow {
     ) -> Result<Self, TdError> {
         Ok(EdgeRow {
             bucket,
+            project_id: dim_key.6,
+            project_name: dim_key.7.clone(),
             source_kind: dim_key.0,
             source: dim_key.1.clone(),
             source_name: dim_key.2.clone(),
@@ -455,6 +471,8 @@ mod tests {
     fn node(bucket_ms: i64, status: LogicalFunctionRunStatus, fn_runs: i64) -> NodeRow {
         NodeRow {
             bucket: EpochMs::try_from(bucket_ms).unwrap(),
+            project_id: Some(ProjectId::sandbox()),
+            project_name: Some(ProjectName::try_from("sandbox").unwrap()),
             kind: NodeKind::Dim,
             collection_id: Some(fixed_collection_id()),
             collection_name: Some(CollectionName::try_from("test_coll").unwrap()),
@@ -479,6 +497,8 @@ mod tests {
     ) -> NodeRow {
         NodeRow {
             bucket: EpochMs::try_from(bucket_ms).unwrap(),
+            project_id: None,
+            project_name: None,
             kind: NodeKind::ExternalSource,
             collection_id: None,
             collection_name: None,
@@ -499,6 +519,8 @@ mod tests {
     fn edge(bucket_ms: i64, status: LogicalFunctionRunStatus, fn_runs: i64) -> EdgeRow {
         EdgeRow {
             bucket: EpochMs::try_from(bucket_ms).unwrap(),
+            project_id: Some(ProjectId::sandbox()),
+            project_name: Some(ProjectName::try_from("sandbox").unwrap()),
             source_kind: NodeKind::ExternalSource,
             source: None,
             source_name: None,
@@ -684,6 +706,8 @@ mod tests {
     fn synthesize_nodes_from_edges_three_kinds() {
         let ingress = EdgeRow {
             bucket: EpochMs::try_from(JAN_2026).unwrap(),
+            project_id: None,
+            project_name: None,
             source_kind: NodeKind::ExternalSource,
             source: None,
             source_name: None,
@@ -698,6 +722,8 @@ mod tests {
         };
         let egress = EdgeRow {
             bucket: EpochMs::try_from(JAN_2026).unwrap(),
+            project_id: None,
+            project_name: None,
             source_kind: NodeKind::Dim,
             source: Some("c2".into()),
             source_name: Some("c2".into()),
@@ -712,6 +738,8 @@ mod tests {
         };
         let unused = EdgeRow {
             bucket: EpochMs::try_from(JAN_2026).unwrap(),
+            project_id: None,
+            project_name: None,
             source_kind: NodeKind::Dim,
             source: Some("c3".into()),
             source_name: Some("c3".into()),
@@ -755,6 +783,8 @@ mod tests {
     fn synthesize_nodes_collapses_same_bucket_status() {
         let mk_ingress = |target: &str, rows: i64| EdgeRow {
             bucket: EpochMs::try_from(JAN_2026).unwrap(),
+            project_id: None,
+            project_name: None,
             source_kind: NodeKind::ExternalSource,
             source: None,
             source_name: None,
@@ -805,6 +835,8 @@ mod tests {
         let rows: Vec<NodeRow> = (0..1000)
             .map(|_| NodeRow {
                 bucket: EpochMs::try_from(JAN_2026).unwrap(),
+                project_id: None,
+                project_name: None,
                 kind: NodeKind::Dim,
                 collection_id: Some(CollectionId::default()),
                 collection_name: Some(CollectionName::try_from("test_coll").unwrap()),

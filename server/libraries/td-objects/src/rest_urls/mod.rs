@@ -175,6 +175,14 @@ pub const METRICS: &str = url!(SCOPED, "/metrics");
 pub const INFLIGHT: &str = url!(SCOPED, "/inflight");
 pub const SNAPSHOT: &str = url!(SCOPED, "/snapshot");
 
+// Global (cross-project) counterparts of the metrics endpoints. Top-level (no
+// `{project}` segment): they run `scope = Global`, which bypasses RLS so the
+// aggregation spans every project. Rows carry `project_id`/`project_name` so
+// same-named collections/groups across projects stay distinguishable.
+pub const GLOBAL_METRICS: &str = url!("/metrics");
+pub const GLOBAL_INFLIGHT: &str = url!("/inflight");
+pub const GLOBAL_SNAPSHOT: &str = url!("/snapshot");
+
 // Permissions
 pub const PERMISSIONS: &str = url!(ROLE, "/permissions");
 pub const PERMISSION: &str = url!(PERMISSIONS, "/{permission}");
