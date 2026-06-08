@@ -8,11 +8,15 @@ use crate::config::{Config, DbSchema, Params};
 use crate::scheduler::{FunctionDispatcher, FunctionRequester, SchedulerCtx};
 use std::sync::Arc;
 use std::time::Duration;
-use td_common::server::{Orchestrator, OrchestratorMessagingProvider, SupervisorMessagingProvider};
+use td_common::server::{
+    BridgeProvider, Orchestrator, OrchestratorMessagingProvider, SupervisorBridgeProvider,
+    SupervisorMessagingProvider,
+};
 use td_common::server_runner::ServerRunner;
 use td_common::status::ExitStatus;
 use td_database::error::DbError;
 use td_execution::SchedulerNotify;
+use td_kubernetes::kube::KubernetesBridgeProvider;
 use td_kubernetes::runtime::gateway::messaging::KubernetesOrchestratorMessagingProvider;
 use td_process::launcher::cli::Cli;
 use td_queries::initialize_logical_ids;
@@ -183,8 +187,25 @@ pub fn run() {
                     })?,
             );
 
+            let bridge_provider: Box<dyn BridgeProvider> = match config.orchestrator {
+                Orchestrator::Supervisor => Box::new(SupervisorBridgeProvider::new()),
+                Orchestrator::Kubernetes => {
+                    let provider = KubernetesBridgeProvider::from_pod_environment()
+                        .await
+                        .map_err(|e| {
+                            error!("Error creating kubernetes bridge provider: {e:#?}");
+                            ExitStatus::GeneralError
+                        })?;
+                    Box::new(provider)
+                }
+            };
+            let server_catalog = bridge_provider.server_catalog().await.map_err(|e| {
+                error!("Error creating server catalog: {e:#?}");
+                ExitStatus::GeneralError
+            })?;
+
             // Create runtime context
-            let runtime_context = RuntimeContext::new().await.map_err(|e| {
+            let runtime_context = RuntimeContext::new(server_catalog).await.map_err(|e| {
                 error!("Error creating runtime context: {e:#?}");
                 ExitStatus::GeneralError
             })?;

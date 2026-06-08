@@ -36,6 +36,7 @@ use std::fmt::Formatter;
 use std::fs::{File, create_dir_all, read_dir, remove_file, rename};
 use std::io::{Error, Write};
 use std::marker::PhantomData;
+use std::ops::Deref;
 use std::option::Option;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -1253,36 +1254,38 @@ impl fmt::Display for EtcContent {
 
 #[td_error]
 pub enum EtcError {
-    #[error("Error creating the etc store instance '{location}': {cause}")]
+    #[error("Error creating the server catalog instance '{location}': {cause}")]
     EtcStoreLocationCreationError { location: PathBuf, cause: Error },
-    #[error("Error reading an etc store file '{location}'")]
+    #[error("Error reading a server catalog file '{location}'")]
     NotFoundError { location: PathBuf },
-    #[error("Error reading an etc store file '{location}': {cause}")]
+    #[error("Error reading a server catalog file '{location}': {cause}")]
     ReadError { location: PathBuf, cause: Error },
+    #[error("Error serializing a server catalog content '{content}': {cause}")]
+    SerializationError { content: EtcContent, cause: String },
 }
 
 #[derive(Debug)]
-pub struct FileEtcStore {
+pub struct EtcFolderStore {
     location: PathBuf,
 }
 
-pub trait IntoEtcStoreBox {
-    fn boxed(self) -> Box<dyn EtcStore + Send + Sync>;
+pub trait IntoServerCatalogBox {
+    fn boxed(self) -> Box<dyn ServerCatalog + Send + Sync>;
 }
 
-impl<T> IntoEtcStoreBox for T
+impl<T> IntoServerCatalogBox for T
 where
-    T: EtcStore + Send + Sync + 'static,
+    T: ServerCatalog + Send + Sync + 'static,
 {
-    fn boxed(self) -> Box<dyn EtcStore + Send + Sync> {
+    fn boxed(self) -> Box<dyn ServerCatalog + Send + Sync> {
         Box::new(self)
     }
 }
 
-impl FileEtcStore {
-    /// Creates an etc store instance to read and write interchange files.
+impl EtcFolderStore {
+    /// Creates a server catalog instance to read and write interchange files.
     pub async fn new() -> Result<Self, EtcError> {
-        // Infers the etc store base location.
+        // Infers the server catalog base location.
         fn obtain_etc_location() -> PathBuf {
             if let Some(location) = obtain_etc_location_from_info_file() {
                 location
@@ -1293,7 +1296,7 @@ impl FileEtcStore {
             }
         }
 
-        // Gets the base etc store base location form standard inf file.
+        // Gets the base server catalog base location form standard inf file.
         fn obtain_etc_location_from_info_file() -> Option<PathBuf> {
             let inf_path = get_current_dir().join(WORKER_INF_FILE);
             if inf_path.exists()
@@ -1305,7 +1308,7 @@ impl FileEtcStore {
             None
         }
 
-        // Gets base etc store base location form passed arguments.
+        // Gets base server catalog base location form passed arguments.
         pub fn obtain_etc_location_from_arguments() -> Option<PathBuf> {
             let mut arguments = Arguments::from_env();
             let location: Option<PathBuf> =
@@ -1314,7 +1317,7 @@ impl FileEtcStore {
             location
         }
 
-        // Gets base etc store base location form current folder.
+        // Gets base server catalog base location form current folder.
         pub fn obtain_etc_location_from_current_dir() -> Option<PathBuf> {
             Some(get_current_dir().join(ETC_FOLDER))
         }
@@ -1336,17 +1339,17 @@ impl FileEtcStore {
     }
 }
 
-pub async fn etc_service() -> Result<Box<dyn EtcStore + Send + Sync>, EtcError> {
-    Ok(FileEtcStore::new().await?.boxed())
+pub async fn etc_service() -> Result<Box<dyn ServerCatalog + Send + Sync>, EtcError> {
+    Ok(EtcFolderStore::new().await?.boxed())
 }
 
 #[async_trait]
-pub trait EtcStore {
+pub trait ServerCatalog {
     async fn read(&self, content: &EtcContent) -> Result<Option<Vec<u8>>, EtcError>;
 }
 
 #[async_trait]
-impl EtcStore for FileEtcStore {
+impl ServerCatalog for EtcFolderStore {
     async fn read(&self, content: &EtcContent) -> Result<Option<Vec<u8>>, EtcError> {
         let path = self.location.join(content.file());
         match fs::read(&path).await {
@@ -1367,9 +1370,63 @@ impl EtcStore for FileEtcStore {
     }
 }
 
+#[async_trait]
+pub trait BridgeProvider: Send + Sync {
+    async fn server_catalog(&self) -> Result<ServerCatalogHandle, EtcError>;
+}
+
+pub struct SupervisorBridgeProvider;
+
+impl SupervisorBridgeProvider {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for SupervisorBridgeProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl BridgeProvider for SupervisorBridgeProvider {
+    async fn server_catalog(&self) -> Result<ServerCatalogHandle, EtcError> {
+        let store = EtcFolderStore::new().await?;
+        Ok(ServerCatalogHandle::new(Arc::new(store)))
+    }
+}
+
+#[derive(Clone)]
+pub struct ServerCatalogHandle(Arc<dyn ServerCatalog + Send + Sync>);
+
+impl ServerCatalogHandle {
+    pub fn new(catalog: Arc<dyn ServerCatalog + Send + Sync>) -> Self {
+        Self(catalog)
+    }
+
+    pub fn into_arc(self) -> Arc<dyn ServerCatalog + Send + Sync> {
+        self.0
+    }
+}
+
+impl Deref for ServerCatalogHandle {
+    type Target = dyn ServerCatalog + Send + Sync;
+    fn deref(&self) -> &Self::Target {
+        &*self.0
+    }
+}
+
+#[async_trait]
+impl ServerCatalog for ServerCatalogHandle {
+    async fn read(&self, content: &EtcContent) -> Result<Option<Vec<u8>>, EtcError> {
+        self.0.read(content).await
+    }
+}
+
 #[cfg(test)]
 mod tests_etc {
-    use crate::server::{EtcContent, EtcStore, FileEtcStore};
+    use crate::server::{EtcContent, EtcFolderStore, ServerCatalog};
     use std::path::Path;
 
     #[tokio::test]
@@ -1378,10 +1435,10 @@ mod tests_etc {
         let path = Path::new(&location).join(EtcContent::ServerBuildManifest_yaml.file());
         let content = "In a hole in the ground there lived a Hobbit.";
         std::fs::write(&path, content).expect("Failed to write the test file.");
-        let etc_instance = FileEtcStore::with_location(&location);
+        let etc_instance = EtcFolderStore::with_location(&location);
         assert!(
             etc_instance.is_ok(),
-            "Failed to create the etc store instance: {etc_instance:?}"
+            "Failed to create the server catalog instance: {etc_instance:?}"
         );
         let result = etc_instance
             .unwrap()
@@ -1389,7 +1446,7 @@ mod tests_etc {
             .await;
         assert!(
             result.is_ok(),
-            "Failed to read from the etc store instance: {result:?}"
+            "Failed to read from the server catalog instance: {result:?}"
         );
 
         let result_bytes = result.unwrap();
