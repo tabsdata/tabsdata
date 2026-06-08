@@ -68,7 +68,9 @@ def test_custom_requirements(tmp_path):
             "tzlocal==5.3.1",
             "wheel==0.46.3",
             "pandas==2.2.3",
-            "simple-salesforce==1.12.6"],
+            "simple-salesforce==1.12.6",
+            "tabsdata",
+            "tabsdata-toolkit"],
         PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY: True,
     }
     correct_custom_requirements_path = os.path.join(
@@ -151,7 +153,9 @@ def test_custom_requirements_no_package_version(tmp_path):
             "tzlocal==5.3.1",
             "wheel==0.46.3",
             "pandas",
-            "simple-salesforce==1.12.6"],
+            "simple-salesforce==1.12.6",
+            "tabsdata",
+            "tabsdata-toolkit"],
         PYTHON_IGNORE_UNAVAILABLE_PUBLIC_PACKAGES_KEY: True,
     }
     correct_custom_requirements_path = os.path.join(

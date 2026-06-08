@@ -299,6 +299,8 @@ for connector in gather_connectors():
         )
     )
 
+LOCAL_PACKAGES_LIST = []
+
 MOCK_COLLECTION = "td_collection"
 MOCK_COLLECTION_ID = 19
 FAKE_EXECUTION_ID = 24
