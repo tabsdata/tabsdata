@@ -39,8 +39,9 @@ pub async fn build_metrics_response(
 ) -> Result<MetricsResponse, TdError> {
     let raw_nodes = conn.metrics().metrics_nodes(&req).await?;
     let raw_edges = conn.metrics().metrics_edges(&req).await?;
-    let nodes = fold_to_coarse(raw_nodes, req.unit)?;
+    let mut nodes = fold_to_coarse(raw_nodes, req.unit)?;
     let edges = fold_to_coarse(raw_edges, req.unit)?;
+    nodes.extend(synthesize_nodes_from_edges(&edges)?);
     let buckets = expected_buckets(req.window.start_ms, req.window.end_ms, req.unit);
     let statuses = resolve_status_axis(&req.statuses);
     let nodes = gap_fill(nodes, &buckets, &statuses)?;
@@ -53,6 +54,66 @@ pub async fn build_metrics_response(
         .nodes(nodes)
         .edges(edges)
         .build()?)
+}
+
+/// Derive the three synthetic singleton NodeRows by aggregating the
+/// edge stream per `(synth_kind, bucket, status)`:
+/// - `ExternalSource → Dim` edges feed `ExternalSource.*_out`.
+/// - `Dim → ExternalDestination` edges feed `ExternalDestination.*_in`.
+/// - `Dim → Unused` edges feed `Unused.*_in`.
+///
+/// **Edge-consistent over-counting**: synthetic magnitudes match
+/// what `sum(edges of that kind)` would produce. For `ExternalSource`
+/// and `Unused` each underlying LFR/LTDV maps to exactly one edge of
+/// its kind, so totals are exact. For `ExternalDestination` an LTDV
+/// consumed by subscribers in distinct dim entities appears in
+/// multiple egress edges (one per subscriber's dim), and its
+/// magnitudes are summed once per consuming subscriber — same
+/// fan-out semantic as real edges, intentional.
+fn synthesize_nodes_from_edges(edges: &[EdgeRow]) -> Result<Vec<NodeRow>, TdError> {
+    let mut acc: HashMap<(NodeKind, i64, LogicalFunctionRunStatus), NodeRow> = HashMap::new();
+    for e in edges {
+        let synth_kind = match (e.source_kind, e.target_kind) {
+            (NodeKind::ExternalSource, _) => NodeKind::ExternalSource,
+            (_, NodeKind::ExternalDestination) => NodeKind::ExternalDestination,
+            (_, NodeKind::Unused) => NodeKind::Unused,
+            _ => continue,
+        };
+        let row = acc
+            .entry((synth_kind, *e.bucket, e.status))
+            .or_insert_with(|| NodeRow {
+                bucket: e.bucket,
+                kind: synth_kind,
+                collection_id: None,
+                collection_name: None,
+                group_id: None,
+                group_name: None,
+                status: e.status,
+                fn_runs: 0,
+                transactions: 0,
+                table_versions_out: TableVersionCount::default(),
+                row_count_out: RowCount::default(),
+                data_bytes_out: ByteCount::default(),
+                table_versions_in: TableVersionCount::default(),
+                row_count_in: RowCount::default(),
+                data_bytes_in: ByteCount::default(),
+            });
+        row.fn_runs += e.fn_runs;
+        row.transactions += e.fn_runs;
+        let tables = TableVersionCount::try_from(e.tables)?;
+        if synth_kind == NodeKind::ExternalSource {
+            row.table_versions_out =
+                TableVersionCount::try_from(*row.table_versions_out + *tables)?;
+            row.row_count_out = RowCount::try_from(*row.row_count_out + *e.row_count)?;
+            row.data_bytes_out = ByteCount::try_from(*row.data_bytes_out + *e.data_bytes)?;
+        } else {
+            // ExternalDestination | Unused — IN-side accumulation.
+            row.table_versions_in = TableVersionCount::try_from(*row.table_versions_in + *tables)?;
+            row.row_count_in = RowCount::try_from(*row.row_count_in + *e.row_count)?;
+            row.data_bytes_in = ByteCount::try_from(*row.data_bytes_in + *e.data_bytes)?;
+        }
+    }
+    Ok(acc.into_values().collect())
 }
 
 /// Status axis for gap-fill: the request filter intersected with
@@ -591,6 +652,103 @@ mod tests {
         assert_eq!(out.len(), 4);
         assert_eq!(out.iter().filter(|r| r.fn_runs == 3).count(), 1);
         assert_eq!(out.iter().filter(|r| r.fn_runs == 0).count(), 3);
+    }
+
+    /// `synthesize_nodes_from_edges` collapses the three synthetic
+    /// edge kinds into per-(bucket, status) singleton NodeRows.
+    #[test]
+    fn synthesize_nodes_from_edges_three_kinds() {
+        let ingress = EdgeRow {
+            bucket: EpochMs::try_from(JAN_2026).unwrap(),
+            source_kind: NodeKind::ExternalSource,
+            source: None,
+            source_name: None,
+            target_kind: NodeKind::Dim,
+            target: Some("c1".into()),
+            target_name: Some("c1".into()),
+            status: LogicalFunctionRunStatus::Done,
+            fn_runs: 2,
+            tables: 3,
+            row_count: RowCount::try_from(100).unwrap(),
+            data_bytes: ByteCount::try_from(500).unwrap(),
+        };
+        let egress = EdgeRow {
+            bucket: EpochMs::try_from(JAN_2026).unwrap(),
+            source_kind: NodeKind::Dim,
+            source: Some("c2".into()),
+            source_name: Some("c2".into()),
+            target_kind: NodeKind::ExternalDestination,
+            target: None,
+            target_name: None,
+            status: LogicalFunctionRunStatus::Done,
+            fn_runs: 1,
+            tables: 1,
+            row_count: RowCount::try_from(40).unwrap(),
+            data_bytes: ByteCount::try_from(200).unwrap(),
+        };
+        let unused = EdgeRow {
+            bucket: EpochMs::try_from(JAN_2026).unwrap(),
+            source_kind: NodeKind::Dim,
+            source: Some("c3".into()),
+            source_name: Some("c3".into()),
+            target_kind: NodeKind::Unused,
+            target: None,
+            target_name: None,
+            status: LogicalFunctionRunStatus::Done,
+            fn_runs: 1,
+            tables: 2,
+            row_count: RowCount::try_from(10).unwrap(),
+            data_bytes: ByteCount::try_from(50).unwrap(),
+        };
+        let synth = synthesize_nodes_from_edges(&[ingress, egress, unused]).unwrap();
+        assert_eq!(synth.len(), 3, "got {synth:?}");
+
+        let by_kind: HashMap<NodeKind, &NodeRow> = synth.iter().map(|n| (n.kind, n)).collect();
+        let src = by_kind[&NodeKind::ExternalSource];
+        assert!(src.collection_id.is_none() && src.group_id.is_none());
+        assert_eq!(src.fn_runs, 2);
+        // transactions mirrors fn_runs on synthetic singletons — the
+        // edge stream doesn't carry transaction ids.
+        assert_eq!(src.transactions, 2);
+        assert_eq!(*src.table_versions_out, 3);
+        assert_eq!(*src.row_count_out, 100);
+        assert_eq!(*src.data_bytes_out, 500);
+        assert_eq!(*src.row_count_in, 0);
+
+        let dst = by_kind[&NodeKind::ExternalDestination];
+        assert_eq!(*dst.row_count_in, 40);
+        assert_eq!(*dst.data_bytes_in, 200);
+        assert_eq!(*dst.row_count_out, 0);
+
+        let unu = by_kind[&NodeKind::Unused];
+        assert_eq!(*unu.table_versions_in, 2);
+        assert_eq!(*unu.row_count_in, 10);
+    }
+
+    /// Multiple edges of the same synthetic kind in the same bucket/status
+    /// collapse into one singleton NodeRow with summed magnitudes.
+    #[test]
+    fn synthesize_nodes_collapses_same_bucket_status() {
+        let mk_ingress = |target: &str, rows: i64| EdgeRow {
+            bucket: EpochMs::try_from(JAN_2026).unwrap(),
+            source_kind: NodeKind::ExternalSource,
+            source: None,
+            source_name: None,
+            target_kind: NodeKind::Dim,
+            target: Some(target.into()),
+            target_name: Some(target.into()),
+            status: LogicalFunctionRunStatus::Done,
+            fn_runs: 1,
+            tables: 1,
+            row_count: RowCount::try_from(rows).unwrap(),
+            data_bytes: ByteCount::try_from(rows * 10).unwrap(),
+        };
+        let synth = synthesize_nodes_from_edges(&[mk_ingress("a", 5), mk_ingress("b", 7)]).unwrap();
+        assert_eq!(synth.len(), 1);
+        assert_eq!(synth[0].kind, NodeKind::ExternalSource);
+        assert_eq!(synth[0].fn_runs, 2);
+        assert_eq!(*synth[0].row_count_out, 12);
+        assert_eq!(*synth[0].data_bytes_out, 120);
     }
 
     /// Synthetic node rows have None ids — gap-fill should treat them
