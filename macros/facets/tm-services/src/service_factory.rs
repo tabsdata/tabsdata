@@ -13,12 +13,28 @@ use syn::{
     FnArg, GenericParam, Ident, ItemFn, ReturnType, Token, Type, parse_macro_input, parse_quote,
 };
 
+/// Service-level project-scope policy. Omitted → tenant (read scope from the
+/// request via `ProjectScoped`); `project_scope = bypass` → explicit
+/// cross-project bypass, no `ProjectScoped` bound on the request type.
+///
+/// A `grep "project_scope = bypass"` returns the canonical audit list: every
+/// service that intentionally spans all projects.
+#[derive(Default)]
+enum ProjectScopePolicy {
+    /// Read the project from `Req` via `ProjectScoped` (default).
+    #[default]
+    Tenant,
+    /// Always bypass project scope.
+    Bypass,
+}
+
 struct ProviderArgs {
     name: Ident,
     request: Type,
     response: Type,
     connection: Option<Type>,
     context: Vec<Type>,
+    project_scope: ProjectScopePolicy,
 }
 
 impl Parse for ProviderArgs {
@@ -28,6 +44,7 @@ impl Parse for ProviderArgs {
         let mut response = None;
         let mut connection = None;
         let mut context = Vec::new();
+        let mut project_scope = ProjectScopePolicy::default();
 
         while !input.is_empty() {
             let key: Ident = input.parse()?;
@@ -41,6 +58,19 @@ impl Parse for ProviderArgs {
                 "context" => {
                     let ctx: Type = input.parse()?;
                     context.push(ctx);
+                }
+                "project_scope" => {
+                    let value: Ident = input.parse()?;
+                    project_scope = match value.to_string().as_str() {
+                        "bypass" => ProjectScopePolicy::Bypass,
+                        "tenant" => ProjectScopePolicy::Tenant,
+                        _ => {
+                            return Err(syn::Error::new(
+                                value.span(),
+                                "`project_scope` must be `tenant` (default) or `bypass`",
+                            ));
+                        }
+                    };
                 }
                 _ => return Err(syn::Error::new(key.span(), "Unknown attribute key")),
             }
@@ -57,6 +87,7 @@ impl Parse for ProviderArgs {
                 .ok_or_else(|| syn::Error::new(input.span(), "Missing `response`"))?,
             connection,
             context,
+            project_scope,
         })
     }
 }
@@ -144,6 +175,23 @@ pub fn service_factory(attr: TokenStream, item: TokenStream) -> TokenStream {
     let req_ty = &args.request;
     let res_ty = &args.response;
 
+    // When a connection provider is present, inject a project-scope layer
+    // right after it. The service-level `project_scope` flag picks which:
+    //   - default / tenant: read the scope from the request type via the
+    //     `ProjectScoped` trait — Some project → set GUC, None → bypass.
+    //   - bypass: unconditional cross-project bypass; no trait bound on Req.
+    //     Grep for "project_scope = bypass" to audit every cross-project
+    //     escape hatch.
+    let project_scope_provider = match (&args.connection, &args.project_scope) {
+        (None, _) => vec![],
+        (Some(_), ProjectScopePolicy::Tenant) => {
+            vec![quote! { ::td_tower::project_scope::ProjectScopeProvider::<#req_ty>::new() }]
+        }
+        (Some(_), ProjectScopePolicy::Bypass) => {
+            vec![quote! { ::td_tower::project_scope::BypassProjectScopeProvider::new() }]
+        }
+    };
+
     let (mut factory_args, mut factory_types) = (vec![], vec![]);
     let (db_input, db_arg, db_provider) = match &args.connection {
         None => (None, None, vec![]),
@@ -220,6 +268,9 @@ pub fn service_factory(attr: TokenStream, item: TokenStream) -> TokenStream {
             )*
             #(
                 .layer(#db_provider)
+            )*
+            #(
+                .layer(#project_scope_provider)
             )*
             .layer(#original_block)
             .map_err(td_error::TdError::from)

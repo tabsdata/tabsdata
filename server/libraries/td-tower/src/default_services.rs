@@ -283,9 +283,12 @@ where
 
         let db = self.db.clone();
         Box::pin(async move {
-            // Create connection
+            // Backend-appropriate read-path connection: a rolled-back ro
+            // transaction on PostgreSQL (so per-request `SET LOCAL` can scope),
+            // the bare pooled connection elsewhere. Dispatch lives in
+            // td-database; this layer stays backend-agnostic.
             let connection = db
-                .acquire()
+                .acquire_for_read()
                 .await
                 .map_err(|e| ConnectionError::CannotGetConnection(e).into())?;
             #[cfg(feature = "test_tower_metadata")]

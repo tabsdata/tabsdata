@@ -22,4 +22,13 @@ pub enum ConnectionError {
     CannotCommitTransaction(#[source] sqlx::Error) = 5002,
     #[error("Broken connection while processing Service request")]
     ConnectionLost = 5003,
+    #[error("Cannot set the project scope on the connection: {0}")]
+    CannotSetProjectScope(#[source] sqlx::Error) = 5004,
+    #[error(
+        "Project scope could not be resolved for the request: the request type \
+         carries no project scope. A tenant-scoped service must run with a \
+         resolvable scope; refusing to run unscoped (which would bypass \
+         row-level security)."
+    )]
+    ProjectScopeUnresolved = 5005,
 }
