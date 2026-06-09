@@ -2847,6 +2847,7 @@ class Table:
         filter: List[str] | str = None,
         order_by: str = None,
         raise_for_status: bool = True,
+        at: int | None = None,
     ) -> List[DataVersion]:
         """
         List the data versions of a table in a collection.
@@ -2864,6 +2865,7 @@ class Table:
                 filter=filter,
                 order_by=order_by,
                 raise_for_status=raise_for_status,
+                at=at,
             )
         )
 
@@ -2872,6 +2874,7 @@ class Table:
         filter: List[str] | str = None,
         order_by: str = None,
         raise_for_status: bool = True,
+        at: int | None = None,
     ) -> Generator[DataVersion]:
         first_page = True
         next_pagination_id = None
@@ -2885,6 +2888,7 @@ class Table:
                 pagination_id=next_pagination_id,
                 next_step=next_step,
                 raise_for_status=raise_for_status,
+                at=at,
             )
             data = response.json().get("data")
             next_pagination_id = data.get("next_pagination_id")
@@ -3904,6 +3908,7 @@ class TabsdataServer:
         filter: List[str] | str = None,
         order_by: str = None,
         raise_for_status: bool = True,
+        at: int | None = None,
     ) -> List[DataVersion]:
         """
         List the data versions of a table in a collection.
@@ -3919,7 +3924,7 @@ class TabsdataServer:
         """
         table = Table(self.connection, collection_name, table_name)
         return table.list_dataversions(
-            filter=filter, order_by=order_by, raise_for_status=raise_for_status
+            filter=filter, order_by=order_by, raise_for_status=raise_for_status, at=at
         )
 
     def cancel_execution(self, execution_id: str) -> requests.Response:

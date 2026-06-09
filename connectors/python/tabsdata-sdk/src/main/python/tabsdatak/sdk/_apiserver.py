@@ -611,12 +611,13 @@ class APIServer:
         pagination_id: str = None,
         next_step: str = None,
         raise_for_status: bool = True,
+        at: int | None = None,
     ):
         endpoint = f"/collections/{collection_name}/tables/{table_name}/data-versions"
 
         params = self.get_params_dict(
-            DEFAULT_LIST_ENDPOINT_PARAMETERS,
-            [request_len, request_filter, order_by, pagination_id, next_step],
+            [*DEFAULT_LIST_ENDPOINT_PARAMETERS, "at"],
+            [request_len, request_filter, order_by, pagination_id, next_step, at],
         )
         response = self.get(endpoint, params)
         return self.raise_for_status_or_return(raise_for_status, response)
@@ -640,6 +641,19 @@ class APIServer:
         params = self.get_params_dict(
             DEFAULT_LIST_ENDPOINT_PARAMETERS,
             [request_len, request_filter, order_by, pagination_id, next_step],
+        )
+        response = self.get(endpoint, params)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def execution_read(
+        self,
+        execution_id: str,
+        with_disabled: bool = False,
+        raise_for_status: bool = True,
+    ):
+        endpoint = f"/executions/{execution_id}"
+        params = self.get_params_dict(
+            ["with_disabled"], [with_disabled.__str__().lower()]
         )
         response = self.get(endpoint, params)
         return self.raise_for_status_or_return(raise_for_status, response)
