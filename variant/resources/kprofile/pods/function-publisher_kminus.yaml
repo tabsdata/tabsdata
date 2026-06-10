@@ -98,7 +98,58 @@ spec:
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
-        - name: 0010-fetch-request
+        - name: 0010-begin-execution
+          image: function
+          imagePullPolicy: IfNotPresent
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:TDK_PYENV_SCRIPTS_FOLDER}/td_begin_execution"]
+          args:
+            - --shared-dir
+            - $(CONTAINER_ROOT)/tabsdata/shared
+            - --work-dir
+            - $(CONTAINER_ROOT)/tabsdata/work
+            - --log-config
+            - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
+            - --liveness
+            - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
+            - --responder-url
+            - env:SECRET__TD_RESPONDER_URL
+            - --responder-method
+            - env:SECRET__TD_RESPONDER_METHOD
+            - --responder-authorization
+            - env:SECRET__TD_RESPONDER_AUTHORIZATION
+            - --execution-meta-file
+            - $(CONTAINER_ROOT)/tabsdata/shared/execution_meta/execution_meta.yaml
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: CONTAINER_ROOT
+              value: "$(KM_CONTAINER_ROOT)"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_TABSDATA_INSTANCE
+              value: "${sys:TDK_INSTANCE_NAME}"
+          volumeMounts:
+            - name: config-begin-execution
+              mountPath: /tabsdata/config
+              readOnly: true
+            - name: pyenv
+              mountPath: /tabsdata/pyenv
+              readOnly: true
+            - name: shared
+              mountPath: /tabsdata/shared
+        - name: 0020-fetch-request
           image: function
           imagePullPolicy: IfNotPresent
           command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:TDK_PYENV_SCRIPTS_FOLDER}/td_fetch_request"]
@@ -157,7 +208,7 @@ spec:
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
-        - name: 0020-localize-fn-bundle
+        - name: 0030-localize-fn-bundle
           image: function
           imagePullPolicy: IfNotPresent
           command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:TDK_PYENV_SCRIPTS_FOLDER}/td_localize_fn_bundle"]
@@ -218,7 +269,7 @@ spec:
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
-        - name: 0030-prep-localize-state
+        - name: 0040-prep-localize-state
           image: function
           imagePullPolicy: IfNotPresent
           command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:TDK_PYENV_SCRIPTS_FOLDER}/td_prep_localize_state"]
@@ -281,7 +332,7 @@ spec:
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
-        - name: 0040-run-transporter-state-download
+        - name: 0050-run-transporter-state-download
           image: function
           imagePullPolicy: IfNotPresent
           command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:TDK_PYENV_SCRIPTS_FOLDER}/td_run_transporter"]
@@ -336,7 +387,7 @@ spec:
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
-        - name: 0050-run-source-plugin
+        - name: 0060-run-source-plugin
           image: function
           imagePullPolicy: IfNotPresent
           command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:TDK_PYENV_SCRIPTS_FOLDER}/td_run_source_plugin"]
@@ -397,7 +448,7 @@ spec:
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
-        - name: 0060-stamp-inputs
+        - name: 0070-stamp-inputs
           image: function
           imagePullPolicy: IfNotPresent
           command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:TDK_PYENV_SCRIPTS_FOLDER}/td_stamp_inputs"]
@@ -456,7 +507,7 @@ spec:
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
-        - name: 0070-run-function
+        - name: 0080-run-function
           image: function
           imagePullPolicy: IfNotPresent
           command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:TDK_PYENV_SCRIPTS_FOLDER}/td_run_function"]
@@ -519,7 +570,7 @@ spec:
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
-        - name: 0080-prep-upload-state
+        - name: 0090-prep-upload-state
           image: function
           imagePullPolicy: IfNotPresent
           command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:TDK_PYENV_SCRIPTS_FOLDER}/td_prep_upload_state"]
@@ -576,7 +627,7 @@ spec:
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
-        - name: 0090-run-transporter-state-upload
+        - name: 0100-run-transporter-state-upload
           image: function
           imagePullPolicy: IfNotPresent
           command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:TDK_PYENV_SCRIPTS_FOLDER}/td_run_transporter"]
@@ -631,7 +682,7 @@ spec:
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
-        - name: 0100-prep-upload-tables
+        - name: 0110-prep-upload-tables
           image: function
           imagePullPolicy: IfNotPresent
           command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:TDK_PYENV_SCRIPTS_FOLDER}/td_prep_upload_tables"]
@@ -688,7 +739,7 @@ spec:
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
-        - name: 0110-run-transporter-tables-upload
+        - name: 0120-run-transporter-tables-upload
           image: function
           imagePullPolicy: IfNotPresent
           command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:TDK_PYENV_SCRIPTS_FOLDER}/td_run_transporter"]
@@ -780,6 +831,11 @@ spec:
               readOnly: true
       volumes:
         - name: config-inspect-function
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+        - name: config-begin-execution
           projected:
             sources:
               - configMap:
