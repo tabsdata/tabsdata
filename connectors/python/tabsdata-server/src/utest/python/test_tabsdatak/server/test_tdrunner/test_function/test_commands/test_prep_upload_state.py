@@ -133,11 +133,17 @@ def test_main_writes_transporter_yaml(monkeypatch, tmp_path, http_ok_url):
             },
         ],
     )
+    # TD-2403: build_upload_state_request only emits a pair when the
+    # source parquet exists on disk; touch the file so the slot is
+    # included in the transporter request.
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    (state_dir / "td-initial-values.parquet").touch()
     out = tmp_path / "transporter.yaml"
     rc = main_with_args(
         monkeypatch,
         request_yaml,
-        tmp_path / "state",
+        state_dir,
         out,
         tmp_path / "live",
         responder_url=http_ok_url,
@@ -206,10 +212,16 @@ def test_main_unsupported_scheme_returns_unsupported_scheme(
             {"name": "x", "location": {"uri": "ftp://server/x.parquet"}},
         ],
     )
+    # TD-2403: scheme validation only fires for slots whose source
+    # parquet exists; touch the file so the unsupported scheme is
+    # actually reached.
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    (state_dir / "x.parquet").touch()
     rc = main_with_args(
         monkeypatch,
         request_yaml,
-        tmp_path / "state",
+        state_dir,
         tmp_path / "out.yaml",
         tmp_path / "live",
         responder_url=http_ok_url,

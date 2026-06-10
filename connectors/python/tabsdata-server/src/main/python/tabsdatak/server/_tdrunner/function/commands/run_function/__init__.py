@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import inspect
+import logging
 import typing
 from pathlib import Path
 from typing import Any, Callable
@@ -69,6 +70,8 @@ from tabsdatak.server._tdrunner.function.commands.run_function.error import (
     RunFunctionErrorCode,
 )
 from tabsdatak.spi import FunctionCtx, TableMode
+
+logger = logging.getLogger(__name__)
 
 # The Info classes this command knows how to invoke. The runner is
 # agnostic of *what* the function does — it just needs the call shape
@@ -378,10 +381,23 @@ def main(args: argparse.Namespace) -> int:
     outputs_manifest_path = Path(args.outputs_manifest)
     state_dir = Path(args.state_dir)
 
+    logger.info("Running user function")
     request = load_request_or_raise(request_path, RunFunctionErrorCode.RF_1)
     info = _load_function_def(bundle_dir)
+    logger.debug(
+        "Loaded function '%s' (kind=%s) from bundle %s",
+        request.info.function,
+        type(info).__name__,
+        bundle_dir,
+    )
     entries = load_inputs_manifest_or_raise(
         inputs_manifest_path, RunFunctionErrorCode.RF_5
+    )
+    logger.debug(
+        "Inputs manifest has %d slot(s): %s; manifest path %s",
+        len(entries),
+        entries,
+        inputs_manifest_path,
     )
 
     func = _unwrap_info(info.func)
@@ -405,6 +421,11 @@ def main(args: argparse.Namespace) -> int:
     for entry, table_mode in zip(entries, table_modes):
         files = entry.get(MANIFEST_FILES_KEY) or []
         call_args.append(_materialise_input_slot(files, table_mode=table_mode))
+    logger.debug(
+        "Materialised %d input slot(s) with modes %s",
+        len(call_args),
+        [m.name if hasattr(m, "name") else str(m) for m in table_modes],
+    )
 
     # If the user function declares a trailing ``ctx: TrxCtx``
     # parameter, construct a FunctionCtx and hydrate it from the
@@ -433,16 +454,31 @@ def main(args: argparse.Namespace) -> int:
             prefer_output=True,
         )
         call_args.append(ctx)
+        logger.debug("Hydrated ctx from %s (work_dir=%s)", state_dir, out_dir)
 
     output_tables = _output_table_names(info)
+    logger.info(
+        "Invoking user function with %d positional arg(s); expecting %d output slot(s)",
+        len(call_args),
+        len(output_tables),
+    )
     result = _invoke_user_function(func, call_args, output_tables)
 
     if ctx is not None:
         drain_ctx_to_state_or_raise(
             ctx, request, state_dir, error_code=RunFunctionErrorCode.RF_19
         )
+        logger.debug("Drained ctx scratch to %s", state_dir)
 
     entries_out = _sink_outputs(result, output_tables, out_dir)
+    written = sum(1 for e in entries_out if e.get(MANIFEST_FILE_KEY) is not None)
+    logger.info(
+        "User function returned %d slot(s); %d table(s) written, %d returned None",
+        len(entries_out),
+        written,
+        len(entries_out) - written,
+    )
+    logger.debug("Outputs manifest entries: %s", entries_out)
 
     try:
         write_outputs_manifest(entries_out, outputs_manifest_path)
@@ -450,6 +486,7 @@ def main(args: argparse.Namespace) -> int:
         raise RunFunctionErrorCode.RF_17.exception(
             cause=exc, path=outputs_manifest_path, detail=str(exc)
         )
+    logger.debug("Wrote outputs manifest to %s", outputs_manifest_path)
 
     return 0
 

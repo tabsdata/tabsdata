@@ -63,18 +63,20 @@ def _build_parser():
 @command(name="td_begin_execution", parser=_build_parser)
 def main(args: argparse.Namespace) -> int:
     out_path = Path(args.execution_meta_file)
+    logger.info("Initializing ExecutionMeta for the function run")
     # i64 unix epoch seconds — matches ResponseMessagePayload.start in
     # td-common/src/server.rs so the value can flow through to the
     # eventual report-completion POST body unchanged.
     start = int(datetime.now(tz=timezone.utc).timestamp())
     meta = ExecutionMeta(start=start)
+    logger.debug("ExecutionMeta start=%s; writing to %s", start, out_path)
     try:
         meta.save(out_path)
     except OSError as exc:
         raise BeginExecutionErrorCode.BE_1.exception(
             cause=exc, path=out_path, detail=str(exc)
         )
-    logger.info("begin-execution: recorded start=%s", start)
+    logger.info("Recorded ExecutionMeta start=%s", start)
     return 0
 
 

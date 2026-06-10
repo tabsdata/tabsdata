@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import logging
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -62,6 +63,8 @@ from tabsdatak.server._tdrunner.function._lib.response import (
 from tabsdatak.server._tdrunner.function.commands.report_completion.error import (
     ReportCompletionErrorCode,
 )
+
+logger = logging.getLogger(__name__)
 
 VERSION = "0.1.0"
 INFO = "report-completion — submit the function-run response to the API server"
@@ -204,12 +207,31 @@ def main(args: argparse.Namespace) -> int:
     state_dir = Path(args.state_dir)
     out_path = Path(args.out)
 
+    logger.info("Building and submitting function-run response")
     request = load_request_or_raise(request_path, ReportCompletionErrorCode.RC_1)
     manifest_entries = load_outputs_manifest_or_raise(
         outputs_manifest_path, ReportCompletionErrorCode.RC_2
     )
+    logger.debug(
+        "Outputs manifest has %d entr%s: %s; request declares %d output "
+        "table(s): %s + %d system_output table(s): %s",
+        len(manifest_entries),
+        "y" if len(manifest_entries) == 1 else "ies",
+        manifest_entries,
+        len(request.output),
+        request.output,
+        len(request.system_output),
+        request.system_output,
+    )
 
     response = _build_response_payload(request, manifest_entries, state_dir)
+    data_count = sum(1 for e in response.output if e.info is not None)
+    nodata_count = len(response.output) - data_count
+    logger.info(
+        "Built response: %d table(s) with data, %d NoData",
+        data_count,
+        nodata_count,
+    )
 
     # Write the response to --out FIRST so it's persisted even when
     # the subsequent POST fails.
@@ -219,6 +241,7 @@ def main(args: argparse.Namespace) -> int:
         raise ReportCompletionErrorCode.RC_4.exception(
             cause=exc, path=out_path, detail=str(exc)
         )
+    logger.debug("Wrote response.yaml to %s", out_path)
 
     # TODO follow-up: the apiserver expects a `CallbackRequest`
     # (`ResponseMessagePayload<WorkerOutput>`) envelope with
@@ -228,7 +251,9 @@ def main(args: argparse.Namespace) -> int:
     # bind but the body still produces an apiserver 400. The body
     # wrapping/transformation lives in the next ticket.
     body = response.model_dump_json().encode("utf-8")
+    logger.info("POSTing response to apiserver at %s", url)
     _post(url, authorization, body)
+    logger.info("Reported completion to apiserver successfully")
     return 0
 
 

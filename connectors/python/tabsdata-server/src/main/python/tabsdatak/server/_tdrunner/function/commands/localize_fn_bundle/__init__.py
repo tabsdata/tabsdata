@@ -21,6 +21,7 @@ parse run-env.yaml, and does not spawn any subprocess of the venv itself.
 from __future__ import annotations
 
 import argparse
+import logging
 import tarfile
 from pathlib import Path
 
@@ -40,6 +41,8 @@ from tabsdatak.server._tdrunner.function._lib.transporter_request import (
 from tabsdatak.server._tdrunner.function.commands.localize_fn_bundle.error import (
     LocalizeFnBundleErrorCode,
 )
+
+logger = logging.getLogger(__name__)
 
 VERSION = "0.1.0"
 INFO = (
@@ -96,6 +99,12 @@ def _fetch_via_transporter(
     transporter_response: Path,
 ) -> None:
     copy_req = build_bundle_fetch_request(request, bundle_archive)
+    logger.debug(
+        "Bundle fetch transporter request: %d pair(s): %s -> %s",
+        len(copy_req.pairs),
+        copy_req.pairs,
+        transporter_request,
+    )
     write_transporter_request(copy_req, transporter_request)
     try:
         rc = run_transporter(transporter_request, transporter_response)
@@ -103,6 +112,7 @@ def _fetch_via_transporter(
         raise LocalizeFnBundleErrorCode.LFB_2.exception(cause=exc, detail=str(exc))
     if rc != 0:
         raise LocalizeFnBundleErrorCode.LFB_3.exception(rc=rc)
+    logger.debug("Bundle archive downloaded to %s", bundle_archive)
 
 
 def _extract(archive: Path, dest_dir: Path) -> None:
@@ -124,11 +134,20 @@ def main(args: argparse.Namespace) -> int:
     transporter_request = Path(args.transporter_request)
     transporter_response = Path(args.transporter_response)
 
+    logger.info("Localizing function bundle")
     request = load_request_or_raise(request_path, LocalizeFnBundleErrorCode.LFB_1)
+    logger.debug(
+        "Bundle URI: %s -> archive %s, extract dir %s",
+        request.info.function_bundle.uri,
+        bundle_archive,
+        bundle_dir,
+    )
     _fetch_via_transporter(
         request, bundle_archive, transporter_request, transporter_response
     )
+    logger.info("Extracting bundle archive into %s", bundle_dir)
     _extract(bundle_archive, bundle_dir)
+    logger.info("Function bundle localized")
     return 0
 
 

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import inspect
+import logging
 from pathlib import Path
 from urllib.parse import urlparse
 from urllib.request import url2pathname
@@ -39,6 +40,8 @@ from tabsdatak.server._tdrunner.function.commands.run_source_plugin.error import
     RunSourcePluginErrorCode,
 )
 from tabsdatak.spi import SrcPluginCtx
+
+logger = logging.getLogger(__name__)
 
 # TODO: After all commands are done, version will be unified in a single source of
 #  truth file.
@@ -241,9 +244,15 @@ def main(args: argparse.Namespace) -> int:
     inputs_manifest = Path(args.inputs_manifest)
     state_dir = Path(args.state_dir)
 
+    logger.info("Running source plugin")
     request = load_request_or_raise(request_path, RunSourcePluginErrorCode.RSP_1)
     info = _load_function_def(bundle_dir)
     plugin = _resolve_plugin(info)
+    logger.debug(
+        "Resolved Src plugin %s for connector %s",
+        type(plugin).__name__,
+        type(info.conn).__name__,
+    )
     ctx = _SrcContext(
         work_dir=out_dir,
         exec_plan_id=str(request.info.execution_id),
@@ -257,11 +266,19 @@ def main(args: argparse.Namespace) -> int:
     hydrate_ctx_from_state_or_raise(
         ctx, request, state_dir, error_code=RunSourcePluginErrorCode.RSP_9
     )
+    logger.debug("Hydrated SrcPluginCtx from %s; work_dir=%s", state_dir, out_dir)
+
+    logger.info("Invoking source plugin's read_in")
     produced = _invoke_read_in(plugin, ctx, info.conn, info.source)
+    logger.info("Source plugin produced %d slot(s)", len(produced))
+
     drain_ctx_to_state_or_raise(
         ctx, request, state_dir, error_code=RunSourcePluginErrorCode.RSP_10
     )
+    logger.debug("Drained ctx scratch to %s", state_dir)
+
     _write_inputs_manifest(info, produced, inputs_manifest)
+    logger.info("Wrote raw inputs manifest to %s", inputs_manifest)
     return 0
 
 

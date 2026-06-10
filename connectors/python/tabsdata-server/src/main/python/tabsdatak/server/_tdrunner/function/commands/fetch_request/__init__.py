@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -34,6 +35,8 @@ from tabsdatak.server._tdrunner.function._lib.command import (
 from tabsdatak.server._tdrunner.function.commands.fetch_request.error import (
     FetchRequestErrorCode,
 )
+
+logger = logging.getLogger(__name__)
 
 VERSION = "2.0.0"
 INFO = (
@@ -132,8 +135,11 @@ def main(args: argparse.Namespace) -> int:
     method = resolve_value(args.resolver_method)
     authorization = resolve_value(args.resolver_authorization)
     request_file = Path(args.request_file)
+    logger.info("Fetching function-run request from the apiserver")
+    logger.debug("Resolver: %s %s -> %s", method, url, request_file)
 
     body = _fetch(url, method, authorization)
+    logger.debug("Received %d bytes from resolver", len(body))
     try:
         envelope = json.loads(body)
     except json.JSONDecodeError as exc:
@@ -154,6 +160,7 @@ def main(args: argparse.Namespace) -> int:
         raise FetchRequestErrorCode.FR_3.exception(
             cause=exc, path=request_file, detail=str(exc)
         )
+    logger.info("Wrote request.yaml to %s", request_file)
     return 0
 
 

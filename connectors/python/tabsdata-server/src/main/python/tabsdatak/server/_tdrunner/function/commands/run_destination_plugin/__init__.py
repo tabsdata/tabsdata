@@ -22,6 +22,7 @@ concrete frames for every output slot.
 from __future__ import annotations
 
 import argparse
+import logging
 from pathlib import Path
 
 from tabsdatak._connectors import get_dest
@@ -41,6 +42,8 @@ from tabsdatak.server._tdrunner.function.commands.run_destination_plugin.error i
     RunDestinationPluginErrorCode,
 )
 from tabsdatak.spi import DestContext
+
+logger = logging.getLogger(__name__)
 
 VERSION = "0.1.0"
 INFO = (
@@ -150,14 +153,28 @@ def main(args: argparse.Namespace) -> int:
     bundle_dir = Path(args.bundle_dir)
     outputs_manifest_path = Path(args.outputs_manifest)
 
+    logger.info("Running destination plugin")
     request = load_request_or_raise(request_path, RunDestinationPluginErrorCode.RDP_1)
     info = _load_function_def(bundle_dir)
     plugin = _resolve_plugin(info)
+    logger.debug(
+        "Resolved Dest plugin %s for connector %s",
+        type(plugin).__name__,
+        type(info.conn).__name__,
+    )
 
     entries = load_outputs_manifest_or_raise(
         outputs_manifest_path, RunDestinationPluginErrorCode.RDP_7
     )
     tables = _tables_from_manifest(entries)
+    logger.debug(
+        "Outputs manifest has %d entries: %s; "
+        "passing %d table frame(s) to the plugin: %s",
+        len(entries),
+        entries,
+        len(tables),
+        tables,
+    )
 
     ctx = _DestContext(
         work_dir=bundle_dir,
@@ -169,7 +186,9 @@ def main(args: argparse.Namespace) -> int:
         function_id=str(request.info.function_run_id),
         function_name=request.info.function,
     )
+    logger.info("Invoking destination plugin's write_out")
     _invoke_write_out(plugin, ctx, info.conn, info.destination, tables)
+    logger.info("Destination plugin completed")
     return 0
 
 

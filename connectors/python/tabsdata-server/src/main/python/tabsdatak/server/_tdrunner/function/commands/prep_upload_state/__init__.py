@@ -13,6 +13,7 @@ disk to cloud storage, and writes that request to ``--out``. Step 7b
 from __future__ import annotations
 
 import argparse
+import logging
 from pathlib import Path
 
 from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
@@ -25,6 +26,8 @@ from tabsdatak.server._tdrunner.function._lib.transporter_request import (
 from tabsdatak.server._tdrunner.function.commands.prep_upload_state.error import (
     PrepUploadStateErrorCode,
 )
+
+logger = logging.getLogger(__name__)
 
 VERSION = "0.1.0"
 INFO = (
@@ -68,12 +71,30 @@ def main(args: argparse.Namespace) -> int:
     state_dir = Path(args.state_dir)
     out_path = Path(args.out)
 
+    logger.info("Preparing upload-state transporter request")
     request = load_request_or_raise(request_path, PrepUploadStateErrorCode.PUS_1)
+    logger.debug(
+        "Request declares %d system_output state slot(s): %s; state_dir=%s",
+        len(request.system_output),
+        request.system_output,
+        state_dir,
+    )
 
     try:
         copy_req = build_upload_state_request(request, state_dir)
     except UnsupportedSchemeError as exc:
         raise PrepUploadStateErrorCode.PUS_2.exception(cause=exc, detail=str(exc))
+    if not copy_req.pairs:
+        logger.debug(
+            "Upload-state request has no pairs (no state files present on "
+            "disk for any declared system_output slot)"
+        )
+    else:
+        logger.debug(
+            "Upload-state copy request has %d pair(s): %s",
+            len(copy_req.pairs),
+            copy_req.pairs,
+        )
 
     try:
         write_transporter_request(copy_req, out_path)
@@ -81,6 +102,7 @@ def main(args: argparse.Namespace) -> int:
         raise PrepUploadStateErrorCode.PUS_3.exception(
             cause=exc, path=out_path, detail=str(exc)
         )
+    logger.info("Upload-state preparation complete; wrote %s", out_path)
     return 0
 
 

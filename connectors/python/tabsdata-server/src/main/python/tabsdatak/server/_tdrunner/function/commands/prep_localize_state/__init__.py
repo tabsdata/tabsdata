@@ -25,6 +25,7 @@ Also writes two manifests describing what was localized:
 from __future__ import annotations
 
 import argparse
+import logging
 from pathlib import Path
 
 from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
@@ -46,6 +47,8 @@ from tabsdatak.server._tdrunner.function._lib.transporter_request import (
 from tabsdatak.server._tdrunner.function.commands.prep_localize_state.error import (
     PrepLocalizeStateErrorCode,
 )
+
+logger = logging.getLogger(__name__)
 
 VERSION = "0.1.0"
 INFO = (
@@ -157,12 +160,26 @@ def main(args: argparse.Namespace) -> int:
     inputs_manifest_path = Path(args.inputs_manifest)
     state_manifest_path = Path(args.state_manifest)
 
+    logger.info("Preparing localize-state transporter request and manifests")
     request = load_request_or_raise(request_path, PrepLocalizeStateErrorCode.PLS_1)
+    logger.debug(
+        "Request has %d input slot(s): %s; %d system_input slot(s): %s",
+        len(request.input),
+        request.input,
+        len(request.system_input),
+        request.system_input,
+    )
 
     try:
         copy_req = build_localize_state_request(request, in_dir, state_dir)
     except UnsupportedSchemeError as exc:
         raise PrepLocalizeStateErrorCode.PLS_2.exception(cause=exc, detail=str(exc))
+    logger.debug(
+        "Localize-state copy request has %d pair(s): %s; writing to %s",
+        len(copy_req.pairs),
+        copy_req.pairs,
+        out_path,
+    )
 
     try:
         write_transporter_request(copy_req, out_path)
@@ -178,6 +195,13 @@ def main(args: argparse.Namespace) -> int:
         raise PrepLocalizeStateErrorCode.PLS_4.exception(
             cause=exc, path=inputs_manifest_path, detail=str(exc)
         )
+    logger.debug(
+        "Wrote inputs manifest with %d entr%s: %s -> %s",
+        len(inputs_entries),
+        "y" if len(inputs_entries) == 1 else "ies",
+        inputs_entries,
+        inputs_manifest_path,
+    )
 
     state_entries = _build_state_manifest_entries(request, state_dir)
     try:
@@ -186,6 +210,14 @@ def main(args: argparse.Namespace) -> int:
         raise PrepLocalizeStateErrorCode.PLS_5.exception(
             cause=exc, path=state_manifest_path, detail=str(exc)
         )
+    logger.debug(
+        "Wrote state manifest with %d entr%s: %s -> %s",
+        len(state_entries),
+        "y" if len(state_entries) == 1 else "ies",
+        state_entries,
+        state_manifest_path,
+    )
+    logger.info("Localize-state preparation complete")
     return 0
 
 

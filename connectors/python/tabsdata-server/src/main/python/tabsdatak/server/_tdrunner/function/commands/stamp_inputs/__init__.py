@@ -22,6 +22,7 @@ runner step so the data-shape boundary between "plugin output" and
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
@@ -42,6 +43,8 @@ from tabsdatak.server._tdrunner.function._lib.system_columns import (
 from tabsdatak.server._tdrunner.function.commands.stamp_inputs.error import (
     StampInputsErrorCode,
 )
+
+logger = logging.getLogger(__name__)
 
 # TODO: After all commands are done, version will be unified in a single
 #  source of truth file.
@@ -141,17 +144,38 @@ def main(args: argparse.Namespace) -> int:
     enriched_dir = Path(args.enriched_dir)
     enriched_manifest = Path(args.enriched_inputs_manifest)
 
+    logger.info("Stamping framework system columns onto inputs")
     request = load_request_or_raise(request_path, StampInputsErrorCode.SI_1)
     entries = load_inputs_manifest_or_raise(inputs_manifest, StampInputsErrorCode.SI_2)
+    logger.debug(
+        "Loaded inputs manifest with %d slot(s): %s from %s",
+        len(entries),
+        entries,
+        inputs_manifest,
+    )
 
     execution = str(request.info.execution_id)
     transaction = str(request.info.transaction_id)
     timestamp = request.info.triggered_on_datetime
+    logger.debug(
+        "Stamping with execution=%s transaction=%s timestamp=%s",
+        execution,
+        transaction,
+        timestamp,
+    )
 
     enriched_entries: list[dict] = []
+    total_stamped = 0
     for slot_idx, entry in enumerate(entries):
         name = entry.get(MANIFEST_NAME_KEY, f"slot{slot_idx}")
         files = entry.get(MANIFEST_FILES_KEY) or []
+        logger.debug(
+            "Slot %d (%s): %d file(s) to stamp: %s",
+            slot_idx,
+            name,
+            len(files),
+            files,
+        )
 
         slot_dir = enriched_dir / f"slot{slot_idx}"
         enriched_files: list[str] = []
@@ -167,6 +191,7 @@ def main(args: argparse.Namespace) -> int:
                 timestamp=timestamp,
             )
             enriched_files.append(str(dest_path.absolute()))
+            total_stamped += 1
 
         enriched_entries.append({
             MANIFEST_NAME_KEY: name,
@@ -179,6 +204,12 @@ def main(args: argparse.Namespace) -> int:
         raise StampInputsErrorCode.SI_6.exception(
             cause=exc, path=enriched_manifest, detail=str(exc)
         )
+    logger.info(
+        "Stamped %d input parquet(s) across %d slot(s); enriched manifest at %s",
+        total_stamped,
+        len(enriched_entries),
+        enriched_manifest,
+    )
     return 0
 
 

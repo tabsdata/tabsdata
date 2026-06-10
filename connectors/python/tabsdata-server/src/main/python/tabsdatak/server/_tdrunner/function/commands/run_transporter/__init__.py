@@ -11,6 +11,7 @@ exec's `td_transporter --request <PATH>` while running a liveness ticker.
 from __future__ import annotations
 
 import argparse
+import logging
 from pathlib import Path
 
 from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
@@ -21,6 +22,8 @@ from tabsdatak.server._tdrunner.function._lib.transporter_proc import (
 from tabsdatak.server._tdrunner.function.commands.run_transporter.error import (
     RunTransporterErrorCode,
 )
+
+logger = logging.getLogger(__name__)
 
 VERSION = "0.1.0"
 INFO = "run-transporter — exec td_transporter with the given request YAML"
@@ -60,10 +63,17 @@ def _build_parser():
 def main(args: argparse.Namespace) -> int:
     request_yaml = Path(args.request)
     report = Path(args.report)
+    logger.info("Running td_transporter")
+    logger.debug("Request: %s  Report: %s", request_yaml, report)
     try:
-        return run_transporter(request_yaml, report)
+        rc = run_transporter(request_yaml, report)
     except TransporterNotFoundError as exc:
         raise RunTransporterErrorCode.RUN_TR_1.exception(cause=exc, detail=str(exc))
+    if rc == 0:
+        logger.info("td_transporter completed successfully")
+    else:
+        logger.warning("td_transporter exited with non-zero code %d", rc)
+    return rc
 
 
 if __name__ == "__main__":  # pragma: no cover
