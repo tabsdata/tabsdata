@@ -196,13 +196,23 @@ def _write_inputs_manifest(
     parameters) is owned by `PublisherInfo._check_func_signature` and
     is already guaranteed by the time this code runs; not re-checked
     here.
+
+    A negative `cardinality` (the `-1` sentinel) means the source's
+    slot count is decided dynamically at read time -- e.g. a
+    stream-stage manifest source, whose slot count comes from the
+    manifest, not from static config -- so the produced-vs-declared
+    check is skipped and the plugin's output is trusted as-is.
     """
     src_def = get_src(type(info.source))
     cardinality = src_def.cardinality(info.source)
     func = _unwrap_info(info.func)
     parameters = list(inspect.signature(func).parameters)
 
-    if len(produced) != cardinality:
+    if cardinality < 0:
+        # Dynamic slot count (-1 sentinel): trust whatever the plugin
+        # produced rather than validating against a declared count.
+        cardinality = len(produced)
+    elif len(produced) != cardinality:
         raise RunSourcePluginErrorCode.RSP_7.exception(
             returned=len(produced), expected=cardinality
         )

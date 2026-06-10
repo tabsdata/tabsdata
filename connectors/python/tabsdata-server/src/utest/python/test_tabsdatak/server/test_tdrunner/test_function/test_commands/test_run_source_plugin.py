@@ -20,6 +20,7 @@ import importlib
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -489,6 +490,25 @@ def test_write_inputs_manifest_cardinality_mismatch_raises(tmp_path, fixture_pub
     produced = [[Path("/x.parquet")], [Path("/y.parquet")]]
     with pytest.raises(PluginFailedError):
         _write_inputs_manifest(fixture_publisher, produced, out)
+
+
+def test_write_inputs_manifest_negative_cardinality_skips_check(
+    tmp_path, fixture_publisher, monkeypatch
+):
+    """A source whose `cardinality` returns -1 (dynamic slot count --
+    e.g. a stream-stage manifest source) bypasses the
+    produced-vs-declared slot-count check: a fixed cardinality of 1
+    would reject the 0 slots produced here, but -1 accepts it and the
+    plugin's output is trusted verbatim."""
+    monkeypatch.setattr(
+        f"{_MOD}.get_src",
+        lambda _cls: SimpleNamespace(cardinality=lambda _src: -1),
+    )
+    out = tmp_path / "manifest.yaml"
+    # Zero slots: a contract violation under a fixed cardinality of 1,
+    # but accepted here because the source declared -1.
+    _write_inputs_manifest(fixture_publisher, [], out)
+    assert yaml.safe_load(out.read_text()) == {"inputs": []}
 
 
 def test_write_inputs_manifest_oserror_raises_manifest_write_failed(
