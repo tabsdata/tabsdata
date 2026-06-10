@@ -225,6 +225,57 @@ def test_import_one_glob_pattern_in_basename(tmp_path: Path):
 
 
 # ---------------------------------------------------------------------------
+# _input.wildcard_copy_one
+# ---------------------------------------------------------------------------
+
+
+def test_wildcard_copy_one_max_files_drains_one_at_a_time(tmp_path: Path):
+    src_dir = _input_dir(tmp_path)
+    out_dir = _output_dir(tmp_path)
+
+    # Three matching files; mtimes are distinct enough to order them.
+    import os as _os
+    import time as _time
+
+    for i, name in enumerate(("a.parquet", "b.parquet", "c.parquet")):
+        _write_input_parquet(src_dir / name, [{"id": i}])
+        _time.sleep(0.01)
+        # Pin a strictly increasing mtime so ordering is deterministic.
+        stamp = 1_700_000_000 + i
+        _os.utime(src_dir / name, (stamp, stamp))
+
+    source = _transporter.TransporterLocalFile(
+        _transporter.path_to_file_uri(src_dir) + "*.parquet",
+    )
+    # A baseline older than every file so all three are candidates.
+    initial_lastmod = "2020-01-01T00:00:00.000000+00:00"
+
+    # First call consumes only the oldest matched file.
+    report = _input_module.wildcard_copy_one(
+        source=source,
+        target_dir=out_dir,
+        initial_lastmod=initial_lastmod,
+        max_files=1,
+    )
+    targets = [f["to"] for f in report.files if isinstance(f, dict) and f.get("to")]
+    assert len(targets) == 1
+    assert targets[0].endswith("a.parquet")
+    assert report.lastmod_info is not None
+
+    # Resuming from the cursor consumes the next oldest file.
+    report = _input_module.wildcard_copy_one(
+        source=source,
+        target_dir=out_dir,
+        initial_lastmod=initial_lastmod,
+        lastmod_info=report.lastmod_info,
+        max_files=1,
+    )
+    targets = [f["to"] for f in report.files if isinstance(f, dict) and f.get("to")]
+    assert len(targets) == 1
+    assert targets[0].endswith("b.parquet")
+
+
+# ---------------------------------------------------------------------------
 # _output.copy_one
 # ---------------------------------------------------------------------------
 

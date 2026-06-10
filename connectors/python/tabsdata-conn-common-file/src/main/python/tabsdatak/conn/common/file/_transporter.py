@@ -237,6 +237,19 @@ class V1CopyFormat:
     format: TransporterFormat
 
 
+@dataclass(frozen=True, slots=True)
+class V1WildcardCopyFormat:
+    # ``source`` is a wildcard location (its file name may contain a glob);
+    # ``target`` is the base directory each matched file is copied under.
+    # ``max_files`` caps how many of the matched files are consumed (the
+    # oldest by last-modified time); ``None`` means no limit.
+    source: TransporterLocation
+    target: TransporterLocation
+    initial_lastmod: str | None = None
+    lastmod_info: str | None = None
+    max_files: int | None = None
+
+
 # --- Response (shared by all flavors) -----------------------------
 
 
@@ -320,6 +333,23 @@ def _v1_copy_to_dict(env: V1CopyFormat) -> dict:
         "source_target_pairs": env.source_target_pairs,
         "format": env.format,
         "parallelism": None,
+    }
+
+
+def _v1_wildcard_copy_to_dict(env: V1WildcardCopyFormat) -> dict:
+    return {
+        "source": {
+            "location": env.source,
+            "initial_lastmod": env.initial_lastmod,
+            "lastmod_info": env.lastmod_info,
+        },
+        # ``target`` is a bare ``Location<BaseUrl>`` (the base directory),
+        # not wrapped in a ``{location: ...}`` mapping like the import target.
+        "target": env.target,
+        "decompression": None,
+        "compression": None,
+        "parallelism": None,
+        "max_files": env.max_files,
     }
 
 
@@ -410,6 +440,15 @@ def _copy_repr(
     return dumper.represent_mapping("!CopyV1", _v1_copy_to_dict(env))
 
 
+def _wildcard_copy_repr(
+    dumper: yaml.SafeDumper,
+    env: V1WildcardCopyFormat,
+) -> yaml.nodes.MappingNode:
+    return dumper.represent_mapping(
+        "!WildcardCopyV1", _v1_wildcard_copy_to_dict(env)
+    )
+
+
 _COMMON_REPRESENTERS: tuple[tuple[type, Callable], ...] = (
     (TransporterEnv, _env_repr),
     (TransporterLiteral, _literal_repr),
@@ -445,6 +484,9 @@ def build_dumper(
 # Pre-built dumpers, one per request flavor.
 INPUT_DUMPER = build_dumper(extra=((V1ImportFormat, _import_repr),))
 OUTPUT_DUMPER = build_dumper(extra=((V1CopyFormat, _copy_repr),))
+WILDCARD_COPY_DUMPER = build_dumper(
+    extra=((V1WildcardCopyFormat, _wildcard_copy_repr),)
+)
 
 
 def dump_request_yaml(
@@ -475,6 +517,7 @@ def _build_loader() -> type[yaml.SafeLoader]:
 
     _Loader.add_constructor("!ImportV1", _ctor)
     _Loader.add_constructor("!CopyV1", _ctor)
+    _Loader.add_constructor("!WildcardCopyV1", _ctor)
     return _Loader
 
 
