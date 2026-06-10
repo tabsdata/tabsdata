@@ -49,6 +49,7 @@ from tabsdatak.conn.db2._cdc_impl import DEFAULT_FETCH_SIZE, SqlReplicaIngester
 from tabsdatak.spi import (
     Explorer,
     StreamSrcDef,
+    StreamStageSrc,
 )
 
 # Allowed CDC src_cfg keys -- the Literal annotation gates typos at
@@ -151,7 +152,7 @@ DB2_CDC_STREAM_SRC = StreamSrcDef(
     src_version="v1",
     src=Db2CdcStreamSrc,
     cardinality=lambda src: len(src.tables),
-    uses_manifest=True,
     plugin=Db2CdcStreamSrcPlugin,
+    publisher_src=StreamStageSrc,
     explorer=Db2CdcExplorer,
 )

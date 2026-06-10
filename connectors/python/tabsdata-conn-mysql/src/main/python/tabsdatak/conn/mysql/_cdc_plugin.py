@@ -51,6 +51,7 @@ from tabsdatak.conn.mysql._cdc_impl import BinlogIngester
 from tabsdatak.spi import (
     Explorer,
     StreamSrcDef,
+    StreamStageSrc,
 )
 
 # Allowed CDC src_cfg keys -- the Literal annotation gates typos at
@@ -148,7 +149,7 @@ MYSQL_CDC_STREAM_SRC = StreamSrcDef(
     src_version="v1",
     src=MySQLCdcStreamSrc,
     cardinality=lambda src: len(src.tables),
-    uses_manifest=True,
     plugin=MySQLCdcStreamSrcPlugin,
+    publisher_src=StreamStageSrc,
     explorer=MySQLCdcExplorer,
 )

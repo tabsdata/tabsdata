@@ -50,6 +50,7 @@ from tabsdatak.spi import (
     StreamSrcDef,
     StreamSrcPlugin,
     StreamSrcPluginCtx,
+    StreamStageSrc,
 )
 
 logger = logging.getLogger(__name__)
@@ -335,9 +336,9 @@ KAFKA_STREAM_SRC = StreamSrcDef(
     src=KafkaStreamSrc,
     # One Kafka topic -> one output table; cardinality is always 1.
     cardinality=lambda src: 1,
-    # Unlike the legacy connector, the new port uses the
-    # manifest-stage contract the CDC sources use.
-    uses_manifest=True,
     plugin=KafkaStreamSrcPlugin,
+    # Like the CDC sources, the new port ingests its staged batches
+    # through the default stream-stage manifest source.
+    publisher_src=StreamStageSrc,
     explorer=KafkaExplorer,
 )

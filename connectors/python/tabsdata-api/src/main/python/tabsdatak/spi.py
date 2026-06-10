@@ -27,6 +27,7 @@ trx.
 
 from __future__ import annotations
 
+import importlib
 from abc import ABC, abstractmethod
 from enum import Enum
 from pathlib import Path
@@ -36,6 +37,7 @@ from typing import (
     Callable,
     Type,
     TypeAlias,
+    cast,
     get_type_hints,
 )
 
@@ -240,6 +242,96 @@ class StreamSrcPluginCtx(PluginCtx, ABC):
         and/or invoking it for its side effect)."""
 
 
+class _StreamStageSrcConn(Conn):
+    pass
+
+
+class StreamStageSrc(Src):
+    pass
+
+
+class StreamStageSrcPlugin(SrcPlugin[_StreamStageSrcConn, StreamStageSrc]):
+    """Batch-side (publisher) source that ingests a stream stage's manifest.
+
+    A :class:`StreamSrcPlugin` only *stages* data: its long-running
+    ``run`` accumulates batches into Tabsdata's storage staging area and
+    records each one in a manifest file. Those staged batches are not
+    pulled into a flow by the stream plugin itself -- every
+    :class:`StreamSrc` requires a paired **hidden** :class:`SrcPlugin`
+    that runs on the batch (publisher) side and consumes the staged data.
+    That hidden source plugin must be this ``StreamStageSrcPlugin`` (or a
+    subclass of it); a :class:`StreamSrcDef` names it via its
+    ``publisher_src`` :class:`StreamStageSrc` binding.
+
+    On each execution this plugin scans the connection's staging area for
+    manifest files and ingests the data files a manifest lists. It
+    consumes exactly **one manifest per execution -- the oldest manifest
+    that has not been consumed yet** -- advancing a per-flow cursor so the
+    next execution picks up the following one. When no unconsumed manifest
+    is found it produces zero output slots.
+
+    Customising ingestion
+    ---------------------
+    The manifest scan + file ingestion is fixed and lives in
+    :meth:`read_in`, which **must not be overridden**. A subclass that
+    needs special logic over the incoming data -- e.g. de-duplicating
+    rows -- overrides :meth:`process_files` instead. ``read_in`` ingests
+    the manifest's files and passes them to :meth:`process_files`, whose
+    (possibly transformed) return value becomes the plugin's output.
+
+    Subclassing checklist
+    ---------------------
+    To register a customised stream-stage source:
+
+    * Subclass ``StreamStageSrcPlugin`` and override :meth:`process_files`.
+    * Subclass :class:`StreamStageSrc` to serve as the source's config
+      type.
+    * Create a :class:`SrcDef` binding the two and declare it as a
+      ``tabsdatak.connectors`` entry point. Because the number of output
+      slots is decided by the manifest at read time (not by static
+      config), its ``cardinality`` **must be a lambda returning ``-1``**
+      -- the sentinel that disables the framework's
+      produced-vs-declared slot-count check -- and its ``explorer`` must
+      be ``None``.
+
+    The concrete manifest scan/ingest is implemented by
+    ``ManifestStageSrcPlugin`` in the ``tabsdata-conn-stream-stage``
+    package; it is imported lazily so ``tabsdata-api`` keeps no
+    dependency on the connector."""
+
+    def read_in(
+        self,
+        ctx: SrcPluginCtx,
+        conn: _StreamStageSrcConn,
+        src: StreamStageSrc,
+    ) -> list[list[TableFileSpec]]:
+        """Ingest the oldest unconsumed manifest's files.
+
+        Final -- subclasses must **not** override this; customise the
+        ingested data via :meth:`process_files` instead."""
+        plugin_cls = getattr(
+            importlib.import_module("tabsdatak.conn.stream.stage"),
+            "ManifestStageSrcPlugin",
+        )
+        plugin = cast(SrcPlugin, plugin_cls())
+        return self.process_files(ctx, plugin.read_in(ctx, conn, src))
+
+    # noinspection PyMethodMayBeStatic
+    def process_files(
+        self,
+        _ctx: SrcPluginCtx,
+        files: list[list[TableFileSpec]],
+    ) -> list[list[TableFileSpec]]:
+        """Hook for subclass post-processing of the ingested files
+        (e.g. de-duplication).
+
+        Receives the per-slot file lists :meth:`read_in` materialised
+        from the manifest and returns the per-slot file lists the plugin
+        ultimately yields. The base implementation returns ``files``
+        unchanged."""
+        return files
+
+
 class StreamSrcPlugin[C: Conn, SS: StreamSrc](ABC):
     """Plugin implementing the long-running side of a
     :class:`StreamSrc` subclass (CDC, log tail, queue tail)."""
@@ -419,11 +511,13 @@ class StreamSrcDef[C: Conn, S: StreamSrc]:
     :param cardinality: Callable returning the number of output
         slots ``src`` declares (typically
         ``lambda s: len(s.tables)``).
-    :param uses_manifest: ``True`` when the plugin batches via
-        :meth:`StreamSrcPluginCtx.stage` + ``commit`` (the CDC
-        sources all set this to ``True``).
     :param plugin: :class:`StreamSrcPlugin` subclass that
         implements ``run``.
+    :param publisher_src: :class:`StreamStageSrc` subclass naming the
+        hidden batch (publisher) source that ingests this stream's
+        staged manifests. Its own :class:`SrcDef` binds it to a
+        :class:`StreamStageSrcPlugin`; use :class:`StreamStageSrc`
+        itself for the default manifest behaviour.
     :param explorer: Optional :class:`Explorer` for tooling.
     """
 
@@ -432,8 +526,8 @@ class StreamSrcDef[C: Conn, S: StreamSrc]:
     conn: Type[C]
     src: Type[S]
     cardinality: Callable[[S], int]
-    uses_manifest: bool
     plugin: Type[StreamSrcPlugin]
+    publisher_src: Type[StreamStageSrc]
     explorer: Type[Explorer] | None
 
     @model_validator(mode="after")

@@ -51,6 +51,7 @@ from tabsdatak.conn.postgres._cdc_impl import (
 from tabsdatak.spi import (
     Explorer,
     StreamSrcDef,
+    StreamStageSrc,
 )
 
 # Allowed CDC src_cfg keys -- the Literal annotation gates typos at
@@ -160,7 +161,7 @@ POSTGRES_CDC_STREAM_SRC = StreamSrcDef(
     src_version="v1",
     src=PostgresCdcStreamSrc,
     cardinality=lambda src: len(src.tables),
-    uses_manifest=True,
     plugin=PostgresCdcStreamSrcPlugin,
+    publisher_src=StreamStageSrc,
     explorer=PostgresCdcExplorer,
 )
