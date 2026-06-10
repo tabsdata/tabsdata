@@ -6,8 +6,8 @@
 mod definitions {
     use crate::dxo::function::FunctionDB;
     use crate::dxo::run_metrics::RunMetrics;
-    use crate::dxo::yaml::function_runner::v2::WrittenTable;
     use crate::dxo::yaml::WorkerOutput;
+    use crate::dxo::yaml::function_runner::v2::WrittenTable;
     use crate::types::basic::{
         AtTime, ByteCount, CollectionId, CollectionName, CronMask, Enabled, EpochMs, ExecutionId,
         ExecutionName, FunctionName, FunctionVersionId, LogicalFunctionRunId,

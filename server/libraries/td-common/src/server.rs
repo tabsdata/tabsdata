@@ -7,7 +7,7 @@
 
 use crate::env::get_current_dir;
 use crate::execution_status::WorkerCallbackStatus;
-use crate::files::{get_files_in_folder_sorted_by_name, LOCK_EXTENSION, YAML_EXTENSION};
+use crate::files::{LOCK_EXTENSION, YAML_EXTENSION, get_files_in_folder_sorted_by_name};
 use crate::logging::LOG_LOCATION;
 use crate::manifest::{Inf, WORKER_INF_FILE};
 use crate::server::EtcError::EtcStoreLocationCreationError;
@@ -33,7 +33,7 @@ use serde_yaml::{Mapping, Value};
 use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Formatter;
-use std::fs::{create_dir_all, read_dir, remove_file, rename, File};
+use std::fs::{File, create_dir_all, read_dir, remove_file, rename};
 use std::io::{Error, Write};
 use std::marker::PhantomData;
 use std::ops::Deref;
