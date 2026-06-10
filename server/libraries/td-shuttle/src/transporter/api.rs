@@ -460,6 +460,13 @@ pub struct WildcardCopyRequest {
     #[builder(default)]
     compression: Option<CompressionAlgorithmSpec>,
     parallelism: Option<usize>,
+    /// Maximum number of files the wildcard match consumes; [`None`] means no
+    /// limit. The oldest (by last modified time) files are kept, and when the
+    /// source tracks last-modified state only the consumed files are marked as
+    /// processed so the rest are picked up by later requests.
+    #[serde(default)]
+    #[builder(default)]
+    max_files: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1621,6 +1628,7 @@ impl TransporterRequest {
             decompression: None,
             compression: None,
             parallelism: Some(10),
+            max_files: Some(1),
         })
     }
 
@@ -1651,6 +1659,7 @@ impl TransporterRequest {
             decompression: None,
             compression: None,
             parallelism: Some(5),
+            max_files: None,
         })
     }
 
@@ -1680,6 +1689,7 @@ impl TransporterRequest {
             decompression: Some(CompressionAlgorithmSpec::Auto),
             compression: Some(CompressionAlgorithmSpec::Zstd),
             parallelism: Some(5),
+            max_files: None,
         })
     }
 
@@ -1708,6 +1718,7 @@ impl TransporterRequest {
             decompression: Some(CompressionAlgorithmSpec::Brotli),
             compression: Some(CompressionAlgorithmSpec::Lz4),
             parallelism: None,
+            max_files: None,
         })
     }
 }
@@ -1824,6 +1835,42 @@ mod tests {
     #[test]
     fn test_response_yaml_samples() {
         super::TransporterReport::yaml_samples();
+    }
+
+    /// Locks the wire contract with the Python ``conn-common-file`` driver:
+    /// the YAML it emits for a wildcard-copy request must deserialize into a
+    /// [`TransporterRequest::WildcardCopyV1`]. Note ``source`` omits the
+    /// optional ``decompression`` field, mirroring what the driver sends.
+    #[test]
+    fn test_deserialize_python_wildcard_copy_request() {
+        use crate::transporter::api::{Location, TransporterRequest};
+
+        let yaml = r#"!WildcardCopyV1
+compression: null
+decompression: null
+max_files: 1
+parallelism: null
+source:
+  initial_lastmod: '2024-01-01T00:00:00.000000+00:00'
+  lastmod_info: null
+  location: !S3
+    configs:
+      access_key: !Env 'LOCATION_AWS_ACCESS_KEY_ID'
+      extra_configs: {}
+      region: !Env 'LOCATION_AWS_REGION'
+      secret_key: !Env 'LOCATION_AWS_SECRET_ACCESS_KEY'
+    url: s3://bucket/base/stream-manifest-*.json
+target: !LocalFile
+  url: file:///tmp/work/
+"#;
+
+        let request: TransporterRequest = serde_yaml::from_str(yaml).unwrap();
+        let TransporterRequest::WildcardCopyV1(request) = request else {
+            panic!("expected a WildcardCopyV1 request, got {request:?}");
+        };
+        assert_eq!(*request.max_files(), Some(1));
+        assert!(matches!(request.target(), Location::LocalFile { .. }));
+        assert!(matches!(request.source().location(), Location::S3 { .. }));
     }
 
     #[test]

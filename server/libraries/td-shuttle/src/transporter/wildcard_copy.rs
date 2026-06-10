@@ -91,7 +91,7 @@ pub async fn wildcard_copy(request: WildcardCopyRequest) -> Result<CopyReport, T
         },
     };
 
-    let mut finder = files_finder(location, lastmod_info);
+    let mut finder = files_finder(location, lastmod_info, *request.max_files());
 
     let files_to_copy = finder.find_files().await?;
     let files_to_copy = files_to_copy
@@ -242,6 +242,112 @@ mod tests {
         assert_eq!(file_report.to, target_url.join("file1.csv").unwrap());
         // initial_lastmod was provided, so the finder produces an updated lastmod_info
         assert!(report.lastmod_info().is_some());
+    }
+
+    /// `max_files` caps how many of the matched files a single request consumes.
+    /// With last-modified tracking the cursor only advances over the consumed
+    /// file, so a follow-up request picks up the next oldest one.
+    #[tokio::test]
+    async fn test_wildcard_copy_max_files() {
+        let dir = td_common::tdtestdir!();
+        let source_dir = dir.join("source");
+        std::fs::create_dir_all(&source_dir).unwrap();
+        let target_dir = dir.join("target");
+        std::fs::create_dir_all(&target_dir).unwrap();
+
+        // Three files, created oldest-first so last-modified ordering is stable.
+        let f1 = File::create(source_dir.join("file1.csv")).unwrap();
+        sleep(std::time::Duration::from_millis(5));
+        let _f2 = File::create(source_dir.join("file2.csv")).unwrap();
+        sleep(std::time::Duration::from_millis(5));
+        let _f3 = File::create(source_dir.join("file3.csv")).unwrap();
+
+        let wildcard_path = source_dir.join("file*.csv");
+        let source_url = Url::from_file_path(&wildcard_path).unwrap();
+        let target_url = Url::from_directory_path(&target_dir).unwrap();
+        let initial_lastmod = f1.metadata().unwrap().modified().unwrap();
+
+        let new_request = |lastmod_info: Option<String>| {
+            let source = WildcardSourceBuilder::default()
+                .location(Location::LocalFile {
+                    url: WildcardUrl(source_url.clone()),
+                })
+                .initial_lastmod(Some(initial_lastmod.into()))
+                .lastmod_info(lastmod_info)
+                .build()
+                .unwrap();
+            WildcardCopyRequestBuilder::default()
+                .source(source)
+                .target(Location::LocalFile {
+                    url: BaseUrl(target_url.clone()),
+                })
+                .parallelism(None)
+                .max_files(Some(1usize))
+                .build()
+                .unwrap()
+        };
+
+        // First request consumes only the oldest matched file.
+        let report = wildcard_copy(new_request(None)).await.unwrap();
+        assert_eq!(report.files().len(), 1);
+        assert_eq!(report.files()[0].to, target_url.join("file1.csv").unwrap());
+        let cursor = report.lastmod_info().clone();
+        assert!(cursor.is_some());
+
+        // Resuming from the cursor consumes the next oldest file, not file1 again.
+        let report = wildcard_copy(new_request(cursor)).await.unwrap();
+        assert_eq!(report.files().len(), 1);
+        assert_eq!(report.files()[0].to, target_url.join("file2.csv").unwrap());
+    }
+
+    /// When the match has more files than `max_files`, a single request keeps
+    /// the `max_files` *oldest* (by last modified time) ones.
+    #[tokio::test]
+    async fn test_wildcard_copy_max_files_keeps_oldest() {
+        let dir = td_common::tdtestdir!();
+        let source_dir = dir.join("source");
+        std::fs::create_dir_all(&source_dir).unwrap();
+        let target_dir = dir.join("target");
+        std::fs::create_dir_all(&target_dir).unwrap();
+
+        // file1 (oldest) .. file3 (newest).
+        let _f1 = File::create(source_dir.join("file1.csv")).unwrap();
+        sleep(std::time::Duration::from_millis(5));
+        let _f2 = File::create(source_dir.join("file2.csv")).unwrap();
+        sleep(std::time::Duration::from_millis(5));
+        let _f3 = File::create(source_dir.join("file3.csv")).unwrap();
+
+        let wildcard_path = source_dir.join("file*.csv");
+        let source_url = Url::from_file_path(&wildcard_path).unwrap();
+        let target_url = Url::from_directory_path(&target_dir).unwrap();
+
+        // No last-modified tracking; exercise the plain truncate-to-oldest path.
+        let source = WildcardSourceBuilder::default()
+            .location(Location::LocalFile {
+                url: WildcardUrl(source_url.clone()),
+            })
+            .initial_lastmod(None)
+            .lastmod_info(None)
+            .build()
+            .unwrap();
+        let request = WildcardCopyRequestBuilder::default()
+            .source(source)
+            .target(Location::LocalFile {
+                url: BaseUrl(target_url.clone()),
+            })
+            .parallelism(None)
+            .max_files(Some(2usize))
+            .build()
+            .unwrap();
+
+        let report = wildcard_copy(request).await.unwrap();
+        let copied: std::collections::HashSet<Url> =
+            report.files().iter().map(|f| f.to.clone()).collect();
+        assert_eq!(copied.len(), 2);
+        // The two oldest are kept; the newest (file3) is left behind.
+        assert!(copied.contains(&target_url.join("file1.csv").unwrap()));
+        assert!(copied.contains(&target_url.join("file2.csv").unwrap()));
+        assert!(!copied.contains(&target_url.join("file3.csv").unwrap()));
     }
 
     use crate::transporter::compression::CompressionAlgorithm;

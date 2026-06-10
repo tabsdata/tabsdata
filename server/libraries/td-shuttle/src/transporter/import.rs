@@ -26,6 +26,16 @@ pub trait FileFinder {
     /// Finds the [`ObjectMeta`] for the files to import.
     async fn find(&mut self) -> Result<Vec<ObjectMeta>, TransporterError>;
 
+    /// Maximum number of files [`find_files`] returns; [`None`] means no limit.
+    ///
+    /// When set, the finder keeps the oldest (by last modified time) files up
+    /// to the limit. For the last-modified-aware finders the limit is also
+    /// applied while updating the cursor, so only the files actually returned
+    /// are marked as processed.
+    fn max_files(&self) -> Option<usize> {
+        None
+    }
+
     /// Finds the files to import and returns their [`ObjectStore`] paths.
     async fn find_files(&mut self) -> Result<Vec<(Url, ObjectMeta)>, TransporterError> {
         let mut base_url = self.import_url();
@@ -46,10 +56,16 @@ pub trait FileFinder {
             url
         };
 
+        let max_files = self.max_files();
         self.find().await.map(|oms| {
-            oms.into_iter()
+            let mut files = oms
+                .into_iter()
                 .map(|m| (to_url(&m.location), m))
-                .collect::<Vec<_>>()
+                .collect::<Vec<_>>();
+            if let Some(max) = max_files {
+                files.truncate(max);
+            }
+            files
         })
     }
 
@@ -61,11 +77,15 @@ pub trait FileFinder {
 /// A finder that locates files to import from a single file URL without last modified check.
 struct SingleFileFinder {
     location: Location<WildcardUrl>,
+    max_files: Option<usize>,
 }
 
 impl SingleFileFinder {
-    pub fn new(location: Location<WildcardUrl>) -> Self {
-        Self { location }
+    pub fn new(location: Location<WildcardUrl>, max_files: Option<usize>) -> Self {
+        Self {
+            location,
+            max_files,
+        }
     }
 }
 
@@ -73,6 +93,10 @@ impl SingleFileFinder {
 impl FileFinder for SingleFileFinder {
     fn import_url(&self) -> Url {
         self.location.url()
+    }
+
+    fn max_files(&self) -> Option<usize> {
+        self.max_files
     }
 
     async fn find(&mut self) -> Result<Vec<ObjectMeta>, TransporterError> {
@@ -106,22 +130,35 @@ struct SingleFileLastModFinder {
 }
 
 impl SingleFileLastModFinder {
-    pub fn new(location: Location<WildcardUrl>, last_modified_info: LastModifiedInfoState) -> Self {
+    pub fn new(
+        location: Location<WildcardUrl>,
+        last_modified_info: LastModifiedInfoState,
+        max_files: Option<usize>,
+    ) -> Self {
         Self {
-            finder: SingleFileFinder::new(location),
+            finder: SingleFileFinder::new(location, max_files),
             last_modified_info,
         }
     }
 }
 
 /// Finds files to import and checks if they are newer than the last modified information.
+///
+/// When the inner finder declares a [`FileFinder::max_files`] limit, the cursor
+/// is only advanced over the files actually returned: iteration stops once the
+/// limit's worth of newer files have been collected, so the remaining (older,
+/// still-unprocessed) files are picked up by a later invocation.
 async fn find_using_last_modified<F: FileFinder>(
     finder: &mut F,
     lastmod_info: &mut LastModifiedInfoState,
 ) -> Result<Vec<ObjectMeta>, TransporterError> {
+    let max_files = finder.max_files();
     let matching_files = finder.find().await?;
     let mut newer_files = Vec::with_capacity(matching_files.len());
     for file_meta in matching_files {
+        if max_files.is_some_and(|max| newer_files.len() >= max) {
+            break;
+        }
         let file_url = file_meta.location.to_string();
         let file_lastmod = file_meta.last_modified;
         if lastmod_info.check_and_set(finder.import_url().path(), &file_url, &file_lastmod)? {
@@ -137,6 +174,10 @@ impl FileFinder for SingleFileLastModFinder {
         self.finder.import_url()
     }
 
+    fn max_files(&self) -> Option<usize> {
+        self.finder.max_files()
+    }
+
     async fn find(&mut self) -> Result<Vec<ObjectMeta>, TransporterError> {
         find_using_last_modified(&mut self.finder, &mut self.last_modified_info).await
     }
@@ -149,11 +190,15 @@ impl FileFinder for SingleFileLastModFinder {
 /// A finder that locates files to import based on a file pattern (wildcard) in the URL.
 struct PatternFileFinder {
     location: Location<WildcardUrl>,
+    max_files: Option<usize>,
 }
 
 impl PatternFileFinder {
-    pub fn new(location: Location<WildcardUrl>) -> Self {
-        Self { location }
+    pub fn new(location: Location<WildcardUrl>, max_files: Option<usize>) -> Self {
+        Self {
+            location,
+            max_files,
+        }
     }
 }
 
@@ -161,6 +206,10 @@ impl PatternFileFinder {
 impl FileFinder for PatternFileFinder {
     fn import_url(&self) -> Url {
         self.location.url()
+    }
+
+    fn max_files(&self) -> Option<usize> {
+        self.max_files
     }
 
     async fn find(&mut self) -> Result<Vec<ObjectMeta>, TransporterError> {
@@ -213,9 +262,13 @@ struct PatternLastModFileFinder {
 }
 
 impl PatternLastModFileFinder {
-    pub fn new(location: Location<WildcardUrl>, last_modified_info: LastModifiedInfoState) -> Self {
+    pub fn new(
+        location: Location<WildcardUrl>,
+        last_modified_info: LastModifiedInfoState,
+        max_files: Option<usize>,
+    ) -> Self {
         Self {
-            finder: PatternFileFinder::new(location),
+            finder: PatternFileFinder::new(location, max_files),
             last_modified_info,
         }
     }
@@ -225,6 +278,10 @@ impl PatternLastModFileFinder {
 impl FileFinder for PatternLastModFileFinder {
     fn import_url(&self) -> Url {
         self.finder.import_url()
+    }
+
+    fn max_files(&self) -> Option<usize> {
+        self.finder.max_files()
     }
 
     async fn find(&mut self) -> Result<Vec<ObjectMeta>, TransporterError> {
@@ -239,17 +296,18 @@ impl FileFinder for PatternLastModFileFinder {
 pub fn files_finder(
     location: &Location<WildcardUrl>,
     last_modified_info: Option<LastModifiedInfoState>,
+    max_files: Option<usize>,
 ) -> Box<dyn FileFinder + Send + Sync> {
     let location = location.clone();
     let finder: Box<dyn FileFinder + Send + Sync> = if location.url().has_wildcard() {
         match last_modified_info {
-            Some(info) => Box::new(PatternLastModFileFinder::new(location, info)),
-            None => Box::new(PatternFileFinder::new(location)),
+            Some(info) => Box::new(PatternLastModFileFinder::new(location, info, max_files)),
+            None => Box::new(PatternFileFinder::new(location, max_files)),
         }
     } else {
         match last_modified_info {
-            Some(info) => Box::new(SingleFileLastModFinder::new(location, info)),
-            None => Box::new(SingleFileFinder::new(location)),
+            Some(info) => Box::new(SingleFileLastModFinder::new(location, info, max_files)),
+            None => Box::new(SingleFileFinder::new(location, max_files)),
         }
     };
     finder
@@ -282,7 +340,7 @@ async fn find_and_import<I: Importer>(
         },
     };
 
-    let mut finder = files_finder(location, lastmod_info);
+    let mut finder = files_finder(location, lastmod_info, None);
 
     let files_to_import = finder.find_files().await?;
     tracing::info!("Found {} files to import", files_to_import.len());
@@ -346,7 +404,7 @@ mod tests {
         let location = Location::LocalFile {
             url: WildcardUrl(url.clone()),
         };
-        let mut finder = SingleFileFinder::new(location);
+        let mut finder = SingleFileFinder::new(location, None);
 
         assert_eq!(finder.import_url(), url);
 
@@ -384,7 +442,7 @@ mod tests {
         let location = Location::LocalFile {
             url: WildcardUrl(url.clone()),
         };
-        let mut finder = PatternFileFinder::new(location);
+        let mut finder = PatternFileFinder::new(location, None);
 
         assert_eq!(finder.import_url(), url);
 
@@ -456,7 +514,7 @@ mod tests {
             url: WildcardUrl(url.clone()),
         };
         let lastmod_info = LastModifiedInfoState::new(last_mod);
-        let mut finder = SingleFileLastModFinder::new(location, lastmod_info);
+        let mut finder = SingleFileLastModFinder::new(location, lastmod_info, None);
 
         assert_eq!(finder.import_url(), url);
 
@@ -522,7 +580,7 @@ mod tests {
             url: WildcardUrl(url.clone()),
         };
         let lastmod_info = LastModifiedInfoState::new(last_mod);
-        let mut finder = PatternLastModFileFinder::new(location, lastmod_info);
+        let mut finder = PatternLastModFileFinder::new(location, lastmod_info, None);
 
         assert_eq!(finder.import_url(), url);
 
