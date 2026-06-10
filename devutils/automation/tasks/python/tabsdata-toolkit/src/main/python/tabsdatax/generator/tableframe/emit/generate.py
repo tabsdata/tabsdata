@@ -381,6 +381,18 @@ def _generate_tests(
 # real receiver for; namespaces / when-then are mock-only.
 _VALUE_LIVE = {"Expr": 'Expr._wrap(pl.col("a"))'}
 
+# Members whose no-arg live call would block on an interactive GUI or otherwise
+# misbehave; the mapped string is spliced in as the live-call arguments so the
+# "_runs" smoke test stays headless. show_graph defaults to show=True, which
+# opens a blocking matplotlib window under a pytest worker.
+_LIVE_ARGS = {"show_graph": "show=False"}
+
+
+def _live_call(receiver: str, name: str, is_property: bool) -> str:
+    if is_property:
+        return f"{receiver}.{name}"
+    return f"{receiver}.{name}({_LIVE_ARGS.get(name, '')})"
+
 
 def _live_test(safe: str, result_stmt: str) -> list[str]:
     return [
@@ -441,7 +453,7 @@ def _render_value_test(syms: list[Symbol], root: str) -> str:
                     f"    getattr(inner, {name!r}).assert_called()",
                 ]
             if receiver is not None:
-                stmt = f"result = {receiver}.{name}" + ("" if sym.is_property else "()")
+                stmt = f"result = {_live_call(receiver, name, sym.is_property)}"
                 lines += _live_test(safe, stmt)
     return "\n".join(lines) + "\n"
 
@@ -470,7 +482,9 @@ def _render_functions_test(syms: list[Symbol], root: str) -> str:
             f"    _module.{name}()",
             "    spy.assert_called()",
         ]
-        lines += _live_test(safe, f"result = _module.{name}()")
+        lines += _live_test(
+            safe, f"result = {_live_call('_module', name, sym.is_property)}"
+        )
     return "\n".join(lines) + "\n"
 
 
@@ -513,7 +527,7 @@ def _render_tableframe_test(syms: list[Symbol], root: str) -> str:
             else:
                 call = f"frame.{name}()"
             lines += [f"    {call}", f"    frame._lf.{name}.assert_called()"]
-        stmt = f"result = _live_frame().{name}" + ("" if sym.is_property else "()")
+        stmt = f"result = {_live_call('_live_frame()', name, sym.is_property)}"
         lines += _live_test(safe, stmt)
     return "\n".join(lines) + "\n"
 
@@ -553,7 +567,10 @@ def _render_lazygroupby_test(syms: list[Symbol], root: str) -> str:
             f"    group_by.{name}()",
             f"    group_by._lgb.{name}.assert_called()",
         ]
-        lines += _live_test(safe, f"result = _live_group_by().{name}()")
+        lines += _live_test(
+            safe,
+            f"result = {_live_call('_live_group_by()', name, sym.is_property)}",
+        )
     return "\n".join(lines) + "\n"
 
 

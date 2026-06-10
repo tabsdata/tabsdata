@@ -314,7 +314,7 @@ def test_show_graph_delegates():
 
 def test_show_graph_runs():
     try:
-        result = _live_frame().show_graph()
+        result = _live_frame().show_graph(show=False)
     except Exception as exc:  # noqa: BLE001
         if "tableframe:" in str(exc):
             raise  # a real leak, not an argument problem
