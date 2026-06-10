@@ -700,6 +700,8 @@ class Wal2JsonIngester(CdcIngester):
             new_values=new_values,
             old_values=old_values,
             offset=offset,
+            segment=offset.lsn if offset is not None else 0,
+            ordinal=sequence,
             schema=schema_version,
         )
 

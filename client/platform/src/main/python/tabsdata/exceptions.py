@@ -2571,6 +2571,13 @@ class ErrorCode(Enum):
             "to any before-image column: {} | {} | {} (prefix: {!r})"
         ),
     }
+    CDCDB28 = {
+        "code": "CDCDB2-008",
+        "message": (
+            "DB2 commit sequence {} exceeds the {}-digit decimal limit of the "
+            "offset position column for {!r}"
+        ),
+    }
 
     # Cloud staging configuration errors
     CSC1 = {

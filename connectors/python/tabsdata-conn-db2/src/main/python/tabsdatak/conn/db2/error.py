@@ -118,3 +118,8 @@ class Db2ErrorCode(ErrorCode):
         Db2RuntimeException,
         "Db2 sqlreplica event: unknown IBMSNAP_OPERATION {op!r} for {table!r}",
     )  # poll_changes: row carries an unrecognised operation code
+    DB2_23 = ErrorDef(
+        Db2RuntimeException,
+        "Db2 commit sequence {commitseq!r} exceeds the {digits}-digit decimal "
+        "limit of the offset position column for {table!r}",
+    )  # poll_changes: IBMSNAP_COMMITSEQ too large for decimal128 position

@@ -249,6 +249,13 @@ class BinlogIngester(CdcIngester):
             return gtid
         return f"{uuid}:1-{seq}"
 
+    @staticmethod
+    def transaction_number(gtid: str | None) -> int:
+        if not gtid:
+            return 0
+        _, _, number = gtid.rpartition(":")
+        return int(number)
+
     def first_binlog_file(self) -> str:
         connection_settings = self.stream_connection_settings()
         conn = pymysql.connect(
@@ -424,6 +431,8 @@ class BinlogIngester(CdcIngester):
                             new_values=new_values,
                             old_values=old_values,
                             offset=GtidOffset(gtid=gtid),
+                            segment=self.transaction_number(gtid),
+                            ordinal=seq,
                             schema=schema_version,
                         )
         except Exception as error:
@@ -510,6 +519,8 @@ class BinlogIngester(CdcIngester):
                                 new_values=new_values,
                                 old_values=old_values,
                                 offset=GtidOffset(gtid=gtid),
+                                segment=self.transaction_number(gtid),
+                                ordinal=seq,
                                 schema=schema_version,
                             )
                         )

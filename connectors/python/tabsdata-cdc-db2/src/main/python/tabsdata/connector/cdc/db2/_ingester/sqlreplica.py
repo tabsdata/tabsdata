@@ -91,6 +91,12 @@ SYSTEM_COLUMNS = [
 
 COMMITSEQ_ORIGIN = b"\x00" * 16
 
+# The seg and ord columns are decimal128, which holds 38 decimal digits. A full
+# 16-byte IBMSNAP_COMMITSEQ or IBMSNAP_INTENTSEQ can in theory reach 39 digits;
+# guard so an out-of-range value fails loudly rather than silently overflowing.
+POSITION_MAX_DIGITS = 38
+POSITION_LIMIT = 10**POSITION_MAX_DIGITS
+
 FETCH_SIZE = 10000
 POLL_INTERVAL_SECONDS = 1.0
 
@@ -517,10 +523,26 @@ class SqlReplicationIngester(CdcIngester):
                 self.localize_values(old_values)
             else:
                 old_values = {column.name: None for column in tracked.columns}
+            segment = int.from_bytes(commit_seq, byteorder="big")
+            ordinal = int.from_bytes(intent_seq, byteorder="big")
+            if segment >= POSITION_LIMIT:
+                raise CdcError(
+                    ErrorCode.CDCDB28,
+                    commit_seq.hex(),
+                    POSITION_MAX_DIGITS,
+                    tracked.data_table.qualified,
+                )
+            if ordinal >= POSITION_LIMIT:
+                raise CdcError(
+                    ErrorCode.CDCDB28,
+                    intent_seq.hex(),
+                    POSITION_MAX_DIGITS,
+                    tracked.data_table.qualified,
+                )
             yield CdcDataChange(
                 operation=op,
                 transaction=commit_seq.hex(),
-                sequence=int.from_bytes(intent_seq, byteorder="big"),
+                sequence=ordinal,
                 timestamp=commit_ts,
                 table=tracked.data_table.qualified,
                 new_values=new_values,
@@ -528,6 +550,8 @@ class SqlReplicationIngester(CdcIngester):
                 offset=CommitSeqOffset(
                     commits={tracked.cdc_table.qualified: commit_seq}
                 ),
+                segment=segment,
+                ordinal=ordinal,
                 schema=schema_version,
             )
 

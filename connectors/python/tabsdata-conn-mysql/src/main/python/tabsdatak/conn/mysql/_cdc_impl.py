@@ -545,6 +545,13 @@ class BinlogIngester(CdcIngester):
             return gtid
         return f"{uuid}:1-{seq}"
 
+    @staticmethod
+    def _transaction_number(gtid: str | None) -> int:
+        if not gtid:
+            return 0
+        _, _, number = gtid.rpartition(":")
+        return int(number)
+
     def _first_binlog_file(self) -> str:
         settings = self._stream_connection_settings()
         conn = pymysql.connect(
@@ -741,6 +748,8 @@ class BinlogIngester(CdcIngester):
                         new_values=new_values,
                         old_values=old_values,
                         offset=GtidOffset(gtid=gtid or ""),
+                        segment=self._transaction_number(gtid),
+                        ordinal=seq,
                         schema=schema_version,
                     )
 
@@ -823,6 +832,8 @@ class BinlogIngester(CdcIngester):
                             new_values=new_values,
                             old_values=old_values,
                             offset=GtidOffset(gtid=gtid or ""),
+                            segment=self._transaction_number(gtid),
+                            ordinal=seq,
                             schema=schema_version,
                         )
                     )

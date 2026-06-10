@@ -5,7 +5,7 @@
 """Shared helpers for the ``td`` CLI.
 
 Also hosts a temporary stand-in for :func:`tdabout` that mirrors the
-legacy ``tabsdata._utils.internal._about.tdabout`` surface so the
+legacy ``tabsdatak.common._information.about.dabout`` surface so the
 ``td`` migration can land without dragging in the explicitly-excluded
 ``_utils/internal/`` subtree. Placeholder pending a proper v2 port
 (see TODO block below).

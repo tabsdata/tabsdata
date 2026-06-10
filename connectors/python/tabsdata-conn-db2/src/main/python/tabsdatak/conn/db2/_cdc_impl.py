@@ -85,6 +85,12 @@ POLL_INTERVAL_SECONDS = 1.0
 # 16 zero bytes -- the "before any commit" baseline IBMSNAP uses.
 COMMITSEQ_ORIGIN = b"\x00" * 16
 
+# The seg and ord columns are decimal128, which holds 38 decimal digits. A full
+# 16-byte IBMSNAP_COMMITSEQ or IBMSNAP_INTENTSEQ can in theory reach 39 digits;
+# guard so an out-of-range value fails loudly rather than silently overflowing.
+POSITION_MAX_DIGITS = 38
+POSITION_LIMIT = 10**POSITION_MAX_DIGITS
+
 
 # Internal start-position shape consumed by the ingester after the
 # plugin has converted the user-facing ``Db2CdcStartFromSpec``.
@@ -817,10 +823,24 @@ class SqlReplicaIngester(CdcIngester):
                 self.localize_values(old_values)
             else:
                 old_values = {col.name: None for col in tracked.columns}
+            segment = int.from_bytes(commit_seq, byteorder="big")
+            ordinal = int.from_bytes(intent_seq, byteorder="big")
+            if segment >= POSITION_LIMIT:
+                raise Db2ErrorCode.DB2_23.exception(
+                    commitseq=commit_seq.hex(),
+                    digits=POSITION_MAX_DIGITS,
+                    table=tracked.data_table.qualified,
+                )
+            if ordinal >= POSITION_LIMIT:
+                raise Db2ErrorCode.DB2_23.exception(
+                    commitseq=intent_seq.hex(),
+                    digits=POSITION_MAX_DIGITS,
+                    table=tracked.data_table.qualified,
+                )
             yield CdcDataChange(
                 operation=op,
                 transaction=commit_seq.hex(),
-                sequence=int.from_bytes(intent_seq, byteorder="big"),
+                sequence=ordinal,
                 timestamp=commit_ts,
                 table=tracked.data_table.qualified,
                 new_values=new_values,
@@ -828,6 +848,8 @@ class SqlReplicaIngester(CdcIngester):
                 offset=CommitSeqOffset(
                     commits={tracked.cdc_table.qualified: commit_seq},
                 ),
+                segment=segment,
+                ordinal=ordinal,
                 schema=schema_version,
             )
 

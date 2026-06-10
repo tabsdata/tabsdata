@@ -49,6 +49,8 @@ class CdcDataChange:
     new_values: dict
     old_values: dict | None
     offset: CdcOffset | None = None
+    segment: int = 0
+    ordinal: int = 0
 
     def __sizeof__(self) -> int:
         size = object.__sizeof__(self)
@@ -56,6 +58,8 @@ class CdcDataChange:
         size += sys.getsizeof(self.transaction)
         size += sys.getsizeof(self.sequence)
         size += sys.getsizeof(self.timestamp)
+        size += sys.getsizeof(self.segment)
+        size += sys.getsizeof(self.ordinal)
         size += sys.getsizeof(self.table)
         size += sys.getsizeof(self.schema)
         size += sys.getsizeof(self.new_values)
