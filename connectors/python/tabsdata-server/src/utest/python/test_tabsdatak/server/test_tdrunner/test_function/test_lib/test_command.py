@@ -8,7 +8,7 @@ import argparse
 
 import pytest
 
-from tabsdatak.server._tdrunner.function._lib.cli import (
+from tabsdatak.server._tdrunner.function._lib.command import (
     build_parser,
     resolve_flag,
     resolve_value,

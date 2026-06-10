@@ -20,7 +20,7 @@ from urllib.request import url2pathname
 
 from tabsdatak._connectors import get_src
 from tabsdatak._info import KIND_PUBLISHER_DEF, PublisherInfo, _unwrap_info
-from tabsdatak.server._tdrunner.function._lib.cli import build_parser, command
+from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
 from tabsdatak.server._tdrunner.function._lib.function_def import (
     load_function_def_or_raise,
 )

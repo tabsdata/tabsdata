@@ -35,7 +35,7 @@ from pathlib import Path
 
 import pyarrow.parquet as pq
 
-from tabsdatak.server._tdrunner.function._lib.cli import (
+from tabsdatak.server._tdrunner.function._lib.command import (
     build_parser,
     command,
     resolve_value,

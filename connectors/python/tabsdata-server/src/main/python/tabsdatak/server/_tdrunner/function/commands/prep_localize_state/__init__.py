@@ -27,7 +27,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from tabsdatak.server._tdrunner.function._lib.cli import build_parser, command
+from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
 from tabsdatak.server._tdrunner.function._lib.endpoint import UnsupportedSchemeError
 from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
     MANIFEST_FILES_KEY,

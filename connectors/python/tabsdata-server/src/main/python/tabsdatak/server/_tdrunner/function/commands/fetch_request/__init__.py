@@ -26,7 +26,7 @@ from tenacity import (
     wait_fixed,
 )
 
-from tabsdatak.server._tdrunner.function._lib.cli import (
+from tabsdatak.server._tdrunner.function._lib.command import (
     build_parser,
     command,
     resolve_value,

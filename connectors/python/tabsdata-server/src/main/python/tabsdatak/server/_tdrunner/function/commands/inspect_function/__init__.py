@@ -16,7 +16,7 @@ import argparse
 import logging
 import os
 
-from tabsdatak.server._tdrunner.function._lib.cli import build_parser, command
+from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
 
 logger = logging.getLogger(__name__)
 

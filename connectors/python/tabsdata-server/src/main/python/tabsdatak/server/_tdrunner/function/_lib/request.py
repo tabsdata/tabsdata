@@ -231,7 +231,7 @@ def load_request_or_raise(path: Path, error_code: ErrorCode) -> Request:
     detail=str(exc))``. The bound exception (a
     :class:`~tabsdatak.server._tdrunner.function._lib.errors.CommandException`
     subclass) carries the per-command ``exit_code`` on its class;
-    :func:`~tabsdatak.server._tdrunner.function._lib.cli.run_command`
+    :func:`~tabsdatak.server._tdrunner.function._lib.command.run_command`
     maps it to the process exit code.
 
     Templates that bind ``error_code`` can reference ``{path}`` and

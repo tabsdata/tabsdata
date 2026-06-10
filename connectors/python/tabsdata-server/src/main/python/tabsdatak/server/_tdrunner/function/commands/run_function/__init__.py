@@ -46,7 +46,7 @@ from tabsdatak._info import (
     TransformerInfo,
     _unwrap_info,
 )
-from tabsdatak.server._tdrunner.function._lib.cli import build_parser, command
+from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
 from tabsdatak.server._tdrunner.function._lib.function_def import (
     load_function_def_or_raise,
 )

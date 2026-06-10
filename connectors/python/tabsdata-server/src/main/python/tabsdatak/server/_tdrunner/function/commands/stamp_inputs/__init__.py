@@ -27,7 +27,7 @@ from pathlib import Path
 
 import polars as pl
 
-from tabsdatak.server._tdrunner.function._lib.cli import build_parser, command
+from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
 from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
     MANIFEST_FILES_KEY,
     MANIFEST_NAME_KEY,

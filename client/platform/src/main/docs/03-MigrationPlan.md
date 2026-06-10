@@ -183,7 +183,7 @@ Copies from `_tabsserver` are minimal cherry-picks per Q1.
 **Scope:** the spec heart of `01-CommandBasics.md`. Wraps argparse and
 resolves arguments uniformly.
 
-**Code:** `tabsdatak/server/_tdrunner/function/_lib/cli.py`
+**Code:** `tabsdatak/server/_tdrunner/function/_lib/command.py`
 
 * `resolve_value(arg: str) -> str` — handles `<V>`, `env:<VAR>` (raises
   `UndefinedEnvError` mapped to exit 2), `val:<V>`.
@@ -704,10 +704,10 @@ Each command is a thin `main()` in
 `test_tabsdatak/server/test_tdrunner/test_function/test_commands/test_<name>.py`.
 Every command:
 
-* builds its parser via `_lib.cli.build_parser`,
+* builds its parser via `_lib.command.build_parser`,
 * starts a `_lib.liveness.Liveness`,
 * maps `CommandError` subclasses to exit codes via
-  `_lib.cli.run_command`,
+  `_lib.command.run_command`,
 * logs via `_lib.logging`.
 
 ### 2.1 — `fetch-request` ✅
