@@ -209,14 +209,39 @@ spec:
             - name: shared
               mountPath: /tabsdata/shared
       containers:
-        - name: 1000-report
+        - name: 1000-report-completion
           image: function
           imagePullPolicy: IfNotPresent
-          command: ["/bin/sh", "-c"]
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:TDK_PYENV_SCRIPTS_FOLDER}/td_report_completion"]
           args:
-            - |
-              echo "[function-subscriber report] step=report pod=$POD_NAME"
-              echo "[function-subscriber report] done"
+            - --shared-dir
+            - $(CONTAINER_ROOT)/tabsdata/shared
+            - --work-dir
+            - $(CONTAINER_ROOT)/tabsdata/work
+            - --log-config
+            - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
+            - --liveness
+            - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
+            - --responder-url
+            - env:SECRET__TD_RESPONDER_URL
+            - --responder-method
+            - env:SECRET__TD_RESPONDER_METHOD
+            - --responder-authorization
+            - env:SECRET__TD_RESPONDER_AUTHORIZATION
+            - --execution-meta-file
+            - $(CONTAINER_ROOT)/tabsdata/shared/execution_meta/execution_meta.yaml
+            - --url
+            - env:SECRET__TD_RESPONDER_URL
+            - --authorization
+            - env:SECRET__TD_RESPONDER_AUTHORIZATION
+            - --request
+            - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
+            - --outputs-manifest
+            - $(CONTAINER_ROOT)/tabsdata/shared/outputs-manifest.yaml
+            - --state-dir
+            - $(CONTAINER_ROOT)/tabsdata/shared/state
+            - --out
+            - $(CONTAINER_ROOT)/tabsdata/shared/response/response.yaml
           resources:
             requests:
               cpu: "50m"
@@ -226,6 +251,8 @@ spec:
             capabilities:
               drop: ["ALL"]
           env:
+            - name: CONTAINER_ROOT
+              value: "$(KM_CONTAINER_ROOT)"
             - name: POD_NAME
               valueFrom:
                 fieldRef:
@@ -237,12 +264,14 @@ spec:
             - name: POD_TABSDATA_INSTANCE
               value: "${sys:TDK_INSTANCE_NAME}"
           volumeMounts:
-            - name: config-report
+            - name: config-report-completion
               mountPath: /tabsdata/config
+              readOnly: true
+            - name: pyenv
+              mountPath: /tabsdata/pyenv
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
-              readOnly: true
       volumes:
         - name: config-inspect-function
           projected:
@@ -259,7 +288,7 @@ spec:
             sources:
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
-        - name: config-report
+        - name: config-report-completion
           projected:
             sources:
               - configMap:
