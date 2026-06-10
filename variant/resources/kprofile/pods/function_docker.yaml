@@ -42,7 +42,7 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       containers:
-        - name: function
+        - name: 1000-function
           image: busybox:latest
           imagePullPolicy: IfNotPresent
           command: ["sh", "-c"]

@@ -47,7 +47,7 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       initContainers:
-        - name: inspect-function
+        - name: 0000-inspect-function
           image: function
           imagePullPolicy: IfNotPresent
           command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:TDK_PYENV_SCRIPTS_FOLDER}/td_inspect_function"]
@@ -96,7 +96,7 @@ spec:
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
-        - name: fetch-request
+        - name: 0010-fetch-request
           image: function
           imagePullPolicy: IfNotPresent
           command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:TDK_PYENV_SCRIPTS_FOLDER}/td_fetch_request"]
@@ -154,7 +154,7 @@ spec:
             - name: shared
               mountPath: /tabsdata/shared
       containers:
-        - name: report
+        - name: 1000-report
           image: function
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-c"]
