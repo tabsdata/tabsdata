@@ -134,6 +134,8 @@ def _uuid7() -> str:
 # --- the stamping helper -------------------------------------------------
 
 
+# [TODO: tabsdatak.tableframe scan and sink migration] revisit when
+# tabsdatak.tableframe ships scan and sink methods.
 def stamp_system_columns(
     df: pl.DataFrame,
     *,

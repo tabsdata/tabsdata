@@ -260,6 +260,8 @@ def _scan_parquet_or_fail(path: Path) -> pl.LazyFrame:
     the right layer.
     """
     try:
+        # [TODO: tabsdatak.tableframe scan and sink migration] revisit when
+        # tabsdatak.tableframe ships scan and sink methods.
         lf = pl.scan_parquet(path)
         lf.collect_schema()
     except Exception as exc:
@@ -353,6 +355,8 @@ def _sink_outputs(
         dest = slot_dir / f"{table_name}.parquet"
         try:
             slot_dir.mkdir(parents=True, exist_ok=True)
+            # [TODO: tabsdatak.tableframe scan and sink migration] revisit when
+            # tabsdatak.tableframe ships scan and sink methods.
             value.sink_parquet(dest)
         except Exception as exc:
             raise RunFunctionErrorCode.RF_16.exception(
