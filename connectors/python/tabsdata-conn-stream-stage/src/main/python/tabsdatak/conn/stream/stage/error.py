@@ -38,8 +38,7 @@ class ManifestStageErrorCode(ErrorCode):
     )  # wildcard-copy run failure
     MANIFEST_STAGE_5 = ErrorDef(
         ManifestStageException,
-        "Invalid transporter report fetching the stream manifest "
-        "matching '{pattern}'",
+        "Invalid transporter report fetching the stream manifest matching '{pattern}'",
     )  # wildcard-copy report parse failure
     MANIFEST_STAGE_6 = ErrorDef(
         ManifestStageException,

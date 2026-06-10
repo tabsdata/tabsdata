@@ -66,6 +66,8 @@ spec:
             - env:SECRET__TD_RESPONDER_METHOD
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
+            - --execution-meta-file
+            - $(CONTAINER_ROOT)/tabsdata/shared/execution_meta/execution_meta.yaml
           resources:
             requests:
               cpu: "50m"
@@ -115,6 +117,8 @@ spec:
             - env:SECRET__TD_RESPONDER_METHOD
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
+            - --execution-meta-file
+            - $(CONTAINER_ROOT)/tabsdata/shared/execution_meta/execution_meta.yaml
             - --resolver-url
             - env:SECRET__TD_RESOLVER_URL
             - --resolver-method
@@ -172,6 +176,8 @@ spec:
             - env:SECRET__TD_RESPONDER_METHOD
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
+            - --execution-meta-file
+            - $(CONTAINER_ROOT)/tabsdata/shared/execution_meta/execution_meta.yaml
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
             - --bundle-dir
@@ -231,6 +237,8 @@ spec:
             - env:SECRET__TD_RESPONDER_METHOD
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
+            - --execution-meta-file
+            - $(CONTAINER_ROOT)/tabsdata/shared/execution_meta/execution_meta.yaml
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
             - --in-dir
@@ -292,6 +300,8 @@ spec:
             - env:SECRET__TD_RESPONDER_METHOD
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
+            - --execution-meta-file
+            - $(CONTAINER_ROOT)/tabsdata/shared/execution_meta/execution_meta.yaml
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/shuttle/request/state-download.yaml
             - --report
@@ -345,6 +355,8 @@ spec:
             - env:SECRET__TD_RESPONDER_METHOD
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
+            - --execution-meta-file
+            - $(CONTAINER_ROOT)/tabsdata/shared/execution_meta/execution_meta.yaml
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
             - --bundle-dir
@@ -404,6 +416,8 @@ spec:
             - env:SECRET__TD_RESPONDER_METHOD
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
+            - --execution-meta-file
+            - $(CONTAINER_ROOT)/tabsdata/shared/execution_meta/execution_meta.yaml
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
             - --inputs-manifest
@@ -461,6 +475,8 @@ spec:
             - env:SECRET__TD_RESPONDER_METHOD
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
+            - --execution-meta-file
+            - $(CONTAINER_ROOT)/tabsdata/shared/execution_meta/execution_meta.yaml
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
             - --bundle-dir
@@ -522,6 +538,8 @@ spec:
             - env:SECRET__TD_RESPONDER_METHOD
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
+            - --execution-meta-file
+            - $(CONTAINER_ROOT)/tabsdata/shared/execution_meta/execution_meta.yaml
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
             - --state-dir
@@ -577,6 +595,8 @@ spec:
             - env:SECRET__TD_RESPONDER_METHOD
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
+            - --execution-meta-file
+            - $(CONTAINER_ROOT)/tabsdata/shared/execution_meta/execution_meta.yaml
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/shuttle/request/state-upload.yaml
             - --report
@@ -630,6 +650,8 @@ spec:
             - env:SECRET__TD_RESPONDER_METHOD
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
+            - --execution-meta-file
+            - $(CONTAINER_ROOT)/tabsdata/shared/execution_meta/execution_meta.yaml
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
             - --outputs-manifest
@@ -685,6 +707,8 @@ spec:
             - env:SECRET__TD_RESPONDER_METHOD
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
+            - --execution-meta-file
+            - $(CONTAINER_ROOT)/tabsdata/shared/execution_meta/execution_meta.yaml
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/shuttle/request/tables-upload.yaml
             - --report

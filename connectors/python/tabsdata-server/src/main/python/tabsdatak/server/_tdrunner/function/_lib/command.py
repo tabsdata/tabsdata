@@ -160,6 +160,9 @@ def build_parser(
       call.
     * ``--responder-authorization`` — required; ``Authorization``
       header value for the responder call.
+    * ``--execution-meta-file PATH`` — required; path to the shared
+      run-metadata YAML (``ExecutionMeta``) every command in the chain
+      reads/writes.
     """
     parser = _Parser(prog=prog, description=description)
     parser.add_argument(
@@ -227,6 +230,15 @@ def build_parser(
         "--responder-authorization",
         required=True,
         help="Responder Authorization header value.",
+    )
+    parser.add_argument(
+        "--execution-meta-file",
+        required=True,
+        metavar="PATH",
+        help=(
+            "Path to the shared ExecutionMeta YAML every command in the "
+            "chain reads/writes on the shared volume."
+        ),
     )
     return parser
 

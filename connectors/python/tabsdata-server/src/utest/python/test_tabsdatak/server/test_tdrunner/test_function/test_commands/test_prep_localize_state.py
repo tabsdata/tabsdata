@@ -61,6 +61,8 @@ def _set_argv(
             responder_method,
             "--responder-authorization",
             responder_authorization,
+            "--execution-meta-file",
+            "/tmp/em.yaml",
         ],
     )
 

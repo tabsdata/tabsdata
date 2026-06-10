@@ -10,15 +10,11 @@ from pathlib import Path
 from typing import Any, Callable, cast
 
 from tabsdatak.api import Conn, Src
-from tabsdatak.conn.azureblob import AzureBlobSrcConn
-from tabsdatak.conn.azureblob import _plugin as _azureblob_plugin
+from tabsdatak.conn.azureblob import AzureBlobSrcConn, _plugin as _azureblob_plugin
 from tabsdatak.conn.common.file import _input, _output, _transporter
-from tabsdatak.conn.gcs import GCSSrcConn
-from tabsdatak.conn.gcs import _plugin as _gcs_plugin
-from tabsdatak.conn.localfile import LocalFileSrcConn
-from tabsdatak.conn.localfile import _plugin as _localfile_plugin
-from tabsdatak.conn.s3 import S3SrcConn
-from tabsdatak.conn.s3 import _plugin as _s3_plugin
+from tabsdatak.conn.gcs import GCSSrcConn, _plugin as _gcs_plugin
+from tabsdatak.conn.localfile import LocalFileSrcConn, _plugin as _localfile_plugin
+from tabsdatak.conn.s3 import S3SrcConn, _plugin as _s3_plugin
 from tabsdatak.conn.stream.stage.error import ManifestStageErrorCode
 from tabsdatak.error import ApiException
 from tabsdatak.spi import (
@@ -95,6 +91,7 @@ def _active_backend(
     run_env = getattr(mod, "run_env", None)
     env_builder: _EnvBuilder | None = None
     if run_env is not None:
+
         def env_builder() -> dict[str, str]:
             return run_env(backend_conn)
 
@@ -102,7 +99,6 @@ def _active_backend(
 
 
 class ManifestStageSrcPlugin(SrcPlugin[ManifestStageConn, ManifestStageSrc]):
-
     def read_in(
         self,
         ctx: SrcPluginCtx,
@@ -167,9 +163,7 @@ class ManifestStageSrcPlugin(SrcPlugin[ManifestStageConn, ManifestStageSrc]):
         if report.lastmod_info is not None:
             ctx.store_attr(_MANIFEST_LASTMOD_KEY, report.lastmod_info)
 
-        targets = [
-            f["to"] for f in report.files if isinstance(f, dict) and f.get("to")
-        ]
+        targets = [f["to"] for f in report.files if isinstance(f, dict) and f.get("to")]
         if not targets:
             return None
         manifest_path = _local_path(cast(str, targets[0]))

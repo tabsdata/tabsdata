@@ -444,9 +444,7 @@ def _wildcard_copy_repr(
     dumper: yaml.SafeDumper,
     env: V1WildcardCopyFormat,
 ) -> yaml.nodes.MappingNode:
-    return dumper.represent_mapping(
-        "!WildcardCopyV1", _v1_wildcard_copy_to_dict(env)
-    )
+    return dumper.represent_mapping("!WildcardCopyV1", _v1_wildcard_copy_to_dict(env))
 
 
 _COMMON_REPRESENTERS: tuple[tuple[type, Callable], ...] = (

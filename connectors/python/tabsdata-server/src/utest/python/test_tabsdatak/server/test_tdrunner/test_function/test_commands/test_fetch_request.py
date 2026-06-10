@@ -132,6 +132,8 @@ def _required_args(
         responder_method,
         "--responder-authorization",
         responder_authorization,
+        "--execution-meta-file",
+        "/tmp/em.yaml",
         "--request-file",
         str(request_file),
         "--liveness",
