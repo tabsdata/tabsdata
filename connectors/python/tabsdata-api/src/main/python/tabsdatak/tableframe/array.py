@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from polars.expr.array import ExprArrayNameSpace as _PlExprArrayNameSpace
+
 from tabsdatak.tableframe._core.base import BaseWrapper
 from tabsdatak.tableframe._core.translate import register, unwrap, wrap
 

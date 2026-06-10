@@ -441,6 +441,7 @@ class TableFrame(BaseFrame):
 
 def _load_registry() -> None:
     import importlib
+
     import polars as pl
 
     for submodule in (
@@ -463,8 +464,8 @@ def _load_registry() -> None:
     ):
         importlib.import_module(f"{__name__}.{submodule}")
 
-    from tabsdatak.tableframe._core.translate import register_factory
     from tabsdatak.tableframe._core.hooks import tableframe_of
+    from tabsdatak.tableframe._core.translate import register_factory
 
     register_factory(pl.LazyFrame, tableframe_of)
 

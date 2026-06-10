@@ -127,7 +127,8 @@ def wrap(obj):
         # Nothing should leak a raw polars object out of the delegation API.
         raise TypeError(
             f"tableframe: no wrapper for polars type "
-            f"{type(obj).__module__}.{type(obj).__qualname__} — it would leak the impl. "
+            f"{type(obj).__module__}.{type(obj).__qualname__} — "
+            f"it would leak the impl. "
             f"Wrap this type or remove the operation from the whitelist."
         )
     return obj

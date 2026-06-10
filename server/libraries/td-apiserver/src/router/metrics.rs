@@ -110,7 +110,9 @@ mod routes {
         Ok(SnapshotRequest { metrics, inflight })
     }
 
-    pub(crate) fn inflight_query_into_request(q: InflightQuery) -> Result<InflightRequest, TdError> {
+    pub(crate) fn inflight_query_into_request(
+        q: InflightQuery,
+    ) -> Result<InflightRequest, TdError> {
         let statuses = checked_inflight_statuses(q.status)?;
         Ok(InflightRequest {
             collections: DimensionFilter::new(q.collection, q.collection_exclude),
@@ -216,7 +218,6 @@ mod routes {
                 status: statuses,
             }
         }
-
 
         #[test]
         fn metrics_default_status_is_committed() {
@@ -362,7 +363,8 @@ mod routes {
         #[test]
         fn snapshot_rejects_ended_inflight_status() {
             let q = metrics_query(vec![]);
-            let Err(err) = snapshot_query_into_request(q, vec![LogicalFunctionRunStatus::Committed])
+            let Err(err) =
+                snapshot_query_into_request(q, vec![LogicalFunctionRunStatus::Committed])
             else {
                 panic!("expected NotInFlight rejection");
             };

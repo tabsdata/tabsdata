@@ -3,10 +3,13 @@
 
 from __future__ import annotations
 
-from polars.expr.whenthen import ChainedThen as _PlChainedThen
-from polars.expr.whenthen import ChainedWhen as _PlChainedWhen
-from polars.expr.whenthen import Then as _PlThen
-from polars.expr.whenthen import When as _PlWhen
+from polars.expr.whenthen import (
+    ChainedThen as _PlChainedThen,
+    ChainedWhen as _PlChainedWhen,
+    Then as _PlThen,
+    When as _PlWhen,
+)
+
 from tabsdatak.tableframe._core.base import BaseWrapper
 from tabsdatak.tableframe._core.translate import register, unwrap, wrap
 

@@ -40,9 +40,7 @@ def set(ctx: click.Context, project: str, collection: str):
         td pin set --proj sales --coll orders
     """
     if not (project or collection):
-        raise click.ClickException(
-            "Nothing to pin. Specify --proj and/or --coll."
-        )
+        raise click.ClickException("Nothing to pin. Specify --proj and/or --coll.")
     pinned = ctx.obj["pinned_objects"]
     # A collection only resolves relative to a pinned project -- one being set
     # in this same command, or a pre-existing pin. Fail fast otherwise.
@@ -55,9 +53,7 @@ def set(ctx: click.Context, project: str, collection: str):
         if project:
             previously_pinned = pinned.get("project")
             if previously_pinned and previously_pinned != project:
-                click.echo(
-                    f"Unpinning previously pinned project: {previously_pinned}"
-                )
+                click.echo(f"Unpinning previously pinned project: {previously_pinned}")
             pinned["project"] = project
             click.echo(f"Pinning project: {project}")
             # Switching to a different project orphans a collection pinned under
