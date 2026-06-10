@@ -128,17 +128,23 @@ def build_upload_state_request(
 ) -> TransporterCopyRequest:
     """Build a copy request that pushes state-out tables from local to cloud.
 
-    Tables with a `None` location are skipped.
+    Tables with a `None` location are skipped. Tables whose state file
+    is absent from ``state_dir`` are also skipped — the user function
+    may not produce state for every declared slot (e.g. a transformer
+    or subscriber whose function signature doesn't include
+    ``ctx: TrxCtx`` never drains to state), mirroring the ``!NoData``
+    convention ``report_completion`` already uses for the same case.
     """
     pairs: list[CopyPair] = []
     for table in request.system_output:
         if table.location is None:
             continue
+        source_path = state_dir / f"{table.name}.parquet"
+        if not source_path.exists():
+            continue
         pairs.append(
             CopyPair(
-                source=LocalFileEndpoint(
-                    url=_local_uri(state_dir / f"{table.name}.parquet")
-                ),
+                source=LocalFileEndpoint(url=_local_uri(source_path)),
                 target=endpoint_from_location(table.location),
             )
         )

@@ -158,23 +158,45 @@ def test_localize_skips_input_table_without_location(tmp_path):
 
 
 def test_upload_outputs_all_system_outputs(tmp_path):
-    """`OutputTable.location` is required, so every system_output gets a pair."""
+    """Every system_output whose state parquet exists on disk gets a pair."""
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    (state_dir / "t1.parquet").touch()
+    (state_dir / "t2.parquet").touch()
     r = _request(
         system_output=(
             _output_table("t1", location=Location(uri="s3://b/t1.parquet")),
             _output_table("t2", location=Location(uri="s3://b/t2.parquet")),
         )
     )
-    out = build_upload_state_request(r, tmp_path / "state")
+    out = build_upload_state_request(r, state_dir)
     assert len(out.pairs) == 2
+
+
+def test_upload_skips_system_output_whose_state_file_is_absent(tmp_path):
+    """A declared system_output slot whose state parquet is absent from
+    ``state_dir`` is silently skipped — mirrors ``report_completion``'s
+    ``!NoData`` convention for the same case. Covers transformers and
+    subscribers whose user function signature omits ``ctx: TrxCtx`` and
+    therefore never drains state for the declared slot."""
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    (state_dir / "present.parquet").touch()  # missing.parquet intentionally not created
+    r = _request(
+        system_output=(
+            _output_table("present", location=Location(uri="s3://b/present.parquet")),
+            _output_table("missing", location=Location(uri="s3://b/missing.parquet")),
+        )
+    )
+    out = build_upload_state_request(r, state_dir)
+    assert len(out.pairs) == 1
+    assert "present.parquet" in out.pairs[0].source.url
 
 
 def test_localize_handles_input_and_system_input_in_order(tmp_path):
     r = _request(
         inputs=(_input_table("i1", location=Location(uri="s3://b/i1.parquet")),),
-        system_input=(
-            _input_table("s1", location=Location(uri="s3://b/s1.parquet")),
-        ),
+        system_input=(_input_table("s1", location=Location(uri="s3://b/s1.parquet")),),
     )
     out = build_localize_state_request(r, tmp_path / "in", tmp_path / "state")
     assert len(out.pairs) == 2
@@ -309,6 +331,9 @@ def test_build_bundle_fetch_request_s3(tmp_path):
 
 
 def test_upload_uses_system_output(tmp_path):
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    (state_dir / "td-initial-values.parquet").touch()
     r = _request(
         system_output=(
             _output_table(
@@ -317,7 +342,7 @@ def test_upload_uses_system_output(tmp_path):
             ),
         )
     )
-    out = build_upload_state_request(r, tmp_path / "state")
+    out = build_upload_state_request(r, state_dir)
     pair = out.pairs[0]
     assert isinstance(pair.source, LocalFileEndpoint)
     assert "state/td-initial-values.parquet" in pair.source.url
