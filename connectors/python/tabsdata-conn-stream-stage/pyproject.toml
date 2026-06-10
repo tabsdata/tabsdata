@@ -44,6 +44,9 @@ Homepage = "https://tabsdata.com"
 Documentation = "https://docs.tabsdata.com"
 Source = "https://github.com/tabsdata/tabsdata"
 
+[project.entry-points."tabsdatak.connectors"]
+src_stream_stage = "tabsdatak.conn.stream.stage:STREAM_STAGE_SRC"
+
 [tool.pytest.ini_options]
 addopts = "--import-mode=importlib"
 consider_namespace_packages = true

@@ -21,7 +21,16 @@ from tabsdatak.conn.s3 import S3SrcConn
 from tabsdatak.conn.s3 import _plugin as _s3_plugin
 from tabsdatak.conn.stream.stage.error import ManifestStageErrorCode
 from tabsdatak.error import ApiException
-from tabsdatak.spi import SrcPlugin, SrcPluginCtx, TableFileSpec
+from tabsdatak.spi import (
+    SrcDef,
+    SrcPlugin,
+    SrcPluginCtx,
+    StreamStageSrc,
+    StreamStageSrcPlugin,
+    TableFileSpec,
+    TableMode,
+    _StreamStageSrcConn,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -244,3 +253,20 @@ def _local_path(file_uri: str) -> Path:
     if parsed.scheme == "file":
         return Path(unquote(parsed.path))
     return Path(file_uri)
+
+
+# Default stream-stage source binding. The manifest decides how many
+# output slots a run yields, so ``cardinality`` returns ``-1`` -- the
+# sentinel that disables the framework's produced-vs-declared slot-count
+# check -- and there is no explorer. ``ARRAY`` mode because a single
+# manifest slot may list more than one parquet file.
+STREAM_STAGE_SRC = SrcDef(
+    conn=_StreamStageSrcConn,
+    src_type="streamStage",
+    src_version="v1",
+    src=StreamStageSrc,
+    table_mode=TableMode.ARRAY,
+    cardinality=lambda s: -1,
+    plugin=StreamStageSrcPlugin,
+    explorer=None,
+)
