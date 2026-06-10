@@ -31,6 +31,7 @@ tabsdata-conn-s3[deps]==2.0.0
 tabsdata-conn-salesforce[deps]==2.0.0
 tabsdata-conn-snowflake[deps]==2.0.0
 tabsdata-conn-starrocks[deps]==2.0.0
+tabsdata-conn-stream-stage[deps]==2.0.0
 tabsdata-databricks[deps]==2.0.0
 tabsdata-kafka[deps]==2.0.0
 tabsdata-mongodb[deps]==2.0.0

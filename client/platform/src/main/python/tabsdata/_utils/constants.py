@@ -40,6 +40,7 @@ TABSDATA_CONNECTORS_NAMES = [
     "conn-salesforce",
     "conn-snowflake",
     "conn-starrocks",
+    "conn-stream-stage",
     "databricks",
     "kafka",
     "mongodb",

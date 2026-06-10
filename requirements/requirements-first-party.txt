@@ -31,6 +31,7 @@ tabsdata-conn-s3==2.0.0
 tabsdata-conn-salesforce==2.0.0
 tabsdata-conn-snowflake==2.0.0
 tabsdata-conn-starrocks==2.0.0
+tabsdata-conn-stream-stage==2.0.0
 tabsdata-databricks==2.0.0
 tabsdata-kafka==2.0.0
 tabsdata-mongodb==2.0.0

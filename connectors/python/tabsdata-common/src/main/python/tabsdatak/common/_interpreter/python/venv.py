@@ -77,6 +77,7 @@ TABSDATA_CONNECTORS_NAMES: tuple[str, ...] = (
     "tabsdata-conn-salesforce",
     "tabsdata-conn-snowflake",
     "tabsdata-conn-starrocks",
+    "tabsdata-conn-stream-stage",
     "tabsdata-databricks",
     "tabsdata-kafka",
     "tabsdata-mongodb",
