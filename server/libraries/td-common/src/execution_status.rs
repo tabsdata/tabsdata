@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 pub enum WorkerCallbackStatus {
     Running,
     Done,
-    Error,
     Failed,
     Stopped,
 }

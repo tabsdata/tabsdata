@@ -164,7 +164,7 @@ mod tests {
     };
     use ta_services::service::TdService;
     use td_common::execution_status::WorkerCallbackStatus;
-    use td_common::server::{MessageAction, ResponseMessagePayloadBuilder, WorkerClass};
+    use td_common::server::{MessageAction, ResponseMessagePayload};
     use td_common::status::ExitStatus;
     use td_database::pool::TdPool;
     use td_database::scoped::InProject;
@@ -263,24 +263,15 @@ mod tests {
             let worker = *w[&test_function].id;
 
             async move {
-                let response: CallbackRequest = ResponseMessagePayloadBuilder::default()
-                    .id(worker.to_string())
-                    .class(WorkerClass::Ephemeral)
-                    .worker("".to_string())
-                    .action(MessageAction::Notify)
-                    .start(123)
-                    .end(Some(456))
-                    .status(callback_status)
-                    .execution(0)
-                    .limit(None)
-                    .error(None)
-                    .exception_kind(None)
-                    .exception_message(None)
-                    .exception_error_code(None)
-                    .exit_status(ExitStatus::Success.code())
-                    .context(function_output)
-                    .build()
-                    .unwrap();
+                let response: CallbackRequest = ResponseMessagePayload {
+                    action: MessageAction::Notify,
+                    start: Some(123),
+                    end: Some(456),
+                    status: callback_status,
+                    error_message: None,
+                    exit_status: ExitStatus::Success.code(),
+                    context: function_output,
+                };
 
                 let request =
                     RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())

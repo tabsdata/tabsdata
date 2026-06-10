@@ -1531,6 +1531,7 @@ mod tests {
     use crate::test_utils::SeedEntry;
     use ta_objects::Buildable;
     use ta_objects::and;
+    use td_common::datetime::Timestamp;
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::dxo::collection::CollectionDB;
@@ -1549,8 +1550,9 @@ mod tests {
     use td_objects::dxo::table::TableDB;
     use td_objects::types::basic::{
         AtTime, BundleId, ByteCount, Decorator, DependencyPos, EpochMs, HasData, InputIdx,
-        LogicalFunctionRunStatus, LogicalPointerReason, LogicalPointerStatus, RowCount,
-        TableFunctionParamPos, TableNameDto, TableVersionCount, TransactionKey, VersionPos,
+        LogicalFunctionRunStatus, LogicalPointerReason, LogicalPointerStatus,
+        PhysicalFunctionRunStatus, RowCount, TableFunctionParamPos, TableNameDto,
+        TableVersionCount, TransactionKey, VersionPos,
     };
     use td_objects::types::basic::{CollectionName, ProjectId, UserId};
     use td_security::ENCODED_ID_SYSTEM;
@@ -1601,9 +1603,9 @@ mod tests {
 
     async fn stamp_buckets_on_pfr(db: &TdPool, pfr: &PhysicalFunctionRunDB) -> Result<(), TdError> {
         let bucket = EpochMs::try_from(IN_WINDOW)?;
-        let ended_on = AtTime::try_from(td_common::datetime::Timestamp::try_from(IN_WINDOW)?)?;
+        let ended_on = AtTime::try_from(Timestamp::try_from(IN_WINDOW)?)?;
         let update = UpdatePhysicalFunctionRunDB::builder()
-            .status(td_objects::types::basic::PhysicalFunctionRunStatus::Done)
+            .status(PhysicalFunctionRunStatus::Done)
             .ended_on(Some(ended_on))
             .ended_on_hour_ms(Some(bucket))
             .ended_on_day_ms(Some(bucket))

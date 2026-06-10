@@ -24,9 +24,7 @@ use std::{env, fmt};
 use td_common::env::{check_flag_env, get_current_dir};
 use td_common::logging::LOG_LOCATION;
 use td_common::server::WorkerName::Function;
-use td_common::server::{
-    ResponseMessagePayloadBuilderError, WORKER_ERR_FILE, WORKER_OUT_FILE, WorkerClass,
-};
+use td_common::server::{WORKER_ERR_FILE, WORKER_OUT_FILE, WorkerClass};
 use td_error::TdError;
 use td_python::venv::{
     ENV_CONDA_PREFIX, ENV_PYENV_VERSION, ENV_PYTHONHOME, ENV_PYTHONPATH, ENV_UV_VENV,
@@ -315,16 +313,10 @@ pub enum RunnerError {
     BadStatus { status: StatusCode },
     #[error("Error generating HTTP request: {cause}")]
     BadRequest { cause: Error },
-    #[error("Unable to build the response message payload: {cause}")]
-    WrongPayload {
-        cause: ResponseMessagePayloadBuilderError,
-    },
     #[error("Invalid header name.")]
     InvalidHeaderNameError(#[from] InvalidHeaderName),
     #[error("Invalid header value.")]
     InvalidHeaderValueError(#[from] InvalidHeaderValue),
-    #[error("An error occurred building a response message: {0}")]
-    ResponseBuilderError(#[from] ResponseMessagePayloadBuilderError),
     #[error("An error occurred serializing an struct to yaml: {0}")]
     YamlError(#[from] serde_yaml::Error),
     #[error("An error occurred serializing an struct to json: {0}")]

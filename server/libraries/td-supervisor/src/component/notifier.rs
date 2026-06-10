@@ -28,7 +28,7 @@ use td_common::server::{
     UNKNOWN_RUN,
 };
 use td_common::status::ExitStatus;
-use tracing::{debug, info};
+use tracing::debug;
 
 /// Notifies the execution result of a run worker.
 #[allow(clippy::too_many_arguments)]
@@ -72,21 +72,6 @@ impl WorkerNotifier for Callback {
             Ok(header_map)
         }
 
-        // ToDo: temporarily, we omit sending notifications for errors, and we wait either for final failure (Fail) or
-        //       eventual success (Done). Thus, we currently do not notify to the API Server error statuses (Error).
-        if matches!(status, WorkerCallbackStatus::Error) {
-            info!(
-                "Omitting notification of finalization for state {:?} of worker:: name: '{}' - id: '{}'",
-                WorkerCallbackStatus::Error,
-                match &worker {
-                    Some(worker) => worker.describer().name().to_string(),
-                    None => "No worker...".to_string(),
-                },
-                request_message.id,
-            );
-            return Ok(failed);
-        };
-
         debug!(
             "Notifying worker status change:\n\
             - Worker:\n{}\n\
@@ -111,7 +96,7 @@ impl WorkerNotifier for Callback {
         );
         match self {
             Callback::Http(callback) => {
-                let request_payload = match request_message.payload {
+                let _request_payload = match request_message.payload {
                     OrchestratorRequestMessagePayload(payload) => payload,
                     OrchestratorResponseMessagePayload(_)
                     | OrchestratorExceptionMessagePayload(_)
@@ -186,19 +171,11 @@ impl WorkerNotifier for Callback {
                     }
                 };
                 let mut response_payload = ResponseMessagePayload {
-                    id: request_message.id,
-                    class: request_payload.class,
-                    worker: request_payload.worker,
                     action: Notify,
-                    start,
+                    start: Some(start),
                     end,
                     status,
-                    execution: execution as i16,
-                    limit: limit.map(|x| x as i16),
-                    error,
-                    exception_kind: exception_payload.kind,
-                    exception_message: exception_payload.message,
-                    exception_error_code: exception_payload.error_code,
+                    error_message: error.or(exception_payload.message),
                     exit_status: exception_payload.exit_status,
                     ..response_payload
                 };

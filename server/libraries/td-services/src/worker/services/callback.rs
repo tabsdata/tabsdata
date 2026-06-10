@@ -50,9 +50,7 @@ mod tests {
     use super::*;
     use ta_services::service::TdService;
     use td_common::execution_status::WorkerCallbackStatus;
-    use td_common::server::{
-        MessageAction, ResponseMessagePayloadBuilder, WorkerClass, WorkerName,
-    };
+    use td_common::server::{MessageAction, ResponseMessagePayload};
     use td_common::status::ExitStatus;
     use td_database::pool::TdPool;
     use td_database::scoped::InProject;
@@ -147,24 +145,15 @@ mod tests {
             .await?;
 
         let started_on = AtTime::now();
-        let response = ResponseMessagePayloadBuilder::default()
-            .id(worker.id.to_string())
-            .class(WorkerClass::Ephemeral)
-            .worker(WorkerName::CronTrigger.as_ref().to_string())
-            .action(MessageAction::Notify)
-            .start(started_on.timestamp_millis())
-            .end(None)
-            .status(WorkerCallbackStatus::Running)
-            .execution(0)
-            .limit(None)
-            .error(None)
-            .exception_kind(None)
-            .exception_message(None)
-            .exception_error_code(None)
-            .exit_status(ExitStatus::Success.code())
-            .context(None)
-            .build()
-            .unwrap();
+        let response: CallbackRequest = ResponseMessagePayload {
+            action: MessageAction::Notify,
+            start: Some(started_on.timestamp_millis()),
+            end: None,
+            status: WorkerCallbackStatus::Running,
+            error_message: None,
+            exit_status: ExitStatus::Success.code(),
+            context: None,
+        };
 
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
@@ -187,24 +176,15 @@ mod tests {
         assert_eq!(worker.ended_on, None);
 
         let ended_on = AtTime::now();
-        let response = ResponseMessagePayloadBuilder::default()
-            .id(worker.id.to_string())
-            .class(WorkerClass::Ephemeral)
-            .worker(WorkerName::CronTrigger.as_ref().to_string())
-            .action(MessageAction::Notify)
-            .start(AtTime::now().timestamp_millis()) // it wont get updated anyway
-            .end(Some(ended_on.timestamp_millis()))
-            .status(WorkerCallbackStatus::Done)
-            .execution(0)
-            .limit(None)
-            .error(None)
-            .exception_kind(None)
-            .exception_message(None)
-            .exception_error_code(None)
-            .exit_status(ExitStatus::Success.code())
-            .context(None)
-            .build()
-            .unwrap();
+        let response: CallbackRequest = ResponseMessagePayload {
+            action: MessageAction::Notify,
+            start: Some(AtTime::now().timestamp_millis()), // it wont get updated anyway
+            end: Some(ended_on.timestamp_millis()),
+            status: WorkerCallbackStatus::Done,
+            error_message: None,
+            exit_status: ExitStatus::Success.code(),
+            context: None,
+        };
 
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())

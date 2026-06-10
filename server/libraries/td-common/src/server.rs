@@ -7,7 +7,7 @@
 
 use crate::env::get_current_dir;
 use crate::execution_status::WorkerCallbackStatus;
-use crate::files::{LOCK_EXTENSION, YAML_EXTENSION, get_files_in_folder_sorted_by_name};
+use crate::files::{get_files_in_folder_sorted_by_name, LOCK_EXTENSION, YAML_EXTENSION};
 use crate::logging::LOG_LOCATION;
 use crate::manifest::{Inf, WORKER_INF_FILE};
 use crate::server::EtcError::EtcStoreLocationCreationError;
@@ -21,9 +21,7 @@ use crate::server::QueueError::{
 use crate::status::ExitStatus;
 use async_trait::async_trait;
 use bytes::Bytes;
-use chrono::Utc;
 use const_format::concatcp;
-use derive_builder::Builder;
 use derive_new::new;
 use futures::Stream;
 use http::Method;
@@ -35,7 +33,7 @@ use serde_yaml::{Mapping, Value};
 use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Formatter;
-use std::fs::{File, create_dir_all, read_dir, remove_file, rename};
+use std::fs::{create_dir_all, read_dir, remove_file, rename, File};
 use std::io::{Error, Write};
 use std::marker::PhantomData;
 use std::ops::Deref;
@@ -361,68 +359,24 @@ where
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Builder, Serialize, Deserialize, ToSchema)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, ToSchema)]
 pub struct ResponseMessagePayload<T = Value>
 where
     T: Clone,
 {
-    #[serde(default = "default_id")]
-    pub id: String,
-    #[serde(default = "default_class")]
-    pub class: WorkerClass,
-    #[serde(default = "default_worker")]
-    pub worker: String,
     #[serde(default = "default_action")]
     pub action: MessageAction,
-    #[serde(default = "default_start")]
-    pub start: i64,
+    pub start: Option<i64>,
     pub end: Option<i64>,
-    #[serde(default = "default_status")]
     pub status: WorkerCallbackStatus,
-    #[serde(default = "default_execution")]
-    pub execution: i16,
-    pub limit: Option<i16>,
-    pub error: Option<String>,
-    pub exception_kind: Option<String>,
-    pub exception_message: Option<String>,
-    pub exception_error_code: Option<String>,
+    pub error_message: Option<String>,
     #[serde(default = "default_exit_status")]
     pub exit_status: i32,
     pub context: Option<T>,
 }
 
-fn default_id() -> String {
-    String::new()
-}
-
-fn default_class() -> WorkerClass {
-    WorkerClass::Ephemeral
-}
-
-fn default_worker() -> String {
-    String::new()
-}
-
 fn default_action() -> MessageAction {
     MessageAction::Notify
-}
-
-fn default_start() -> i64 {
-    Utc::now().timestamp()
-}
-
-fn default_status() -> WorkerCallbackStatus {
-    WorkerCallbackStatus::Done
-}
-
-fn default_execution() -> i16 {
-    INITIAL_RUN as i16
-}
-
-impl ResponseMessagePayload {
-    pub fn builder() -> ResponseMessagePayloadBuilder {
-        ResponseMessagePayloadBuilder::default()
-    }
 }
 
 impl<T> Default for ResponseMessagePayload<T>
@@ -431,19 +385,11 @@ where
 {
     fn default() -> Self {
         Self {
-            id: default_id(),
-            class: default_class(),
-            worker: default_worker(),
             action: default_action(),
-            start: default_start(),
+            start: None,
             end: None,
-            status: default_status(),
-            execution: default_execution(),
-            limit: None,
-            error: None,
-            exception_kind: None,
-            exception_message: None,
-            exception_error_code: None,
+            status: WorkerCallbackStatus::Done,
+            error_message: None,
             exit_status: default_exit_status(),
             context: None,
         }

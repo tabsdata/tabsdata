@@ -154,7 +154,6 @@ impl TryFrom<WorkerCallbackStatus> for LogicalFunctionRunStatus {
         let status = match value {
             WorkerCallbackStatus::Running => LogicalFunctionRunStatus::Running,
             WorkerCallbackStatus::Done => LogicalFunctionRunStatus::Done,
-            WorkerCallbackStatus::Error => LogicalFunctionRunStatus::Error,
             WorkerCallbackStatus::Failed => LogicalFunctionRunStatus::Failed,
             WorkerCallbackStatus::Stopped => Err(api_error!(
                 ApiError::InputError,
@@ -270,7 +269,6 @@ impl TryFrom<WorkerCallbackStatus> for PhysicalFunctionRunStatus {
         let status = match value {
             WorkerCallbackStatus::Running => PhysicalFunctionRunStatus::Running,
             WorkerCallbackStatus::Done => PhysicalFunctionRunStatus::Done,
-            WorkerCallbackStatus::Error => PhysicalFunctionRunStatus::Error,
             WorkerCallbackStatus::Failed => PhysicalFunctionRunStatus::Failed,
             WorkerCallbackStatus::Stopped => Err(api_error!(
                 ApiError::InputError,
@@ -552,7 +550,6 @@ impl From<WorkerCallbackStatus> for WorkerStatus {
         match value {
             WorkerCallbackStatus::Running => WorkerStatus::Running,
             WorkerCallbackStatus::Done => WorkerStatus::Done,
-            WorkerCallbackStatus::Error => WorkerStatus::Error,
             WorkerCallbackStatus::Failed => WorkerStatus::Failed,
             WorkerCallbackStatus::Stopped => WorkerStatus::Stopped,
         }

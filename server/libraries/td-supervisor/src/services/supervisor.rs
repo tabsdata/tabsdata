@@ -1901,7 +1901,7 @@ impl Supervisor {
             return Ok(());
         }
 
-        let (status, error) = if intentionally_stopped {
+        let (status, error, notify_server) = if intentionally_stopped {
             info!(
                 "Worker '{}' run '{}' intentionally stopped via stop request (interceptor: {:?})",
                 worker.name(),
@@ -1912,31 +1912,34 @@ impl Supervisor {
                 },
                 interceptor.as_ref().map(|m| &m.file)
             );
-            (WorkerCallbackStatus::Stopped, None)
+            (WorkerCallbackStatus::Stopped, None, true)
         } else {
             match &result {
-                Ok(_) => (WorkerCallbackStatus::Done, None),
-                Err(e) => {
-                    if execution <= limit {
-                        (WorkerCallbackStatus::Error, Some(format!("{e:?}")))
-                    } else {
-                        (WorkerCallbackStatus::Failed, Some(format!("{e:?}")))
-                    }
-                }
+                Ok(_) => (WorkerCallbackStatus::Done, None, true),
+                // Report only terminal failures; retryable attempts go unreported.
+                Err(e) => (
+                    WorkerCallbackStatus::Failed,
+                    Some(format!("{e:?}")),
+                    execution > limit,
+                ),
             }
         };
 
-        let notify_answer = notify(
-            worker_run,
-            message.clone(),
-            start,
-            Some(end),
-            status.clone(),
-            execution,
-            Some(limit),
-            error.clone(),
-        )
-        .await;
+        let notify_answer = if notify_server {
+            notify(
+                worker_run,
+                message.clone(),
+                start,
+                Some(end),
+                status.clone(),
+                execution,
+                Some(limit),
+                error.clone(),
+            )
+            .await
+        } else {
+            Ok(false)
+        };
 
         let failed = match notify_answer {
             Ok(answer) => answer,
