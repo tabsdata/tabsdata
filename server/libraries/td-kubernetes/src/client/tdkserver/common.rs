@@ -66,13 +66,19 @@ pub fn parse_yes_no(value: &str) -> Option<bool> {
 }
 
 pub fn prompt_yes_no(message: &str) -> bool {
-    print!("{message} [{VALUE_Y}/{VALUE_YES}/{VALUE_N}/{VALUE_NO}]: ");
-    io::stdout().flush().ok();
-    let mut line = String::new();
-    if io::stdin().lock().read_line(&mut line).is_err() {
-        return false;
+    let stdin = io::stdin();
+    loop {
+        print!("{message} [{VALUE_Y}/{VALUE_YES}/{VALUE_N}/{VALUE_NO}]: ");
+        io::stdout().flush().ok();
+        let mut line = String::new();
+        match stdin.lock().read_line(&mut line) {
+            Ok(0) | Err(_) => return false,
+            Ok(_) => {}
+        }
+        if let Some(answer) = parse_yes_no(line.trim()) {
+            return answer;
+        }
     }
-    matches!(parse_yes_no(line.trim()), Some(true))
 }
 
 pub fn effective_yes(yes: bool) -> bool {
